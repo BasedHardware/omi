@@ -403,3 +403,54 @@ def test_group_join_schedules_one_group_recovery(monkeypatch):
     )
     episode_finalize.schedule_group_attachments(_UID, ['desktop', 'pendant', 'desktop'])
     assert calls == [(_UID, 'pendant', ProcessingTrigger.CAPTURE_GROUP)]
+
+
+def test_serving_intake_notifies_workerd_only_for_current_bound_revision(monkeypatch):
+    from datetime import datetime, timezone
+    from unittest.mock import Mock
+
+    import httpx
+    from database import _client
+    from utils.episodes import service
+    from utils.sync import worker_client
+
+    monkeypatch.delenv('SYNC_EPISODE_INTAKE_ORIGIN', raising=False)
+    monkeypatch.delenv('WORKER_EPISODE_INTAKE_AUDIENCE', raising=False)
+    monkeypatch.setattr(episode_finalize.client_gate, 'client_seen_cached', lambda _uid: True)
+    canonical = Mock(return_value='joined')
+    monkeypatch.setattr(service, 'attach_synced_intake', canonical)
+    client = Mock()
+    snapshot_get = (
+        client.collection.return_value.document.return_value.collection.return_value.document.return_value.get
+    )
+    snapshot = snapshot_get.return_value
+    snapshot.update_time = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    snapshot.to_dict.return_value = {'sync_content_revision': 3}
+    firestore_client = Mock(return_value=client)
+    monkeypatch.setattr(_client, 'get_firestore_client', firestore_client)
+    token = Mock(return_value='fixture-token')
+    monkeypatch.setattr(worker_client, 'identity_token', token)
+    request = Mock(return_value=Mock(status_code=200))
+    monkeypatch.setattr(httpx, 'post', request)
+
+    assert episode_finalize.attach_synced_at_intake(_UID, 'clip', {'sync_content_revision': 3}) == 'joined'
+    canonical.assert_called_once_with(_UID, 'clip', {'source': None, 'sync_content_revision': 3})
+    firestore_client.assert_not_called()
+    token.assert_not_called()
+    request.assert_not_called()
+
+    monkeypatch.setenv('SYNC_EPISODE_INTAKE_ORIGIN', 'https://workerd.fixture.test')
+    monkeypatch.setenv('WORKER_EPISODE_INTAKE_AUDIENCE', 'fixture-audience')
+    assert episode_finalize.attach_synced_at_intake(_UID, 'clip', {'sync_content_revision': 2}) == 'joined'
+    request.assert_not_called()
+    assert episode_finalize.attach_synced_at_intake(_UID, 'clip', {'sync_content_revision': 3}) == 'joined'
+    request.assert_called_once_with(
+        'https://workerd.fixture.test/internal/finalization/episode-intake',
+        json={'owner': _UID, 'conversation': 'clip', 'written': snapshot.update_time.isoformat()},
+        headers={'Authorization': 'Bearer fixture-token'},
+        follow_redirects=False,
+        timeout=5.0,
+    )
+    canonical.return_value = 'skipped_discarded'
+    assert episode_finalize.attach_synced_at_intake(_UID, 'clip', {'sync_content_revision': 3}) == 'skipped_discarded'
+    token.assert_called_once_with('fixture-audience')

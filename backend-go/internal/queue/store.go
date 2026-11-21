@@ -213,23 +213,29 @@ func (s *Store) Redrive(ctx context.Context, key string) error {
 		return err
 	}
 	return s.Tenant(ctx, j.Tenant, func(sc *Scope) error {
-		tag, err := sc.conn.Exec(ctx, `UPDATE queue_jobs SET
+		return sc.Redrive(ctx, key, j.Token)
+	})
+}
+
+// Redrive returns exactly the parked epoch of a job belonging to this tenant to
+// its schedule. A newer terminal attempt cannot be reopened by an older command.
+func (sc *Scope) Redrive(ctx context.Context, key string, expectedEpoch int64) error {
+	tag, err := sc.conn.Exec(ctx, `UPDATE queue_jobs SET
 state=CASE WHEN gated AND NOT initializing AND intent IS NULL THEN 'blocked' ELSE 'ready' END,
 ready_at=clock_timestamp()+CASE WHEN gated AND NOT initializing AND intent IS NULL
   THEN $2*interval '1 microsecond' ELSE interval '0' END,
 blocked_since=CASE WHEN gated AND NOT initializing AND intent IS NULL THEN clock_timestamp() END,
 run_at=clock_timestamp(),attempts=0,deterministic_attempts=0,reconcile_attempts=0,
 reason=NULL,outcome=NULL,updated_at=clock_timestamp()
-WHERE job_key=$1 AND state='parked'`, key, s.cfg.GateTimeout.Microseconds())
-		if err != nil {
-			return fmt.Errorf("redrive: %w", err)
-		}
-		if tag.RowsAffected() == 0 {
-			return ErrState
-		}
-		s.signal()
-		return nil
-	})
+WHERE job_key=$1 AND state='parked' AND uid=$3 AND lease_token=$4`, key, sc.store.cfg.GateTimeout.Microseconds(), sc.tenant, expectedEpoch)
+	if err != nil {
+		return fmt.Errorf("redrive: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrState
+	}
+	sc.store.signal()
+	return nil
 }
 
 // Stats returns the number of jobs in each state and the age in seconds of the oldest job

@@ -231,7 +231,6 @@ def test_helper_kill_switch_budget_entries_match_the_live_registry():
         'CONVERSATION_TERMINAL_FAMILY_MODE',
         'BATCH_ALLOWANCE_INTAKE_PARK_ENABLED',
         'BATCH_HELD_DEAD_LETTER_ENABLED',
-        'BATCH_HELD_POLL_SKIP_ENABLED',
         'SERVER_BATCH_UNSUPPORTED_LANGUAGES',
         rollout_name,
         'BATCH_PIPELINE_SERVING_PROJECTION_SWEEP',

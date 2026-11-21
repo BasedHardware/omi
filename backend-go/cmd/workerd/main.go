@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"log/slog"
-	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
@@ -40,9 +39,7 @@ func run(ctx context.Context, args []string, logger *slog.Logger) error {
 		return err
 	}
 
-	// The family lanes supply production declarations and handlers here. An empty registry
-	// starts a dev infrastructure smoke worker that leaves all queued jobs untouched.
-	kinds, handlers := []queue.Kind(nil), map[string]queue.Handler(nil)
+	kinds := workerdKinds()
 	registry := prometheus.NewRegistry()
 	metrics := newQueueMetrics(registry, kinds, cfg.policy.GateAbandoned)
 
@@ -62,26 +59,32 @@ func run(ctx context.Context, args []string, logger *slog.Logger) error {
 		}
 		return nil
 	}
-	err = store.Ready(startup)
-	if err != nil {
+	if readyErr := store.Ready(startup); readyErr != nil {
+		reportQueueError(logger, "ready", readyErr)
 		endStartup()
-		reportQueueError(logger, "ready", err)
 		store.Close()
 		return errors.New("could not verify PostgreSQL queue schema; check connectivity and migration state")
 	}
-
-	var eraseServer *http.Server
-	if cfg.erase.port != 0 {
-		var closeErase func()
-		eraseServer, closeErase, err = openEraseServer(startup, cfg, store, logger)
-		if err != nil {
-			endStartup()
-			store.Close()
-			return err
-		}
-		defer closeErase()
+	maintenance, err := openFinalizationRuntime(ctx, startup, cfg, store)
+	if err != nil {
+		endStartup()
+		store.Close()
+		return err
 	}
+	defer func() {
+		if closeErr := maintenance.close(); closeErr != nil {
+			logger.Warn("could not close finalization adapters")
+		}
+	}()
+	handlers := workerdHandlers(maintenance.family)
+
+	eraseServer, closeErase, err := openEraseServer(startup, cfg, store, logger)
 	endStartup()
+	if err != nil {
+		store.Close()
+		return err
+	}
+	defer closeErase()
 
 	workers, err := queue.Start(ctx, store, handlers, func(err error) {
 		reportQueueError(logger, "worker", err)
@@ -93,5 +96,7 @@ func run(ctx context.Context, args []string, logger *slog.Logger) error {
 	}
 	registry.MustRegister(newStrandedCollector(workers))
 
-	return serve(ctx, cfg, store, workers, registry, eraseServer)
+	return serve(ctx, cfg, store, workers, registry, func(ctx context.Context) {
+		maintenance.run(ctx, logger)
+	}, maintenance.episodeIntakeHandler(cfg), eraseServer)
 }

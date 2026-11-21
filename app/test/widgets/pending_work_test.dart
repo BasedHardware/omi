@@ -47,6 +47,7 @@ Future<PendingWorkStore> _store({
   List<AttentionItem> attention = const [],
   List<String>? retried,
   List<String>? retriedAll,
+  List<String>? dismissed,
 }) async {
   final store = PendingWorkStore(
     loadPending: () async => ApiSuccess(PendingWorkSnapshot(enabled: true, items: pending, attentionUnseenCount: 0)),
@@ -60,6 +61,10 @@ Future<PendingWorkStore> _store({
       return const ApiSuccess([]);
     },
     markSeen: (_) async => const ApiSuccess(null),
+    dismiss: (id) async {
+      dismissed?.add(id);
+      return const ApiSuccess(null);
+    },
   );
   await store.refresh();
   return store;
@@ -136,6 +141,23 @@ void main() {
       await tester.tap(find.byKey(const Key('activity_retry_all')));
       await tester.pump();
       expect(retriedAll, hasLength(1));
+    });
+
+    testWidgets('swiping a server row left dismisses it; VoiceOver gets the same action', (tester) async {
+      final dismissed = <String>[];
+      final store = await _store(attention: [_item('x', title: 'Launch planning'), _item('y')], dismissed: dismissed);
+      await tester.pumpWidget(_app(NeedsAttentionSection(store: store, syncProvider: _IdleSync())));
+
+      final semantics = tester.ensureSemantics();
+      final node = tester.getSemantics(find.byKey(const ValueKey('activity_attention_dismiss_y')));
+      expect(node.getSemanticsData().customSemanticsActionIds, isNotEmpty);
+      semantics.dispose();
+
+      await tester.drag(find.text('Launch planning'), const Offset(-500, 0));
+      await tester.pumpAndSettle();
+      expect(dismissed, ['x']);
+      expect(find.text('Launch planning'), findsNothing);
+      expect(find.text("Couldn't summarize this conversation"), findsOneWidget);
     });
   });
 

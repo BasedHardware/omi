@@ -199,6 +199,27 @@ class WorkflowContractTests(unittest.TestCase):
         before = text.index(before_marker)
         path.write_text(text[:before] + step + text[before:], encoding="utf-8")
 
+    def test_workerd_publish_requires_production_admission_and_is_image_only(self) -> None:
+        root = self.fixture_root()
+        self.mutate(
+            root,
+            CHECKER.MANUAL_WORKFLOW_PATH,
+            "inputs.mode == 'workerd-image-only' &&",
+            "(inputs.mode == 'workerd-image-only' || inputs.mode == 'deploy') &&",
+        )
+        self.assertIn(
+            "workerd publish must run only for the normal admitted main-ref production image-only mode",
+            CHECKER.validate(root),
+        )
+        self.mutate(
+            root,
+            CHECKER.MANUAL_WORKFLOW_PATH,
+            '          repository="gcr.io/based-hardware/workerd"',
+            '          kubectl rollout restart deployment/workerd\n'
+            '          repository="gcr.io/based-hardware/workerd"',
+        )
+        self.assertIn("workerd publish must not touch a serving surface: kubectl", CHECKER.validate(root))
+
     def test_current_workflows_are_valid(self) -> None:
         self.assertEqual(CHECKER.validate(), [])
 
@@ -579,8 +600,8 @@ class WorkflowContractTests(unittest.TestCase):
         self.mutate(
             root,
             CHECKER.MANUAL_WORKFLOW_PATH,
-            "    if: >-\n      github.ref == 'refs/heads/main' &&\n      (github.event.inputs.mode == 'deploy' || github.event.inputs.mode == 'build-only')\n",
-            "    if: >-\n      github.ref == 'refs/heads/main' &&\n      (github.event.inputs.mode == 'deploy' || github.event.inputs.mode == 'build-only') || true\n",
+            "    if: >-\n      github.ref == 'refs/heads/main' &&\n      (github.event.inputs.mode == 'deploy' || github.event.inputs.mode == 'build-only' || github.event.inputs.mode == 'workerd-image-only')\n",
+            "    if: >-\n      github.ref == 'refs/heads/main' &&\n      (github.event.inputs.mode == 'deploy' || github.event.inputs.mode == 'build-only' || github.event.inputs.mode == 'workerd-image-only') || true\n",
         )
         self.assertIn("manual source admission must use exactly the main-ref deploy condition", CHECKER.validate(root))
 

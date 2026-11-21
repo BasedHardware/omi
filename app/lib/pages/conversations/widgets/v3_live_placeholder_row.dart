@@ -4,11 +4,13 @@ import 'package:flutter/material.dart';
 
 import 'package:provider/provider.dart';
 
+import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/pages/conversations/capture_state_labels.dart';
 import 'package:omi/pages/conversations/widgets/conversation_state_tile.dart';
 import 'package:omi/pages/episodes/episode_presentation.dart';
 import 'package:omi/pages/episodes/live_episode_page.dart';
 import 'package:omi/providers/capture_provider.dart';
+import 'package:omi/services/live_preview/live_preview_controller.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
@@ -24,8 +26,32 @@ class V3LivePlaceholderRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
-    // The capture's own state (listening, paused, reconnecting…), resolved as the capture card did.
-    final state = context.select<CaptureProvider, CaptureDisplayState>(EpisodePresentation.displayState);
+    // Bind to the exact live capture behind this placeholder. The preview controller is
+    // capture-scoped; only an admitted, verified Omi pendant can contribute a snippet.
+    // Final transcript text takes precedence, as it does in the capture card.
+    final (state, source, verified, admitted, preview, device, _) = context
+        .select<CaptureProvider, (CaptureDisplayState, String?, bool, bool, LivePreviewController?, BtDevice?, int)>(
+      (capture) => (
+        EpisodePresentation.displayState(capture),
+        capture.liveCaptureSource,
+        capture.pendantCaptureVerified,
+        capture.localPreviewAdmitted,
+        capture.livePreview,
+        capture.recordingDevice,
+        // Load-bearing though discarded below: canShowPreview reads segments and photos without
+        // subscribing, so this version is what rebuilds the row when final text or photos arrive.
+        capture.segmentsPhotosVersion,
+      ),
+    );
+    final capture = context.read<CaptureProvider>();
+    final canShowPreview = source != null &&
+        source != 'phone' &&
+        device?.type == DeviceType.omi &&
+        verified &&
+        admitted &&
+        EpisodePresentation.isListening(state) &&
+        capture.segments.isEmpty &&
+        capture.photos.isEmpty;
     final title = captureStateLabel(l10n, state);
     return Padding(
       padding: const EdgeInsets.only(top: 8, left: 16, right: 16),
@@ -60,7 +86,22 @@ class V3LivePlaceholderRow extends StatelessWidget {
                       Text(title,
                           style: Theme.of(context).textTheme.titleMedium, maxLines: 1, overflow: TextOverflow.ellipsis),
                       const SizedBox(height: 3),
-                      Text(l10n.live, style: OmiType.footnote.copyWith(color: OmiColors.textSecondary), maxLines: 1),
+                      ListenableBuilder(
+                        // Listen while an admitted socket is resolving its verdict: the controller's
+                        // admission phase change also notifies here.
+                        listenable: preview ?? const AlwaysStoppedAnimation<double>(0),
+                        builder: (context, _) {
+                          final latest =
+                              canShowPreview && preview?.admitted == true ? preview!.latestLine?.trim() : null;
+                          return Text(
+                            latest == null || latest.isEmpty ? l10n.live : latest,
+                            key: const Key('v3_live_placeholder_preview'),
+                            style: OmiType.footnote.copyWith(color: OmiColors.textSecondary),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          );
+                        },
+                      ),
                     ],
                   ),
                 ),
