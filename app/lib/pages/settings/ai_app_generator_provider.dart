@@ -187,9 +187,15 @@ class AiAppGeneratorProvider extends ChangeNotifier {
         _generatedCategory ?? 'other',
       );
 
-      if (iconBase64 != null) {
-        _generatedIconBytes = base64Decode(iconBase64);
+      if (iconBase64 == null) {
+        // The preview needs an icon (hasGeneratedApp), so a missing one is a failed generation the
+        // person must hear about, not a silent return to the prompt (#24723).
+        _state = GenerationState.error;
+        _errorMessage = globalNavigatorKey.currentContext!.l10n.aiGenFailedToGenerateApp;
+        notifyListeners();
+        return false;
       }
+      _generatedIconBytes = base64Decode(iconBase64);
 
       // Step 5: Final touches
       _updateStep(GenerationStep.finalTouches, 'Final touches…');
@@ -220,13 +226,16 @@ class AiAppGeneratorProvider extends ChangeNotifier {
     try {
       final iconBase64 = await generateAppIcon(_generatedName!, _generatedDescription!, _generatedCategory ?? 'other');
 
-      if (iconBase64 != null) {
-        _generatedIconBytes = base64Decode(iconBase64);
+      if (iconBase64 == null) {
+        _state = GenerationState.error;
+        _errorMessage = globalNavigatorKey.currentContext!.l10n.aiGenFailedToRegenerateIcon;
+        notifyListeners();
+        return false;
       }
-
+      _generatedIconBytes = base64Decode(iconBase64);
       _state = GenerationState.idle;
       notifyListeners();
-      return iconBase64 != null;
+      return true;
     } catch (e) {
       Logger.debug('Error regenerating icon: $e');
       _state = GenerationState.error;
