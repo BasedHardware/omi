@@ -576,6 +576,27 @@ class AppLocalizationsTh extends AppLocalizations {
   String get doubleTapAction => 'การดำเนินการแตะสองครั้ง';
 
   @override
+  String get singlePress => 'Single Press';
+
+  @override
+  String get triplePress => 'Triple Press';
+
+  @override
+  String get longPress => 'Long Press';
+
+  @override
+  String get singlePressAction => 'Single Press Action';
+
+  @override
+  String get triplePressAction => 'Triple Press Action';
+
+  @override
+  String get turnOnOff => 'เปิดเครื่อง / ปิดเครื่อง';
+
+  @override
+  String get triplePressSubtitle => 'Requires updated firmware';
+
+  @override
   String get endAndProcess => 'จบและประมวลผลบทสนทนา';
 
   @override

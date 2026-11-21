@@ -579,6 +579,27 @@ class AppLocalizationsBe extends AppLocalizations {
   String get doubleTapAction => 'Дзеянне двойнага дотыку';
 
   @override
+  String get singlePress => 'Single Press';
+
+  @override
+  String get triplePress => 'Triple Press';
+
+  @override
+  String get longPress => 'Long Press';
+
+  @override
+  String get singlePressAction => 'Single Press Action';
+
+  @override
+  String get triplePressAction => 'Triple Press Action';
+
+  @override
+  String get turnOnOff => 'Уключыць / Выключыць';
+
+  @override
+  String get triplePressSubtitle => 'Requires updated firmware';
+
+  @override
   String get endAndProcess => 'Завяршыць і перапрацаваць размову';
 
   @override

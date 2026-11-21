@@ -741,6 +741,13 @@
     "@doubleTapAction": {
         "description": "Double tap action setting"
     },
+    "singlePress": "Single Press",
+    "triplePress": "Triple Press",
+    "longPress": "Long Press",
+    "singlePressAction": "Single Press Action",
+    "triplePressAction": "Triple Press Action",
+    "turnOnOff": "Uključivanje / Isključivanje",
+    "triplePressSubtitle": "Requires updated firmware",
     "endAndProcess": "Završi i obradi razgovor",
     "@endAndProcess": {
         "description": "End and process action"

@@ -579,6 +579,27 @@ class AppLocalizationsUr extends AppLocalizations {
   String get doubleTapAction => 'دوگنا تھپتھپانے کا عمل';
 
   @override
+  String get singlePress => 'Single Press';
+
+  @override
+  String get triplePress => 'Triple Press';
+
+  @override
+  String get longPress => 'Long Press';
+
+  @override
+  String get singlePressAction => 'Single Press Action';
+
+  @override
+  String get triplePressAction => 'Triple Press Action';
+
+  @override
+  String get turnOnOff => 'آن کریں / بند کریں';
+
+  @override
+  String get triplePressSubtitle => 'Requires updated firmware';
+
+  @override
   String get endAndProcess => 'بات چیت ختم اور پروسیس کریں';
 
   @override

@@ -577,6 +577,27 @@ class AppLocalizationsHi extends AppLocalizations {
   String get doubleTapAction => 'डबल टैप क्रिया';
 
   @override
+  String get singlePress => 'Single Press';
+
+  @override
+  String get triplePress => 'Triple Press';
+
+  @override
+  String get longPress => 'Long Press';
+
+  @override
+  String get singlePressAction => 'Single Press Action';
+
+  @override
+  String get triplePressAction => 'Triple Press Action';
+
+  @override
+  String get turnOnOff => 'चालू करें / बंद करें';
+
+  @override
+  String get triplePressSubtitle => 'Requires updated firmware';
+
+  @override
   String get endAndProcess => 'समाप्त करें और संसाधित करें';
 
   @override
