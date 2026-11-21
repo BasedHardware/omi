@@ -1859,15 +1859,6 @@ overlay:
         - REPEAT_WORK_REVISION_ENABLED
         - HOSTED_DIARIZATION_API_URL
         env:
-          # Provider backlog release authority (backlog-release-meter runbook step 4; David 2026-11-18):
-          # the single fenced heartbeat writer, allowlist-only for four support owners at 60 units/hour.
-          # Reach 0 is unlimited. Close: STATE closed (or WRITER disabled; the gate expires in 180s).
-          BATCH_PIPELINE_BACKLOG_RELEASE_WRITER: {value: enabled, category: config}
-          BATCH_PIPELINE_BACKLOG_RELEASE_STATE: {value: open, category: config}
-          BATCH_PIPELINE_BACKLOG_RELEASE_RATE_PER_HOUR: {value: '60', category: config}
-          BATCH_PIPELINE_BACKLOG_RELEASE_REACH_SECONDS: {value: '0', category: config}
-          BATCH_PIPELINE_BACKLOG_RELEASE_MODE: {value: allowlist_only, category: config}
-          BATCH_PIPELINE_BACKLOG_RELEASE_OWNER_KEYS: {value: '30a9aadced4e2bc0aec94b34ebd9c4563f37e64b84399557fd24a0377dd8e223,70a8958da857b008477b9ab8ba52205bf5d4f7f61b4ed18d1e48b70344a3e80d,aac672257a5b347976517c0d65483bc11538a6c75cf3d16523cf6a4f884bf5e1,c68953b9fdbdcd5528b856fd4d50097e14c6b5eb4f48968115783ade222e59b1,cbf55865bc7f785d18a634a4615a21f052bbea40f4b9d5e726dec3dcbae40c26,cc49ba0944135998f50e3a8c1655ff8ce39ed6e6177e0fa2d9a5b7a83af99d87,f5d5e95afa2e18b4073f43099f4499f99326a2d3f2c50219dfa26013060cb177', category: config}
           # Unlimited backfill day cap, enforced only at sync upload (retryable 503 backfill_capacity until the
           # next UTC day). Rollback: 'false' in one config train (David 2026-11-18, support-packet decision 13).
           UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED: {value: 'true', category: rollout}

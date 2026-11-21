@@ -379,9 +379,11 @@ class StrictFirestoreTransaction:
         payload = deepcopy(data)
         self.sets.append((ref.path, payload))
         if merge:
-            if ref.path[0] == 'app_review_config' and len(ref.path) == 2:
+            if ref.path[0] in ('app_review_config', 'legal_holds') and len(ref.path) == 2:
                 # App-review persists a complete top-level config snapshot with
-                # merge=True, preserving fields owned by other writers.
+                # merge=True, preserving fields owned by other writers. A legal
+                # hold merges flat top-level fields the same way (place keeps
+                # release fields, release keeps placement fields).
                 prior = deepcopy(self._database.rows.get(ref.path) or {})
                 prior.update(payload)
                 self._database.rows[ref.path] = prior
