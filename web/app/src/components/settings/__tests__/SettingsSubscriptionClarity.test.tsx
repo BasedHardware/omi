@@ -8,14 +8,7 @@ const mocks = vi.hoisted(() => ({
   selected: vi.fn(),
   succeeded: vi.fn(),
   upgrade: vi.fn(async () => ({ status: 'success' })),
-  subscription: {
-    plan: 'plus',
-    status: 'active',
-    is_unlimited: true,
-    current_price_id: 'price_plus',
-    transcription_seconds_limit: 90000,
-    transcription_seconds_used: 45000,
-  } as Record<string, unknown>,
+  subscription: {} as Record<string, unknown>,
 }));
 vi.mock('@tschk/moonshine-next/navigation', () => ({
   useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
@@ -76,6 +69,14 @@ import { SettingsPage, UsageSectionContent } from '../SettingsPage';
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.emptyPlans = false;
+  mocks.subscription = {
+    plan: 'plus',
+    status: 'active',
+    is_unlimited: true,
+    current_price_id: 'price_plus',
+    transcription_seconds_limit: 90000,
+    transcription_seconds_used: 45000,
+  };
 });
 
 describe('Account billing keeps paid identity separate from the allowance', () => {

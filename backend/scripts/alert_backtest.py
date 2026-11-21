@@ -477,6 +477,7 @@ def lint_rule(rule, inventory):
             # it must not admit the same name on a different Prometheus.
             scoped = inventory.get('datasource_metrics', {}).get(node.get('datasourceUid'), {})
             known_metrics.update(scoped.get('metrics', []))
+            known_metrics.update(scoped.get('declared_metrics', []))
             missing = metric_names(model['expr']) - known_metrics
             if missing:
                 errors.append('missing metrics: ' + ', '.join(sorted(missing)))

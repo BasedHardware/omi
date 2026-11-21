@@ -144,23 +144,6 @@ def test_both_off_fastapi_bytes_and_side_effects_match_original_quota(boundary, 
     boundary.byok.has_validated_byok_keys.assert_not_called()
 
 
-@pytest.mark.parametrize('tier', ['basic', 'plus', 'operator', 'architect'])
-def test_ladder_chat_at_cap_detail_is_unchanged_and_precedes_generic_gate(boundary, monkeypatch, tier):
-    monkeypatch.setenv('LADDER_V1_BUDGET_ENFORCEMENT_ENABLED', 'true')
-    detail = {
-        'error': 'usage_budget_exhausted',
-        'trigger': 'usage_budget',
-        'chat_at_cap': {'state': 'paused', 'plan_type': tier, 'reset_at': RESET_AT},
-    }
-    boundary.namespace['ladder_v1'].enforce_chat_budget.side_effect = HTTPException(402, detail)
-    client, effects = _response_client(boundary.quota)
-    response = client.post('/chat')
-    assert response.status_code == 402 and response.json() == {'detail': detail}
-    assert effects == []
-    boundary.funded.processing_allowed.assert_not_called()
-    boundary.byok.has_validated_byok_keys.assert_not_called()
-
-
 @pytest.mark.parametrize('tier', TIERS)
 def test_stt_only_below_cap_keeps_existing_chat_policy(boundary, monkeypatch, tier):
     monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', 'true')

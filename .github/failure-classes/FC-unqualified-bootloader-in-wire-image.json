@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "id": "FC-unqualified-bootloader-in-wire-image",
+  "violated_contract": "A wire-flash firmware artifact must not replace a hardware-qualified bootloader with an unqualified default implementation, even when the application and its OTA package are valid.",
+  "canonical_prevention": "Build the board-specific bootloader entrypoint explicitly and require its exact jig-qualified padded hash, key and layout. Construct wire images from that loader plus the exact tested OTA app bytes; exclude unrelated flash regions. Parse every staged HEX against the approved hash list at staging, promotion and publication.",
+  "canonical_prevention_artifact": [
+    "omi/firmware/scripts/ci/cv1_bootloader.py",
+    "omi/firmware/scripts/ci/test_cv1_bootloader.py",
+    "omi/firmware/scripts/ci/test_cv1_release.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "omi/firmware/scripts/ci/",
+    "omi/firmware/bootloader/cv1-bootloader-policy.json"
+  ],
+  "status": "open"
+}

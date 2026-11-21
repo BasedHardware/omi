@@ -191,6 +191,7 @@ def agentic_notes_payload(
                     toolbox=toolbox,
                     budget=budget,
                     transcript_words=words,
+                    task_intelligence_capture=bool(kwargs.get('task_intelligence_capture')),
                     prefetched_evidence=packet.get('prefetched_evidence', 0),
                     prefetched_lookups=prefetched_results(packet),
                     open_tasks=open_tasks,

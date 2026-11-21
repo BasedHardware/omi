@@ -6,6 +6,7 @@ Only local synthetic identities are used in the emulator. Ciphertext stays opaqu
 these boundaries can diagnose custody and missing finalization from metadata alone.
 """
 
+import base64
 from copy import deepcopy
 from datetime import datetime
 import hashlib
@@ -13,6 +14,8 @@ import hashlib
 
 def restore_dates(value):
     if isinstance(value, dict):
+        if set(value) == {'_firestore_bytes_base64'}:
+            return base64.b64decode(value['_firestore_bytes_base64'], validate=True)
         return {key: restore_dates(item) for key, item in value.items()}
     if isinstance(value, list):
         return [restore_dates(item) for item in value]
@@ -40,14 +43,17 @@ def seed_case(case, environment):
     identities = {corpus.get('owner_token', uid): uid, corpus.get('conversation_id', row.get('id', cid)): cid}
     job_ids = {key: f'{uid}-finalization-{index}' for index, key in enumerate(corpus.get('finalization_jobs', {}))}
     identities.update(job_ids)
+    environment.replay_identities = identities
 
-    def remap(value):
+    def remap(value, mapping=None):
+        mapping = identities if mapping is None else mapping
         if isinstance(value, dict):
-            return {key: remap(item) for key, item in value.items()}
+            return {remap(key, mapping): remap(item, mapping) for key, item in value.items()}
         if isinstance(value, list):
-            return [remap(item) for item in value]
-        return identities.get(value, value) if isinstance(value, str) else value
+            return [remap(item, mapping) for item in value]
+        return mapping.get(value, value) if isinstance(value, str) else value
 
+    environment.restore_replay_identities = remap
     row = remap(row)
     row['id'] = cid
     ref.set(row)

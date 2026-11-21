@@ -684,16 +684,14 @@ async def _inline_run_blocking(_executor, func, *args, **kwargs):
 
 @pytest.mark.anyio
 @pytest.mark.parametrize(('status', 'expected_code'), [('busy', 409), ('completed', 200)])
-@pytest.mark.parametrize('deadline', ['false', 'true'])
+@pytest.mark.parametrize('deadline', ['true'])
 async def test_sync_reprocess_response_preserves_status_and_logs_busy_without_ids(
     monkeypatch, caplog, status, expected_code, deadline
 ):
     from utils.batch_pipeline import enrichment
 
-    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', deadline)
-
     async def run(executor, func, *args, **kwargs):
-        expected = finalization_router.postprocess_executor if deadline == 'true' else finalization_router.sync_executor
+        expected = finalization_router.postprocess_executor
         assert executor is expected
         return func(*args, **kwargs)
 
@@ -866,7 +864,7 @@ async def test_worker_retries_processing_failure_before_final_attempt(monkeypatc
 
     assert response.status_code == 500
     assert json.loads(response.body) == {'status': 'retry'}
-    retryable.assert_called_once_with('job-1', 1, 1, 'processing_failed')
+    retryable.assert_called_once_with('job-1', 1, 1, 'deterministic_processing_failed')
 
 
 @pytest.mark.anyio
@@ -944,7 +942,7 @@ async def test_worker_dead_letters_the_final_failed_attempt(monkeypatch):
 
     assert response.status_code == 200
     assert json.loads(response.body) == {'status': 'dead_letter'}
-    dead_letter.assert_called_once_with('job-1', 1, 1, 3, failure_code='processing_failed')
+    dead_letter.assert_called_once_with('job-1', 1, 1, 3, failure_code='deterministic_processing_failed')
 
 
 @pytest.mark.anyio
@@ -1000,7 +998,12 @@ async def test_recovery_minimum_ends_on_first_failure_only_when_enabled(
     else:
         assert response.status_code == 500
         terminal.assert_not_called()
-        retryable.assert_called_once_with('job-1', 1, 3, 'processing_failed')
+        failure_code = (
+            'transient_processing_failed'
+            if isinstance(source_error, TimeoutError)
+            else 'deterministic_processing_failed'
+        )
+        retryable.assert_called_once_with('job-1', 1, 3, failure_code)
 
 
 @pytest.mark.anyio
@@ -1071,7 +1074,7 @@ async def test_worker_durable_failure_budget_survives_a_new_task_generation(monk
     assert response.status_code == 200
     assert json.loads(response.body) == {'status': 'dead_letter'}
     assert finalizer.await_args.kwargs['final_attempt'] is True
-    dead_letter.assert_called_once_with('job-1', 9, 8, 5, failure_code='processing_failed')
+    dead_letter.assert_called_once_with('job-1', 9, 8, 5, failure_code='deterministic_processing_failed')
     retryable.assert_not_called()
 
 
@@ -1532,11 +1535,11 @@ async def test_pusher_requeues_an_unexpected_failure_after_claim(monkeypatch):
         'uid-1', 'conversation-1', 'en', websocket, finalization_job_id='job-1', dispatch_generation=3
     )
 
-    retryable.assert_called_once_with('job-1', 3, 4, 'worker_failed')
+    retryable.assert_called_once_with('job-1', 3, 4, 'deterministic_processing_failed')
     retries.assert_called_once_with()
     assert json.loads(websocket.sent[0][4:]) == {
         'conversation_id': 'conversation-1',
-        'error': 'processing_failed',
+        'error': 'deterministic_processing_failed',
         'terminal': False,
     }
 
@@ -1569,11 +1572,11 @@ async def test_pusher_does_not_dead_letter_a_job_whose_only_claims_were_session_
         'uid-1', 'conversation-1', 'en', websocket, finalization_job_id='job-1', dispatch_generation=3
     )
 
-    retryable.assert_called_once_with('job-1', 3, 9, 'processing_failed')
+    retryable.assert_called_once_with('job-1', 3, 9, 'deterministic_processing_failed')
     dead_letter.assert_not_called()
     assert json.loads(websocket.sent[0][4:]) == {
         'conversation_id': 'conversation-1',
-        'error': 'processing_failed',
+        'error': 'deterministic_processing_failed',
         'terminal': False,
     }
 
@@ -1607,11 +1610,11 @@ async def test_pusher_dead_letters_a_job_that_exhausted_its_attempt_budget(monke
         'uid-1', 'conversation-1', 'en', websocket, finalization_job_id='job-1', dispatch_generation=3
     )
 
-    dead_letter.assert_called_once_with('job-1', 3, 4, 5, failure_code='processing_failed')
+    dead_letter.assert_called_once_with('job-1', 3, 4, 5, failure_code='deterministic_processing_failed')
     retryable.assert_not_called()
     assert json.loads(websocket.sent[0][4:]) == {
         'conversation_id': 'conversation-1',
-        'error': 'processing_failed',
+        'error': 'deterministic_processing_failed',
         'terminal': True,
     }
 
@@ -1638,10 +1641,10 @@ async def test_pusher_lease_loss_never_terminalizes_a_newer_finalization_owner(m
         'uid-1', 'conversation-1', 'en', websocket, finalization_job_id='job-1', dispatch_generation=3
     )
 
-    dead_letter.assert_called_once_with('job-1', 3, 4, 5, failure_code='processing_failed')
+    dead_letter.assert_called_once_with('job-1', 3, 4, 5, failure_code='deterministic_processing_failed')
     assert json.loads(websocket.sent[0][4:]) == {
         'conversation_id': 'conversation-1',
-        'error': 'processing_failed',
+        'error': 'deterministic_processing_failed',
         'terminal': False,
     }
 
@@ -1774,7 +1777,7 @@ async def test_a_webhook_stuck_on_5xx_only_strands_the_conversation_while_retrie
     monkeypatch.setattr(
         persisted_finalizer.lifecycle_service,
         'claim_finalization_fanout',
-        lambda *args: {'status': 'claimed', 'fanout_key': 'conversation:conversation-1:finalization'},
+        lambda *args, **kwargs: {'status': 'claimed', 'fanout_key': 'conversation:conversation-1:finalization'},
     )
     completed = MagicMock(return_value=True)
     monkeypatch.setattr(persisted_finalizer.lifecycle_service, 'complete_finalization_fanout', completed)
@@ -1903,7 +1906,7 @@ async def test_completed_conversation_replays_only_the_durable_fanout_boundary(
     monkeypatch.setattr(
         persisted_finalizer.lifecycle_service,
         'claim_finalization_fanout',
-        lambda *args: {'status': 'claimed', 'fanout_key': 'conversation:conversation-1:finalization'},
+        lambda *args, **kwargs: {'status': 'claimed', 'fanout_key': 'conversation:conversation-1:finalization'},
     )
     completed = MagicMock(return_value=True)
     monkeypatch.setattr(persisted_finalizer.lifecycle_service, 'complete_finalization_fanout', completed)
@@ -1958,7 +1961,7 @@ async def test_async_finalizer_records_degraded_redis_location_fallback(monkeypa
     monkeypatch.setattr(
         persisted_finalizer.lifecycle_service,
         'claim_finalization_fanout',
-        lambda *args: {'status': 'claimed', 'fanout_key': 'conversation:conversation-1:finalization'},
+        lambda *args, **kwargs: {'status': 'claimed', 'fanout_key': 'conversation:conversation-1:finalization'},
     )
     monkeypatch.setattr(persisted_finalizer.lifecycle_service, 'complete_finalization_fanout', lambda *args: True)
     monkeypatch.setattr(persisted_finalizer, 'extract_memories', MagicMock())
@@ -2338,7 +2341,7 @@ async def test_finalizer_runs_derived_effects_only_after_winning_claim(monkeypat
     monkeypatch.setattr(
         persisted_finalizer.lifecycle_service,
         'claim_finalization_fanout',
-        lambda *args: {'status': 'claimed', 'fanout_key': 'conversation:conversation-1:finalization'},
+        lambda *args, **kwargs: {'status': 'claimed', 'fanout_key': 'conversation:conversation-1:finalization'},
     )
     monkeypatch.setattr(persisted_finalizer.lifecycle_service, 'complete_finalization_fanout', complete)
     monkeypatch.setattr(persisted_finalizer, 'trigger_external_integrations', integrations)
@@ -2400,7 +2403,7 @@ async def test_finalizer_completes_when_an_app_permanently_rejects_the_delivery(
     monkeypatch.setattr(
         persisted_finalizer.lifecycle_service,
         'claim_finalization_fanout',
-        lambda *args: {'status': 'claimed', 'fanout_key': 'conversation:conversation-1:finalization'},
+        lambda *args, **kwargs: {'status': 'claimed', 'fanout_key': 'conversation:conversation-1:finalization'},
     )
     monkeypatch.setattr(persisted_finalizer.lifecycle_service, 'complete_finalization_fanout', complete)
 
@@ -2475,19 +2478,20 @@ async def test_finalizer_summary_vector_requires_visible_structure_and_winning_c
         id='conversation-1',
         status=ConversationStatus.completed,
         discarded=discarded,
+        recording=terminal == 'recording',
         structured=(
             SimpleNamespace(title='Meeting', title_provenance='server_minimum' if vector_case == 'minimum' else None)
             if structured
             else None
         ),
     )
-    emits = emits and vector_case != 'minimum'
+    emits = emits and vector_case != 'minimum' and terminal != 'recording'
     events = []
 
     async def inline_run_blocking(_executor, func, *args, **kwargs):
         return func(*args, **kwargs)
 
-    def claim(*args):
+    def claim(*args, **kwargs):
         events.append('claim')
         return {'status': claim_status, 'fanout_key': 'fixture'}
 
@@ -2527,7 +2531,8 @@ async def test_finalizer_summary_vector_requires_visible_structure_and_winning_c
             'id': conversation.id,
             'status': 'completed',
             'deleted': deleted,
-            persisted_finalizer.TERMINAL_NO_DERIVED_EFFECTS_FIELD: terminal,
+            persisted_finalizer.TERMINAL_NO_DERIVED_EFFECTS_FIELD: terminal is True,
+            'recording': terminal == 'recording',
         },
     )
     monkeypatch.setattr(persisted_finalizer, 'deserialize_conversation', deserialize)
@@ -2617,10 +2622,13 @@ async def test_first_budget_exhaustion_acknowledges_with_a_delayed_requeue(monke
     monkeypatch.setattr(
         jobs_db, 'get_finalization_job', lambda job_id: {'uid': 'uid-1', 'conversation_id': 'conversation-1'}
     )
+    # A delayed second budget requires evidence of a transient failure.
+    error = ConversationFinalizationError('processing_failed')
+    error.__context__ = TimeoutError('synthetic provider timeout')
     monkeypatch.setattr(
         finalization_router,
         'finalize_persisted_conversation',
-        AsyncMock(side_effect=ConversationFinalizationError('processing_failed')),
+        AsyncMock(side_effect=error),
     )
     requeued = MagicMock(return_value='requeued')
     retryable = MagicMock()
@@ -2634,7 +2642,7 @@ async def test_first_budget_exhaustion_acknowledges_with_a_delayed_requeue(monke
 
     assert response.status_code == 200
     assert json.loads(response.body) == {'status': 'delayed_requeue'}
-    requeued.assert_called_once_with('job-1', 1, 1, 5, failure_code='processing_failed')
+    requeued.assert_called_once_with('job-1', 1, 1, 5, failure_code='transient_processing_failed')
     retryable.assert_not_called()
 
 
@@ -2987,3 +2995,13 @@ def test_dead_letter_counters_zero_initialize_the_closed_cause_set():
     # The normalizer is load-bearing for the reconciler's wider live codes.
     assert finalization_service._normalize_dead_letter_cause('record_owner_contention') == 'unknown'
     assert finalization_service._normalize_dead_letter_cause('refresh_lease_busy') == 'refresh_lease_busy'
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('claim_status', ['claimed', 'completed'])
+async def test_recording_completed_replay_suppresses_fallback_intelligence(monkeypatch, caplog, claim_status):
+    await test_finalizer_summary_vector_requires_visible_structure_and_winning_claim(
+        monkeypatch, claim_status, False, False, True, True, 'success', caplog, 'recording'
+    )
+    persisted_finalizer.extract_memories.assert_not_called()
+    persisted_finalizer.trigger_external_integrations.assert_not_called()

@@ -162,6 +162,113 @@ def test_recovery_calendar_overlap_does_not_take_the_rule_discard(monkeypatch, i
 
 
 @pytest.mark.parametrize(
+    ('stored', 'conversation_fields', 'expects_notes'),
+    [
+        pytest.param(Structured(title='Discussion notes'), {}, False, id='fallback-only'),
+        pytest.param(Structured(title='Discussion notes', overview='  '), {}, False, id='blank-overview'),
+        pytest.param(
+            Structured(title='Discussion notes', gist='Existing Home preview', title_provenance='server_minimum'),
+            {},
+            True,
+            id='gist',
+        ),
+        pytest.param(Structured(title='Project update'), {}, True, id='real-title'),
+        pytest.param(Structured(title='Discussion 3', overview='Existing notes'), {}, True, id='notes'),
+        pytest.param(Structured(title='Discussion notes'), {'user_title': 'Discussion notes'}, True, id='user-title'),
+        pytest.param(
+            Structured(title='Discussion notes', participants=[{'source': 'roster', 'name': 'Test reviewer'}]),
+            {},
+            True,
+            id='participant',
+        ),
+        pytest.param(
+            Structured(title='Discussion notes', salience='highlight', title_provenance='server_minimum'),
+            {},
+            True,
+            id='salience',
+        ),
+        pytest.param(
+            Structured(title='Call mom before five', salience='highlight', title_provenance='server_minimum'),
+            {},
+            True,
+            id='transcript-title-with-salience',
+        ),
+        pytest.param(
+            Structured(title='Discussion notes', category='work', title_provenance='server_minimum'),
+            {},
+            True,
+            id='category',
+        ),
+        pytest.param(
+            Structured(title='Discussion notes'),
+            {'user_corrections': [{'text': 'Keep the speaker name'}]},
+            True,
+            id='owner-corrections',
+        ),
+        pytest.param(
+            Structured(title='Discussion notes'),
+            {
+                'transcript_segments': [
+                    TranscriptSegment(
+                        text='Call mom before five to confirm the address and ask what I should bring.',
+                        speaker='SPEAKER_00',
+                        is_user=True,
+                        start=0,
+                        end=5,
+                    )
+                ],
+            },
+            True,
+            id='above-word-floor',
+        ),
+    ],
+)
+def test_quiet_recovery_uses_minimum_only_without_protected_content(
+    monkeypatch, isolated_processing_module, stored, conversation_fields, expects_notes
+):
+    monkeypatch.setenv('LISTEN_FINALIZATION_RECOVERY_MINIMUM_TERMINAL_ENABLED', 'true')
+    monkeypatch.setenv('NOTES_SHORT_CLIP_FLOOR', 'off')
+    pc = isolated_processing_module
+    monkeypatch.setattr(pc.redis_db, 'get_user_preferred_app', lambda uid: None)
+    conversation = _empty_recovery_conversation().model_copy(
+        update={
+            'structured': stored,
+            'language': 'en',
+            'transcript_segments': [
+                TranscriptSegment(text='Call mom before five.', speaker='SPEAKER_00', is_user=True, start=0, end=1)
+            ],
+            **conversation_fields,
+        }
+    )
+    text = conversation.transcript_segments[0].text
+    minimum = Structured(title=text, title_provenance='server_minimum')
+    with (
+        patch.object(pc, 'conversation_transcripts_for_llm', return_value=(text, text, {})),
+        patch.object(pc, 'has_structural_wake_word_marker', return_value=False),
+        patch.object(pc, 'is_release_probe_uid', return_value=False),
+        patch.object(pc, '_calendar_overlap_retains_conversation', return_value=False),
+        patch.object(pc, 'get_conversation_notes', return_value=stored) as paid_notes,
+        patch.object(pc, 'build_deterministic_minimum_structured', return_value=minimum) as build_minimum,
+    ):
+        result, discarded = pc._get_structured(
+            'uid-recovery',
+            'en',
+            conversation,
+            trigger=ProcessingTrigger.SERVER_RECOVERY,
+            recovery_transcript_decoded=True,
+        )
+
+    assert discarded is False
+    assert result is (stored if expects_notes else minimum)
+    if expects_notes:
+        paid_notes.assert_called_once()
+        build_minimum.assert_not_called()
+    else:
+        paid_notes.assert_not_called()
+        build_minimum.assert_called_once()
+
+
+@pytest.mark.parametrize(
     'decided_by,reason',
     [
         ('deterministic', 'jev_fallback_deterministic'),

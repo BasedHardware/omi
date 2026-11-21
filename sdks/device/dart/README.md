@@ -29,3 +29,13 @@ Note: the production Omi app uses **native Pigeon BLE** for lifecycle. This pack
 ## STT
 
 See `sdks/device/STT.md`.
+
+`ParakeetTranscriber` drops PCM until the server sends `ready`. If the server closes the stream before
+`ready` (for example 1013 `capacity_full` or `service_not_ready`), `appendPcm` and `stop` throw an
+`SttStreamClosedException` carrying the close code and reason, so callers can retry or switch engines.
+
+## Tests
+
+Run `flutter test` in this directory. The STT tests drive the transcribers through an in-memory WebSocket
+channel, so the suite needs no device, credentials, or transcription service. CI runs it for changes under
+`sdks/device/dart/` (`.github/workflows/sdk-dart.yml`).

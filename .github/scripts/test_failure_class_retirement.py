@@ -29,6 +29,7 @@ def definition(class_id: str, status: str = "open", dormant_since: str | None = 
     data: dict[str, object] = {
         "schema_version": 1,
         "id": class_id,
+        "family": "other",
         "violated_contract": "A contract that failed once.",
         "canonical_prevention": "Converge the owner.",
         "evidence_prs": [1234],
@@ -77,6 +78,11 @@ class RetirementDiffTests(unittest.TestCase):
         self.tmp = Path(self._tmp.name)
         self.definitions = self.tmp / ".github/failure-classes"
         self.definitions.mkdir(parents=True)
+        # The CLI the retirement run shells out to validates each class's family against
+        # the catalogue beside the registry directory.
+        (self.tmp / ".github/failure-class-families.json").write_text(
+            json.dumps({"schema_version": 1, "families": {"other": "Test family."}}) + "\n", encoding="utf-8"
+        )
 
     def tearDown(self) -> None:
         self._tmp.cleanup()
@@ -193,6 +199,11 @@ class EndToEndTests(unittest.TestCase):
         self.tmp = Path(self._tmp.name)
         self.definitions = self.tmp / ".github/failure-classes"
         self.definitions.mkdir(parents=True)
+        # The CLI the retirement run shells out to validates each class's family against
+        # the catalogue beside the registry directory.
+        (self.tmp / ".github/failure-class-families.json").write_text(
+            json.dumps({"schema_version": 1, "families": {"other": "Test family."}}) + "\n", encoding="utf-8"
+        )
         self.feed = self.tmp / "events.json"
         self.evidence = self.tmp / "evidence.md"
 

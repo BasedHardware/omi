@@ -1,0 +1,7 @@
+{
+  "version": "0.12.565",
+  "date": "2026-11-04",
+  "changes": [
+    "Meeting-note Action items retain metadata in cache, show owners, context, and confirmed or tentative due dates, support adding, completing, reopening, and finding linked tasks, and start with Try with Apps collapsed."
+  ]
+}

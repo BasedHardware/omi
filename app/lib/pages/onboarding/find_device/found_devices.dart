@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import 'package:collection/collection.dart';
 import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/backend/preferences.dart';
@@ -51,15 +52,32 @@ class FoundDevices extends StatefulWidget {
   State<FoundDevices> createState() => _FoundDevicesState();
 }
 
-class _FoundDevicesState extends State<FoundDevices> {
+class _FoundDevicesState extends State<FoundDevices> with WidgetsBindingObserver {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (mounted) {
         context.read<DeviceProvider>().initiateConnection('FoundDevices');
       }
     });
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  /// Back from Settings with Bluetooth now allowed: search again without another tap.
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed) return;
+    unawaited(() async {
+      if (!await context.read<OnboardingProvider>().recheckPermissionBlock() || !mounted) return;
+      await widget.onRescan?.call();
+    }());
   }
 
   Future<void> _handleRayBanMetaOnboarding(BtDevice device, OnboardingProvider provider) async {
@@ -91,7 +109,18 @@ class _FoundDevicesState extends State<FoundDevices> {
         final real = provider.deviceList.firstWhereOrNull(
           (d) => d.type == DeviceType.raybanMeta && d.id != RayBanMetaDiscoverer.setupPlaceholderId,
         );
-        if (real == null) return;
+        if (real == null) {
+          // The setup finished but the glasses did not show up: say so, with Try Again (D8).
+          if (mounted) {
+            OmiFeedback.error(
+              context,
+              context.l10n.rayBanMetaNotFoundAfterSetup,
+              actionLabel: context.l10n.tryAgain,
+              onAction: () => ServiceManager.instance().device.discover(timeout: 5),
+            );
+          }
+          return;
+        }
         target = real;
       }
 
@@ -328,6 +357,7 @@ class _FoundDevicesState extends State<FoundDevices> {
                     reason: provider.pairingFailureReason!,
                     onDismiss: provider.dismissPairingFailure,
                     onRetry: widget.onRescan,
+                    onOpenSettings: provider.pairingBlockNeedsSettings ? openAppSettings : null,
                     onGuide: () => ConnectionGuideSheet.show(context),
                   ),
                 ),

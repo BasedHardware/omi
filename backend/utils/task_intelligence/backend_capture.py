@@ -14,6 +14,7 @@ class BackendCaptureSignals(BaseModel):
     model_config = ConfigDict(extra='forbid')
 
     explicit_command: bool = False
+    reminder_owner_review: bool = False
     clear_commitment: bool = False
     concrete_deliverable: bool = False
     direct_request: bool = False

@@ -1,0 +1,19 @@
+id: safe/panic-loop-enters-safe
+summary: >
+  Three kernel panics in a row (the real fatal handler marks retained RAM and
+  takes a software reset) enter SAFE on the fourth boot; a fourth panic inside
+  SAFE keeps it there.
+committee: [1]
+tags: [guard]
+timeline:
+  - {t: 1000, panic: true}
+  - {t: 2100, panic: true}
+  - {t: 3200, panic: true}
+end: 12000
+expect:
+  boot_count: 4
+  boots:
+    - {exit: fatal, safe: false, boot_count: 1}
+    - {exit: fatal, reset: software, warm: true, boot_count: 2}
+    - {exit: fatal, reset: software, boot_count: 3}
+    - {exit: stop, reset: software, safe: true, latch_reason: 1, boot_count: 4}

@@ -1,5 +1,7 @@
 # Operator-controlled maintenance; zero replicas retains the positive-minimum HPA.
 maintenanceMode: false
+# A separately named, digest-only release with no production routing resources.
+shadowCanary: false
 # Default values for diarizer.
 # This is a YAML-formatted file.
 # Declare variables to be passed into your templates.
@@ -145,6 +147,7 @@ podMonitoring:
 
 # Raise for long final-pass requests when enabling a cohort behind the ingress.
 backendConfig:
+  enabled: true
   name: diarizer-backend-config
   timeoutSeconds: 30
 

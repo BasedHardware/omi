@@ -64,7 +64,7 @@ def test_drift_check_separates_allowlisted_keys_on_prod_manifest(checker, prod_d
             'backend-sync': {
                 'env': [
                     *({'name': k, 'value': 'v'} for k in sorted(prod_declared['backend-sync'])),
-                    {'name': 'FIRST_SUMMARY_UID_ALLOWLIST', 'value': 'sensitive-uid-123'},
+                    {'name': 'FAIR_USE_EXEMPT_UIDS', 'value': 'sensitive-uid-123'},
                     {'name': 'SYNC_BACKFILL_ORDER_UID_ALLOWLIST', 'value': 'sensitive-uid-123'},
                     {'name': 'SYNC_DURABLE_REDRIVE_GUARD', 'value': 'true'},
                     {'name': 'SYNC_LEGACY_COMPLETION_CONVERGENCE', 'value': 'true'},
@@ -73,7 +73,7 @@ def test_drift_check_separates_allowlisted_keys_on_prod_manifest(checker, prod_d
             'backend-sync-backfill': {
                 'env': [
                     *({'name': k, 'value': 'v'} for k in sorted(prod_declared['backend-sync-backfill'])),
-                    {'name': 'FIRST_SUMMARY_UID_ALLOWLIST', 'value': 'sensitive-uid-123'},
+                    {'name': 'FAIR_USE_EXEMPT_UIDS', 'value': 'sensitive-uid-123'},
                     {'name': 'SYNC_DURABLE_REDRIVE_GUARD', 'value': 'true'},
                     {'name': 'SYNC_LEGACY_COMPLETION_CONVERGENCE', 'value': 'true'},
                 ]
@@ -81,7 +81,6 @@ def test_drift_check_separates_allowlisted_keys_on_prod_manifest(checker, prod_d
             'backend-integration': {
                 'env': [
                     *({'name': k, 'value': 'v'} for k in sorted(prod_declared['backend-integration'])),
-                    {'name': 'FIRST_SUMMARY_UID_ALLOWLIST', 'value': 'sensitive-uid-123'},
                 ]
             },
         }
@@ -101,12 +100,12 @@ def test_drift_check_separates_allowlisted_keys_on_prod_manifest(checker, prod_d
     )
     assert by_service['backend'].unallowlisted_live_only == ()
     assert by_service['backend-sync'].allowlisted_live_only == (
-        'FIRST_SUMMARY_UID_ALLOWLIST',
+        'FAIR_USE_EXEMPT_UIDS',
         'SYNC_BACKFILL_ORDER_UID_ALLOWLIST',
     )
     assert by_service['backend-sync'].unallowlisted_live_only == ()
     assert by_service['backend-sync-backfill'].unallowlisted_live_only == ()
-    assert by_service['backend-integration'].allowlisted_live_only == ('FIRST_SUMMARY_UID_ALLOWLIST',)
+    assert by_service['backend-integration'].allowlisted_live_only == ()
     assert by_service['backend-integration'].unallowlisted_live_only == ()
 
 
@@ -162,7 +161,7 @@ def test_drift_check_catches_missing_sync_redrive_flags_and_redacts_values(check
             'backend-sync': {
                 'env': [
                     {'name': 'FIRST_SUMMARY_DEADLINE_ENABLED', 'value': 'true'},
-                    {'name': 'FIRST_SUMMARY_UID_ALLOWLIST', 'value': 'sensitive-uid-123'},
+                    {'name': 'FAIR_USE_EXEMPT_UIDS', 'value': 'sensitive-uid-123'},
                     {'name': 'SYNC_DURABLE_REDRIVE_GUARD', 'value': 'true'},
                     {'name': 'SYNC_LEGACY_COMPLETION_CONVERGENCE', 'value': 'true'},
                 ]
@@ -170,7 +169,7 @@ def test_drift_check_catches_missing_sync_redrive_flags_and_redacts_values(check
             'backend-sync-backfill': {
                 'env': [
                     {'name': 'FIRST_SUMMARY_DEADLINE_ENABLED', 'value': 'true'},
-                    {'name': 'FIRST_SUMMARY_UID_ALLOWLIST', 'value': 'sensitive-uid-123'},
+                    {'name': 'FAIR_USE_EXEMPT_UIDS', 'value': 'sensitive-uid-123'},
                     {'name': 'SYNC_DURABLE_REDRIVE_GUARD', 'value': 'true'},
                     {'name': 'SYNC_LEGACY_COMPLETION_CONVERGENCE', 'value': 'true'},
                 ]
@@ -178,7 +177,6 @@ def test_drift_check_catches_missing_sync_redrive_flags_and_redacts_values(check
             'backend-integration': {
                 'env': [
                     {'name': 'FIRST_SUMMARY_DEADLINE_ENABLED', 'value': 'true'},
-                    {'name': 'FIRST_SUMMARY_UID_ALLOWLIST', 'value': 'sensitive-uid-123'},
                 ]
             },
         }
@@ -307,7 +305,7 @@ def _sync_env(*, queue: str, repair: str, uid_allowlist: str = '') -> list[dict]
         {'name': 'DEMAND_PROCESSING_UID_ALLOWLIST', 'value': uid_allowlist},
         {'name': 'SYNC_TASKS_HANDLER_URL', 'value': 'https://handler.example/run'},
         {'name': 'TYPESENSE_HOST', 'valueFrom': {'secretKeyRef': {'name': 'TYPESENSE_HOST', 'key': 'latest'}}},
-        {'name': 'FIRST_SUMMARY_UID_ALLOWLIST', 'value': SENSITIVE_UID},
+        {'name': 'FAIR_USE_EXEMPT_UIDS', 'value': SENSITIVE_UID},
     ]
 
 
@@ -360,7 +358,7 @@ def test_replay_2026_10_18_reads_serving_revision_not_template(checker, tmp_path
     assert mismatches['SYNC_TASKS_QUEUE'].expected_hash == checker.value_hash('value', 'sync-jobs')
     assert mismatches['SYNC_TASKS_QUEUE'].target == SERVING_REVISION
     assert sync.missing_from_live == ()
-    assert sync.allowlisted_live_only == ('FIRST_SUMMARY_UID_ALLOWLIST',)
+    assert sync.allowlisted_live_only == ('FAIR_USE_EXEMPT_UIDS',)
     assert sync.value_unchecked_keys == 1  # env_var binding without rendered state
     assert sync.status == 'DRIFT'
     # Published fingerprint is the redacted one (a sensitive key is present).
@@ -1564,6 +1562,7 @@ def test_gke_values_mode_matches_prod_chart_values(checker) -> None:
             if ref is not None and values.get('runtimeConfigMapName'):
                 entry['valueFrom'] = {'configMapKeyRef': {**ref, 'name': values['runtimeConfigMapName']}}
             live_env.append(entry)
+        live_env = _with_private_secret_refs(workload, values, live_env)
         deployment = spec.deployment.format(env='prod')
         gke_state = {
             'configmaps': {cm_name: {'data': cm_data}},
@@ -1587,14 +1586,16 @@ def test_gke_values_mode_matches_prod_chart_values(checker) -> None:
         assert result.unallowlisted_live_only == ()
         assert result.value_mismatches == ()
         if workload == 'backend-listen':
-            # The privateEnv-replaceable keys (LISTEN_PRIVATE_VALUES_YAML) are
-            # presence-only without the deployed override state, so they are
-            # never value-asserted; the offline ConfigMap data is proven, so
-            # the rest still compares exactly and the result stays OK.
-            private_keys = checker.LISTEN_PRIVATE_ENV & {e['name'] for e in live_env}
-            assert private_keys, 'chart must still bind the privateEnv-replaceable keys'
-            assert result.value_unchecked_keys >= len(private_keys)
-            assert [m.key for m in result.value_mismatches if m.key in checker.LISTEN_PRIVATE_ENV] == []
+            # Private names are chart-declared secretKeyRefs (privateSecretEnv), so
+            # the source states the exact reference and nothing is presence-only.
+            secret_env = values['privateSecretEnv']
+            refs = {
+                e['name']
+                for e in live_env
+                if ((e.get('valueFrom') or {}).get('secretKeyRef') or {}).get('name') == secret_env['secretName']
+            }
+            assert refs == set(secret_env['keys'])
+            assert checker.LISTEN_PRIVATE_ENV == frozenset()
             assert result.status == 'OK', (workload, result)
             assert not result.has_drift
             assert checker.exit_code((result,), strict=True) == 0
@@ -1602,13 +1603,27 @@ def test_gke_values_mode_matches_prod_chart_values(checker) -> None:
             assert result.status == 'OK', (workload, result)
 
 
-def test_gke_listen_private_env_never_false_drifts_without_override_state(checker) -> None:
-    # Thread: prod backend-listen values for the STT_CAP_DISPATCH_* keys can be
-    # replaced at deploy time from the LISTEN_PRIVATE_VALUES_YAML secret (the
-    # chart's privateEnv mechanism). Without the exact override argv the
-    # checked-in defaults are not the proven deployed values, so a valid
-    # serving ReplicaSet carrying replaced values must degrade to INVENTORY
-    # (strict exit 0), not value drift (strict exit 1).
+def _with_private_secret_refs(workload, values, live_env):
+    """Mirror the listen template: one secretKeyRef per privateSecretEnv name."""
+    secret_env = values.get('privateSecretEnv') or {}
+    if workload != 'backend-listen' or not secret_env:
+        return live_env
+    keys = list(secret_env['keys'])
+    refs = [
+        {
+            'name': key,
+            'valueFrom': {'secretKeyRef': {'name': secret_env['secretName'], 'key': key, 'optional': False}},
+        }
+        for key in keys
+    ]
+    return [e for e in live_env if e['name'] not in keys] + refs
+
+
+def test_gke_listen_private_literal_is_drift_once_names_are_secret_refs(checker) -> None:
+    # The retired privateEnv overlay rendered private values as literals. Once
+    # the chart declares them as secretKeyRefs, a serving ReplicaSet that still
+    # carries a literal (the state before the cutover roll) is real, reported
+    # drift on exactly those names; the value itself never reaches the report.
     cm_name, cm_data = _prod_configmap_fixture(checker)
     values = yaml.safe_load(
         (BACKEND_ROOT.parent / checker.GKE_WORKLOADS['backend-listen'].values_file.format(env='prod')).read_text(
@@ -1625,10 +1640,9 @@ def test_gke_listen_private_env_never_false_drifts_without_override_state(checke
         ref = (entry.get('valueFrom') or {}).get('configMapKeyRef')
         if ref is not None and values.get('runtimeConfigMapName'):
             entry['valueFrom'] = {'configMapKeyRef': {**ref, 'name': values['runtimeConfigMapName']}}
-        # The deploy replaced every privateEnv-replaceable key out of band.
-        if entry['name'] in checker.LISTEN_PRIVATE_ENV:
-            entry = {'name': entry['name'], 'value': 'private-deploy-replaced'}
         live_env.append(entry)
+    private = sorted(values['privateSecretEnv']['keys'])
+    live_env += [{'name': key, 'value': 'private-literal-sentinel'} for key in private]
     gke_state = {
         'configmaps': {cm_name: {'data': cm_data}},
         'backend-listen': {
@@ -1644,14 +1658,9 @@ def test_gke_listen_private_env_never_false_drifts_without_override_state(checke
     }
     (result,) = checker.inspect_gke_drift(env='prod', workloads=('backend-listen',), gke_state=gke_state)
     assert result.error is None, result.error
-    private_keys = checker.LISTEN_PRIVATE_ENV & {e['name'] for e in live_env}
-    assert private_keys
-    # Presence-only: no value assertion on the privateEnv-replaceable keys, so
-    # the out-of-band replaced values cannot produce drift (strict stays 0).
-    assert [m.key for m in result.value_mismatches if m.key in checker.LISTEN_PRIVATE_ENV] == []
-    assert result.value_unchecked_keys >= len(private_keys)
-    assert not result.has_drift
-    assert checker.exit_code((result,), strict=True) == 0
+    assert sorted(m.key for m in result.value_mismatches) == private
+    assert 'private-literal-sentinel' not in repr(result)
+    assert checker.exit_code((result,), strict=True) == 1
 
 
 def test_gke_listen_private_env_still_compared_with_override_state(checker) -> None:
@@ -3840,7 +3849,7 @@ def test_cloud_run_secret_alias_resolves_through_annotation(checker, tmp_path: P
         {'name': 'DEMAND_PROCESSING_UID_ALLOWLIST', 'value': ''},
         {'name': 'SYNC_TASKS_HANDLER_URL', 'value': 'https://handler.example/run'},
         {'name': 'TYPESENSE_HOST', 'valueFrom': {'secretKeyRef': {'name': 'SHARED_TOKEN', 'key': 'latest'}}},
-        {'name': 'FIRST_SUMMARY_UID_ALLOWLIST', 'value': SENSITIVE_UID},
+        {'name': 'FAIR_USE_EXEMPT_UIDS', 'value': SENSITIVE_UID},
     ]
     state = _replay_state(serving_env=serving_env)
     # Annotate both serving revision and template so fingerprints stay comparable.
@@ -4375,3 +4384,22 @@ def test_cloud_run_secret_alias_env_name_fallback_no_longer_resolves(checker, tm
     assert 'TYPESENSE_HOST' not in sync.alias_unproven_keys
     assert sync.status == 'DRIFT', sync
     assert checker.exit_code((sync,), strict=True) == 1
+
+
+def test_every_deployed_cloud_run_role_allows_only_its_live_release_stamp(checker, prod_declared):
+    state = {
+        'services': {
+            name: {
+                'env': [
+                    *({'name': key, 'value': 'synthetic'} for key in sorted(prod_declared[name])),
+                    {'name': 'OMI_BACKEND_RELEASE_SHA', 'value': 'a' * 40},
+                    {'name': 'UNEXPECTED_SYNTHETIC_KEY', 'value': 'synthetic'},
+                ]
+            }
+            for name in ('backend', 'backend-sync', 'backend-sync-backfill', 'backend-integration')
+        }
+    }
+    _, _, results = checker.inspect_services_drift(env='prod', manifest_path=PROD_MANIFEST, cloud_run_state=state)
+    for result in results:
+        assert 'OMI_BACKEND_RELEASE_SHA' in result.allowlisted_live_only
+        assert result.unallowlisted_live_only == ('UNEXPECTED_SYNTHETIC_KEY',)

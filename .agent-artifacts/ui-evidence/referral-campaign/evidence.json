@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-referral-pocket-light.png",
+      "platform": "mobile-ios",
+      "description": "Design A Pocket-style referral page, light, iPhone simulator against a local backend with the uid in OMI_REFERRAL_CAMPAIGN_PREVIEW_UIDS and the campaign flag off. Short link shown; Copy put the full signed link on the clipboard.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "002-mobile-ios-referral-pocket-dark.png",
+      "platform": "mobile-ios",
+      "description": "Same preview account in dark appearance.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "003-mobile-ios-referral-pocket-max-text.png",
+      "platform": "mobile-ios",
+      "description": "Largest accessibility text size, scrolled to the rewards rows; the page scrolls without clipping.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ]
+}

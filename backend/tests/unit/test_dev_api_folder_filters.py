@@ -5,6 +5,8 @@ Verifies that:
 2. GET /v1/dev/user/conversations passes folder_id / starred to DB
 """
 
+from database.ports.folders import FolderEntity
+
 import os
 import sys
 from datetime import datetime, timezone
@@ -143,20 +145,22 @@ def _read_auth():
 
 def _make_folder(folder_id='f1', name='Work'):
     now = datetime(2025, 1, 15, 10, 0, 0, tzinfo=timezone.utc)
-    return {
-        'id': folder_id,
-        'name': name,
-        'description': 'Work folder',
-        'color': '#3B82F6',
-        'icon': '💼',
-        'created_at': now,
-        'updated_at': now,
-        'order': 0,
-        'is_default': False,
-        'is_system': True,
-        'category_mapping': 'work',
-        'conversation_count': 5,
-    }
+    return FolderEntity.model_construct(
+        **{
+            'id': folder_id,
+            'name': name,
+            'description': 'Work folder',
+            'color': '#3B82F6',
+            'icon': '💼',
+            'created_at': now,
+            'updated_at': now,
+            'order': 0,
+            'is_default': False,
+            'is_system': True,
+            'category_mapping': 'work',
+            'conversation_count': 5,
+        }
+    )
 
 
 def _make_conversation(conv_id='conv-1'):
@@ -206,7 +210,7 @@ class TestDevGetFolders:
 
         result = get_user_folders(uid='uid1')
 
-        assert result == folder_list
+        assert result == [f.model_dump(exclude_unset=True) for f in folder_list]
         _mock_get_folders.assert_called_once_with('uid1')
         _mock_initialize_system_folders.assert_not_called()
 

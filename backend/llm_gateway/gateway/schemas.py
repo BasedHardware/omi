@@ -58,11 +58,11 @@ class FailureClass(str, Enum):
     RESERVED_CAPACITY_UNAVAILABLE = 'reserved_capacity_unavailable'
     PROVIDER_5XX_OMI_PAID = 'provider_5xx_omi_paid'
     PROVIDER_INVALID_REQUEST = 'provider_invalid_request'
-    BYOK_AUTH = 'byok_auth'
+    BYOK_AUTH = 'byok_auth'  # pragma: allowlist secret
     BYOK_QUOTA = 'byok_quota'
     BYOK_RATE_LIMIT = 'byok_rate_limit'
     BYOK_UNSUPPORTED_PROVIDER = 'byok_unsupported_provider'
-    MISSING_BYOK_KEY = 'missing_byok_key'
+    MISSING_BYOK_KEY = 'missing_byok_key'  # pragma: allowlist secret
     CAPABILITY_MISMATCH = 'capability_mismatch'
     INVALID_CONFIG = 'invalid_config'
 

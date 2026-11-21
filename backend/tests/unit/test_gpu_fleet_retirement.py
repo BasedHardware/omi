@@ -165,12 +165,18 @@ def test_maintenance_zero_preserves_every_object_and_model(chart):
     assert hpa['spec']['minReplicas'] > 0
 
 
-def test_parakeet_guard_is_retired_and_batch_keeps_own_replicas():
-    baseline = resources('incluster-guards')
-    assert next(o for o in baseline if o['kind'] == 'CronJob')['spec']['suspend'] is True
-    guards = resources('incluster-guards', '--set', 'parakeetSuspended=true')
+@pytest.mark.parametrize('parakeet_suspended', [False, True])
+def test_parakeet_guard_retirement_is_scoped_and_batch_keeps_own_replicas(parakeet_suspended):
+    guards = resources('incluster-guards', '--set', f'parakeetSuspended={str(parakeet_suspended).lower()}')
     cron = next(o for o in guards if o['kind'] == 'CronJob' and o['metadata']['name'] == 'prod-omi-incluster-guards')
-    assert cron['spec']['suspend'] is True
+    assert cron['spec']['suspend'] is False
+    env = {
+        e['name']: e['value'] for e in cron['spec']['jobTemplate']['spec']['template']['spec']['containers'][0]['env']
+    }
+    assert env['PARAKEET_SUSPENDED'] == str(parakeet_suspended).lower()
+    role = next(o for o in guards if o['kind'] == 'Role')
+    hpa_rule = next(r for r in role['rules'] if r['resources'] == ['horizontalpodautoscalers'])
+    assert ('patch' in hpa_rule['verbs']) is (not parakeet_suspended)
     assert any(o['kind'] == 'ConfigMap' and o['metadata']['name'].endswith('-state') for o in guards)
     path = ROOT / 'backend/charts/diarizer'
     result = subprocess.check_output(

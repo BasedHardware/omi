@@ -1,0 +1,3 @@
+{
+  "change": "Recordings that are still waiting for a transcript now say so, and the summary appears once the transcript is ready, instead of showing an error"
+}

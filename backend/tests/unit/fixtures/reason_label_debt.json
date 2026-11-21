@@ -217,6 +217,14 @@
       "why": "pre-existing; unreviewed"
     },
     {
+      "path": "services/error_class_sentinel.py",
+      "function": "_tick",
+      "label": "outcome",
+      "shape": "name",
+      "count": 1,
+      "why": "error-class sweep outcome is a pinned four-value closed set (ok/truncated/error/permission_denied), not a failure reason"
+    },
+    {
       "path": "utils/account_cutover/telemetry.py",
       "function": "record_cutover_transition",
       "label": "reason",
@@ -461,8 +469,8 @@
       "function": "<module>",
       "label": "outcome",
       "shape": "name",
-      "count": 12,
-      "why": "pre-existing; unreviewed"
+      "count": 13,
+      "why": "pre-existing; +1 error-class sweep pre-zero loop (pinned four-value closed set)"
     },
     {
       "path": "utils/metrics.py",

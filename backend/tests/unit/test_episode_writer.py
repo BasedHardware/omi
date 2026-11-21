@@ -21,8 +21,7 @@ from utils.conversations.episode_selection import (
 def test_sticky_writer_settings_are_read_at_call_boundary(monkeypatch):
     assert not episode_writer_settings().claims
     monkeypatch.setenv('MEETING_NOTES_EPISODE_EFFORT', 'high')
-    monkeypatch.setenv('MEETING_NOTES_EPISODE_CLAIMS_ENABLED', 'true')
-    assert episode_writer_settings() == EpisodeWriterSettings('high', True, tiered=True)
+    assert episode_writer_settings() == EpisodeWriterSettings('high', tiered=True)
     monkeypatch.setenv('MEETING_NOTES_EPISODE_EFFORT', 'invented')
     assert episode_writer_settings().effort == 'default'
 

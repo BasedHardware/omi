@@ -1,6 +1,7 @@
 {
   "schema_version": 1,
   "id": "FC-bounding-layer-converts-success-to-failure",
+  "family": "cross-boundary-contract",
   "violated_contract": "A representation budget may degrade the detail of a successful tool result, but it must never rewrite that executor success as a tool failure. Every truncating surface must preserve the succeeded outcome, report omitted totals, and provide a durable handle for drill-in.",
   "canonical_prevention": "The tool manifest owns per-surface result budgets and section contracts; the kernel's total projector persists full output, emits an artifact-backed bounded success with omission counts, and adapters only transport or assert the canonical envelope.",
   "canonical_prevention_artifact": [

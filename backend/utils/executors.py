@@ -19,6 +19,8 @@ Provides shared executors with strict separation (bulkhead pattern):
 - cleanup_executor: long-running account-deletion wipes (vectors, recordings,
   Firestore subcollections). Bulkheaded so bursts of account deletions cannot
   starve normal post-processing.
+- erasure_executor: conversation batch purges and accepted-delete erasures
+  (conversation-erasure queue), apart from account-deletion wipes.
 - storage_executor: audio file precaching, GCS operations.
 - pinecone_shutdown: lazy single-worker mutation settlement, isolated from
   provider calls and the event loop's default executor during termination.
@@ -45,6 +47,7 @@ import queue
 import threading
 from collections import deque
 from concurrent.futures import Future, ThreadPoolExecutor
+from contextlib import contextmanager
 from typing import Any, Callable, Coroutine, Dict, List, ParamSpec, TypeVar, cast
 
 from prometheus_client import REGISTRY, Gauge
@@ -281,12 +284,34 @@ critical_executor = MonitoredThreadPoolExecutor(
 db_executor = MonitoredThreadPoolExecutor(
     name="db", max_workers=int(os.getenv('PUSHER_DB_EXECUTOR_WORKERS', '32')), thread_name_prefix="db"
 )
+# Optional read-cache checks cannot queue behind, or consume, serving DB workers.
+# Shadow allowance IO cannot occupy the serving DB pool or grow an unbounded queue.
+free_allowance_executor = MonitoredThreadPoolExecutor(
+    name="free_allowance", max_workers=2, max_queue_size=4, thread_name_prefix="free-allowance"
+)
+read_cache_shadow_executor = MonitoredThreadPoolExecutor(
+    name="read_cache_shadow",
+    max_workers=2,
+    max_queue_size=0,
+    wait_on_saturation=True,  # submit still raises immediately; suppress expected rejection warnings.
+    thread_name_prefix="read-cache-shadow",
+)
 record_barrier_executor = MonitoredThreadPoolExecutor(
     name="record_barrier",
     max_workers=int(os.getenv('PUSHER_RECORD_BARRIER_EXECUTOR_WORKERS', '16')),
     max_queue_size=64,
     wait_on_saturation=True,
     thread_name_prefix="record-barrier",
+)
+gateway_idempotency_executor = MonitoredThreadPoolExecutor(
+    name="gateway_idempotency", max_workers=8, max_queue_size=8, thread_name_prefix="gateway-idempotency"
+)
+GATEWAY_SETTLEMENT_WORKERS = 8
+gateway_settlement_executor = MonitoredThreadPoolExecutor(
+    name="gateway_settlement",
+    max_workers=GATEWAY_SETTLEMENT_WORKERS,
+    max_queue_size=0,
+    thread_name_prefix="gateway-settlement",
 )
 llm_executor = MonitoredThreadPoolExecutor(name="llm", max_workers=6, thread_name_prefix="llm")
 # Batch policy HTTP leaves only; coordinators stay in async Pump code.
@@ -309,7 +334,27 @@ postprocess_executor = MonitoredThreadPoolExecutor(
     thread_name_prefix="postproc",
 )
 cleanup_executor = MonitoredThreadPoolExecutor(name="cleanup", max_workers=4, thread_name_prefix="cleanup")
+# Sized to the conversation-erasure queue's maxConcurrentDispatches: a delivered task
+# never waits here against its dispatch deadline, and a cleanup burst never waits in
+# front of account wipes on cleanup's four workers.
+erasure_executor = MonitoredThreadPoolExecutor(name="erasure", max_workers=20, thread_name_prefix="erasure")
 storage_executor = MonitoredThreadPoolExecutor(name="storage", max_workers=128, thread_name_prefix="storage")
+# Optional playback discovery cannot consume mandatory custody/readback workers.
+# Its process coordinator admits at most two calls; this pool has no queue.
+playback_metadata_executor = MonitoredThreadPoolExecutor(
+    name="playback_metadata",
+    max_workers=2,
+    max_queue_size=0,
+    wait_on_saturation=True,
+    thread_name_prefix="playback-metadata",
+)
+playback_debt_executor = MonitoredThreadPoolExecutor(
+    name="playback_debt",
+    max_workers=2,
+    max_queue_size=32,
+    wait_on_saturation=True,
+    thread_name_prefix="playback-debt",
+)
 # Prompt-list verification may outlive its caller while a provider finishes.
 # Keep both the clip cut and inline STT away from shared feature pools.
 speaker_tag_verify_executor = MonitoredThreadPoolExecutor(
@@ -338,7 +383,11 @@ _ALL_EXECUTORS = [
     quiet_replay_executor,
     critical_executor,
     db_executor,
+    free_allowance_executor,
+    read_cache_shadow_executor,
     record_barrier_executor,
+    gateway_idempotency_executor,
+    gateway_settlement_executor,
     llm_executor,
     stripe_executor,
     admission_executor,
@@ -346,7 +395,10 @@ _ALL_EXECUTORS = [
     record_language_executor,
     postprocess_executor,
     cleanup_executor,
+    erasure_executor,
     storage_executor,
+    playback_metadata_executor,
+    playback_debt_executor,
     speaker_tag_verify_executor,
     cimd_executor,
     open_loops_executor,
@@ -444,6 +496,56 @@ def after_db_call(callback: Callable[[], Coroutine[Any, Any, Any]]) -> bool:
     return True
 
 
+_future_tracker: contextvars.ContextVar['ExecutorFutureTracker | None'] = contextvars.ContextVar(
+    'executor_future_tracker', default=None
+)
+
+
+class ExecutorFutureTracker:
+    """Session-scoped completion proof, independent of caller cancellation.
+
+    Only selected pools are shielded. Completed futures are immediately removed,
+    so a long-lived socket retains neither results nor upload arguments.
+    """
+
+    def __init__(self, *pools):
+        self.pools = pools
+        self.pending: set[asyncio.Future] = set()
+
+    @contextmanager
+    def scope(self):
+        token = _future_tracker.set(self)
+        try:
+            yield
+        finally:
+            _future_tracker.reset(token)
+
+    async def wait(self):
+        # Call only after all submitting tasks have stopped. asyncio.wait never
+        # propagates this coordinator's cancellation into the underlying work.
+        while self.pending:
+            await asyncio.wait(list(self.pending))
+
+    def observe(self, executor, future):
+        if executor not in self.pools:
+            return False
+        self.pending.add(future)
+
+        def settled(done):
+            self.pending.discard(done)
+            if not done.cancelled():
+                done.exception()
+
+        future.add_done_callback(settled)
+        return True
+
+
+def track_executor_future(executor, future):
+    """Include direct metadata submissions in the same session completion proof."""
+    tracker = _future_tracker.get()
+    return tracker is not None and tracker.observe(executor, future)
+
+
 async def run_blocking(executor: ThreadPoolExecutor, fn: Callable[P, T], *args: P.args, **kwargs: P.kwargs) -> T:
     """Offload *fn* to *executor*, propagating ContextVars."""
     loop = asyncio.get_running_loop()
@@ -461,7 +563,7 @@ async def run_blocking(executor: ThreadPoolExecutor, fn: Callable[P, T], *args: 
                     raise
                 # Backpressure stays in the async caller, without occupying another worker.
                 await asyncio.sleep(0.05)
-        result = await future
+        result = await asyncio.shield(future) if track_executor_future(executor, future) else await future
     finally:
         if token is not None:
             _after_db.reset(token)

@@ -32,7 +32,9 @@ version, conversation existence/ownership/privacy/redirect fields, conversation
 tombstones, and privacy epoch/purge state. This includes dynamic payloads,
 field transforms and deletes. Metadata-only updates with an exists precondition
 are excluded when they cannot change the decision. Full-row `snapshots=`
-consumers always read live, including episode and recorded-time metadata.
+consumers (`database.batch_pipeline_projection_session`, intake, retention,
+custody) read live unless the owner memo serves the decision; see the owner-memo
+section for the partial export that can produce.
 
 Each cached decision re-reads the durable token and checks its server revision,
 including nanoseconds. Missing or malformed tokens/revisions cause live reads.
@@ -45,11 +47,13 @@ Batch memo entries belong to one sync/pump attempt, including inline sync, and
 close on every exit. The pull worker opens its attempt before its first await,
 including preflight/convergence/cleanup; the shared coordinator opens a nested
 attempt for both Cloud Tasks and pull execution. The worker supervisor exposes
-all seven privacy counter families at `/metrics`, preserving child counters
+the privacy counter families in [`COUNTERS`](../../utils/sync/worker_privacy_metrics.py)
+at `/metrics`, preserving child counters
 across exit/SIGKILL via Prometheus mmap files and removing each child's files
 only after the process group is reaped. The worker chart enables PodMonitoring
 by default. Include that installed worker target in all-plane coverage before
-starting the 14-day window; a missing scrape or denominator blocks qualification.
+satisfying the [evidence gate](#deploy-and-ramp); no 14-day window applies.
+A missing scrape or denominator blocks qualification.
 Transactions reusing a batch memo read the token in their
 conflict set. Existing transactional legal-hold fences retain both live authority
 reads and do not add a privacy-token read. Nontransactional
@@ -74,11 +78,67 @@ absence. `record_deletion` invalidates it. These hints remain bounded to 30
 seconds and never authorize reuse without the durable token. No deletion TTL
 cap is raised. Per-session memo entries on listen/pusher are bounded and closed
 on teardown; late executor leaves cannot reuse a closed holder.
-The new negative families use a fixed managed-deployment ceiling of 30 seconds;
+The older `fsr_read_cache` hints behind `tombstone_negative_cache` and
+`legal_hold_fence_cache` use a fixed managed-deployment ceiling of 30 seconds;
 their TTL environment names are not deployment tuning knobs. Optional local
-overrides can only shorten that ceiling. Rollouts use the declared reader levers.
+overrides can only shorten that ceiling. This is separate from the WQ26
+token-certified process-local negative LRU below, whose second bound is 60
+seconds. Rollouts use each family's declared reader levers.
 
 ## Measurement
+
+### Token-fenced negative lookups (omi-pipeline, owner lead2)
+
+`privacy_negative_lookup_cache` uses the existing 0–100 percent cohorts. Zero
+is the kill switch. `privacy_checks_shadow` selects shadow mode within that same
+new-lever
+cohort: every lookup stays live, and generation-memo hits are bypassed so the
+walk supplies comparisons. With the new lever at 0, existing decision shadow
+behavior remains unchanged. No second new lever is introduced. The new lever
+replaces retired `batch_privacy_memoize` one-for-one (lead2 ruling 258db3 (03)).
+Its class, caller plumbing, memo-only replay assertions and deployment literals
+are removed. The shared env registry/flag-budget slot remains
+`FIRESTORE_READ_LEVERS`; individual levers have no separate budget entry.
+No cache cohort is enabled by this PR. Runtime config changes only remove the
+retired key, including the worker's former 100% value.
+This is independent of `privacy_ttl60` and its Firestore kill document; it never
+touches Redis or seeds an older deletion-marker cache.
+
+Only real NOT_FOUND reads of `account_deletions/{uid}`, per-ID conversation
+tombstones and conversations can seed the process-local 50,000-entry LRU.
+Entries expire at 60 seconds, measured before the authoritative read, and
+carry the client's plane, owner, exact document path and token/server revision.
+Every reuse requires an uncached token read in the same authorizing transaction.
+Malformed/missing/blocked tokens, nontransactional calls and full-row exports
+stay live. The retired WQ12 snapshot memo cannot seed or certify these hints.
+Metadata-only conversation creates/upserts rotate the token too; existing-only
+updates may skip rotation only when they cannot change privacy authority.
+Legal-hold writes rotate the token, but hold adjudication remains in the
+existing legal-hold fence; the batch walk does not introduce a new hold policy.
+
+`privacy_negative_lookup_total{collection,mode,result}` has bounded collection
+labels (`account_deletions`, `deleted_conversations`, `conversations`, `other`),
+mode `shadow|enforce`, result `hit|miss|mismatch`. A shadow hit is a compared
+candidate NOT_FOUND; a live document is always a mismatch, even within TTL.
+The denominator for qualification is shadow **hits**, not cold misses. Both
+Cloud Run keep-lists retain it; GKE PodMonitoring retains application counters
+without a name keep-list. The GPU worker registers the counter on its private
+metrics registry, and its pod parent merges each child's series with a
+`worker_process` label. Isolated sync workers fold the counter across exits.
+
+Proposed ramp after the lead verifies writer-fence coverage on every plane:
+hour 0–2 set `privacy_negative_lookup_cache:100` and `privacy_checks_shadow:100`
+(shadow only, no enforcement); require zero mismatches on at least
+10,000 shadow hits with every serving plane represented and no scrape gaps.
+Hours 2–4 enforce 10%, hours 4–6 enforce 50%, hour 6 onward enforce 100%,
+only after the preceding two-hour window stays clean. Set existing `privacy_checks_shadow:10` during enforcement
+(shadow wins overlapping cohorts; its samples do not enforce). Lead2 owns each advancement;
+insufficient samples extend the window rather than advancing by the clock.
+Any mismatch stops the ramp: set enforcement to 0 (and existing `privacy_checks_shadow` to 0 for an exact
+original read path), investigate the writer bypass, and requalify from shadow.
+Compare absolute caller reads and cache hits against each plane's own baseline.
+This schedule covers token-fenced lookup hints; the decision-cache family's
+qualification window below remains separate.
 
 All labels are closed enums with no owner, conversation, job or session IDs.
 Point reads retain their historical SDK caller labels through a closed privacy
@@ -89,8 +149,8 @@ use the separate live/shadow counters when measuring the live decision path.
 | Metric | Meaning |
 | --- | --- |
 | `privacy_check_calls_total{family,mode}` | Calls, including invalid inputs and nested fences |
-| `privacy_checks_total{family,mode,reason}` | Allow/block/error decisions |
-| `privacy_check_reads_total{family,mode,result}` | Issued point reads, hit/miss/error |
+| `privacy_checks_total{family,mode,reason,plan_group}` | Allow/block/error decisions |
+| `privacy_check_reads_total{family,mode,result,plan_group}` | Issued point reads, hit/miss/error |
 | `privacy_conversations_walked_total{mode}` | Distinct conversation nodes walked per check |
 | `privacy_session_cycle_operations{plane,family,mode,kind}` | Completed 60-second intervals: listen after bootstrap; pusher from websocket entry, including bootstrap |
 | `privacy_shadow_checks_total{family,result}` | Match/mismatch/error denominator |
@@ -106,7 +166,171 @@ Unresolved shadow errors or missing candidate coverage block qualification.
 Compare each plane against its own lifecycle baseline; pusher's first complete
 interval includes setup checks, while listen resets its census after bootstrap.
 
+## Current API owner-memo admission (2026-11-17)
+
+The margin-40 lead's O2b stage-2 order recorded the source target only for
+prod Cloud Run backend, backend-sync and backend-integration, following the
+100% live-shadow qualification under David's 2026-11-04 evidence-based privacy
+gate and Release's stage-1/native-5xx disposition. The later incident and current
+hold described below require fresh admission; the gate itself is not waived.
+The durable source for those three APIs is owner enforcement 100, shadow 0,
+decision cache 0, negative cache 0 and TTL60 0; see the
+[runtime-source contract](../../deploy/runtime_env/README.md#api-owner-memo-source-carry-o2b-2026-11-17).
+Backfill remains owner enforcement 0/shadow 10/decision cache 0. Other role and
+family admissions remain separate; no worker/GKE/global default expands here.
+
+The margin lead records that David's 2026-11-04 gate was met from
+2026-11-16T23:40Z through 2026-11-17T01:40Z: two hours of live shadow at
+100 percent, zero mismatches, with the automatic kill armed. This is historical
+qualification, not a waiver of the automatic-trip requirement. The owner memo
+serves only when `privacy_checks_shadow` is 0; enforcement therefore emits no
+mismatch comparison stream and the comparison guard cannot trip automatically
+in that state. The safety mechanism on each served decision is the token
+re-read in the caller's transaction, with the existing writer fences. A sampled
+live comparison alongside enforcement is owed as a code follow-up commissioned
+by the margin lead; this source carry does not implement or validate it.
+Retain the authority-unavailable/audio/5xx stop conditions.
+
+The subsequent 2026-11-17T04:56Z guard/receiving-vector incident supersedes the
+earlier source admission. Release holds this carry until the margin lead
+reconciles the current runtime/guard disposition and explicitly admits the
+corrected source. The existing kill remains set; neither this historical
+qualification nor the source literals authorize clearing it or reactivating
+enforcement. Release's runtime inverse is enforcement 0 with shadow 10, or
+the existing privacy kill document. Reconcile source before the next train
+after an inverse. Source merge is not runtime acceptance, writer coverage or
+measured savings.
+
+### Historical owner-level decision memo packet (before the API admission above)
+
+SCA-2190 re-land: candidates remain on (`bpp_owner_memo:100`), but serving an owner memo also requires the separate `bpp_owner_memo_enforce` admission lever (default 0). Old, missing or malformed config therefore cannot admit a new image to owner enforcement. This packet explicitly keeps admission at 0; only the cost lead may authorize a later reviewed config change after qualification. One entry per (client, uid) holds the
+token version, generation, the conversation-id union a walk certified and the
+user sync default. Every use re-reads the token in the caller's transaction and
+requires token, server revision and generation to match; ids outside the
+certified union are walked live in that transaction; BLOCK is never stored; the
+kill switch `ops_kill_switches/privacy_decision_cache` is consulted before every
+served decision. `privacy_ttl60` stays off and is not used here.
+
+A served decision exports no rows for ids the entry has already certified.
+Unseen ids are walked live and their rows ARE exported, so a `snapshots=`
+caller can receive a partial export; the projection, intake, retention and
+custody consumers read any row they still need themselves.
+
+Shadow window to run before any owner-memo enforcement admission:
+
+- Before interpreting any match count, read
+  `ops_kill_switches/privacy_decision_cache` and require it to be clear. Require
+  a present `privacy_ttl_cache_disabled = 0` series and
+  `increase(privacy_ttl_cache_switch_reads_total{result="clear"}[window]) > 0`
+  for **each serving service** over the same observation window, plus positive
+  `candidate_source="owner_hit"` comparisons on each eligible shape. A set switch makes the owner comparison window vacuous even when
+  fresh-read comparisons match. The old kill guard left this switch set from
+  2026-11-04T22:50:25Z through 2026-11-16 (confirmed by David's ro-prod read);
+  release cleared it at 2026-11-16T23:39Z after old revisions drained (reported
+  by the release lead); owner hits then appeared on every shape and service
+  with zero mismatches. Enforcement stays off. These observations do not replace
+  the qualification gate.
+- Keep `bpp_owner_memo:100` and `bpp_owner_memo_enforce:0`; set
+  `privacy_checks_shadow:10`, `privacy_negative_lookup_cache:0`, and `privacy_ttl60:0`.
+  This 10% stage is diagnostic; the current qualification policy below requires
+  100% live shadow for two hours after synthetic/replay proof.
+  Clearing shadow alone NEVER admits this memo: the enforcement gate stays off.
+- For the sampled 10% of uids every transactional batch check serves the LIVE
+  decision and then compares an owner-memo candidate. That covers all three
+  previously unshadowed shapes: attempt-scoped calls, the store/retention
+  `no_attempt` calls and the `snapshots=` callers (projection, intake). Gating
+  shadow on an attempt, or skipping export callers, would leave those paths
+  enforcing with no comparison and a zero `stale_allow` there would be
+  structural, not evidence.
+- The candidate receives a throwaway export dict, so a comparison can never
+  publish rows or perturb the caller's export.
+- Unsampled uids do not enforce either: while any `privacy_checks_shadow`
+  percentage is set, the owner memo serves no one, so the unsampled cohort
+  serves plain live decisions (baseline reads, no memo saving) until the
+  lever clears. Nothing the comparison cohort has not validated serves a
+  decision during the window. Nontransactional provider-STT preflight stays
+  live and never enters the memo path (no transaction); it is live by
+  construction in every stage, so no later lever or stage enforces the memo
+  there. The already-shipped attempt-scoped id-set memo keeps its existing
+  levers and behavior throughout; it is not part of this release's change.
+- The negative lookup cache must stay off for the window: with it on,
+  `negative_shadow` wins and the memo neither enforces nor compares.
+- Gate: `privacy_decision_mismatch_total{family="batch",reason="stale_allow"}`
+  is zero and `privacy_shadow_checks_total{family="batch",result="mismatch"}`
+  is zero, with `candidate_source="owner_hit"` comparisons observed on every
+  shape above. A zero comparison count is not evidence: it means the negative
+  cache is still on or the window is not set.
+- Read cost: the window saves nothing. Sampled uids roughly double their reads
+  — a cold owner pays the live walk plus the candidate walk, a warm owner pays
+  the live walk plus one candidate token read, and every sampled check adds
+  one observation token read. Snapshot callers add per-new-id reads on
+  candidate misses. The unsampled cohort returns to baseline live reads. At
+  10% sampling that is about +0.5 read per check across the fleet, plus the
+  baseline (no-saving) reads for the unsampled 90% until the window ends.
+
+### Diagnosing a missing owner-hit denominator
+
+Read `ops_kill_switches/privacy_decision_cache` directly and check both
+`privacy_ttl_cache_disabled = 0` and
+`increase(privacy_ttl_cache_switch_reads_total{result="clear"}[window]) > 0`
+on each serving service over the observation window (for example `[30m]`
+during diagnosis or `[2h]` for live qualification). Both metrics must be
+exported by that service's keep-list. The gauge initializes to zero at import;
+its presence alone proves no switch read. The counter increments only on
+actual polls, with closed outcomes `clear`, `disabled`, or `error`; cached
+lookups do not increment it. Require positive clear reads together with the
+zero gauge, the direct document read and owner-hit comparisons. A fleet
+`max=0` from other planes is not proof that a Cloud Run worker read its switch.
+A switch read failure is fail-closed (`1`), just like an explicit disable. Neither shadow candidates nor
+enforcement may bypass it. An unreadable switch reproduces fresh-read
+candidates on no-attempt/export paths and session hits on attempt paths with
+no owner hits, even with all memo levers on.
+
+Do not admit enforcement to diagnose a zero-hit window. The candidate already
+sets `owner_candidate=True`, which bypasses enforcement admission and the
+fleet-wide shadow gate, while retaining the transaction, owner lever, kill
+switch and token eligibility checks. It stores successful live walks in the
+same owner memo used by enforcement. Neither an attempt scope nor token mint
+is required for an owner with a usable token. New conversation ids are checked
+live on an owner hit and still report `candidate_source="owner_hit"`.
+
+Inspect `privacy_memo_ineligible_total` by `reason,caller`: transactional export
+calls reporting `reason="snapshots"` mean the owner path was off at its gate,
+not that their throwaway export changed a cache key. `privacy_memo_requests_total`
+with `result="no_token"` is not a count of all unusable tokens: it only increments
+when minting is allowed by the caller and `_mintable` accepts the snapshot.
+Missing server revisions, blocked tokens and non-integer generations can
+prevent eligibility without incrementing that series. Unsupported schema
+versions are mintable and do increment `no_token` when the caller permits
+minting, even if `bpp_token_mint` is off and the scheduler therefore does nothing.
+
+Candidate exceptions increment both the existing error denominator and
+`privacy_owner_shadow_error_total{shape="attempt|no_attempt|snapshots",error_class="..."}`.
+Error classes are a closed allowlist: `deadline_exceeded`, `aborted`,
+`failed_precondition`, `permission_denied`, `resource_exhausted`,
+`service_unavailable`, `invalid_argument`, `timeout`, `value_error`, `type_error`,
+`artifact_read_limit`, `runtime_error`, or `other`. Custom class names and exception messages are never
+exported. Compare errors by service and shape; a caught error has no effect on
+the live result and does not qualify a candidate. For example:
+
+```promql
+sum by (service_name, shape, error_class) (
+  increase(privacy_owner_shadow_error_total[30m])
+)
+```
+
 ## Deploy and ramp
+
+**Correction 2026-11-17 — calendar soak requirements superseded.** David's
+2026-11-04 ~17:10Z ruling replaced calendar soaks for **all Firestore read
+levers**, including the 14-day privacy shadow: privacy/deletion levers require
+**evidence, not time**. Require zero mismatches across at least approximately
+1,000 synthetic plus replayed risky transitions, then **two hours of live
+shadow at 100%**, with an automatic kill switch on the **first mismatch**.
+The old 14-day clauses in steps 3–4 below are retained as superseded history;
+they must not govern admission. Writer coverage, privacy contracts, mismatch
+classification and baseline economics still apply. This correction does not
+admit enforcement; the cost lead owns that separate decision.
 
 1. Lead deploys writer code: **listen → pusher → Cloud Run** (backend,
    backend-sync, backend-sync-backfill, desktop-backend and other serving
@@ -117,14 +341,15 @@ interval includes setup checks, while listen resets its census after bootstrap.
    Staging/migration tools are not authority to enable production caching.
 2. Record each slice's pre-ramp live read baseline. Enable
    `privacy_checks_shadow` for the sampled cohorts, then all planes. The memo
-   candidate runs **after** live allow/block, never changes it and never exports
-   snapshots. Shadow wins if an enforcement lever is also present.
-3. Require **at least 14 days** of all-plane shadow and **zero unexplained
+   candidate runs **after** live allow/block, never changes it and never writes
+   to the caller's export (it gets a throwaway copy). Shadow wins if an
+   enforcement lever is also present.
+3. **Superseded calendar clause (see correction above):** Require **at least 14 days** of all-plane shadow and **zero unexplained
    `privacy_decision_mismatch_total`**, plus the emulator writer matrix and privacy contracts.
    Count/classify benign concurrent ordering rather than discarding it. Grade
    memo economics against the scope's 30% repeat-key hit-rate bar; a cache with
    insufficient repeat-key traffic has no demonstrated saving.
-4. Infracost owns expansion and the first enforcement decision is due **14 days
+4. **Superseded calendar clause (see correction above):** Infracost owns expansion and the first enforcement decision is due **14 days
    after shadow reaches all planes**. Remove shadow for the qualified cohort,
    then ramp `bpp_generation_memo`, `legal_hold_fence_cache`, and
    `tombstone_negative_cache` separately to **5% → PASS on two ticks → 100%**,

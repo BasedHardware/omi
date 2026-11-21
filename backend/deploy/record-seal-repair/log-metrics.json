@@ -23,7 +23,7 @@
   {
     "name": "omi_record_seal_repair_seal_age_seconds",
     "description": "Observed age in seconds, not a complete backlog census.",
-    "filter": "resource.type=\"k8s_container\" AND resource.labels.namespace_name=\"prod-omi-backend\" AND resource.labels.container_name=\"repair\" AND jsonPayload.logger=\"record-seal-repair\" AND jsonPayload.message:\"\\\"event\\\": \\\"record_seal_repair_row\\\"\" AND jsonPayload.message=~\"\\\"disposition\\\": \\\"sealed(_registered)?\\\"\"",
+    "filter": "resource.type=\"k8s_container\" AND resource.labels.namespace_name=\"prod-omi-backend\" AND resource.labels.container_name=\"repair\" AND jsonPayload.logger=\"record-seal-repair\" AND jsonPayload.message:\"\\\"event\\\": \\\"record_seal_repair_row\\\"\" AND jsonPayload.message=~\"\\\"disposition\\\": \\\"sealed(_registered)?\\\"\" AND jsonPayload.message:\"\\\"seal_age_seconds\\\"\"",
     "metricDescriptor": {
       "metricKind": "DELTA",
       "valueType": "DISTRIBUTION",
@@ -118,5 +118,43 @@
     "labelExtractors": {
       "reason": "REGEXP_EXTRACT(jsonPayload.message, \"\\\"partial_reason\\\": \\\"(tail_lagging|budget_limit|tail_lost_or_unproven)\\\"\")"
     }
+  },
+  {
+    "name": "omi_record_seal_repair_blocker_outcomes",
+    "description": "Proof-gated pending repair outcomes by closed blocker and disposition.",
+    "filter": "resource.type=\"k8s_container\" AND resource.labels.namespace_name=\"prod-omi-backend\" AND resource.labels.container_name=\"repair\" AND jsonPayload.logger=\"record-seal-repair\" AND jsonPayload.message:\"\\\"event\\\": \\\"record_seal_repair_row\\\"\" AND jsonPayload.message:\"\\\"blocker\\\"\"",
+    "metricDescriptor": {
+      "metricKind": "DELTA",
+      "valueType": "INT64",
+      "unit": "1",
+      "labels": [
+        {
+          "key": "disposition",
+          "valueType": "STRING",
+          "description": "Closed repair outcome."
+        },
+        {
+          "key": "blocker",
+          "valueType": "STRING",
+          "description": "Closed pending blocker class."
+        }
+      ]
+    },
+    "valueExtractor": "REGEXP_EXTRACT(jsonPayload.message, \"\\\"count\\\": ([0-9]+)\")",
+    "labelExtractors": {
+      "disposition": "REGEXP_EXTRACT(jsonPayload.message, \"\\\"disposition\\\": \\\"([a-z_]+)\\\"\")",
+      "blocker": "REGEXP_EXTRACT(jsonPayload.message, \"\\\"blocker\\\": \\\"(partial_barrier|producer_pending_tokens|upload_failed|already_closed_job_pending|conversation_missing|seal_eligible)\\\"\")"
+    }
+  },
+  {
+    "name": "omi_record_seal_repair_invalid_clock_rows",
+    "description": "Attempted repair rows excluded from age metrics because the source clock is invalid.",
+    "filter": "resource.type=\"k8s_container\" AND resource.labels.namespace_name=\"prod-omi-backend\" AND resource.labels.container_name=\"repair\" AND jsonPayload.logger=\"record-seal-repair\" AND jsonPayload.message:\"\\\"event\\\": \\\"record_seal_repair\\\"\" AND jsonPayload.message:\"\\\"outcome\\\": \\\"ok\\\"\"",
+    "metricDescriptor": {
+      "metricKind": "DELTA",
+      "valueType": "INT64",
+      "unit": "1"
+    },
+    "valueExtractor": "REGEXP_EXTRACT(jsonPayload.message, \"\\\"invalid_clock_rows\\\": ([0-9]+)\")"
   }
 ]

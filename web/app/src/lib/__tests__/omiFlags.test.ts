@@ -15,7 +15,7 @@ const response = {
 describe('omiFlags', () => {
   beforeEach(() => resetOmiFlags());
 
-  it('answers owned keys and leaves unowned keys to PostHog', async () => {
+  it('answers owned keys and leaves missing keys unknown', async () => {
     const load = vi.fn().mockResolvedValue(response);
     expect(await omiFlagEnabled('web-plan-storefront', { load })).toBe(false);
     expect(await omiFlagEnabled('web-contextual-upsells', { load })).toBe(true);
@@ -46,5 +46,16 @@ describe('omiFlags', () => {
     resetOmiFlags();
     await loadOmiFlags(load);
     expect(load).toHaveBeenCalledTimes(2);
+  });
+  it('late account A response cannot answer a read after account reset', async () => {
+    let finish!: (value: typeof response) => void;
+    const load = () =>
+      new Promise<typeof response>((resolve) => {
+        finish = resolve;
+      });
+    const oldRead = omiFlagEnabled('web-contextual-upsells', { load });
+    resetOmiFlags();
+    finish(response);
+    expect(await oldRead).toBeUndefined();
   });
 });

@@ -45,7 +45,7 @@ Pending; the primary instance keeps queue sampling and the HPA. */}}
 {{- if eq $t4 (index .nodeSelector "cloud.google.com/gke-nodepool") -}}{{- fail "t4Fallback.nodePool must differ from all primary pools" -}}{{- end -}}
 {{- end -}}
 {{- if lt (int .Values.t4Fallback.replicas) 0 -}}{{- fail "t4Fallback.replicas must be >= 0" -}}{{- end -}}
-{{- $instances = append $instances (dict "name" (printf "%s-t4" .Release.Name) "nodeSelector" (mergeOverwrite (deepCopy .Values.nodeSelector) (dict "cloud.google.com/gke-nodepool" $t4)) "fixedReplicas" (int .Values.t4Fallback.replicas) "processes" (int .Values.t4Fallback.processes)) -}}
+{{- $instances = append $instances (dict "name" (printf "%s-t4" .Release.Name) "nodeSelector" (mergeOverwrite (deepCopy .Values.nodeSelector) (dict "cloud.google.com/gke-nodepool" $t4)) "fixedReplicas" (int .Values.t4Fallback.replicas) "processes" (int .Values.t4Fallback.processes) "pipelineDepth" (int .Values.t4Fallback.pipelineDepth)) -}}
 {{- end -}}
 {{- with .Values.borrowedNodePools -}}
 {{- if .enabled -}}

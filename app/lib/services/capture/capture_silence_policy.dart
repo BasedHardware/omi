@@ -31,6 +31,16 @@ CaptureTransition _reduceSilenceResume(CaptureCoordinatorState state, CaptureEnv
   if (!env.silencePaused || state.phoneOwns || state.callActive) {
     return CaptureTransition(state, const []);
   }
+  final grace = state.pendantSuspension;
+  if (grace?.reason == SuspendReason.reconnect) {
+    // Charging/foreground can clear an old automatic pause between device
+    // publication and start. Keep the reconnect identity and manual mute;
+    // only DeviceStartRequested may consume this suspension.
+    return CaptureTransition(state, [
+      const RunStage(SilencePauseMarkerStage(false)),
+      if (grace!.wasPaused != env.policyMuted) PolicyWrite(grace.wasPaused, unlessCallActive: true),
+    ]);
+  }
   final device = state.connectedDevice;
   if (device == null) {
     // Link reconnect remains immediate and will start capture under this intent.
@@ -52,14 +62,16 @@ CaptureTransition _reduceSilenceResume(CaptureCoordinatorState state, CaptureEnv
     [
       const PolicyWrite(false),
       MintRecording(sessionKey: key, telemetrySource: 'pendant_live'),
+      const RunStage(ResolveDeviceMuteStage()),
       const RunStage(StartDeviceSessionStage(deviceRequested: true, promptLocation: false)),
     ],
   );
 }
 
 CaptureTransition _reduceDevicePause(CaptureCoordinatorState state, CaptureEnvironment env) {
+  if (state.pendantSuspension?.reason == SuspendReason.reconnect) return _reducePause(state, env);
   if (env.silencePaused) {
-    return CaptureTransition(state, const [RunStage(SilencePauseMarkerStage(false))]);
+    return _reducePause(state, env);
   }
   if (state.phase == CapturePhase.phoneLive || state.phase == CapturePhase.phoneBatchLive) {
     return _reducePause(state, env);
@@ -72,6 +84,7 @@ CaptureTransition _reduceDevicePause(CaptureCoordinatorState state, CaptureEnvir
   };
   if (nextPhase != state.phase) {
     return CaptureTransition(state.copyWith(phase: nextPhase), const [
+      RunStage(PersistDeviceMuteStage(true)),
       PolicyWrite(true),
       RunStage(RecordingMarkStage(RecordingState.pause)),
       RunStage(PauseDeviceTailStage()),
@@ -83,7 +96,11 @@ CaptureTransition _reduceDevicePause(CaptureCoordinatorState state, CaptureEnvir
     return CaptureTransition(state.copyWith(suspended: _withPendantWasPaused(state.suspended, true)), const []);
   }
   if (state.phase == CapturePhase.idle && !state.callActive) {
-    return CaptureTransition(state, const [PolicyWrite(true), RunStage(PauseDeviceTailStage())]);
+    return CaptureTransition(state, [
+      if (state.connectedDevice != null) const RunStage(PersistDeviceMuteStage(true)),
+      const PolicyWrite(true),
+      const RunStage(PauseDeviceTailStage()),
+    ]);
   }
   return CaptureTransition(state, const []);
 }

@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import Any
 
-ACCOUNT_DELETION_COLLECTION = "account_deletions"
+from database.batch_account_authority_schema import ACCOUNT_DELETION_COLLECTION as ACCOUNT_DELETION_COLLECTION
 
 
 def account_deletion_firestore_client(*, firestore_client: Any | None = None) -> Any:
@@ -38,78 +38,25 @@ def get_user_deletion_wipe_status(uid: str, *, firestore_client: Any | None = No
     """Negative-only cache, generation-fenced by every marker writer."""
     from database import privacy_check_metrics as metrics
     from database.account_deletion_policy import account_deletion_blocks_access
-    from database.fsr_read_cache import cached_read, memo, plane_id, ttl
+    from database.fsr_read_cache import cached_read, plane_id, ttl
 
     metrics.called('deletion_marker')
     try:
         client = account_deletion_firestore_client(firestore_client=firestore_client)
-
-        def read():
-            return memo(
-                uid,
-                ('deletion', plane_id(client)),
-                lambda: cached_read(
-                    'deletion_marker_cache',
-                    uid,
-                    'absent:' + plane_id(client),
-                    lambda: _s4_read_deletion_status(uid, firestore_client=client),
-                    seconds=ttl('FSR_DELETION_NEGATIVE_TTL_SECONDS', 30),
-                    cacheable=lambda status: status is None,
-                ),
-            )
-
-        status = _ttl_bounded_status(uid, client, read, lambda: _s4_read_deletion_status(uid, firestore_client=client))
+        status = cached_read(
+            'deletion_marker_cache',
+            uid,
+            'absent:' + plane_id(client),
+            lambda: _s4_read_deletion_status(uid, firestore_client=client),
+            seconds=ttl('FSR_DELETION_NEGATIVE_TTL_SECONDS', 30),
+            cacheable=lambda status: status is None,
+        )
     except Exception:
-        metrics.decision('deletion_marker', 'authority_unavailable')
+        metrics.decision('deletion_marker', 'authority_unavailable', uid=uid)
         raise
-    metrics.decision('deletion_marker', 'account_deleted' if account_deletion_blocks_access(status) else 'allow')
-    return status
-
-
-def _ttl_bounded_status(uid: str, client: Any, read: Any, direct: Any) -> str | None:
-    """Reuse any marker status for at most 60s (David ruling 2026-11-04, lever privacy_ttl60).
-
-    With the lever on, every fill and every live decision comes from ``direct``,
-    a confirmed Firestore read. It is never ``read``, whose Redis negative cache
-    could hand back an already-aged absence and stretch the bound past 60s.
-
-    Every status is reusable: a blocking status only delays a restore, and an
-    absent or permitting status takes effect within the 60s bound. Read errors
-    are never stored. Under privacy_checks_shadow the live read always decides
-    and the cached answer is only compared.
-    """
-    from config.firestore_read_levers import lever_enabled
-    from database import privacy_check_metrics as metrics
-    from database import privacy_ttl_cache as ttl_cache
-    from database.account_deletion_policy import account_deletion_blocks_access
-    from database.fsr_read_cache import plane_id
-
-    if not ttl_cache.enabled('privacy_ttl60', uid):
-        return read()
-    shadow = lever_enabled('privacy_checks_shadow', uid)
-    key = ('privacy_ttl', plane_id(client), uid, 'deletion_marker', '')
-    cached, age = ttl_cache.DECISIONS.get(key)
-    hit = not ttl_cache.is_missing(cached)
-    if hit and not shadow:
-        metrics.ttl_result('deletion_marker', 'hit')
-        return cached[0]
-    started = ttl_cache.DECISIONS.clock()
-    status = direct()
-    if shadow:
-        try:
-            live = 'account_deleted' if account_deletion_blocks_access(status) else 'allow'
-            candidate = live
-            if hit:
-                candidate = 'account_deleted' if account_deletion_blocks_access(cached[0]) else 'allow'
-            metrics.ttl_result('deletion_marker', 'hit' if hit else 'miss')
-            metrics.compare('deletion_marker', live, candidate, cached_age=age if hit else None)
-        except Exception:
-            metrics.shadow_error('deletion_marker')
-    else:
-        metrics.ttl_result('deletion_marker', 'miss')
-    # Box the value so a cached None (no marker) differs from a miss.
-    if ttl_cache.DECISIONS.put(key, (status,), started=started):
-        metrics.ttl_result('deletion_marker', 'store')
+    metrics.decision(
+        'deletion_marker', 'account_deleted' if account_deletion_blocks_access(status) else 'allow', uid=uid
+    )
     return status
 
 
@@ -133,7 +80,7 @@ def _s4_read_deletion_status(uid: str, *, firestore_client: Any | None = None) -
     from database.firestore_read_metrics import FirestoreReadOutcome, FirestoreReadSite, record_document_read
 
     client = account_deletion_firestore_client(firestore_client=firestore_client)
-    snapshot = read_snapshot('deletion_marker', account_deletion_document(uid, firestore_client=client))
+    snapshot = read_snapshot('deletion_marker', account_deletion_document(uid, firestore_client=client), uid=uid)
     record_document_read(
         FirestoreReadSite.USER_DELETION_WIPE_STATUS,
         FirestoreReadOutcome.HIT if snapshot.exists else FirestoreReadOutcome.MISS,

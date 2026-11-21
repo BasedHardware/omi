@@ -26,11 +26,23 @@ def jobs(text):
 PR_SCHEMA_WRITERS = {"gcp_firestore_indexes.yml"}
 
 INTENTIONAL_BUDGET_CHANGES = {
+    # Lane 8 adds a port-map job to the reusable workflow. It is skipped on
+    # the pinned nightly, and its PR and main-push budget is fixed here.
+    ("backend-go-checks.yml", "port-tasks", "runs-on"): "ubuntu-latest",
+    ("backend-go-checks.yml", "port-tasks", "timeout-minutes"): "15",
+    # #25814 adds locked Python setup and an emulator replay to the Go check.
+    ("backend-go-checks.yml", "check", "timeout-minutes"): "30",
     # iOS Compile Check: the 40-min ceiling sat below the measured cold path
     # (39:25 real steps + ~1 min post-job Post Setup Flutter cache save, run
     # 39634604539 attempt 1), cancelling a healthy cold job after every real
     # step passed. 50 restores wedge headroom; budget_p50 stays 19.
     ("mobile-app-checks.yml", "ios-compile-check", "timeout-minutes"): "50",
+    # Dart Analyze & Tests: the 30-min ceiling sat below the measured suite
+    # path — main's healthy runs took 27-29.6 min (run 41736391155: 29:36 for
+    # 8207 tests) — so run 41693050609 was cancelled at the cap with all 7842
+    # executed tests passing and ~360 unexecuted, failing Mobile Release
+    # Eligibility downstream. 40 restores wedge headroom; budget_p50 stays 17.
+    ("mobile-app-checks.yml", "analyze-and-test", "timeout-minutes"): "40",
     # Backend unit shard: the 15-min job ceiling includes runner setup, but
     # the step regression budget excludes it, leaving 180s for setup.
     # Setup measured 73-92s typical, 227s worst (run 39741901310 attempt 2:
@@ -126,11 +138,19 @@ class WorkflowTests(unittest.TestCase):
         base = subprocess.run(["git", "merge-base", "origin/main", "HEAD"], cwd=ROOT,
                               capture_output=True, text=True, check=True).stdout.strip()
         for filename in self.calls.values():
-            baseline = subprocess.run(["git", "show", f"{base}:.github/workflows/{filename}"],
-                                      cwd=ROOT, capture_output=True, text=True, check=True).stdout
+            shown = subprocess.run(["git", "show", f"{base}:.github/workflows/{filename}"],
+                                   cwd=ROOT, capture_output=True, text=True)
+            if shown.returncode != 0:
+                # A workflow this PR adds has no earlier budget to keep; ci-budget.yaml covers it.
+                continue
+            baseline = shown.stdout
             before, after = jobs(baseline), jobs((WORKFLOWS / filename).read_text())
-            self.assertEqual(set(before), set(after), filename)
-            for name in before:
+            approved_jobs = {
+                name for workflow, name, field in INTENTIONAL_BUDGET_CHANGES
+                if workflow == filename and field == "runs-on"
+            }
+            self.assertEqual(set(before) | approved_jobs, set(after), filename)
+            for name in after:
                 for field in ("runs-on", "timeout-minutes"):
                     pattern = rf"(?m)^    {field}:.*$"
                     after_values = re.findall(pattern, after[name])
@@ -138,7 +158,7 @@ class WorkflowTests(unittest.TestCase):
                     if pinned is not None:
                         self.assertEqual([f"    {field}: {pinned}"], after_values, (filename, name, field))
                         continue
-                    self.assertEqual(re.findall(pattern, before[name]), after_values, (filename, name, field))
+                    self.assertEqual(re.findall(pattern, before.get(name, "")), after_values, (filename, name, field))
 
 
 if __name__ == "__main__":

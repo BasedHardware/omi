@@ -34,3 +34,5 @@ whichever is later.
 falls back to the shipped steps without a release.
 
 **Owner.** nik. Created 2026-10-14. Review by 2026-11-13.
+
+**Outcome (2026-11-17).** Retired as stale, by David's ruling. The `pocket` arm served 100% in PostHog and has been fixed in code since commit 8999d3730d9 (#24485, merged 2026-11-04), so it is the shipped flow and is recorded as graduated. The other arms and the exposure tracking are deleted in a follow-up.

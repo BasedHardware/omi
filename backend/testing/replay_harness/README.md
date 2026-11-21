@@ -30,6 +30,59 @@ production frequency. Whether retries exhaust depends on scheduling and host loa
 `admission-drain-contention` usually stops on `FirestoreContentionExhausted` but can admit cleanly. CI
 accepts only those two outcomes for it; repeat it locally before reading a single run as a fix.
 
+## Replay a service's runtime config
+
+Pass `--runtime-env <service>[:<env>]` to `run`, or `RUNTIME_ENV=backend` to
+`make replay-harness`, `make replay-privacy-full` and `make replay-gate`.
+The environment defaults to `prod`; `dev` is also supported. This renders the
+**repository's declared deploy inputs offline**, without reading production or
+claiming they match a running revision. Unknown services/environments fail closed.
+Cloud Run services use `deploy/compose_runtime_env.py` (base plus overlay);
+GKE workloads use the drift checker's workload registry and exact `helm template`
+invocation with their checked-in chart values. GKE requires Helm on PATH. No
+live private overrides, ConfigMaps, Secret Manager payloads or ambient env inputs
+are fetched or resolved. Indirect `envFrom` sources are dropped as whole sources.
+
+Only literal scalar entries matching `FSR_*`, `FIRESTORE_READ_*`, `*_PERCENT`,
+`*_TTL_SECONDS` or `*_ENABLED` can be applied. Credential/secret/token, identity,
+project, endpoint/URL/URI, host/port/emulator/socket, bucket/database and path/file
+names are denied even under those prefixes. Entries marked secret, credential,
+auth, identity or service discovery, and all secret refs and `env_var` bindings
+(including bindings with defaults) are dropped. Rendering runs in a separate
+process with only PATH/TMPDIR/SYSTEMROOT inherited. A differing binding for any
+setting owned by the hermetic environment refuses the run; an equal binding
+preserves that setting. Values outside this policy never enter reports or error
+messages. Each case report and gate worker outcome records only:
+
+```json
+{"runtime_env":{"service":"backend","env":"prod","applied_keys":["FSR_SUBSCRIPTION_TTL_SECONDS"],"dropped_count":1}}
+```
+
+The key list/count above is illustrative. `dropped_count` includes nonallowlisted,
+secret and indirect entries (one count per unresolved GKE `envFrom` source).
+With no selector the existing code-default replay behavior is preserved.
+
+```bash
+unset GOOGLE_APPLICATION_CREDENTIALS CLOUDSDK_CONFIG CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE
+export PATH=/opt/homebrew/opt/openjdk@21/bin:$PATH
+/Users/dazheng/workspace/omi/bin/omi-heavy run -- \
+  node_modules/.bin/firebase emulators:exec --only firestore --project demo-omi-isolated-tests \
+  'make replay-privacy-full RUNTIME_ENV=backend OUTPUT=/Volumes/Ephemeral/scratch/privacy-runtime'
+```
+
+Gate workers render REF and BASE separately using **each side's archived
+composition code and inputs**, including retries. The fixed adapter never copies
+its checkout's runtime settings into either side. A config-only TTL fix therefore
+produces a normal `fixed` classification when BASE reproduces the expected stop
+and REF passes. `runtime_env` is recorded per outcome because values can differ
+between the two sides even when their applied key names are identical.
+
+The privacy stage still explicitly enables its test levers with shadow off to
+exercise staleness. Runtime TTLs reach the real helpers unchanged; no TTL override
+is needed. `PRIVACY_TTL_OVERRIDE_S` remains an explicit test monkeypatch and takes
+precedence when supplied. Privacy replay does not certify live rollout enablement, and it
+checks the checked-in config at the tested source, not the live traffic-serving revision.
+
 ## Add a case
 
 One directory per case: `manifest.json` (schema version 1, validated by `manifest.py`), `corpus.json`, and
@@ -70,6 +123,53 @@ Corpora live under `/Volumes/Ephemeral/scratch/replay-corpus/` (mode `0700`), ne
 when the program that needed them ends. Output is printed as counts, statuses and exception types only.
 Capture at detection time: a fix that lands first erases the failing input.
 
+## Decrypting captured cases
+
+Decryption is opt-in. With no private files, captured transcript fields stay opaque,
+`titling:precondition_skipped:recovery_undecoded` remains an explicit stop, and the
+reports say `decryption: off`. To enable it, supply **all three** files:
+
+- `--secret-file`: the UTF-8 product master secret (at least 32 bytes, optional trailing newline).
+- `--uid-file`: the consenting owner's UID.
+- `--consent-file`: the capture consent pins, one lowercase SHA-256 UID hash per line.
+
+Each file must be an owned, nonsymlink regular file with mode exactly `0600`.
+Replay reuses `guard.py`'s private-file and consent checks, then requires
+`sha256(uid)` to equal the case's `corpus.owner_sha256`. New captures include this
+pin. Older captures may use their retained result `owner_key` or immutable
+artifact URI owner hash; every retained pin must agree. A case without an owner
+pin must be recaptured; the salted owner token alone cannot prove ownership.
+Inputs are validated before infrastructure starts. Never put these files under
+OUTPUT or Git. Replay does not obtain credentials or read production.
+
+```bash
+unset GOOGLE_APPLICATION_CREDENTIALS CLOUDSDK_CONFIG CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE
+export PATH=/opt/homebrew/opt/openjdk@21/bin:$PATH
+/Users/dazheng/workspace/omi/bin/omi-heavy run -- \
+  node_modules/.bin/firebase emulators:exec --only firestore --project demo-omi-isolated-tests \
+  'make replay-harness CASES="/absolute/private/owner-case" OUTPUT=/Volumes/Ephemeral/scratch/replay-decrypted SECRET_FILE=/absolute/private/master-secret UID_FILE=/absolute/private/owner-uid CONSENT_FILE=/absolute/private/consent-pins'
+```
+
+The direct `run` command accepts `--secret-file`, `--uid-file` and `--consent-file`.
+`make replay-gate` accepts the same `SECRET_FILE`, `UID_FILE` and `CONSENT_FILE`
+variables alongside `REF`, `BASE`, `CASES` and `OUTPUT`. Both sides and any retry
+receive the existing file paths; the gate never copies the files or their values.
+The report and each worker outcome record `decryption: on` when enabled.
+
+Decrypted Tier C replay supports `capture_upload` and `titling`. Product key
+derivation, transcript decryption/decompression and artifact authentication run
+unchanged. The real owner identity is used only in memory for derivation and
+artifact AAD; emulator document names remain synthetic. Product string/byte
+field values are replaced at the Firestore SDK boundary with random opaque
+identity tokens backed by a per-run memory table, so even generated titles stay
+in memory. Equality queries and transactions remain real; this adapter does not
+support ordering queries over string fields. Artifact ciphertext is read in
+place and plaintext is returned only in memory. Product stdout/stderr and logs
+are discarded during decrypted execution. No plaintext, UID or secret is written
+to temporary files, reports or logs. This is process-local instrumentation: do
+not run concurrent replay coroutines in the same Python process. Separate gate
+workers remain isolated. Reports retain only the existing sanitized observations.
+
 ## Privacy cache replay
 
 `privacy_cache` qualifies **cache staleness only**. It is a schema-v1 boundary that compares real cached readers with
@@ -108,8 +208,13 @@ application stops with `privacy_cache:unverified_fault`.
 
 `transition_results` records each row's applicability, actual application,
 completion, verification status and bounded evidence. Redis injection counters
-prove calls were refused; BEGIN loss also requires a successful END. Request memo
-cases require a warmed entry, a real memo hit and writer-driven clearing.
+prove calls were refused; BEGIN loss also requires a successful END. Subscription
+request memo cases require a warmed entry, a real memo hit and writer-driven clearing.
+Deletion-marker `request_memo` cases instead prove the absence of request memoization:
+both warm reads must consult fenced Redis, a real writer runs in a separate request
+scope, and every probe in the original open scope must consult Redis and immediately
+observe the updated marker. Reintroducing the request memo fails this proof, including
+when the writer would have cleared a memo in its own request.
 Overlap cases require every writer to reach real FSR BEGIN, or (for batch and
 uncached protection) a nonempty Firestore SDK Commit, before the overlapping read.
 The Commit barrier delegates to the saved real method, retaining the product
@@ -160,10 +265,10 @@ invalidations lost with Redis reads available, BEGIN-token loss, overlapping
 writers/readers, a reader held inside the real BEGIN fence, and a request memo
 spanning the real writer. Cache publication/memo events verify eligible warm
 paths actually exercise the optimization. Batch reads call the real guard twice
-inside one transaction with one shared `BatchPrivacyMemo`; distinct source sets
-force cold generation-memo misses and shared marker/user snapshot reuse. The
-`batch_snapshot:memo_hit` observation asserts snapshot object reuse separately
-from `batch:memo_hit` generation-decision reuse. Emulator mutation tests set
+inside one transaction; distinct source sets force cold generation-memo misses
+and independent live authority walks. `batch:memo_hit` proves generation-decision
+reuse across repeated checks; the retired WQ12 snapshot memo is no longer a
+qualification requirement. Emulator mutation tests set
 120s TTLs and lose invalidations: both BYOK directions and deletion-marker creation
 must record the +60/+61 mismatches and finish all probes. Default-TTL controls
 preserve the observed closed-boundary behavior, and 55s controls must qualify.

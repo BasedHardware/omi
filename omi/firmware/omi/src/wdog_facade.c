@@ -1,8 +1,10 @@
+#include <zephyr/drivers/hwinfo.h>
 #include <zephyr/drivers/watchdog.h>
 #include <zephyr/init.h>
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
 
+#include "diagnostics.h"
 #include "safe_mode.h"
 
 LOG_MODULE_REGISTER(wdog_facade, CONFIG_LOG_DEFAULT_LEVEL);
@@ -67,6 +69,12 @@ int watchdog_deinit(void)
 }
 static int early_watchdog_start(void)
 {
+    /* Preserve the normal diagnostics' Zephyr reset flags before the retained
+     * state machine captures and clears the raw Nordic register. */
+    uint32_t cause;
+    if (hwinfo_get_reset_cause(&cause) == 0) {
+        omi_diagnostics_set_reset_cause(cause);
+    }
     safe_mode_early_boot();
     return watchdog_init();
 }

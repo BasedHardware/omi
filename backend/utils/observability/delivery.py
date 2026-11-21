@@ -111,6 +111,8 @@ def observe_sync_failures(function: SyncFunction) -> SyncFunction:
                     'SummaryRepairSuperseded',
                     'SyncConversationPersistenceFenced',
                     'ProcessingDeferred',
+                    # A sync write moved the revision mid-run; the enrichment consumer retries it.
+                    'RefreshRevisionChanged',
                 }
                 else 'failed'
             )

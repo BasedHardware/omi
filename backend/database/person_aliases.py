@@ -204,9 +204,16 @@ def dismiss_person_transaction(transaction: Any, person_ref: Any) -> bool:
     _invalidate_people_scans()
     if authority_change is not None:
         transaction.update(*authority_change)
+    contributions = data.get('notes_identity_identifiers') or {}
+    aliases = {a.casefold() for c in contributions.values() for a in c.get('aliases', [])}
+    emails = {e.casefold() for c in contributions.values() for e in c.get('emails', [])}
     transaction.update(
         person_ref,
         {
+            'aliases': [a for a in data.get('aliases') or [] if a.casefold() not in aliases],
+            'email': None if (data.get('email') or '').casefold() in emails else data.get('email'),
+            'emails': [e for e in data.get('emails') or [] if e.casefold() not in emails],
+            'notes_identity_identifiers': {},
             'is_dismissed': True,
             'dismissed_at': data.get('dismissed_at') or now,
             'updated_at': now,

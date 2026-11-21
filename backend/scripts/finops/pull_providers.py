@@ -17,6 +17,9 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 import json
+import math
+import time
+from email.utils import parsedate_to_datetime
 import os
 import pathlib
 import subprocess
@@ -55,11 +58,51 @@ else:
     _ANTHROPIC_ENV_FLAG = []
 
 
+class ProviderPullError(SystemExit):
+    def __init__(self, message: str, status=None, retry_after=None):
+        super().__init__(message)
+        self.status = status
+        self.retry_after = retry_after
+
+
+def retry_delay(value: str | None) -> float:
+    if value:
+        try:
+            seconds = float(value)
+            if math.isfinite(seconds):
+                return max(0.0, seconds)
+        except ValueError:
+            try:
+                return max(0.0, (parsedate_to_datetime(value) - dt.datetime.now(dt.timezone.utc)).total_seconds())
+            except (ValueError, TypeError, OverflowError):
+                pass
+    return 20.0
+
+
 def run_json(cmd: list[str], env: dict | None = None) -> dict:
     p = subprocess.run([sys.executable] + cmd, capture_output=True, text=True, timeout=900, env=env)
     if p.returncode != 0:
-        raise SystemExit("provider pull failed: %s\n%s" % (cmd[0], p.stderr[-1500:]))
+        try:
+            error = json.loads(p.stderr)
+        except ValueError:
+            error = {}
+        raise ProviderPullError(
+            "provider pull failed: %s\n%s" % (cmd[0], p.stderr[-1500:]), error.get("status"), error.get("retry_after")
+        )
     return json.loads(p.stdout)
+
+
+def openai_page(cmd: list[str], env: dict | None) -> dict:
+    for attempt in range(2):
+        try:
+            return run_json(cmd, env=env)
+        except ProviderPullError as error:
+            if error.status != 429 or attempt == 1:
+                raise
+            delay = retry_delay(error.retry_after)
+            sys.stderr.write("WARNING: OpenAI costs HTTP 429; retrying once after %.1fs\n" % delay)
+            time.sleep(delay)
+    raise AssertionError("unreachable")
 
 
 def openai_costs(start: str, end_excl: str) -> dict:
@@ -72,7 +115,7 @@ def openai_costs(start: str, end_excl: str) -> dict:
         _env = dict(os.environ)
         _env["OPENAI_ADMIN_KEY"] = cloudrun.secret("openai")
     while True:
-        page = run_json(
+        page = openai_page(
             [
                 str(OPENAI),
                 *_OPENAI_ENV_FLAG,
@@ -132,6 +175,8 @@ def main() -> None:
     raw.mkdir(parents=True, exist_ok=True)
     end_excl = (dt.date.fromisoformat(a.end) + dt.timedelta(days=1)).isoformat()
 
+    for filename in ("openai_cost_daily.json", "anthropic_cost_daily.json", "stt_vendor_cost_daily.json"):
+        (raw / filename).unlink(missing_ok=True)
     oai = openai_costs(a.start, end_excl)
     (raw / "openai_cost_daily.json").write_text(json.dumps(oai, indent=1))
     tot = {}

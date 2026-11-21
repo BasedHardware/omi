@@ -1,5 +1,6 @@
 """Behavioral contract for the exclusive conversation lifecycle owner (#9516)."""
 
+import asyncio
 import copy
 import logging
 import threading
@@ -596,6 +597,18 @@ def test_processing_admission_guard_keeps_the_traceback_for_unexpected_failures(
     assert record.levelno == logging.ERROR
     assert record.exc_info is not None
     assert 'processor crashed' in caplog.text
+
+
+def test_processing_admission_guard_rolls_back_cancellation_to_recoverable_state(lifecycle_store, monkeypatch):
+    _quiet_heartbeat(monkeypatch)
+    lifecycle_store.put_conversation('uid', 'conversation', status=ConversationStatus.processing.value, discarded=False)
+
+    with pytest.raises(asyncio.CancelledError):
+        with lifecycle_service.processing_admission_guard('uid', 'conversation'):
+            raise asyncio.CancelledError()
+
+    assert lifecycle_store.conversation('uid', 'conversation')['status'] == ConversationStatus.in_progress.value
+    assert lifecycle_service.admit_processing('uid', 'conversation') is True
 
 
 def test_processing_admission_guard_keeps_the_traceback_for_a_generic_processing_500(monkeypatch, caplog):

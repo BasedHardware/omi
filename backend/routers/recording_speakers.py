@@ -3,7 +3,8 @@
 from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException
 
 from config.recording_speakers import enabled, RecordingLimitExceeded
-from config.episodes import APP_CHANNEL_HEADER, client_channel_admitted, episodes_enabled_for
+from config.app_channel import APP_CHANNEL_HEADER
+from config.episodes import client_channel_admitted, episodes_enabled_for
 from models.recording_speakers import (
     RecordingSpeakerRequest,
     RecordingSpeakerResponse,

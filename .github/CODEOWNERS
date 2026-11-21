@@ -21,3 +21,17 @@
 /app/lib/providers/capture_provider.dart @mdmohsin7
 /app/android/app/src/main/kotlin/com/friend/ios/ble/** @mdmohsin7
 /app/ios/Runner/Ble/** @mdmohsin7
+
+# Batch pipeline and job store. Firestore reads on these paths drive most of the unit cost, and
+# the 11-05 sweep showed that concurrency and discovery changes here multiply reads across every
+# serving instance. Keep these entries last so they win over any broader rule.
+/backend/utils/batch_pipeline/** @Git-on-my-level
+/backend/database/batch_pipeline*.py @Git-on-my-level
+/backend/database/jobstore/** @Git-on-my-level
+/backend/config/batch_pipeline.py @Git-on-my-level
+/backend/charts/batch-pipeline-worker/** @Git-on-my-level
+
+# Firestore read budgets. A raise is a cost decision: its PR must state $/day and
+# be reviewed by the margin owner, not only the lane that wants the raise.
+/backend/tests/fixtures/firestore_read_budgets.toml @Git-on-my-level
+/backend/testing/firestore_read_budget.py @Git-on-my-level

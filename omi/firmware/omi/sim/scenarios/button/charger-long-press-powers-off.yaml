@@ -1,0 +1,15 @@
+id: button/charger-long-press-powers-off
+summary: >
+  On the charger at runtime, the ordinary 3 s hold still powers off; the 10 s
+  manual-entry gesture exists only at power-on.
+committee: [1]
+tags: [guard]
+initial: {charging: true}
+timeline:
+  - {t: 5000, hold: 3500}
+end: 20000
+expect:
+  boot_count: 1
+  final: "off"
+  boots:
+    - {exit: poweroff, safe: false}

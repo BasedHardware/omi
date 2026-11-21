@@ -12,6 +12,7 @@ from urllib.request import Request, urlopen
 
 from google.cloud.firestore_v1 import FieldFilter
 
+from config import record_seal_rules
 from config import record_seal_sweeper as sweeper_config
 from database.batch_pipeline_store import FirestoreStore
 from utils.batch_pipeline.artifact_policy import artifacts_for
@@ -33,6 +34,8 @@ class SweepReport(TypedDict):
     mode: str
     discovered: int
     backlog: int
+    omi_record_seal_refused_age_seconds: int
+    omi_record_seal_refused_count: int
     oldest_unsealed_seconds: int
     oldest_unsealed_over_four_hours: bool
     bare_token_skips: int
@@ -130,6 +133,8 @@ def sweep(
         'mode': mode,
         'discovered': 0,
         'backlog': 0,
+        'omi_record_seal_refused_age_seconds': 0,
+        'omi_record_seal_refused_count': 0,
         'oldest_unsealed_seconds': 0,
         'oldest_unsealed_over_four_hours': False,
         'bare_token_skips': 0,
@@ -203,10 +208,19 @@ def sweep(
             if not row:
                 raise ValueError('missing conversation')
             report['classified'] += 1
+            # The refusal clock is meaningful only while audio is unclosed.
+            # Repair/nojob seals may retain a stale stamp; exclude it from all gauges.
             if row.get('record_audio_closed'):
                 counts['already_closed'] += 1
                 continue
             report['backlog'] += 1
+            # Pre-apply observations of this bounded page grant no seal authority.
+            refused = row.get('record_seal_refused_at') if record_seal_rules.refused_stamp_enabled() else None
+            if isinstance(refused, (int, float)) and not isinstance(refused, bool) and math.isfinite(refused):
+                report['omi_record_seal_refused_count'] += 1
+                report['omi_record_seal_refused_age_seconds'] = max(
+                    report['omi_record_seal_refused_age_seconds'], max(0, int(now - refused))
+                )
             finished = row.get('finished_at')
             if isinstance(finished, datetime) and finished.tzinfo is not None:
                 age = now - finished.timestamp()

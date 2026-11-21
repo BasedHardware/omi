@@ -11,6 +11,8 @@ class PendingWorkItem(BaseModel):
     kind: Literal['conversation', 'sync_job']
     state: Literal['queued', 'transcribing', 'summarizing']
     conversation_ids: list[str]
+    home_step: str | None = None
+    recording_count: int = 1
     started_at: datetime | None
     duration_seconds: float
     updated_at: datetime | None
@@ -18,6 +20,7 @@ class PendingWorkItem(BaseModel):
 
 class PendingWorkSnapshot(BaseModel):
     enabled: bool
+    home_processing_today: bool = False
     items: list[PendingWorkItem]
     attention_unseen_count: int
 

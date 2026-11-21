@@ -206,16 +206,20 @@ class _WebPaywallPageState extends State<WebPaywallPage> {
   }
 
   Future<void> _restore() async {
-    final usage = context.read<UsageProvider>();
-    await usage.fetchSubscription();
+    final outcome = await context.read<UsageProvider>().restorePurchases();
     if (!mounted) return;
-    if (usage.subscription?.subscription.plan.isPaid == true) {
-      OmiFeedback.confirm(context, context.l10n.unlimitedPlan);
-      _closed = true;
-      Navigator.of(context).pop(true);
-      return;
+    switch (outcome) {
+      case RestoreOutcome.paid:
+        OmiFeedback.confirm(context, context.l10n.unlimitedPlan);
+        _closed = true;
+        Navigator.of(context).pop(true);
+      case RestoreOutcome.free:
+        await _tell('onRestore', 'free');
+      case RestoreOutcome.failed:
+        // The web page only knows "free"; a failed read is said natively, never as free.
+        final l10n = context.l10n;
+        OmiFeedback.error(context, l10n.restorePurchasesFailed, actionLabel: l10n.tryAgain, onAction: _restore);
     }
-    await _tell('onRestore', 'free');
   }
 
   void _dismiss() {

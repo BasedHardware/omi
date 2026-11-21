@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from contextlib import contextmanager
+from contextvars import ContextVar
 import hashlib
 import os
 import sys
@@ -74,7 +76,23 @@ def make_database_client_stub() -> ModuleType:
     client_mod.delete_collection_recursive = MagicMock()
     client_mod.get_firestore_client = lambda: client_mod.db
     client_mod.get_customer_firestore_client = lambda: client_mod.db
-    client_mod.run_transactional = lambda client, operation: operation(client.transaction())
+    in_body = ContextVar("memory_test_transaction_body", default=False)
+
+    @contextmanager
+    def transaction_body():
+        token = in_body.set(True)
+        try:
+            yield
+        finally:
+            in_body.reset(token)
+
+    def run_transactional(client, operation, *args, transient=False, **kwargs):
+        with transaction_body():
+            return operation(client.transaction(), *args, **kwargs)
+
+    client_mod.run_transactional = run_transactional
+    client_mod.transaction_body = transaction_body
+    client_mod.in_transaction_body = in_body.get
     # The data-plane seam (database/_client.py's get_data_plane_firestore_client()):
     # memory_apply_store and screen/frame sync import
     # `data_plane_db` at their module boundary instead of the shared `db` above.
@@ -149,6 +167,8 @@ def install_canonical_write_runtime_stubs() -> list[str]:
 CLIENT_BINDING_DATABASE_MODULES = (
     "database.notifications",
     "database.conversations",
+    "database.transcript_pointer",
+    "database.conversation_terminal_title",
     "database.redis_db",
     "database.users",
     "database.memories",

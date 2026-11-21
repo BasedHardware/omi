@@ -135,7 +135,9 @@ def test_batch_pipeline_adapter_is_the_scoped_freshness_contract():
     assert 'stage="worker_flight"' in chain_query and 'rate(' in chain_query and '[10m])' in chain_query
     # Two scrape jobs read every worker pod: one series per pod, or demand doubles.
     assert 'max by (namespace, pod) (' in chain_query
+    assert 'sampler_observed_at_seconds{<<.LabelMatchers>>} < 60' in chain_query
     assert 'metrics_refreshed_at_seconds{<<.LabelMatchers>>} < 60' in chain_query
+    assert 'or' in chain_query  # old-worker clock remains valid during rollback/mixed fleets
     assert 'or vector(0)' not in chain_query
     # Stage timers export only the stage label; requiring worker_release here
     # (or in the HPA selector) would match zero series and pin the floor.
@@ -198,9 +200,8 @@ def test_diff_chain_rule_is_a_closed_reviewed_addition():
             expected_config(broken)
 
 
-def test_hpa_and_adapter_changes_select_this_contract():
-    sources = [ADAPTER] + list(CHARTS.glob('*/prod*values.yaml'))
-    sources += list(CHARTS.glob('*/templates/hpa.yaml'))
+def _hpa_contract_sources():
+    sources = [ADAPTER, *CHARTS.glob('*/prod*values.yaml'), *CHARTS.glob('*/templates/hpa.yaml')]
     owned = {
         'parakeet',
         'backend-listen',
@@ -211,13 +212,22 @@ def test_hpa_and_adapter_changes_select_this_contract():
         'monitoring',
         'batch-pipeline-worker',
     }
-    all_tests = selector.discover_all_tests()
-    for source in sources:
-        if source.relative_to(CHARTS).parts[0] not in owned:
-            continue
-        path = str(source.relative_to(CHARTS.parents[1]))
-        selected, _ = selector.tests_for_changed_paths([path], all_tests)
-        assert 'tests/unit/test_monitoring_adapter_hpa_contract.py' in selected, path
+    return sorted(
+        source.relative_to(CHARTS.parents[1]).as_posix()
+        for source in sources
+        if source.relative_to(CHARTS).parts[0] in owned
+    )
+
+
+@pytest.fixture(scope='module')
+def discoverable_backend_tests():
+    return selector.discover_all_tests()
+
+
+@pytest.mark.parametrize('path', _hpa_contract_sources())
+def test_hpa_and_adapter_changes_select_this_contract(path, discoverable_backend_tests):
+    selected, _ = selector.tests_for_changed_paths([path], discoverable_backend_tests)
+    assert 'tests/unit/test_monitoring_adapter_hpa_contract.py' in selected
 
 
 def _comparison_inputs():

@@ -124,6 +124,11 @@ OPENAI_API_KEY=your_openai_key
 # Shared secret guarding the chat-tool endpoints (see below)
 GITHUB_TOOLS_SECRET=change-me
 
+# Secret used to sign the settings-session cookie (see below).
+# Set this BEFORE deploying: without it, settings writes fail closed with 503
+# and the OAuth callback cannot issue a session.
+GITHUB_SETTINGS_SECRET=change-me-too
+
 # App Settings
 APP_HOST=0.0.0.0
 APP_PORT=8000
@@ -188,10 +193,19 @@ GITHUB_CLIENT_ID
 GITHUB_CLIENT_SECRET
 OPENAI_API_KEY
 GITHUB_TOOLS_SECRET
+GITHUB_SETTINGS_SECRET
 OAUTH_REDIRECT_URL=https://your-app.up.railway.app/auth/callback
 APP_HOST=0.0.0.0
 APP_PORT=8000
 ```
+
+**Deploy order:** set `GITHUB_SETTINGS_SECRET` in the Railway dashboard before
+deploying a version that contains the settings-session guard. The value is a
+random string (for example `openssl rand -hex 32`); rotating it invalidates all
+existing settings sessions. If it is missing, settings writes return `503` and
+OAuth cannot issue a session. Existing users who linked GitHub before the
+upgrade can reconnect once from the settings page with the same GitHub account;
+the callback recognises the stored username and re-issues the session.
 
 ## 🧪 Testing
 
@@ -349,8 +363,22 @@ All chat-tool endpoints (`/tools/*`) require a shared secret so only the trusted
 OMI backend can invoke them. The caller presents `GITHUB_TOOLS_SECRET` either as an
 `Authorization: Bearer <secret>` header or a `github_tools_token` query parameter.
 Requests without a valid secret are rejected with `401` (or `503` when the secret is
-not configured). Browser setup and settings endpoints (`/`, `/auth`, `/auth/callback`,
-`/setup-completed`, `/update-repo`, `/refresh-repos`) remain open without this guard.
+not configured). This is separate from the browser settings session below.
+
+## Settings Session Authentication
+
+The uid-keyed settings writes (`/update-repo`, `/refresh-repos`,
+`/check-repo-access`, `/save-agent-provider`, `/save-agent-key`, `/delete-agent-key`,
+`/test-agent`) require a signed browser session; a bare `uid` is not accepted as
+proof of identity. `/auth/callback` issues an `omi_github_settings` cookie signed
+with `GITHUB_SETTINGS_SECRET` (HMAC-SHA256 over the uid), and every settings write
+requires that cookie to name the same uid with a valid signature.
+
+If the secret is unset the routes fail closed with `503`; missing, foreign, or
+tampered cookies get `401`. Reconnecting with the same GitHub account that is
+already stored re-issues the cookie for users who linked before this guard
+shipped. A different GitHub account is rejected with `403` unless the browser
+already holds a valid session.
 
 ## 🤝 Contributing
 

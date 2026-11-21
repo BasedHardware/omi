@@ -161,6 +161,39 @@ def test_applicability_and_fault_evidence_are_required():
     assert not fault_applied('request_memo', {'request_memo_warmed': True, 'request_memo_hit': True})
 
 
+def test_deletion_request_scope_requires_redis_and_cross_request_visibility_evidence():
+    evidence = {
+        'request_memo_absent': True,
+        'independent_writer_scope': True,
+        'reader_scope_preserved': True,
+        'request_redis_warm_reads': 2,
+        'request_redis_probe_reads': [1] * 6,
+        'request_deletion_observed': True,
+    }
+    assert fault_applied('request_memo', evidence, family='deletion_marker')
+    for key in evidence:
+        assert not fault_applied(
+            'request_memo', {k: v for k, v in evidence.items() if k != key}, family='deletion_marker'
+        )
+    for key, value in (
+        ('request_memo_absent', False),
+        ('independent_writer_scope', False),
+        ('reader_scope_preserved', False),
+        ('request_redis_warm_reads', 1),
+        ('request_redis_probe_reads', []),
+        ('request_redis_probe_reads', [1, 0, 1, 1, 1, 1]),
+        ('request_deletion_observed', False),
+    ):
+        assert not fault_applied('request_memo', {**evidence, key: value}, family='deletion_marker')
+    # Subscription readers still have a memo and must prove its lifecycle.
+    assert not fault_applied('request_memo', evidence, family='subscription')
+    assert fault_applied(
+        'request_memo',
+        {'request_memo_warmed': True, 'request_memo_hit': True, 'request_memo_cleared': True},
+        family='subscription',
+    )
+
+
 @pytest.mark.parametrize(
     'minimum,applied,reason', [(1000, True, 'insufficient_verified_transitions'), (0, False, 'unverified_fault')]
 )

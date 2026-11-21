@@ -14,6 +14,7 @@ import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart'
 import 'package:omi/pages/conversation_detail/widgets.dart';
 import 'package:omi/pages/on_device/on_device_provenance_section.dart';
 import 'package:omi/providers/connectivity_provider.dart';
+import 'package:omi/providers/conversations_v3_provider.dart';
 import 'package:omi/services/app_review_service.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:omi/utils/analytics/product_telemetry.dart';
@@ -24,17 +25,29 @@ import 'package:omi/ui/ui.dart';
 import 'package:visibility_detector/visibility_detector.dart';
 import 'package:uuid/uuid.dart';
 
+import 'conversation_action_items_section.dart';
 import 'conversation_screenshots_section.dart';
+import 'live_summary_section.dart';
+import 'summary_task_recovery.dart';
 import 'feedback_prompt_policy.dart';
 import 'feedback_sheet.dart';
-import 'summary_task_recovery.dart';
 
 class SummaryTab extends StatefulWidget {
   final bool reviewEnabled;
+  final int liveSummaryOpen;
+  final int liveSummaryTick;
+  final bool Function(int)? claimLiveSummaryOpen;
+  final bool Function()? isLiveSummaryVisible;
+  final String? Function()? liveSummaryInterval;
   final ValueChanged<String>? onOpenSource;
   final String searchQuery;
   final int currentResultIndex;
+
+  /// How many of the Summary tab's search matches precede the action-item
+  /// section; the page computes it alongside the tab's total.
+  final int summarySearchResultOffset;
   final VoidCallback? onTapWhenSearchEmpty;
+  final ValueChanged<List<String>>? onShowActionItemInTranscript;
 
   /// Switches the page to the Transcript tab.
   final VoidCallback? onOpenTranscript;
@@ -42,10 +55,17 @@ class SummaryTab extends StatefulWidget {
   const SummaryTab(
       {super.key,
       this.reviewEnabled = false,
+      this.liveSummaryOpen = 0,
+      this.liveSummaryTick = 0,
+      this.claimLiveSummaryOpen,
+      this.isLiveSummaryVisible,
+      this.liveSummaryInterval,
       this.onOpenSource,
       this.searchQuery = '',
       this.currentResultIndex = -1,
+      this.summarySearchResultOffset = 0,
       this.onTapWhenSearchEmpty,
+      this.onShowActionItemInTranscript,
       this.onOpenTranscript});
 
   @override
@@ -54,6 +74,10 @@ class SummaryTab extends StatefulWidget {
 
 class _SummaryTabState extends State<SummaryTab> with AutomaticKeepAliveClientMixin {
   bool _isEditing = false;
+
+  /// v3: the summary written on open stands in for the stored one until it is stored. Null until the
+  /// section first reports, so the stored summary does not flash in its first frame.
+  bool? _liveSummaryActive;
   @override
   bool get wantKeepAlive => true;
 
@@ -61,7 +85,12 @@ class _SummaryTabState extends State<SummaryTab> with AutomaticKeepAliveClientMi
   Future<void> _openConversation(BuildContext context, String id) async {
     final known = context.read<ConversationProvider?>()?.conversations.where((c) => c.id == id).firstOrNull;
     final conversation = known ?? await getConversationById(id);
-    if (conversation == null || !context.mounted) return;
+    if (!context.mounted) return;
+    if (conversation == null) {
+      // The tap answers even when the moment's conversation cannot be read (V12).
+      OmiMissingTarget.conversation.show(context, onRetry: () => _openConversation(context, id));
+      return;
+    }
     routeToPage(context, ConversationDetailPage(conversation: conversation));
   }
 
@@ -82,6 +111,11 @@ class _SummaryTabState extends State<SummaryTab> with AutomaticKeepAliveClientMi
         builder: (context, provider, child) {
           final conversation = provider.conversationOrNull;
           final discarded = conversation?.discarded ?? true;
+          final liveWanted = conversation != null &&
+              !discarded &&
+              context.select<ConversationsV3Provider?, bool>((p) => p?.v3 ?? false) &&
+              LiveSummarySection.wants(conversation);
+          if (liveWanted && provider.detailAccessUnavailable) return const SizedBox.shrink();
           // Base the surrounding tab state on the summary the user is actually looking at
           // (the displayed source chip), not the canonical server selection.
           final summarySelection = provider.getDisplayedSummarySelection();
@@ -129,44 +163,74 @@ class _SummaryTabState extends State<SummaryTab> with AutomaticKeepAliveClientMi
                         // Redo with Omi Cloud waits on a re-transcription endpoint.
                         if (conversation != null && !discarded)
                           SliverToBoxAdapter(child: OnDeviceProvenanceSection(conversationId: conversation.id)),
+                        if (liveWanted)
+                          LiveSummarySection(
+                            key: ValueKey('live-summary-${conversation.id}'),
+                            conversation: conversation,
+                            open: widget.liveSummaryOpen,
+                            refreshTick: widget.liveSummaryTick,
+                            liveInterval: widget.liveSummaryInterval,
+                            claimOpen: widget.claimLiveSummaryOpen,
+                            detailHydrated: provider.hasHydratedDetail(conversation.id),
+                            detailReadFailed: provider.detailLoad == ConversationDetailLoad.failed,
+                            isSummaryVisible: widget.isLiveSummaryVisible,
+                            refresh: provider.refreshConversation,
+                            onActiveChanged: (active) {
+                              if (mounted && active != _liveSummaryActive) {
+                                setState(() => _liveSummaryActive = active);
+                              }
+                            },
+                          ),
                         discarded
                             ? const SliverToBoxAdapter(child: ReprocessDiscardedWidget())
-                            : GetAppsWidgets(
-                                onOpenSource: widget.onOpenSource,
-                                searchQuery: widget.searchQuery,
-                                currentResultIndex: widget.currentResultIndex,
-                                onOpenTranscript: widget.onOpenTranscript,
-                                canStartEditing: () {
-                                  final connectivityProvider =
-                                      Provider.of<ConnectivityProvider>(context, listen: false);
-                                  if (!connectivityProvider.isConnected) {
-                                    ConnectivityProvider.showNoInternetDialog(context);
-                                    return false;
-                                  }
-                                  return true;
-                                },
-                                onEditStarted: (_) {
-                                  setState(() => _isEditing = true);
-                                  PlatformManager.instance.analytics.editSummaryStarted();
-                                },
-                                onEditCancelled: (_) {
-                                  setState(() => _isEditing = false);
-                                  PlatformManager.instance.analytics.editSummaryCancelled();
-                                },
-                                onSaveSummarySelection: (selection, newContent) {
-                                  PlatformManager.instance.analytics.editSummarySaved();
-                                  context.read<ConversationDetailProvider>().saveEditingSummarySelection(
-                                        selection,
-                                        newContent,
-                                      );
-                                },
-                              ),
+                            : liveWanted && (_liveSummaryActive ?? true)
+                                ? const SliverToBoxAdapter(child: SizedBox.shrink())
+                                : GetAppsWidgets(
+                                    onOpenSource: widget.onOpenSource,
+                                    searchQuery: widget.searchQuery,
+                                    currentResultIndex: widget.currentResultIndex,
+                                    onOpenTranscript: widget.onOpenTranscript,
+                                    canStartEditing: () {
+                                      final connectivityProvider =
+                                          Provider.of<ConnectivityProvider>(context, listen: false);
+                                      if (!connectivityProvider.isConnected) {
+                                        ConnectivityProvider.showNoInternetDialog(context);
+                                        return false;
+                                      }
+                                      return true;
+                                    },
+                                    onEditStarted: (_) {
+                                      setState(() => _isEditing = true);
+                                      PlatformManager.instance.analytics.editSummaryStarted();
+                                    },
+                                    onEditCancelled: (_) {
+                                      setState(() => _isEditing = false);
+                                      PlatformManager.instance.analytics.editSummaryCancelled();
+                                    },
+                                    onSaveSummarySelection: (selection, newContent) {
+                                      PlatformManager.instance.analytics.editSummarySaved();
+                                      context.read<ConversationDetailProvider>().saveEditingSummarySelection(
+                                            selection,
+                                            newContent,
+                                          );
+                                    },
+                                  ),
+                        // After the note's sections, before the screenshots: the Mac's order.
                         if (conversation != null &&
                             !_isEditing &&
                             !summarySelection.isApp &&
                             !provider.isLoading &&
                             !provider.loadingReprocessConversation)
                           SliverToBoxAdapter(child: SummaryTaskRecovery(conversation: conversation)),
+                        if (!discarded && conversation != null)
+                          ConversationActionItemsSection(
+                            items: conversation.structured.actionItems,
+                            conversationId: conversation.id,
+                            onShowInTranscript: widget.onShowActionItemInTranscript ?? (_) {},
+                            searchQuery: widget.searchQuery,
+                            currentResultIndex: widget.currentResultIndex,
+                            searchResultOffset: widget.summarySearchResultOffset,
+                          ),
                       ]),
                     ),
                     // Where the Mac puts its strip: after the note's own sections. Only a completed

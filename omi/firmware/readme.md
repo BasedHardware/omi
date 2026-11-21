@@ -22,6 +22,12 @@ The Omi firmware is built on the Zephyr RTOS and provides functionality for audi
 - `boards/`: Custom board definitions and configurations
 - `scripts/`: Build and utility scripts
 
+## Host regressions without hardware
+
+Run `python3 omi/firmware/omi/tests/run_host_regressions.py` from the monorepo root.
+See [test scope and prerequisites](omi/tests/host/README.md). These host shims do
+not replace embedded builds, device tests or OTA/recovery qualification.
+
 ## Building and flashing the Firmware
 
 Follow the instructions in our [official documentation](https://docs.omi.me/doc/developer/firmware/Compile_firmware).

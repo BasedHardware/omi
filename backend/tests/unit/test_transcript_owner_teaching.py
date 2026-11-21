@@ -71,6 +71,9 @@ def _conversation_model(segments):
 @pytest.fixture
 def world(monkeypatch):
     scheduled = {'owner': [], 'person': [], 'deleted': []}
+    # Positive speaker-scoped assignments retire ignored-voice markers through
+    # voice_profiles; keep that write on a hermetic store, not the metadata server.
+    monkeypatch.setattr(voice_profiles, 'get_firestore_client', lambda: StrictFirestore())
     monkeypatch.setattr(
         teaching_tasks,
         'run_authorized_owner_learning',

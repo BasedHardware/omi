@@ -135,3 +135,10 @@ def test_all_streaming_response_routes_are_exempt():
     assert scanned >= 4, f'route scan found {scanned} streaming routes; the drift pin is broken'
     missing = {p for p in streaming_paths if not _is_exempt(p)}
     assert not missing, f'streaming routes not exempt from gzip: {sorted(missing)}'
+
+
+def test_conversation_summary_stream_is_exempt_for_concrete_ids():
+    assert _is_exempt('/v1/conversations/abc123/summary/stream')
+    assert _is_exempt('/v1/conversations/abc123/summary/live-catchup/stream')
+    assert not _is_exempt('/v1/conversations/abc123/summary')
+    assert not _is_exempt('/v1/other/abc123/summary/stream')

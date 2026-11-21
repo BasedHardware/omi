@@ -173,7 +173,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(fetchedIds, ['convo-0']);
-    expect(find.text('Conversation not found or has been deleted'), findsOneWidget);
+    expect(find.text("Couldn't open this conversation."), findsOneWidget);
   });
 
   test('resolveChatCitationConversation fetches when the grouped map misses', () async {

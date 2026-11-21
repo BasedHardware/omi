@@ -1,5 +1,7 @@
 'use client';
 
+import { formatDateInputValue } from '@/lib/dateInput';
+
 import { useState, useCallback, useMemo, useEffect } from 'react';
 import { LayoutGrid, List, CheckSquare, Square } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -317,6 +319,8 @@ export function TaskHub() {
     if (!selectedDate) return null;
     const dateStr = selectedDate.toDateString();
     const dateFilteredItems = filteredItems.filter((item) => {
+      if (item.due?.kind === 'date')
+        return item.due.date === formatDateInputValue(selectedDate);
       if (!item.due_at) return false;
       return new Date(item.due_at).toDateString() === dateStr;
     });
@@ -339,8 +343,8 @@ export function TaskHub() {
       viewMode === 'list'
         ? filteredFlatList.pending
         : filteredView
-          ? filteredView.pending
-          : filteredItems.filter((i) => !i.completed),
+        ? filteredView.pending
+        : filteredItems.filter((i) => !i.completed),
     [filteredFlatList, filteredItems, filteredView, viewMode],
   );
 

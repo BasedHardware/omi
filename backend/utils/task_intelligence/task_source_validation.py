@@ -1,16 +1,14 @@
 """Validate task conversation links only inside the authenticated account."""
 
+from utils.conversations.layer import read_product as read_product_conversation
 from collections.abc import Mapping, Sequence
 from typing import Any
 
 from config.refactor_modes import default_on
 from database import conversations as conversations_db
+from database.ports.action_items import TaskSourceValidationError as TaskSourceValidationError
 
 SOURCE_LINKS_ENABLED_ENV = 'ACTION_ITEM_SOURCE_LINKS_ENABLED'
-
-
-class TaskSourceValidationError(ValueError):
-    """A supplied source is unavailable to this account (including deleted rows)."""
 
 
 def validate_task_sources(uid: str, items: Sequence[Mapping[str, Any]]) -> None:
@@ -28,7 +26,7 @@ def validate_task_sources(uid: str, items: Sequence[Mapping[str, Any]]) -> None:
             if source in checked:
                 continue
             # Never search another account to distinguish foreign from missing.
-            row = conversations_db.get_conversation(uid, source)
+            row = read_product_conversation(conversations_db.get_conversation, uid, source)
             if not row or row.get('deleted'):
                 raise TaskSourceValidationError('Task source conversation is unavailable.')
             checked.add(source)

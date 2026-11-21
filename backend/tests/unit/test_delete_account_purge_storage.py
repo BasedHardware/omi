@@ -32,6 +32,8 @@ def users_service():
     """Load a fresh services.users.account_deletion against stubbed database/utils namespaces."""
     fakes = {
         "database": _pkg("database"),
+        "database.directory": _pkg("database.directory"),
+        "database.directory.wipe": AutoMockModule("database.directory.wipe"),
         "database.sync_jobs": AutoMockModule("database.sync_jobs"),
         "database.users": AutoMockModule("database.users"),
         "database.action_items": AutoMockModule("database.action_items"),
@@ -58,6 +60,7 @@ def users_service():
         "utils.integration_telemetry": AutoMockModule("utils.integration_telemetry"),
         "utils.other": _pkg("utils.other"),
         "utils.other.endpoints": AutoMockModule("utils.other.endpoints"),
+        "utils.other.lake_wipe": AutoMockModule("utils.other.lake_wipe"),
         "utils.other.storage": AutoMockModule("utils.other.storage"),
         "utils.memory": _pkg("utils.memory"),
         "utils.memory.canonical_memory_adapter": AutoMockModule("utils.memory.canonical_memory_adapter"),

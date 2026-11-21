@@ -44,6 +44,7 @@ Wal _wal(DateTime start, int seconds, WalStatus status, {String? rejectionReason
       codec: BleAudioCodec.opus,
       seconds: seconds,
       status: status,
+      uploadedAt: status == WalStatus.uploaded ? _now.millisecondsSinceEpoch ~/ 1000 : 0,
       storage: WalStorage.disk,
       device: 'phone',
       uploadRejectionReason: rejectionReason,
@@ -94,6 +95,16 @@ List<String> _dayTexts(WidgetTester tester, String date) =>
     [for (final t in tester.widgetList<Text>(find.descendant(of: _day(date), matching: find.byType(Text)))) t.data!];
 
 void main() {
+  testWidgets('old unresolved upload shows waiting-on-server with details action, never transcribing', (tester) async {
+    await _pump(tester, [
+      _wal(_now.subtract(const Duration(days: 40)), 120, WalStatus.uploaded)..uploadedAt = 0,
+      _wal(_now.subtract(const Duration(days: 40)), 60, WalStatus.miss)..isSyncing = true,
+    ]);
+    expect(find.text('Your audio is safe on your device or phone'), findsWidgets);
+    expect(find.text('Transcribing…'), findsNothing);
+    expect(find.byKey(const Key('on_the_way_stalled_details')), findsOneWidget);
+  });
+
   testWidgets('one row per local day: totals on the subtitle, a quiet status on the right', (tester) async {
     await _pump(tester, [
       // Starts 11:50 PM yesterday and runs 20 minutes past midnight: it stays on yesterday.
@@ -106,7 +117,7 @@ void main() {
 
     expect(find.text('Uploads by itself. Conversations fill in as it lands.'), findsOneWidget);
     expect(_dayTexts(tester, '2026-10-18'), ['Today', '2 recordings · 6m', 'Uploading']);
-    expect(_dayTexts(tester, '2026-10-17'), ['Yesterday', '1 recording · 20m', 'Transcribing…']);
+    expect(_dayTexts(tester, '2026-10-17'), ['Yesterday', '1 recording · 20m', 'Uploaded, awaiting server']);
     // Uploads go oldest first: the oldest waiting day is next, the rest wait their turn.
     expect(_dayTexts(tester, '2026-10-16').last, 'Queued');
     expect(_dayTexts(tester, '2026-10-14').last, 'Next');
@@ -132,7 +143,7 @@ void main() {
           rejectionReason: WalUploadRejection.invalidCaptureTime),
       _wal(DateTime(2026, 10, 15, 9), 60, WalStatus.unsupportedAudio),
     ]);
-    expect(_dayTexts(tester, '2026-10-18'), ['Today', '1 recording · 4m', 'Transcribing…']);
+    expect(_dayTexts(tester, '2026-10-18'), ['Today', '1 recording · 4m', 'Uploaded, awaiting server']);
     expect(_day('2026-10-15'), findsNothing);
     expect(find.textContaining('need attention'), findsNothing);
     expect(find.text('Try Again'), findsNothing);

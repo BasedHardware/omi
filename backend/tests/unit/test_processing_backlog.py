@@ -566,7 +566,7 @@ async def test_worker_dispatch_carries_expiring_month_consent(monkeypatch):
     assert funded.processing_allowed('synthetic')  # New capture has no expired job grant.
 
 
-@pytest.mark.parametrize('flag', ['LADDER_V1_BUDGET_ENFORCEMENT_ENABLED', 'STT_CAP_DISPATCH_ENFORCEMENT'])
+@pytest.mark.parametrize('flag', ['STT_CAP_DISPATCH_ENFORCEMENT'])
 @pytest.mark.parametrize('summary_switch', [None, 'false'])
 def test_funded_cap_denial_stores_summary_as_waiting_never_terminal_or_derived(monkeypatch, flag, summary_switch):
     from models.client_processing import ClientProcessing, ProjectedStructure, ProjectionProvenance

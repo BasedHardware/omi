@@ -1,0 +1,18 @@
+id: sd/absent-card-no-hot-loop
+summary: >
+  Committee item 4 (dead card). With no card answering, mount attempts back
+  off (1, 2, 4 ... 60 s) instead of hammering the card, and shutdown still
+  completes promptly.
+committee: [4]
+tags: [fix]
+initial: {sd: absent}
+timeline:
+  - {t: 120000, hold: 3500}
+end: 150000
+expect:
+  boot_count: 1
+  final: "off"
+  boots:
+    # 5 CTRL_INIT tries per mount; the backoff gives 8 mounts in the first 2 min.
+    - {exit: poweroff, sd_ready: false, log: ["retry in 60000 ms", "Entering system off"]}
+  invariants: [sd-mount-attempts-bounded]

@@ -34,6 +34,18 @@ Memory-only rollout: backfill 8 → 4 GiB, keep 2 vCPU, concurrency 3, min/max 3
 
 ## Concurrency and dispatch
 
+The standing production `backend-integration` cap is 35 (David, 2026-11-05 16:01Z;
+coordinator `ac3408`); read the live value from the serving revision, since a
+temporary capacity revision can raise it (45 for one train, approved 2026-11-20). Hold only while CPU p50 stays below approximately 0.75,
+queues fall, and drain stays near 11 rows/s; otherwise restore the previous cap (50
+before the 2026-11-05 hold) with a capacity revision. Since 2026-11-20
+`.github/actions/deploy-backend-stack/action.yml` live-resolves the cap (the minimum of
+the service cap, when set, and the cap of every revision receiving traffic; an uncapped
+receiving revision, or no service cap and no receiving revision, or a cap above 500 counts
+as the default, 35 in prod and 50 elsewhere), so the next deploy preserves whatever cap is live. Change or roll back
+the cap with a capacity revision (omi-workspace `infra/rollout/bin/cr_apply.sh backend-integration
+--image=<serving digest> --max-instances=N`); no source edit is needed.
+
 Updated 2026-10-15 for Train 1: `.github/actions/sync-backfill-lifecycle/action.yml` sets revision max 40 **and** service max 40, concurrency 6, CPU 2, memory 8 GiB, min 3. Both queue create/update branches set 90 concurrent dispatches / 15 per second,5–60s retry backoff. This is source configuration; verify the applied revision, traffic, worker capacity and queue separately. The earlier 40/10 and concurrency 3 sizing proposals below are historical, not current settings.
 
 The prior baseline was 60/10 and 18×6 slots. Release worker capacity before queue dispatch. Keep 90/ 15 as the persisted first step; later operator increases 135/20→180/25→200/25 require at least 15 min per step, durable-throughput evidence, <10% latency/retry regression, no OOM/capacity 429, unchanged GPU admission, and observed Firestore/Redis headroom. See [capacity and retirement runbook](sync-backfill-concurrency.md) for the exact queue rollback and flag-off behavior. Retire Redis-absent heads under the new guarded policy instead of consuming a full Cloud Tasks turn per expired job; this recovers capacity but does not itself recover audio or count as a completed transcript.

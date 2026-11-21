@@ -41,6 +41,10 @@ def token_version(snapshot):
 class PrivacyAttempt:
     def __init__(self):
         self._entries = OrderedDict()
+        # Owner-level decisions (lever bpp_owner_memo): one entry per owner per
+        # attempt, carrying the certified conversation-id union. Separate from
+        # the id-set entries so every existing consumer keeps its keying.
+        self._owners = OrderedDict()
         self._lock = RLock()
         self._closed = False
 
@@ -62,14 +66,34 @@ class PrivacyAttempt:
             while len(self._entries) > 1024:
                 self._entries.popitem(last=False)
 
+    def owner_get(self, key):
+        """The owner's decision entry, or None; certified per use by the caller."""
+        with self._lock:
+            return None if self._closed else self._owners.get(key)
+
+    def owner_put(self, key, entry):
+        with self._lock:
+            if self._closed:
+                return
+            self._owners[key] = entry
+            self._owners.move_to_end(key)
+            while len(self._owners) > 1024:
+                self._owners.popitem(last=False)
+
+    def owner_forget(self, key):
+        with self._lock:
+            self._owners.pop(key, None)
+
     def reset(self):
         with self._lock:
             self._entries.clear()
+            self._owners.clear()
 
     def close(self):
         with self._lock:
             self._closed = True
             self._entries.clear()
+            self._owners.clear()
 
 
 _ATTEMPT: ContextVar[PrivacyAttempt | None] = ContextVar('batch_privacy_attempt', default=None)
@@ -93,6 +117,27 @@ def batch_privacy_attempt():
     finally:
         attempt.close()
         _ATTEMPT.reset(token)
+
+
+@contextmanager
+def scoped_privacy_attempt(lever_key: str):
+    """Open a fresh attempt for one store call when none is current (lever bpp_attempt_scope).
+
+    The attempt memo only certifies reuse with the memo token read inside the
+    authorizing transaction, so an authority write (revoke/delete/purge) between two
+    decisions in this scope rotates the token and the next decision walks live. An
+    outer attempt, when present, is reused unchanged. Lever off: no-op.
+    """
+    if current_attempt() is not None:
+        yield
+        return
+    from config.firestore_read_levers import lever_enabled
+
+    if not lever_enabled('bpp_attempt_scope', lever_key):
+        yield
+        return
+    with batch_privacy_attempt():
+        yield
 
 
 def with_batch_privacy_attempt(function):

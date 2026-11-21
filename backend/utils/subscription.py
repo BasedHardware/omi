@@ -14,7 +14,7 @@ from database.fsr_read_cache import fresh_reader
 from dataclasses import dataclass
 import time
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any, Dict, List, Literal, Optional, Set, Tuple, overload
 
 from fastapi import HTTPException
 import stripe
@@ -46,6 +46,7 @@ from utils.transcription_allowance import TranscriptionAllowance
 from utils.observability.fallback import record_fallback
 import logging
 from config import ladder_v1 as ladder_policy
+from config.refactor_modes import default_on as refactor_default_on
 from utils import ladder_v1
 
 logger = logging.getLogger(__name__)
@@ -849,17 +850,8 @@ def get_chat_quota_snapshot(
 
     Platform is retained for callers; all platforms use the real plan quota.
     """
-    # Flagged quota display and admission share one authority on Free and paid tiers.
-    enforcing = ladder_policy.budget_enforcement_enabled()
-    subscription = None
-    shared_budget = None
-    if enforcing:
-        subscription = users_db.get_user_valid_subscription(uid, firestore_client=firestore_client, provision=provision)
-        shared_budget = ladder_v1.budget_snapshot(uid, subscription, firestore_client=firestore_client)
-
-    if not enforcing:
-        subscription = users_db.get_user_valid_subscription(uid, firestore_client=firestore_client, provision=provision)
-        shared_budget = ladder_v1.budget_snapshot(uid, subscription, firestore_client=firestore_client)
+    subscription = users_db.get_user_valid_subscription(uid, firestore_client=firestore_client, provision=provision)
+    shared_budget = ladder_v1.budget_snapshot(uid, subscription, firestore_client=firestore_client)
     plan = subscription.plan if subscription else PlanType.basic
     limits = get_plan_limits(plan)
     usage = user_usage_db.get_monthly_chat_usage(uid, firestore_client=firestore_client)
@@ -1321,7 +1313,13 @@ def can_user_make_payment(uid: str, target_price_id: Optional[str] = None) -> Tu
     Returns:
         tuple: (can_pay: bool, reason: str)
     """
-    subscription = users_db.get_user_valid_subscription(uid)
+    from config.referral_campaign import campaign_enabled
+
+    subscription = (
+        users_db.get_user_valid_subscription(uid, provision=False, include_promotions=False)
+        if campaign_enabled()
+        else users_db.get_user_valid_subscription(uid)
+    )
     if target_price_id in configured_ladder_prices() and subscription is not None:
         if subscription.plan != PlanType.basic and ladder_policy.entitlements(subscription) is None:
             return False, "Legacy subscriptions keep their current plan"
@@ -1406,7 +1404,15 @@ def can_user_make_payment(uid: str, target_price_id: Optional[str] = None) -> Tu
     return True, "User can make payment"
 
 
-def get_monthly_usage_for_subscription(uid: str) -> Dict[str, Any]:
+@overload
+def get_monthly_usage_for_subscription(uid: str, *, ready_only: Literal[False] = False) -> Dict[str, Any]: ...
+
+
+@overload
+def get_monthly_usage_for_subscription(uid: str, *, ready_only: Literal[True]) -> Dict[str, Any] | None: ...
+
+
+def get_monthly_usage_for_subscription(uid: str, *, ready_only: bool = False) -> Dict[str, Any] | None:
     """
     Gets the current monthly usage for subscription purposes, considering the launch date from env variables.
     The launch date format is expected to be YYYY-MM-DD.
@@ -1421,7 +1427,7 @@ def get_monthly_usage_for_subscription(uid: str) -> Dict[str, Any]:
         raise ValueError('missing subscription launch date')
     if not subscription_launch_date_str:
         # Subscription not launched, so no usage is counted against limits.
-        return {}
+        return None if ready_only else {}
 
     try:
         # Use strptime to enforce YYYY-MM-DD format
@@ -1432,13 +1438,15 @@ def get_monthly_usage_for_subscription(uid: str) -> Dict[str, Any]:
             logger.error('event=stt_cap_launch_config outcome=invalid reason=invalid')
             raise
         # Invalid date format, treat as not launched.
-        return {}
+        return None if ready_only else {}
 
     now = datetime.now(timezone.utc)
     if now < launch_date:
         # Launch date is in the future, so no usage is counted yet.
-        return {}
+        return None if ready_only else {}
 
+    if ready_only:
+        return user_usage_db.get_ready_monthly_usage_stats_since(uid, now, launch_date)
     return user_usage_db.get_monthly_usage_stats_since(uid, now, launch_date)
 
 
@@ -1507,6 +1515,7 @@ def resolve_transcription_allowance(
     omi_funded: bool = False,
     usage_cache: Any = None,
     provision_subscription: bool = True,
+    ready_usage_only: bool = False,
 ) -> TranscriptionAllowance:
     """Resolve the managed-transcription allowance for one uid, once. Never raises.
 
@@ -1569,7 +1578,12 @@ def resolve_transcription_allowance(
         if allowance is None:
             return TranscriptionAllowance(TRANSCRIPTION_MODE_MANAGED, None, 'plan_unlimited', limit_seconds=None)
         if usage is _UNRESOLVED:
-            usage = get_monthly_usage_for_subscription(uid)
+            if ready_usage_only:
+                usage = get_monthly_usage_for_subscription(uid, ready_only=True)
+                if usage is None:
+                    return _closed('allowance_unavailable', limit_seconds=allowance)
+            else:
+                usage = get_monthly_usage_for_subscription(uid)
         used = _usage_seconds(usage)
         if used is None:
             logger.warning('transcription allowance: untrusted usage record for uid=%s', uid)
@@ -1624,6 +1638,19 @@ def _processing_closed(reason: str) -> ConversationProcessingAllowance:
     return ConversationProcessingAllowance(CONVERSATION_PROCESSING_MODE_SKIPPED, 0, reason)
 
 
+# Ops kill (default on): once a plan's monthly listening allowance is spent,
+# transcripts made on the phone (on-device / custom STT) still get Omi's
+# summary, memories and tasks. David 2026-11-16: keep summaries on for free
+# users past the cap until free-user cost is re-measured. false/0/off/no
+# restores the cap (`plan_allowance_exhausted` skip).
+PROCESSING_PAST_CAP_ENV = 'CONVERSATION_PROCESSING_PAST_CAP_ENABLED'
+PROCESSING_PAST_CAP_REASON = 'plan_allowance_exhausted_kept_on'
+
+
+def conversation_processing_past_cap_enabled() -> bool:
+    return refactor_default_on(PROCESSING_PAST_CAP_ENV)
+
+
 def _usage_speech_seconds(usage: Any) -> Optional[int]:
     """Speech seconds attributed this month, or ``None`` when the record is not trustworthy.
 
@@ -1661,7 +1688,11 @@ def resolve_conversation_processing_allowance(
             return ConversationProcessingAllowance(CONVERSATION_PROCESSING_MODE_ALLOWED, None, 'marketplace_reviewer')
         if byok_active is _UNRESOLVED:
             byok_active = users_db.is_byok_active(uid)
-        if byok_active and _request_has_llm_byok_key():
+        from utils.stt.allowance_watch import observe
+
+        customer_funded = bool(byok_active and _request_has_llm_byok_key())
+        observe(uid, 'processing', 'llm', customer_funded=customer_funded)
+        if customer_funded:
             return ConversationProcessingAllowance(CONVERSATION_PROCESSING_MODE_ALLOWED, None, 'llm_byok')
         if subscription is _UNRESOLVED:
             subscription = users_db.get_user_valid_subscription(uid)
@@ -1693,6 +1724,10 @@ def resolve_conversation_processing_allowance(
         if remaining > 0:
             return ConversationProcessingAllowance(
                 CONVERSATION_PROCESSING_MODE_ALLOWED, remaining, 'plan_within_allowance'
+            )
+        if conversation_processing_past_cap_enabled():
+            return ConversationProcessingAllowance(
+                CONVERSATION_PROCESSING_MODE_ALLOWED, None, PROCESSING_PAST_CAP_REASON
             )
         return _processing_closed('plan_allowance_exhausted')
     except Exception as exc:
@@ -1761,10 +1796,13 @@ def _stored_paid_period_lapsed(subscription: Subscription) -> bool:
     return not end or datetime.fromtimestamp(end, tz=timezone.utc) < datetime.now(timezone.utc)
 
 
-def reconcile_basic_plan_with_stripe(uid: str, subscription: Subscription | None) -> Subscription | None:
+def reconcile_basic_plan_with_stripe(
+    uid: str, subscription: Subscription | None, *, stripe_snapshot: Optional[Dict[str, Any]] = None
+) -> Subscription | None:
     """
     If Firestore says `basic`, or a paid plan whose period has passed, but Stripe holds an
     active paid subscription, fix it once by reconciling with Stripe.
+    When requested, share the retrieved Stripe snapshot with the caller's recovery check.
     """
     if not subscription:
         return subscription
@@ -1786,6 +1824,8 @@ def reconcile_basic_plan_with_stripe(uid: str, subscription: Subscription | None
             stripe_sub_dict: Optional[Dict[str, Any]] = (
                 stripe_sub.to_dict() if stripe_sub else None  # type: ignore[reportDeprecated]  # stripe public serialization API
             )
+            if stripe_snapshot is not None and stripe_sub_dict:
+                stripe_snapshot.update(stripe_sub_dict)
             if stripe_sub_dict:
                 items: List[Dict[str, Any]] = stripe_sub_dict.get('items', {}).get('data') or []
                 price_id: Optional[str] = None

@@ -3,8 +3,10 @@ Tools for accessing Google Calendar events.
 """
 
 import asyncio
+import traceback
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional, Tuple, cast
+from typing import Any, Callable, Dict, List, Optional, Tuple, cast
+from urllib.parse import quote
 
 import httpx
 from langchain_core.tools import tool  # type: ignore[reportUnknownVariableType]  # langchain @tool decorator partially typed
@@ -18,6 +20,7 @@ from utils.model_text import (
     format_span,
     truncation_note,
 )
+from utils.observability.fallback import record_fallback
 from utils.user_clock import clock_for_config
 from models.calendar_mutation import (
     CalendarMutationResult,
@@ -48,8 +51,18 @@ from utils.log_sanitizer import sanitize, sanitize_pii, sanitize_provider_error
 import logging
 
 from utils.retrieval.tools.calendar_render import render_calendar_event
+from utils.retrieval.google_calendar_selection import event_path, event_reference, read_ids
+from utils.retrieval import google_calendar_catalog_cache
 
 logger = logging.getLogger(__name__)
+
+
+def _log_failure(context: str, error: BaseException) -> None:
+    """Log a failure without its message or traceback, which can carry provider or user text."""
+    frames = traceback.extract_tb(error.__traceback__)
+    filename = frames[-1].filename.replace('\\', '/').rsplit('/', 1)[-1] if frames else ''
+    where = f" at {filename}:{frames[-1].lineno} in {frames[-1].name}" if frames else ""
+    logger.error("%s: %s%s", context, sanitize_provider_error(error), where)
 
 
 async def search_google_contacts(access_token: str, query: str) -> Optional[str]:
@@ -100,9 +113,9 @@ async def search_google_contacts(access_token: str, query: str) -> Optional[str]
             error_body = response.text[:200] if response.text else "No error body"
             logger.error(f"⚠️ Google Contacts API error {response.status_code}: {sanitize(error_body)}")
     except httpx.HTTPError as e:
-        logger.error(f"⚠️ Network error searching My Contacts: {e}")
+        _log_failure("Network error searching My Contacts", e)
     except Exception as e:
-        logger.error(f"⚠️ Error searching My Contacts: {e}")
+        _log_failure("Error searching My Contacts", e)
 
     # If not found in My Contacts, search in "Other Contacts"
     try:
@@ -120,7 +133,7 @@ async def search_google_contacts(access_token: str, query: str) -> Optional[str]
             # Wait a moment for cache to update (not strictly necessary but recommended)
             await asyncio.sleep(0.5)
         except Exception as warmup_error:
-            logger.error(f"⚠️ Other Contacts warm-up failed (non-critical): {warmup_error}")
+            _log_failure("Other Contacts warm-up failed (non-critical)", warmup_error)
 
         # Now perform the actual search
         response = await client.get(
@@ -165,9 +178,9 @@ async def search_google_contacts(access_token: str, query: str) -> Optional[str]
                 f"⚠️ Google Contacts API (Other Contacts) error {response.status_code}: {sanitize(error_body)}"
             )
     except httpx.HTTPError as e:
-        logger.error(f"⚠️ Network error searching Other Contacts: {e}")
+        _log_failure("Network error searching Other Contacts", e)
     except Exception as e:
-        logger.error(f"⚠️ Error searching Other Contacts: {e}")
+        _log_failure("Error searching Other Contacts", e)
 
     logger.info(f"⚠️ No contacts found in My Contacts or Other Contacts for: {sanitize_pii(query)}")
     return None
@@ -283,9 +296,10 @@ async def get_google_calendar_event(access_token: str, event_id: str) -> Dict[st
 
     event_data = await google_api_request(
         "GET",
-        f'https://www.googleapis.com/calendar/v3/calendars/primary/events/{event_id}',
+        event_path(event_id),
         access_token,
     )
+    event_data['id'] = event_id
     return event_data
 
 
@@ -363,10 +377,11 @@ async def update_google_calendar_event(
 
     updated = await google_api_request(
         "PATCH",
-        f'https://www.googleapis.com/calendar/v3/calendars/primary/events/{event_id}',
+        event_path(event_id),
         access_token,
         body=event_body,
     )
+    updated['id'] = event_id
     return updated
 
 
@@ -385,7 +400,7 @@ async def delete_google_calendar_event(access_token: str, event_id: str) -> bool
 
     await google_api_request(
         "DELETE",
-        f'https://www.googleapis.com/calendar/v3/calendars/primary/events/{event_id}',
+        event_path(event_id),
         access_token,
         allow_204=True,
     )
@@ -398,61 +413,129 @@ async def get_google_calendar_events(
     time_max: Optional[datetime] = None,
     max_results: int = 10,
     search_query: Optional[str] = None,
+    *,
+    uid: Optional[str] = None,
+    selections: Optional[Dict[str, Any]] = None,
+    on_degraded: Optional[Callable[[], None]] = None,
 ) -> List[Dict[str, Any]]:
-    """
-    Fetch events from Google Calendar API.
+    try:
+        async with asyncio.timeout(20):
+            return await _get_selected_calendar_events(
+                access_token,
+                time_min,
+                time_max,
+                max_results,
+                search_query,
+                uid=uid,
+                selections=selections,
+                on_degraded=on_degraded,
+            )
+    except GoogleAPIError:
+        if uid:
+            google_calendar_catalog_cache.invalidate(uid)
+        raise
 
-    Args:
-        access_token: Google Calendar access token
-        time_min: Minimum time for events (defaults to now)
-        time_max: Maximum time for events (defaults to 7 days from now)
-        max_results: Maximum number of events to return
-        search_query: Optional search query to filter events by title, description, attendees, etc.
 
-    Returns:
-        List of calendar events
+async def _get_selected_calendar_events(
+    access_token: str,
+    time_min: Optional[datetime] = None,
+    time_max: Optional[datetime] = None,
+    max_results: int = 10,
+    search_query: Optional[str] = None,
+    *,
+    uid: Optional[str] = None,
+    selections: Optional[Dict[str, Any]] = None,
+    on_degraded: Optional[Callable[[], None]] = None,
+) -> List[Dict[str, Any]]:
+    """Read only the owner's selected calendars, globally ordered and bounded.
+
+    Each calendar has its own pagination cursor. Calendar-qualified references
+    preserve identity through linking, import dedupe and later event mutations.
+    Callers without an Omi owner retain the legacy primary-only helper contract.
     """
     now = datetime.now(timezone.utc)
     time_min = (time_min or now).astimezone(timezone.utc)
     time_max = (time_max or (time_min + timedelta(days=7))).astimezone(timezone.utc)
-
-    # Format times in RFC3339 format (UTC)
-    time_min_str = time_min.strftime('%Y-%m-%dT%H:%M:%SZ')  # not-model-facing: Google Calendar API parameter
-    time_max_str = time_max.strftime('%Y-%m-%dT%H:%M:%SZ')  # not-model-facing: Google Calendar API parameter
-
-    params: Dict[str, Any] = {
-        'timeMin': time_min_str,
-        'timeMax': time_max_str,
-        'singleEvents': 'true',
-        'orderBy': 'startTime',
-        'maxResults': 2500,
-    }
-    if search_query:
-        params['q'] = search_query
-
-    events: List[Dict[str, Any]] = []
-    page = None
-
-    while True:
-        if page:
+    calendars = await read_ids(uid, access_token, selections, on_degraded) if uid else ['primary']
+    collected: List[Dict[str, Any]] = []
+    for calendar_id in calendars:
+        params: Dict[str, Any] = {
+            'timeMin': time_min.strftime('%Y-%m-%dT%H:%M:%SZ'),  # not-model-facing: Google API
+            'timeMax': time_max.strftime('%Y-%m-%dT%H:%M:%SZ'),  # not-model-facing: Google API
+            'singleEvents': 'true',
+            'orderBy': 'startTime',
+            'maxResults': min(max(max_results, 1), 2500),
+        }
+        if search_query:
+            params['q'] = search_query
+        events: List[Dict[str, Any]] = []
+        seen_pages: set[str] = set()
+        seen_ids: set[str] = set()
+        for _ in range(100):
+            try:
+                data = await google_api_request(
+                    'GET',
+                    f'https://www.googleapis.com/calendar/v3/calendars/{quote(calendar_id, safe="")}/events',
+                    access_token,
+                    params=params,
+                )
+            except GoogleAPIError as error:
+                # A 403 is also how Google reports quota exhaustion, which is
+                # transient and not a lost grant. Dropping the calendar there
+                # would return a partial read as a successful one.
+                if calendar_id != 'primary' and error.status_code in {403, 404, 410} and not error.is_quota_error:
+                    if uid:
+                        google_calendar_catalog_cache.invalidate(uid)
+                    # The read still returns the remaining calendars, so the
+                    # caller reports success. Record the degradation, otherwise
+                    # sync-success telemetry cannot be distinguished from a
+                    # complete read that is missing a selected calendar.
+                    record_fallback(
+                        component='calendar_read',
+                        from_mode='selected_calendars',
+                        to_mode='reachable_selected_calendars',
+                        reason='not_authorized' if error.status_code == 403 else 'unavailable',
+                        outcome='degraded',
+                        log=logger,
+                    )
+                    if on_degraded is not None:
+                        on_degraded()
+                    # Access can disappear after catalog enumeration. Keep other
+                    # selected calendars; never substitute an unselected primary.
+                    break
+                raise
+            for row in data.get('items', []):
+                if not isinstance(row, dict):
+                    continue
+                provider_id = row.get('id')
+                if isinstance(provider_id, str):
+                    if provider_id in seen_ids:
+                        continue
+                    seen_ids.add(provider_id)
+                event = dict(row)
+                if calendar_id != 'primary' and isinstance(provider_id, str):
+                    event['id'] = event_reference(calendar_id, provider_id)
+                events.append(event)
+            page = data.get('nextPageToken')
+            if len(events) >= max_results or not page:
+                break
+            if not isinstance(page, str) or page in seen_pages:
+                raise ValueError('invalid_calendar_event_pagination')
+            seen_pages.add(page)
             params['pageToken'] = page
+        else:
+            raise ValueError('calendar_event_page_limit_exceeded')
+        collected.extend(events[:max_results])
+    if len(calendars) > 1:
 
-        data = await google_api_request(
-            "GET",
-            'https://www.googleapis.com/calendar/v3/calendars/primary/events',
-            access_token,
-            params=params,
-        )
-        events.extend(data.get('items', []))
+        def starts_at(event: Dict[str, Any]) -> datetime:
+            start = event.get('start') or {}
+            return coerce_utc_datetime(start.get('dateTime') or start.get('date')) or datetime.max.replace(
+                tzinfo=timezone.utc
+            )
 
-        if len(events) >= max_results:
-            return events[:max_results]
-
-        page = data.get('nextPageToken')
-        if not page:
-            break
-
-    return events[:max_results]
+        collected.sort(key=starts_at)
+    return collected[:max_results]
 
 
 @tool
@@ -594,6 +677,7 @@ async def get_calendar_events_tool(
                 # With search_query, Google Calendar API filters server-side, so we can search entire range at once
                 logger.info(f"📅 search_query provided, using single API call for {days_range} day range")
                 events = await get_google_calendar_events(
+                    uid=uid,
                     access_token=access_token,
                     time_min=time_min,
                     time_max=time_max,
@@ -628,6 +712,7 @@ async def get_calendar_events_tool(
 
                     # Fetch events for this window
                     window_events = await get_google_calendar_events(
+                        uid=uid,
                         access_token=access_token,
                         time_min=search_start,
                         time_max=search_end,
@@ -666,6 +751,7 @@ async def get_calendar_events_tool(
                 # For smaller ranges (<=30 days), fetch normally
                 logger.info(f"📅 Fetching calendar events with time_min={time_min}, time_max={time_max}")
                 events = await get_google_calendar_events(
+                    uid=uid,
                     access_token=access_token,
                     time_min=time_min,
                     time_max=time_max,
@@ -673,7 +759,7 @@ async def get_calendar_events_tool(
                     search_query=search_query,
                 )
         except GoogleAPIError as e:
-            logger.error(f"❌ Google API error fetching calendar events: status={e.status_code}, msg={e.message}")
+            _log_failure("Google API error fetching calendar events", e)
 
             if e.is_auth_error:
                 logger.info(f"🔄 Attempting to refresh Google Calendar token...")
@@ -681,6 +767,7 @@ async def get_calendar_events_tool(
                 if new_token:
                     try:
                         events = await get_google_calendar_events(
+                            uid=uid,
                             access_token=new_token,
                             time_min=time_min,
                             time_max=time_max,
@@ -689,7 +776,7 @@ async def get_calendar_events_tool(
                         )
                         order = "soonest first"  # the retry reads the whole range in start-time order
                     except Exception as retry_error:
-                        logger.error(f"❌ Error after token refresh: {retry_error}", exc_info=True)
+                        _log_failure("Error after token refresh", retry_error)
                         emit_sync_failed(telemetry_context, retry_error)
                         return "Error fetching calendar events. Please try again."
                 else:
@@ -705,11 +792,11 @@ async def get_calendar_events_tool(
                 emit_sync_failed(telemetry_context, e)
                 return f"Error fetching calendar events (Google Calendar status {e.status_code}). Please try again."
         except (httpx.TimeoutException, httpx.ConnectError) as e:
-            logger.error(f"❌ Network error fetching calendar events: {e}")
+            _log_failure("Network error fetching calendar events", e)
             emit_sync_failed(telemetry_context, e)
             return "Unable to reach Google Calendar right now. Please try again in a moment."
         except Exception as e:
-            logger.error(f"❌ Unexpected error fetching calendar events: {e}", exc_info=True)
+            _log_failure("Unexpected error fetching calendar events", e)
             emit_sync_failed(telemetry_context, e)
             return "Error fetching calendar events. Please try again."
 
@@ -755,7 +842,7 @@ async def get_calendar_events_tool(
         emit_sync_succeeded(telemetry_context, item_count=len(events))
         return result.strip()
     except Exception as e:
-        logger.error(f"❌ Unexpected error in get_calendar_events_tool: {e}", exc_info=True)
+        _log_failure("Unexpected error in get_calendar_events_tool", e)
         if telemetry_context:
             emit_sync_failed(telemetry_context, e)
         return "An unexpected error occurred while fetching calendar events. Please try again later."
@@ -898,7 +985,7 @@ async def create_calendar_event_tool(
             return result.strip()
 
         except GoogleAPIError as e:
-            logger.error(f"❌ Google API error creating calendar event: status={e.status_code}, msg={e.message}")
+            _log_failure("Google API error creating calendar event", e)
 
             if e.is_auth_error:
                 logger.info(f"🔄 Attempting to refresh Google Calendar token...")
@@ -931,7 +1018,7 @@ async def create_calendar_event_tool(
 
                         return result.strip()
                     except Exception as retry_error:
-                        logger.error(f"❌ Error after token refresh: {retry_error}", exc_info=True)
+                        _log_failure("Error after token refresh", retry_error)
                         return "Error creating calendar event. Please try again."
                 else:
                     logger.error(f"❌ Token refresh failed")
@@ -943,11 +1030,11 @@ async def create_calendar_event_tool(
             else:
                 return f"Error creating calendar event (Google Calendar status {e.status_code}). Please try again."
         except (httpx.TimeoutException, httpx.ConnectError) as e:
-            logger.error(f"❌ Network error creating calendar event: {e}")
+            _log_failure("Network error creating calendar event", e)
             return "Unable to reach Google Calendar right now. Please try again in a moment."
 
     except Exception as e:
-        logger.error(f"❌ Unexpected error in create_calendar_event_tool: {e}", exc_info=True)
+        _log_failure("Unexpected error in create_calendar_event_tool", e)
         return "An unexpected error occurred while creating the calendar event. Please try again later."
 
 
@@ -1015,7 +1102,7 @@ async def delete_calendar_event_tool(
                 await delete_google_calendar_event(access_token, event_id)
                 return f"✅ Successfully deleted calendar event (ID: {event_id})"
             except GoogleAPIError as e:
-                logger.error(f"❌ Google API error deleting event by ID: status={e.status_code}, msg={e.message}")
+                _log_failure("Google API error deleting event by ID", e)
 
                 if e.is_auth_error:
                     logger.info(f"🔄 Attempting to refresh Google Calendar token...")
@@ -1025,7 +1112,7 @@ async def delete_calendar_event_tool(
                             await delete_google_calendar_event(new_token, event_id)
                             return f"✅ Successfully deleted calendar event (ID: {event_id})"
                         except Exception as retry_error:
-                            logger.error(f"❌ Error after token refresh deleting event: {retry_error}", exc_info=True)
+                            _log_failure("Error after token refresh deleting event", retry_error)
                             return "Error deleting calendar event. Please try again."
                     else:
                         return "Google Calendar authentication expired. Please reconnect your Google Calendar from settings."
@@ -1034,10 +1121,10 @@ async def delete_calendar_event_tool(
                 else:
                     return f"Error deleting calendar event (Google Calendar status {e.status_code}). Please try again."
             except (httpx.TimeoutException, httpx.ConnectError) as e:
-                logger.error(f"❌ Network error deleting event by ID: {e}")
+                _log_failure("Network error deleting event by ID", e)
                 return "Unable to reach Google Calendar right now. Please try again in a moment."
             except Exception as e:
-                logger.error(f"❌ Unexpected error deleting event by ID: {e}", exc_info=True)
+                _log_failure("Unexpected error deleting event by ID", e)
                 return "Error deleting calendar event. Please try again."
 
         # Otherwise, search for events matching criteria
@@ -1073,6 +1160,7 @@ async def delete_calendar_event_tool(
         # Search for matching events
         try:
             events = await get_google_calendar_events(
+                uid=uid,
                 access_token=access_token,
                 time_min=time_min,
                 time_max=time_max,
@@ -1126,7 +1214,7 @@ async def delete_calendar_event_tool(
             return format_deleted_calendar_events(mutation_result)
 
         except GoogleAPIError as e:
-            logger.error(f"❌ Google API error searching events to delete: status={e.status_code}, msg={e.message}")
+            _log_failure("Google API error searching events to delete", e)
 
             if e.is_auth_error:
                 logger.info(f"🔄 Attempting to refresh Google Calendar token...")
@@ -1134,6 +1222,7 @@ async def delete_calendar_event_tool(
                 if new_token:
                     try:
                         events = await get_google_calendar_events(
+                            uid=uid,
                             access_token=new_token,
                             time_min=time_min,
                             time_max=time_max,
@@ -1176,7 +1265,7 @@ async def delete_calendar_event_tool(
 
                         return format_deleted_calendar_events(mutation_result)
                     except Exception as retry_error:
-                        logger.error(f"❌ Error after token refresh deleting events: {retry_error}", exc_info=True)
+                        _log_failure("Error after token refresh deleting events", retry_error)
                         return "Error deleting calendar events. Please try again."
                 else:
                     return (
@@ -1189,14 +1278,14 @@ async def delete_calendar_event_tool(
                     f"Error searching for calendar events (Google Calendar status {e.status_code}). Please try again."
                 )
         except (httpx.TimeoutException, httpx.ConnectError) as e:
-            logger.error(f"❌ Network error searching events to delete: {e}")
+            _log_failure("Network error searching events to delete", e)
             return "Unable to reach Google Calendar right now. Please try again in a moment."
         except Exception as e:
-            logger.error(f"❌ Unexpected error searching events to delete: {e}", exc_info=True)
+            _log_failure("Unexpected error searching events to delete", e)
             return "An unexpected error occurred while searching for calendar events to delete. Please try again later."
 
     except Exception as e:
-        logger.error(f"❌ Unexpected error in delete_calendar_event_tool: {e}", exc_info=True)
+        _log_failure("Unexpected error in delete_calendar_event_tool", e)
         return "An unexpected error occurred while deleting calendar events. Please try again later."
 
 
@@ -1294,6 +1383,7 @@ async def update_calendar_event_tool(
             # Search for matching events
             try:
                 events = await get_google_calendar_events(
+                    uid=uid,
                     access_token=access_token,
                     time_min=time_min,
                     time_max=time_max,
@@ -1326,7 +1416,7 @@ async def update_calendar_event_tool(
         try:
             current_event = await get_google_calendar_event(access_token, target_event_id)
         except GoogleAPIError as e:
-            logger.error(f"❌ Google API error getting event: status={e.status_code}, msg={e.message}")
+            _log_failure("Google API error getting event", e)
 
             if e.is_auth_error:
                 logger.info(f"🔄 Attempting to refresh Google Calendar token...")
@@ -1336,7 +1426,7 @@ async def update_calendar_event_tool(
                         current_event = await get_google_calendar_event(new_token, target_event_id)
                         access_token = new_token
                     except Exception as retry_error:
-                        logger.error(f"❌ Error after token refresh getting event: {retry_error}", exc_info=True)
+                        _log_failure("Error after token refresh getting event", retry_error)
                         return "Error getting calendar event. Please try again."
                 else:
                     return (
@@ -1347,10 +1437,10 @@ async def update_calendar_event_tool(
             else:
                 return f"Error getting calendar event (Google Calendar status {e.status_code}). Please try again."
         except (httpx.TimeoutException, httpx.ConnectError) as e:
-            logger.error(f"❌ Network error getting event: {e}")
+            _log_failure("Network error getting event", e)
             return "Unable to reach Google Calendar right now. Please try again in a moment."
         except Exception as e:
-            logger.error(f"❌ Unexpected error getting event: {e}", exc_info=True)
+            _log_failure("Unexpected error getting event", e)
             return "Error getting calendar event. Please try again."
 
         # Prepare update fields
@@ -1440,7 +1530,7 @@ async def update_calendar_event_tool(
             return result.strip()
 
         except GoogleAPIError as e:
-            logger.error(f"❌ Google API error updating calendar event: status={e.status_code}, msg={e.message}")
+            _log_failure("Google API error updating calendar event", e)
 
             if e.is_auth_error:
                 logger.info(f"🔄 Attempting to refresh Google Calendar token...")
@@ -1461,7 +1551,7 @@ async def update_calendar_event_tool(
                             result += f"   Attendees: {', '.join(update_attendees)}\n"
                         return result.strip()
                     except Exception as retry_error:
-                        logger.error(f"❌ Error after token refresh updating event: {retry_error}", exc_info=True)
+                        _log_failure("Error after token refresh updating event", retry_error)
                         return "Error updating calendar event. Please try again."
                 else:
                     return (
@@ -1472,9 +1562,9 @@ async def update_calendar_event_tool(
             else:
                 return f"Error updating calendar event (Google Calendar status {e.status_code}). Please try again."
         except (httpx.TimeoutException, httpx.ConnectError) as e:
-            logger.error(f"❌ Network error updating calendar event: {e}")
+            _log_failure("Network error updating calendar event", e)
             return "Unable to reach Google Calendar right now. Please try again in a moment."
 
     except Exception as e:
-        logger.error(f"❌ Unexpected error in update_calendar_event_tool: {e}", exc_info=True)
+        _log_failure("Unexpected error in update_calendar_event_tool", e)
         return "An unexpected error occurred while updating the calendar event. Please try again later."

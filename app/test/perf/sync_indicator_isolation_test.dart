@@ -1,3 +1,4 @@
+import 'package:omi/services/wals/wal_derived_sync_views.dart';
 import 'dart:io';
 import 'dart:ui' as ui;
 
@@ -47,7 +48,7 @@ class _Device extends ChangeNotifier implements DeviceProvider {
   @override
   String get latestStableFirmwareVersion => '';
   @override
-  Future<void> getDeviceInfo() async {}
+  Future<void> getDeviceInfo({bool forceRefresh = false}) async {}
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
@@ -91,7 +92,7 @@ class _Capture extends ChangeNotifier implements CaptureProvider {
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
-class _Sync extends ChangeNotifier implements SyncProvider {
+class _Sync extends ChangeNotifier with WalDerivedSyncViews implements SyncProvider {
   bool active = false;
   @override
   SyncState get syncState => active ? const SyncState(status: SyncStatus.syncing) : const SyncState();

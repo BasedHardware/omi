@@ -5,6 +5,7 @@ quota and never grant enrollment consent. Paid naming cards retain the existing
 manual tagging and quality-gated, preference-controlled teaching behavior.
 """
 
+from utils.conversations.layer import read_product as read_product_conversation
 import asyncio
 import contextvars
 import hashlib
@@ -51,6 +52,7 @@ from utils.observability.speaker_tag_prompts import (
     OWNER_CONFIRMATION_EVENTS,
 )
 from utils.product_telemetry import emit_product_event
+from utils.ignored_voice_markers import retire_exclusion_markers
 from utils.executors import (
     ExecutorSaturatedError,
     db_executor,
@@ -659,7 +661,7 @@ def _apply_owner_answer(
         )
         if request.answer == SpeakerTagPromptAnswer.skip:
             owner_confirmation_db.record(uid, request.conversation_id, 'skip', evidence)
-            raw = conversations_db.get_conversation(uid, request.conversation_id)
+            raw = read_product_conversation(conversations_db.get_conversation, uid, request.conversation_id)
             identities = []
         else:
             raw, resolved, *_ = conversations_db.assign_conversation_speaker(
@@ -745,7 +747,7 @@ def apply_answer(
     # Naming a voice by hand is free on every plan; only automatic non-owner suggestions are paid
     # (get_prompts withholds them), so an answer to an already-served card is never refused here.
 
-    conversation = conversations_db.get_conversation(uid, request.conversation_id) or {}
+    conversation = read_product_conversation(conversations_db.get_conversation, uid, request.conversation_id) or {}
     origin = metric_origin(
         uid, conversation, request.segment_ids, request.origin.value, current_ids(uid, [conversation])
     )
@@ -759,6 +761,18 @@ def apply_answer(
     if answer == SpeakerTagPromptAnswer.me:
         conversation, resolved = _assign(
             uid, request, is_user=True, person_id=None, train=False, owner_segment_ids=request.segment_ids
+        )
+        # A card "Me"/person answer replaces any live not_a_person exclusion,
+        # so the ignored-voice marker must retire through the same shared
+        # reconciliation the live sheet uses (the router-only copy used to
+        # leave the positively assigned voice listed as ignored).
+        retire_exclusion_markers(
+            uid,
+            conversation.get('id') or request.conversation_id,
+            conversation,
+            resolved,
+            speaker_id=request.speaker_id,
+            logger_=logger,
         )
         if schedule is not None:
             assigned = set(resolved) & {s.get('id') for s in conversation.get('transcript_segments') or []}
@@ -776,6 +790,14 @@ def apply_answer(
         settings = voice_profiles_db.get_voice_profile_settings(uid)
         train = settings['save_other_voice_profiles']
         conversation, resolved = _assign(uid, request, is_user=False, person_id=person_id, train=train)
+        retire_exclusion_markers(
+            uid,
+            conversation.get('id') or request.conversation_id,
+            conversation,
+            resolved,
+            speaker_id=request.speaker_id,
+            logger_=logger,
+        )
         if not train:
             SPEAKER_TAG_PROMPT_VOICE_SAMPLES.labels(target='person', outcome='disabled_by_user').inc()
         elif schedule is not None:
@@ -809,6 +831,19 @@ def apply_answer(
                 else None
             )
         conversation, resolved = _assign(uid, request, is_user=False, person_id=None, train=False, rejection=rejection)
+        # Any newer non-not_a_person answer supersedes an earlier exclusion:
+        # retire_exclusion_markers distinguishes rejection kinds, so the stale
+        # not_a_person marker is cleared for not_me / not_person / unnamed
+        # answers while a still-winning not_a_person keeps (and re-records)
+        # its marker below.
+        retire_exclusion_markers(
+            uid,
+            conversation.get('id') or request.conversation_id,
+            conversation,
+            resolved,
+            speaker_id=request.speaker_id,
+            logger_=logger,
+        )
         if answer == SpeakerTagPromptAnswer.not_a_person:
             resolved_ids = set(resolved)
             speaker_ids = {

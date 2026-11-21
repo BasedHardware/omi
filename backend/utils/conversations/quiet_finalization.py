@@ -6,6 +6,8 @@ import logging
 from typing import Any
 
 from config.listen_quiet_finalization import enabled
+from config.refactor_modes import quiet_empty_exit_enabled
+from database.batch_pipeline_privacy import assert_batch_write_allowed
 from database import conversation_quiet_checks as checks_db
 from database.account_deletion_marker import account_deletion_blocks_user_work
 from utils.account_cutover.access import should_skip_background_account_mutation
@@ -51,14 +53,43 @@ def _dispatch(check: dict[str, Any]) -> None:
 
 def arm(
     uid: str, conversation_id: str, timeout: float, *, requires_byok: bool = False, firestore_client: Any = None
-) -> None:
+) -> bool:
+    """Return whether a durable quiet check now owns this conversation's finalization."""
     if not enabled():
-        return
+        return False
     check = checks_db.arm_quiet_check(
         uid, conversation_id, timeout, requires_byok=requires_byok, firestore_client=firestore_client
     )
     if check is not None:
         _dispatch(check)
+    return check is not None
+
+
+class EmptyExitChanged(RuntimeError):
+    """Custody changed between evaluation and fenced deletion."""
+
+
+def _empty_storage_proof(transaction: Any, uid: str, cid: str, *, firestore_client: Any = None) -> bool:
+    from database._client import get_firestore_client
+    from utils.other.storage import list_audio_chunks
+
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    try:
+        assert_batch_write_allowed(client, transaction, uid, conversation_ids=(cid,))
+        return not list_audio_chunks(
+            uid, cid, max_count=4096, require_archive=True, include_raw=True, source_metadata=True
+        )
+    except Exception:
+        # A failed/partial listing is never proof of absence.
+        record_fallback(
+            component='pusher',
+            from_mode='quiet_empty_proof',
+            to_mode='base_quiet_admission',
+            reason='proof_refused',
+            outcome='degraded',
+            log=logger,
+        )
+        return False
 
 
 def run(job_id: str, generation: int, *, firestore_client: Any = None) -> str:
@@ -71,7 +102,12 @@ def run(job_id: str, generation: int, *, firestore_client: Any = None) -> str:
     if not is_listen_finalization_dispatch_enabled() or not is_listen_finalization_dispatch_configured():
         checks_db.ensure_quiet_check_progress(job_id, firestore_client=firestore_client)
         raise lifecycle.FinalizationDispatchUnavailable('quiet finalization dispatch is unavailable')
-    check = checks_db.evaluate_quiet_check(job_id, generation, firestore_client=firestore_client)
+    proof_args = {}
+    if quiet_empty_exit_enabled():
+        proof_args['empty_storage_proof'] = lambda tx, uid, cid: _empty_storage_proof(
+            tx, uid, cid, firestore_client=firestore_client
+        )
+    check = checks_db.evaluate_quiet_check(job_id, generation, firestore_client=firestore_client, **proof_args)
     if check['status'] not in {'ready', 'empty_ready', 'deferred'}:
         return check['status']
     if account_deletion_blocks_user_work(check['uid'], firestore_client=firestore_client):
@@ -85,16 +121,64 @@ def run(job_id: str, generation: int, *, firestore_client: Any = None) -> str:
     if check['status'] == 'deferred':
         return 'deferred'
     if check['status'] == 'empty_ready':
-        deleted = lifecycle.delete_empty_recording_conversation(
-            check['uid'],
-            check['conversation_id'],
-            check.get('recording_session_id'),
-            recovery_cutoff=check['recovery_cutoff'],
-            require_expired_recording_lease=True,
-            firestore_client=firestore_client,
-        )
+        guards = {}
+        if check.get('empty_exit') == 'proven_empty_storage':
+
+            def guard(transaction, row):
+                if row is None:
+                    client = firestore_client
+                    if client is None:
+                        from database._client import get_firestore_client
+
+                        client = get_firestore_client()
+                    row = (
+                        client.collection('users')
+                        .document(check['uid'])
+                        .collection('conversations')
+                        .document(check['conversation_id'])
+                        .get(transaction=transaction)
+                        .to_dict()
+                        or {}
+                    )
+                if (
+                    not quiet_empty_exit_enabled()
+                    or not checks_db.quiet_empty_candidate(row)
+                    or not _empty_storage_proof(
+                        transaction, check['uid'], check['conversation_id'], firestore_client=firestore_client
+                    )
+                ):
+                    raise EmptyExitChanged()
+
+            guards['transaction_guard'] = guard
+        try:
+            deleted = lifecycle.delete_empty_recording_conversation(
+                check['uid'],
+                check['conversation_id'],
+                check.get('recording_session_id'),
+                recovery_cutoff=check['recovery_cutoff'],
+                require_expired_recording_lease=True,
+                firestore_client=firestore_client,
+                **guards,
+            )
+        except EmptyExitChanged:
+            checks_db.stop_quiet_check(
+                job_id,
+                check['dispatch_generation'],
+                failure_code='record_orphan_repair',
+                firestore_client=firestore_client,
+            )
+            return 'deferred'
         if deleted:
             checks_db.stop_quiet_check(job_id, check['dispatch_generation'], firestore_client=firestore_client)
+        elif quiet_empty_exit_enabled():
+            # A failed empty admission has no attempt budget. Keep custody and
+            # hand it to repair rather than repeatedly dispatching a refusal.
+            checks_db.stop_quiet_check(
+                job_id,
+                check['dispatch_generation'],
+                failure_code='record_orphan_repair',
+                firestore_client=firestore_client,
+            )
         return 'empty_deleted' if deleted else 'deferred'
     CONVERSATION_ORPHANED_UNFINALIZED.inc()
     try:

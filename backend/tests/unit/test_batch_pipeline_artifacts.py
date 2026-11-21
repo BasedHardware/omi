@@ -50,6 +50,7 @@ class ObjectClient:
             def __init__(self):
                 self.generation = generation
                 self.size = None
+                self.metadata = None
 
             def upload_from_file(self, stream, **kw):
                 body = stream.read()
@@ -326,14 +327,16 @@ def test_result_and_audio_share_one_download_budget():
     uri = store.persist_result(staged, {'words': []})
     budget = ArtifactReadBudget(time.monotonic() + 180, 1024, 1)
     assert store.load_result(staged, uri, read_budget=budget) == {'words': []}
+    assert budget.received_bytes == budget.downloaded_bytes > 0
     with pytest.raises(ArtifactReadLimit):
         store.fetch_audio(staged, read_budget=budget)
     assert budget.objects == client.downloads == 1
 
 
-def test_manifest_source_reads_share_the_staging_budget():
+@pytest.mark.parametrize('max_objects', [1, 2])
+def test_manifest_source_reads_share_the_staging_budget(max_objects):
 
-    store, client, _ = setup()
+    store, client, state = setup()
     original = item(conversation_id='synthetic-conversation')
     pcm = b'\x01\0' * 16000
     path = 'chunks/synthetic-owner/synthetic-conversation/source.batch'
@@ -361,7 +364,20 @@ def test_manifest_source_reads_share_the_staging_budget():
         ).encode()
     )
     staged = replace(original, audio_uri=store.stage_audio(original, manifest))
-    budget = ArtifactReadBudget(time.monotonic() + 180, 1024 * 1024, 1)
-    with pytest.raises(ArtifactReadLimit):
-        store.fetch_audio(staged, read_budget=budget)
-    assert client.downloads == 1  # Manifest only; no unbudgeted nested source GET.
+    checks = []
+
+    def authorize_read(item, *, read_budget):
+        checks.append(read_budget)
+        return state.context
+
+    store.authorize_read = authorize_read
+    budget = ArtifactReadBudget(time.monotonic() + 180, 1024 * 1024, max_objects)
+    if max_objects == 1:
+        with pytest.raises(ArtifactReadLimit):
+            store.fetch_audio(staged, read_budget=budget)
+    else:
+        assert store.fetch_audio(staged, read_budget=budget)
+    assert client.downloads == budget.objects == max_objects
+    manifest_size = sum(len(body) for _, body in client.objects.values()) - len(pcm)
+    assert budget.received_bytes == budget.downloaded_bytes == manifest_size + (len(pcm) if max_objects == 2 else 0)
+    assert checks == [budget] * (3 if max_objects == 2 else 2)

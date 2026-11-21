@@ -31,7 +31,7 @@ The self-hosted T2/fault harness remains available for engineering QA, but it is
 
 ## Failed Codemagic build rehearsal
 
-A failed canonical Codemagic check triggers **Desktop Release Recovery Required**. Its job summary and retained JSON capsule bind the build ID, immutable tag, source SHA, failed step, sanitized diagnostics, and whether the step is locally reproducible. This is the just-in-time handoff for operators and agents; do not infer a fix from the generic Codemagic check title alone.
+For a failed canonical Codemagic build, dispatch **Desktop Release Recovery Required** (`desktop_codemagic_failure_recovery.yml`) from `main` with the failed build ID; it no longer runs on every `check_run` event. Its job summary and retained JSON capsule bind the build ID, immutable tag, source SHA, failed step, sanitized diagnostics, and whether the step is locally reproducible. This is the just-in-time handoff for operators and agents; do not infer a fix from the generic Codemagic check title alone.
 
 For a locally reproducible bundle-audit or signed-smoke failure, run the capsule's exact command manually. On a managed Omi Mac:
 
@@ -63,6 +63,17 @@ Do not edit release bodies, pointers, static routes, or legacy bridges manually.
 - Automatic Beta is fail-closed: any signed-smoke, reservation, digest, manifest, admission-generation, or pointer failure leaves the candidate non-live. Operators pause/resume only through the ADMIN_KEY-protected backend admission control; workflow variables are not pause authority. When a served Beta is concretely broken, `desktop_rollback_beta.yml` and `desktop_breakglass_rollout_beta.yml` retain their audited incident-only behavior. Rollback does not downgrade already-updated clients; follow it with a higher-build repair.
 
 Stable is manual: Codemagic never promotes Stable. `desktop_promote_prod.yml` remains `workflow_dispatch` only and protected by the `prod` environment.
+
+## Bundled Node.js 22 LTS security-release cadence and packaging checklist
+
+`desktop/macos/scripts/prepare-agent-runtime.sh` pins the universal macOS Node.js 22 LTS binary bundled at `Contents/Resources/Omi Computer_Omi Computer.bundle/Contents/Resources/node`. Check [Node.js Security Releases](https://nodejs.org/en/security/) before cutting a desktop release or immediately after an upstream Node.js 22 LTS security advisory lands:
+
+1. Fetch `https://nodejs.org/dist/v22.x.y/SHASUMS256.txt` and its `.sig` for the latest patched Node.js 22 LTS release. Verify the signature against the [official Node release keyring](https://github.com/nodejs/release-keys), then update `NODE_VERSION`, `NODE_DARWIN_ARM64_SHA256` (`node-v22.x.y-darwin-arm64.tar.gz`), and `NODE_DARWIN_X64_SHA256` (`node-v22.x.y-darwin-x64.tar.gz`) in `desktop/macos/scripts/prepare-agent-runtime.sh`.
+2. Keep `NODE_MIN_VERSION` explicit as the minimum runtime compatibility floor required by maintained `pi` packages (`--experimental-strip-types` and `node:sqlite`), separate from the pinned `NODE_VERSION` security baseline.
+3. Exercise cold and warm `scripts/prepare-agent-runtime.sh --universal-node` staging; both must report the pinned version and both architectures. Reject a mismatched archive before extraction. Launch the agent through a separate named app bundle and preserve its source identity and runtime receipt.
+4. Verify that `scripts/smoke-signed-desktop-artifact.sh` checks both the exact bundled `node --version` and its universal `arm64`/`x86_64` architectures, and that `python3 .github/scripts/desktop-changelog.py latest-release --format markdown --runtime-smoke-result <built-artifact-smoke.json>` publishes `Bundled Node.js runtime: v22.x.y` in the candidate release notes. Codemagic requires the successful signed-artifact receipt; absent or failed runtime evidence prevents publication instead of falling back to generic notes.
+
+Implementation checklist: pin/checksum verification, separate compatibility-floor assertions, runtime smoke receipt and artifact-backed release notes are implemented. For each release, retain the cold/warm staging and named-app launch evidence, then verify the signed candidate and its published notes before marking rollout complete.
 
 ## Backend deployment workflows
 

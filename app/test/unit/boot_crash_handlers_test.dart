@@ -7,6 +7,8 @@ import 'package:omi/startup/boot_journal.dart';
 import 'package:omi/env/physical_qualification.dart';
 import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
 
+import '../support/temp_dir_cleanup.dart';
+
 class _Documents extends PathProviderPlatform {
   _Documents(this.path);
   final String path;
@@ -48,7 +50,7 @@ void main() {
       FlutterError.onError = previousFlutter;
       PlatformDispatcher.instance.onError = previousPlatform;
       PathProviderPlatform.instance = previousProvider;
-      await directory.delete(recursive: true);
+      await deleteTempDirQuietly(directory);
     }
   }, skip: PhysicalQualification.enabled);
 }
