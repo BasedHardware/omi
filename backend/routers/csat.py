@@ -45,7 +45,11 @@ def get_csat_config(
     # `platform` is accepted and reserved so Windows/iOS/Android callers can
     # attach later without a contract change; v1 serves the same product-wide
     # singleton for every platform. A missing doc returns defaults — never 404.
-    return CsatConfigResponse(**csat.get_product_config())
+    try:
+        return CsatConfigResponse(**csat.get_product_config())
+    except Exception as e:
+        logger.error("Failed to fetch CSAT config: %s", type(e).__name__, exc_info=True)
+        raise HTTPException(status_code=503, detail="CSAT service temporarily unavailable") from e
 
 
 @router.post('/v1/csat/ratings', response_model=CsatRatingReceipt, status_code=201)
@@ -72,7 +76,7 @@ def submit_csat_rating(
             revision=payload.revision,
         )
     except Exception as e:
-        logger.error(f"Failed to submit CSAT rating for uid {uid}: {e}", exc_info=True)
+        logger.error("Failed to submit CSAT rating for uid %s: %s", uid, type(e).__name__, exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to record CSAT rating") from e
 
     if not created:
