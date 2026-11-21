@@ -41,8 +41,8 @@ the minimal upload/status hooks. GPU runtime/model implementations live under
 - Privacy-fenced recovery is isolated by `database/batch_pipeline_recovery.py`;
   it revokes leases without clearing privacy fences or resurrecting content.
 - Dedicated GPUs receive conversation-sized units (intake maximum one hour).
-  Shared-live admission remains separately off, bounded to120s and one hardware
-  flight; lease expiry never proves non-preemptible CUDA idle.
+  The shared-live pool kind is retired; the scheduler never leases work onto a
+  live GPU.
 - Only complete multipart projection advances the owner publication cursor.
   Durable privacy checks apply before reads/writes and object publication.
 - Switch defaults and kill switches are recorded in the

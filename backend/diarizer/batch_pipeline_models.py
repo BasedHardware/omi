@@ -386,9 +386,7 @@ def create_local_worker(
     """
     config = provider_config()
     if config.pool_kind != 'dedicated_batch':
-        raise ValueError(
-            'local model chain requires dedicated batch GPU; shared-live requires its existing GPU arbiter'
-        )
+        raise ValueError('local model chain requires the dedicated batch GPU pool')
     pin_parakeet_decoding(parakeet_model, cuda_graphs=config.asr_cuda_graphs)
     words = ParakeetWords(parakeet_model, cuda_graphs=config.asr_cuda_graphs)
     flight = (

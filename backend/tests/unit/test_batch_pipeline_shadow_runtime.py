@@ -53,7 +53,7 @@ async def test_generic_failed_shadow_keeps_measured_error_without_new_paid_call(
     recovery.assert_not_called()
 
 
-@pytest.mark.parametrize('restriction', ['zero_slots', 'fresh_reserved', 'stale', 'shared_live', 'oversized'])
+@pytest.mark.parametrize('restriction', ['zero_slots', 'fresh_reserved', 'stale', 'oversized'])
 async def test_shadow_obeys_the_same_capacity_snapshot_as_normal_pull(repository, restriction):
     runner = ShadowRunner(repository, Mock())
     runner.worker_id = 'worker-capacity'
@@ -67,7 +67,6 @@ async def test_shadow_obeys_the_same_capacity_snapshot_as_normal_pull(repository
             'zero_slots': {'available_slots': 0},
             'fresh_reserved': {'reserved_fresh_slots': 1},
             'stale': {'observed_at': time.time() - 30},
-            'shared_live': {'shared_with_live': True, 'gpu_id': 'synthetic-gpu', 'memory_headroom_bytes': 8 * 1024**3},
             'oversized': {'max_item_seconds': 120},
         }[restriction]
     )

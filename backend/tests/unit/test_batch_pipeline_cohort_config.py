@@ -111,7 +111,6 @@ def test_batch_pipeline_admission_is_configured_without_uid_allowlists(manifest,
                 allowlist = env.get('BATCH_PIPELINE_UID_ALLOWLIST')
                 assert allowlist is None or allowlist.get('value', '') == ''
             assert env['BATCH_PIPELINE_WORKER_ENABLED']['value'] == 'false'
-            assert env['BATCH_PIPELINE_SHARED_LIVE_ENABLED']['value'] == 'false'
             if stage == 'dev':
                 assert env['BATCH_PIPELINE_SERVING_ENABLED']['value'] == 'false'
                 assert env.get('BATCH_PIPELINE_UID_ALLOWLIST', {}).get('value', '') == ''

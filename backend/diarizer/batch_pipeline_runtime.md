@@ -1,7 +1,7 @@
 # Dedicated batch worker process
 
 `python -m diarizer.batch_pipeline_runtime` is the sole GPU chain owner. It
-constructs A's `Pump` with `Scheduler(pool='batch')`, one `PipelineWorker`, a
+constructs A's `Pump` with `Scheduler()`, one `PipelineWorker`, a
 fresh per-pull `PoolCapacity`, and the configured conversation-unit ceiling.
 The model microbatch size is distinct from the admitted conversation duration.
 No live Parakeet endpoint or shared-live arbiter is used.

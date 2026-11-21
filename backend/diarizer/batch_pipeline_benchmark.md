@@ -30,8 +30,8 @@ GPU peak below is Torch allocated memory, not total device framebuffer.
 
 Batch 8 gives 1.62x batch-1 throughput. Batch 32 adds only 3.6% over batch 8 while
 roughly doubling peak allocation. Keep ceiling 8; the dedicated padded budget
-is 272 seconds to fit eight 34s context windows. Shared-live remains capped at
-120 seconds and the local multi-model factory refuses live placement. These
+is 272 seconds to fit eight 34s context windows. The shared-live pool kind is
+retired and the local multi-model factory refuses live placement. These
 are window-batching measurements; model inputs have no owner metadata, while
 hermetic chain tests verify restoration to separate owner/item results.
 

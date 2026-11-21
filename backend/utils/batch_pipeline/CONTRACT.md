@@ -90,7 +90,7 @@ record. Live transcription is a preview; the batch result is the record.
   A pull stops at a claimed fresh shard only on a pump's first lane. Its other
   lanes, finding every eligible fresh shard claimed, lease recent/deep backfill
   instead of returning empty: the claimant is serving that fresh work, and the
-  first lane keeps fresh-first per pump. A shared live GPU never borrows.
+  first lane keeps fresh-first per pump.
   `BATCH_PULL_BUSY_BORROW_ENABLED=false` restores strict fresh-first on every lane
   (Helm: `worker.pullBusyBorrowEnabled=false`).
   The existing Sync Cloud Tasks batch emulator gate runs the three-puller

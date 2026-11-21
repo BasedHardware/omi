@@ -289,7 +289,6 @@ def test_unset_invalid_and_off_preserve_legacy_selection_recovery_and_serving_fa
     assert first is not second
     assert first.store is second.store is store
     assert first.pool == second.pool == 'batch'
-    assert service.queue('live') is not service.queue('live')
     populate_legacy(first)
     leases = first.pull(NOW, 4)
     assert [lease.item.segment_id for lease in leases] == ['fresh', 'recent-old', 'recent-new', 'deep']
@@ -563,8 +562,5 @@ def test_serving_factory_preserves_small_pull_share_cadence_and_pool_isolation(m
     assert sum(name.startswith('cohort-') for name in names) == 1
     assert any(name.startswith('old-recent-') for name in names)
     assert any(name.startswith('old-deep-') for name in names)
-    assert service.queue('batch') is not service.queue('live')
-    with pytest.raises(ValueError, match='pool must'):
-        service.queue('invalid')
     monkeypatch.setenv('BATCH_PIPELINE_PROTECTED_SHARE_ENABLED', 'off')
     assert service.queue() is not service.queue()

@@ -214,12 +214,6 @@ def record_capture_eligible(owner_id: str, capture: dict, *, policy=None) -> boo
     )
 
 
-def shared_live_enabled() -> bool:
-    from config.policy import resolve_stage_policy
-
-    return resolve_stage_policy('', 'scheduler').shared_live
-
-
 def control_candidate_fanout(fanout: int | None = None) -> int:
     """Bound hint reads; 64 restores the previous candidate query width."""
     try:

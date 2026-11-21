@@ -234,7 +234,6 @@ spec:
               value: ""
               {{- end }}
             {{- end }}
-            - {name: BATCH_PIPELINE_SHARED_LIVE_ENABLED, value: "false"}
             - {name: BATCH_PIPELINE_POOL_KIND, value: dedicated_batch}
             - {name: BATCH_PIPELINE_WORDS_PROVIDER, value: parakeet}
             - {name: BATCH_PIPELINE_DIARIZER, value: pyannote}

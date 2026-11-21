@@ -27,7 +27,8 @@ off. A pre-upload artifact reference remains in the erasure outbox until its
 2-minute in-flight IO window closes; the maintenance sweep erases it again and
 removes the reference. Failed storage cleanup retains retry state. Hash-only
 privacy generations and deletion authorities have no TTL, so a stale result cannot
-reopen an account. GPU reservations require the hardware owner's idle receipt.
+reopen an account. The shared-live GPU reservation path is retired, so no
+reservation outlives a purge.
 
 Conversation erasure keeps only a content-free result ordering edge when a
 predecessor has not projected yet. Its state is `erased`, with no result, URI or

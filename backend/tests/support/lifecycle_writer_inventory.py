@@ -3299,7 +3299,7 @@ FIELD_SITES = {
             'Scheduler._pull_shard.commit',
             'state',
             "'leased'",
-            ('attempt', 'lease_until', 'shared_gpu_key', 'state', 'token'),
+            ('attempt', 'lease_until', 'state', 'token'),
         ),
         ('Scheduler.complete.commit', 'state', "'result_ready'", ('ready_at', 'result', 'state')),
         ('Scheduler.defer.commit', 'state', "'retry'", ('attempt', 'available_at', 'lease_until', 'state', 'token')),
