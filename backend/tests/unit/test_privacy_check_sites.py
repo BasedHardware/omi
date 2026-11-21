@@ -38,7 +38,8 @@ def test_production_module_is_named_with_each_shape(monkeypatch):
     monkeypatch.setenv('FIRESTORE_READ_LEVERS', LEVERS)
     db = _db()
     module = 'database.batch_pipeline_projection_session'
-    before = {s: count(module, s) for s in ('no_transaction', 'snapshots', 'attempt', 'no_attempt')}
+    label = module + ':<module>'
+    before = {s: count(label, s) for s in ('no_transaction', 'snapshots', 'attempt', 'no_attempt')}
     _call_from(module, 'privacy.assert_batch_write_allowed(db, db.transaction(), UID, conversation_ids=["c"])', db)
     _call_from(module, 'privacy.assert_batch_write_allowed(db, None, UID, conversation_ids=["c"])', db)
     _call_from(
@@ -52,7 +53,7 @@ def test_production_module_is_named_with_each_shape(monkeypatch):
         '    privacy.assert_batch_write_allowed(db, db.transaction(), UID, conversation_ids=["c"])',
         db,
     )
-    assert {s: count(module, s) - before[s] for s in before} == {
+    assert {s: count(label, s) - before[s] for s in before} == {
         'no_transaction': 1,
         'snapshots': 1,
         'attempt': 1,
@@ -73,9 +74,9 @@ def test_shadow_candidate_is_not_counted_twice(monkeypatch):
     monkeypatch.setenv('FIRESTORE_READ_LEVERS', json.dumps({'privacy_checks_shadow': 100, 'bpp_owner_memo': 100}))
     db = _db()
     module = 'utils.enrichment.redrive'
-    before = count(module, 'no_attempt')
+    before = count(module + ':<module>', 'no_attempt')
     _call_from(module, 'privacy.assert_batch_write_allowed(db, db.transaction(), UID, conversation_ids=["c"])', db)
-    assert count(module, 'no_attempt') == before + 1
+    assert count(module + ':<module>', 'no_attempt') == before + 1
 
 
 def test_metric_failure_never_changes_the_decision(monkeypatch):
@@ -110,3 +111,22 @@ def test_unknown_shape_is_bounded():
     before = count('other', 'no_attempt')
     metrics.check_site('surprise')
     assert count('other', 'no_attempt') == before + 1
+
+
+def test_forwarding_wrapper_is_attributed_to_its_caller(monkeypatch):
+    """store.check_privacy fronts intake, policy, shadow and others; name the loop, not the wrapper."""
+    monkeypatch.setenv('FIRESTORE_READ_LEVERS', LEVERS)
+    db = _db()
+    source = (
+        'def check_privacy(uid):\n'
+        '    return privacy.assert_batch_write_allowed(db, db.transaction(), uid, conversation_ids=["c"])\n'
+    )
+    wrapper = {'__name__': 'database.batch_pipeline_store', 'privacy': privacy, 'db': db}
+    exec(compile(source, 'database/batch_pipeline_store.py', 'exec'), wrapper)
+    loop = {'__name__': 'database.batch_pipeline_intake', 'check_privacy': wrapper['check_privacy'], 'UID': UID}
+    exec(compile('def admit():\n    check_privacy(UID)\n', 'database/batch_pipeline_intake.py', 'exec'), loop)
+    before = count('database.batch_pipeline_intake:admit', 'no_attempt')
+    wrapped_before = count('database.batch_pipeline_store:check_privacy', 'no_attempt')
+    loop['admit']()
+    assert count('database.batch_pipeline_intake:admit', 'no_attempt') == before + 1
+    assert count('database.batch_pipeline_store:check_privacy', 'no_attempt') == wrapped_before

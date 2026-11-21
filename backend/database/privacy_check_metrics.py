@@ -114,14 +114,22 @@ _INELIGIBLE_CALLERS = frozenset(
 _PRIVACY_MODULES = frozenset({'database.batch_pipeline_privacy', 'database.privacy_check_metrics'})
 # Every batch check by its first non-privacy calling module and transaction shape
 # (SCA-3508). The decision counters have no call-site dimension, so ~98M checks/day
-# could not be attributed to the loops that issue them. Labels are code module
-# names under the production packages (bounded by the codebase) or 'other'.
+# could not be attributed to the loops that issue them. Labels are code
+# module:function names under the production packages (bounded by the codebase)
+# or 'other'; the store and projection-session forwarding wrappers are skipped.
 SITE_CHECKS = Counter(
     'omi_batch_privacy_check_sites_total',
-    'Batch privacy checks by first non-privacy calling module and shape',
+    'Batch privacy checks by first non-privacy, non-wrapper calling module:function and shape',
     ['caller', 'shape'],
 )
 _SITE_PACKAGES = ('database.', 'utils.', 'services.', 'routers.')
+# Thin forwarding wrappers: attribute through them to the loop that called them.
+_SITE_WRAPPERS = frozenset(
+    {
+        ('database.batch_pipeline_store', 'check_privacy'),
+        ('database.batch_pipeline_projection_session', 'guard'),
+    }
+)
 _SITE_SHAPES = frozenset({'no_transaction', 'snapshots', 'attempt', 'no_attempt'})
 TTL_CACHE = Counter(
     'privacy_ttl_cache_total', '60s-bounded privacy decision reuse (hit, miss, store)', ['family', 'result']
@@ -391,9 +399,11 @@ def check_site(shape):
             if frame is None:
                 break
             module = frame.f_globals.get('__name__', '')
-            if module not in _PRIVACY_MODULES:
-                if module.startswith(_SITE_PACKAGES) and len(module) <= 80:
-                    caller = module
+            function = frame.f_code.co_name
+            if module not in _PRIVACY_MODULES and (module, function) not in _SITE_WRAPPERS:
+                label = f'{module}:{function}'
+                if module.startswith(_SITE_PACKAGES) and len(label) <= 120:
+                    caller = label
                 break
             frame = frame.f_back
         SITE_CHECKS.labels(caller, shape).inc()
