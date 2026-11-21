@@ -2777,6 +2777,8 @@ def update_conversation_summary(uid: str, conversation_id: str, app_id: Optional
         'app_result_not_found' if app_id given but no matching apps_results entry,
         'app_result_ambiguous' if multiple entries share that app_id.
     """
+    from database.conversation_processing_result import cleared_native_visibility
+
     user_ref = db.collection('users').document(uid)
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
 
@@ -2794,6 +2796,7 @@ def update_conversation_summary(uid: str, conversation_id: str, app_id: Optional
                     'structured.overview': content,
                     'structured.sections': firestore.DELETE_FIELD,
                     'updated_at': updated_at,
+                    **cleared_native_visibility(doc_snapshot.to_dict() or {}, has_notes=bool(content.strip())),
                 },
             )
             return 'ok'

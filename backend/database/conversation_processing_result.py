@@ -6,10 +6,32 @@ from typing import Any
 from google.cloud.firestore_v1.field_path import FieldPath
 
 from models.conversation import ConversationStatus
+from utils.conversations.summary_delivery import present
 from utils.conversations.v3 import policy as v3_policy
 
 
+def cleared_native_visibility(existing, *, has_notes):
+    if not has_notes and existing.get(v3_policy.NATIVE_MANUAL_NOTES_VISIBILITY):
+        return {
+            v3_policy.NATIVE_MANUAL_NOTES_VISIBILITY: None,
+            'v3_notes_written': False,
+            'summary_covers_through': None,
+        }
+    return {}
+
+
 def stamp_native_visibility(existing, write_data):
+    if 'structured' in write_data and existing.get(v3_policy.NATIVE_MANUAL_NOTES_VISIBILITY):
+        incoming = write_data['structured']
+        prior = existing.get('structured')
+        # Processing writes merge structured leaves, so omitted body fields can survive.
+        merged = (
+            {**prior, **incoming} if isinstance(prior, dict) and isinstance(incoming, dict) and incoming else incoming
+        )
+        clearing = cleared_native_visibility(existing, has_notes=present(merged))
+        if clearing:
+            write_data.update(clearing)
+            return
     if (
         write_data.get('status') == ConversationStatus.completed
         and write_data.get('summary_output_present') is True

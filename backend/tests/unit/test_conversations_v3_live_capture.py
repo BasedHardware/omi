@@ -202,10 +202,13 @@ async def test_manual_end_during_a_pass_lands_a_processing_row_within_one_follow
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('case', ['steady', 'reopened_before_notes', 'reopened_before_settlement'])
+@pytest.mark.parametrize(
+    'case', ['steady', 'reopened_before_notes', 'reopened_before_settlement', 'reopened_after_notes_cleared']
+)
 async def test_promoted_native_stop_commits_one_tail_summary_across_a_ready_replay(strict, monkeypatch, case):
     revoked = case != 'steady'
     notes_committed = case == 'reopened_before_settlement'
+    notes_cleared = case == 'reopened_after_notes_cleared'
     end = datetime.now(timezone.utc) - timedelta(seconds=10)
     start = end - timedelta(seconds=20)
     successor_key = ('users', 'synthetic', 'conversations', 'successor')
@@ -297,7 +300,7 @@ async def test_promoted_native_stop_commits_one_tail_summary_across_a_ready_repl
         assert not strict.rows[R]['v3_pending']
         (before,) = [row for row in strict.rows.values() if row.get('v3_derived')]
         assert before['manual_end'] and before['v3_process_pending']
-        if notes_committed:
+        if notes_committed or notes_cleared:
             # The core write had authorized substantive notes, but the notes lease had not settled yet.
             receipt = service.policy.native_manual_notes_receipt(before)
             assert receipt
@@ -306,7 +309,16 @@ async def test_promoted_native_stop_commits_one_tail_summary_across_a_ready_repl
                 structured={'overview': 'The final decision was to ship tomorrow.'},
                 v3_native_manual_notes_visibility=receipt,
             )
-            summary_writes.append(before['id'])
+            if notes_cleared:
+                db = store.conversations
+                monkeypatch.setattr(db, 'db', strict)
+                monkeypatch.setattr(db, '_sync_conversation_search_index', lambda *a: None)
+                assert db.update_conversation_summary('synthetic', before['id'], None, '') == 'ok'
+                cleared = strict.rows[(*R[:-1], before['id'])]
+                assert cleared['structured']['overview'] == ''
+                assert not cleared.get(service.policy.NATIVE_MANUAL_NOTES_VISIBILITY)
+            else:
+                summary_writes.append(before['id'])
         strict.rows[R].update(record_upload_revision=8, record_audio_closed=False)
 
         # The next notes admission rejects the old proof and rearms the exact source.
@@ -329,6 +341,10 @@ async def test_promoted_native_stop_commits_one_tail_summary_across_a_ready_repl
             assert after['tile_state'] == 'done' and after['v3_created_pending']
         else:
             assert after['status'] == 'in_progress' and not after['manual_end']
+            if notes_cleared:
+                assert not after.get(service.policy.NATIVE_MANUAL_NOTES_VISIBILITY)
+                assert not after.get('v3_notes_written')
+                assert after.get('summary_covers_through') is None
             clock = end + timedelta(minutes=5)
             strict.rows[R].update(record_audio_closed=True, record_sealed_at=clock.timestamp())
             assert await service.reconcile('synthetic') == 'committed'
@@ -410,7 +426,7 @@ async def test_adjacent_revoked_native_windows_retire_unmatched_pending_tile(str
 
     for _ in range(2):
         assert await service.reconcile('synthetic') == 'committed'
-        (_, existing, _) = load('synthetic')
+        _, existing, _ = load('synthetic')
         (replacement,) = existing.values()
         assert replacement['id'] == pending[0]['id']
         assert replacement['v3_recording_ids'] == ['r', 'second']

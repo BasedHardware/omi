@@ -58,6 +58,13 @@ def test_legacy_background_notes_commit_native_visibility(monkeypatch, overview)
     raw = conversations.document('r')
     target = conversations.document(derived['id'])
     raw.set(source)
+    if not overview:
+        derived.update(
+            structured={'overview': 'Previous notes'},
+            summary_covers_through=derived['finished_at'],
+            v3_notes_written=True,
+            v3_native_manual_notes_visibility=policy.native_manual_notes_receipt(derived),
+        )
     target.set(derived)
     monkeypatch.setattr(db, 'db', client)
     monkeypatch.setattr(db.pipeline_ledger, 'record_summary', lambda *args, **kwargs: None)
@@ -78,6 +85,8 @@ def test_legacy_background_notes_commit_native_visibility(monkeypatch, overview)
         assert saved['structured']['overview'] == overview
         expected = policy.native_manual_notes_receipt(derived) if overview else None
         assert saved.get(policy.NATIVE_MANUAL_NOTES_VISIBILITY) == expected
+        if not overview:
+            assert saved['summary_covers_through'] is None
     finally:
         target.delete()
         raw.delete()

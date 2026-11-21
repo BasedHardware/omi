@@ -13,6 +13,7 @@ from google.cloud.firestore_v1 import FieldFilter
 from database import conversations, conversations_v3 as store
 from database.account_deletion_marker import account_deletion_document
 from database.account_deletion_policy import account_deletion_marker_blocks_access
+from database.conversation_processing_result import cleared_native_visibility
 from models.finalization_owner import python_owns_finalization
 from utils.conversations.v3 import Conflict, policy
 from utils.conversations.summary_delivery import present
@@ -223,11 +224,14 @@ def store_summary(uid, cid, token, revision, structured, covers, *, live_input=N
             else {}
         )
         settled = current.get('v3_derived') and (bool(open_lock) or current.get('status') != 'in_progress')
-        visibility_receipt = policy.native_manual_notes_receipt(current) if settled and present(structured) else None
+        has_notes = present(structured)
+        visibility_receipt = policy.native_manual_notes_receipt(current) if settled and has_notes else None
+        clearing = cleared_native_visibility(current, has_notes=has_notes)
         # On-open notes are a notes write too: a row whose background notes failed and the user then
         # opened owes the same single created delivery once it is visible and completed.
         armed = bool(
             settled
+            and not clearing
             and policy.created_eligible(
                 {**current, **open_lock, 'v3_notes_written': True, 'v3_process_failed': False, 'tile_state': 'done'}
             )
@@ -247,6 +251,7 @@ def store_summary(uid, cid, token, revision, structured, covers, *, live_input=N
                 **({'v3_notes_written': True} if settled else {}),
                 **({policy.NATIVE_MANUAL_NOTES_VISIBILITY: visibility_receipt} if visibility_receipt else {}),
                 **({'v3_created_pending': True} if armed else {}),
+                **clearing,
             },
         )
         return armed
