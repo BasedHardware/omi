@@ -256,6 +256,9 @@ def test_complete_producer_uses_only_bounded_reads_and_refuses_changed_binding(t
         'based-hardware',
         ['-f', '<private-overlay>'],
     )
+    values = tmp_path / 'backend/charts/backend-listen/prod_omi_backend_listen_values.yaml'
+    values.parent.mkdir(parents=True)
+    values.write_text('privateEnv: {}\nenv: []\n')  # a pre-privateSecretEnv candidate
     reader = Fake()
     with patch.object(evidence, 'bindings', return_value=req['bindings']):
         if fault:
@@ -273,6 +276,16 @@ def test_complete_producer_uses_only_bounded_reads_and_refuses_changed_binding(t
         assert not (args[0] == 'kubectl' and 'apply' in args)
         if args[0] == 'helm' and 'upgrade' in args:
             assert '--dry-run=client' in args
+
+
+def test_evidence_is_retired_once_the_candidate_declares_private_secret_env(tmp_path):
+    values = tmp_path / 'backend/charts/backend-listen/prod_omi_backend_listen_values.yaml'
+    values.parent.mkdir(parents=True)
+    values.write_text('privateSecretEnv:\n  secretName: s\n  keys: [STT_CAP_DISPATCH_COHORT]\nenv: []\n')
+    request = {'state': 'requested'}
+    with patch.object(evidence, 'validate_request'), pytest.raises(evidence.Refused) as caught:
+        evidence.produce(request, None, {}, tmp_path, tmp_path / 'unused', [], 200)
+    assert 'evidence_retired_private_secret_env' in str(caught.value)
 
 
 def test_real_subprocess_output_is_capped_and_private_error_is_never_echoed(tmp_path):

@@ -17,6 +17,7 @@ from database import batch_pipeline_allowance_migration as migration
 from database.batch_pipeline_allowance_hold import OWNERS, STATE
 from database.batch_pipeline_store import FirestoreStore, FirestoreTransaction
 from database.batch_pipeline_transaction_attempt import prepare_transaction
+from scripts import batch_pipeline_allowance_migration as cli
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore, StrictFirestoreSnapshot
 
 
@@ -221,6 +222,54 @@ def test_discovery_owner_is_only_a_hint_and_is_rechecked(h):
         migration._apply_rows(h.store, snapshots, 10, 2, migration.RowRateLimiter())
     assert h.marker not in h.client.rows
     assert h.client.rows['batch_pipeline_dev_jobs', 'a']['state'] == 'retry'
+
+
+def test_owner_change_is_a_typed_page_replay_stop(h):
+    h.seed('a', 'one')
+    snapshots = list(Page(h.store).limit(100).select(['owner_key']).stream())
+    h.client.rows['batch_pipeline_dev_jobs', 'a']['owner_key'] = 'two'
+    with pytest.raises(migration.MigrationOwnerChanged):
+        migration._apply_rows(h.store, snapshots, 10, 2, migration.RowRateLimiter())
+
+
+def test_concurrent_page_failure_keeps_every_owner_groups_error(h, monkeypatch):
+    h.seed('a', 'one')
+    h.seed('b', 'two')
+    snapshots = list(Page(h.store).limit(100).select(['owner_key']).stream())
+    both = Barrier(2, timeout=10)
+
+    def park(tx, job, now):
+        both.wait()
+        raise (KeyError if job['owner_key'] == 'one' else ValueError)('synthetic')
+
+    monkeypatch.setattr(migration, 'park', park)
+    with pytest.raises((KeyError, ValueError)) as stop:
+        migration._apply_rows(h.store, snapshots, 10, 2, migration.RowRateLimiter())
+    siblings = stop.value.migration_sibling_errors
+    assert {type(stop.value), *map(type, siblings)} == {KeyError, ValueError}
+    assert len(siblings) == 1
+    assert h.marker not in h.client.rows
+
+
+def test_concurrent_page_siblings_reach_the_operator_stop_line(h, monkeypatch):
+    h.seed('a', 'one')
+    h.seed('b', 'two')
+    snapshots = list(Page(h.store).limit(100).select(['owner_key']).stream())
+    both = Barrier(2, timeout=10)
+
+    def park(tx, job, now):
+        both.wait()
+        if job['owner_key'] == 'one':
+            raise migration.MigrationOwnerChanged('retry the page')
+        raise ValueError('synthetic')
+
+    monkeypatch.setattr(migration, 'park', park)
+    with pytest.raises((migration.MigrationOwnerChanged, ValueError)) as stop:
+        migration._apply_rows(h.store, snapshots, 10, 2, migration.RowRateLimiter())
+    report = cli.error_report(stop.value)
+    assert report['errors'] == 2
+    assert report['retryable'] is False
+    assert len(report['sibling_types']) == 1
 
 
 def test_prefetch_maps_unordered_batchget_and_preserves_absence_and_copies(h):

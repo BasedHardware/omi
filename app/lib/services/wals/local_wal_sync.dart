@@ -64,7 +64,6 @@ import 'package:omi/services/on_device/on_device_transcription_controller.dart';
 import 'package:omi/services/on_device/on_device_overflow_intake.dart';
 import 'package:omi/services/wals/sync_upload_gate.dart';
 import 'package:omi/backend/http/api/sync_upload_refusal.dart';
-import 'package:omi/services/wals/recording_wait_deferrals.dart';
 import 'package:omi/services/wals/wal_evidence_runs.dart';
 import 'package:omi/utils/debug_log_manager.dart';
 import 'package:omi/utils/logger.dart';
@@ -373,7 +372,10 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
   final Future<DeviceConnection?> Function(String deviceId)? _connectionResolver;
 
   DateTime _now() => _nowOverride?.call() ?? DateTime.now();
-  late final RecordingWaitDeferrals _recordingWaits = RecordingWaitDeferrals(_now);
+  bool _isRecordingWaiting(Wal wal) => _uploadGate.isRecordingWaiting(
+        recordingGroup: recordingWaitGroupKey(wal),
+        filePath: wal.filePath,
+      );
 
   Future<void> _sleep(Duration duration) => (_sleepOverride ?? Future<void>.delayed)(duration);
 
@@ -573,18 +575,23 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     });
     _flushingTimer = _periodic(const Duration(seconds: flushIntervalInSeconds + newFrameSyncDelaySeconds), (t) async {
       final generation = _sessionGeneration;
-      await _enqueueBuffer(() => _flush(generation));
+      await _logTickFailure('flush', _enqueueBuffer(() => _flush(generation)));
     });
     _pendantTimer = _periodic(const Duration(seconds: 10), (t) async {
       final generation = _sessionGeneration;
-      await _drainPendantTail(generation);
-      await _drainPhoneTail(generation);
+      await _logTickFailure('pendant drain', _drainPendantTail(generation));
+      await _logTickFailure('phone-mic drain', _drainPhoneTail(generation));
       _maybeRecoverOrphanAudio();
     });
     try {
       WidgetsBinding.instance.addObserver(this);
     } catch (_) {}
   }
+
+  /// Timer ticks have no caller: a failed index save (e.g. disk full) keeps its rows for the next tick, never uncaught.
+  Future<void> _logTickFailure(String tick, Future<void> work) => work.catchError((Object e) {
+        Logger.debug('LocalWalSync: periodic $tick failed: $e');
+      });
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
@@ -2274,7 +2281,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
               isAutoUploadEligible(wal, nowSeconds: batchNowSeconds) &&
               !_isDiscardedRecording(wal) &&
               !attemptedWalIds.contains(walAttemptKey(wal)) &&
-              !_recordingWaits.isWaiting(wal.conversationId) &&
+              !_isRecordingWaiting(wal) &&
               (wal.status != WalStatus.uploadRejected || refusalRetries < walMaxRefusalRetriesPerDrain))
           .toList();
       final pending = eligible.where((wal) => !liveCaptureOnly || isLiveCaptureWal(wal, batchNowSeconds)).toList();
@@ -2441,6 +2448,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
           conversationId: batchWals.first.conversationId,
           captureEvidence: captureEvidenceUploadHeader(batchWals, files),
           recordingSessionId: batchWals.first.recordingSessionId,
+          recordingGroup: recordingWaitGroupKey(batchWals.first),
           audioStartSeconds: audioBounds.start,
           audioEndSeconds: audioBounds.end,
           claimLiveCapture: claimLiveCapture,
@@ -2561,7 +2569,9 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
           );
           continue;
         }
-        if (!definitive) batchesFailed++;
+        final scopedWait = isRecordingScopedSyncWaitReasonCode(e.reasonCode);
+        if (e is SyncRecordingWaitException) clockRecoveryAttempted = false;
+        if (!definitive && !scopedWait) batchesFailed++;
         final authenticationFailed = e.statusCode == 401 || e.statusCode == 403;
         if (definitive) {
           await applyUploadRefusals(batchWals, generation, e);
@@ -2584,10 +2594,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
           'statusCode': e.statusCode,
           'terminal': definitive,
         });
-        final scopedWait = isRecordingScopedSyncWaitReasonCode(e.reasonCode);
-        final recordingWait =
-            scopedWait && _recordingWaits.defer(batchConversationId, e.recordingWaitSeconds ?? e.retryAfterSeconds);
-        if (e.statusCode >= 500 && !recordingWait && (scopedWait || (e.retryAfterSeconds ?? 0) <= 0)) {
+        if (e.statusCode >= 500 && !scopedWait && (e.retryAfterSeconds ?? 0) <= 0) {
           // Unscoped 5xx (e.g. platform shedding under load): the server gave
           // no pacing, so the drain pauses briefly and grows the pause with
           // each consecutive refusal instead of immediately re-uploading the
@@ -2693,6 +2700,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
       return null;
     }
     final walToSync = matches.first;
+    if (_isRecordingWaiting(walToSync)) throw const SyncRecordingWaitException();
     // A deliberate single-recording retry is a fresh start, so it restores the
     // auto-upload budget a previous failure spent. It costs at most one extra
     // upload for a permanently refused recording: the reconciler spends the
@@ -2769,6 +2777,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
         conversationId: walToSync.conversationId,
         captureEvidence: captureEvidenceUploadHeader([walToSync], [walFile]),
         recordingSessionId: walToSync.recordingSessionId,
+        recordingGroup: recordingWaitGroupKey(walToSync),
         audioStartSeconds: audioBounds.start,
         audioEndSeconds: audioBounds.end,
         claimLiveCapture: claimLiveCapture,

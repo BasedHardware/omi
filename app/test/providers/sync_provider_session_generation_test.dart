@@ -16,6 +16,7 @@ class _FakeSyncs {
   Completer<List<Wal>>? hangGetAllWals;
   int getAllWalsCalls = 0;
   int cancelSyncCalls = 0;
+  IWalSyncProgressListener? transferProgress;
 
   _FakeSyncs(this.wals);
 
@@ -42,6 +43,7 @@ class _FakeSyncs {
   }
 
   Future<SyncLocalFilesResponse?> syncWal({required Wal wal, IWalSyncProgressListener? progress}) async {
+    transferProgress = progress;
     final hang = hangSyncWal;
     if (hang != null) return hang.future;
     wal.status = WalStatus.uploaded;
@@ -83,6 +85,29 @@ Future<SyncProvider> _provider(_FakeSyncs syncs) async {
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  test('first direct transfer admits progress and rejects it after session reset', () async {
+    final wal = _wal()..storage = WalStorage.sdcard;
+    final syncs = _FakeSyncs([wal]);
+    syncs.hangSyncWal = Completer<SyncLocalFilesResponse?>();
+    final provider = await _provider(syncs);
+    addTearDown(provider.dispose);
+    final transfer = provider.transferWalToPhone(wal);
+    // Allow the keep-alive acquisition to reach the fake device reader.
+    for (var i = 0; i < 20 && syncs.transferProgress == null; i++) {
+      await Future<void>.delayed(Duration.zero);
+    }
+    expect(syncs.transferProgress, isNotNull);
+    syncs.transferProgress!.onWalSyncedProgress(0.38, speedKBps: 50);
+    expect(provider.walsSyncedProgress, 0.38);
+    provider.clearUserData();
+    syncs.transferProgress!.onWalSyncedProgress(0.87, speedKBps: 60);
+    expect(provider.syncState.isIdle, isTrue);
+    expect(provider.walsSyncedProgress, 0);
+    syncs.hangSyncWal!.complete(null);
+    await transfer;
+    expect(provider.allWals, isEmpty);
+  });
 
   test('clearUserData mid-sync refuses to publish the stale WAL list or job cache', () async {
     final wal = _wal();

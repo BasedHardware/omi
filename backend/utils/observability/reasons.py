@@ -840,6 +840,7 @@ class FallbackReason(StrEnum):
 
     UNKNOWN = 'unknown'
     INPUT_MISSING = 'input_missing'
+    RETAINED_DIGEST_CHANGED = 'retained_digest_changed'
     INITIALIZATION_FAILED = 'initialization_failed'
     CONNECTION_LOST = 'connection_lost'
     SEND_FAILED = 'send_failed'

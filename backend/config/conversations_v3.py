@@ -64,6 +64,29 @@ def stretch_cohesion_enabled() -> bool:
     return os.getenv('CONVERSATIONS_V3_STRETCH_COHESION', 'on').strip().lower() not in {'off', 'false', '0', 'no'}
 
 
+DEFAULT_BOUNDARY_SECONDS = 300
+HISTORICAL_SITDOWN_TIMING = (900, 3600)
+# Stamped by the transaction that makes new recording speech visible; custom lock timing counts from it.
+SPEECH_LANDED_FIELD = 'v3_speech_landed_at'
+
+
+def _boundary_seconds(key: str, maximum: int) -> int:
+    try:
+        value = int(os.getenv(key, str(DEFAULT_BOUNDARY_SECONDS)))
+    except ValueError:
+        return DEFAULT_BOUNDARY_SECONDS
+    return value if 120 <= value <= maximum else DEFAULT_BOUNDARY_SECONDS
+
+
+def boundary_seconds(*, cohesion: bool) -> tuple[int, int]:
+    if not cohesion:
+        return DEFAULT_BOUNDARY_SECONDS, DEFAULT_BOUNDARY_SECONDS
+    return (
+        _boundary_seconds('CONVERSATIONS_V3_SILENCE_GAP_SECONDS', 1800),
+        _boundary_seconds('CONVERSATIONS_V3_LOCK_SECONDS', 3600),
+    )
+
+
 def backfill_enabled() -> bool:
     return os.getenv('CONVERSATIONS_V3_BACKFILL', 'off').strip().lower() == 'on'
 

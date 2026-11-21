@@ -11,6 +11,7 @@ import 'package:omi/backend/schema/folder.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_meta.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:omi/pages/conversation_detail/share.dart';
+import 'package:omi/pages/conversation_detail/share_flow.dart';
 import 'package:omi/pages/conversation_detail/widgets.dart';
 import 'package:omi/pages/conversation_detail/widgets/calendar_event_sheets.dart';
 import 'package:omi/pages/conversation_detail/widgets/capture_recordings.dart';
@@ -356,12 +357,43 @@ abstract final class ConversationVisibilitySheet {
   static void show(BuildContext context, ServerConversation conversation) {
     final provider = context.read<ConversationDetailProvider>();
 
+    Future<void> makePrivate() async {
+      final ok = await setConversationVisibility(conversation.id, visibility: ConversationVisibility.private_.value);
+      if (ok) provider.updateVisibilityLocally(ConversationVisibility.private_);
+      if (!ok && context.mounted) showShareFlowEnd(context, ShareFlowEnd.stillPublic, makePrivate: makePrivate);
+    }
+
     Future<void> choose(BuildContext sheetContext, ConversationVisibility target) async {
       if (conversation.visibility == target) {
         Navigator.pop(sheetContext);
         return;
       }
       final previousVisibility = conversation.visibility;
+      if (target == ConversationVisibility.shared) {
+        // Making it shared is Share: the same consent step, sheet and revert (ux-contract §17.7).
+        Navigator.pop(sheetContext); // omi-ux-allow: pop-before-await -- the next step is the share consent dialog
+        final end = await runConversationShare(
+          wasPrivate: true,
+          confirm: () => showOmiConfirm(
+            context,
+            title: context.l10n.shareConversationQuestion,
+            message: context.l10n.anyoneWithLinkCanView,
+            confirmLabel: context.l10n.share,
+          ),
+          setVisibility: (visibility) => setConversationVisibility(conversation.id, visibility: visibility.value),
+          onVisibility: provider.updateVisibilityLocally,
+          openSheet: () async => (await shareConversationLink(conversation)).status,
+        );
+        if (end == ShareFlowEnd.shared) {
+          PlatformManager.instance.analytics.conversationVisibilityChanged(
+            conversationId: conversation.id,
+            fromVisibility: previousVisibility.value,
+            toVisibility: target.value,
+          );
+        }
+        if (context.mounted) showShareFlowEnd(context, end, makePrivate: makePrivate);
+        return;
+      }
       provider.updateVisibilityLocally(target);
       Navigator.pop(sheetContext);
       final success = await setConversationVisibility(conversation.id, visibility: target.value);
@@ -375,7 +407,6 @@ abstract final class ConversationVisibilitySheet {
         fromVisibility: previousVisibility.value,
         toVisibility: target.value,
       );
-      if (target == ConversationVisibility.shared && context.mounted) shareConversationLink(conversation);
     }
 
     showOmiSheet<void>(

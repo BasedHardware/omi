@@ -101,6 +101,21 @@ def _env_entries_by_name(raw_env: object) -> EnvEntryMap:
     return result
 
 
+def _chart_env_entries(values: ConfigDict) -> EnvEntryMap:
+    """A chart values file's effective env: `env`, plus one secretKeyRef per
+    `privateSecretEnv` name (the listen template's rendering, which replaces any
+    public entry of the same name)."""
+    result = _env_entries_by_name(values.get('env', []))
+    secret_env = _as_config_dict(values.get('privateSecretEnv')) or {}
+    for name in _as_config_list(secret_env.get('keys')) or []:
+        if isinstance(name, str):
+            result[name] = {
+                'name': name,
+                'valueFrom': {'secretKeyRef': {'name': secret_env.get('secretName'), 'key': name, 'optional': False}},
+            }
+    return result
+
+
 def _expected_flag_value(expected_entry: object) -> str:
     expected_dict = _as_config_dict(expected_entry)
     if expected_dict is not None and 'value' in expected_dict:

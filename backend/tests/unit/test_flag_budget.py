@@ -76,6 +76,7 @@ HELPER_KILL_SWITCHES = {
     'PROJECTION_DRAIN_PRIVACY_BACKOFF',
     'PROJECTION_PRIVACY_REFUSAL_RESUME',
     'BATCH_PIPELINE_PROJECTION_STRIPING_ENABLED',
+    'BATCH_PIPELINE_RETAINED_DIGEST_HOLD_ENABLED',
     'CONVERSATION_OCCASION_RELEVANCE_ENABLED',
     'LATE_AUDIO_SYNC_INTAKE_ENABLED',
     'EPISODE_RECORDED_TIME_ENABLED',
@@ -332,6 +333,9 @@ def test_helper_kill_switch_budget_entries_match_the_live_registry():
         elif name == 'BATCH_PROJECTION_OUTBOX':
             assert entry['owner'] == flag['owner'] == 'omi-pipeline / lead2'
             assert entry['review_by'] == '2026-12-18'
+        elif name == 'BATCH_PIPELINE_RETAINED_DIGEST_HOLD_ENABLED':
+            assert entry['owner'] == flag['owner'] == 'Goal: Pipeline'
+            assert entry['review_by'] == '2026-12-19'
         elif name in {
             'EPISODE_COMPOSER_THRIFT',
             'SUMMARY_PROJECTION_DEBT_ENABLED',
@@ -525,6 +529,8 @@ def test_reconnect_dark_rollout_has_a_dated_release_ramp():
     flag = next(item for item in flags['flags'] if item['key'] == 'LISTEN_BATCH_RECONNECT_ENABLED')
     assert flag['lifecycle'] == 'rollout'
     assert flag['fail'] == 'closed'
-    assert flag['review_by'] == budget['names'][flag['key']]['review_by'] == '2026-11-20'
+    assert flag['review_by'] == '2026-11-20'
+    # The registry extends by an extension block, never by moving review_by; the budget follows it.
+    assert budget['names'][flag['key']]['review_by'] == flag['extension']['until'] == '2026-11-23'
     assert flag['ramp']['done_by'] == '2026-11-20'
     assert 'Release' in flag['ramp']['expander'] and 'Quality' in flag['ramp']['expander']
