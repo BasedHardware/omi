@@ -36,7 +36,7 @@ replicaCount: 1
 # replacement still keeps its node).
 rollout:
   maxUnavailable: 50%
-  # Read-only carrier render. Use helm template --dry-run=server --show-only
+  # Read-only, redacted carrier report. Use helm template --dry-run=server --show-only
   # templates/primary-only-preview.yaml against the three existing Deployments.
   primaryOnlyPreview: false
 # Operator-managed L4 (g2-standard-8) pool; never share the live diarizer pool.
@@ -85,6 +85,8 @@ worker:
   idlePollMaxSeconds: 10
   firestoreReadLevers: '{}'
   uidAllowlist:
+    # A new deployment can use a Secret reference. Existing private bindings
+    # stay on the live Deployment and are carried by the primary-only patch.
     value: ""
   # Fenced per-shard pulls and worker affinity; false restores legacy selection.
   shardSpreadEnabled: true

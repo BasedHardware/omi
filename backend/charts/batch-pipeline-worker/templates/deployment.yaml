@@ -32,14 +32,32 @@
 {{- if not $current }}
 {{- $preserveLiveEnv = list }}
 {{- end }}
+{{- $privateBinding := has "BATCH_PIPELINE_UID_ALLOWLIST" $preserveLiveEnv }}
+{{- if and $privateBinding .Release.IsUpgrade }}
+{{- fail "use the primary-only patch for an existing worker with live allowlist preservation" }}
+{{- end }}
+{{- $configuredAllowlist := .Values.worker.uidAllowlist | default dict }}
+{{- if $configuredAllowlist.value }}
+{{- fail "use an allowlist Secret reference; literal values are not renderable" }}
+{{- end }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: {{ .instance.name }}
-  {{- if and .Values.autoscaling.balancedPools.enabled (eq .instance.name .Release.Name) }}
+  {{- $hasCompanion := and .Values.autoscaling.balancedPools.enabled (eq .instance.name .Release.Name) }}
+  {{- if or $hasCompanion $privateBinding }}
   annotations:
+    {{- if $hasCompanion }}
     # The existing deployment reporter verifies the required Spot sibling too.
     omi.ai/required-companion-deployment: {{ printf "%s-spot" .Release.Name | quote }}
+    {{- end }}
+    {{- if $privateBinding }}
+    {{- range $current.spec.template.spec.containers }}
+    {{- if eq .name "worker" }}
+    omi.ai/worker-allowlist-binding-kind: {{ include "batch-pipeline-worker.allowlistKind" .env | quote }}
+    {{- end }}
+    {{- end }}
+    {{- end }}
   {{- end }}
 spec:
   # L4 scale-from-zero, image pull and joint model startup exceeded 600s in dev.
@@ -207,8 +225,14 @@ spec:
             {{- if and (hasKey .Values.worker "shadowLanguageOnly") (not (has "BATCH_PIPELINE_SHADOW_LANGUAGE_ONLY" $preserveLiveEnv)) }}
             - {name: BATCH_PIPELINE_SHADOW_LANGUAGE_ONLY, value: {{ .Values.worker.shadowLanguageOnly | quote }}}
             {{- end }}
-            {{- if not (has "BATCH_PIPELINE_UID_ALLOWLIST" $preserveLiveEnv) }}
-            - {{ merge (dict "name" "BATCH_PIPELINE_UID_ALLOWLIST") .Values.worker.uidAllowlist | toYaml | nindent 14 | trim }}
+            {{- if not $privateBinding }}
+            - name: BATCH_PIPELINE_UID_ALLOWLIST
+              {{- if $configuredAllowlist.valueFrom }}
+              valueFrom:
+                {{- toYaml $configuredAllowlist.valueFrom | nindent 16 }}
+              {{- else }}
+              value: ""
+              {{- end }}
             {{- end }}
             - {name: BATCH_PIPELINE_SHARED_LIVE_ENABLED, value: "false"}
             - {name: BATCH_PIPELINE_POOL_KIND, value: dedicated_batch}
