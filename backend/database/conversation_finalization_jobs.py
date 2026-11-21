@@ -563,7 +563,7 @@ def _create_or_get_finalization_intent_txn(
 ) -> FinalizationIntent:
     """Persist finalization ownership before any pusher or task handoff.
 
-    Every return runs ``_apply_snapshot_bound_projection`` in ``finally``.
+    Non-fenced returns run ``_apply_snapshot_bound_projection`` in ``finally``.
     A new exit inside the ``try`` is therefore bound automatically; do not
     add a conversation write, or a return, outside that ``try``.
     """
@@ -578,7 +578,8 @@ def _create_or_get_finalization_intent_txn(
 
         loaded: dict[str, Any] = conversation_snapshot.to_dict() or {}
         if not python_owns_finalization(loaded):
-            return _no_finalization_intent(FINALIZATION_OWNER_REFUSAL)
+            intent = _no_finalization_intent(FINALIZATION_OWNER_REFUSAL)
+            return intent
         conversation = loaded
         if trigger is ProcessingTrigger.SILENT_BACKFILL:
             if extra_updates:
@@ -679,7 +680,8 @@ def _create_or_get_finalization_intent_txn(
             if getattr(existing_snapshot, 'exists', False):
                 job = existing_snapshot.to_dict() or {}
                 if not python_owns_finalization(job):
-                    return _no_finalization_intent(FINALIZATION_OWNER_REFUSAL)
+                    intent = _no_finalization_intent(FINALIZATION_OWNER_REFUSAL)
+                    return intent
                 intent = _intent_from_job(existing_job_id, job)
                 return intent
 
@@ -694,7 +696,8 @@ def _create_or_get_finalization_intent_txn(
         if getattr(job_snapshot, 'exists', False):
             job = job_snapshot.to_dict() or {}
             if not python_owns_finalization(job):
-                return _no_finalization_intent(FINALIZATION_OWNER_REFUSAL)
+                intent = _no_finalization_intent(FINALIZATION_OWNER_REFUSAL)
+                return intent
             # Lifecycle fields stay owned by this attach; extra_updates may only
             # contribute a snapshot-bound projection, never identity or status.
             lifecycle_updates.update(
@@ -794,7 +797,7 @@ def _create_or_get_finalization_intent_txn(
         # Only on a normal exit. An exception aborts the transaction, so the
         # write would never commit; attempting it can only replace the real
         # traceback with a binding error raised inside ``finally``.
-        if not raised:
+        if not raised and intent['status'] != FINALIZATION_OWNER_REFUSAL:
             _apply_snapshot_bound_projection(
                 transaction,
                 conversation_ref,
@@ -2055,6 +2058,8 @@ def _record_meeting_receipt_txn(
     if not getattr(conversation_snapshot, 'exists', False):
         return {'status': 'missing'}
     conversation = conversation_snapshot.to_dict() or {}
+    if not python_owns_finalization(conversation):
+        return {'status': 'fenced'}
     existing_job_id = conversation.get('finalization_job_id')
     job_id = (
         finalization_job_id
@@ -2068,6 +2073,8 @@ def _record_meeting_receipt_txn(
     job_ref = jobs_collection.document(job_id)
     job_snapshot = job_ref.get(transaction=transaction)
     job = (job_snapshot.to_dict() or {}) if getattr(job_snapshot, 'exists', False) else {}
+    if not python_owns_finalization(job):
+        return {'status': 'fenced'}
     if job and (job.get('uid') != uid or job.get('conversation_id') != conversation_id):
         return {'status': 'identity_mismatch'}
 
@@ -3397,7 +3404,7 @@ def _abandon_byok_finalization_job_txn(
         return _byok_abandonment('missing')
     job = snapshot.to_dict() or {}
     status = str(job.get('status') or '')
-    if not bool(job.get('requires_byok')):
+    if not python_owns_finalization(job) or not job.get('requires_byok'):
         return _byok_abandonment('fenced')
     if status not in ('queued', 'leased', 'blocked_byok') or status != expected_status:
         return _byok_abandonment('fenced')
@@ -3431,11 +3438,13 @@ def _abandon_byok_finalization_job_txn(
         conversation_snapshot = conversation_ref.get(transaction=transaction)
         conversation = conversation_snapshot.to_dict() if getattr(conversation_snapshot, 'exists', False) else None
 
+    if isinstance(conversation, Mapping) and not python_owns_finalization(conversation):
+        return _byok_abandonment('fenced')
+
     closes_conversation = (
         conversation_ref is not None
         and isinstance(uid, str)
         and isinstance(conversation, Mapping)
-        and python_owns_finalization(conversation)
         and conversation.get('finalization_job_id') == job_ref.id
         and conversation.get('finalization_revision') == job.get('finalization_revision')
         and conversation.get('status') == 'processing'
@@ -3496,7 +3505,8 @@ def _abandon_byok_finalization_job_txn(
         # A desktop lazy row intentionally stays on `processing` and is owned by
         # its own lane, exactly as the bare-`processing` sweep treats it.
         return _byok_abandonment('abandoned', 'deferred')
-    transaction.update(conversation_ref, terminal)
+    if closes_conversation:
+        transaction.update(conversation_ref, terminal)
     return _byok_abandonment('abandoned', 'closed')
 
 

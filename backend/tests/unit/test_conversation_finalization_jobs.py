@@ -6,6 +6,7 @@ from database import conversation_processing_recovery as processing_recovery
 
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
+from unittest.mock import Mock
 
 import pytest
 from google.api_core.exceptions import Aborted
@@ -2468,4 +2469,52 @@ def test_python_direct_admission_and_orphan_recovery_refuse_foreign_snapshot():
     )
     assert not processing_recovery._stamp_processing_admission_if_absent_txn(transaction, row, _now())
     assert not jobs._renew_processing_lease_txn(transaction, row, _now())
+    assert transaction.updates == transaction.sets == []
+
+
+@pytest.mark.parametrize('bound', [False, True])
+def test_foreign_intent_job_refuses_snapshot_projection(bound, monkeypatch):
+    ref = _conversation({'finalization_job_id': 'job-1'} if bound else {})
+    job_id = 'job-1' if bound else jobs._job_id('uid-1', ref.id, 1)
+    foreign_job = _Ref(job_id, {'finalization_engine': 'go', 'finalization_owner_epoch': 1})
+    transaction = _Transaction()
+    projection = Mock(side_effect=AssertionError('ownership refusal must skip projection'))
+    monkeypatch.setattr(jobs, '_apply_snapshot_bound_projection', projection)
+
+    result = jobs._create_or_get_finalization_intent_txn(
+        transaction,
+        ref,
+        _Collection({job_id: foreign_job}),
+        'uid-1',
+        ref.id,
+        False,
+        _admit_finalization,
+        _now(),
+        extra_updates={'client_processing': {'title': 'Do not write'}},
+    )
+    assert result['status'] == 'finalization_owned_elsewhere'
+    assert transaction.updates == transaction.sets == []
+    projection.assert_not_called()
+
+
+@pytest.mark.parametrize('marked_row', ['conversation', 'job'])
+def test_meeting_receipt_refuses_foreign_owner(marked_row):
+    conversation = _completed_finalization_conversation()
+    job = _Ref('job-1', {'uid': 'uid-1', 'conversation_id': conversation.id, 'status': 'completed'})
+    marked = conversation if marked_row == 'conversation' else job
+    marked.data.update(finalization_engine='go', finalization_owner_epoch=1)
+    transaction = _Transaction()
+    assert jobs._record_meeting_receipt_txn(
+        transaction,
+        conversation,
+        _Collection({'job-1': job}),
+        'uid-1',
+        conversation.id,
+        'job-1',
+        True,
+        'eligible',
+        1720.0,
+        1719.8,
+        _now(),
+    ) == {'status': 'fenced'}
     assert transaction.updates == transaction.sets == []
