@@ -636,6 +636,9 @@ overlay:
           UNLIMITED_V2_BACKFILL_HOURS_CAP_HOURS: {value: '24', category: rollout}
           # Hold silent read skipping until the release-owner canary (review F1).
           BATCH_PIPELINE_SILENCE_READ_SKIP_ENABLED: {value: 'false', category: ops_kill}
+          # SCA-3555: main reads an absent claimed-sibling skip as ON; pin the serving behaviour off
+          # until David's activation (SCA-3508). Activation sets 'true'; rollback is this 'false'.
+          BATCH_PIPELINE_FOLLOWUP_CLAIMED_SIBLING_SKIP_ENABLED: {value: 'false', category: ops_kill}
           PUSHER_RECORD_CLOSE_NOTIFY_ENABLED: {value: 'false', category: rollout}
           PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_PERCENT: {value: '100', category: rollout}
           PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_UID_SHA256S: {value: '', category: rollout}
@@ -1038,6 +1041,9 @@ overlay:
           CONVERSATIONS_V3_BACKFILL: {value: 'on', category: ops_kill}
           # Hold silent read skipping until the release-owner canary (review F1).
           BATCH_PIPELINE_SILENCE_READ_SKIP_ENABLED: {value: 'false', category: ops_kill}
+          # SCA-3555: main reads an absent claimed-sibling skip as ON; pin the serving behaviour off
+          # until David's activation (SCA-3508). Activation sets 'true'; rollback is this 'false'.
+          BATCH_PIPELINE_FOLLOWUP_CLAIMED_SIBLING_SKIP_ENABLED: {value: 'false', category: ops_kill}
           PUSHER_RECORD_CLOSE_NOTIFY_ENABLED: {value: 'false', category: rollout}
           PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_PERCENT: {value: '100', category: rollout}
           PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_UID_SHA256S: {value: '', category: rollout}
