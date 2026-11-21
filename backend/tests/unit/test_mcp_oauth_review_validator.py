@@ -72,3 +72,48 @@ def test_validator_reads_jsonrpc_tools_list_envelopes():
     )
 
     assert errors == []
+
+
+def test_smoke_listing_scope_url_and_tool_assertions():
+    import pytest
+    from scripts.smoke_mcp_chatgpt_review import (
+        DIRECTORY_LISTING_SCOPE,
+        SmokeFailure,
+        _authorize_url,
+        assert_listing_scope_tools,
+    )
+
+    url = _authorize_url(
+        "omi-chatgpt-prod",
+        "https://chatgpt.com/connector_platform_oauth_redirect",
+        "v" * 64,
+        "static-smoke",
+        scope=DIRECTORY_LISTING_SCOPE,
+    )
+    assert "scope=memories.read" in url
+    assert "conversations.read" not in url
+
+    names = assert_listing_scope_tools(
+        {
+            "jsonrpc": "2.0",
+            "id": 10,
+            "result": {
+                "tools": [
+                    {"name": "get_memories"},
+                    {"name": "get_conversations"},
+                    {"name": "search_conversations"},
+                ]
+            },
+        }
+    )
+    assert names == ["get_conversations", "get_memories", "search_conversations"]
+
+    with pytest.raises(SmokeFailure, match="conversations.read floor not applied"):
+        assert_listing_scope_tools(
+            {
+                "jsonrpc": "2.0",
+                "id": 10,
+                "result": {"tools": [{"name": "get_memories"}]},
+            }
+        )
+
