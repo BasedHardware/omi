@@ -6090,6 +6090,9 @@ environments:
             BATCH_PIPELINE_FOLLOWUP_CLAIMED_SIBLING_SKIP_ENABLED:
               value: 'false'
               category: ops_kill
+            BATCH_PIPELINE_SERVING_PROJECTION_SWEEP:
+              value: 'off'
+              category: ops_kill
             BATCH_PIPELINE_SILENCE_READ_SKIP_ENABLED:
               value: 'true'
               category: ops_kill
@@ -6578,6 +6581,9 @@ environments:
             BATCH_PROJECTION_FINISH_CLASSIFY_PAGE_LIMIT: {value: '16', category: rollout}
             BATCH_PIPELINE_FOLLOWUP_CLAIMED_SIBLING_SKIP_ENABLED:
               value: 'false'
+              category: ops_kill
+            BATCH_PIPELINE_SERVING_PROJECTION_SWEEP:
+              value: 'true'
               category: ops_kill
             BATCH_PIPELINE_SILENCE_READ_SKIP_ENABLED:
               value: 'false'
