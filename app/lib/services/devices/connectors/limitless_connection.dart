@@ -63,7 +63,7 @@ class LimitlessDeviceConnection extends DeviceConnection {
   int _streamReactivationAttempts = 0;
   bool _streamHealthCheckInFlight = false;
   LimitlessRealtimeHealth? _customLiveHealth;
-  bool Function()? _startCustomLiveWatch;
+  bool Function(int epoch)? _startCustomLiveWatch;
 
   /// Drift of pendant RTC vs phone at connect, before forward clock sync.
   /// Null when no Type-8 clock was observed (fail-open: no correction).
@@ -168,7 +168,9 @@ class LimitlessDeviceConnection extends DeviceConnection {
 
   @override
   void onPhysicalConnectionLost() {
-    stopCustomLiveAudioWatch();
+    // Native recovery can retain the capture owner without starting it again.
+    // Close the old epoch now and let reconnect setup try the retained binding.
+    _closeCustomLiveAudioWatch();
     _cancelStreamHealthWatch();
   }
 
@@ -180,14 +182,12 @@ class LimitlessDeviceConnection extends DeviceConnection {
     required void Function(LimitlessRealtimeHealthOutcome) report,
   }) {
     stopCustomLiveAudioWatch();
-    final epoch = connectionEpoch;
-    bool isCurrent() =>
-        _isCurrentSession(epoch) && _isInitialized && !_isBatchMode && !_realtimeSuppressed && captureIsCurrent();
-
     // The coordinator may install the listener while the first BLE setup settles.
-    _startCustomLiveWatch = () {
+    _startCustomLiveWatch = (epoch) {
+      bool isCurrent() =>
+          _isCurrentSession(epoch) && _isInitialized && !_isBatchMode && !_realtimeSuppressed && captureIsCurrent();
+
       if (!isCurrent()) return false;
-      _startCustomLiveWatch = null;
       _cancelStreamHealthWatch();
       _customLiveHealth = LimitlessRealtimeHealth(
         window: _streamHealthWindow,
@@ -201,11 +201,15 @@ class LimitlessDeviceConnection extends DeviceConnection {
       onEnabled();
       return true;
     };
-    if (_isInitialized) _startCustomLiveWatch?.call();
+    if (_isInitialized) _startCustomLiveWatch?.call(connectionEpoch);
   }
 
   void stopCustomLiveAudioWatch() {
     _startCustomLiveWatch = null;
+    _closeCustomLiveAudioWatch();
+  }
+
+  void _closeCustomLiveAudioWatch() {
     final previous = _customLiveHealth;
     _customLiveHealth = null;
     previous?.close();
@@ -527,7 +531,7 @@ class LimitlessDeviceConnection extends DeviceConnection {
   }
 
   void _armStreamHealthWatch({required String reason, bool resetAttempts = true}) {
-    if (_customLiveHealth != null || (_startCustomLiveWatch?.call() ?? false)) return;
+    if (_customLiveHealth != null || (_startCustomLiveWatch?.call(connectionEpoch) ?? false)) return;
     _streamHealthGeneration++;
     final generation = _streamHealthGeneration;
     _streamHealthTimer?.cancel();

@@ -919,7 +919,7 @@ void main() {
     await connection.disconnect();
   }, timeout: const Timeout(Duration(seconds: 10)));
 
-  test('Custom Live retries firmware streaming after decoded audio stalls; link loss censors the attempt', () async {
+  test('Custom Live retries after decoded audio stalls on each link of a retained capture', () async {
     final transport = FakeDeviceTransport();
     final device = BtDevice(name: 'Limitless Pendant', id: 'fake-limitless', type: DeviceType.limitless, rssi: -50);
     final connection = LimitlessDeviceConnection(
@@ -930,14 +930,14 @@ void main() {
       reconnectSettleDelay: Duration.zero,
     );
     addTearDown(connection.disconnect);
-    final decoded = Completer<void>();
+    var decoded = Completer<void>();
     final subscription = await connection.performGetBleAudioBytesListener(
       onAudioBytesReceived: (_) {
         if (!decoded.isCompleted) decoded.complete();
       },
     );
     addTearDown(() => subscription?.cancel());
-    final activated = Completer<void>();
+    var activated = Completer<void>();
     final outcome = Completer<LimitlessRealtimeHealthOutcome>();
 
     final connected = Completer<void>();
@@ -950,31 +950,34 @@ void main() {
     await connected.future;
     connection.watchCustomLiveAudio(
       captureIsCurrent: () => true,
-      onEnabled: activated.complete,
-      report: outcome.complete,
+      onEnabled: () => activated.complete(),
+      report: (value) {
+        if (!outcome.isCompleted) outcome.complete(value);
+      },
     );
     await initialSetup;
     await activated.future.timeout(const Duration(seconds: 2));
 
-    final reactivation = Completer<void>();
+    var reactivation = Completer<void>();
     transport.onWrite = (data) {
       if (decodeWrapperCommand(data)['messageNumber'] == 8 && !reactivation.isCompleted) reactivation.complete();
     };
     final frames = [for (var i = 0; i < 8; i++) opusFrame(0xb8, i, 40)];
-    transport.emit(
-      limitlessRxCharUuid,
-      bleWrapper(
-        10,
-        0,
-        1,
-        pendantMessage(storageBufferBytes(
-          session: 7,
-          seq: 1,
-          index: 100,
-          page: flashPageBytes(1750000000000, [audioWrapper(audioBlobOfFrames(frames))]),
-        )),
-      ),
-    );
+    void emitAudio() => transport.emit(
+          limitlessRxCharUuid,
+          bleWrapper(
+            10,
+            0,
+            1,
+            pendantMessage(storageBufferBytes(
+              session: 7,
+              seq: 1,
+              index: 100,
+              page: flashPageBytes(1750000000000, [audioWrapper(audioBlobOfFrames(frames))]),
+            )),
+          ),
+        );
+    emitAudio();
     await decoded.future.timeout(const Duration(seconds: 2));
     expect(transport.writes, hasLength(2));
     await reactivation.future.timeout(const Duration(seconds: 2));
@@ -982,6 +985,24 @@ void main() {
 
     transport.emitState(DeviceTransportState.disconnected);
     expect(await outcome.future.timeout(const Duration(seconds: 2)), LimitlessRealtimeHealthOutcome.censored);
+
+    // A native recovery drop can preserve the admitted recording and its audio
+    // listener. The controller does not perform a duplicate capture start.
+    activated = Completer<void>();
+    transport.onWrite = null;
+    transport.emitState(DeviceTransportState.connected);
+    await activated.future.timeout(const Duration(seconds: 2));
+    expect(transport.writes.map((data) => decodeWrapperCommand(data)['messageNumber']), [6, 8, 8, 6, 8]);
+
+    decoded = Completer<void>();
+    reactivation = Completer<void>();
+    transport.onWrite = (data) {
+      if (decodeWrapperCommand(data)['messageNumber'] == 8 && !reactivation.isCompleted) reactivation.complete();
+    };
+    emitAudio();
+    await decoded.future.timeout(const Duration(seconds: 2));
+    await reactivation.future.timeout(const Duration(seconds: 2));
+    expect(transport.writes.map((data) => decodeWrapperCommand(data)['messageNumber']), [6, 8, 8, 6, 8, 8]);
   });
 
   test('concurrent Limitless status probes share one control write', () async {
