@@ -18,7 +18,9 @@ construction): those must not re-buy anything.
 
 from __future__ import annotations
 
-NOTES_PROMPT_VERSION = 'notes-9'
+NOTES_PROMPT_VERSION = 'notes-10'
+# notes-10 fences model admission for backfilled v3 notes during account deletion.
+# Admitted calls have the same output contract, so notes-9 checkpoints stay reusable.
 # notes-9 strips UUID-only citation units from newly generated notes. Keep
 # older versioned checkpoints reusable. The completed V3 detail GET repairs
 # stored section bodies and their matching derived overview on read. Other
@@ -34,7 +36,7 @@ NOTES_PROMPT_VERSION = 'notes-9'
 # for every non-v3 conversation is unchanged, so notes-5 checkpoints stay reusable.
 # Unchanged notes-4 checkpoints are filtered locally, not invalidated by the
 # quality prompt. Retain the earlier unscaled notes-3 alias.
-NOTES_REUSABLE_PREVIOUS_VERSIONS = ('notes-8', 'notes-7', 'notes-6', 'notes-5', 'notes-4')
+NOTES_REUSABLE_PREVIOUS_VERSIONS = ('notes-9', 'notes-8', 'notes-7', 'notes-6', 'notes-5', 'notes-4')
 NOTES_UNSCALED_PREVIOUS_VERSION = 'notes-3'
 L1_PROMPT_VERSION = 'l1-1'
 

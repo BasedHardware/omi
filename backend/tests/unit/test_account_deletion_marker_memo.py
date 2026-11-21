@@ -92,3 +92,13 @@ async def test_request_read_dedupe_does_not_memoize_deletion_marker(env, monkeyp
         assert len(store.reads) == 3
     finally:
         await scope.aclose()
+
+
+def test_a_fresh_read_skips_the_negative_cache_but_keeps_the_check_metrics(env, monkeypatch):
+    store, redis = env
+    monkeypatch.setattr(cache, 'cached_read', lambda *a, **kw: pytest.fail('fresh read went through the cache'))
+    checks = metrics.CHECKS.labels('deletion_marker', 'live', 'allow', 'unattributed')._value.get()
+    assert deletion.get_user_deletion_wipe_status('u', fresh=True) is None
+    assert account_deletion_blocks_user_work('u', fresh=True) is False
+    assert len(store.reads) == 2
+    assert metrics.CHECKS.labels('deletion_marker', 'live', 'allow', 'unattributed')._value.get() == checks + 2

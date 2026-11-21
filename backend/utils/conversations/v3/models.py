@@ -3,8 +3,12 @@
 import json
 from contextlib import contextmanager
 from contextvars import ContextVar
-from typing import Callable
+from time import monotonic
+from typing import Callable, TypeVar
 
+from google.cloud import firestore
+from database.account_deletion_marker import account_deletion_document, account_deletion_firestore_client
+from database.account_deletion_policy import account_deletion_marker_blocks_access
 from langchain_core.callbacks import BaseCallbackHandler
 
 from utils.llm.gateway_client import feature_auto_lane_id
@@ -24,7 +28,12 @@ def get_or_create_omi_gateway_llm(*args, **kwargs):
     return gateway_llm(*args, **kwargs)
 
 
-_notes_mode: ContextVar[tuple[str, bool, Callable[[str], None] | None] | None] = ContextVar(
+class BackfillNotesDeletionBlocked(RuntimeError):
+    """Account deletion won admission to the notes model."""
+
+
+_T = TypeVar('_T')
+_notes_mode: ContextVar[tuple[str, bool, Callable[[str], None] | None, bool] | None] = ContextVar(
     'v3_notes_mode', default=None
 )
 
@@ -59,8 +68,8 @@ class SectionEvents(BaseCallbackHandler):
 
 
 @contextmanager
-def notes_mode(uid, *, foreground=False, emit=None):
-    token = _notes_mode.set((uid, foreground, emit))
+def notes_mode(uid, *, foreground=False, emit=None, backfilled=False):
+    token = _notes_mode.set((uid, foreground, emit, backfilled))
     try:
         yield
     finally:
@@ -71,11 +80,38 @@ def active():
     return _notes_mode.get() is not None
 
 
+def dispatch_notes_model(invoke: Callable[[], _T]) -> _T:
+    mode = _notes_mode.get()
+    if mode is None or not mode[3]:
+        return invoke()
+
+    uid = mode[0]
+    client = account_deletion_firestore_client()
+    marker = account_deletion_document(uid, firestore_client=client)
+    # The server transaction locks the same document the deletion intent writes.
+    # Start the model call while that admission lock is held. Never replay a
+    # paid invocation if the transaction later times out or loses contention.
+    deadline = monotonic() + 5
+
+    @firestore.transactional
+    def dispatch(tx):
+        snapshot = marker.get(transaction=tx, timeout=3, retry=None)
+        if account_deletion_marker_blocks_access(
+            marker_exists=snapshot.exists, raw_status=(snapshot.to_dict() or {}).get('wipe_status')
+        ):
+            raise BackfillNotesDeletionBlocked
+        if monotonic() >= deadline:
+            raise TimeoutError('backfill_notes_admission_expired')
+        return invoke()
+
+    return dispatch(client.transaction(max_attempts=1))
+
+
 def notes_client():
     mode = _notes_mode.get()
     if mode is None:
         return None
-    uid, foreground, emit = mode
+    uid, foreground, emit, _ = mode
     feature = 'conversation_v3_summary_open' if foreground else 'conversation_v3_summary'
     require_current_generated_compute(feature, uid=uid, provider='openai', allow_byok=False)
     options = {'request_timeout': 90, 'max_retries': 0}
@@ -143,7 +179,8 @@ def short_tasks(uid, conversation):
         # No response_format: the conv_action_items gateway lane declares no structured output and
         # rejects json_object with 400 capability_not_supported, which failed every short v3 tile
         # (2026-11-18). The prompt asks for JSON; _action_items parses it defensively.
-        response = model.bind(reasoning_effort='low').invoke(messages)
+        call_model = model.bind(reasoning_effort='low')
+        response = dispatch_notes_model(lambda: call_model.invoke(messages))
     if not isinstance(response.content, str):
         raise ValueError('short_tasks_non_text_response')
     structured = conversation.structured.model_copy(deep=True)

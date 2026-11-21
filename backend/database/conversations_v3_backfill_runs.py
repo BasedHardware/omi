@@ -24,7 +24,8 @@ COLLECTION = 'conversations_v3_backfill_runs'
 # The run mode whose ledger keeps undo priors (utils.conversations.v3.backfill.LIVE_MODE).
 LIVE_MODE = 'rederive-live'
 # Terminal run states; the task route refuses work for a run in one of these or undoing.
-FINISHED = frozenset({'committed', 'blocked', 'undone'})
+# undone_partial: undo finished but kept groups the owner deleted a copy in, or saw a delete race it.
+FINISHED = frozenset({'committed', 'blocked', 'undone', 'undone_partial'})
 STOPPED = FINISHED | {'undoing'}
 
 

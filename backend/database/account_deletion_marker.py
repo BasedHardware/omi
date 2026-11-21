@@ -34,8 +34,8 @@ def account_deletion_document(uid: str, *, firestore_client: Any | None = None) 
     return account_deletion_collection(firestore_client=firestore_client).document(uid)
 
 
-def get_user_deletion_wipe_status(uid: str, *, firestore_client: Any | None = None) -> str | None:
-    """Negative-only cache, generation-fenced by every marker writer."""
+def get_user_deletion_wipe_status(uid: str, *, firestore_client: Any | None = None, fresh: bool = False) -> str | None:
+    """Negative-only cache, generation-fenced by every marker writer; ``fresh`` reads past it."""
     from database import privacy_check_metrics as metrics
     from database.account_deletion_policy import account_deletion_blocks_access
     from database.fsr_read_cache import cached_read, plane_id, ttl
@@ -43,14 +43,17 @@ def get_user_deletion_wipe_status(uid: str, *, firestore_client: Any | None = No
     metrics.called('deletion_marker')
     try:
         client = account_deletion_firestore_client(firestore_client=firestore_client)
-        status = cached_read(
-            'deletion_marker_cache',
-            uid,
-            'absent:' + plane_id(client),
-            lambda: _s4_read_deletion_status(uid, firestore_client=client),
-            seconds=ttl('FSR_DELETION_NEGATIVE_TTL_SECONDS', 30),
-            cacheable=lambda status: status is None,
-        )
+        if fresh:
+            status = _s4_read_deletion_status(uid, firestore_client=client)
+        else:
+            status = cached_read(
+                'deletion_marker_cache',
+                uid,
+                'absent:' + plane_id(client),
+                lambda: _s4_read_deletion_status(uid, firestore_client=client),
+                seconds=ttl('FSR_DELETION_NEGATIVE_TTL_SECONDS', 30),
+                cacheable=lambda status: status is None,
+            )
     except Exception:
         metrics.decision('deletion_marker', 'authority_unavailable', uid=uid)
         raise
@@ -60,18 +63,21 @@ def get_user_deletion_wipe_status(uid: str, *, firestore_client: Any | None = No
     return status
 
 
-def account_deletion_blocks_user_work(uid: str, *, firestore_client: Any | None = None) -> bool:
+def account_deletion_blocks_user_work(uid: str, *, firestore_client: Any | None = None, fresh: bool = False) -> bool:
     """Shared fail-closed predicate for per-user background and public work.
 
     Keep this aligned with the normal account access fence: only explicitly
     restored/pre-acceptance statuses permit work. An unavailable authority
-    raises so callers cannot silently process a deleting account.
+    raises so callers cannot silently process a deleting account. ``fresh``
+    skips the negative cache, for a check that gates sending user content out.
     """
     if not uid or not uid.strip():
         raise ValueError('uid is required')
     from database.account_deletion_policy import account_deletion_blocks_access
 
-    return account_deletion_blocks_access(get_user_deletion_wipe_status(uid, firestore_client=firestore_client))
+    return account_deletion_blocks_access(
+        get_user_deletion_wipe_status(uid, firestore_client=firestore_client, fresh=fresh)
+    )
 
 
 def _s4_read_deletion_status(uid: str, *, firestore_client: Any | None = None) -> str | None:

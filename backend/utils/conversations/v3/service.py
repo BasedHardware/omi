@@ -76,6 +76,7 @@ BLOCKED = frozenset(
         'remove_not_backfilled',
         'rederive_mixed_runs',
         'backfill_source_unreadable',
+        'backfill_donor_unclaimed',
         'rederive_live_open',
         'rederive_live_boundary',
         'rederive_live_outline_failed',
@@ -653,6 +654,11 @@ async def reconcile(
             unclaimed = [rid for rid, r in recordings.items() if '_v3_backfill_prior' in r and rid not in claimed]
             for rid in unclaimed:
                 recordings.pop(rid)
+            if rederive and any(rid not in claimed for rid, r in recordings.items() if r.get('_v3_derive')):
+                # On a re-derive an already-converted donor that no rebuilt window claims would lose its
+                # retired copy and stay hidden; block until it is understood (a resume keeps the copy). Undo restores it unless the
+                # owner deleted its copy (then undo keeps it; plan around that range instead).
+                raise Conflict('backfill_donor_unclaimed')
         # A re-derive reuses prior ids; a prior copy no rebuilt window claims is retired with the commit.
         remove = [cid for cid in existing if cid not in planned] if derive and rederive else []
         retire, commit_recordings, commit_existing, priors = {}, recordings, existing, []
@@ -1026,9 +1032,9 @@ async def _process_leased(uid, row, token):
         await asyncio.shield(worker)
     except asyncio.CancelledError:
         await asyncio.shield(worker)
-        await keeper
         raise
-    await keeper
+    finally:
+        await keeper
 
 
 async def drain_processing(uid):
@@ -1091,7 +1097,7 @@ def _process(uid, row, token):
     else:
         notes = True
         persisted = []
-        with fence.writer(uid, row['id'], token), models.notes_mode(uid):
+        with fence.writer(uid, row['id'], token), models.notes_mode(uid, backfilled=bool(row.get('backfilled'))):
             result = process_conversation(
                 uid,
                 row.get('language') or 'en',
@@ -1226,39 +1232,53 @@ async def drain_backfill(uid, *, deadline, keep_going=None, concurrency=BACKFILL
     """Notes for backfilled rows, through the same _process as live, a few at a time until deadline.
 
     Returns counts; ``remaining`` > 0 asks the caller for a continuation task. ``keep_going`` is
-    checked before each chunk so an undo stops new notes work.
+    checked before each chunk so an undo stops new notes work, and so is the account-deletion marker:
+    once deletion starts no transcript goes to the notes model (``account_deletion`` is set).
     """
     rows = [row for row in await run_blocking(db_executor, store.pending_backfill_processing, uid) if row]
-    counts = {'processed': 0, 'failed': 0, 'retry': 0, 'busy': 0, 'remaining': 0}
+    counts = {'processed': 0, 'failed': 0, 'retry': 0, 'busy': 0, 'remaining': 0, 'account_deletion': 0}
 
     async def one(row):
         token = await run_blocking(db_executor, leases.acquire, uid, 'summary-' + row['id'])
         if token is None:
             counts['busy'] += 1
             return
-        failed = False
         try:
-            await _process_leased(uid, row, token)
-        except Exception as error:
-            failed = True
-            logger.warning('event=v3_backfill_notes outcome=error exception_type=%s', type(error).__name__)
-        finally:
+            if await run_blocking(db_executor, store.account_deletion_blocks_user_work, uid, fresh=True):
+                counts['account_deletion'] = 1
+                return
+            failed = False
             try:
-                outcome = await run_blocking(
-                    db_executor,
-                    writers.settle_backfill_processing,
-                    uid,
-                    row['id'],
-                    failed=failed,
-                    max_attempts=BACKFILL_NOTES_ATTEMPTS,
-                )
-            finally:
-                await run_blocking(db_executor, leases.release, uid, 'summary-' + row['id'], token)
+                await _process_leased(uid, row, token)
+            except models.BackfillNotesDeletionBlocked:
+                counts['account_deletion'] = 1
+                await run_blocking(db_executor, writers.park_backfill_processing, uid, row['id'])
+                return
+            except Exception as error:
+                failed = True
+                logger.warning('event=v3_backfill_notes outcome=error exception_type=%s', type(error).__name__)
+            outcome = await run_blocking(
+                db_executor,
+                writers.settle_backfill_processing,
+                uid,
+                row['id'],
+                failed=failed,
+                max_attempts=BACKFILL_NOTES_ATTEMPTS,
+            )
+        finally:
+            await run_blocking(db_executor, leases.release, uid, 'summary-' + row['id'], token)
         counts[{'settled': 'processed', 'absent': 'processed', 'failed': 'failed', 'retry': 'retry'}[outcome]] += 1
 
     for start in range(0, len(rows), concurrency):
-        if time.monotonic() >= deadline or (keep_going is not None and not await keep_going()):
+        if (
+            counts['account_deletion']
+            or time.monotonic() >= deadline
+            or (keep_going is not None and not await keep_going())
+        ):
             break
+        if await run_blocking(db_executor, store.account_deletion_blocks_user_work, uid, fresh=True):
+            counts['account_deletion'] = 1
+            break  # still count what remains owed below
         await asyncio.gather(*(one(row) for row in rows[start : start + concurrency]))
     left = await run_blocking(db_executor, store.pending_backfill_processing, uid)
     counts['remaining'] = len([row for row in left if row])

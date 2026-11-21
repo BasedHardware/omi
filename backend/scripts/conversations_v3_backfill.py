@@ -189,41 +189,42 @@ def cmd_run(args) -> int:
     if args.mode == backfill.LIVE_MODE and until > datetime.now(timezone.utc) - settle:
         # The live builder still owns the last minutes; a partition there would block as open.
         raise SystemExit(f'window: a rederive-live run must end at least {settle} ago (--until)')
+    status = 0
     for number, uid in enumerate(owners, 1):
         label = f'owner[{number}]'
         if active_runs(uid):
             print(
                 f'{label} skipped: a run is planned, running, blocked or undoing; resume or undo it first (see status)'
             )
+            status = 1
             continue
         try:
             counts, partitions, estimate = plan_owner(
                 uid, label, since, until, args.mode, historical_sitdown=args.historical_sitdown
             )
-        except Conflict as error:
-            if not args.historical_sitdown:
-                raise
-            show(label + ' blocked', {'reason': str(error)})
-            return 1
-        if args.dry_run:
+            if args.dry_run:
+                continue
+            run_id = backfill.create_run(
+                uid,
+                since=since,
+                until=until,
+                mode=args.mode,
+                operator=args.operator,
+                code_sha=code_sha(),
+                partitions=partitions,
+                estimate=estimate,
+                counts=counts,
+                historical_sitdown=args.historical_sitdown,
+            )
+        except (Conflict, backfill.BackfillRunExists) as error:
+            print(f'{label} blocked: {error}')
+            status = 1
             continue
-        run_id = backfill.create_run(
-            uid,
-            since=since,
-            until=until,
-            mode=args.mode,
-            operator=args.operator,
-            code_sha=code_sha(),
-            partitions=partitions,
-            estimate=estimate,
-            counts=counts,
-            historical_sitdown=args.historical_sitdown,
-        )
         print(f'{label} run={run_id} planned; the sweep starts it within ~5 minutes when CONVERSATIONS_V3_BACKFILL=on')
         if args.no_wait:
             if len(owners) > 1:
                 print('owners run one at a time: stopping after the first planned run (--no-wait)')
-                return 0
+                return status
             continue
         outcome = wait_for(uid, label, run_id, args.wait_minutes)
         print(f'{label} run={run_id} outcome={outcome}')
@@ -232,7 +233,7 @@ def cmd_run(args) -> int:
             return 1
         if number < len(owners):
             time.sleep(args.owner_gap_seconds)
-    return 0
+    return status
 
 
 def cmd_status(args) -> int:
@@ -297,8 +298,9 @@ def cmd_undo(args) -> int:
                 'run': args.run,
                 'donors': sum(1 for d in docs if not d.get('v3_derived')),
                 'derived_rows': sum(1 for d in docs if d.get('v3_derived')),
-                # Donors whose copy the owner deleted stay converted with the copies they share.
-                'donors_deleted_by_owner': sum(
+                'groups': len(backfill.undo_groups(docs)),
+                # A lower bound: it misses a delete whose claim release has not run yet (tombstone only).
+                'donors_deleted_by_owner_min': sum(
                     1 for d in docs if not d.get('v3_derived') and store.deleted_after_backfill(d)
                 ),
             },

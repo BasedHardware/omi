@@ -90,7 +90,7 @@ def test_invalid_bounds_and_metric_failure_never_block_finalize(monkeypatch):
     metrics.record_capture_loss(item)
 
 
-def persistence_hook(record, settlements=None):
+def persistence_hook(record, settlements=None, *, historical=False, v3_backfilled=False):
     # Execute the production nested hook without importing LLM/DB providers.
     tree = ast.parse((Path(__file__).parents[2] / 'utils/conversations/process_conversation.py').read_text())
     process = next(
@@ -109,7 +109,8 @@ def persistence_hook(record, settlements=None):
         'derived_effects_disposition_observer': None,
         'DerivedEffectsDisposition': SimpleNamespace(RUN='run'),
         'defer_derived_effects': True,
-        'historical': False,
+        'historical': historical,
+        'v3_backfilled': v3_backfilled,
         'final_pass_settlements': [] if settlements is None else settlements,
         # Owner-recognition observation is a separate counter. This hook only
         # proves capture-loss accounting still runs on an accepted persist.
@@ -128,6 +129,18 @@ def test_processing_hook_counts_only_accepted_persistence():
     record.assert_not_called()
     report(True, completed=item)
     record.assert_called_once_with(item)
+
+
+@pytest.mark.parametrize(
+    ('historical', 'v3_backfilled', 'counted'),
+    [(True, False, True), (True, True, False)],
+    ids=['silent_backfill_recovery_counts', 'v3_backfill_copy_skips'],
+)
+def test_only_v3_backfill_copies_skip_capture_loss_accounting(historical, v3_backfilled, counted):
+    record = MagicMock()
+    item = conversation(runs=[run(0, 10)])
+    persistence_hook(record, historical=historical, v3_backfilled=v3_backfilled)(True, completed=item)
+    assert record.called is counted
 
 
 @pytest.mark.parametrize('accepted', [False, True])
