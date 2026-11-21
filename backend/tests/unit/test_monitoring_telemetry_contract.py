@@ -47,6 +47,26 @@ def test_app_review_sweep_counter_is_declared_with_its_outcome_label():
     assert tuple(OMI_APP_REVIEW_CONFIG_SWEEP_TOTAL._labelnames) == ('outcome',)
 
 
+def test_backend_sync_scrapes_conversations_v3_rollout_metrics():
+    sync = yaml.safe_load((REPO / 'backend/deploy/cloud_run_gmp_sync.yaml').read_text())
+    (keep,) = [
+        rule
+        for rule in sync['spec']['endpoints'][0]['metricRelabeling']
+        if rule['action'] == 'keep' and rule['sourceLabels'] == ['__name__']
+    ]
+    for metric in (
+        'omi_conversations_v3_reconciles_total',
+        'omi_conversations_v3_blocked_total',
+        'omi_conversations_v3_pending_age_seconds_bucket',
+        'omi_conversations_v3_first_speech_to_visible_seconds_count',
+        'omi_conversations_v3_end_to_summary_seconds_sum',
+        'omi_conversations_v3_model_calls_total',
+        'omi_conversations_v3_summary_writes_total',
+    ):
+        assert re.fullmatch(keep['regex'], metric), metric
+    assert not re.fullmatch(keep['regex'], 'omi_conversations_v3_unregistered_total')
+
+
 def _cpu_millicores(value: object) -> float:
     text = str(value)
     return float(text[:-1]) if text.endswith('m') else float(text) * 1000
