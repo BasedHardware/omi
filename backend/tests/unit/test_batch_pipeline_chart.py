@@ -284,12 +284,19 @@ def test_environment_values_render_worker_identity_and_gpu_pool(
             assert 'BATCH_PROJECTION_FINISH_BACKOFF_ENABLED' not in worker_env
             assert 'BATCH_PIPELINE_UPLOAD_COALESCING_ENABLED' not in worker_env
             if environment == 'prod':
+                assert 'BATCH_PROJECTION_OUTBOX' not in worker_env
+                assert worker_env['RECORD_SEAL_REPAIR_FRESH_ENABLED'] == 'true'
+                assert 'RECORD_FRESH_MERGE_ENABLED' not in worker_env
+                assert 'BATCH_PIPELINE_MERGE_STALE_HEAD_UID_ALLOWLIST' not in worker_env
+                assert 'BATCH_PIPELINE_PACKING_SAMPLE_RATE' not in worker_env
+                assert worker_env['BATCH_PIPELINE_SHADOW_LANGUAGE_ONLY'] == 'false'
+                assert worker_env['BUCKET_AUDIO_DERIVED'] is None
                 assert json.loads(worker_env['FIRESTORE_READ_LEVERS']) == dict(
                     integration_levers,
                     usage_month_cache=0,
                     usage_month_total=0,
-                    bpp_decision_cache=100,
-                    privacy_checks_shadow=10,
+                    bpp_decision_cache=0,
+                    privacy_checks_shadow=0,
                     bpp_owner_memo_enforce=0,
                 )
             else:
@@ -800,7 +807,7 @@ def test_worker_dispatch_rollout_defaults_are_dark_and_live_only(environment):
     env = {row['name']: row.get('value') for row in deployment['spec']['template']['spec']['containers'][0]['env']}
     assert env['STT_CAP_DISPATCH_ENFORCEMENT'] == 'false'
     assert 'LADDER_V1_BUDGET_ENFORCEMENT_ENABLED' not in env
-    assert env['STT_CAP_DISPATCH_COHORT'] == ''
+    assert env['STT_CAP_DISPATCH_COHORT'] == (None if environment == 'prod' else '')
     assert env['STT_CAP_DISPATCH_LANES'] == 'live'
 
 
@@ -1033,7 +1040,7 @@ def test_worker_default_inheritance_is_reviewed_and_unresolved(environment):
     assert surface['effective']['batch_timeliness_leader'] == 100
 
 
-def test_prod_worker_levers_match_backend_integration():
+def test_prod_worker_levers_match_backend_integration_with_worker_overrides():
     manifest = json.loads((CHART.parents[1] / 'deploy/firestore_read_levers_manifest.json').read_text())
     worker = manifest['surfaces']['chart/prod/batch-pipeline-worker']
     integration = manifest['surfaces']['runtime/prod/cloud_run/services/backend-integration']
@@ -1041,19 +1048,18 @@ def test_prod_worker_levers_match_backend_integration():
         integration['explicit'],
         usage_month_cache=0,
         usage_month_total=0,
-        bpp_decision_cache=100,
-        privacy_checks_shadow=10,
+        bpp_decision_cache=0,
+        privacy_checks_shadow=0,
         bpp_owner_memo_enforce=0,
     )
     assert worker['effective'] == dict(
         integration['effective'],
         usage_month_cache=0,
         usage_month_total=0,
-        bpp_decision_cache=100,
-        privacy_checks_shadow=10,
+        bpp_decision_cache=0,
+        privacy_checks_shadow=0,
         bpp_owner_memo_enforce=0,
     )
-    assert worker['explicit']['bpp_decision_cache'] == 100
     assert 'inheritance' not in worker
 
 
