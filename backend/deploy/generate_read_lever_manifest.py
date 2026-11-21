@@ -54,13 +54,13 @@ UNRESOLVED_NOTES = [
     'documented as 0 in runtime_env/README.md but _base.yaml carries 100. Neither source is selected as authority; '
     'human ruling required.',
 ]
-# Explicit retained worker role policy: API-only O2b does not grant these changes.
+# SCA-3548 preserves the production worker's live read policy for the depth-only roll.
 # This data is a strict expected projection, not permission to ignore divergence.
 PROD_WORKER_RETAINED_LEVERS = {
     'usage_month_cache': 0,
     'usage_month_total': 0,
-    'bpp_decision_cache': 100,
-    'privacy_checks_shadow': 10,
+    'bpp_decision_cache': 0,
+    'privacy_checks_shadow': 0,
     'bpp_owner_memo_enforce': 0,
 }
 README_TRAIN_LEVERS = ('memory_list_index_window', 'people_scan_dedupe', 'finjob_candidate_queries')
