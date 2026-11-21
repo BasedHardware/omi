@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/services.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -14,6 +15,7 @@ import 'package:omi/services/wals/local_wal_sync.dart';
 import 'package:omi/services/wals/wal.dart';
 import 'package:omi/services/wals/wal_interfaces.dart';
 import 'package:omi/utils/wal_file_manager.dart';
+import 'package:omi/utils/analytics/registry/events.g.dart';
 
 class _MockListener implements IWalSyncListener {
   @override
@@ -125,8 +127,10 @@ void main() {
     final entered = List.generate(2, (_) => Completer<void>());
     final release = List.generate(2, (_) => Completer<void>());
     var write = entered.length;
+    final telemetry = <WalStopDrain>[];
     final sync = LocalWalSyncImpl(
       _MockListener(),
+      stopDrainTelemetry: telemetry.add,
       freeDiskBytes: () async => 1 << 40,
       persistWals: (wals) async {
         if (write < entered.length) {
@@ -169,6 +173,8 @@ void main() {
     await stopping;
 
     expect(lateFrames.every(sync.isFrameDurable), isTrue);
+    expect(telemetry.single.result, WalStopDrainResult.drained);
+    expect(telemetry.single.lateFramesIndexed, 10);
     sync.onFrameCaptured(frame(60, 0));
     expect(sync.lastFrameAccepted, isFalse);
 
@@ -178,7 +184,8 @@ void main() {
     await restarted.walReady;
     final index = restarted.testWals;
     expect(index.map((wal) => wal.totalFrames), [50, 5, 5]);
-    expect(index.every((wal) => wal.syncedAt == 0), isTrue);
+    expect(index.every((wal) => wal.syncedAt == 0 && wal.status == WalStatus.miss), isTrue);
+    expect(index.map((wal) => wal.holdForUser), [false, true, true]);
     final payloads = <int>[];
     for (final wal in index) {
       final bytes = await File('${tempDir.path}/${wal.filePath}').readAsBytes();
@@ -197,8 +204,10 @@ void main() {
       final entered = Completer<void>();
       final release = Completer<void>();
       var holdWrite = false;
+      final telemetry = <WalStopDrain>[];
       final sync = LocalWalSyncImpl(
         _MockListener(),
+        stopDrainTelemetry: telemetry.add,
         freeDiskBytes: () async => 1 << 40,
         persistWals: (wals) async {
           if (holdWrite) {
@@ -227,6 +236,8 @@ void main() {
       final late = sync.onFrameCaptured(frame(1, 0));
       release.complete();
       await stopped;
+      expect(telemetry.single.result, replace ? WalStopDrainResult.superseded : WalStopDrainResult.failed);
+      expect(telemetry.single.lateFramesIndexed, 0);
       expect(sync.isFrameDurable(late), isFalse);
       expect(sync.testFrames, [late]);
       if (replace) {
@@ -240,6 +251,59 @@ void main() {
       expect(rows.fold<int>(0, (count, wal) => count + wal.totalFrames), replace ? 3 : 2);
     });
   }
+
+  test('lifecycle drain before stop keeps the already-sent pendant tail for recovery', () async {
+    final sync = LocalWalSyncImpl(
+      _MockListener(),
+      freeDiskBytes: () async => 1 << 40,
+      persistWals: (wals) async {
+        expect(await WalFileManager.saveWals(wals), isTrue);
+      },
+    );
+    sync.start();
+    await sync.walReady;
+    sync.setDeviceInfo('devkit-1', 'Omi DevKit');
+    final captured = sync.onFrameCaptured(frame(0, 0));
+    sync.markFrameSynced(captured.syncKey);
+
+    sync.didChangeAppLifecycleState(AppLifecycleState.detached);
+    await sync.stop();
+
+    expect(sync.isFrameDurable(captured), isTrue);
+    final indexed = (await WalFileManager.loadWals()).single;
+    expect(indexed.totalFrames, 1);
+    expect(indexed.status, WalStatus.miss);
+    expect(indexed.syncedAt, 0);
+    expect(indexed.holdForUser, isTrue);
+  });
+
+  test('stop reports a storage-refused write and keeps the sealed payload for retry', () async {
+    final telemetry = <WalStopDrain>[];
+    var freeDisk = 0;
+    final sync = LocalWalSyncImpl(
+      _MockListener(),
+      stopDrainTelemetry: telemetry.add,
+      freeDiskBytes: () async => freeDisk,
+      persistWals: (wals) async {
+        expect(await WalFileManager.saveWals(wals), isTrue);
+      },
+    );
+    sync.start();
+    await sync.walReady;
+    sync.setDeviceInfo('devkit-1', 'Omi DevKit');
+    final captured = sync.onFrameCaptured(frame(0, 0));
+
+    await sync.stop();
+
+    expect(telemetry.single.result, WalStopDrainResult.pending);
+    expect(telemetry.single.lateFramesIndexed, 0);
+    expect(sync.isFrameDurable(captured), isFalse);
+    expect(sync.testWals.single.data, [captured.payload]);
+
+    freeDisk = 1 << 40;
+    await sync.stop();
+    expect(sync.isFrameDurable(captured), isTrue);
+  });
 
   test('stop durably seals a short phone-mic tail', () async {
     final sync = LocalWalSyncImpl(

@@ -177,9 +177,11 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
   final void Function(Map<String, Object?>)? _orphanTelemetryOverride;
 
   static const stopTailDrainEnabled = !bool.fromEnvironment('OMI_WAL_STOP_TAIL_DRAIN_OFF');
+  static const _maxStopFlushes = 8;
   int _startEpoch = 0;
   bool _stopIngressClosed = false;
   Future<void>? _stopDrain;
+  final void Function(WalStopDrain)? _stopDrainTelemetry;
 
   Future<void> _bufferQueue = Future.value();
   Future<void>? _initializationInFlight;
@@ -432,6 +434,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     Future<List<Wal>> Function()? loadWals,
     WalCoverageTelemetryEmitter? coverageTelemetry,
     WalCoverageTelemetryEmitter? staleWalTelemetry,
+    void Function(WalStopDrain)? stopDrainTelemetry,
     Future<int?> Function()? freeDiskBytes,
     Future<void> Function(Duration duration)? sleep,
     PendantRingCustody? custody,
@@ -454,6 +457,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
         _loadWalsOverride = loadWals,
         _coverageTelemetryOverride = coverageTelemetry,
         _staleWalTelemetry = staleWalTelemetry,
+        _stopDrainTelemetry = stopDrainTelemetry,
         _freeDiskBytesOverride = freeDiskBytes,
         _sleepOverride = sleep,
         _custody = custody ?? PendantRingCustody.shared,
@@ -625,8 +629,8 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
         state == AppLifecycleState.detached) {
       final generation = _sessionGeneration;
       unawaited(
-        _drainPendantTail(generation).catchError((e) {
-          Logger.debug('LocalWalSync: lifecycle pendant drain failed: $e');
+        _drainPendantTail(generation, retainUnconfirmed: stopTailDrainEnabled).catchError((e) {
+          Logger.debug('LocalWalSync: lifecycle pendant drain failed: ${e.runtimeType}');
         }),
       );
       // Seal the live phone-mic tail the same way: suspension may follow, and
@@ -827,11 +831,13 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
   Future<void> _drainOnStop(int generation, int startEpoch) async {
     bool current() => _isCurrent(generation) && _startEpoch == startEpoch;
     var result = WalStopDrainResult.superseded;
-    var firstFlush = true;
     var lateFramesIndexed = 0;
     try {
-      while (current()) {
-        final lateFrames = firstFlush ? const <WalFrame>[] : List<WalFrame>.of(_frames);
+      for (var pass = 0; pass < _maxStopFlushes && current(); pass++) {
+        final lateFrames = pass == 0 ? const <WalFrame>[] : List<WalFrame>.of(_frames);
+        // Normally producers already stopped. A source that fails to quiesce
+        // cannot extend shutdown forever: seal the last admitted tail now.
+        if (pass == _maxStopFlushes - 1) _stopIngressClosed = true;
         _sealPendantTail(generation, retainUnconfirmed: true);
         if (_frames.isEmpty) {
           await _flush(generation);
@@ -851,7 +857,6 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
           result = WalStopDrainResult.drained;
           break;
         }
-        firstFlush = false;
       }
     } catch (_) {
       result = WalStopDrainResult.failed;
@@ -862,11 +867,14 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
         _stopIngressClosed = true;
         if (_frames.isEmpty) _pendingPhoneOnly = false;
       }
-      if (!firstFlush || result != WalStopDrainResult.drained) {
-        try {
-          const TypedEvents().emit(WalStopDrain(lateFramesIndexed: lateFramesIndexed, result: result));
-        } catch (_) {/* Diagnostics never affect custody. */}
-      }
+      try {
+        final event = WalStopDrain(lateFramesIndexed: lateFramesIndexed, result: result);
+        if (_stopDrainTelemetry case final emit?) {
+          emit(event);
+        } else {
+          const TypedEvents().emit(event);
+        }
+      } catch (_) {/* Diagnostics never affect custody. */}
     }
   }
 
@@ -1069,6 +1077,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
       if (!shouldStored) continue;
       final syncedOffset = syncedPrefixCount(runSynced);
       final frameCount = run.end - run.start;
+      final holdTransportTail = _holdNewTransportTail(retainUnconfirmed, syncedOffset, frameCount);
       final timerStart = run.claimable
           ? (selectionStartSeconds + run.start / _framesPerSecond).floor()
           : legacySelectionTimerStart + run.start ~/ _framesPerSecond;
@@ -1094,7 +1103,8 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
           storage: WalStorage.mem,
           onDeviceOnly: _pendingPhoneOnly,
           capturedOnDeviceOnly: _pendingPhoneOnly,
-          status: syncedOffset == frameCount ? WalStatus.synced : WalStatus.miss,
+          holdForUser: holdTransportTail,
+          status: !holdTransportTail && syncedOffset == frameCount ? WalStatus.synced : WalStatus.miss,
           device: _deviceId ?? "omi",
           deviceModel: _deviceModel ?? "Omi",
           deviceType: _bufferDeviceType,
@@ -1150,6 +1160,15 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     _notifyUpdated(generation);
   }
 
+  // A transport-only tail that the normal policy would have dropped remains
+  // available for manual recovery. The shutdown path does not add permission
+  // to automatically upload a copy that the server may already hold.
+  bool _holdNewTransportTail(bool retainUnconfirmed, int syncedOffset, int count) =>
+      retainUnconfirmed &&
+      syncedOffset == count &&
+      !_keepsLiveSafetyCopy &&
+      !SharedPreferencesUtil().unlimitedLocalStorageEnabled;
+
   ({int? start, int? end, int? ringId, int? epoch}) _liveEvidenceFor(List<WalFrame> frames) =>
       stableLiveWalEvidence(frames, _deviceId, _custody);
 
@@ -1160,8 +1179,8 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     }
   }
 
-  Future<void> _drainPendantTail(int generation) => _enqueueBuffer(() async {
-        if (_sealPendantTail(generation)) await _flush(generation);
+  Future<void> _drainPendantTail(int generation, {bool retainUnconfirmed = false}) => _enqueueBuffer(() async {
+        if (_sealPendantTail(generation, retainUnconfirmed: retainUnconfirmed)) await _flush(generation);
       });
 
   /// The phone-mic twin of the pendant 10-second drain: a process death must
@@ -1211,6 +1230,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
         retainUnconfirmed: retainUnconfirmed,
       );
     } else {
+      final holdTransportTail = _holdNewTransportTail(retainUnconfirmed, syncedOffset, frameCount);
       final wal = Wal(
         codec: _codec,
         timerStart: timerStart,
@@ -1218,7 +1238,8 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
         storage: WalStorage.mem,
         onDeviceOnly: _pendingPhoneOnly,
         capturedOnDeviceOnly: _pendingPhoneOnly,
-        status: syncedOffset == frameCount ? WalStatus.synced : WalStatus.miss,
+        holdForUser: holdTransportTail,
+        status: !holdTransportTail && syncedOffset == frameCount ? WalStatus.synced : WalStatus.miss,
         device: _deviceId ?? "omi",
         deviceModel: _deviceModel ?? "Omi",
         deviceType: _bufferDeviceType,
@@ -1918,6 +1939,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
         );
       } else {
         final syncedOffset = syncedPrefixCount(_frameSynced.sublist(0, high));
+        final holdTransportTail = _holdNewTransportTail(retainUnconfirmed, syncedOffset, chunkFrameCount);
 
         // Use a distinct timerStart so we don't collide with WALs from _chunk().
         // This is the tail buffer that _chunk() left behind.
@@ -1928,7 +1950,8 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
           storage: WalStorage.mem,
           onDeviceOnly: _pendingPhoneOnly,
           capturedOnDeviceOnly: _pendingPhoneOnly,
-          status: syncedOffset == chunkFrameCount ? WalStatus.synced : WalStatus.miss,
+          holdForUser: holdTransportTail,
+          status: !holdTransportTail && syncedOffset == chunkFrameCount ? WalStatus.synced : WalStatus.miss,
           device: _deviceId ?? "omi",
           deviceModel: _deviceModel ?? "Omi",
           deviceType: _bufferDeviceType,

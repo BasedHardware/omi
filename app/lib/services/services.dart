@@ -87,7 +87,7 @@ class ServiceManager {
     _wal.start();
   }
 
-  void deinit() async {
+  Future<void> deinit() async {
     ConnectivityService().dispose();
     if (!LocalWalSyncImpl.stopTailDrainEnabled) await _wal.stop();
     try {
