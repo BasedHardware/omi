@@ -9033,6 +9033,16 @@ class AppLocalizationsTh extends AppLocalizations {
   String get syncStatusUploaded => 'อัปโหลดแล้ว · กำลังประมวลผลบน Omi';
 
   @override
+  String get deleteFromServerTitle => 'ลบทุกที่ใช่ไหม';
+
+  @override
+  String get deleteFromServerMessage =>
+      'การบันทึกนี้อัปโหลดแล้วแต่ยังไม่ได้ถอดเสียง การลบจะลบสำเนาบนเซิร์ฟเวอร์ของ Omi อย่างถาวรด้วย จึงจะไม่ถูกถอดเสียงอีกเลย การดำเนินการนี้ไม่สามารถย้อนกลับได้';
+
+  @override
+  String get deletedRecordingAlreadyTranscribed => 'ถอดเสียงแล้ว ลบบทสนทนาของรายการนี้เพื่อนำออก';
+
+  @override
   String get deleteWhileProcessingTitle => 'ยังประมวลผลอยู่';
 
   @override

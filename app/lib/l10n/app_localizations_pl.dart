@@ -9102,6 +9102,16 @@ class AppLocalizationsPl extends AppLocalizations {
   String get syncStatusUploaded => 'Przesłano · przetwarzanie w Omi';
 
   @override
+  String get deleteFromServerTitle => 'Usunąć wszędzie?';
+
+  @override
+  String get deleteFromServerMessage =>
+      'To nagranie zostało przesłane, ale nie zostało jeszcze przetranskrybowane. Usunięcie go trwale usuwa również kopię na serwerach Omi, więc nigdy nie zostanie przetranskrybowane. Tej operacji nie można cofnąć.';
+
+  @override
+  String get deletedRecordingAlreadyTranscribed => 'Już przetranskrybowane. Usuń jego rozmowę, aby je usunąć.';
+
+  @override
   String get deleteWhileProcessingTitle => 'Wciąż przetwarzane';
 
   @override

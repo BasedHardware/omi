@@ -37,6 +37,11 @@ COLLECTION = 'stt_cap_holds'
 SUMMARY_COLLECTION = 'stt_cap_hold_summary'
 AUDIO_CHUNK_BYTES = 1024 * 1024
 RETAINED_NEXT_ATTEMPT_AT = 253402300799  # Terminal rows sort after actionable work, without a new query/index.
+# The owner deleted the upload (utils/sync/owner_cancel_legacy.py); erasure follows. Never claimed again.
+OWNER_CANCELLED_STATE = 'owner_cancelled'
+UNCLAIMABLE_STATES = frozenset(
+    {'completed', 'retained', 'purged', 'staging', 'sealing', 'superseded', OWNER_CANCELLED_STATE}
+)
 
 
 def holds(uid: str) -> Any:
@@ -420,7 +425,7 @@ def claim(uid: str, ref: Any, now: float) -> dict[str, Any] | None:
         row = snapshot.to_dict() if snapshot.exists else None
         if (
             not row
-            or row.get('state') in {'completed', 'retained', 'purged', 'staging', 'sealing', 'superseded'}
+            or row.get('state') in UNCLAIMABLE_STATES
             or row.get('lease_until', 0) > now
             or row.get('next_attempt_at', 0) > now
         ):

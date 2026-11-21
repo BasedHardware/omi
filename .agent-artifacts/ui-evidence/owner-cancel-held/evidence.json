@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "003-mobile-ios-delete-everywhere-confirm.png",
+      "platform": "mobile-ios",
+      "description": "Offline Sync: swiping an uploaded, not-yet-transcribed recording asks to delete it everywhere, saying the server copy is erased and will never be transcribed",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "004-mobile-ios-delete-uploaded-cancel-paused.png",
+      "platform": "mobile-ios",
+      "description": "Offline Sync: while the server's owner-cancel switch was last seen off, an uploaded recording keeps the phone-copy wording (the server keeps processing for now)",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ]
+}

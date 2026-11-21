@@ -9078,6 +9078,16 @@ class AppLocalizationsFa extends AppLocalizations {
   String get syncStatusUploaded => 'بارگذاری شد · در حال پردازش در Omi';
 
   @override
+  String get deleteFromServerTitle => 'همه‌جا حذف شود؟';
+
+  @override
+  String get deleteFromServerMessage =>
+      'این ضبط بارگذاری شده اما هنوز رونویسی نشده است. با حذف آن، نسخه روی سرورهای Omi نیز برای همیشه پاک می‌شود و هرگز رونویسی نخواهد شد. این کار قابل بازگشت نیست.';
+
+  @override
+  String get deletedRecordingAlreadyTranscribed => 'قبلاً رونویسی شده است. برای حذف آن، گفتگوی مربوط را حذف کنید.';
+
+  @override
   String get deleteWhileProcessingTitle => 'هنوز در حال پردازش';
 
   @override

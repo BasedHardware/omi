@@ -2737,6 +2737,62 @@ def link_archive_captures(uid: str, paths: List[str], conversation_ids: List[str
                     raise
 
 
+def _archive_linked(metadata: Dict[str, Any]) -> bool | None:
+    if metadata.get('conversation_id') not in (None, '', 'unknown'):
+        return True
+    try:
+        links = json.loads(metadata.get('conversation_ids', '[]'))
+    except (TypeError, ValueError):
+        return None  # Unreadable linkage cannot authorize erasure.
+    return bool(links) if isinstance(links, list) else None
+
+
+class ArchiveReceiptIncomplete(RuntimeError):
+    """An older receipt cannot prove all of its original audio was erased."""
+
+
+def delete_unlinked_upload_archives(uid: str, sync_job_id: str, archive_paths: tuple[str, ...] = ()) -> int:
+    """Erase the private-cloud originals archived for one owner-cancelled upload.
+
+    Delete unlinked generations named by the durable receipt or tagged with this
+    job id. A create-only retry can reuse a path tagged by an earlier attempt.
+    An original that a conversation already
+    references stays with it and is erased when that conversation is deleted.
+    Without exact archive paths, an unlinked object tagged to another attempt
+    could belong to this upload. Preserve it and keep erasure pending.
+    The caller holds the account destructive-operation gate.
+    """
+    if not sync_job_id or '/' in sync_job_id:
+        raise ValueError('bounded sync job identity required')
+    owner_prefixes = (f'raw-sync/{uid}/', f'raw-mobile-batch/{uid}/')
+    paths = set(archive_paths)
+    if any(not path.startswith(owner_prefixes) or {'.', '..'}.intersection(path.split('/')) for path in paths):
+        raise ValueError('archive path crosses owner boundary')
+    bucket = _get_storage_client().bucket(private_cloud_sync_bucket)
+    deleted = 0
+    unresolved = False
+    for prefix in ('raw-sync', 'raw-mobile-batch'):
+        for blob in list(bucket.list_blobs(prefix=f'{prefix}/{uid}/', versions=True)):
+            metadata = blob.metadata or {}
+            linked = _archive_linked(metadata)
+            if linked is True:
+                continue
+            belongs_to_upload = blob.name in paths or metadata.get('sync_job_id') == sync_job_id
+            if linked is None or not belongs_to_upload:
+                unresolved |= not paths or belongs_to_upload
+                continue
+            try:
+                blob.delete(
+                    if_generation_match=blob.generation, if_metageneration_match=blob.metageneration, timeout=10
+                )
+            except NotFound:
+                continue
+            deleted += 1
+    if unresolved:
+        raise ArchiveReceiptIncomplete('unlinked archive ownership cannot be resolved from an older upload receipt')
+    return deleted
+
+
 _canonical_bucket_cache: tuple[Any, str, float, Any] | None = None
 _canonical_bucket_lock = threading.Lock()
 

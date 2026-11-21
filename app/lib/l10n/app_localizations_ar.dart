@@ -9016,6 +9016,16 @@ class AppLocalizationsAr extends AppLocalizations {
   String get syncStatusUploaded => 'تم الرفع · قيد المعالجة على Omi';
 
   @override
+  String get deleteFromServerTitle => 'حذف من كل مكان؟';
+
+  @override
+  String get deleteFromServerMessage =>
+      'تم رفع هذا التسجيل ولكن لم يتم تحويله إلى نص بعد. حذفه يمسح أيضًا نسخته على خوادم Omi نهائيًا، فلن يتم تحويله إلى نص أبدًا. لا يمكن التراجع عن ذلك.';
+
+  @override
+  String get deletedRecordingAlreadyTranscribed => 'تم تحويله إلى نص بالفعل. احذف محادثته لإزالته.';
+
+  @override
   String get deleteWhileProcessingTitle => 'لا تزال قيد المعالجة';
 
   @override

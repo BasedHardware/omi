@@ -9095,6 +9095,16 @@ class AppLocalizationsUk extends AppLocalizations {
   String get syncStatusUploaded => 'Завантажено · обробка в Omi';
 
   @override
+  String get deleteFromServerTitle => 'Видалити всюди?';
+
+  @override
+  String get deleteFromServerMessage =>
+      'Цей запис завантажено, але ще не розшифровано. Видалення також назавжди зітре копію на серверах Omi, тож його ніколи не буде розшифровано. Цю дію не можна скасувати.';
+
+  @override
+  String get deletedRecordingAlreadyTranscribed => 'Уже розшифровано. Щоб прибрати запис, видаліть його розмову.';
+
+  @override
   String get deleteWhileProcessingTitle => 'Ще обробляється';
 
   @override

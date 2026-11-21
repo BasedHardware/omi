@@ -9112,6 +9112,16 @@ class AppLocalizationsKn extends AppLocalizations {
   String get syncStatusUploaded => 'ಅಪ್‌ಲೋಡ್ ಆಗಿದೆ · Omi ನಲ್ಲಿ ಪ್ರಕ್ರಿಯೆ ನಡೆಯುತ್ತಿದೆ';
 
   @override
+  String get deleteFromServerTitle => 'ಎಲ್ಲೆಡೆಯಿಂದ ಅಳಿಸುವುದೇ?';
+
+  @override
+  String get deleteFromServerMessage =>
+      'ಈ ರೆಕಾರ್ಡಿಂಗ್ ಅಪ್‌ಲೋಡ್ ಆಗಿದೆ ಆದರೆ ಇನ್ನೂ ಲಿಪ್ಯಂತರ ಆಗಿಲ್ಲ. ಇದನ್ನು ಅಳಿಸಿದರೆ Omi ಸರ್ವರ್‌ಗಳಲ್ಲಿರುವ ಪ್ರತಿಯೂ ಶಾಶ್ವತವಾಗಿ ಅಳಿಸಲ್ಪಡುತ್ತದೆ, ಆದ್ದರಿಂದ ಇದು ಎಂದಿಗೂ ಲಿಪ್ಯಂತರ ಆಗುವುದಿಲ್ಲ. ಇದನ್ನು ರದ್ದುಗೊಳಿಸಲು ಸಾಧ್ಯವಿಲ್ಲ.';
+
+  @override
+  String get deletedRecordingAlreadyTranscribed => 'ಈಗಾಗಲೇ ಲಿಪ್ಯಂತರ ಆಗಿದೆ. ಅದನ್ನು ತೆಗೆದುಹಾಕಲು ಅದರ ಸಂಭಾಷಣೆಯನ್ನು ಅಳಿಸಿ.';
+
+  @override
   String get deleteWhileProcessingTitle => 'ಇನ್ನೂ ಪ್ರಕ್ರಿಯೆ ನಡೆಯುತ್ತಿದೆ';
 
   @override

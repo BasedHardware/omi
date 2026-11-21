@@ -9099,6 +9099,16 @@ class AppLocalizationsMs extends AppLocalizations {
   String get syncStatusUploaded => 'Dimuat naik · diproses di Omi';
 
   @override
+  String get deleteFromServerTitle => 'Padam di semua tempat?';
+
+  @override
+  String get deleteFromServerMessage =>
+      'Rakaman ini telah dimuat naik tetapi belum ditranskripsi. Memadamnya turut memadam salinan pada pelayan Omi secara kekal, jadi ia tidak akan ditranskripsi. Tindakan ini tidak boleh dibuat asal.';
+
+  @override
+  String get deletedRecordingAlreadyTranscribed => 'Sudah ditranskripsi. Padam perbualannya untuk mengalih keluarnya.';
+
+  @override
   String get deleteWhileProcessingTitle => 'Masih diproses';
 
   @override

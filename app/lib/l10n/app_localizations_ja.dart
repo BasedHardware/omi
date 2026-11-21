@@ -8951,6 +8951,16 @@ class AppLocalizationsJa extends AppLocalizations {
   String get syncStatusUploaded => 'アップロード済み · Omi で処理中';
 
   @override
+  String get deleteFromServerTitle => 'すべての場所から削除しますか？';
+
+  @override
+  String get deleteFromServerMessage =>
+      'この録音はアップロード済みですが、まだ文字起こしされていません。削除すると Omi のサーバー上のコピーも完全に消去され、文字起こしされることはありません。この操作は元に戻せません。';
+
+  @override
+  String get deletedRecordingAlreadyTranscribed => 'すでに文字起こし済みです。削除するには、その会話を削除してください。';
+
+  @override
   String get deleteWhileProcessingTitle => 'まだ処理中です';
 
   @override

@@ -9087,6 +9087,16 @@ class AppLocalizationsLt extends AppLocalizations {
   String get syncStatusUploaded => 'Įkelta · apdorojama Omi';
 
   @override
+  String get deleteFromServerTitle => 'Ištrinti visur?';
+
+  @override
+  String get deleteFromServerMessage =>
+      'Šis įrašas įkeltas, bet dar nepaverstas tekstu. Jį ištrynus visam laikui ištrinama ir kopija Omi serveriuose, todėl jis niekada nebus paverstas tekstu. To negalima atšaukti.';
+
+  @override
+  String get deletedRecordingAlreadyTranscribed => 'Jau paverstas tekstu. Norėdami pašalinti, ištrinkite jo pokalbį.';
+
+  @override
   String get deleteWhileProcessingTitle => 'Vis dar apdorojama';
 
   @override

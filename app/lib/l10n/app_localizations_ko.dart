@@ -8952,6 +8952,16 @@ class AppLocalizationsKo extends AppLocalizations {
   String get syncStatusUploaded => '업로드됨 · Omi에서 처리 중';
 
   @override
+  String get deleteFromServerTitle => '모든 곳에서 삭제할까요?';
+
+  @override
+  String get deleteFromServerMessage =>
+      '이 녹음은 업로드되었지만 아직 텍스트로 변환되지 않았습니다. 삭제하면 Omi 서버에 있는 사본도 영구적으로 지워지므로 텍스트로 변환되지 않습니다. 이 작업은 되돌릴 수 없습니다.';
+
+  @override
+  String get deletedRecordingAlreadyTranscribed => '이미 텍스트로 변환되었습니다. 제거하려면 해당 대화를 삭제하세요.';
+
+  @override
   String get deleteWhileProcessingTitle => '아직 처리 중';
 
   @override

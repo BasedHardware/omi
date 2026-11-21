@@ -9124,6 +9124,17 @@ class AppLocalizationsMk extends AppLocalizations {
   String get syncStatusUploaded => 'Поставено · се обработува на Omi';
 
   @override
+  String get deleteFromServerTitle => 'Да се избрише насекаде?';
+
+  @override
+  String get deleteFromServerMessage =>
+      'Оваа снимка е прикачена, но сè уште не е транскрибирана. Со бришењето трајно се брише и копијата на серверите на Omi, па никогаш нема да биде транскрибирана. Ова не може да се врати.';
+
+  @override
+  String get deletedRecordingAlreadyTranscribed =>
+      'Веќе е транскрибирана. Избришете го нејзиниот разговор за да ја отстраните.';
+
+  @override
   String get deleteWhileProcessingTitle => 'Сè уште се обработува';
 
   @override

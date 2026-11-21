@@ -9069,6 +9069,17 @@ class AppLocalizationsSk extends AppLocalizations {
   String get syncStatusUploaded => 'Nahraté · spracúva sa v Omi';
 
   @override
+  String get deleteFromServerTitle => 'Odstrániť všade?';
+
+  @override
+  String get deleteFromServerMessage =>
+      'Tento záznam je nahraný, ale ešte nebol prepísaný. Odstránením sa natrvalo vymaže aj kópia na serveroch Omi, takže nikdy nebude prepísaný. Túto akciu nie je možné vrátiť späť.';
+
+  @override
+  String get deletedRecordingAlreadyTranscribed =>
+      'Už bol prepísaný. Ak ho chcete odstrániť, odstráňte jeho konverzáciu.';
+
+  @override
   String get deleteWhileProcessingTitle => 'Stále sa spracúva';
 
   @override

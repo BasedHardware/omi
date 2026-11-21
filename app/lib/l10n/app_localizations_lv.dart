@@ -9102,6 +9102,16 @@ class AppLocalizationsLv extends AppLocalizations {
   String get syncStatusUploaded => 'Augšupielādēts · tiek apstrādāts Omi';
 
   @override
+  String get deleteFromServerTitle => 'Dzēst visur?';
+
+  @override
+  String get deleteFromServerMessage =>
+      'Šis ieraksts ir augšupielādēts, bet vēl nav transkribēts. Dzēšot to, neatgriezeniski tiek izdzēsta arī kopija Omi serveros, tāpēc tas nekad netiks transkribēts. Šo darbību nevar atsaukt.';
+
+  @override
+  String get deletedRecordingAlreadyTranscribed => 'Jau transkribēts. Lai to noņemtu, izdzēsiet tā sarunu.';
+
+  @override
   String get deleteWhileProcessingTitle => 'Vēl tiek apstrādāts';
 
   @override

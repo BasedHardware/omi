@@ -41,8 +41,10 @@ void main() {
     return w;
   }
 
-  ({String title, String message}) confirm(List<Wal> wals, {String notUploaded = fallback}) =>
-      walDeleteConfirmation(en, wals, notUploadedMessage: notUploaded);
+  // These cases pin #25676's phone-copy wording, which applies while the server's owner-cancel
+  // switch is off; the cancel-on cases are at the end.
+  ({String title, String message}) confirm(List<Wal> wals, {String notUploaded = fallback, bool paused = true}) =>
+      walDeleteConfirmation(en, wals, notUploadedMessage: notUploaded, serverCancelPaused: paused);
 
   final processingCopy = (title: en.deleteWhileProcessingTitle, message: en.deleteWhileProcessingMessage);
   final warning = (title: en.deleteRecording, message: fallback);
@@ -92,5 +94,37 @@ void main() {
       confirm([wal(WalSyncDisplayState.uploaded)], notUploaded: en.deleteRecordingConfirmation),
       processingCopy,
     );
+  });
+
+  group('with owner cancel on', () {
+    final erased = (title: en.deleteFromServerTitle, message: en.deleteFromServerMessage);
+
+    test('an uploaded recording says the server copy is cancelled and erased too', () {
+      expect(confirm([wal(WalSyncDisplayState.uploaded)], paused: false), erased);
+      expect(
+        confirm([wal(WalSyncDisplayState.uploaded), wal(WalSyncDisplayState.synced, offset: 30)], paused: false),
+        erased,
+      );
+      expect(en.deleteFromServerMessage, contains("permanently erases the copy on Omi's servers"));
+    });
+
+    test('anything not yet on the server keeps the warning either way', () {
+      expect(confirm([wal(WalSyncDisplayState.uploaded), wal(WalSyncDisplayState.waiting, offset: 30)], paused: false),
+          warning);
+      expect(confirm([wal(WalSyncDisplayState.synced)], paused: false), warning);
+    });
+
+    test('an uploaded row with no job handle cannot be cancelled and keeps the phone-copy wording', () {
+      expect(confirm([wal(WalSyncDisplayState.uploaded)..jobId = null], paused: false), processingCopy);
+    });
+
+    test('every locale carries both uploaded copies', () {
+      for (final locale in AppLocalizations.supportedLocales) {
+        final l = lookupAppLocalizations(locale);
+        expect(l.deleteFromServerMessage, isNotEmpty, reason: '$locale');
+        expect(l.deleteWhileProcessingMessage, isNotEmpty, reason: '$locale');
+        expect(l.deleteFromServerMessage, isNot(l.deleteWhileProcessingMessage), reason: '$locale');
+      }
+    });
   });
 }

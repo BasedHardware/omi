@@ -9152,6 +9152,17 @@ class AppLocalizationsTa extends AppLocalizations {
   String get syncStatusUploaded => 'பதிவேற்றப்பட்டது · Omi-இல் செயலாக்கப்படுகிறது';
 
   @override
+  String get deleteFromServerTitle => 'எல்லா இடங்களிலிருந்தும் நீக்கவா?';
+
+  @override
+  String get deleteFromServerMessage =>
+      'இந்தப் பதிவு பதிவேற்றப்பட்டது, ஆனால் இன்னும் எழுத்துப்படியாக்கப்படவில்லை. இதை நீக்கினால் Omi சேவையகங்களில் உள்ள நகலும் நிரந்தரமாக அழிக்கப்படும், எனவே இது ஒருபோதும் எழுத்துப்படியாக்கப்படாது. இதைச் செயல்தவிர்க்க முடியாது.';
+
+  @override
+  String get deletedRecordingAlreadyTranscribed =>
+      'ஏற்கனவே எழுத்துப்படியாக்கப்பட்டது. அதை அகற்ற அதன் உரையாடலை நீக்கவும்.';
+
+  @override
   String get deleteWhileProcessingTitle => 'இன்னும் செயலாக்கப்படுகிறது';
 
   @override

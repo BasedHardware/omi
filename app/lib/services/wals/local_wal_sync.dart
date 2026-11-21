@@ -37,6 +37,8 @@ import 'package:flutter/widgets.dart';
 import 'package:path_provider/path_provider.dart';
 
 import 'package:omi/backend/http/shared.dart';
+import 'package:omi/backend/http/api/sync_job_cancel.dart';
+import 'package:omi/services/wals/server_cancel_pause.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/models/sync_state.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
@@ -84,6 +86,7 @@ part 'wal_account_purge.dart';
 part 'wal_discard.dart';
 part 'wal_orphan_recovery.dart';
 part 'wal_orphan_reclaim.dart';
+part 'wal_server_cancel.dart';
 
 class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
   /// A cheap view invalidation signal: unrelated live/device sync changes do
@@ -359,6 +362,9 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
   final DateTime Function()? _nowOverride;
   final Timer Function(Duration, void Function(Timer))? _periodicOverride;
   final Future<SyncJobFetch> Function(String jobId)? _jobStatusFetcherOverride;
+  final Future<SyncJobCancelResult> Function(String jobId)? _serverCancelOverride;
+  final WalServerCancelStore _serverCancelStore;
+  Completer<void>? _serverCancelBusy;
   final Future<void> Function(List<Wal> wals)? _persistWalsOverride;
   final Future<bool> Function()? _deltaIndexAllowedOverride;
   final Future<List<Wal>> Function()? _loadWalsOverride;
@@ -410,6 +416,8 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     DateTime Function()? now,
     Timer Function(Duration, void Function(Timer))? periodic,
     Future<SyncJobFetch> Function(String jobId)? jobStatusFetcher,
+    Future<SyncJobCancelResult> Function(String jobId)? serverCancel,
+    WalServerCancelStore? serverCancelStore,
     Future<void> Function(List<Wal> wals)? persistWals,
     Future<bool> Function()? deltaIndexAllowed,
     Future<List<Wal>> Function()? loadWals,
@@ -432,6 +440,8 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
         _nowOverride = now,
         _periodicOverride = periodic,
         _jobStatusFetcherOverride = jobStatusFetcher,
+        _serverCancelOverride = serverCancel,
+        _serverCancelStore = serverCancelStore ?? PreferencesWalServerCancelStore(),
         _persistWalsOverride = persistWals,
         _deltaIndexAllowedOverride = deltaIndexAllowed,
         _loadWalsOverride = loadWals,
@@ -1704,8 +1714,10 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     return removed;
   }
 
+  /// Deletes the recording. An uploaded, unprocessed one also cancels its server job (see
+  /// `wal_server_cancel.dart`); the result is that server's answer, null when none was needed.
   @override
-  Future deleteWal(Wal wal) async {
+  Future<SyncJobCancelResult?> deleteWal(Wal wal) async {
     final generation = _sessionGeneration;
     Wal? target;
     for (final candidate in _wals) {
@@ -1730,7 +1742,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
         .singleOrNull;
     if (target == null) {
       _notifyUpdated(generation);
-      return;
+      return null;
     }
     // Re-checked here, at the moment of deletion: a caller's row can be stale
     // by the time its confirmation resolves, and audio that is mid-upload is
@@ -1738,12 +1750,25 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     if (target.isSyncing) {
       Logger.debug('deleteWal skipped ${target.id}: still uploading');
       _notifyUpdated(generation);
-      return;
+      return null;
+    }
+    final serverJob = target.status == WalStatus.uploaded ? target.jobId : null;
+    if (serverJob != null && serverJob.isNotEmpty) {
+      // The tombstone is durable before the local copy goes; without it the server job
+      // would outlive the delete with nothing left to cancel it.
+      if (!await _recordServerCancel(serverJob, target.ownerUid)) {
+        Logger.debug('deleteWal kept ${target.id}: server cancel could not be recorded');
+        _notifyUpdated(generation);
+        return const SyncJobCancelResult(SyncJobCancelOutcome.retryLater);
+      }
     }
     if (await _deleteWal(target, generation: generation)) {
       await _saveWalsToFile(generation);
     }
     _notifyUpdated(generation);
+    if (serverJob == null || serverJob.isEmpty) return null;
+    final pass = await _drainServerCancels(generation, only: serverJob);
+    return pass.answered[serverJob] ?? const SyncJobCancelResult(SyncJobCancelOutcome.retryLater);
   }
 
   @override

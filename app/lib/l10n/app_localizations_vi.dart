@@ -9084,6 +9084,16 @@ class AppLocalizationsVi extends AppLocalizations {
   String get syncStatusUploaded => 'Đã tải lên · đang xử lý trên Omi';
 
   @override
+  String get deleteFromServerTitle => 'Xóa ở mọi nơi?';
+
+  @override
+  String get deleteFromServerMessage =>
+      'Bản ghi này đã được tải lên nhưng chưa được chép lời. Xóa bản ghi cũng sẽ xóa vĩnh viễn bản sao trên máy chủ của Omi, nên nó sẽ không bao giờ được chép lời. Không thể hoàn tác thao tác này.';
+
+  @override
+  String get deletedRecordingAlreadyTranscribed => 'Đã được chép lời. Hãy xóa cuộc trò chuyện của nó để gỡ bỏ.';
+
+  @override
   String get deleteWhileProcessingTitle => 'Vẫn đang xử lý';
 
   @override

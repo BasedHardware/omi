@@ -9109,6 +9109,17 @@ class AppLocalizationsHr extends AppLocalizations {
   String get syncStatusUploaded => 'Učitano · obrađuje se na Omi';
 
   @override
+  String get deleteFromServerTitle => 'Izbrisati posvuda?';
+
+  @override
+  String get deleteFromServerMessage =>
+      'Ova je snimka prenesena, ali još nije transkribirana. Brisanjem se trajno briše i kopija na Omi poslužiteljima, pa nikada neće biti transkribirana. Ovo se ne može poništiti.';
+
+  @override
+  String get deletedRecordingAlreadyTranscribed =>
+      'Već je transkribirana. Izbrišite njezin razgovor da biste je uklonili.';
+
+  @override
   String get deleteWhileProcessingTitle => 'Još se obrađuje';
 
   @override

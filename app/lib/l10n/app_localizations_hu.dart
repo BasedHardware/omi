@@ -9119,6 +9119,16 @@ class AppLocalizationsHu extends AppLocalizations {
   String get syncStatusUploaded => 'Feltöltve · feldolgozás az Omin';
 
   @override
+  String get deleteFromServerTitle => 'Törlés mindenhonnan?';
+
+  @override
+  String get deleteFromServerMessage =>
+      'Ez a felvétel fel van töltve, de még nincs átírva. A törlés az Omi szerverein lévő példányt is véglegesen eltávolítja, így soha nem lesz átírva. Ez nem vonható vissza.';
+
+  @override
+  String get deletedRecordingAlreadyTranscribed => 'Már át lett írva. Az eltávolításhoz töröld a beszélgetését.';
+
+  @override
   String get deleteWhileProcessingTitle => 'Még feldolgozás alatt';
 
   @override

@@ -9087,6 +9087,16 @@ class AppLocalizationsBn extends AppLocalizations {
   String get syncStatusUploaded => 'আপলোড হয়েছে · Omi-তে প্রক্রিয়াধীন';
 
   @override
+  String get deleteFromServerTitle => 'সব জায়গা থেকে মুছবেন?';
+
+  @override
+  String get deleteFromServerMessage =>
+      'এই রেকর্ডিংটি আপলোড হয়েছে কিন্তু এখনও ট্রান্সক্রাইব হয়নি। এটি মুছলে Omi-র সার্ভারের কপিটিও স্থায়ীভাবে মুছে যাবে, তাই এটি আর কখনও ট্রান্সক্রাইব হবে না। এটি পূর্বাবস্থায় ফেরানো যাবে না।';
+
+  @override
+  String get deletedRecordingAlreadyTranscribed => 'ইতিমধ্যে ট্রান্সক্রাইব হয়েছে। সরাতে এর কথোপকথনটি মুছুন।';
+
+  @override
   String get deleteWhileProcessingTitle => 'এখনও প্রক্রিয়াধীন';
 
   @override

@@ -9130,6 +9130,16 @@ class AppLocalizationsCa extends AppLocalizations {
   String get syncStatusUploaded => 'Pujat · processant-se a Omi';
 
   @override
+  String get deleteFromServerTitle => 'Vols eliminar-ho a tot arreu?';
+
+  @override
+  String get deleteFromServerMessage =>
+      'Aquesta gravació s\'ha pujat però encara no s\'ha transcrit. Eliminar-la també esborra permanentment la còpia als servidors d\'Omi, de manera que mai no es transcriurà. Això no es pot desfer.';
+
+  @override
+  String get deletedRecordingAlreadyTranscribed => 'Ja s\'ha transcrit. Elimina\'n la conversa per treure-la.';
+
+  @override
   String get deleteWhileProcessingTitle => 'Encara s\'està processant';
 
   @override

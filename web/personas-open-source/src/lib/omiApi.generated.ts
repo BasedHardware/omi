@@ -5871,6 +5871,13 @@ export interface SyncContentInProgressResponse {
   poll_after_ms?: number | null;
 }
 
+export interface SyncJobCancelResponse {
+  conversation_ids?: Array<string>;
+  erasure?: "complete" | "pending" | null;
+  job_id: string;
+  outcome: "cancelled" | "already_processed" | "not_found";
+}
+
 export interface SyncJobStartResponse {
   job_id: string;
   lane?: string;
@@ -7570,6 +7577,7 @@ export interface OmiApiSchemas {
   "SyncCaptureManifestRequest": SyncCaptureManifestRequest;
   "SyncCaptureManifestResponse": SyncCaptureManifestResponse;
   "SyncContentInProgressResponse": SyncContentInProgressResponse;
+  "SyncJobCancelResponse": SyncJobCancelResponse;
   "SyncJobStartResponse": SyncJobStartResponse;
   "SyncJobStatusResponse": SyncJobStatusResponse;
   "SyncLocalFilesResultResponse": SyncLocalFilesResultResponse;
@@ -13028,6 +13036,15 @@ export interface OmiApiPaths {
       operationId: "get_sync_job_status_v2_sync_local_files__job_id__get";
       responses: {
         "200": SyncJobStatusResponse;
+        "401": void;
+        "404": void;
+        "422": HTTPValidationError;
+      };
+    };
+    delete: {
+      operationId: "cancel_sync_upload_v2_sync_local_files__job_id__delete";
+      responses: {
+        "200": SyncJobCancelResponse;
         "401": void;
         "404": void;
         "422": HTTPValidationError;
@@ -23847,6 +23864,25 @@ export async function get_sync_job_status_v2_sync_local_files__job_id__get(path:
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
+export async function cancel_sync_upload_v2_sync_local_files__job_id__delete(path: { job_id: string }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<SyncJobCancelResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v2/sync-local-files/${path.job_id}`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "DELETE",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
 export async function release_sync_upload_hold_v2_sync_local_files__job_id__release_hold_post(path: { job_id: string }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<SyncUploadHoldReleaseResponse> {
   const _base = init?.baseURL ?? "";
   const _path = `/v2/sync-local-files/${path.job_id}/release-hold`;
@@ -24440,4 +24476,4 @@ export async function get_speech_profile_v4_speech_profile_get(header: { authori
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-// Total: 557 client methods generated.
+// Total: 558 client methods generated.

@@ -9077,6 +9077,16 @@ class AppLocalizationsCs extends AppLocalizations {
   String get syncStatusUploaded => 'Nahráno · zpracovává se v Omi';
 
   @override
+  String get deleteFromServerTitle => 'Smazat všude?';
+
+  @override
+  String get deleteFromServerMessage =>
+      'Tento záznam je nahraný, ale ještě nebyl přepsán. Smazáním se trvale vymaže i kopie na serverech Omi, takže nikdy nebude přepsán. Tuto akci nelze vrátit zpět.';
+
+  @override
+  String get deletedRecordingAlreadyTranscribed => 'Už byl přepsán. Chcete-li ho odstranit, smažte jeho konverzaci.';
+
+  @override
   String get deleteWhileProcessingTitle => 'Stále se zpracovává';
 
   @override

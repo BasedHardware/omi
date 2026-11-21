@@ -21,6 +21,21 @@ def sync_content_in_progress_response(job_id: Optional[str]) -> JSONResponse:
     )
 
 
+def owner_cancelled_response(job_id: str | None, *, total_files: int, lane: str) -> JSONResponse:
+    return JSONResponse(
+        status_code=202,
+        content={
+            'job_id': job_id,
+            'status': 'failed',
+            'reason_code': 'owner_cancelled',
+            'total_files': total_files,
+            'total_segments': 0,
+            'poll_after_ms': 0,
+            'lane': lane,
+        },
+    )
+
+
 def sync_finalization_retrying() -> HTTPException:
     return HTTPException(
         status_code=503,
