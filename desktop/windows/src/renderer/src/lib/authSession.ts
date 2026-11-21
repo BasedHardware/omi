@@ -9,6 +9,8 @@
 import { signOut } from 'firebase/auth'
 import { auth, onAuthStateChanged } from './firebase'
 import { toast } from './toast'
+import { advanceAuthSessionGeneration } from './authSessionScope'
+export { getAuthSessionGeneration } from './authSessionScope'
 
 // Firebase Auth error codes that mean the credential is permanently dead — the
 // JS-SDK equivalents of macOS's INVALID_REFRESH_TOKEN / USER_DISABLED /
@@ -72,6 +74,7 @@ export async function forceReauth(): Promise<void> {
 // `auth` (getAuth) this subscription may be a no-op stub.
 try {
   onAuthStateChanged(auth, (u) => {
+    advanceAuthSessionGeneration()
     if (u) reauthInFlight = false
   })
 } catch {

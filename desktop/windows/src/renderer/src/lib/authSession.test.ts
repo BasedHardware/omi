@@ -28,13 +28,26 @@ vi.mock('./firebase', () => ({
 }))
 vi.mock('./toast', () => ({ toast: h.toast }))
 
-import { forceReauth, refreshIdToken, __resetReauthGuardForTest } from './authSession'
+import {
+  forceReauth,
+  getAuthSessionGeneration,
+  refreshIdToken,
+  __resetReauthGuardForTest
+} from './authSession'
 
 beforeEach(() => {
   h.authObj.currentUser = null
   h.signOut.mockClear()
   h.toast.mockClear()
   __resetReauthGuardForTest()
+})
+
+it('revokes earlier request scopes across sign-out and same-account sign-in', () => {
+  h.authCb?.({ uid: 'same-account' })
+  const original = getAuthSessionGeneration()
+  h.authCb?.(null)
+  h.authCb?.({ uid: 'same-account' })
+  expect(getAuthSessionGeneration()).toBe(original + 2)
 })
 afterEach(() => vi.restoreAllMocks())
 

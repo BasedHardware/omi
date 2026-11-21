@@ -202,15 +202,21 @@ extension APIClient {
   // MARK: - Assistant Settings API
 
   /// Fetches assistant settings from the backend
-  func getAssistantSettings() async throws -> AssistantSettingsResponse {
-    return try await get("v1/users/assistant-settings")
+  func getAssistantSettings(
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
+  ) async throws -> AssistantSettingsResponse {
+    return try await get("v1/users/assistant-settings", authorizationSnapshot: authorizationSnapshot)
   }
 
   /// Updates assistant settings on the backend (partial update — only non-nil fields are changed)
-  func updateAssistantSettings(_ settings: AssistantSettingsResponse) async throws
+  func updateAssistantSettings(
+    _ settings: AssistantSettingsResponse,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
+  ) async throws
     -> AssistantSettingsResponse
   {
-    return try await patch("v1/users/assistant-settings", body: settings)
+    return try await patch(
+      "v1/users/assistant-settings", body: settings, authorizationSnapshot: authorizationSnapshot)
   }
 
   /// Fetches server-controlled desktop update/banner policy.
