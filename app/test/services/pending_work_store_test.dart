@@ -9,10 +9,10 @@ import 'package:omi/services/pending_work/pending_work_store.dart';
 /// The one-row Home and the bell's Needs attention read one store; retries reuse one idempotency
 /// key until the server answers.
 
-AttentionItem _item(String id, {bool seen = false, bool retryable = true}) => AttentionItem(
+AttentionItem _item(String id, {bool seen = false, bool retryable = true, String? conversationId}) => AttentionItem(
       id: id,
       kind: 'conversation_summary_failed',
-      conversationId: 'c-$id',
+      conversationId: conversationId ?? 'c-$id',
       retryable: retryable,
       seen: seen,
       retryState: AttentionRetryState.none,
@@ -34,6 +34,8 @@ PendingWorkStore _store(
   ApiResult<List<AttentionRetryResult>> Function()? retryAll,
   Future<ApiResult<void>> Function(String id)? dismiss,
   List<String>? dismissedStore,
+  Map<String, List<String>>? dismissedByUid,
+  String Function()? uid,
 }) {
   var keys = 0;
   return PendingWorkStore(
@@ -59,10 +61,17 @@ PendingWorkStore _store(
       return const ApiSuccess(null);
     },
     dismiss: dismiss ?? (_) async => const ApiSuccess(null),
-    loadDismissed: () => [...?dismissedStore],
-    saveDismissed: (ids) => dismissedStore
-      ?..clear()
-      ..addAll(ids),
+    loadDismissed: (owner) => [...?(dismissedByUid?[owner] ?? dismissedStore)],
+    saveDismissed: (owner, ids) {
+      if (dismissedByUid != null) {
+        dismissedByUid[owner] = [...ids];
+      } else {
+        dismissedStore
+          ?..clear()
+          ..addAll(ids);
+      }
+    },
+    currentUid: uid ?? () => 'u1',
     newKey: () => 'key-${keys++}',
   );
 }
@@ -387,6 +396,61 @@ void main() {
           dismiss: (_) async => const ApiFailure(ApiProblem(ApiProblemKind.transport)));
       await store.refresh();
       await store.dismiss(store.attention.single);
+      expect(saved, isEmpty);
+    });
+
+    test('an account switch neither hides nor re-saves the old account\'s conversations', () async {
+      var uid = 'a';
+      final saved = <String, List<String>>{};
+      var items = [_item('x')];
+      final store = PendingWorkStore(
+        loadPending: () async => const ApiSuccess(PendingWorkSnapshot.disabled),
+        loadAttention: () async => page(items),
+        dismiss: (_) async => const ApiSuccess(null),
+        loadDismissed: (owner) => [...?saved[owner]],
+        saveDismissed: (owner, ids) => saved[owner] = [...ids],
+        currentUid: () => uid,
+      );
+      await store.refresh();
+      await store.dismiss(store.attention.single);
+      expect(saved, {
+        'a': ['c-x']
+      });
+
+      uid = 'b';
+      store.reset();
+      expect(store.attentionConversationIds, isEmpty);
+      items = [_item('y')];
+      await store.refresh();
+      await store.dismiss(store.attention.single);
+      expect(saved, {
+        'a': ['c-x'],
+        'b': ['c-y']
+      });
+      expect(store.attentionConversationIds, {'c-y'});
+
+      uid = 'a';
+      store.reset();
+      expect(store.attentionConversationIds, {'c-x'});
+    });
+
+    test('a new failure for a dismissed conversation shows again and leaves the saved list', () async {
+      final saved = <String>['c-x'];
+      var items = <AttentionItem>[];
+      final store = PendingWorkStore(
+        loadPending: () async => const ApiSuccess(PendingWorkSnapshot.disabled),
+        loadAttention: () async => page(items),
+        loadDismissed: (_) => [...saved],
+        saveDismissed: (_, ids) => saved
+          ..clear()
+          ..addAll(ids),
+        currentUid: () => 'u1',
+      );
+      await store.refresh();
+      expect(store.attentionConversationIds, {'c-x'});
+      items = [_item('x2', conversationId: 'c-x')];
+      await store.refresh();
+      expect(store.attention.map((i) => i.id), ['x2']);
       expect(saved, isEmpty);
     });
 

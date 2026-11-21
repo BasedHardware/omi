@@ -20,8 +20,9 @@ class PendingWorkStore extends ChangeNotifier {
     Future<ApiResult<List<AttentionRetryResult>>> Function({required String idempotencyKey})? retryAll,
     Future<ApiResult<void>> Function(List<String> ids)? markSeen,
     Future<ApiResult<void>> Function(String id)? dismiss,
-    List<String> Function()? loadDismissed,
-    void Function(List<String> conversationIds)? saveDismissed,
+    List<String> Function(String uid)? loadDismissed,
+    void Function(String uid, List<String> conversationIds)? saveDismissed,
+    String Function()? currentUid,
     String Function()? newKey,
   })  : _loadPending = loadPending ?? api.getPendingWork,
         _loadAttention = loadAttention ?? api.getAttentionItems,
@@ -29,8 +30,10 @@ class PendingWorkStore extends ChangeNotifier {
         _retryAll = retryAll ?? api.retryAllAttentionItems,
         _markSeen = markSeen ?? api.markAttentionItemsSeen,
         _dismiss = dismiss ?? api.dismissAttentionItem,
-        _loadDismissed = loadDismissed ?? (() => SharedPreferencesUtil().getStringList(_dismissedKey)),
-        _saveDismissed = saveDismissed ?? ((ids) => SharedPreferencesUtil().saveStringList(_dismissedKey, ids)),
+        _loadDismissed = loadDismissed ?? ((uid) => SharedPreferencesUtil().getStringList('$_dismissedKey.$uid')),
+        _saveDismissed =
+            saveDismissed ?? ((uid, ids) => SharedPreferencesUtil().saveStringList('$_dismissedKey.$uid', ids)),
+        _currentUid = currentUid ?? (() => SharedPreferencesUtil().uid),
         _newKey = newKey ?? (() => const Uuid().v4());
 
   static PendingWorkStore instance = PendingWorkStore();
@@ -41,8 +44,9 @@ class PendingWorkStore extends ChangeNotifier {
   final Future<ApiResult<List<AttentionRetryResult>>> Function({required String idempotencyKey}) _retryAll;
   final Future<ApiResult<void>> Function(List<String> ids) _markSeen;
   final Future<ApiResult<void>> Function(String id) _dismiss;
-  final List<String> Function() _loadDismissed;
-  final void Function(List<String> conversationIds) _saveDismissed;
+  final List<String> Function(String uid) _loadDismissed;
+  final void Function(String uid, List<String> conversationIds) _saveDismissed;
+  final String Function() _currentUid;
   final String Function() _newKey;
 
   List<PendingWorkItem> _pending = const [];
@@ -72,6 +76,9 @@ class PendingWorkStore extends ChangeNotifier {
     _session++;
     _retryAllKey = null;
     _seenFailedConversations.clear();
+    // The next read loads the signed-in account's own list; nothing of the old one is kept or re-saved.
+    _dismissedOwner = null;
+    _dismissedSet = {};
     failedConversationsSeen.value++;
     _pendingAnswered = false;
     notifyListeners();
@@ -104,14 +111,27 @@ class PendingWorkStore extends ChangeNotifier {
   final Map<String, String> _acceptedNotes = {};
 
   /// A dismissed row's conversation must not come back as Activity's projected failure row, also
-  /// after a relaunch. Kept on the device, newest last, bounded.
-  late final Set<String> _dismissedConversations = {..._loadDismissed()};
+  /// after a relaunch. Kept on the device per account, newest last, bounded. A new attention item
+  /// for the conversation (a new failure) takes it off the list.
+  String? _dismissedOwner;
+  Set<String> _dismissedSet = {};
   static const _maxDismissed = 500;
   static const _dismissedKey = 'dismissedAttentionConversations';
 
+  Set<String> get _dismissedConversations {
+    final owner = _currentUid();
+    if (owner != _dismissedOwner) {
+      _dismissedOwner = owner;
+      _dismissedSet = owner.isEmpty ? {} : {..._loadDismissed(owner)};
+    }
+    return _dismissedSet;
+  }
+
   void _saveDismissedConversations() {
-    final ids = _dismissedConversations.toList();
-    _saveDismissed(ids.length > _maxDismissed ? ids.sublist(ids.length - _maxDismissed) : ids);
+    final owner = _dismissedOwner;
+    if (owner == null || owner.isEmpty) return;
+    final ids = _dismissedSet.toList();
+    _saveDismissed(owner, ids.length > _maxDismissed ? ids.sublist(ids.length - _maxDismissed) : ids);
   }
 
   final Set<String> retryErrors = {};
@@ -127,7 +147,8 @@ class PendingWorkStore extends ChangeNotifier {
   /// once per failure (X5). Local: v3 failures have no server attention item yet.
   final Set<String> _seenFailedConversations = {};
 
-  /// Bumps when [markFailedConversationsSeen] adds an id, so the bell re-reads.
+  /// Bumps when [markFailedConversationsSeen] adds an id or a dismiss changes the hidden set, so the
+  /// bell re-reads.
   final ValueNotifier<int> failedConversationsSeen = ValueNotifier(0);
 
   bool hasUnseenFailedConversation(Iterable<String> failedIds) =>
@@ -193,6 +214,10 @@ class PendingWorkStore extends ChangeNotifier {
 
   void _setAttention(List<AttentionItem> items) {
     _attention = items;
+    final dismissed = _dismissedConversations;
+    final before = dismissed.length;
+    dismissed.removeWhere((id) => items.any((i) => i.conversationId == id));
+    if (dismissed.length != before) _saveDismissedConversations();
     _acceptedNotes.removeWhere((id, conversation) =>
         items.any((item) => item.notesOnly && item.conversationId == conversation && item.id != id));
     _acceptedNotes.removeWhere((id, _) => items.any((i) =>
@@ -301,13 +326,19 @@ class PendingWorkStore extends ChangeNotifier {
     final removed = _attention[index];
     final retryKey = _retryKeys[item.id];
     retryErrors.remove(item.id);
-    final conversationId = removed.conversationId;
-    final suppressing = conversationId != null && _dismissedConversations.add(conversationId);
-    if (suppressing) _saveDismissedConversations();
     _setAttention([
       for (final i in _attention)
         if (i.id != item.id) i
     ]);
+    final conversationId = removed.conversationId;
+    // Another live item for the same conversation keeps it visible: only a conversation with no
+    // remaining row is hidden from the failure projection.
+    final suppressing = conversationId != null &&
+        !_attention.any((i) => i.conversationId == conversationId) &&
+        _dismissedConversations.add(conversationId);
+    if (suppressing) _saveDismissedConversations();
+    // The bell re-reads its failed-conversation dot, which now skips this conversation.
+    failedConversationsSeen.value++;
     notifyListeners();
     final result = await _read(() => _dismiss(item.id));
     if (session != _session) return false;
@@ -320,6 +351,7 @@ class PendingWorkStore extends ChangeNotifier {
         if (suppressing) {
           _dismissedConversations.remove(conversationId);
           _saveDismissedConversations();
+          failedConversationsSeen.value++;
         }
         if (!_attention.any((i) => i.id == item.id)) {
           _attentionRevision++;
