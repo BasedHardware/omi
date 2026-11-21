@@ -1,5 +1,7 @@
 """Proposed native CI qualification of the fixed image, without cloud/network in containers."""
 
+import qualification_profile as P
+
 import argparse
 from contextlib import contextmanager
 from datetime import datetime, timezone
@@ -162,8 +164,20 @@ def fixture_files(archive_path, target):
     return manifest
 
 
+def cli_import_report(smoke):
+    reports = [json.loads(line) for line in smoke.splitlines() if line.startswith('{')]
+    report = next(
+        (row for row in reports if isinstance(row, dict) and row.get('result') == 'GENERAL_COPIER_CLI_IMPORT_PASS'),
+        None,
+    )
+    if report is None:
+        raise ValueError('GENERAL_COPIER_ACTUAL_CLI_IMPORT_REQUIRED')
+    return report
+
+
 def qualify(contract, archive, fixtures, output):
-    source_program = image_smoke.source_refusal_program(contract.get('readiness_sha256'))
+    P.validate_contract(contract)
+    source_program = image_smoke.source_refusal_program(contract.get('catalog_sha256'))
     host = native_host()
     if (
         archive.stat().st_size != contract['archive_bytes']
@@ -173,6 +187,9 @@ def qualify(contract, archive, fixtures, output):
     ):
         raise ValueError('EXACT_ARCHIVE_AND_FIXTURES_REQUIRED')
     checked = validate(archive, contract['source_sha'], contract['build_inputs_sha256'], contract['supervisor_sha256'])
+    labels = checked['config']['config'].get('Labels', {})
+    if labels.get('omi.artifact.profile') != P.PROFILE or labels.get('omi.catalog.profile') != P.CATALOG_PROFILE:
+        raise ValueError('EXACT_IMAGE_PROFILE_LABELS_REQUIRED')
     if checked['manifest_digest'] != contract['oci_manifest_digest']:
         raise ValueError('EXACT_MANIFEST_REQUIRED')
     tag = contract['loaded_tag']
@@ -189,15 +206,20 @@ def qualify(contract, archive, fixtures, output):
                 readiness=True,
             )
         )
-        image_smoke.validate_source_refusal(source_refusal, contract['readiness_sha256'])
+        image_smoke.validate_source_refusal(source_refusal, contract['catalog_sha256'])
         smoke = image_smoke.run_container(
             ['--entrypoint=/opt/operator-venv/bin/python', image_id, '-c', image_smoke.PROGRAM]
         )
+        cli_smoke = cli_import_report(smoke)
         with tempfile.TemporaryDirectory(prefix='operator-native-fixtures-', dir=output.parent) as temporary:
             target = Path(temporary)
             target.chmod(0o755)
             manifest = fixture_files(fixtures, target)
-            if manifest['source_sha'] != contract['source_sha']:
+            if (
+                manifest.get('artifact_profile') != P.PROFILE
+                or manifest.get('suite_sha256') != P.SUITE_SHA
+                or manifest['source_sha'] != contract['source_sha']
+            ):
                 raise ValueError('FIXTURE_SOURCE_CHANGED')
             tests = image_smoke.run_container(
                 [
@@ -206,17 +228,12 @@ def qualify(contract, archive, fixtures, output):
                     '--workdir=/checks',
                     '--entrypoint=/opt/operator-venv/bin/python',
                     image_id,
-                    '-m',
-                    'unittest',
-                    'discover',
-                    '-s',
-                    'tests',
-                    '-v',
+                    '-B',
+                    'run_suite.py',
                 ]
             )
-            count = re.search(r'^Ran (\d+) tests? in ', tests, re.MULTILINE)
-            if not count or int(count.group(1)) != 58 or tests.strip().splitlines()[-1] != 'OK':
-                raise ValueError('ALL_58_NATIVE_CASES_WITHOUT_SKIPS_REQUIRED')
+            suite_result = json.loads(tests.strip().splitlines()[-1])
+            P.validate_suite(suite_result)
         smoke += image_smoke.run_container([image_id], hold=True)
         receipt = {
             'result': 'NATIVE_AMD64_QUALIFIED_OFFLINE_ONLY',
@@ -230,8 +247,13 @@ def qualify(contract, archive, fixtures, output):
             'loaded_image_id': image_id,
             'loaded_identity_binding': binding,
             'config_digest': checked['config_digest'],
-            'tests_run': 58,
+            'tests_run': P.TESTS_EXPECTED,
+            'artifact_profile': P.PROFILE,
+            'catalog_profile': P.CATALOG_PROFILE,
+            'suite_sha256': P.SUITE_SHA,
+            'test_ids_sha256': P.TEST_IDS_SHA,
             'resource_bound_source_refusal': source_refusal,
+            'general_cli_import_smoke': cli_smoke,
             'tests_skipped': 0,
             'uid': 1000,
             'container_network': 'none',

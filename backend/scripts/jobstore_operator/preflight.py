@@ -1,5 +1,7 @@
 """Proposed CI preflight, intentionally closed until exact ingress/permission review."""
 
+import qualification_profile as P
+
 import json
 import os
 from pathlib import Path
@@ -10,7 +12,8 @@ from image_smoke import source_refusal_program
 
 
 def check(contract, environment, free_bytes):
-    source_refusal_program(contract.get('readiness_sha256'))
+    P.validate_contract(contract)
+    source_refusal_program(contract.get('catalog_sha256'))
     source = environment.get('REQUESTED_SOURCE', '')
     if not re.fullmatch('[0-9a-f]{40}', source) or source != contract['source_sha']:
         raise ValueError('EXACT_RUNTIME_SOURCE_REQUIRED')
