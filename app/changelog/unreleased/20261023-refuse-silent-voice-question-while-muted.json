@@ -1,0 +1,3 @@
+{
+  "change": "Refuse pendant voice-question sessions while the device is muted so Omi never starts a silent question recording"
+}
