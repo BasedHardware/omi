@@ -7,6 +7,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/BasedHardware/omi/backend-go/internal/platform/fault"
 	"github.com/BasedHardware/omi/backend-go/internal/platform/pg"
 	"github.com/BasedHardware/omi/backend-go/internal/queue/rules"
 )
@@ -123,12 +124,23 @@ func (s *Store) claim(ctx context.Context, req claimRequest) (*Run, error) {
 		after verdict
 	)
 	err := pg.InTx(ctx, s.pool, func(tx pgx.Tx) error {
+		if err := s.inject(fault.QueueClaim); err != nil {
+			return err
+		}
 		var err error
 		run, after, err = s.claimTx(ctx, tx, req)
-		return err
+		if err != nil {
+			return err
+		}
+		return s.inject(fault.PostgresCommit)
 	})
 	if err != nil {
 		return nil, err
+	}
+	if run != nil {
+		if err := s.inject(fault.QueueClaimAfterCommit); err != nil {
+			return nil, err
+		}
 	}
 	if after != proceed {
 		return nil, after.err()
@@ -298,6 +310,9 @@ func (s *Store) intent(job Job, action rules.Claim) (*Cause, bool) {
 }
 
 func (s *Store) renew(ctx context.Context, held lease) error {
+	if err := s.inject(fault.LeaseRenewal); err != nil {
+		return err
+	}
 	tag, err := s.heartbeat.Exec(ctx, `UPDATE queue_jobs SET
 lease_until=clock_timestamp()+$3*interval '1 microsecond',ready_at=clock_timestamp()+$3*interval '1 microsecond'
 WHERE job_key=$1 AND lease_token=$2 AND state='leased' AND lease_until > clock_timestamp()`,
@@ -308,5 +323,5 @@ WHERE job_key=$1 AND lease_token=$2 AND state='leased' AND lease_until > clock_t
 	if tag.RowsAffected() == 0 {
 		return ErrLease
 	}
-	return nil
+	return s.inject(fault.LeaseRenewalAfter)
 }

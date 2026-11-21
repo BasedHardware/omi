@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/BasedHardware/omi/backend-go/internal/platform/clock"
+	"github.com/BasedHardware/omi/backend-go/internal/platform/fault"
 	"github.com/BasedHardware/omi/backend-go/internal/platform/pgtest"
 	"github.com/BasedHardware/omi/backend-go/internal/queue"
 )
@@ -38,27 +39,55 @@ type Harness struct {
 	Store *queue.Store
 	// URL is the test's database, for assertions that read rows directly.
 	URL string
+	// Faults is the schedule shared by every store instance across Restart.
+	Faults *fault.Injector
 
 	tb      testing.TB
 	mu      sync.Mutex
 	reports []error
+	policy  queue.Config
+	kinds   []queue.Kind
+	workers []*queue.Workers
 }
 
 // Open creates the test's database and opens a migrated store declaring kinds.
 func Open(tb testing.TB, policy queue.Config, kinds ...queue.Kind) *Harness {
 	tb.Helper()
+	return open(tb, policy, nil, kinds...)
+}
+
+// OpenScheduled creates a real-Postgres harness with a seeded fault schedule.
+func OpenScheduled(tb testing.TB, policy queue.Config, schedule fault.Schedule, kinds ...queue.Kind) *Harness {
+	tb.Helper()
+	injector, err := fault.New(schedule)
+	if err != nil {
+		tb.Fatalf("fault schedule: %v", err)
+	}
+	return open(tb, policy, injector, kinds...)
+}
+
+func open(tb testing.TB, policy queue.Config, injector *fault.Injector, kinds ...queue.Kind) *Harness {
+	tb.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), limit)
 	defer cancel()
 	url := pgtest.New(tb)
-	store, err := queue.Open(ctx, url, policy, kinds, nil, clock.System{})
+	var options []queue.OpenOption
+	if injector != nil {
+		options = append(options, queue.WithFaultInjector(injector))
+	}
+	store, err := queue.Open(ctx, url, policy, kinds, nil, clock.System{}, options...)
 	if err != nil {
 		tb.Fatalf("open queue: %v", err)
 	}
-	tb.Cleanup(store.Close)
 	if err := store.Migrate(ctx); err != nil {
 		tb.Fatalf("migrate queue: %v", err)
 	}
-	return &Harness{Store: store, URL: url, tb: tb}
+	h := &Harness{Store: store, URL: url, Faults: injector, tb: tb, policy: policy, kinds: append([]queue.Kind(nil), kinds...)}
+	tb.Cleanup(func() {
+		h.Stop()
+		h.Store.Close()
+	})
+	return h
 }
 
 // Start runs workers for handlers until the test ends.
@@ -74,11 +103,48 @@ func (h *Harness) Start(handlers map[string]queue.Handler) *queue.Workers {
 		cancel()
 		h.tb.Fatalf("start workers: %v", err)
 	}
-	h.tb.Cleanup(func() {
-		workers.Stop()
-		cancel()
-	})
+	h.workers = append(h.workers, workers)
+	h.tb.Cleanup(cancel)
 	return workers
+}
+
+// Stop stops all replicas started by this harness.
+func (h *Harness) Stop() {
+	h.tb.Helper()
+	for _, workers := range h.workers {
+		workers.Stop()
+	}
+	h.workers = nil
+}
+
+// Restart closes the current store and reopens the same real database while
+// preserving the schedule cursor, as a process restart would.
+func (h *Harness) Restart() {
+	h.RestartWithPolicy(h.policy)
+}
+
+// RestartWithPolicy reopens the same database under a new replica policy while
+// retaining the schedule cursor.
+func (h *Harness) RestartWithPolicy(policy queue.Config) {
+	h.tb.Helper()
+	h.Stop()
+	h.Store.Close()
+	h.policy = policy
+	ctx, cancel := context.WithTimeout(context.Background(), limit)
+	defer cancel()
+	var options []queue.OpenOption
+	if h.Faults != nil {
+		options = append(options, queue.WithFaultInjector(h.Faults))
+	}
+	store, err := queue.Open(ctx, h.URL, h.policy, h.kinds, nil, clock.System{}, options...)
+	if err != nil {
+		h.tb.Fatalf("reopen queue after restart: %v", err)
+	}
+	if err := store.Migrate(ctx); err != nil {
+		store.Close()
+		h.tb.Fatalf("migrate queue after restart: %v", err)
+	}
+	h.Store = store
 }
 
 // Reports returns the errors the workers reported so far. A healthy run reports none.

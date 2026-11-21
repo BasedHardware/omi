@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/BasedHardware/omi/backend-go/internal/platform/fault"
 	"github.com/BasedHardware/omi/backend-go/internal/queue/rules"
 )
 
@@ -119,11 +120,15 @@ func (w *Workers) start(to chan<- func(context.Context), fn func(context.Context
 // Stop cancels running handlers and waits for them to return. A handler that ignores its
 // context delays Stop for as long as it runs, so every adapter call needs a deadline.
 func (w *Workers) Stop() {
+	w.requestStop()
+	w.wg.Wait()
+}
+
+func (w *Workers) requestStop() {
 	w.mu.Lock()
 	w.stopping = true
 	w.stop()
 	w.mu.Unlock()
-	w.wg.Wait()
 }
 
 // take reserves a run slot. It returns ErrStopped when the workers are shutting down and
@@ -229,6 +234,15 @@ func (w *Workers) resumeAt(key, secret string, due time.Time) error {
 	return nil
 }
 
+func (w *Workers) applyResumeStopFault() error {
+	err := w.store.inject(fault.ResumeClaimStop)
+	if errors.Is(err, fault.ErrInjected) {
+		w.requestStop()
+		return nil
+	}
+	return err
+}
+
 // reserve records a scheduled resume, bounding how many secrets a replica holds in memory.
 func (w *Workers) reserve(key string) error {
 	w.mu.Lock()
@@ -272,20 +286,7 @@ func (w *Workers) resumeNow(ctx context.Context, key, secret string) {
 		if w.take(ctx) != nil {
 			return
 		}
-		r, err := w.store.claim(ctx, claimRequest{key: key, secret: secret, can: w.can})
-		if err == nil && w.launch(r) {
-			return
-		}
-		w.release()
-		if err == nil {
-			w.handBack(ctx, r)
-			return
-		}
-		if !errors.Is(err, ErrDeferred) {
-			gone := errors.Is(err, ErrState) || errors.Is(err, ErrAbsent)
-			if !gone && ctx.Err() == nil {
-				w.report(err)
-			}
+		if !w.resumeAttempt(ctx, key, secret) {
 			return
 		}
 		select {
@@ -294,6 +295,32 @@ func (w *Workers) resumeNow(ctx context.Context, key, secret string) {
 			return
 		}
 	}
+}
+
+func (w *Workers) resumeAttempt(ctx context.Context, key, secret string) bool {
+	r, err := w.store.claim(ctx, claimRequest{key: key, secret: secret, can: w.can})
+	if err == nil {
+		if err = w.applyResumeStopFault(); err != nil {
+			w.release()
+			w.report(err)
+			return false
+		}
+		if w.launch(r) {
+			return false
+		}
+	}
+	w.release()
+	if err == nil {
+		w.handBack(ctx, r)
+		return false
+	}
+	if errors.Is(err, ErrDeferred) {
+		return true
+	}
+	if !errors.Is(err, ErrState) && !errors.Is(err, ErrAbsent) && ctx.Err() == nil {
+		w.report(err)
+	}
+	return false
 }
 
 // dispatch claims and launches jobs until ctx ends. With nothing to claim, the watcher

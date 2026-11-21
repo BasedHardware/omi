@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"sync/atomic"
 	"testing"
+
+	"github.com/BasedHardware/omi/backend-go/internal/platform/fault"
 )
 
 // Guarded proves that a call is running inside Run.Guard. A port method that reaches
@@ -17,8 +19,9 @@ import (
 // Do not store a Guarded or pass it to another goroutine. It stops being valid when the
 // guard returns, and an adapter checks Err before it commits anything.
 type Guarded struct {
-	open  *atomic.Bool
-	lease lease
+	open   *atomic.Bool
+	lease  lease
+	faults *fault.Injector
 }
 
 // Err returns nil while the guard is held and ErrLease once it has ended.
@@ -70,7 +73,7 @@ func (r *Run) Guard(ctx context.Context, fn func(context.Context, Guarded) error
 	open := &atomic.Bool{}
 	open.Store(true)
 	defer open.Store(false)
-	return fn(ctx, Guarded{open: open, lease: r.lease})
+	return fn(ctx, Guarded{open: open, lease: r.lease, faults: r.store.faults})
 }
 
 // Admitting proves that a call is running inside Store.Tenant, under the tenant's erasure

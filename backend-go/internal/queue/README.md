@@ -16,6 +16,7 @@ own causes, and the queue supplies everything about when and whether work runs.
 | Turn an error into an outcome | `FromError`, `LaterOnError`; adapters wrap with `Classify` |
 | Save progress under the lease | `Run.Save`, `Run.SetStep` |
 | Call anything outside the database | `Run.Guard`, which hands the call a `Guarded` |
+| Arm a fault at a named port boundary in a local test | `Guarded.FaultPoint` with `fault.PortBefore` or `fault.PortAfter` |
 | Give an external operation a stable identity | `Guarded.Operation` |
 | Order work per key | `NewJob.OrderKey`, `OrderAt`, `SortKey` |
 | Delay work | `NewJob.RunAt`, `Yield` with a delay |
@@ -63,6 +64,17 @@ against Postgres, each test in its own database (`internal/platform/pgtest`).
 | Queue-only erase waits for guards, purges tenant queue rows, and records the tombstone while preserving the remote-cleanup completion bit | `Store.EraseQueue` | `TestEraseQueueWaitsForGuardAndCascades`, `TestEraseQueueIncludesAdmissionThatCommitsWhileItWaits`, `TestQueueOnlyErasePreservesRemoteCompletion` |
 | Every job field is scanned from its matching column | `columns`, `scan` | `TestJobScanMatchesItsProjection` |
 | A database whose applied migration differs from the embedded file is refused | `Store.Migrate`, `Store.Ready` | `TestMigrateRefusesAnEditedMigration` |
+| A seeded schedule injects the same points on replay, across a real worker restart | `platform/fault` and `queue.WithFaultInjector` | `TestScheduleReplaysTheSameSeededPoints`, `TestSavedClaimFailureScheduleRestartsSeveralWorkers` |
+| Stop after a scheduled resume's committed claim returns the lease and attempt | `Workers.resumeNow` | `TestScheduledResumeHandsBackClaimWhenStopWinsLaunch` |
+
+`fault.Schedule` is a seed plus a list of injection point names; the seed fixes their firing
+order. Queue claim, pre-commit,
+post-claim, lease renewal, settle, and guarded port boundaries expose named points. A port
+names its individual call with `fault.PortBefore(name)` and `fault.PortAfter(name)`. The
+`queue/queuetest` harness opens real local Postgres, starts several workers, and can close and
+reopen the store while retaining the schedule cursor. Saved schedules live under
+`testdata/fault-schedules/` and are replayed by ordinary CI tests. This controls fault points
+without trying to simulate every goroutine or database interleaving.
 
 ## The erasure contract, and its limit
 

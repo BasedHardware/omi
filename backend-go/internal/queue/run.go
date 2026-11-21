@@ -8,6 +8,7 @@ import (
 	"runtime/debug"
 	"time"
 
+	"github.com/BasedHardware/omi/backend-go/internal/platform/fault"
 	"github.com/BasedHardware/omi/backend-go/internal/queue/rules"
 )
 
@@ -103,6 +104,9 @@ func (r *Run) backoff() time.Duration { return rules.Backoff(r.store.cfg.Backoff
 // transition applies set to the job only while this claim still holds an unexpired lease.
 // Every write a worker makes goes through here, which is what makes the token a fence.
 func (r *Run) transition(ctx context.Context, set string, args ...any) error {
+	if err := r.store.inject(fault.QueueSettle); err != nil {
+		return err
+	}
 	params := append([]any{r.lease.key, r.lease.token}, args...)
 	tag, err := r.store.pool.Exec(ctx, "UPDATE queue_jobs SET "+set+`, updated_at=clock_timestamp()
 WHERE job_key=$1 AND lease_token=$2 AND state='leased' AND lease_until > clock_timestamp()`, params...)
@@ -112,7 +116,7 @@ WHERE job_key=$1 AND lease_token=$2 AND state='leased' AND lease_until > clock_t
 	if tag.RowsAffected() == 0 {
 		return ErrLease
 	}
-	return nil
+	return r.store.inject(fault.QueueSettleAfter)
 }
 
 func (r *Run) finish(ctx context.Context, state State, result Terminal, cause Cause) error {

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/BasedHardware/omi/backend-go/internal/platform/clock"
+	"github.com/BasedHardware/omi/backend-go/internal/platform/fault"
 	"github.com/BasedHardware/omi/backend-go/internal/platform/pgtest"
 )
 
@@ -28,11 +29,11 @@ func testConfig() Config {
 }
 
 // openStore opens a store on url with its schema applied.
-func openStore(t *testing.T, url string, cfg Config, kinds []Kind) *Store {
+func openStore(t *testing.T, url string, cfg Config, kinds []Kind, options ...OpenOption) *Store {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	t.Cleanup(cancel)
-	s, err := Open(ctx, url, cfg, kinds, nil, clock.System{})
+	s, err := Open(ctx, url, cfg, kinds, nil, clock.System{}, options...)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -49,6 +50,13 @@ func testStore(t *testing.T) (context.Context, *Store) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	t.Cleanup(cancel)
 	return ctx, openStore(t, pgtest.New(t), testConfig(), testKinds())
+}
+
+func testStoreWithFaults(t *testing.T, injector *fault.Injector) (context.Context, *Store) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	t.Cleanup(cancel)
+	return ctx, openStore(t, pgtest.New(t), testConfig(), testKinds(), WithFaultInjector(injector))
 }
 
 // demo returns a plain job of the test kind.

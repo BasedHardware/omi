@@ -2,13 +2,17 @@ package queue
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"os"
+	"slices"
 	"testing"
 	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/BasedHardware/omi/backend-go/internal/platform/fault"
 	"github.com/BasedHardware/omi/backend-go/internal/platform/pg"
 )
 
@@ -57,28 +61,50 @@ func TestHoldPausesTenantBeforeReleasingJob(t *testing.T) {
 
 func TestScheduledResumeHandsBackClaimWhenStopWinsLaunch(t *testing.T) {
 	t.Parallel()
-	ctx, s := testStore(t)
+	data, err := os.ReadFile("testdata/fault-schedules/resume-stop.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var schedule fault.Schedule
+	if err := json.Unmarshal(data, &schedule); err != nil {
+		t.Fatal(err)
+	}
+	var first []fault.Point
+	for replay := range 2 {
+		history := replayResumeStop(t, schedule)
+		if replay == 0 {
+			first = history
+		} else if !slices.Equal(history, first) {
+			t.Fatalf("saved schedule changed faults: %v then %v", first, history)
+		}
+	}
+}
+
+func replayResumeStop(t *testing.T, schedule fault.Schedule) []fault.Point {
+	t.Helper()
+	injector, err := fault.New(schedule)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, s := testStoreWithFaults(t, injector)
 	enqueue(t, ctx, s, gated(demo("job", "tenant")))
 	workerCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	// Leave the supervisor's unbuffered channel without a receiver. This
-	// holds launch at the actual handoff, after commit and before any handler.
 	w := &Workers{store: s, slots: make(chan struct{}, 1), spawn: make(chan func(context.Context)),
 		done: workerCtx.Done(), stop: cancel, report: func(err error) { t.Error(err) }}
 	w.wg.Go(func() { w.resumeNow(workerCtx, "job", "live-secret") })
-	defer w.Stop()
-	eventually(t, ctx, "the scheduled resume has committed its claim", func() bool {
-		j, err := s.Get(ctx, "job")
-		if err != nil {
-			t.Fatal(err)
-		}
-		return j.State == StateLeased && j.Attempts == 1
+	eventually(t, ctx, "the saved schedule reaches the post-claim stop point", func() bool {
+		return len(injector.History()) > 0
 	})
 	w.Stop()
 	j, err := s.Get(ctx, "job")
 	if err != nil || j.State != StateBlocked || j.Attempts != 0 || len(w.slots) != 0 {
-		t.Fatalf("scheduled resume did not hand back its claim and slot: %+v, %v", j, err)
+		t.Fatalf("schedule did not hand back its claim and slot: %+v, %v", j, err)
 	}
+	if injector.Remaining() != 0 || !slices.Equal(injector.History(), []fault.Point{fault.ResumeClaimStop}) {
+		t.Fatalf("schedule replay history: remaining=%d points=%v", injector.Remaining(), injector.History())
+	}
+	return injector.History()
 }
 
 func TestAdmissionSeesEraseCommittedWhileWaitingForLock(t *testing.T) {

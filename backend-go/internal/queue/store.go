@@ -9,6 +9,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/BasedHardware/omi/backend-go/internal/platform/clock"
+	"github.com/BasedHardware/omi/backend-go/internal/platform/fault"
 	"github.com/BasedHardware/omi/backend-go/internal/platform/pg"
 )
 
@@ -32,6 +33,7 @@ type Store struct {
 	kinds     registry
 	observer  Observer
 	clock     clock.Clock
+	faults    *fault.Injector
 	// wake tells one idle dispatcher that work may be claimable now.
 	wake chan struct{}
 	// rescan tells the schedule watcher that a due time changed, so it must not sleep on.
@@ -42,7 +44,7 @@ type Store struct {
 // for work and a small one reserved for lease renewals, so a saturated work pool can never
 // starve the heartbeats that keep leases alive.
 func Open(
-	ctx context.Context, url string, cfg Config, kinds []Kind, observer Observer, c clock.Clock,
+	ctx context.Context, url string, cfg Config, kinds []Kind, observer Observer, c clock.Clock, options ...OpenOption,
 ) (*Store, error) {
 	if err := cfg.Validate(); err != nil {
 		return nil, err
@@ -81,6 +83,9 @@ func Open(
 	store := &Store{
 		pool: pool, heartbeat: heartbeat, cfg: cfg, kinds: declared, observer: observer,
 		clock: c, wake: make(chan struct{}, 1), rescan: make(chan struct{}, 1),
+	}
+	for _, option := range options {
+		option(store)
 	}
 	if err := pool.Ping(ctx); err != nil {
 		store.Close()
