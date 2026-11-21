@@ -225,7 +225,7 @@ def test_prod_pump_is_integration_plus_the_dark_overrides():
     for name in train_pins:
         assert integration['env'][name]['value'] == 'false', name
         assert services['backend-sync-backfill']['env'][name]['value'] == 'false', name
-        assert pump['env'][name]['value'] == 'true', name
+        assert pump['env'][name]['value'] == 'false', name  # SCA-3318: inherited, custody off
     assert pump['env']['BATCH_PIPELINE_INDEPENDENT_LANGUAGE_RECOVERY_ENABLED']['value'] == 'false'
 
 
@@ -1103,3 +1103,16 @@ def test_claimed_sibling_skip_ships_dark_on_integration_until_activation():
     services = _prod_services()
     for name in ('backend-integration', PROJECTION_PUMP):
         assert services[name]['env']['BATCH_PIPELINE_FOLLOWUP_CLAIMED_SIBLING_SKIP_ENABLED']['value'] == 'false', name
+
+
+def test_existing_latest_routed_pump_is_pinned_inside_the_locked_deploy():
+    """SCA-3318: a pump created but never pinned (100% via LATEST) is pinned by name, pre-pin verified."""
+    steps = {step.get('id') or step.get('name'): step for step in PUMP_ACTION['runs']['steps']}
+    script = steps['pump-service']['run']
+    existing = script[script.index('          1)') if '          1)' in script else script.index('1)') :]
+    pin = existing.index('update-traffic backend-projection-pump')
+    assert existing.index('--before-first-pin') < pin
+    assert existing.index('latestRevision') < existing.index('--before-first-pin')
+    assert '--to-revisions="$base=100"' in existing
+    assert pin < existing.index('--disposition="$RELEASE_DISPOSITION"')
+    assert 'needs a disposition naming its base revision' in existing
