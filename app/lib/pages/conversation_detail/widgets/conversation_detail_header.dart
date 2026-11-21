@@ -124,8 +124,12 @@ class ConversationDetailHeader extends StatelessWidget {
           displayText: (stored) => waiting && stored.trim() == TranscriptionPendingConversations.serverHoldTitle
               ? ''
               : presentableConversationTitle(conversation, title: stored),
-          hintText: transcriptFallbackTitle(conversation) ??
-              recordingFallbackTitle(conversation, context.l10n, dates: OmiDateFormat.of(context)),
+          // A hint shows only while the field is empty, so a live conversation's empty field reads
+          // Listening even if the server named it during an edit that skipped the server title.
+          hintText: conversation.v3?.tileState == ConversationTileState.live
+              ? context.l10n.listening
+              : transcriptFallbackTitle(conversation) ??
+                  recordingFallbackTitle(conversation, context.l10n, dates: OmiDateFormat.of(context)),
         );
       },
     );

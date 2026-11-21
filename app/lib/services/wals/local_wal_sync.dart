@@ -14,6 +14,7 @@ import 'package:path/path.dart' as path;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:omi/services/experiments/orphan_audio_recovery.dart';
 import 'package:omi/services/experiments/orphan_audio_reclaim.dart';
+import 'package:omi/utils/analytics/lag_work_registry.dart';
 import 'package:omi/utils/analytics/registry/events.g.dart';
 // TypedEvents must resolve through its registry library, not the legacy re-export.
 // ignore: unnecessary_import
@@ -153,6 +154,17 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
   Timer? _flushingTimer;
   Timer? _pendantTimer;
   DateTime? _lastOrphanRecoveryWake;
+
+  /// When the last live audio frame was buffered; the orphan census backs off while audio streams.
+  DateTime? _lastLiveFrameAt;
+
+  @visibleForTesting
+  set testLastOrphanRecoveryWake(DateTime? value) => _lastOrphanRecoveryWake = value;
+
+  /// Whether the foreground orphan census may start now, from this sync's own clocks.
+  @visibleForTesting
+  bool get orphanRecoveryDueNow =>
+      orphanRecoveryDue(now: _now(), lastRun: _lastOrphanRecoveryWake, lastLiveFrame: _lastLiveFrameAt);
   Future<void>? _orphanRecoveryInFlight;
   Future<void>? _orphanReclaimInFlight;
   final Future<bool> Function()? _orphanReclaimOffOverride;
@@ -2135,6 +2147,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     _frames.add(positioned);
     _frameSynced.add(false);
     _lastFrameAccepted = true;
+    _lastLiveFrameAt = _now();
     if (_isPendantFrame(frame) && _deviceId != null) {
       RingCustodyDiagnostics.shared.route(_deviceId!, RingCaptureRoute.ordinaryWal);
     }
