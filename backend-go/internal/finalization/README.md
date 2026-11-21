@@ -47,10 +47,10 @@ is pending.
   transcript load and title/overview compare-and-apply. The emulator compatibility
   test composes both. Worker wiring still needs the conversation policy fields,
   sections and hash writes, as well as object-lake transcript custody.
-- Lane 3's pending PR offers keyed submission and guarded completion recovery.
-  The family supplies the queue row's creation time and checks for a recoverable
-  completion before repeating a paid notes step. Serving use needs the gateway
-  protocol and retention policy active on every replica.
+- Workerd can opt into lane 3's keyed gateway and guarded completion recovery.
+  The family supplies the original queue row's creation time and checks for a
+  recoverable completion before repeating a paid notes step. Serving use needs
+  the gateway protocol and retention policies active on every replica.
 - Lane 5's event and target fields match this worker's inputs. Its delivery service
   accepts a queue run and acquires its own guards. It needs a guarded entry point
   to implement the family port directly. The contract also allows previously successful

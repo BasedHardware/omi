@@ -15,6 +15,7 @@ import (
 	"github.com/BasedHardware/omi/backend-go/internal/adapters/conversations"
 	"github.com/BasedHardware/omi/backend-go/internal/adapters/finalizationdocs"
 	"github.com/BasedHardware/omi/backend-go/internal/adapters/integrations"
+	"github.com/BasedHardware/omi/backend-go/internal/adapters/llmgateway"
 	"github.com/BasedHardware/omi/backend-go/internal/finalization"
 	"github.com/BasedHardware/omi/backend-go/internal/integrationfanout"
 	"github.com/BasedHardware/omi/backend-go/internal/platform/clock"
@@ -28,6 +29,7 @@ import (
 func workerdKinds() []queue.Kind {
 	causes := append(finalizationdocs.Causes(), conversations.Causes()...)
 	causes = append(causes, integrationfanout.Causes()...)
+	causes = append(causes, llmgateway.Causes()...)
 	return []queue.Kind{finalization.Declaration(causes...)}
 }
 
@@ -50,10 +52,12 @@ type finalizationRuntime struct {
 	quiet   *finalizationdocs.QuietScan
 	retract *httpx.Client
 	sender  *integrations.Sender
+	gateway llmgateway.Replayable
 }
 
 func openFinalizationRuntime(ctx, startup context.Context, cfg config, q *queue.Store) (finalizationRuntime, error) {
-	if !cfg.quietRecovery && !cfg.summaryRepair && cfg.privateArchive == "" && cfg.retractionOrigin == "" && cfg.objectBucket == "" && cfg.episodeIntakeAudience == "" {
+	if !cfg.quietRecovery && !cfg.summaryRepair && cfg.privateArchive == "" && cfg.retractionOrigin == "" && cfg.objectBucket == "" &&
+		cfg.episodeIntakeAudience == "" && cfg.gateway.BaseURL == "" {
 		return finalizationRuntime{}, nil
 	}
 	docs, err := docstore.Open(startup, docstore.Config{Project: cfg.firestoreProject})
@@ -76,6 +80,9 @@ func openFinalizationRuntime(ctx, startup context.Context, cfg config, q *queue.
 	}
 	wireFinalizationDocuments(runtime.family, store, offload, cfg.notesDedupe)
 	if wireErr := runtime.bindIntegrationDelivery(clk); wireErr != nil {
+		return finalizationRuntime{}, errors.Join(wireErr, runtime.close())
+	}
+	if wireErr := runtime.bindFinalizationGateway(cfg.gateway, clk); wireErr != nil {
 		return finalizationRuntime{}, errors.Join(wireErr, runtime.close())
 	}
 	if cfg.summaryRepair {
@@ -156,6 +163,9 @@ func (m *finalizationRuntime) bindIntegrationDelivery(clk clock.Clock) error {
 }
 
 func (m *finalizationRuntime) close() error {
+	if m.gateway != nil {
+		m.gateway.Close()
+	}
 	if m.sender != nil {
 		m.sender.Close()
 	}

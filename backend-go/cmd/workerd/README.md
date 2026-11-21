@@ -2,7 +2,8 @@
 
 Runs the Go queue worker process. The finalization kind is declared in the queue registry.
 The ordinary handler joins the registry once its serving ports are present. The current
-composition can opt into summary repair while gateway and serving effects are pending.
+composition can opt into summary repair and the keyed notes gateway while the remaining
+serving effects are pending.
 Summary repair shares the Python scheduler's Firestore lease and writes wakes for the
 existing enrichment dispatcher. Archive and retraction clients are wired when their
 configuration is present. The retraction receiver must be deployed and workerd must
@@ -25,6 +26,8 @@ Lane B needs to provide a bounded drain and fenced handback API before enabling 
 | `ENCRYPTION_SECRET` | required | At least 32 bytes, per `crypt.Check` |
 | `WORKER_QUIET_RECOVERY_ENABLED` | false | Drive due quiet wakes once the archive and ordinary serving handler are configured |
 | `WORKER_EPISODE_INTAKE_AUDIENCE`, `WORKER_EPISODE_INTAKE_CALLER` | unset | Enable the internal intake repair route for the configured Google workload identity |
+| `WORKER_FINALIZATION_GATEWAY_ENABLED` | false | Configure the keyed finalization notes gateway |
+| `OMI_LLM_GATEWAY_URL`, `OMI_LLM_GATEWAY_SERVICE_TOKEN` | unset | Required when the keyed gateway is enabled. `LLM_GATEWAY_SERVICE_TOKEN` is the token fallback |
 | `WORKER_SUMMARY_REPAIR_ENABLED` | false | Run the due-summary scan in workerd |
 | `ENRICHMENT_MAX_AGE_HOURS` | 72 | Nonnegative hours, with zero disabling age-based scan phases |
 | `BUCKET_PRIVATE_CLOUD_SYNC` | unset | Private recording bucket for the read-only archive client |
@@ -58,6 +61,20 @@ the worker Deployment.
 | Queue and PostgreSQL failures use closed log fields without remote error text | `TestReportQueueErrorUsesClosedClassification` |
 | Queue observer metrics constrain all labels to declared values and `unknown` | `TestQueueObserverUsesOnlyDeclaredLabels` |
 | The metrics listener counts real Postgres jobs that lack a local handler | `TestMetricsScrapeCountsJobsWithNoHandler` |
+
+## Keyed finalization notes gateway
+
+Enable the gateway after all replicas support the keyed operations endpoint and
+its retention policies. The adapter uses the original queue job creation time
+for the 29-day POST cutoff. Retries recover by GET with the same job/step UUID.
+A bare 404 is retryable and does not trigger fallback dispatch. The workerd
+registry still requires the complete set of serving ports.
+
+| Rule | Test |
+| --- | --- |
+| Default-off composition and explicit config | `TestWorkerdFinalizationGatewayIsOptIn` |
+| F10. One notes POST across a lost response and a retryable bare 404 during recovery | `TestF10WorkerdRecoversNotesThroughKeyedGateway` |
+| F10. The durable creation time enforces the paid replay cutoff | `TestF10WorkerdRefusesPaidSubmissionAtOriginalJobCutoff` |
 
 ## Serving sync episode intake
 

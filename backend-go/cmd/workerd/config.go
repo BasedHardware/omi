@@ -13,6 +13,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/BasedHardware/omi/backend-go/internal/adapters/llmgateway"
 	"github.com/BasedHardware/omi/backend-go/internal/platform/crypt"
 	"github.com/BasedHardware/omi/backend-go/internal/queue"
 )
@@ -22,6 +23,7 @@ const gateAbandoned queue.Cause = "gate_abandoned"
 type config struct {
 	policy                                     queue.Config
 	erase                                      eraseConfig
+	gateway                                    llmgateway.Config
 	databaseURL                                string
 	firestoreProject                           string
 	encryptionSecret                           string
@@ -86,6 +88,9 @@ func (c *config) readWorkerConfig(lookup lookupEnv) error {
 	if (c.episodeIntakeAudience == "") != (c.episodeIntakeCaller == "") ||
 		(c.episodeIntakeCaller != "" && !strings.HasSuffix(c.episodeIntakeCaller, ".iam.gserviceaccount.com")) {
 		return errors.New("episode intake requires an OIDC audience and service account email")
+	}
+	if err := c.readFinalizationGateway(lookup); err != nil {
+		return err
 	}
 	return c.readFinalizationAdapters(lookup)
 }
