@@ -323,6 +323,88 @@ def sweep_query(state, monkeypatch):
     return query
 
 
+@pytest.mark.parametrize('runner', ['active', 'legacy'])
+@pytest.mark.parametrize('effects_only', [False, True])
+def test_ownership_park_releases_only_after_python_decision(state, sweep_query, monkeypatch, runner, effects_only):
+    from database import conversations
+    from database.outbox_firestore import ENRICHMENT_OUTBOX
+    from utils.conversations import lazy_enrichment
+    from utils.enrichment import custody
+    from utils.enrichment.consumer import EnrichmentConsumer
+    from utils.sync import processing_hold
+    from utils.workers.consumer import run_push
+
+    rows, tasks = state
+    if effects_only:
+        # The effects producer normally blind-writes this separate obligation.
+        ENRICHMENT_OUTBOX.enqueue(
+            reprocess.key('u', 'c\0effects'),
+            'u',
+            {'conversation_id': 'c', 'language': 'en', 'effects_only': True},
+            600,
+            now=0,
+        )
+    else:
+        reprocess.mark('u', 'c', 'en', now=0)
+    key = reprocess.key('u', 'c\0effects' if effects_only else 'c')
+    monkeypatch.setattr(custody, 'discard_blocked', lambda _: False)
+    wake = tasks[-1]['task_token']
+    worlds = {
+        'c': {'sync_bridge_pending': {'target_id': 'target'}} if not effects_only else {},
+        'target': {'finalization_engine': 'go', 'finalization_owner_epoch': 1},
+    }
+    if effects_only:
+        worlds['c'] = worlds['target']
+    monkeypatch.setattr(conversations, 'get_conversation_raw_snapshot', lambda uid, cid, **_: worlds[cid])
+    monkeypatch.setattr(sweep_query, 'stream', lambda: [SimpleNamespace(id=key, to_dict=lambda: deepcopy(rows[key]))])
+    calls = []
+
+    def process(*_):
+        calls.append('process')
+        if len(calls) == 1:
+            raise processing_hold.finalization_owner_deferral()
+        return SimpleNamespace(structured={'title': 'done', 'overview': 'finished'})
+
+    monkeypatch.setattr(lazy_enrichment, 'enrich_settled', process)
+    consumer = EnrichmentConsumer(ENRICHMENT_OUTBOX, process)
+
+    def deliver(token, now):
+        if runner == 'legacy':
+            return reprocess.run(key, token, process, now=now)
+        return run_push(consumer, ENRICHMENT_OUTBOX, key, token, now=now).outcome
+
+    assert deliver(wake, 600) == 'deferred'
+    assert reprocess.ownership_parked(rows[key])
+    assert rows[key]['task_due_at'] is None and rows[key]['task_token'] == wake
+    assert deliver(wake, 700) == 'stale'
+    now = rows[key]['due_at']
+    for _ in range(3):
+        assert reprocess.sweep(now=now)['repaired'] == 0
+        assert reprocess.ownership_parked(rows[key])
+        assert len(tasks) == 1 and calls == ['process']
+        now = rows[key]['due_at']
+
+    original = deepcopy(rows[key])
+    new, (reported, coalesced) = reprocess.mark_update(
+        'u', 'c', 'es', current=now, settle_at=now, effects_only=effects_only, coalesce='max', batch=False
+    )(original)
+    assert coalesced and not reported['_wake']
+    assert new['version'] == original['version'] + 1 and new['language'] == 'es'
+    assert new['first_pending_at'] == original['first_pending_at']
+    rows[key] = new
+    if effects_only:
+        # mark_effects can blind-merge over the generic defer reason.
+        rows[key]['deferred_reason'] = None
+        assert reprocess.ownership_parked(rows[key])
+
+    worlds['target'].update(finalization_engine='python', finalization_owner_epoch=2)
+    assert reprocess.sweep(now=now)['repaired'] == 1
+    assert not rows[key]['dormant']
+    assert len(tasks) == 2 and tasks[-1]['task_token'] != wake
+    assert deliver(tasks[-1]['task_token'], now) in ('done', 'processed')
+    assert calls == ['process', 'process']
+
+
 @pytest.mark.parametrize('field', ['queue', 'handler', 'audience', 'invoker_sa'])
 def test_sweep_repairs_each_missing_binding_field(state, sweep_query, field):
     rows, _ = state

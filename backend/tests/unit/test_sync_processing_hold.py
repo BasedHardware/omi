@@ -740,7 +740,8 @@ def test_default_consumer_defers_foreign_finalization(state, monkeypatch, claime
     assert result.outcome == 'deferred'
     assert rows[key]['deferred_reason'] == 'finalization_owned_elsewhere'
     assert rows[key]['due_at'] > 700 and rows[key]['lease_until'] == 0
-    assert rows[key]['task_token'] != wake and not rows[key].get('dormant')
+    assert rows[key]['task_token'] == wake and outbox.ownership_parked(rows[key])
+    assert len(tasks) == 1
     assert not any(transaction.has_written for transaction in store.transactions)
     assert not store.rows[source_path].get('discarded')
     assert not store.rows[destination_path].get('discarded')

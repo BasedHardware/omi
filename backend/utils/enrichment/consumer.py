@@ -220,6 +220,13 @@ class EnrichmentConsumer:
                 try:
                     enrich_settled(uid, conversation_id, language)
                 except processing_hold.ProcessingDeferred as error:
+                    if error.reason == rows.FINALIZATION_OWNER_REFUSAL:
+                        return Result(
+                            Outcome.DEFERRED,
+                            ConsumerReason.NOT_DUE,
+                            available_at=error.available_at,
+                            defer_cause=error.reason,
+                        )
                     return Result(Outcome.DEFERRED, ConsumerReason.NOT_DUE, available_at=error.available_at)
             if lost.is_set():
                 return Result(Outcome.STALE, ConsumerReason.STALE_TOKEN)
