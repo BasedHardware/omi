@@ -17,6 +17,8 @@ import 'package:omi/services/wals/wal_interfaces.dart';
 import 'package:omi/utils/wal_file_manager.dart';
 import 'package:omi/utils/analytics/registry/events.g.dart';
 
+import '../support/capture/virtual_capture_time.dart';
+
 class _MockListener implements IWalSyncListener {
   @override
   void onWalUpdated() {}
@@ -205,9 +207,12 @@ void main() {
       final release = Completer<void>();
       var holdWrite = false;
       final telemetry = <WalStopDrain>[];
+      final scheduler = ManualScheduler(clock: VirtualClock(DateTime.utc(2026, 11, 22)));
       final sync = LocalWalSyncImpl(
         _MockListener(),
         stopDrainTelemetry: telemetry.add,
+        periodic: scheduler.periodic,
+        now: scheduler.clock.now,
         freeDiskBytes: () async => 1 << 40,
         persistWals: (wals) async {
           if (holdWrite) {
@@ -243,9 +248,11 @@ void main() {
       if (replace) {
         sync.onFrameCaptured(frame(2, 0));
         expect(sync.lastFrameAccepted, isTrue);
+        await sync.stop();
+      } else {
+        scheduler.elapse(const Duration(seconds: 10));
+        await scheduler.waitForCallbackIo();
       }
-
-      await sync.stop();
       expect(sync.isFrameDurable(late), isTrue);
       final rows = await WalFileManager.loadWals();
       expect(rows.fold<int>(0, (count, wal) => count + wal.totalFrames), replace ? 3 : 2);
@@ -277,12 +284,15 @@ void main() {
     expect(indexed.holdForUser, isTrue);
   });
 
-  test('stop reports a storage-refused write and keeps the sealed payload for retry', () async {
+  test('stopped ledger retries a refused write automatically after free space returns', () async {
     final telemetry = <WalStopDrain>[];
+    final scheduler = ManualScheduler(clock: VirtualClock(DateTime.utc(2026, 11, 22)));
     var freeDisk = 0;
     final sync = LocalWalSyncImpl(
       _MockListener(),
       stopDrainTelemetry: telemetry.add,
+      periodic: scheduler.periodic,
+      now: scheduler.clock.now,
       freeDiskBytes: () async => freeDisk,
       persistWals: (wals) async {
         expect(await WalFileManager.saveWals(wals), isTrue);
@@ -301,8 +311,14 @@ void main() {
     expect(sync.testWals.single.data, [captured.payload]);
 
     freeDisk = 1 << 40;
-    await sync.stop();
+    scheduler.elapse(const Duration(seconds: 10));
+    await scheduler.waitForCallbackIo();
     expect(sync.isFrameDurable(captured), isTrue);
+    expect(telemetry.map((event) => event.result), [WalStopDrainResult.pending, WalStopDrainResult.drained]);
+
+    scheduler.elapse(const Duration(seconds: 30));
+    await scheduler.waitForCallbackIo();
+    expect(telemetry, hasLength(2), reason: 'indexed custody cancels the stopped-ledger retry');
   });
 
   test('stop durably seals a short phone-mic tail', () async {

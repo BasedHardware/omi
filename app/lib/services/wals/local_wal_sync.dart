@@ -181,6 +181,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
   int _startEpoch = 0;
   bool _stopIngressClosed = false;
   Future<void>? _stopDrain;
+  Timer? _stopRetryTimer;
   final void Function(WalStopDrain)? _stopDrainTelemetry;
 
   Future<void> _bufferQueue = Future.value();
@@ -331,6 +332,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     _backlogTelemetry.clearUserData();
     _orphanFrameCache = const OrphanAudioFrameCache.empty();
     _sessionGeneration++;
+    _cancelStopRetry();
     _drainGroupBatchCounts.clear();
     _drainGroupCountedAt.clear();
     conversationCompletions.value = null;
@@ -585,6 +587,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     // Boot recovery can start the same singleton again while its init tail saves.
     if (_flushingTimer?.isActive ?? false) return;
     _startEpoch++;
+    _cancelStopRetry();
     _stopIngressClosed = false;
     _stopDrain = null;
     if (_initializationInFlight == null) _initialIndexAdmissionPending = true;
@@ -818,8 +821,13 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
       return;
     }
 
-    final startEpoch = _startEpoch;
-    final drain = _enqueueBuffer(() => _drainOnStop(generation, startEpoch));
+    await _queueStopDrain(generation, _startEpoch);
+  }
+
+  Future<void> _queueStopDrain(int generation, int startEpoch, {bool retry = false}) async {
+    final currentDrain = _stopDrain;
+    if (currentDrain != null) return currentDrain;
+    final drain = _enqueueBuffer(() => _drainOnStop(generation, startEpoch, retry: retry));
     _stopDrain = drain;
     try {
       await drain;
@@ -828,7 +836,27 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     }
   }
 
-  Future<void> _drainOnStop(int generation, int startEpoch) async {
+  void _cancelStopRetry() {
+    _stopRetryTimer?.cancel();
+    _stopRetryTimer = null;
+  }
+
+  void _retryStoppedLedger(int generation, int startEpoch) {
+    _stopRetryTimer ??= _periodic(const Duration(seconds: 10), (timer) async {
+      if (!identical(timer, _stopRetryTimer) || !_isCurrent(generation) || _startEpoch != startEpoch) {
+        timer.cancel();
+        return;
+      }
+      if (_stopDrain != null) return;
+      try {
+        await _queueStopDrain(generation, startEpoch, retry: true);
+      } catch (error) {
+        Logger.debug('LocalWalSync: stop retry failed: ${error.runtimeType}');
+      }
+    });
+  }
+
+  Future<void> _drainOnStop(int generation, int startEpoch, {required bool retry}) async {
     bool current() => _isCurrent(generation) && _startEpoch == startEpoch;
     var result = WalStopDrainResult.superseded;
     var lateFramesIndexed = 0;
@@ -866,15 +894,24 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
       if (current()) {
         _stopIngressClosed = true;
         if (_frames.isEmpty) _pendingPhoneOnly = false;
-      }
-      try {
-        final event = WalStopDrain(lateFramesIndexed: lateFramesIndexed, result: result);
-        if (_stopDrainTelemetry case final emit?) {
-          emit(event);
+        if (result == WalStopDrainResult.drained) {
+          _cancelStopRetry();
         } else {
-          const TypedEvents().emit(event);
+          _retryStoppedLedger(generation, startEpoch);
         }
-      } catch (_) {/* Diagnostics never affect custody. */}
+      }
+      // Record the initial result and eventual durability once, not every
+      // retry while the same stopped ledger is waiting for storage.
+      if (!retry || result == WalStopDrainResult.drained) {
+        try {
+          final event = WalStopDrain(lateFramesIndexed: lateFramesIndexed, result: result);
+          if (_stopDrainTelemetry case final emit?) {
+            emit(event);
+          } else {
+            const TypedEvents().emit(event);
+          }
+        } catch (_) {/* Diagnostics never affect custody. */}
+      }
     }
   }
 
