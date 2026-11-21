@@ -40,8 +40,7 @@ class ProjectionDiscovery:
         self.states = states
         self.stripe = projection_discovery_stripe()
         self.seeded = False
-        # The finish page's dark backoff adds a range filter, which moves the
-        # ordering (and therefore the cursor) to the row's next-attempt clock.
+        # Clock-filtered pages use a different order and cursor shape.
         self.due_mode = False
         self.clock_mode = None
 

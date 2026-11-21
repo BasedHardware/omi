@@ -279,10 +279,10 @@ def test_environment_values_render_worker_identity_and_gpu_pool(
             if worker['name'] != 'worker':
                 continue
             worker_env = {item['name']: item.get('value') for item in worker['env']}
-            # SCA-1993/SCA-2024: default-off backoff must stay absent from every worker sibling.
+            # SCA-3503: neither retired batch flag belongs on a worker.
+            assert 'BATCH_HELD_POLL_SKIP_ENABLED' not in worker_env
             assert 'BATCH_PROJECTION_FINISH_BACKOFF_ENABLED' not in worker_env
             assert 'BATCH_PIPELINE_UPLOAD_COALESCING_ENABLED' not in worker_env
-            assert 'BATCH_HELD_POLL_SKIP_ENABLED' not in worker_env
             if environment == 'prod':
                 assert 'BATCH_PROJECTION_OUTBOX' not in worker_env
                 assert 'RECORD_SEAL_REPAIR_FRESH_ENABLED' not in worker_env

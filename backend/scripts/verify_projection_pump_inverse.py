@@ -79,7 +79,7 @@ def verify(
         status.get('latestReadyRevisionName') != expected.revision
         or status.get('latestCreatedRevisionName') != expected.revision
     ):
-        raise ValueError('LATEST does not resolve to the newly created base')
+        raise ValueError('LATEST does not resolve to the expected base revision')
 
     metadata = revision.get('metadata', {})
     if (
@@ -134,14 +134,16 @@ def main() -> int:
     parser.add_argument('--before-first-pin', action='store_true')
     parser.add_argument('--snapshot', type=Path, help='Capture the exact verified traffic readback for restoration')
     args = parser.parse_args()
-    if args.before_first_pin and (not args.new_base or args.snapshot):
-        parser.error('LATEST is allowed only when verifying a newly created base before its pin')
+    if args.before_first_pin and args.snapshot:
+        parser.error('LATEST is allowed only when verifying a base before its pin')
     try:
         expected = (
             ExpectedInverse(*args.new_base) if args.new_base else ExpectedInverse.from_disposition(args.disposition)
         )
-        if args.new_base and not expected.revision.endswith('-base'):
-            raise ValueError('expected the newly created base revision')
+        if (args.new_base or args.before_first_pin) and not expected.revision.endswith('-base'):
+            # A pre-pin check (a new create, or an existing service still routed via LATEST,
+            # SCA-3318) is only ever for the dark base revision.
+            raise ValueError('expected the base revision before its pin')
         service = _read(args.project, args.region, 'services', 'describe', SERVICE)
         revision = _read(args.project, args.region, 'revisions', 'describe', expected.revision)
         iam = _read(args.project, args.region, 'services', 'get-iam-policy', SERVICE)

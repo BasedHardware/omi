@@ -1,22 +1,29 @@
 package conversations
 
 import (
+	"context"
 	"encoding/json"
 	"time"
 
 	"github.com/BasedHardware/omi/backend-go/internal/platform/crypt"
+	"github.com/BasedHardware/omi/backend-go/internal/queue"
 )
 
-func (s Store) decode(ref Ref, row map[string]any) (Conversation, error) {
+func (s Store) decode(ctx context.Context, g queue.Guarded, ref Ref, row map[string]any) (Conversation, error) {
 	revision, err := rowRevision(ref, row)
 	if err != nil {
 		return Conversation{}, err
 	}
-	transcript, err := s.transcript(ref.Owner, row["transcript_segments"], field[bool](row, "transcript_segments_compressed"))
+	transcript, err := s.snapshotTranscript(ctx, g, ref, row)
 	if err != nil {
 		return Conversation{}, err
 	}
 	structured := field[map[string]any](row, "structured")
+	sections, integrity := readNotesSections(structured["sections"])
+	outputHash := ""
+	if integrity {
+		outputHash = field[string](row, notesOutputHashField)
+	}
 	return Conversation{
 		Revision:             revision,
 		Status:               Status(field[string](row, "status")),
@@ -28,12 +35,21 @@ func (s Store) decode(ref Ref, row map[string]any) (Conversation, error) {
 		Discarded:            field[bool](row, "discarded"),
 		Title:                effectiveTitle(row, field[string](structured, "title")),
 		Overview:             effectiveOverview(row, field[string](structured, "overview")),
+		Sections:             sections, NotesInputHash: field[string](row, notesInputHashField), NotesOutputHash: outputHash,
 		CreatedAt:            field[time.Time](row, "created_at"),
 		StartedAt:            field[time.Time](row, "started_at"),
 		FinishedAt:           field[time.Time](row, "finished_at"),
 		SummaryCoversThrough: field[time.Time](row, "summary_covers_through"),
 		Transcript:           transcript,
 	}, nil
+}
+
+func (s Store) snapshotTranscript(ctx context.Context, g queue.Guarded, ref Ref, row map[string]any) ([]json.RawMessage, error) {
+	raw := row["transcript_segments"]
+	if pointer, ok := raw.(map[string]any); ok && s.Offload != nil {
+		return s.Offload.Read(ctx, g, ref.Owner, ref.ID, pointer)
+	}
+	return s.transcript(ref.Owner, raw, field[bool](row, "transcript_segments_compressed"))
 }
 
 func (s Store) transcript(owner string, value any, compressed bool) ([]json.RawMessage, error) {

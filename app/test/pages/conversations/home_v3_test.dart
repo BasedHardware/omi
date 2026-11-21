@@ -40,6 +40,9 @@ import 'package:omi/pages/conversation_detail/widgets/summary_tab.dart';
 import 'package:omi/pages/conversations/conversations_page.dart';
 import 'package:omi/pages/conversations/widgets/conversation_list_item.dart';
 import 'package:omi/pages/conversations/widgets/processing_capture.dart';
+import 'package:omi/pages/conversation_detail/widgets.dart' show ConversationTitleField;
+import 'package:omi/pages/conversations/widgets/date_list_item.dart';
+import 'package:omi/pages/conversations/widgets/empty_conversations.dart';
 import 'package:omi/pages/conversations/widgets/v3_live_placeholder_row.dart';
 import 'package:omi/pages/conversations/widgets/conversation_state_tile.dart';
 import 'package:omi/pages/conversations/widgets/day_summary_link.dart';
@@ -326,7 +329,7 @@ class _Home {
     detailReads++;
     await detailBarrier?.future;
     if (id != 'live-1' || detailFails) return null;
-    return _conversation('live-1', _now.subtract(const Duration(minutes: 20)), 'Launch checklist',
+    return _conversation('live-1', _now.subtract(const Duration(minutes: 20)), liveTitle,
         lastSpeech: _now.subtract(const Duration(minutes: 9)),
         segments: detailSegments,
         v3: ConversationV3Fields(kind: 'conversation', tileState: detailState, homeHidden: detailHidden));
@@ -334,6 +337,13 @@ class _Home {
 
   /// False once the conversation in progress has closed.
   bool liveOpen = true;
+
+  /// The server's title for the conversation in progress; empty until the server names it.
+  String liveTitle = 'Launch checklist';
+
+  /// The live window's start, and whether Home hides it.
+  late DateTime liveStart = _now.subtract(const Duration(minutes: 20));
+  bool liveHidden = false;
   final sync = _StubSyncProvider();
   late final _LiveCapture capture = _LiveCapture()
     ..segments = [
@@ -390,11 +400,12 @@ class _Home {
       return ApiSuccess(ConversationsLiveRead(
         v3: v3,
         conversation: v3 && liveOpen
-            ? _conversation('live-1', _now.subtract(const Duration(minutes: 20)), 'Launch checklist',
+            ? _conversation('live-1', liveStart, liveTitle,
                 // The server's finished_at for an open window is its last speech: 11 minutes in.
                 lastSpeech: _now.subtract(const Duration(minutes: 9)),
                 segments: _liveSoFar,
-                v3: const ConversationV3Fields(kind: 'conversation', tileState: ConversationTileState.live))
+                v3: ConversationV3Fields(
+                    kind: 'conversation', tileState: ConversationTileState.live, homeHidden: liveHidden))
             : null,
       ));
     },
@@ -579,6 +590,98 @@ void main() {
     });
   });
 
+  testWidgets('v3: with nothing listed, the streaming placeholder still opens Today', (tester) async {
+    await withClock(Clock.fixed(_now), () async {
+      final home = await _pumpHome(tester, v3: true);
+      home.conversations
+        ..conversations = []
+        ..groupConversationsByDate();
+      home.liveOpen = false;
+      await home.conversationsV3.refresh();
+      await tester.pump();
+      await tester.pump();
+      expect(find.byType(V3LivePlaceholderRow), findsOneWidget);
+      final headers = tester.widgetList<DateListItem>(find.byType(DateListItem)).toList();
+      expect(headers.map((h) => h.date), [DateTime(_now.year, _now.month, _now.day)], reason: 'one header: Today');
+      final today = tester.getRect(find.byType(DateListItem));
+      expect(tester.getRect(find.byType(V3LivePlaceholderRow)).top, greaterThanOrEqualTo(today.bottom));
+      expect(find.byType(NoConversationsHero), findsNothing, reason: 'something is being captured: not a new account');
+      expect(find.byType(EmptyConversationsWidget), findsNothing);
+      await _dispose(tester, home);
+    });
+  });
+
+  testWidgets('v3: a live window Home hides is stood in for by the placeholder; a deleted one is not', (tester) async {
+    await withClock(Clock.fixed(_now), () async {
+      final home = await _pumpHome(tester, v3: true);
+      home.liveHidden = true;
+      await home.conversationsV3.refresh();
+      await tester.pump();
+      await tester.pump();
+      expect(find.byKey(const ValueKey('live-1')), findsNothing);
+      expect(find.byType(V3LivePlaceholderRow), findsOneWidget, reason: 'a hidden live window still reads as live');
+
+      home.liveHidden = false;
+      await home.conversationsV3.refresh();
+      await tester.pump();
+      await tester.pump();
+      home.conversations.memoriesToDelete['live-1'] = home.conversationsV3.live!;
+      home.conversations.notifyListeners();
+      await tester.pump();
+      expect(find.byKey(const ValueKey('live-1')), findsNothing);
+      expect(find.byType(V3LivePlaceholderRow), findsNothing, reason: 'the owner deleted it: nothing stands in');
+
+      // Deleted and hidden at once: still nothing.
+      home.liveHidden = true;
+      await home.conversationsV3.refresh();
+      await tester.pump();
+      await tester.pump();
+      expect(find.byType(V3LivePlaceholderRow), findsNothing, reason: 'a deleted window stays gone when hidden');
+      await _dispose(tester, home);
+    });
+  });
+
+  testWidgets('v3: a live window that started before midnight still leads Today', (tester) async {
+    await withClock(Clock.fixed(_now), () async {
+      final home = await _pumpHome(tester, v3: true);
+      home.liveStart = DateTime(_now.year, _now.month, _now.day).subtract(const Duration(minutes: 20));
+      await home.conversationsV3.refresh();
+      await tester.pump();
+      await tester.pump();
+      expect(_rowIds(tester).first, 'live-1');
+      final today =
+          tester.getRect(find.byKey(ValueKey('date_${DateTime(_now.year, _now.month, _now.day).toIso8601String()}')));
+      final live = tester.getRect(find.byKey(const ValueKey('live-1')));
+      expect(live.top, greaterThanOrEqualTo(today.bottom));
+      expect(live.top, lessThan(tester.getRect(find.byKey(const ValueKey('c-call'))).top));
+      await _dispose(tester, home);
+    });
+  });
+
+  testWidgets('v3: the open live title is not overwritten while the owner edits it', (tester) async {
+    await withClock(Clock.fixed(_now), () async {
+      final home = await _pumpHome(tester, v3: true);
+      home.liveTitle = '';
+      await home.conversationsV3.refresh();
+      await tester.pump();
+      await tester.pump();
+      await tester.tap(find.byKey(const ValueKey('live-1')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+      await tester.pump(const Duration(milliseconds: 500));
+      final field = find.byType(ConversationTitleField);
+      await tester.tap(field);
+      await tester.pump();
+      home.liveTitle = 'Launch checklist';
+      await tester.pump(const Duration(seconds: 15));
+      await tester.pump();
+      await tester.pump();
+      expect(tester.widget<ConversationTitleField>(field).controller!.text, '',
+          reason: 'focused: the server title waits until the owner stops editing');
+      await _dispose(tester, home);
+    });
+  });
+
   testWidgets('v3: the list is re-read when the conversation in progress closes', (tester) async {
     await withClock(Clock.fixed(_now), () async {
       final home = await _pumpHome(tester, v3: true);
@@ -599,14 +702,23 @@ void main() {
       expect(find.byType(V3LivePlaceholderRow), findsOneWidget);
       expect(find.descendant(of: find.byType(ConversationCaptureWidget), matching: find.byType(GestureDetector)),
           findsNothing);
+      // It sits under Today, first in the day, never above the day list (David, 2026-11-21).
+      final today =
+          tester.getRect(find.byKey(ValueKey('date_${DateTime(_now.year, _now.month, _now.day).toIso8601String()}')));
+      final placeholder = tester.getRect(find.byType(V3LivePlaceholderRow));
+      expect(placeholder.top, greaterThanOrEqualTo(today.bottom), reason: 'the placeholder is inside Today');
+      expect(placeholder.top, lessThan(tester.getRect(find.byKey(const ValueKey('c-call'))).top),
+          reason: 'and leads it');
 
-      // The next window opens: its row replaces the placeholder.
+      // The next window opens: its row replaces the placeholder in the same slot, so nothing jumps.
       home.liveOpen = true;
       await home.conversationsV3.refresh();
       await tester.pump();
       await tester.pump();
       expect(find.byType(V3LivePlaceholderRow), findsNothing);
       expect(_rowIds(tester).first, 'live-1');
+      expect(tester.getRect(find.byKey(const ValueKey('live-1'))).top, placeholder.top,
+          reason: 'the live row takes the placeholder\'s slot');
       await _dispose(tester, home);
     });
   });
@@ -1073,6 +1185,62 @@ void main() {
     });
   });
 
+  testWidgets('an untitled live conversation reads Listening, and its open page takes the title when it lands',
+      (tester) async {
+    await withClock(Clock.fixed(_now), () async {
+      final home = await _pumpHome(tester, v3: true);
+      home.liveTitle = '';
+      await home.conversationsV3.refresh();
+      await tester.pump();
+      await tester.pump();
+
+      // The row reads like the placeholder: "Listening" over "Live · 11m", never a date or a snippet.
+      final live = find.byKey(const ValueKey('live-1'));
+      expect(find.descendant(of: live, matching: find.text('Listening')), findsOneWidget);
+      expect(tester.widget<Text>(find.byKey(const Key('conversation_row_live_length'))).data, 'Live · 11m');
+      expect(find.descendant(of: live, matching: find.textContaining('2026')), findsNothing);
+      expect(find.descendant(of: live, matching: find.textContaining('Doors')), findsNothing);
+
+      await tester.tap(live);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+      await tester.pump(const Duration(milliseconds: 500));
+      final field = find.byType(ConversationTitleField);
+      expect(tester.widget<ConversationTitleField>(field).hintText, 'Listening');
+
+      // The server names it; the page's 15 s re-read brings the title into the open page.
+      home.liveTitle = 'Launch checklist';
+      await tester.pump(const Duration(seconds: 15));
+      await tester.pump();
+      await tester.pump();
+      expect(tester.widget<ConversationTitleField>(field).controller!.text, 'Launch checklist');
+      await _dispose(tester, home);
+    });
+  });
+
+  testWidgets('the live page opened from the placeholder reads Listening, then the server title', (tester) async {
+    await withClock(Clock.fixed(_now), () async {
+      final home = await _pumpHome(tester, v3: true);
+      home.liveOpen = false;
+      await home.conversationsV3.refresh();
+      await tester.pump();
+      await tester.pump();
+      await tester.tap(find.byType(V3LivePlaceholderRow));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+      final title = find.byKey(const Key('live_page_v3_title'));
+      expect(find.descendant(of: title, matching: find.text('Listening')), findsOneWidget);
+
+      // Home stops re-reading while the page covers it; the page re-reads and takes the title.
+      home.liveOpen = true;
+      await tester.pump(const Duration(seconds: 15));
+      await tester.pump();
+      await tester.pump();
+      expect(find.descendant(of: title, matching: find.text('Launch checklist')), findsOneWidget);
+      await _dispose(tester, home);
+    });
+  });
+
   testWidgets('a 320pt phone: the live detail bar fits Ask Omi and End', (tester) async {
     await withClock(Clock.fixed(_now), () async {
       final home = await _pumpHome(tester, v3: true, size: const Size(320, 640));
@@ -1234,6 +1402,57 @@ void main() {
         expect(find.byType(V3LivePlaceholderRow), findsOneWidget);
         await shoot(tester, '003-mobile-ios-v3-home-live-placeholder');
 
+        debugDefaultTargetPlatformOverride = null;
+        await _dispose(tester, home);
+      });
+    });
+
+    testWidgets('the live row in Today: placeholder, its page, untitled, then titled', (tester) async {
+      await withClock(Clock.fixed(_now), () async {
+        debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+        final palette = OmiColors.active;
+        addTearDown(() => OmiColors.active = palette);
+        OmiColors.active = OmiColors.forBrightness(Brightness.dark);
+        final home = await _pumpHome(tester, v3: true, boundary: boundary, theme: theme(), size: const Size(393, 852));
+
+        // Streaming with no server window yet: the placeholder leads Today.
+        home.liveOpen = false;
+        await home.conversationsV3.refresh();
+        await tester.pump();
+        await tester.pump();
+        expect(find.byType(V3LivePlaceholderRow), findsOneWidget);
+        await shoot(tester, '009-mobile-ios-v3-placeholder-in-today');
+
+        // Its page reads Listening until the server names the conversation.
+        await tester.tap(find.byType(V3LivePlaceholderRow));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 500));
+        expect(find.descendant(of: find.byKey(const Key('live_page_v3_title')), matching: find.text('Listening')),
+            findsOneWidget);
+        await shoot(tester, '010-mobile-ios-v3-live-page-listening');
+        await tester.pageBack();
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 500));
+
+        // The server window opens untitled: same slot, "Listening" over "Live · 11m", no date.
+        home.liveTitle = '';
+        home.liveOpen = true;
+        await home.conversationsV3.refresh();
+        await tester.pump();
+        await tester.pump();
+        expect(find.byType(V3LivePlaceholderRow), findsNothing);
+        expect(find.descendant(of: find.byKey(const ValueKey('live-1')), matching: find.text('Listening')),
+            findsOneWidget);
+        await shoot(tester, '011-mobile-ios-v3-live-row-untitled');
+
+        // Named: the real title, same slot.
+        home.liveTitle = 'Launch checklist';
+        await home.conversationsV3.refresh();
+        await tester.pump();
+        await tester.pump();
+        expect(find.descendant(of: find.byKey(const ValueKey('live-1')), matching: find.text('Launch checklist')),
+            findsOneWidget);
+        await shoot(tester, '012-mobile-ios-v3-live-row-titled');
         debugDefaultTargetPlatformOverride = null;
         await _dispose(tester, home);
       });

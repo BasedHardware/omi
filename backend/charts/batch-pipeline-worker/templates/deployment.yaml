@@ -136,9 +136,6 @@ spec:
             {{- if not (has "FIRESTORE_READ_LEVERS" $preserveLiveEnv) }}
             - {name: FIRESTORE_READ_LEVERS, value: {{ .Values.worker.firestoreReadLevers | quote }}}
             {{- end }}
-            {{- if hasKey .Values.worker "heldPollSkipEnabled" }}
-            - {name: BATCH_HELD_POLL_SKIP_ENABLED, value: {{ .Values.worker.heldPollSkipEnabled | quote }}}
-            {{- end }}
             {{- if hasKey .Values.worker "RECORD_FRESH_MERGE_ENABLED" }}
             - {name: RECORD_FRESH_MERGE_ENABLED, value: {{ .Values.worker.RECORD_FRESH_MERGE_ENABLED | quote }}}
             {{- end }}

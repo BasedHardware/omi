@@ -73,9 +73,14 @@
       "key": "no-uid-literals|prod|gke/pusher/TRANSCRIPTION_SHADOW_UID_ALLOWLIST|uids=1",
       "why": "Cohort UIDs predate this suite; moving cohorts to Firestore is in flight (#22075). Ratchet: no new keys."
     },
+    {"key": "reader-split|prod|helm/batch-pipeline-worker/BATCH_PIPELINE_FOLLOWUP_CLAIMED_SIBLING_SKIP_ENABLED", "why": "Reviewed 2026-11-21 (SCA-3544): only ProjectionFollowups reads it, constructed by Projector.start_followups and ProjectionOutbox on the Cloud Run serving/pump loops; diarizer/ never constructs a Projector or outbox, so the worker never executes it. Cloud Run pins false until David activates #25920."},
     {
       "key": "reader-split|prod|helm/batch-pipeline-worker/BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED",
       "why": "Reviewed 2026-10-18: the worker imports projection only transitively (Pump/Scheduler never call Projection); the flag is not executed there."
+    },
+    {
+      "key": "reader-split|prod|helm/batch-pipeline-worker/BATCH_PIPELINE_PACKING_SAMPLE_RATE",
+      "why": "SCA-3548: preserve the live GPU worker's unset sampling rate on the depth-only roll. Cloud Run's sampling policy remains independent."
     },
     {
       "key": "task-target-retry-semantics|code|account-deletion/routers/users.py:run_account_deletion_wipe/500",

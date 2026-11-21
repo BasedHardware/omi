@@ -53,9 +53,8 @@ _BATCH_PROJECTION_INDEXES = tuple(
     for namespace in ('batch_pipeline_prod', 'batch_pipeline_dev')
 )
 
-# Dark finish backoff: the finish page ranges over the row's next-attempt clock,
-# which therefore leads the ordering (Firestore serves a range filter on the
-# first ordered field only), then the committed log and the key.
+# Async finish discovery ranges over the shared finish clock, ahead of the
+# committed log and document key in the index order.
 _BATCH_PROJECTION_FINISH_INDEXES = tuple(
     FirestoreIndexRequirement(
         f'{namespace}_projection_finish',

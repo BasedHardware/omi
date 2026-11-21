@@ -225,7 +225,7 @@ def test_prod_pump_is_integration_plus_the_dark_overrides():
     for name in train_pins:
         assert integration['env'][name]['value'] == 'false', name
         assert services['backend-sync-backfill']['env'][name]['value'] == 'false', name
-        assert pump['env'][name]['value'] == 'true', name
+        assert pump['env'][name]['value'] == 'false', name  # SCA-3318: inherited, custody off
     assert pump['env']['BATCH_PIPELINE_INDEPENDENT_LANGUAGE_RECOVERY_ENABLED']['value'] == 'false'
 
 
@@ -489,7 +489,19 @@ def _run_inverse_step(tmp_path, step, documents, receipt=INVERSE_RECEIPT):
         'assert sys.argv[1] == "run"\n'
         'key = " ".join(arg for arg in sys.argv[2:] if not arg.startswith("--"))\n'
         'path = Path(__file__).with_name("fixtures.json")\n'
-        'print(json.dumps(json.loads(path.read_text())[key]))\n'
+        'fixtures = json.loads(path.read_text())\n'
+        'if key.startswith("services update-traffic"):\n'
+        '    with Path(__file__).with_name("writes.log").open("a") as log:\n'
+        '        log.write(" ".join(sys.argv[2:]) + "\\n")\n'
+        '    target = next(a.split("=", 1)[1] for a in sys.argv if a.startswith("--to-revisions="))\n'
+        '    name, percent = target.rsplit("=", 1)\n'
+        '    service = fixtures["services describe ' + PROJECTION_PUMP + '"]\n'
+        '    for section in ("spec", "status"):\n'
+        '        service[section]["traffic"] = [{"revisionName": name, "percent": int(percent)}]\n'
+        '    fixtures["services list"] = [service]\n'
+        '    path.write_text(json.dumps(fixtures))\n'
+        '    sys.exit(0)\n'
+        'print(json.dumps(fixtures[key]))\n'
     )
     gcloud.chmod(0o755)
     script = step['run'].replace('${{ inputs.project_id }}', 'based-hardware')
@@ -531,7 +543,7 @@ def _run_inverse_step(tmp_path, step, documents, receipt=INVERSE_RECEIPT):
 def test_pinned_but_unverified_base_blocks_retry_and_inverse(tmp_path, inverse_readback, break_readback):
     break_readback(*inverse_readback)
     for name in (
-        'Verify existing projection pump before any mutation',
+        'Verify existing projection pump, pinning a LATEST-routed base, before deploy mutations',
         'Reverify the projection pump inverse and capture its traffic snapshot',
     ):
         result = _run_inverse_step(tmp_path, _step_named(name), inverse_readback)
@@ -541,7 +553,7 @@ def test_pinned_but_unverified_base_blocks_retry_and_inverse(tmp_path, inverse_r
 
 
 def test_pinned_base_requires_release_disposition_and_live_proof(tmp_path, inverse_readback):
-    step = _step_named('Verify existing projection pump before any mutation')
+    step = _step_named('Verify existing projection pump, pinning a LATEST-routed base, before deploy mutations')
     result = _run_inverse_step(tmp_path, step, inverse_readback, receipt='')
     assert result.returncode != 0 and 'recorded Release disposition' in result.stderr
     assert not (tmp_path / 'steps.out').exists()
@@ -566,8 +578,13 @@ def test_latest_is_allowed_only_for_the_new_base_before_its_first_pin(tmp_path, 
     service['status']['traffic'][0]['latestRevision'] = True
     service['status'].update(latestReadyRevisionName=INVERSE_REVISION, latestCreatedRevisionName=INVERSE_REVISION)
 
-    existing = _step_named('Verify existing projection pump before any mutation')
-    assert _run_inverse_step(tmp_path, existing, inverse_readback).returncode != 0
+    existing = _step_named('Verify existing projection pump, pinning a LATEST-routed base, before deploy mutations')
+    # SCA-3318 changed this boundary: an existing service still on LATEST (live 2026-11-21, its
+    # first pin never ran) may be pinned, but only to the disposition's base that LATEST resolves to.
+    other_base = f'{PROJECTION_PUMP}-bbbbbbb-18-1-base'
+    receipt = f'01a1f818-f3a6-7183-bd19-9bd0f7e7bb75 {other_base} {"a" * 40} {INVERSE_IMAGE}'
+    assert _run_inverse_step(tmp_path, existing, inverse_readback, receipt=receipt).returncode != 0
+    assert not (tmp_path / 'writes.log').exists()
     before_pin = _step_named('Verify a newly created projection pump base before pinning')
     result = _run_inverse_step(tmp_path, before_pin, inverse_readback, receipt='')
     assert result.returncode == 0, result.stderr
@@ -1096,3 +1113,166 @@ def test_cap_recovery_quoted_etag_round_trip(tmp_path, monkeypatch, inverse_read
     else:
         assert recovery.main() == 1
         assert fixture.cap_requests == []
+
+
+def test_claimed_sibling_skip_ships_dark_on_integration_until_activation():
+    """SCA-3544: #25920 is default-on in code; prod integration (and the pump derived from it) pin it false."""
+    services = _prod_services()
+    for name in ('backend-integration', PROJECTION_PUMP):
+        assert services[name]['env']['BATCH_PIPELINE_FOLLOWUP_CLAIMED_SIBLING_SKIP_ENABLED']['value'] == 'false', name
+
+
+def test_existing_latest_routed_pump_is_pinned_inside_the_locked_deploy():
+    """SCA-3318: a pump created but never pinned (100% via LATEST) is pinned by name, pre-pin verified."""
+    steps = {step.get('id') or step.get('name'): step for step in PUMP_ACTION['runs']['steps']}
+    script = steps['pump-service']['run']
+    existing = script[script.index('          1)') if '          1)' in script else script.index('1)') :]
+    pin = existing.index('update-traffic backend-projection-pump')
+    assert existing.index('--before-first-pin') < pin
+    assert existing.index('latestRevision') < existing.index('--before-first-pin')
+    assert '--to-revisions="$base=100"' in existing
+    assert pin < existing.rindex('--disposition="$RELEASE_DISPOSITION"')
+    pre_pin = existing[existing.index('latestRevision') : pin]
+    assert '--disposition="$RELEASE_DISPOSITION"' in pre_pin and '--before-first-pin' in pre_pin
+    assert '--new-base' not in pre_pin
+
+
+@pytest.mark.parametrize(
+    'disposition',
+    [
+        # UUID missing (three fields), malformed UUID, and a non-base revision.
+        f'{BASE_REVISION} {"a" * 40} gcr.io/based-hardware/backend@sha256:{"b" * 64}',
+        f'not-a-uuid {BASE_REVISION} {"a" * 40} gcr.io/based-hardware/backend@sha256:{"b" * 64}',
+        f'01a1fd00-0000-7000-8000-000000000000 backend-projection-pump-x {"a" * 40} '
+        f'gcr.io/based-hardware/backend@sha256:{"b" * 64}',
+    ],
+)
+def test_pre_pin_disposition_is_fully_validated_before_any_read(monkeypatch, disposition):
+    """#25945 panel F1: the LATEST pin path must reject a bad disposition before touching traffic."""
+    inverse = sys.modules[recovery.verify.__module__]
+
+    monkeypatch.setattr(inverse, '_read', lambda *a, **k: pytest.fail('read before validation'))
+    monkeypatch.setattr(
+        sys,
+        'argv',
+        ['verify', '--project=p', '--region=r', f'--disposition={disposition}', '--before-first-pin'],
+    )
+    assert inverse.main() != 0
+
+
+@pytest.mark.parametrize('route', ['latest', 'pinned'])
+def test_existing_pump_step_pins_only_a_latest_routed_base(tmp_path, inverse_readback, route):
+    """#25945 panel F1/F5: execute the step; a LATEST route is pre-pin verified, then pinned by name."""
+    service, revision, iam = inverse_readback
+    if route == 'latest':
+        for section in ('spec', 'status'):
+            service[section]['traffic'] = [{'latestRevision': True, 'percent': 100, 'revisionName': INVERSE_REVISION}]
+        service['status'].update(latestReadyRevisionName=INVERSE_REVISION, latestCreatedRevisionName=INVERSE_REVISION)
+    step = _step_named('Verify existing projection pump, pinning a LATEST-routed base, before deploy mutations')
+    result = _run_inverse_step(tmp_path, step, (service, revision, iam))
+    assert result.returncode == 0, result.stderr
+    writes = (tmp_path / 'writes.log').read_text().splitlines() if (tmp_path / 'writes.log').exists() else []
+    if route == 'latest':
+        assert len(writes) == 1 and f'--to-revisions={INVERSE_REVISION}=100' in writes[0]
+        assert (tmp_path / 'artifacts' / 'projection-pump-existing-latest-readback.txt').exists()
+    else:
+        assert writes == []
+
+
+def test_cap_recovery_waits_for_post_write_reconciliation(inverse_readback, monkeypatch, capsys):
+    """Run 44900134239: the write landed, but the first post-write read was still reconciling."""
+    api = _recovery_fixture(inverse_readback)
+    original_patch, reads = api.patch, {'n': 0}
+
+    def patch(etag, cap, *, validate_only):
+        result = original_patch(etag, cap, validate_only=validate_only)
+        if not validate_only:
+            api.state['reconciling'] = True
+        return result
+
+    original_service = api.service
+
+    def service():
+        if api.state.get('reconciling'):
+            reads['n'] += 1
+            if reads['n'] >= 3:
+                api.state['reconciling'] = False
+        return original_service()
+
+    api.patch, api.service = patch, service
+    sleeps = []
+    monkeypatch.setattr(recovery.time, 'sleep', sleeps.append)
+    recovery.recover(api, api.read, 'approved-version')
+    assert [item for item in api.cap_requests if not item[2]] == [('approved-version', 4, False)]
+    assert reads['n'] >= 3
+    assert sleeps and set(sleeps) == {5}
+    out = capsys.readouterr().out
+    assert 'PUMP_CAP_SETTLING attempt=1' in out and f'PUMP_CAP_SETTLED attempts={len(sleeps) + 1}' in out
+
+
+def test_cap_recovery_settle_wait_is_bounded(inverse_readback, monkeypatch, capsys):
+    api = _recovery_fixture(inverse_readback)
+    original_patch = api.patch
+
+    def patch(etag, cap, *, validate_only):
+        result = original_patch(etag, cap, validate_only=validate_only)
+        if not validate_only:
+            api.state['reconciling'] = True  # never settles
+        return result
+
+    api.patch = patch
+    now = {'t': 0.0}
+    monkeypatch.setattr(recovery.time, 'sleep', lambda s: now.__setitem__('t', now['t'] + s))
+    monkeypatch.setattr(recovery.time, 'monotonic', lambda: now['t'])
+    with pytest.raises(ValueError, match='independent Release reconciliation'):
+        recovery.recover(api, api.read, 'approved-version')
+    assert [item for item in api.cap_requests if not item[2]] == [('approved-version', 4, False)]
+    assert 'PUMP_CAP_SETTLE_TIMEOUT' in capsys.readouterr().err
+
+
+@pytest.mark.parametrize('case', ['transient_read', 'terminal_failure'])
+def test_cap_recovery_settle_retries_reads_but_not_a_failed_condition(inverse_readback, monkeypatch, capsys, case):
+    """#25948 panel F1/F2: a transient GET is retried; a failed terminal condition refuses at once."""
+    api = _recovery_fixture(inverse_readback)
+    original_patch, original_service, calls = api.patch, api.service, {'n': 0, 'written': False}
+
+    def patch(etag, cap, *, validate_only):
+        result = original_patch(etag, cap, validate_only=validate_only)
+        calls['written'] = calls['written'] or not validate_only
+        if not validate_only and case == 'terminal_failure':
+            api.state['terminalCondition'] = {'state': 'CONDITION_FAILED'}
+        return result
+
+    def service():
+        if calls['written'] and case == 'transient_read' and calls['n'] < 2:
+            calls['n'] += 1
+            raise ValueError('Cloud Run request failed or response was unreadable')
+        return original_service()
+
+    api.patch, api.service = patch, service
+    sleeps = []
+    monkeypatch.setattr(recovery.time, 'sleep', sleeps.append)
+    if case == 'transient_read':
+        recovery.recover(api, api.read, 'approved-version')
+        assert sleeps == [5, 5]
+    else:
+        with pytest.raises(ValueError, match='independent Release reconciliation'):
+            recovery.recover(api, api.read, 'approved-version')
+        assert sleeps == []
+        assert 'PUMP_CAP_SETTLE_FAILED' in capsys.readouterr().err
+    assert [item for item in api.cap_requests if not item[2]] == [('approved-version', 4, False)]
+
+
+def test_truncated_response_is_a_safe_api_error(monkeypatch, capsys):
+    """#25948 panel F1: http.client errors take the safe PUMP_CAP_API_ERROR path, never a traceback."""
+    import http.client
+
+    class Opener:
+        def open(self, *_args, **_kwargs):
+            raise http.client.IncompleteRead(b'partial')
+
+    api = recovery.RunAPI('fixture-token')
+    api.opener = Opener()
+    with pytest.raises(ValueError):
+        api.service()
+    assert 'PUMP_CAP_API_ERROR stage=service-read status=unconfirmed' in capsys.readouterr().err

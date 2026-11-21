@@ -354,4 +354,55 @@ void main() {
     expect(tester.takeException(), isNull);
     await _unmount(tester);
   });
+
+  // v3 accounts (and episodes off) get the transcript-only page: main.dart suppresses their
+  // EpisodeProvider. Its shell used to sit under a whole-page Consumer<CaptureProvider>, so every
+  // ingress-health, metric and socket notify of a streaming pendant rebuilt the Scaffold.
+  testWidgets('episodes-off live page: capture notifies that change nothing shown rebuild none of its shell',
+      (tester) async {
+    const notifies = 20;
+    final capture = _LiveCapture();
+    addTearDown(capture.dispose);
+    capture.segments = [for (var i = 0; i < 600; i++) _line(i)];
+    // As main.dart wires it for a v3 account: suppressed, nothing cached from an earlier read.
+    final episodes = EpisodeProvider(
+      fetchLive: () async => const ApiSuccess(EpisodeRead.disabled),
+      lookup: (_) async => const ApiSuccess(EpisodeRead.disabled),
+      wrapUp: (id, {conversationId}) async => const ApiFailure(ApiProblem(ApiProblemKind.transport)),
+      dismiss: (id, itemId) async => const ApiFailure(ApiProblem(ApiProblemKind.transport)),
+      clock: () => _seedNow,
+    )..suppressed = (() => true);
+    addTearDown(episodes.dispose);
+    final device = _StubDeviceProvider();
+    addTearDown(device.dispose);
+    await _pump(tester, const LiveEpisodePage(), capture: capture, episodes: episodes, device: device);
+
+    expect(find.byKey(const Key('live_episode_page')), findsNothing, reason: 'the episodes-off page');
+    expect(find.byKey(const Key('process_now_button')), findsOneWidget);
+    List<TranscriptSegment> shown() => tester.widget<TranscriptWidget>(find.byType(TranscriptWidget)).segments;
+    final before = shown();
+
+    final idle = await _rebuildsDuring(() async {
+      for (var i = 0; i < notifies; i++) {
+        capture.notifyListeners();
+        await tester.pump();
+      }
+    });
+    debugPrint('LIVE-PAGE (episodes off) idle-notify rebuilds ($notifies notifies): $idle');
+    for (final shellType in ['Scaffold', 'CaptureWedgeAppBar', 'OmiButton', 'OmiIconButton']) {
+      expect(idle[shellType] ?? 0, 0,
+          reason: 'a capture notify that changes nothing shown must not rebuild $shellType');
+    }
+    expect(identical(shown(), before), isTrue,
+        reason: 'an unchanged transcript keeps its snapshot, so TranscriptWidget does not re-index every line');
+    // The transcript still follows the capture: it subscribes itself.
+    capture.onSegmentReceived([_line(5000)]);
+    await tester.pump();
+    expect(identical(shown(), before), isFalse);
+    expect(shown().length, 601);
+    expect(find.byKey(const Key('process_now_button')), findsOneWidget);
+
+    expect(tester.takeException(), isNull);
+    await _unmount(tester);
+  });
 }

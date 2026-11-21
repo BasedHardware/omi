@@ -85,7 +85,7 @@ worker:
     valueFrom:
       secretKeyRef:
         name: prod-omi-backend-secrets
-        key: BATCH_PIPELINE_UID_ALLOWLIST
+        key: BATCH_PIPELINE_UID_ALLOWLIST_SECRET
   heldDeadLetterEnabled: true
   inputExpiringEnabled: true
   # Two pump processes share each L4 (cl2-gpueff 2026-11-04, data/run-2026-11-04-gpueff

@@ -52,6 +52,20 @@ bool _orphanCloudConfigKnown(Object? value) {
   return true;
 }
 
+/// How often the orphan census may run while live audio streams (15 minutes otherwise).
+const orphanRecoveryStreamingInterval = Duration(hours: 2);
+
+/// Whether the orphan census may run now. It walks every file in Documents on the UI isolate (2.6 s
+/// freezes on a heavy phone, 2026-11-21), so while live audio is arriving (a frame in the last
+/// minute) it runs at most every two hours instead of every 15 minutes: a streaming pendant is not
+/// interrupted by it each quarter hour, and it still runs.
+@visibleForTesting
+bool orphanRecoveryDue({required DateTime now, DateTime? lastRun, DateTime? lastLiveFrame}) {
+  if (lastRun == null) return true;
+  final streaming = lastLiveFrame != null && now.difference(lastLiveFrame) < const Duration(minutes: 1);
+  return now.difference(lastRun) >= (streaming ? orphanRecoveryStreamingInterval : const Duration(minutes: 15));
+}
+
 extension LocalOrphanRecovery on LocalWalSyncImpl {
   /// Opaque, read-only derived framing for diagnostics; never export the cache.
   OrphanAudioFrameCache get orphanFrameCache => _orphanFrameCache;
@@ -62,19 +76,23 @@ extension LocalOrphanRecovery on LocalWalSyncImpl {
 
   void _maybeRecoverOrphanAudio() {
     if (!_orphanForeground || _headlessIndexLoad || _initialIndexAdmissionPending || !_walReady.isCompleted) return;
+    if (!orphanRecoveryDueNow) return;
     final now = _now();
-    if (_lastOrphanRecoveryWake != null && now.difference(_lastOrphanRecoveryWake!) < const Duration(minutes: 15)) {
-      return;
-    }
     _lastOrphanRecoveryWake = now;
     unawaited(recoverOrphanAudio().then((_) => reclaimOrphanAudio()));
   }
 
   /// Explicit recovery pass, separate from startup admission/native intake.
   /// Coalesced across resume/timer wakes. No audio mutation and no second uploader.
-  Future<void> recoverOrphanAudio() => _orphanRecoveryInFlight ??= _recoverOrphanAudioOnce().whenComplete(() {
-        _orphanRecoveryInFlight = null;
-      });
+  /// Registered as lag work: the census walks every file in Documents (~168k on a heavy phone) and
+  /// copies that inventory into its isolates from the UI isolate, so a stall it causes is named.
+  Future<void> recoverOrphanAudio() => _orphanRecoveryInFlight ??= () {
+        final work = lagWork.begin(LagWork.orphanCensus);
+        return _recoverOrphanAudioOnce().whenComplete(() {
+          lagWork.end(work);
+          _orphanRecoveryInFlight = null;
+        });
+      }();
 
   Future<void> _recoverOrphanAudioOnce() async {
     final generation = _sessionGeneration, uid = SharedPreferencesUtil().uid;
