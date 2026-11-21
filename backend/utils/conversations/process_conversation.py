@@ -308,8 +308,8 @@ from utils.other.storage import (
     precache_conversation_audio,
 )
 
-from utils.conversations.v3 import policy as v3_policy
-from utils.conversations.v3 import service as v3_service
+from utils.conversations.v3 import policy as v3_policy, service as v3_service
+from utils.conversations.v3.word_floor import MIN_HOME_WORDS, MIN_TASK_WORDS, text_word_count
 
 logger = logging.getLogger(__name__)
 
@@ -455,10 +455,10 @@ def _get_structured(
                 recovery_minimum_fallback_observer()
             return minimum, decision.discard
         if v3_policy.flag(conversation, 'v3_derived'):
-            words = sum(len(s.text.split()) for s in conversation.transcript_segments)
-            if not full_v3_notes and (conversation.kind in {'media', 'background'} or words < 20):
+            words = sum(text_word_count(s.text) for s in conversation.transcript_segments)
+            if not full_v3_notes and (conversation.kind in {'media', 'background'} or words < MIN_TASK_WORDS):
                 return conversation.structured, True
-            if words < 300 and not full_v3_notes:
+            if words < MIN_HOME_WORDS and not full_v3_notes:
                 return v3_service.models.short_tasks(uid, conversation), False
             covers = getattr(conversation, 'summary_covers_through', None)
             if (

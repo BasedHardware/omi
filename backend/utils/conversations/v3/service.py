@@ -50,6 +50,7 @@ from utils.conversations.v3 import (
     context,
 )
 from utils.conversations.v3 import refinement, preview_wakes
+from utils.conversations.v3.word_floor import MIN_TASK_WORDS, has_unspaced_script, text_word_count
 from utils.conversations.processing_trigger import ProcessingTrigger
 from utils.executors import run_blocking, db_executor, llm_executor, postprocess_executor, storage_executor
 
@@ -1092,9 +1093,13 @@ def _process(uid, row, token):
         return
     if not writers.begin_processing(uid, row, token):
         return
-    words = sum(len(s.get('text', '').split()) for s in row.get('transcript_segments') or [])
+    texts = [s.get('text') or '' for s in row.get('transcript_segments') or []]
+    words = sum(map(text_word_count, texts))
+    below_minimum = words < MIN_TASK_WORDS
+    passive = row.get('kind') in {'media', 'background'}
+    manual = policy.manual_intent(row)
     notes = False
-    if row.get('kind') in {'media', 'background'} or (not policy.manual_intent(row) and words < 20):
+    if passive or (not manual and below_minimum):
         lifecycle.complete(uid, row['id'])
     else:
         notes = True
@@ -1118,6 +1123,12 @@ def _process(uid, row, token):
             raise RuntimeError('v3_processing_not_completed')
         metrics.SUMMARY_WRITES.labels('rewrite' if row.get('v3_rewrites') else 'first').inc()
     metrics.SUMMARY_LATENCY.observe(max(0, (datetime.now(timezone.utc) - row['finished_at']).total_seconds()))
+    word_floor_outcomes = None
+    if not (passive or manual or row.get('backfilled') or row.get('v3_rewrites')) and any(
+        map(has_unspaced_script, texts)
+    ):
+        legacy_below = sum(len(text.split()) for text in texts) < MIN_TASK_WORDS
+        word_floor_outcomes = (legacy_below, below_minimum)
     writers.settle_processing(
         uid,
         row['id'],
@@ -1126,6 +1137,7 @@ def _process(uid, row, token):
         row['finished_at'],
         notes=notes,
         content_hash=writers.processing_hash(row),
+        word_floor_outcomes=word_floor_outcomes,
     )
 
 
