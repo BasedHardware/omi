@@ -91,8 +91,8 @@ vi.mock('@/components/memories/MemoryQuickAdd', () => ({
 }));
 
 vi.mock('@/components/memories/MemoryList', () => ({
-  MemoryList: ({ hasMore }: { hasMore: boolean }) => (
-    <div data-testid="memory-list" data-has-more={hasMore} />
+  MemoryList: ({ hasMore, truncated }: { hasMore: boolean; truncated?: boolean }) => (
+    <div data-testid="memory-list" data-has-more={hasMore} data-truncated={truncated} />
   ),
   MemoryListSkeleton: () => <div data-testid="memory-list-skeleton" />,
 }));
@@ -179,5 +179,21 @@ describe('MemoriesPage list layout', () => {
     expect(screen.getByRole('status')).toHaveTextContent('memory view is partial');
     fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
     expect(mocks.refresh).toHaveBeenCalledOnce();
+  });
+
+  it('hands the unfinished read to the list and stops calling the loaded count a total', () => {
+    mocks.truncated = true;
+    render(<MemoriesPage />);
+
+    expect(screen.getByTestId('memory-list')).toHaveAttribute('data-truncated', 'true');
+    expect(screen.getByText('Loaded Memories (partial)')).toBeInTheDocument();
+    expect(screen.queryByText('Total Memories')).not.toBeInTheDocument();
+  });
+
+  it('labels a complete read as the total', () => {
+    render(<MemoriesPage />);
+
+    expect(screen.getByTestId('memory-list')).toHaveAttribute('data-truncated', 'false');
+    expect(screen.getByText('Total Memories')).toBeInTheDocument();
   });
 });
