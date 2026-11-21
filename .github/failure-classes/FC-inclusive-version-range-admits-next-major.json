@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "id": "FC-inclusive-version-range-admits-next-major",
+  "family": "vendor-platform-behavior",
+  "violated_contract": "A dependency version range written with an inclusive upper bound ([a,b]) admits b. When the vendor publishes that next major, the build resolves it with no repository change, and a third-party plugin compiled against the previous major stops compiling, so every job that configures the build fails at once. The range reads as a ceiling but is not one.",
+  "canonical_prevention": "Declare the dependency with a direct `strictly` range whose upper bound is exclusive, so the next major is rejected even when a transitive plugin declares the same inclusive range; a direct strictly range wins over a transitive one, which a plain version or an inclusive range cannot do. Assert the exclusive ceiling in a static guard so it cannot drift back to an inclusive bound.",
+  "canonical_prevention_artifact": [
+    ".github/scripts/test_mobile_ci_infra_guards.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "app/android/app/build.gradle"
+  ],
+  "status": "open"
+}
