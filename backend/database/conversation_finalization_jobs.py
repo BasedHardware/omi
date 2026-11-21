@@ -1952,6 +1952,9 @@ def _terminalize_exhausted_requeued_job_txn(
     job = snapshot.to_dict() or {}
     if not python_owns_finalization(job) or str(job.get('status') or '') != 'queued':
         return False
+    if job.get('finalization_waiting_on_owner'):
+        # The row may have parked since the sweep read its candidate snapshot.
+        return False
     if int(job.get('dispatch_generation') or 1) != expected_dispatch_generation:
         return False
     if int(job.get('lease_epoch') or 0) != expected_lease_epoch:

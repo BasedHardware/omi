@@ -2365,6 +2365,7 @@ def test_terminalize_exhausted_requeued_job_closes_the_parked_row_and_its_conver
         (4, 3, {}),
         (4, 2, {'status': 'leased', 'lease_expires_at': _now() - timedelta(minutes=1)}),
         (4, 2, {'fanout_status': 'completed'}),
+        (4, 2, {'finalization_waiting_on_owner': 'survivor'}),
     ],
 )
 def test_terminalize_refuses_fence_losses_and_committed_fanout(
