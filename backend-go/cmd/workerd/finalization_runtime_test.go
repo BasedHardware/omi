@@ -30,13 +30,17 @@ func TestWorkerdValidatesArchiveAndRetractionComposition(t *testing.T) {
 	t.Parallel()
 	env := fixtureEnv()
 	env["BUCKET_AUDIO_DERIVED"] = "regional-fixture"
+	if _, err := readConfig(envLookup(env), false); err == nil {
+		t.Fatal("derived archive accepted a missing private bucket")
+	}
+	env["BUCKET_PRIVATE_CLOUD_SYNC"] = "private-fixture"
 	env["WORKER_MERGE_RETRACTION_ORIGIN"] = "https://backend.fixture.test"
 	if _, err := readConfig(envLookup(env), false); err == nil {
 		t.Fatal("retraction accepted a missing OIDC audience")
 	}
 	env["LISTEN_FINALIZATION_TASKS_HANDLER_URL"] = "https://backend.fixture.test/v1/conversation-finalization-jobs/run"
 	cfg, err := readConfig(envLookup(env), false)
-	if err != nil || cfg.privateArchive != "omi-private-cloud-sync" || cfg.derivedArchive != "regional-fixture" ||
+	if err != nil || cfg.privateArchive != "private-fixture" || cfg.derivedArchive != "regional-fixture" ||
 		cfg.retractionAudience != env["LISTEN_FINALIZATION_TASKS_HANDLER_URL"] {
 		t.Fatalf("adapter config: %v", err)
 	}
@@ -54,6 +58,10 @@ func TestQuietRecoveryRequiresCompleteRuntime(t *testing.T) {
 		t.Fatal("quiet recovery accepted invalid boolean")
 	}
 	env["WORKER_QUIET_RECOVERY_ENABLED"] = "true"
+	if _, err := readConfig(envLookup(env), false); err == nil {
+		t.Fatal("quiet recovery accepted a missing private bucket")
+	}
+	env["BUCKET_PRIVATE_CLOUD_SYNC"] = "private-fixture"
 	cfg, err := readConfig(envLookup(env), false)
 	if err != nil || !cfg.quietRecovery {
 		t.Fatalf("quiet recovery opt-in: %v %v", cfg.quietRecovery, err)

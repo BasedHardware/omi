@@ -30,8 +30,8 @@ Lane B needs to provide a bounded drain and fenced handback API before enabling 
 | `OMI_LLM_GATEWAY_URL`, `OMI_LLM_GATEWAY_SERVICE_TOKEN` | unset | Required when the keyed gateway is enabled. `LLM_GATEWAY_SERVICE_TOKEN` is the token fallback |
 | `WORKER_SUMMARY_REPAIR_ENABLED` | false | Run the due-summary scan in workerd |
 | `ENRICHMENT_MAX_AGE_HOURS` | 72 | Nonnegative hours, with zero disabling age-based scan phases |
-| `BUCKET_PRIVATE_CLOUD_SYNC` | unset | Private recording bucket for the read-only archive client |
-| `BUCKET_AUDIO_DERIVED` | unset | Additional regional recording bucket |
+| `BUCKET_PRIVATE_CLOUD_SYNC` | unset | Required for the read-only recording archive client, including quiet recovery or when `BUCKET_AUDIO_DERIVED` is supplied |
+| `BUCKET_AUDIO_DERIVED` | unset | Optional regional recording bucket, requires the private bucket |
 | `BUCKET_OBJECT_LAKE`, `OBJECT_LAKE_KMS_KEY` | unset | Both configure guarded offloaded transcript reads |
 | `OBJECT_LAKE_READ_ENABLED` | true | Disable offloaded transcript reads independently of inline reads |
 | `WORKER_MERGE_RETRACTION_ORIGIN` | unset | HTTPS backend origin, using the configured listen finalization OIDC audience |

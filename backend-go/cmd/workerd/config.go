@@ -113,8 +113,8 @@ func (c *config) readFinalizationAdapters(lookup lookupEnv) error {
 	private, _ := lookup("BUCKET_PRIVATE_CLOUD_SYNC")
 	derived, _ := lookup("BUCKET_AUDIO_DERIVED")
 	c.privateArchive, c.derivedArchive = strings.TrimSpace(private), strings.TrimSpace(derived)
-	if c.privateArchive == "" && c.derivedArchive != "" {
-		c.privateArchive = "omi-private-cloud-sync"
+	if c.privateArchive == "" && (c.derivedArchive != "" || c.quietRecovery) {
+		return errors.New("recording archive requires BUCKET_PRIVATE_CLOUD_SYNC")
 	}
 	if err := c.readObjectLake(lookup); err != nil {
 		return err
