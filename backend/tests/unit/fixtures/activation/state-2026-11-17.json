@@ -26,6 +26,7 @@
   "environment": "prod",
   "feature": "conversations-v3",
   "note": "The 2026-11-17 TestFlight activation state (KB evidence 2026-11-17-v3-testflight-activation-escapes.md, delivery-debt D1/D8): llm-gateway two weeks stale without v3 lanes, pusher on its 2026-11-09 image without SYNC_TASKS_PROJECT/LOCATION, no conversations-v3 queue or v3 scheduler jobs. Cloud Run is shown at a tree with every required commit so only the 11-17 escapes report.",
+  "project": "based-hardware",
   "queues": {
     "conversations-v3": {
       "exists": false

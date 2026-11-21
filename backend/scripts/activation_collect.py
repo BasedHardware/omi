@@ -287,7 +287,7 @@ class Collector:
         self.registry = registry or Registry(lambda: self.run(['gcloud', 'auth', 'print-access-token']))
         # Promoted images (prod pusher) keep their commit tag only in the qualifying registry.
         self.promoted_registry = promoted_registry or self.registry
-        self.kubectl = kubectl or ['kubectl']
+        self.kubectl = kubectl
 
     def gcloud_json(self, *args: str) -> Any:
         return json.loads(self.run(['gcloud', *args, '--project', self.project, '--format=json']))
@@ -345,6 +345,8 @@ class Collector:
     def gke(
         self, namespace: str, deployment: str, wanted: set[str], promoted_from: list[str] = (), container: str = ''
     ) -> dict[str, Any]:
+        if not self.kubectl:
+            raise ReadError('credentials for the manifest GKE cluster are unavailable')
         deploy = json.loads(self.run([*self.kubectl, '-n', namespace, 'get', 'deployment', deployment, '-o', 'json']))
         selector = ((deploy.get('spec') or {}).get('selector') or {}).get('matchLabels') or {}
         if not selector:
@@ -424,6 +426,9 @@ def _objects(collector: Collector, kind: list[str], items: list[dict[str, Any]])
 
 def collect(manifest: dict[str, Any], collector: Collector) -> dict[str, Any]:
     activation_check.validate_manifest(manifest)
+    for name in ('project', 'region'):
+        if getattr(collector, name) != manifest[name]:
+            raise activation_check.InvalidInput(f'collector {name} does not match manifest.{name}')
     wanted = manifest_env_keys(manifest)
     services: dict[str, Any] = {}
     for name, svc in manifest['services'].items():
@@ -466,7 +471,7 @@ def collect(manifest: dict[str, Any], collector: Collector) -> dict[str, Any]:
     return {
         'schema_version': activation_check.SCHEMA_VERSION,
         'feature': manifest['feature'],
-        'environment': manifest.get('environment', ''),
+        'environment': manifest['environment'],
         'collected_at': dt.datetime.now(dt.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'),
         'project': collector.project,
         'services': services,
@@ -480,9 +485,9 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('--manifest', required=True, type=Path)
     parser.add_argument('--out', type=Path, help='write state JSON here (default stdout)')
-    parser.add_argument('--project', default='based-hardware')
-    parser.add_argument('--region', default='us-central1')
-    parser.add_argument('--cluster', help='GKE cluster; fetches credentials into a temporary kubeconfig')
+    parser.add_argument('--project', help='assert the manifest project')
+    parser.add_argument('--region', help='assert the manifest region')
+    parser.add_argument('--cluster', help='assert the manifest GKE cluster')
     parser.add_argument(
         '--promoted-from-gcloud-config',
         default=os.environ.get('ACTIVATION_PROMOTED_FROM_CLOUDSDK_CONFIG', ''),
@@ -495,9 +500,16 @@ def main(argv: list[str] | None = None) -> int:
     except (activation_check.InvalidInput, OSError) as error:
         print(f'activation_collect: invalid manifest: {error}', file=sys.stderr)
         return activation_check.EXIT_INVALID
+    for name in ('project', 'region', 'cluster'):
+        supplied = getattr(args, name)
+        if supplied is not None and supplied != manifest.get(name):
+            print(f'activation_collect: --{name} does not match manifest.{name}', file=sys.stderr)
+            return activation_check.EXIT_INVALID
+
+    project, region, cluster = manifest['project'], manifest['region'], manifest.get('cluster')
     with tempfile.TemporaryDirectory(prefix='activation-collect-') as scratch:
-        kubectl = ['kubectl']
-        if args.cluster:
+        kubectl = None
+        if cluster:
             kubeconfig = str(Path(scratch) / 'config')
             env = {**os.environ, 'KUBECONFIG': kubeconfig}
             proc = subprocess.run(
@@ -506,11 +518,11 @@ def main(argv: list[str] | None = None) -> int:
                     'container',
                     'clusters',
                     'get-credentials',
-                    args.cluster,
+                    cluster,
                     '--region',
-                    args.region,
+                    region,
                     '--project',
-                    args.project,
+                    project,
                 ],
                 capture_output=True,
                 text=True,
@@ -521,7 +533,8 @@ def main(argv: list[str] | None = None) -> int:
                 print(
                     'activation_collect: cluster credentials unavailable; GKE services will be unknown', file=sys.stderr
                 )
-            kubectl = ['kubectl', '--kubeconfig', kubeconfig]
+            else:
+                kubectl = ['kubectl', '--kubeconfig', kubeconfig]
         promoted = None
         if args.promoted_from_gcloud_config:
             promoted_env = {**os.environ, 'CLOUDSDK_CONFIG': args.promoted_from_gcloud_config}
@@ -536,7 +549,7 @@ def main(argv: list[str] | None = None) -> int:
                     timeout=90,
                 ).stdout
             )
-        collector = Collector(args.project, args.region, Git(args.repo), kubectl=kubectl, promoted_registry=promoted)
+        collector = Collector(project, region, Git(args.repo), kubectl=kubectl, promoted_registry=promoted)
         state = collect(manifest, collector)
     text = json.dumps(state, indent=2, sort_keys=True) + '\n'
     if args.out:

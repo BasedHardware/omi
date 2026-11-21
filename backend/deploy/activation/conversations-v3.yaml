@@ -6,6 +6,9 @@
 schema_version: 1
 feature: conversations-v3
 environment: prod
+project: based-hardware
+region: us-central1
+cluster: prod-omi-gke
 owner: backend/docs/runbooks/conversations-v3.md
 lever:
   # The move this manifest gates: a stage change (cohort -> beta -> all) or the kill switch back on.

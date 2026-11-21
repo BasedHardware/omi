@@ -23,7 +23,7 @@ and scheduler jobs were all found in prod or by luck.
 source ~/.local/bin/gcp-agent-env.sh ro-prod          # read-only identity; never a human login
 git fetch origin                                        # the serving commits must be local for ancestry
 python3 backend/scripts/activation_collect.py --manifest backend/deploy/activation/conversations-v3.yaml \
-    --cluster prod-omi-gke --promoted-from-gcloud-config ~/.config/gcloud-agent/ro-dev --out /tmp/v3.json
+    --promoted-from-gcloud-config ~/.config/gcloud-agent/ro-dev --out /tmp/v3.json
 python3 backend/scripts/activation_check.py --manifest backend/deploy/activation/conversations-v3.yaml \
     --state /tmp/v3.json [--before pusher] [--json]
 ```
@@ -32,6 +32,13 @@ Exit codes: `0` READY, `1` BLOCKED (a controlled requirement is missing), `2` UN
 but a controlled requirement could not be read), `3` invalid manifest or state.
 
 ## Format (schema_version 1)
+
+- `project`, `environment` and `feature` identify the activation target. A snapshot must declare all
+  three and match the manifest exactly. Invalid identity stops the check with exit 3. Recollect old
+  live snapshots that lack identity metadata.
+- `region` selects the Cloud Run region and GKE cluster location. GKE manifests also declare
+  `cluster`. The collector uses a temporary kubeconfig for the manifest cluster. Any explicit
+  `--project`, `--region` or `--cluster` argument must agree with the manifest.
 
 - `services.<name>`: `kind: cloud_run` (`service`) or `kind: gke` (`namespace`, `deployment`). `contains`
   lists full commit SHAs, each with a `why`; every serving unit must serve a source tree that has the

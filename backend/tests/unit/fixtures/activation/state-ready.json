@@ -12,6 +12,7 @@
   "environment": "prod",
   "feature": "conversations-v3",
   "note": "Synthetic correct state: every service serves a tree containing each required commit, env set and equal, queue and jobs present.",
+  "project": "based-hardware",
   "queues": {
     "conversations-v3": {
       "exists": true,

@@ -40,6 +40,7 @@ EXIT = {READY: 0, BLOCKED: 1, UNDETERMINED: 2}
 EXIT_INVALID = 3
 ACTIVATE = 'activate'
 SCHEMA_VERSION = 1
+IDENTITY_FIELDS = ('project', 'environment', 'feature')
 
 
 class InvalidInput(ValueError):
@@ -101,10 +102,19 @@ def _names(value: Any, what: str) -> list[str]:
     return list(value)
 
 
+def _require_target_fields(data: dict[str, Any], label: str, fields: Iterable[str]) -> None:
+    for field in fields:
+        value = data.get(field)
+        _require(
+            isinstance(value, str) and bool(value) and value == value.strip(),
+            f'{label}.{field}: non-empty string without surrounding whitespace',
+        )
+
+
 def validate_manifest(manifest: Any) -> dict[str, Any]:
     _require(isinstance(manifest, dict), 'manifest: mapping')
     _require(manifest.get('schema_version') == SCHEMA_VERSION, 'manifest.schema_version: 1')
-    _require(isinstance(manifest.get('feature'), str) and manifest['feature'], 'manifest.feature')
+    _require_target_fields(manifest, 'manifest', (*IDENTITY_FIELDS, 'region'))
     services = manifest.get('services')
     _require(isinstance(services, dict) and services, 'manifest.services: mapping')
     for name, svc in services.items():
@@ -114,6 +124,8 @@ def validate_manifest(manifest: Any) -> dict[str, Any]:
                 isinstance(commit, dict) and re.fullmatch(r'[0-9a-f]{40}', str(commit.get('commit', ''))) is not None,
                 f'services.{name}.contains: full 40-hex commit',
             )
+    if any(svc['kind'] == 'gke' for svc in services.values()) or 'cluster' in manifest:
+        _require_target_fields(manifest, 'manifest', ('cluster',))
     order = manifest.get('order')
     _require(isinstance(order, list) and order, 'manifest.order: list of steps')
     ordered: list[str] = []
@@ -156,6 +168,7 @@ def load_manifest(path: Path) -> dict[str, Any]:
 def validate_state(state: Any) -> dict[str, Any]:
     _require(isinstance(state, dict), 'state: mapping')
     _require(state.get('schema_version') == SCHEMA_VERSION, 'state.schema_version: 1')
+    _require_target_fields(state, 'state', IDENTITY_FIELDS)
     for key in ('services', 'queues', 'scheduler_jobs', 'ancestry'):
         table = state.get(key, {})
         _require(isinstance(table, dict), f'state.{key}: mapping')
@@ -415,6 +428,8 @@ def _objects(manifest, state, step, kind: str, state_key: str, ready_states: Ite
 def evaluate(manifest: dict[str, Any], state: dict[str, Any], step: str = ACTIVATE) -> Verdict:
     validate_manifest(manifest)
     validate_state(state)
+    for field in IDENTITY_FIELDS:
+        _require(state[field] == manifest[field], f'state.{field}: does not match manifest.{field}')
     due = _due_services(manifest, step)
     results: list[Result] = []
     for group in manifest['order']:

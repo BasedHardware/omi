@@ -82,6 +82,33 @@ def test_cli_exit_codes_and_text(capsys):
     assert payload['verdict'] == 'READY' and payload['counts']['missing'] == 0
 
 
+@pytest.mark.parametrize('field', ['project', 'environment', 'feature'])
+@pytest.mark.parametrize('bad_value', [None, 'unrelated', '', ' ', 123])
+def test_checker_rejects_wrong_or_missing_state_identity(manifest, tmp_path, capsys, field, bad_value):
+    state = _state('state-ready.json')
+    if bad_value is None:
+        state.pop(field)
+    else:
+        state[field] = bad_value
+
+    with pytest.raises(check.InvalidInput, match=rf'state[.]{field}'):
+        check.evaluate(manifest, state)
+
+    path = tmp_path / 'state.json'
+    path.write_text(json.dumps(state))
+    assert check.main(['--manifest', str(MANIFEST_PATH), '--state', str(path), '--json']) == check.EXIT_INVALID
+    stdout, stderr = capsys.readouterr()
+    assert stdout == ''
+    assert f'state.{field}' in stderr
+
+
+@pytest.mark.parametrize('field', ['project', 'environment', 'feature', 'region', 'cluster'])
+def test_manifest_requires_identity_and_collection_target(manifest, field):
+    data = {key: value for key, value in manifest.items() if key != field}
+    with pytest.raises(check.InvalidInput, match=rf'manifest[.]{field}'):
+        check.validate_manifest(data)
+
+
 def test_report_never_prints_env_values(manifest):
     verdict = check.evaluate(manifest, _state('state-2026-11-17.json'))
     text = check.render_text(verdict) + json.dumps(verdict.to_json())
@@ -446,6 +473,7 @@ def test_collector_gke_counts_pods_and_resolves_promoted_digests():
         'us-central1',
         FakeGit({NEW: set(), OLD: set()}),
         runner,
+        kubectl=['kubectl'],
         registry=FakeRegistry({('gcr.io/prod/pusher', DIG_OLD): OLD}),
         promoted_registry=FakeRegistry({('gcr.io/dev/pusher', DIG_NEW): NEW[:7]}),
     )
@@ -521,6 +549,7 @@ def test_gke_mixed_generation_same_digest_cannot_pass_stage_parity(
         'us-central1',
         FakeGit({sha: set()}),
         runner,
+        kubectl=['kubectl'],
         registry=FakeRegistry({('gcr.io/prod/pusher', DIG_NEW): sha}),
     )
 
@@ -600,7 +629,12 @@ def test_release_pins_each_startup_value_in_the_pod_spec(manifest, helm, startup
     pods = {'items': [_gke_pod(app, DIG_NEW)]}
     runner, calls = _fake_runner({('get', 'deployment', runtime): deployment, ('get', 'pods'): pods})
     collector = collect.Collector(
-        'proj', 'us-central1', FakeGit({sha: set()}), runner, registry=FakeRegistry({(repository, DIG_NEW): sha})
+        'proj',
+        'us-central1',
+        FakeGit({sha: set()}),
+        runner,
+        kubectl=['kubectl'],
+        registry=FakeRegistry({(repository, DIG_NEW): sha}),
     )
     wanted = collect.manifest_env_keys(manifest)[runtime]
     state['services'][runtime] = collector.gke('ns', runtime, wanted)
@@ -642,6 +676,89 @@ def test_listen_chart_rejects_private_override_of_pinned_startup_env(helm, start
     assert f'{private_source} cannot override a conversationsV3StartupEnv key' in result.stderr
 
 
+@pytest.mark.parametrize('option', ['--project', '--region', '--cluster'])
+def test_collector_rejects_conflicting_target_before_reads(tmp_path, capsys, monkeypatch, option):
+    def unexpected_read(*args, **kwargs):
+        pytest.fail('collection must reject a conflicting target before reading')
+
+    monkeypatch.setattr(collect.subprocess, 'run', unexpected_read)
+    monkeypatch.setattr(collect, 'collect', unexpected_read)
+    output = tmp_path / 'state.json'
+    output.write_text('prior snapshot')
+    assert (
+        collect.main(['--manifest', str(MANIFEST_PATH), '--out', str(output), option, 'unrelated'])
+        == check.EXIT_INVALID
+    )
+    assert option in capsys.readouterr().err
+    assert output.read_text() == 'prior snapshot'
+
+
+@pytest.mark.parametrize('explicit', [False, True])
+def test_collector_uses_the_manifest_target(manifest, monkeypatch, tmp_path, explicit):
+    calls = []
+
+    def credentials(argv, *, env, **kwargs):
+        calls.append(argv)
+        assert env['KUBECONFIG'] != '/ambient/kubeconfig'
+        return subprocess.CompletedProcess(argv, 0)
+
+    def fake_collect(data, collector):
+        assert collector.project == manifest['project']
+        assert collector.region == manifest['region']
+        assert collector.kubectl[:2] == ['kubectl', '--kubeconfig']
+        assert collector.kubectl[2] != '/ambient/kubeconfig'
+        return _state('state-ready.json')
+
+    monkeypatch.setenv('KUBECONFIG', '/ambient/kubeconfig')
+    monkeypatch.setattr(collect.subprocess, 'run', credentials)
+    monkeypatch.setattr(collect, 'collect', fake_collect)
+    output = tmp_path / 'state.json'
+    args = ['--manifest', str(MANIFEST_PATH), '--out', str(output)]
+    if explicit:
+        for name in ('project', 'region', 'cluster'):
+            args.extend([f'--{name}', manifest[name]])
+    assert collect.main(args) == 0
+    assert calls == [
+        [
+            'gcloud',
+            'container',
+            'clusters',
+            'get-credentials',
+            manifest['cluster'],
+            '--region',
+            manifest['region'],
+            '--project',
+            manifest['project'],
+        ]
+    ]
+    assert check.evaluate(manifest, json.loads(output.read_text())).verdict == check.READY
+
+
+def test_collector_leaves_gke_unread_when_target_credentials_fail(manifest, monkeypatch, tmp_path):
+    def credentials(argv, **kwargs):
+        assert argv[:4] == ['gcloud', 'container', 'clusters', 'get-credentials']
+        return subprocess.CompletedProcess(argv, 1)
+
+    def fake_collect(data, collector):
+        with pytest.raises(collect.ReadError, match='manifest GKE cluster'):
+            collector.gke('namespace', 'pusher', set())
+        return {}
+
+    monkeypatch.setenv('KUBECONFIG', '/ambient/kubeconfig')
+    monkeypatch.setattr(collect.subprocess, 'run', credentials)
+    monkeypatch.setattr(collect, 'collect', fake_collect)
+    assert collect.main(['--manifest', str(MANIFEST_PATH), '--out', str(tmp_path / 'state.json')]) == 0
+
+
+def test_programmatic_collector_rejects_other_project(manifest):
+    def unexpected_read(argv):
+        pytest.fail('collection must reject a conflicting project before reading')
+
+    collector = collect.Collector('other-project', 'us-central1', FakeGit({}), unexpected_read)
+    with pytest.raises(collect.activation_check.InvalidInput, match='project'):
+        collect.collect(manifest, collector)
+
+
 def test_collect_end_to_end_marks_failures_unknown(manifest):
     git = FakeGit(
         {NEW: {c['commit'] for s in manifest['services'].values() for c in s.get('contains', [])}},
@@ -668,8 +785,13 @@ def test_collect_end_to_end_marks_failures_unknown(manifest):
             ('scheduler', 'jobs', 'list'): collect.ReadError('gcloud exit 1'),
         }
     )
-    state = collect.collect(manifest, Stub('proj', 'us-central1', git, runner, registry=FakeRegistry({})))
+    state = collect.collect(
+        manifest, Stub(manifest['project'], manifest['region'], git, runner, registry=FakeRegistry({}))
+    )
 
+    assert {field: state[field] for field in ('project', 'environment', 'feature')} == {
+        field: manifest[field] for field in ('project', 'environment', 'feature')
+    }
     assert state['services']['backend']['error'].startswith('ReadError')
     assert state['services']['llm-gateway']['serving'][0]['lanes'] == [
         'omi:auto:chat-agent',
@@ -838,7 +960,7 @@ def test_gke_counts_pods_with_unreadable_digests_and_picks_the_named_container()
     runner, _ = _fake_runner(
         {('get', 'deployment', 'd'): deployment, ('get', 'pods'): {'items': [bad_pod, copy.deepcopy(bad_pod)]}}
     )
-    collector = collect.Collector('p', 'r', FakeGit({}), runner, registry=FakeRegistry({}))
+    collector = collect.Collector('p', 'r', FakeGit({}), runner, kubectl=['kubectl'], registry=FakeRegistry({}))
 
     result = collector.gke('ns', 'd', {'K'}, (), 'app')
 
