@@ -272,13 +272,17 @@ CREATED_PAGE = 8
 def pending_created(uid, *, firestore_client=None):
     """Owed conversation-created deliveries for one owner (collection-scoped, bounded)."""
     client = firestore_client or store.get_firestore_client()
-    return [
-        snapshot.id
-        for snapshot in store.user_conversations(client, uid)
-        .where(filter=FieldFilter('v3_created_pending', '==', True))
-        .limit(CREATED_PAGE)
-        .stream()
-    ]
+    query = store.user_conversations(client, uid).where(filter=FieldFilter('v3_created_pending', '==', True))
+    ids = []
+    page = query
+    while True:
+        page_size = CREATED_PAGE - len(ids)
+        snapshots = list(page.limit(page_size).stream())
+        ids.extend(snapshot.id for snapshot in snapshots if python_owns_finalization(snapshot.to_dict() or {}))
+        if len(ids) >= CREATED_PAGE or len(snapshots) < page_size:
+            return ids
+        # A full page including parked deliveries can hide Python work behind it.
+        page = query.start_after(snapshots[-1])
 
 
 def claim_created(uid, cid, *, firestore_client=None):
@@ -294,7 +298,7 @@ def claim_created(uid, cid, *, firestore_client=None):
     def claim(tx):
         snapshot = ref.get(transaction=tx)
         row = snapshot.to_dict() or {}
-        if not snapshot.exists or not row.get('v3_created_pending'):
+        if not snapshot.exists or not python_owns_finalization(row) or not row.get('v3_created_pending'):
             return None
         now = datetime.now(timezone.utc)
         if not policy.created_eligible(row):
@@ -326,7 +330,11 @@ def finish_created(uid, cid, attempt, *, delivered, dropped=False, firestore_cli
     def finish(tx):
         snapshot = ref.get(transaction=tx)
         row = snapshot.to_dict() or {}
-        if not snapshot.exists or int(row.get('v3_created_attempts') or 0) != attempt:
+        if (
+            not snapshot.exists
+            or not python_owns_finalization(row)
+            or int(row.get('v3_created_attempts') or 0) != attempt
+        ):
             return False
         if delivered:
             tx.update(
