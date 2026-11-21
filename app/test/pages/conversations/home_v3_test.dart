@@ -1308,6 +1308,57 @@ void main() {
       });
     });
 
+    testWidgets('the live row in Today: placeholder, its page, untitled, then titled', (tester) async {
+      await withClock(Clock.fixed(_now), () async {
+        debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+        final palette = OmiColors.active;
+        addTearDown(() => OmiColors.active = palette);
+        OmiColors.active = OmiColors.forBrightness(Brightness.dark);
+        final home = await _pumpHome(tester, v3: true, boundary: boundary, theme: theme(), size: const Size(393, 852));
+
+        // Streaming with no server window yet: the placeholder leads Today.
+        home.liveOpen = false;
+        await home.conversationsV3.refresh();
+        await tester.pump();
+        await tester.pump();
+        expect(find.byType(V3LivePlaceholderRow), findsOneWidget);
+        await shoot(tester, '009-mobile-ios-v3-placeholder-in-today');
+
+        // Its page reads Listening until the server names the conversation.
+        await tester.tap(find.byType(V3LivePlaceholderRow));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 500));
+        expect(find.descendant(of: find.byKey(const Key('live_page_v3_title')), matching: find.text('Listening')),
+            findsOneWidget);
+        await shoot(tester, '010-mobile-ios-v3-live-page-listening');
+        await tester.pageBack();
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 500));
+
+        // The server window opens untitled: same slot, "Listening" over "Live · 11m", no date.
+        home.liveTitle = '';
+        home.liveOpen = true;
+        await home.conversationsV3.refresh();
+        await tester.pump();
+        await tester.pump();
+        expect(find.byType(V3LivePlaceholderRow), findsNothing);
+        expect(find.descendant(of: find.byKey(const ValueKey('live-1')), matching: find.text('Listening')),
+            findsOneWidget);
+        await shoot(tester, '011-mobile-ios-v3-live-row-untitled');
+
+        // Named: the real title, same slot.
+        home.liveTitle = 'Launch checklist';
+        await home.conversationsV3.refresh();
+        await tester.pump();
+        await tester.pump();
+        expect(find.descendant(of: find.byKey(const ValueKey('live-1')), matching: find.text('Launch checklist')),
+            findsOneWidget);
+        await shoot(tester, '012-mobile-ios-v3-live-row-titled');
+        debugDefaultTargetPlatformOverride = null;
+        await _dispose(tester, home);
+      });
+    });
+
     testWidgets('Home, light', (tester) async {
       await withClock(Clock.fixed(_now), () async {
         debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
