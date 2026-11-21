@@ -267,7 +267,10 @@ class OrderedSonioxProviderClock(SonioxProviderClock):
             self.invalidate()
             return 0
         before = self.samples
-        quantum = 1920  # Probed stt-rt-v5 mono pcm_s16le / 16 kHz only.
+        # Measured on v5 mono pcm_s16le / 16 kHz. V6 is API-compatible,
+        # but its 120 ms quantum has not been live-probed. Every prediction
+        # still requires matching progress fields; mismatch invalidates capture.
+        quantum = 1920
         self.samples = (before // quantum + 1) * quantum
         self._predictions.append((before, self.samples, self._emitted))
         self._update_state()
