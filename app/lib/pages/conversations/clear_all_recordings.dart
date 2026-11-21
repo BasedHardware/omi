@@ -74,7 +74,7 @@ Future<bool> confirmClearAllRecordings(
                   await share(recording.wals);
                 } catch (error) {
                   Logger.debug('Offline Sync export failed: ${error.runtimeType}');
-                  if (sheetContext.mounted) OmiFeedback.error(sheetContext, l.audioPlaybackFailed);
+                  if (sheetContext.mounted) OmiFeedback.error(sheetContext, l.exportFailedTryAgain);
                 }
               },
             );

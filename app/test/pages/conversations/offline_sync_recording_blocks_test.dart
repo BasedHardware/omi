@@ -88,6 +88,7 @@ class _Sync extends ChangeNotifier with WalDerivedSyncViews implements SyncProvi
   final List<Wal> relistOnDiscover;
   final deleted = <Wal>[];
   final shared = <List<Wal>>[];
+  bool failShare = false;
   int retried = 0;
   int discovered = 0;
   String? skipDeleteId;
@@ -99,7 +100,10 @@ class _Sync extends ChangeNotifier with WalDerivedSyncViews implements SyncProvi
   @override
   bool canPlayOrShareWal(Wal wal) => wal.filePath != null;
   @override
-  Future<void> shareRecordingAsWav(List<Wal> wals, {bool Function()? canShare}) async => shared.add(wals);
+  Future<void> shareRecordingAsWav(List<Wal> wals, {bool Function()? canShare}) async {
+    if (failShare) throw StateError('Recording changed');
+    shared.add(wals);
+  }
 
   @override
   List<Wal> get retryableAttentionWals => wals.where((w) => isRetryableSyncState(w.syncDisplayState)).toList();
@@ -579,7 +583,14 @@ void main() {
     expect(sync.deleted, isEmpty);
     final exportSheet = find.byType(OmiSheetScaffold);
     await _frame(tester, '002-mobile-ios-too-old-export-list');
-    await tester.tap(find.descendant(of: exportSheet, matching: find.byIcon(Icons.ios_share_rounded)));
+    final share = find.descendant(of: exportSheet, matching: find.byIcon(Icons.ios_share_rounded));
+    sync.failShare = true;
+    await tester.tap(share);
+    await tester.pumpAndSettle();
+    expect(find.text('Export failed. Please try again.'), findsOneWidget);
+    expect(sync.deleted, isEmpty);
+    sync.failShare = false;
+    await tester.tap(share);
     await tester.pumpAndSettle();
     expect(sync.shared.single, rows);
     expect(sync.deleted, isEmpty);
