@@ -536,7 +536,8 @@ def _run_inverse_step(tmp_path, step, documents, receipt=INVERSE_RECEIPT):
         lambda s, r, i: r['spec']['containers'][0].update(image=INVERSE_IMAGE[:-1] + 'c'),
         lambda s, r, i: r['status'].update(imageDigest='sha256:' + 'c' * 64),
         lambda s, r, i: r['spec']['containers'][0]['env'][0].update(value='true'),
-        lambda s, r, i: r['spec']['containers'][0]['env'][1].update(value='true'),
+        # The pinned inverse may be the activated pump (#25966), but only as the literal 'true'.
+        lambda s, r, i: r['spec']['containers'][0]['env'][1].update(value='yes'),
         lambda s, r, i: r['spec']['containers'][0]['env'][3].update(value='all'),
         lambda s, r, i: r['spec'].update(containerConcurrency=81),
         lambda s, r, i: s['metadata']['annotations'].update({'run.googleapis.com/ingress': 'all'}),
@@ -1302,3 +1303,42 @@ def test_truncated_response_is_a_safe_api_error(monkeypatch, capsys):
     with pytest.raises(ValueError):
         api.service()
     assert 'PUMP_CAP_API_ERROR stage=service-read status=unconfirmed' in capsys.readouterr().err
+
+
+def _with_pump_flag(revision, value):
+    revision = copy.deepcopy(revision)
+    for entry in revision['spec']['containers'][0]['env']:
+        if entry['name'] == 'BATCH_PIPELINE_PROJECTION_PUMP_ENABLED':
+            entry['value'] = value
+    return revision
+
+
+@pytest.mark.parametrize('value, accepted', [('true', True), ('false', True), ('True', False), ('yes', False)])
+def test_pinned_inverse_accepts_the_activated_pump_only_as_literal_true(inverse_readback, value, accepted):
+    """#25966 panel F1: after step 2 the routed inverse is the activated pump, so later deploys must pass."""
+    inverse = sys.modules[recovery.verify.__module__]
+    service, revision, iam = inverse_readback
+    expected = inverse.ExpectedInverse.from_disposition(INVERSE_RECEIPT)
+    candidate = _with_pump_flag(revision, value)
+    if accepted:
+        inverse.verify(service, candidate, iam, expected, before_first_pin=False)
+    else:
+        with pytest.raises(ValueError, match='BATCH_PIPELINE_PROJECTION_PUMP_ENABLED'):
+            inverse.verify(service, candidate, iam, expected, before_first_pin=False)
+
+
+def test_base_before_first_pin_and_new_create_stay_dark(inverse_readback):
+    inverse = sys.modules[recovery.verify.__module__]
+    service, revision, iam = inverse_readback
+    active = _with_pump_flag(revision, 'true')
+    new_base = inverse.ExpectedInverse(INVERSE_REVISION, 'a' * 40, INVERSE_IMAGE)
+    with pytest.raises(ValueError, match='BATCH_PIPELINE_PROJECTION_PUMP_ENABLED'):
+        inverse.verify(service, active, iam, new_base, before_first_pin=False)
+    latest = copy.deepcopy(service)
+    latest['spec']['traffic'] = [{'percent': 100, 'latestRevision': True}]
+    latest['status']['traffic'][0]['latestRevision'] = True
+    latest['status'].update(latestReadyRevisionName=INVERSE_REVISION, latestCreatedRevisionName=INVERSE_REVISION)
+    pinned = inverse.ExpectedInverse.from_disposition(INVERSE_RECEIPT)
+    with pytest.raises(ValueError, match='BATCH_PIPELINE_PROJECTION_PUMP_ENABLED'):
+        inverse.verify(latest, active, iam, pinned, before_first_pin=True)
+    inverse.verify(latest, revision, iam, pinned, before_first_pin=True)
