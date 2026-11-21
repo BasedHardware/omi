@@ -237,9 +237,16 @@ def test_oversized_merge_is_a_request_rejection_not_an_internal_job_error(conv):
 
 
 @pytest.mark.parametrize(
-    'mode,published', [(None, False), ('inline', False), ('cloud_tasks', True), ('cloud_tasks', False)]
+    'mode,opt_in,published',
+    [
+        (None, None, False),
+        ('inline', '1', False),
+        ('prod', None, False),
+        ('cloud_tasks', '1', True),
+        ('cloud_tasks', '1', False),
+    ],
 )
-def test_merge_dispatches_durable_generation_before_falling_back(conv, monkeypatch, mode, published):
+def test_merge_dispatches_durable_generation_before_falling_back(conv, monkeypatch, mode, opt_in, published):
     from unittest.mock import Mock
 
     from fastapi import BackgroundTasks
@@ -257,7 +264,17 @@ def test_merge_dispatches_durable_generation_before_falling_back(conv, monkeypat
         lambda *_args: {'job_id': 'merge-fixture', 'dispatch_generation': 4, 'merge_target_id': 'durable-target'},
     )
     monkeypatch.setattr(tasks, '_listen_finalization_tasks_binding', lambda: ('configured',) * 5)
-    if mode is None:
+    monkeypatch.delenv('EXPLICIT_MERGE_CLOUD_TASKS_ENABLED', raising=False)
+    if opt_in is not None:
+        monkeypatch.setenv('EXPLICIT_MERGE_CLOUD_TASKS_ENABLED', opt_in)
+    if mode == 'prod':
+        import yaml
+
+        overlay = Path(__file__).resolve().parents[2] / 'deploy/runtime_env/prod.overlay.yaml'
+        deployed = yaml.safe_load(overlay.read_text())['overlay']['cloud_run']['services']['backend']['env']
+        assert 'EXPLICIT_MERGE_CLOUD_TASKS_ENABLED' not in deployed
+        monkeypatch.setenv('LISTEN_FINALIZATION_DISPATCH_MODE', deployed['LISTEN_FINALIZATION_DISPATCH_MODE']['value'])
+    elif mode is None:
         monkeypatch.delenv('LISTEN_FINALIZATION_DISPATCH_MODE', raising=False)
     else:
         monkeypatch.setenv('LISTEN_FINALIZATION_DISPATCH_MODE', mode)
@@ -270,7 +287,7 @@ def test_merge_dispatches_durable_generation_before_falling_back(conv, monkeypat
         uid='test-account',
     )
     assert result.merged_conversation_id == 'durable-target'
-    if mode == 'cloud_tasks':
+    if mode == 'cloud_tasks' and opt_in:
         enqueue.assert_called_once_with('merge-fixture', 4)
     else:
         enqueue.assert_not_called()

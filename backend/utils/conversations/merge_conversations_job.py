@@ -4,6 +4,7 @@ import asyncio
 import logging
 from typing import Any, Callable
 
+from config.refactor_modes import default_off
 from database import conversation_merge_jobs as store
 from utils.executors import db_executor, lifecycle_executor, run_blocking, start_background_task
 from utils.observability.fallback import record_fallback
@@ -24,7 +25,7 @@ def schedule(job: dict, add_background_task: Callable[..., Any]) -> None:
     from utils.cloud_tasks import enqueue_listen_finalization_job, is_listen_finalization_dispatch_configured
 
     job_id, generation = job['job_id'], job['dispatch_generation']
-    if is_listen_finalization_dispatch_configured():
+    if default_off('EXPLICIT_MERGE_CLOUD_TASKS_ENABLED') and is_listen_finalization_dispatch_configured():
         try:
             enqueue_listen_finalization_job(job_id, generation)
             return
