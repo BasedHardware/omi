@@ -551,7 +551,7 @@ def test_retryable_processing_failure_increments_the_attempt_budget():
     assert transaction.updates[0][1]['last_failure_code'] == 'processing_failed'
 
 
-@pytest.mark.parametrize('reason', ['record_owner_contention', 'live_episode_notes'])
+@pytest.mark.parametrize('reason', ['record_owner_contention', 'live_episode_notes', 'finalization_owned_elsewhere'])
 def test_repeated_scheduling_wait_does_not_consume_processing_budget(reason):
     now = _now()
     ref = _Ref(
@@ -570,6 +570,7 @@ def test_repeated_scheduling_wait_does_not_consume_processing_budget(reason):
         update = transaction.updates[0][1]
         assert update['status'] == 'queued' and update['attempt_count'] == 4
         assert update['worker_claim_count'] == 4
+        assert update['last_failure_code'] == reason
         ref.data.update(update)
 
 
