@@ -1096,3 +1096,10 @@ def test_cap_recovery_quoted_etag_round_trip(tmp_path, monkeypatch, inverse_read
     else:
         assert recovery.main() == 1
         assert fixture.cap_requests == []
+
+
+def test_claimed_sibling_skip_ships_dark_on_integration_until_activation():
+    """SCA-3544: #25920 is default-on in code; prod integration (and the pump derived from it) pin it false."""
+    services = _prod_services()
+    for name in ('backend-integration', PROJECTION_PUMP):
+        assert services[name]['env']['BATCH_PIPELINE_FOLLOWUP_CLAIMED_SIBLING_SKIP_ENABLED']['value'] == 'false', name
