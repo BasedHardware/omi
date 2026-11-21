@@ -12,6 +12,7 @@ from google.cloud.firestore_v1 import FieldFilter
 from database import conversations, conversations_v3 as store
 from database.account_deletion_marker import account_deletion_document
 from database.account_deletion_policy import account_deletion_marker_blocks_access
+from models.finalization_owner import python_owns_finalization
 from utils.conversations.v3 import Conflict, policy
 from utils.conversations.summary_delivery import present
 from utils.encryption import encrypt, decrypt
@@ -146,6 +147,7 @@ def store_summary(uid, cid, token, revision, structured, covers, *, live_input=N
         current = snapshot.to_dict() or {}
         if (
             not snapshot.exists
+            or not python_owns_finalization(current)
             or current.get('deleted')
             or current.get('is_locked')
             or lease.get('token') != token
@@ -229,7 +231,7 @@ def settle_processing(
         lease = held.get(transaction=tx).to_dict() or {}
         if lease.get('token') != token or not lease.get('until') or lease['until'] <= datetime.now(timezone.utc):
             raise Conflict('processing_source_changed')
-        if not row:
+        if not row or not python_owns_finalization(row):
             return False
         if not skipped and not row.get('deleted') and row.get('sync_content_revision') != revision:
             decoded = store.decode_row(uid, snapshot)
@@ -372,7 +374,7 @@ def begin_processing(uid, row, token, *, force=False, firestore_client=None):
             timezone.utc
         ):
             raise Conflict('lease_lost')
-        if not current or current.get('deleted') or current.get('is_locked'):
+        if not current or not python_owns_finalization(current) or current.get('deleted') or current.get('is_locked'):
             return False
         attempts = (
             current.get('v3_process_attempts', 0)
@@ -426,7 +428,7 @@ def fail_processing(uid, cid, token, revision, *, content_hash=None, retryable=T
         lease = held.get(transaction=tx).to_dict() or {}
         if lease.get('token') != token or not lease.get('until') or lease['until'] <= datetime.now(timezone.utc):
             raise Conflict('lease_lost')
-        if not row or row.get('deleted'):
+        if not row or not python_owns_finalization(row) or row.get('deleted'):
             return False
         if row.get('is_locked'):
             tx.update(ref, {'v3_process_pending': False, 'tile_state': 'done', 'v3_process_failed': False})
@@ -456,7 +458,7 @@ def settle_backfill_processing(uid, cid, *, failed, max_attempts, firestore_clie
     def settle(tx):
         snapshot = ref.get(transaction=tx)
         row = snapshot.to_dict() or {}
-        if not snapshot.exists or not row.get('v3_backfill_process_pending'):
+        if not snapshot.exists or not python_owns_finalization(row) or not row.get('v3_backfill_process_pending'):
             return 'absent'
         if not failed and not row.get('v3_process_pending'):
             tx.update(ref, {'v3_backfill_process_pending': False})

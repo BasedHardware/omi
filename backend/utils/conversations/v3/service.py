@@ -37,6 +37,7 @@ from utils.conversations.v3.renewal import renew_until_done, leased_work
 from database import conversations as conversations_db, conversations_v3 as store, conversations_v3_fence as fence
 from models.conversation import Conversation
 from models.conversation_enums import ConversationStatus
+from models.finalization_owner import FinalizationOwnedElsewhere, python_owns_finalization
 from utils.conversations.v3 import (
     Conflict,
     outline,
@@ -126,6 +127,8 @@ async def _drain_blocked(uid, reason):
 def recording_short_path(fn):
     @wraps(fn)
     def guarded(uid, language_code, conversation, *args, **kwargs):
+        if isinstance(conversation, Conversation) and not conversation._python_finalization_owner:
+            raise FinalizationOwnedElsewhere()
         if not policy.flag(conversation, 'recording'):
             if policy.flag(conversation, 'v3_derived') and not fence.current():
                 from utils.conversations.v3.processing import run_external
@@ -142,6 +145,8 @@ def recording_short_path(fn):
 
         persisted = lifecycle.complete(uid, conversation.id)
         current = conversations_db.get_conversation(uid, conversation.id)
+        if current is not None and not python_owns_finalization(current):
+            raise FinalizationOwnedElsewhere()
         if current and current.get('status') == 'completed':
             persisted = True
         if persisted:
@@ -1034,7 +1039,7 @@ async def _process_leased(uid, row, token):
 async def drain_processing(uid):
     rows = await run_blocking(db_executor, pending_processing, uid)
     for row in rows:
-        if row is None:
+        if row is None or not python_owns_finalization(row):
             continue
         token = await run_blocking(db_executor, leases.acquire, uid, 'summary-' + row['id'])
         if token is None:
@@ -1067,7 +1072,7 @@ def _process(uid, row, token):
     from utils.conversations import lifecycle
     from utils.conversations.process_conversation import process_conversation
 
-    if not row:
+    if not row or not python_owns_finalization(row):
         return
     if row.get('deleted') or row.get('is_locked'):
         writers.settle_processing(uid, row['id'], token, row.get('sync_content_revision'), None, skipped=True)
@@ -1162,6 +1167,8 @@ async def sweep():
             query = query.start_after(cursor)
         processing = await run_blocking(db_executor, lambda: list(query.stream()))
         for doc in processing:
+            if not python_owns_finalization(doc.to_dict() or {}):
+                continue
             parts = doc.reference.path.split('/')
             if len(parts) == 4 and parts[0] == 'users' and parts[1] not in users:
                 users.add(parts[1])
@@ -1228,7 +1235,11 @@ async def drain_backfill(uid, *, deadline, keep_going=None, concurrency=BACKFILL
     Returns counts; ``remaining`` > 0 asks the caller for a continuation task. ``keep_going`` is
     checked before each chunk so an undo stops new notes work.
     """
-    rows = [row for row in await run_blocking(db_executor, store.pending_backfill_processing, uid) if row]
+    rows = [
+        row
+        for row in await run_blocking(db_executor, store.pending_backfill_processing, uid)
+        if row and python_owns_finalization(row)
+    ]
     counts = {'processed': 0, 'failed': 0, 'retry': 0, 'busy': 0, 'remaining': 0}
 
     async def one(row):
@@ -1261,7 +1272,7 @@ async def drain_backfill(uid, *, deadline, keep_going=None, concurrency=BACKFILL
             break
         await asyncio.gather(*(one(row) for row in rows[start : start + concurrency]))
     left = await run_blocking(db_executor, store.pending_backfill_processing, uid)
-    counts['remaining'] = len([row for row in left if row])
+    counts['remaining'] = sum(1 for row in left if row and python_owns_finalization(row))
     return counts
 
 
