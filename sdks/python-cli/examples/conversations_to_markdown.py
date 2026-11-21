@@ -100,7 +100,7 @@ def conversation_to_markdown(conv: Dict[str, Any]) -> str:
         except Exception:
             date_str = started_at
 
-    category_tag = strip_surrogates(category).lower().replace(" ", "-")
+    category_tag = strip_surrogates(str(category or "")).lower().replace(" ", "-")
 
     # Serialize YAML frontmatter scalars safely using json.dumps to prevent injection and Python 3.10/3.11 SyntaxError
     lines: List[str] = [
@@ -158,16 +158,26 @@ def conversation_to_markdown(conv: Dict[str, Any]) -> str:
         for seg in transcript_segments:
             if not isinstance(seg, dict):
                 continue
-            speaker = seg.get("speaker", "Speaker")
-            if isinstance(speaker, int):
+            speaker = seg.get("speaker")
+            if speaker is None or isinstance(speaker, bool):
+                speaker = seg.get("speaker_name")
+                if speaker is None or isinstance(speaker, bool):
+                    speaker_id = seg.get("speaker_id")
+                    if speaker_id is not None and not isinstance(speaker_id, bool):
+                        speaker = f"Speaker {speaker_id}"
+                    else:
+                        speaker = "Speaker"
+
+            if isinstance(speaker, int) and not isinstance(speaker, bool):
                 speaker_label = f"Speaker {speaker}"
             else:
-                speaker_label = str(speaker) if speaker else "Speaker"
+                speaker_label = str(speaker).strip() if str(speaker).strip() else "Speaker"
 
             start_time = format_timestamp(seg.get("start"))
             text = (seg.get("text") or "").strip()
             if text:
-                lines.append(f"> **[{start_time}] {speaker_label}:** {text}")
+                flat_text = " ".join(line.strip() for line in text.splitlines() if line.strip())
+                lines.append(f"> **[{start_time}] {speaker_label}:** {flat_text}")
                 lines.append(">")
         if lines[-1] == ">":
             lines.pop()
@@ -209,6 +219,10 @@ def export_conversations(
         md_content = conversation_to_markdown(conv)
 
         if overwrite:
+            counter = 1
+            while filepath in used_paths:
+                counter += 1
+                filepath = output_dir / f"{base_name}_{counter}.md"
             used_paths.add(filepath)
             filepath.write_text(md_content, encoding="utf-8")
         else:
