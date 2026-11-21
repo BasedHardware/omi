@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/services/devices/connectors/limitless_connection.dart';
+import 'package:omi/services/devices/connectors/limitless_realtime_health.dart';
 import 'package:omi/services/devices/models.dart';
 import 'package:omi/services/devices/transports/device_transport.dart';
 
@@ -12,6 +13,7 @@ class FakeDeviceTransport extends DeviceTransport {
   final Map<String, StreamController<List<int>>> _rxControllers = {};
   final StreamController<DeviceTransportState> _stateController = StreamController<DeviceTransportState>.broadcast();
   final List<List<int>> writes = [];
+  void Function(List<int>)? onWrite;
 
   StreamController<List<int>> _controllerFor(String characteristicUuid) {
     return _rxControllers.putIfAbsent(characteristicUuid, () => StreamController<List<int>>.broadcast());
@@ -51,6 +53,7 @@ class FakeDeviceTransport extends DeviceTransport {
   @override
   Future<void> writeCharacteristic(String serviceUuid, String characteristicUuid, List<int> data) async {
     writes.add(List<int>.from(data));
+    onWrite?.call(data);
   }
 
   @override
@@ -915,6 +918,71 @@ void main() {
 
     await connection.disconnect();
   }, timeout: const Timeout(Duration(seconds: 10)));
+
+  test('Custom Live retries firmware streaming after decoded audio stalls; link loss censors the attempt', () async {
+    final transport = FakeDeviceTransport();
+    final device = BtDevice(name: 'Limitless Pendant', id: 'fake-limitless', type: DeviceType.limitless, rssi: -50);
+    final connection = LimitlessDeviceConnection(
+      device,
+      transport,
+      streamHealthWindow: const Duration(milliseconds: 150),
+      setupSettleDelay: Duration.zero,
+      reconnectSettleDelay: Duration.zero,
+    );
+    addTearDown(connection.disconnect);
+    final decoded = Completer<void>();
+    final subscription = await connection.performGetBleAudioBytesListener(
+      onAudioBytesReceived: (_) {
+        if (!decoded.isCompleted) decoded.complete();
+      },
+    );
+    addTearDown(() => subscription?.cancel());
+    final activated = Completer<void>();
+    final outcome = Completer<LimitlessRealtimeHealthOutcome>();
+
+    final connected = Completer<void>();
+    final statusSub =
+        transport.connectionStateStream.where((state) => state == DeviceTransportState.connected).listen((_) {
+      if (!connected.isCompleted) connected.complete();
+    });
+    addTearDown(statusSub.cancel);
+    final initialSetup = connection.connect();
+    await connected.future;
+    connection.watchCustomLiveAudio(
+      captureIsCurrent: () => true,
+      onEnabled: activated.complete,
+      report: outcome.complete,
+    );
+    await initialSetup;
+    await activated.future.timeout(const Duration(seconds: 2));
+
+    final reactivation = Completer<void>();
+    transport.onWrite = (data) {
+      if (decodeWrapperCommand(data)['messageNumber'] == 8 && !reactivation.isCompleted) reactivation.complete();
+    };
+    final frames = [for (var i = 0; i < 8; i++) opusFrame(0xb8, i, 40)];
+    transport.emit(
+      limitlessRxCharUuid,
+      bleWrapper(
+        10,
+        0,
+        1,
+        pendantMessage(storageBufferBytes(
+          session: 7,
+          seq: 1,
+          index: 100,
+          page: flashPageBytes(1750000000000, [audioWrapper(audioBlobOfFrames(frames))]),
+        )),
+      ),
+    );
+    await decoded.future.timeout(const Duration(seconds: 2));
+    expect(transport.writes, hasLength(2));
+    await reactivation.future.timeout(const Duration(seconds: 2));
+    expect(transport.writes.map((data) => decodeWrapperCommand(data)['messageNumber']), [6, 8, 8]);
+
+    transport.emitState(DeviceTransportState.disconnected);
+    expect(await outcome.future.timeout(const Duration(seconds: 2)), LimitlessRealtimeHealthOutcome.censored);
+  });
 
   test('concurrent Limitless status probes share one control write', () async {
     final transport = FakeDeviceTransport();

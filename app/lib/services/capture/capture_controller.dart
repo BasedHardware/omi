@@ -20,6 +20,7 @@ import 'package:omi/services/wals/sync_wake_scope.dart';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
@@ -802,6 +803,7 @@ class CaptureController extends ChangeNotifier
   /// recording-device notification so an in-flight socket/BLE open that awaited a
   /// codec or resolver result cannot install transport across a same-id ABA.
   int _deviceIdentityRevision = 0;
+  LimitlessDeviceConnection? _limitlessAudioConnection;
 
   /// Depth of in-flight `reconnectActiveCaptureForTesting` probes. Nonzero only
   /// under explicit testing probes; while held, `updateRecordingDevice` may
@@ -1445,6 +1447,7 @@ class CaptureController extends ChangeNotifier
   bool _deviceIdentityStale(int? revision) => revision != null && _deviceIdentityRevision != revision;
 
   void _rollCaptureSession(String identity) {
+    _stopLimitlessCustomLiveWatch();
     _liveSocketIdentity = null;
     _mobileStandardBatchAllowed = false;
     _mobileStandardBatch?.authorize(false);
@@ -1670,6 +1673,7 @@ class CaptureController extends ChangeNotifier
 
   Future<void> _transcriptionSettingsChangedBody() async {
     Logger.debug("Transcription settings changed, refreshing socket connection...");
+    _refreshLimitlessCustomLiveWatch();
     await _reconcileNativeBackgroundStreamingPolicy();
 
     final device = _recordingDevice;
@@ -2742,9 +2746,69 @@ class CaptureController extends ChangeNotifier
     }
     if (_deviceIdentityStale(deviceRevision)) return;
     updateRecordingState(isPaused ? RecordingState.pause : RecordingState.deviceRecord);
+    if (Platform.isAndroid && connection is LimitlessDeviceConnection) {
+      _limitlessAudioConnection = connection;
+      _refreshLimitlessCustomLiveWatch();
+    }
     _armUplinkSilence();
     notifyListeners();
   }
+
+  void _stopLimitlessCustomLiveWatch() {
+    _limitlessAudioConnection?.stopCustomLiveAudioWatch();
+    _limitlessAudioConnection = null;
+  }
+
+  void _refreshLimitlessCustomLiveWatch() {
+    final connection = _limitlessAudioConnection;
+    if (connection == null) return;
+    connection.stopCustomLiveAudioWatch();
+    final device = _recordingDevice;
+    final recordingId = activeRecordingId;
+    final token = _sessionOwner?.token;
+    final deviceRevision = _deviceIdentityRevision;
+    final captureRevision = _preferences.capturePolicy.revision;
+    final config = _preferences.customSttConfig;
+    if (device == null || recordingId == null || !config.isEnabled || config.provider != SttProvider.customLive) return;
+
+    bool isCurrent() {
+      if (_captureControllerDisposed ||
+          _deviceIdentityStale(deviceRevision) ||
+          !_admitsCapture(captureRevision) ||
+          !_captureSessionIsCurrent(token) ||
+          _recordingDevice?.id != device.id ||
+          activeRecordingId != recordingId ||
+          _bleBytesStream == null ||
+          _omiCallActive ||
+          _pendantSuspension != null ||
+          _capture.stagedReadModel.phase != CapturePhase.pendantLive ||
+          _preferences.batchModeEnabled) {
+        return false;
+      }
+      return _preferences.customSttConfig.sttConfigId == config.sttConfigId;
+    }
+
+    if (!isCurrent()) return;
+    _recordingTelemetry.observeCustomLiveAudioEligibility();
+    if (_customLiveAudioRecoveryKilled) {
+      _recordingTelemetry.observeCustomLiveAudioDetection(enabled: false);
+      return;
+    }
+    connection.watchCustomLiveAudio(
+      captureIsCurrent: () => isCurrent() && !_customLiveAudioRecoveryKilled,
+      onEnabled: () => _recordingTelemetry.observeCustomLiveAudioDetection(enabled: true),
+      report: (outcome) {
+        if (activeRecordingId == recordingId) {
+          _recordingTelemetry.observeCustomLiveAudioStall(outcome);
+        }
+      },
+    );
+  }
+
+  // DeviceService's saved-reconnect policy already refreshes the shared flag cache.
+  bool get _customLiveAudioRecoveryKilled =>
+      !customLiveCaptureFixEnabled ||
+      AnalyticsManager().isBooleanFeatureEnabledCached('android-custom-live-audio-recovery-kill');
 
   Future<void> _saveNativeBleStreamConfig(BtDevice device, BleAudioCodec codec) async {
     final audioTarget = _nativeBleAudioTarget(device);
