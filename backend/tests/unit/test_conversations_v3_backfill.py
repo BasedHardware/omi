@@ -8,7 +8,7 @@ allowed are the backfill stamps and the notes marker the backfill drains itself.
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 
@@ -615,6 +615,48 @@ async def test_drain_runs_live_notes_and_settles_each_row(direct, monkeypatch):
     assert sorted(settled) == [('boom', True), ('ok', False)]
     assert counts['processed'] == 1 and counts['retry'] == 1 and counts['remaining'] == 0
     assert sorted(released) == ['summary-boom', 'summary-ok']
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('engine', ['go', 'pending', None])
+async def test_drain_reaches_python_notes_behind_saturated_foreign_page(direct, monkeypatch, engine):
+    first = [SimpleNamespace(id=f'prefix-{n:03d}') for n in range(128)]
+    tail = SimpleNamespace(id='tail')
+    pending = {doc.id for doc in first + [tail]}
+    prefix_ownership = {'finalization_engine': engine, 'finalization_owner_epoch': 1} if engine else {}
+    collection = Mock()
+    page = collection.where.return_value.limit.return_value
+    page.stream.side_effect = lambda: [doc for doc in first + [tail] if doc.id in pending][:128]
+    after = page.start_after.return_value
+    after.stream.side_effect = lambda: [tail] if tail.id in pending else []
+
+    monkeypatch.setattr(store, 'get_firestore_client', lambda: object())
+    monkeypatch.setattr(store, 'user_conversations', lambda *_: collection)
+    monkeypatch.setattr(
+        store, 'decode_row', lambda _, doc: {'id': doc.id, **(prefix_ownership if doc in first else {})}
+    )
+    monkeypatch.setattr(leases, 'acquire', lambda *args: 'token')
+    monkeypatch.setattr(leases, 'release', lambda *args: None)
+    process = AsyncMock()
+    monkeypatch.setattr(service, '_process_leased', process)
+
+    def settle(_uid, cid, **_kwargs):
+        pending.remove(cid)
+        return 'settled'
+
+    monkeypatch.setattr(writers, 'settle_backfill_processing', settle)
+    counts = await service.drain_backfill('u', deadline=float('inf'))
+    if engine is None:
+        # The original full unmarked page still uses only the two existing scans.
+        assert counts['processed'] == 128 and counts['remaining'] == 1
+        assert page.stream.call_count == 2
+        page.start_after.assert_not_called()
+    else:
+        process.assert_awaited_once_with('u', {'id': 'tail'}, 'token')
+        assert counts['processed'] == 1
+        assert counts['remaining'] == counts['ownership_blocked'] == 128
+        assert page.start_after.call_args_list == [((first[-1],), {})] * 2
+        assert pending == {doc.id for doc in first}
 
 
 class Ledger:

@@ -21,6 +21,7 @@ from database.conversations_v3_undo_removals import removal_ref
 from database.home_feed_fields import COMMIT_STAMPED_FIELDS
 from database.account_deletion_marker import account_deletion_blocks_user_work, account_deletion_document
 from database.account_deletion_policy import account_deletion_marker_blocks_access
+from models.finalization_owner import python_owns_finalization
 from utils.encryption import encrypt, decrypt
 from config.conversations_v3 import boundary_seconds, stretch_cohesion_enabled
 from utils.conversations.v3 import Conflict, policy, preview_wakes
@@ -1184,13 +1185,25 @@ def backfill_window_metadata(uid, since, until, *, firestore_client=None):
 def pending_backfill_processing(uid, *, firestore_client=None):
     """Backfilled rows whose notes are owed; the live sweep and live drain never read this marker."""
     client = firestore_client or get_firestore_client()
-    return [
-        decode_row(uid, doc)
-        for doc in user_conversations(client, uid)
-        .where(filter=FieldFilter('v3_backfill_process_pending', '==', True))
-        .limit(LIMIT)
-        .stream()
-    ]
+    query = user_conversations(client, uid).where(filter=FieldFilter('v3_backfill_process_pending', '==', True))
+    page = query.limit(LIMIT)
+
+    def scan(page_query):
+        snapshots = list(page_query.stream())
+        return snapshots, [decode_row(uid, snapshot) for snapshot in snapshots]
+
+    snapshots, first = scan(page)
+    owned = [row for row in first if row]
+    if not owned or any(python_owns_finalization(row) for row in owned):
+        return first
+
+    # Keep the first page as evidence of remaining foreign debt. Search for one
+    # page of Python work without loading every foreign page into memory.
+    while len(snapshots) == LIMIT:
+        snapshots, rows = scan(page.start_after(snapshots[-1]))
+        if any(row and python_owns_finalization(row) for row in rows):
+            return first + rows
+    return first
 
 
 def backfill_run_documents(uid, run_id, *, firestore_client=None):
