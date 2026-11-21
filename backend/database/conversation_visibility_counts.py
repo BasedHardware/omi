@@ -7,6 +7,8 @@ from fastapi import HTTPException
 
 from utils.sync import bridge_pending
 
+from .conversation_revisions import ensure_timezone_aware
+
 
 def matches_list_predicates(
     data: Mapping[str, Any],
@@ -35,10 +37,10 @@ def matches_list_predicates(
         return False
     if starred is not None and bool(data.get('starred')) != starred:
         return False
-    stamp = data.get(date_field)
-    if start_date is not None and (stamp is None or stamp < start_date):
+    stamp = ensure_timezone_aware(raw_stamp) if isinstance(raw_stamp := data.get(date_field), datetime) else None
+    if start_date is not None and (stamp is None or stamp < ensure_timezone_aware(start_date)):
         return False
-    if end_date is not None and (stamp is None or stamp > end_date):
+    if end_date is not None and (stamp is None or stamp > ensure_timezone_aware(end_date)):
         return False
     return True
 
