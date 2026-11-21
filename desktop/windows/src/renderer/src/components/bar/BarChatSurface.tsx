@@ -84,17 +84,13 @@ function OmiChatRow({ onOpen }: { onOpen: () => void }): React.JSX.Element {
   )
 }
 
-/** Leading status column shared by EVERY list row so all titles line up on one
- *  left margin (no ragged edge). The dot pulses when that row is active — Omi
- *  thinking/speaking, or an agent running a task — and is a calm neutral marker
- *  otherwise. Neutral/emerald only (no purple — brand rule). */
+/** Static activity marker: status text and latest activity convey progress
+ *  without continuous motion drawing attention to a background job. */
 function RowStatusDot({ active }: { active: boolean }): React.JSX.Element {
   return (
     <span
       aria-hidden="true"
-      className={`h-2 w-2 shrink-0 rounded-full ${
-        active ? 'animate-pulse bg-emerald-400' : 'bg-neutral-600'
-      }`}
+      className={`h-2 w-2 shrink-0 rounded-full ${active ? 'bg-emerald-400' : 'bg-neutral-600'}`}
     />
   )
 }

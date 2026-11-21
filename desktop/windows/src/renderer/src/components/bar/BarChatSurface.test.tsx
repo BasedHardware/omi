@@ -6,6 +6,7 @@ import path from 'node:path'
 import { useState } from 'react'
 import { render, cleanup, fireEvent, screen, act } from '@testing-library/react'
 import { BarChatSurface, type BarChatSurfaceProps } from './BarChatSurface'
+import type { AgentPill } from './agentPills'
 import type { BarChatState } from '../../../../shared/types'
 
 // The conversation view pins the message list with a ResizeObserver (absent in jsdom).
@@ -286,6 +287,55 @@ describe('BarChatSurface', () => {
     fireEvent.click(screen.getByText('Refactor the parser'))
     expect(props.onOpenPill).toHaveBeenCalledWith('p1')
     expect(props.onOpenConversation).not.toHaveBeenCalled()
+  })
+
+  it('list: a quiet job row keeps progress, draft focus and run controls across updates', () => {
+    const pill: AgentPill = {
+      id: 'p1',
+      runId: 'r1',
+      sessionId: 's1',
+      title: 'Prepare the proposal',
+      displayStatus: 'running',
+      latestActivity: 'Reading notes',
+      query: 'Prepare the proposal',
+      createdAtMs: 1,
+      completedAtMs: null,
+      errorMessage: null,
+      provider: null,
+      viewedAtMs: null
+    }
+    const props = makeProps({ pills: [pill], draft: 'Keep this draft', onStopPill: vi.fn() })
+    const { rerender } = render(<BarChatSurface {...props} />)
+    const input = screen.getByPlaceholderText(/Ask Omi/i)
+    const open = screen.getByRole('button', { name: /Prepare the proposal/ })
+
+    // jsdom cannot run keyframes; computed motion still needs real-renderer verification.
+    expect(open.querySelector('.animate-pulse')).toBeNull()
+    expect(open.textContent).toContain('Running')
+    expect(document.activeElement).toBe(input)
+
+    const updated = { ...pill, latestActivity: 'Draft ready for review' }
+    rerender(<BarChatSurface {...props} pills={[updated]} />)
+    expect(screen.getByText('Draft ready for review')).toBeTruthy()
+    expect(document.activeElement).toBe(input)
+    expect((input as HTMLTextAreaElement).value).toBe('Keep this draft')
+    expect(props.setDraft).not.toHaveBeenCalled()
+
+    fireEvent.click(screen.getByLabelText('Stop agent'))
+    expect(props.onStopPill).toHaveBeenCalledWith(updated)
+    expect(props.onOpenPill).not.toHaveBeenCalled()
+
+    rerender(
+      <BarChatSurface
+        {...props}
+        pills={[{ ...updated, displayStatus: 'done', completedAtMs: 2 }]}
+      />
+    )
+    fireEvent.click(screen.getByRole('button', { name: /Prepare the proposal/ }))
+    expect(props.onOpenPill).toHaveBeenCalledWith('p1')
+    fireEvent.click(screen.getByLabelText('Dismiss agent'))
+    expect(props.onDismissPill).toHaveBeenCalledWith('p1')
+    expect(screen.queryByLabelText('Stop agent')).toBeNull()
   })
 
   it('conversation: header renders the passed title prop (data-driven, not hardcoded)', () => {
