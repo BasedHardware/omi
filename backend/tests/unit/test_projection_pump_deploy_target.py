@@ -221,7 +221,11 @@ def test_prod_pump_is_integration_plus_the_dark_overrides():
     # The one-key activation keeps the dark successor's silence-skip value (SCA-3318).
     overridden = (
         set(ACTIVE_OVERRIDES)
-        | {'BATCH_PIPELINE_INDEPENDENT_LANGUAGE_RECOVERY_ENABLED', 'BATCH_PIPELINE_SILENCE_READ_SKIP_ENABLED'}
+        | {
+            'BATCH_PIPELINE_INDEPENDENT_LANGUAGE_RECOVERY_ENABLED',
+            'BATCH_PIPELINE_SILENCE_READ_SKIP_ENABLED',
+            'BATCH_PIPELINE_SERVING_PROJECTION_SWEEP',
+        }
         | train_pins
     )
     assert set(pump['env']) - set(integration['env']) <= overridden
@@ -1356,3 +1360,19 @@ def test_pinned_inverse_refuses_a_secret_backed_pump_flag(inverse_readback):
     expected = inverse.ExpectedInverse.from_disposition(INVERSE_RECEIPT)
     with pytest.raises(ValueError, match='BATCH_PIPELINE_PROJECTION_PUMP_ENABLED'):
         inverse.verify(service, candidate, iam, expected, before_first_pin=False)
+
+
+def test_integration_serving_sweep_is_off_and_the_pump_keeps_its_loop():
+    """SCA-3318 step 3: only the literal 'off' disables the serving sweep; the pump's loop runs in pump mode."""
+    services = _prod_services()
+    assert services['backend-integration']['env']['BATCH_PIPELINE_SERVING_PROJECTION_SWEEP'] == {
+        'value': 'off',
+        'category': 'ops_kill',
+    }
+    assert services[PROJECTION_PUMP]['env']['BATCH_PIPELINE_SERVING_PROJECTION_SWEEP'] == {
+        'value': 'on',
+        'category': 'ops_kill',
+    }
+    assert services[PROJECTION_PUMP]['env']['BATCH_PIPELINE_PROJECTION_PUMP_ENABLED']['value'] == 'true'
+    for name in ('backend', 'backend-sync', 'backend-sync-backfill'):
+        assert 'BATCH_PIPELINE_SERVING_PROJECTION_SWEEP' not in services[name]['env'], name

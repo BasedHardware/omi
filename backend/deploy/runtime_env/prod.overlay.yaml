@@ -1871,6 +1871,9 @@ overlay:
           # SCA-3544: #25920's claimed-sibling skip ships dark until David's activation on SCA-3508.
           # Activation sets this value to 'true' (Cloud Run merges env, so deleting the key would leave false).
           BATCH_PIPELINE_FOLLOWUP_CLAIMED_SIBLING_SKIP_ENABLED: {value: 'false', category: ops_kill}
+          # SCA-3318 step 3: the projection pump owns the recurring sweep; integration's serving sweep is off.
+          # Only the literal 'off' disables this switch ('false' keeps it ON). Rollback: the prior revision, or 'on'.
+          BATCH_PIPELINE_SERVING_PROJECTION_SWEEP: {value: 'off', category: ops_kill}
           # BATCH_PIPELINE_MERGE_STALE_HEAD_UID_ALLOWLIST (#25673 canary) is a private uid binding:
           # it is omitted here so deploys keep the live value; set it on the service at deploy time.
           # Silent read skipping on (SCA-1824 canary READBACK -13.5% reads); kill switch: set false.
@@ -2186,6 +2189,9 @@ overlay:
           # never on backend-integration (the selector is service-wide). Rollback: 'false'.
           BATCH_PIPELINE_SERVING_ENABLED: {value: 'false', category: rollout}
           BATCH_PIPELINE_PROJECTION_PUMP_ENABLED: {value: 'true', category: rollout}
+          # The pump's loop runs in 'pump' mode, which ignores this switch (projection_drain.py); pin the
+          # inherited value back to the default so the pump's env keeps its meaning.
+          BATCH_PIPELINE_SERVING_PROJECTION_SWEEP: {value: 'on', category: ops_kill}
           # SCA-3318 one-key activation: keep the serving dark successor's silence-skip value (false);
           # widening the skip to the pump is a separate later change. Rollback for the pump key: 'false'.
           BATCH_PIPELINE_SILENCE_READ_SKIP_ENABLED: {value: 'false', category: ops_kill}
