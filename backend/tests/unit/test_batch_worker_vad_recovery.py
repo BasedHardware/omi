@@ -3,6 +3,7 @@
 import pytest
 from copy import deepcopy
 import io
+import logging
 import wave
 
 from tests.unit.test_batch_pipeline_quarantine_recovery import setup, legacy_dependencies, row  # noqa: F401
@@ -229,6 +230,7 @@ def test_ordinary_serving_async_preserves_receipts_and_privacy(
 ):
     import asyncio
 
+    caplog.set_level(logging.INFO)
     client, _, binding, artifacts, modulate, soniox, recovery, _ = ordinary(setup, monkeypatch, legacy_dependencies)
     worker_receipt(client, 1.5)
     if outcome.startswith('error'):
