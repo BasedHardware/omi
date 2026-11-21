@@ -71,7 +71,7 @@ async def test_backfill_never_adopts_and_never_parks_the_live_builder(builder, m
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('reason', ['target_exists', 'multiple_open_conversations', 'v3_derived_budget'])
+@pytest.mark.parametrize('reason', ['target_exists', 'multiple_open_conversations', 'v3_derived_budget', 'invalid_row'])
 async def test_deterministic_conflict_answers_the_task_and_backs_the_owner_off(builder, monkeypatch, reason):
     monkeypatch.setattr(store, 'load', lambda *a, **kw: ({'r': source()}, {}, []))
 
@@ -288,6 +288,7 @@ def _open_loop_row(level):
     return {
         'id': 'c',
         'status': 'processing',
+        'created_at': AT,
         'started_at': AT,
         'finished_at': AT,
         'v3_recording_ids': ['r'],

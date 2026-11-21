@@ -272,6 +272,11 @@ try:
 finally:
     _restore_stubbed_modules()
 
+# Read isolation is the real shared primitive, not a stub: a stub would screen out every hydrated row.
+from utils.conversations import row_contract as _real_row_contract  # noqa: E402
+
+conv.row_contract = _real_row_contract
+
 # The router imports these helpers from a lightweight module stub in this test file. Keep the default
 # parser on the natural-language path; individual exact-reference tests override it explicitly.
 conv.parse_exact_conversation_reference = MagicMock(return_value=None)

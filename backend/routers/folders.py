@@ -1,7 +1,7 @@
 from utils.conversations.layer import read_product as read_product_conversation
 import logging
 
-from utils.conversations import transcribing_hold
+from utils.conversations import row_contract, transcribing_hold
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from typing import List, Optional
@@ -159,17 +159,8 @@ def get_folder_conversations(
     )
     conversations = [transcribing_hold.project(row) for row in conversations]
     redact_conversations_for_list(conversations)
-    # Validate each record individually so one malformed/legacy conversation doesn't fail the whole list
-    # with a 500.
-    valid_conversations: List[Conversation] = []
-    for conv in conversations:
-        try:
-            valid_conversations.append(Conversation.model_validate(conv))
-        except ValidationError as e:
-            invalid_fields = [err['loc'][0] for err in e.errors() if err.get('loc')]
-            logger.warning(f"Skipping invalid conversation in folder {folder_id} for uid {uid}: {invalid_fields}")
-            continue
-    return valid_conversations
+    # One malformed/legacy conversation must not fail the whole list with a 500.
+    return row_contract.readable_models(conversations, surface='folder_conversations', model=Conversation)
 
 
 @router.patch(

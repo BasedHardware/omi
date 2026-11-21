@@ -12,7 +12,7 @@ from models.conversation_tasks import (
     TaskConversationPageResponse,
 )
 from routers.conversations import search_task_conversation_candidates
-from utils.conversations import paid_lock_recovery, transcribing_hold
+from utils.conversations import paid_lock_recovery, row_contract, transcribing_hold
 from utils.conversations.render import redact_conversations_for_list
 from utils.conversations.task_filter import TaskFilterCursorError, TaskFilterUnavailable, task_conversation_page
 from utils.executors import db_executor, run_blocking
@@ -101,5 +101,6 @@ async def conversations_with_tasks(
         ) from error
     result['items'] = [transcribing_hold.project(row) for row in result['items']]
     redact_conversations_for_list(result['items'])
+    result['items'] = row_contract.readable_rows(result['items'], surface='conversations_with_tasks')
     budget.observe('truncated' if result['partial'] else 'complete')
     return result

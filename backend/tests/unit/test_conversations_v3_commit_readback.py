@@ -82,10 +82,12 @@ def planned(count, *, text_bytes=60000):
         {
             'id': f'c{i}',
             'status': 'processing',
+            'created_at': AT + timedelta(minutes=i),
+            'structured': {},
             'started_at': AT + timedelta(minutes=i),
             'finished_at': AT + timedelta(minutes=i, seconds=30),
             'v3_recording_ids': ['r'],
-            'transcript_segments': [{'text': 'x' * text_bytes}],
+            'transcript_segments': [{'text': 'x' * text_bytes, 'is_user': True, 'start': 0, 'end': 30}],
             'home_source_version': 'stale-from-prior',
         }
         for i in range(count)

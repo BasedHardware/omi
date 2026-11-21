@@ -1,6 +1,8 @@
 """Generated batch/listen policy invariants and replay coverage."""
 
+import json
 from dataclasses import replace
+from pathlib import Path
 
 import pytest
 
@@ -12,7 +14,7 @@ from testing.pipeline_sim import sim as sim_module
 from testing.pipeline_sim.policy_invariants import assert_policy_invariants, simulate_policy_case
 from testing.pipeline_sim.sim import SimConfig, simulate
 from testing.pipeline_sim.stt import EMPTY, ExhaustionWindow, FakeModulate, ModulateProfile, SPEECH, STTProfile
-from testing.pipeline_sim.trace import GOLDEN_CONFIGS, golden_trace, trace
+from testing.pipeline_sim.trace import GOLDEN_CONFIGS, trace
 from testing.pipeline_sim.workload import NORMAL, SegmentSpec, UploadSpec, Workload, WorkloadSpec, content_id_for
 
 PR_SEED = 20261020
@@ -125,7 +127,8 @@ def test_seeded_double_vendor_charge_is_detected(monkeypatch):
 
 def test_policy_window_recorded_policy_id_replays_the_golden_decision():
     config = GOLDEN_CONFIGS['policy_window']()
-    expected = golden_trace('policy_window')
+    golden = Path(__file__).parent / 'fixtures' / 'pipeline_sim_goldens' / 'policy_window.json'
+    expected = json.loads(golden.read_text())
     recorded_run = simulate(config)
     recorded = next(record.first_summary_policy for record in recorded_run.records if record.first_summary_policy)
     assert recorded.policy_id

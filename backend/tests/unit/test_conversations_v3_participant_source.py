@@ -9,7 +9,7 @@ os.environ.setdefault('ENCRYPTION_SECRET', 'omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7
 
 from datetime import datetime, timedelta, timezone  # noqa: E402
 
-from models.conversation import Conversation  # noqa: E402
+from tests.unit.fixtures.conversation_round_trip import assert_conversation_row_round_trips  # noqa: E402
 from models.structured import Participant, Structured  # noqa: E402
 from utils.conversations.v3 import outline, planner  # noqa: E402
 
@@ -41,7 +41,7 @@ def _built_row(people):
 def test_planned_window_with_people_validates_as_conversation():
     built = _built_row(['Alex', 'Sam'])
     assert [p['source'] for p in built['structured']['participants']] == ['transcript', 'transcript']
-    conversation = Conversation(**built)
+    conversation = assert_conversation_row_round_trips(built)
     assert [p.name for p in conversation.structured.participants] == ['Alex', 'Sam']
 
 

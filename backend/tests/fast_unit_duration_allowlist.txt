@@ -21,6 +21,9 @@ tests/unit/test_llm_gateway_deploy_contract.py::test_gateway_deploy_workflows_bi
 # Parses the full deploy/runtime_env.yaml manifest (grew ~230 lines in #21803); measured 0.32s CPU locally.
 tests/unit/test_llm_gateway_deploy_contract.py::test_prod_gateway_wiring_promotes_cloud_run_only_after_verified_endpoint_injection
 tests/unit/test_rendered_deployment_contract.py::test_repository_charts_render_the_full_contract_when_helm_is_available
+# Runs the changed-file selector over every discovered test file for each chart source; CPU grows with the suite
+# (1.04s on CI runners in #25720, under 1s locally). Hermetic selector contract, required in the unit lane.
+tests/unit/test_monitoring_adapter_hpa_contract.py::test_hpa_and_adapter_changes_select_this_contract
 # Builds 10,001 in-memory records to prove universal export has no historical-data cap.
 tests/unit/test_universal_memory_service.py::test_export_has_no_silent_record_cap
 # Copies 10,001 records and verifies every payload group across both namespaces to prove

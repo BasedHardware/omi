@@ -25,6 +25,7 @@ from database.account_deletion_policy import account_deletion_marker_blocks_acce
 from models.finalization_owner import ENGINE_FIELD, EPOCH_FIELD, python_owns_finalization
 from utils.encryption import encrypt, decrypt
 from config.conversations_v3 import boundary_seconds, stretch_cohesion_enabled
+from utils.conversations import row_contract
 from utils.conversations.v3 import Conflict, policy, preview_wakes
 from utils.open_loops.extraction import OPEN_LOOP_EXTRACTIONS_COMPRESSED_FIELD, OPEN_LOOP_EXTRACTIONS_FIELD
 
@@ -636,6 +637,13 @@ def commit_projection(
         # path never decodes them); the codec accepts only the decoded object.
         blob = clean.pop(OPEN_LOOP_EXTRACTIONS_FIELD, None)
         marker = clean.pop(OPEN_LOOP_EXTRACTIONS_COMPRESSED_FIELD, None)
+        if not row.get('deleted'):
+            # Readers validate stored rows with Conversation; a planner bug must park this owner here
+            # (nothing committed, sources stay owed) instead of failing every list read.
+            try:
+                row_contract.check_write(clean, producer='v3_backfill' if key == BACKFILL_LEASE else 'v3_planner')
+            except row_contract.InvalidConversationRow as error:
+                raise Conflict('invalid_row') from error
         level = clean.get('data_protection_level') or 'standard'
         encoded = conversations._prepare_conversation_for_write(  # pyright: ignore[reportPrivateUsage] -- reuse the authoritative encryption codec
             clean, uid, level, allow_offload=True

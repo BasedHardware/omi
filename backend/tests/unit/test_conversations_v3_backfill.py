@@ -520,10 +520,12 @@ def convert(strict):
         'backfilled': True,
         'v3_backfill_run': RUN,
         'status': 'processing',
+        'created_at': AT,
         'started_at': AT,
         'finished_at': AT + timedelta(minutes=1),
         'v3_recording_ids': ['r'],
-        'transcript_segments': [{'text': 'copied speech'}],
+        'transcript_segments': [{'text': 'copied speech', 'start': 0, 'end': 1, 'is_user': True}],
+        'structured': {},
     }
     store.commit_projection(
         'synthetic', token, {'r': donor}, {}, [row], [], key=store.BACKFILL_LEASE, firestore_client=strict

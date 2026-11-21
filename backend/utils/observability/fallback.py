@@ -217,6 +217,7 @@ ALLOWED_COMPONENTS = frozenset(
         'conversation_relevance',
         'conversation_finalization',
         'conversation_notes',
+        'conversation_row_contract',
         'speaker_assignments',
         'daily_summary',
         'feature_flags',

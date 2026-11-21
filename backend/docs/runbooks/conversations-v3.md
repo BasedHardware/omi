@@ -185,8 +185,9 @@ extension may still index recordings; first-party projection deletes them and
 hydration rejects them. Admin raw-index counts may therefore be inflated.
 
 Deterministic reconcile conflicts (`target_exists`, `target_deleted`, `multiple_open_conversations`,
-the closure/derived budgets, `recording_decode_unavailable`, `account_deletion`, and
-`document_too_large` when a written document exceeds Firestore's 1 MiB limit) answer the task with
+the closure/derived budgets, `recording_decode_unavailable`, `account_deletion`,
+`document_too_large` when a written document exceeds Firestore's 1 MiB limit, and
+`invalid_row` when a planned row fails the reader model at the write seam) answer the task with
 outcome `blocked` instead of a 500 retry and park the owner on the builder lease doc
 (`v3_backoff_until`, 5 min doubling to 1 h, token-fenced); `v3_pending` stays owed, on-open bypasses it,
 backfill never parks the live builder, and the next successful commit clears it. `request_too_large`

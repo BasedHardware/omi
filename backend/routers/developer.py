@@ -100,7 +100,7 @@ from utils.observability.firestore_request_reads import ReadComponent, read_comp
 from utils import external_list_reads as external_lists
 from utils import external_polling_cache as polling_cache
 from utils.developer_item_reads import project_structured_defaults, read_conversation_item
-from utils.conversations import transcribing_hold
+from utils.conversations import row_contract, transcribing_hold
 from config.episodes import home_transcription_presentation_gate_enabled
 from utils.mcp_server.handlers.conversations import conversation_cards_page_core
 from utils.mcp_server.errors import ToolExecutionError
@@ -1623,20 +1623,11 @@ def get_conversations(
 
         # Validate each record individually so a single malformed/legacy doc doesn't fail the whole page
         # with a 500. Mirrors the hardening already applied to GET /v1/dev/user/memories.
-        valid_conversations = []
-        for conv in unlocked_conversations:
-            if not isinstance(conv, dict) or not conv.get('id'):
-                logger.warning('Skipping malformed conversation in Developer API conversation list')
-                continue
-            try:
-                valid_conversations.append(Conversation.model_validate(project_structured_defaults(conv)))
-            except ValidationError as e:
-                invalid_fields = [err['loc'][0] for err in e.errors() if err.get('loc')]
-                logger.warning(
-                    f"Skipping invalid conversation doc {conv.get('id', 'unknown')} for uid {uid}: "
-                    f"missing/invalid fields {invalid_fields}"
-                )
-                continue
+        valid_conversations = row_contract.readable_models(
+            [project_structured_defaults(conv) if isinstance(conv, dict) else conv for conv in unlocked_conversations],
+            surface='developer_conversations',
+            model=Conversation,
+        )
         status = 200
         returned_count = len(valid_conversations)
         return valid_conversations

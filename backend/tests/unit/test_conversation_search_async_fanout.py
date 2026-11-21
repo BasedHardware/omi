@@ -2,6 +2,7 @@
 
 import asyncio
 import os
+from datetime import datetime, timezone
 from types import SimpleNamespace
 from typing import Any
 from unittest.mock import AsyncMock
@@ -25,7 +26,16 @@ from utils.conversations.search import ConversationSearchUnavailableError  # noq
 
 
 def _conv(cid: str) -> dict:
-    return {'id': cid, 'is_locked': False}
+    # The fields the search response model requires: the route drops a row it would reject.
+    now = datetime.now(timezone.utc)
+    return {
+        'id': cid,
+        'is_locked': False,
+        'created_at': now,
+        'started_at': now,
+        'finished_at': now,
+        'structured': {},
+    }
 
 
 def _typesense_result(ids: list, page: int = 1, per_page: int = 10) -> dict:

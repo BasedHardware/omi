@@ -1,7 +1,7 @@
 """GET /v1/folders/{id}/conversations must skip a malformed conversation instead of 500ing the list.
 
 The endpoint returned raw dicts under response_model=List[Conversation], so one malformed/legacy record
-500'd the whole list. We patch the Conversation model with a simple stand-in to exercise the skip loop.
+500'd the whole list. The skip loop is the shared utils.conversations.row_contract primitive.
 routers/folders.py has a heavy import graph, so we import it under a stub finder.
 """
 
@@ -13,9 +13,8 @@ import importlib.util
 import os
 import sys
 import types
+from datetime import datetime, timezone
 from unittest.mock import MagicMock, patch
-
-from pydantic import BaseModel
 
 os.environ.setdefault('OPENAI_API_KEY', 'sk-test-not-real')
 os.environ.setdefault('ENCRYPTION_SECRET', 'omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv')
@@ -100,14 +99,19 @@ finally:
 
 folders_mod.FolderUpdate = FolderUpdate
 
+# The router imported a stub; the skip loop under test is the real shared read-isolation primitive.
+from utils.conversations import row_contract  # noqa: E402
 
-class _FakeConv(BaseModel):
-    id: str
+
+def _row(cid):
+    now = datetime(2026, 11, 17, tzinfo=timezone.utc)
+    return {'id': cid, 'created_at': now, 'started_at': now, 'finished_at': now, 'structured': {'title': cid}}
 
 
 def test_malformed_conversation_skipped_not_500():
-    page = [{'id': 'c1'}, {}, {'id': 'c2'}]  # middle one missing required id
-    with patch.object(folders_mod, 'Conversation', _FakeConv), patch.object(
+    # The middle row misses every required field.
+    page = [_row('c1'), {'structured': {}}, _row('c2')]
+    with patch.object(folders_mod, 'row_contract', row_contract), patch.object(
         folders_mod.folders_db, 'get_folder', return_value={'id': 'f1'}
     ), patch.object(folders_mod.folders_db, 'get_conversations_in_folder', return_value=page), patch.object(
         folders_mod, 'redact_conversations_for_list', lambda x: None

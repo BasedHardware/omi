@@ -188,6 +188,7 @@ def test_commit_dedupes_claims_on_untouched_and_moved_sources(strict):
     row = {
         'id': 'c',
         'status': 'processing',
+        'created_at': T0,
         'started_at': T0,
         'finished_at': T0,
         'v3_recording_ids': ['r', 'm'],
@@ -232,10 +233,11 @@ def test_too_large_commit_logs_the_document_kind_and_size_only(strict, monkeypat
     row = {
         'id': 'secret-conversation-id',
         'status': 'processing',
+        'created_at': T0,
         'started_at': T0,
         'finished_at': T0,
         'v3_recording_ids': ['r'],
-        'transcript_segments': [{'text': 'secret words'}],
+        'transcript_segments': [{'text': 'secret words', 'start': 0, 'end': 1, 'is_user': True}],
         'structured': {},
     }
     with caplog.at_level(logging.WARNING, logger=store.logger.name), pytest.raises(InvalidArgument):
@@ -405,10 +407,12 @@ def test_batches_count_source_claim_rewrites_against_the_request(strict, monkeyp
         {
             'id': f'c{i}',
             'status': 'processing',
+            'created_at': T0,
             'started_at': T0,
             'finished_at': T0,
             'v3_recording_ids': ['r'],
-            'transcript_segments': [{'text': 'x' * 100000}],
+            'transcript_segments': [{'text': 'x' * 100000, 'start': 0, 'end': 1, 'is_user': True}],
+            'structured': {},
         }
         for i in range(8)
     ]

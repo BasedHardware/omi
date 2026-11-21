@@ -237,7 +237,7 @@ def test_conversation_route_preserves_page_cursor_and_unfetched_members(monkeypa
     routes = conversation_routes
 
     configure_membership(monkeypatch)
-    rows = [floor(episode_id='e'), floor(id='old', episode_id='unfetched')]
+    rows = [floor(episode_id='e', created_at=NOW), floor(id='old', episode_id='unfetched', created_at=NOW)]
     calls = []
     monkeypatch.setattr(
         routes.conversations_db,
