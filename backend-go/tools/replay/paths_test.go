@@ -58,7 +58,12 @@ func TestRejectReportAndUnreviewedCorpusInsideWorktree(t *testing.T) {
 }
 
 func TestPrivateCorpusRequiresRedactedReportAndExternalKey(t *testing.T) {
-	t.Parallel()
+	// This test covers the local-only path even when the suite itself runs in CI.
+	// Keep it sequential so these environment overrides cannot leak into parallel tests.
+	t.Setenv("CI", "false")
+	t.Setenv("GITHUB_ACTIONS", "false")
+	t.Setenv("GITLAB_CI", "false")
+	t.Setenv("BUILDKITE", "false")
 	scratch := t.TempDir()
 	corpus := filepath.Join(scratch, "recording.json")
 	key := filepath.Join(scratch, "test-key")

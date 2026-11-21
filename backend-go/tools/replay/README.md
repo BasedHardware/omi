@@ -63,6 +63,11 @@ framing; they are estimates, not provider-billed usage. Firestore counts cover t
 run; corpus seeding, snapshots, observation and cleanup are excluded. The tool also prints
 aggregate totals as a convenience.
 
+Until the driver switches to the lane 6 worker, the Go column and aggregate Go totals are
+measurements for the `cmd/jobd` conformance driver. Do not use the Go-versus-Python cost
+comparison as a gate on this interim run; the Go ≤ Python criterion applies to the lane 6
+worker replay.
+
 The tool exits **0** for parity, **1** for unexplained differences, and **2** for a setup,
 execution, or report error. It creates a new mode-0600 JSON file and refuses to overwrite a
 report. By default it reports paths, refusals and counts. The CLI rejects report locations inside Git worktrees.
