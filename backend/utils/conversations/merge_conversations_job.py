@@ -160,7 +160,16 @@ def retract_go_merge_source(job_id: str, generation: int, epoch: int, index: int
         owner, conversation, target, already_retracted = source
         if already_retracted:
             return True
-        retract_sync_bridge_source(owner, conversation)
+
+        def guard(transaction: Any) -> None:
+            current = store.resolve_go_cleanup_source(job_id, generation, epoch, index, transaction=transaction)
+            if current != source:
+                raise MergeLeaseLost('merge source retraction lost its sealed claim')
+
+        try:
+            retract_sync_bridge_source(owner, conversation, write_guard=guard)
+        except MergeLeaseLost:
+            return False
         receipt = store.resolve_go_cleanup_source(
             job_id, generation, epoch, index, retracted_source=(owner, conversation, target)
         )

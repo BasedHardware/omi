@@ -958,9 +958,10 @@ def _cancel_open_dated_task_reminders(uid: str, items: List[Dict]) -> None:
             )
 
 
-def retract_sync_bridge_source(uid: str, source_id: str) -> None:
+def retract_sync_bridge_source(uid: str, source_id: str, *, write_guard: Callable[[Any], None] | None = None) -> None:
     """Retract derived data, retaining redirect/audio; propagate failures for retry."""
-    _delete_conversation_and_related_data(uid, source_id, retain_capture=True)
+    guard_kwargs = {'write_guard': write_guard} if write_guard is not None else {}
+    _delete_conversation_and_related_data(uid, source_id, retain_capture=True, **guard_kwargs)
 
 
 def copy_sync_bridge_audio(uid: str, source_id: str, target_id: str) -> None:
@@ -1033,6 +1034,7 @@ def _delete_conversation_and_related_data(
     retain_capture: bool = False,
     purge_sync_sources: bool = True,
     merged_into: Optional[str] = None,
+    write_guard: Callable[[Any], None] | None = None,
 ) -> None:
     """
     Delete a conversation and all its generated/related data.
@@ -1064,6 +1066,8 @@ def _delete_conversation_and_related_data(
             retract_kwargs: dict[str, Any] = {}
             if retain_capture:
                 retract_kwargs['claim_destructive_gate'] = False
+            if write_guard is not None:
+                retract_kwargs['write_guard'] = write_guard
             if on_authoritative_retraction is None:
                 memory_service.retract_conversation_memories(uid, conversation_id, **retract_kwargs)
             else:
@@ -1090,7 +1094,16 @@ def _delete_conversation_and_related_data(
         # it on the deletion data message (#5085), so the merge has to send one per
         # open dated task, like the conversation delete path does.
         source_items = action_items_db.get_action_items_by_conversation(uid, conversation_id)
-        action_items_db.delete_action_items_for_conversation(uid, conversation_id)
+        if write_guard is None:
+            action_items_db.delete_action_items_for_conversation(uid, conversation_id)
+        else:
+            from database.space_store import FirestoreSpaceStore
+
+            def delete_source_tasks(tx: Any) -> None:
+                write_guard(tx.transaction)
+                tx.action_items.delete_conversation_documents(conversation_id)
+
+            FirestoreSpaceStore(uid, firestore_client=firestore_db).run(delete_source_tasks)
     except Exception as e:
         logger.error(f"Error deleting action items for {conversation_id}: {e}")
         if retain_capture:

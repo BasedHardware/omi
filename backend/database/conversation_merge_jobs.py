@@ -180,13 +180,18 @@ def renew(job_id: str, epoch: int, *, phase: str | None = None, firestore_client
 
 
 def resolve_go_cleanup_source(
-    job_id: str, generation: int, epoch: int, index: int, *, retracted_source: tuple[str, str, str] | None = None
+    job_id: str,
+    generation: int,
+    epoch: int,
+    index: int,
+    *,
+    retracted_source: tuple[str, str, str] | None = None,
+    transaction: Any = None,
 ) -> tuple[str, str, str, bool] | None:
     """Resolve or acknowledge a source under the exact sealed Go cleanup lease."""
     client = client_for(None)
     ref = client.collection(COLLECTION).document(job_id)
 
-    @firestore.transactional
     def resolve(transaction: Any) -> tuple[str, str, str, bool] | None:
         job = ref.get(transaction=transaction).to_dict() or {}
         sources = job.get('conversation_ids')
@@ -237,7 +242,9 @@ def resolve_go_cleanup_source(
             transaction.update(ref, {'go_cleanup_receipts': receipts})
         return owner, source, target, already_retracted or retracted_source is not None
 
-    return resolve(client.transaction())
+    if transaction is not None:
+        return resolve(transaction)
+    return firestore.transactional(resolve)(client.transaction())
 
 
 def finish(job_id: str, epoch: int, *, firestore_client: Any = None) -> bool:

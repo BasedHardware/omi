@@ -266,16 +266,20 @@ def test_go_retraction_requires_current_sealed_lease_and_live_target(store, monk
     assert not worker.retract_go_merge_source(job_id, 1, 1, 1)
     retract.assert_not_called()
     assert worker.retract_go_merge_source(job_id, 1, 1, 0)
-    retract.assert_called_once_with(owner, 'a')
+    assert retract.call_args.args == (owner, 'a')
+    assert callable(retract.call_args.kwargs['write_guard'])
+    assert retract.call_count == 1
     assert row(store, 'a')['merge_job_id'] == job_id
     assert release.call_count == 4
     assert jobrow(store, admitted)['go_cleanup_receipts'] == {
         'source_0': {'generation': 1, 'epoch': 1, 'source': 'a', 'target': target}
     }
     assert worker.retract_go_merge_source(job_id, 1, 1, 0)
-    retract.assert_called_once_with(owner, 'a')
+    assert retract.call_args.args == (owner, 'a')
+    assert callable(retract.call_args.kwargs['write_guard'])
+    assert retract.call_count == 1
     jobrow(store, admitted).update(lease_epoch=2, go_cleanup_epoch=2)
-    retract.side_effect = lambda *_args: row(store, 'a').pop('transcript_corrections_moved_to')
+    retract.side_effect = lambda *_args, **_kwargs: row(store, 'a').pop('transcript_corrections_moved_to')
     assert not worker.retract_go_merge_source(job_id, 1, 2, 0)
     assert jobrow(store, admitted)['go_cleanup_receipts']['source_0']['epoch'] == 1
     retract.reset_mock()
@@ -348,3 +352,42 @@ def test_rollback_with_absent_target_retries_sibling_cleanup_and_skips_tombstone
     assert row(store, 'a')['status'] == 'merging'
     assert row(store, 'b')['status'] == 'completed'
     assert jobrow(store, job)['rollback_cleanup_steps'] == sorted(jobs.ROLLBACK_CLEANUP_STEPS)
+
+
+@pytest.mark.parametrize('change', ['tombstone', 'epoch'])
+def test_go_retraction_fences_writes_after_initial_validation(store, monkeypatch, go_retraction_ports, change):
+    from google.cloud import firestore
+
+    sync_jobs, access, merge, worker = go_retraction_ports
+    client, owner = store
+    admitted = admit(store)
+    job_id, target = admitted['job_id'], admitted['merge_target_id']
+    assert jobs.claim(job_id, firestore_client=client)
+    jobrow(store, admitted).update(phase='source_cleanup', go_cleanup_epoch=1)
+    client.rows[('users', owner, 'conversations', target)] = {'status': 'completed'}
+    row(store, 'a')['transcript_corrections_moved_to'] = target
+    monkeypatch.setattr(jobs, 'client_for', lambda _: client)
+    monkeypatch.setattr(access, 'should_skip_background_account_mutation', lambda _: False)
+    monkeypatch.setattr(sync_jobs, 'try_acquire_job_run_lock', lambda _: 'lock')
+    monkeypatch.setattr(sync_jobs, 'release_job_run_lock', lambda *_: None)
+
+    def retract(uid, cid, *, write_guard):
+        if change == 'tombstone':
+            client.rows[('users', owner, 'deleted_conversations', target)] = {'deleted': True}
+        else:
+            jobrow(store, admitted).update(lease_epoch=2, go_cleanup_epoch=2)
+
+        @firestore.transactional
+        def destructive_commit(transaction):
+            write_guard(transaction)
+            transaction.update(
+                client.collection('users').document(uid).collection('conversations').document(cid),
+                {'test_retracted': True},
+            )
+
+        destructive_commit(client.transaction())
+
+    monkeypatch.setattr(merge, 'retract_sync_bridge_source', retract)
+    assert not worker.retract_go_merge_source(job_id, 1, 1, 0)
+    assert 'test_retracted' not in row(store, 'a')
+    assert 'go_cleanup_receipts' not in jobrow(store, admitted)
