@@ -393,11 +393,9 @@ def test_go_retraction_fences_writes_after_initial_validation(store, monkeypatch
     assert 'go_cleanup_receipts' not in jobrow(store, admitted)
 
 
-def test_go_retraction_with_typesense_failure_does_not_receipt(store, monkeypatch, go_retraction_ports):
-    from unittest.mock import Mock
-
-    from database import action_items, space_store
-    from utils.conversations import typesense_index
+@pytest.fixture
+def sealed_provider_retraction(store, monkeypatch, go_retraction_ports):
+    from database import action_items
 
     sync_jobs, access, merge, worker = go_retraction_ports
     client, owner = store
@@ -415,6 +413,52 @@ def test_go_retraction_with_typesense_failure_does_not_receipt(store, monkeypatc
     monkeypatch.setattr(action_items, 'get_action_items_by_conversation', lambda *_: [])
     monkeypatch.setattr(action_items, 'get_action_item_ids', lambda *_args, **_kwargs: [])
     monkeypatch.setattr(merge, 'firestore_db', client)
+    return merge, worker, admitted
+
+
+@pytest.mark.parametrize('boundary', ['tasks', 'conversation', 'search'])
+def test_go_retraction_rechecks_claim_before_provider_delete(store, monkeypatch, sealed_provider_retraction, boundary):
+    from unittest.mock import Mock
+
+    from database import action_items, space_store
+
+    merge, worker, admitted = sealed_provider_retraction
+    client, owner = store
+
+    def lose_claim():
+        client.rows[('users', owner, 'deleted_conversations', admitted['merge_target_id'])] = {}
+
+    monkeypatch.setattr(action_items, 'get_action_item_ids', lambda *_args, **_kwargs: ['task-fixture'])
+    step = iter(['tasks', 'conversation'])
+
+    def task_transaction(*_):
+        if next(step) == boundary:
+            lose_claim()
+
+    monkeypatch.setattr(space_store.FirestoreSpaceStore, 'run', task_transaction)
+    task_vectors = Mock()
+    conversation_vector = Mock(side_effect=(lambda *_: lose_claim()) if boundary == 'search' else None)
+    search = Mock()
+    monkeypatch.setattr(merge, 'delete_action_item_vectors_batch', task_vectors)
+    monkeypatch.setattr(merge, 'delete_vector', conversation_vector)
+    monkeypatch.setattr(merge.conversations_db, '_delete_conversation_search_index', search)
+
+    assert not worker.retract_go_merge_source(admitted['job_id'], 1, 1, 0)
+    assert task_vectors.call_count == int(boundary != 'tasks')
+    assert conversation_vector.call_count == int(boundary == 'search')
+    search.assert_not_called()
+    assert 'go_cleanup_receipts' not in jobrow(store, admitted)
+
+
+def test_go_retraction_with_typesense_failure_does_not_receipt(store, monkeypatch, sealed_provider_retraction):
+    from unittest.mock import Mock
+
+    from database import space_store
+    from utils.conversations import typesense_index
+
+    merge, worker, admitted = sealed_provider_retraction
+    job_id = admitted['job_id']
+    _, owner = store
     monkeypatch.setattr(space_store.FirestoreSpaceStore, 'run', lambda *_: None)
     monkeypatch.setattr(merge, 'delete_vector', lambda *_: None)
     monkeypatch.setattr(typesense_index, 'typesense_configured', lambda: True)

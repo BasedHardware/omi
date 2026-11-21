@@ -1116,7 +1116,9 @@ def _delete_conversation_and_related_data(
             task_ids = action_items_db.get_action_item_ids(
                 uid, conversation_id=conversation_id, firestore_client=firestore_db
             )
-            delete_action_item_vectors_batch(uid, task_ids)
+            if task_ids:
+                write_guard(None)
+                delete_action_item_vectors_batch(uid, task_ids)
             task_store.run(delete_source_tasks)
     except Exception as e:
         logger.error(f"Error deleting action items for {conversation_id}: {e}")
@@ -1140,7 +1142,11 @@ def _delete_conversation_and_related_data(
         # Sync bridges retain redirect tombstones and original audio: another
         # in-flight worker may still be uploading to that immutable source ID.
         # Propagate errors so the durable ancestry can replay cleanup on retry.
+        if write_guard is not None:
+            write_guard(None)
         delete_vector(uid, conversation_id)
+        if write_guard is not None:
+            write_guard(None)
         conversations_db._delete_conversation_search_index(uid, conversation_id, strict=True)
         return
 
