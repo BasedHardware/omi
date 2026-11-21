@@ -995,6 +995,10 @@
     "policy": "conversations",
     "reason": "Product and derived readers must apply is_visible_conversation or the validated by-id boundary; home_hidden is not a general visibility filter."
   },
+  "backend/utils/support/retention.py:collection": {
+    "policy": "operator",
+    "reason": "Support operator CLI retention check (scripts/support/ops.py); audited raw inspection of what survives for one account, including deleted rows, never a product read."
+  },
   "backend/utils/sync/assignment.py:collection": {
     "policy": "both",
     "reason": "Capture, audio, sync, custody, retention, export, deletion or v3 construction owns recording-layer access; all lookups remain scoped to their owner."
