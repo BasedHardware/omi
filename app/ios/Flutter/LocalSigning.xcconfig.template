@@ -1,0 +1,6 @@
+// Optional local signing override for self-built / self-hosted iOS builds.
+// 1. Copy this file to LocalSigning.xcconfig (git-ignored).
+// 2. Set your Apple Developer Team ID and custom bundle identifier below so
+//    local builds do not dirty tracked xcconfig or project files.
+// DEVELOPMENT_TEAM = YOUR_TEAM_ID
+// APP_BUNDLE_IDENTIFIER = com.example.omi.dev

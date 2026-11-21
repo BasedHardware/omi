@@ -1,5 +1,4 @@
 import 'package:omi/utils/platform/platform_manager.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import 'package:omi/backend/http/api/users.dart';
@@ -235,7 +234,7 @@ class DeveloperModeProvider extends BaseProvider {
     // Decided before the audio interval default below, which is not an edit.
     final webhooksToSave = _webhookFields.keys.where(_savesWebhook).toSet();
 
-    if (!kReleaseMode) {
+    if (BackendUrlOverride.isSupported) {
       try {
         final rawBackendUrl = customBackendUrl.text.trim();
         final normalizedBackendUrl = rawBackendUrl.isEmpty ? '' : BackendUrlOverride.parse(rawBackendUrl).url;
