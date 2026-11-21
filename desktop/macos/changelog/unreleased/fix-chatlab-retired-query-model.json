@@ -1,0 +1,3 @@
+{
+  "change": "Fixed Chat Prompt Lab failures by using the same active Claude model as chat"
+}
