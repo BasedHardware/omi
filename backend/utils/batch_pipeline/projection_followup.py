@@ -10,7 +10,7 @@ from __future__ import annotations
 import asyncio
 from collections import deque
 from contextlib import nullcontext
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import hashlib
 import logging
 import os
@@ -87,6 +87,24 @@ FOLLOWUP_TIMEOUT_SECONDS = 120.0
 CLAIM_RELEASE_TIMEOUT_SECONDS = 2.0
 
 
+# How long a ready sibling waits for its same-page claimant's live privacy proof.
+CLAIM_PROOF_WAIT_SECONDS = 5.0
+
+
+@dataclass
+class SiblingClaim:
+    """The first ready sibling for a (page, binding) and the siblings skipped behind it.
+
+    ``proof`` is the claimant's live privacy proof from its own session check,
+    published before its completion attempt. A sibling may coalesce on it only
+    through the existing C1 verification (covered ids, expiry, live token).
+    """
+
+    ready: asyncio.Event = field(default_factory=asyncio.Event)
+    proof: FollowupPrivacyProof | None = None
+    waiting: list = field(default_factory=list)
+
+
 @dataclass(frozen=True)
 class PersistedFollowup:
     job: dict
@@ -121,7 +139,7 @@ class ProjectionFollowups:
         self.pages: dict[str, int] = {}
         self.completion_attempts: set[tuple[int, ProjectionBinding]] = set()
         # (page, binding) -> ready siblings that skipped behind the first claimant (SCA-3508).
-        self.sibling_claims: dict[tuple[int, ProjectionBinding], list[str]] = {}
+        self.sibling_claims: dict[tuple[int, ProjectionBinding], SiblingClaim] = {}
         # Skipped siblings still finishing when their claimant gave up: re-queue on finish.
         self.sibling_requeue: set[str] = set()
         self.completed_probes: dict[int, dict[ProjectionBinding, FollowupPrivacyProof]] = {}
@@ -430,7 +448,11 @@ class ProjectionFollowups:
     def release_sibling_claim(self, key):
         """End a claim. Siblings that skipped behind a claimant that never reached the
         completion attempt run again on the ordinary path, so none loses its probe."""
-        waiting = self.sibling_claims.pop(key, None) or []
+        claim = self.sibling_claims.pop(key, None)
+        if claim is None:
+            return
+        claim.ready.set()
+        waiting = claim.waiting
         if not waiting or key in self.completion_attempts or self.closed:
             return
         for sibling in waiting:
@@ -533,31 +555,62 @@ class ProjectionFollowups:
             if not acquired:
                 return 'claim_busy'
             page = self.pages.get(segment)
-            hints = None
-            if page and projection_followup_page_enabled() and projection_followup_claimed_sibling_skip_enabled():
-                # The same hint read read_persisted would issue; reused below.
-                hints = await run_blocking(db_executor, store.read, segment)
-                key = self.ready_sibling_key(page, hints)
-                if key is not None:
-                    waiting = self.sibling_claims.get(key)
-                    if key in self.completion_attempts or waiting is not None:
-                        # A same-page sibling owns this binding's completion. The
-                        # existing path would re-read the session and then return
-                        # 'coalesced' with no writes; skip the reads instead.
-                        if waiting is not None and key not in self.completion_attempts:
-                            waiting.append(segment)
-                        OUTCOMES.labels('claimed_sibling_skipped').inc()
-                        return 'coalesced'
-                    self.sibling_claims[key] = []
-                    sibling_key = key
             early = (
                 page is not None and projection_followup_page_enabled() and projection_followup_early_coalesce_enabled()
             )
-            if early and page is not None:
+            hints = None
+            persisted = None
+            if early and page and projection_followup_claimed_sibling_skip_enabled():
+                # The same hint read read_persisted would issue; reused below.
+                hints = await run_blocking(db_executor, store.read, segment)
+                key = self.ready_sibling_key(page, hints)
+                if key is not None and self.pages.get(segment) == page:
+                    sibling_claim = self.sibling_claims.get(key)
+                    if sibling_claim is None:
+                        self.sibling_claims[key] = SiblingClaim()
+                        sibling_key = key
+                    else:
+                        # Wait (bounded) for the claimant's live privacy proof, then
+                        # verify it exactly as C1 does: this sibling's own privacy ids
+                        # must be covered, unexpired, with the live token unchanged.
+                        # Any miss returns this run's own full-path result instead.
+                        try:
+                            await asyncio.wait_for(sibling_claim.ready.wait(), CLAIM_PROOF_WAIT_SECONDS)
+                        except TimeoutError:
+                            pass
+                        proof = sibling_claim.proof
+                        if proof is not None and self.pages.get(segment) == page:
+                            persisted = await run_blocking(
+                                db_executor, self.read_persisted, segment, prior={key[1]: proof}, hints=hints
+                            )
+                            if persisted.coalesced:
+                                live = self.sibling_claims.get(key) is sibling_claim
+                                if (
+                                    persisted.proof is proof
+                                    and (live or key in self.completion_attempts)
+                                    and self.pages.get(segment) == page
+                                    and time.monotonic() < proof.expires_at
+                                    and not self.closed
+                                ):
+                                    if live:
+                                        sibling_claim.waiting.append(segment)
+                                    OUTCOMES.labels('claimed_sibling_skipped').inc()
+                                    return 'coalesced'
+                                persisted = None  # Claim ended without an attempt: take the full path.
+            if persisted is not None:
+                pass  # This run's own full-path result from the proof check above.
+            elif early and page is not None:
                 prior = self.completed_probes.get(page, {}).copy()
                 persisted = await run_blocking(db_executor, self.read_persisted, segment, prior=prior, hints=hints)
             else:
                 persisted = await run_blocking(db_executor, self.read_persisted, segment, hints=hints)
+            if sibling_key is not None:
+                # Publish this claimant's live proof before its completion attempt.
+                own = self.sibling_claims.get(sibling_key)
+                if own is not None:
+                    if not persisted.coalesced and persisted.proof is not None:
+                        own.proof = persisted.proof
+                    own.ready.set()
             job, entry, binding = persisted.job, persisted.entry, persisted.binding
             if persisted.coalesced:
                 # A recovery wake, page cleanup or shutdown may have invalidated
@@ -647,6 +700,9 @@ class ProjectionFollowups:
             )
             return 'retry'
         finally:
+            if sibling_key is not None:
+                # Before the claim exit, so a release failure cannot strand skipped siblings.
+                self.release_sibling_claim(sibling_key)
             if entered:
                 # Cleanup must not hold a follow-up slot if Redis/the DB pool
                 # stalls. The advisory claim also has its own bounded TTL.
@@ -662,8 +718,6 @@ class ProjectionFollowups:
                         probe_page, binding, proof = completed_probe
                         if probe_page == self.pages.get(segment) and not self.closed:
                             self.completed_probes.setdefault(probe_page, {})[binding] = proof
-            if sibling_key is not None:
-                self.release_sibling_claim(sibling_key)
 
     async def step(self, policy, phase, executor, function, *args, **kwargs):
         with projection_phase(phase, policy):
