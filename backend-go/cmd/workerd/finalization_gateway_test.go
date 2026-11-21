@@ -4,6 +4,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -50,10 +51,10 @@ func TestWorkerdFinalizationGatewayIsOptIn(t *testing.T) {
 
 func TestF10WorkerdRecoversNotesThroughKeyedGateway(t *testing.T) {
 	t.Parallel()
-	fixture := &gatewayReplayFixture{}
+	fixture := &gatewayReplayFixture{rejectFirstGet: true}
 	server := httptest.NewServer(fixture.handler(t))
 	t.Cleanup(server.Close)
-	h, runtime, job := gatewayTestJob(t)
+	h, runtime, job, _ := gatewayTestJob(t)
 	bindGatewayFixture(t, runtime, server.URL, clock.System{})
 	h.Start(workerdHandlers(runtime.family))
 
@@ -68,10 +69,49 @@ func TestF10WorkerdRecoversNotesThroughKeyedGateway(t *testing.T) {
 	}
 }
 
+func TestF10RecoverCommittedOperationBeforeNewerInput(t *testing.T) {
+	t.Parallel()
+	h, runtime, job, bench := gatewayTestJob(t)
+	fixture := &gatewayReplayFixture{}
+	fixture.onPost = func(r *http.Request, key string) {
+		persisted, err := h.Store.Get(r.Context(), job.Key)
+		if err != nil || !strings.Contains(string(persisted.Checkpoint), key) {
+			t.Errorf("gateway UUID did not commit before POST: %v", err)
+		}
+		const path = "users/gateway-owner/conversations/gateway-conversation"
+		doc := bench.Raw.Doc(path)
+		current, err := doc.Get(r.Context())
+		if err != nil {
+			t.Error(err)
+			return
+		}
+		fields := current.Data()
+		fields["sync_content_revision"] = int64(2)
+		fields["transcript_segments"] = []map[string]any{{"text": "Newer synthetic speech"}}
+		if _, err := doc.Set(r.Context(), fields); err != nil {
+			t.Error(err)
+		}
+	}
+	server := httptest.NewServer(fixture.handler(t))
+	t.Cleanup(server.Close)
+	bindGatewayFixture(t, runtime, server.URL, clock.System{})
+	h.Start(workerdHandlers(runtime.family))
+	waiting := h.Until(job.Key, "a separate sync-revision step", func(row queue.Job) bool {
+		return row.State == queue.StateWaiting && row.Reason != nil && *row.Reason == finalization.CauseChanged
+	})
+	fixture.mu.Lock()
+	defer fixture.mu.Unlock()
+	if fixture.posts != 1 || fixture.gets != 1 || waiting.Step != finalization.StepLoad {
+		t.Fatalf("recovery made %d POSTs and %d GETs, then waited at %q", fixture.posts, fixture.gets, waiting.Step)
+	}
+}
+
 type gatewayReplayFixture struct {
-	mu          sync.Mutex
-	key         string
-	posts, gets int
+	mu             sync.Mutex
+	key            string
+	posts, gets    int
+	rejectFirstGet bool
+	onPost         func(*http.Request, string)
 }
 
 func (f *gatewayReplayFixture) handler(t *testing.T) http.HandlerFunc {
@@ -90,11 +130,14 @@ func (f *gatewayReplayFixture) handler(t *testing.T) http.HandlerFunc {
 				return
 			}
 			f.key = key
+			if f.onPost != nil {
+				f.onPost(r, key)
+			}
 			// The completion committed, but the worker lost the response.
 			panic(http.ErrAbortHandler)
 		case r.Method == http.MethodGet && r.URL.Path == operations+"/"+key && key != "" && key == f.key:
 			f.gets++
-			if f.gets == 1 {
+			if f.rejectFirstGet && f.gets == 1 {
 				http.NotFound(w, r)
 				return
 			}
@@ -124,7 +167,7 @@ func TestF10WorkerdRefusesPaidSubmissionAtOriginalJobCutoff(t *testing.T) {
 		}
 	}))
 	t.Cleanup(server.Close)
-	h, runtime, job := gatewayTestJob(t)
+	h, runtime, job, _ := gatewayTestJob(t)
 	bindGatewayFixture(t, runtime, server.URL, clock.Fixed{T: job.CreatedAt.Add(29 * 24 * time.Hour)})
 	h.Start(workerdHandlers(runtime.family))
 	settled := h.Settled(job.Key)
@@ -133,7 +176,7 @@ func TestF10WorkerdRefusesPaidSubmissionAtOriginalJobCutoff(t *testing.T) {
 	}
 }
 
-func gatewayTestJob(t *testing.T) (*queuetest.Harness, *finalizationRuntime, queue.Job) {
+func gatewayTestJob(t *testing.T) (*queuetest.Harness, *finalizationRuntime, queue.Job, docstoretest.Bench) {
 	t.Helper()
 	bench := docstoretest.Open(t)
 	ref := finalization.Ref{Owner: "gateway-owner", ID: "gateway-conversation"}
@@ -157,7 +200,7 @@ func gatewayTestJob(t *testing.T) (*queuetest.Harness, *finalizationRuntime, que
 	if err != nil {
 		t.Fatal(err)
 	}
-	return h, &finalizationRuntime{family: family}, job
+	return h, &finalizationRuntime{family: family}, job, bench
 }
 
 func bindGatewayFixture(t *testing.T, runtime *finalizationRuntime, baseURL string, clk clock.Clock) {

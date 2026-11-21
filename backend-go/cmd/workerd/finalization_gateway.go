@@ -60,6 +60,10 @@ type finalizationGateway struct {
 	client llmgateway.Replayable
 }
 
+func (finalizationGateway) OperationID(g queue.Guarded, step string) string {
+	return llmgateway.OperationID(g, step)
+}
+
 func (f finalizationGateway) Complete(ctx context.Context, g queue.Guarded, req finalization.CompletionRequest) (string, error) {
 	messages := make([]llmgateway.Message, len(req.Messages))
 	for i, message := range req.Messages {

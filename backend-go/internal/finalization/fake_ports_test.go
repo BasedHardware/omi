@@ -119,6 +119,10 @@ func (p *fakePorts) Complete(_ context.Context, g queue.Guarded, req CompletionR
 	return result, nil
 }
 
+func (*fakePorts) OperationID(g queue.Guarded, step string) string {
+	return g.Operation(step)
+}
+
 func (p *fakePorts) Recover(_ context.Context, g queue.Guarded, step string) (string, error) {
 	if err := g.Err(); err != nil {
 		return "", err

@@ -22,16 +22,21 @@ func (s *Service) persistError(ctx context.Context, run *queue.Run, claim Claim,
 	if !errors.Is(err, ErrSourceChanged) {
 		return err
 	}
-	var delay time.Duration
-	replayErr := run.Guard(ctx, func(ctx context.Context, g queue.Guarded) error {
-		var storeErr error
-		delay, storeErr = s.Replay.DeferSyncRevision(ctx, g, claim, revision)
-		return storeErr
-	})
+	delay, replayErr := s.deferSyncRevision(ctx, run, claim, revision)
 	if replayErr != nil {
 		return replayErr
 	}
 	return queue.Classify(err, queue.Yield(CauseChanged, delay))
+}
+
+func (s *Service) deferSyncRevision(ctx context.Context, run *queue.Run, claim Claim, revision int64) (time.Duration, error) {
+	var delay time.Duration
+	err := run.Guard(ctx, func(ctx context.Context, g queue.Guarded) error {
+		var storeErr error
+		delay, storeErr = s.Replay.DeferSyncRevision(ctx, g, claim, revision)
+		return storeErr
+	})
+	return delay, err
 }
 
 // Redrive reopens the exact parked managed job. If SQL redrive fails after the

@@ -41,17 +41,21 @@ func (s *Service) process(ctx context.Context, run *queue.Run, claim Claim, snap
 	if snapshot.Discarded {
 		return ErrStale
 	}
+	pending, err := s.recoverNotes(ctx, run)
+	if err != nil {
+		return err
+	}
 	if !rules.NeedsNotes(snapshot.Status, snapshot.PendingMinimum) {
 		return nil
 	}
-	snapshot, err := s.waitForEvidence(ctx, run, claim, snapshot)
+	snapshot, err = s.waitForEvidence(ctx, run, claim, snapshot)
 	if err != nil || !rules.NeedsNotes(snapshot.Status, snapshot.PendingMinimum) {
 		return err
 	}
 	if snapshot.Discarded {
 		return ErrStale
 	}
-	return s.structure(ctx, run, claim, snapshot)
+	return s.structure(ctx, run, claim, snapshot, pending)
 }
 
 func (s *Service) waitForEvidence(ctx context.Context, run *queue.Run, claim Claim, snapshot Conversation) (Conversation, error) {
@@ -67,7 +71,7 @@ func (s *Service) waitForEvidence(ctx context.Context, run *queue.Run, claim Cla
 	return s.load(ctx, run, claim)
 }
 
-func (s *Service) structure(ctx context.Context, run *queue.Run, claim Claim, snapshot Conversation) error {
+func (s *Service) structure(ctx context.Context, run *queue.Run, claim Claim, snapshot Conversation, pending recoveredNotes) error {
 	if snapshot.RecordingLayer || snapshot.NoDerivedEffects {
 		return s.persist(ctx, run, claim, snapshot, nil, "", "")
 	}
@@ -75,44 +79,22 @@ func (s *Service) structure(ctx context.Context, run *queue.Run, claim Claim, sn
 	if err != nil {
 		return err
 	}
+	if pending.operation.ID != "" || run.Job().Step == StepNotes {
+		return s.resumeNotes(ctx, run, claim, snapshot, req, hash, pending)
+	}
 	if reusableNotes(snapshot, hash) {
 		return s.persist(ctx, run, claim, snapshot, nil, "", "")
 	}
-	recoverPaid := run.Job().Step == StepNotes
-	req.JobCreatedAt = run.Job().CreatedAt
-	if stepErr := run.SetStep(ctx, StepNotes); stepErr != nil {
-		return stepErr
-	}
-	var completion string
-	err = run.Guard(ctx, func(ctx context.Context, g queue.Guarded) error {
-		var callErr error
-		completion, callErr = s.completeNotes(ctx, g, req, recoverPaid)
-		return callErr
-	})
-	if err != nil {
-		return err
-	}
-	notes, output, err := parseNotes(completion)
-	if err != nil {
-		return err
-	}
-	return s.persist(ctx, run, claim, snapshot, &notes, hash, output)
-}
-
-func (s *Service) completeNotes(ctx context.Context, g queue.Guarded, req CompletionRequest, recoverPaid bool) (string, error) {
-	if recoverPaid {
-		text, err := s.Gateway.Recover(ctx, g, req.Step)
-		if !errors.Is(err, ErrCompletionAbsent) {
-			return text, err
-		}
-	}
-	return s.Gateway.Complete(ctx, g, req)
+	return s.submitNotes(ctx, run, claim, snapshot, req, hash)
 }
 
 func (s *Service) persist(ctx context.Context, run *queue.Run, claim Claim, before Conversation, notes *Notes, inputHash, outputHash string) error {
 	err := run.Guard(ctx, func(ctx context.Context, g queue.Guarded) error {
 		return s.Documents.ApplyFinalization(ctx, g, claim, before, notes, inputHash, outputHash)
 	})
+	if notes != nil && errors.Is(err, ErrSourceChanged) {
+		return s.deferNotes(ctx, run, claim, before.SyncRevision, err)
+	}
 	return s.persistError(ctx, run, claim, before.SyncRevision, err)
 }
 

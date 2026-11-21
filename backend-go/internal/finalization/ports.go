@@ -144,6 +144,7 @@ type BYOK struct {
 // makes no paid call and returns ErrCompletionAbsent when it cannot supply a
 // committed result.
 type Gateway interface {
+	OperationID(g queue.Guarded, step string) string
 	Complete(ctx context.Context, g queue.Guarded, req CompletionRequest) (string, error)
 	Recover(ctx context.Context, g queue.Guarded, step string) (string, error)
 }

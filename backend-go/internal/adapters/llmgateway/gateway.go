@@ -202,7 +202,7 @@ func (c *client) Recover(ctx context.Context, g queue.Guarded, step string) (str
 	if strings.TrimSpace(step) == "" {
 		return "", classify(CauseRejected, 0, 0)
 	}
-	key := requestID(g.Operation(step))
+	key := OperationID(g, step)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.endpoint+"/"+key, nil)
 	if err != nil {
 		return "", classify(CauseRejected, 0, 0)

@@ -75,6 +75,10 @@ func (s *syntheticGateway) Complete(ctx context.Context, g queue.Guarded, req fi
 	return `{"title":"Latest", "overview":"Summary includes late speech","sections":["Synthetic detail"]}`, nil
 }
 
+func (*syntheticGateway) OperationID(g queue.Guarded, step string) string {
+	return g.Operation(step)
+}
+
 func (*syntheticGateway) Recover(context.Context, queue.Guarded, string) (string, error) {
 	return "", finalization.ErrCompletionAbsent
 }
@@ -164,6 +168,10 @@ type unavailableNotes struct{}
 
 func (unavailableNotes) Complete(context.Context, queue.Guarded, finalization.CompletionRequest) (string, error) {
 	return "", errors.New("synthetic provider outage")
+}
+
+func (unavailableNotes) OperationID(g queue.Guarded, step string) string {
+	return g.Operation(step)
 }
 
 func (unavailableNotes) Recover(context.Context, queue.Guarded, string) (string, error) {
