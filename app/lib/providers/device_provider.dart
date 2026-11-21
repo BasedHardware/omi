@@ -525,6 +525,9 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
         return;
       }
       pairedDevice = info;
+      if (info.type == DeviceType.openglass && _firstChargeDeviceId == info.id) {
+        _clearFirstChargeCheck();
+      }
       if (connection != null) {
         _firmwareRevisions.add((deviceId: readingDevice.id, version: info.firmwareRevision));
       }

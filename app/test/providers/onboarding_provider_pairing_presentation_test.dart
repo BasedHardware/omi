@@ -12,6 +12,7 @@ import 'package:omi/gen/pigeon_communicator.g.dart';
 import 'package:omi/l10n/app_localizations_en.dart';
 import 'package:omi/pages/onboarding/find_device/pairing_failure_card.dart';
 import 'package:omi/providers/onboarding_provider.dart';
+import 'package:omi/services/devices/connectors/device_connection.dart';
 import 'package:omi/services/devices/pairing_failure.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/ui/ui.dart';
@@ -172,6 +173,30 @@ void main() {
     expect(find.text(l10n.charging), findsNothing);
     expect(find.text('3%'), findsNothing);
     await capture('002-mobile-ios-pairing-ready.png');
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('OmiGlass advertised as Omi keeps its battery level after pairing', (tester) async {
+    final device = BtDevice(id: 'glass-discovery', name: 'OmiGlass', type: DeviceType.omi, rssi: -50);
+    final live = DiscoveryDeviceProvider(device: device, connected: true, battery: 72);
+    addTearDown(live.dispose);
+    await tester.pumpWidget(polish.host(polish.connect(provider, device: live)));
+    await tester.pump();
+    await tester.pump();
+    final type = DeviceConnectionFactory.resolveDeviceType(device);
+    expect(type, DeviceType.openglass);
+    provider
+      ..isConnected = true
+      ..deviceId = device.id
+      ..deviceName = device.name
+      ..deviceType = type
+      ..batteryPercentage = live.batteryLevel
+      ..setLoading(false);
+    await tester.pump();
+    final l10n = AppLocalizationsEn();
+    expect(find.text(l10n.pairingSuccessful), findsOneWidget);
+    expect(find.text('72%'), findsOneWidget);
+    expect(find.text(l10n.deviceReadyToUse), findsNothing);
     await tester.pumpWidget(const SizedBox());
   });
 

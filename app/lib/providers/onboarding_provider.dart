@@ -20,6 +20,7 @@ import 'package:omi/pages/onboarding/permissions/onboarding_permission_decision.
 import 'package:omi/services/bridges/ble_bridge.dart';
 import 'package:omi/services/devices.dart';
 import 'package:omi/services/devices/bluetooth_readiness.dart';
+import 'package:omi/services/devices/connectors/device_connection.dart';
 import 'package:omi/services/devices/pairing_failure.dart';
 import 'package:omi/services/notifications.dart';
 import 'package:omi/utils/analytics/registry/events.g.dart';
@@ -394,7 +395,8 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
         }
       }
 
-      final firstOmiPairing = device.type == DeviceType.omi &&
+      final resolvedDeviceType = DeviceConnectionFactory.resolveDeviceType(device);
+      final firstOmiPairing = resolvedDeviceType == DeviceType.omi &&
           !SharedPreferencesUtil().btDevices.any((saved) => saved.id.toUpperCase() == device.id.toUpperCase());
       if (firstOmiPairing) finishFirstChargePreparation = deviceProvider?.prepareFirstChargeCheck(device.id);
       final connection = await ServiceManager.instance().device.ensureConnection(device.id, force: true);
@@ -406,7 +408,7 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
       await SharedPreferencesUtil().btDeviceSet(device);
       _syncSavedDevices();
       deviceName = device.name;
-      deviceType = device.type;
+      deviceType = resolvedDeviceType;
       var cDevice = await _getConnectedDevice(deviceId);
       if (cDevice != null) {
         unawaited(deviceProvider!.setConnectedDevice(cDevice));
@@ -417,6 +419,10 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
       finishFirstChargePreparation?.call();
       finishFirstChargePreparation = null;
       var connectedDevice = deviceProvider!.connectedDevice;
+      final normalizedDevice = deviceProvider!.capabilityNormalizedDevice;
+      if (normalizedDevice?.id == device.id && normalizedDevice?.type == DeviceType.openglass) {
+        deviceType = DeviceType.openglass;
+      }
       batteryPercentage = deviceProvider!.batteryLevel;
       isConnected = true;
       isClicked = false;
