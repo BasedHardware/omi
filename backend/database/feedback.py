@@ -210,7 +210,9 @@ def record_feedback_event(
         return event_id
     except Exception as e:
         # The comment may hold user text, so log the shape and never the row.
-        logger.error(f'Failed to record feedback event (surface={record["surface"]}, value={value}): {e}')
+        logger.error(
+            "Failed to record feedback event (surface=%s, value=%s): %s", record["surface"], value, type(e).__name__
+        )
         if raise_on_error:
             raise
         return None
@@ -347,9 +349,17 @@ def record_feedback_event_idempotent(
     return event_id, False
 
 
-def get_feedback_event(event_id: str) -> Optional[FeedbackEvent]:
-    doc = get_firestore_client().collection(FEEDBACK_EVENTS_COLLECTION).document(event_id).get()
-    return parse_snapshot_or_none(FeedbackEvent, doc)
+def get_feedback_event(event_id: str, *, firestore_client: Any | None = None) -> Optional[FeedbackEvent]:
+    clean_id = str(event_id or '').strip()
+    if not clean_id:
+        return None
+    client = firestore_client or get_firestore_client()
+    try:
+        doc = client.collection(FEEDBACK_EVENTS_COLLECTION).document(clean_id).get()
+        return parse_snapshot_or_none(FeedbackEvent, doc)
+    except Exception as e:
+        logger.warning("Failed to get feedback event %s: %s", clean_id, type(e).__name__)
+        return None
 
 
 def list_negative_events(
@@ -365,7 +375,8 @@ def list_negative_events(
     # top-level import would make merely importing this module fail there.
     from google.cloud.firestore_v1 import FieldFilter
 
-    collection = get_firestore_client().collection(FEEDBACK_EVENTS_COLLECTION)
+    client = get_firestore_client()
+    collection = client.collection(FEEDBACK_EVENTS_COLLECTION)
     query = NEGATIVE_FEEDBACK_EVENTS_QUERY.build(
         collection,
         {'value': -1, 'start_at': start_at, 'end_at': end_at},
@@ -374,17 +385,30 @@ def list_negative_events(
     query = query.order_by('created_at').limit(limit)
 
     # Fail-open: one malformed row must not cost the whole report.
-    return parse_snapshots(FeedbackEvent, query.stream())
+    try:
+        return parse_snapshots(FeedbackEvent, query.stream())
+    except Exception as e:
+        logger.warning("Failed to stream negative feedback events: %s", type(e).__name__)
+        return []
 
 
-def save_report(report: FeedbackReport) -> None:
+def save_report(report: FeedbackReport, *, firestore_client: Any | None = None) -> None:
+    client = firestore_client or get_firestore_client()
     payload = report.model_dump(mode='json')
-    get_firestore_client().collection(FEEDBACK_REPORTS_COLLECTION).document(report.date).set(payload)
+    client.collection(FEEDBACK_REPORTS_COLLECTION).document(report.date).set(payload)
 
 
-def get_report(date: str) -> Optional[FeedbackReport]:
-    doc = get_firestore_client().collection(FEEDBACK_REPORTS_COLLECTION).document(date).get()
-    return parse_snapshot_or_none(FeedbackReport, doc)
+def get_report(date: str, *, firestore_client: Any | None = None) -> Optional[FeedbackReport]:
+    clean_date = str(date or '').strip()
+    if not clean_date:
+        return None
+    client = firestore_client or get_firestore_client()
+    try:
+        doc = client.collection(FEEDBACK_REPORTS_COLLECTION).document(clean_date).get()
+        return parse_snapshot_or_none(FeedbackReport, doc)
+    except Exception as e:
+        logger.warning("Failed to get feedback report %s: %s", clean_date, type(e).__name__)
+        return None
 
 
 def list_report_dates(limit: int = 30) -> List[str]:
@@ -400,7 +424,7 @@ def list_report_dates(limit: int = 30) -> List[str]:
         )
         return [doc.id for doc in docs]
     except Exception as e:
-        logger.error(f'Failed to list feedback report dates: {e}')
+        logger.error("Failed to list feedback report dates: %s", type(e).__name__)
         return []
 
 
