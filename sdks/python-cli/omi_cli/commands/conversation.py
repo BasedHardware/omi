@@ -56,6 +56,8 @@ def list_conversations(
     ),
     categories: Optional[str] = typer.Option(None, "--categories", help="Comma-separated category filter."),
     include_transcript: bool = typer.Option(False, "--include-transcript", help="Include transcript_segments."),
+    folder_id: Optional[str] = typer.Option(None, "--folder-id", help="Only show conversations in this folder."),
+    starred: Optional[bool] = typer.Option(None, "--starred/--not-starred", help="Filter by starred status."),
 ) -> None:
     if start_date is not None and end_date is not None and as_utc(start_date) > as_utc(end_date):
         raise UsageError(
@@ -64,18 +66,26 @@ def list_conversations(
         )
     server_page_size = 200
     ctx = _ctx(typer_ctx)
+    if folder_id is not None and not folder_id.strip():
+        raise UsageError(message="Invalid folder ID", detail="--folder-id must not be empty.")
+
+    def request_params(page_limit: int, page_offset: int) -> dict[str, object]:
+        return {
+            "limit": page_limit,
+            "offset": page_offset,
+            "start_date": start_date.isoformat() if start_date else None,
+            "end_date": end_date.isoformat() if end_date else None,
+            "categories": categories,
+            "include_transcript": include_transcript,
+            "folder_id": folder_id,
+            "starred": starred,
+        }
+
     with ctx.make_client() as client:
         if limit <= server_page_size:
             items = client.get(
                 "/v1/dev/user/conversations",
-                params={
-                    "limit": limit,
-                    "offset": offset,
-                    "start_date": start_date.isoformat() if start_date else None,
-                    "end_date": end_date.isoformat() if end_date else None,
-                    "categories": categories,
-                    "include_transcript": include_transcript,
-                },
+                params=request_params(limit, offset),
             )
         else:
             items = []
@@ -84,14 +94,7 @@ def list_conversations(
                 batch_limit = min(limit - len(items), server_page_size)
                 page = client.get(
                     "/v1/dev/user/conversations",
-                    params={
-                        "limit": batch_limit,
-                        "offset": current_offset,
-                        "start_date": start_date.isoformat() if start_date else None,
-                        "end_date": end_date.isoformat() if end_date else None,
-                        "categories": categories,
-                        "include_transcript": include_transcript,
-                    },
+                    params=request_params(batch_limit, current_offset),
                 )
                 if not page:
                     break
@@ -99,7 +102,6 @@ def list_conversations(
                 current_offset += batch_limit
             if len(items) > limit:
                 items = items[:limit]
-
     if ctx.renderer.json_mode:
         ctx.renderer.emit(items)
         return
