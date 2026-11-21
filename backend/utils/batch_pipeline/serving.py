@@ -11,6 +11,7 @@ import time
 
 from config import batch_pipeline_protected_share as protected_share
 from config.batch_pipeline import (
+    batch_held_dead_letter_enabled,
     held_partial_enabled,
     owner_chain_projection_enabled,
     recovered_merge_release_enabled,
@@ -26,7 +27,7 @@ from config.batch_pipeline import (
     projection_pump_tick_seconds,
 )
 from database.outbox import OutboxKind, outbox_for
-from database.batch_privacy_attempt import with_batch_privacy_attempt
+from database.batch_privacy_attempt import batch_privacy_attempt, with_batch_privacy_attempt
 from database.batch_pipeline_store import FirestoreStore
 from database.batch_pipeline_shadow_hook import shadow_from_env
 from database.batch_pipeline_staging import reap
@@ -168,7 +169,14 @@ class Serving:
 
     @with_batch_privacy_attempt
     async def reconcile_async(
-        self, *, recover_quarantine=False, periodic=False, owner_id=None, recovered=None, owner_only=False
+        self,
+        *,
+        recover_quarantine=False,
+        periodic=False,
+        owner_id=None,
+        recovered=None,
+        owner_only=False,
+        run_held_expiry=True,
     ):
         owner_only = owner_only and recovery_owner_only_enabled()
         priority = await run_blocking(
@@ -179,6 +187,7 @@ class Serving:
             owner_id=owner_id,
             recovered=recovered,
             owner_only=owner_only,
+            run_held_expiry=run_held_expiry,
         )
         # Walk-owed follow-ups keep the drain scheduled until they are queued.
         owes = getattr(self.projector, 'owes_followups', False) is True
@@ -218,7 +227,14 @@ class Serving:
         return []
 
     def reconcile(
-        self, *, recover_quarantine=False, periodic=False, owner_id=None, recovered=None, owner_only=False
+        self,
+        *,
+        recover_quarantine=False,
+        periodic=False,
+        owner_id=None,
+        recovered=None,
+        owner_only=False,
+        run_held_expiry=True,
     ) -> list[str]:
         """Returns async follow-ups an owner-chain wake wants run first."""
         if owner_only:
@@ -229,6 +245,7 @@ class Serving:
             self._maintain(
                 recover_quarantine=recover_quarantine,
                 recovery_caller=RecoveryCaller.SERVING if periodic else RecoveryCaller.RECONCILE,
+                run_held_expiry=run_held_expiry,
             )
         elif self.metrics:
             self.metrics.fresh_guard.deactivate()
@@ -260,6 +277,16 @@ class Serving:
         if self.recovery is None or not self._leads(True):
             return None
         return self.recovery.sweep()
+
+    def sweep_held_dead_letters(self, *, periodic=False):
+        if not batch_held_dead_letter_enabled() or not self._leads(periodic):
+            return
+        try:
+            self.held_dead_letter.tick(time.time())
+        except Exception as error:
+            logging.getLogger(__name__).error(
+                'event=batch_held_dead_letter outcome=retry exception_type=%s', type(error).__name__
+            )
 
     def _charge_held_partial_reads(self, counts: dict) -> None:
         reads = counts.get('reads')
@@ -335,7 +362,7 @@ class Serving:
             self.metrics.fresh_guard.deactivate()
         return leads
 
-    def _maintain(self, *, recover_quarantine: bool, recovery_caller=None):
+    def _maintain(self, *, recover_quarantine: bool, recovery_caller=None, run_held_expiry=True):
         """Idempotent, transaction-fenced maintenance: cleanup, sweeps, discovery, recovery, drain."""
         leads = self.refresh_fresh_guard()
         if self.metrics:
@@ -391,12 +418,8 @@ class Serving:
                 logging.getLogger(__name__).error(
                     'event=batch_projection action=release_held outcome=retry exception_type=%s', type(error).__name__
                 )
-        try:
-            self.held_dead_letter.tick(time.time())
-        except Exception as error:
-            logging.getLogger(__name__).error(
-                'event=batch_held_dead_letter outcome=retry exception_type=%s', type(error).__name__
-            )
+        if run_held_expiry:
+            self.sweep_held_dead_letters()
         try:
             self.projection_held_dead_letter.tick(time.time())
         except Exception as error:
@@ -520,6 +543,25 @@ async def _supervise_fresh_guard(stop):
             pass
 
 
+async def _supervise_held_dead_letters(stop):
+    # A slow or failed reconciliation (including quarantine discovery) must
+    # still let the maintenance leader scan and expire dormant holds.
+    while not stop.is_set():
+        try:
+            if batch_held_dead_letter_enabled():
+                service = await run_blocking(db_executor, serving_for_stage, current_stage())
+                with batch_privacy_attempt():
+                    await run_blocking(db_executor, service.sweep_held_dead_letters, periodic=True)
+        except Exception as error:
+            logging.getLogger(__name__).error(
+                'event=batch_held_dead_letter outcome=retry exception_type=%s', type(error).__name__
+            )
+        try:
+            await asyncio.wait_for(stop.wait(), timeout=serving_tick_seconds())
+        except asyncio.TimeoutError:
+            pass
+
+
 def start_serving_from_env():
     """Start projection consumers on the processes that own projection policy."""
     pump_enabled = projection_pump_enabled()
@@ -575,7 +617,7 @@ def start_serving_from_env():
         while not stop.is_set():
             try:
                 service = await run_blocking(sync_executor, serving_for_stage, current_stage())
-                await service.reconcile_async(recover_quarantine=True, periodic=True)
+                await service.reconcile_async(recover_quarantine=True, periodic=True, run_held_expiry=False)
             except Exception as error:
                 logging.getLogger(__name__).error(
                     'event=batch_serving outcome=retry exception_type=%s', type(error).__name__
@@ -686,6 +728,7 @@ def start_serving_from_env():
                     supervise(),
                     drain(),
                     dispatch_recovery(),
+                    _supervise_held_dead_letters(stop),
                     drain_upload_holds(),
                     _supervise_fresh_guard(stop),
                     _supervise_backlog_heartbeat(stop),
