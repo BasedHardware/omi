@@ -1255,6 +1255,7 @@ async def test_sibling_takes_its_own_privacy_check_unless_the_proof_covers_it(re
         store.client.collection('account_deletions').document(f.binding.owner_id).create({'wipe_status': 'pending'})
     elif case == 'page_cleared':
         f.runner.forget_page('later')
+        release.set()  # this run reaches its own completion attempt; don't make it wait
 
     result = await f.run('later')
     release.set()
@@ -1303,7 +1304,7 @@ async def test_still_running_skipped_sibling_is_requeued_when_it_finishes(follow
 def test_released_claim_after_a_completion_attempt_requeues_nothing(followup):
     f = followup
     f.runner.completion_attempts.add((1, f.binding))
-    f.runner.sibling_claims[(1, f.binding)] = projection_followup.SiblingClaim(waiting=['x'])
+    f.runner.sibling_claims[(1, f.binding)] = projection_followup.SiblingClaim(waiting=['x'], attempted=True)
     before = _requeues()
     f.runner.release_sibling_claim((1, f.binding))
     assert not f.runner.pending and _requeues() == before
@@ -1342,3 +1343,36 @@ def test_ready_sibling_key_matches_the_legacy_coalesce_key():
         'b',
     )
     assert projection_followup.ProjectionFollowups.ready_sibling_key(3, hints) == (3, 'b')
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('case', ['claimant_refused_before_proof', 'proof_wait_timeout'])
+async def test_sibling_without_a_published_proof_pays_its_own_privacy_check(ready_followup, monkeypatch, case):
+    """Confirmation panel F1: the no-proof and timeout branches never coalesce unverified."""
+    f, _authority = ready_followup
+    monkeypatch.setenv(SKIP, 'true')
+    store = f.projector.store
+    claim = projection_followup.SiblingClaim()
+    if case == 'claimant_refused_before_proof':
+        claim.ready.set()  # claimant ended without publishing a proof
+    else:
+        monkeypatch.setattr(projection_followup, 'CLAIM_PROOF_WAIT_SECONDS', 0.05)
+    f.runner.sibling_claims[(1, f.binding)] = claim
+    store.client.collection('account_deletions').document(f.binding.owner_id).create({'wipe_status': 'pending'})
+    before = _skips()
+
+    assert await f.run('later') == 'blocked'
+    assert store.check.call_count == 1  # the sibling's own session and privacy check
+    assert _skips() == before
+    assert not claim.waiting
+
+
+def test_release_requeues_unless_the_claimant_itself_attempted_completion(followup):
+    """Confirmation panel F2: a foreign in-flight attempt must not suppress the re-queue."""
+    f = followup
+    f.runner.completion_attempts.add((1, f.binding))
+    claim = projection_followup.SiblingClaim(waiting=['x'])
+    f.runner.sibling_claims[(1, f.binding)] = claim
+    before = _requeues()
+    f.runner.release_sibling_claim((1, f.binding))
+    assert f.runner.pending[0] == 'x' and _requeues() == before + 1

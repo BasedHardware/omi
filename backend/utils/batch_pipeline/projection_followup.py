@@ -103,6 +103,9 @@ class SiblingClaim:
     ready: asyncio.Event = field(default_factory=asyncio.Event)
     proof: FollowupPrivacyProof | None = None
     waiting: list = field(default_factory=list)
+    # True once this claimant itself registered the completion attempt; only then
+    # may its release leave skipped siblings coalesced.
+    attempted: bool = False
 
 
 @dataclass(frozen=True)
@@ -453,7 +456,7 @@ class ProjectionFollowups:
             return
         claim.ready.set()
         waiting = claim.waiting
-        if not waiting or key in self.completion_attempts or self.closed:
+        if not waiting or (claim.attempted and key in self.completion_attempts) or self.closed:
             return
         for sibling in waiting:
             if sibling in self.tasks:
@@ -652,6 +655,8 @@ class ProjectionFollowups:
                 if key in self.completion_attempts:
                     return 'coalesced'
                 self.completion_attempts.add(key)
+                if sibling_key == key and (own := self.sibling_claims.get(key)) is not None:
+                    own.attempted = True
             try:
                 result = await run_blocking(
                     postprocess_executor,
