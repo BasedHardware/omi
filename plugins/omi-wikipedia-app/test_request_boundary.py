@@ -219,5 +219,70 @@ class NonStringArgumentTests(unittest.TestCase):
         self.assertEqual(wikipedia._safe_limit("3"), 3)
 
 
+class DefensivePayloadHandlingTests(unittest.TestCase):
+    """Wikipedia API responses with null or unexpected types must not crash the app."""
+
+    def test_format_summary_handles_none_content_urls(self):
+        data = {
+            "title": "Quantum computing",
+            "extract": "A model of computation.",
+            "content_urls": None,
+        }
+        formatted = wikipedia._format_summary(data, "en")
+        self.assertIn("Quantum computing", formatted)
+        self.assertIn("https://en.wikipedia.org/wiki/Quantum_computing", formatted)
+
+    def test_format_summary_handles_none_desktop_url(self):
+        data = {
+            "title": "Quantum computing",
+            "extract": "A model of computation.",
+            "content_urls": {"desktop": None},
+        }
+        formatted = wikipedia._format_summary(data, "en")
+        self.assertIn("Quantum computing", formatted)
+        self.assertIn("https://en.wikipedia.org/wiki/Quantum_computing", formatted)
+
+    def test_search_articles_handles_none_query_response(self):
+        async def fake_request(url, params=None):
+            return {"query": None}
+
+        with patch.object(wikipedia, "_request_json", fake_request):
+            result = run(wikipedia.search_articles({"query": "Physics"}))
+        self.assertEqual(result.result, "No Wikipedia articles found for 'Physics'.")
+
+    def test_search_articles_filters_non_dict_items(self):
+        async def fake_request(url, params=None):
+            return {
+                "query": {
+                    "search": [
+                        None,
+                        "malformed_string",
+                        {"title": "Valid Result", "snippet": "A test snippet"},
+                    ]
+                }
+            }
+
+        with patch.object(wikipedia, "_request_json", fake_request):
+            result = run(wikipedia.search_articles({"query": "Physics"}))
+        self.assertIn("Valid Result", result.result)
+        self.assertIn("A test snippet", result.result)
+
+    def test_get_random_article_handles_none_query_response(self):
+        async def fake_request(url, params=None):
+            return {"query": None}
+
+        with patch.object(wikipedia, "_request_json", fake_request):
+            result = run(wikipedia.get_random_article({}))
+        self.assertEqual(result.result, "No random Wikipedia article was returned.")
+
+    def test_get_random_article_handles_non_dict_random_item(self):
+        async def fake_request(url, params=None):
+            return {"query": {"random": ["invalid_string_instead_of_dict"]}}
+
+        with patch.object(wikipedia, "_request_json", fake_request):
+            result = run(wikipedia.get_random_article({}))
+        self.assertEqual(result.result, "Wikipedia returned a random article without a title.")
+
+
 if __name__ == "__main__":
     unittest.main()
