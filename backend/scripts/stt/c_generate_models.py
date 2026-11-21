@@ -53,25 +53,18 @@ if __name__ == '__main__':
     cleaned_files = ['data/training/cleaned/' + p for p in list(sorted(os.listdir('data/training/cleaned')))]
 
     models_configs: List[Any] = []
-    for i in range(0, len(raw_files) - 5):
-        audio_paths = raw_files[i : i + 5]
-        models_configs.append([f'models/raw_5_samples_{i}_{i + 5}.pt', audio_paths])
 
-    for i in range(0, len(cleaned_files) - 5):
-        audio_paths = cleaned_files[i : i + 5]
-        models_configs.append([f'models/cleaned_5_samples_{i}_{i + 5}.pt', audio_paths])
-
-    for i in range(0, len(raw_files) - 10):
-        audio_paths = raw_files[i : i + 10]
-        models_configs.append([f'models/raw_10_samples_{i}_{i + 10}.pt', audio_paths])
-
-    for i in range(0, len(cleaned_files) - 10):
-        audio_paths = cleaned_files[i : i + 10]
-        models_configs.append([f'models/cleaned_10_samples_{i}_{i + 10}.pt', audio_paths])
+    for window_size in (5, 10):
+        for i in range(0, len(raw_files) - window_size):
+            models_configs.append(
+                [f'models/raw_{window_size}_samples_{i}_{i + window_size}.pt', raw_files[i : i + window_size]]
+            )
+        for i in range(0, len(cleaned_files) - window_size):
+            models_configs.append(
+                [f'models/cleaned_{window_size}_samples_{i}_{i + window_size}.pt', cleaned_files[i : i + window_size]]
+            )
 
     models_configs.append([f'models/raw_{len(raw_files)}_samples.pt', raw_files])
     models_configs.append([f'models/cleaned_{len(cleaned_files)}_samples.pt', cleaned_files])
     for path, samples in models_configs:
         train(path, samples)
-
-    # TODO: tweak different preprocessing too
