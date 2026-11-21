@@ -110,6 +110,28 @@ class RunAPI:
 
     def complete(self, operation, cap, *, submitted, sleep=time.sleep):
         name = operation.get('name')
+        if not submitted:
+            # Safe shape marker: key names and types only, never values.
+            metadata = operation.get('metadata')
+            print(
+                'PUMP_CAP_VALIDATE_SHAPE '
+                f'keys={",".join(sorted(operation))} done={operation.get("done") is True} '
+                f'metadata_type={metadata.get("@type") if isinstance(metadata, dict) else type(metadata).__name__}',
+                flush=True,
+            )
+            if operation.get('done') is not True and 'error' not in operation:
+                # Cloud Run v2 does not persist validate-only operations: GET on
+                # the returned name is 404 (run 44862200539). Never poll it.
+                # Accept only the operation's own Service preview, and only
+                # when it names the exact pump service and the requested cap.
+                if (
+                    isinstance(metadata, dict)
+                    and metadata.get('@type') == SERVICE_TYPE
+                    and metadata.get('name') in RESOURCE_NAMES
+                    and metadata.get('scaling', {}).get('maxInstanceCount') == cap
+                ):
+                    return
+                raise ValueError('Cloud Run validation returned no exact pump service preview')
         if submitted or operation.get('done') is not True:
             if not isinstance(name, str) or not OPERATION_NAME.fullmatch(name):
                 raise ValueError('Cloud Run returned no bound operation identity')
