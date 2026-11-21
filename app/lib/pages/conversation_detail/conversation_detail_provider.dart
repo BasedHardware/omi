@@ -51,6 +51,20 @@ typedef ConversationDetailFetchCall = Future<ServerConversation?> Function(Strin
 /// a tab with nothing to show yet uses this to say "loading" or "couldn't load" instead of blank.
 enum ConversationDetailLoad { idle, loading, failed }
 
+/// The text the detail title field should take after a server re-read, or null to leave it. The field
+/// follows a changed server title only while it still shows the previous server title and the owner is
+/// not editing it: a typed, just-saved or in-progress title differs and is kept.
+String? followedServerTitle({
+  required String? previousServerTitle,
+  required String nextServerTitle,
+  required String fieldText,
+  required bool editing,
+}) {
+  if (previousServerTitle == null || nextServerTitle == previousServerTitle) return null;
+  if (editing || fieldText != previousServerTitle) return null;
+  return nextServerTitle;
+}
+
 class ConversationDetailProvider extends ChangeNotifier
     with MessageNotifierMixin, ConversationSummaryGeneration, ConversationRecordingSpeakers {
   static final RegExp _syncConversationId = RegExp(r'^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-');
@@ -1075,6 +1089,7 @@ class ConversationDetailProvider extends ChangeNotifier
     showUnassignedFloatingButton = true;
 
     titleController!.text = conversation.structured.title;
+    _lastServerTitle = conversation.structured.title;
     // The title saves when editing ends (Done or leaving the field); the title field calls
     // [saveTitle] and reports the outcome.
 
@@ -1353,7 +1368,7 @@ class ConversationDetailProvider extends ChangeNotifier
         // A transcript in the detail copy proves transcription finished; a missing Home step proves nothing.
         TranscriptionPendingConversations.observe(updatedConversation);
         conversationProvider?.updateConversation(updatedConversation);
-        _followServerTitle(_cachedConversation?.structured.title, updatedConversation);
+        _followServerTitle(updatedConversation);
         _cachedConversation = updatedConversation;
         _hydratedDetail = (owner: ownerUid, row: conversationOrNull ?? updatedConversation);
         clearSettledSummaryFailure(updatedConversation);
@@ -1390,19 +1405,32 @@ class ConversationDetailProvider extends ChangeNotifier
       if (ids.remove(donorId)) ids.add(survivorId);
     }
     conversationProvider?.replaceBridgedConversation(donorId, survivor);
-    _followServerTitle(_cachedConversation?.structured.title, survivor);
+    _followServerTitle(survivor);
     _cachedConversation = survivor;
   }
 
-  /// A re-read (a live conversation's 15 s refresh, or its bridge survivor) that brings a new server
-  /// title updates the title field, which [initConversation] filled once. Left alone while the owner
-  /// is editing it or has typed something other than the title the page last showed.
-  void _followServerTitle(String? shown, ServerConversation next) {
+  /// The title the last server read carried (not the cached conversation, which a save mutates).
+  String? _lastServerTitle;
+
+  /// A re-read (a live conversation's 15 s refresh, or its bridge survivor) whose server title changed
+  /// updates the title field, which [initConversation] filled once. The field follows only while it
+  /// still shows the previous server title: an edit in progress, a typed title or a just-saved one
+  /// differs from it and is never overwritten, including by a re-read that predates the save.
+  @visibleForTesting
+  void followServerTitle(ServerConversation next) => _followServerTitle(next);
+
+  void _followServerTitle(ServerConversation next) {
+    final previous = _lastServerTitle;
+    _lastServerTitle = next.structured.title;
     final controller = titleController;
-    if (controller == null || shown == null || titleFocusNode?.hasFocus == true) return;
-    final title = next.structured.title;
-    if (title == shown || controller.text != shown) return;
-    controller.text = title;
+    if (controller == null) return;
+    final followed = followedServerTitle(
+      previousServerTitle: previous,
+      nextServerTitle: next.structured.title,
+      fieldText: controller.text,
+      editing: titleFocusNode?.hasFocus == true,
+    );
+    if (followed != null) controller.text = followed;
   }
 
   void updateFolderIdLocally(String? newFolderId) {

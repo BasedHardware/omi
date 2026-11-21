@@ -58,6 +58,11 @@ class TranscriptWidget extends StatefulWidget {
   final bool followLatest;
   final TranscriptScrollState? scrollState;
   final double jumpToLatestButtonBottom;
+
+  /// Must change whenever the segments' ids or text change without the list instance or its length
+  /// changing (an in-place edit). An update with the same list instance, length, version, leading
+  /// items and layout identity skips re-indexing segment keys, so a caller that edits [segments] in
+  /// place at constant length and keeps the default 0 leaves stale keys. Pass a fresh list instead.
   final int contentVersion;
   final String layoutIdentity;
   final List<Widget> leadingItems;

@@ -100,10 +100,15 @@ class LiveEpisodePageState extends State<LiveEpisodePage> with SingleTickerProvi
     _tick = Timer.periodic(const Duration(seconds: 30), (_) {
       if (mounted) setState(() {});
     });
+    // Armed for every account: the v3 switch may answer after the page opens. Each tick reads only
+    // for a v3 account, with the app in the foreground and this page on top, as Home's own read does.
     final v3 = context.read<ConversationsV3Provider?>();
-    if (v3?.v3 == true) {
+    if (v3 != null) {
       _v3Refresh = Timer.periodic(const Duration(seconds: 15), (_) {
-        if (mounted && ModalRoute.of(context)?.isCurrent != false) unawaited(v3!.refresh());
+        if (!mounted || !v3.v3 || ModalRoute.of(context)?.isCurrent == false) return;
+        final lifecycle = WidgetsBinding.instance.lifecycleState;
+        if (lifecycle != null && lifecycle != AppLifecycleState.resumed) return;
+        unawaited(v3.refresh());
       });
     }
   }

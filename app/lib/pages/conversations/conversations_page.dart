@@ -922,7 +922,9 @@ class _ConversationsPageState extends State<ConversationsPage>
             !v3Live.discarded &&
             !convoProvider.memoriesToDelete.containsKey(v3Live.id) &&
             !SharedPreferencesUtil().isConversationDeleteConfirmed(v3Live.id);
-        final livePlaceholder = v3Home && streaming && !v3LiveShown && !callActive;
+        // A deleted or discarded live window shows nothing (the owner removed it); only a window Home
+        // hides (still below the word minimum, say) is stood in for by the placeholder.
+        final livePlaceholder = v3Home && streaming && (v3Live == null || v3Live.v3?.homeHidden == true) && !callActive;
         if (v3Home) {
           final waiting = streaming && v3Live == null;
           final signature =

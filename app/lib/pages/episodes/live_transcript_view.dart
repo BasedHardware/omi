@@ -98,6 +98,16 @@ class _LiveTranscriptViewState extends State<LiveTranscriptView> {
   Object? _flatSegmentsKey;
   List<TranscriptSegment>? _flatSegments;
 
+  // This session's unsynced WALs and in-flight seconds, read once per capture notify (each read walks
+  // every WAL on the phone, 14k+ on a long-lived install). The behind-line and catch-up rebuild on
+  // every preview notify between capture notifies and reuse this snapshot.
+  ({List<Wal> wals, int inFlight})? _walSnapshot;
+
+  ({List<Wal> wals, int inFlight}) _readWals(CaptureProvider provider) =>
+      _walSnapshot = (wals: provider.unsyncedSessionWals, inFlight: provider.inFlightAudioSeconds);
+
+  ({List<Wal> wals, int inFlight}) _wals(CaptureProvider provider) => _walSnapshot ?? _readWals(provider);
+
   List<TranscriptSegment> _flatSegmentsFor(CaptureProvider provider) {
     final key = (provider.segmentsPhotosVersion, provider.segments.length, identityHashCode(provider.segments));
     if (_flatSegmentsKey != key || _flatSegments == null) {
@@ -129,6 +139,7 @@ class _LiveTranscriptViewState extends State<LiveTranscriptView> {
         final usage = context.watch<UsageProvider>();
         final photoChannelActive = _photoChannelActive(deviceProvider.connectedDevice);
         final transcriptionInterrupted = provider.recordingState == RecordingState.interrupted;
+        _readWals(provider);
         final transcriptSessionId =
             provider.activeCaptureSessionId ?? widget.topConversationId ?? 'pending-live-capture';
         final transcriptScrollState = _scrollStateFor(transcriptSessionId);
@@ -761,8 +772,7 @@ class _LiveTranscriptViewState extends State<LiveTranscriptView> {
     if (_quietBehindLine(provider) == null) return null;
     final l10n = context.l10n;
     final started = provider.liveTranscriptStartedAt;
-    final seconds =
-        provider.unsyncedSessionWals.fold<int>(0, (sum, w) => sum + w.seconds) + provider.inFlightAudioSeconds;
+    final seconds = _wals(provider).wals.fold<int>(0, (sum, w) => sum + w.seconds) + _wals(provider).inFlight;
     final saved = (seconds / 10).round() * 10;
     return Column(
       key: const Key('live_transcript_catch_up'),
@@ -793,9 +803,9 @@ class _LiveTranscriptViewState extends State<LiveTranscriptView> {
     if (!_showsLivePreview(provider)) return null;
     // Each read walks every WAL on the phone (14k+ on a long-lived install); callers that already
     // hold this build's read pass it in.
-    final unsyncedWals = unsynced ?? provider.unsyncedSessionWals;
+    final unsyncedWals = unsynced ?? _wals(provider).wals;
     final totalSeconds =
-        unsyncedWals.fold<int>(0, (sum, w) => sum + w.seconds) + (inFlight ?? provider.inFlightAudioSeconds);
+        unsyncedWals.fold<int>(0, (sum, w) => sum + w.seconds) + (inFlight ?? _wals(provider).inFlight);
     // Uploaded audio has no pending-upload duration, but the server may still
     // be transcribing it. Only uncovered preview text proves we are waiting.
     final waitingWithoutDuration =
@@ -830,8 +840,8 @@ class _LiveTranscriptViewState extends State<LiveTranscriptView> {
   }
 
   Widget _buildUnsyncedWalIndicator(CaptureProvider provider) {
-    final unsyncedWals = provider.unsyncedSessionWals;
-    final inFlightSeconds = provider.inFlightAudioSeconds;
+    final unsyncedWals = _wals(provider).wals;
+    final inFlightSeconds = _wals(provider).inFlight;
     final totalSeconds = unsyncedWals.fold<int>(0, (sum, w) => sum + w.seconds) + inFlightSeconds;
     if (totalSeconds <= 5) return const SizedBox.shrink();
 

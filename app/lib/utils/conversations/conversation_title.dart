@@ -40,11 +40,6 @@ String? transcriptFallbackTitle(ServerConversation conversation) {
   return String.fromCharCodes(head.sublist(0, boundary)).trimRight();
 }
 
-/// The display title of a kept (not discarded) conversation: its title, else transcript text,
-/// else a localized recording date/time. The last case reports [ConversationUntitledRendered]
-/// so missing server titles remain observable. [title] overrides the raw structured title
-/// when a surface already normalized it. Citation debris (`[s01234]`, `Speaker_00`) is
-/// repaired for display; edit fields keep the stored title.
 /// A v3 conversation still in progress with no real title yet: its rows and its detail page read
 /// "Listening", the same title as Home's live placeholder, never a transcript snippet or a recording
 /// date, until the server names it.
@@ -52,6 +47,11 @@ bool awaitsLiveTitle(ServerConversation conversation, {String? title}) =>
     conversation.v3?.tileState == ConversationTileState.live &&
     presentableConversationTitle(conversation, title: title).isEmpty;
 
+/// The display title of a kept (not discarded) conversation: its title, else transcript text,
+/// else a localized recording date/time. The last case reports [ConversationUntitledRendered]
+/// so missing server titles remain observable. [title] overrides the raw structured title
+/// when a surface already normalized it. Citation debris (`[s01234]`, `Speaker_00`) is
+/// repaired for display; edit fields keep the stored title.
 String conversationDisplayTitle(
   ServerConversation conversation,
   AppLocalizations l10n, {

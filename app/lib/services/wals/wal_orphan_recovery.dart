@@ -76,8 +76,8 @@ extension LocalOrphanRecovery on LocalWalSyncImpl {
 
   void _maybeRecoverOrphanAudio() {
     if (!_orphanForeground || _headlessIndexLoad || _initialIndexAdmissionPending || !_walReady.isCompleted) return;
+    if (!orphanRecoveryDueNow) return;
     final now = _now();
-    if (!orphanRecoveryDue(now: now, lastRun: _lastOrphanRecoveryWake, lastLiveFrame: _lastLiveFrameAt)) return;
     _lastOrphanRecoveryWake = now;
     unawaited(recoverOrphanAudio().then((_) => reclaimOrphanAudio()));
   }

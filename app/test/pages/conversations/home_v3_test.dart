@@ -339,6 +339,10 @@ class _Home {
 
   /// The server's title for the conversation in progress; empty until the server names it.
   String liveTitle = 'Launch checklist';
+
+  /// The live window's start, and whether Home hides it.
+  late DateTime liveStart = _now.subtract(const Duration(minutes: 20));
+  bool liveHidden = false;
   final sync = _StubSyncProvider();
   late final _LiveCapture capture = _LiveCapture()
     ..segments = [
@@ -395,11 +399,12 @@ class _Home {
       return ApiSuccess(ConversationsLiveRead(
         v3: v3,
         conversation: v3 && liveOpen
-            ? _conversation('live-1', _now.subtract(const Duration(minutes: 20)), liveTitle,
+            ? _conversation('live-1', liveStart, liveTitle,
                 // The server's finished_at for an open window is its last speech: 11 minutes in.
                 lastSpeech: _now.subtract(const Duration(minutes: 9)),
                 segments: _liveSoFar,
-                v3: const ConversationV3Fields(kind: 'conversation', tileState: ConversationTileState.live))
+                v3: ConversationV3Fields(
+                    kind: 'conversation', tileState: ConversationTileState.live, homeHidden: liveHidden))
             : null,
       ));
     },
@@ -599,6 +604,70 @@ void main() {
       expect(headers.map((h) => h.date), [DateTime(_now.year, _now.month, _now.day)], reason: 'one header: Today');
       final today = tester.getRect(find.byType(DateListItem));
       expect(tester.getRect(find.byType(V3LivePlaceholderRow)).top, greaterThanOrEqualTo(today.bottom));
+      await _dispose(tester, home);
+    });
+  });
+
+  testWidgets('v3: a live window Home hides is stood in for by the placeholder; a deleted one is not', (tester) async {
+    await withClock(Clock.fixed(_now), () async {
+      final home = await _pumpHome(tester, v3: true);
+      home.liveHidden = true;
+      await home.conversationsV3.refresh();
+      await tester.pump();
+      await tester.pump();
+      expect(find.byKey(const ValueKey('live-1')), findsNothing);
+      expect(find.byType(V3LivePlaceholderRow), findsOneWidget, reason: 'a hidden live window still reads as live');
+
+      home.liveHidden = false;
+      await home.conversationsV3.refresh();
+      await tester.pump();
+      await tester.pump();
+      home.conversations.memoriesToDelete['live-1'] = home.conversationsV3.live!;
+      home.conversations.notifyListeners();
+      await tester.pump();
+      expect(find.byKey(const ValueKey('live-1')), findsNothing);
+      expect(find.byType(V3LivePlaceholderRow), findsNothing, reason: 'the owner deleted it: nothing stands in');
+      await _dispose(tester, home);
+    });
+  });
+
+  testWidgets('v3: a live window that started before midnight still leads Today', (tester) async {
+    await withClock(Clock.fixed(_now), () async {
+      final home = await _pumpHome(tester, v3: true);
+      home.liveStart = DateTime(_now.year, _now.month, _now.day).subtract(const Duration(minutes: 20));
+      await home.conversationsV3.refresh();
+      await tester.pump();
+      await tester.pump();
+      expect(_rowIds(tester).first, 'live-1');
+      final today =
+          tester.getRect(find.byKey(ValueKey('date_${DateTime(_now.year, _now.month, _now.day).toIso8601String()}')));
+      final live = tester.getRect(find.byKey(const ValueKey('live-1')));
+      expect(live.top, greaterThanOrEqualTo(today.bottom));
+      expect(live.top, lessThan(tester.getRect(find.byKey(const ValueKey('c-call'))).top));
+      await _dispose(tester, home);
+    });
+  });
+
+  testWidgets('v3: the open live title is not overwritten while the owner edits it', (tester) async {
+    await withClock(Clock.fixed(_now), () async {
+      final home = await _pumpHome(tester, v3: true);
+      home.liveTitle = '';
+      await home.conversationsV3.refresh();
+      await tester.pump();
+      await tester.pump();
+      await tester.tap(find.byKey(const ValueKey('live-1')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+      await tester.pump(const Duration(milliseconds: 500));
+      final field = find.byType(ConversationTitleField);
+      await tester.tap(field);
+      await tester.pump();
+      home.liveTitle = 'Launch checklist';
+      await tester.pump(const Duration(seconds: 15));
+      await tester.pump();
+      await tester.pump();
+      expect(tester.widget<ConversationTitleField>(field).controller!.text, '',
+          reason: 'focused: the server title waits until the owner stops editing');
       await _dispose(tester, home);
     });
   });

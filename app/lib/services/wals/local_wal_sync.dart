@@ -157,6 +157,14 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
 
   /// When the last live audio frame was buffered; the orphan census backs off while audio streams.
   DateTime? _lastLiveFrameAt;
+
+  @visibleForTesting
+  set testLastOrphanRecoveryWake(DateTime? value) => _lastOrphanRecoveryWake = value;
+
+  /// Whether the foreground orphan census may start now, from this sync's own clocks.
+  @visibleForTesting
+  bool get orphanRecoveryDueNow =>
+      orphanRecoveryDue(now: _now(), lastRun: _lastOrphanRecoveryWake, lastLiveFrame: _lastLiveFrameAt);
   Future<void>? _orphanRecoveryInFlight;
   Future<void>? _orphanReclaimInFlight;
   final Future<bool> Function()? _orphanReclaimOffOverride;
