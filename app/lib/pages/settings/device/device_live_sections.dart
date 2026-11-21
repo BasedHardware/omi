@@ -86,6 +86,7 @@ class DeviceStatsRow extends StatelessWidget {
     return Wrap(
       spacing: OmiSpacing.xs,
       runSpacing: OmiSpacing.xxs,
+      crossAxisAlignment: WrapCrossAlignment.center,
       children: [
         for (var i = 0; i < tiles.length; i++) ...[
           if (i > 0) Text('·', style: OmiType.subhead.copyWith(color: OmiColors.textTertiary)),
@@ -135,7 +136,15 @@ class _StatTile extends StatelessWidget {
       label: [label, value, if (caption != null) caption!, if (secondCaption != null) secondCaption!].join(', '),
       button: onTap != null,
       excludeSemantics: true,
-      child: onTap == null ? content : InkWell(onTap: onTap, child: content),
+      child: onTap == null
+          ? content
+          : InkWell(
+              onTap: onTap,
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
+                child: Align(widthFactor: 1, heightFactor: 1, child: content),
+              ),
+            ),
     );
   }
 }

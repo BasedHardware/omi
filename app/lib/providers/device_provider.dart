@@ -660,7 +660,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     notifyListeners();
   }
 
-  void _publishBatterySample(int value) {
+  void _publishBatterySample(int value, {bool refresh = false}) {
     if (value < 0 || value > 100) return;
     _batterySampleRevision++;
     if (batteryLevel != value) {
@@ -672,7 +672,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
       );
     }
     _noteLowBattery(value);
-    _updateBatteryLevel(value);
+    _updateBatteryLevel(value, refresh: refresh);
   }
 
   void _noteLowBattery(int value) {
@@ -736,7 +736,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
           _batterySampleRevision != sampleRevision ||
           level < 0 ||
           level > 100) return false;
-      _publishBatterySample(level);
+      _publishBatterySample(level, refresh: true);
       return true;
     } catch (e) {
       Logger.debug('Battery refresh failed: $e');
@@ -871,7 +871,8 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     _bleChargingStatusListener = null;
   }
 
-  bool _updateBatteryLevel(int value, {DateTime? now}) {
+  bool _updateBatteryLevel(int value, {DateTime? now, bool refresh = false}) {
+    final levelChanged = value != batteryLevel;
     batteryLevel = value;
     final currentTime = now ?? DateTime.now();
 
@@ -884,7 +885,8 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
         (value < 20 && _lastNotifiedBatteryLevel >= 20) || (value >= 20 && _lastNotifiedBatteryLevel < 20);
     final crossedFirmwareThreshold =
         (value >= kFirmwareUpdateMinBattery) != (_lastNotifiedBatteryLevel >= kFirmwareUpdateMinBattery);
-    final shouldNotify = _lastNotifiedBatteryLevel == -1 ||
+    final shouldNotify = (refresh && levelChanged) ||
+        _lastNotifiedBatteryLevel == -1 ||
         delta >= 5 ||
         elapsed.inMinutes >= 15 ||
         crossedLowBatteryThreshold ||

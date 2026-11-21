@@ -1238,6 +1238,7 @@ void main() {
         onRetryBattery: () => checks++,
       )));
       expect(find.text('0%'), findsOneWidget);
+      expect(tester.getSize(find.byKey(const Key('device_stat_battery'))).height, greaterThanOrEqualTo(44));
       await tester.tap(find.text('Try Again'));
       expect(checks, 1);
     });

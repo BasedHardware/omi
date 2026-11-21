@@ -133,6 +133,13 @@ void main() {
     await tester.pump(const Duration(seconds: 1));
     expect(transport.batteryReads, 1);
     expect(provider.batteryLevel, 91);
+
+    var notifications = 0;
+    provider.addListener(() => notifications++);
+    transport.battery = [92];
+    expect(await provider.refreshBatteryLevel(), isTrue);
+    expect(provider.batteryLevel, 92);
+    expect(notifications, 1);
   });
 
   testWidgets('a delayed battery read from a retired link is discarded', (tester) async {

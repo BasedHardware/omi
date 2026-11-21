@@ -380,10 +380,13 @@ class _FoundDevicesState extends State<FoundDevices> with WidgetsBindingObserver
                   style: OmiType.body.copyWith(fontWeight: FontWeight.w500),
                 ),
               if (provider.isConnected && showOmiStatus)
-                Text(
-                  charging ? context.l10n.charging : context.l10n.deviceReadyToUse,
-                  textAlign: TextAlign.center,
-                  style: OmiType.footnote.copyWith(color: OmiColors.textSecondary),
+                Semantics(
+                  liveRegion: true,
+                  child: Text(
+                    charging ? context.l10n.charging : context.l10n.deviceReadyToUse,
+                    textAlign: TextAlign.center,
+                    style: OmiType.footnote.copyWith(color: OmiColors.textSecondary),
+                  ),
                 ),
               if (provider.isConnected && provider.deviceType != DeviceType.omi && provider.batteryPercentage > 0)
                 Padding(
