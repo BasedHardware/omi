@@ -218,15 +218,13 @@ runs:
               | jq -er '[.status.traffic[] | select((.percent // 0) > 0)]
                   | if length == 1 and (.[0].latestRevision // false) then "true" else "false" end')"
             if [[ "$latest" == true ]]; then
-              read -r _ base base_sha base_image extra <<< "$RELEASE_DISPOSITION"
-              if [[ -z "${base_image:-}" || -n "${extra:-}" ]]; then
-                echo 'A LATEST-routed pump needs a disposition naming its base revision, source and digest.' >&2
-                exit 1
-              fi
+              # The full four-field disposition (Release comment UUID, base revision, source,
+              # digest) is validated by the verifier before any traffic write.
               python3 "$DEPLOY_CONTROL_SCRIPTS/verify_projection_pump_inverse.py" \
                 --project="${{ inputs.project_id }}" --region="${{ inputs.region }}" \
-                --new-base "$base" "$base_sha" "$base_image" \
+                --disposition="$RELEASE_DISPOSITION" \
                 --before-first-pin | tee artifacts/projection-pump-existing-latest-readback.txt
+              read -r _ base _ <<< "$RELEASE_DISPOSITION"
               gcloud run services update-traffic backend-projection-pump \
                 --project="${{ inputs.project_id }}" --region="${{ inputs.region }}" \
                 --to-revisions="$base=100" --quiet

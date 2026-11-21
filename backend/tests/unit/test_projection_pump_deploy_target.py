@@ -1114,5 +1114,30 @@ def test_existing_latest_routed_pump_is_pinned_inside_the_locked_deploy():
     assert existing.index('--before-first-pin') < pin
     assert existing.index('latestRevision') < existing.index('--before-first-pin')
     assert '--to-revisions="$base=100"' in existing
-    assert pin < existing.index('--disposition="$RELEASE_DISPOSITION"')
-    assert 'needs a disposition naming its base revision' in existing
+    assert pin < existing.rindex('--disposition="$RELEASE_DISPOSITION"')
+    pre_pin = existing[existing.index('latestRevision') : pin]
+    assert '--disposition="$RELEASE_DISPOSITION"' in pre_pin and '--before-first-pin' in pre_pin
+    assert '--new-base' not in pre_pin
+
+
+@pytest.mark.parametrize(
+    'disposition',
+    [
+        # UUID missing (three fields), malformed UUID, and a non-base revision.
+        f'{BASE_REVISION} {"a" * 40} gcr.io/based-hardware/backend@sha256:{"b" * 64}',
+        f'not-a-uuid {BASE_REVISION} {"a" * 40} gcr.io/based-hardware/backend@sha256:{"b" * 64}',
+        f'01a1fd00-0000-7000-8000-000000000000 backend-projection-pump-x {"a" * 40} '
+        f'gcr.io/based-hardware/backend@sha256:{"b" * 64}',
+    ],
+)
+def test_pre_pin_disposition_is_fully_validated_before_any_read(monkeypatch, disposition):
+    """#25945 panel F1: the LATEST pin path must reject a bad disposition before touching traffic."""
+    inverse = sys.modules[recovery.verify.__module__]
+
+    monkeypatch.setattr(inverse, '_read', lambda *a, **k: pytest.fail('read before validation'))
+    monkeypatch.setattr(
+        sys,
+        'argv',
+        ['verify', '--project=p', '--region=r', f'--disposition={disposition}', '--before-first-pin'],
+    )
+    assert inverse.main() != 0
