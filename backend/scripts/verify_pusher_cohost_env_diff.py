@@ -333,10 +333,6 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
             "PARAKEET_WINDOW_PACE_SECONDS",
             "PARAKEET_WINDOW_POST_TIMEOUT_SECONDS",
             # Listen-only Soniox idle-close treatment cohort; pusher opens no Soniox stream.
-            "SONIOX_IDLE_COHORT_PERCENT",
-            "SONIOX_IDLE_COHORT_CLOSE_SECONDS",
-            "SONIOX_IDLE_COHORT_REARM_SECONDS",
-            "SONIOX_IDLE_COHORT_MAX_CLOSES_PER_HOUR",
             "SONIOX_CIRCUIT_COOLDOWN_SECONDS",
             "SONIOX_CIRCUIT_FAILURE_THRESHOLD",
             "STT_ACCOUNT_CIRCUIT_COOLDOWN_SECONDS",
@@ -479,6 +475,10 @@ PUSHER_ONLY_ALLOWED: dict[str, frozenset[str]] = {
             "TRANSCRIPTION_SHADOW_UID_ALLOWLIST",
             "TRANSCRIPTION_SHADOW_PERCENT",
             "TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS",
+            # Listen reads its STT cap enforcement and fallback cohort from privateSecretEnv (Secret
+            # Manager references, not env literals); pusher keeps its public observe-only values.
+            "STT_CAP_DISPATCH_ENFORCEMENT",
+            "STT_CAP_DISPATCH_COHORT",
         }
     )
     | frozenset(PROD_FINAL_PASS_SHADOW_VALUES),

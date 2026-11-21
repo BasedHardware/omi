@@ -3792,9 +3792,29 @@ def test_prod_sync_backfill_lookback_is_sixty_days_and_no_release_reach_undercut
         assert reach == 0 or reach >= lookback
 
 
-def test_prod_unlimited_backfill_day_cap_is_on_at_24_hours_on_every_declaring_surface():
+def test_prod_unlimited_backfill_day_cap_is_on_at_24_hours_on_every_declaring_surface_except_prod_listen():
     # Enforced only at sync upload (retryable 503 backfill_capacity); dev keeps it off.
+    # Exception: prod backend-listen pins it 'false' so the listen roll (SCA-3516) preserves the serving
+    # image's behaviour (44d0a4f runs it 'false', and listen also admits sync backfill uploads, so listen
+    # admission stays uncapped as it is today). Turning listen on is its own config
+    # change after that roll (Shipping ruling 2026-11-21 13:25Z). Remove this exception then.
     manifest = yaml.safe_load((ROOT / 'deploy/runtime_env.yaml').read_text())
+    listen = manifest['environments']['prod']['gke']['backend-listen']['env']
+    assert listen['UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED']['value'] == 'false'
+    assert listen['UNLIMITED_V2_BACKFILL_HOURS_CAP_HOURS']['value'] == '24'
+    # Same roll: no privacy writer and no packing sampling on prod listen until separately approved.
+    assert listen['BATCH_ACCOUNT_PRIVACY_WRITER_ENABLED']['value'] == 'false'
+    assert listen['BATCH_PIPELINE_PACKING_SAMPLE_RATE']['value'] == '0'
+    chart = {
+        item['name']: item.get('value')
+        for item in yaml.safe_load((ROOT / 'charts/backend-listen/prod_omi_backend_listen_values.yaml').read_text())[
+            'env'
+        ]
+    }
+    assert chart['UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED'] == 'false'
+    assert chart['BATCH_ACCOUNT_PRIVACY_WRITER_ENABLED'] == 'false'
+    assert chart['BATCH_PIPELINE_PACKING_SAMPLE_RATE'] == '0'
+    manifest['environments']['prod']['gke'].pop('backend-listen')
     for stage, expected in (('prod', 'true'), ('dev', 'false')):
         environment = manifest['environments'][stage]
         enabled = list(_settings_named(environment, 'UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED'))
@@ -4274,3 +4294,41 @@ def test_read_lever_parity_rejects_worker_inheriting_api_privacy_scope(read_leve
     assert changed[worker][lever] != expected[integration][lever]
     changed[worker][lever] = expected[integration][lever]
     assert any(worker in error for error in read_lever_manifest.parity_errors(changed, expected, policy))
+
+
+def _listen_drift_manifest(validator, monkeypatch):
+    manifest = copy.deepcopy(validator._load_yaml(validator.DEFAULT_MANIFEST))
+    listen_env = manifest['environments']['prod']['gke']['backend-listen']['env']
+    key = next(k for k, v in listen_env.items() if isinstance(v, dict) and v.get('value') in ('true', 'false'))
+    listen_env[key] = {**listen_env[key], 'value': 'drifted'}
+    monkeypatch.setattr(
+        manifest_validation,
+        '_load_yaml',
+        lambda path: manifest if path == validator.DEFAULT_MANIFEST else validator._load_yaml(path),
+    )
+    return validator._get_env_config(manifest, 'prod')
+
+
+def test_pump_only_run_skips_listen_drift_but_checks_pump_drift(tmp_path, monkeypatch):
+    """SCA-3318: a pump-only selector scopes drift to the pump; 'all' still checks listen."""
+    validator = load_validator()
+    config = _listen_drift_manifest(validator, monkeypatch)
+    state = render_cloud_run_state(config, monkeypatch)
+    path = tmp_path / 'state.json'
+    path.write_text(json.dumps(state))
+
+    def errors(service):
+        return validator.validate_runtime_env(env='prod', cloud_run_state_path=path, cloud_run_service=service)
+
+    pump_only = errors('backend-projection-pump')
+    assert pump_only == [], [(e.scope, e.message) for e in pump_only]
+    assert any(e.scope == 'gke/backend-listen' for e in errors('all'))
+    assert any(e.scope == 'gke/backend-listen' for e in errors('backend-integration'))
+
+    pump_env = state['services']['backend-projection-pump']['env']
+    entry = next(e for e in pump_env if e.get('value') in ('true', 'false'))
+    entry['value'] = 'drifted'
+    path.write_text(json.dumps(state))
+    drifted = errors('backend-projection-pump')
+    assert drifted and all('gke/' not in e.scope for e in drifted), [(e.scope, e.message) for e in drifted]
+    assert any('backend-projection-pump' in e.scope for e in drifted), [(e.scope, e.message) for e in drifted]

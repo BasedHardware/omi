@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-back-from-settings-before-after.png",
+      "platform": "mobile-ios",
+      "description": "New account in onboarding: closed the sign-up paywall, declined the 30-day offer, reached pairing, opened iOS Settings, Omi ended there (as iOS does after a permission change), Omi opened again. BEFORE (main 50d7f024ad): the sign-up trial paywall again. AFTER (this PR): back on Connect. iPhone 17 Pro simulator, iOS 26.4, local backend.",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "002-mobile-ios-relaunch-before-after.png",
+      "platform": "mobile-ios",
+      "description": "Same account, first relaunch from pairing. BEFORE (main): the sign-up trial paywall, then the 30-day offer. AFTER (this PR): Connect. Same on the second relaunch.",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "003-mobile-ios-first-time-unchanged.png",
+      "platform": "mobile-ios",
+      "description": "AFTER (this PR), first time: the sign-up trial paywall (7 days free, then US$269.91/year) and, after closing it, the 30-day offer, exactly as on main.",
+      "captured_by": "agent",
+      "source": "screencapture"
+    }
+  ]
+}

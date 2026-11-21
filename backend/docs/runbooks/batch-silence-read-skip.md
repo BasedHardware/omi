@@ -1,16 +1,18 @@
 # Silent-unit read reduction (R9, SCA-1757)
 
-Prepared 2026-11-12. Activation belongs to the deploy lane and owner. This change
-has not activated production or established the issue’s production acceptance checks.
+Prepared 2026-11-12. Integration canary 2026-11-21T13:20:14Z (`backend-integration-sca1824-on`,
+SCA-1824): one clean hour, target-caller reads −13.5% against the 11-20 control hours
+(19.98M→17.36M/h), guard clean. The expansion to every role is #25959 (2026-11-21).
 
 `BATCH_PIPELINE_SILENCE_READ_SKIP_ENABLED` defaults **on**. Set `false`, `off`, or
 `0` to restore the full processing path for subsequent silent projections. Existing
 ready receipts remain valid on rollback. There is no storage format migration.
-Production source explicitly holds the switch `false` on backend, backend-sync,
-backend-sync-backfill and backend-integration. These Cloud Run hosts evaluate it
+Production source sets the switch `true` on backend, backend-sync,
+backend-sync-backfill and backend-integration (and backend-projection-pump, which
+derives from integration). These Cloud Run hosts evaluate it
 in `Projector._assign` and `Projector.complete_content`, through the shared
 `serving_for_stage` composition and reconcile/metrics routes or serving loop.
-The listen overlay and chart also hold it `false` defensively: the legacy image
+The listen overlay and chart set it `true` too, matching the other roles: the legacy image
 mounts the shared routes, although its serving loop is disabled and its worker
 auth settings are empty. The dedicated GPU worker runs `diarizer.batch_pipeline_runtime`
 with a pump that commits results and requests CPU-side work; it does not construct
@@ -176,12 +178,16 @@ and clean main; no timing allowance is changed.
    Record matched windows and qualified silent-only
    attribution; these caller counters have no outcome dimension by themselves.
 2. The margin-40 lead expands all roles to `true` in repo config after that
-   clean hour. Complete the expansion or revert by **2026-11-18T20:00Z**.
-   Rollback value: `false` on every affected role, including the listen hold.
+   clean hour. Done: canary clean hour ended 2026-11-21T14:20:14Z (READBACK on
+   SCA-1824); expansion PR #25959. The original 2026-11-18T20:00Z deadline slipped
+   because the canary started late (SCA-3495 rollback).
+   Rollback value: `false` on every affected role, including the listen hold and the
+   projection pump; the integration-only rollback revision is
+   `backend-integration-a1a8b2d-44889281317-1`.
 3. Record serving image/revision identity, retention/erasure and speech-latency
    evidence. At D+2 record settled Firestore charges, including simultaneous
    changes and traffic. No production savings are claimed by this PR.
 
 Owner log: prepared flag `BATCH_PIPELINE_SILENCE_READ_SKIP_ENABLED`; rollback is
-`false`. Production activation, matched-hour attribution, serving-revision proof
-and D+2 bill effect are pending with deploy/verify, not executed by this worker.
+`false`. Integration canary and matched-hour attribution done 2026-11-21 (SCA-1824).
+The all-roles serving proof, all-roles READBACK and D+2 bill effect are pending after #25959 serves.

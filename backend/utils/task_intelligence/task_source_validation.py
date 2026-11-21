@@ -6,12 +6,9 @@ from typing import Any
 
 from config.refactor_modes import default_on
 from database import conversations as conversations_db
+from database.ports.action_items import TaskSourceValidationError as TaskSourceValidationError
 
 SOURCE_LINKS_ENABLED_ENV = 'ACTION_ITEM_SOURCE_LINKS_ENABLED'
-
-
-class TaskSourceValidationError(ValueError):
-    """A supplied source is unavailable to this account (including deleted rows)."""
 
 
 def validate_task_sources(uid: str, items: Sequence[Mapping[str, Any]]) -> None:

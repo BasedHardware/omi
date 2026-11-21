@@ -12,7 +12,15 @@ import subprocess
 import pytest
 import yaml
 
-from scripts.runtime_env_canary_ops import BACKOFF, PROVIDER, QUALITY, SERVICES, SOURCE, RESTORED_DEFAULTS, compose
+from scripts.runtime_env_canary_ops import (
+    RETIRED_BATCH_ENV,
+    PROVIDER,
+    QUALITY,
+    SERVICES,
+    SOURCE,
+    RESTORED_DEFAULTS,
+    compose,
+)
 from scripts.runtime_env_validation.cloud_run import _validate_cloud_run
 from scripts.runtime_env_validation.manifest import validate_runtime_env
 from scripts.runtime_env_validation import workflows as workflow_validation
@@ -46,7 +54,7 @@ def snapshot():
                                         'name': 'SYNC_JOB_SECRET',
                                         'valueFrom': {'secretKeyRef': {'name': 'ops-ref', 'key': '4'}},
                                     },
-                                    {'name': BACKOFF, 'value': 'true'},
+                                    *({'name': key, 'value': 'false'} for key in sorted(RETIRED_BATCH_ENV)),
                                     {'name': PROVIDER, 'value': 'false'},
                                     {'name': 'UNOWNED', 'value': 'private-live'},
                                 ],
@@ -97,8 +105,8 @@ def test_integration_only_composition_preserves_every_other_service_and_live_bin
     assert desired['env']['UNOWNED']['value'] == 'private-live'
     assert desired['env']['SYNC_TASKS_QUEUE']['value'] == 'backend-integration-fresh'
     assert desired['secrets']['SYNC_JOB_SECRET'] == {'secret': 'ops-ref', 'version': '4'}
-    assert set(desired['forbidden_env']) == set(RESTORED_DEFAULTS) | {'BATCH_PIPELINE_RETIRED'}
-    assert not set(RESTORED_DEFAULTS) & (set(desired['env']) | set(desired['secrets']))
+    assert set(desired['forbidden_env']) == set(RESTORED_DEFAULTS) | RETIRED_BATCH_ENV | {'BATCH_PIPELINE_RETIRED'}
+    assert not (RESTORED_DEFAULTS.keys() | RETIRED_BATCH_ENV) & (set(desired['env']) | set(desired['secrets']))
     assert desired['env']['OMI_BACKEND_RELEASE_SHA']['value'] == source
     entries[-1]['value'] = '20'
     with pytest.raises(ValueError, match='saved inverse'):
@@ -241,10 +249,9 @@ def test_serving_ops_fresh_queue_secret_and_dispositions_are_composed_without_mu
         assert env['OMI_BACKEND_RELEASE_SHA']['value'] == SOURCE
         assert {k: env[k]['value'] for k in QUALITY} == QUALITY
         assert env[PROVIDER]['value'] == 'false'
-        if s in ('backend-sync', 'backend-integration'):
-            assert env[BACKOFF]['value'] == 'false'
-        else:
-            assert BACKOFF not in env and BACKOFF in role['forbidden_env']
+        assert not RETIRED_BATCH_ENV.intersection(env)
+        assert not RETIRED_BATCH_ENV.intersection(role['secrets'])
+        assert RETIRED_BATCH_ENV <= set(role['forbidden_env'])
 
 
 def test_projection_and_firestore_read_ops_are_preserved_from_serving():

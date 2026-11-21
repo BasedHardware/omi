@@ -2,6 +2,7 @@
 
 from utils.conversations.v3 import policy, visibility
 from utils.conversations.v3.outline import SILENCE, playback_origin, sitdown as is_sitdown
+from utils.conversations.v3.word_floor import text_word_count
 
 from collections.abc import Iterator
 from copy import deepcopy
@@ -15,7 +16,7 @@ CAP = timedelta(hours=2)
 
 
 def word_count(lines):
-    return sum(len(line['text'].split()) for line in lines)
+    return sum(text_word_count(line.get('text') or '') for line in lines)
 
 
 def late_rewrite(*, previous_words, new_words, ended_at, now, rewrites):
@@ -409,7 +410,7 @@ def build(uid, window, recordings, existing=None, *, allocated=None):
     )
     manual_end = bool(window.get('manual_end') or (existing or {}).get('manual_end'))
     outline_kind = window.get('outline_kind', window['kind'])
-    words = window.get('_stretch_words', sum(len(s.get('text', '').split()) for s in segments))
+    words = window['_stretch_words'] if '_stretch_words' in window else word_count(segments)
     if (
         existing is not None
         and retained
@@ -699,7 +700,7 @@ def preserve_finished_windows(planned, existing, recordings=None, *, protect_pro
     published_partitions = set()
     fresh_metadata = {'_published': published, '_published_ids': published_ids}
     for window in planned:
-        gaps, pieces = [], []
+        gaps = []
         partition = window.get('_stretch_partition')
         for line in window['lines']:
             # The same owner the two-hour cap saw (Ownership). Only a protected owner retains the
@@ -713,7 +714,7 @@ def preserve_finished_windows(planned, existing, recordings=None, *, protect_pro
                     published_partitions.add(partition)
             if owner:
                 if gaps and not window.get('_keep_unmatched_together'):
-                    pieces.append({**window, **fresh_metadata, 'lines': gaps, 'manual_end': False})
+                    fresh.append({**window, **fresh_metadata, 'lines': gaps, 'manual_end': False, 'finished': True})
                     gaps = []
                 target = retained.setdefault(
                     owner['id'],
@@ -740,20 +741,17 @@ def preserve_finished_windows(planned, existing, recordings=None, *, protect_pro
             else:
                 gaps.append(line)
         if gaps:
-            pieces.append(
+            # Only a fragment reaching the original window's final line can stay open.
+            reaches_end = gaps[-1] is window['lines'][-1]
+            fresh.append(
                 {
                     **window,
                     **fresh_metadata,
                     'lines': gaps,
-                    'manual_end': bool(window.get('manual_end') and gaps[-1] is window['lines'][-1]),
+                    'manual_end': bool(window.get('manual_end') and reaches_end),
+                    'finished': window['finished'] or not reaches_end,
                 }
             )
-        # Published speech follows every fragment but the last, so only the last can be the open edge.
-        # Several open fragments never commit (multiple_open_conversations parks the owner), and the
-        # fragments, their lines and their time matching stay exactly as a finished window splits.
-        for piece in pieces[:-1]:
-            piece['finished'] = True
-        fresh.extend(pieces)
     # Even a separate fresh topic in the same stretch cannot qualify on published speech.
     for window in fresh:
         if window.get('_stretch_partition') in published_partitions:

@@ -96,9 +96,10 @@ LIVE_ONE_SIDED_ALLOWLIST: dict[str, str] = {
 # warm; a replay window warms it with --warm. Min and max never exceed prod's. cpu, memory and
 # concurrency are equal, so per-instance behaviour matches.
 EQUAL_SCALE_FIELDS = ('cpu', 'memory', 'concurrency')
-# Listen env whose prod values come from the LISTEN_PRIVATE_VALUES_YAML secret (#22763 privateEnv),
-# so source states presence only.
-LISTEN_PRIVATE_ENV = ('STT_CAP_DISPATCH_ENFORCEMENT', 'STT_CAP_DISPATCH_COHORT', 'STT_CAP_DISPATCH_LANES')
+# Listen env whose prod values the deploy replaces out of band (presence-only in source). Empty since
+# the retired privateEnv overlay (LISTEN_PRIVATE_VALUES_YAML, #22763) became privateSecretEnv: private
+# names are secretKeyRefs the chart declares, so source states the reference exactly.
+LISTEN_PRIVATE_ENV: tuple[str, ...] = ()
 # Ramp position: staging sits on prod's set, or ahead of it on the full-ramp set it proves (plan §1).
 STAGING_AHEAD_SET = '100_percent'
 
@@ -413,14 +414,15 @@ def deploy_action_flags(
     return out
 
 
-_DEPLOY_SH_CASE = re.compile(r'^\s*([a-z-]+)\)\s*echo\s+"([^"]*)"\s*;;', re.MULTILINE)
+_DEPLOY_SH_CASE = re.compile(r'^\s*([a-z|-]+)\)[^;]*?\becho\s+"([^"]*)"\s*;;', re.MULTILINE)
 
 
 def staging_deploy_flags(path: Path) -> dict[str, dict[str, str]]:
     """Per-service flags from ``deploy/staging/deploy.sh``'s case table."""
     out: dict[str, dict[str, str]] = {}
-    for service, flags in _DEPLOY_SH_CASE.findall(path.read_text(encoding='utf-8')):
-        out[service] = dict(_FLAG.findall(flags + ' '))
+    for services, flags in _DEPLOY_SH_CASE.findall(path.read_text(encoding='utf-8')):
+        for service in services.split('|'):
+            out[service] = dict(_FLAG.findall(flags + ' '))
     return out
 
 
@@ -446,6 +448,13 @@ def listen_values(path: Path) -> tuple[dict[str, dict[str, str]], dict[str, Any]
             env.update(redact_env([entry]))
     for name in [*(doc.get('privateEnv') or {}), *LISTEN_PRIVATE_ENV]:
         env[str(name)] = {'from': 'private-values'}
+    secret_env = doc.get('privateSecretEnv') or {}
+    for name in secret_env.get('keys') or []:
+        env.update(
+            redact_env(
+                [{'name': name, 'valueFrom': {'secretKeyRef': {'name': secret_env.get('secretName'), 'key': name}}}]
+            )
+        )
     autoscaling = doc.get('autoscaling') or {}
     limits = (doc.get('resources') or {}).get('limits') or {}
     scale = {
@@ -482,8 +491,7 @@ def source_model(environment: str, root: Path = ROOT) -> dict[str, SourceService
             environment, base_path=runtime_env_dir / '_base.yaml', runtime_env_dir=runtime_env_dir
         )
         actions = root / '.github' / 'actions'
-        # The manual workflow scopes some action inputs by deploy environment; the prod model
-        # takes their prod branch (e.g. backend-sync memory) so the fallback stays drift-checked.
+        # Resolve environment-scoped action inputs before overlaying ops-owned settings.
         input_values = workflow_input_values(root / '.github' / 'workflows' / 'gcp_backend.yml')
         flags = deploy_action_flags(
             [actions / 'deploy-backend-stack' / 'action.yml', actions / 'sync-backfill-lifecycle' / 'action.yml'],
@@ -497,9 +505,12 @@ def source_model(environment: str, root: Path = ROOT) -> dict[str, SourceService
         op = ops_services.get(name, {})
         # Composed flags (staging's overlay scale_flags) first; deploy-script literals override.
         composed_flags = dict(_FLAG.findall(' '.join(f'{k}={v}' for k, v in (cfg.get('flags') or {}).items()) + ' '))
+        scale = _flag_scale({**composed_flags, **flags.get(name, {})})
+        if 'memory' in op:
+            scale['memory'] = op['memory']
         out[name] = SourceService(
             env=_source_env(cfg.get('env') or {}, cfg.get('secrets') or {}),
-            scale=_flag_scale({**composed_flags, **flags.get(name, {})}),
+            scale=scale,
             ops_env={k: str(v) for k, v in (op.get('env') or {}).items()},
             ops_scale={'service_min': op.get('min_instances'), 'service_max': op.get('max_instances')},
         )

@@ -72,18 +72,19 @@ def renew(uid, key, token, *, firestore_client=None):
 
 
 @contextmanager
-def keepalive(uid, key, token):
-    """Own and join the heartbeat of synchronous reprocess/merge writers."""
+def keepalive(uid, key, token, *, firestore_client=None, max_seconds: int | None = 900):
+    """Own and join the heartbeat of a synchronous writer."""
     stop = threading.Event()
-    deadline = monotonic() + 900
+    deadline = monotonic() + max_seconds if max_seconds is not None else None
+    client_args = {'firestore_client': firestore_client} if firestore_client is not None else {}
 
     def heartbeat():
         failures, delay = 0, LEASE_SECONDS / 3
         while not stop.wait(delay):
-            if monotonic() >= deadline:
+            if deadline is not None and monotonic() >= deadline:
                 return
             try:
-                renew(uid, key, token)
+                renew(uid, key, token, **client_args)
                 failures, delay = 0, LEASE_SECONDS / 3
             except Exception as exc:
                 # Persistence still checks the token and expiry. A transient

@@ -411,12 +411,6 @@ class SonioxIdleMetrics(NamedTuple):
     failures: Counter
     avoided: Counter
     closes_by_trigger: Counter
-    cohort_closes: Counter
-    cohort_reopens: Counter
-    cohort_latency: Histogram
-    cohort_failures: Counter
-    cohort_avoided: Counter
-    cohort_closes_by_trigger: Counter
     drains: Counter
     close_refusals: Counter
     silence_gaps: Histogram
@@ -425,20 +419,11 @@ class SonioxIdleMetrics(NamedTuple):
 _soniox_idle_metrics: SonioxIdleMetrics | None = None
 _soniox_idle_lock = threading.Lock()
 
-SONIOX_IDLE_COHORT_ARMS = ('control', 'treatment')
-# Silence-gap buckets bracket the speech-gate close thresholds (hangover + 1 s
-# up to today's 45 s), so the connected time any threshold would save reads
-# straight off the histogram before a cohort runs.
 SONIOX_SILENCE_GAP_BUCKETS = (2, 4, 5, 6, 8, 10, 12, 15, 20, 30, 45, 60, 120, 300, 900)
 
 
 def soniox_idle_metrics() -> SonioxIdleMetrics:
-    """Register only when an enabled Soniox socket is constructed; no off series.
-
-    The ``omi_soniox_idle_cohort_*`` companions carry the session's treatment
-    arm (``config.soniox_idle`` uid-hash cohort) so a percent rollout compares
-    arms without relabelling the existing unlabeled family.
-    """
+    """Register only when an enabled Soniox socket is constructed."""
     global _soniox_idle_metrics
     with _soniox_idle_lock:
         if _soniox_idle_metrics is None:
@@ -458,37 +443,6 @@ def soniox_idle_metrics() -> SonioxIdleMetrics:
                     'omi_soniox_idle_closes_by_trigger_total',
                     'Planned paid transport closes by trigger (vad silence, pre_speech silence or no client frames)',
                     ['trigger'],
-                ),
-                Counter(
-                    'omi_soniox_idle_cohort_closes_total',
-                    'Planned paid transport closes by treatment arm',
-                    ['arm'],
-                ),
-                Counter(
-                    'omi_soniox_idle_cohort_reopens_total',
-                    'Speech-triggered paid transport dials by treatment arm',
-                    ['arm'],
-                ),
-                Histogram(
-                    'omi_soniox_idle_cohort_reopen_seconds',
-                    'Onset to replacement audio admission by treatment arm',
-                    ['arm'],
-                    buckets=(0.01, 0.05, 0.1, 0.25, 0.5, 1, 2, 5, 10),
-                ),
-                Counter(
-                    'omi_soniox_idle_cohort_reopen_failures_total',
-                    'Failed speech-triggered transport dials by treatment arm',
-                    ['arm'],
-                ),
-                Counter(
-                    'omi_soniox_idle_cohort_connected_seconds_avoided_total',
-                    'Estimated wall seconds with transport closed by treatment arm',
-                    ['arm'],
-                ),
-                Counter(
-                    'omi_soniox_idle_cohort_closes_by_trigger_total',
-                    'Planned paid transport closes by trigger and treatment arm',
-                    ['arm', 'trigger'],
                 ),
                 Counter(
                     'omi_soniox_idle_drains_total',
@@ -512,12 +466,4 @@ def soniox_idle_metrics() -> SonioxIdleMetrics:
             _soniox_idle_metrics.close_refusals.labels(reason='cap')
             for _trigger in ('vad', 'pre_speech', 'no_frames'):
                 _soniox_idle_metrics.closes_by_trigger.labels(trigger=_trigger)
-                for _arm in SONIOX_IDLE_COHORT_ARMS:
-                    _soniox_idle_metrics.cohort_closes_by_trigger.labels(arm=_arm, trigger=_trigger)
-            for _arm in SONIOX_IDLE_COHORT_ARMS:
-                _soniox_idle_metrics.cohort_closes.labels(arm=_arm)
-                _soniox_idle_metrics.cohort_reopens.labels(arm=_arm)
-                _soniox_idle_metrics.cohort_latency.labels(arm=_arm)
-                _soniox_idle_metrics.cohort_failures.labels(arm=_arm)
-                _soniox_idle_metrics.cohort_avoided.labels(arm=_arm)
     return _soniox_idle_metrics

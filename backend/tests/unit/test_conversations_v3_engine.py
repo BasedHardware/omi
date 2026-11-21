@@ -411,6 +411,39 @@ def test_outline_fallback_is_valid_and_deterministic():
     assert outline.parse(json.dumps({'conversations': entries}), group)
 
 
+@pytest.mark.parametrize(
+    'text,words',
+    [
+        ('hello世界', 3),
+        ('会議の時間です。', 7),
+        ('今天开会。', 4),
+        ('カタカナとｶﾅ', 7),
+        ('한국어', 3),
+        ('한국어', 3),
+        ('ภาษาไทย', 7),
+        ('สวัสดี', 4),
+        ('ASCII\twith\nspace !', 4),
+        ('Latin 世界，again', 4),
+        ('', 0),
+    ],
+)
+def test_transcript_word_floor_counts_mixed_script_without_punctuation(text, words):
+    assert planner.word_count([{'text': text}]) == words
+
+
+@pytest.mark.parametrize('letter', ['界', 'あ'])
+@pytest.mark.parametrize('words', [299, 300])
+def test_finished_script_aware_window_respects_home_word_floor(letter, words):
+    row = recording(segments=[{'text': letter * words, 'start': 0, 'end': 10}])
+    group = outline.stretches([row], NOW + timedelta(minutes=10))[0]
+    window = planner.windows([group], [[entry()]])[0]
+    assert window['finished']
+    assert planner.build('u', window, {'r': row})['home_hidden'] is (words < 300)
+    # Some projection callers supply no stretch count and use the copied segments.
+    window.pop('_stretch_words', None)
+    assert planner.build('u', window, {'r': row})['home_hidden'] is (words < 300)
+
+
 @pytest.mark.parametrize('words', [5, 40])
 def test_manual_end_with_any_speech_is_visible_and_sticky(words):
     row = recording(

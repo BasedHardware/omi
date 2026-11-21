@@ -1,0 +1,24 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "required": ["image", "redisAddresses", "dnsResolverAddresses"],
+  "properties": {
+    "image": {
+      "type": "string",
+      "pattern": "^[^@]+@sha256:[a-f0-9]{64}$"
+    },
+    "redisAddresses": {"$ref": "#/definitions/addresses"},
+    "dnsResolverAddresses": {"$ref": "#/definitions/addresses"}
+  },
+  "definitions": {
+    "addresses": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "anyOf": [{"format": "ipv4"}, {"format": "ipv6"}]
+      }
+    }
+  }
+}

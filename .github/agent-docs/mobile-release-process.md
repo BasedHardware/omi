@@ -57,7 +57,7 @@ platform-matched distribution evidence. Upload/build completion alone is not a
 distribution receipt. The current destination policy remains TestFlight
 internal for iOS and Play internal with alpha promotion for Android.
 
-Play held changes (2026-10-26 → 2026-10-27, on again since 2026-10-28): Play's
+Play held changes (2026-10-26 → 2026-10-27, 2026-10-28 → 2026-11-21): Play's
 requirement for the `changesNotSentForReview` commit parameter has flipped
 both ways within a day, and each direction has broken publishing while it
 disagreed with the repo:
@@ -76,16 +76,29 @@ disagreed with the repo:
   `android-internal-auto` Codemagic build at the Publishing step
   (6ae027d351896e4d7456241e, 6adff5257fc36211fd770f24,
   6adfc38e82d3cae8a7ae890b).
+- 2026-10-28: Play refused automated review submission again after build
+  1504; held mode went back on.
+- 2026-11-20/21: Play auto-sends for review again ("Changes are sent for
+  review automatically. The query parameter changesNotSentForReview must not
+  be set."); every `android-internal-auto` build of 1.0.596/1606 uploaded and
+  then failed at Publishing (6b0160b66230fe1ed3aee673 09:28Z, the 12:34Z
+  run 6b018bd61cebd0bd62b80442, 6b018d6dd4b9891201ed4caa 13:08Z).
 
-Held mode is on again since 2026-10-28 (Play refused automated review
-submission after build 1504): `mobile_store_promote.py`'s
+Since 2026-11-21 the repo is split: internal publishing is unheld
+(`android-internal-auto` has no `changes_not_sent_for_review`, and
+`ANDROID_HELD_CHANGES_MODE` is `False` with it), while the production writers
+below stay in held mode until that flip is reviewed on its own. Play rejects
+the parameter on every commit, so their writes fail closed rather than hold.
+In held mode, `mobile_store_promote.py`'s
 `CHANGES_NOT_SENT_FOR_REVIEW` is `True` (every commit carries
 `changesNotSentForReview=true`, the train parks the ladder, and the brake
 joins the held queue) and both Play publishing blocks in `codemagic.yaml`
 set `changes_not_sent_for_review: true`. `ANDROID_HELD_CHANGES_MODE` in
-`.github/scripts/mobile_distribution.py` is `True` with them (it lagged as
-`False` until 2026-11-01; `test_play_held_changes_flags_agree` now pins all
-four together). While the mode is on, the consequences below apply:
+`.github/scripts/mobile_distribution.py` was `True` with them (it lagged as
+`False` until 2026-11-01). `test_play_held_changes_flags_agree` pins the
+dispatcher to the `android-internal-auto` block and the scripts' flag to the
+`android-prod-internal` block. While the mode is on, the consequences below
+apply:
 
 - Distribution evidence: a settled Codemagic publishing action only proves
   the edit committed — testers cannot install a held change. The internal
@@ -144,7 +157,10 @@ submission (one line plus its pinned tests): set `mobile_store_promote.py`'s
 in `.github/scripts/mobile_distribution.py`, drop
 `changes_not_sent_for_review` from both Play publishing blocks in
 `codemagic.yaml` (and regenerate the workflow-contract fixture digests), and
-update the tests that pin the mode (`test_check_release_process_guards.py`,
+update the tests that pin the mode. The internal half (the
+`android-internal-auto` block and `ANDROID_HELD_CHANGES_MODE`) only changes
+what internal testers receive and can land first, as on 2026-11-21; the rest
+lets the train stage and ladder production again (`test_check_release_process_guards.py`,
 `test_dispatch_mobile_internal_builds.py`,
 `app/scripts/mobile_store_promote_test.py`, `app/scripts/mobile_daily_train_test.py`,
 `backend/tests/unit/test_mobile_rollout_brake.py`).
