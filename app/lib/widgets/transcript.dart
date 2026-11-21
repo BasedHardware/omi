@@ -373,7 +373,10 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
     final shouldFollow = !_userHasScrolled && !widget.isConversationDetail;
 
     if (contentChanged && !shouldFollow) _pendingAnchorRestore = true;
-    _syncSegmentKeys();
+    // The same list at the same length and version holds the ids already indexed. A live capture
+    // re-renders this widget on every capture notify; re-indexing every line each time is
+    // O(transcript) per notify.
+    if (contentChanged || !identical(widget.segments, oldWidget.segments)) _syncSegmentKeys();
 
     if (widget.followCurrentSegment &&
         (widget.followTargetSegmentId != oldWidget.followTargetSegmentId ||

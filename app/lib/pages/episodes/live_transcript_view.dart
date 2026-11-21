@@ -92,6 +92,21 @@ class _LiveTranscriptViewState extends State<LiveTranscriptView> {
   Object? _previewCoverageKey;
   LivePreviewCoverage? _previewCoverage;
 
+  // The flat (no episode, no photos) transcript's membership snapshot, kept while the transcript
+  // is unchanged, on the timeline's key: a fresh copy per capture notify made TranscriptWidget
+  // re-index every line on each one.
+  Object? _flatSegmentsKey;
+  List<TranscriptSegment>? _flatSegments;
+
+  List<TranscriptSegment> _flatSegmentsFor(CaptureProvider provider) {
+    final key = (provider.segmentsPhotosVersion, provider.segments.length, identityHashCode(provider.segments));
+    if (_flatSegmentsKey != key || _flatSegments == null) {
+      _flatSegmentsKey = key;
+      _flatSegments = List<TranscriptSegment>.of(provider.segments);
+    }
+    return _flatSegments!;
+  }
+
   LivePreviewCoverage _coverageFor(CaptureProvider provider) {
     final key = (
       provider.segmentsPhotosVersion,
@@ -181,7 +196,7 @@ class _LiveTranscriptViewState extends State<LiveTranscriptView> {
                                 )
                               : getTranscriptWidget(
                                   false,
-                                  List<TranscriptSegment>.of(provider.segments),
+                                  _flatSegmentsFor(provider),
                                   provider.photos,
                                   deviceProvider.connectedDevice,
                                   bottomMargin: 0,
@@ -774,10 +789,13 @@ class _LiveTranscriptViewState extends State<LiveTranscriptView> {
   /// A local-preview session has no uploading pill to watch: one quiet line under the
   /// transcript says how far behind the final transcript is. Failures and retries keep
   /// today's actionable pill above it (its retry is the point of it). Null when the pill applies.
-  Widget? _quietBehindLine(CaptureProvider provider) {
+  Widget? _quietBehindLine(CaptureProvider provider, {List<Wal>? unsynced, int? inFlight}) {
     if (!_showsLivePreview(provider)) return null;
-    final unsyncedWals = provider.unsyncedSessionWals;
-    final totalSeconds = unsyncedWals.fold<int>(0, (sum, w) => sum + w.seconds) + provider.inFlightAudioSeconds;
+    // Each read walks every WAL on the phone (14k+ on a long-lived install); callers that already
+    // hold this build's read pass it in.
+    final unsyncedWals = unsynced ?? provider.unsyncedSessionWals;
+    final totalSeconds =
+        unsyncedWals.fold<int>(0, (sum, w) => sum + w.seconds) + (inFlight ?? provider.inFlightAudioSeconds);
     // Uploaded audio has no pending-upload duration, but the server may still
     // be transcribing it. Only uncovered preview text proves we are waiting.
     final waitingWithoutDuration =
@@ -817,7 +835,9 @@ class _LiveTranscriptViewState extends State<LiveTranscriptView> {
     final totalSeconds = unsyncedWals.fold<int>(0, (sum, w) => sum + w.seconds) + inFlightSeconds;
     if (totalSeconds <= 5) return const SizedBox.shrink();
 
-    if (_quietBehindLine(provider) != null) return const SizedBox.shrink();
+    if (_quietBehindLine(provider, unsynced: unsyncedWals, inFlight: inFlightSeconds) != null) {
+      return const SizedBox.shrink();
+    }
     final minutes = totalSeconds ~/ 60;
     final seconds = totalSeconds % 60;
     final label = minutes > 0 ? '${minutes}m ${seconds}s' : '${seconds}s';

@@ -1119,6 +1119,29 @@ void main() {
     });
   });
 
+  testWidgets('the live page opened from the placeholder reads Listening, then the server title', (tester) async {
+    await withClock(Clock.fixed(_now), () async {
+      final home = await _pumpHome(tester, v3: true);
+      home.liveOpen = false;
+      await home.conversationsV3.refresh();
+      await tester.pump();
+      await tester.pump();
+      await tester.tap(find.byType(V3LivePlaceholderRow));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+      final title = find.byKey(const Key('live_page_v3_title'));
+      expect(find.descendant(of: title, matching: find.text('Listening')), findsOneWidget);
+
+      // Home stops re-reading while the page covers it; the page re-reads and takes the title.
+      home.liveOpen = true;
+      await tester.pump(const Duration(seconds: 15));
+      await tester.pump();
+      await tester.pump();
+      expect(find.descendant(of: title, matching: find.text('Launch checklist')), findsOneWidget);
+      await _dispose(tester, home);
+    });
+  });
+
   testWidgets('a 320pt phone: the live detail bar fits Ask Omi and End', (tester) async {
     await withClock(Clock.fixed(_now), () async {
       final home = await _pumpHome(tester, v3: true, size: const Size(320, 640));
