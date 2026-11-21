@@ -5,7 +5,6 @@ From the repository root, pass the local image tag as argv[1].
 
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import ExitStack
-from hashlib import sha256
 import json
 from pathlib import Path
 from secrets import token_hex
@@ -115,16 +114,12 @@ def run(image: str) -> None:
         check_attempt_deadlines(root)
 
         password = token_hex(32)
-        acl = root / 'redis.acl'
-        password_hash = sha256(password.encode('ascii')).hexdigest()
-        acl.write_text(f'user default off\nuser {USER} on #{password_hash} +ping\n')
         prometheus_config = root / 'prometheus.yml'
         prometheus_config.write_text(
             f'scrape_configs:\n  - job_name: {USER}\n    scrape_interval: 2s\n'
             f'    static_configs:\n      - targets: ["{probe}:9090"]\n'
         )
-        for file in (acl, prometheus_config):
-            file.chmod(0o444)
+        prometheus_config.chmod(0o444)
 
         docker('network', 'create', '--internal', name)
         cleanup.callback(docker, 'network', 'rm', name, check=False)
@@ -133,14 +128,30 @@ def run(image: str) -> None:
             docker('run', '--detach', '--rm', '--network', name, '--name', container, *args)
             cleanup.callback(docker, 'rm', '-f', container, check=False)
 
+        # Redis reads and applies the native ACL before opening its listener.
+        # The FIFO carries startup configuration without retaining it.
         start(
             redis,
-            '-v',
-            f'{acl}:/fixture/redis.acl:ro',
+            '--user',
+            'redis',
+            '--log-driver',
+            'none',
+            '--tmpfs',
+            '/run/redis-auth:rw,noexec,nosuid,nodev,size=64k,mode=0700,uid=999,gid=1000',
+            '--entrypoint',
+            'sh',
             'redis:7.4-alpine',
-            'redis-server',
-            '--aclfile',
-            '/fixture/redis.acl',
+            '-c',
+            'mkfifo -m 0600 /run/redis-auth/config && exec redis-server - < /run/redis-auth/config',
+        )
+        docker(
+            'exec',
+            '-i',
+            redis,
+            'sh',
+            '-c',
+            'while [ ! -p /run/redis-auth/config ]; do sleep 0.1; done; cat > /run/redis-auth/config',
+            stdin=f'bind 0.0.0.0\nsave ""\nappendonly no\nuser default off\nuser {USER} on >{password} +ping\n',
         )
         start(
             probe,
