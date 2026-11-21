@@ -1,6 +1,9 @@
 package main
 
 import (
+	"encoding/base64"
+	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -72,5 +75,81 @@ func TestPrivateCorpusRequiresRedactedReportAndExternalKey(t *testing.T) {
 	}
 	if err := validateCorpusLocation(t.TempDir(), corpus, key, false, nil); err != nil {
 		t.Fatalf("private corpus outside Git was rejected: %v", err)
+	}
+}
+
+func TestOwnerCorpusIsM5OnlyAndNeverCI(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name     string
+		hostname string
+		ci       bool
+		wantErr  bool
+	}{
+		{name: "m5 local", hostname: "m5-mbp", wantErr: false},
+		{name: "m5 fqdn", hostname: "m5-mbp.local", wantErr: false},
+		{name: "other host", hostname: "dev-mbp", wantErr: true},
+		{name: "ci on m5", hostname: "m5-mbp", ci: true, wantErr: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			err := ownerCorpusHostAllowed(tc.hostname, tc.ci)
+			if (err != nil) != tc.wantErr {
+				t.Fatalf("ownerCorpusHostAllowed(%q, %v) = %v", tc.hostname, tc.ci, err)
+			}
+		})
+	}
+}
+
+func TestHeldOutCorpusCannotBeReplayedInCI(t *testing.T) {
+	t.Parallel()
+	if !ciReplayCorpusAllowed("conformance-gaps.json") || ciReplayCorpusAllowed("held-out.json") {
+		t.Fatal("CI replay corpus selection includes a held-out fixture")
+	}
+}
+
+func TestOwnerCorpusRequiresAboutTwentyReencryptedTranscripts(t *testing.T) {
+	t.Parallel()
+	cases := make([]map[string]any, 20)
+	for index := range cases {
+		name := fmt.Sprintf("owned-%02d", index)
+		cases[index] = map[string]any{
+			"name": name,
+			"uid":  "replay-" + name,
+			"document": map[string]any{
+				"transcript_segments": base64.StdEncoding.EncodeToString(make([]byte, 32)),
+			},
+		}
+	}
+	validCorpus, err := json.Marshal(map[string]any{"version": 1, "cases": cases})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := validateOwnerCorpus(validCorpus); err != nil {
+		t.Fatalf("valid owner corpus was rejected: %v", err)
+	}
+	for _, tc := range []struct {
+		name string
+		data []byte
+	}{
+		{name: "too few", data: []byte(`{"version":1,"cases":[{"name":"owned","document":{"transcript_segments":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="}}]}`)},
+		{name: "missing transcript", data: []byte(`{"version":1,"cases":[{"name":"owned","document":{}}]}`)},
+		{name: "invalid json", data: []byte(`{`)},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			if err := validateOwnerCorpus(tc.data); err == nil {
+				t.Fatal("invalid owner corpus was accepted")
+			}
+		})
+	}
+}
+
+func TestPrivateCorpusIsNeverReadInCI(t *testing.T) {
+	t.Setenv("CI", "true")
+	dir := t.TempDir()
+	err := validateCorpusLocation("/outside/backend", filepath.Join(dir, "corpus.json"), filepath.Join(dir, "key"), false, []byte(`{}`))
+	if err == nil || err.Error() != "CI may not read private replay corpora" {
+		t.Fatalf("validateCorpusLocation() = %v, want private corpus CI refusal", err)
 	}
 }

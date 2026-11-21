@@ -61,6 +61,8 @@ def _validate_case(case, seen):
         'responses',
         'final_attempt',
         'unavailable_app',
+        'erase_after',
+        'delete_before_worker_read',
     }
     if not isinstance(case, dict) or set(case) - fields:
         raise ValueError('unknown replay case fields')
@@ -91,7 +93,10 @@ def _validate_case(case, seen):
         raise ValueError('duplicate synthetic app identifier')
     if 'unavailable_app' in case and case['unavailable_app'] not in case.get('apps', []):
         raise ValueError('unavailable_app must name a seeded app')
-    if any(type(case.get(field, False)) is not bool for field in ('repeat', 'own_key', 'final_attempt')):
+    if any(
+        type(case.get(field, False)) is not bool
+        for field in ('repeat', 'own_key', 'final_attempt', 'erase_after', 'delete_before_worker_read')
+    ):
         raise ValueError('expected a boolean')
     if 'notes' in case and (
         not isinstance(case['notes'], dict)

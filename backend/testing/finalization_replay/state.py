@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from threading import Lock
 
 from testing.finalization_replay.corpus import FIXED_DATE, pack, seed_document
 
@@ -39,7 +40,57 @@ class CaseState:
         self.initial_updated_at = None
         self.effects = {}
         self.provider_calls = []
+        self.llm_tokens = {'prompt': 0, 'completion': 0}
+        self.embedding_tokens = 0
+        self.firestore_operations = {
+            'rpc_calls': 0,
+            'document_reads': 0,
+            'query_documents': 0,
+            'query_requests': 0,
+            'writes': 0,
+            'deletes': 0,
+        }
+        self.go_evidence = {}
+        self._metrics_lock = Lock()
+        self.cost_measured = False
         self.started_at = None
+
+    def record_provider_call(self, feature, prompt, completion):
+        from testing.finalization_replay.metrics import token_estimate
+
+        prompt_tokens = token_estimate(prompt)
+        completion_tokens = token_estimate(completion)
+        with self._metrics_lock:
+            self.provider_calls.append(feature)
+            self.llm_tokens['prompt'] += prompt_tokens
+            self.llm_tokens['completion'] += completion_tokens
+        return prompt_tokens, completion_tokens
+
+    def record_embedding_request(self, values):
+        from testing.finalization_replay.metrics import token_estimate
+
+        if not isinstance(values, list):
+            values = [values]
+        with self._metrics_lock:
+            self.provider_calls.append('openai-embeddings')
+            self.embedding_tokens += sum(token_estimate(value) for value in values)
+
+    def add_firestore_operations(self, **counts):
+        with self._metrics_lock:
+            for name, count in counts.items():
+                self.firestore_operations[name] += count
+
+    def cost(self):
+        with self._metrics_lock:
+            prompt = self.llm_tokens['prompt']
+            completion = self.llm_tokens['completion']
+            return {
+                'measured': self.cost_measured,
+                'token_basis': 'cl100k content-token estimate; excludes model/API framing',
+                'llm_tokens': {'prompt': prompt, 'completion': completion, 'total': prompt + completion},
+                'embedding_tokens': self.embedding_tokens,
+                'firestore_operations': dict(self.firestore_operations),
+            }
 
     def seed(self, provider_url):
         self.user.set(
@@ -129,6 +180,8 @@ class CaseState:
             'started_at': self.started_at.isoformat(),
             'finished_at': datetime.now(timezone.utc).isoformat(),
             'provider_calls': sorted(self.provider_calls),
+            'cost': self.cost(),
+            'go_evidence': self.go_evidence,
             'effects': pack(self.effects),
             'conversation': pack(document),
             'derived_documents': changed,

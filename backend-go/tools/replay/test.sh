@@ -21,14 +21,16 @@ scratch=$(mktemp -d "${TMPDIR:-/tmp}/finalization-replay.XXXXXXXX")
 trap 'rm -rf -- "$scratch"' EXIT
 go build -o "$scratch/jobd" ./cmd/jobd
 go build -o "$scratch/replay" ./tools/replay
+commit=$(git -C "$go_root/.." rev-parse HEAD)
 
 ./scripts/with-postgres.sh ./scripts/with-firestore.sh bash -euc '
     scratch=$1
     python_bin=$2
+    commit=$3
     repo_go=$PWD
     cd "$scratch"
     run() {
-        "$scratch/replay" -jobd "$scratch/jobd" -python "$python_bin" "$@"
+        "$scratch/replay" -jobd "$scratch/jobd" -python "$python_bin" -commit "$commit" "$@"
     }
 
     parity_status=0
@@ -64,4 +66,4 @@ go build -o "$scratch/replay" ./tools/replay
 
         "$python_bin" -O "$repo_go/tools/replay/verify.py" "$scratch/parity.json" "$scratch/gaps.json"
     fi
-' bash "$scratch" "$python_bin"
+' bash "$scratch" "$python_bin" "$commit"

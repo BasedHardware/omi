@@ -1,69 +1,74 @@
 """Check that the two emulator runs prove both parity and drift detection."""
 
-from collections import Counter
-import hashlib
 import json
-import re
 from pathlib import Path
 import sys
-
-# Only substitute known nondeterministic document IDs. Preserve the collection,
-# nested field path, difference kind and multiplicity for each reviewed case.
-DYNAMIC_DOCUMENT_IDS = {
-    'action_items': (r'[A-Za-z0-9]{20}', '<auto-id>'),
-    'events': (r'gpe_[0-9a-f]{32}', '<goal-event-id>'),
-    'goal_history': (r'\d{4}-\d{2}-\d{2}', '<day>'),
-    'hourly_usage': (r'\d{4}-\d{2}-\d{2}-\d{2}', '<hour>'),
-    'llm_usage': (r'\d{4}-\d{2}-\d{2}', '<day>'),
-    'monthly_usage_totals': (r'\d{4}-\d{2}', '<month>'),
-}
-
-
-def stable_path(path):
-    prefix = '/derived_documents/'
-    if not path.startswith(prefix):
-        return path
-    key, separator, field = path.removeprefix(prefix).partition('/')
-    parts = key.split('~1')
-    for index in range(0, len(parts) - 1, 2):
-        replaced = DYNAMIC_DOCUMENT_IDS.get(parts[index])
-        if replaced and re.fullmatch(replaced[0], parts[index + 1]):
-            parts[index + 1] = replaced[1]
-    return prefix + '~1'.join(parts) + separator + field
-
-
-def drift_signatures(report):
-    result = {}
-    for case in report['cases']:
-        counts = Counter(
-            (stable_path(diff['path']), diff['kind']) for diff in case['differences'] if not diff.get('reason')
-        )
-        canonical = [[path, kind, count] for (path, kind), count in sorted(counts.items())]
-        payload = json.dumps(canonical, ensure_ascii=True, separators=(',', ':')).encode()
-        result[case['name']] = {'count': sum(counts.values()), 'sha256': hashlib.sha256(payload).hexdigest()}
-    return result
-
-
-def verify_drift(gaps):
-    baseline = Path(__file__).with_name('expected-drift.json')
-    expected = json.loads(baseline.read_text())
-    observed = drift_signatures(gaps)
-    changed = sorted(name for name in (expected.keys() | observed.keys()) if expected.get(name) != observed.get(name))
-    require(not changed, 'unexpected drift signatures: ' + ', '.join(changed))
-
 
 def require(condition, detail):
     if not condition:
         raise SystemExit(str(detail))
 
 
+def verify_cost(report):
+    cases = {case['name']: case for case in report['cases']}
+    rows = report.get('cost_table', [])
+    require(len(rows) == len(cases), 'cost table does not have one row per case')
+    require({row['case'] for row in rows} == set(cases), 'cost table case set differs from replay report')
+    for name, case in cases.items():
+        cost = case['cost']
+        for side in ('python', 'go'):
+            measured = cost[side]
+            require(measured['measured'] is True, (name, side, 'cost was not measured'))
+            require(measured['token_basis'].startswith('cl100k content-token estimate'), (name, side, 'token basis'))
+            tokens = measured['llm_tokens']
+            require(tokens['total'] == tokens['prompt'] + tokens['completion'], (name, side, 'token totals'))
+            require(measured['embedding_tokens'] >= 0, (name, side, 'embedding token count'))
+            ops = measured['firestore_operations']
+            require(all(type(value) is int and value >= 0 for value in ops.values()), (name, side, 'Firestore counts'))
+        row = next(item for item in rows if item['case'] == name)
+        require(row['python'] == cost['python'] and row['go'] == cost['go'], (name, 'cost row mismatch'))
+
+
+def verify_corpus_map(parity, gaps):
+    replay_dir = Path(__file__).parent
+    manifest = json.loads((replay_dir / 'case-map.json').read_text())
+    rules = set(manifest['oracle_drivable_rules']) | set(manifest['not_oracle_drivable_rules'])
+    require(rules == {f'F{number:02d}' for number in range(1, 39)}, 'case map must name every F01-F38 rule')
+    require(set(manifest['oracle_drivable_rules']) & set(manifest['not_oracle_drivable_rules']) == set(), 'rule scope overlaps')
+    entries = manifest['cases']
+    names = [item['name'] for item in entries]
+    require(len(names) == len(set(names)), 'case map has duplicate case names')
+    require(all(item['rules'] for item in entries), 'every case must map to at least one contract rule')
+    corpus_names = {}
+    for filename in ('admission-parity.json', 'conformance-gaps.json', 'held-out.json'):
+        payload = json.loads((replay_dir / 'corpus' / filename).read_text())
+        corpus_names[filename] = {item['name'] for item in payload['cases']}
+    require(len(corpus_names['admission-parity.json'] | corpus_names['conformance-gaps.json']) == manifest['active_case_count'], 'active corpus count mismatch')
+    require(manifest['active_case_count'] >= manifest['active_floor'] >= 50, 'active synthetic corpus is below its floor')
+    require(len(corpus_names['held-out.json']) == manifest['held_out_case_count'] > 0, 'held-out corpus count mismatch')
+    for filename, case_names in corpus_names.items():
+        mapped = {item['name'] for item in entries if item['corpus'] == filename}
+        require(mapped == case_names, (filename, 'case map does not match corpus'))
+    active_entries = [item for item in entries if not item['held_out']]
+    heldout_entries = [item for item in entries if item['held_out']]
+    require({item['corpus'] for item in heldout_entries} == {'held-out.json'}, 'held-out cases must use the holdout file')
+    require({rule for item in active_entries for rule in item['rules']} == set(manifest['oracle_drivable_rules']), 'active cases do not cover every drivable rule')
+    require(not any(set(item['rules']) - set(manifest['oracle_drivable_rules']) for item in active_entries), 'active case claims an undrivable rule')
+    require(all(item['rules'] for item in entries), 'held-out case has no contract mapping')
+    reported = {case['name'] for report in (parity, gaps) for case in report['cases']}
+    require(reported == {item['name'] for item in active_entries}, 'held-out cases must stay out of CI reports')
+    require(len(gaps['cases']) == 40 and len(parity['cases']) == 10, 'expected 40 active-finalizer and 10 admission cases')
+    require(parity['commit_sha'] == gaps['commit_sha'] and len(gaps['commit_sha']) == 40, 'reports must name the same commit')
+    verify_cost(parity)
+    verify_cost(gaps)
+
+
 def main():
-    if len(sys.argv) == 3 and sys.argv[1] == '--print-drift-signatures':
-        print(json.dumps(drift_signatures(json.loads(Path(sys.argv[2]).read_text())), indent=2, sort_keys=True))
-        return
     parity_path, gaps_path = map(Path, sys.argv[1:])
     parity = json.loads(parity_path.read_text())
-    require(parity['matched_cases'] == len(parity['cases']) >= 10, parity['matched_cases'])
+    gaps = json.loads(gaps_path.read_text())
+    verify_corpus_map(parity, gaps)
+    require(parity['matched_cases'] == len(parity['cases']) == 10, parity['matched_cases'])
     require(
         parity['unexplained_differences'] == parity['failed_cases'] == 0,
         "replay verification failed at parity['unexplained_differences'] == parity['failed_cases'] == 0",
@@ -73,10 +78,31 @@ def main():
         "replay verification failed at all('python' not in case and 'go' not in case for case in parity['cases'])",
     )
 
-    gaps = json.loads(gaps_path.read_text())
-    require(gaps['unexplained_differences'] > 0 and gaps['failed_cases'] == 0, gaps['failed_cases'])
-    verify_drift(gaps)
+    failed = [case for case in gaps['cases'] if case['errors']]
+    require(not failed and gaps['failed_cases'] == 0, [(case['name'], case['errors']) for case in failed])
+    require(gaps['unexplained_differences'] > 0, gaps['unexplained_differences'])
+    measured = sum(1 for case in gaps['cases'] for diff in case['differences'] if not diff.get('reason'))
+    require(measured == gaps['unexplained_differences'], 'per-commit unexplained-difference count is inconsistent')
     by_name = {case['name']: case for case in gaps['cases']}
+    erase = by_name['erase-removes-owner-and-jobs']
+    erase_evidence = erase['go_evidence']['erasure']
+    require(erase_evidence['user_document_absent'] is True, 'Go erasure left the owner document')
+    require(erase_evidence['jobs_for_uid'] == erase_evidence['tenants_for_uid'] == 0, 'Go erasure left database rows')
+    require(erase['go']['conversation'] is None, 'Go erasure replay retained a conversation row')
+    unreadable = by_name['unreadable-ciphertext-dead-letters']
+    require(unreadable['go_evidence']['job']['reason'] == 'transcript_unreadable', 'Go did not preserve the typed decrypt error')
+    require(unreadable['go']['conversation']['finalization_status'] == 'dead_letter', 'Go unreadable transcript did not dead-letter')
+    require('conv-structure' not in unreadable['go']['provider_calls'], 'Go sent unreadable ciphertext to note generation')
+    missing_worker = by_name['worker-missing-row-fence']
+    require(missing_worker['go_evidence']['job']['outcome'] == 'fenced', 'Go worker did not fence the deleted row')
+    require('conv-structure' not in missing_worker['go']['provider_calls'], 'Go worker called the model after losing its row')
+    for case in gaps['cases']:
+        if case['name'].startswith('trigger-'):
+            expected = case['name'].removeprefix('trigger-').replace('-', '_')
+            require(case['go_evidence']['job']['metadata']['trigger'] == expected, (case['name'], 'trigger metadata'))
+        if case['name'].startswith('end-reason-'):
+            expected = case['name'].removeprefix('end-reason-').replace('-', '_')
+            require(case['go_evidence']['job']['metadata']['end_reason'] == expected, (case['name'], 'end reason metadata'))
     kept = by_name['kept-with-effects']
     py, candidate = kept['python'], kept['go']
     for result in (py, candidate):

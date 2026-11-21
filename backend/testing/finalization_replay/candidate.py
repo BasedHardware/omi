@@ -121,7 +121,7 @@ class _Handler(BaseHTTPRequestHandler):
             status, result = 500, {'code': 'replay_adapter_error'}
         self._reply(status, result)
 
-    do_GET = do_PATCH = do_POST = do_PUT = _dispatch
+    do_GET = do_PATCH = do_POST = do_PUT = do_DELETE = _dispatch
 
     def _route(self):
         state = self.server.state
@@ -140,11 +140,13 @@ class _Handler(BaseHTTPRequestHandler):
                 request = self._body()
                 if (request['uid'], request['subject_id']) == (state.uid, state.cid):
                     feature = 'conv-structure' if step == 'notes' else 'memory-l1'
-                    state.provider_calls.append(feature)
                     fixture = response(state, feature)
                     if step == 'notes':
-                        return 200, {field: fixture[field] for field in ('title', 'overview')}
-                    return 200, {'contents': [item['text'] for item in fixture['items']]}
+                        result = {field: fixture[field] for field in ('title', 'overview')}
+                    else:
+                        result = {'contents': [item['text'] for item in fixture['items']]}
+                    state.record_provider_call(feature, request.get('input', ''), result)
+                    return 200, result
             case 'PUT', ['vectors', uid, cid] if (uid, cid) == (state.uid, state.cid):
                 body = self._body()
                 if not _bound(state, body):
@@ -166,9 +168,21 @@ class _Handler(BaseHTTPRequestHandler):
                         return 503, {'code': 'fixture_unavailable'}
                     return 200, {}
                 return 409, {'code': 'fenced'}
+            case 'DELETE', ['accounts', uid, 'data'] if uid == state.uid:
+                state.client.recursive_delete(state.user)
+                if state.user.get().exists:
+                    raise RuntimeError('Go replay erase left a user document')
+                return 200, {}
         raise ValueError('unexpected jobd stub request')
 
     def _conversation(self, state):
+        if self.command == 'GET' and state.case.get('delete_before_worker_read'):
+            reads = state.case.get('_go_conversation_reads', 0) + 1
+            state.case['_go_conversation_reads'] = reads
+            if reads > 1 and not state.case.get('_go_conversation_deleted'):
+                state.case['_go_conversation_deleted'] = True
+                state.conversation.delete()
+                return 404, {'code': 'not_found'}
         doc = _document(state)
         if doc is None:
             return 404, {'code': 'not_found'}
@@ -201,7 +215,9 @@ def _stub(state):
             worker.join()
 
 
-def _admit(proc, url, state):
+def _admit(proc, url, state, database):
+    from psycopg import connect
+
     path = f'{url}/v1/conversations/{state.cid}/end'
     request = {
         'uid': state.uid,
@@ -235,7 +251,32 @@ def _admit(proc, url, state):
         if status != 202:
             raise RuntimeError('Go BYOK resume rejected')
         job = _wait(proc, job_url, lambda code, result: code == 200 and result['state'] in {'completed', 'parked'})
+    state.go_evidence['job'] = {
+        'state': job['state'],
+        'reason': job.get('reason'),
+        'outcome': job.get('outcome'),
+    }
+    with connect(database) as connection, connection.cursor() as cursor:
+        cursor.execute('SELECT meta FROM queue_jobs WHERE job_key = %s', (job_id,))
+        metadata = cursor.fetchone()
+    if metadata is None:
+        raise RuntimeError('Go replay job row disappeared before observation')
+    state.go_evidence['job']['metadata'] = metadata[0]
     state.queue_fanout_key = job['fanout_key']
+    if state.case.get('erase_after'):
+        status, _ = _request('POST', f'{url}/v1/users/{state.uid}/erase')
+        if status != 200:
+            raise RuntimeError('Go replay erase was refused')
+        with connect(database) as connection, connection.cursor() as cursor:
+            cursor.execute('SELECT count(*) FROM queue_jobs WHERE uid = %s', (state.uid,))
+            jobs_for_uid = cursor.fetchone()[0]
+            cursor.execute('SELECT count(*) FROM queue_tenants WHERE uid = %s', (state.uid,))
+            tenants_for_uid = cursor.fetchone()[0]
+        state.go_evidence['erasure'] = {
+            'user_document_absent': True,
+            'jobs_for_uid': jobs_for_uid,
+            'tenants_for_uid': tenants_for_uid,
+        }
     if job.get('outcome') == 'fenced':
         return 'fenced'
     if job['state'] == 'completed' and (state.conversation.get().to_dict() or {}).get('discarded'):
@@ -277,7 +318,7 @@ def run_candidate(state, jobd: Path, database: str, key: str):
             try:
                 url = _listener_url(proc)
                 _wait(proc, f'{url}/healthz', lambda code, _body: code == 200)
-                status = _admit(proc, url, state)
+                status = _admit(proc, url, state, database)
             finally:
                 proc.terminate()
                 try:
