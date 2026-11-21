@@ -1592,6 +1592,7 @@ FIELD_SITES = {
                 'failure_code',
                 'phase',
                 'reconcile_after_at',
+                'rollback_cleanup_steps',
                 'status',
                 'updated_at',
             ),
@@ -4186,7 +4187,7 @@ FIELD_SITES = {
             ('memory_id', 'origin', 'public_id', 'status', 'uid', 'updated_at'),
         ),
         (
-            'MemoryService._write_historical_overrides',
+            'MemoryService._write_historical_overrides.stage',
             'status',
             'status.value',
             ('memory_id', 'origin', 'public_id', 'status', 'uid', 'updated_at'),
