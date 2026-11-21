@@ -21,6 +21,13 @@ Infrastructure failures on mobile-app-checks.yml:
   job after every real step passed. 50 is the asserted budget: above that
   cold path with wedge headroom, while the CI budget check counts p50
   (19), not the ceiling.
+* PostHog Android SDK drift. Gradle's `[a,b]` range is inclusive of `b`, so
+  `com.posthog:posthog-android:[3.51.0,4.0.0]` — the range posthog_flutter
+  5.28.0 declares — admitted 4.0.0 the day it was published (2026-11-20).
+  4.0.0 pulls core posthog 7.0.0, which removed PostHogOnFeatureFlags and
+  onFeatureFlags, so the plugin's Kotlin stopped compiling and all three
+  Android jobs failed (run 44867593537). The app must keep a direct
+  `strictly` range that rejects the next major.
 """
 
 from pathlib import Path
@@ -45,6 +52,19 @@ IOS_COLD_PATH_TIMEOUT_MINUTES = 50
 BUILD_GRADLE_NDK_PIN_RE = re.compile(
     r'ndkVersion\s+System\.getenv\(\)\["NDK_VERSION"\]\s*\?:\s*"([0-9][0-9.]*)"'
 )
+
+# posthog_flutter 5.28.0 declares com.posthog:posthog-android:[3.51.0,4.0.0],
+# which Gradle reads as inclusive of 4.0.0. Only a direct `strictly` range
+# rejects the new major over that transitive range.
+POSTHOG_ANDROID_BLOCK_RE = re.compile(
+    r"implementation\('com\.posthog:posthog-android'\)\s*\{(?P<body>.*?)\n\s*\}",
+    re.S,
+)
+POSTHOG_ANDROID_STRICT_RANGE_RE = re.compile(
+    r"strictly\s+'\[(?P<floor>[0-9][0-9.]*),(?P<ceiling>[0-9][0-9.]*)\)'"
+)
+POSTHOG_ANDROID_CEILING = "4.0.0"
+POSTHOG_ANDROID_LAST_GOOD = (3, 77, 1)
 
 
 def load_workflow() -> dict:
@@ -164,6 +184,36 @@ class MobileCIInfraGuardTests(unittest.TestCase):
             "iOS Compile Check's ceiling must stay above the measured cold path (39:25 real "
             "steps + ~1 min post-job cache save, run 39634604539 attempt 1) or a healthy "
             "cold job is cancelled after every real step passes; re-measure before changing",
+        )
+
+    def test_posthog_android_range_rejects_the_next_major(self) -> None:
+        source = BUILD_GRADLE_PATH.read_text(encoding="utf-8")
+        block = POSTHOG_ANDROID_BLOCK_RE.search(source)
+        self.assertIsNotNone(
+            block,
+            "app/android/app/build.gradle must declare com.posthog:posthog-android with a "
+            "`version { strictly ... }` block; a plain version or an inclusive range lets a "
+            "newly published major break posthog_flutter's Kotlin compile",
+        )
+        match = POSTHOG_ANDROID_STRICT_RANGE_RE.search(block.group("body"))
+        self.assertIsNotNone(
+            match,
+            "posthog-android must use an exclusive-upper-bound strictly range such as "
+            "'[3.51.0,4.0.0)'; Gradle's [a,b] is inclusive of b, which is how 4.0.0 was "
+            "admitted and broke every Android job in run 44867593537",
+        )
+        self.assertEqual(
+            POSTHOG_ANDROID_CEILING,
+            match.group("ceiling"),
+            "the posthog-android ceiling must stay at the last major posthog_flutter 5.28.0 "
+            "compiles against; re-verify the plugin's Kotlin against the new SDK before "
+            "raising it",
+        )
+        self.assertLessEqual(
+            tuple(int(part) for part in match.group("floor").split(".")),
+            POSTHOG_ANDROID_LAST_GOOD,
+            "the posthog-android floor must admit a real 3.x release, or the strictly range "
+            "resolves to nothing",
         )
 
 
