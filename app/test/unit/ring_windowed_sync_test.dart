@@ -33,7 +33,7 @@ class _FakeLocalSync implements LocalWalSync {
   final added = <Wal>[];
 
   @override
-  int get sessionGeneration => 1;
+  int sessionGeneration = 1;
 
   @override
   Future<void> addExternalWal(Wal wal, {required int admittedGeneration}) async => added.add(wal);
@@ -319,9 +319,8 @@ void main() {
     });
   }
 
-  for (final interrupted in [false, true]) {
-    test(interrupted ? 'a reconnect during reclaim confirmation fences the old pass' : 'unconfirmed reclaim times out',
-        () async {
+  for (final scenario in ['timeout', 'reconnect', 'account change']) {
+    test('leaves reclaim pending after $scenario during confirmation', () async {
       final ring = _RingModel(readSeq: 1000, writeSeq: 1240)..deferAdvanceAt = 1120;
       final local = _FakeLocalSync();
       final wal = ringWal(ring);
@@ -330,14 +329,15 @@ void main() {
         if (delay != const Duration(seconds: 1)) return Timer(delay, callback);
         return Timer(Duration.zero, () {
           waits++;
-          if (interrupted) ring.epoch++;
+          if (scenario == 'reconnect') ring.epoch++;
+          if (scenario == 'account change') local.sessionGeneration++;
           callback();
         });
       });
 
       await sync.syncAll();
 
-      expect(waits, interrupted ? 1 : 8);
+      expect(waits, scenario == 'timeout' ? 8 : 1);
       expect(ring.reads, [(1000, 120)]);
       expect(ring.readSeq, lessThan(1120));
       expect(framesStored(local), 120 * _framesPerRecord);
