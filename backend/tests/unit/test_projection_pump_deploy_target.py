@@ -7,6 +7,7 @@ the boundary shell with fixture inputs. Nothing here calls a cloud API.
 from __future__ import annotations
 
 import copy
+import io
 import json
 import os
 import re
@@ -15,6 +16,7 @@ import subprocess
 import sys
 from pathlib import Path
 from urllib.error import HTTPError
+from urllib.parse import parse_qs, urlsplit
 
 import pytest
 import yaml
@@ -213,12 +215,17 @@ def test_prod_pump_is_integration_plus_the_dark_overrides():
     assert pump['flags'] == integration['flags']
     assert pump['forbidden_env'] == integration['forbidden_env']
     assert pump['service_account'] == integration['service_account']
-    overridden = set(DARK_OVERRIDES) | {'BATCH_PIPELINE_INDEPENDENT_LANGUAGE_RECOVERY_ENABLED'}
+    train_pins = {'BATCH_ACCOUNT_PRIVACY_WRITER_ENABLED', 'BATCH_PROJECTION_OUTBOX'}
+    overridden = set(DARK_OVERRIDES) | {'BATCH_PIPELINE_INDEPENDENT_LANGUAGE_RECOVERY_ENABLED'} | train_pins
     assert set(pump['env']) - set(integration['env']) <= overridden
     for name in set(integration['env']) - overridden:
         assert pump['env'][name] == integration['env'][name], name
     for name, value in DARK_OVERRIDES.items():
         assert pump['env'][name]['value'] == value, name
+    for name in train_pins:
+        assert integration['env'][name]['value'] == 'false', name
+        assert services['backend-sync-backfill']['env'][name]['value'] == 'false', name
+        assert pump['env'][name]['value'] == 'true', name
     assert pump['env']['BATCH_PIPELINE_INDEPENDENT_LANGUAGE_RECOVERY_ENABLED']['value'] == 'false'
 
 
@@ -704,14 +711,14 @@ def test_deploy_pin_and_sidecar_steps_name_the_same_base_revision():
 
 
 # SCA-3318 recovery uses the interrupted base, with one service-cap mismatch.
-def _recovery_fixture(inverse_readback):
+def _recovery_fixture(inverse_readback, etag='approved-version'):
     service, revision, policy = inverse_readback
     before = {
         'name': recovery.RESOURCE,
         'uid': 'pump-uid',
         'generation': '7',
         'observedGeneration': '7',
-        'etag': 'approved-version',
+        'etag': etag,
         'terminalCondition': {'state': 'CONDITION_SUCCEEDED'},
         'scaling': {'maxInstanceCount': 20},
         'template': copy.deepcopy(revision['spec']),
@@ -919,22 +926,8 @@ def test_cap_recovery_uses_existing_approval_and_lock():
     assert WORKFLOW['concurrency']['cancel-in-progress'] is False
 
 
-@pytest.mark.parametrize(
-    'override',
-    [
-        {},
-        {'GITHUB_RUN_ATTEMPT': '2'},
-        {'GITHUB_REF': 'refs/heads/topic'},
-        {'CONTROL_SHA': 'b' * 40},
-        {'APPROVED_ETAG': ''},
-        {'CLOUD_RUN_SERVICE': 'backend-sync'},
-        {'break_glass_lock': 'true'},
-        {'skip_eligibility_proof': 'true'},
-        {'deploy_gateway': 'true'},
-    ],
-)
-def test_cap_recovery_preapproval_boundary(tmp_path, override):
-    script = WORKFLOW['jobs']['validate-production-boundary']['steps'][1]['run']
+def _cap_recovery_preapproval(tmp_path, override):
+    step = WORKFLOW['jobs']['validate-production-boundary']['steps'][1]
     event = tmp_path / 'event.json'
     summary = tmp_path / 'summary'
     inputs = {
@@ -942,6 +935,7 @@ def test_cap_recovery_preapproval_boundary(tmp_path, override):
         'skip_eligibility_proof': 'false',
         'deploy_gateway': 'false',
         'requested_by': 'release-owner',
+        'pump_recovery_etag': 'AQ==',
     }
     env = {
         **os.environ,
@@ -956,13 +950,99 @@ def test_cap_recovery_preapproval_boundary(tmp_path, override):
         'WORKFLOW_CONTROL_SHA': 'a' * 40,
         'GITHUB_SHA': 'a' * 40,
         'RELEASE_SHA': 'f7060aa1a0c9e3481790d497140096ae99f9b062',
-        'APPROVED_ETAG': 'AQ==',
         'GITHUB_EVENT_PATH': str(event),
         'GITHUB_STEP_SUMMARY': str(summary),
     }
     for key, value in override.items():
         (inputs if key in inputs else env)[key] = value
     event.write_text(json.dumps({'inputs': inputs}))
-    run = subprocess.run(['bash', '-c', script], env=env, capture_output=True, text=True, timeout=10)
+    dispatch_inputs = json.loads(event.read_text())['inputs']
+    assert step['env']['APPROVED_ETAG'] == '${{ inputs.pump_recovery_etag }}'
+    env['APPROVED_ETAG'] = dispatch_inputs['pump_recovery_etag']
+    run = subprocess.run(['bash', '-c', step['run']], env=env, capture_output=True, text=True, timeout=10)
+    return run, summary, dispatch_inputs
+
+
+@pytest.mark.parametrize(
+    'override',
+    [
+        {},
+        {'GITHUB_RUN_ATTEMPT': '2'},
+        {'GITHUB_REF': 'refs/heads/topic'},
+        {'CONTROL_SHA': 'b' * 40},
+        {'pump_recovery_etag': ''},
+        {'pump_recovery_etag': '""'},
+        {'pump_recovery_etag': '"AQ=='},
+        {'pump_recovery_etag': 'AQ=="'},
+        {'pump_recovery_etag': '"AQ="="'},
+        {'pump_recovery_etag': '"AQ=="\n'},
+        {'pump_recovery_etag': '"' + 'A' * 201 + '"'},
+        {'CLOUD_RUN_SERVICE': 'backend-sync'},
+        {'break_glass_lock': 'true'},
+        {'skip_eligibility_proof': 'true'},
+        {'deploy_gateway': 'true'},
+    ],
+)
+def test_cap_recovery_preapproval_boundary(tmp_path, override):
+    run, summary, inputs = _cap_recovery_preapproval(tmp_path, override)
     assert (run.returncode == 0) is (not override), run.stderr
     assert summary.exists() is (not override)
+    if not override:
+        assert json.loads(summary.read_text())['etag'] == inputs['pump_recovery_etag']
+
+
+@pytest.mark.parametrize('dispatch_etag', ['"A+B/c_d-e=="', '"stale-version"', 'A+B/c_d-e=='])
+def test_cap_recovery_quoted_etag_round_trip(tmp_path, monkeypatch, inverse_readback, dispatch_etag):
+    live_etag = '"A+B/c_d-e=="'
+    run, summary, inputs = _cap_recovery_preapproval(tmp_path, {'pump_recovery_etag': dispatch_etag})
+    assert run.returncode == 0, run.stderr
+    assert json.loads(summary.read_text())['etag'] == dispatch_etag
+
+    step = WORKFLOW['jobs']['recover-projection-pump-cap']['steps'][-1]
+    assert step['env']['APPROVED_ETAG'] == '${{ inputs.pump_recovery_etag }}'
+    # Capture the workflow shell's argv with a stand-in for the Python executable.
+    command_output = subprocess.check_output(
+        ['bash', '-c', 'python3() { printf "%s\\0" "$@"; }\n' + step['run']],
+        env={**os.environ, 'APPROVED_ETAG': inputs['pump_recovery_etag']},
+        timeout=10,
+    )
+    argv = command_output.decode().split('\0')[:-1]
+    assert argv[0] == 'backend/scripts/recover_projection_pump_cap.py'
+    monkeypatch.setattr(sys, 'argv', argv)
+
+    fixture = _recovery_fixture(inverse_readback, etag=live_etag)
+    api = recovery.RunAPI('fixture-token')
+    monkeypatch.setattr(api, 'permission_check', fixture.permission_check)
+    monkeypatch.setattr(api, 'service', fixture.service)
+    monkeypatch.setattr(api, 'complete', fixture.complete)
+
+    def open_patch(request, *, timeout):
+        assert request.method == 'PATCH'
+        url = urlsplit(request.full_url)
+        assert url.path == '/v2/' + recovery.RESOURCE
+        query = parse_qs(url.query)
+        assert query['updateMask'] == ['scaling.maxInstanceCount']
+        body = json.loads(request.data)
+        assert body['name'] == recovery.RESOURCE
+        result = fixture.patch(
+            body['etag'], body['scaling']['maxInstanceCount'], validate_only=query['validateOnly'] == ['true']
+        )
+        return io.BytesIO(json.dumps(result).encode())
+
+    monkeypatch.setattr(api.opener, 'open', open_patch)
+    monkeypatch.setattr(recovery, 'RunAPI', lambda _token: api)
+    monkeypatch.setattr(recovery, '_read', lambda _project, _region, *args: fixture.read(*args))
+    monkeypatch.setattr(
+        recovery.subprocess, 'run', lambda *args, **kwargs: subprocess.CompletedProcess(args, 0, 'token')
+    )
+    if dispatch_etag == live_etag:
+        assert recovery.main() == 0
+        assert fixture.cap_requests == [
+            (live_etag, 4, True),
+            (live_etag, 20, True),
+            (live_etag, 4, False),
+            ('new-version', 20, True),
+        ]
+    else:
+        assert recovery.main() == 1
+        assert fixture.cap_requests == []

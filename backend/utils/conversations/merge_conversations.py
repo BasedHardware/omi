@@ -24,7 +24,7 @@ from typing import Any, Callable, Dict, List, Optional, Set, Tuple
 from google.api_core import exceptions as google_exceptions
 
 import database.conversations as conversations_db
-from database import conversation_tombstones
+from database import conversation_tombstones, conversations_v3_backfill_runs
 from database.conversation_merge_policy import source_has_merge_receipt
 from database._client import db as firestore_db
 from database.vector_db import delete_action_item_vectors_batch, delete_vector
@@ -968,6 +968,10 @@ def copy_sync_bridge_audio(uid: str, source_id: str, target_id: str) -> None:
     _copy_audio_chunks_for_merge(uid, [{'id': source_id}], target_id, strict=True, skip_existing=True)
 
 
+def _purge_rederive_priors(uid: str, conversation_ids: list) -> None:
+    conversations_v3_backfill_runs.purge_conversation_priors(uid, conversation_ids, 'deleted')
+
+
 def delete_conversation_with_sync_sources(
     uid: str,
     conversation_id: str,
@@ -983,6 +987,9 @@ def delete_conversation_with_sync_sources(
         if conversation_row is not None
         else read_product_conversation(conversations_db.get_conversation, uid, conversation_id) or {}
     )
+    # A stopped attempt can have a prior before the row is stamped. Use the requested ID even
+    # on a retry without row metadata, and purge the known lineage before deleting its rows.
+    _purge_rederive_priors(uid, [conversation_id, *(row.get('sync_merged_from') or [])])
     for source_id in row.get('sync_merged_from', []):
         if source_id != conversation_id:
             # The source row is destroyed below; without intent its from-segments

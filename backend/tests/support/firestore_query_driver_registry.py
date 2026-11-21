@@ -158,7 +158,12 @@ _DEV_KEY = 'omi_dev_' + 'a' * 32
 _MCP_KEY = 'omi_mcp_' + 'a' * 32
 
 BODY_DIGEST = {
-    'database.conversations_v3.commit_projection': 'ef2e983f527e4c07c35d5756b816405140fb88196bc819bc9f7a20012411c40e',
+    'llm_gateway.gateway.idempotency._request_body': '821d003b89db821c83bd02ba648b9f4a0fba5081d9e450a7cac38192b6382abd',
+    'database.legal_holds.list_legal_holds': 'adb83d85cbbabaa98a4d435147d92e2139b4e483c19a9c09e695c5f7fa4c517b',
+    'utils.support.holds._events': '360ff57663deaf3c17c934276f219cce74f4a468dc28c8a1145623524625927e',
+    'utils.support.holds._held_deferred_deletes': '612a521045553ef1b02d1eb81aac37a3c63a75c598ce5e99484c007c7c87e878',
+    'utils.support.retention._select_conversations': 'f36920350f4e3a557e0e474e8801ae414c21ce67203e0627f7a39ba820243d16',
+    'database.conversations_v3.commit_projection': '1839fb90b6ce564158f484f9608796e98a401dc0b9b0b6222c60fee1d66514ad',
     'database.batch_pipeline_conversation_purge_scans._claim': 'faa5dabcf01dc5bd377b2e14a149282aa2db93b2872cdc97a3b756157701532c',
     'database.batch_pipeline_conversation_purge_scans.run_job': '1916be25d4e9d5b8a350a665ae0fce626ccc56f68fc66107e8f4b0bb1243b00e',
     'database.batch_pipeline_store.FirestoreStore.protected_retries': 'b55d2960c94057cb8df9b9cdd2e7728b6af63728bc0a2cb6f5bd333efed443a2',
@@ -412,6 +417,8 @@ _add(
         domains={'collection': ['conversation_batch_purge_jobs', 'conversation_erasure_jobs']},
     )
 )
+# The pager's separate operations database uses a built-in next_at index.
+_add(DriverEntry('paging.store.due_deliveries', base={'now': T0}))
 # Sealed owner groups use an existing single-field uid index on obligations.
 _add(
     DriverEntry(
@@ -647,6 +654,7 @@ _add(
         neutrals={
             'document_id': (None, 'optional doc id; absent does not change query'),
             'reuse_finished': (True, 'filters streamed key matches in Python; query unchanged'),
+            'check_undo_removals': (False, 'adds only owner-scoped removal marker and conversation point reads'),
         },
         setup=_seed_action_items_control,
         trials=2,
@@ -3638,7 +3646,7 @@ for entry in (
     CoveredByEntry(
         'database.conversations_v3.commit_projection',
         covered_by=('database.conversations_v3.merge_donors_have_tasks',),
-        reason='The projection is lease fenced. Its only collection query checks donor task links before writes.',
+        reason='Refinement and live repair use the same bounded donor-task query and write point markers with donor redirects.',
         expect_observed=False,
         body_digest=BODY_DIGEST['database.conversations_v3.commit_projection'],
     ),
@@ -3807,6 +3815,14 @@ _add(
         reason='Builder consumed by its registered serving parent',
         expect_observed=False,
         body_digest=BODY_DIGEST['database.proactivity_producers.task_items_query'],
+    )
+)
+
+_add(
+    SkipEntry(
+        'llm_gateway.gateway.idempotency._request_body',
+        reason='FastAPI Request.stream() reads incoming HTTP body bytes, without a Firestore query.',
+        body_digest=BODY_DIGEST['llm_gateway.gateway.idempotency._request_body'],
     )
 )
 
@@ -4418,6 +4434,34 @@ for _key, _reason in (
         'discovery or a limited PG key page, then exact-key primary get_all rereads. No additional Firestore '
         'query shape; row/read/statement/deadline budgets and commit-only cursor checked by '
         'tests/unit/test_jobstore_reconcile.py.',
+    ),
+):
+    _add(SkipEntry(_key, reason=_reason, body_digest=BODY_DIGEST[_key]))
+
+
+# Support operator CLI (scripts/support/ops.py): audited, ticket-scoped operator reads, never serving.
+for _key, _reason in (
+    (
+        'database.legal_holds.list_legal_holds',
+        'Support operator CLI `hold list` only: bounded limit() scan of the small legal_holds collection by '
+        'document id (no filter, no order); active/review state filtered in Python.',
+    ),
+    (
+        'utils.support.holds._events',
+        'Support operator CLI `hold status` only: bounded limit() read of one account\'s '
+        'legal_holds/{uid}/events subcollection in default document-id order (no filter, no order_by, '
+        'no composite index); the newest are kept in Python.',
+    ),
+    (
+        'utils.support.holds._held_deferred_deletes',
+        'Support operator CLI `hold status/release` only: one account\'s deleted_conversations tombstones, '
+        'paged by document id (built-in __name__ order, start_after, limit) up to a fixed cap; held_deferred '
+        'filtered in Python.',
+    ),
+    (
+        'utils.support.retention._select_conversations',
+        'Support operator CLI `retention check` only: one account\'s conversations, created_at range with '
+        'order on the same field and an explicit cap (single-field index, no composite).',
     ),
 ):
     _add(SkipEntry(_key, reason=_reason, body_digest=BODY_DIGEST[_key]))

@@ -180,6 +180,7 @@ def test_conversation_delete_route_maps_takeover_to_409(monkeypatch, conversatio
     service.retract_conversation_memories.side_effect = DestructiveGateTakeover("peer completed before hold")
     monkeypatch.setattr(conversation_routes, "MemoryService", lambda **kwargs: service)
     monkeypatch.setattr(conversation_routes, 'destructive_operation_gate', lambda *args, **kwargs: nullcontext())
+    monkeypatch.setattr(conversation_routes, '_legal_hold_defers_delete', lambda uid: False)
     monkeypatch.setattr(conversation_routes.conversation_tombstones, "is_deleted", lambda *args: False)
     monkeypatch.setattr(conversation_routes.conversation_tombstones, "record_deletion", lambda *args: None)
     # #25610 short-circuits an already-tombstoned delete; this conversation is live.

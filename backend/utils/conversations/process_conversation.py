@@ -854,16 +854,25 @@ def _get_conversation_obj(
         return result
     elif isinstance(conversation, ExternalIntegrationCreateConversation):
         create_conversation = conversation
+        # Carried as a field on the create model; the persisted Conversation
+        # carries it in external_data, the shape every reader already uses.
+        calendar_context = getattr(conversation, 'calendar_meeting_context', None)
+        conversation_dict = conversation.dict()
+        conversation_dict.pop('calendar_meeting_context', None)
         # Use started_at as created_at for external integrations to preserve original timestamp
         created_at = conversation.started_at if conversation.started_at else datetime.now(timezone.utc)
         result = Conversation(
             id=conversation_id or str(uuid.uuid4()),
-            **conversation.dict(),
+            **conversation_dict,
             created_at=created_at,
             structured=structured,
             discarded=discarded,
         )
-        result.external_data = create_conversation.dict()
+        result.external_data = conversation_dict
+        if calendar_context is not None:
+            # The model's hand-built storage shape, not a dump: a storage write
+            # for meeting metadata must not sweep up fields added later.
+            result.external_data['calendar_meeting_context'] = calendar_context.to_storage_dict()
         result.app_id = create_conversation.app_id
         return result
     else:
