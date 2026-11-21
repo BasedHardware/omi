@@ -14,6 +14,7 @@ import wave
 import httpx
 from prometheus_client import Counter
 
+from config.batch_pipeline import known_unsupported_batch_language
 from config.prerecorded_language import (
     MIN_AUDIO_LID_CONFIDENCE,
     audio_lid_confidence_floor,
@@ -403,10 +404,18 @@ def select_decision(language, decision, selector):
     return selected
 
 
-def resolve_file(language, path, *, selector, before_probe=None, cohort_key=None):
-    """Return the final provider before a sync segment's dispatch/accounting."""
+def resolve_file(language, path, *, selector, before_probe=None, cohort_key=None, declared_language=None):
+    """Return the final provider before a sync segment's dispatch/accounting.
+
+    ``declared_language`` is the user's stored language. A code the batch Parakeet model cannot
+    serve never buys a probe, the same eligibility rule batch intake applies: a confident but
+    wrong European verdict on a short sample would send the whole recording to Parakeet and
+    come back as English-looking noise (#22487). Blank, ``multi`` and served codes still probe.
+    """
     if not language_guard_enabled() or language_class(language) != 'unknown':
         return selector(language)
+    if known_unsupported_batch_language(declared_language):
+        return select_decision(language, LanguageDecision('und', 0.0, 'declared'), selector)
     try:
         with wave.open(str(path), 'rb') as source:
             body, _ = probe_wav_from_reader(source)

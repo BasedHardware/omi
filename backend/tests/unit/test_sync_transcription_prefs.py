@@ -21,7 +21,7 @@ import threading
 import wave
 from pathlib import Path
 from types import ModuleType
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, Mock, patch
 
 import numpy as np
 import pytest
@@ -498,6 +498,56 @@ class TestProcessSegmentPreferences:
         _, kwargs = mock_dg.call_args
         assert kwargs['language'] == 'multi'
         assert kwargs['return_language'] is True
+
+    @patch('utils.sync.pipeline.process_conversation')
+    @patch('utils.sync.pipeline.get_closest_conversation_to_timestamps', return_value=None)
+    @patch('utils.sync.pipeline.get_timestamp_from_path', return_value=1700000000)
+    @patch('utils.sync.pipeline.prerecorded')
+    @patch('utils.sync.pipeline.delete_syncing_temporal_file')
+    @patch('utils.sync.pipeline.get_syncing_file_temporal_signed_url', return_value='http://example.com/audio.wav')
+    def test_translation_on_with_a_language_parakeet_cannot_serve_pins_modulate_without_a_probe(
+        self, mock_url, mock_delete, mock_dg, mock_ts, mock_closest, mock_process, monkeypatch, tmp_path
+    ):
+        """#22487: Japanese primary language with automatic translation on must never reach Parakeet."""
+        from utils.sync.pipeline import process_segment
+        from utils.stt import batch_language as lid
+
+        monkeypatch.setenv('STT_PRERECORDED_MODEL', 'parakeet,modulate-velma-2')
+        monkeypatch.setenv('MODULATE_API_KEY', 'synthetic-not-a-key')
+        monkeypatch.delenv('STT_PRERECORDED_LANGUAGE_GUARD_ENABLED', raising=False)
+        # The vendor sample that would confidently call the first seconds English.
+        client = Mock()
+        client.post.return_value.json.return_value = {
+            'predicted_language_code': 'en',
+            'confidence': 0.99,
+            'duration_ms': 6000,
+        }
+        client.__enter__ = Mock(return_value=client)
+        client.__exit__ = Mock(return_value=False)
+        monkeypatch.setattr(lid.httpx, 'Client', Mock(return_value=client))
+        path = tmp_path / 'segment.wav'
+        path.write_bytes(_make_wav_bytes(6.0))
+        mock_dg.return_value = (self._make_mock_words(), 'ja')
+        mock_process.return_value = MagicMock(id='test-id')
+
+        def dispatch_kwargs(language):
+            mock_dg.reset_mock()
+            client.post.reset_mock()
+            prefs = {'vocabulary': [], 'language': language, 'single_language_mode': False}
+            response = {'new_memories': set(), 'updated_memories': set()}
+            process_segment(str(path), 'uid123', response, threading.Lock(), [], transcription_prefs=prefs)
+            _, kwargs = mock_dg.call_args
+            return kwargs
+
+        kwargs = dispatch_kwargs('ja')
+        assert kwargs['language'] == 'multi'
+        assert kwargs['selected_service'] == ('modulate', 'multi', 'velma-2')
+        client.post.assert_not_called()
+
+        # The same recording under a served primary language still asks the sample, as before.
+        kwargs = dispatch_kwargs('en')
+        assert kwargs['selected_service'][0] == 'parakeet'
+        client.post.assert_called_once()
 
     @patch('utils.sync.pipeline.get_closest_conversation_to_timestamps', return_value=None)
     @patch('utils.sync.pipeline.get_timestamp_from_path', return_value=1700000000)
