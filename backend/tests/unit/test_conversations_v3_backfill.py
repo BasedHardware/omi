@@ -1173,7 +1173,7 @@ def test_one_owners_blocked_plan_never_stops_the_others(tmp_path, monkeypatch, c
     monkeypatch.setattr(runs, 'list_runs', lambda uid: [])
     planned = []
 
-    def plan(uid, label, *a):
+    def plan(uid, label, *a, **kw):
         if uid == 'owner-one':
             raise store.Conflict('backfill_partition_budget')
         planned.append(label)
@@ -1284,7 +1284,7 @@ def test_a_blocked_owner_still_fails_the_exit_code_with_no_wait(tmp_path, monkey
     owners.write_text('owner-one\nowner-two\n')
     monkeypatch.setattr(runs, 'list_runs', lambda uid: [])
 
-    def plan(uid, label, *a):
+    def plan(uid, label, *a, **kw):
         if uid == 'owner-one':
             raise store.Conflict('backfill_partition_budget')
         return {}, [], {}
@@ -1341,7 +1341,7 @@ def test_an_existing_run_is_a_typed_blocked_owner(tmp_path, monkeypatch, capsys)
     owners = tmp_path / 'owners.txt'
     owners.write_text('owner-one\nowner-two\n')
     monkeypatch.setattr(runs, 'list_runs', lambda uid: [])
-    monkeypatch.setattr(script, 'plan_owner', lambda *a: ({}, [], {}))
+    monkeypatch.setattr(script, 'plan_owner', lambda *a, **kw: ({}, [], {}))
     monkeypatch.setattr(runs, 'create_run', lambda *a, **kw: False)
     assert issubclass(backfill.BackfillRunExists, ValueError)
     assert script.main(['run', '--owners-file', str(owners), '--no-wait']) == 1
@@ -1447,7 +1447,7 @@ def test_an_owner_skipped_for_an_active_run_fails_the_exit_code(tmp_path, monkey
     owners = tmp_path / 'owners.txt'
     owners.write_text('owner-one\nowner-two\n')
     monkeypatch.setattr(runs, 'list_runs', lambda uid: [{'status': 'running'}] if uid == 'owner-one' else [])
-    monkeypatch.setattr(script, 'plan_owner', lambda *a: ({}, [], {}))
+    monkeypatch.setattr(script, 'plan_owner', lambda *a, **kw: ({}, [], {}))
     assert script.main(['run', '--owners-file', str(owners), '--dry-run']) == 1
 
 
@@ -1477,7 +1477,7 @@ def test_an_unexpected_plan_error_is_not_reported_as_a_blocked_owner(tmp_path, m
     owners.write_text('owner-one\n')
     monkeypatch.setattr(runs, 'list_runs', lambda uid: [])
 
-    def plan(*a):
+    def plan(*a, **kw):
         raise ValueError('bug')
 
     monkeypatch.setattr(script, 'plan_owner', plan)

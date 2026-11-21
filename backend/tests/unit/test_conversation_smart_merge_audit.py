@@ -543,6 +543,7 @@ def test_survivor_purge_counts_once_after_the_delete(recorded, monkeypatch):
         'smart_merge': {'role': 'survivor', 'last_merged_at': datetime.now(timezone.utc) - timedelta(minutes=5)},
     }
     purged = []
+    monkeypatch.setattr(merge_conversations, '_purge_rederive_priors', lambda *a: None)
     monkeypatch.setattr(merge_conversations.conversations_db, 'get_conversation', lambda uid, cid: row)
     # Donor tombstone writes bind to their own module-level client; keep the
     # purge hermetic and assert the intent was recorded before the donor purge.
@@ -564,6 +565,7 @@ def test_survivor_purge_counts_once_after_the_delete(recorded, monkeypatch):
 
 def test_failed_survivor_delete_is_not_counted(recorded, monkeypatch):
     row = {'smart_merge': {'role': 'survivor', 'last_merged_at': datetime.now(timezone.utc)}}
+    monkeypatch.setattr(merge_conversations, '_purge_rederive_priors', lambda *a: None)
     monkeypatch.setattr(merge_conversations.conversations_db, 'get_conversation', lambda uid, cid: row)
 
     def fail(uid, cid):
@@ -576,6 +578,7 @@ def test_failed_survivor_delete_is_not_counted(recorded, monkeypatch):
 
 
 def test_plain_conversation_delete_is_not_counted(recorded, monkeypatch):
+    monkeypatch.setattr(merge_conversations, '_purge_rederive_priors', lambda *a: None)
     monkeypatch.setattr(merge_conversations.conversations_db, 'get_conversation', lambda uid, cid: {'id': 'c'})
     monkeypatch.setattr(merge_conversations.conversations_db, 'delete_conversation', lambda uid, cid: None)
     merge_conversations.delete_conversation_with_sync_sources(UID, 'c')

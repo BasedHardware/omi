@@ -55,6 +55,11 @@ on:
         required: false
         default: false
         type: boolean
+      skip_backend_secrets:
+        description: 'Skip reapplying shared <env>-omi-backend-secrets; the read-only gateway credential check still runs'
+        required: false
+        default: false
+        type: boolean
 
 # LLM Gateway deployment reapplies shared backend-secrets, so it joins the
 # full backend mutation domain for the selected environment.
@@ -287,6 +292,8 @@ jobs:
           # deploy-llm-gateway.sh on the image.tag it built above.
           IMAGE_REPOSITORY: ${{ env.ROLE_IMAGE_REPOSITORY }}
           IMAGE_DIGEST: ${{ env.ROLE_IMAGE_DIGEST }}
+          # Scopes a gateway-only release: the shared secret reapply is skipped, the presence check is not.
+          SKIP_BACKEND_SECRETS: ${{ github.event.inputs.skip_backend_secrets == 'true' && 'true' || 'false' }}
         run: |
           IMAGE_TAG="${IMAGE_TAG}" backend/scripts/deploy-llm-gateway.sh
           if [[ -n "$IMAGE_DIGEST" ]]; then

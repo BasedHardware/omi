@@ -1,0 +1,5 @@
+{
+  "schema_version": 1,
+  "field": "expires_at",
+  "collection_groups": ["llm_gateway_idempotency_claims", "llm_gateway_idempotency_results"]
+}

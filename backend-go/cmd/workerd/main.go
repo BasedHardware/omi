@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
@@ -62,12 +63,25 @@ func run(ctx context.Context, args []string, logger *slog.Logger) error {
 		return nil
 	}
 	err = store.Ready(startup)
-	endStartup()
 	if err != nil {
+		endStartup()
 		reportQueueError(logger, "ready", err)
 		store.Close()
 		return errors.New("could not verify PostgreSQL queue schema; check connectivity and migration state")
 	}
+
+	var eraseServer *http.Server
+	if cfg.erase.port != 0 {
+		var closeErase func()
+		eraseServer, closeErase, err = openEraseServer(startup, cfg, store, logger)
+		if err != nil {
+			endStartup()
+			store.Close()
+			return err
+		}
+		defer closeErase()
+	}
+	endStartup()
 
 	workers, err := queue.Start(ctx, store, handlers, func(err error) {
 		reportQueueError(logger, "worker", err)
@@ -79,5 +93,5 @@ func run(ctx context.Context, args []string, logger *slog.Logger) error {
 	}
 	registry.MustRegister(newStrandedCollector(workers))
 
-	return serve(ctx, cfg, store, workers, registry)
+	return serve(ctx, cfg, store, workers, registry, eraseServer)
 }

@@ -59,6 +59,8 @@ run_proof() {
 # ordinary unit shards intentionally do not stand up emulator services.
 run_proof "record custody append (committed reply loss, retries, privacy)" \
   "$PYTHON" -m pytest -q -p no:cacheprovider tests/integration/test_record_custody_append_emulator.py
+run_proof "LLM gateway idempotency (claim, replay, expiry, stale settlement)" \
+  "$PYTHON" -m pytest -q -p no:cacheprovider tests/integration/test_llm_gateway_idempotency_firestore.py
 run_proof "record nojob seal (synthetic cleanup ownership)" \
   "$PYTHON" -m pytest -q -p no:cacheprovider tests/unit/test_record_seal_nojob_emulator.py
 run_proof "pipeline ledger (fence, reopen, ordering, delete, erasure)" \

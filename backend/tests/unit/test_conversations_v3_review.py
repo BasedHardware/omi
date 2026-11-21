@@ -9,6 +9,7 @@ from unittest.mock import AsyncMock
 import pytest
 
 from database import conversations_v3 as store
+from database import conversations_v3_backfill_runs as runs
 from utils.conversations.v3 import service
 from utils.conversations import process_conversation as process_pipeline
 from utils.conversations import merge_conversations as merger
@@ -1168,7 +1169,32 @@ def test_merge_donor_task_guard_is_scoped_and_bounded():
     client = MemoryQuery(rows)
     assert store.merge_donors_have_tasks('synthetic', ['other', 'donor'], firestore_client=client)
     assert not store.merge_donors_have_tasks('synthetic', ['other'], firestore_client=client)
+    assert store.merge_donors_have_tasks(
+        'synthetic', [f'd{i:02}' for i in range(31)] + ['donor'], firestore_client=client
+    )
+    assert len(client.calls) == 4
     assert all(limit == 1 for _filters, limit, _after in client.calls)
+
+
+def test_prior_purge_inventory_skips_other_modes_and_stays_owner_scoped(monkeypatch):
+    monkeypatch.setattr(runs, 'PRIORS_READ_PAGE', 2)
+    prefix = f'/users/u/{runs.COLLECTION}/'
+    client = MemoryQuery(
+        {
+            prefix + 'a': {'mode': 'derive'},
+            prefix + 'b': {'mode': runs.LIVE_MODE},
+            prefix + 'c': {'mode': 'rederive'},
+            prefix + 'd': {'mode': runs.LIVE_MODE},
+            prefix + 'e': {'mode': runs.LIVE_MODE},
+            f'/users/other/{runs.COLLECTION}/f': {'mode': runs.LIVE_MODE},
+        }
+    )
+    assert runs._live_run_ids('u', firestore_client=client) == ['b', 'd', 'e']
+    assert len(client.calls) == 2
+    assert all(filters == (('mode', '==', runs.LIVE_MODE),) and cap == 2 for filters, cap, _ in client.calls)
+    client.calls.clear()
+    assert runs.purge_conversation_priors('no-history', ['c0'], 'deleted', firestore_client=client) == 0
+    assert len(client.calls) == 1
 
 
 def test_builder_followup_distinguishes_deferred_preview_from_new_work(monkeypatch):

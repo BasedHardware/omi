@@ -358,6 +358,8 @@ AREA_TESTS = (
             'tests/unit/test_batch_pipeline_chart.py',
             'tests/unit/test_config_train.py',
             'tests/unit/test_runtime_env_sources.py',
+            # Renders the listen chart for the seal overlap switch; it went stale unselected after #25660.
+            'tests/unit/test_record_seal_cluster_repair_deploy.py',
         ),
     ),
     (
