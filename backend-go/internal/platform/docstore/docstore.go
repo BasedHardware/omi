@@ -191,19 +191,16 @@ func (s *Store) Fenced(ctx context.Context, live Live, owner string, fn func(*Tx
 		return err
 	}
 	err = s.client.RunTransaction(ctx, func(_ context.Context, tx *firestore.Transaction) error {
-		snapshot, getErr := tx.Get(s.client.Doc(marker.path))
-		exists := getErr == nil
-		if getErr != nil && status.Code(getErr) != codes.NotFound {
+		fenced := &Tx{store: s, tx: tx}
+		var fields map[string]any
+		exists, getErr := fenced.Get(marker, &fields)
+		if getErr != nil {
 			return getErr
 		}
-		var state any
-		if exists {
-			state = snapshot.Data()[markerStatusField]
-		}
-		if Blocks(exists, state) {
+		if Blocks(exists, fields[markerStatusField]) {
 			return ErrOwnerDeleting
 		}
-		if fnErr := fn(&Tx{store: s, tx: tx}); fnErr != nil {
+		if fnErr := fn(fenced); fnErr != nil {
 			return fnErr
 		}
 		return live.Err()

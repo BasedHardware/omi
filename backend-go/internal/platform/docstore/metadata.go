@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"cloud.google.com/go/firestore"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -43,12 +44,20 @@ func sizeRejection(message string) *DocumentSizeError {
 // GetVersion reads the document and its server-owned last-write timestamp.
 // A zero timestamp means there was no document.
 func (t *Tx) GetVersion(ref Ref, dst any) (time.Time, error) {
-	snapshot, err := t.tx.Get(t.store.client.Doc(ref.path))
+	snapshots, err := t.tx.GetAll([]*firestore.DocumentRef{t.store.client.Doc(ref.path)})
 	if status.Code(err) == codes.NotFound {
-		return time.Time{}, nil
+		// A failed RPC says nothing about whether this document exists.
+		return time.Time{}, classifyMarkerRead(err)
 	}
 	if err != nil {
 		return time.Time{}, err
+	}
+	if len(snapshots) != 1 || snapshots[0] == nil {
+		return time.Time{}, &CallError{Kind: KindRejected, Code: "UnexpectedSnapshotCount"}
+	}
+	snapshot := snapshots[0]
+	if !snapshot.Exists() {
+		return time.Time{}, nil
 	}
 	if err := snapshot.DataTo(dst); err != nil {
 		return time.Time{}, &CallError{Kind: KindRejected, Code: "Undecodable"}
