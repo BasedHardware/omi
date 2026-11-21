@@ -3,6 +3,7 @@
 
 import argparse
 import copy
+import http.client
 import json
 import re
 import subprocess
@@ -80,7 +81,7 @@ class RunAPI:
         except HTTPError as error:
             print(f'PUMP_CAP_API_ERROR stage={stage} status={error.code}', file=sys.stderr, flush=True)
             raise ValueError('Cloud Run request was refused') from None
-        except (URLError, OSError, UnicodeError, ValueError):
+        except (URLError, OSError, UnicodeError, ValueError, http.client.HTTPException):
             print(f'PUMP_CAP_API_ERROR stage={stage} status=unconfirmed', file=sys.stderr, flush=True)
             raise ValueError('Cloud Run request failed or response was unreadable') from None
         if not isinstance(doc, dict):
@@ -226,7 +227,9 @@ def settled_snapshot(api, read, cap):
             service = None  # RunAPI already printed a safe PUMP_CAP_API_ERROR marker.
         if service is not None:
             reconciling = service.get('reconciling', False) is not False
-            observed = service.get('observedGeneration') == service.get('generation')
+            observed = bool(service.get('generation')) and service.get('observedGeneration') == service.get(
+                'generation'
+            )
             state = service.get('terminalCondition', {}).get('state')
             if not reconciling and observed:
                 if state == 'CONDITION_SUCCEEDED':

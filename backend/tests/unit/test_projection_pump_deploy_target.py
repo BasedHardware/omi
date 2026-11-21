@@ -1187,3 +1187,18 @@ def test_cap_recovery_settle_retries_reads_but_not_a_failed_condition(inverse_re
         assert sleeps == []
         assert 'PUMP_CAP_SETTLE_FAILED' in capsys.readouterr().err
     assert [item for item in api.cap_requests if not item[2]] == [('approved-version', 4, False)]
+
+
+def test_truncated_response_is_a_safe_api_error(monkeypatch, capsys):
+    """#25948 panel F1: http.client errors take the safe PUMP_CAP_API_ERROR path, never a traceback."""
+    import http.client
+
+    class Opener:
+        def open(self, *_args, **_kwargs):
+            raise http.client.IncompleteRead(b'partial')
+
+    api = recovery.RunAPI('fixture-token')
+    api.opener = Opener()
+    with pytest.raises(ValueError):
+        api.service()
+    assert 'PUMP_CAP_API_ERROR stage=service-read status=unconfirmed' in capsys.readouterr().err
