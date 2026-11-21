@@ -402,6 +402,14 @@ PYTHONPATH=backend backend/.venv/bin/python $S run --owners-file $O --since 2026
   Partitions hold up to 192 documents (the loader refuses more than 256). Same lease, queue, outline
   and notes path as a backfill; rebuilt rows are stamped `backfilled` and `v3_rederive_live_run`, so
   their notes take no derived effects and they never fan out again.
+  With `--historical-sitdown`, plan for at most 384 range documents and keep each stretch
+  intact at decoded 900-second seams. Load at most 400 range documents and 512 range plus
+  closure reads per partition, including missing lookups and deleted claimants. Retain the
+  existing source and claimant ceilings. Historical loading stops at 16 MiB of stored
+  document payload, expanded codec input, or hydrated payload (each accounted separately).
+  These are partition limits. The Lab reader must also enforce its approved cumulative
+  Firestore and object-read caps. The preview reports a model-free final-batch write estimate.
+  Apply still validates the actual projection against the existing write and transaction size limits.
   - Never touched: open windows and every source they hold, rows that overlap `since` or `until`,
     sources that are pending, unsealed, still transcribing, failed, purge-pending, private, deleted,
     legacy backfill donors or within a claims update of Firestore's 1 MiB document limit

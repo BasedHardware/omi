@@ -24,7 +24,7 @@ import zlib
 from cachetools import TTLCache
 
 from config import object_lake as config
-from database import _client
+from database import _client, conversation_decode_budget
 from utils import encryption
 from utils.other import object_lake, space_keys
 
@@ -157,31 +157,47 @@ def _memo_key(uid, ref):
     return uid, ref
 
 
+def _read_pointer(ref, *, limit=None):
+    try:
+        if limit is None:
+            plaintext = object_lake.get_space_object(ref)
+        else:
+            plaintext = object_lake.get_space_object(ref, max_plaintext_bytes=limit)
+            conversation_decode_budget.charge_bytes(len(plaintext))
+        return _require_segment_list(json.loads(plaintext))
+    except object_lake.LakeObjectBudgetExceeded:
+        raise conversation_decode_budget.DecodeBudgetExceeded() from None
+    except object_lake.LakeObjectAbsent:
+        return TranscriptBlobAbsent('Transcript object is absent')
+    except space_keys.SpaceKeyDestroyed:
+        return TranscriptShredded('Transcript key was destroyed')
+    except (object_lake.LakeFetchError, object_lake.ObjectLakeNotConfigured, space_keys.SpaceKeyUnavailable):
+        raise TranscriptPointerFetchError('Transcript lake resolution unavailable') from None
+    except (object_lake.LakeObjectCorrupt, ValueError, TypeError, RecursionError):
+        return TranscriptSegmentsDecodeError('undecodable transcript pointer')
+
+
 def preload_pointer(uid, pointer) -> None:
     if _client.in_transaction_body():
         raise TranscriptPointerUnloaded(uid, pointer)
     if not config.read_enabled():
         raise TranscriptPointerFetchError('Transcript lake resolution is disabled')
     ref = _ref(uid, pointer)
-    try:
-        plaintext = object_lake.get_space_object(ref)
-        value = json.loads(plaintext)
-        value = _require_segment_list(value)
-    except object_lake.LakeObjectAbsent:
-        value = TranscriptBlobAbsent('Transcript object is absent')
-    except space_keys.SpaceKeyDestroyed:
-        value = TranscriptShredded('Transcript key was destroyed')
-    except (object_lake.LakeFetchError, object_lake.ObjectLakeNotConfigured, space_keys.SpaceKeyUnavailable):
-        raise TranscriptPointerFetchError('Transcript lake resolution unavailable') from None
-    except (object_lake.LakeObjectCorrupt, ValueError, TypeError, RecursionError):
-        value = TranscriptSegmentsDecodeError('undecodable transcript pointer')
-    _memo().decoded[_memo_key(uid, ref)] = value
+    _memo().decoded[_memo_key(uid, ref)] = _read_pointer(ref)
 
 
 def resolve_pointer(uid: str, pointer: Mapping) -> list:
     if not config.read_enabled():
         raise TranscriptPointerFetchError('Transcript lake resolution is disabled')
     ref = _ref(uid, pointer)
+    limit = conversation_decode_budget.remaining_bytes()
+    if limit is not None:
+        if _client.in_transaction_body():
+            raise TranscriptPointerUnloaded(uid, pointer)
+        bounded = _read_pointer(ref, limit=limit)
+        if isinstance(bounded, Exception):
+            raise bounded
+        return bounded
     key = _memo_key(uid, ref)
     memo = _memo()
     try:
@@ -469,12 +485,14 @@ def decode_stored_transcript(
                 # A display fallback is not proof of successful decryption.
                 raise TranscriptSegmentsDecodeError('undecodable transcript_segments: decryption failed')
             if compressed:
-                parsed = json.loads(zlib.decompress(bytes.fromhex(payload)).decode('utf-8'))
+                parsed = json.loads(conversation_decode_budget.decompress(bytes.fromhex(payload)).decode('utf-8'))
             else:
                 parsed = json.loads(payload)
             return _require_segment_list(parsed)
         if isinstance(raw_segments, bytes) and compressed:
-            return _require_segment_list(json.loads(zlib.decompress(raw_segments).decode('utf-8')))
+            return _require_segment_list(
+                json.loads(conversation_decode_budget.decompress(raw_segments).decode('utf-8'))
+            )
     except TranscriptSegmentsDecodeError:
         raise
     except (ValueError, TypeError, RecursionError, zlib.error) as error:

@@ -64,7 +64,7 @@ def _utc(value):
     return outline.utc(value)
 
 
-def plan_partitions(meta, since, until, *, max_rows=PARTITION_ROWS, historical_sitdown=False):
+def plan_partitions(meta, since, until, *, max_rows=None, historical_sitdown=False):
     """Cut [since, until) into partitions of at most max_rows documents, at recorded silence.
 
     A cut is placed at the last gap of at least five minutes (outline.SILENCE, the live hard window
@@ -72,6 +72,10 @@ def plan_partitions(meta, since, until, *, max_rows=PARTITION_ROWS, historical_s
     cut at its largest gap; that partition is marked forced_cut and the run reports the count.
     Historical sit-down plans require a 900-second boundary and refuse forced cuts.
     """
+    if max_rows is None:
+        max_rows = rederive_store.HISTORICAL_PARTITION_ROWS if historical_sitdown else PARTITION_ROWS
+    if historical_sitdown:
+        max_rows = min(max_rows, rederive_store.HISTORICAL_PARTITION_ROWS)
     gap_seconds = HISTORICAL_SITDOWN_TIMING[0] if historical_sitdown else outline.SILENCE.total_seconds()
     rows = sorted((r for r in meta if r.get('started_at')), key=lambda r: _utc(r['started_at']))
     if (
@@ -597,7 +601,7 @@ def estimate_live_partition(uid, partition, run_id, *, now=None, historical_sitd
     """
     now = now or datetime.now(timezone.utc)
     recordings, existing, _cache, counts = rederive_store.load_live_rederive(
-        uid, since=partition['since'], until=partition['until'], run_id=run_id
+        uid, since=partition['since'], until=partition['until'], run_id=run_id, historical_sitdown=historical_sitdown
     )
     eligible = [r for r in recordings.values() if policy.builder_eligible(r)]
     if historical_sitdown:
@@ -654,6 +658,12 @@ def estimate_live_partition(uid, partition, run_id, *, now=None, historical_sitd
     for key, value in counts.items():
         if key.startswith(('protected_', 'sources_', 'skipped_')):
             est[key] = value
+    if historical_sitdown:
+        # The model-free plan estimates retirements and assumes all eligible sources may be touched.
+        retirements = est['rows_retired_est']
+        write_estimate = len(recordings) + 2 * retirements + min(retirements, len(fresh)) + 2 if fresh else 0
+        est['estimated_final_batch_writes'] = write_estimate
+        est['partitions_estimated_over_write_budget'] = int(write_estimate > store.BATCH_MAX_WRITES)
     for group in groups:
         words = sum(len(line['text'].split()) for line in group['lines'])
         est['words'] += words

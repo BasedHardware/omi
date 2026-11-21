@@ -90,7 +90,7 @@ def plan_owner(uid: str, label: str, since: datetime, until: datetime, mode: str
         meta,
         since,
         until,
-        max_rows=backfill.LIVE_PARTITION_ROWS if live else backfill.PARTITION_ROWS,
+        max_rows=None if historical_sitdown else backfill.LIVE_PARTITION_ROWS if live else backfill.PARTITION_ROWS,
         historical_sitdown=historical_sitdown,
     )
     show(label + ' window', {'since': since.isoformat(), 'until': until.isoformat(), 'mode': mode})

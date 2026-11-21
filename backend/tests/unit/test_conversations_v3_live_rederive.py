@@ -7,6 +7,7 @@ strict in-memory Firestore; only the outline model, speaker evidence and the sta
 
 import asyncio
 import json
+import zlib
 from contextlib import contextmanager, nullcontext
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
@@ -41,6 +42,7 @@ from tests.unit.fixtures.strict_firestore_transaction import (
 from tests.unit.test_conversations_v3_transactions import strict  # noqa: F401
 
 UID = 'synthetic'
+REAL_DECODE_ROW = store.decode_row
 RUN = 'run-live-1'
 AT = datetime(2026, 11, 19, 7, 50, tzinfo=timezone.utc)
 SINCE, UNTIL = AT - timedelta(hours=1), AT + timedelta(hours=2)
@@ -115,17 +117,18 @@ ONE_CHAPTER = reply({'first_line': 1, 'title': 'Lunch with the team', 'line': 'Y
 class RangeQuery:
     """The started_at range read the loader issues; the strict fixture models equality reads only."""
 
-    def __init__(self, database, coll_path, filters=()):
+    def __init__(self, database, coll_path, filters=(), read_limit=None):
         self.database, self.coll_path, self.filters = database, coll_path, filters
+        self.read_limit = read_limit
 
     def where(self, *, filter):
-        return RangeQuery(self.database, self.coll_path, (*self.filters, filter))
+        return RangeQuery(self.database, self.coll_path, (*self.filters, filter), self.read_limit)
 
     def order_by(self, *a, **kw):
         return self
 
     def limit(self, n):
-        return self
+        return RangeQuery(self.database, self.coll_path, self.filters, n)
 
     def stream(self):
         ops = {'>=': lambda a, b: a >= b, '<': lambda a, b: a < b}
@@ -136,10 +139,11 @@ class RangeQuery:
             if all(
                 row.get(f.field_path) is not None and ops[f.op_string](row[f.field_path], f.value) for f in self.filters
             ):
-                snapshot = StrictFirestoreSnapshot(row)
-                snapshot.reference = StrictFirestoreDocument(self.database, doc_path)
-                found.append(snapshot)
-        return iter(sorted(found, key=lambda s: s.to_dict()['started_at']))
+                found.append((doc_path, row))
+        for doc_path, row in sorted(found, key=lambda pair: pair[1]['started_at'])[: self.read_limit]:
+            snapshot = StrictFirestoreSnapshot(row)
+            snapshot.reference = StrictFirestoreDocument(self.database, doc_path)
+            yield snapshot
 
 
 @pytest.fixture
@@ -1582,13 +1586,30 @@ async def test_a_partition_over_the_transaction_write_cap_blocks(owner, strict, 
 
 
 @pytest.mark.asyncio
-async def test_partition_write_budget_includes_donor_markers(owner, strict, monkeypatch):
+@pytest.mark.parametrize('historical', [False, True])
+async def test_partition_write_budget_includes_donor_markers(owner, strict, monkeypatch, historical):
     sources, rows = lunch(count=3)
+    if historical:
+        monkeypatch.setenv('CONVERSATIONS_V3_SILENCE_GAP_SECONDS', '900')
+        monkeypatch.setenv('CONVERSATIONS_V3_LOCK_SECONDS', '3600')
+        monkeypatch.setenv('CONVERSATIONS_V3_STRETCH_COHESION', 'on')
+        for src in sources:
+            src['v3_speech_landed_at'] = src['finished_at']
     owner(*sources, *rows)
     before = conversations(strict)
     # Three sources, two donors and their markers, one lineage patch, one row and the lease.
     monkeypatch.setattr(store, 'BATCH_MAX_WRITES', 9)
-    outcome, report = await rederive()
+    report = {}
+    outcome = await service.reconcile(
+        UID,
+        derive=True,
+        live=True,
+        since=SINCE,
+        until=UNTIL,
+        run_id=RUN,
+        report=report,
+        historical_timing=[900, 3600] if historical else None,
+    )
     assert outcome == 'blocked' and report['blocked_reason'] == 'backfill_partition_budget'
     assert conversations(strict) == before and not priors(strict)
 
@@ -1719,6 +1740,83 @@ def test_undo_groups_restore_rows_sharing_a_source_together():
 
 
 # ---- dry-run and operator -----------------------------------------------------------------------
+
+
+def test_historical_352_document_stretch_loads_with_deleted_claim_closure(owner, strict, monkeypatch):
+    monkeypatch.setattr(store, 'decode_row', REAL_DECODE_ROW)
+    sources = [
+        source(f'r{i}', AT + timedelta(seconds=10 * i), seconds=8, v3_speech_landed_at=AT + timedelta(hours=1))
+        for i in range(176)
+    ]
+    # A sizable but synthetic owned snapshot with deliberately retained deleted claimants.
+    rows = [fragment(f'c{i}', src, deleted=i < 12, synthetic_padding='x' * 87_000) for i, src in enumerate(sources)]
+    outside = fragment('outside', sources[0], started_at=SINCE - timedelta(seconds=1), deleted=True)
+    document_set = sources + rows
+    assert 14 * 1024 * 1024 < sum(rederive_store.stored_bytes(row) for row in document_set) < 16 * 1024 * 1024
+    owner(*document_set, outside)
+    [partition] = backfill.plan_partitions(document_set, SINCE, UNTIL, historical_sitdown=True)
+    assert partition['documents'] == 352 and not partition['forced_cut']
+
+    args = {'since': SINCE, 'until': UNTIL, 'run_id': RUN}
+    with pytest.raises(Conflict, match='rederive_live_range_overflow'):
+        rederive_store.load_live_rederive(UID, **args)
+    recordings, existing, _, counts = rederive_store.load_live_rederive(UID, historical_sitdown=True, **args)
+    assert len(recordings) == 176 and len(existing) == 177
+    assert counts['protected_deleted'] == 13 and existing['outside']['_v3_protected'] == 'deleted'
+    assert any(claim['conversation_id'] == 'outside' for claim in recordings['r0']['claims'])
+    del recordings, existing
+    estimate = backfill.estimate_live_partition(
+        UID, partition, RUN, historical_sitdown=True, now=AT + timedelta(hours=2)
+    )
+    assert estimate['stretches'] == 1 and estimate['protected_deleted'] == 13
+    assert estimate['partitions_estimated_over_write_budget'] == 1
+    assert not strict.transactions
+
+
+def test_historical_planner_and_loader_have_separate_hard_limits(owner, strict):
+    docs = [source(f'r{i}', AT) for i in range(401)]
+    with pytest.raises(Conflict, match='rederive_live_boundary'):
+        backfill.plan_partitions(docs[:385], SINCE, UNTIL, historical_sitdown=True)
+    assert [part['documents'] for part in backfill.plan_partitions(docs[:49], SINCE, UNTIL)] == [1, 48]
+    owner(*docs)
+    with pytest.raises(Conflict, match='rederive_live_range_overflow'):
+        rederive_store.load_live_rederive(UID, since=SINCE, until=UNTIL, run_id=RUN, historical_sitdown=True)
+
+
+@pytest.mark.parametrize('claimant', [False, True], ids=['source-closure', 'claimant-closure'])
+def test_historical_closure_counts_missing_reads_before_batchget(owner, strict, monkeypatch, claimant):
+    src = source('r', AT)
+    row = fragment('c', src)
+    if claimant:
+        src['claims'] += [{'conversation_id': 'missing'}]
+    else:
+        row['v3_recording_ids'].append('missing')
+    owner(src, row)
+    monkeypatch.setattr(rederive_store, 'HISTORICAL_CLOSURE_READS', 2)
+    monkeypatch.setattr(strict, 'get_all', lambda refs: pytest.fail('Over-budget closure must not issue reads'))
+    with pytest.raises(Conflict, match='rederive_live_closure_overflow'):
+        rederive_store.load_live_rederive(UID, since=SINCE, until=UNTIL, run_id=RUN, historical_sitdown=True)
+
+
+@pytest.mark.parametrize('overflow', ['stored', 'decoded', 'hydrated'])
+def test_historical_loader_fails_closed_at_byte_ceiling(owner, strict, monkeypatch, overflow):
+    src = source('r', AT)
+    if overflow == 'stored':
+        src['padding'] = 'x' * 4096
+    elif overflow == 'decoded':
+        segments = [{'text': 'x' * 4096, 'start': 0, 'end': 1}]
+        src['transcript_segments'] = zlib.compress(json.dumps(segments).encode())
+        src['transcript_segments_compressed'] = True
+        monkeypatch.setattr(store, 'decode_row', REAL_DECODE_ROW)
+    else:
+        decode = store.decode_row
+        monkeypatch.setattr(store, 'decode_row', lambda *args: {**decode(*args), 'padding': 'x' * 4096})
+    owner(src)
+    monkeypatch.setattr(rederive_store, 'HISTORICAL_PAYLOAD_BYTES', 2048)
+    reason = 'stored' if overflow == 'stored' else 'decoded'
+    with pytest.raises(Conflict, match=f'rederive_live_{reason}_bytes'):
+        rederive_store.load_live_rederive(UID, since=SINCE, until=UNTIL, run_id=RUN, historical_sitdown=True)
+    assert not strict.transactions
 
 
 def test_historical_partition_refuses_a_short_silence_gap():

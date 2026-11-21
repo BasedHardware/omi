@@ -78,6 +78,7 @@ def entries():
         DriverEntry(
             'database.conversations_v3_rederive.load_live_rederive',
             base={'uid': SHAPE_UID, 'since': FROZEN_NOW, 'until': FROZEN_LATER, 'run_id': 'shape-run'},
+            domains={'historical_sitdown': [False, True]},
         ),
         DriverEntry(
             'database.conversations_v3.backfill_window_metadata',

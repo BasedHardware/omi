@@ -16,7 +16,7 @@ from google.cloud.firestore_v1 import FieldFilter
 
 from database._client import get_firestore_client
 from database.transcript_pointer import TranscriptBlobAbsent, TranscriptShredded
-from database import conversations, conversations_v3_leases as leases
+from database import conversation_decode_budget, conversations, conversations_v3_leases as leases
 from database.conversations_v3_undo_removals import removal_ref
 from database.home_feed_fields import COMMIT_STAMPED_FIELDS
 from database.account_deletion_marker import account_deletion_blocks_user_work, account_deletion_document
@@ -88,9 +88,19 @@ def decode_row(uid, snapshot) -> dict[str, Any] | None:
     if not snapshot.exists:
         return None
     data.setdefault('id', snapshot.id)
-    segments = conversations.decode_transcript_segments_verified(
-        uid, data.get('transcript_segments') or [], bool(data.get('transcript_segments_compressed'))
-    )
+    if conversation_decode_budget.remaining_bytes() is not None:
+        # Supply the verified decoded list to hydration so it cannot expand the payload a second time.
+        data['transcript_segments'] = conversations.decode_transcript_segments_blob(
+            uid,
+            data.get('transcript_segments') or [],
+            bool(data.get('transcript_segments_compressed')),
+            require_decryption=True,
+        )
+        segments = data['transcript_segments']
+    else:
+        segments = conversations.decode_transcript_segments_verified(
+            uid, data.get('transcript_segments') or [], bool(data.get('transcript_segments_compressed'))
+        )
     data = conversations.prepare_conversation_for_read(data, uid)
     if data is None:
         raise Conflict('recording_decode_unavailable')

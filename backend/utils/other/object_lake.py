@@ -77,6 +77,10 @@ class LakeObjectCorrupt(ObjectLakeError):
     """Envelope, authentication or plaintext digest verification failed."""
 
 
+class LakeObjectBudgetExceeded(ObjectLakeError):
+    """The caller's bounded read cannot accommodate the object."""
+
+
 class LakeObjectConflict(ObjectLakeError):
     """A create-only name already has incompatible metadata."""
 
@@ -688,7 +692,7 @@ def _check_put_authority(space_id, entity_id, blob, *, created, deadline, attemp
         raise
 
 
-def get_space_object(ref: LakeObjectRef) -> bytes:
+def get_space_object(ref: LakeObjectRef, *, max_plaintext_bytes: int | None = None) -> bytes:
     _, sid, data_class, _, digest = _parse_ref(ref)
     # Destroyed authority wins over missing blobs for retained stale pointers.
     try:
@@ -702,8 +706,20 @@ def get_space_object(ref: LakeObjectRef) -> bytes:
             raise LakeObjectCorrupt('Invalid lake key version') from None
         raise
     try:
+        limit = MAX_PLAINTEXT_BYTES[data_class]
+        if max_plaintext_bytes is not None:
+            limit = min(limit, max_plaintext_bytes)
+            # Allow compression/envelope overhead but reject oversized pointers before fetching.
+            if ref.bytes > limit + 65536:
+                raise LakeObjectBudgetExceeded()
         try:
-            payload = _bucket_for(ref).blob(ref.key).download_as_bytes()
+            blob = _bucket_for(ref).blob(ref.key)
+            # One extra byte detects an envelope that disagrees with the pointer's advertised length.
+            payload = (
+                blob.download_as_bytes()
+                if max_plaintext_bytes is None
+                else blob.download_as_bytes(start=0, end=ref.bytes, raw_download=True)
+            )
         except ObjectLakeError:
             raise
         except NotFound:
@@ -730,9 +746,10 @@ def get_space_object(ref: LakeObjectRef) -> bytes:
             finally:
                 del dek
             decoder = zlib.decompressobj()
-            limit = MAX_PLAINTEXT_BYTES[data_class]
             plaintext = decoder.decompress(compressed, limit + 1)
             if len(plaintext) > limit or decoder.unconsumed_tail:
+                if max_plaintext_bytes is not None and limit < MAX_PLAINTEXT_BYTES[data_class]:
+                    raise LakeObjectBudgetExceeded()
                 raise LakeObjectCorrupt('Lake plaintext exceeds data-class limit')
             if not decoder.eof or decoder.unused_data or hashlib.sha256(plaintext).hexdigest() != digest:
                 raise LakeObjectCorrupt('Lake plaintext digest or compression mismatch')

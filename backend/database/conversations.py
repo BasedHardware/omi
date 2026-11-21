@@ -85,7 +85,7 @@ from utils.conversations.home_titles import (
 from utils.conversations import transcribing_hold
 from database.mcp_read_queries import MCP_CONVERSATION_CARD_FIELD_PATHS, MCP_CONVERSATION_TRANSCRIPT_FIELD_PATHS
 from database.quiet_check_retirement import restore_quiet_check_in_transaction, stop_quiet_check_for_conversation
-from database import transcript_pointer
+from database import conversation_decode_budget, transcript_pointer
 from utils.home_feed.projection import DISPLAY_FIELDS, stamp as stamp_home_display
 from database.transcript_pointer import (
     TranscriptSegmentsDecodeError,
@@ -254,10 +254,10 @@ def _reveal_json_value(raw: Any, uid: str, compressed: bool) -> Any:
     if isinstance(raw, str):
         payload = verified_encrypted_read(raw, encryption.decrypt(raw, uid))
         if compressed:
-            return json.loads(zlib.decompress(bytes.fromhex(payload)).decode('utf-8'))
+            return json.loads(conversation_decode_budget.decompress(bytes.fromhex(payload)).decode('utf-8'))
         return json.loads(payload)
     if isinstance(raw, bytes) and compressed:
-        return json.loads(zlib.decompress(raw).decode('utf-8'))
+        return json.loads(conversation_decode_budget.decompress(raw).decode('utf-8'))
     raise ValueError(f'undecodable json blob: {type(raw).__name__} compressed={compressed}')
 
 
@@ -293,6 +293,8 @@ def _reveal_match_scores_for_read(data: Dict[str, Any], uid: str) -> None:
         return
     try:
         data[match_scores.FIELD] = match_scores.normalize(_reveal_json_value(data[match_scores.FIELD], uid, True))
+    except conversation_decode_budget.DecodeBudgetExceeded:
+        raise
     except Exception:
         if current_portability_read() is not None:
             raise

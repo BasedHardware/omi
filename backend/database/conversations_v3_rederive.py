@@ -15,6 +15,7 @@ from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
 from database import conversations_v3 as store
+from database.conversation_decode_budget import DecodeBudget, DecodeBudgetExceeded
 from database import conversations_v3_backfill_runs as runs
 from database import conversations_v3_leases as leases
 from database.account_deletion_marker import account_deletion_document
@@ -28,6 +29,10 @@ from utils.conversations.v3 import Conflict, policy
 
 # Documents (sources and rows) one partition's started_at read may return; more blocks the partition.
 REDERIVE_LIVE_LIMIT = 256
+HISTORICAL_PARTITION_ROWS = 384
+HISTORICAL_RANGE_LIMIT = 400
+HISTORICAL_CLOSURE_READS = 512
+HISTORICAL_PAYLOAD_BYTES = 16 * 1024 * 1024
 # A source whose stored document (by the same JSON estimate the projection's size log uses) is this
 # close to Firestore's 1 MiB document limit cannot take a claims update safely: its rows stay as they
 # are, and the dry-run reports it. CLAIM_BYTES is the estimate for one claim entry.
@@ -149,7 +154,7 @@ def _rederive_live_prior(row, raw):
     }
 
 
-def load_live_rederive(uid, *, since, until, run_id, firestore_client=None):
+def load_live_rederive(uid, *, since, until, run_id, historical_sitdown=False, firestore_client=None):
     """One live re-derive partition: sealed sources, their rows and every row their claims name.
 
     Returns (recordings, existing, cache, counts). ``existing`` holds eligible rows as open priors
@@ -160,23 +165,49 @@ def load_live_rederive(uid, *, since, until, run_id, firestore_client=None):
     if store.account_deletion_blocks_user_work(uid, firestore_client=client):
         raise Conflict('account_deletion')
     coll = store.user_conversations(client, uid)
-    snapshots = list(
+    range_limit = HISTORICAL_RANGE_LIMIT if historical_sitdown else REDERIVE_LIVE_LIMIT
+    snapshots = (
         coll.where(filter=FieldFilter('started_at', '>=', since))
         .where(filter=FieldFilter('started_at', '<', until))
         .order_by('started_at')
-        .limit(REDERIVE_LIVE_LIMIT + 1)
+        .limit(range_limit + 1)
         .stream()
     )
-    if len(snapshots) > REDERIVE_LIVE_LIMIT:
-        raise Conflict('rederive_live_range_overflow')
     counts = {'rows_eligible': 0, 'visible_before': 0}
 
     def count(name):
         counts[name] = counts.get(name, 0) + 1
 
-    raws, sources, rows = {}, {}, {}
-    for snapshot in snapshots:
+    reads = 0
+    raw_bytes = hydrated_bytes = 0
+    decode_budget = DecodeBudget(HISTORICAL_PAYLOAD_BYTES) if historical_sitdown else None
+
+    def unpack(snapshot):
+        nonlocal raw_bytes
         raw = snapshot.to_dict() or {}
+        if historical_sitdown:
+            raw_bytes += stored_bytes(raw)
+            if raw_bytes > HISTORICAL_PAYLOAD_BYTES:
+                raise Conflict('rederive_live_stored_bytes')
+        return raw
+
+    def decode(reader, snapshot):
+        nonlocal hydrated_bytes
+        if decode_budget is None:
+            return reader(uid, snapshot)
+        with decode_budget.activate():
+            result = reader(uid, snapshot)
+        if result is not None:
+            hydrated_bytes += stored_bytes(result)
+            if hydrated_bytes > HISTORICAL_PAYLOAD_BYTES:
+                raise DecodeBudgetExceeded()
+        return result
+
+    raws, sources, rows = {}, {}, {}
+    for reads, snapshot in enumerate(snapshots, 1):
+        if reads > range_limit:
+            raise Conflict('rederive_live_range_overflow')
+        raw = unpack(snapshot)
         raws[snapshot.id] = raw
         if raw.get('v3_derived') and not raw.get('recording'):
             rows[snapshot.id] = snapshot
@@ -184,15 +215,17 @@ def load_live_rederive(uid, *, since, until, run_id, firestore_client=None):
             sources[snapshot.id] = snapshot
 
     def read(ids):
+        nonlocal reads
+        if historical_sitdown and reads + len(ids) > HISTORICAL_CLOSURE_READS:
+            raise Conflict('rederive_live_closure_overflow')
+        reads += len(ids)  # Firestore also bills missing documents.
         ordered = sorted(ids)
-        found = {}
         for start in range(0, len(ordered), store.CLAIM_READ_CHUNK):
             for snapshot in client.get_all(
                 [coll.document(cid) for cid in ordered[start : start + store.CLAIM_READ_CHUNK]]
             ):
                 if snapshot.exists:
-                    found[snapshot.id] = snapshot
-        return found
+                    yield snapshot.id, snapshot, unpack(snapshot)
 
     # Sources every in-window row names, then every row any loaded source's claims name.
     def named_sources(raw):
@@ -203,8 +236,7 @@ def load_live_rederive(uid, *, since, until, run_id, firestore_client=None):
     wanted = set().union(*(named_sources(raws[cid]) for cid in rows)) - sources.keys() if rows else set()
     if len(sources) + len(wanted) > store.SOURCE_LIMIT:
         raise Conflict('v3_source_closure_budget')
-    for cid, snapshot in read(wanted).items():
-        raw = snapshot.to_dict() or {}
+    for cid, snapshot, raw in read(wanted):
         if raw.get('recording') and not raw.get('v3_derived'):
             raws[cid], sources[cid] = raw, snapshot
     claimed = {
@@ -215,8 +247,7 @@ def load_live_rederive(uid, *, since, until, run_id, firestore_client=None):
     } - rows.keys()
     if len(rows) + len(claimed) > store.DERIVED_LIMIT:
         raise Conflict('v3_derived_budget')
-    for cid, snapshot in read(claimed).items():
-        raw = snapshot.to_dict() or {}
+    for cid, snapshot, raw in read(claimed):
         if raw.get('v3_derived') and not raw.get('recording'):
             raws[cid], rows[cid] = raw, snapshot
 
@@ -224,7 +255,10 @@ def load_live_rederive(uid, *, since, until, run_id, firestore_client=None):
     recordings, blocked = {}, set()
     for rid, snapshot in sources.items():
         reason = live_source_block(raws[rid])
-        row = None if reason else store.recording_input(uid, snapshot)
+        try:
+            row = None if reason else decode(store.recording_input, snapshot)
+        except DecodeBudgetExceeded:
+            raise Conflict('rederive_live_decoded_bytes') from None
         if not reason and (row is None or row.get('_v3_unreadable')):
             reason = 'unreadable'
         if reason or row is None:
@@ -261,7 +295,9 @@ def load_live_rederive(uid, *, since, until, run_id, firestore_client=None):
             # Speech a row cannot be rebuilt from stays in that row.
             reason = 'source_missing'
         try:
-            row = store.decode_row(uid, snapshot)
+            row = decode(store.decode_row, snapshot)
+        except DecodeBudgetExceeded:
+            raise Conflict('rederive_live_decoded_bytes') from None
         except (ValueError, TypeError, FileNotFoundError, TranscriptBlobAbsent, TranscriptShredded, Conflict):
             row = None
         if row is None:

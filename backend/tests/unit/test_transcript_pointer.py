@@ -14,6 +14,7 @@ import pytest
 from cachetools import TTLCache
 
 from database import _client, conversations as conversations_db, transcript_pointer as pointer
+from database.conversation_decode_budget import DecodeBudget, DecodeBudgetExceeded
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestoreDocument
 from tests.unit.fixtures.lake_firestore import LakeFirestore as StrictFirestore
 from tests.unit.memory_import_isolation import make_database_client_stub
@@ -71,6 +72,19 @@ def lake_world(tmp_path, monkeypatch):
     yield SimpleNamespace(store=store, bucket=bucket, calls=calls)
     pointer.clear_memo()
     space_keys.clear_space_key_cache()
+
+
+def test_bounded_resolve_respects_remaining_bytes_even_with_a_warm_memo(lake_world):
+    doc = pointer_doc(lake_world)
+    ref = doc['transcript_segments']
+    segments = pointer.resolve_pointer(UID, ref)
+    assert segments == speech()
+    with DecodeBudget(1000).activate(), pytest.raises(DecodeBudgetExceeded):
+        pointer.resolve_pointer(UID, ref)
+    allowance = DecodeBudget(128 * 1024)
+    with allowance.activate():
+        assert pointer.resolve_pointer(UID, ref) == segments
+    assert 0 < allowance.remaining < 128 * 1024
 
 
 def encode(segments=None, level='standard'):

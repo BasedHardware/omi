@@ -82,6 +82,9 @@ BLOCKED = frozenset(
         'rederive_live_coverage',
         'rederive_live_donor_tasks',
         'rederive_live_range_overflow',
+        'rederive_live_closure_overflow',
+        'rederive_live_stored_bytes',
+        'rederive_live_decoded_bytes',
         'rederive_live_timing',
         'rederive_live_landing_unknown',
     }
@@ -265,7 +268,13 @@ async def reconcile(
             silence_seconds, lock_seconds = HISTORICAL_SITDOWN_TIMING
         if derive and live:
             recordings, existing, cached, skipped = await run_blocking(
-                db_executor, rederive_store.load_live_rederive, uid, since=since, until=until, run_id=run_id
+                db_executor,
+                rederive_store.load_live_rederive,
+                uid,
+                since=since,
+                until=until,
+                run_id=run_id,
+                historical_sitdown=historical_timing is not None,
             )
             report.update(skipped)
         elif derive:

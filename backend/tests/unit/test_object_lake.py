@@ -66,6 +66,23 @@ def test_empty_plaintext(storage):
     assert lake.get_space_object(put(b'')) == b''
 
 
+def test_bounded_read_limits_the_download_and_plaintext_expansion(storage):
+    plaintext = b'x' * 4096
+    ref = put(plaintext)
+    with patch.object(
+        LocalBlob, 'download_as_bytes', autospec=True, side_effect=LocalBlob.download_as_bytes
+    ) as download:
+        assert lake.get_space_object(ref, max_plaintext_bytes=len(plaintext)) == plaintext
+        download.assert_called_once()
+        assert download.call_args.kwargs == {'start': 0, 'end': ref.bytes, 'raw_download': True}
+    with pytest.raises(lake.LakeObjectBudgetExceeded):
+        lake.get_space_object(ref, max_plaintext_bytes=len(plaintext) - 1)
+    with patch.object(LocalBlob, 'download_as_bytes') as download:
+        with pytest.raises(lake.LakeObjectBudgetExceeded):
+            lake.get_space_object(replace(ref, bytes=65538), max_plaintext_bytes=1)
+        download.assert_not_called()
+
+
 def test_upload_intent_precedes_blob_and_survives_retries(storage, monkeypatch):
     bucket, store = storage
     upload = LocalBlob.upload_from_string
