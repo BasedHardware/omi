@@ -565,7 +565,7 @@ export async function fetchVendorBalanceHistory(
     [rows] = await bq.query({
       query: FINOPS_VENDOR_BALANCE_QUERY,
       params: { today: new BigQueryDate(today), days },
-      maximumBytesBilled: String(10 * 1024 * 1024),
+      maximumBytesBilled: String(20 * 1024 * 1024),
       jobTimeoutMs: 30_000,
     });
   } catch (error) {
