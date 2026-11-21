@@ -594,7 +594,7 @@ def direct(monkeypatch):
 async def test_drain_runs_live_notes_and_settles_each_row(direct, monkeypatch):
     rows = [{'id': 'ok'}, {'id': 'boom'}]
     pending = [rows, []]
-    monkeypatch.setattr(store, 'pending_backfill_processing', lambda uid: pending.pop(0))
+    monkeypatch.setattr(store, 'pending_backfill_processing', lambda uid, **_: (pending.pop(0), None))
     monkeypatch.setattr(leases, 'acquire', lambda *a: 'token')
     released = []
     monkeypatch.setattr(leases, 'release', lambda *a: released.append(a[1]))
@@ -620,21 +620,21 @@ async def test_drain_runs_live_notes_and_settles_each_row(direct, monkeypatch):
 @pytest.mark.asyncio
 @pytest.mark.parametrize('engine', ['go', 'pending', None])
 async def test_drain_reaches_python_notes_behind_saturated_foreign_page(direct, monkeypatch, engine):
-    first = [SimpleNamespace(id=f'prefix-{n:03d}') for n in range(128)]
-    tail = SimpleNamespace(id='tail')
-    pending = {doc.id for doc in first + [tail]}
     prefix_ownership = {'finalization_engine': engine, 'finalization_owner_epoch': 1} if engine else {}
+    first = [SimpleNamespace(id=f'prefix-{n:03d}', to_dict=lambda: prefix_ownership) for n in range(128)]
+    tail = SimpleNamespace(id='tail', to_dict=lambda: {})
+    pending = {doc.id for doc in first + [tail]}
     collection = Mock()
-    page = collection.where.return_value.limit.return_value
-    page.stream.side_effect = lambda: [doc for doc in first + [tail] if doc.id in pending][:128]
-    after = page.start_after.return_value
-    after.stream.side_effect = lambda: [tail] if tail.id in pending else []
+    query = collection.where.return_value
+    page = query.limit.return_value
+    page.stream.side_effect = lambda **_: [doc for doc in first + [tail] if doc.id in pending][:128]
+    seek = query.order_by.return_value.start_after
+    seek.return_value.limit.return_value.stream.side_effect = lambda **_: [tail] if tail.id in pending else []
 
     monkeypatch.setattr(store, 'get_firestore_client', lambda: object())
     monkeypatch.setattr(store, 'user_conversations', lambda *_: collection)
-    monkeypatch.setattr(
-        store, 'decode_row', lambda _, doc: {'id': doc.id, **(prefix_ownership if doc in first else {})}
-    )
+    decode = Mock(side_effect=lambda _, doc, *, data: {'id': doc.id, **data})
+    monkeypatch.setattr(store, 'decode_row', decode)
     monkeypatch.setattr(leases, 'acquire', lambda *args: 'token')
     monkeypatch.setattr(leases, 'release', lambda *args: None)
     process = AsyncMock()
@@ -650,13 +650,32 @@ async def test_drain_reaches_python_notes_behind_saturated_foreign_page(direct, 
         # The original full unmarked page still uses only the two existing scans.
         assert counts['processed'] == 128 and counts['remaining'] == 1
         assert page.stream.call_count == 2
-        page.start_after.assert_not_called()
+        query.order_by.assert_not_called()
     else:
         process.assert_awaited_once_with('u', {'id': 'tail'}, 'token')
         assert counts['processed'] == 1
         assert counts['remaining'] == counts['ownership_blocked'] == 128
-        assert page.start_after.call_args_list == [((first[-1],), {})] * 2
+        assert seek.call_args_list == [(({'__name__': collection.document.return_value},), {})] * 2
+        assert collection.document.call_args_list == [((first[-1].id,), {})] * 2
+        decode.assert_called_once_with('u', tail, data={})
         assert pending == {doc.id for doc in first}
+
+
+def test_expired_backfill_page_never_calls_firestore(monkeypatch):
+    client = Mock(side_effect=AssertionError('expired scan acquired a Firestore client'))
+    monkeypatch.setattr(store, 'get_firestore_client', client)
+    assert store.pending_backfill_processing('u', deadline=0) is None
+    client.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_expired_drain_leaves_scan_for_continuation(direct, monkeypatch):
+    read = Mock(side_effect=AssertionError('expired drain started a scan'))
+    monkeypatch.setattr(store, 'pending_backfill_processing', read)
+    counts = await service.drain_backfill('u', deadline=0, after='checkpoint')
+    assert counts['remaining'] == 1 and counts['scan_pending']
+    assert 'scan_after' not in counts  # Keep the durable cursor.
+    read.assert_not_called()
 
 
 class Ledger:
@@ -673,9 +692,12 @@ class Ledger:
     def get(self, uid, run_id):
         return deepcopy(self.run)
 
-    def update(self, uid, run_id, *, status=None, partition=None, patch=None, expect=None):
+    def update(self, uid, run_id, *, status=None, partition=None, patch=None, expect=None, expected_drain_seq=None):
         if expect is not None and self.run['status'] not in expect:
             return None
+        if expected_drain_seq is not None:
+            part = self.run['partitions'][partition[0]]
+            assert int(part.get('drain_seq') or 0) == expected_drain_seq
         if status:
             self.run['status'] = status
         if partition:
@@ -683,6 +705,21 @@ class Ledger:
             self.run['partitions'][index].update(fields)
         self.run.update(patch or {})
         return self.run
+
+
+def test_late_continuation_cannot_replace_a_newer_cursor(strict):
+    uid = 'synthetic'
+    path = ('users', uid, runs.COLLECTION, RUN)
+    part = {'status': 'notes', 'drain_seq': 2, 'notes_scan_after': 'new'}
+    strict.rows[path] = {'status': 'running', 'partitions': [dict(part)]}
+
+    assert (
+        runs.update_run(
+            uid, RUN, partition=(0, {'notes_scan_after': 'old'}), expected_drain_seq=1, firestore_client=strict
+        )
+        is None
+    )
+    assert strict.rows[path]['partitions'] == [part]
 
 
 @pytest.fixture
@@ -765,6 +802,66 @@ async def test_unfinished_notes_continue_on_a_new_named_drain_task(chain, monkey
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize('budget', ['pages', 'deadline'])
+async def test_backfill_resumes_its_persisted_cursor_after_scan_budget(direct, monkeypatch, budget):
+    uid = 'synthetic'
+    ledger = Ledger(1, status='running')
+    part = ledger.run['partitions'][0]
+    part['status'] = 'notes'
+    monkeypatch.setattr(runs, 'get_run', ledger.get)
+    monkeypatch.setattr(runs, 'update_run', ledger.update)
+    clock = [50.0]
+    monkeypatch.setattr(service, 'time', SimpleNamespace(monotonic=lambda: clock[0]))
+    monkeypatch.setattr(backfill, 'time', SimpleNamespace(monotonic=lambda: clock[0], time=lambda: 12345))
+    if budget == 'pages':
+        monkeypatch.setattr(service, 'BACKFILL_SCAN_MAX_PAGES', 1)
+    foreign = {'id': 'foreign', 'finalization_engine': 'go', 'finalization_owner_epoch': 1}
+    python = {'id': 'python'}
+    owes_python = True
+    reads = []
+
+    def read(_uid, *, after, deadline):
+        assert clock[0] < deadline
+        reads.append(after)
+        if after is None:
+            if budget == 'deadline':
+                clock[0] = deadline
+            return [foreign], 'foreign'
+        assert after == 'foreign'
+        return ([python] if owes_python else []), None
+
+    def settle(_uid, cid, **_):
+        nonlocal owes_python
+        assert cid == python['id']
+        owes_python = False
+        return 'settled'
+
+    monkeypatch.setattr(store, 'pending_backfill_processing', read)
+    monkeypatch.setattr(leases, 'acquire', lambda *args: 'token')
+    monkeypatch.setattr(leases, 'release', lambda *args: None)
+    monkeypatch.setattr(writers, 'settle_backfill_processing', settle)
+    process = AsyncMock()
+    monkeypatch.setattr(service, '_process_leased', process)
+    enqueue = Mock()
+    monkeypatch.setattr(backfill, 'enqueue_step', enqueue)
+
+    assert await backfill.run_step(uid, RUN, 0, 'drain') == {'outcome': 'draining', 'remaining': 1}
+    assert reads == [None]
+    assert part['notes_scan_after'] == 'foreign'
+    enqueue.assert_called_once_with(uid, RUN, 0, 'drain', 1, 0)
+    process.assert_not_awaited()
+
+    if budget == 'pages':
+        monkeypatch.setattr(service, 'BACKFILL_SCAN_MAX_PAGES', 2)
+    assert await backfill.run_step(uid, RUN, 0, 'drain') == {'outcome': 'draining', 'remaining': 1}
+    assert reads == [None, 'foreign', 'foreign']
+    assert part['notes_scan_after'] is None
+    assert part['status'] == 'notes' and part['notes_processed'] == 1
+    process.assert_awaited_once_with(uid, python, 'token')
+    assert enqueue.call_args.kwargs == {'schedule_at': 12345 + backfill.OWNERSHIP_RECHECK_SECONDS}
+
+
+@pytest.mark.asyncio
 async def test_foreign_notes_keep_partition_open_until_handback(direct, strict, monkeypatch):
     uid = 'synthetic'
     path = ('users', uid, 'conversations', 'c')
@@ -783,7 +880,10 @@ async def test_foreign_notes_keep_partition_open_until_handback(direct, strict, 
     monkeypatch.setattr(
         store,
         'pending_backfill_processing',
-        lambda _: [dict(strict.rows[path])] if strict.rows[path]['v3_backfill_process_pending'] else [],
+        lambda _, **_kwargs: (
+            [dict(strict.rows[path])] if strict.rows[path]['v3_backfill_process_pending'] else [],
+            None,
+        ),
     )
     process = AsyncMock()
     monkeypatch.setattr(service, '_process_leased', process)

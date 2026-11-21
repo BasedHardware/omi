@@ -21,6 +21,7 @@ import re
 import time
 from datetime import datetime, timedelta, timezone
 from functools import wraps
+from typing import Any
 from uuid import NAMESPACE_URL, uuid5
 
 from google.cloud.firestore_v1 import FieldFilter
@@ -1229,20 +1230,37 @@ async def sweep():
 
 BACKFILL_NOTES_CONCURRENCY = 4
 BACKFILL_NOTES_ATTEMPTS = 3
+BACKFILL_SCAN_MAX_PAGES = 8
 
 
-async def drain_backfill(uid, *, deadline, keep_going=None, concurrency=BACKFILL_NOTES_CONCURRENCY):
+async def drain_backfill(uid, *, deadline, after=None, keep_going=None, concurrency=BACKFILL_NOTES_CONCURRENCY):
     """Notes for backfilled rows, through the same _process as live, a few at a time until deadline.
 
     Returns counts; ``remaining`` > 0 asks the caller for a continuation task. ``keep_going`` is
     checked before each chunk so an undo stops new notes work.
     """
-    rows = [
-        row
-        for row in await run_blocking(db_executor, store.pending_backfill_processing, uid)
-        if row and python_owns_finalization(row)
-    ]
-    counts = {'processed': 0, 'failed': 0, 'retry': 0, 'busy': 0, 'remaining': 0}
+    counts: dict[str, Any] = {'processed': 0, 'failed': 0, 'retry': 0, 'busy': 0, 'remaining': 0}
+    pages_left = BACKFILL_SCAN_MAX_PAGES
+
+    async def scan(cursor):
+        nonlocal pages_left
+        foreign = 0
+        while pages_left and time.monotonic() < deadline:
+            pages_left -= 1
+            page = await run_blocking(
+                db_executor, store.pending_backfill_processing, uid, after=cursor, deadline=deadline
+            )
+            if page is None:
+                break
+            pending, next_cursor = page
+            rows = [row for row in pending if python_owns_finalization(row)]
+            foreign += len(pending) - len(rows)
+            if rows or not pending or next_cursor is None:
+                return rows, cursor, foreign, False
+            cursor = next_cursor
+        return [], cursor, foreign, True
+
+    rows, cursor, foreign, paused = await scan(after)
 
     async def one(row):
         token = await run_blocking(db_executor, leases.acquire, uid, 'summary-' + row['id'])
@@ -1273,10 +1291,21 @@ async def drain_backfill(uid, *, deadline, keep_going=None, concurrency=BACKFILL
         if time.monotonic() >= deadline or (keep_going is not None and not await keep_going()):
             break
         await asyncio.gather(*(one(row) for row in rows[start : start + concurrency]))
-    left = await run_blocking(db_executor, store.pending_backfill_processing, uid)
-    remaining = [row for row in left if row]
-    counts['remaining'] = len(remaining)
-    counts['ownership_blocked'] = sum(not python_owns_finalization(row) for row in remaining)
+    if rows:
+        pending, tail_cursor, tail_foreign, paused = await scan(cursor)
+        # Earlier skipped rows still owe notes. A rescan of the actionable
+        # page may see the same foreign rows, so combine counts conservatively.
+        foreign = max(foreign, tail_foreign) if cursor != after else tail_foreign
+        rows, cursor = pending, tail_cursor
+    # A suffix scan cannot certify that the skipped prefix is empty. At the
+    # end of the suffix, wrap to the head on the delayed continuation.
+    foreign = max(foreign, int(cursor is not None))
+    counts['remaining'] = max(len(rows) + foreign, int(paused))
+    counts['ownership_blocked'] = foreign
+    counts['scan_pending'] = paused
+    next_cursor = cursor if paused or rows else None
+    if next_cursor != after:
+        counts['scan_after'] = next_cursor
     return counts
 
 
