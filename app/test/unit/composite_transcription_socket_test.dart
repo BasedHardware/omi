@@ -21,6 +21,51 @@ void main() {
     Env.init(_TestEnvFields());
   });
 
+  group('CompositeTranscriptionSocket provider control messages', () {
+    setUp(() async {
+      SharedPreferences.setMockInitialValues({});
+      await SharedPreferencesUtil.init();
+    });
+
+    test('a Custom live service gets the control message and Omi never does', () async {
+      final primary = _FakeControlSocket();
+      final secondary = _FakeSocket();
+      final socket = CompositeTranscriptionSocket(
+          primarySocket: primary, secondarySocket: secondary, sttProvider: SttProvider.customLive.name);
+      await socket.connect();
+
+      expect(socket.sendProviderControl({'type': 'ButtonEvent', 'state': 1}), isTrue);
+
+      expect(primary.controls, [
+        {'type': 'ButtonEvent', 'state': 1}
+      ]);
+      expect(primary.sent, isEmpty);
+      expect(secondary.sent, isEmpty);
+    });
+
+    test('built-in streaming providers never get control messages', () async {
+      for (final provider in [SttProvider.deepgramLive.name, SttProvider.geminiLive.name, null]) {
+        final primary = _FakeControlSocket();
+        final socket =
+            CompositeTranscriptionSocket(primarySocket: primary, secondarySocket: _FakeSocket(), sttProvider: provider);
+        await socket.connect();
+
+        expect(socket.sendProviderControl({'type': 'ButtonEvent', 'state': 2}), isFalse, reason: '$provider');
+        expect(primary.controls, isEmpty, reason: '$provider');
+      }
+    });
+
+    test('a primary socket without control support is left alone', () async {
+      final primary = _FakeSocket();
+      final socket = CompositeTranscriptionSocket(
+          primarySocket: primary, secondarySocket: _FakeSocket(), sttProvider: SttProvider.customLive.name);
+      await socket.connect();
+
+      expect(socket.sendProviderControl({'type': 'ButtonEvent', 'state': 1}), isFalse);
+      expect(primary.sent, isEmpty);
+    });
+  });
+
   group('CompositeTranscriptionSocket raw audio forwarding', () {
     setUp(() async {
       SharedPreferences.setMockInitialValues({});
@@ -564,6 +609,16 @@ class _TestEnvFields implements EnvFields {
 
   @override
   bool? get useWebAuth => false;
+}
+
+class _FakeControlSocket extends _FakeSocket implements ProviderControlSocket {
+  final List<Map<String, dynamic>> controls = [];
+
+  @override
+  bool sendControl(Map<String, dynamic> message) {
+    controls.add(message);
+    return true;
+  }
 }
 
 class _FakeSocket implements IPureSocket {
