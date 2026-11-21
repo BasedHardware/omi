@@ -30,7 +30,7 @@ Note: Open "firmware" folder in your code editor. Don't open the root omi folder
     - [x] BLE
     - [x] Buttons
     - [x] LEDs
-    - [ ] Wi-Fi (nRF7002 populated; not enabled in current firmware)
+    - [ ] Wi-Fi (nRF7002 populated; bring-up config enabled in firmware, pending hardware validation/provisioning and end-to-end integration)
     - [x] Motors
     - [x] SPI NOR flash (OTA staging)
     - [ ] IMU
