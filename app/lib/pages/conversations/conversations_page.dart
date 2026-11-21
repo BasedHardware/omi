@@ -434,6 +434,8 @@ class _ConversationsPageState extends State<ConversationsPage>
             _v3Quick = null;
             return;
           }
+          // Covered by another page (the live page re-reads for itself): skip, as the 15 s read does.
+          if (ModalRoute.of(context)?.isCurrent == false) return;
           unawaited(v3.refresh());
         });
       }
@@ -924,7 +926,12 @@ class _ConversationsPageState extends State<ConversationsPage>
             !SharedPreferencesUtil().isConversationDeleteConfirmed(v3Live.id);
         // A deleted or discarded live window shows nothing (the owner removed it); only a window Home
         // hides (still below the word minimum, say) is stood in for by the placeholder.
-        final livePlaceholder = v3Home && streaming && (v3Live == null || v3Live.v3?.homeHidden == true) && !callActive;
+        final liveRemoved = v3Live != null &&
+            (v3Live.discarded ||
+                convoProvider.memoriesToDelete.containsKey(v3Live.id) ||
+                SharedPreferencesUtil().isConversationDeleteConfirmed(v3Live.id));
+        final livePlaceholder =
+            v3Home && streaming && (v3Live == null || v3Live.v3?.homeHidden == true) && !liveRemoved && !callActive;
         if (v3Home) {
           final waiting = streaming && v3Live == null;
           final signature =
@@ -1340,7 +1347,8 @@ class _ConversationsPageState extends State<ConversationsPage>
                   hasScrollBody: false,
                   child: Center(child: ConversationApiStatus(provider: convoProvider)),
                 )
-              else if (_nonDiscardedConversationCount(convoProvider) == 0 &&
+              else if (!livePlaceholder &&
+                  _nonDiscardedConversationCount(convoProvider) == 0 &&
                   conversationsByDate.values.every((list) => list.isEmpty) &&
                   !hasProcessingConversations &&
                   !hasRecordings &&
@@ -1361,7 +1369,8 @@ class _ConversationsPageState extends State<ConversationsPage>
                     ),
                   ),
                 )
-              else if (conversationsByDate.values.every((list) => list.isEmpty) &&
+              else if (!livePlaceholder &&
+                  conversationsByDate.values.every((list) => list.isEmpty) &&
                   !hasRecordings &&
                   !hasProcessingConversations &&
                   !isShowingConversationSkeleton)

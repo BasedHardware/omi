@@ -35,4 +35,12 @@ void main() {
   test('no server title seen yet (page not initialised) leaves the field alone', () {
     expect(follow(previous: null), isNull);
   });
+
+  test('leaving an untouched field after a server rename saves nothing (the stale text is not edited)', () {
+    // The field showed "" when it was focused; the server named it meanwhile; blur sends "".
+    expect(titleEditedByOwner(text: '', shownServerTitle: ''), isFalse);
+    expect(titleEditedByOwner(text: 'Old ', shownServerTitle: 'Old'), isFalse);
+    expect(titleEditedByOwner(text: 'Mine', shownServerTitle: 'Old'), isTrue);
+    expect(titleEditedByOwner(text: 'Mine', shownServerTitle: null), isTrue);
+  });
 }

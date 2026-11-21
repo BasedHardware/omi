@@ -42,6 +42,7 @@ import 'package:omi/pages/conversations/widgets/conversation_list_item.dart';
 import 'package:omi/pages/conversations/widgets/processing_capture.dart';
 import 'package:omi/pages/conversation_detail/widgets.dart' show ConversationTitleField;
 import 'package:omi/pages/conversations/widgets/date_list_item.dart';
+import 'package:omi/pages/conversations/widgets/empty_conversations.dart';
 import 'package:omi/pages/conversations/widgets/v3_live_placeholder_row.dart';
 import 'package:omi/pages/conversations/widgets/conversation_state_tile.dart';
 import 'package:omi/pages/conversations/widgets/day_summary_link.dart';
@@ -604,6 +605,8 @@ void main() {
       expect(headers.map((h) => h.date), [DateTime(_now.year, _now.month, _now.day)], reason: 'one header: Today');
       final today = tester.getRect(find.byType(DateListItem));
       expect(tester.getRect(find.byType(V3LivePlaceholderRow)).top, greaterThanOrEqualTo(today.bottom));
+      expect(find.byType(NoConversationsHero), findsNothing, reason: 'something is being captured: not a new account');
+      expect(find.byType(EmptyConversationsWidget), findsNothing);
       await _dispose(tester, home);
     });
   });
@@ -627,6 +630,13 @@ void main() {
       await tester.pump();
       expect(find.byKey(const ValueKey('live-1')), findsNothing);
       expect(find.byType(V3LivePlaceholderRow), findsNothing, reason: 'the owner deleted it: nothing stands in');
+
+      // Deleted and hidden at once: still nothing.
+      home.liveHidden = true;
+      await home.conversationsV3.refresh();
+      await tester.pump();
+      await tester.pump();
+      expect(find.byType(V3LivePlaceholderRow), findsNothing, reason: 'a deleted window stays gone when hidden');
       await _dispose(tester, home);
     });
   });

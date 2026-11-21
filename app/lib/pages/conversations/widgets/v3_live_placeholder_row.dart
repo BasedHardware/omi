@@ -38,6 +38,8 @@ class V3LivePlaceholderRow extends StatelessWidget {
         capture.localPreviewAdmitted,
         capture.livePreview,
         capture.recordingDevice,
+        // Load-bearing though discarded below: canShowPreview reads segments and photos without
+        // subscribing, so this version is what rebuilds the row when final text or photos arrive.
         capture.segmentsPhotosVersion,
       ),
     );
