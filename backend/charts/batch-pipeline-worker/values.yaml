@@ -1,6 +1,7 @@
 # Rendering defaults creates no resources. Enabling this release only drains
 # durable admitted work; the lead separately controls backend admission cohorts.
 enabled: false
+audioDerivedBucket: ""
 # Part A only. All repair children inherit a stable release epoch; 0 is
 # dormant while off. The release owner pins the epoch with the shadow flip,
 # then retains it across restarts and later ramp steps.
@@ -35,6 +36,9 @@ replicaCount: 1
 # replacement still keeps its node).
 rollout:
   maxUnavailable: 50%
+  # Read-only carrier render. Use helm template --dry-run=server --show-only
+  # templates/primary-only-preview.yaml against the three existing Deployments.
+  primaryOnlyPreview: false
 # Operator-managed L4 (g2-standard-8) pool; never share the live diarizer pool.
 nodeSelector:
   cloud.google.com/gke-nodepool: batch-pipeline-pool
@@ -80,6 +84,8 @@ worker:
   admissionParallelCalls: true
   idlePollMaxSeconds: 10
   firestoreReadLevers: '{}'
+  uidAllowlist:
+    value: ""
   # Fenced per-shard pulls and worker affinity; false restores legacy selection.
   shardSpreadEnabled: true
   # One shard transaction leases up to the pull batch; false leases one per transaction.
@@ -252,7 +258,9 @@ recordSealRepair:
   suspend: true
   runtimeEnabled: true
   jobsDiscovery: "on"
-  # Shared by repair, CPU seal worker and every GPU Deployment variant.
+  # Used by the repair CronJob and by the CPU seal worker and GPU variants
+  # when their live fresh-repair binding is not being preserved.
+  # The production depth-only overlay preserves that binding or its absence.
   # Serving hosts also need the matching runtime-env/listen overlay switch.
   freshEnabled: true
   # Forbid still prevents overlap; minute ticks bound restart gaps after a 25m run.

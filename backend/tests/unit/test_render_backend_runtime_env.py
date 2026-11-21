@@ -1632,6 +1632,10 @@ def test_post_seal_switches_reach_rendered_pods_and_can_be_disabled(environment,
         containers = deployment['spec']['template']['spec']['containers']
         env = {e['name']: e.get('value') for c in containers for e in c.get('env', [])}
         if chart == 'batch-pipeline-worker':
+            if environment == 'prod' and mode == 'staged':
+                # Preserve the live omission and let the runtime default stay off.
+                assert not (set(flags) & env.keys())
+                continue
             assert set(flags) & env.keys() == {'RECORD_FRESH_MERGE_ENABLED'}
             assert env['RECORD_FRESH_MERGE_ENABLED'] == ('true' if mode == 'qualified' else 'false')
             continue

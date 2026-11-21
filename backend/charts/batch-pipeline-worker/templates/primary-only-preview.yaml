@@ -1,0 +1,53 @@
+{{- if (.Values.rollout | default dict).primaryOnlyPreview }}
+{{- if or (not .Values.enabled) (ne .Values.stage "prod") (ne .Release.Namespace "prod-omi-backend") (ne .Release.Name "prod-omi-batch-pipeline-worker") }}
+{{- fail "primary-only preview requires the production batch worker release" }}
+{{- end }}
+{{- if .Release.IsUpgrade }}
+{{- fail "primary-only preview is for helm template; apply only the reviewed primary CAS patch" }}
+{{- end }}
+{{- if not (regexMatch "^sha256:[0-9a-f]{64}$" .Values.image.digest) }}
+{{- fail "primary-only preview requires a qualified image.digest" }}
+{{- end }}
+{{- $depth := toString .Values.worker.pipelineDepth }}
+{{- if not (has $depth (list "3" "4")) }}
+{{- fail "primary-only preview requires worker.pipelineDepth 3 or 4" }}
+{{- end }}
+{{- $primary := .Release.Name }}
+{{- range $name := list $primary (printf "%s-t4" $primary) "record-seal-worker" }}
+{{- $current := lookup "apps/v1" "Deployment" $.Release.Namespace $name }}
+{{- if not $current }}
+{{- fail (printf "primary-only preview requires the existing Deployment %s" $name) }}
+{{- end }}
+{{- $spec := deepCopy $current.spec }}
+{{- if eq $name $primary }}
+  {{- $workers := 0 }}
+  {{- $depthEntries := 0 }}
+  {{- range $container := $spec.template.spec.containers }}
+    {{- if eq $container.name "worker" }}
+      {{- $workers = add1 $workers }}
+      {{- $_ := set $container "image" (printf "%s@%s" (required "image.repository required" $.Values.image.repository) $.Values.image.digest) }}
+      {{- range $env := $container.env }}
+        {{- if eq $env.name "BATCH_PIPELINE_WORKER_PIPELINE_DEPTH" }}
+          {{- if or $env.valueFrom (not (has $env.value (list "3" "4"))) }}
+            {{- fail "primary-only preview requires the live worker depth to be literal 3 or 4" }}
+          {{- end }}
+          {{- $depthEntries = add1 $depthEntries }}
+          {{- $_ := set $env "value" $depth }}
+        {{- end }}
+      {{- end }}
+    {{- end }}
+  {{- end }}
+  {{- if or (ne $workers 1) (ne $depthEntries 1) }}
+    {{- fail "primary-only preview requires exactly one worker container and one depth entry" }}
+  {{- end }}
+{{- end }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $name }}
+  namespace: {{ $.Release.Namespace }}
+spec:
+  {{- toYaml $spec | nindent 2 }}
+{{- end }}
+{{- end }}
