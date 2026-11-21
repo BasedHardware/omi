@@ -9,9 +9,11 @@ conversation once. Correctness/observability switch, not a margin lever.
 
 """
 
-from config.refactor_switches import default_off as rollout_default_off
-
+import hashlib
+import math
 import os
+
+from config.refactor_switches import default_off as rollout_default_off
 
 
 def playback_on_demand() -> bool:
@@ -20,7 +22,21 @@ def playback_on_demand() -> bool:
     )
 
 
-def poll_backoff() -> bool:
-    return rollout_default_off(
+def poll_backoff(uid: str | None = None) -> bool:
+    """Serve poll hints to a stable UID cohort while retaining the global kill switch."""
+    if not rollout_default_off(
         'SYNC_POLL_BACKOFF_ENABLED', os.getenv('SYNC_POLL_BACKOFF_ENABLED', 'false').strip().lower() == 'true'
-    )
+    ):
+        return False
+    try:
+        percent = float(os.getenv('SYNC_POLL_BACKOFF_PERCENT', '100') or 0)
+    except ValueError:
+        return False
+    if not math.isfinite(percent) or not 0 <= percent <= 100 or percent == 0:
+        return False
+    if percent == 100:
+        return True
+    if not uid:
+        return False
+    bucket = int.from_bytes(hashlib.sha256(f'sync-poll-backoff:{uid}'.encode()).digest()[:4], 'big') / 2**32 * 100
+    return bucket < percent
