@@ -823,10 +823,14 @@ def run(document_id: str, task_token: str, process: Callable[[str, str, str], An
     if process_context and process_context.get('redirect_to'):
         from utils.enrichment.custody import transfer_redirect
 
-        pending = transfer_redirect(document_id, task_token, owner, process_context['redirect_to'], now=current)
-        if pending is not None:
-            _enqueue(pending)  # Transactional custody survives a lost enqueue acknowledgement.
-        return 'redirected'
+        try:
+            pending = transfer_redirect(document_id, task_token, owner, process_context['redirect_to'], now=current)
+        except processing_hold.ProcessingDeferred as error:
+            process_context = {'defer_reason': error.reason, 'defer_until': error.available_at}
+        else:
+            if pending is not None:
+                _enqueue(pending)  # Transactional custody survives a lost enqueue acknowledgement.
+            return 'redirected'
 
     if process_context and process_context.get('defer_reason'):
 

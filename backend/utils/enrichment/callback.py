@@ -61,8 +61,12 @@ _LINEAGE_RETRY_LANGUAGE = '__stored_conversation_language__'
 @observe_sync_failures
 def enrich_conversation(uid: str, conversation_id: str, language: str, *, user_selected: bool = False):
     """Reassess relevance and regenerate notes after sync appends."""
+    from models.finalization_owner import REFUSAL as FINALIZATION_OWNER_REFUSAL, python_owns_finalization
+
     conversation_data = conversations_db.get_conversation(uid, conversation_id)
     context = PROCESS_CONTEXT.get()
+    if conversation_data is not None and not python_owns_finalization(conversation_data):
+        raise processing_hold.finalization_owner_deferral()
     if conversation_data and conversation_data.get('deleted') and conversation_data.get('sync_merged_into'):
         if context is not None:
             try:
@@ -83,6 +87,8 @@ def enrich_conversation(uid: str, conversation_id: str, language: str, *, user_s
             return sync_result('deferred')
         conversation_data = conversations_db.get_sync_redirected_conversation(uid, conversation_id)
         if conversation_data:
+            if not python_owns_finalization(conversation_data):
+                raise processing_hold.finalization_owner_deferral()
             conversation_id = conversation_data['id']
     if not conversation_data or conversation_data.get('deleted'):
         if context is not None:
@@ -97,6 +103,8 @@ def enrich_conversation(uid: str, conversation_id: str, language: str, *, user_s
         conversation_id, conversation_data = bridge.resume_pending(uid, conversation_id, conversation_data, context)
         if conversation_data is None:
             return sync_result('deferred')
+        if not python_owns_finalization(conversation_data):
+            raise processing_hold.finalization_owner_deferral()
 
     if repair_fenced(conversation_data):
         raise SummaryRepairSuperseded(
@@ -164,6 +172,8 @@ def enrich_conversation(uid: str, conversation_id: str, language: str, *, user_s
                 sync_intake_decision(rule),
                 expected_sync_content_revision=conversation_data.get('sync_content_revision'),
             )
+            if outcome == FINALIZATION_OWNER_REFUSAL:
+                raise processing_hold.finalization_owner_deferral()
             if outcome == 'discarded':
                 record_conversation_relevance(trigger='sync_intake', verdict='discard', decided_by='rule', reason=rule)
             if outcome in ('discarded', 'already_discarded'):
@@ -250,6 +260,8 @@ def enrich_conversation(uid: str, conversation_id: str, language: str, *, user_s
             context['redirect_to'] = absorbed.canonical_id
             return sync_result('deferred')
         canonical = conversations_db.get_sync_redirected_conversation(uid, conversation_id)
+        if canonical is not None and not python_owns_finalization(canonical):
+            raise processing_hold.finalization_owner_deferral()
         return sync_result('deferred', deserialize_conversation(canonical) if canonical else None)
 
     if context is not None and context.get('hold_budget_denied_at_max'):

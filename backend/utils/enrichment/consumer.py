@@ -271,7 +271,9 @@ class EnrichmentConsumer:
                     if output is not None and not summary_seen and not discarded and not blocked:
                         raise summary_delivery.SummaryOutputUnavailable('first-summary output is empty')
         except processing_hold.ProcessingDeferred as error:
-            return Result(Outcome.DEFERRED, ConsumerReason.NOT_DUE, available_at=error.available_at)
+            return Result(
+                Outcome.DEFERRED, ConsumerReason.NOT_DUE, available_at=error.available_at, defer_cause=error.reason
+            )
         except rows.FirstSummaryCallbackPending as error:
             return _callback_pending(_cause(error), now)
         except HTTPException as error:
@@ -343,6 +345,10 @@ class EnrichmentConsumer:
             try:
                 pending = transfer_redirect(
                     claim.row_id, claim.wake_token, claim.lease_token, str(context['redirect_to']), now=now
+                )
+            except processing_hold.ProcessingDeferred as error:
+                return Result(
+                    Outcome.DEFERRED, ConsumerReason.NOT_DUE, available_at=error.available_at, defer_cause=error.reason
                 )
             except rows.FirstSummaryCallbackPending as error:
                 return _callback_pending('redirect_' + _cause(error), now)

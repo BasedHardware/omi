@@ -8,7 +8,9 @@ from google.cloud import firestore
 from config.record_latency import record_notes_eager_enabled
 from database.record_notes_hold import merge_producers
 from database.batch_pipeline_privacy import BatchPrivacyBlocked, BatchPrivacyReason, assert_batch_write_allowed
+from models.finalization_owner import python_owns_finalization
 from utils.conversations.summary_delivery import EMPTY_BLOCKED_REASONS
+from utils.sync import processing_hold
 
 
 def discard_blocked(document_id: str) -> bool:
@@ -99,6 +101,8 @@ def transfer_redirect(document_id: str, token: str, owner: str, canonical: str, 
             current = data.get('sync_merged_into')
         if current != canonical or current == donor['conversation_id'] or not data:
             raise reprocess.FirstSummaryCallbackPending('redirect target changed')
+        if not python_owns_finalization(data):
+            raise processing_hold.finalization_owner_deferral()
         target_id = reprocess.key(donor['uid'], canonical)
         target = client.collection(reprocess.COLLECTION).document(target_id)
         previous = target.get(transaction=transaction).to_dict() or {}

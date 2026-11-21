@@ -1098,10 +1098,9 @@ def test_python_sync_refuses_foreign_finalization_before_processing(pipeline, mo
     context = {} if claimed else None
     token = pipeline.PROCESS_CONTEXT.set(context)
     try:
-        pipeline._reprocess_conversation_after_update('u', 'c', 'en')
+        with pytest.raises(pipeline.processing_hold.ProcessingDeferred, match='finalization_owned_elsewhere'):
+            pipeline._reprocess_conversation_after_update('u', 'c', 'en')
     finally:
         pipeline.PROCESS_CONTEXT.reset(token)
     read.assert_called_once_with('u', 'c')
     processor.assert_not_called()
-    if claimed:
-        assert context['defer_reason'] == 'finalization_owned_elsewhere'

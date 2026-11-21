@@ -44,7 +44,7 @@ from utils.conversations.llm_input_dedupe import NOTES_OUTPUT_HASH, output_finge
 from database.audio_file_projection import finalize_audio_file_group as _finalize_audio_file_group
 from models.note_claims import claim_references_segment
 from models.client_processing import PROJECTION_FAMILY_FIELDS
-from models.finalization_owner import python_owns_finalization
+from models.finalization_owner import REFUSAL as FINALIZATION_OWNER_REFUSAL, python_owns_finalization
 from models.conversation_enums import ConversationStatus, PostProcessingModel, PostProcessingStatus
 from models.conversation_photo import ConversationPhoto
 from models.capture_window_proof import CaptureWindowProof
@@ -3481,7 +3481,8 @@ def rule_discard_outcome(
     deleted, user-restored or revised row is ``refused``. A row that is already
     stored hidden is ``already_discarded``: that state is what the caller wanted,
     but nothing changed, so no cache or index side effect runs. Only a write
-    returns ``discarded``.
+    returns ``discarded``. A pending or Go-owned row returns
+    ``finalization_owned_elsewhere``.
     """
     user_ref = db.collection('users').document(uid)
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
@@ -3494,6 +3495,8 @@ def rule_discard_outcome(
         current = snapshot.to_dict() or {}
         if is_soft_deleted(current):
             return 'refused'
+        if not python_owns_finalization(current):
+            return FINALIZATION_OWNER_REFUSAL
         if current.get('discarded'):
             return 'already_discarded'
         status = getattr(current.get('status'), 'value', current.get('status'))

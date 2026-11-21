@@ -672,7 +672,7 @@ def rule_discard_outcome(
     *,
     expected_sync_content_revision: Optional[int] = None,
 ) -> str:
-    """``discarded`` on a write, ``already_discarded`` for a stored hide, else ``refused``."""
+    """Report whether the rule discard wrote, was already stored, or was refused."""
     return conversations_db.rule_discard_outcome(
         uid,
         conversation_id,
