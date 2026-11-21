@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import List, Optional
+from typing import Any, List, Optional, cast
 from pydantic import BaseModel, Field, field_validator
 
 
@@ -38,6 +38,14 @@ class CreateFolderRequest(BaseModel):
     color: Optional[str] = None
     icon: Optional[str] = None
 
+    @field_validator('name')
+    @classmethod
+    def validate_name(cls, v: str) -> str:
+        stripped = v.strip()
+        if not stripped:
+            raise ValueError('Folder name cannot be empty or whitespace only')
+        return stripped
+
 
 class UpdateFolderRequest(BaseModel):
     """Request model for updating folder metadata."""
@@ -47,6 +55,16 @@ class UpdateFolderRequest(BaseModel):
     color: Optional[str] = None
     icon: Optional[str] = None
     order: Optional[int] = None
+
+    @field_validator('name')
+    @classmethod
+    def validate_name(cls, v: Optional[str]) -> Optional[str]:
+        if v is not None:
+            stripped = v.strip()
+            if not stripped:
+                raise ValueError('Folder name cannot be empty or whitespace only')
+            return stripped
+        return v
 
 
 class MoveConversationRequest(BaseModel):
@@ -59,6 +77,29 @@ class BulkMoveConversationsRequest(BaseModel):
     """Request model for moving multiple conversations to a folder."""
 
     conversation_ids: List[str]
+
+    @field_validator('conversation_ids')
+    @classmethod
+    def validate_and_deduplicate(cls, ids: List[str]) -> List[str]:
+        cleaned: List[str] = []
+        seen = set()
+        # Runtime items come from JSON payloads; keep the defensive non-str guard expressible
+        # under the str annotation by narrowing from Any.
+        for raw in cast(List[Any], ids):
+            if not isinstance(raw, str):
+                continue
+            item = raw.strip()
+            if item and item not in seen:
+                seen.add(item)
+                cleaned.append(item)
+        if not cleaned:
+            raise ValueError('conversation_ids must contain at least one valid non-empty conversation id')
+        # Bounds live in the validator, not in Field constraints: schema-level additions to a
+        # released App-client request body are a breaking contract change, while the runtime
+        # bound keeps the same 422 semantics (and stays invisible to the generated schema).
+        if len(cleaned) > 500:
+            raise ValueError('conversation_ids must contain at most 500 conversation ids')
+        return cleaned
 
 
 class ReorderFoldersRequest(BaseModel):
