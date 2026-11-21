@@ -454,12 +454,38 @@ class TestTranscribeFirestoreLoading:
         world.extract.assert_not_called()
 
     @pytest.mark.parametrize('private_sync', [False, True])
+    def test_custom_stt_loads_owner_and_people_voice_profiles(self, live_owner_profile, private_sync):
+        from routers.listen.contracts import CustomSttMode
+        from utils.transcribe_decisions import USER_SELF_PERSON_ID
+
+        world = live_owner_profile
+        world.people.return_value = [
+            {
+                'id': 'person-alice',
+                'name': 'Alice',
+                'speaker_embedding': [0.75] * 256,
+                'speech_samples': ['samples/alice.wav'],
+                'speech_samples_version': 3,
+            }
+        ]
+        runtime = asyncio.run(world.start(private_sync=private_sync, custom_stt_mode=CustomSttMode.enabled))
+
+        assert runtime.use_custom_stt is True
+        assert runtime.has_speech_profile is True
+        assert runtime.state.speaker_id_enabled is True
+        assert runtime.state.audio_ring_buffer is not None
+        assert USER_SELF_PERSON_ID in runtime.speakers.person_embeddings
+        assert 'person-alice' in runtime.speakers.person_embeddings
+        assert runtime.speakers.person_embeddings['person-alice']['name'] == 'Alice'
+        assert _owner_segment_can_queue(runtime)
+
+    @pytest.mark.parametrize('private_sync', [False, True])
     @pytest.mark.parametrize(
         'options',
         [
             {'include_speech_profile': False},
             {'channels': 2},
-            {'custom_stt_mode': 'enabled'},
+            {'custom_stt_mode': 'enabled', 'include_speech_profile': False},
         ],
     )
     def test_excluded_profiles_are_not_read_or_loaded(self, live_owner_profile, options, private_sync):
@@ -852,3 +878,266 @@ class TestDimensionMismatchGuard:
 
         # Alice vs herself → ~0.0 (correctly matches)
         assert compare_embeddings(alice_emb, alice_emb) < 0.001
+
+
+# ─── Custom STT Speaker Identification (#25148) ──────────────────────────────
+
+
+class TestCustomSttSpeakerIdentification:
+    """Verify speaker identification and upstream speaker metadata under Custom STT."""
+
+    def test_custom_stt_queues_unlabeled_segments_when_raw_audio_streamed(self, live_owner_profile):
+        from models.transcript_segment import TranscriptSegment
+        from routers.listen.contracts import CustomSttMode
+        from routers.listen.transcripts import TranscriptProcessor
+
+        runtime = asyncio.run(live_owner_profile.start(private_sync=True, custom_stt_mode=CustomSttMode.enabled))
+        runtime.state.current_conversation_id = 'conv-custom-audio'
+        runtime.state.audio_ring_buffer.write(b'\x01\x00' * (16000 * 3), 1000.0)
+        processor = TranscriptProcessor(runtime)
+
+        segment = TranscriptSegment(
+            id='seg-unlabeled',
+            text='Testing custom STT with streamed audio',
+            speaker='SPEAKER_0',
+            speaker_id=0,
+            speaker_id_scope='0:custom',
+            is_user=False,
+            person_id=None,
+            start=0.2,
+            end=2.7,
+        )
+        asyncio.run(processor._speaker_detection([segment], 1000.0))
+
+        assert not runtime.speakers.queue.empty()
+        queued = runtime.speakers.queue.get_nowait()
+        assert queued['id'] == 'seg-unlabeled'
+        assert queued['speaker_id'] == 0
+        assert queued['speaker_id_scope'] == '0:custom'
+        assert queued['abs_start'] == pytest.approx(1000.2)
+        assert queued['abs_end'] == pytest.approx(1002.7)
+
+    def test_custom_stt_skips_embedding_queue_when_raw_audio_not_forwarded(self, live_owner_profile):
+        from models.transcript_segment import TranscriptSegment
+        from routers.listen.contracts import CustomSttMode
+        from routers.listen.transcripts import TranscriptProcessor
+
+        runtime = asyncio.run(live_owner_profile.start(private_sync=True, custom_stt_mode=CustomSttMode.enabled))
+        runtime.state.current_conversation_id = 'conv-custom-no-audio'
+        assert runtime.state.audio_ring_buffer.get_time_range() is None
+        processor = TranscriptProcessor(runtime)
+
+        segment = TranscriptSegment(
+            id='seg-no-audio',
+            text='Local transcript without raw audio forwarding',
+            speaker='SPEAKER_0',
+            speaker_id=0,
+            speaker_id_scope='0:custom',
+            is_user=False,
+            person_id=None,
+            start=0.0,
+            end=3.0,
+        )
+        asyncio.run(processor._speaker_detection([segment], 1000.0))
+
+        assert runtime.speakers.queue.empty()
+
+    def test_custom_stt_preserves_upstream_is_user_and_person_id_across_live_matching(self, live_owner_profile):
+        from models.transcript_segment import SpeakerIdentityStatus, TranscriptSegment
+        from routers.listen.contracts import CustomSttMode
+        from routers.listen.transcripts import TranscriptProcessor
+        from utils.speaker_assignment import process_speaker_assigned_segments
+
+        runtime = asyncio.run(live_owner_profile.start(private_sync=True, custom_stt_mode=CustomSttMode.enabled))
+        runtime.state.current_conversation_id = 'conv-custom-byo'
+        runtime.state.audio_ring_buffer.write(b'\x01\x00' * (16000 * 6), 1000.0)
+        processor = TranscriptProcessor(runtime)
+
+        byo_owner = TranscriptSegment(
+            id='seg-owner',
+            text='Wearer turn tagged upstream',
+            speaker='SPEAKER_0',
+            speaker_id=0,
+            speaker_id_scope='0:custom',
+            is_user=True,
+            person_id=None,
+            start=0.0,
+            end=2.0,
+        )
+        byo_person = TranscriptSegment(
+            id='seg-alice',
+            text='Alice turn tagged upstream',
+            speaker='SPEAKER_0',
+            speaker_id=0,
+            speaker_id_scope='0:custom',
+            is_user=False,
+            person_id='person-alice',
+            start=2.0,
+            end=4.0,
+        )
+        unlabeled = TranscriptSegment(
+            id='seg-unlabeled',
+            text='Unlabeled turn on same speaker id',
+            speaker='SPEAKER_0',
+            speaker_id=0,
+            speaker_id_scope='0:custom',
+            is_user=False,
+            person_id=None,
+            start=4.0,
+            end=6.0,
+        )
+
+        # Upstream-identified segments must not enqueue embedding work.
+        asyncio.run(processor._speaker_detection([byo_owner, byo_person], 1000.0))
+        assert runtime.speakers.queue.empty()
+
+        # Simulate SpeakerMatcher matching speaker 0 -> Bob on the unlabeled segment.
+        runtime.speakers.speaker_to_person[0] = ('person-bob', 'Bob')
+        runtime.speakers.voice_identity_status[0] = SpeakerIdentityStatus.not_user
+        segments = [byo_owner, byo_person, unlabeled]
+
+        for _ in range(2):
+            process_speaker_assigned_segments(
+                segments, runtime.speakers.segment_assignments, runtime.speakers.speaker_to_person
+            )
+            processor._apply_speaker_identity_statuses(segments)
+
+        assert byo_owner.is_user is True
+        assert byo_owner.person_id is None
+        assert byo_owner.speaker_identity_status == SpeakerIdentityStatus.user
+        assert byo_owner.speaker_match_source is None
+
+        assert byo_person.is_user is False
+        assert byo_person.person_id == 'person-alice'
+        assert byo_person.speaker_identity_status == SpeakerIdentityStatus.not_user
+        assert byo_person.speaker_match_source is None
+
+        assert unlabeled.is_user is False
+        assert unlabeled.person_id == 'person-bob'
+        assert unlabeled.speaker_label_source == 'auto'
+        assert unlabeled.speaker_match_source == 'live_embedding'
+        assert unlabeled.speaker_identity_status == SpeakerIdentityStatus.not_user
+
+        # Even if speaker 0 later retracts to no_match, upstream labels remain intact.
+        runtime.speakers.speaker_to_person.pop(0, None)
+        runtime.speakers.voice_identity_status[0] = SpeakerIdentityStatus.no_match
+        processor._apply_speaker_identity_statuses(segments)
+
+        assert byo_owner.is_user is True
+        assert byo_owner.person_id is None
+        assert byo_person.person_id == 'person-alice'
+        assert unlabeled.person_id is None
+
+    def test_combine_segments_preserves_distinct_upstream_identities_on_same_speaker_label(self):
+        from models.transcript_segment import TranscriptSegment
+
+        owner_seg = TranscriptSegment(
+            text='Hello',
+            speaker='SPEAKER_0',
+            speaker_id=0,
+            is_user=True,
+            person_id=None,
+            start=0.0,
+            end=1.0,
+        )
+        person_seg = TranscriptSegment(
+            text='hi back',
+            speaker='SPEAKER_0',
+            speaker_id=0,
+            is_user=False,
+            person_id='person-alice',
+            start=1.1,
+            end=2.0,
+        )
+        unlabeled_seg = TranscriptSegment(
+            text='who is this',
+            speaker='SPEAKER_0',
+            speaker_id=0,
+            is_user=False,
+            person_id=None,
+            start=2.1,
+            end=3.0,
+        )
+
+        merged = TranscriptSegment.combine_segments([], [owner_seg, person_seg, unlabeled_seg]).segments
+        assert len(merged) == 3
+        assert (merged[0].is_user, merged[0].person_id) == (True, None)
+        assert (merged[1].is_user, merged[1].person_id) == (False, 'person-alice')
+        assert (merged[2].is_user, merged[2].person_id) == (False, None)
+
+    def test_post_conversation_resolution_preserves_custom_stt_upstream_identities(self):
+        from datetime import datetime, timezone
+        from models.conversation import Conversation
+        from models.structured import Structured
+        from models.transcript_segment import SpeakerIdentityStatus
+        from utils.conversations.speaker_resolution import apply_speaker_resolution
+        from utils.stt.conversation_speakers import Identity
+
+        now = datetime(2026, 1, 1, tzinfo=timezone.utc)
+        conversation = Conversation(
+            id='conv-custom-post',
+            created_at=now,
+            started_at=now,
+            finished_at=now,
+            uses_custom_stt=True,
+            structured=Structured(title='t', overview='o'),
+            transcript_segments=[
+                {
+                    'id': 's-owner',
+                    'text': 'Owner turn',
+                    'speaker': 'SPEAKER_00',
+                    'speaker_id': 0,
+                    'is_user': True,
+                    'person_id': None,
+                    'start': 0.0,
+                    'end': 2.0,
+                },
+                {
+                    'id': 's-alice',
+                    'text': 'Alice turn',
+                    'speaker': 'SPEAKER_01',
+                    'speaker_id': 1,
+                    'is_user': False,
+                    'person_id': 'person-alice',
+                    'start': 2.0,
+                    'end': 4.0,
+                },
+                {
+                    'id': 's-unlabeled',
+                    'text': 'Bob turn',
+                    'speaker': 'SPEAKER_02',
+                    'speaker_id': 2,
+                    'is_user': False,
+                    'person_id': None,
+                    'start': 4.0,
+                    'end': 6.0,
+                },
+            ],
+        )
+
+        apply_speaker_resolution(
+            conversation,
+            {'s-owner': 0, 's-alice': 1, 's-unlabeled': 2},
+            {2: Identity(is_user=False, person_id='person-bob')},
+            {
+                0: SpeakerIdentityStatus.no_match,
+                1: SpeakerIdentityStatus.no_match,
+                2: SpeakerIdentityStatus.not_user,
+            },
+            owner_voiceprint_available=True,
+        )
+
+        owner_seg, alice_seg, bob_seg = conversation.transcript_segments
+        assert owner_seg.is_user is True
+        assert owner_seg.person_id is None
+        assert owner_seg.speaker_identity_status == SpeakerIdentityStatus.user
+        assert owner_seg.speaker_match_source is None
+
+        assert alice_seg.is_user is False
+        assert alice_seg.person_id == 'person-alice'
+        assert alice_seg.speaker_identity_status == SpeakerIdentityStatus.not_user
+        assert alice_seg.speaker_match_source is None
+
+        assert bob_seg.is_user is False
+        assert bob_seg.person_id == 'person-bob'
+        assert bob_seg.speaker_label_source == 'auto'

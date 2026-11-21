@@ -459,6 +459,8 @@ class TranscriptSegment(BaseModel):
         def _should_merge_same_speaker(a: 'TranscriptSegment', b: 'TranscriptSegment') -> bool:
             return (
                 (a.speaker == b.speaker or (a.is_user and b.is_user))
+                and a.is_user == b.is_user
+                and a.person_id == b.person_id
                 and a.speech_profile_processed == b.speech_profile_processed
                 and _is_chronological_continuation(a, b)
                 and (len(a.text) < 125 or a.text[-1] not in SENTENCE_ENDERS)
@@ -473,6 +475,8 @@ class TranscriptSegment(BaseModel):
                 bool(a.text)
                 and bool(b.text)
                 and (a.speaker == b.speaker or (a.is_user and b.is_user))
+                and a.is_user == b.is_user
+                and a.person_id == b.person_id
                 and a.text[-1] not in SENTENCE_ENDERS
                 and _starts_with_lowercase_cased(b.text)
                 and a.speech_profile_processed == b.speech_profile_processed
