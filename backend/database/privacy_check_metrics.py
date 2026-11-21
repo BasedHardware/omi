@@ -112,6 +112,17 @@ _INELIGIBLE_CALLERS = frozenset(
     }
 )
 _PRIVACY_MODULES = frozenset({'database.batch_pipeline_privacy', 'database.privacy_check_metrics'})
+# Every batch check by its first non-privacy calling module and transaction shape
+# (SCA-3508). The decision counters have no call-site dimension, so ~98M checks/day
+# could not be attributed to the loops that issue them. Labels are code module
+# names under the production packages (bounded by the codebase) or 'other'.
+SITE_CHECKS = Counter(
+    'omi_batch_privacy_check_sites_total',
+    'Batch privacy checks by first non-privacy calling module and shape',
+    ['caller', 'shape'],
+)
+_SITE_PACKAGES = ('database.', 'utils.', 'services.', 'routers.')
+_SITE_SHAPES = frozenset({'no_transaction', 'snapshots', 'attempt', 'no_attempt'})
 TTL_CACHE = Counter(
     'privacy_ttl_cache_total', '60s-bounded privacy decision reuse (hit, miss, store)', ['family', 'result']
 )
@@ -366,6 +377,31 @@ def ttl_result(family, result):
         TTL_CACHE.labels(_family(family), result).inc()
     except Exception:
         pass
+
+
+def check_site(shape):
+    """Count one live batch check against its first non-privacy calling module."""
+    current = frame = None
+    try:
+        shape = shape if shape in _SITE_SHAPES else 'no_attempt'
+        caller = 'other'
+        current = inspect.currentframe()
+        frame = current.f_back if current is not None else None
+        for _ in range(12):
+            if frame is None:
+                break
+            module = frame.f_globals.get('__name__', '')
+            if module not in _PRIVACY_MODULES:
+                if module.startswith(_SITE_PACKAGES) and len(module) <= 80:
+                    caller = module
+                break
+            frame = frame.f_back
+        SITE_CHECKS.labels(caller, shape).inc()
+    except Exception:
+        pass
+    finally:
+        # Break the frame reference cycle so request frames are freed immediately.
+        del current, frame
 
 
 def memo_ineligible(reason):
