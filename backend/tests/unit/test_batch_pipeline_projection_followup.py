@@ -522,7 +522,9 @@ async def test_ready_probe_failure_does_not_suppress_next_queued_sibling(followu
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('next_page', [[], ['head']])
-async def test_next_discovery_keeps_running_pages_probe_and_starts_a_fresh_one(followup, next_page):
+async def test_next_discovery_keeps_running_pages_probe_and_starts_a_fresh_one(followup, monkeypatch, next_page):
+    # Pins the full path's same-page interleaving; the claimed-sibling skip has its own tests.
+    monkeypatch.setenv('BATCH_PIPELINE_FOLLOWUP_CLAIMED_SIBLING_SKIP_ENABLED', 'false')
     f = followup
     for receipt in f.receipts.values():
         receipt['state'] = 'ready'
@@ -574,7 +576,9 @@ async def test_owed_row_also_discovered_still_probes_completion(followup, monkey
 
 
 @pytest.mark.asyncio
-async def test_owed_running_row_bypasses_its_existing_pages_probe(followup):
+async def test_owed_running_row_bypasses_its_existing_pages_probe(followup, monkeypatch):
+    # Pins the full path's same-page interleaving; the claimed-sibling skip has its own tests.
+    monkeypatch.setenv('BATCH_PIPELINE_FOLLOWUP_CLAIMED_SIBLING_SKIP_ENABLED', 'false')
     f = followup
     for receipt in f.receipts.values():
         receipt['state'] = 'ready'
@@ -974,6 +978,9 @@ def ready_followup(followup, monkeypatch):
     monkeypatch.setenv('FIRESTORE_READ_LEVERS', '{"bpp_generation_memo":100}')
     monkeypatch.setattr(batch_pipeline_privacy, 'ttl_disabled', lambda: False)
     monkeypatch.delenv('BATCH_PIPELINE_FOLLOWUP_EARLY_COALESCE_ENABLED', raising=False)
+    # These cases pin C1's same-page proof path; the claimed-sibling skip (SCA-3508)
+    # runs ahead of it and has its own tests below.
+    monkeypatch.setenv('BATCH_PIPELINE_FOLLOWUP_CLAIMED_SIBLING_SKIP_ENABLED', 'false')
     client = StrictFirestore()
     store = ProjectionStore(SimpleNamespace(client=client, namespace='synthetic'))
     f.projector.store = store
@@ -1149,3 +1156,137 @@ async def test_failed_first_claim_release_does_not_publish_proof(ready_followup,
     monkeypatch.setattr(projection_followup, 'projection_claim', previous_claim)
     assert await f.run('later') == 'coalesced'
     assert f.projector.store.check.call_count == 2
+
+
+# --- claimed-sibling skip (SCA-3508) -------------------------------------------------------------
+
+
+def _ready_page(f, monkeypatch, count=4):
+    from dataclasses import replace
+
+    monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_FOLLOWUP_PAGE_ENABLED', 'true')
+    segments = tuple(f'synthetic-{index:02}' for index in range(count))
+    binding = replace(f.binding, segment_ids=segments)
+    for segment in segments:
+        f.jobs[segment] = {**f.jobs['head'], 'segment_id': segment}
+        f.receipts[segment] = {**f.receipts['head'], 'state': 'ready'}
+    f.projector.store.store.projection_pending.return_value = list(segments)
+    f.projector.store.read.side_effect = lambda sid: (f.jobs[sid], {'projection': f.receipts[sid]}, binding)
+    f.projector.store.session.side_effect = lambda sid, *_: SimpleNamespace(
+        job=f.jobs[sid], entry={'projection': f.receipts[sid]}
+    )
+    f.projector.store.check.side_effect = lambda session: (_ for _ in ()).throw(
+        ProjectionReplay({'state': session.entry['projection']['state']})
+    )
+    return segments, binding
+
+
+async def _drain(f):
+    while f.runner.tasks:
+        await asyncio.gather(*list(f.runner.tasks.values()))
+    await asyncio.sleep(0)
+
+
+def _skips():
+    return projection_followup.OUTCOMES.labels('claimed_sibling_skipped')._value.get()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('enabled', ['true', 'false'])
+async def test_ready_siblings_skip_the_session_check_once_completion_is_claimed(followup, monkeypatch, enabled):
+    f = followup
+    monkeypatch.setenv('BATCH_PIPELINE_FOLLOWUP_CLAIMED_SIBLING_SKIP_ENABLED', enabled)
+    segments, binding = _ready_page(f, monkeypatch)
+    before = _skips()
+
+    await f.runner.schedule()
+    await _drain(f)
+
+    # One completion either way: the legacy path coalesces after its re-read.
+    f.projector.complete_content.assert_called_once()
+    checks = f.projector.store.check.call_count
+    if enabled == 'true':
+        assert checks == 1  # only the claimant pays the session check
+        assert _skips() - before == len(segments) - 1
+    else:
+        assert checks == len(segments)
+        assert _skips() == before
+    # No write on any skipped sibling.
+    f.projector.store.mark_enrichment.assert_not_called()
+    f.projector.store.ready.assert_not_called()
+    assert not f.runner.sibling_claims
+
+
+@pytest.mark.asyncio
+async def test_siblings_skipped_behind_a_failed_claimant_run_again_on_the_ordinary_path(followup, monkeypatch):
+    f = followup
+    monkeypatch.setenv('BATCH_PIPELINE_FOLLOWUP_CLAIMED_SIBLING_SKIP_ENABLED', 'true')
+    segments, binding = _ready_page(f, monkeypatch, count=3)
+    calls = []
+
+    def complete(segment, _binding, *, silence):
+        calls.append(segment)
+        if len(calls) == 1:
+            raise RuntimeError('synthetic first completion failure')
+
+    f.projector.complete_content.side_effect = complete
+    requeued = projection_followup.OUTCOMES.labels('claimed_sibling_requeued')._value.get()
+
+    await f.runner.schedule()
+    await _drain(f)
+
+    # The claimant failed inside its completion attempt (key discarded), so the
+    # siblings that skipped behind it were re-queued and one of them completed.
+    assert len(calls) >= 2
+    assert projection_followup.OUTCOMES.labels('claimed_sibling_requeued')._value.get() > requeued
+    assert not f.runner.sibling_claims
+
+
+@pytest.mark.asyncio
+async def test_unready_sibling_is_never_skipped(followup, monkeypatch):
+    f = followup
+    monkeypatch.setenv('BATCH_PIPELINE_FOLLOWUP_CLAIMED_SIBLING_SKIP_ENABLED', 'true')
+    segments, binding = _ready_page(f, monkeypatch, count=2)
+    f.receipts[segments[1]]['state'] = 'persisted'
+    before = _skips()
+
+    await f.runner.schedule()
+    await _drain(f)
+
+    assert _skips() == before
+    assert f.projector.store.check.call_count == 2
+
+
+@pytest.mark.parametrize(
+    'hints',
+    [
+        None,
+        ({'policy_parts': {}}, {'projection': {'state': 'ready'}}, 'binding'),
+        (
+            {'policy_parts': {'projection': ProjectionPolicy(async_projection=False).to_dict()}},
+            {'projection': {'state': 'ready'}},
+            'b',
+        ),
+        (
+            {'policy_parts': {'projection': ProjectionPolicy(async_projection=True).to_dict()}},
+            {'projection': {'state': 'ready'}, 'projection_parts': {'0': {'state': 'persisted'}}},
+            'b',
+        ),
+        (
+            {'policy_parts': {'projection': ProjectionPolicy(async_projection=True).to_dict()}},
+            {'projection': {'state': 'ready'}},
+            ['unhashable'],
+        ),
+    ],
+)
+def test_ready_sibling_key_refuses_anything_the_legacy_path_would_not_coalesce(hints):
+    assert projection_followup.ProjectionFollowups.ready_sibling_key(3, hints) is None
+
+
+def test_ready_sibling_key_matches_the_legacy_coalesce_key():
+    hints = (
+        {'policy_parts': {'projection': ProjectionPolicy(async_projection=True).to_dict()}},
+        {'projection': {'state': 'ready'}, 'projection_parts': {'0': {'state': 'ready'}}},
+        'b',
+    )
+    assert projection_followup.ProjectionFollowups.ready_sibling_key(3, hints) == (3, 'b')

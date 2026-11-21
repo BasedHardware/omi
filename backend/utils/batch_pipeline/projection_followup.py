@@ -24,6 +24,7 @@ from database.batch_pipeline_privacy import BatchPrivacyBlocked, matches_live_pr
 from database.batch_privacy_attempt import with_batch_privacy_attempt
 from config.batch_pipeline import (
     projection_followup_backoff_seconds,
+    projection_followup_claimed_sibling_skip_enabled,
     projection_followup_early_coalesce_enabled,
     projection_followup_page_enabled,
     projection_followup_slots,
@@ -119,6 +120,8 @@ class ProjectionFollowups:
         self.page = 0
         self.pages: dict[str, int] = {}
         self.completion_attempts: set[tuple[int, ProjectionBinding]] = set()
+        # (page, binding) -> ready siblings that skipped behind the first claimant (SCA-3508).
+        self.sibling_claims: dict[tuple[int, ProjectionBinding], list[str]] = {}
         self.completed_probes: dict[int, dict[ProjectionBinding, FollowupPrivacyProof]] = {}
         self.backoff_ceiling = projection_followup_backoff_seconds()
         # Desync needs the keyset cursor: with pagination off every page is the
@@ -384,6 +387,7 @@ class ProjectionFollowups:
             self.pages.clear()
             self.completion_attempts.clear()
             self.completed_probes.clear()
+            self.sibling_claims.clear()
         if targeted:
             self.launch_targeted()
         else:
@@ -396,6 +400,38 @@ class ProjectionFollowups:
         except (TypeError, ValueError, KeyError, AttributeError):
             # Malformed or partially migrated hints still take the authoritative path.
             return None
+
+    @staticmethod
+    def ready_sibling_key(page, hints):
+        """The coalesce key for a hint that the existing path would coalesce, else None.
+
+        Mirrors the legacy test exactly: async projection, the projection and every
+        part ``ready``. Malformed hints return None and take the authoritative path.
+        """
+        try:
+            job, entry, binding = hints
+            if entry['projection']['state'] != 'ready' or not all(
+                part.get('state') == 'ready' for part in (entry.get('projection_parts') or {}).values()
+            ):
+                return None
+            if not ProjectionPolicy.from_dict(job['policy_parts']['projection']).async_projection:
+                return None
+            hash(binding)
+            return (page, binding)
+        except (TypeError, ValueError, KeyError, AttributeError):
+            return None
+
+    def release_sibling_claim(self, key):
+        """End a claim. Siblings that skipped behind a claimant that never reached the
+        completion attempt run again on the ordinary path, so none loses its probe."""
+        waiting = self.sibling_claims.pop(key, None) or []
+        if not waiting or key in self.completion_attempts or self.closed:
+            return
+        for sibling in waiting:
+            if sibling not in self.tasks and sibling not in self.pending:
+                self.pending.appendleft(sibling)
+                self.prioritized.add(sibling)
+        OUTCOMES.labels('claimed_sibling_requeued').inc(len(waiting))
 
     def read_persisted(self, segment, *, prior=None, hints=None):
         store = self.projector.store
@@ -476,20 +512,38 @@ class ProjectionFollowups:
         )
         entered = False
         completed_probe: tuple[int, ProjectionBinding, FollowupPrivacyProof] | None = None
+        sibling_key: tuple[int, ProjectionBinding] | None = None
         try:
             acquired = await run_blocking(db_executor, claim.__enter__)
             entered = True
             if not acquired:
                 return 'claim_busy'
             page = self.pages.get(segment)
+            hints = None
+            if page and projection_followup_page_enabled() and projection_followup_claimed_sibling_skip_enabled():
+                # The same hint read read_persisted would issue; reused below.
+                hints = await run_blocking(db_executor, store.read, segment)
+                key = self.ready_sibling_key(page, hints)
+                if key is not None:
+                    waiting = self.sibling_claims.get(key)
+                    if key in self.completion_attempts or waiting is not None:
+                        # A same-page sibling owns this binding's completion. The
+                        # existing path would re-read the session and then return
+                        # 'coalesced' with no writes; skip the reads instead.
+                        if waiting is not None and key not in self.completion_attempts:
+                            waiting.append(segment)
+                        OUTCOMES.labels('claimed_sibling_skipped').inc()
+                        return 'coalesced'
+                    self.sibling_claims[key] = []
+                    sibling_key = key
             early = (
                 page is not None and projection_followup_page_enabled() and projection_followup_early_coalesce_enabled()
             )
             if early and page is not None:
                 prior = self.completed_probes.get(page, {}).copy()
-                persisted = await run_blocking(db_executor, self.read_persisted, segment, prior=prior)
+                persisted = await run_blocking(db_executor, self.read_persisted, segment, prior=prior, hints=hints)
             else:
-                persisted = await run_blocking(db_executor, self.read_persisted, segment)
+                persisted = await run_blocking(db_executor, self.read_persisted, segment, hints=hints)
             job, entry, binding = persisted.job, persisted.entry, persisted.binding
             if persisted.coalesced:
                 # A recovery wake, page cleanup or shutdown may have invalidated
@@ -594,6 +648,8 @@ class ProjectionFollowups:
                         probe_page, binding, proof = completed_probe
                         if probe_page == self.pages.get(segment) and not self.closed:
                             self.completed_probes.setdefault(probe_page, {})[binding] = proof
+            if sibling_key is not None:
+                self.release_sibling_claim(sibling_key)
 
     async def step(self, policy, phase, executor, function, *args, **kwargs):
         with projection_phase(phase, policy):
