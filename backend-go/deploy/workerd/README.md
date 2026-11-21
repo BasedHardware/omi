@@ -132,10 +132,13 @@ names. Keep the pinned digest and production values from the install above.
 Verify `Gateway` is Programmed, the `HTTPRoute` reports Accepted and ResolvedRefs for the
 HTTPS listener, and the Service backend is healthy on `/ready`. From the real Cloud Run
 producer, verify private DNS and TLS, then check that an unsigned POST yields 403 and a
-GET to the exact path yields 405. Use a token minted for the configured audience by the
-allowed runtime service account and a controlled, already-bound dev receipt for the signed
-probe. Expect 200 with no writes on replay. Check the same route with a wrong host or path
-is unrouted. After Release approval, set the producer's `SYNC_EPISODE_INTAKE_ORIGIN` to the
+GET to the exact path yields 405. For each signed probe, use a token minted for the
+configured audience by the allowed runtime service account and a receipt from an
+already-bound fixture in that worker's Firestore project. Release must approve the
+fixture for that environment. It must use a dedicated test account and synthetic data,
+with both the conversation's `episode_id` and its `episode_links` binding already
+populated. Never use customer data. Expect 200 with no writes on replay. Verify that
+requests to a wrong host or path are unrouted. After Release approval, set the producer's `SYNC_EPISODE_INTAKE_ORIGIN` to the
 private HTTPS origin and `WORKER_EPISODE_INTAKE_AUDIENCE` to the value used by workerd. Run
 the eligible Python sync intake flow and verify 200, 204 or an expected stale 409.
 Record responses and metrics without logging tokens, receipts or tenant IDs.
@@ -162,3 +165,7 @@ producers and consumers, and a bounded drain plus fenced handback. To revert tha
 close Go admission, drain or reconcile in-flight work and paid effects, then atomically
 return outstanding conversations to Python under the same fence. Python resumes those
 conversations only after handback. Keep the remainder of traffic on Python throughout.
+
+## Chart render tests
+
+With Helm on PATH, run `bash backend-go/deploy/workerd/test-render.sh` from the repository root.

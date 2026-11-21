@@ -1,3 +1,6 @@
+{{- if not (kindIs "bool" .Values.migration.enabled) }}
+{{- fail "migration.enabled: expected a boolean" }}
+{{- end }}
 {{- if .Values.migration.enabled }}
 apiVersion: batch/v1
 kind: Job

@@ -1,3 +1,6 @@
+{{- if not (kindIs "bool" .Values.intake.enabled) }}
+{{- fail "intake.enabled: expected a boolean" }}
+{{- end }}
 {{- if .Values.intake.enabled }}
 {{- $hostname := required "intake.hostname is required" .Values.intake.hostname }}
 {{- if not (regexMatch "^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$" $hostname) }}
