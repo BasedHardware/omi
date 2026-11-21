@@ -302,7 +302,7 @@ def prod_state(monkeypatch):
     return RENDERER['_render_cloud_run_state'](MANIFEST['environments']['prod'])
 
 
-def test_rendered_pump_env_is_dark_and_keeps_only_the_required_secrets(prod_state):
+def test_rendered_pump_env_carries_the_activation_and_keeps_only_the_required_secrets(prod_state):
     state = prod_state
     pump = state['services'][PROJECTION_PUMP]
     rendered = {entry['name']: entry.get('value') for entry in pump['env'] if 'value' in entry}
@@ -1342,3 +1342,17 @@ def test_base_before_first_pin_and_new_create_stay_dark(inverse_readback):
     with pytest.raises(ValueError, match='BATCH_PIPELINE_PROJECTION_PUMP_ENABLED'):
         inverse.verify(latest, active, iam, pinned, before_first_pin=True)
     inverse.verify(latest, revision, iam, pinned, before_first_pin=True)
+
+
+def test_pinned_inverse_refuses_a_secret_backed_pump_flag(inverse_readback):
+    """#25969 panel F2: the activated inverse needs a literal 'true', never a valueFrom binding."""
+    inverse = sys.modules[recovery.verify.__module__]
+    service, revision, iam = inverse_readback
+    candidate = copy.deepcopy(revision)
+    for entry in candidate['spec']['containers'][0]['env']:
+        if entry['name'] == 'BATCH_PIPELINE_PROJECTION_PUMP_ENABLED':
+            entry.pop('value', None)
+            entry['valueFrom'] = {'secretKeyRef': {'name': 'pump-flag', 'key': 'latest'}}
+    expected = inverse.ExpectedInverse.from_disposition(INVERSE_RECEIPT)
+    with pytest.raises(ValueError, match='BATCH_PIPELINE_PROJECTION_PUMP_ENABLED'):
+        inverse.verify(service, candidate, iam, expected, before_first_pin=False)

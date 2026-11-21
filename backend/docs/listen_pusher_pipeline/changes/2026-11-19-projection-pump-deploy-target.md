@@ -192,8 +192,9 @@ resuming with that revision and identity, using the actual inputs in the workflo
 pre-approval summary. Use `repository@sha256:digest` for the image.
 Use the serving revision's own admitted source and digest from Release evidence, which may
 predate the new candidate. The workflow binds the dispatch input to live data and stops before
-mutation unless requested and serving traffic agree on exactly that Ready dark revision.
-Record the run ID and independent serving and dark baseline readback in the Release order.
+mutation unless requested and serving traffic agree on exactly the Ready revision the disposition
+names (dark, or the activated pump after step 2). Record the run ID and independent serving and
+baseline readback in the Release order.
 
 ## Hazards
 
@@ -217,7 +218,7 @@ Record the run ID and independent serving and dark baseline readback in the Rele
   read as complete. Adding the pump to `SHIPPED_SERVICES` before the service exists would make
   every reconcile incomplete, so it lands as its own change after the dark deploy is read back
   and before the pump flag is enabled. Owner: SCA-3120. Done in the step-2 activation PR (#25966):
-  the pump is in `SHIPPED_SERVICES`, not in `HOT_SERVICES`; the dark successor already emits snapshots.
+  the pump is in `SHIPPED_SERVICES` and `HOT_SERVICES`; the dark successor already emits snapshots.
 - **Inherited invoker grants.** The pre-traffic check reads the service's own IAM policy and
   permits direct bindings only for private Cloud Run viewers. It does not read project or folder policy: a
   principal granted `roles/run.invoker` at the project can invoke every Cloud Run service in

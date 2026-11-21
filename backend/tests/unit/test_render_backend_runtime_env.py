@@ -1712,7 +1712,7 @@ def test_record_close_notify_renders_on_every_cloud_run_listener(environment, se
         assert [(name, value) for name, value in rendered if name == key] == [(key, expected)]
 
 
-def test_prod_silence_read_skip_is_on_for_every_serving_role():
+def test_prod_silence_read_skip_is_on_for_every_role_but_the_pump_pin():
     key = 'BATCH_PIPELINE_SILENCE_READ_SKIP_ENABLED'
     prod = _MANIFEST['environments']['prod']
     for name in ('backend', 'backend-sync', 'backend-sync-backfill', 'backend-integration'):
