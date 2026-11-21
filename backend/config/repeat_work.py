@@ -28,15 +28,20 @@ def poll_backoff(uid: str | None = None) -> bool:
         'SYNC_POLL_BACKOFF_ENABLED', os.getenv('SYNC_POLL_BACKOFF_ENABLED', 'false').strip().lower() == 'true'
     ):
         return False
+    return poll_backoff_cohort(uid) == 'in'
+
+
+def poll_backoff_cohort(uid: str | None) -> str:
+    """Return stable cohort membership independent of the serving kill switch."""
     try:
-        percent = float(os.getenv('SYNC_POLL_BACKOFF_PERCENT', '100') or 0)
+        percent = float(os.getenv('SYNC_POLL_BACKOFF_PERCENT', '0') or 0)
     except ValueError:
-        return False
+        return 'out'
     if not math.isfinite(percent) or not 0 <= percent <= 100 or percent == 0:
-        return False
+        return 'out'
     if percent == 100:
-        return True
+        return 'in'
     if not uid:
-        return False
+        return 'out'
     bucket = int.from_bytes(hashlib.sha256(f'sync-poll-backoff:{uid}'.encode()).digest()[:4], 'big') / 2**32 * 100
-    return bucket < percent
+    return 'in' if bucket < percent else 'out'

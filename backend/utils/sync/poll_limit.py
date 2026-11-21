@@ -4,6 +4,7 @@ from config.repeat_work import poll_backoff
 from database import redis_db
 from utils.observability.fallback import record_fallback
 from utils.sync import stage
+from utils.sync.poll_metrics import record_active_sync_uploader, record_first_terminal_read
 
 # Dart admits at most 18 polls/minute per app instance, with 20s per job.
 # Even two instances bursting simultaneously (36 requests) fit this window.
@@ -44,7 +45,10 @@ def with_poll_hint(status: dict, *, uid: str | None = None, surface_open: bool =
         'batch_artifact_missing',
         'source_alignment_pending',
     }:
+        record_active_sync_uploader(uid, status)
         return {**status, 'poll_after_ms': 300000}
+    record_active_sync_uploader(uid, status)
+    record_first_terminal_read(uid, status)
     if not poll_backoff(uid):
         return status
     result = dict(status)

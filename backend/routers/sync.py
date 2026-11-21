@@ -173,6 +173,7 @@ from utils.metrics import (
     OMI_SYNC_RECORDING_AGE_SECONDS,
 )
 from utils.sync.poll_limit import SYNC_POLL_WINDOW_SECONDS, admit_sync_job_poll, with_poll_hint
+from utils.sync.poll_metrics import record_sync_job_poll_request
 from utils.sync.retired_handle_ack import acknowledge_retired_handle
 from config.repeat_work import playback_on_demand
 from contextlib import nullcontext
@@ -1914,6 +1915,7 @@ def get_sync_job_status(
 ):
     """Poll for the status of an async sync job."""
     OMI_SYNC_JOB_POLL_REQUESTS_TOTAL.inc()
+    record_sync_job_poll_request(uid)
     if not admit_sync_job_poll(uid):
         OMI_SYNC_JOB_POLL_THROTTLED_TOTAL.inc()
         raise HTTPException(
@@ -2090,6 +2092,7 @@ def get_sync_job_status(
         'processed_segments': job.get('processed_segments', 0),
         'successful_segments': job.get('successful_segments', 0),
         'failed_segments': job.get('failed_segments', 0),
+        'completed_at': job.get('completed_at'),
         'lane': job.get('lane', SyncLane.FRESH.value),
         'reason_code': job.get('reason_code'),
         'retry_after': job.get('retry_after'),
