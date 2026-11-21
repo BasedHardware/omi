@@ -1,7 +1,8 @@
 """Pure add-only task reconciliation. Receipts remember exact identities after hard deletion.
 
-No anchor matching. An edited task is never overwritten; its prior normalized key
-remains an alias once enrolled. Missing receipt targets are deletion intent, not
+Unique segment anchors can suppress reworded generated tasks. An edited task is
+never overwritten; its prior normalized key remains an alias once enrolled.
+Missing receipt targets are deletion intent, not
 permission to recreate. Pre-enrollment hard deletes/edits cannot be reconstructed.
 """
 
@@ -12,7 +13,7 @@ from hashlib import sha256
 from typing import Any
 
 from config.action_item_identity_key import identity_key
-from config.action_item_similarity import near_duplicate_tokens, tokens
+from config.action_item_similarity import guarded_tokens_match, near_duplicate_tokens, substitution_tokens_match, tokens
 
 LIMIT = 200
 RECEIPT = 'action_item_refresh'
@@ -21,6 +22,13 @@ RECEIPT = 'action_item_refresh'
 def key(value: object) -> str:
     normalized = identity_key(value)
     return sha256(normalized.encode()).hexdigest() if normalized else ''
+
+
+def _segment_ids(row: dict) -> frozenset[str]:
+    for ref in row.get('provenance') or []:
+        if ref.get('kind') == 'conversation':
+            return frozenset(s for s in ref.get('transcript_segment_ids') or [] if isinstance(s, str) and s)
+    return frozenset()
 
 
 def enroll(ledger: dict[str, list[str]], rows: dict[str, dict]) -> None:
@@ -67,7 +75,14 @@ def plan(
     """Return receipt, creates, partial updates and bounded counters (all reads supplied)."""
     ledger = deepcopy(receipt.get('keys') or {}) if receipt.get('generation', generation) == generation else {}
     enroll(ledger, rows)
-    counts = dict(kept_existing=len(rows), added_new=0, transferred_from_donor=0, skipped_duplicate=0, disabled=0)
+    counts = dict(
+        kept_existing=len(rows),
+        added_new=0,
+        transferred_from_donor=0,
+        skipped_duplicate=0,
+        disabled=0,
+        skipped_anchor_duplicate=0,
+    )
     creates: dict[str, dict] = {}
     updates: dict[str, dict] = {}
     if donor_rows is not None:
@@ -115,6 +130,21 @@ def plan(
             counts['transferred_from_donor'] += 1
     else:
         existing_tokens = {task_id: tokens(row.get('description')) for task_id, row in rows.items()}
+        # Reserve text matches across the whole extraction before trying anchors,
+        # including items later in the list. One row must not absorb two tasks.
+        matched = set()
+        for item in items:
+            identity = key(item.get('description'))
+            if ledger.get(identity):
+                matched.update(ledger[identity])
+            else:
+                words = tokens(item.get('description'))
+                matched.update(tid for tid, prior in existing_tokens.items() if near_duplicate_tokens(words, prior))
+        segments = {
+            task_id: _segment_ids(row)
+            for task_id, row in rows.items()
+            if not row.get('deleted') and not protected_donor(row, [])
+        }
         for item in items:
             identity = key(item.get('description'))
             if not identity:
@@ -133,7 +163,24 @@ def plan(
             )
             if match is not None:
                 ledger[identity] = [match]  # Enroll this rewording as an edit/delete suppressor.
+                matched.add(match)
                 counts['skipped_duplicate'] += 1
+                continue
+            candidate_segments = _segment_ids(item)
+            anchors = [
+                task_id
+                for task_id, prior_segments in segments.items()
+                if task_id not in matched
+                and candidate_segments & prior_segments
+                and len(candidate_tokens & existing_tokens[task_id]) >= 3
+                and guarded_tokens_match(candidate_tokens, existing_tokens[task_id])
+                and substitution_tokens_match(candidate_tokens, existing_tokens[task_id])
+            ]
+            if len(anchors) == 1:
+                ledger[identity] = anchors  # Retain the original wording and remember this alias.
+                matched.add(anchors[0])
+                counts['skipped_duplicate'] += 1
+                counts['skipped_anchor_duplicate'] += 1
                 continue
             ordinal = 0
             task_id = 'refresh-' + sha256(f'{conversation_id}:{generation}:{identity}:{ordinal}'.encode()).hexdigest()

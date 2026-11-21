@@ -23,7 +23,14 @@ from utils.notification_dispatch import dispatch_action_item_reminder
 from utils.task_sync import auto_sync_action_items_batch
 
 logger = logging.getLogger(__name__)
-OUTCOMES = ('kept_existing', 'added_new', 'transferred_from_donor', 'skipped_duplicate', 'disabled')
+OUTCOMES = (
+    'kept_existing',
+    'added_new',
+    'transferred_from_donor',
+    'skipped_duplicate',
+    'disabled',
+    'skipped_anchor_duplicate',
+)
 
 
 def _emit(counts: dict[str, int]) -> None:
@@ -31,7 +38,7 @@ def _emit(counts: dict[str, int]) -> None:
         OMI_ACTION_ITEM_REFRESH_TOTAL.labels(outcome=outcome).inc(counts.get(outcome, 0))
     logger.info(
         'event=action_item_identity mode=preserve kept_existing=%d added_new=%d '
-        'transferred_from_donor=%d skipped_duplicate=%d disabled=%d',
+        'transferred_from_donor=%d skipped_duplicate=%d disabled=%d skipped_anchor_duplicate=%d',
         *(counts.get(outcome, 0) for outcome in OUTCOMES),
     )
 

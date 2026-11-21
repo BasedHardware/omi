@@ -18,6 +18,20 @@ def tokens(description: object) -> frozenset[str]:
     return frozenset(word for word in words if word not in _FILLER)
 
 
+def guarded_tokens_match(a: frozenset[str], b: frozenset[str]) -> bool:
+    """Preserve numbers, codes, negation, conjunctions and directional/time qualifiers."""
+    # Task titles containing codes use exact identity only (case and punctuation matter).
+    if (a | b) & _CODE_WORDS:
+        return False
+    guarded = lambda words: {w for w in words if w in _SENSITIVE or any(c.isdigit() for c in w)}
+    return guarded(a) == guarded(b)
+
+
+def substitution_tokens_match(a: frozenset[str], b: frozenset[str]) -> bool:
+    """Allow additions/removals, but no substitutions after known verb normalization."""
+    return not (a - b and b - a)
+
+
 def near_duplicate(left: object, right: object) -> bool:
     if identity_key(left) and identity_key(left) == identity_key(right):
         return True
@@ -29,17 +43,12 @@ def near_duplicate_tokens(a: frozenset[str], b: frozenset[str]) -> bool:
     """Compare cached token sets; exact identities are checked separately by the planner."""
     if not a or not b:
         return False
-    # Preserve numbers, codes, negation, conjunctions and directional/time qualifiers.
-    # Task titles containing codes use exact identity only (case and punctuation matter).
-    if (a | b) & _CODE_WORDS:
-        return False
-    guarded = lambda words: {w for w in words if w in _SENSITIVE or any(c.isdigit() for c in w)}
-    if guarded(a) != guarded(b):
+    if not guarded_tokens_match(a, b):
         return False
     # Substituting a recipient, object or action is not a paraphrase, even when
     # most words match. Only reordering, known verb variants and small additions
     # qualify. In particular token_set_ratio's subset=100 would be too permissive.
-    if a - b and b - a:
+    if not substitution_tokens_match(a, b):
         return False
     if (a ^ b) - _ELABORATION:
         return False

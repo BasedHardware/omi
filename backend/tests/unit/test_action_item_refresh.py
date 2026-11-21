@@ -13,7 +13,7 @@ from google.api_core.exceptions import Aborted
 
 from config.action_item_identity import action_item_refresh_preserve_enabled
 from database import action_item_refresh as db
-from database.action_item_refresh_policy import RECEIPT, key
+from database.action_item_refresh_policy import RECEIPT, key, plan
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore, StrictFirestoreTransaction
 from utils.conversations import action_item_refresh as flow
 from utils.conversations import process_conversation as pc, smart_merge
@@ -42,6 +42,10 @@ def item(description, **extra):
         'completed_at': None,
         **extra,
     }
+
+
+def anchored_item(description, **extra):
+    return item(description, provenance=[{'kind': 'conversation', 'transcript_segment_ids': ['s1']}], **extra)
 
 
 class AtomicTransaction(StrictFirestoreTransaction):
@@ -180,6 +184,166 @@ def test_edits_and_hard_deletion_after_enrollment_are_not_recreated(world):
     world.write(['Send report'])
     assert not [p for p in world.store.rows if p[-2] == 'action_items']
     assert not world.queue
+
+
+def test_segment_anchor_suppresses_license_elaborations_and_enrolls_aliases(world):
+    descriptions = [
+        'Contact the maintainer requesting a license for the meeting-intelligence repository',
+        'Contact the maintainer requesting help obtaining a license for the meeting-intelligence repository',
+        'Contact the maintainer requesting a missing license for the meeting-intelligence repository',
+    ]
+    original = anchored_item(descriptions[0])
+    world.store.rows[task_path('original')] = deepcopy(original)
+    for description in descriptions[1:]:
+        result = db.reconcile(UID, 'survivor', [anchored_item(description)], expected_revision=1)
+        assert result['counts']['skipped_duplicate'] == 1
+        assert result['counts']['skipped_anchor_duplicate'] == 1
+        assert result['counts']['added_new'] == 0
+        assert not result['pending']
+        ledger = world.store.rows[conv_path('survivor')][RECEIPT]['keys']
+        assert ledger[key(description)] == ['original']
+    assert world.store.rows[task_path('original')] == original
+    assert [p for p in world.store.rows if p[-2] == 'action_items'] == [task_path('original')]
+    # Once enrolled, aliases still suppress after a user edit and hard deletion.
+    world.store.rows[task_path('original')].update(description='User edited title', updated_at=NOW.replace(day=3))
+    assert not db.reconcile(UID, 'survivor', [anchored_item(descriptions[1])], expected_revision=1)['pending']
+    del world.store.rows[task_path('original')]
+    assert not db.reconcile(UID, 'survivor', [anchored_item(descriptions[2])], expected_revision=1)['pending']
+
+
+@pytest.mark.parametrize('reverse', [False, True])
+@pytest.mark.parametrize('unchanged', ['Send project deck to organizer', 'Send latest project deck to organizer'])
+def test_segment_anchor_reserves_other_reextracted_tasks(reverse, unchanged):
+    rows = {
+        'deck': anchored_item('Send project deck to organizer'),
+        'agenda': anchored_item('Send project agenda to organizer'),
+    }
+    items = [anchored_item('Send project agenda over to organizer'), anchored_item(unchanged)]
+    if reverse:
+        items.reverse()
+    receipt, creates, updates, counts = plan('survivor', rows, items, {}, 0)
+    assert not creates and not updates
+    assert counts['skipped_duplicate'] == 2
+    assert counts['skipped_anchor_duplicate'] == 1
+    assert receipt['keys'][key(items[0]['description'])] == ['deck' if reverse else 'agenda']
+
+
+def test_segment_anchor_ambiguous_targets_mint_instead_of_merging():
+    rows = {
+        'deck': anchored_item('Send project deck to organizer'),
+        'agenda': anchored_item('Send project agenda to organizer'),
+    }
+    items = [anchored_item('Send project slides to organizer'), anchored_item('Send project schedule to organizer')]
+    _, creates, updates, counts = plan('survivor', rows, items, {}, 0)
+    assert len(creates) == 2 and not updates
+    assert counts['skipped_duplicate'] == 0
+
+
+@pytest.mark.parametrize(
+    'row,candidate',
+    [
+        (anchored_item('Send deck to organizer'), anchored_item('Send agenda to organizer')),
+        (
+            item('Contact maintainer about repository license'),
+            anchored_item('Ask maintainer about missing repository license'),
+        ),
+        (
+            anchored_item('Contact maintainer about repository license'),
+            item('Ask maintainer about missing repository license'),
+        ),
+        (
+            anchored_item('Contact maintainer about repository license', deleted=True),
+            anchored_item('Ask maintainer about missing repository license'),
+        ),
+        (
+            anchored_item('Contact maintainer about repository license', updated_at=NOW.replace(day=3)),
+            anchored_item('Ask maintainer about missing repository license'),
+        ),
+        (
+            anchored_item('Contact maintainer about repository license', folder_id='curated'),
+            anchored_item('Ask maintainer about missing repository license'),
+        ),
+    ],
+    ids=['few-tokens', 'missing-row-provenance', 'missing-candidate-provenance', 'deleted', 'edited', 'folder'],
+)
+def test_segment_anchor_guards_keep_minting(row, candidate):
+    _, creates, updates, counts = plan('survivor', {'original': row}, [candidate], {}, 0)
+    assert len(creates) == 1 and not updates
+    assert counts['skipped_duplicate'] == 0
+
+
+@pytest.mark.parametrize('reverse', [False, True])
+@pytest.mark.parametrize(
+    'original,refreshed',
+    [
+        ('Send 3 copies to Jamie by Friday', 'Send 4 copies to Jamie by Friday'),
+        ('Do not send copies to Jamie by Friday', 'Send copies to Jamie by Friday'),
+        ('Send copies to Jamie before Friday', 'Send copies to Jamie after Friday'),
+        ('Send access code to Jamie by Friday', 'Share access code with Jamie by Friday'),
+        ('Email John about the quarterly report', 'Call John about the quarterly report'),
+        ('Email the quarterly report to John', 'Email the quarterly report to Sarah'),
+        ('Send the quarterly report to John', 'Send the quarterly forecast to John'),
+        (
+            'Contact the maintainer requesting a license for the meeting-intelligence repository',
+            'Contact the maintainer requesting help resolving the missing repository license',
+        ),
+    ],
+    ids=['quantity', 'negation', 'time-qualifier', 'code', 'action', 'recipient', 'object', 'ambiguous-paraphrase'],
+)
+def test_segment_anchor_preserves_guarded_meaning(world, original, refreshed, reverse):
+    if reverse:
+        original, refreshed = refreshed, original
+    row = anchored_item(original)
+    world.store.rows[task_path('original')] = deepcopy(row)
+    candidate = anchored_item(refreshed)
+    result = db.reconcile(UID, 'survivor', [candidate], expected_revision=1)
+    assert result['counts']['added_new'] == 1
+    assert result['counts']['skipped_duplicate'] == 0
+    assert result['counts']['skipped_anchor_duplicate'] == 0
+    new_id = result['pending'][0]
+    assert new_id != 'original'
+    assert world.store.rows[task_path('original')] == row
+    assert world.store.rows[task_path(new_id)]['description'] == refreshed
+    ledger = world.store.rows[conv_path('survivor')][RECEIPT]['keys']
+    assert ledger[key(refreshed)] == [new_id]
+    repeated = db.reconcile(UID, 'survivor', [candidate], expected_revision=1)
+    assert repeated['counts']['added_new'] == 0
+    assert repeated['counts']['skipped_duplicate'] == 1
+    assert repeated['counts']['skipped_anchor_duplicate'] == 0
+
+
+def test_anchor_suppression_count_is_emitted_separately_from_total(monkeypatch):
+    emitted = {}
+    monkeypatch.setattr(
+        flow,
+        'OMI_ACTION_ITEM_REFRESH_TOTAL',
+        SimpleNamespace(labels=lambda *, outcome: SimpleNamespace(inc=lambda value: emitted.update({outcome: value}))),
+    )
+    flow._emit({'skipped_duplicate': 3, 'skipped_anchor_duplicate': 1})
+    assert emitted['skipped_duplicate'] == 3
+    assert emitted['skipped_anchor_duplicate'] == 1
+
+
+def test_segment_anchor_consumes_target_only_once():
+    row = anchored_item('Contact maintainer about repository license')
+    items = [
+        anchored_item('Contact maintainer about missing repository license'),
+        anchored_item('Contact maintainer about absent repository license'),
+    ]
+    _, creates, _, counts = plan('survivor', {'original': row}, items, {}, 0)
+    assert len(creates) == 1
+    assert counts['skipped_duplicate'] == 1
+
+
+def test_refresh_identity_collision_remains_atomic(world):
+    candidate = anchored_item('Ask maintainer about missing repository license')
+    _, creates, _, _ = plan('survivor', {'original': item('Send report')}, [candidate], {}, 0)
+    collision_id = next(iter(creates))
+    world.store.rows[task_path(collision_id)] = item('Foreign task', conversation_id='other')
+    before = deepcopy(world.store.rows)
+    with pytest.raises(ValueError, match='identity collision'):
+        db.reconcile(UID, 'survivor', [candidate], expected_revision=1)
+    assert world.store.rows == before
 
 
 def test_soft_deleted_tasks_are_suppressors_and_omitted_tasks_stay(world):
