@@ -901,7 +901,57 @@ def test_cap_recovery_polls_numeric_project_operation(monkeypatch):
     api.complete({'name': name}, 4, submitted=True, sleep=lambda _: None)
 
 
-def test_cap_recovery_operation_404_is_not_validation_success(monkeypatch, capsys):
+def test_cap_validation_never_polls_an_unpersisted_operation(monkeypatch, capsys):
+    """Run 44862200539: a validate-only operation name is not readable (404); never GET it."""
+    api = recovery.RunAPI('fixture-token')
+
+    def missing(*_args, **_kwargs):
+        raise AssertionError('validate-only operations must not be polled')
+
+    monkeypatch.setattr(api.opener, 'open', missing)
+    # Without an exact Service preview it is still not validation success.
+    with pytest.raises(ValueError, match='no exact pump service preview'):
+        api.complete({'name': recovery.OPERATIONS + 'operation'}, 4, submitted=False, sleep=lambda _: None)
+    out = capsys.readouterr().out
+    assert 'PUMP_CAP_VALIDATE_SHAPE keys=name done=False metadata_type=absent' in out
+    assert recovery.OPERATIONS not in out  # key names only, never values
+
+
+@pytest.mark.parametrize(
+    'metadata',
+    [
+        {'@type': recovery.SERVICE_TYPE, 'name': recovery.RESOURCE, 'scaling': {'maxInstanceCount': 20}},
+        {'@type': 'type.googleapis.com/other', 'name': recovery.RESOURCE, 'scaling': {'maxInstanceCount': 4}},
+        {'@type': recovery.SERVICE_TYPE, 'name': recovery.RESOURCE + '-x', 'scaling': {'maxInstanceCount': 4}},
+        'not-a-dict',
+        {'@type': recovery.SERVICE_TYPE, 'name': recovery.RESOURCE, 'scaling': None},
+    ],
+)
+def test_cap_validation_preview_must_name_the_exact_service_and_cap(monkeypatch, metadata):
+    api = recovery.RunAPI('fixture-token')
+    monkeypatch.setattr(api.opener, 'open', lambda *_a, **_k: pytest.fail('must not poll'))
+    with pytest.raises(ValueError):
+        api.complete({'name': recovery.OPERATIONS + 'op', 'metadata': metadata}, 4, submitted=False)
+
+
+@pytest.mark.parametrize('resource', sorted(recovery.RESOURCE_NAMES))
+def test_cap_validation_accepts_the_exact_unfinished_preview(monkeypatch, resource):
+    api = recovery.RunAPI('fixture-token')
+    monkeypatch.setattr(api.opener, 'open', lambda *_a, **_k: pytest.fail('must not poll'))
+    metadata = {'@type': recovery.SERVICE_TYPE, 'name': resource, 'scaling': {'maxInstanceCount': 4}}
+    api.complete({'name': recovery.OPERATIONS + 'op', 'metadata': metadata}, 4, submitted=False)
+
+
+def test_cap_validation_error_is_still_a_failure(monkeypatch):
+    api = recovery.RunAPI('fixture-token')
+    metadata = {'@type': recovery.SERVICE_TYPE, 'name': recovery.RESOURCE, 'scaling': {'maxInstanceCount': 4}}
+    with pytest.raises(ValueError, match='reported failure'):
+        api.complete(
+            {'name': recovery.OPERATIONS + 'op', 'metadata': metadata, 'error': {'code': 3}}, 4, submitted=False
+        )
+
+
+def test_submitted_operation_404_is_still_a_refusal(monkeypatch, capsys):
     api = recovery.RunAPI('fixture-token')
 
     def missing(*_args, **_kwargs):
@@ -909,7 +959,7 @@ def test_cap_recovery_operation_404_is_not_validation_success(monkeypatch, capsy
 
     monkeypatch.setattr(api.opener, 'open', missing)
     with pytest.raises(ValueError):
-        api.complete({'name': recovery.OPERATIONS + 'operation'}, 4, submitted=False, sleep=lambda _: None)
+        api.complete({'name': recovery.OPERATIONS + 'operation'}, 4, submitted=True, sleep=lambda _: None)
     assert capsys.readouterr().err == 'PUMP_CAP_API_ERROR stage=operation-read status=404\n'
 
 
