@@ -15,6 +15,7 @@ import tempfile
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, help="New evidence directory; existing paths are refused")
+    parser.add_argument("--cv1-baseline", action="store_true", help="Also compare BLE and storage against public CV1 .24")
     args = parser.parse_args()
     tests = Path(__file__).resolve().parent
     app = tests.parent
@@ -31,6 +32,10 @@ def main():
         "output": str(output),
     }
     inputs = [app / "src/lib/core" / name for name in ("codec.c", "codec.h", "config.h", "utils.h", "transport.c")]
+    storage_sources = ("storage.c", "storage.h", "custody.c", "custody.h", "sd_card.h", "transport.h", "utils.h")
+    if args.cv1_baseline:
+        inputs += [app / "src/lib/core" / name for name in storage_sources if name != "utils.h"]
+        inputs.append(app / "src/rtc.h")
     inputs += [app / "src" / name for name in ("diagnostics.c", "diagnostics.h", "diagnostics_packet.c")]
     inputs += [tests / "diagnostics_packet_test.c"]
 
@@ -131,6 +136,51 @@ def main():
             + [str(output / "conn_params_regression.c"), "-o", str(output / "conn_params")],
         )
         run("conn-params", [str(output / "conn_params")])
+        if args.cv1_baseline:
+            public_sha = "2fd0a9d94f238b6c338d6c67aec1e77f783159d9"  # Omi_CV1_v3.0.24
+            report["cv1_baseline_sha"] = public_sha
+            public_transport = subprocess.check_output(
+                ["git", "show", f"{public_sha}:omi/firmware/omi/src/lib/core/transport.c"],
+                cwd=app,
+                text=True,
+                timeout=10,
+            )
+            request_start = public_transport.index("#define CONN_PARAM_RETRY_COUNT")
+            request_end = public_transport.index("static void update_phy(struct bt_conn *conn)\n{", request_start)
+            callback_start = public_transport.index("static void _le_param_updated(")
+            callback_end = public_transport.index("static void _le_phy_updated(", callback_start)
+            baseline = public_transport[request_start:request_end] + public_transport[callback_start:callback_end]
+            (output / "conn_params_baseline_block.inc").write_text(baseline)
+            run(
+                "conn-params-baseline-compile",
+                flags
+                + ["-Werror", "-pedantic", "-DOMI_CV1_BLE_BASELINE=1"]
+                + includes
+                + [str(output / "conn_params_regression.c"), "-o", str(output / "conn_params_baseline")],
+            )
+            run("conn-params-baseline", [str(output / "conn_params_baseline")])
+            baseline_core = output / "baseline-core"
+            baseline_core.mkdir()
+            for filename in storage_sources:
+                (baseline_core / filename).write_bytes(
+                    subprocess.check_output(
+                        ["git", "show", f"{public_sha}:omi/firmware/omi/src/lib/core/{filename}"], cwd=app, timeout=10
+                    )
+                )
+            core = app / "src/lib/core"
+            for name, source, source_flag in (
+                ("storage", core, []),
+                ("storage-baseline", baseline_core, ['-DOMI_CV1_BASELINE_STORAGE_SOURCE="storage.c"']),
+            ):
+                run(
+                    name + "-compile",
+                    flags
+                    + ["-Werror", "-Wno-unused-parameter", "-Wno-unused-variable", "-I" + str(tests / "stubs")]
+                    + ["-iquote", str(source), "-iquote", str(app / "src"), "-iquote", str(core)]
+                    + source_flag
+                    + [str(tests / "test_storage.c"), str(source / "custody.c"), "-o", str(output / name)],
+                )
+                run(name, [str(output / name)])
         start = "/* One snapshot per connection."
         end = "static struct bt_gatt_attr diagnostics_service_attr"
         if transport.count(start) != 1 or transport.count(end) != 1:

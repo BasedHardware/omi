@@ -20,30 +20,62 @@ struct bt_le_conn_param {
     uint16_t interval_min, interval_max, latency, timeout;
 };
 static unsigned calls;
+static uint16_t requested_timeout;
 static int api_error;
+#ifdef OMI_CV1_BLE_BASELINE
+static unsigned sleeps;
+static void k_sleep(unsigned millis)
+{
+    assert(millis == 300);
+    sleeps++;
+}
+#define K_MSEC(ms) (ms)
+#define EXPECTED_TIMEOUT 400
+#else
+#define EXPECTED_TIMEOUT 600
 static uint8_t bt_conn_index(struct bt_conn *conn)
 {
     return conn->index;
 }
+#endif
 static int bt_conn_le_param_update(struct bt_conn *conn, const struct bt_le_conn_param *p)
 {
     (void) conn;
-    assert(p->interval_min == 6 && p->interval_max == 12 && p->latency == 0 && p->timeout == 600);
+    assert(p->interval_min == 6 && p->interval_max == 12 && p->latency == 0 && p->timeout == EXPECTED_TIMEOUT);
     /* Convert both sides to microseconds; mixed Bluetooth units must not be compared directly. */
     assert(p->interval_max * 1250U * (p->latency + 1U) * 3U < p->timeout * 10000U);
+    requested_timeout = p->timeout;
     calls++;
     return api_error;
 }
+#ifdef OMI_CV1_BLE_BASELINE
+#include "conn_params_baseline_block.inc"
+#else
 /* Real production request, update callback and lifecycle reset statements. No k_sleep shim:
  * a blocking callback retry fails compilation. */
 #include "conn_params_block.inc"
+#endif
 int main(void)
 {
-    struct bt_conn a = {0}, b = {1}, invalid = {2};
+    struct bt_conn a = {0};
+#ifndef OMI_CV1_BLE_BASELINE
     connected_reset(&a);
+#endif
     update_conn_params(&a); /* Initial request counts toward the same budget. */
     _le_param_updated(&a, 24, 0, 600);
     assert(calls == 1);
+    for (unsigned i = 0; i < 8; i++)
+        _le_param_updated(&a, 25, 0, 400);
+    printf("initial plus eight callbacks: %u requests, timeout %u ms\n", calls, requested_timeout * 10U);
+#ifdef OMI_CV1_BLE_BASELINE
+    assert(calls == 9 && sleeps == 0);
+    api_error = -16;
+    _le_param_updated(&a, 25, 0, 400);
+    assert(calls == 12 && sleeps == 2);
+    printf("immediate API failure: %u sleeps\n", sleeps);
+#else
+    struct bt_conn b = {1}, invalid = {2};
+    assert(calls == 3);
     for (unsigned i = 0; i < 1000; i++)
         _le_param_updated(&a, 25, 0, 400);
     assert(calls == 3);
@@ -63,5 +95,6 @@ int main(void)
     assert(calls == 7);
     puts("PASS timeout, unchanged intervals, refusal cap, API failures, reconnect reset, independent links, "
          "nonblocking callback");
+#endif
     return 0;
 }

@@ -207,7 +207,11 @@ bool rtc_is_valid(void)
     return false;
 }
 
+#ifdef OMI_CV1_BASELINE_STORAGE_SOURCE
+#include OMI_CV1_BASELINE_STORAGE_SOURCE
+#else
 #include "../src/lib/core/storage.c"
+#endif
 
 static void z_connect(struct bt_conn *c)
 {
@@ -255,7 +259,9 @@ static void z_reset_all(void)
     z_clear_calls = 0;
     z_info_flush_calls = 0;
     z_info_peek_calls = 0;
+#ifndef OMI_CV1_BASELINE_STORAGE_SOURCE
     k_sem_init(&storage_wake_sem, 0, 1);
+#endif
     storage_status_refresh_deadline_ms = 0;
     z_on_sd_read = NULL;
     z_read_calls = 0;
@@ -475,37 +481,47 @@ static void test_clear_terminates_read(void)
     printf("clear_read ok\n");
 }
 
-/* Status polling must not write the card. sd_ring_get_info() flushes the
- * buffered batch, so with live persist a poll every 250 ms rewrote the whole
- * batch four times a second for as long as a phone stayed connected. */
-static void test_status_poll_never_flushes(void)
+/* The ring accumulates packets while INFO is waiting for the phone's MTU.
+ * Each connected status poll used to force a commit during that wait. */
+static void test_status_polls_during_stalled_drain(void)
 {
     z_reset_all();
+    z_conn_b.mtu = 23;
     z_connect(&z_conn_b);
-    for (int i = 0; i < 40; i++) {
+    uint8_t info_cmd = 0x10;
+    z_send_cmd(&z_conn_b, &info_cmd, 1);
+    for (int i = 0; i < 8; i++) {
+        z_sd.write_seq++; /* More recorded packets enter the ring. */
         z_stub_now_ms += 250;
         z_run(1);
     }
-    CHECK(z_info_peek_calls >= 40);
+    CHECK(z_find_notify(0x02, &z_conn_b, 0) < 0);
+    CHECK(info_requested);
+#ifdef OMI_CV1_BASELINE_STORAGE_SOURCE
+    CHECK(z_info_flush_calls == 8);
+    CHECK(z_info_peek_calls == 0);
+#else
+    CHECK(z_info_peek_calls == 8);
     CHECK(z_info_flush_calls == 0);
+#endif
+    int poll_flushes = z_info_flush_calls;
 
-    /* The app asking for the ring still gets the committed, flushed state. */
-    uint8_t info_cmd = 0x10;
-    z_send_cmd(&z_conn_b, &info_cmd, 1);
+    /* The pending INFO and the subsequent read get committed state. */
+    z_conn_b.mtu = 64;
     z_run(1);
     CHECK(z_find_notify(0x02, &z_conn_b, 0) >= 0);
-    CHECK(z_info_flush_calls == 1);
+    CHECK(z_info_flush_calls == poll_flushes + 1);
 
-    /* So does starting a read, which must see every record queued so far. */
     uint8_t rd[9] = {0x11};
     sys_put_be64(0, rd + 1);
     z_send_cmd(&z_conn_b, rd, sizeof(rd));
     z_run(1);
     CHECK(transfer_active);
-    CHECK(z_info_flush_calls == 2);
-    printf("status_poll_no_flush ok\n");
+    CHECK(z_info_flush_calls == poll_flushes + 2);
+    printf("stalled drain: %d flush-capable calls during eight status polls\n", poll_flushes);
 }
 
+#ifndef OMI_CV1_BASELINE_STORAGE_SOURCE
 /* The worker sleeps on its wake semaphore when idle instead of polling each
  * millisecond. The harness clock only moves when the code calls k_msleep(), so
  * an idle connected worker must leave it untouched. */
@@ -551,6 +567,7 @@ static void test_idle_worker_waits_for_wake(void)
     CHECK(info_requested == 0);
     printf("idle_wait ok\n");
 }
+#endif
 
 int main(void)
 {
@@ -562,8 +579,10 @@ int main(void)
     test_read_advance_done();
     test_disconnect_mid_read();
     test_clear_terminates_read();
-    test_status_poll_never_flushes();
+    test_status_polls_during_stalled_drain();
+#ifndef OMI_CV1_BASELINE_STORAGE_SOURCE
     test_idle_worker_waits_for_wake();
+#endif
     printf("storage harness: %d failures\n", failures);
     return failures ? 1 : 0;
 }
