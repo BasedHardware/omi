@@ -323,6 +323,106 @@ def sweep_query(state, monkeypatch):
     return query
 
 
+@pytest.mark.parametrize('runner', ['active', 'legacy'])
+@pytest.mark.parametrize('effects_only', [False, True])
+def test_ownership_park_releases_only_after_python_decision(state, sweep_query, monkeypatch, runner, effects_only):
+    from database import conversations
+    from database.outbox_firestore import ENRICHMENT_OUTBOX
+    from utils.conversations import lazy_enrichment, process_conversation
+    from utils.enrichment import custody
+    from utils.enrichment.consumer import EnrichmentConsumer
+    from utils.sync import processing_hold
+    from utils.workers.consumer import run_push
+
+    rows, tasks = state
+    if effects_only:
+        # The effects producer normally blind-writes this separate obligation.
+        ENRICHMENT_OUTBOX.enqueue(
+            reprocess.key('u', 'c\0effects'),
+            'u',
+            {'conversation_id': 'c', 'language': 'en', 'effects_only': True},
+            600,
+            now=0,
+        )
+    else:
+        reprocess.mark('u', 'c', 'en', now=0)
+    key = reprocess.key('u', 'c\0effects' if effects_only else 'c')
+    monkeypatch.setattr(custody, 'discard_blocked', lambda _: False)
+    wake = tasks[-1]['task_token']
+    worlds = {
+        'c': {'status': 'completed', 'sync_bridge_pending': {'target_id': 'target'}},
+        'target': {'finalization_engine': 'go', 'finalization_owner_epoch': 1},
+    }
+    apply_effects = Mock()
+    checkpoint = Mock()
+    if effects_only:
+        worlds['c'].update(finalization_engine='go', finalization_owner_epoch=1)
+        monkeypatch.setattr(conversations, 'get_conversation', lambda uid, cid: worlds[cid])
+        monkeypatch.setattr(conversations, 'record_demand_enrichment_checkpoint', checkpoint)
+        monkeypatch.setattr(lazy_enrichment, 'deserialize_conversation', lambda row: SimpleNamespace(id='c'))
+        monkeypatch.setattr(lazy_enrichment, 'fingerprint', lambda _: 'effects-input')
+        monkeypatch.setattr(process_conversation, 'apply_settled_enrichment', apply_effects)
+    probe = Mock(side_effect=lambda uid, cid, **_: worlds[cid])
+    monkeypatch.setattr(conversations, 'get_conversation_raw_snapshot', probe)
+    monkeypatch.setattr(sweep_query, 'stream', lambda: [SimpleNamespace(id=key, to_dict=lambda: deepcopy(rows[key]))])
+    calls = []
+
+    def process(*_):
+        calls.append('process')
+        if len(calls) == 1:
+            raise processing_hold.finalization_owner_deferral()
+        return SimpleNamespace(structured={'title': 'done', 'overview': 'finished'})
+
+    consumer = EnrichmentConsumer(ENRICHMENT_OUTBOX, process)
+
+    def deliver(token, now):
+        if runner == 'legacy':
+            return reprocess.run(key, token, process, now=now)
+        return run_push(consumer, ENRICHMENT_OUTBOX, key, token, now=now).outcome
+
+    assert deliver(wake, 600) == 'deferred'
+    assert reprocess.ownership_parked(rows[key])
+    assert rows[key]['task_due_at'] is None and rows[key]['task_token'] == wake
+    assert deliver(wake, 700) == 'stale'
+    now = rows[key]['due_at']
+    for _ in range(3):
+        assert reprocess.sweep(now=now)['repaired'] == 0
+        assert reprocess.ownership_parked(rows[key])
+        assert len(tasks) == 1
+        now = rows[key]['due_at']
+    assert calls == ([] if effects_only else ['process'])
+    apply_effects.assert_not_called()
+    checkpoint.assert_not_called()
+
+    original = deepcopy(rows[key])
+    new, (reported, coalesced) = reprocess.mark_update(
+        'u', 'c', 'es', current=now, settle_at=now, effects_only=effects_only, coalesce='max', batch=False
+    )(original)
+    assert coalesced and not reported['_wake']
+    assert new['version'] == original['version'] + 1 and new['language'] == 'es'
+    assert new['first_pending_at'] == original['first_pending_at']
+    rows[key] = new
+    if effects_only:
+        # mark_effects can blind-merge over the generic defer reason.
+        rows[key]['deferred_reason'] = None
+        assert reprocess.ownership_parked(rows[key])
+
+    handed_back = worlds['c' if effects_only else 'target']
+    handed_back.update(finalization_engine='python', finalization_owner_epoch=2)
+    assert reprocess.sweep(now=now)['repaired'] == 1
+    assert not rows[key]['dormant']
+    assert len(tasks) == 2 and tasks[-1]['task_token'] != wake
+    assert deliver(tasks[-1]['task_token'], now) in ('done', 'processed')
+    if effects_only:
+        assert worlds['target']['finalization_engine'] == 'go'
+        assert [call.args for call in probe.call_args_list] == [('u', 'c')] * 4
+        assert deliver(tasks[-1]['task_token'], now + 1) == 'stale'
+        apply_effects.assert_called_once_with('u', SimpleNamespace(id='c'))
+        checkpoint.assert_called_once_with('u', 'c', 'effects-input')
+    else:
+        assert calls == ['process', 'process']
+
+
 @pytest.mark.parametrize('field', ['queue', 'handler', 'audience', 'invoker_sa'])
 def test_sweep_repairs_each_missing_binding_field(state, sweep_query, field):
     rows, _ = state
@@ -1086,3 +1186,21 @@ def test_later_revision_retains_settle_and_repeat_work_ceilings(state, monkeypat
         reprocess.mark('u', 'c', 'en', now=121 + offset)
     assert rows[key]['due_at'] == 121 + ceiling
     assert rows[key]['effects_only'] is False
+
+
+@pytest.mark.parametrize('claimed', [False, True])
+@pytest.mark.parametrize('engine', ['pending', 'go'])
+def test_python_sync_refuses_foreign_finalization_before_processing(pipeline, monkeypatch, claimed, engine):
+    read = Mock(return_value={'id': 'c', 'finalization_engine': engine, 'finalization_owner_epoch': 1})
+    monkeypatch.setattr(pipeline.conversations_db, 'get_conversation', read)
+    processor = Mock()
+    monkeypatch.setattr(pipeline, 'process_conversation', processor)
+    context = {} if claimed else None
+    token = pipeline.PROCESS_CONTEXT.set(context)
+    try:
+        with pytest.raises(pipeline.processing_hold.ProcessingDeferred, match='finalization_owned_elsewhere'):
+            pipeline._reprocess_conversation_after_update('u', 'c', 'en')
+    finally:
+        pipeline.PROCESS_CONTEXT.reset(token)
+    read.assert_called_once_with('u', 'c')
+    processor.assert_not_called()

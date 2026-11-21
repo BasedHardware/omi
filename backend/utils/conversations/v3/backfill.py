@@ -40,6 +40,7 @@ LIVE_PARTITION_ROWS = 192
 # A step (outline pass plus notes) stops taking new notes work this long after it started; the
 # route timeout and the Cloud Tasks dispatch deadline are both 25 minutes.
 STEP_SECONDS = 20 * 60
+OWNERSHIP_RECHECK_SECONDS = 60 * 60
 DEFAULT_QUEUE = 'conversations-v3-backfill'
 STARTS_PER_SWEEP = 20
 
@@ -258,13 +259,14 @@ def _task_id(uid, run_id, index, phase, seq, gen):
     return f'conversations-v3-backfill-{owner}-{run_id}-g{gen}-{index}-{phase}-{seq}'
 
 
-def enqueue_step(uid, run_id, index, phase='derive', seq=0, gen=0):
+def enqueue_step(uid, run_id, index, phase='derive', seq=0, gen=0, *, schedule_at=None):
     """Named per run, resume generation, partition, phase and drain sequence: a redelivery dedupes."""
     enqueue_named_task(
         os.getenv('CONVERSATIONS_V3_BACKFILL_QUEUE', DEFAULT_QUEUE),
         task_base() + '/v1/conversations-v3/backfill',
         _task_id(uid, run_id, index, phase, seq, gen),
         {'uid': uid, 'run_id': run_id, 'partition': index, 'phase': phase},
+        schedule_at=schedule_at,
     )
 
 
@@ -425,7 +427,11 @@ async def run_step(uid, run_id, index, phase):
             expect=active,
         ):
             return {'outcome': 'stopped', 'remaining': drained['remaining']}
-        await run_blocking(db_executor, enqueue_step, uid, run_id, index, 'drain', seq, gen)
+        # Keep the partition open through handback without rapid task churn when all debt is foreign.
+        schedule = {}
+        if drained.get('ownership_blocked') == drained['remaining']:
+            schedule['schedule_at'] = int(time.time()) + OWNERSHIP_RECHECK_SECONDS
+        await run_blocking(db_executor, enqueue_step, uid, run_id, index, 'drain', seq, gen, **schedule)
         return {'outcome': 'draining', 'remaining': drained['remaining']}
     last = index + 1 >= len(partitions)
     if run.get('mode') == LIVE_MODE:

@@ -8,6 +8,7 @@ from typing import Any, Dict, Literal, Optional
 from fastapi.websockets import WebSocket
 
 from database import conversation_finalization_jobs as finalization_jobs_db
+from models.finalization_owner import REFUSAL as FINALIZATION_OWNER_REFUSAL
 from services.conversation_finalization import final_attempt_failed
 from utils.byok import set_validated_byok_keys
 from utils.cloud_tasks import get_listen_finalization_tasks_max_attempts
@@ -214,7 +215,8 @@ async def process_conversation_task(
                     'error': f'job_{claim_status}',
                     # A dead-lettered job is never actionable again; telling the
                     # live session it is terminal stops it from re-requesting.
-                    'terminal': claim_status in finalization_jobs_db.TERMINAL_JOB_STATUSES,
+                    'terminal': claim_status == FINALIZATION_OWNER_REFUSAL
+                    or claim_status in finalization_jobs_db.TERMINAL_JOB_STATUSES,
                 }
             )
             return

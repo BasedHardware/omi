@@ -11,10 +11,12 @@ from functools import cache
 import hashlib
 import json
 import os
+import time
 from typing import Any
 
 from prometheus_client import Counter, Histogram, REGISTRY
 from config.merge_before_processing import enabled as merge_before_processing_enabled
+from models.finalization_owner import REFUSAL as FINALIZATION_OWNER_REFUSAL
 from utils.observability.reasons import ReasonFamily, SyncProcessingHoldOutcome, reason_label
 
 QUIET_SECONDS = 600
@@ -31,6 +33,11 @@ class ProcessingDeferred(RuntimeError):
         super().__init__(reason)
         self.reason = reason
         self.available_at = available_at
+
+
+def finalization_owner_deferral() -> ProcessingDeferred:
+    """Retry durable enrichment later, including after a Python handback."""
+    return ProcessingDeferred(FINALIZATION_OWNER_REFUSAL, time.time() + 120)
 
 
 @cache

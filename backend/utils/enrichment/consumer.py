@@ -220,6 +220,13 @@ class EnrichmentConsumer:
                 try:
                     enrich_settled(uid, conversation_id, language)
                 except processing_hold.ProcessingDeferred as error:
+                    if error.reason == rows.FINALIZATION_OWNER_REFUSAL:
+                        return Result(
+                            Outcome.DEFERRED,
+                            ConsumerReason.NOT_DUE,
+                            available_at=error.available_at,
+                            defer_cause=error.reason,
+                        )
                     return Result(Outcome.DEFERRED, ConsumerReason.NOT_DUE, available_at=error.available_at)
             if lost.is_set():
                 return Result(Outcome.STALE, ConsumerReason.STALE_TOKEN)
@@ -271,7 +278,9 @@ class EnrichmentConsumer:
                     if output is not None and not summary_seen and not discarded and not blocked:
                         raise summary_delivery.SummaryOutputUnavailable('first-summary output is empty')
         except processing_hold.ProcessingDeferred as error:
-            return Result(Outcome.DEFERRED, ConsumerReason.NOT_DUE, available_at=error.available_at)
+            return Result(
+                Outcome.DEFERRED, ConsumerReason.NOT_DUE, available_at=error.available_at, defer_cause=error.reason
+            )
         except rows.FirstSummaryCallbackPending as error:
             return _callback_pending(_cause(error), now)
         except HTTPException as error:
@@ -343,6 +352,10 @@ class EnrichmentConsumer:
             try:
                 pending = transfer_redirect(
                     claim.row_id, claim.wake_token, claim.lease_token, str(context['redirect_to']), now=now
+                )
+            except processing_hold.ProcessingDeferred as error:
+                return Result(
+                    Outcome.DEFERRED, ConsumerReason.NOT_DUE, available_at=error.available_at, defer_cause=error.reason
                 )
             except rows.FirstSummaryCallbackPending as error:
                 return _callback_pending('redirect_' + _cause(error), now)

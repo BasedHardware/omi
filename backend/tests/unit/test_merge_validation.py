@@ -27,6 +27,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from models import finalization_owner
 from testing.import_isolation import load_module_fresh, stub_modules
 
 _BACKEND = Path(__file__).resolve().parents[2]
@@ -136,6 +137,7 @@ def merge():
         "utils.conversations.lifecycle": lifecycle_stub,
         "utils.other.storage": storage_stub,
         "models": models_pkg,
+        "models.finalization_owner": finalization_owner,
         "utils.memory.memory_service": memory_service_stub,
         "utils.memory.memory_system": memory_system_stub,
         "utils.memory.canonical_activation": canonical_activation_stub,

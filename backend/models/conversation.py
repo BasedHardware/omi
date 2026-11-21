@@ -4,6 +4,7 @@ from datetime import datetime
 from collections.abc import Mapping
 from typing import Annotated, Any, Dict, List, Literal, Optional, Union
 
+from models.finalization_owner import ENGINE_FIELD, EPOCH_FIELD, python_owns_finalization
 from pydantic.json_schema import SkipJsonSchema
 
 import config.speaker_match_scores as match_scores
@@ -764,6 +765,10 @@ class Conversation(BaseModel):
     client_device_id: Optional[str] = None
     client_platform: Optional[str] = None
 
+    # Preserve raw marker presence and type for the internal ownership check.
+    finalization_engine: SkipJsonSchema[Any] = Field(default=None, exclude=True, repr=False)
+    finalization_owner_epoch: SkipJsonSchema[Any] = Field(default=None, exclude=True, repr=False)
+
     # Read projection of the authoritative finalization-job meeting receipt.
     meeting_treatment_eligible: bool = False
     meeting_treatment_reason: Optional[str] = None
@@ -789,6 +794,12 @@ class Conversation(BaseModel):
         # Update plugins_results based on apps_results
         self.plugins_results = [PluginResult(plugin_id=app.app_id, content=app.content) for app in self.apps_results]
         self.processing_memory_id = self.processing_conversation_id
+
+    @property
+    def python_finalization_owned(self) -> bool:
+        return python_owns_finalization(
+            {field: getattr(self, field) for field in (ENGINE_FIELD, EPOCH_FIELD) if field in self.model_fields_set}
+        )
 
     def get_transcript(self, include_timestamps: bool, people: List[Person] = None, user_name: str = None) -> str:
         # Warn: missing transcript for workflow source, external integration source

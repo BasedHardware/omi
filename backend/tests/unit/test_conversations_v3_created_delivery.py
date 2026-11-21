@@ -3,6 +3,7 @@
 from contextlib import nullcontext
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
+from unittest.mock import Mock
 
 import pytest
 
@@ -96,6 +97,56 @@ def test_short_path_settle_writes_no_notes_and_owes_nothing(strict):
     strict.rows[C] = derived()
     assert settle(strict, notes=False) is False
     assert 'v3_notes_written' not in strict.rows[C] and 'v3_created_pending' not in strict.rows[C]
+
+
+def test_discovery_skips_parked_deliveries_without_hiding_python_work(monkeypatch):
+    def snapshot(cid, engine):
+        return SimpleNamespace(id=cid, to_dict=lambda: {'finalization_engine': engine, 'finalization_owner_epoch': 1})
+
+    pending = snapshot('a', 'pending')
+    go = snapshot('b', 'go')
+    python = SimpleNamespace(id='c', to_dict=lambda: {})
+    monkeypatch.setattr(writers, 'CREATED_PAGE', 2)
+    collection = Mock()
+    query = collection.where.return_value
+    query.limit.return_value.stream.return_value = [pending, go]
+    query.start_after.return_value.limit.return_value.stream.return_value = [python]
+    monkeypatch.setattr(store, 'user_conversations', lambda *_: collection)
+
+    assert writers.pending_created('synthetic', firestore_client=object()) == ['c']
+    query.start_after.assert_called_once_with(go)
+
+    query.reset_mock()
+    query.limit.return_value.stream.return_value = [python]
+    assert writers.pending_created('synthetic', firestore_client=object()) == ['c']
+    query.limit.return_value.stream.assert_called_once()
+    query.start_after.assert_not_called()
+
+
+@pytest.mark.parametrize('engine', ['pending', 'go'])
+@pytest.mark.asyncio
+async def test_marked_created_delivery_preserves_claim_and_owed_marker(strict, delivery, monkeypatch, engine):
+    strict.rows[C] = derived(
+        v3_notes_written=True, v3_created_pending=True, finalization_engine=engine, finalization_owner_epoch=1
+    )
+    blocked = dict(strict.rows[C])
+    assert await created.deliver('synthetic') == 0
+    assert strict.rows[C] == blocked
+
+    strict.rows[C] = derived(v3_notes_written=True, v3_created_pending=True)
+
+    def read_after_claim(*_):
+        strict.rows[C].update(finalization_engine=engine, finalization_owner_epoch=1)
+        return dict(strict.rows[C])
+
+    monkeypatch.setattr(created.conversations_db, 'get_conversation', read_after_claim)
+    assert await created.deliver('synthetic') == 0
+    blocked = dict(strict.rows[C])
+    assert not delivery.sent and not delivery.wakes
+    assert blocked['v3_created_pending'] and blocked['v3_created_attempts'] == 1
+    for delivered, dropped in [(True, False), (False, True), (False, False)]:
+        assert not writers.finish_created('synthetic', 'c', 1, delivered=delivered, dropped=dropped)
+        assert strict.rows[C] == blocked
 
 
 @pytest.mark.asyncio

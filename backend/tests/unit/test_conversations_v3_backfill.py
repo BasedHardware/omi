@@ -723,6 +723,54 @@ async def test_unfinished_notes_continue_on_a_new_named_drain_task(chain, monkey
 
 
 @pytest.mark.asyncio
+async def test_foreign_notes_keep_partition_open_until_handback(direct, strict, monkeypatch):
+    uid = 'synthetic'
+    path = ('users', uid, 'conversations', 'c')
+    strict.rows[path] = {
+        'id': 'c',
+        'v3_backfill_process_pending': True,
+        'finalization_engine': 'go',
+        'finalization_owner_epoch': 1,
+    }
+    ledger = Ledger(1, status='running')
+    part = ledger.run['partitions'][0]
+    part['status'] = 'notes'
+    monkeypatch.setattr(runs, 'get_run', ledger.get)
+    monkeypatch.setattr(runs, 'update_run', ledger.update)
+    monkeypatch.setattr(store, 'get_firestore_client', lambda: strict)
+    monkeypatch.setattr(
+        store,
+        'pending_backfill_processing',
+        lambda _: [dict(strict.rows[path])] if strict.rows[path]['v3_backfill_process_pending'] else [],
+    )
+    process = AsyncMock()
+    monkeypatch.setattr(service, '_process_leased', process)
+    wakes = []
+    monkeypatch.setattr(backfill, 'task_base', lambda: 'https://worker.invalid')
+    monkeypatch.setattr(backfill, 'enqueue_named_task', lambda *args, **kwargs: wakes.append((args, kwargs)))
+    clock = backfill.time.time()
+
+    assert await backfill.run_step(uid, RUN, 0, 'drain') == {'outcome': 'draining', 'remaining': 1}
+    assert part['status'] == 'notes' and part['notes_remaining'] == 1
+    assert strict.rows[path]['v3_backfill_process_pending']
+    process.assert_not_awaited()
+    assert len(wakes) == 1
+    args, kwargs = wakes.pop()
+    assert kwargs['schedule_at'] >= int(clock) + backfill.OWNERSHIP_RECHECK_SECONDS
+
+    strict.rows[path].update(finalization_engine='python', finalization_owner_epoch=2)
+    payload = args[3]
+    assert await backfill.run_step(payload['uid'], payload['run_id'], payload['partition'], payload['phase']) == {
+        'outcome': 'committed',
+        'last': True,
+    }
+    assert part['notes_processed'] == 1 and part['notes_remaining'] == 0
+    assert not strict.rows[path]['v3_backfill_process_pending']
+    process.assert_awaited_once()
+    assert not wakes
+
+
+@pytest.mark.asyncio
 async def test_blocked_partition_stops_the_run_and_busy_retries(chain, monkeypatch):
     ledger, steps = chain
 
