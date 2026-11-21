@@ -32,6 +32,12 @@ class BGTaskLaunchRegistrationTest < Minitest::Test
     assert_equal 2, sites, 'periodic sync + on-device overflow, both from didFinishLaunching'
   end
 
+  def test_background_service_handler_is_registered_before_launch_finishes
+    assert_includes did_finish_launching_body,
+                    'SwiftFlutterBackgroundServicePlugin.registerTaskIdentifier(' \
+                    "\n      taskIdentifier: SwiftFlutterBackgroundServicePlugin.taskIdentifier"
+  end
+
   def test_background_service_registration_is_once_per_process
     body = BACKGROUND_SERVICE[BACKGROUND_SERVICE.index('public static func registerTaskIdentifier')..]
     guard = body.index('registeredTaskIdentifiers.insert(taskIdentifier).inserted else { return }')

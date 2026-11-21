@@ -7,6 +7,7 @@ import AVFoundation
 import Speech
 import WidgetKit
 import BackgroundTasks
+import flutter_background_service_ios
 
 extension FlutterError: Error {}
 // MARK: - Quick Actions Icon Patcher
@@ -181,6 +182,11 @@ final class QuickActionsIconPatcher: NSObject {
       self.runPeriodicSync(task)
     }
     OnDeviceOverflowPlugin.registerBackgroundTask()
+    // The plugin registers in its own didFinishLaunching, which runs after launch under UIScene (iOS 18
+    // raises). Register here first; its once-per-process guard makes the plugin's later calls no-ops.
+    SwiftFlutterBackgroundServicePlugin.registerTaskIdentifier(
+      taskIdentifier: SwiftFlutterBackgroundServicePlugin.taskIdentifier
+    )
     QuickActionsIconPatcher.shared.startObserving()
     SwiftFlutterForegroundTaskPlugin.setPluginRegistrantCallback { registry in
       GeneratedPluginRegistrant.register(with: registry)
