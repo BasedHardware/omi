@@ -1,0 +1,3 @@
+{
+  "change": "Custom live transcription no longer fills the Custom STT log with repeated Unsupported message type warnings during recording"
+}
