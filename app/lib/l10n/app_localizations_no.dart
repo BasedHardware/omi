@@ -8949,6 +8949,9 @@ class AppLocalizationsNo extends AppLocalizations {
   String get voiceResponseAlways => 'Alltid';
 
   @override
+  String get voiceResponseOmiDevice => 'Omi device';
+
+  @override
   String get agreeAndContinue => 'Godta og fortsett';
 
   @override
@@ -11217,6 +11220,18 @@ class AppLocalizationsNo extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$name og andre';
   }
+
+  @override
+  String get singleTap => 'Enkelttrykk';
+
+  @override
+  String get singleTapAction => 'Enkelttrykk-handling';
+
+  @override
+  String get tripleTap => 'Trippeltrykk';
+
+  @override
+  String get tripleTapAction => 'Trippeltrykk-handling';
 
   @override
   String get deviceOnboardingVoiceReplyTitle => 'Hør svarene fra Omi';

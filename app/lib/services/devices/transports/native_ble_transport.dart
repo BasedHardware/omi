@@ -297,6 +297,7 @@ class NativeBleTransport extends DeviceTransport implements CaptureSubscriptionE
   ///
   /// This is intentionally read-only so higher-level commands can fail closed
   /// instead of treating NativeBleTransport's compatibility no-op writes as success.
+  @override
   bool hasCharacteristic(String serviceUuid, String characteristicUuid) =>
       _hasCharacteristic(serviceUuid, characteristicUuid);
 

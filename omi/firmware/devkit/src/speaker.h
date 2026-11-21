@@ -1,6 +1,7 @@
 #ifndef SPEAKER_H
 #define SPEAKER_H
 
+#include <zephyr/bluetooth/conn.h>
 #include <zephyr/kernel.h>
 /**
  * @brief Initialize the Speaker
@@ -15,14 +16,17 @@ int speaker_init();
  * @brief Endpoint function for streaming audio
  *
  * Call this function in the following way (Via ble)
- * 1. Send a 2 byte packet containing the audio data size
+ * 1. Send a 4 byte little-endian packet containing the audio data size
  * 2. Send to the ble notify id 400 byte packets (with notify), with each 2 bytes being the audio data
  * 3. Repeat step 2 until the audio data is sent. Then the speaker will automatically play the sound
  * when the audio data sent is equal to the audio data size sent in step 1
  *
  * @return The amount of data successfully sent in bytes.
  */
-uint16_t speak(uint16_t len, const void *buf);
+int speak(uint16_t len, const void *buf, struct bt_conn *conn);
+void speaker_reset_stream(void);
+// Transport supplies the version-2 drain notification after DMA releases the block.
+void speaker_notify_complete(struct bt_conn *conn, bool success);
 
 /**
  * @brief Play a chime effect

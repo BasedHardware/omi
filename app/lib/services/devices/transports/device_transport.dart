@@ -20,6 +20,13 @@ abstract class DeviceTransport {
   Future<List<int>> readCharacteristic(String serviceUuid, String characteristicUuid);
   Future<void> writeCharacteristic(String serviceUuid, String characteristicUuid, List<int> data);
 
+  /// Whether [characteristicUuid] was discovered on [serviceUuid] for this link.
+  ///
+  /// Default false so non-BLE transports stay conservative. Callers that need a
+  /// optional characteristic (e.g. DevKit 2 speaker PCM) must check this before
+  /// writing — [writeCharacteristic] may no-op silently when the char is absent.
+  bool hasCharacteristic(String serviceUuid, String characteristicUuid) => false;
+
   Stream<DeviceTransportState> get connectionStateStream;
 
   Future<void> dispose();

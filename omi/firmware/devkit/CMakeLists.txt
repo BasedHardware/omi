@@ -21,6 +21,11 @@ target_sources(app PRIVATE
 	# src/nfc.c future release
 )
 
+target_include_directories(app PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+    ${CMAKE_CURRENT_SOURCE_DIR}/../common
+)
+
 target_sources_ifdef(CONFIG_OMI_CODEC_OPUS app PRIVATE
     src/lib/opus-1.2.1/A2NLSF.c
     src/lib/opus-1.2.1/CNG.c

@@ -1,5 +1,6 @@
 #include "speaker.h"
 
+#include <errno.h>
 #include <math.h>
 #include <zephyr/bluetooth/gatt.h>
 #include <zephyr/bluetooth/l2cap.h>
@@ -11,12 +12,14 @@
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
 #include <zephyr/logging/log_ctrl.h>
+#include <zephyr/sys/atomic.h>
+#include <zephyr/sys/byteorder.h>
 
 LOG_MODULE_REGISTER(speaker, CONFIG_LOG_DEFAULT_LEVEL);
 
 #define MAX_BLOCK_SIZE 10000 // 24000 * 2
 
-#define BLOCK_COUNT 2
+#define BLOCK_COUNT 1
 #define SAMPLE_FREQUENCY 8000
 #define NUMBER_OF_CHANNELS 2
 #define PACKET_SIZE 400
@@ -31,12 +34,61 @@ K_MEM_SLAB_DEFINE_STATIC(mem_slab, MAX_BLOCK_SIZE, BLOCK_COUNT, 2);
 struct device *audio_speaker;
 
 static void *rx_buffer;
-static void *buzz_buffer;
-static int16_t *ptr2;
-static int16_t *clear_ptr;
-
+// The slab owns the DMA buffer while I2S plays it. Only the speaker thread
+// waits for its return; Bluetooth RX never sleeps for playback.
 static uint16_t current_length;
 static uint16_t offset;
+static uint16_t playback_bytes;
+static atomic_t playing;
+static struct bt_conn *playback_conn;
+K_SEM_DEFINE(playback_ready, 0, 1);
+
+static int play_pcm_block(size_t bytes)
+{
+    void *block = rx_buffer;
+    if (block == NULL)
+        return -EIO;
+    int result = i2s_write(audio_speaker, block, bytes);
+    if (result < 0)
+        return result;
+    rx_buffer = NULL; // I2S now owns and eventually frees this slab block.
+    result = i2s_trigger(audio_speaker, I2S_DIR_TX, I2S_TRIGGER_START);
+    if (result == 0)
+        result = i2s_trigger(audio_speaker, I2S_DIR_TX, I2S_TRIGGER_DRAIN);
+    if (result < 0)
+        i2s_trigger(audio_speaker, I2S_DIR_TX, I2S_TRIGGER_DROP);
+    // One slab block: reacquiring it proves DMA has released the previous
+    // transmission. The bound covers the maximum 312.5 ms audio block.
+    int allocated = k_mem_slab_alloc(&mem_slab, &rx_buffer, K_MSEC(1000));
+    if (allocated < 0) {
+        rx_buffer = NULL;
+        return allocated;
+    }
+    return result;
+}
+
+static void play_pending_block(void)
+{
+    int result = play_pcm_block(playback_bytes);
+    struct bt_conn *conn = playback_conn;
+    playback_conn = NULL;
+    atomic_clear(&playing);
+    speaker_notify_complete(conn, result == 0);
+    bt_conn_unref(conn);
+}
+
+static void speaker_thread(void *a, void *b, void *c)
+{
+    ARG_UNUSED(a);
+    ARG_UNUSED(b);
+    ARG_UNUSED(c);
+    while (true) {
+        k_sem_take(&playback_ready, K_FOREVER);
+        play_pending_block();
+    }
+}
+
+K_THREAD_DEFINE(speaker_thread_id, 1024, speaker_thread, NULL, NULL, NULL, 7, 0, 0);
 
 struct gpio_dt_spec haptic_gpio_pin = {.port = DEVICE_DT_GET(DT_NODELABEL(gpio1)),
                                        .pin = 11,
@@ -163,71 +215,50 @@ int speaker_init()
         return -1;
     }
 
-    err = k_mem_slab_alloc(&mem_slab, &buzz_buffer, K_MSEC(200));
-    if (err) {
-        LOG_INF("Failed to allocate for chime (%d)", err);
-        return -1;
-    }
-
-    memset(rx_buffer, 0, MAX_BLOCK_SIZE);
-    memset(buzz_buffer, 0, MAX_BLOCK_SIZE);
-
     return 0;
 }
 
-uint16_t speak(uint16_t len, const void *buf) // direct from bt
+int speak(uint16_t len, const void *buf, struct bt_conn *conn)
 {
-    uint16_t amount = 0;
-    amount = len;
-    if (len == 4) // if stage 1
-    {
-        current_length = ((uint32_t *) buf)[0];
-        LOG_INF("About to write %u bytes", current_length);
-        ptr2 = (int16_t *) rx_buffer;
-        clear_ptr = (int16_t *) rx_buffer;
-    } else { // if not stage 1
-        if (current_length > PACKET_SIZE) {
-            LOG_INF("Data length: %u", len);
-            current_length = current_length - PACKET_SIZE;
-            LOG_INF("remaining data: %u", current_length);
-
-            for (int i = 0; i < (int) (len / 2); i++) {
-                *ptr2++ = ((int16_t *) buf)[i];
-                *ptr2++ = ((int16_t *) buf)[i];
-            }
-            offset = offset + len;
-        } else if (current_length < PACKET_SIZE) {
-            LOG_INF("entered the final stretch");
-            LOG_INF("Data length: %u", len);
-            current_length = current_length - len;
-            LOG_INF("remaining data: %u", current_length);
-            // memcpy(rx_buffer+offset, buf, len);
-            for (int i = 0; i < len / 2; i++) {
-                *ptr2++ = ((int16_t *) buf)[i];
-                *ptr2++ = ((int16_t *) buf)[i];
-            }
-            offset = offset + len;
-            LOG_INF("offset: %u", offset);
-            offset = 0;
-            int res = i2s_write(audio_speaker, rx_buffer, MAX_BLOCK_SIZE);
-            if (res < 0) {
-                LOG_PRINTK("Failed to write I2S data: %d\n", res);
-            }
-            i2s_trigger(audio_speaker, I2S_DIR_TX, I2S_TRIGGER_START); // calls are probably non blocking
-            if (res != 0) {
-                LOG_PRINTK("Failed to drain I2S transmission: %d\n", res);
-            }
-            res = i2s_trigger(audio_speaker, I2S_DIR_TX, I2S_TRIGGER_DRAIN);
-            if (res != 0) {
-                LOG_PRINTK("Failed to drain I2S transmission: %d\n", res);
-            }
-            // clear the buffer
-            k_sleep(K_MSEC(4000));
-
-            memset(clear_ptr, 0, MAX_BLOCK_SIZE);
-        }
+    if (atomic_get(&playing))
+        return -EBUSY;
+    if (rx_buffer == NULL)
+        return -EIO;
+    if (current_length == 0) {
+        if (len != 4)
+            return -EINVAL;
+        uint32_t size = sys_get_le32(buf);
+        if (size == 0 || size > MAX_BLOCK_SIZE / 2 || (size & 1))
+            return -EINVAL;
+        current_length = size;
+        offset = 0;
+        return len;
     }
-    return amount;
+    if (len == 0 || len > PACKET_SIZE || (len & 1) || len > current_length)
+        return -EINVAL;
+    const uint8_t *samples = buf;
+    int16_t *stereo = (int16_t *) rx_buffer;
+    for (size_t i = 0; i < len; i += 2) {
+        int16_t sample = (int16_t) sys_get_le16(samples + i);
+        stereo[offset + i] = sample;
+        stereo[offset + i + 1] = sample;
+    }
+    offset += len;
+    current_length -= len;
+    if (current_length == 0) {
+        playback_bytes = offset * 2;
+        playback_conn = bt_conn_ref(conn);
+        atomic_set(&playing, 1);
+        k_sem_give(&playback_ready);
+    }
+    return len;
+}
+
+void speaker_reset_stream(void)
+{
+    // Called on disconnect; a queued DMA block still finishes on its worker.
+    current_length = 0;
+    offset = 0;
 }
 
 void generate_gentle_chime(int16_t *buffer, int num_samples)
@@ -251,33 +282,14 @@ void generate_gentle_chime(int16_t *buffer, int num_samples)
 
 int play_boot_sound(void)
 {
-    int ret;
-    int16_t *buffer = (int16_t *) buzz_buffer;
+    if (rx_buffer == NULL)
+        return -EIO;
     const int samples_per_block = MAX_BLOCK_SIZE / (NUM_CHANNELS * sizeof(int16_t));
-
-    generate_gentle_chime(buffer, samples_per_block);
-    LOG_INF("Writing to speaker");
-    k_sleep(K_MSEC(100));
-    ret = i2s_write(audio_speaker, buffer, MAX_BLOCK_SIZE);
-    if (ret) {
-        LOG_ERR("Failed to write initial I2S data: %d", ret);
-        return ret;
-    }
-
-    ret = i2s_trigger(audio_speaker, I2S_DIR_TX, I2S_TRIGGER_START);
-    if (ret) {
-        LOG_ERR("Failed to start I2S transmission: %d", ret);
-        return ret;
-    }
-
-    ret = i2s_trigger(audio_speaker, I2S_DIR_TX, I2S_TRIGGER_DRAIN);
-    if (ret != 0) {
-        LOG_ERR("Failed to drain I2S transmission: %d", ret);
-        return ret;
-    }
-    k_sleep(K_MSEC(3000));
-
-    return 0;
+    atomic_set(&playing, 1);
+    generate_gentle_chime((int16_t *) rx_buffer, samples_per_block);
+    int result = play_pcm_block(MAX_BLOCK_SIZE);
+    atomic_clear(&playing);
+    return result;
 }
 
 int init_haptic_pin()

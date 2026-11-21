@@ -8983,6 +8983,9 @@ class AppLocalizationsBg extends AppLocalizations {
   String get voiceResponseAlways => 'Винаги';
 
   @override
+  String get voiceResponseOmiDevice => 'Устройство Omi';
+
+  @override
   String get agreeAndContinue => 'Приемам и продължавам';
 
   @override
@@ -11255,6 +11258,18 @@ class AppLocalizationsBg extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$name и други';
   }
+
+  @override
+  String get singleTap => 'Единично докосване';
+
+  @override
+  String get singleTapAction => 'Действие при единично докосване';
+
+  @override
+  String get tripleTap => 'Тройно докосване';
+
+  @override
+  String get tripleTapAction => 'Действие при тройно докосване';
 
   @override
   String get deviceOnboardingVoiceReplyTitle => 'Чуйте отговорите на Omi';

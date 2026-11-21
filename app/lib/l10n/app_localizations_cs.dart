@@ -8947,6 +8947,9 @@ class AppLocalizationsCs extends AppLocalizations {
   String get voiceResponseAlways => 'Vždy';
 
   @override
+  String get voiceResponseOmiDevice => 'Zařízení Omi';
+
+  @override
   String get agreeAndContinue => 'Souhlasím a pokračovat';
 
   @override
@@ -11215,6 +11218,18 @@ class AppLocalizationsCs extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$name a další';
   }
+
+  @override
+  String get singleTap => 'Jednoduché klepnutí';
+
+  @override
+  String get singleTapAction => 'Akce jednoduchého klepnutí';
+
+  @override
+  String get tripleTap => 'Trojité klepnutí';
+
+  @override
+  String get tripleTapAction => 'Akce trojitého klepnutí';
 
   @override
   String get deviceOnboardingVoiceReplyTitle => 'Poslechněte si odpovědi Omi';
