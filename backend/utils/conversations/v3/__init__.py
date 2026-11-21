@@ -7,6 +7,10 @@ class Conflict(RuntimeError):
     """Retryable v3 ownership and source-revision conflicts."""
 
 
+class RetryCustodyUnavailable(Conflict):
+    """The live delivery still owns the retry because no successor was confirmed."""
+
+
 def preview_wakes(rows, recordings) -> dict[str, datetime]:
     """Keep one recording pending per preview so the existing sweep can recover its deadline."""
     wakes: dict[str, datetime] = {}

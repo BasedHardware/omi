@@ -76,7 +76,7 @@ def task_base():
     return base
 
 
-def enqueue(uid, *, at=None, manual_end_id=None):
+def enqueue(uid, *, at=None, manual_end_id=None, require_future=False):
     instant = at or datetime.now(timezone.utc)
     minute = int(instant.timestamp()) // 60
     task_id = 'conversations-v3-' + hashlib.sha256(uid.encode()).hexdigest()[:32] + '-' + str(minute)
@@ -91,6 +91,7 @@ def enqueue(uid, *, at=None, manual_end_id=None):
         task_id,
         {'uid': uid},
         schedule_at=int(instant.timestamp()),
+        **({'require_future': True} if require_future else {}),
     )
 
 
