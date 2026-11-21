@@ -1241,19 +1241,28 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
         }
         final file = File(filePath);
         if (writeId != null) _liveWalWrites.add(fileName);
-        var receiptPublished = false;
         try {
-          final digest = writeId == null ? null : await LiveWalReceipt.prepare(file, wal, writeId, data);
-          receiptPublished = digest != null;
+          String? digest;
+          if (writeId != null) {
+            // Exclusive creation keeps a failed receipt from falling through
+            // to an overwrite. Use the reserved name even without a receipt:
+            // the index may still commit, and an interrupted write cannot
+            // fall through to heuristic ownership under a different account.
+            await file.create(exclusive: true);
+            try {
+              digest = await LiveWalReceipt.prepare(file, wal, writeId, data);
+            } catch (_) {
+              _emitLiveWalReceipt(WalWriteReceiptResult.publishFailed);
+            }
+          }
           await file.writeAsBytes(data, flush: true);
           wal.fileSha256 = digest ?? (wal.liveRingId == null ? null : sha256.convert(data).toString());
-          wal.liveFileWriteId = writeId;
+          wal.liveFileWriteId = digest == null ? null : writeId;
           if (wal.liveRingId != null) wal.liveDeviceId = wal.device;
           wal.filePath = fileName;
           wal.storage = WalStorage.disk;
         } catch (e) {
           Logger.debug('LocalWalSync: flush write failed: ${e.runtimeType}');
-          if (writeId != null && !receiptPublished) _emitLiveWalReceipt(WalWriteReceiptResult.publishFailed);
           _releaseAdmission(data.length);
           if (_isPendantWal(wal)) _pendantBlockedByStorage = true;
           break;

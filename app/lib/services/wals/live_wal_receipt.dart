@@ -1,5 +1,6 @@
 // Saves captured ownership before live audio reaches disk. A receipt proves
 // local bytes for index replay only. It is never a server or pendant receipt.
+import 'dart:collection';
 import 'dart:convert';
 import 'dart:io';
 
@@ -17,7 +18,7 @@ typedef LiveWalIndexEntry = ({LiveWalBinding binding, Object row});
 
 enum LiveWalWithheld { invalid, deletedOwner, missingAudio, contentMismatch }
 
-typedef LiveWalReplay = ({List<Wal> rows, Map<LiveWalWithheld, int> withheld, bool budgetExhausted});
+typedef LiveWalReplay = ({List<Wal> rows, Map<LiveWalWithheld, int> withheld, bool budgetExhausted, String? nextAfter});
 
 class LiveWalReceipt {
   static const directoryName = '.wal-live-receipts';
@@ -29,7 +30,9 @@ class LiveWalReceipt {
   static const _maxReceiptBytes = 16 * 1024;
   static const _maxReplayBytes = 32 * 1024 * 1024;
   static final _idPattern = RegExp(r'^[a-f0-9]{32}$');
-  static final _managedNamePattern = RegExp(r'_wr[a-f0-9]{32}_[^_]+\.bin$', caseSensitive: false);
+  static final _managedNamePattern =
+      RegExp(r'_wr([a-f0-9]{32})(?:_clke[0-9a-z]{1,32})?_[^_]+\.bin$', caseSensitive: false);
+  static final _clockSuffix = RegExp(r'_clke[0-9a-z]{1,32}$');
   static final _digestPattern = RegExp(r'^[a-f0-9]{64}$');
 
   static Directory directory(Directory documents) => Directory(path.join(documents.path, directoryName));
@@ -51,11 +54,20 @@ class LiveWalReceipt {
 
   static String newId() => const Uuid().v4().replaceAll('-', '');
 
-  /// Keep the numeric timestamp as the last token on the upload wire.
+  /// Keep the existing field positions for record-WAL handoff and the
+  /// trailing timestamp for sync admission. Both timestamps come from the
+  /// same original name, including fractional capture evidence.
   static String uniqueName(String basename, String id) {
     if (!_safeName(basename) || !_idPattern.hasMatch(id)) throw const FormatException('invalid live WAL name');
-    final timestamp = basename.lastIndexOf('_');
-    return '${basename.substring(0, timestamp)}_wr$id${basename.substring(timestamp)}';
+    final timestampStart = basename.lastIndexOf('_');
+    final timestamp = basename.substring(timestampStart + 1, basename.length - 4);
+    final originalFields = basename.substring(0, timestampStart);
+    final clock = _clockSuffix.firstMatch(originalFields);
+    final fields = originalFields.substring(0, clock?.start ?? originalFields.length);
+    // Both Opus variants use the same codec on the wire. Its packet duration
+    // is already carried by the explicit fs field.
+    final wireFields = fields.replaceFirst('_opus_fs320_', '_opus_');
+    return '${wireFields}_${timestamp}_wr$id${clock?.group(0) ?? ''}_$timestamp.bin';
   }
 
   static File _receipt(Directory documents, String name) => File(path.join(directory(documents).path, name + _pending));
@@ -68,10 +80,12 @@ class LiveWalReceipt {
     return directory;
   }
 
+  static Future<String> _digest(List<int> bytes) => offUiIsolate(() => sha256.convert(bytes).toString(),
+      size: bytes.length, threshold: 64 * 1024, debugName: 'live_wal_receipt_digest');
+
   static Future<String> prepare(File audio, Wal wal, String id, List<int> bytes) async {
     final name = path.basename(audio.path);
-    final digest = await offUiIsolate(() => sha256.convert(bytes).toString(),
-        size: bytes.length, threshold: 64 * 1024, debugName: 'live_wal_receipt_digest');
+    final digest = await _digest(bytes);
     final pending = _receipt(audio.parent, name);
     await _checkedDirectory(pending.parent);
     final staging = await _checkedDirectory(Directory(path.join(pending.parent.path, _stagingDirectory)));
@@ -86,7 +100,7 @@ class LiveWalReceipt {
       ..['captured_on_device_only'] = wal.capturedOnDeviceOnly ?? wal.onDeviceOnly;
     final body = jsonEncode({'version': 1, 'length': bytes.length, 'wal': fields});
     if (utf8.encode(body).length > _maxReceiptBytes) throw const FormatException('live WAL receipt too large');
-    if (await pending.exists() || await audio.exists()) throw const FileSystemException('live WAL name already in use');
+    if (await pending.exists()) throw const FileSystemException('live WAL receipt already exists');
     await temporary.writeAsString(body, flush: true);
     await temporary.rename(pending.path);
     return digest;
@@ -160,25 +174,44 @@ class LiveWalReceipt {
     Directory documents, {
     required Set<String> knownBasenames,
     required Set<String> deletedOwners,
+    String? after,
   }) async {
     final rows = <Wal>[];
     final withheld = <LiveWalWithheld, int>{};
     void reject(LiveWalWithheld reason) => withheld.update(reason, (count) => count + 1, ifAbsent: () => 1);
 
-    var visited = 0, bytesRemaining = _maxReplayBytes, exhausted = false;
     final pending = directory(documents);
     final type = await FileSystemEntity.type(pending.path, followLinks: false);
-    if (type == FileSystemEntityType.notFound) return (rows: rows, withheld: withheld, budgetExhausted: exhausted);
+    if (type == FileSystemEntityType.notFound) {
+      return (rows: rows, withheld: withheld, budgetExhausted: false, nextAfter: null);
+    }
     if (type != FileSystemEntityType.directory) throw const FileSystemException('invalid live WAL receipt directory');
+
+    // Directory order is unspecified. Select a bounded page ordered by the
+    // random transaction ID, starting after the last attempted entry and
+    // wrapping once. Invalid and missing entries cannot starve future launches.
+    final candidates = SplayTreeMap<String, ({File file, String name})>((a, b) {
+      if (after != null) {
+        final aBefore = a.compareTo(after) <= 0, bBefore = b.compareTo(after) <= 0;
+        if (aBefore != bBefore) return aBefore ? 1 : -1;
+      }
+      return a.compareTo(b);
+    });
     await for (final entry in pending.list(followLinks: false)) {
       final name = _receiptBasename(entry.path);
       if (entry is! File || name == null || knownBasenames.contains(name.toLowerCase())) continue;
-      // A later startup can progress past rows that an earlier batch indexed,
-      // even if the backup still needs to catch up before retiring receipts.
-      if (++visited > _maxEntries) {
-        exhausted = true;
-        break;
-      }
+      final id = _managedNamePattern.firstMatch(name)!.group(1)!;
+      candidates[id] = (file: entry, name: name);
+      if (candidates.length > _maxEntries + 1) candidates.remove(candidates.lastKey());
+    }
+
+    var bytesRemaining = _maxReplayBytes;
+    var exhausted = candidates.length > _maxEntries;
+    String? lastAttempted;
+    for (final candidate in candidates.entries.take(_maxEntries)) {
+      final previous = lastAttempted;
+      lastAttempted = candidate.key;
+      final (file: entry, :name) = candidate.value;
       try {
         final record = await _read(entry, name);
         if (record == null) {
@@ -200,11 +233,19 @@ class LiveWalReceipt {
         }
         if (record.length > bytesRemaining) {
           exhausted = true;
+          lastAttempted = previous;
           break;
         }
         bytesRemaining -= record.length;
-        final digest = await sha256.bind(audio.openRead(0, record.length)).first;
-        if (digest.toString() != record.binding.digest || await audio.length() != record.length) {
+        final handle = await audio.open();
+        final List<int> bytes;
+        try {
+          bytes = await handle.read(record.length);
+        } finally {
+          await handle.close();
+        }
+        final digest = await _digest(bytes);
+        if (bytes.length != record.length || digest != record.binding.digest || await audio.length() != record.length) {
           reject(LiveWalWithheld.contentMismatch);
           continue;
         }
@@ -223,7 +264,13 @@ class LiveWalReceipt {
         reject(LiveWalWithheld.invalid);
       }
     }
-    return (rows: rows, withheld: withheld, budgetExhausted: exhausted);
+    return (rows: rows, withheld: withheld, budgetExhausted: exhausted, nextAfter: exhausted ? lastAttempted : null);
+  }
+
+  static Future<Map<String, LiveWalIndexEntry>> _readIndexBindings(File file) async {
+    final content = await file.readAsString();
+    return offUiIsolate(() => indexBindings(jsonDecode(content)),
+        size: content.length, threshold: 0, debugName: 'live_wal_receipt_index');
   }
 
   static Future<void> _flushBackupCopy(File file) async {
@@ -236,13 +283,14 @@ class LiveWalReceipt {
   }
 
   /// Run only after both restart index generations have durably committed the
-  /// matching record. Best effort: the next save or startup can try again.
-  static Future<void> retireCommitted(
-      File backupFile, Map<String, LiveWalIndexEntry> main, Map<String, LiveWalIndexEntry> backup) async {
-    if (main.isEmpty || backup.isEmpty) return;
+  /// matching record. Best effort: a later startup can try again.
+  static Future<void> retireCommitted(File primaryFile, File backupFile) async {
     try {
       final pending = directory(backupFile.parent);
-      if (!await pending.exists()) return;
+      if (!await pending.exists() || !await primaryFile.exists() || !await backupFile.exists()) return;
+      final main = await _readIndexBindings(primaryFile);
+      final backup = await _readIndexBindings(backupFile);
+      if (main.isEmpty || backup.isEmpty) return;
       var visited = 0;
       var backupFlushed = false;
       await for (final entry in pending.list(followLinks: false)) {

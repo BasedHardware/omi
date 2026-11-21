@@ -520,22 +520,88 @@ void main() {
     expect(await restarted.hasDurableWal(replayed, admittedGeneration: restarted.sessionGeneration), isTrue);
   });
 
-  test('failed receipt publication keeps admitted frames and creates no audio file', () async {
-    final directory = LiveWalReceipt.directory(dir);
-    final blockingFile = await File(directory.path).writeAsString('cannot create receipt directory');
-    final writer = await ledger(realCensus: true);
+  test('receipt-managed basename keeps both backend timestamp contracts and estimated run identity', () {
+    final id = List.filled(32, 'a').join();
+    const original = 'audio_pendant_opus_fs320_16000_1_fs320_clkeoriginal_1795272480.125.bin';
+    final managed = LiveWalReceipt.uniqueName(original, id);
+    final tokens = managed.split('_');
+    expect(tokens.take(7), ['audio', 'pendant', 'opus', '16000', '1', 'fs320', '1795272480.125']);
+    expect(tokens[tokens.length - 2], 'clkeoriginal');
+    expect(tokens.last, '1795272480.125.bin');
+    expect(LiveWalReceipt.isManagedBasename(managed), isTrue);
+    expect(LiveWalReceipt.isManagedBasename(original), isFalse);
+  });
+
+  for (final indexFails in [false, true]) {
+    test('failed receipt publication still writes reserved audio (index fails $indexFails)', () async {
+      final directory = LiveWalReceipt.directory(dir);
+      await File(directory.path).writeAsString('cannot create receipt directory');
+      var failWrite = false;
+      final writer = await ledger(
+          realCensus: true,
+          persist: (rows) async {
+            if (failWrite) throw const FileSystemException('injected index failure');
+            expect(await WalFileManager.saveWals(rows), isTrue);
+          });
+      await captureReceiptAudio(writer);
+      failWrite = indexFails;
+      if (indexFails) {
+        try {
+          await expectLater(writer.finalizeCurrentSession(), throwsA(isA<FileSystemException>()));
+        } finally {
+          failWrite = false;
+        }
+      } else {
+        await writer.finalizeCurrentSession();
+      }
+      final written = writer.testWals.singleWhere((w) => LiveWalReceipt.isManagedBasename(w.filePath ?? ''));
+      final filename = written.filePath!;
+      final file = File('${dir.path}/$filename');
+      expect(written.liveFileWriteId, isNull);
+      expect(LiveWalReceipt.isManagedBasename(filename), isTrue);
+      expect(await file.readAsBytes(), orderedEquals(encodeWalFrames(receiptFrames)));
+
+      final restarted = await ledger(realCensus: true);
+      if (indexFails) {
+        expect(restarted.testWals.where((w) => w.filePath == filename), isEmpty);
+        expect((await census()).orphans.where((candidate) => candidate.filePath == file.path), isEmpty);
+      } else {
+        expect(restarted.testWals.singleWhere((w) => w.filePath == filename).ownerUid, 'owner-a');
+      }
+    });
+  }
+
+  test('receipt issuance kill switch still replays and retires existing receipts', () async {
+    final id = LiveWalReceipt.newId();
+    final filename = LiveWalReceipt.uniqueName(name(now - 10), id);
+    final file = File('${dir.path}/$filename');
+    final bytes = encodeWalFrames(receiptFrames);
+    final captured = Wal(
+      codec: BleAudioCodec.opusFS320,
+      timerStart: now - 10,
+      seconds: 1,
+      totalFrames: receiptFrames.length,
+      storage: WalStorage.mem,
+      status: WalStatus.miss,
+      ownerUid: 'owner-a',
+      device: 'pendant',
+    );
+    await LiveWalReceipt.prepare(file, captured, id, bytes);
+    await file.writeAsBytes(bytes, flush: true);
+
+    final writer = await ledger(realCensus: true, realPersistence: true);
+    expect(writer.testWals.singleWhere((w) => w.filePath == filename).liveFileWriteId, id);
     await captureReceiptAudio(writer);
     await writer.finalizeCurrentSession();
-    final pending = writer.testWals.singleWhere((w) => w.storage == WalStorage.mem);
-    expect(pending.data, receiptFrames);
-    expect(dir.listSync().whereType<File>().where((f) => f.path.endsWith('.bin')), isEmpty);
-    await blockingFile.delete();
-    await writer.finalizeCurrentSession();
-    // The normal periodic flush retries stored-memory rows even when its
-    // frame buffer has already been sealed. Stop exercises that same flush.
-    await writer.stop();
-    expect(pending.storage, WalStorage.disk);
-  });
+    final newlyWritten = writer.testWals.singleWhere((w) => w.recordingSessionId == 'receipt-session');
+    expect(newlyWritten.liveFileWriteId, isNull);
+    expect(LiveWalReceipt.isManagedBasename(newlyWritten.filePath!), isFalse);
+    expect(await receiptFor(filename).exists(), isTrue);
+
+    await ledger(realCensus: true);
+    expect(await receiptFor(filename).exists(), isFalse);
+    expect(await file.readAsBytes(), orderedEquals(bytes));
+  }, skip: LiveWalReceipt.writeEnabled ? 'Run with --dart-define=OMI_LIVE_WAL_RECEIPT_OFF=true' : false);
 
   for (final delta in [false, true]) {
     test('retire only after both restart indexes cover the transaction (delta $delta)', () async {
@@ -555,6 +621,9 @@ void main() {
       final extraName = name(now - 5, 'different-device');
       await audio(extraName);
       await writer.addExternalWal(Wal.fromJson(row(extraName)), admittedGeneration: writer.sessionGeneration);
+      expect(await receiptFor(fileName).exists(), isTrue, reason: 'index writes alone do not retire cover');
+      final confirmed = await ledger(realCensus: true);
+      expect(confirmed.testWals.singleWhere((w) => w.filePath == fileName).ownerUid, 'owner-a');
       expect(await receiptFor(fileName).exists(), isFalse);
 
       await File('${dir.path}/wals.json').writeAsString('{', flush: true);
@@ -579,6 +648,7 @@ void main() {
     final extraName = name(now - 5, 'different-device');
     await audio(extraName);
     await writer.addExternalWal(Wal.fromJson(row(extraName)), admittedGeneration: writer.sessionGeneration);
+    await ledger(realCensus: true);
     expect(await receiptFor(fileName).exists(), isTrue);
 
     await File('${dir.path}/wals.json').delete();
@@ -676,7 +746,15 @@ void main() {
     }
 
     final first = await ledger(realCensus: true);
-    expect(first.testWals.where((w) => w.liveFileWriteId != null), hasLength(128));
+    final initial = first.testWals.where((w) => w.liveFileWriteId != null);
+    expect(initial, hasLength(128));
+    final remainingAudio = dir
+        .listSync()
+        .whereType<File>()
+        .where((f) => f.path.endsWith('.bin'))
+        .singleWhere((file) => initial.every((w) => w.filePath != file.uri.pathSegments.last));
+    expect((await census()).orphans.any((file) => file.filePath == remainingAudio.path), isFalse);
+    expect(await remainingAudio.readAsBytes(), orderedEquals(bytes));
 
     final next = await ledger(realCensus: true);
     final replayed = next.testWals.where((w) => w.liveFileWriteId != null);
@@ -684,7 +762,39 @@ void main() {
     expect(replayed, hasLength(129));
   });
 
-  test('unreadable and budget-deferred receipts reserve their audio basenames', () async {
+  test('replay progresses past a full page of invalid receipts on a later launch', () async {
+    final directory = await LiveWalReceipt.directory(dir).create();
+    for (var i = 0; i < 128; i++) {
+      final id = i.toRadixString(16).padLeft(32, '0');
+      final nameWithReceipt = LiveWalReceipt.uniqueName(name(now - 100 - i), id);
+      await File('${directory.path}/$nameWithReceipt.json').writeAsString('{');
+    }
+    final id = 'f' * 32;
+    final filename = LiveWalReceipt.uniqueName(name(now), id);
+    final file = File('${dir.path}/$filename');
+    final bytes = encodeWalFrames(receiptFrames);
+    final captured = Wal(
+      codec: BleAudioCodec.opusFS320,
+      timerStart: now,
+      seconds: 1,
+      totalFrames: receiptFrames.length,
+      storage: WalStorage.mem,
+      status: WalStatus.miss,
+      ownerUid: 'owner-a',
+      device: 'pendant',
+    );
+    await LiveWalReceipt.prepare(file, captured, id, bytes);
+    await file.writeAsBytes(bytes, flush: true);
+
+    final first = await ledger(realCensus: true);
+    expect(first.testWals.where((wal) => wal.filePath == filename), isEmpty);
+
+    final next = await ledger(realCensus: true);
+    expect(next.testWals.singleWhere((wal) => wal.filePath == filename).ownerUid, 'owner-a');
+    expect(await file.readAsBytes(), orderedEquals(bytes));
+  });
+
+  test('an unreadable receipt still reserves its audio basename', () async {
     final directory = await LiveWalReceipt.directory(dir).create();
     final base = LiveWalReceipt.uniqueName(name(now - 2), LiveWalReceipt.newId());
     final candidate = await audio(base);

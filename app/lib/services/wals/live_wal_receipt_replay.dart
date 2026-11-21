@@ -11,13 +11,26 @@ extension _LiveWalReceiptReplay on LocalWalSyncImpl {
         for (final name in _liveWalWrites) name.toLowerCase(),
       };
 
+  static const _scanCursorKey = 'liveWalReceiptScanCursor';
+
   Future<void> _recoverLiveWalReceipts(int generation) async {
+    SharedPreferences? prefs;
+    String? after;
     LiveWalReplay replay;
     try {
       final documents = await getApplicationDocumentsDirectory();
       if (!await LiveWalReceipt.directory(documents).exists() || !_isCurrent(generation)) return;
+      final knownBasenames = _liveWalReservedNames();
+      if (knownBasenames.isNotEmpty) await WalFileManager.retireCommittedLiveWalReceipts();
+      if (!_isCurrent(generation)) return;
+      try {
+        prefs = await SharedPreferences.getInstance();
+        after = prefs.getString(_scanCursorKey);
+      } catch (_) {/* A missing cursor starts at the first page. */}
       replay = await LiveWalReceipt.recover(documents,
-          knownBasenames: _liveWalReservedNames(), deletedOwners: (await readDeletedAccountUids()).toSet());
+          knownBasenames: _liveWalReservedNames(),
+          deletedOwners: (await readDeletedAccountUids()).toSet(),
+          after: after);
     } catch (_) {
       _emitLiveWalReceipt(WalWriteReceiptResult.scanUnavailable);
       return;
@@ -33,6 +46,14 @@ extension _LiveWalReceiptReplay on LocalWalSyncImpl {
       _emitLiveWalReceipt(result, withheld: entry.value);
     }
     if (replay.budgetExhausted) _emitLiveWalReceipt(WalWriteReceiptResult.budgetExhausted);
+    try {
+      if (replay.nextAfter case final cursor?) {
+        await prefs?.setString(_scanCursorKey, cursor);
+      } else if (after != null) {
+        await prefs?.remove(_scanCursorKey);
+      }
+    } catch (_) {/* Cursor loss only delays recovery until a later scan. */}
+    if (!_isCurrent(generation)) return;
 
     // A flush may have published a receipt or finished writing its file
     // during the scan. Give that producer sole ownership of its transaction.

@@ -11,8 +11,8 @@ import 'package:pool/pool.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/services/wals.dart';
-import 'package:omi/services/wals/mobile_batch_buffer.dart';
 import 'package:omi/services/wals/live_wal_receipt.dart';
+import 'package:omi/services/wals/mobile_batch_buffer.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/off_ui_isolate.dart';
 import 'package:omi/utils/wal_index_worker.dart';
@@ -49,6 +49,16 @@ class WalFileManager {
   /// Custody must never mistake a replayed, unindexed journal for an index
   /// commit. This reader deliberately excludes journal discovery/repair.
   static Future<List<Wal>> loadIndexedWals() => _saveLock.withResource(_loadIndexedWals);
+
+  /// Only a startup read can retire receipts that both restart indexes
+  /// already cover. Use the index lock so neither file can change mid-proof.
+  static Future<void> retireCommittedLiveWalReceipts() => _saveLock.withResource(() async {
+        final primary = _walFile;
+        final backup = _walBackupFile;
+        if (primary != null && backup != null) {
+          await LiveWalReceipt.retireCommitted(primary, backup);
+        }
+      });
 
   static Future<List<Wal>> _loadWals() async {
     final indexed = await _loadIndexedWals();
@@ -170,13 +180,7 @@ class WalFileManager {
   /// Length and modification time of the index as this process last wrote it.
   /// While the file still matches, it is known-valid JSON (we encoded it), so
   /// the backup can be copied without reading and decoding the whole index.
-  static ({
-    String path,
-    int length,
-    DateTime modified,
-    DateTime changed,
-    Map<String, LiveWalIndexEntry> bindings
-  })? _lastWritten;
+  static ({String path, int length, DateTime modified})? _lastWritten;
 
   static Future<bool> saveWals(List<Wal> wals) {
     _indexRevision++;
@@ -206,36 +210,32 @@ class WalFileManager {
       return false;
     }
 
-    var backupProof = <String, LiveWalIndexEntry>{};
     if (superseded != null && _walBackupFile != null) {
       // Serial saves would have left the newest superseded snapshot on disk as
       // the backup; write it there directly. Best effort, like _createBackup:
       // a backup failure must never block the index write.
       try {
         final backupTmp = File('${_walBackupFile!.path}.tmp');
-        final backup = await _encodeIndex(superseded);
-        await backupTmp.writeAsString(backup.content, flush: true);
+        await backupTmp.writeAsString(await _encodeIndex(superseded), flush: true);
         await backupTmp.rename(_walBackupFile!.path);
-        backupProof = backup.bindings;
       } on FileSystemException catch (e) {
         Logger.debug('WalFileManager: Failed to write superseded backup: $e');
       }
     } else {
-      backupProof = await _createBackup();
+      await _createBackup();
     }
 
-    final snapshot = await _encodeIndex(wals);
+    final jsonString = await _encodeIndex(wals);
     final tmp = File('${_walFile!.path}.tmp');
-    await tmp.writeAsString(snapshot.content, flush: true);
+    await tmp.writeAsString(jsonString, flush: true);
     await tmp.rename(_walFile!.path);
-    await _recordWrite(_walFile!, snapshot.bindings);
-    await LiveWalReceipt.retireCommitted(_walBackupFile!, snapshot.bindings, backupProof);
+    await _recordWrite(_walFile!);
 
     Logger.debug('Successfully saved ${wals.length} WALs to file');
     return true;
   }
 
-  static Future<({String content, Map<String, LiveWalIndexEntry> bindings})> _encodeIndex(List<Wal> wals) {
+  static Future<String> _encodeIndex(List<Wal> wals) {
     // Copy WAL objects into the worker before expanding them into thousands
     // of JSON maps. Encoding alone leaves that allocation work on the UI.
     return offUiIsolate(() {
@@ -244,53 +244,45 @@ class WalFileManager {
         'timestamp': DateTime.now().millisecondsSinceEpoch,
         'wals': wals.map((wal) => wal.toJson()).toList(),
       };
-      return (content: jsonEncode(jsonData), bindings: LiveWalReceipt.indexBindings(jsonData));
+      return jsonEncode(jsonData);
     }, size: wals.length, threshold: backgroundEncodeThreshold, debugName: 'wal_index_encode');
   }
 
-  static Future<void> _recordWrite(File file, Map<String, LiveWalIndexEntry> bindings) async {
+  static Future<void> _recordWrite(File file) async {
     try {
       final stat = await FileStat.stat(file.path);
-      _lastWritten =
-          (path: file.path, length: stat.size, modified: stat.modified, changed: stat.changed, bindings: bindings);
+      _lastWritten = (path: file.path, length: stat.size, modified: stat.modified);
     } on FileSystemException {
       _lastWritten = null;
     }
   }
 
-  static Future<Map<String, LiveWalIndexEntry>> _createBackup() async {
+  static Future<void> _createBackup() async {
     try {
       final walFile = _walFile;
       final backupFile = _walBackupFile;
-      if (walFile == null || backupFile == null) return {};
+      if (walFile == null || backupFile == null) return;
       final stat = await FileStat.stat(walFile.path);
-      if (stat.type == FileSystemEntityType.notFound) return {};
+      if (stat.type == FileSystemEntityType.notFound) return;
       final last = _lastWritten;
-      final unchangedSinceOurWrite = last != null &&
-          last.path == walFile.path &&
-          last.length == stat.size &&
-          last.modified == stat.modified &&
-          last.changed == stat.changed;
-      Map<String, LiveWalIndexEntry> bindings;
-      if (unchangedSinceOurWrite) {
-        bindings = last.bindings;
-      } else {
+      final unchangedSinceOurWrite =
+          last != null && last.path == walFile.path && last.length == stat.size && last.modified == stat.modified;
+      if (!unchangedSinceOurWrite) {
         // Written by an earlier process or changed under us: prove it parses
         // before it may replace the last good backup.
         final content = await walFile.readAsString();
-        if (content.isEmpty) return {};
-        bindings = await offUiIsolate(() => LiveWalReceipt.indexBindings(jsonDecode(content)),
-            size: content.length, threshold: 0, debugName: 'wal_backup_validate');
+        if (content.isEmpty) return;
+        await offUiIsolate(() {
+          jsonDecode(content);
+          return true;
+        }, size: content.length, threshold: 0, debugName: 'wal_backup_validate');
       }
-      final tmp = await walFile.copy('${backupFile.path}.tmp');
-      await tmp.rename(backupFile.path);
-      return bindings;
+      await walFile.copy(backupFile.path);
     } on FileSystemException catch (e) {
       Logger.debug('WalFileManager: Failed to create backup: $e');
     } on FormatException catch (e) {
       Logger.debug('WalFileManager: Not backing up unreadable WAL file: $e');
     }
-    return {};
   }
 
   /// Load WALs from backup file
