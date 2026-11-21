@@ -82,6 +82,16 @@ void test_pcm_rms() {
     CHECK_CLOSE(ctx_pcm_rms_int16le(ragged, sizeof(ragged)), 0.5, 1e-12);
 }
 
+void test_pcm_peak() {
+    const uint8_t samples[] = {0x00, 0x40, 0x01, 0x80, 0xff, 0x7f};  // 16384, -32767, 32767
+    CHECK(ctx_pcm_peak_int16le(samples, sizeof(samples)) == 32767);
+
+    const uint8_t minimum[] = {0x00, 0x80};  // -32768, whose magnitude needs the unsigned result.
+    CHECK(ctx_pcm_peak_int16le(minimum, sizeof(minimum)) == 32768);
+    CHECK(ctx_pcm_peak_int16le(samples, 1) == 0);
+    CHECK(ctx_pcm_peak_int16le(nullptr, 0) == 0);
+}
+
 void test_pcm_encode_little_endian_and_clamped() {
     // 0.5 * 32767 rounds to 16384 == 0x4000, low byte first.
     uint8_t buf[2] = {};
@@ -460,6 +470,7 @@ void test_version_is_reported() {
 int main() {
     test_session_boundaries();
     test_pcm_rms();
+    test_pcm_peak();
     test_pcm_encode_little_endian_and_clamped();
     test_pcm_decode_basic();
     test_pcm_roundtrip_stays_within_one_lsb();
