@@ -21,10 +21,10 @@ def admit(uid: str, conversation_ids: list[str], reprocess: bool, *, firestore_c
 
 def schedule(job: dict, add_background_task: Callable[..., Any]) -> None:
     """Offer the exact admitted generation to the configured transport first."""
-    from utils.cloud_tasks import enqueue_listen_finalization_job, listen_finalization_binding
+    from utils.cloud_tasks import enqueue_listen_finalization_job, is_listen_finalization_dispatch_configured
 
     job_id, generation = job['job_id'], job['dispatch_generation']
-    if all(listen_finalization_binding().values()):
+    if is_listen_finalization_dispatch_configured():
         try:
             enqueue_listen_finalization_job(job_id, generation)
             return

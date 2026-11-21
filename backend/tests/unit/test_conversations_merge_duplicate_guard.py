@@ -236,8 +236,10 @@ def test_oversized_merge_is_a_request_rejection_not_an_internal_job_error(conv):
     assert tasks.tasks == []
 
 
-@pytest.mark.parametrize('published', [True, False])
-def test_merge_dispatches_durable_generation_before_falling_back(conv, monkeypatch, published):
+@pytest.mark.parametrize(
+    'mode,published', [(None, False), ('inline', False), ('cloud_tasks', True), ('cloud_tasks', False)]
+)
+def test_merge_dispatches_durable_generation_before_falling_back(conv, monkeypatch, mode, published):
     from unittest.mock import Mock
 
     from fastapi import BackgroundTasks
@@ -254,7 +256,11 @@ def test_merge_dispatches_durable_generation_before_falling_back(conv, monkeypat
         'admit',
         lambda *_args: {'job_id': 'merge-fixture', 'dispatch_generation': 4, 'merge_target_id': 'durable-target'},
     )
-    monkeypatch.setattr(tasks, 'listen_finalization_binding', lambda: {'queue': 'configured'})
+    monkeypatch.setattr(tasks, '_listen_finalization_tasks_binding', lambda: ('configured',) * 5)
+    if mode is None:
+        monkeypatch.delenv('LISTEN_FINALIZATION_DISPATCH_MODE', raising=False)
+    else:
+        monkeypatch.setenv('LISTEN_FINALIZATION_DISPATCH_MODE', mode)
     enqueue = Mock(side_effect=None if published else TimeoutError('ambiguous transport'))
     monkeypatch.setattr(tasks, 'enqueue_listen_finalization_job', enqueue)
     fallback = BackgroundTasks()
@@ -264,7 +270,10 @@ def test_merge_dispatches_durable_generation_before_falling_back(conv, monkeypat
         uid='test-account',
     )
     assert result.merged_conversation_id == 'durable-target'
-    enqueue.assert_called_once_with('merge-fixture', 4)
+    if mode == 'cloud_tasks':
+        enqueue.assert_called_once_with('merge-fixture', 4)
+    else:
+        enqueue.assert_not_called()
     if published:
         assert fallback.tasks == []
     else:
