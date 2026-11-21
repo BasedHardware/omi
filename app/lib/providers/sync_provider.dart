@@ -831,6 +831,8 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
   /// Capture the rows in the confirmation and the session that owns them.
   WalClearAllOffer prepareClearAllWals() {
     final generation = _sessionGeneration;
+    final LocalWalSyncImpl phone = _walService.getSyncs().phone;
+    final phoneGeneration = phone.sessionGeneration;
     final targets = List<Wal>.unmodifiable(allWals);
     final tooOld = List<Wal>.unmodifiable(targets.where((wal) => wal.status == WalStatus.outsideRecoveryWindow));
     final exportOffered = Map<Wal, WalFileIdentity>.identity();
@@ -843,11 +845,17 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
       clear: () async {
         if (!_isCurrent(generation)) throw StateError('Recording session changed');
         await deleteAllClearableWals(exportOffered: exportOffered);
+        if (!_isCurrent(generation) || allWals.any((wal) => wal.status == WalStatus.outsideRecoveryWindow)) {
+          throw StateError('Clear All retained recordings');
+        }
       },
       share: (wals) async {
         bool stillOffered() =>
             _isCurrent(generation) &&
-            wals.every((wal) => exportOffered[wal] == wal.fileIdentity && allWals.contains(wal));
+            wals.every((wal) {
+              final identity = exportOffered[wal];
+              return identity != null && phone.ownsOfferedAudio(wal, identity, phoneGeneration);
+            });
         if (!stillOffered()) throw StateError('Recording changed');
         await shareRecordingAsWav(wals, canShare: stillOffered);
       },

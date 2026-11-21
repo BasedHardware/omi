@@ -237,7 +237,9 @@ void main() {
 
     final replacement = _wal(timerStart: replaced.timerStart, filePath: replaced.filePath)..markOutsideRecoveryWindow();
     localSync.testWals = [removed, replacement, newlyTooOld..markOutsideRecoveryWindow()];
-    await intent.clear();
+    expect(syncProvider.allWals, contains(replaced), reason: 'the provider has not refreshed');
+    await expectLater(intent.share([replaced]), throwsStateError);
+    await expectLater(intent.clear(), throwsStateError, reason: 'the caller must report retained files');
 
     expect(syncProvider.allWals, [replacement, newlyTooOld]);
     expect(await File('${tempDir.path}/offered.bin').exists(), isFalse);

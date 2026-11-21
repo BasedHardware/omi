@@ -1980,6 +1980,17 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     return _publishedWals!;
   }
 
+  /// A saved export offer must still refer to an active, unshared phone file.
+  bool ownsOfferedAudio(Wal wal, WalFileIdentity identity, int generation) {
+    final path = identity.path;
+    return _isCurrent(generation) &&
+        _activeWals.contains(wal) &&
+        wal.fileIdentity == identity &&
+        path != null &&
+        path.isNotEmpty &&
+        !_fileReferencedByOtherWal(wal, path.split('/').last);
+  }
+
   /// Synchronous metadata snapshot only: no lock, flush, load, repair or save.
   /// Export aggregation/JSON decoding happens off the UI isolate.
   Map<String, List<RecordingInventoryRow>> get recordingInventorySnapshot => {
