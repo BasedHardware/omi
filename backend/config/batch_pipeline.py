@@ -730,6 +730,11 @@ def projection_followup_early_coalesce_enabled() -> bool:
     return kill_switch('BATCH_PIPELINE_FOLLOWUP_EARLY_COALESCE_ENABLED', log=False)
 
 
+def projection_followup_claimed_sibling_skip_enabled() -> bool:
+    """Kill switch: a ready sibling skips its read-only check once a same-page sibling claims completion."""
+    return kill_switch('BATCH_PIPELINE_FOLLOWUP_CLAIMED_SIBLING_SKIP_ENABLED', log=False)
+
+
 def owner_drain_enabled() -> bool:
     """Kill switch: a per-process owner drain replaces the sweep-shared walk budget."""
     from config.policy import kill_switch
