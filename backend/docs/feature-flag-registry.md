@@ -586,6 +586,7 @@ and an explicit empty literal renders as `''`.
 | `JOBSTORE_INDEX_READS` | Default on unless 0/false/off/no; kill index discovery while retaining mirror and independent erasure | backend | env | open | — | — | — | — | keep | keep | — | jobstore-index |
 | `JOBSTORE_SHADOW_WRITES` | Default on unless 0/false/off/no; off stops the A2 Postgres shadow mirror (and its parity reads) while BATCH_JOBSTORE_MODE=shadow | backend | env | open | — | — | — | — | keep | keep | — | auditfix |
 | `LATE_AUDIO_SYNC_INTAKE_ENABLED` | Default on; route delayed listen transcripts through recorded-time sync assignment and reject stale live stamps | backend | env | open | — | — | — | — | keep | keep | — | auditfix |
+| `LEGAL_HOLD_DEFER_SINGLE_DELETE` | Default on; a conversation delete on an account under an active legal hold is accepted for the user (hidden, tombstoned, 204) and physically retained until release. false/off/0/no restores the previous behavior (non-cascade deletes erase; cascade deletes answer 409). | backend | env | open | — | — | — | — | keep | keep | — | support-ops / SCA-3339 |
 | `LISTEN_FINALIZATION_BYOK_ABANDONMENT_ENABLED` | Abandon finalization after BYOK failure | backend | env | open | true | true (backend-listen (chart), gke/backend-listen) | true (backend-listen (chart), gke/backend-listen) | — | keep | keep | — | unowned |
 | `LISTEN_FINALIZATION_DURABLE_ATTEMPT_CAP_ENABLED` | Cap durable listen worker attempts while retaining transcript-only conversations | backend | env | open | — | — | true | — | keep | keep | — | auditfix |
 | `LISTEN_FINALIZATION_EMPTY_STRUCTURE_MINIMUM_ENABLED` | Default on; a kept, decoded recovery with no enriched structure completes on the deterministic minimum instead of dead-lettering; false/0/off restores the typed refusal | backend | env | open | — | — | — | — | keep | keep | — | capfix-finalization |
@@ -1406,6 +1407,7 @@ their code default (`fail` tells you which way a missing value resolves).
 - `LADDER_V1_RETIRE_PRO_ALIAS_ENABLED` — Default-off pro-as-Architect alias retirement; requires old-client and stored-record audit (fail: closed)
 - `LADDER_V1_WIRE_IDENTITY_ENABLED` — Default-off approved mobile/Windows decoder floors; old installed clients preserve remap (fail: closed)
 - `LATE_AUDIO_SYNC_INTAKE_ENABLED` — Default on; route delayed listen transcripts through recorded-time sync assignment and reject stale live stamps (fail: open)
+- `LEGAL_HOLD_DEFER_SINGLE_DELETE` — Default on; a conversation delete on an account under an active legal hold is accepted for the user (hidden, tombstoned, 204) and physically retained until release. false/off/0/no restores the previous behavior (non-cascade deletes erase; cascade deletes answer 409). (fail: open)
 - `LIFECYCLE_V2_MODE` — Separate speech clocks, recovery head probes and bounded finalization executor lanes; off|shadow|serve, default shadow (fail: closed)
 - `LIFECYCLE_V2_MODE_SERVE_PERCENT` — Serve cohort percentage in shadow mode, default 0 (fail: closed)
 - `LIFECYCLE_V2_MODE_SERVE_UID_SHA256S` — Serve cohort account digests in shadow mode, default empty; never raw account identifiers (fail: closed)
