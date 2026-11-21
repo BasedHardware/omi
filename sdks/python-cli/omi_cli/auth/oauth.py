@@ -87,6 +87,25 @@ _CLI_KEY_SCOPES = [
 # --- Browser flow ----------------------------------------------------------
 
 
+_SUPPORTED_PROVIDERS = {"google", "apple"}
+
+
+def normalize_provider(provider: str) -> str:
+    """Return the canonical lowercase provider, or raise ``UsageError``.
+
+    CLI users write ``--provider Google`` or ``--provider " apple "``; the
+    backend contract is lowercase, so normalize at the boundary and fail
+    eagerly (with the raw value quoted) for anything unsupported.
+    """
+    cleaned = provider.strip().lower()
+    if cleaned not in _SUPPORTED_PROVIDERS:
+        raise UsageError(
+            message=f"Unknown OAuth provider: {provider!r}",
+            detail="Supported: google, apple.",
+        )
+    return cleaned
+
+
 def login_with_browser(
     profile_name: str,
     *,
@@ -101,11 +120,7 @@ def login_with_browser(
     ``open_browser=False`` is useful in headless tests; the caller is then
     responsible for actually visiting the printed URL.
     """
-    if provider not in {"google", "apple"}:
-        raise UsageError(
-            message=f"Unknown OAuth provider: {provider}",
-            detail="Supported: google, apple.",
-        )
+    provider = normalize_provider(provider)
 
     state = secrets.token_urlsafe(32)
     code_verifier, code_challenge = _generate_pkce_pair()
