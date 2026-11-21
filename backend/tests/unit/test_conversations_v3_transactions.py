@@ -8,6 +8,7 @@ from datetime import datetime, timedelta, timezone
 from copy import deepcopy
 from concurrent.futures import ThreadPoolExecutor
 import importlib
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 
@@ -733,23 +734,28 @@ def test_processing_writers_refuse_foreign_snapshot(strict, monkeypatch, engine)
     assert strict.rows[path] == stored
 
 
-def test_queued_processing_skips_foreign_candidate_before_lease(monkeypatch):
-    import asyncio
-    from unittest.mock import Mock
+@pytest.fixture
+def created_delivery(monkeypatch):
+    # Load the integration graph in fixture setup. This test exercises the
+    # drain's ownership check before any lease or integration work.
+    created = importlib.import_module('utils.conversations.v3.created')
+    deliver = AsyncMock()
+    monkeypatch.setattr(created, 'deliver', deliver)
+    return deliver
 
-    from utils.conversations.v3 import created
 
-    monkeypatch.setattr(
-        service,
-        'pending_processing',
-        lambda _: [{'id': 'c', 'finalization_engine': 'go', 'finalization_owner_epoch': 1}],
-    )
-    acquire = Mock()
+@pytest.mark.asyncio
+async def test_queued_processing_skips_foreign_candidate_before_lease(monkeypatch, created_delivery):
+    async def run_inline(_executor, fn, *args, **kwargs):
+        return fn(*args, **kwargs)
+
+    pending = Mock(return_value=[{'id': 'c', 'finalization_engine': 'go', 'finalization_owner_epoch': 1}])
+    acquire = Mock(side_effect=AssertionError('foreign row acquired a processing lease'))
+    monkeypatch.setattr(service, 'run_blocking', run_inline)
+    monkeypatch.setattr(service, 'pending_processing', pending)
     monkeypatch.setattr(leases, 'acquire', acquire)
 
-    async def deliver(_):
-        return None
-
-    monkeypatch.setattr(created, 'deliver', deliver)
-    asyncio.run(service.drain_processing('synthetic'))
+    await service.drain_processing('synthetic')
+    pending.assert_called_once_with('synthetic')
     acquire.assert_not_called()
+    created_delivery.assert_awaited_once_with('synthetic')

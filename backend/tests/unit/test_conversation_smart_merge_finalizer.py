@@ -491,7 +491,7 @@ async def test_donor_foreign_survivor_defers_without_retry_budget(harness, resum
 
     calls, row = harness
     row.update(_DONOR)
-    resumes['error'] = processing_hold.finalization_owner_deferral()
+    resumes['error'] = processing_hold.finalization_owner_deferral(target_id='p')
     retry = Mock(return_value=True)
     monkeypatch.setattr(finalizer.finalization_jobs_db, 'mark_finalization_retryable', retry)
     original = finalizer.run_blocking
@@ -504,5 +504,7 @@ async def test_donor_foreign_survivor_defers_without_retry_budget(harness, resum
     monkeypatch.setattr(finalizer, 'run_blocking', run)
 
     assert await _finalize() is finalizer.ConversationFinalizationDisposition.deferred
-    retry.assert_called_once_with('job', 1, 1, 'finalization_owned_elsewhere', count_attempt=False)
+    retry.assert_called_once_with(
+        'job', 1, 1, 'finalization_owned_elsewhere', count_attempt=False, ownership_target_id='p'
+    )
     assert finalizer.lifecycle_service.claim_finalization_fanout not in calls

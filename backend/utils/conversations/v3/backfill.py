@@ -410,14 +410,19 @@ async def run_step(uid, run_id, index, phase):
         current = await run_blocking(db_executor, runs.get_run, uid, run_id)
         return bool(current) and current.get('status') not in runs.STOPPED
 
-    drained = await service.drain_backfill(uid, deadline=deadline, keep_going=keep_going)
+    drained = await service.drain_backfill(
+        uid, deadline=deadline, after=part.get('notes_scan_after'), keep_going=keep_going
+    )
     fields = {
         'notes_processed': int(part.get('notes_processed') or 0) + drained['processed'],
         'notes_failed': int(part.get('notes_failed') or 0) + drained['failed'],
         'notes_remaining': drained['remaining'],
     }
+    previous_seq = int(part.get('drain_seq') or 0)
     if drained['remaining']:
-        seq = int(part.get('drain_seq') or 0) + 1
+        seq = previous_seq + 1
+        if 'scan_after' in drained:
+            fields['notes_scan_after'] = drained['scan_after']
         if not await run_blocking(
             db_executor,
             runs.update_run,
@@ -425,11 +430,12 @@ async def run_step(uid, run_id, index, phase):
             run_id,
             partition=(index, {**fields, 'drain_seq': seq}),
             expect=active,
+            expected_drain_seq=previous_seq,
         ):
             return {'outcome': 'stopped', 'remaining': drained['remaining']}
         # Keep the partition open through handback without rapid task churn when all debt is foreign.
         schedule = {}
-        if drained.get('ownership_blocked') == drained['remaining']:
+        if not drained.get('scan_pending') and drained.get('ownership_blocked') == drained['remaining']:
             schedule['schedule_at'] = int(time.time()) + OWNERSHIP_RECHECK_SECONDS
         await run_blocking(db_executor, enqueue_step, uid, run_id, index, 'drain', seq, gen, **schedule)
         return {'outcome': 'draining', 'remaining': drained['remaining']}
@@ -438,7 +444,7 @@ async def run_step(uid, run_id, index, phase):
         # The partition's notes are settled: anything that changes these rows from here on is not the
         # run's, and undo refuses to overwrite it.
         await run_blocking(db_executor, rederive_store.record_baselines, uid, run_id, prior_ids)
-    if await run_blocking(
+    if not await run_blocking(
         db_executor,
         runs.update_run,
         uid,
@@ -446,9 +452,11 @@ async def run_step(uid, run_id, index, phase):
         status='committed' if last else None,
         partition=(index, {**fields, 'status': 'committed'}),
         expect=active,
+        expected_drain_seq=previous_seq,
     ):
-        if not last:
-            await run_blocking(db_executor, enqueue_step, uid, run_id, index + 1, 'derive', 0, gen)
+        return {'outcome': 'stopped', 'remaining': 0}
+    if not last:
+        await run_blocking(db_executor, enqueue_step, uid, run_id, index + 1, 'derive', 0, gen)
     return {'outcome': 'committed', 'last': last}
 
 

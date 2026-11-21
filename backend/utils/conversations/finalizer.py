@@ -784,6 +784,7 @@ async def finalize_persisted_conversation(
                 lease_epoch,
                 error.reason,
                 count_attempt=False,
+                **({'ownership_target_id': error.ownership_target_id} if error.ownership_target_id else {}),
             )
             return (
                 ConversationFinalizationDisposition.deferred if yielded else ConversationFinalizationDisposition.fenced

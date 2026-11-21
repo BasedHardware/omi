@@ -574,6 +574,80 @@ def test_repeated_scheduling_wait_does_not_consume_processing_budget(reason):
         ref.data.update(update)
 
 
+def test_survivor_refusal_parks_and_replays_only_after_handback():
+    now = _now()
+    job = _Ref(
+        'job-1',
+        {
+            'uid': 'owner',
+            'conversation_id': 'donor',
+            'status': 'leased',
+            'dispatch_generation': 2,
+            'lease_epoch': 4,
+            'lease_counts_worker_attempt': True,
+            'attempt_count': 4,
+            'worker_claim_count': 5,
+        },
+    )
+    survivor = _Ref('survivor', {'finalization_engine': 'go', 'finalization_owner_epoch': 1})
+    lookup = Mock(return_value=survivor)
+
+    def commit(tx):
+        for ref, patch in tx.updates:
+            for key, value in patch.items():
+                if value is jobs.firestore.DELETE_FIELD:
+                    ref.data.pop(key, None)
+                else:
+                    ref.data[key] = value
+
+    tx = _Transaction()
+    assert jobs._mark_finalization_retryable_txn(
+        tx, job, 2, 4, jobs.FINALIZATION_OWNER_REFUSAL, now, count_attempt=False, ownership_target_id='survivor'
+    )
+    commit(tx)
+    assert job.data['finalization_waiting_on_owner'] == 'survivor'
+    assert job.data['attempt_count'] == job.data['worker_claim_count'] == 4
+
+    def reconcile(at, expected_dispatch):
+        tx = _Transaction()
+        result = jobs._claim_finalization_replay_txn(tx, job, timedelta(minutes=5), at, conversation_ref_for_job=lookup)
+        assert result['created'] is expected_dispatch
+        commit(tx)
+
+    claim = _Transaction()
+    assert jobs._claim_finalization_job_txn(claim, job, 2, False, 60, now)['status'] == 'not_actionable'
+    assert claim.updates == []
+    reconcile(now + timedelta(minutes=5), False)
+    lookup.assert_not_called()
+    for _ in range(3):
+        reconcile(job.data['reconcile_after_at'], False)
+        assert job.data['dispatch_generation'] == 2
+        assert job.data['attempt_count'] == job.data['worker_claim_count'] == 4
+    assert lookup.call_args_list == [(('owner', 'survivor'), {})] * 3
+
+    survivor.data.update(finalization_engine='python', finalization_owner_epoch=2)
+    due = job.data['reconcile_after_at']
+    reconcile(due, True)
+    assert 'finalization_waiting_on_owner' not in job.data
+    assert job.data['dispatch_generation'] == 3
+    reconcile(due, False)
+    assert lookup.call_count == 4
+    claim = _Transaction()
+    assert jobs._claim_finalization_job_txn(claim, job, 3, False, 60, due)['status'] == 'claimed'
+
+
+def test_unmarked_replay_does_not_read_the_survivor():
+    job = _Ref('job-1', {'status': 'queued', 'dispatch_generation': 2})
+    lookup = Mock(side_effect=AssertionError('unmarked replay read a conversation'))
+    tx = _Transaction()
+    assert jobs._claim_finalization_replay_txn(tx, job, timedelta(minutes=5), _now(), conversation_ref_for_job=lookup)[
+        'created'
+    ]
+    lookup.assert_not_called()
+    assert len(tx.updates) == 1
+    assert 'finalization_waiting_on_owner' not in tx.updates[0][1]
+
+
 def test_finalization_completion_requires_durable_fanout_completion():
     now = _now()
     ref = _Ref(

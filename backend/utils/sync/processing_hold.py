@@ -29,15 +29,16 @@ FIELD = 'sync_processing_hold'
 class ProcessingDeferred(RuntimeError):
     """Keep durable custody while a processing prerequisite is unavailable."""
 
-    def __init__(self, reason: str, available_at: float):
+    def __init__(self, reason: str, available_at: float, *, ownership_target_id: str | None = None):
         super().__init__(reason)
         self.reason = reason
         self.available_at = available_at
+        self.ownership_target_id = ownership_target_id
 
 
-def finalization_owner_deferral() -> ProcessingDeferred:
+def finalization_owner_deferral(*, target_id: str | None = None) -> ProcessingDeferred:
     """Retry durable enrichment later, including after a Python handback."""
-    return ProcessingDeferred(FINALIZATION_OWNER_REFUSAL, time.time() + 120)
+    return ProcessingDeferred(FINALIZATION_OWNER_REFUSAL, time.time() + 120, ownership_target_id=target_id)
 
 
 @cache
