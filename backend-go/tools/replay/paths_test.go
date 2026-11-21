@@ -1,6 +1,10 @@
 package main
 
 import (
+	"crypto/aes"
+	"crypto/cipher"
+	"crypto/hkdf"
+	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -64,6 +68,10 @@ func TestPrivateCorpusRequiresRedactedReportAndExternalKey(t *testing.T) {
 	t.Setenv("GITHUB_ACTIONS", "false")
 	t.Setenv("GITLAB_CI", "false")
 	t.Setenv("BUILDKITE", "false")
+	t.Setenv("CIRCLECI", "false")
+	t.Setenv("JENKINS_URL", "")
+	t.Setenv("TF_BUILD", "false")
+	t.Setenv("TRAVIS", "false")
 	scratch := t.TempDir()
 	corpus := filepath.Join(scratch, "recording.json")
 	key := filepath.Join(scratch, "test-key")
@@ -152,38 +160,134 @@ func TestHeldOutCorpusCannotBeReplayedInCI(t *testing.T) {
 
 func TestOwnerCorpusRequiresAboutTwentyReencryptedTranscripts(t *testing.T) {
 	t.Parallel()
-	cases := make([]map[string]any, 20)
-	for index := range cases {
-		name := fmt.Sprintf("owned-%02d", index)
-		cases[index] = map[string]any{
-			"name": name,
-			"uid":  "replay-" + name,
-			"document": map[string]any{
-				"transcript_segments": base64.StdEncoding.EncodeToString(make([]byte, 32)),
-			},
-		}
-	}
-	validCorpus, err := json.Marshal(map[string]any{"version": 1, "cases": cases})
+	const key = "synthetic-owner-replay-test-key-000000"
+	validCorpus, err := ownerCorpusFixture(t, key, "valid")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := validateOwnerCorpus(validCorpus); err != nil {
+	if err := validateOwnerCorpus(validCorpus, key); err != nil {
 		t.Fatalf("valid owner corpus was rejected: %v", err)
 	}
-	for _, tc := range []struct {
-		name string
-		data []byte
-	}{
-		{name: "too few", data: []byte(`{"version":1,"cases":[{"name":"owned","document":{"transcript_segments":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="}}]}`)},
-		{name: "missing transcript", data: []byte(`{"version":1,"cases":[{"name":"owned","document":{}}]}`)},
-		{name: "invalid json", data: []byte(`{`)},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
+	for _, variant := range []string{"plaintext base64", "wrong key", "standard protection"} {
+		t.Run(variant, func(t *testing.T) {
 			t.Parallel()
-			if err := validateOwnerCorpus(tc.data); err == nil {
+			data, err := ownerCorpusFixture(t, key, variant)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := validateOwnerCorpus(data, key); err == nil {
 				t.Fatal("invalid owner corpus was accepted")
 			}
 		})
+	}
+}
+
+func ownerCorpusFixture(t *testing.T, key, variant string) ([]byte, error) {
+	t.Helper()
+	cases := make([]map[string]any, 20)
+	for index := range cases {
+		name := fmt.Sprintf("owned-%02d", index)
+		uid := "replay-" + name
+		transcript := "AQEBAQEBAQEBAQEBYKsmab1xWi0/QlJE+UQW5Of/AzfN8KQzz4Ydgqy6Y3SdFBjY++u3mDEWQIpeHCZZVF39wLhFtu99r+E7BDjC"
+		var err error
+		if index > 0 {
+			transcript, err = sealOwnerFixture(key, uid)
+			if err != nil {
+				return nil, err
+			}
+		}
+		protection := "enhanced"
+		switch variant {
+		case "plaintext base64":
+			transcript = base64.StdEncoding.EncodeToString([]byte(`[{"text":"plaintext transcript"}]`))
+		case "wrong key":
+			transcript, err = sealOwnerFixture("different-test-key-with-over-32-bytes", uid)
+			if err != nil {
+				return nil, err
+			}
+		case "standard protection":
+			protection = "standard"
+		}
+		cases[index] = map[string]any{
+			"name": name,
+			"uid":  uid,
+			"document": map[string]any{
+				"data_protection_level": protection,
+				"transcript_segments":   transcript,
+			},
+		}
+	}
+	return json.Marshal(map[string]any{"version": 1, "cases": cases})
+}
+
+func sealOwnerFixture(secret, uid string) (string, error) {
+	key, err := hkdf.Key(sha256.New, []byte(secret), []byte(uid), "user-data-encryption", 32)
+	if err != nil {
+		return "", err
+	}
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		return "", err
+	}
+	aead, err := cipher.NewGCM(block)
+	if err != nil {
+		return "", err
+	}
+	nonce := []byte("123456789012")
+	plain := []byte(`[{"text":"Synthetic owner replay transcript."}]`)
+	sealed := aead.Seal(append([]byte(nil), nonce...), nonce, plain, nil)
+	return base64.StdEncoding.EncodeToString(sealed), nil
+}
+
+func TestCIRecognizesCommonProviders(t *testing.T) {
+	for _, name := range []string{"CIRCLECI", "JENKINS_URL", "TF_BUILD", "TRAVIS"} {
+		t.Run(name, func(t *testing.T) {
+			if !isCIWith(func(key string) string {
+				if key == name {
+					return "true"
+				}
+				return ""
+			}) {
+				t.Fatalf("CI provider %s was not recognized", name)
+			}
+		})
+	}
+}
+
+func TestReportValueStrippingRemovesQueueEvidence(t *testing.T) {
+	result := report{Cases: []caseReport{{GoEvidence: map[string]any{"job": map[string]any{"metadata": "private queue meta"}}}}}
+	result.Cases[0].Python = &observation{}
+	result.Cases[0].Go = &observation{}
+	stripReportValues(&result)
+	if result.Cases[0].Python != nil || result.Cases[0].Go != nil || result.Cases[0].GoEvidence != nil {
+		t.Fatal("value-free report retained observations or Go queue evidence")
+	}
+}
+
+func TestFixtureDirectorySymlinkIsResolved(t *testing.T) {
+	t.Parallel()
+	repo := t.TempDir()
+	backend := filepath.Join(repo, "backend")
+	if err := os.MkdirAll(backend, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	actual := filepath.Join(t.TempDir(), "corpus")
+	if err := os.MkdirAll(actual, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	fixtures := filepath.Join(repo, "backend-go", "tools", "replay", "corpus")
+	if err := os.MkdirAll(filepath.Dir(fixtures), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(actual, fixtures); err != nil {
+		t.Fatal(err)
+	}
+	got, err := replayFixtureDir(backend)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != actual {
+		t.Fatalf("replayFixtureDir() = %q, want resolved path %q", got, actual)
 	}
 }
 

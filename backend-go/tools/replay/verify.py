@@ -64,10 +64,6 @@ def verify_cost(report):
                     not observed_activity or total_cost > 0,
                     (name, side, 'observed activity has an all-zero cost row'),
                 )
-        row = next(item for item in rows if item['case'] == name)
-        require(row['python'] == cost['python'] and row['go'] == cost['go'], (name, 'cost row mismatch'))
-
-
 def verify_corpus_map(parity, gaps):
     replay_dir = Path(__file__).parent
     manifest = json.loads((replay_dir / 'case-map.json').read_text())

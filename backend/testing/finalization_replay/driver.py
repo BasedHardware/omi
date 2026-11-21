@@ -15,7 +15,7 @@ from unittest.mock import patch
 from uuid import uuid4
 
 from testing.finalization_replay.candidate import migrate, replay_database, run_candidate
-from testing.finalization_replay.corpus import DEFAULT_TEST_KEY, read_corpus
+from testing.finalization_replay.corpus import DEFAULT_TEST_KEY, pack, read_corpus
 from testing.finalization_replay.metrics import install_firestore_meter, measure
 from testing.finalization_replay.providers import allow_provider_port, provider_server
 from testing.finalization_replay.reference import run_reference
@@ -42,7 +42,7 @@ def _observe(state, run, output, side):
             'started_at': (state.started_at or finished).isoformat(),
             'finished_at': finished.isoformat(),
             'provider_calls': sorted(state.provider_calls),
-            'effects': state.effects,
+            'effects': pack(state.effects),
             'conversation': None,
             'derived_documents': {},
             'webhooks': sorted(state.webhooks, key=lambda delivery: delivery['app']),

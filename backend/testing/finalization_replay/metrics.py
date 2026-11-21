@@ -84,7 +84,7 @@ def _writes(request):
 
 def _delete_write(write):
     if isinstance(write, dict):
-        return bool(write.get('delete'))
+        return 'delete' in write and write['delete'] is not None
     try:
         return write.WhichOneof('operation') == 'delete'
     except (AttributeError, ValueError):
@@ -97,6 +97,16 @@ def _count_write_request(state, request):
         return
     deletes = sum(_delete_write(write) for write in writes)
     state.add_firestore_operations(writes=len(writes) - deletes, deletes=deletes)
+
+
+def _invoke_rpc(state, name, read_methods, call, *args, **kwargs):
+    if state is not None:
+        state.add_firestore_operations(
+            rpc_calls=1,
+            query_requests=int(name in {'run_query', 'run_aggregation_query'}),
+            document_reads=int(name in read_methods),
+        )
+    return call(*args, **kwargs)
 
 
 def _is_read_result(method, item):
@@ -141,16 +151,11 @@ def install_firestore_meter():
         def make_wrapper(name, call):
             def wrapped(self, *args, **kwargs):
                 state = _active_state()
-                if state is not None:
-                    query = int(name in {'run_query', 'run_aggregation_query'})
-                    state.add_firestore_operations(rpc_calls=1, query_requests=query)
                 request = _request(args, kwargs)
-                result = call(self, *args, **kwargs)
+                result = _invoke_rpc(state, name, reads, call, self, *args, **kwargs)
                 if state is None:
                     return result
-                if name in reads:
-                    state.add_firestore_operations(document_reads=1)
-                elif name in direct_writes:
+                if name in direct_writes:
                     state.add_firestore_operations(**({'deletes': 1} if name == 'delete_document' else {'writes': 1}))
                 elif name in batched_writes:
                     _count_write_request(state, request)

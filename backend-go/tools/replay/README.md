@@ -68,6 +68,11 @@ measurements for the `cmd/jobd` conformance driver. Do not use the Go-versus-Pyt
 comparison as a gate on this interim run; the Go ≤ Python criterion applies to the lane 6
 worker replay.
 
+The Firestore meter counts direct document-read attempts before dispatch, including failed
+RPCs. Stream request counts are recorded when the RPC is started, while document counts cover
+only results consumed by the replay; a partially consumed stream can have fetched and billed
+additional results, so streamed document counts are a lower bound.
+
 The tool exits **0** for parity, **1** for unexplained differences, and **2** for a setup,
 execution, or report error. It creates a new mode-0600 JSON file and refuses to overwrite a
 report. By default it reports paths, refusals and counts. The CLI rejects report locations inside Git worktrees.
@@ -127,6 +132,10 @@ re-encrypted under a replay test key for unique synthetic `replay-*` UIDs. Keep
 `corpus.json` and the mode-0600 `-test-key-file` outside Git. The hook is enabled only on
 `m5-mbp`, rejects CI, and writes reports without observations. Example after the lead supplies
 both files:
+
+The m5 hostname and CI checks are operational guards against accidental use, not a security
+boundary. A process with access to the host and files can bypass them; the hook validates each
+enhanced transcript envelope with the external replay test key before opening the oracle.
 
 ```sh
 work=$(mktemp -d)

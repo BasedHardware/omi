@@ -1,6 +1,11 @@
 package main
 
 import (
+	"bytes"
+	"compress/zlib"
+	"crypto/aes"
+	"crypto/cipher"
+	"crypto/hkdf"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
@@ -34,7 +39,10 @@ func prepareReplay(backend, corpus, output, testKey string, includeValues bool) 
 	if err != nil {
 		return replayInput{}, err
 	}
-	fixtureDir := filepath.Join(filepath.Dir(backend), "backend-go", "tools", "replay", "corpus")
+	fixtureDir, err := replayFixtureDir(backend)
+	if err != nil {
+		return replayInput{}, err
+	}
 	reportPath, err := outsideWorktree(output)
 	if err != nil {
 		return replayInput{}, err
@@ -144,10 +152,13 @@ func validateCorpusLocation(backend, corpus, testKey string, includeValues bool,
 	if err != nil {
 		return fmt.Errorf("check replay corpus host: %w", err)
 	}
-	if err := validateCorpusPath(backend, corpus, testKey, includeValues, hostname, isCI()); err != nil {
+	if err = validateCorpusPath(backend, corpus, testKey, includeValues, hostname, isCI()); err != nil {
 		return err
 	}
-	fixtureDir := filepath.Join(filepath.Dir(backend), "backend-go", "tools", "replay", "corpus")
+	fixtureDir, err := replayFixtureDir(backend)
+	if err != nil {
+		return err
+	}
 	name := filepath.Base(corpus)
 	if filepath.Dir(corpus) == fixtureDir && ciReplayCorpusAllowed(name) && !approvedSyntheticCorpus(name, data) {
 		return errors.New("replay corpus does not match its reviewed synthetic digest")
@@ -156,7 +167,10 @@ func validateCorpusLocation(backend, corpus, testKey string, includeValues bool,
 }
 
 func validateCorpusPath(backend, corpus, testKey string, includeValues bool, hostname string, ci bool) error {
-	fixtureDir := filepath.Join(filepath.Dir(backend), "backend-go", "tools", "replay", "corpus")
+	fixtureDir, err := replayFixtureDir(backend)
+	if err != nil {
+		return err
+	}
 	name := filepath.Base(corpus)
 	if filepath.Dir(corpus) == fixtureDir && ciReplayCorpusAllowed(name) {
 		if testKey != "" {
@@ -167,11 +181,11 @@ func validateCorpusPath(backend, corpus, testKey string, includeValues bool, hos
 	if ci {
 		return errors.New("CI may only read reviewed synthetic replay corpora")
 	}
-	if _, err := outsideWorktree(corpus); err != nil {
+	if _, pathErr := outsideWorktree(corpus); pathErr != nil {
 		return errors.New("only reviewed synthetic corpora may be replayed from Git")
 	}
-	if err := ownerCorpusHostAllowed(hostname, false); err != nil {
-		return err
+	if hostErr := ownerCorpusHostAllowed(hostname, false); hostErr != nil {
+		return hostErr
 	}
 	if includeValues || testKey == "" {
 		return errors.New("private replay requires an external test key and a report without values")
@@ -222,8 +236,12 @@ func ownerCorpusPath(dir string) (string, error) {
 }
 
 func isCI() bool {
-	for _, name := range []string{"CI", "GITHUB_ACTIONS", "GITLAB_CI", "BUILDKITE"} {
-		value := strings.ToLower(strings.TrimSpace(os.Getenv(name)))
+	return isCIWith(os.Getenv)
+}
+
+func isCIWith(getenv func(string) string) bool {
+	for _, name := range []string{"CI", "GITHUB_ACTIONS", "GITLAB_CI", "BUILDKITE", "CIRCLECI", "JENKINS_URL", "TF_BUILD", "TRAVIS"} {
+		value := strings.ToLower(strings.TrimSpace(getenv(name)))
 		if value != "" && value != "0" && value != "false" && value != "no" {
 			return true
 		}
@@ -245,7 +263,7 @@ func ownerCorpusHostAllowed(hostname string, ci bool) error {
 	return nil
 }
 
-func validateOwnerCorpus(data []byte) error {
+func validateOwnerCorpus(data []byte, testKey string) error {
 	var corpus struct {
 		Version int `json:"version"`
 		Cases   []struct {
@@ -260,6 +278,9 @@ func validateOwnerCorpus(data []byte) error {
 	if corpus.Version != 1 || len(corpus.Cases) < 15 || len(corpus.Cases) > 25 {
 		return errors.New("owner corpus must be version 1 with 15 to 25 cases")
 	}
+	if len(testKey) < 32 {
+		return errors.New("replay test key must contain at least 32 bytes")
+	}
 	seenUIDs := make(map[string]bool, len(corpus.Cases))
 	for _, replayCase := range corpus.Cases {
 		uid := replayCase.UID
@@ -270,13 +291,128 @@ func validateOwnerCorpus(data []byte) error {
 			return errors.New("every owner case must have a unique synthetic replay uid")
 		}
 		seenUIDs[uid] = true
+		if replayCase.Document["data_protection_level"] != "enhanced" {
+			return errors.New("every owner case must use enhanced transcript protection")
+		}
 		transcript, ok := replayCase.Document["transcript_segments"].(string)
-		ciphertext, decodeErr := base64.StdEncoding.DecodeString(transcript)
+		ciphertext, decodeErr := base64.StdEncoding.Strict().DecodeString(transcript)
 		if !ok || decodeErr != nil || len(ciphertext) < 28 {
 			return errors.New("every owner case must contain a re-encrypted transcript envelope")
 		}
+		compressed, ok := replayCase.Document["transcript_segments_compressed"].(bool)
+		if _, exists := replayCase.Document["transcript_segments_compressed"]; exists && !ok {
+			return errors.New("owner transcript compression marker must be boolean")
+		}
+		if err := decryptOwnerTranscript(uid, transcript, compressed, testKey); err != nil {
+			return errors.New("owner transcript envelope could not be decrypted with the replay test key")
+		}
 	}
 	return nil
+}
+
+func readOwnerTestKey(path string) (key string, err error) {
+	resolved, err := filepath.EvalSymlinks(path)
+	if err != nil {
+		return "", fmt.Errorf("resolve replay test key: %w", err)
+	}
+	privatePath, err := outsideWorktree(resolved)
+	if err != nil {
+		return "", err
+	}
+	file, err := os.Open(privatePath)
+	if err != nil {
+		return "", fmt.Errorf("open replay test key: %w", err)
+	}
+	defer func() { err = errors.Join(err, file.Close()) }()
+	info, err := file.Stat()
+	if err != nil {
+		return "", fmt.Errorf("inspect replay test key: %w", err)
+	}
+	if !info.Mode().IsRegular() || info.Mode().Perm()&0o077 != 0 || info.Size() > 4096 {
+		return "", errors.New("replay test key must be a private regular file of at most 4 KiB")
+	}
+	data, err := io.ReadAll(io.LimitReader(file, 4097))
+	if err != nil || len(data) > 4096 {
+		return "", errors.New("read replay test key failed")
+	}
+	key = strings.TrimRight(string(data), "\r\n")
+	if strings.ContainsRune(key, '\x00') || len(key) < 32 {
+		return "", errors.New("replay test key must contain at least 32 bytes")
+	}
+	return key, nil
+}
+
+// decryptOwnerTranscript mirrors the enhanced transcript envelope format used by
+// internal/platform/crypt. Tools stay standard-library-only, so the Python-generated
+// known-answer test keeps this small compatibility reader tied to that contract.
+func decryptOwnerTranscript(uid, envelope string, compressed bool, secret string) error {
+	sealed, err := base64.StdEncoding.Strict().DecodeString(envelope)
+	if err != nil {
+		return errors.New("invalid base64 envelope")
+	}
+	key, err := hkdf.Key(sha256.New, []byte(secret), []byte(uid), "user-data-encryption", 32)
+	if err != nil {
+		return err
+	}
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		return err
+	}
+	aead, err := cipher.NewGCM(block)
+	if err != nil || len(sealed) < aead.NonceSize()+aead.Overhead() {
+		return errors.New("invalid encrypted envelope")
+	}
+	plain, err := aead.Open(nil, sealed[:aead.NonceSize()], sealed[aead.NonceSize():], nil)
+	if err != nil {
+		return errors.New("encrypted envelope authentication failed")
+	}
+	if compressed {
+		if strings.ToLower(string(plain)) != string(plain) {
+			return errors.New("compressed transcript hex must be lowercase")
+		}
+		compressedBytes, err := hex.DecodeString(string(plain))
+		if err != nil {
+			return err
+		}
+		reader, err := zlib.NewReader(bytes.NewReader(compressedBytes))
+		if err != nil {
+			return err
+		}
+		plain, err = io.ReadAll(io.LimitReader(reader, 64<<20+1))
+		closeErr := reader.Close()
+		if err != nil || closeErr != nil || len(plain) > 64<<20 {
+			return errors.New("invalid compressed transcript")
+		}
+	}
+	var segments []struct {
+		Text *string `json:"text"`
+	}
+	if err := json.Unmarshal(plain, &segments); err != nil || segments == nil {
+		return errors.New("invalid transcript segments")
+	}
+	for _, segment := range segments {
+		if segment.Text == nil {
+			return errors.New("transcript segment has no text")
+		}
+	}
+	return nil
+}
+
+func replayFixtureDir(backend string) (string, error) {
+	dir := filepath.Join(filepath.Dir(backend), "backend-go", "tools", "replay", "corpus")
+	resolved, err := filepath.EvalSymlinks(dir)
+	switch {
+	case err == nil:
+		dir = resolved
+	case !errors.Is(err, os.ErrNotExist):
+		return "", fmt.Errorf("resolve replay fixture directory: %w", err)
+	default:
+		parent, parentErr := filepath.EvalSymlinks(filepath.Dir(dir))
+		if parentErr == nil {
+			dir = filepath.Join(parent, filepath.Base(dir))
+		}
+	}
+	return filepath.Abs(dir)
 }
 
 func approvedSyntheticCorpus(name string, data []byte) bool {
@@ -327,7 +463,7 @@ func syntheticDigests() map[string]string {
 	// as synthetic, including the decoded contents of encrypted fixture records.
 	return map[string]string{
 		"admission-parity.json": "3d9d4ffec0a1053bbca24f481f0c776d5c5acc97ebc3b18020b369e7b313e9ab",
-		"conformance-gaps.json": "b6311b93832dbeccc1840a1075359f831d7acb5a96091410e30f439fe8c27ec2",
+		"conformance-gaps.json": "63c7b644b63985ae1f9434f7c0d6e6730fbb52b388572a56235e479aab53a160",
 		"held-out.json":         "a1ae0f2357f1f4debc04be7fb09487da966c8660e90738ae4b225f4948193ce9",
 	}
 }

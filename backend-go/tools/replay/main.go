@@ -69,7 +69,11 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		return failure(stderr, err)
 	}
 	if *ownerCorpus != "" {
-		if validationErr := validateOwnerCorpus(input.corpus); validationErr != nil {
+		key, keyErr := readOwnerTestKey(*testKey)
+		if keyErr != nil {
+			return failure(stderr, keyErr)
+		}
+		if validationErr := validateOwnerCorpus(input.corpus, key); validationErr != nil {
 			return failure(stderr, validationErr)
 		}
 	}
@@ -83,10 +87,7 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	}
 	result.CommitSHA = *commit
 	if !*includeValues {
-		for index := range result.Cases {
-			result.Cases[index].Python = nil
-			result.Cases[index].Go = nil
-		}
+		stripReportValues(&result)
 	}
 	if err := writeReport(input.reportPath, result); err != nil {
 		return failure(stderr, err)
@@ -101,6 +102,14 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 	return 0
+}
+
+func stripReportValues(result *report) {
+	for index := range result.Cases {
+		result.Cases[index].Python = nil
+		result.Cases[index].Go = nil
+		result.Cases[index].GoEvidence = nil
+	}
 }
 
 func failure(stderr io.Writer, err error) int {

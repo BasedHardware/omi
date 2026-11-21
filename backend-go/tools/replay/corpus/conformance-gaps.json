@@ -524,7 +524,7 @@
         "duration_s": 25,
         "segments": [
           {
-            "text": "Synthetic contract replay for transcript-null-structured. The test fixture records the conversation outcome without customer data."
+            "text": "Synthetic contract replay for transcript-standard-protection. The test fixture records the conversation outcome without customer data."
           }
         ]
       },

@@ -173,7 +173,7 @@ class _Handler(BaseHTTPRequestHandler):
                         result = {field: fixture[field] for field in ('title', 'overview')}
                     else:
                         result = {'contents': [item['text'] for item in fixture['items']]}
-                    state.record_provider_call(feature, request.get('input', ''), result)
+                    state.record_provider_call(feature, request.get('messages', []), result)
                     return 200, result
             case 'PUT', ['vectors', uid, cid] if (uid, cid) == (state.uid, state.cid):
                 body = self._body()
@@ -295,13 +295,16 @@ def _admit(proc, url, state, database):
         status, _ = _request('POST', f'{url}/v1/users/{state.uid}/erase')
         if status != 200:
             raise RuntimeError('Go replay erase was refused')
+        user_document_absent = not state.user.get().exists
+        if not user_document_absent:
+            raise RuntimeError('Go replay erase left the owner document')
         with _connect_loopback(connect, database) as connection, connection.cursor() as cursor:
             cursor.execute('SELECT count(*) FROM queue_jobs WHERE uid = %s', (state.uid,))
             jobs_for_uid = cursor.fetchone()[0]
             cursor.execute('SELECT count(*) FROM queue_tenants WHERE uid = %s', (state.uid,))
             tenants_for_uid = cursor.fetchone()[0]
         state.go_evidence['erasure'] = {
-            'user_document_absent': True,
+            'user_document_absent': user_document_absent,
             'jobs_for_uid': jobs_for_uid,
             'tenants_for_uid': tenants_for_uid,
         }
