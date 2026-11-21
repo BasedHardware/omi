@@ -2,7 +2,35 @@
 
 import json
 from pathlib import Path
+import re
 import sys
+
+
+# Public path normalization used by the merged Go port-task delta tooling.
+# Only replace reviewed volatile IDs under derived documents; preserve all other path parts.
+DYNAMIC_DOCUMENT_IDS = {
+    'action_items': (r'[A-Za-z0-9]{20}', '<auto-id>'),
+    'events': (r'gpe_[0-9a-f]{32}', '<goal-event-id>'),
+    'goal_history': (r'\d{4}-\d{2}-\d{2}', '<day>'),
+    'hourly_usage': (r'\d{4}-\d{2}-\d{2}-\d{2}', '<hour>'),
+    'llm_usage': (r'\d{4}-\d{2}-\d{2}', '<day>'),
+    'monthly_usage_totals': (r'\d{4}-\d{2}', '<month>'),
+}
+
+
+def stable_path(path):
+    """Normalize only reviewed dynamic document IDs in a derived-document pointer."""
+    prefix = '/derived_documents/'
+    if not path.startswith(prefix):
+        return path
+    key, separator, field = path.removeprefix(prefix).partition('/')
+    parts = key.split('~1')
+    for index in range(0, len(parts) - 1, 2):
+        replaced = DYNAMIC_DOCUMENT_IDS.get(parts[index])
+        if replaced and re.fullmatch(replaced[0], parts[index + 1]):
+            parts[index + 1] = replaced[1]
+    return prefix + '~1'.join(parts) + separator + field
+
 
 def require(condition, detail):
     if not condition:
