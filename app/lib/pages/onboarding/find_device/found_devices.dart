@@ -335,7 +335,8 @@ class _FoundDevicesState extends State<FoundDevices> with WidgetsBindingObserver
         final isLiveDevice = liveDeviceId != null && liveDeviceId == provider.deviceId;
         final pairingType = isLiveDevice ? liveType : provider.deviceType;
         final showOmiStatus = isLiveDevice && pairingType == DeviceType.omi;
-        final batteryPercentage = isLiveDevice && liveBattery >= 0 ? liveBattery : provider.batteryPercentage;
+        final batteryPercentage =
+            isLiveDevice && liveType == DeviceType.openglass ? liveBattery : provider.batteryPercentage;
         return MessageListener<OnboardingProvider>(
           showError: (error) {
             // The inline card owns connect-failure recovery and its shown event.

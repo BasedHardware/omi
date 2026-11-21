@@ -31,9 +31,13 @@ class DiscoveryDeviceProvider extends AuditDeviceProvider {
 
   bool? chargingNow;
   BtDevice? resolvedDevice;
+  int? liveBattery;
 
   @override
   BtDevice? get capabilityNormalizedDevice => resolvedDevice ?? super.capabilityNormalizedDevice;
+
+  @override
+  int get batteryLevel => liveBattery ?? super.batteryLevel;
 
   @override
   bool get isCharging => chargingNow ?? false;
@@ -48,6 +52,11 @@ class DiscoveryDeviceProvider extends AuditDeviceProvider {
 
   void resolveGlass(BtDevice discovered) {
     resolvedDevice = discovered.copyWith(type: DeviceType.openglass);
+    notifyListeners();
+  }
+
+  void updateBattery(int level) {
+    liveBattery = level;
     notifyListeners();
   }
 
@@ -209,7 +218,7 @@ void main() {
   testWidgets('late Glass capability switches pairing to the live battery without changing the discovered type',
       (tester) async {
     final device = BtDevice(id: 'glass-capability', name: 'Omi', type: DeviceType.omi, rssi: -50);
-    final live = DiscoveryDeviceProvider(device: device, connected: true, battery: 72);
+    final live = DiscoveryDeviceProvider(device: device, connected: true);
     addTearDown(live.dispose);
     await tester.pumpWidget(polish.host(polish.connect(provider, device: live)));
     await tester.pump();
@@ -218,16 +227,19 @@ void main() {
       ..deviceId = device.id
       ..deviceName = device.name
       ..deviceType = device.type
-      ..batteryPercentage = -1
+      ..batteryPercentage = 3
       ..setLoading(false);
     await tester.pump();
     final l10n = AppLocalizationsEn();
     expect(find.text(l10n.connected), findsOneWidget);
-    expect(find.text('72%'), findsNothing);
+    expect(find.text('3%'), findsNothing);
 
     live.resolveGlass(device);
     await tester.pump();
     expect(find.text(l10n.pairingSuccessful), findsOneWidget);
+    expect(find.text('3%'), findsNothing);
+    live.updateBattery(72);
+    await tester.pump();
     expect(find.text('72%'), findsOneWidget);
     expect(provider.deviceType, DeviceType.omi);
     await tester.pumpWidget(const SizedBox());
