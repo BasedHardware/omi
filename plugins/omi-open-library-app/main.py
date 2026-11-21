@@ -21,6 +21,8 @@ OPEN_LIBRARY_BASE_URL = "https://openlibrary.org"
 REQUEST_TIMEOUT_SECONDS = 10
 MAX_LIMIT = 10
 USER_AGENT = "omi-open-library-app/1.0 (https://omi.me)"
+# Work links are /works/OL<digits>W, then an optional .json or a title slug.
+_WORK_ID_PATTERN = re.compile(r"(?i)(?:^|/)(?:works/)?(OL[0-9]+W)(?:\.json)?(?:/|[?#]|$)")
 _SUBJECT_CHARS_TO_DROP = frozenset(""";/?:@&=+$,<>#%"{}|\\^[]`\n\r""")
 
 _open_library_client: Optional[httpx.AsyncClient] = None
@@ -113,21 +115,30 @@ def _extract_names(items: Any, limit: int = 5) -> str:
 def _description_text(description: Any) -> str:
     if isinstance(description, dict):
         description = description.get("value")
-    text = _clean_text(description)
+    if description is None:
+        return ""
+    text = unescape(str(description))
+    text = re.sub(r"(?i)<br\s*/?>", "\n", text)
+    text = re.sub(r"(?i)</p\s*>", "\n", text)
+    text = re.sub(r"<[^>]+>", "", text)
+    text = text.replace("\r\n", "\n").replace("\r", "\n")
+    text = re.sub(r"[^\S\n]+", " ", text)
+    text = re.sub(r" *\n *", "\n", text)
+    text = re.sub(r"\n{3,}", "\n\n", text)
+    text = text.strip()
     if len(text) > 900:
         text = text[:900].rstrip() + "..."
     return text
 
 
 def _work_id(value: Any) -> Optional[str]:
-    candidate = _clean_text(value)
+    candidate = _clean_text(value).strip()
     if not candidate:
         return None
-    candidate = candidate.strip("/")
-    candidate = candidate.removeprefix("works/")
-    if re.fullmatch(r"OL[0-9]+W", candidate, flags=re.IGNORECASE):
-        return candidate.upper()
-    return None
+    match = _WORK_ID_PATTERN.search(candidate)
+    if match is None:
+        return None
+    return match.group(1).upper()
 
 
 def _safe_isbn(value: Any) -> Optional[str]:

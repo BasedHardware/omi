@@ -230,6 +230,8 @@ def validate(
     *,
     prod_source_sha: str = SOURCE_SHA,
     expected_canary_source_sha: str | None = None,
+    expected_canary_workflow_sha: str = "",
+    expected_qualification_source_sha: str = "",
     checkout_repository: Path | None = None,
     canary_override: dict[str, object] | None = None,
     canary_run_override: dict[str, object] | None = None,
@@ -317,6 +319,8 @@ def validate(
         expected_canary_workflow_id=CANARY_WORKFLOW_ID,
         expected_canary_run_id=CANARY_RUN_ID,
         expected_canary_source_sha=expected_sha,
+        expected_canary_workflow_sha=expected_canary_workflow_sha,
+        expected_qualification_source_sha=expected_qualification_source_sha,
         canary_deployment_receipt=canary_deployment_receipt,
         canary_semantic_evidence=canary_semantic,
         final_deployment_receipt=final_deployment_receipt,
@@ -1181,6 +1185,36 @@ def test_live_receipt_treats_helm_null_secret_ref_and_empty_pod_security_as_abse
     )
 
 
+def test_live_receipt_treats_downward_api_defaults_as_absent(receipt_builder: SimpleNamespace) -> None:
+    def template(field_ref: dict, resource_ref: dict) -> dict:
+        return {
+            "spec": {
+                "containers": [
+                    {
+                        "name": "pusher",
+                        "image": f"repo@{DIGEST}",
+                        "env": [
+                            {"name": "MEMORY_ENABLED", "value": "on"},
+                            {"name": "ROLLOUT_POD_TEMPLATE_HASH", "valueFrom": {"fieldRef": field_ref}},
+                            {"name": "CPU_LIMIT", "valueFrom": {"resourceFieldRef": resource_ref}},
+                        ],
+                    }
+                ]
+            }
+        }
+
+    path = "metadata.labels['pod-template-hash']"
+    rendered = template({"fieldPath": path}, {"resource": "limits.cpu"})
+    live = template({"apiVersion": "v1", "fieldPath": path}, {"resource": "limits.cpu", "divisor": "1"})
+    assert receipt_builder.pod_template_semantic_projection(rendered) == (
+        receipt_builder.pod_template_semantic_projection(live)
+    )
+    moved = template({"apiVersion": "v1", "fieldPath": "metadata.name"}, {"resource": "limits.cpu"})
+    assert receipt_builder.pod_template_semantic_projection(rendered) != (
+        receipt_builder.pod_template_semantic_projection(moved)
+    )
+
+
 def test_isolated_canary_render_uses_one_proposed_config_map_for_every_reference(
     receipt_builder: SimpleNamespace,
 ) -> None:
@@ -1208,6 +1242,13 @@ def test_isolated_canary_render_uses_one_proposed_config_map_for_every_reference
         "PROACTIVITY_REDIS_HOST": config_name,
         "REDIS_DB_HOST": config_name,
         "TYPESENSE_HOST": config_name,
+        "RECORD_TOKEN_LEASE_MODE": config_name,
+        "RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT": config_name,
+        "RECORD_TOKEN_LEASE_SECONDS": config_name,
+        "RECORD_TOKEN_LEASE_DEPLOYED_AT": config_name,
+        # The conversations v3 stage moves with the canary config like every other rollout key.
+        "CONVERSATIONS_V3_STAGE": config_name,
+        "CONVERSATIONS_V3_FIRST_APP_BUILD": config_name,
     }
 
 
@@ -1425,6 +1466,70 @@ def test_rejects_prod_evidence_still_bound_to_the_dev_qualified_source(
     assert any("one exact isolated candidate Pusher pod" in error for error in errors)
     assert any("semantic probe candidate does not match" in error for error in errors)
     assert any("run source does not match the checked-out production source" in error for error in errors)
+
+
+@pytest.mark.parametrize("require_final", [False, True])
+def test_runtime_pin_can_differ_from_trusted_workflow_source(
+    verifier: SimpleNamespace,
+    evidence: dict[str, object],
+    deployment_receipt: dict[str, object],
+    run: dict[str, object],
+    require_final: bool,
+) -> None:
+    workflow_sha = "d" * 40
+    assert (
+        validate(
+            verifier,
+            evidence,
+            deployment_receipt,
+            run,
+            expected_canary_workflow_sha=workflow_sha,
+            expected_qualification_source_sha=SOURCE_SHA,
+            canary_run_override=_canary_run(workflow_sha),
+            require_final=require_final,
+        )
+        == []
+    )
+    errors = validate(
+        verifier,
+        evidence,
+        deployment_receipt,
+        run,
+        expected_canary_workflow_sha=workflow_sha,
+        canary_run_override=_canary_run(SOURCE_SHA),
+        require_final=require_final,
+    )
+    assert any("trusted workflow source" in error for error in errors)
+    errors = validate(
+        verifier,
+        evidence,
+        deployment_receipt,
+        run,
+        expected_canary_workflow_sha=workflow_sha,
+        canary_run_override=_canary_run(workflow_sha),
+        expected_qualification_source_sha="e" * 40,
+        require_final=require_final,
+    )
+    assert any("explicit release source" in error for error in errors)
+
+
+@pytest.mark.parametrize("workflow_sha", ["short", "D" * 40, "0" * 40])
+def test_rejects_malformed_trusted_workflow_identity(
+    verifier: SimpleNamespace,
+    evidence: dict[str, object],
+    deployment_receipt: dict[str, object],
+    run: dict[str, object],
+    workflow_sha: str,
+) -> None:
+    errors = validate(
+        verifier,
+        evidence,
+        deployment_receipt,
+        run,
+        expected_canary_workflow_sha=workflow_sha,
+        canary_run_override=_canary_run(workflow_sha),
+    )
+    assert any("workflow source must be a full nonzero" in error for error in errors)
 
 
 def test_rejects_canary_run_head_sha_that_is_not_the_checked_out_production_source(

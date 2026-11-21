@@ -11,7 +11,8 @@ backend/docs/storing-conversations.md).
 from utils.conversations import phase_shadow
 
 from database import conversation_visibility_counts, processing_backlog, speaker_auto_enroll, capture_group_notes
-from database import conversation_recorded_time
+from database import conversation_recorded_time, conversations_v3_backfill_runs
+from database import pipeline_ledger
 from utils.conversations import summary_delivery, lifecycle_clocks
 from utils.observability.delivery import summary_terminal_outcome
 from utils.sync import processing_hold, bridge_pending
@@ -23,9 +24,9 @@ import logging
 import uuid
 import zlib
 from collections.abc import Mapping
-from functools import wraps
+from functools import partial, wraps
 from datetime import datetime, timedelta, timezone
-from typing import List, Optional, Dict, Any, Callable, Tuple
+from typing import List, Optional, Dict, Any, Callable, Literal, Tuple, overload
 from database import chat_edits
 from database.dream_dirty import after_write
 from database.account_deletion_policy import account_deletion_marker_blocks_access
@@ -37,9 +38,13 @@ from prometheus_client import Counter, REGISTRY
 from threading import Lock
 import utils.other.hume as hume
 from models.audio_file import AudioFile
+from models.structured import Structured
+from utils.summary_quality import clean_structured, stable_title, content_units, title_basis, valid_title
+from utils.conversations.llm_input_dedupe import NOTES_OUTPUT_HASH, output_fingerprint
 from database.audio_file_projection import finalize_audio_file_group as _finalize_audio_file_group
 from models.note_claims import claim_references_segment
 from models.client_processing import PROJECTION_FAMILY_FIELDS
+from models.finalization_owner import REFUSAL as FINALIZATION_OWNER_REFUSAL, python_owns_finalization
 from models.conversation_enums import ConversationStatus, PostProcessingModel, PostProcessingStatus
 from models.conversation_photo import ConversationPhoto
 from models.capture_window_proof import CaptureWindowProof
@@ -48,6 +53,8 @@ from utils import encryption
 from utils.conversation_page_cursor import BookmarkDict, decode_cursor, encode_cursor, query_scope
 from config.firestore_read_levers import lever_enabled
 from config.recording_speakers import stamp_scope_index, with_creation_scope_index
+from config.record_audio import record_identity
+from utils.sync.stage import current_stage
 from utils.conversations.fragment_visibility import is_completed_rule_discard, is_user_curated
 from utils.conversations.fragment_visibility import SETTLING_FIELDS, is_settling_fragment
 from utils.conversations.transcript_hash import (
@@ -70,10 +77,25 @@ from utils.manual_speaker_assignments import (
     normalize_rejection,
     remap_absorbed_receipt,
 )
-from utils.conversations.home_titles import SUMMARY_DEBT_FIELDS, apply_user_title, project_home
+from utils.conversations.home_titles import (
+    SUMMARY_DEBT_FIELDS,
+    apply_user_title,
+    PENDING_TITLE_STAND_IN,
+    notes_pending,
+    project_home,
+    title_for_stability,
+)
 from utils.conversations import transcribing_hold
 from database.mcp_read_queries import MCP_CONVERSATION_CARD_FIELD_PATHS, MCP_CONVERSATION_TRANSCRIPT_FIELD_PATHS
 from database.quiet_check_retirement import restore_quiet_check_in_transaction, stop_quiet_check_for_conversation
+from database import transcript_pointer
+from utils.home_feed.projection import DISPLAY_FIELDS, stamp as stamp_home_display
+from database.transcript_pointer import (
+    TranscriptSegmentsDecodeError,
+    decode_stored_transcript as decode_transcript_segments_blob,
+    run_preloaded_transactional,
+)
+
 from ._client import db, delete_collection_recursive, get_firestore_client, run_transactional
 from database.sync_assignment import (
     SyncAssignmentClock,
@@ -125,6 +147,9 @@ from utils.llm.model_constants import LUNA_MODEL
 logger = logging.getLogger(__name__)
 
 conversations_collection = 'conversations'
+ACTION_ITEMS_EDIT_REVISION = 'user_action_items_revision'
+EVENTS_EDIT_REVISION = 'user_events_revision'
+
 
 # Monotonic server-only fence so a restore-then-discard ABA cannot masquerade
 # as the original state while a reprocess generates template results.
@@ -164,8 +189,19 @@ def get_conversation_ids(uid: str) -> List[str]:
 # *********************************
 
 
-def _decrypt_conversation_data(conversation_data: Dict[str, Any], uid: str, *, firestore_client=None) -> Dict[str, Any]:
+def _decrypt_conversation_data(
+    conversation_data: Dict[str, Any], uid: str, *, firestore_client=None
+) -> Optional[Dict[str, Any]]:
     data = copy.deepcopy(conversation_data)
+    if isinstance(data.get('transcript_segments'), dict):
+        try:
+            data['transcript_segments'] = decode_transcript_segments_blob(uid, data['transcript_segments'], True)
+        except transcript_pointer.TranscriptBlobAbsent:
+            return None
+        except TranscriptSegmentsDecodeError:
+            if current_portability_read() is not None:
+                raise
+            data['transcript_segments'] = []
     _reveal_match_scores_for_read(data, uid)
 
     if 'transcript_segments' not in data:
@@ -354,10 +390,21 @@ def update_owner_recognition_diagnostics(uid: str, conversation_id: str, diagnos
 
 
 def _prepare_conversation_for_write(
-    data: Dict[str, Any], uid: str, level: str, *, preserve_transcript_identity: bool = False
+    data: Dict[str, Any],
+    uid: str,
+    level: str,
+    *,
+    preserve_transcript_identity: bool = False,
+    conversation_id: Optional[str] = None,
+    conversation_state: Optional[Mapping[str, Any]] = None,
+    allow_offload: bool = True,
 ) -> Dict[str, Any]:
     data = copy.deepcopy(data)
 
+    # Partial writes cannot certify an entire legacy row. Explicit prepare
+    # reconciles them; full creates/processing results get compact content now.
+    if isinstance(data.get('structured'), dict) and ('started_at' in data or 'recorded_start' in data):
+        data.update(stamp_home_display(uid, data, 'conversation'))
     stamp_scope_index(data)
     conversation_recorded_time.stamp_for_write(data)
     summary_delivery.prepare(data, uid)
@@ -376,6 +423,8 @@ def _prepare_conversation_for_write(
     if level not in {'standard', 'enhanced'}:
         data.pop('record_lane_owner', None)
     segments = data.get('transcript_segments')
+    if not data.get('discarded') and isinstance(data.get('structured'), dict) and isinstance(segments, list):
+        data['content_word_units'] = content_units(segments)
     if isinstance(segments, list) and any('original_text' in segment for segment in segments):
         from utils.agent_capabilities.transcripts import originals
 
@@ -384,7 +433,7 @@ def _prepare_conversation_for_write(
         _reveal_match_scores_for_read(data, uid)
         if isinstance(segments, list):
             updates = match_scores.from_segments(segments)
-            if updates and match_scores.enabled():
+            if updates:
                 data[match_scores.FIELD] = match_scores.merge(data.get(match_scores.FIELD), updates)
     except Exception:
         # Optional metadata must never block content when decoding/merging fails.
@@ -397,8 +446,15 @@ def _prepare_conversation_for_write(
             data['transcript_segments'] = canonicalize_transcript_segments_for_storage(data['transcript_segments'])
         from utils.conversations.speaker_grouping_storage import protect_segments
 
-        protect_segments(data['transcript_segments'], uid)
-        data['transcript_segments'] = _protect_json_value(data['transcript_segments'], uid, level)
+        data['transcript_segments'] = transcript_pointer.offload_or_inline(
+            uid,
+            conversation_id or data.get('id'),
+            data['transcript_segments'],
+            lambda value: _protect_json_value(value, uid, level),
+            prepare_segments=lambda value: protect_segments(value, uid),
+            conversation_state=data if allow_offload else {},
+            current_state=conversation_state if allow_offload else None,
+        )
         data['transcript_segments_compressed'] = True
     if match_scores.FIELD in data:
         try:
@@ -446,7 +502,11 @@ def _prepare_conversation_for_write(
 
 
 def encode_conversation_for_write(
-    uid: str, conversation_data: Dict[str, Any], level: str = 'standard'
+    uid: str,
+    conversation_data: Dict[str, Any],
+    level: str = 'standard',
+    *,
+    conversation_state: Optional[Mapping[str, Any]] = None,
 ) -> Dict[str, Any]:
     """Encode a conversation exactly as the write path stores it.
 
@@ -454,17 +514,24 @@ def encode_conversation_for_write(
     document with a plain ``transcript_segments`` list is a state production
     never writes, and seeding one hides encoding-aware guard bugs.
     """
-    return _prepare_conversation_for_write(conversation_data, uid, level)
+    return _prepare_conversation_for_write(conversation_data, uid, level, conversation_state=conversation_state)
 
 
-class TranscriptSegmentsDecodeError(ValueError):
-    """The stored transcript field cannot safely authorize a segment merge."""
-
-
-def _require_segment_list(parsed: Any) -> List[Any]:
-    if not isinstance(parsed, list):
-        raise TranscriptSegmentsDecodeError(f'undecodable transcript_segments: parsed {type(parsed).__name__}')
-    return parsed
+def _offload_processing_transcript(uid: str, data: dict, current: Optional[Mapping[str, Any]] = None) -> None:
+    """Called after lifecycle/privacy guards; replay uploads outside the txn."""
+    if not transcript_pointer.conversation_allows_offload(
+        data, current
+    ) or not transcript_pointer.config.write_admitted(uid):
+        return
+    raw = data.get('transcript_segments')
+    if raw is None or isinstance(raw, dict):
+        return
+    segments = decode_transcript_segments_blob(
+        uid, raw, bool(data.get('transcript_segments_compressed')), require_decryption=True
+    )
+    data['transcript_segments'] = transcript_pointer.offload_or_inline(
+        uid, data.get('id'), segments, lambda _: raw, conversation_state=data, current_state=current
+    )
 
 
 def _decode_transcript_segments_strict(
@@ -475,40 +542,6 @@ def _decode_transcript_segments_strict(
     segments = decode_transcript_segments_blob(uid, raw_segments, compressed, require_decryption=require_decryption)
     reveal_segments(segments, uid)
     return segments
-
-
-def decode_transcript_segments_blob(
-    uid: str, raw_segments: Any, compressed: bool, *, require_decryption: bool = False
-) -> List[Any]:
-    """Decode a stored ``transcript_segments`` blob, raising when it cannot be read.
-
-    The read path swallows decode failures into an empty list, which is safe for
-    rendering but unsafe for a caller deciding whether a conversation is empty
-    or whether a client projection may bind to it. Binding is authorization,
-    not display: an unreadable blob must not become ``[]``.
-    """
-    if isinstance(raw_segments, list):
-        return raw_segments
-    try:
-        if isinstance(raw_segments, str):
-            payload = encryption.decrypt(raw_segments, uid)
-            if require_decryption and payload == raw_segments:
-                # A display fallback is not proof of successful decryption.
-                raise TranscriptSegmentsDecodeError('undecodable transcript_segments: decryption failed')
-            if compressed:
-                parsed = json.loads(zlib.decompress(bytes.fromhex(payload)).decode('utf-8'))
-            else:
-                parsed = json.loads(payload)
-            return _require_segment_list(parsed)
-        if isinstance(raw_segments, bytes) and compressed:
-            return _require_segment_list(json.loads(zlib.decompress(raw_segments).decode('utf-8')))
-    except TranscriptSegmentsDecodeError:
-        raise
-    except (ValueError, TypeError, RecursionError, zlib.error) as error:
-        raise TranscriptSegmentsDecodeError('undecodable transcript_segments: invalid encoding') from error
-    raise TranscriptSegmentsDecodeError(
-        f'undecodable transcript_segments: {type(raw_segments).__name__} compressed={compressed}'
-    )
 
 
 def decode_transcript_segments_verified(uid: str, raw_segments: Any, compressed: bool) -> List[Any]:
@@ -621,19 +654,24 @@ def raw_conversation_has_content(uid: str, conversation: Dict[str, Any]) -> bool
     Only the decoded value distinguishes an empty recording from a real one.
     Undecodable segments count as content: never delete data we cannot read.
     """
-    if conversation.get('has_content') or conversation.get('photos'):
-        return True
     raw_segments = conversation.get('transcript_segments')
-    if not raw_segments:
+    other_content = bool(conversation.get('has_content')) or bool(conversation.get('photos'))
+    if not isinstance(raw_segments, dict) and other_content:
+        return True
+    if not raw_segments and not isinstance(raw_segments, dict):
         return False
     try:
         segments = _decode_transcript_segments_strict(
             uid, raw_segments, bool(conversation.get('transcript_segments_compressed'))
         )
+    except (transcript_pointer.TranscriptBlobAbsent, transcript_pointer.TranscriptShredded):
+        # Only the transcript signal disappeared. Photos and the durable
+        # content marker still forbid empty-recording deletion.
+        return other_content
     except (json.JSONDecodeError, TypeError, zlib.error, ValueError) as e:
         logger.error(f'raw_conversation_has_content: undecodable segments, assuming content. {uid} {e}')
         return True
-    return bool(segments)
+    return bool(segments) or other_content
 
 
 def effective_user_title(user_title: Any) -> Optional[str]:
@@ -693,6 +731,19 @@ def prepare_conversation_for_read(
         return None
 
     data = copy.deepcopy(conversation_data)
+    # Separate encrypted card data must not leak into hydrated detail or be
+    # replayed as stale projection metadata by a logical-state writer.
+    for field in DISPLAY_FIELDS:
+        data.pop(field, None)
+    if isinstance(data.get('transcript_segments'), dict):
+        try:
+            data['transcript_segments'] = decode_transcript_segments_blob(uid, data['transcript_segments'], True)
+        except transcript_pointer.TranscriptBlobAbsent:
+            return None
+        except TranscriptSegmentsDecodeError:
+            if current_portability_read() is not None:
+                raise
+            data['transcript_segments'] = []
     data.pop('live_transcript_replay_receipt', None)
     _reveal_user_corrections_for_read(data, uid)
     if is_completed_rule_discard(data):
@@ -701,11 +752,12 @@ def prepare_conversation_for_read(
     level = data.get('data_protection_level')
 
     if level == 'enhanced':
+        decrypted = _decrypt_conversation_data(data, uid, firestore_client=firestore_client)
+        if decrypted is None:
+            return None
         return project_home(
             uid,
-            conversation_recorded_time.hydrate(
-                _decrypt_conversation_data(data, uid, firestore_client=firestore_client)
-            ),
+            conversation_recorded_time.hydrate(decrypted),
             firestore_client=firestore_client,
             read_budget=read_budget,
         )
@@ -886,8 +938,26 @@ def _reapply_current_manual_assignments(uid: str, write_data: dict, existing: di
     if owner_diagnostics.FIELD in write_data:
         payload[owner_diagnostics.FIELD] = write_data.pop(owner_diagnostics.FIELD)
         _merge_owner_diagnostics(payload, existing)
-    write_data.update(_prepare_conversation_for_write(payload, uid, level))
+    write_data.update(
+        _prepare_conversation_for_write(payload, uid, level, conversation_id=write_data.get('id'), allow_offload=False)
+    )
     write_data['data_protection_level'] = level
+
+
+def _batch_identity_membership_current(uid, incoming, existing):
+    from utils.conversations.speaker_resolution_inputs import transcript_membership
+
+    resolution = incoming.get('speaker_resolution') or {}
+    expected = resolution.get('input_membership_sha256')
+    if not expected:
+        return True
+    current = _decode_transcript_segments_strict(
+        uid,
+        existing.get('transcript_segments', []),
+        bool(existing.get('transcript_segments_compressed')),
+        require_decryption=True,
+    )
+    return expected == transcript_membership(current)
 
 
 def _stage_notes_identity(transaction, user_ref, write_data, existing):
@@ -898,7 +968,9 @@ def _stage_notes_identity(transaction, user_ref, write_data, existing):
         existing,
         decode_segments=_decode_transcript_segments_strict,
         decode_receipt=decode_manual_speaker_assignments,
-        encode=_prepare_conversation_for_write,
+        encode=lambda data, owner, level: _prepare_conversation_for_write(
+            data, owner, level, conversation_id=write_data.get('id'), allow_offload=False
+        ),
     )
 
 
@@ -922,10 +994,21 @@ def is_soft_deleted(conversation: Optional[Mapping[str, Any]]) -> bool:
 
 @phase_shadow.compare('home_visibility')
 def is_visible_conversation(
-    conversation: Optional[Mapping[str, Any]], *, include_discarded: bool = False, presentation: bool = False
+    conversation: Optional[Mapping[str, Any]],
+    *,
+    include_discarded: bool = False,
+    presentation: bool = False,
+    include_recordings: bool = False,
+    hide_home: bool = False,
+    capture_only: bool = False,
+    show_held: bool = False,
 ) -> bool:
     """Whether a stored conversation may be put in front of a user or downstream job."""
     if not conversation:
+        return False
+    if capture_only and conversation.get('v3_derived'):
+        return False
+    if (conversation.get('recording') and not include_recordings) or (hide_home and conversation.get('home_hidden')):
         return False
     if (
         is_soft_deleted(conversation)
@@ -939,7 +1022,7 @@ def is_visible_conversation(
             conversation.get('dream_duplicate_of')
             or bridge_pending.hidden(conversation)
             or (
-                is_settling_fragment(conversation)
+                is_settling_fragment(conversation, show_held=show_held)
                 and not (presentation and transcribing_hold.applies(conversation, stored=True))
             )
             or conversation.get('discarded')
@@ -949,11 +1032,19 @@ def is_visible_conversation(
     return True
 
 
-# Legacy completed rule-discards still match ``discarded == False``. Skip at
-# most this many of them while filling one page: one stale row must not empty
-# the page, and a pile must not walk the collection. Past the cap the page
-# may be short; that bound is preferable to an unbounded scan or a new index.
-_RULE_DISCARD_PAGE_SKIP_CAP = 64
+# Rows the indexed query still matches but readers hide (completed rule
+# discards, ``home_hidden`` v3 windows, recordings, tombstones, holds). Skip at
+# most this many HIDDEN rows while filling one page; visible rows never count.
+# One stale row must not empty the page, and a pile must not walk the
+# collection. Measured 2026-11-18 over 648 v3-active owners: the longest
+# hidden run is p99 93, max 158 rows. Past the cap the page may be short, but
+# it still reports how many storage rows it consumed and that more remain, so
+# pagination continues. 512 rows plus a page stays far inside the request's
+# 25,000-document list budget, and list reads select no transcript blobs.
+# Readers without a request budget (full-document internal callers) keep the
+# old 64-row allowance, so their worst case does not grow.
+_HIDDEN_ROW_PAGE_SKIP_CAP = 512
+_UNBUDGETED_HIDDEN_ROW_SKIP_CAP = 64
 
 
 def _conversation_list_cursor_enabled(uid: Optional[str]) -> bool:
@@ -986,34 +1077,116 @@ def _with_conversation_cursor_envelope(func):
     return wrapper
 
 
-def _collect_cursor_conversation_page(
-    conversations_ref, *, limit, include_discarded, budget, bookmark, presentation=False
-):
-    """Bound the scan by page size plus the existing hidden-row allowance."""
-    conversations = []
-    last_doc = None
-    skipped = 0
-    query = conversations_ref.start_after(bookmark)
-    try:
-        while len(conversations) < limit and skipped <= _RULE_DISCARD_PAGE_SKIP_CAP:
-            batch_limit = min(limit - len(conversations), _RULE_DISCARD_PAGE_SKIP_CAP - skipped + 1)
+class _PageFill:
+    """Fill one page of visible rows from a newest-first query.
+
+    Hidden rows count against the cap (:data:`_HIDDEN_ROW_PAGE_SKIP_CAP` under a
+    request budget); visible rows
+    do not. ``consumed`` is the number of storage rows this page read past its
+    start (the raw-offset advance), and ``has_more`` says whether the scan
+    stopped before the end of the query. A budget cut keeps the honest prefix.
+
+    A page that fills to ``limit`` reports ``has_more`` without probing for a
+    next row, so a query that ends exactly on a page boundary costs the client
+    one extra request that returns an empty page. That is intended: a probe
+    would charge every full page one more read to save that rare request.
+    """
+
+    def __init__(self, conversations_ref, *, limit, budget, visible):
+        self.conversations_ref = conversations_ref
+        self.limit = limit
+        self.budget = budget
+        self.visible = visible
+        self.rows: List[Dict[str, Any]] = []
+        self.last_doc = None
+        self.consumed = 0
+        self.skipped = 0
+        self.has_more = False
+        self.cap = _HIDDEN_ROW_PAGE_SKIP_CAP if budget is not None else _UNBUDGETED_HIDDEN_ROW_SKIP_CAP
+
+    def run(self, query, batch_limit):
+        try:
+            self._run(query, batch_limit)
+        except ListReadBudgetExhausted:
+            # With no row read there is no position to resume from, and an identical retry
+            # would stop at the same place, so only a page that advanced says more.
+            self.has_more = self.consumed > 0
+        return self
+
+    def _run(self, query, batch_limit):
+        refill = 0
+        while True:
             fetched = 0
-            for doc in budgeted_stream_iter(query.limit(batch_limit), budget):
+            for doc in budgeted_stream_iter(query, self.budget):
                 fetched += 1
-                last_doc = doc
+                self.consumed += 1
+                self.last_doc = doc
                 conversation = document_data_with_revision(doc)
-                if conversation is None or not is_visible_conversation(
-                    conversation, include_discarded=include_discarded, presentation=presentation
-                ):
-                    skipped += 1
+                if conversation is None or not self.visible(conversation):
+                    self.skipped += 1
+                    if self.skipped >= self.cap:
+                        self.has_more = True
+                        return
                     continue
-                conversations.append(conversation)
-            if fetched < batch_limit or last_doc is None:
-                break
-            query = conversations_ref.start_after(last_doc)
-    except ListReadBudgetExhausted:
-        pass
-    return conversations, last_doc
+                self.rows.append(conversation)
+                if len(self.rows) >= self.limit:
+                    self.has_more = True
+                    return
+            if fetched < batch_limit or self.last_doc is None:
+                return
+            if not hasattr(self.conversations_ref, 'start_after'):
+                # Fakes without bookmarks cannot refill; a full window may have more.
+                self.has_more = True
+                return
+            # Refill only missing slots at first, then double through a hidden
+            # run so a long run costs a few RPCs, never one RPC per row.
+            missing = self.limit - len(self.rows)
+            refill += 1
+            batch_limit = min(
+                missing + self.cap - self.skipped,
+                missing if refill == 1 else max(missing, 2 * batch_limit),
+            )
+            query = self.conversations_ref.start_after(self.last_doc).limit(batch_limit)
+
+
+def _visibility(**options):
+    return lambda conversation: is_visible_conversation(conversation, **options)
+
+
+def _collect_cursor_conversation_page(
+    conversations_ref,
+    *,
+    limit,
+    include_discarded,
+    budget,
+    bookmark,
+    presentation=False,
+    include_recordings=False,
+    hide_home=False,
+    capture_only=False,
+    show_held=False,
+    report=None,
+):
+    """Bound the scan by page size plus the hidden-row allowance.
+
+    ``report`` (when given) receives ``storage_rows`` and ``has_more``.
+    """
+    fill = _PageFill(
+        conversations_ref,
+        limit=limit,
+        budget=budget,
+        visible=_visibility(
+            include_discarded=include_discarded,
+            presentation=presentation,
+            include_recordings=include_recordings,
+            hide_home=hide_home,
+            capture_only=capture_only,
+            show_held=show_held,
+        ),
+    ).run(conversations_ref.start_after(bookmark).limit(limit), limit)
+    if report is not None:
+        report.update(storage_rows=fill.consumed, has_more=fill.has_more)
+    return fill.rows, fill.last_doc
 
 
 def _collect_visible_conversation_page(
@@ -1029,14 +1202,25 @@ def _collect_visible_conversation_page(
     cursor_filters: Optional[Dict[str, Any]] = None,
     sort_field: str = 'created_at',
     presentation: bool = False,
+    include_recordings: bool = False,
+    hide_home: bool = False,
+    capture_only: bool = False,
+    show_held: bool = False,
 ) -> List[Dict[str, Any]]:
     """Page visible rows.
 
     ``include_discarded=True`` scans and fills, because donor tombstones are not
-    excluded by an indexed flag. ``include_discarded=False`` keeps the indexed
-    ``discarded == False`` query's server ``limit``/``offset`` (desktop parity).
-    If that window is full but some rows are completed rule-discards, keep
-    reading after the last snapshot until the page is full or the skip cap hits.
+    excluded by an indexed flag; its ``offset`` counts visible rows.
+    ``include_discarded=False`` keeps the indexed ``discarded == False`` query's
+    server ``limit``/``offset`` (desktop parity), so its ``offset`` counts
+    storage rows. If that window is full but some rows are hidden, keep reading
+    after the last snapshot until the page is full or the hidden-row cap hits.
+
+    ``cursor_page`` (when given) receives ``storage_rows``, the amount the
+    caller's next ``offset`` must advance by, and ``has_more``, whether the scan
+    stopped before the end of the query. A short page is not the end: a long
+    hidden run can cut a page short while more visible rows remain behind it.
+    With the cursor lever on it also receives ``next_cursor``.
     """
     cursor_enabled = _conversation_list_cursor_enabled(uid)
     scope = (
@@ -1044,9 +1228,19 @@ def _collect_visible_conversation_page(
         if cursor_enabled
         else None
     )
-    last_doc = None
+    visible = _visibility(
+        include_discarded=include_discarded,
+        presentation=presentation,
+        include_recordings=include_recordings,
+        hide_home=hide_home,
+        capture_only=capture_only,
+        show_held=show_held,
+    )
 
-    def finish(rows):
+    def finish(rows, last_doc, *, storage_rows, has_more):
+        if cursor_page is not None:
+            cursor_page['storage_rows'] = storage_rows
+            cursor_page['has_more'] = has_more
         if cursor_enabled and cursor_page is not None:
             cursor_page['next_cursor'] = None
             if last_doc is not None:
@@ -1073,91 +1267,57 @@ def _collect_visible_conversation_page(
             # Firestore implicitly orders document IDs in the last order's
             # direction. Make that tie-break explicit for the value cursor.
             ordered = conversations_ref.order_by('__name__', direction=firestore.Query.DESCENDING)
-            conversations, last_doc = _collect_cursor_conversation_page(
+            report: Dict[str, Any] = {}
+            rows, last_doc = _collect_cursor_conversation_page(
                 ordered,
+                report=report,
                 limit=limit,
                 include_discarded=include_discarded,
                 budget=budget,
                 presentation=presentation,
+                include_recordings=include_recordings,
+                hide_home=hide_home,
+                capture_only=capture_only,
+                show_held=show_held,
                 bookmark=BookmarkDict({sort_field: stamp, '__name__': doc_id}),
             )
-            return finish(conversations)
+            return finish(rows, last_doc, **report)
 
     if include_discarded:
         skipped_visible = 0
         conversations: List[Dict[str, Any]] = []
+        last_doc = None
+        has_more = False
         try:
             for doc in budgeted_stream_iter(conversations_ref, budget):
                 last_doc = doc
                 conversation = document_data_with_revision(doc)
-                if conversation is None or not is_visible_conversation(
-                    conversation, include_discarded=include_discarded, presentation=presentation
-                ):
+                if conversation is None or not visible(conversation):
                     continue
                 if skipped_visible < offset:
                     skipped_visible += 1
                     continue
                 conversations.append(conversation)
                 if len(conversations) >= limit:
+                    has_more = True
                     break
         except ListReadBudgetExhausted:
-            pass
-        return finish(conversations)
+            # An empty page advances nothing, so saying more would invite the same request again.
+            has_more = bool(conversations)
+        # This scan's offset counts visible rows, so the advance is the page size.
+        return finish(conversations, last_doc, storage_rows=len(conversations), has_more=has_more)
 
     if budget is not None and offset > 0:
         try:
             budget.charge(offset)
         except ListReadBudgetExhausted:
-            return finish([])
-    page_query = conversations_ref.limit(limit).offset(offset)
-    conversations = []
-    last_doc = None
-    fetched = 0
-    batch_limit = limit
-    try:
-        for doc in budgeted_stream_iter(page_query, budget):
-            fetched += 1
-            last_doc = doc
-            conversation = document_data_with_revision(doc)
-            if conversation is None or not is_visible_conversation(
-                conversation, include_discarded=False, presentation=presentation
-            ):
-                continue
-            conversations.append(conversation)
-    except ListReadBudgetExhausted:
-        return finish(conversations)
-
-    refill_reads = 0
-    while (
-        len(conversations) < limit
-        and refill_reads < _RULE_DISCARD_PAGE_SKIP_CAP
-        and fetched == batch_limit
-        and last_doc is not None
-        and hasattr(conversations_ref, 'start_after')
-    ):
-        # Refill only missing slots and bound all follow-up reads, including
-        # visible rows. Pending holds cannot multiply a large requested page.
-        batch_limit = min(limit - len(conversations), _RULE_DISCARD_PAGE_SKIP_CAP - refill_reads)
-        follow = conversations_ref.start_after(last_doc).limit(batch_limit)
-        fetched = 0
-        try:
-            for doc in budgeted_stream_iter(follow, budget):
-                fetched += 1
-                refill_reads += 1
-                last_doc = doc
-                conversation = document_data_with_revision(doc)
-                if conversation is None or not is_visible_conversation(
-                    conversation, include_discarded=False, presentation=presentation
-                ):
-                    continue
-                conversations.append(conversation)
-                if len(conversations) >= limit:
-                    return finish(conversations)
-        except ListReadBudgetExhausted:
-            return finish(conversations)
-        if fetched < batch_limit:
-            break
-    return finish(conversations)
+            # Nothing was read, so there is no position to resume from; a retry
+            # would pay the same charge and stop here again.
+            return finish([], None, storage_rows=0, has_more=False)
+    fill = _PageFill(conversations_ref, limit=limit, budget=budget, visible=visible).run(
+        conversations_ref.limit(limit).offset(offset), limit
+    )
+    return finish(fill.rows, fill.last_doc, storage_rows=fill.consumed, has_more=fill.has_more)
 
 
 def _drop_summary_memo(uid: str) -> None:
@@ -1172,7 +1332,9 @@ def _drop_summary_memo(uid: str) -> None:
 
 
 @set_data_protection_level(data_arg_name='conversation_data')
-@prepare_for_write(data_arg_name='conversation_data', prepare_func=_prepare_conversation_for_write)
+@prepare_for_write(
+    data_arg_name='conversation_data', prepare_func=partial(_prepare_conversation_for_write, allow_offload=False)
+)
 @after_write('conversations')
 def upsert_conversation_with_lifecycle(uid: str, conversation_data: dict):
     from database.recurring_voice_privacy import filter_processing_write
@@ -1190,21 +1352,27 @@ def upsert_conversation_with_lifecycle(uid: str, conversation_data: dict):
     summary_receipt = None
     delivery_outcome = None
     summary_changed = False
+    ledger_stages: tuple[str, ...] = ()
+    source_revision = 0
 
     @firestore.transactional
     def _write_processing_result(transaction):
-        nonlocal summary_receipt, summary_changed, delivery_outcome
+        nonlocal summary_receipt, summary_changed, delivery_outcome, ledger_stages, source_revision
         summary_receipt = None
         delivery_outcome = None
         summary_changed = False
+        ledger_stages = ()
         write_data = copy.deepcopy(conversation_data)
         write_data.pop('record_audio_partial', None)
         # Capture-group membership has one writer (database.capture_groups).
         write_data.pop(CAPTURE_GROUP_FIELD, None)
         conversation_recorded_time.adopt_membership(transaction, user_ref, write_data)
         existing_snapshot = conversation_ref.get(transaction=transaction)
+        source_revision = pipeline_ledger.source_revision(existing_snapshot)
         if getattr(existing_snapshot, 'exists', False):
             existing = existing_snapshot.to_dict() or {}
+            if existing.get('deleted'):
+                return
             preserve_duplicate_hint(write_data, existing)
             if existing.get('arrival_at'):
                 write_data['arrival_at'] = existing['arrival_at']
@@ -1255,12 +1423,16 @@ def upsert_conversation_with_lifecycle(uid: str, conversation_data: dict):
             if existing.get('user_overview'):
                 write_data.setdefault('structured', {})['overview'] = existing['user_overview']
 
+            _quality_processing_notes(uid, write_data, existing)
             _reapply_current_manual_assignments(uid, write_data, existing)
             _stage_notes_identity(transaction, user_ref, write_data, existing)
             filter_processing_write(transaction, user_ref, write_data)
             guard_match_score_size(write_data, existing, getattr(conversation_ref, 'path', None))
 
+            _offload_processing_transcript(uid, write_data, existing)
+
             summary_receipt = summary_delivery.merge_result(existing, write_data, uid)
+            ledger_stages = pipeline_ledger.summary_stages(summary_receipt)
             delivery_outcome = summary_terminal_outcome(existing, write_data)
             summary_changed = processing_backlog.stage_transition(
                 transaction, uid, conversation_data['id'], existing, write_data, firestore_client=db
@@ -1269,27 +1441,88 @@ def upsert_conversation_with_lifecycle(uid: str, conversation_data: dict):
             return
 
         write_data.setdefault('has_photos', False)
+        _quality_processing_notes(uid, write_data, {})
         _stage_notes_identity(transaction, user_ref, write_data, {})
         filter_processing_write(transaction, user_ref, write_data)
+        _offload_processing_transcript(uid, write_data)
 
         summary_receipt = summary_delivery.creation_result(write_data, uid)
+        ledger_stages = pipeline_ledger.summary_stages(summary_receipt)
         delivery_outcome = summary_terminal_outcome({}, write_data)
         summary_changed = processing_backlog.stage_transition(
             transaction, uid, conversation_data['id'], {}, write_data, firestore_client=db
         )
         transaction.set(conversation_ref, with_creation_scope_index(write_data))
 
-    run_transactional(db, _write_processing_result)
+    run_preloaded_transactional(db, _write_processing_result)
+    if ledger_stages:
+        # After the real commit, in the ledger's own fenced transaction.
+        pipeline_ledger.record_summary(
+            uid,
+            conversation_data['id'],
+            ledger_stages,
+            revision=source_revision,
+            source_ref=conversation_ref,
+            owner_ref=user_ref,
+            firestore_client=db,
+        )
     stop_quiet_check_for_conversation(uid, conversation_data['id'], firestore_client=db)
     summary_delivery.emit_result(uid, summary_changed, summary_receipt, delivery_outcome, _drop_summary_memo)
     invalidate_people_stats_cache(uid)
     _sync_conversation_search_index(uid, conversation_data['id'])
 
 
+def _quality_processing_notes(uid: str, data: dict, existing: Mapping[str, Any]) -> None:
+    generated = data.get('structured')
+    if not isinstance(generated, dict) or data.get('discarded'):
+        return
+    user_title = effective_user_title(existing.get('user_title'))
+    prior = title_for_stability(existing)
+    if user_title is None and not valid_title(prior) and notes_pending(generated):
+        # A capture stub or raw completion has no notes to title. A fallback
+        # title here would present the row as finished and keep the batch
+        # projection from registering its first-summary obligation. A stored
+        # stand-in (server minimum) stays; a stored placeholder is cleared.
+        stored = existing.get('structured')
+        stored_title = stored.get('title') if isinstance(stored, Mapping) else None
+        # Same sanitization as generated notes (unsafe narration, quality flags). A
+        # usable stand-in title keeps the policy from recording a title fallback
+        # for a row that never had notes; the real title is set just below.
+        cleaned = clean_structured({**generated, 'title': PENDING_TITLE_STAND_IN})
+        cleaned['title'] = stored_title if valid_title(stored_title) else ''
+    elif user_title is not None:
+        cleaned = clean_structured(generated)
+        cleaned['title'] = user_title
+    else:
+        cleaned = clean_structured(generated)
+        units = data.get('content_word_units')
+        if units is None:
+            units = content_units(data.get('transcript_segments', []))
+        cleaned['title'], reason = stable_title(
+            prior,
+            cleaned['title'],
+            previous_units=existing.get('title_content_units') or 0,
+            current_units=units,
+        )
+        if units or existing.get('title_content_units'):
+            data['title_content_units'] = title_basis(existing.get('title_content_units'), units, reason)
+        if reason:
+            data['title_change_reason'] = reason
+            data['title_changed_at'] = datetime.now(timezone.utc)
+    if existing.get('user_overview'):
+        cleaned['overview'] = existing['user_overview']
+    data['structured'] = cleaned
+    if data.get(NOTES_OUTPUT_HASH):
+        document_path = '/'.join(('users', uid, 'conversations', str(data['id'])))
+        parsed = parse_payload_strict(Structured, cleaned, document_path=document_path)
+        data[NOTES_OUTPUT_HASH] = output_fingerprint(parsed)
+    data.update(stamp_home_display(uid, {**existing, **data}, 'conversation'))
+
+
 @set_data_protection_level(data_arg_name='conversation_data')
 @prepare_for_write(
     data_arg_name='conversation_data',
-    prepare_func=_prepare_conversation_for_write,
+    prepare_func=partial(_prepare_conversation_for_write, allow_offload=False),
     preserve_result=True,
 )
 @after_write('conversations')
@@ -1342,12 +1575,14 @@ def persist_processing_result_with_lifecycle(
     summary_changed = False
     notes_refresh_state_write = None
     terminal_refusal = None
+    ledger_stages: tuple[str, ...] = ()
+    source_revision = 0
     family_enabled = _terminal_family_serving(uid)
 
     @firestore.transactional
     def _persist(transaction) -> bool:
         nonlocal stale_sync_revision, owner_gone, first_completed, summary_receipt, summary_changed, \
-            notes_refresh_state_write, delivery_outcome, terminal_refusal
+            notes_refresh_state_write, delivery_outcome, terminal_refusal, ledger_stages, source_revision
         terminal_refusal = None
         summary_changed = False
         summary_receipt = None
@@ -1356,11 +1591,17 @@ def persist_processing_result_with_lifecycle(
         owner_gone = False
         first_completed = False
         notes_refresh_state_write = None
+        ledger_stages = ()
         write_data = copy.deepcopy(conversation_data)
         evidence_refresh = write_data.pop('_notes_evidence_reprocess', False)
         # Capture-group membership has one writer (database.capture_groups).
         write_data.pop(CAPTURE_GROUP_FIELD, None)
+        from database.conversations_v3_fence import permits
+
+        if not permits(transaction, db, uid, conversation_data['id']):
+            return False
         existing_snapshot = conversation_ref.get(transaction=transaction)
+        source_revision = pipeline_ledger.source_revision(existing_snapshot)
         if not getattr(existing_snapshot, 'exists', False):
             # A processor is never an authority to recreate a conversation.
             # Deleting one is a decision its owner made, and a merge write to a
@@ -1372,6 +1613,8 @@ def persist_processing_result_with_lifecycle(
 
         if is_soft_deleted(existing):
             owner_gone = True
+            return False
+        if not python_owns_finalization(existing):
             return False
         if expected_document_revision is not None and firestore_revision_datetime(
             getattr(existing_snapshot, 'update_time', None)
@@ -1472,6 +1715,10 @@ def persist_processing_result_with_lifecycle(
             stale_sync_revision = True
             return False
 
+        if not _batch_identity_membership_current(uid, write_data, existing):
+            stale_sync_revision = True
+            return False
+
         if write_data.get('discarded') is True and recovery_discard_payload(write_data):
             from utils.conversations.recovery import (
                 RecoveryStructureUnavailableError,
@@ -1555,6 +1802,18 @@ def persist_processing_result_with_lifecycle(
         if existing.get('user_overview'):
             write_data.setdefault('structured', {})['overview'] = existing['user_overview']
 
+        _quality_processing_notes(uid, write_data, existing)
+
+        structured = write_data.get('structured')
+        if existing.get('v3_rederive_live_run') and isinstance(structured, dict):
+            # Late repair notes must retain the owner's current embedded state.
+            stored = existing.get('structured')
+            stored = stored if isinstance(stored, dict) else {}
+            if existing.get(ACTION_ITEMS_EDIT_REVISION):
+                structured['action_items'] = stored.get('action_items', [])
+            if existing.get(EVENTS_EDIT_REVISION) or has_created_calendar_events(stored):
+                structured['events'] = stored.get('events', [])
+
         _reapply_current_manual_assignments(uid, write_data, existing)
         _stage_notes_identity(transaction, user_ref, write_data, existing)
         filter_processing_write(transaction, user_ref, write_data)
@@ -1611,7 +1870,9 @@ def persist_processing_result_with_lifecycle(
                     'completed_status_regression',
                 )
 
+        _offload_processing_transcript(uid, write_data, existing)
         summary_receipt = summary_delivery.merge_result(existing, write_data, uid)
+        ledger_stages = pipeline_ledger.summary_stages(summary_receipt)
         delivery_outcome = summary_terminal_outcome(existing, write_data)
         summary_changed = processing_backlog.stage_transition(
             transaction, uid, conversation_data['id'], existing, write_data, firestore_client=db
@@ -1635,7 +1896,21 @@ def persist_processing_result_with_lifecycle(
         ) and write_status in (ConversationStatus.completed, ConversationStatus.completed.value)
         return True
 
-    persisted = run_transactional(db, _persist)
+    try:
+        persisted = run_preloaded_transactional(db, _persist)
+    except (transcript_pointer.TranscriptBlobAbsent, transcript_pointer.TranscriptShredded):
+        return False
+    if persisted and ledger_stages:
+        # After the real commit, in the ledger's own fenced transaction.
+        pipeline_ledger.record_summary(
+            uid,
+            conversation_data['id'],
+            ledger_stages,
+            revision=source_revision,
+            source_ref=conversation_ref,
+            owner_ref=user_ref,
+            firestore_client=db,
+        )
     if persisted and terminal_refusal is not None:
         _record_terminal_claim_refusal(*terminal_refusal)
     stop_quiet_check_for_conversation(uid, conversation_data['id'], firestore_client=db)
@@ -1658,7 +1933,7 @@ def persist_processing_result_with_lifecycle(
 @set_data_protection_level(data_arg_name='conversation_data')
 @prepare_for_write(
     data_arg_name='conversation_data',
-    prepare_func=_prepare_conversation_for_write,
+    prepare_func=partial(_prepare_conversation_for_write, allow_offload=False),
     preserve_result=True,
 )
 @after_write('conversations')
@@ -1675,15 +1950,18 @@ def create_conversation_if_absent_with_lifecycle(uid: str, conversation_data: di
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_data['id'])
     summary_receipt = summary_delivery.creation_result(conversation_data, uid)
     delivery_outcome = summary_terminal_outcome({}, conversation_data)
-    created, summary_changed = conversation_recorded_time.create_if_absent(
+
+    def stage_create(transaction, data):
+        if '_notes_identity' in data:
+            _stage_notes_identity(transaction, user_ref, data, {})
+        _offload_processing_transcript(uid, data)
+
+    created, summary_changed = transcript_pointer.run_preloaded_operation(
+        conversation_recorded_time.create_if_absent,
         uid,
         conversation_data,
         firestore_client=db,
-        stage_identity=(
-            (lambda transaction, data: _stage_notes_identity(transaction, user_ref, data, {}))
-            if '_notes_identity' in conversation_data
-            else None
-        ),
+        stage_identity=stage_create,
     )
     if not created:
         _sync_conversation_search_index(uid, conversation_data['id'])
@@ -1824,7 +2102,7 @@ def discover_public_conversation_owner(conversation_id: str, cached_uid: str = '
     """
     from .firestore_read_metrics import FirestoreReadFamily, FirestoreReadMode, record_firestore_read
 
-    fields = ['id', 'owner_uid', 'visibility', 'deleted', 'is_locked']
+    fields = ['id', 'owner_uid', 'visibility', 'deleted', 'is_locked', 'recording']
     if cached_uid:
         snapshot = (
             db.collection('users')
@@ -1863,6 +2141,7 @@ def discover_public_conversation_owner(conversation_id: str, cached_uid: str = '
     if (
         raw.get('id') != conversation_id
         or raw.get('owner_uid', uid) != uid
+        or raw.get('recording')
         or raw.get('visibility') not in {'shared', 'public'}
         or is_soft_deleted(raw)
         or raw.get('is_locked', False)
@@ -2053,6 +2332,8 @@ def get_conversations_count(
     folder_id: Optional[str] = None,
     starred: Optional[bool] = None,
     sources: Optional[List[str]] = None,
+    hide_home: bool = False,
+    include_recordings: bool = False,
 ):
     conversations_ref = db.collection('users').document(uid).collection(conversations_collection)
     if not include_discarded:
@@ -2088,6 +2369,8 @@ def get_conversations_count(
     matching -= conversation_visibility_counts.count_hidden(
         db.collection('users').document(uid).collection(conversations_collection),
         include_discarded=include_discarded,
+        hide_home=hide_home,
+        include_recordings=include_recordings,
         statuses=statuses,
         sources=sources,
         start_date=start_date,
@@ -2112,7 +2395,8 @@ def count_conversations_with_geolocation(uid: str, *, firestore_client: Any = No
     conversations_ref = client.collection('users').document(uid).collection(conversations_collection)
     query = conversations_ref.where(filter=FieldFilter('geolocation.latitude', '!=', None))
     result = query.count().get()
-    return int(result[0][0].value or 0)
+    recording_count = query.where(filter=FieldFilter('recording', '==', True)).count().get()
+    return max(0, int(result[0][0].value or 0) - int(recording_count[0][0].value or 0))
 
 
 @_with_conversation_cursor_envelope
@@ -2133,6 +2417,10 @@ def get_conversations_without_photos(
     list_fields_only: bool = False,
     *,
     presentation: bool = False,
+    include_recordings: bool = False,
+    hide_home: bool = False,
+    capture_only: bool = False,
+    show_held: bool = False,
     cursor: Optional[str] = None,
     page_envelope: bool = False,
     cursor_page: Optional[Dict[str, Any]] = None,
@@ -2163,14 +2451,20 @@ def get_conversations_without_photos(
                 'user_title',
                 'user_corrections_compressed',
                 'deleted',
+                'recording',
+                'home_hidden',
                 'dream_duplicate_of',
                 'sync_bridge_pending',
+                # held_for_notes evidence for the legacy Home list (show_held).
+                'sync_processing_hold',
                 'relevance_decision',
                 'sync_relevance_user_kept',
                 'has_photos',
                 'folder_user_set',
                 'episode_id',
                 'finalization_status',
+                'notes_written_at',
+                'v3_notes_written',
                 *SETTLING_FIELDS,
                 *SUMMARY_DEBT_FIELDS,
                 *transcribing_hold.READ_FIELDS,
@@ -2216,6 +2510,10 @@ def get_conversations_without_photos(
         offset=offset,
         include_discarded=include_discarded,
         presentation=presentation,
+        include_recordings=include_recordings,
+        hide_home=hide_home,
+        capture_only=capture_only,
+        show_held=show_held,
         budget=budget,
         uid=uid,
         cursor=cursor,
@@ -2274,7 +2572,9 @@ def get_mcp_conversations_by_id(
     ]
 
 
-def iter_all_conversations(uid: str, batch_size: int = 400, include_discarded: bool = True):
+def iter_all_conversations(
+    uid: str, batch_size: int = 400, include_discarded: bool = True, *, include_recordings: bool = False
+):
     """Yield all conversations for a user, decrypted, in batches. Used for streaming data export."""
     conversations_ref = db.collection('users').document(uid).collection(conversations_collection)
     if not include_discarded:
@@ -2290,8 +2590,12 @@ def iter_all_conversations(uid: str, batch_size: int = 400, include_discarded: b
         for doc in snapshots:
             check_portability_read()
             conv = doc.to_dict()
-            conv = prepare_conversation_for_read(conv, uid) or conv
-            if not is_visible_conversation(conv, include_discarded=include_discarded):
+            conv = prepare_conversation_for_read(conv, uid)
+            if conv is None:
+                continue
+            if not is_visible_conversation(
+                conv, include_discarded=include_discarded, include_recordings=include_recordings
+            ):
                 continue
             batch.append(conv)
         yield from batch
@@ -2359,7 +2663,9 @@ def update_conversation(
             **update_data,
             'audio_files': retain_aliases(update_data['audio_files'], doc_snapshot.to_dict().get('audio_files') or []),
         }
-    prepared_data = _prepare_conversation_for_write(update_data, uid, doc_level)
+    prepared_data = _prepare_conversation_for_write(
+        update_data, uid, doc_level, conversation_id=conversation_id, conversation_state=doc_snapshot.to_dict()
+    )
     guard_match_score_size(prepared_data, doc_snapshot.to_dict(), getattr(doc_ref, 'path', None))
     try:
         if expected_audio_files is None:
@@ -2383,6 +2689,21 @@ def update_conversation(
     invalidate_people_stats_cache(uid)
     if _SEARCH_INDEXED_FIELD_ROOTS.intersection(str(key).split('.', 1)[0] for key in update_data):
         _sync_conversation_search_index(uid, conversation_id)
+    before = doc_snapshot.to_dict() or {}
+    if (
+        update_data.get('audio_files')
+        and before.get('recording') is True
+        and not before.get('deleted')
+        and not before.get('v3_pending')
+    ):
+        # Audio metadata can land after a v3 recording was reconciled (sync finalize, merges,
+        # projection repair). Re-arm the builder so its conversation gains the recording pieces.
+        from utils.conversations.v3.triggers import changed
+
+        try:
+            changed(uid, conversation_id)
+        except Exception as error:  # the write committed; opening the conversation rebuilds its pieces
+            logger.warning('v3 audio re-arm deferred exception_type=%s', type(error).__name__)
     return True
 
 
@@ -2759,7 +3080,15 @@ def update_conversation_chat(uid: str, conversation_id: str, expected: dict, upd
     raw = get_conversation_raw_snapshot(uid, conversation_id)
     if raw is None:
         raise PermissionError('Conversation removed')
-    prepared = _prepare_conversation_for_write(update_data, uid, raw.get('data_protection_level', 'standard'))
+    prepared = _prepare_conversation_for_write(
+        update_data, uid, raw.get('data_protection_level', 'standard'), conversation_id=conversation_id
+    )
+    # The general codec also prepares summary enrollment metadata. A manual
+    # chat edit owns only its requested fields and correction encoding; carrying
+    # those derived fields would fail the chat allowlist (or re-enroll debt).
+    prepared = {
+        key: value for key, value in prepared.items() if key in update_data or key == 'user_corrections_compressed'
+    }
     after = chat_edits.apply_update(uid, 'conversation', conversation_id, expected, prepared)
     refresh_conversation_after_chat_edit(uid, conversation_id)
     return after
@@ -2899,7 +3228,7 @@ def update_conversation_title(uid: str, conversation_id: str, title: str):
     if not doc_snapshot.exists:
         return
 
-    conversation_ref.update({'structured.title': title, 'user_title': title})
+    conversation_ref.update({'structured.title': title, 'user_title': title, 'summary_due_at': None})
     _sync_conversation_search_index(uid, conversation_id)
 
 
@@ -3016,6 +3345,18 @@ def delete_conversation_photos(uid: str, conversation_id: str) -> int:
     return deleted_count
 
 
+def delete_pipeline_ledger_row(uid: str, conversation_id: str) -> None:
+    """Remove the capture's sibling ledger row; a deleted capture must not leave one.
+
+    The ledger is a sibling collection, not a child of the conversation, so the
+    recursive child sweep in :func:`delete_conversation` never reaches it. A
+    failure is raised, not swallowed: a deletion that reports success must not
+    leave the user-owned row behind until its TTL. The delete is idempotent, so
+    the caller's retry completes it.
+    """
+    db.collection('users').document(uid).collection('pipeline_ledger').document(conversation_id).delete()
+
+
 def delete_conversation(uid, conversation_id):
     """Delete a conversation and every subcollection underneath it.
 
@@ -3043,6 +3384,9 @@ def delete_conversation(uid, conversation_id):
         processing_backlog.remove(uid, conversation_id)
     # Corrections are a sibling owner collection, not a child of the capture.
     user_ref.collection('transcript_corrections').document(conversation_id).delete()
+    # The in-flight ledger is also a sibling; the fence stops new writes but
+    # does not remove the row that already exists.
+    delete_pipeline_ledger_row(uid, conversation_id)
     invalidate_people_stats_cache(uid)
     from database.proactivity import purge_source_items
 
@@ -3064,8 +3408,15 @@ def get_conversations_by_id(
     include_discarded: bool = False,
     *,
     read_site: FirestoreReadSite = FirestoreReadSite.UNATTRIBUTED,
+    include_recordings: bool = False,
 ):
-    return _get_conversations_by_id(uid, conversation_ids, include_discarded=include_discarded, read_site=read_site)
+    return _get_conversations_by_id(
+        uid,
+        conversation_ids,
+        include_discarded=include_discarded,
+        include_recordings=include_recordings,
+        read_site=read_site,
+    )
 
 
 @prepare_for_read(decrypt_func=prepare_conversation_for_read, read_budget_arg='read_budget')
@@ -3075,10 +3426,16 @@ def get_conversations_by_id_without_photos(
     include_discarded: bool = False,
     *,
     read_site: FirestoreReadSite = FirestoreReadSite.UNATTRIBUTED,
+    include_recordings: bool = False,
     read_budget: Optional[ListReadBudget] = None,
 ):
     return _get_conversations_by_id(
-        uid, conversation_ids, include_discarded=include_discarded, read_site=read_site, read_budget=read_budget
+        uid,
+        conversation_ids,
+        include_discarded=include_discarded,
+        include_recordings=include_recordings,
+        read_site=read_site,
+        read_budget=read_budget,
     )
 
 
@@ -3088,6 +3445,7 @@ def _get_conversations_by_id(
     include_discarded: bool = False,
     *,
     read_site: FirestoreReadSite = FirestoreReadSite.UNATTRIBUTED,
+    include_recordings: bool = False,
     read_budget: Optional[ListReadBudget] = None,
 ):
     user_ref = db.collection('users').document(uid)
@@ -3103,7 +3461,9 @@ def _get_conversations_by_id(
         if doc.exists:
             hits += 1
             data = doc.to_dict()
-            if not is_visible_conversation(data, include_discarded=include_discarded):
+            if not is_visible_conversation(
+                data, include_discarded=include_discarded, include_recordings=include_recordings
+            ):
                 continue
             data.setdefault('id', doc.id)
             conversations_by_id[str(data['id'])] = data
@@ -3168,6 +3528,7 @@ def migrate_conversations_level_batch(uid: str, conversation_ids: List[str], tar
         ],
     )
 
+    prior_ids = set()
     for doc_snapshot in doc_snapshots:
         if not doc_snapshot.exists:
             logger.warning(f"Conversation {doc_snapshot.id} not found, skipping.")
@@ -3178,11 +3539,14 @@ def migrate_conversations_level_batch(uid: str, conversation_ids: List[str], tar
             current = doc_snapshot.reference.get(transaction=transaction).to_dict()
             if not current or current.get('deleted') or current.get('visibility') in ('public', 'shared'):
                 return False
+            # Priors can exist before a repair stamps the row. Collect IDs even on a same-target retry.
+            prior_ids.add(doc_snapshot.id)
+            prior_ids.update(current.get('sync_merged_from') or [])
             if current.get('data_protection_level', 'standard') == target_level:
                 return False
             payload = {'data_protection_level': target_level}
             had_match_scores = match_scores.FIELD in current
-            if 'transcript_segments' in current:
+            if 'transcript_segments' in current and not isinstance(current['transcript_segments'], dict):
                 payload['transcript_segments'] = _decode_transcript_segments_strict(
                     uid, current['transcript_segments'], bool(current.get('transcript_segments_compressed'))
                 )
@@ -3203,7 +3567,11 @@ def migrate_conversations_level_batch(uid: str, conversation_ids: List[str], tar
                     bool(current.get('manual_speaker_assignments_compressed')),
                 )
             prepared = _prepare_conversation_for_write(
-                payload, uid, target_level, preserve_transcript_identity=bool(current.get('has_transcript_corrections'))
+                payload,
+                uid,
+                target_level,
+                preserve_transcript_identity=bool(current.get('has_transcript_corrections')),
+                conversation_id=doc_snapshot.reference.id,
             )
             guard_match_score_size(prepared, current, getattr(doc_snapshot.reference, 'path', None))
             if had_match_scores and match_scores.FIELD not in prepared:
@@ -3216,7 +3584,7 @@ def migrate_conversations_level_batch(uid: str, conversation_ids: List[str], tar
             transaction.update(doc_snapshot.reference, prepared)
             return True
 
-        if not run_transactional(db, _migrate):
+        if not run_preloaded_transactional(db, _migrate):
             continue
 
         # Photos retain their separate batched migration path.
@@ -3248,6 +3616,11 @@ def migrate_conversations_level_batch(uid: str, conversation_ids: List[str], tar
 
     if batch_count > 0:
         batch.commit()
+    if prior_ids:
+        # After rows and photos: a live re-derive's undo copies stored at another level are emptied.
+        conversations_v3_backfill_runs.purge_conversation_priors(
+            uid, sorted(prior_ids), 'protection', firestore_client=db, keep_level=target_level
+        )
 
 
 # **************************************
@@ -3264,7 +3637,11 @@ def get_in_progress_conversation(uid: str):
     )
     conversations_ref = conversations_ref.order_by('created_at', direction=firestore.Query.DESCENDING).limit(8)
     docs = [doc.to_dict() for doc in conversations_ref.stream()]
-    conversations = [conversation for conversation in docs if conversation and not is_soft_deleted(conversation)]
+    conversations = [
+        conversation
+        for conversation in docs
+        if conversation and not conversation.get('v3_derived') and not is_soft_deleted(conversation)
+    ]
     conversation = conversations[0] if conversations else None
     return conversation
 
@@ -3280,7 +3657,9 @@ def get_processing_conversations(uid: str):
     # Exclude lazy-deferred conversations: they intentionally sit in `processing` (no LLM summary
     # yet) until the user opens them, where they're enriched on demand. They must NOT be swept
     # back to pusher for background processing — that would defeat the freemium cost saving.
-    conversations = [c for c in conversations if not c.get('deferred') and not is_soft_deleted(c)]
+    conversations = [
+        c for c in conversations if not c.get('v3_derived') and not c.get('deferred') and not is_soft_deleted(c)
+    ]
     return conversations
 
 
@@ -3331,7 +3710,7 @@ def get_conversation_for_capture_check(uid: str, conversation_id: str, *, firest
     user_ref = client.collection('users').document(uid)
     snapshot = user_ref.collection(conversations_collection).document(conversation_id).get()
     raw = snapshot.to_dict() if getattr(snapshot, 'exists', False) else None
-    if not raw:
+    if not raw or is_soft_deleted(raw):
         return None, None
     return prepare_conversation_for_read(raw, uid), transcript_fingerprint(raw)
 
@@ -3422,6 +3801,8 @@ def _terminal_family_serving(uid: str) -> bool:
 
 
 def _conversation_claim_matches(current, expected_status, expected_fields=None, *, allow_discarded=False):
+    if not python_owns_finalization(current):
+        return False
     if (current.get('discarded') and not allow_discarded) or current.get('status') != expected_status:
         return False
     return not any(
@@ -3602,7 +3983,8 @@ def rule_discard_outcome(
     deleted, user-restored or revised row is ``refused``. A row that is already
     stored hidden is ``already_discarded``: that state is what the caller wanted,
     but nothing changed, so no cache or index side effect runs. Only a write
-    returns ``discarded``.
+    returns ``discarded``. A pending or Go-owned row returns
+    ``finalization_owned_elsewhere``.
     """
     user_ref = db.collection('users').document(uid)
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
@@ -3615,6 +3997,8 @@ def rule_discard_outcome(
         current = snapshot.to_dict() or {}
         if is_soft_deleted(current):
             return 'refused'
+        if not python_owns_finalization(current):
+            return FINALIZATION_OWNER_REFUSAL
         if current.get('discarded'):
             return 'already_discarded'
         status = getattr(current.get('status'), 'value', current.get('status'))
@@ -3691,10 +4075,25 @@ def _user_restore_updates(current: Mapping[str, Any]) -> dict[str, Any] | None:
     restored = {**current, **updates}
     stamp_terminal_decision(restored, path='user_restore')
     updates['relevance_decision'] = restored['relevance_decision']
+    due = summary_delivery.rearm_after_refusal_clear(current, restored)
+    if due is not None:
+        updates['summary_due_at'] = due
     return updates
 
 
-def restore_conversation_from_discarded(uid: str, conversation_id: str):
+@overload
+def restore_conversation_from_discarded(
+    uid: str, conversation_id: str, *, return_snapshot: Literal[True]
+) -> Optional[dict]: ...
+
+
+@overload
+def restore_conversation_from_discarded(
+    uid: str, conversation_id: str, *, return_snapshot: Literal[False] = ...
+) -> bool: ...
+
+
+def restore_conversation_from_discarded(uid: str, conversation_id: str, *, return_snapshot: bool = False):
     user_ref = db.collection('users').document(uid)
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
 
@@ -3704,20 +4103,21 @@ def restore_conversation_from_discarded(uid: str, conversation_id: str):
         if not getattr(snapshot, 'exists', False):
             return False
         current = snapshot.to_dict() or {}
-        if is_soft_deleted(current) or current.get('is_locked'):
-            # A concurrent paid-lock transition fences transcript delivery too.
+        if is_soft_deleted(current):
+            # Redirect tombstones reuse discarded=True for the indexed hide.
+            # Restoring them would put a merged-away donor back on lists.
             return False
         updates = _user_restore_updates(current)
         if updates is None:
             return False
         transaction.update(conversation_ref, updates)
-        return True
+        return {**current, **updates}
 
     restored = run_transactional(db, _restore)
     if restored:
         invalidate_people_stats_cache(uid)
         _sync_conversation_search_index(uid, conversation_id)
-    return restored
+    return restored if return_snapshot else bool(restored)
 
 
 # *********************************
@@ -3725,8 +4125,16 @@ def restore_conversation_from_discarded(uid: str, conversation_id: str):
 # *********************************
 
 
+def has_created_calendar_events(structured: object) -> bool:
+    """Historical calendar confirmations can predate the owner revision marker."""
+    events = structured.get('events') if isinstance(structured, dict) else None
+    return isinstance(events, list) and any(
+        isinstance(event, dict) and event.get('created') is True for event in events
+    )
+
+
 def update_conversation_events(uid: str, conversation_id: str, events: List[dict]):
-    update_conversation(uid, conversation_id, {'structured.events': events})
+    update_conversation(uid, conversation_id, {'structured.events': events, EVENTS_EDIT_REVISION: uuid.uuid4().hex})
 
 
 # *********************************
@@ -3735,7 +4143,11 @@ def update_conversation_events(uid: str, conversation_id: str, events: List[dict
 
 
 def update_conversation_action_items(uid: str, conversation_id: str, action_items: List[dict]):
-    update_conversation(uid, conversation_id, {'structured.action_items': action_items})
+    update_conversation(
+        uid,
+        conversation_id,
+        {'structured.action_items': action_items, ACTION_ITEMS_EDIT_REVISION: uuid.uuid4().hex},
+    )
 
 
 def _page_eligible_action_item_count(conversation: dict, include_completed: bool) -> int:
@@ -4049,7 +4461,15 @@ def extra_updates_with_bound_client_processing(
             if transcript_corrections is None:
                 raise ValueError('Transcript corrections must be read in the binding transaction')
             segments = apply_entries(segments, transcript_corrections)
-    except (json.JSONDecodeError, TypeError, zlib.error, ValueError, RecursionError):
+    except (
+        json.JSONDecodeError,
+        TypeError,
+        zlib.error,
+        ValueError,
+        RecursionError,
+        transcript_pointer.TranscriptBlobAbsent,
+        transcript_pointer.TranscriptShredded,
+    ):
         for field in PROJECTION_FAMILY_FIELDS:
             if field not in updates:
                 continue
@@ -4114,7 +4534,7 @@ def bind_client_processing(
         transaction.update(doc_ref, bound_updates)
         return True
 
-    return run_transactional(client, _bind)
+    return run_preloaded_transactional(client, _bind)
 
 
 def assign_conversation_speaker(
@@ -4272,6 +4692,8 @@ def assign_conversation_speaker(
             uid,
             raw.get('data_protection_level', 'standard'),
             preserve_transcript_identity=bool(raw.get('has_transcript_corrections')),
+            conversation_id=current_id,
+            conversation_state=raw,
         )
         clear_client_processing(payload)
         guard_match_score_size(payload, raw, getattr(ref, 'path', None))
@@ -4285,7 +4707,10 @@ def assign_conversation_speaker(
             current.pop(field, None)
         return current, resolved, removed, relabeled
 
-    result = run_assignment_transaction(client, assign, uid=uid)
+    try:
+        result = run_assignment_transaction(client, assign, uid=uid)
+    except (transcript_pointer.TranscriptBlobAbsent, transcript_pointer.TranscriptShredded):
+        raise LookupError('Conversation not found') from None
     record_assignment_commit(uid, result, logger)
     current = result[0]
     try:
@@ -4339,12 +4764,15 @@ def update_conversation_segments(
     client = firestore_client if firestore_client is not None else get_firestore_client()
     doc_ref = client.collection('users').document(uid).collection(conversations_collection).document(conversation_id)
 
+    v3_recording = [False]
+
     @firestore.transactional
     def _write_segments(transaction):
         doc_snapshot = doc_ref.get(transaction=transaction)
         if not getattr(doc_snapshot, 'exists', False):
             return False
         current = doc_snapshot.to_dict() or {}
+        v3_recording[0] = bool(current.get('recording'))
         if current.get('record_projection_revision') and segment_update_fields is None:
             # The durable record owns the finalized capture. A delayed socket
             # flush cannot append its provisional twin after projection.
@@ -4452,7 +4880,7 @@ def update_conversation_segments(
             # this fence must not depend on the lineage rollout allowlist.
             update_payload['sync_content_revision'] = (current.get('sync_content_revision') or 0) + 1
         summary_delivery.rearm_on_revision_change(current, update_payload)
-        if score_updates and match_scores.enabled():
+        if score_updates:
             try:
                 score_current = dict(current)
                 _reveal_match_scores_for_read(score_current, uid)
@@ -4491,8 +4919,48 @@ def update_conversation_segments(
         from utils.conversations.recorded_time import write_span
 
         update_payload.update(write_span({**current, **update_payload}, arrival_at=datetime.now(timezone.utc)))
+        # A proven additive live append cannot revoke old display text. Keep
+        # these frequent writes off the explicit Home preparation path; edits,
+        # removals, re-attribution and moved origins retain the normal fence.
+        prior_by_id = {s.get('id'): s for s in persisted} if live_segments is not None else {}
+        after_by_id = {s.get('id'): s for s in accepted}
+        speech_fields = ('text', 'person_id', 'person_name', 'is_user', 'speaker')
+        if (
+            live_segments is not None
+            and current.get('status') == 'in_progress'
+            and (not started_at or started_at == current.get('started_at'))
+            and update_payload.get('recorded_start', current.get('recorded_start')) == current.get('recorded_start')
+            and all(
+                sid in after_by_id and all(before.get(k) == after_by_id[sid].get(k) for k in speech_fields)
+                for sid, before in prior_by_id.items()
+            )
+        ):
+            update_payload['home_append_only'] = True
+        if current.get('recording'):
+            update_payload.update(
+                v3_pending=True, v3_pending_since=current.get('v3_pending_since') or datetime.now(timezone.utc)
+            )
+            if segment_update_fields is None:
+                # The landing time commits with the speech it describes, and only when speech changed:
+                # field-only writes and no-op retries must not extend the v3 lock.
+                from config.conversations_v3 import SPEECH_LANDED_FIELD
+
+                before = persisted if live_segments is not None else None
+                if before is None:
+                    raw = current.get('transcript_segments') or []
+                    before = _decode_transcript_segments_strict(
+                        uid, raw, bool(current.get('transcript_segments_compressed'))
+                    )
+                speech = ('id', 'start', 'end', 'text')
+                if [[r.get(k) for k in speech] for r in before] != [[r.get(k) for k in speech] for r in accepted]:
+                    update_payload[SPEECH_LANDED_FIELD] = datetime.now(timezone.utc)
         prepared_payload = _prepare_conversation_for_write(
-            update_payload, uid, doc_level, preserve_transcript_identity=bool(current.get('has_transcript_corrections'))
+            update_payload,
+            uid,
+            doc_level,
+            preserve_transcript_identity=bool(current.get('has_transcript_corrections')),
+            conversation_id=conversation_id,
+            conversation_state=current,
         )
         if invalidate_client_processing:
             clear_client_processing(prepared_payload)
@@ -4508,9 +4976,16 @@ def update_conversation_segments(
             return planned.with_segments(accepted)
         return accepted if return_segments else True
 
-    result = run_transactional(client, _write_segments)
+    try:
+        result = run_preloaded_transactional(client, _write_segments)
+    except (transcript_pointer.TranscriptBlobAbsent, transcript_pointer.TranscriptShredded):
+        return False
     if result is not False:
         invalidate_people_stats_cache(uid)
+        if v3_recording[0]:
+            from utils.conversations.v3.triggers import changed
+
+            changed(uid, conversation_id)
     return result
 
 
@@ -4651,6 +5126,8 @@ def materialize_translation(
             uid,
             level,
             preserve_transcript_identity=bool(current.get('has_transcript_corrections')),
+            conversation_id=conversation_id,
+            conversation_state=current,
         )
         payload['translation_materializations'] = _protect_json_value(metadata, uid, 'enhanced')
         payload['translation_materializations_compressed'] = True
@@ -4664,7 +5141,10 @@ def materialize_translation(
             **({'original_text': selected['text']} if current.get('has_transcript_corrections') else {}),
         }
 
-    return run_transactional(client, _write)
+    try:
+        return run_preloaded_transactional(client, _write)
+    except (transcript_pointer.TranscriptBlobAbsent, transcript_pointer.TranscriptShredded):
+        return None
 
 
 # ***********************************
@@ -5024,6 +5504,7 @@ def assign_sync_conversation(
     retry_contention: bool = False,
     timing: bool = False,
     defer_index: Callable[[str, str, list[str]], None] | None = None,
+    absorb_contained_processed_donor: bool = False,
 ):
     """Atomically choose, create or append a sync conversation; ``timing`` logs bounded sub-phases.
 
@@ -5094,6 +5575,13 @@ def assign_sync_conversation(
                     uid, client, transaction, payload, score_snapshots.get(payload.get('id'))
                 )
 
+        def record_obligations():
+            # Registration and visibility are separate commits. Reread the
+            # canonical obligation in the transaction that replaces the text.
+            _, segment = record_identity(uid, target_id)
+            job = client.collection(f'batch_pipeline_{current_stage()}_jobs').document(segment)
+            return (job.get(transaction=transaction).to_dict() or {},)
+
         with clock.timed('plan'):
             planned = assign_in_transaction(
                 transaction,
@@ -5107,6 +5595,8 @@ def assign_sync_conversation(
                 full_ids=full_ids,
                 live_candidate_ids=discovery.candidate_ids,
                 absorbed=absorbed,
+                absorb_contained_processed_donor=absorb_contained_processed_donor,
+                **({'record_obligations': record_obligations} if incoming.get('_batch_replace_live') else {}),
                 **discovery.plan_kwargs(),
             )
         # Remember the candidate before the transaction commits.
@@ -5173,7 +5663,7 @@ def eligible_merge_target(conversation: Optional[dict]) -> bool:
     conversation". Discarded rows stay eligible; the merge path reprocesses
     and revives them.
     """
-    return bool(conversation) and not is_soft_deleted(conversation)
+    return bool(conversation) and not conversation.get('v3_derived') and not is_soft_deleted(conversation)
 
 
 def select_closest_conversation(conversations, start_timestamp: int, end_timestamp: int) -> Optional[dict]:
@@ -5246,7 +5736,7 @@ def get_last_completed_conversation(uid: str) -> Optional[dict]:
     conversations: List[Dict[str, Any]] = []
     for doc in query.stream():
         data = doc.to_dict()
-        if data and not is_soft_deleted(data):
+        if data and not data.get('v3_derived') and not is_soft_deleted(data):
             conversations.append(data)
     conversation = conversations[0] if conversations else None
     return conversation
@@ -5319,12 +5809,17 @@ def promote_final_pass_if_current(
             uid,
             current.get('data_protection_level') or 'standard',
             preserve_transcript_identity=bool(current.get('has_transcript_corrections')),
+            conversation_id=conversation_id,
+            conversation_state=current,
         )
         guard_match_score_size(prepared, current, getattr(parent, 'path', None))
         transaction.update(parent, prepared)
         return True
 
-    written = run_transactional(client, commit)
+    try:
+        written = run_preloaded_transactional(client, commit)
+    except (transcript_pointer.TranscriptBlobAbsent, transcript_pointer.TranscriptShredded):
+        return False
     if written:
         invalidate_people_stats_cache(uid)
     return bool(written)
@@ -5352,6 +5847,8 @@ def complete_sync_processing_hold(
     @firestore.transactional
     def finish(transaction):
         existing = ref.get(transaction=transaction).to_dict() or {}
+        if not python_owns_finalization(existing):
+            return False
         deleting = deletion.get(transaction=transaction)
         deletion_status = normalize_account_deletion_status(
             marker_exists=deleting.exists, raw_status=(deleting.to_dict() or {}).get('wipe_status')

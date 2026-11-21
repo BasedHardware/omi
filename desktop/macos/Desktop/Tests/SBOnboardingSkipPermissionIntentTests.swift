@@ -19,6 +19,7 @@ final class SBOnboardingSkipPermissionIntentTests: XCTestCase {
     for key in [
       AssistantSettings.audioRecordingModeDefaultsKey,
       DefaultsKey.screenAnalysisEnabled.rawValue,
+      DefaultsKey.screenAnalysisHeldOffByUser.rawValue,
       DefaultsKey.onboardingAccessibilitySkipped.rawValue,
       DefaultsKey.onboardingSystemAudioSkipped.rawValue,
       DefaultsKey.disableSystemAudioCapture.rawValue,
@@ -27,6 +28,7 @@ final class SBOnboardingSkipPermissionIntentTests: XCTestCase {
     }
     defaults.removeObject(forKey: AssistantSettings.audioRecordingModeDefaultsKey)
     defaults.removeObject(forKey: DefaultsKey.screenAnalysisEnabled.rawValue)
+    defaults.removeObject(forKey: DefaultsKey.screenAnalysisHeldOffByUser.rawValue)
     defaults.removeObject(forKey: DefaultsKey.onboardingAccessibilitySkipped.rawValue)
     defaults.removeObject(forKey: DefaultsKey.onboardingSystemAudioSkipped.rawValue)
     defaults.removeObject(forKey: DefaultsKey.disableSystemAudioCapture.rawValue)
@@ -114,6 +116,26 @@ final class SBOnboardingSkipPermissionIntentTests: XCTestCase {
     model.answerScreen()
 
     XCTAssertTrue(AssistantSettings.shared.screenAnalysisEnabled)
+  }
+
+  func testScreenSkipSurvivesRemoteSyncAndAllowReleasesHold() {
+    let model = makeModel()
+    model.step = .screen
+    model.scrState = .ask
+    model.answerScreen()
+    SettingsSyncManager.shared.applyRemoteSettings(
+      AssistantSettingsResponse(shared: SharedAssistantSettingsResponse(screenAnalysisEnabled: true)))
+    XCTAssertFalse(AssistantSettings.shared.screenAnalysisEnabled)
+    XCTAssertFalse(SettingsSyncManager.shared.restoreScreenAnalysisDefaultForMigration())
+    model.step = .screen
+    model.scrState = .on
+    model.answerScreen()
+    XCTAssertFalse(SettingsSyncManager.shared.isScreenAnalysisHeldOffByUser)
+    for enabled in [false, true] {
+      SettingsSyncManager.shared.applyRemoteSettings(
+        AssistantSettingsResponse(shared: SharedAssistantSettingsResponse(screenAnalysisEnabled: enabled)))
+      XCTAssertEqual(AssistantSettings.shared.screenAnalysisEnabled, enabled)
+    }
   }
 
   func testCompletionNeverForcesScreenAnalysisOnForASkippedGrant() {

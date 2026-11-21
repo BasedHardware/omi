@@ -13,6 +13,8 @@ from typing import Any
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
+from database.space_store import FirestoreSpaceStore
+from database.action_item_fence import fenced_action_item_commit
 from database._client import get_firestore_client, run_transactional
 from database.action_items import typed_doc
 from database.action_items import _prepare_action_item_for_write  # pyright: ignore[reportPrivateUsage]
@@ -57,8 +59,9 @@ def reconcile(
     user = client.collection('users').document(uid)
     conversation_ref = user.collection('conversations').document(conversation_id)
 
-    @firestore.transactional
-    def write(transaction):
+    def write(space_tx):
+        transaction = space_tx.transaction
+        tasks = space_tx.action_items
         conversation = typed_doc(conversation_ref.get(transaction=transaction))
         if not conversation or conversation.get('deleted'):
             successor = conversation.get('sync_merged_into') if conversation else None
@@ -109,14 +112,14 @@ def reconcile(
             if user.collection('action_items').document(task_id).get(transaction=transaction).exists:
                 raise ValueError('refresh task identity collision')
         for task_id, item in creates.items():
-            transaction.create(user.collection('action_items').document(task_id), _prepare_action_item_for_write(item))
+            tasks.stage_write('create', task_id, _prepare_action_item_for_write(item))
         for task_id, patch in updates.items():
-            transaction.update(user.collection('action_items').document(task_id), patch)
+            tasks.stage_write('update', task_id, patch)
         transaction.update(conversation_ref, {RECEIPT: receipt})
         pending = [task_id for task_id, row in rows.items() if row.get('refresh_delivery') == 'pending']
         return {'counts': counts, 'pending': [*pending, *creates]}
 
-    result = run_transactional(client, write)
+    result = FirestoreSpaceStore(uid, firestore_client=client).run(write)
     if result is not None:
         bump_action_items_list_version(uid)
     return result
@@ -163,7 +166,8 @@ def claim_delivery(uid: str, conversation_id: str, task_ids: list[str], *, fires
             result.append(dict(row, id=ref.id))
         return result
 
-    return run_transactional(client, claim)
+    with fenced_action_item_commit(uid):
+        return run_transactional(client, claim)
 
 
 def pending_rows(uid: str, conversation_id: str, task_ids: list[str], *, firestore_client: Any = None) -> list[dict]:

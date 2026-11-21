@@ -12,6 +12,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from fastapi import HTTPException
 
 from database import conversations as conversations_db
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
@@ -86,7 +87,7 @@ def harness(monkeypatch):
     monkeypatch.setattr(
         finalizer.lifecycle_service,
         'claim_finalization_fanout',
-        lambda *a: {'status': 'claimed', 'fanout_key': 'fixture'},
+        lambda *a, **kw: {'status': 'claimed', 'fanout_key': 'fixture'},
     )
     monkeypatch.setattr(finalizer.lifecycle_service, 'complete_finalization_fanout', lambda *a: True)
     monkeypatch.delenv('CROSS_DEVICE_DEDUP_MIN_OVERLAP_SECONDS', raising=False)
@@ -209,7 +210,6 @@ def test_discovery_links_recorded_overlap_despite_skew_and_delayed_ingest(harnes
     decoy = dict(primary, id='far', recorded_start=T0 - timedelta(hours=3), recorded_end=T0 - timedelta(hours=2))
     harness.rows.update({path('pendant'): primary, path('desktop'): secondary, path('far'): decoy})
     monkeypatch.setattr(policy, 'reconcile_cross_device', lambda *a: False)
-    monkeypatch.setattr(policy, 'shared_speech_mode', lambda uid: 'off')
     monkeypatch.setattr(policy, '_group_confirmed_captures', lambda *a: None)
 
     policy.link_duplicate_captures(UID, SimpleNamespace(**secondary))
@@ -301,15 +301,28 @@ def test_sync_processor_links_only_after_successful_completion(harness, monkeypa
 
     monkeypatch.setattr(processor.conversations_db, 'update_conversation', update_conversation)
 
-    def persist(uid, payload):
+    def persist(uid, payload, **_guard):
         if persisted:
             harness.rows[path(payload['id'], uid)].update(payload)
         return persisted
 
     monkeypatch.setattr(processor.lifecycle_service, 'persist_processed_conversation', persist)
-    processor.process_conversation(
-        UID, 'en', conversation, trigger=processor.ProcessingTrigger.USER_REPROCESS, defer_memory_extraction=True
-    )
+    # A user reprocess commits its app results against the stored row's current snapshot.
+    monkeypatch.setattr(processor.conversations_db, 'get_user_reprocess_app_snapshot', lambda *a: ([], {}, None, 0))
+    monkeypatch.setattr(processor.lifecycle_service, 'commit_user_reprocess_app_results', lambda *a, **kw: True)
+
+    def reprocess():
+        processor.process_conversation(
+            UID, 'en', conversation, trigger=processor.ProcessingTrigger.USER_REPROCESS, defer_memory_extraction=True
+        )
+
+    if persisted:
+        reprocess()
+    else:
+        # A fenced write is a failed reprocess the caller must see, and nothing links.
+        with pytest.raises(HTTPException) as fenced:
+            reprocess()
+        assert fenced.value.status_code == 409
     assert ('duplicate_capture_of' in harness.rows[path('desktop')]['external_data']) is persisted
 
 
@@ -387,7 +400,9 @@ def test_confirmed_group_notifies_episode_attachment_for_both_sources(harness, m
 async def test_completed_fanout_replay_still_delivers_grouped_row_to_episode_hook(harness, monkeypatch):
     capture = row('desktop', 'desktop', capture_group={'id': 'g', 'primary_id': 'pendant'})
     harness.rows[path('desktop')] = capture
-    monkeypatch.setattr(finalizer.lifecycle_service, 'claim_finalization_fanout', lambda *a: {'status': 'completed'})
+    monkeypatch.setattr(
+        finalizer.lifecycle_service, 'claim_finalization_fanout', lambda *a, **kw: {'status': 'completed'}
+    )
     seen = []
 
     async def after(uid, cid, latest, trigger):

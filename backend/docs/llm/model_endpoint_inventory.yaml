@@ -451,10 +451,10 @@ surfaces:
   call_sites:
   - utils/llm/ai_user_profile.py::feature:memories
   current_provider_model: openai/gpt-x-luna memories feature
-  request_shape: return-only two-stage user profile document from desktop source lines
+  request_shape: two-stage user profile document from backend-selected sources (utils/ai_profile_refresh.py, daily per owner and POST /v1/users/ai-profile/refresh); the return-only synthesize route remains for released desktop builds
   gateway_lane_capability_needed: generated omi:auto:memories lane
-  migration_status: get_llm_routed; desktop assistants should call this instead of Haiku chat completions
-  test_guardrail_coverage: backend/tests/unit/test_ai_user_profile_route.py
+  migration_status: get_llm_routed; backend owns generation, clients only read and edit users/{uid}.ai_user_profile
+  test_guardrail_coverage: backend/tests/unit/test_ai_user_profile_route.py, backend/tests/unit/test_ai_profile_refresh.py
 - surface: desktop_realtime_token_mint
   funded_budget_gate: routers/desktop_realtime.py:mint_session
   code_path: backend/routers/desktop_realtime.py:mint_session

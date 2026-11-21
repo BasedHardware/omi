@@ -6,6 +6,7 @@ import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/gen/conversation_wire.g.dart' as wire;
 import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/l10n/app_localizations.dart';
+import 'package:omi/pages/conversation_detail/conversation_summary_generation.dart';
 import 'package:omi/pages/conversation_detail/conversation_summary_selection.dart';
 import 'package:omi/pages/conversation_detail/widgets.dart';
 
@@ -55,9 +56,9 @@ Future<void> _pumpSummary(
   await tester.pump();
 }
 
-App _templateApp() => App(
-      id: 'app-1',
-      name: 'My Template',
+App _templateApp({String id = 'app-1', String name = 'My Template'}) => App(
+      id: id,
+      name: name,
       author: 'tester',
       description: 'test',
       image: '',
@@ -128,5 +129,19 @@ void main() {
 
       expect(find.text('My Template'), findsOneWidget);
     });
+    for (final asSliver in [false, true]) {
+      testWidgets('the built-in template shows no row (sliver: $asSliver)', (tester) async {
+        await _pumpSummary(
+          tester,
+          app: _templateApp(id: builtInSummaryTemplateAppId, name: 'The Best Summarizer'),
+          response: AppResponse('App summary', appId: builtInSummaryTemplateAppId),
+          asSliver: asSliver,
+        );
+
+        expect(find.text('App summary'), findsOneWidget);
+        expect(find.text('The Best Summarizer'), findsNothing);
+        expect(find.byIcon(Icons.arrow_forward_ios), findsNothing);
+      });
+    }
   });
 }

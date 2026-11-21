@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from models.account_cutover import (
+    AccountCutoverCheckpointPhase,
     AccountCutoverRecord,
     AccountCutoverState,
     AccountCutoverTransitionRequest,
@@ -12,7 +13,10 @@ from models.account_cutover import (
 _FORWARD: dict[AccountCutoverState, frozenset[AccountCutoverState]] = {
     AccountCutoverState.legacy: frozenset({AccountCutoverState.migrating}),
     # Abort during migration goes through rolled_back_stranded (never silent legacy).
-    AccountCutoverState.migrating: frozenset({AccountCutoverState.new, AccountCutoverState.rolled_back_stranded}),
+    AccountCutoverState.migrating: frozenset(
+        {AccountCutoverState.new, AccountCutoverState.migrated, AccountCutoverState.rolled_back_stranded}
+    ),
+    AccountCutoverState.migrated: frozenset({AccountCutoverState.rolled_back_stranded}),
     AccountCutoverState.new: frozenset({AccountCutoverState.rolled_back_stranded}),
     AccountCutoverState.rolled_back_stranded: frozenset({AccountCutoverState.migrating}),
 }
@@ -54,7 +58,10 @@ def _assert_offline_instruction_legal(
             f'offline_queue_instruction={instruction.value} illegal in fenced state={state.value}',
             code='illegal_offline_queue_instruction',
         )
-    if state == AccountCutoverState.rolled_back_stranded and instruction == OfflineQueueInstruction.drain:
+    if (
+        state in {AccountCutoverState.rolled_back_stranded, AccountCutoverState.migrated}
+        and instruction == OfflineQueueInstruction.drain
+    ):
         # Transitions into stranded always quarantine; drain is a separate pre-begin seam.
         raise AccountCutoverTransitionError(
             'drain on rolled_back_stranded requires prepare_offline_drain',
@@ -73,6 +80,35 @@ def apply_cutover_transition(
             'account generation fence mismatch',
             code='account_generation_mismatch',
         )
+    if (
+        (request.data_plane == 'cell' or record.data_plane == 'cell')
+        and request.next_account_generation is not None
+        and request.next_account_generation != record.account_generation
+    ):
+        # Cell cutovers keep generation 0 so released clients without the header stay admitted.
+        raise AccountCutoverTransitionError(
+            'cell cutovers must preserve the account generation',
+            code='account_generation_regression',
+        )
+    if request.target_state == AccountCutoverState.migrated:
+        # The core seam is also called directly, outside the coordinator. A
+        # request cannot invent the readiness or destination binding it needs.
+        if record.data_plane != 'cell':
+            raise AccountCutoverTransitionError('migrated completion requires cell kind')
+        ready = record.checkpoint_phase == AccountCutoverCheckpointPhase.cutover_ready
+        completed_retry = (
+            record.state == AccountCutoverState.migrated
+            and record.checkpoint_phase == AccountCutoverCheckpointPhase.completed
+        )
+        if not (ready or completed_retry):
+            raise AccountCutoverTransitionError(
+                'complete requires cutover_ready checkpoint', code='checkpoint_not_ready'
+            )
+        if record.destination_backend_bound is not True:
+            raise AccountCutoverTransitionError(
+                'destination backend binding required before complete', code='destination_backend_unbound'
+            )
+
     if request.target_state == record.state:
         # Idempotent no-op with optional checkpoint/manifest refresh.
         return _refresh_same_state(record, request)
@@ -84,13 +120,19 @@ def apply_cutover_transition(
             code='illegal_cutover_transition',
         )
 
+    data_plane = (
+        'cell'
+        if request.data_plane == 'cell' or record.data_plane == 'cell'
+        else request.data_plane or record.data_plane
+    )
+    cell_cutover = data_plane == 'cell'
     next_generation = record.account_generation
     if request.next_account_generation is not None:
         next_generation = request.next_account_generation
-    elif request.target_state in _GENERATION_BUMP_STATES:
+    elif request.target_state in _GENERATION_BUMP_STATES and not cell_cutover:
         next_generation = record.account_generation + 1
 
-    if request.target_state in _GENERATION_BUMP_STATES:
+    if request.target_state in _GENERATION_BUMP_STATES and not cell_cutover:
         if next_generation <= record.account_generation:
             raise AccountCutoverTransitionError(
                 'next_account_generation must increase when entering migrating/new',
@@ -117,7 +159,7 @@ def apply_cutover_transition(
         offline = OfflineQueueInstruction.quarantine
     elif request.target_state in {AccountCutoverState.new, AccountCutoverState.rolled_back_stranded}:
         offline = OfflineQueueInstruction.quarantine
-    elif request.target_state == AccountCutoverState.legacy:
+    elif request.target_state in {AccountCutoverState.legacy, AccountCutoverState.migrated}:
         offline = OfflineQueueInstruction.none
 
     _assert_offline_instruction_legal(request.target_state, offline)
@@ -125,6 +167,7 @@ def apply_cutover_transition(
     return record.model_copy(
         update={
             'state': request.target_state,
+            'data_plane': data_plane,
             'account_generation': next_generation,
             'stranded_new_data': stranded,
             'offline_queue_instruction': offline,
@@ -142,6 +185,8 @@ def _refresh_same_state(
     request: AccountCutoverTransitionRequest,
 ) -> AccountCutoverRecord:
     updates: dict[str, object] = {}
+    if request.data_plane is not None:
+        updates['data_plane'] = 'cell' if record.data_plane == 'cell' else request.data_plane
     if request.offline_queue_instruction is not None:
         _assert_offline_instruction_legal(record.state, request.offline_queue_instruction)
         updates['offline_queue_instruction'] = request.offline_queue_instruction

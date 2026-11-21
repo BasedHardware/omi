@@ -7,10 +7,13 @@ An unproven/late tail remains client-owned; it never starts a second GPU job.
 
 from dataclasses import fields
 from datetime import datetime, timedelta, timezone
-from enum import Enum
+from enum import Enum, StrEnum
 from typing import Any
 import io
+import hashlib
+import json
 import logging
+import os
 import wave
 
 from fastapi.responses import JSONResponse
@@ -20,11 +23,20 @@ from config.batch_pipeline import (
     record_capture_eligible,
 )
 from config.policy import resolve_batch_policy
+from config.batch_pipeline_coverage_wait import coverage_wait_memo_enabled, record_wait_memo_first_enabled
 from config.batch_pipeline_language import admission_language_exclusion_enabled, batch_admission_language
 from database.conversations import claim_record_lane_owner
 from database.batch_pipeline_store import FirestoreStore
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
 from database.sync_ledger import LEDGER_RETENTION_DAYS
+from database.record_custody_append import resolve_target
+from database.sync_record_wait_cache import (
+    RECORD_WAIT_CACHE_SECONDS,
+    cached_record_wait,
+    remember_record_wait,
+    cached_coverage_wait,
+    remember_coverage_wait,
+)
 from utils.batch_pipeline.contracts import WorkItem
 from utils.batch_pipeline.intake import durable_status, start_response
 from utils.batch_pipeline.artifact_policy import artifacts_for
@@ -32,8 +44,14 @@ from utils.batch_pipeline.intake_outcome import IntakeRouteEvidence
 from utils.batch_pipeline.live import OWNER, record_identity
 from utils.batch_pipeline.language_metrics import record_admission_exclusion
 from utils.batch_pipeline.capture_decode import decode_units
+from utils.capture.batch_coverage import covered_response
+from utils.batch_pipeline import record_gap_fill, record_wal_handoff, record_wal_metrics
+from config.record_gap_fill import gap_fill_enabled
 from utils.executors import db_executor, storage_executor, run_blocking, sync_executor
+from utils.metrics import OMI_PIPELINE_RECORD_WAIT_ANSWERS_TOTAL, OMI_PIPELINE_RECORD_WAIT_MEMO_HITS_TOTAL
+from utils.observability.reasons import ReasonFamily, reason_label
 from utils.sync.stage import current_stage
+from utils.sync.record_token_lease import handoff_committed
 from utils.sync.legacy_dark import LegacySyncMode
 
 
@@ -45,7 +63,7 @@ class RecordUploadRoute(Enum):
 logger = logging.getLogger(__name__)
 
 
-class RecordUploadWait(Enum):
+class RecordUploadWait(StrEnum):
     TARGET_UNRESOLVED = 'target_unresolved'
     RESERVATION_PENDING = 'reservation_pending'
     OWNER_CLAIM_RACED = 'owner_claim_raced'
@@ -61,23 +79,117 @@ class RecordUploadWait(Enum):
     RECEIPT_STATUS_READ_FAILED = 'receipt_status_read_failed'
 
 
-def _pending(reason: RecordUploadWait):
+def _pending(reason: RecordUploadWait, record: str | None = None, *, path: str = '-', memo: str = '-'):
     # These are custody waits, not evidence of Cloud Run refusing a request.
     # Keep the branch vocabulary static and omit identities/audio/error text.
-    logger.info('event=sync_record_upload outcome=pending reason=%s', reason.value)
+    # ``record`` is a 16-hex prefix of the record content hash (the intake key
+    # bp_<content>), so repeated waits can be grouped per recording without ids.
+    # ``path`` names the bounded answer branch and ``memo`` whether a memo
+    # answered it, so a memo-hit share is readable without any identifier.
+    # No Retry-After: shipped clients read any 5xx carrying one as an
+    # account-wide pause, so one conversation's wait stalled every other WAL
+    # on the phone (2026-11-07 503 storm). Without it the drain skips this
+    # recording for the pass and keeps uploading the rest, after the client's
+    # own short unscoped-5xx pause (2-30s, reset by a success); the WAL is kept.
+    # The body's retry_after_seconds paces only this recording in new apps.
+    OMI_PIPELINE_RECORD_WAIT_ANSWERS_TOTAL.labels(
+        reason=reason_label(ReasonFamily.SYNC_DISPATCH, reason, RecordUploadWait)
+    ).inc()
+    if memo == 'hit' and path in {'conversation', 'coverage'}:
+        OMI_PIPELINE_RECORD_WAIT_MEMO_HITS_TOTAL.labels(memo=path).inc()
+    logger.info(
+        'event=sync_record_upload outcome=pending reason=%s record=%s path=%s memo=%s',
+        reason.value,
+        (record or '-')[:16],
+        path,
+        memo,
+    )
     return JSONResponse(
         status_code=503,
-        headers={'Retry-After': '30'},
         content={
             'code': 'record_capture_pending',
             'detail': 'Retain local audio until the registered record is complete',
+            'retry_after_seconds': RECORD_WAIT_CACHE_SECONDS,
         },
+    )
+
+
+# Conversation-level waits: any WAL for the conversation gets the same answer
+# until record state changes. Content-level waits (coverage, receipts) are not
+# memoized here, since another WAL of the same conversation may already be provable.
+_MEMOIZED_WAITS = frozenset({RecordUploadWait.RECORD_JOBS_MISSING, RecordUploadWait.RESERVATION_PENDING})
+
+
+async def conversation_pending(reason: RecordUploadWait, uid: str, conversation_id: str | None):
+    if reason in _MEMOIZED_WAITS and isinstance(conversation_id, str) and conversation_id:
+        await run_blocking(db_executor, remember_record_wait, uid, conversation_id, reason.value)
+    return _pending(reason, _record_key(uid, conversation_id), path='conversation', memo='miss')
+
+
+def _record_key(uid: str, conversation_id: str | None) -> str | None:
+    return record_identity(uid, conversation_id)[0] if isinstance(conversation_id, str) and conversation_id else None
+
+
+async def memoized_record_wait(uid, conversation_id) -> JSONResponse | None:
+    """Repeat a recent conversation-level custody wait before any upload work."""
+    if not isinstance(conversation_id, str) or not conversation_id:
+        return None
+    if record_wal_handoff.handoff_enabled():
+        return None
+    cached = await run_blocking(db_executor, cached_record_wait, uid, conversation_id)
+    if cached is None:
+        return None
+    try:
+        if await run_blocking(db_executor, record_wal_handoff.receipts.has_receipts, uid, conversation_id):
+            return None
+    except Exception:
+        return None  # Unknown receipt state must reach durable discovery, never a stale refusal.
+    try:
+        reason = RecordUploadWait(cached)
+    except ValueError:
+        return None
+    return (
+        _pending(reason, _record_key(uid, conversation_id), path='conversation', memo='hit')
+        if reason in _MEMOIZED_WAITS
+        else None
     )
 
 
 def _pcm(wav):
     with wave.open(io.BytesIO(wav), 'rb') as stream:
         return stream.readframes(stream.getnframes())
+
+
+def _upload_identity(paths):
+    """Count and total bytes on disk; the byte hash itself is ``content_id``.
+
+    ``compute_sync_content_id`` already HMACs the basename and the SHA-256 of
+    every uploaded file, so a memo keyed on it can never move to different
+    bytes. Carrying the count and the sizes beside it makes that property
+    legible at the key, and keeps it true for any adapter that supplies its own
+    content id. Both are free: the files are already on temp disk.
+    """
+    total = 0
+    for path in paths:
+        try:
+            total += os.path.getsize(path)
+        except OSError:
+            # A file removed under us makes this identity useless for a memo:
+            # the caller treats a missing size as "no identity" and checks in full.
+            return None
+    return (len(paths), total)
+
+
+def _coverage_wait_key(uid, conversation_id, content_id, jobs, upload_identity):
+    # content_id already hashes each uploaded basename (capture timestamp and
+    # codec) plus its bytes, without decoding. record_identity is stable for the
+    # conversation, NOT a revision: hash the current jobs too, so added units or
+    # changed artifact references/timing invalidate immediately. Existing reads
+    # supply all inputs; no extra Firestore lookup or local file read is needed.
+    # ``upload_identity`` keeps the key sensitive to the upload as well: a second,
+    # different WAL for the same record must never inherit this one's miss.
+    payload = json.dumps([uid, conversation_id, content_id, upload_identity, jobs], sort_keys=True, default=str)
+    return hashlib.sha256(payload.encode()).hexdigest()
 
 
 def _covered(paths, jobs, artifacts):
@@ -101,21 +213,28 @@ def _covered(paths, jobs, artifacts):
                 continue
             offset = round((cursor - item.capture_at) * 16000) * 2
             if offset < 0:
-                return False
+                # The WAL has audio before (or between) the record's units.
+                return _unproven('wal_audio_outside_record')
             source = _pcm(artifacts.fetch_audio(item))
             length = min(len(source) - offset, len(pcm) - consumed)
-            if (
-                length <= 0
-                or memoryview(source)[offset : offset + length] != memoryview(pcm)[consumed : consumed + length]
-            ):
-                return False
+            if length <= 0:
+                return _unproven('record_unit_exhausted')
+            if memoryview(source)[offset : offset + length] != memoryview(pcm)[consumed : consumed + length]:
+                return _unproven('audio_bytes_differ')
             consumed += length
             del source
             if consumed == len(pcm):
                 break
         if consumed != len(pcm):
-            return False
+            # The record ends (or has no unit) before this WAL unit does.
+            return _unproven('wal_audio_past_record')
     return True
+
+
+def _unproven(cause: str) -> bool:
+    # Static vocabulary only: says which way the WAL and record disagree.
+    logger.info('event=sync_record_coverage outcome=unproven cause=%s', cause)
+    return False
 
 
 async def _legacy_mode(legacy_mode, uid):
@@ -184,6 +303,7 @@ async def registered_record_response(
     policy=None,
     legacy_mode=None,
     evidence: IntakeRouteEvidence | None = None,
+    before_coverage=None,
 ) -> JSONResponse | RecordUploadRoute | None:
     policy = policy or resolve_batch_policy(uid)
     if not conversation_id and not recording_session_id:
@@ -196,12 +316,7 @@ async def registered_record_response(
 
     def target_snapshot() -> tuple[str | None, Any]:
         user = store.client.collection('users').document(uid)
-        target = conversation_id
-        if not target and recording_session_id:
-            session = user.collection('recording_sessions').document(recording_session_id).get().to_dict() or {}
-            target = session.get('conversation_id')
-        if target is not None and not isinstance(target, str):
-            raise ValueError('invalid registered conversation identity')
+        target = resolve_target(uid, conversation_id, recording_session_id, firestore_client=store.client)
         return (target, user.collection('conversations').document(target).get()) if target else (None, None)
 
     snapshot = None
@@ -231,7 +346,7 @@ async def registered_record_response(
             and record_capture_eligible(uid, row, policy=policy)
         )
         if awaiting_reservation or (snapshot is not None and not snapshot.exists and policy.live_record_enabled):
-            return _pending(RecordUploadWait.RESERVATION_PENDING)
+            return await conversation_pending(RecordUploadWait.RESERVATION_PENDING, uid, conversation_id)
         if snapshot is not None and snapshot.exists and not row.get('record_lane_owner'):
             # Only enabled admission may establish a new dispatcher. BYOK takes the
             # batch owner like any upload (David, 10-19): no request-scoped keys needed.
@@ -303,19 +418,91 @@ async def registered_record_response(
                 'detail': 'Capture is unavailable for server processing',
             },
         )
+    # A prior native alias already has a proven disposition. New originals need
+    # their own custody/status handle, never that old job's completed status.
+    if not prior and (record_wal_handoff.handoff_enabled() or row.get('record_wal_handoff_present')):
+        try:
+            held = await record_wal_handoff.handoff(
+                store=store,
+                uid=uid,
+                cid=conversation_id,
+                paths=paths,
+                source=source,
+                device=client_device_id,
+            )
+            if held is not None:
+                handoff_committed()
+                return start_response(held)
+        except Exception:
+            record_wal_metrics.answers.labels('refused').inc()
+            return _pending(RecordUploadWait.AUDIO_COVERAGE_UNPROVEN, content)
+
+    if before_coverage is not None:
+        await before_coverage()
+    from utils.batch_pipeline.record_lease_append import rearm_partial, retain_upload
+
+    coverage_key = None
+    if coverage_wait_memo_enabled():
+        identity = _upload_identity(paths)
+        if identity is not None:
+            coverage_key = _coverage_wait_key(uid, conversation_id, content_id, jobs, identity)
+    memo_checked = False
+    if coverage_key is not None and record_wait_memo_first_enabled() and not prior and jobs:
+        # Fast path: the same bytes were already compared against these same
+        # record units and lost, so the copy below would be a create-only no-op
+        # and the decode/fetch would repeat a proven negative. Answer before
+        # either. The partial wake still runs: it is what lets the record
+        # discover chunks it already holds, and dropping it would trade one
+        # kind of wasted work for slower delivery.
+        memo_checked = True
+        if await run_blocking(db_executor, cached_coverage_wait, coverage_key):
+            await rearm_partial(uid, conversation_id, row, store)
+            return _pending(RecordUploadWait.AUDIO_COVERAGE_UNPROVEN, content, path='coverage', memo='hit')
+    await retain_upload(uid, conversation_id, row, paths, store)
     if prior.get('dispatch_protocol') == 'batch_v1' and prior.get('job_id') == 'bp_' + content:
         status = await run_blocking(db_executor, durable_status, store, uid, prior['job_id'])
-        return start_response(status) if status else _pending(RecordUploadWait.RECEIPT_STATUS_MISSING)
+        return start_response(status) if status else _pending(RecordUploadWait.RECEIPT_STATUS_MISSING, content)
     if prior:
-        return _pending(RecordUploadWait.CONTENT_RECEIPT_CONFLICT)
+        return _pending(RecordUploadWait.CONTENT_RECEIPT_CONFLICT, content)
     if not jobs:
-        return _pending(RecordUploadWait.RECORD_JOBS_MISSING)
+        if gap_fill_enabled(uid):
+            # A closed record whose retained tail never landed cannot admit;
+            # write this owner WAL's missing span so the drain's next normal
+            # pass can. Option A (RECORD_RETAINED_ACK): once the server holds
+            # a byte-exact durable copy of every WAL sample, answer the covered
+            # 200 so the phone releases this batch and sends the next one.
+            # Otherwise the answer is the same 503.
+            _, acked = await record_gap_fill.run_gap_fill(
+                uid=uid,
+                conversation_id=conversation_id,
+                paths=paths,
+                wal_content_id=content_id,
+                store=store,
+            )
+            if acked:
+                return covered_response()
+        return await conversation_pending(RecordUploadWait.RECORD_JOBS_MISSING, uid, conversation_id)
+    if (
+        coverage_key is not None
+        and not memo_checked
+        and await run_blocking(db_executor, cached_coverage_wait, coverage_key)
+    ):
+        # Memo disabled at the fast path, or a receipt/jobs branch kept this
+        # request below it: the identical check still answers without decoding.
+        return _pending(RecordUploadWait.AUDIO_COVERAGE_UNPROVEN, content, path='coverage', memo='hit')
     failure_reason = RecordUploadWait.ARTIFACT_LOOKUP_FAILED
     try:
         artifacts = await run_blocking(storage_executor, artifacts_for, store)
         failure_reason = RecordUploadWait.COVERAGE_CHECK_FAILED
         if not await run_blocking(sync_executor, _covered, paths, jobs, artifacts):
-            return _pending(RecordUploadWait.AUDIO_COVERAGE_UNPROVEN)
+            if coverage_key is not None:
+                await run_blocking(db_executor, remember_coverage_wait, coverage_key)
+            return _pending(
+                RecordUploadWait.AUDIO_COVERAGE_UNPROVEN,
+                content,
+                path='coverage',
+                memo='miss' if coverage_key is not None else 'off',
+            )
 
         def alias(tx):
             current = tx.get('content', f'{uid}/{content_id}')
@@ -336,11 +523,11 @@ async def registered_record_response(
 
         failure_reason = RecordUploadWait.ALIAS_WRITE_FAILED
         if not await run_blocking(db_executor, store.run, alias):
-            return _pending(RecordUploadWait.ALIAS_CONFLICT)
+            return _pending(RecordUploadWait.ALIAS_CONFLICT, content)
         failure_reason = RecordUploadWait.RECEIPT_STATUS_READ_FAILED
         status = await run_blocking(db_executor, durable_status, store, uid, 'bp_' + content)
-        return start_response(status) if status else _pending(RecordUploadWait.RECEIPT_STATUS_MISSING)
+        return start_response(status) if status else _pending(RecordUploadWait.RECEIPT_STATUS_MISSING, content)
     except Exception:
         # An erased/missing manifest cannot prove WAL coverage. Retain it;
         # never translate a storage/privacy failure into legacy compute.
-        return _pending(failure_reason)
+        return _pending(failure_reason, content)

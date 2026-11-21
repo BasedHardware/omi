@@ -80,17 +80,19 @@ class _TrialPaywallPageState extends State<TrialPaywallPage> {
     if (_locked) return;
     setState(() => _busy = true);
     try {
-      final usage = context.read<UsageProvider>();
-      await usage.fetchSubscription();
+      final outcome = await context.read<UsageProvider>().restorePurchases();
       if (!mounted || _dismissed) return;
       final l10n = context.l10n;
-      if (usage.subscription?.subscription.plan.isPaid == true) {
-        OmiFeedback.confirm(context, l10n.unlimitedPlan);
-        _dismissed = true;
-        Navigator.of(context).pop(true);
-        return;
+      switch (outcome) {
+        case RestoreOutcome.paid:
+          OmiFeedback.confirm(context, l10n.unlimitedPlan);
+          _dismissed = true;
+          Navigator.of(context).pop(true);
+        case RestoreOutcome.free:
+          OmiFeedback.info(context, l10n.freePlan);
+        case RestoreOutcome.failed:
+          OmiFeedback.error(context, l10n.restorePurchasesFailed, actionLabel: l10n.tryAgain, onAction: _restore);
       }
-      OmiFeedback.info(context, l10n.freePlan);
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -309,41 +311,48 @@ class _TrialPaywallPageState extends State<TrialPaywallPage> {
                               ])
                             : offer == null
                                 ? Text(l10n.unableToLoadPlans, textAlign: TextAlign.center, style: _Paper.body())
-                                : IntrinsicHeight(
-                                    child: Row(
-                                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                                      children: [
-                                        if (monthly != null)
-                                          Expanded(
-                                            child: _PlanCard(
-                                              key: const Key('trial_paywall_monthly'),
-                                              title: l10n.billingMonthly,
-                                              price: formatBillingPrice(monthly.amountMinor, monthly.currency),
-                                              footnote: l10n.paywallTrialBilledMonthly,
-                                              selected: !_yearly || yearly == null,
-                                              onTap: () => setState(() => _yearly = false),
+                                : IgnorePointer(
+                                    // The CTA captures the selected price before the
+                                    // session request resolves. Letting a card change
+                                    // the selection in that window redraws the terms
+                                    // for one plan while the other plan's cart opens.
+                                    ignoring: _locked,
+                                    child: IntrinsicHeight(
+                                      child: Row(
+                                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                                        children: [
+                                          if (monthly != null)
+                                            Expanded(
+                                              child: _PlanCard(
+                                                key: const Key('trial_paywall_monthly'),
+                                                title: l10n.billingMonthly,
+                                                price: formatBillingPrice(monthly.amountMinor, monthly.currency),
+                                                footnote: l10n.paywallTrialBilledMonthly,
+                                                selected: !_yearly || yearly == null,
+                                                onTap: () => setState(() => _yearly = false),
+                                              ),
                                             ),
-                                          ),
-                                        if (monthly != null && yearly != null) const SizedBox(width: 10),
-                                        if (yearly != null)
-                                          Expanded(
-                                            child: _PlanCard(
-                                              key: const Key('trial_paywall_yearly'),
-                                              title: l10n.billingYearly,
-                                              price: formatBillingPrice(yearly.amountMinor, yearly.currency),
-                                              wasPrice: monthly == null
-                                                  ? null
-                                                  : formatBillingPrice(monthly.amountMinor * 12, monthly.currency),
-                                              footnote: l10n.paywallTrialBilledYearly,
-                                              saving: yearlySaving == null
-                                                  ? null
-                                                  : l10n.paywallTrialSaveAmount(
-                                                      formatBillingPrice(yearlySaving, yearly.currency)),
-                                              selected: _yearly || monthly == null,
-                                              onTap: () => setState(() => _yearly = true),
+                                          if (monthly != null && yearly != null) const SizedBox(width: 10),
+                                          if (yearly != null)
+                                            Expanded(
+                                              child: _PlanCard(
+                                                key: const Key('trial_paywall_yearly'),
+                                                title: l10n.billingYearly,
+                                                price: formatBillingPrice(yearly.amountMinor, yearly.currency),
+                                                wasPrice: monthly == null
+                                                    ? null
+                                                    : formatBillingPrice(monthly.amountMinor * 12, monthly.currency),
+                                                footnote: l10n.paywallTrialBilledYearly,
+                                                saving: yearlySaving == null
+                                                    ? null
+                                                    : l10n.paywallTrialSaveAmount(
+                                                        formatBillingPrice(yearlySaving, yearly.currency)),
+                                                selected: _yearly || monthly == null,
+                                                onTap: () => setState(() => _yearly = true),
+                                              ),
                                             ),
-                                          ),
-                                      ],
+                                        ],
+                                      ),
                                     ),
                                   ),
                       ),
@@ -375,6 +384,15 @@ class _TrialPaywallPageState extends State<TrialPaywallPage> {
                         l10n.paywallTrialCancelNote,
                         textAlign: TextAlign.center,
                         style: _Paper.label(size: 13, color: _Paper.success, weight: FontWeight.w600),
+                      ),
+                      const SizedBox(height: 4),
+                      // Shopify buyers with an included year land here, not on the plans sheet with
+                      // its code field; their code goes in Stripe Checkout's promotion code box.
+                      Text(
+                        l10n.paywallTrialCodeHint,
+                        key: const Key('trial_paywall_code_hint'),
+                        textAlign: TextAlign.center,
+                        style: _Paper.label(size: 13, color: _Paper.textSecondary),
                       ),
                     ],
                   ),

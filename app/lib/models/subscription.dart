@@ -462,18 +462,70 @@ class PaymentIssue {
   final String status;
   final PlanType plan;
 
-  const PaymentIssue({required this.status, required this.plan});
+  /// A declined yearly renewal can move to the same plan's monthly price instead. Null when not offered
+  /// (and always from servers that predate it).
+  final MonthlySwitchOffer? monthlySwitch;
 
-  factory PaymentIssue.fromGenerated(wire.GeneratedPaymentIssue generated) =>
-      PaymentIssue(status: generated.status, plan: PlanType.fromWire(generated.plan));
+  const PaymentIssue({required this.status, required this.plan, this.monthlySwitch});
 
-  wire.GeneratedPaymentIssue toGenerated() => wire.GeneratedPaymentIssue(status: status, plan: plan.wireName);
+  factory PaymentIssue.fromGenerated(wire.GeneratedPaymentIssue generated) => PaymentIssue(
+        status: generated.status,
+        plan: PlanType.fromWire(generated.plan),
+        monthlySwitch:
+            generated.monthlySwitch == null ? null : MonthlySwitchOffer.fromGenerated(generated.monthlySwitch!),
+      );
+
+  wire.GeneratedPaymentIssue toGenerated() =>
+      wire.GeneratedPaymentIssue(status: status, plan: plan.wireName, monthlySwitch: monthlySwitch?.toGenerated());
 
   @override
-  bool operator ==(Object other) => other is PaymentIssue && other.status == status && other.plan == plan;
+  bool operator ==(Object other) =>
+      other is PaymentIssue && other.status == status && other.plan == plan && other.monthlySwitch == monthlySwitch;
 
   @override
-  int get hashCode => Object.hash(status, plan);
+  int get hashCode => Object.hash(status, plan, monthlySwitch);
+}
+
+/// The plan's catalog monthly price, charged today if the reader switches (backend
+/// `payment_issue.monthly_switch`). Amounts are minor units of [currency]; [yearlyAmount] is the
+/// unpaid yearly charge the switch cancels.
+class MonthlySwitchOffer {
+  final String priceId;
+  final int amount;
+  final String currency;
+  final int yearlyAmount;
+
+  const MonthlySwitchOffer({
+    required this.priceId,
+    required this.amount,
+    required this.currency,
+    required this.yearlyAmount,
+  });
+
+  factory MonthlySwitchOffer.fromGenerated(wire.GeneratedPaymentIssueMonthlySwitch generated) => MonthlySwitchOffer(
+        priceId: generated.priceId,
+        amount: generated.amount,
+        currency: generated.currency,
+        yearlyAmount: generated.yearlyAmount,
+      );
+
+  wire.GeneratedPaymentIssueMonthlySwitch toGenerated() => wire.GeneratedPaymentIssueMonthlySwitch(
+        priceId: priceId,
+        amount: amount,
+        currency: currency,
+        yearlyAmount: yearlyAmount,
+      );
+
+  @override
+  bool operator ==(Object other) =>
+      other is MonthlySwitchOffer &&
+      other.priceId == priceId &&
+      other.amount == amount &&
+      other.currency == currency &&
+      other.yearlyAmount == yearlyAmount;
+
+  @override
+  int get hashCode => Object.hash(priceId, amount, currency, yearlyAmount);
 }
 
 class UserSubscriptionResponse {

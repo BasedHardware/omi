@@ -730,7 +730,11 @@ def test_conversations_count_filtered_date_ranges_have_declared_descending_compo
 
     conversations_db.get_conversations_count('index-contract-user', **kwargs)
 
-    counts = [(entry[1], entry[2]) for entry in recorder if entry[0] == 'count']
+    counts = [
+        (entry[1], entry[2])
+        for entry in recorder
+        if entry[0] == 'count' and not any(f[0] in {'recording', 'home_hidden'} for f in entry[1])
+    ]
     assert counts == [(expected_filters, (('created_at', 'DESCENDING'),))]
     assert signature in _declared_index_signatures()
 
@@ -738,7 +742,9 @@ def test_conversations_count_filtered_date_ranges_have_declared_descending_compo
 def test_conversations_in_folder_has_the_prod_observed_composite(monkeypatch):
     """Prod FailedPrecondition on 2026-09-23 came from this folder list query."""
     recorder = []
-    monkeypatch.setattr(folders_db, 'db', _StreamRecordingFirestore(recorder, collection_name='conversations'))
+    monkeypatch.setattr(
+        folders_db, 'get_firestore_client', lambda: _StreamRecordingFirestore(recorder, collection_name='conversations')
+    )
 
     folders_db.get_conversations_in_folder('index-contract-user', 'folder-123')
 
@@ -774,7 +780,11 @@ def test_conversations_count_date_range_has_a_descending_range_composite(monkeyp
     )
     conversations_db.get_conversations_count('index-contract-user', include_discarded=False)
 
-    counts = [(entry[1], entry[2]) for entry in recorder if entry[0] == 'count']
+    counts = [
+        (entry[1], entry[2])
+        for entry in recorder
+        if entry[0] == 'count' and not any(f[0] in {'recording', 'home_hidden'} for f in entry[1])
+    ]
     bounded, unbounded = counts
     assert bounded == (
         (('discarded', '=='), ('created_at', '>='), ('created_at', '<=')),

@@ -79,6 +79,7 @@ async def test_owner_contention_stays_queued_without_completion_or_failure_budge
     retry.assert_not_called()
     complete.assert_not_called()
     dead_letter.assert_not_called()
+    assert len(websocket.sent) == 1  # The queued acknowledgement cannot be overwritten by an immediate retry error.
     assert any(
         b'job_queued' in payload and b'"terminal":false' in payload.replace(b' ', b'') for payload in websocket.sent
     )
@@ -179,6 +180,7 @@ async def test_first_exhaustion_requeue_queues_the_job_and_stays_warning(monkeyp
             dispatch_generation=1,
         )
 
+    assert len(websocket.sent) == 1  # The queued acknowledgement cannot be overwritten by an immediate retry error.
     assert any(
         b'job_queued' in payload and b'"terminal":false' in payload.replace(b' ', b'') for payload in websocket.sent
     )
@@ -230,7 +232,7 @@ async def test_byok_pusher_exhaustion_dead_letters_without_a_requeue(monkeypatch
             dispatch_generation=1,
         )
 
-    grant.assert_called_once_with('job-1', 1, 7, 'processing_failed')
+    grant.assert_called_once_with('job-1', 1, 7, 'deterministic_processing_failed')
     records = [r for r in caplog.records if 'pusher finalization failed' in r.getMessage()]
     assert records and all('terminal=True' in r.getMessage() for r in records)
     assert any(b'"terminal":true' in payload.replace(b' ', b'') for payload in websocket.sent)
@@ -270,3 +272,20 @@ async def test_terminal_byok_failure_keeps_the_warning_downclass(monkeypatch, in
     assert records, 'expected a pusher finalization failure record'
     assert all(r.levelno == logging.WARNING for r in records)
     assert all('terminal=True' in r.getMessage() for r in records)
+
+
+@pytest.mark.anyio
+async def test_retired_go_job_refusal_is_terminal(monkeypatch, inline_run_blocking):
+    monkeypatch.setattr(
+        jobs_db, 'claim_finalization_job', MagicMock(return_value={'status': 'finalization_owned_elsewhere'})
+    )
+    finalize = AsyncMock()
+    monkeypatch.setattr(pusher_finalization, 'finalize_persisted_conversation', finalize)
+    websocket = _PusherWebSocket()
+    await pusher_finalization.process_conversation_task(
+        'uid-1', 'conversation-1', 'en', websocket, finalization_job_id='old-go-job', dispatch_generation=1
+    )
+    finalize.assert_not_awaited()
+    assert len(websocket.sent) == 1
+    assert b'job_finalization_owned_elsewhere' in websocket.sent[0]
+    assert b'"terminal":true' in websocket.sent[0].replace(b' ', b'')

@@ -1,0 +1,13 @@
+{
+  "addition_commit": "44d470e980f19fee32992a9a31e3539b2454cf14",
+  "comparison_base": "0bb9d47e424477fcd185e5d3dd83738dfc49c868",
+  "added": 954,
+  "deleted": 81,
+  "changed": 1035,
+  "files": 119,
+  "localization_added": 205,
+  "localization_deleted": 0,
+  "method": "excludes upstream merges, tests, e2e, UI evidence and render harness; includes source, localizations/generated files, config and docs",
+  "measured_at": "2026-11-10T19:48:59.080825+00:00",
+  "reproduce": "git show --numstat --format= 44d470e980f19fee32992a9a31e3539b2454cf14; exclude test/tests/__tests__/e2e path components, .agent-artifacts/, web/app/scripts/ui-evidence/, and binary rows"
+}

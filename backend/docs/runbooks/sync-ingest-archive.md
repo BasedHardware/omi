@@ -13,8 +13,7 @@ and `AUDIO_ARCHIVE_READ_ENABLED` default **on** as fleet kill switches: the
 original Opus capture is dual-written next to the decoded PCM everywhere, and
 readers prefer it, without a percent cohort. Setting either to `false` is the
 rollback. The remaining phases stay default-off staged rollouts behind their
-enable plus the common deterministic cohort (`AUDIO_ARCHIVE_PERCENT` (0),
-`AUDIO_ARCHIVE_UID_ALLOWLIST` (empty)) — except STOP_PCM and REGIONAL_CACHE,
+enable plus the common deterministic cohort (`AUDIO_ARCHIVE_PERCENT` (0) and injected `audio-archive` Firestore membership) — except STOP_PCM and REGIONAL_CACHE,
 which ramp against their own percent (`AUDIO_ARCHIVE_STOP_PCM_PERCENT`,
 `AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT`) because COALESCE pins the shared
 `AUDIO_ARCHIVE_PERCENT` at 100 fleet-wide:
@@ -27,7 +26,7 @@ which ramp against their own percent (`AUDIO_ARCHIVE_STOP_PCM_PERCENT`,
 | `AUDIO_ARCHIVE_SYNC_ENABLED` | v1/v2 SD/offline uploads archive original file bytes before decode/acceptance; lossy backend Opus chunks become derived renditions. Existing mobile-batch archival remains mandatory. |
 | `AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED` + `AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT` (default off/0) | Route merged/playback caches, sync renditions and new intake staging to `BUCKET_AUDIO_DERIVED`. Canonical raw stays multi-region. Ramps against its own percent (not `AUDIO_ARCHIVE_PERCENT`, which COALESCE pins at 100, or the enable flag would be an instant 100% cutover). |
 | `AUDIO_ARCHIVE_REGIONAL_CHUNKS_PERCENT` (default 0; pusher only; also needs `AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED`) | Route new pusher PCM chunk batches (`chunks/…batch.*`) to `BUCKET_AUDIO_DERIVED`. These are renditions of the canonical raw-live packs, which stay multi-region. Readers list and resolve both buckets; the merge copies inside the chunk's own bucket, deletes sweep both, and the v2 collision check covers both. Before admitting anyone: the derived bucket has no lifecycle `Delete` rule and has soft delete, and the batch worker has `audioDerivedBucket` set with read IAM on that bucket. Otherwise retained-audio references to it are refused. Roll back the percent to 0 and keep `BUCKET_AUDIO_DERIVED` configured. |
-| `AUDIO_ARCHIVE_COALESCE_ENABLED` | Share concurrent identical file rebuild results, including failures; released admission permits retry. Existing fingerprint-named Cloud Tasks and distributed conversation leases still cover cross-instance rebuilds. |
+| COALESCE (always on; `AUDIO_ARCHIVE_COALESCE_ENABLED` retired 2026-11-09) | Share concurrent identical file rebuild results, including failures; released admission permits retry. Existing fingerprint-named Cloud Tasks and distributed conversation leases still cover cross-instance rebuilds. |
 | `AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED` | Route admitted merge tasks to `AUDIO_MERGE_WORKER_URL` (full `/v2/audio-merge-jobs/run` URL). Non-admitted tasks retain `AUDIO_MERGE_HANDLER_URL`. |
 
 Stored-format decode support is permanent, with raw playback gated by READ.
@@ -90,17 +89,15 @@ invoker SA and its endpoint-specific OIDC audience. Configure
 named task before the cohort ramp. Do not enable a worker without runtime-image,
 identity, index-readiness and route qualification.
 
-First deploy this SHA at the prod default memory (6Gi since the 2026-10-24
-costcut promotion; development keeps 8Gi) through GitHub Actions. For a
+First deploy this SHA at the memory limit declared for `backend-sync` in
+`backend/deploy/ops/prod.yaml` through GitHub Actions. For a
 separate memory trial, the lead creates a tagged **no-traffic** revision at
 the trial size from that already-built same-SHA image, routes at most 5% to it
-and waits ≥12h. Only after qualification/full promotion change the prod
-fallback here (or set GitHub environment variable `BACKEND_SYNC_MEMORY`)
-for future deployments; the backend-stack action validates
-`4Gi|5Gi|6Gi|8Gi`. Since the 2026-10-24 costcut, the manual workflow's fallback is `6Gi`
-for prod and `8Gi` for development, and the dev-only deploys (auto-dev) keep the action's
-`8Gi` default. The deployment remains through the existing release admission and
-GitHub Actions workflow. Rollback: redeploy the admitted image at the prior size.
+and waits ≥12h. After qualification, record the production limit in
+`backend/deploy/ops/prod.yaml`. Use the config train to change or restore
+the limit on the serving image. Normal production deployments read the
+same ops value. Development keeps the action's `8Gi` default and the manual
+workflow's `BACKEND_SYNC_MEMORY` override.
 Watch memory peak, OOMs, queue age and retry rate; 4.9 GiB is an observed sample
 peak, not qualification for the largest batch. At 6Gi the 1-min per-instance max was
 4.74 GiB on 2026-10-25 and at most 3.96 GiB from 10-27 to 11-02, so a 5Gi trial

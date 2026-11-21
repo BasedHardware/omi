@@ -1,6 +1,7 @@
 {
   "schema_version": 1,
   "id": "FC-empty-asr-without-evidenced-disposition",
+  "family": "projection-contract",
   "violated_contract": "Empty ASR or words outside a unit's ownership core are not a terminal acoustic verdict: accepted units need strict speech evidence, a bounded fenced recovery, and truthful silence or failure completion.",
   "canonical_prevention": "Use one strict in-memory VAD disposition primitive for fresh recovery and owner-scoped historical repair. Only affirmative no-speech creates silence; speech retains the durable at-most-once provider intent. Preserve closed stage/reason failures and exercise all-sibling client completion and lost-reply replay.",
   "canonical_prevention_artifact": [

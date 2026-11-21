@@ -23,6 +23,7 @@ from testing.lifecycle_sim import listener_faults
 from testing.lifecycle_sim import run as simulator_runner
 from testing.lifecycle_sim.storage import LifecycleBucket
 from testing.lifecycle_sim.producers import CaptureRefused, begin_capture
+from testing.listen_pusher_stack import run as stack_runner
 
 
 @pytest.fixture
@@ -37,6 +38,23 @@ def environment(tmp_path):
 
 def test_preflight_accepts_only_isolated_loopback(environment, tmp_path):
     preflight(tmp_path, environ=environment)
+
+
+def test_isolated_children_bound_numerical_pools_after_dropping_ambient_environment(monkeypatch, tmp_path):
+    limits = (
+        'OMP_NUM_THREADS',
+        'OPENBLAS_NUM_THREADS',
+        'MKL_NUM_THREADS',
+        'VECLIB_MAXIMUM_THREADS',
+        'NUMEXPR_NUM_THREADS',
+        'BLIS_NUM_THREADS',
+    )
+    for key in limits:
+        monkeypatch.setenv(key, '128')
+    monkeypatch.setenv('FIRESTORE_EMULATOR_HOST', '127.0.0.1:8081')
+    monkeypatch.setattr(stack_runner.firestore, 'Client', Mock())
+    child_env = stack_runner.Stack(tmp_path).env
+    assert {key: child_env.get(key) for key in limits} == dict.fromkeys(limits, '1')
 
 
 @pytest.mark.parametrize(
@@ -154,13 +172,21 @@ def test_relative_state_root_has_one_absolute_parent_child_identity(monkeypatch,
 
 @pytest.mark.parametrize('only', [False, True])
 def test_shell_routes_retained_diagnostics_to_its_own_subdirectory(tmp_path, only):
+    """run.sh keeps the lifecycle sim's state and emulator logs under the caller's root.
+
+    The emulator supervisor builds the inner command, so the shell's routing is
+    observed through the `inner:` line it prints. Each attempt is additionally
+    nested under `<state>/attempt-<n>`, so a retry never inherits a half-run
+    lifecycle state; the lifecycle sim still gets its own `lifecycle-sim`
+    subdirectory when the full gauntlet runs.
+    """
     executables = tmp_path / 'bin'
     executables.mkdir()
-    capture = tmp_path / 'firebase-args'
     for name, body in {
         'java': 'exit 0',
-        'node': 'if [ "$#" -eq 2 ]; then printf "%s\\n" 49999; fi',
-        'npx': 'printf "%s\\n" "$@" > "$CAPTURE"',
+        # Firebase never runs the generated inner script here: this test pins
+        # the routing of the command, not the emulator's behaviour.
+        'npx': 'exit 0',
     }.items():
         path = executables / name
         path.write_text('#!/bin/sh\n' + body + '\n')
@@ -169,22 +195,28 @@ def test_shell_routes_retained_diagnostics_to_its_own_subdirectory(tmp_path, onl
     script = Path(__file__).resolve().parents[2] / 'testing/listen_pusher_stack/run.sh'
     command = ['bash', str(script)] + (['--lifecycle-only'] if only else [])
     command += ['--keep', '--state-dir', str(state)]
-    subprocess.run(
+    completed = subprocess.run(
         command,
         env=os.environ
         | {
             'PATH': str(executables) + os.pathsep + os.environ['PATH'],
-            'CAPTURE': str(capture),
             'TMPDIR': str(tmp_path),
         },
-        check=True,
+        capture_output=True,
+        text=True,
+        check=False,
     )
-    final_command = capture.read_text().splitlines()[-1]
-    lifecycle_command = shlex.split(final_command.split('&&')[-1])
+    attempt_state = state / 'attempt-1'
+    inner_lines = [line for line in completed.stdout.splitlines() if ' inner: ' in line]
+    assert len(inner_lines) == 1, completed.stdout + completed.stderr
+    assert '--state-dir' in inner_lines[0]
+    lifecycle_command = shlex.split(inner_lines[0].split(' inner: ', 1)[1].split('&&')[-1])
     assert '--keep' in lifecycle_command
     assert lifecycle_command[lifecycle_command.index('--state-dir') + 1] == str(
-        state if only else state / 'lifecycle-sim'
+        attempt_state if only else attempt_state / 'lifecycle-sim'
     )
+    # Diagnostics stay under the caller's root instead of the emulator's temp dir.
+    assert (state / 'emulator' / 'emulator-attempt-1.log').is_file()
 
 
 def test_age_job_preserves_evidence_and_shifts_numeric_and_datetime_deadlines():

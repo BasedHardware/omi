@@ -130,7 +130,44 @@ def test_enabled_write_requires_real_bindings(enabled):
     bindings = document['environments']['prod']['gke']['pusher']['env']
     bindings['OBJECT_LAKE_WRITE_ENABLED']['value'] = enabled
     bindings['OBJECT_LAKE_WRITE_PERCENT']['value'] = '1'
-    assert len(validator.validate_runtime_binding(document, contract())) == 2
+    errors = validator.validate_runtime_binding(document, contract())
+    assert any('OBJECT_LAKE_WRITE_ENABLED' in error and 'C4 wipe-coverage' in error for error in errors)
+    assert any('OBJECT_LAKE_WRITE_PERCENT' in error and 'C4 wipe-coverage' in error for error in errors)
+    for name in ('BUCKET_OBJECT_LAKE', 'OBJECT_LAKE_KMS_KEY'):
+        assert any(f'enabled writes require a real {name}' in error for error in errors)
+
+
+@pytest.mark.parametrize(
+    'percent,needs_bindings', [('0', False), ('0.0', False), (' 0 ', False), ('0.01', True), ('bad', True)]
+)
+def test_enabled_write_binding_check_parses_percent_numerically(percent, needs_bindings):
+    document = runtime()
+    bindings = document['environments']['dev']['gke']['pusher']['env']
+    bindings['OBJECT_LAKE_WRITE_ENABLED']['value'] = 'true'
+    bindings['OBJECT_LAKE_WRITE_PERCENT']['value'] = percent
+    for name in ('BUCKET_OBJECT_LAKE', 'OBJECT_LAKE_KMS_KEY'):
+        bindings[name]['value'] = ''
+    errors = validator.validate_write_admission('dev', document['environments']['dev'])
+    missing = [error for error in errors if 'enabled writes require a real' in error]
+    assert bool(missing) is needs_bindings
+
+
+@pytest.mark.parametrize('stage', ['dev', 'prod'])
+@pytest.mark.parametrize('plane,service', validator.EXPECTED_SERVICES)
+@pytest.mark.parametrize('enabled,percent', [('true', '0'), ('false', '0.01'), ('true', '100')])
+def test_provisioned_deploy_bindings_allow_dev_but_require_c4_for_prod(stage, plane, service, enabled, percent):
+    document = runtime()
+    env = document['environments'][stage][plane]
+    bindings = (env['services'] if plane == 'cloud_run' else env)[service]['env']
+    bindings['BUCKET_OBJECT_LAKE']['value'] = 'bound-lake'
+    bindings['OBJECT_LAKE_KMS_KEY']['value'] = 'projects/p/locations/l/keyRings/r/cryptoKeys/k'
+    bindings['OBJECT_LAKE_WRITE_ENABLED']['value'] = enabled
+    bindings['OBJECT_LAKE_WRITE_PERCENT']['value'] = percent
+    errors = validator.validate_runtime_binding(document, contract())
+    if stage == 'dev':
+        assert errors == []
+    else:
+        assert any('C4 wipe-coverage' in error for error in errors)
 
 
 def test_validator_cli_is_offline_by_default_and_rejects_mutations(tmp_path):

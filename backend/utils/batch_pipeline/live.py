@@ -12,6 +12,7 @@ from typing import Any
 import hashlib
 import json
 import logging
+import math
 import os
 import random
 import time
@@ -20,13 +21,28 @@ from utils.conversations import phase_shadow
 
 from config.policy import resolve_batch_policy
 from config.audio_archive import derived_audio_bucket
-from config.record_audio import require_record_audio_barrier, record_identity
+from config.record_audio import BARRIER_NOT_CLOSED, require_record_audio_barrier, record_identity
 from config.record_partial import UNIT_SECONDS, UNIT_REFERENCES, INVENTORY_POLL_SECONDS
-from config.record_drain import record_drain_batch, record_drain_concurrency, record_drain_lease_seconds
+from config.record_latency import record_seal_wake_preserved_enabled
+from config.record_drain import (
+    record_drain_batch,
+    record_drain_concurrency,
+    record_drain_lease_seconds,
+    record_drain_privacy_defer_seconds,
+    record_drain_idle_without_progress_enabled,
+    barrier_retry_delay,
+    record_drain_barrier_backoff_enabled,
+)
 from database.batch_pipeline_policy import load_job_policy
 from database.batch_ramp import ramp_admission_policy
-from config.batch_pipeline import Priority, RecordOwnerContention, record_capture_eligible
-from database.conversations import claim_record_lane_owner
+from config.batch_pipeline import (
+    Priority,
+    RecordOwnerContention,
+    record_capture_eligible,
+    batch_held_dead_letter_enabled,
+    RECORD_DEAD_LETTER_SECONDS,
+)
+from database.conversations import claim_record_lane_owner, is_soft_deleted
 from utils.batch_pipeline.record_provider import admit_record_units
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
 from database.batch_pipeline_store import FirestoreStore
@@ -40,6 +56,7 @@ from utils.batch_pipeline.record_language import prove_manifest
 from utils.batch_pipeline.language_receipt import admission as language_admission_receipt
 from utils.batch_pipeline.record_partial import drain_partial, record_failure as record_partial_failure
 from config.record_seal_rules import overlap_trim_enabled
+from config.record_seal_repair import fresh_enabled as fresh_seal_repair_enabled
 from utils.executors import db_executor, storage_executor, run_blocking
 from utils.other.local_storage import create_storage_client
 from utils.other.storage import list_audio_chunks, private_cloud_sync_bucket
@@ -55,7 +72,7 @@ _RETRY_REASONS = frozenset(
     {
         'audio staging reservation missing or reclaimed',
         'capture upload barrier changed during staging',
-        'capture upload/finalization barrier not closed',
+        BARRIER_NOT_CLOSED,
         'complete ordered sibling set must match immutable projection binding',
         'conflicting retained audio overlap',
         'existing segment cannot change its immutable intake binding',
@@ -93,10 +110,52 @@ def _retry_reason(error: BaseException) -> str:
     return text.replace(' ', '_').replace('/', '_') if text in _RETRY_REASONS else 'other'
 
 
+BATCH_LEDGER_OWNERS = frozenset({OWNER, 'batch_sync_v1'})
+
+
+def observe_admitted(uid: str, conversation: dict, *, now=None) -> bool:
+    """Fail-open C1 admission: the capture entered the in-flight ledger.
+
+    The row is created at the durable admission that gives this capture a batch
+    owner, so the census gets a denominator row even when the capture never
+    reaches a later stage. A later repair that admits after the seal already
+    wrote ``sealed`` keeps that forward stage: the ledger is forward-only and
+    refuses the rewind. A reconnect or finalizer replay can only produce a
+    duplicate, a forward refusal, or an illegal-transition refusal; never a
+    second admission. A deleted capture gets no row, matching the seal's fence.
+    """
+    capture_id = conversation.get('id')
+    if not isinstance(capture_id, str) or not capture_id or conversation.get('deleted'):
+        return False
+    try:
+        from database import pipeline_ledger
+        from database._client import get_firestore_client
+
+        client = get_firestore_client()
+        owner_ref = client.collection('users').document(uid)
+        source_ref = owner_ref.collection('conversations').document(capture_id)
+        return pipeline_ledger.advance(
+            uid,
+            capture_id,
+            pipeline_ledger.CAPTURING,
+            now=time.time() if now is None else now,
+            source_ref=source_ref,
+            owner_ref=owner_ref,
+            firestore_client=client,
+        )
+    except Exception as error:  # The real admission is already authoritative.
+        logger.warning('event=batch_live_ledger outcome=error stage=capturing exception_type=%s', type(error).__name__)
+        return False
+
+
 def reserve_recording(uid: str, conversation: dict) -> str | None:
     """Cover captures already in progress at enablement, before legacy admission."""
     owner = conversation.get('record_lane_owner')
     if owner:
+        # A lane claimed on a streaming path is still an admission; the writer is
+        # idempotent, and a sealed or later row keeps its forward stage.
+        if owner in BATCH_LEDGER_OWNERS:
+            observe_admitted(uid, conversation)
         return owner
     policy = resolve_batch_policy(uid)
     if conversation.get('status') not in {'in_progress', 'processing'} or not record_capture_eligible(
@@ -109,17 +168,25 @@ def reserve_recording(uid: str, conversation: dict) -> str | None:
     if revision is None:
         raise RecordOwnerContention('record route snapshot changed')
     conversation.update(record_lane_owner=OWNER, updated_at=revision)
+    observe_admitted(uid, conversation)
     return OWNER
 
 
 def register_recording(
-    uid: str, conversation: dict, *, store=None, now=None, transaction=None, server_flags=None
+    uid: str, conversation: dict, *, store=None, now=None, transaction=None, server_flags=None, restoring: bool = False
 ) -> bool:
     if conversation.get('record_lane_owner') != OWNER:
         return False
     if server_batch_owned(conversation) and not server_batch_has_audio(conversation):
         return False
-    if conversation.get('deleted') or conversation.get('discarded') or conversation.get('uses_custom_stt'):
+    if conversation.get('deleted') or conversation.get('uses_custom_stt'):
+        return False
+    # Only explicit register-first restore may cross the discard fence. Use
+    # restore's tombstone predicate and also refuse a merged-away donor.
+    if restoring:
+        if is_soft_deleted(conversation) or conversation.get('sync_merged_into'):
+            return False
+    elif conversation.get('discarded'):
         return False
     if not conversation.get('private_cloud_sync_enabled'):
         return False
@@ -174,6 +241,7 @@ def register_recording(
                 'policy': policy.to_dict(),
                 'policy_source': 'admission',
                 'merge_pending': False,
+                **({'registration_origin': 'restore'} if restoring else {}),
             },
         )
         return True
@@ -217,6 +285,22 @@ def retained_record_units(
         comparison_pcm = pcm
         source_digest = hashlib.sha256(pcm).hexdigest()
         source_skip = 0
+        raw_offset = chunk.get('raw_offset_samples')
+        if raw_offset is not None:
+            # A listed raw fragment selects its own samples from the unchanged
+            # pack. A gapped pack yields one fragment per contiguous run, so
+            # reading the whole pack for every fragment would duplicate audio
+            # and close the writer's gaps.
+            count = int((chunk.get('span') or {}).get('samples', 0))
+            if count <= 0:
+                raise ValueError('raw fragment has no sample span')
+            source_skip = int(raw_offset)
+            pcm = pcm[source_skip * 2 : (source_skip + count) * 2]
+            if len(pcm) != count * 2:
+                raise ValueError('raw fragment exceeds its source pack')
+            # The next overlap compares against this fragment's tail, not the
+            # whole pack the fragment was selected from.
+            comparison_pcm = pcm
         capture = float(chunk['timestamp'])
         if capture_origin is None:
             capture_origin = capture
@@ -239,7 +323,7 @@ def retained_record_units(
                 raise ValueError('conflicting retained audio overlap')
             if divergent and diagnostics is not None:
                 diagnostics['trimmed_divergent_overlaps'] = diagnostics.get('trimmed_divergent_overlaps', 0) + 1
-            source_skip = overlap // 2
+            source_skip = source_skip + overlap // 2
             pcm, capture = pcm[overlap:], end
             if not pcm:
                 continue
@@ -459,7 +543,7 @@ async def admit_recording(store, pending, *, now=None, provider_outbox_factory=N
     )
 
 
-async def drain_recordings(store, *, provider_outbox_factory=None) -> bool:
+async def drain_recordings(store, *, provider_outbox_factory=None, metrics=None) -> bool:
     """Drain one bounded pass; return whether a full page warrants another."""
     started = time.monotonic()
     batch_size = record_drain_batch()
@@ -467,6 +551,10 @@ async def drain_recordings(store, *, provider_outbox_factory=None) -> bool:
     lease_seconds = record_drain_lease_seconds()
     segments, partial_count = [], 0
     privacy_blocked = False
+    # Rows this pass actually admitted. A full page of deferred/failed rows (for
+    # example captures still behind their upload barrier) made no progress, so
+    # rescanning at once only re-reads it (2026-11-07: store:due 4x in 30 min).
+    admitted = 0
     # Every admission rewrites the owner's scheduler row, so two local workers
     # admitting one owner only exhaust each other's contention retries. Leave
     # the busy owner's other rows due for the next pass instead.
@@ -486,14 +574,29 @@ async def drain_recordings(store, *, provider_outbox_factory=None) -> bool:
                 lease = await run_blocking(db_executor, store.run, lambda tx: claim(tx, segment))
             except BatchPrivacyBlocked:
                 # The claim write meets the same privacy fence as admission;
-                # erasure owns the row and this worker moves on.
-                privacy_blocked = True
+                # erasure owns the row and this worker moves on. A fence-exempt
+                # available_at-only defer takes it off the oldest page, so the
+                # rows behind it are not starved; an undeferred row stays due.
+                privacy_blocked = not await defer_privacy_blocked(segment) or privacy_blocked
                 return
             if lease is None:
                 return
             await admit_and_defer(segment, pending, lease)
         finally:
             busy_owners.discard(owner)
+
+    async def defer_privacy_blocked(segment):
+        delay = record_drain_privacy_defer_seconds()
+        if not delay:
+            return False
+        now = time.time()
+        try:
+            return await run_blocking(db_executor, store.defer_privacy_blocked_record, segment, now + delay, now)
+        except Exception as error:
+            logger.warning(
+                'event=batch_live_admission outcome=privacy_defer_failed exception_type=%s', type(error).__name__
+            )
+            return False
 
     def claim(tx, segment):
         # Every replica selects the same oldest page. Without a claim, each one
@@ -507,13 +610,15 @@ async def drain_recordings(store, *, provider_outbox_factory=None) -> bool:
             return None
         lease = now + lease_seconds
         latest['available_at'] = lease
+        latest['record_intake_claimed_at'] = now
+        latest.pop('record_intake_retry_at', None)
         tx.put('jobs', segment, latest)
         return lease
 
     async def admit_and_defer(segment, pending, lease):
-        nonlocal partial_count, privacy_blocked
+        nonlocal partial_count, privacy_blocked, admitted
         partial_count += bool(pending.get('partial_coordinator'))
-        failed = False
+        failed = barrier_open = False
         try:
             if provider_outbox_factory is None:
                 await admit_recording(store, pending)
@@ -528,13 +633,16 @@ async def drain_recordings(store, *, provider_outbox_factory=None) -> bool:
             return
         except Exception as error:
             failed = True
+            barrier_open = isinstance(error, ValueError) and str(error) == BARRIER_NOT_CLOSED
             if pending.get('partial_coordinator'):
                 record_partial_failure(error, run=pending.get('partial_run'))
             logger.warning(
-                'event=batch_live_admission outcome=retry exception_type=%s reason=%s tables=%s',
+                'event=batch_live_admission outcome=retry exception_type=%s reason=%s tables=%s record=%s',
                 type(error).__name__,
                 _retry_reason(error),
                 getattr(error, 'store_tables', 'n/a'),
+                # Same one-way key as the sync pending line (record content hash prefix), so the two join.
+                str(pending.get('record_content_id') or '-')[:16],
             )
 
         def defer(tx):
@@ -543,17 +651,65 @@ async def drain_recordings(store, *, provider_outbox_factory=None) -> bool:
             # so a no-op cannot monopolize every immediately repeated pass,
             # and never overwrite a concurrently admitted row.
             latest = tx.get('jobs', segment)
-            if latest.get('state') == 'record_pending':
-                delay = 60
-                if not failed and (latest.get('partial_run') or {}).get('complete'):
-                    delay = INVENTORY_POLL_SECONDS
-                # Our own lease ends now; a later deferral written during
-                # admission (or another replica's newer lease) is kept.
-                current = latest.get('available_at', 0)
-                latest['available_at'] = max(0 if current == lease else current, time.time() + delay)
-                tx.put('jobs', segment, latest)
+            if latest.get('state') != 'record_pending':
+                # The row left record_pending: it was admitted (by us or a peer). A
+                # peer's dead-letter is not an admission, so it is not progress.
+                return latest.get('state') != 'dead', False
+            now = time.time()
+            expired = False
+            if barrier_open and latest.get('available_at') == lease and batch_held_dead_letter_enabled():
+                deadline = latest.get('record_dead_letter_deadline_at')
+                if deadline is None:
+                    latest['record_dead_letter_deadline_at'] = now + RECORD_DEAD_LETTER_SECONDS
+                elif (
+                    not isinstance(deadline, bool)
+                    and isinstance(deadline, (int, float))
+                    and math.isfinite(deadline)
+                    and deadline <= now
+                ):
+                    latest.update(
+                        state='dead',
+                        merge_pending=False,
+                        dead_letter_reason='record_barrier_aged',
+                        record_dead_letter_at=now,
+                    )
+                    expired = True
+            delay = 60
+            if not failed and (latest.get('partial_run') or {}).get('complete'):
+                delay = INVENTORY_POLL_SECONDS
+            elif barrier_open and record_drain_barrier_backoff_enabled():
+                # The capture is not finalized yet: back off by how long it has waited.
+                enqueued = latest.get('enqueued_at')
+                age = (
+                    max(0.0, now - enqueued)
+                    if not isinstance(enqueued, bool) and isinstance(enqueued, (int, float)) and math.isfinite(enqueued)
+                    else 0.0
+                )
+                delay = barrier_retry_delay(age)
+            # Our own lease ends now; a later deferral written during
+            # admission (or another replica's newer lease) is kept.
+            current = latest.get('available_at', 0)
+            if record_seal_wake_preserved_enabled() and current != lease and current <= now:
+                # A seal committed a due-now wake after our barrier read.
+                # Its wake wins over this stale attempt's 60/900/3600s defer.
+                return False, expired
+            latest['available_at'] = max(0 if current == lease else current, now + delay)
+            if current == lease and fresh_seal_repair_enabled() and batch_held_dead_letter_enabled():
+                # Certify this exact value as a retry, not an active claim.
+                # Claiming changes available_at, so even an older replica that
+                # does not know this marker invalidates it automatically.
+                latest['record_intake_retry_at'] = latest['available_at']
+            tx.put('jobs', segment, latest)
+            return False, expired
 
-        await run_blocking(db_executor, store.run, defer)
+        # Progress means the row actually left record_pending; a normal return can be a
+        # no-op (an unchanged partial inventory poll), which must not count. The
+        # dead-letter verdict rides the same transaction but is not progress.
+        progressed, expired = await run_blocking(db_executor, store.run, defer)
+        if progressed:
+            admitted += 1
+        if expired and metrics is not None:
+            metrics.record_dead_letter.inc()
 
     async def worker():
         # next() has no await: each selected row belongs to one local worker.
@@ -575,7 +731,8 @@ async def drain_recordings(store, *, provider_outbox_factory=None) -> bool:
         for result in results:
             if isinstance(result, BaseException):
                 raise result
-        return len(segments) == batch_size and not privacy_blocked
+        progressed = admitted > 0 or not record_drain_idle_without_progress_enabled()
+        return len(segments) == batch_size and not privacy_blocked and progressed
     finally:
         logger.info(
             'event=batch_drain_pass row_count=%s partial_count=%s seconds=%.3f',

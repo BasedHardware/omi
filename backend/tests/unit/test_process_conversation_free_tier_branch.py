@@ -17,7 +17,7 @@ from types import ModuleType, SimpleNamespace
 
 from typing import Any
 
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -687,16 +687,22 @@ def _capture_all_persists(monkeypatch, pc, *, store: Any = None, path: Any = Non
 
 def _drive_reprocess(pc, conversation: Any, uid: str = 'paid-uid') -> Any:
     """Exact kwargs the reprocess route passes (routers/conversations.py:495);
-    the derived bundle is captured, never run."""
-    return pc.process_conversation(
-        uid,
-        'en',
-        conversation,
-        trigger=pc.ProcessingTrigger.USER_REPROCESS,
-        persistence_observer=lambda _owned: None,
-        defer_derived_effects=True,
-        derived_effects_observer=lambda _runner: None,
-    )
+    the derived bundle is captured, never run. The route's re-read of the stored row is
+    answered from the conversation under test; persists here never reach a real store."""
+    with patch.multiple(
+        pc,
+        _current_user_reprocess_conversation=lambda _uid, _conversation_id: {},
+        deserialize_conversation=lambda _row: conversation,
+    ):
+        return pc.process_conversation(
+            uid,
+            'en',
+            conversation,
+            trigger=pc.ProcessingTrigger.USER_REPROCESS,
+            persistence_observer=lambda _owned: None,
+            defer_derived_effects=True,
+            derived_effects_observer=lambda _runner: None,
+        )
 
 
 def _omi_create() -> CreateConversation:
@@ -880,7 +886,8 @@ async def test_finalizer_summary_vector_requires_winning_claim(monkeypatch, pc, 
     async def inline(_executor, func, *args, **kwargs):
         return func(*args, **kwargs)
 
-    def claim(*args):
+    def claim(*args, expected_discarded=False):
+        assert expected_discarded is (mode == 'discarded_replay')
         events.append('claim')
         return {'status': claim_status, 'fanout_key': 'key'}
 
@@ -1025,6 +1032,36 @@ def test_silent_backfill_persists_summary_and_never_schedules_derived_work(monke
     )
     assert payloads and payloads[-1][pc.TERMINAL_NO_DERIVED_EFFECTS_FIELD] is True
     assert not bundle
+    assert disposition[-1] is pc.DerivedEffectsDisposition.TERMINAL_NO_DERIVED_EFFECTS
+    for key in ['extract_memories', 'extract_memories_inner', 'trigger_apps', 'assign_folder']:
+        spies[key].assert_not_called()
+    submitted.assert_not_called()
+
+
+def test_v3_backfilled_window_takes_the_live_notes_trigger_but_no_derived_effects(monkeypatch, pc):
+    """A v3 backfill window is processed like live capture (same trigger into notes) yet stays silent."""
+    monkeypatch.setattr(pc.funded_processing, 'enabled', lambda *_: False)
+    spies = _spy_managed_effects(monkeypatch, pc)
+    spies['get_structured'].return_value = (Structured(title='Derived', overview='Synthetic complete summary'), False)
+    _stub_completed_for_normal_path(monkeypatch, pc)
+    payloads = _capture_all_persists(monkeypatch, pc)
+    disposition = []
+    submitted = MagicMock(side_effect=AssertionError('historical work must stay silent'))
+    monkeypatch.setattr(pc, 'submit_with_context', submitted)
+    # As inside service._process: the v3 summary writer fence is held by the drain.
+    monkeypatch.setattr(pc.v3_service.fence, 'current', lambda: True)
+    window = _existing_desktop().model_copy(
+        update={'source': ConversationSource.omi, 'v3_derived': True, 'backfilled': True}
+    )
+    pc.process_conversation(
+        'uid',
+        'en',
+        window,
+        trigger=pc.ProcessingTrigger.CAPTURE_END,
+        derived_effects_disposition_observer=disposition.append,
+    )
+    assert spies['get_structured'].call_args.kwargs['trigger'] is pc.ProcessingTrigger.CAPTURE_END
+    assert payloads and payloads[-1][pc.TERMINAL_NO_DERIVED_EFFECTS_FIELD] is True
     assert disposition[-1] is pc.DerivedEffectsDisposition.TERMINAL_NO_DERIVED_EFFECTS
     for key in ['extract_memories', 'extract_memories_inner', 'trigger_apps', 'assign_folder']:
         spies[key].assert_not_called()

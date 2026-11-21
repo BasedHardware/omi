@@ -21,6 +21,7 @@ from database.jobstore.connection import Pool
 from database.cells._validation import validate_address, validate_document, validate_id
 from database.cells.feed import Feed
 from database.cells.purge import Purge
+from database.cells.purge import lock_writable_space
 from database.cells.receipts import Receipts
 
 T = TypeVar('T')
@@ -86,6 +87,26 @@ class CellTransaction:
             if (mutation.entity, mutation.entity_id) == (entity, entity_id):
                 return deepcopy(mutation.doc) if mutation.doc is not None else {}
         return deepcopy(row[1]) if row is not None else {}
+
+    def get_with_rev(self, entity: str, entity_id: str) -> tuple[int, dict[str, Any]] | None:
+        validate_address(entity, entity_id)
+        return deepcopy(self._lock_read(entity, entity_id))
+
+    def receipt_seq(self, client_mutation_id: str) -> int | None:
+        if not client_mutation_id or '\x00' in client_mutation_id:
+            raise ValueError('client_mutation_id must be nonempty without NUL')
+        row = self.conn.execute(
+            'SELECT seq FROM mutation_receipts WHERE space_id=%s AND client_mutation_id=%s',
+            (self.space_id, client_mutation_id),
+        ).fetchone()
+        return row[0] if row else None
+
+    def seq_as_of(self, entity: str, entity_id: str, ts: float) -> int | None:
+        validate_address(entity, entity_id)
+        return self.conn.execute(
+            'SELECT max(seq) FROM change_log ' 'WHERE space_id=%s AND entity=%s AND entity_id=%s AND committed_at<=%s',
+            (self.space_id, entity, entity_id, ts),
+        ).fetchone()[0]
 
     def _buffer(
         self,
@@ -165,6 +186,14 @@ class CellTransaction:
         )
 
     def flush(self) -> dict[str, int]:
+        if self.mutations:
+            # Match body reads (including typed adapters): document/missing-key
+            # locks first, then the admission/sequence head through commit. Lock
+            # buffered-only writes too, before replay checks take the head.
+            for address in sorted({(m.entity, m.entity_id) for m in self.mutations}):
+                self._lock_read(*address)
+            # Also guard replay-only writes; no implicit enrollment on this path.
+            lock_writable_space(self.conn, self.space_id)
         ids = [m.client_mutation_id for m in self.mutations if m.client_mutation_id is not None]
         receipts = {}
         if ids:
@@ -206,12 +235,18 @@ class CellTransaction:
         if not pending:
             return replayed
         count = len(pending)
-        head, _epoch = self.conn.execute(
-            'INSERT INTO space_heads (space_id, next_seq, epoch, updated_at) VALUES (%s,%s,1,%s) '
-            'ON CONFLICT (space_id) DO UPDATE SET next_seq=space_heads.next_seq+%s, '
-            'updated_at=EXCLUDED.updated_at RETURNING next_seq, epoch',
-            (self.space_id, count, self.now, count),
+        # flush already owns the space-head lock. Sample the database clock here,
+        # after contention, and advance monotonically even if that clock recedes.
+        # Caller `now` remains event/retention time, never revision authority.
+        head, _epoch, revision_us = self.conn.execute(
+            'UPDATE space_heads SET next_seq=next_seq+%s, updated_at=%s, '
+            'revision_us=greatest((extract(epoch FROM clock_timestamp())*1000000)::bigint, revision_us+1) '
+            'WHERE space_id=%s AND NOT tombstoned RETURNING next_seq, epoch, revision_us',
+            (count, self.now, self.space_id),
         ).fetchone()
+        # Integer microseconds round-trip through datetime tokens without
+        # accumulating floating-point drift during logical clock advances.
+        committed_at = revision_us / 1_000_000
         for seq, address in enumerate(sorted(pending), head - count + 1):
             mutation = pending[address]
             if mutation.doc is None:
@@ -224,11 +259,12 @@ class CellTransaction:
                     'VALUES (%s,%s,%s,%s,%s,%s::jsonb,%s) ON CONFLICT (space_id, entity, entity_id) DO UPDATE '
                     'SET author_id=EXCLUDED.author_id, rev=EXCLUDED.rev, doc=EXCLUDED.doc, '
                     'updated_at=EXCLUDED.updated_at',
-                    (self.space_id, *address, mutation.author_uid, seq, dumps(mutation.doc), self.now),
+                    (self.space_id, *address, mutation.author_uid, seq, dumps(mutation.doc), committed_at),
                 )
             self.conn.execute(
                 'INSERT INTO change_log (space_id, seq, entity, entity_id, op, rev, actor_uid, '
-                'client_mutation_id, fingerprint, feed, ts) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)',
+                'client_mutation_id, fingerprint, feed, ts, committed_at) '
+                'VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)',
                 (
                     self.space_id,
                     seq,
@@ -240,6 +276,7 @@ class CellTransaction:
                     mutation.fingerprint,
                     mutation.feed,
                     self.now,
+                    committed_at,
                 ),
             )
             if mutation.client_mutation_id is not None:
@@ -254,6 +291,17 @@ class CellTransaction:
 class CellStore(Feed, Purge, Receipts):
     def __init__(self, pool: Pool):
         self.pool = pool
+
+    def enroll_space(self, space_id: str, *, now: float) -> None:
+        """Enrollment/backfill only. Never revive a previously wiped identity."""
+        validate_id(space_id)
+        with self.pool.connection() as conn, conn.transaction():
+            conn.execute(
+                'INSERT INTO space_heads (space_id, next_seq, epoch, updated_at) VALUES (%s,0,1,%s) '
+                'ON CONFLICT (space_id) DO NOTHING',
+                (space_id, now),
+            )
+            lock_writable_space(conn, space_id)
 
     def run(self, space_id: str, body: Callable[[CellTransaction], T], *, actor_uid: str, now: float) -> RunResult[T]:
         validate_id(space_id)
@@ -298,10 +346,9 @@ class CellStore(Feed, Purge, Receipts):
 
     def bump_epoch(self, space_id: str, *, now: float) -> int:
         validate_id(space_id)
-        with self.pool.connection() as conn:
+        with self.pool.connection() as conn, conn.transaction():
+            lock_writable_space(conn, space_id)
             return conn.execute(
-                'INSERT INTO space_heads (space_id, next_seq, epoch, updated_at) VALUES (%s,0,1,%s) '
-                'ON CONFLICT (space_id) DO UPDATE SET epoch=space_heads.epoch+1, updated_at=EXCLUDED.updated_at '
-                'RETURNING epoch',
-                (space_id, now),
+                'UPDATE space_heads SET epoch=epoch+1, updated_at=%s WHERE space_id=%s RETURNING epoch',
+                (now, space_id),
             ).fetchone()[0]

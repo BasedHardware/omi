@@ -3,6 +3,7 @@
 import copy
 import json
 import runpy
+import sys
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -142,6 +143,71 @@ def test_split_mismatch_duplicate_and_prod_only_fail_closed(provisioner, tmp_pat
 
 def test_actual_source_exports_match(provisioner):
     assert provisioner.load_rules(provisioner.RULES)
+
+
+def _source_tree(tmp_path, rules):
+    path = tmp_path / 'alert-rules.json'
+    (tmp_path / 'alerts').mkdir()
+    path.write_text(json.dumps(rules))
+    for item in rules:
+        (tmp_path / 'alerts' / f"{item['uid']}.json").write_text(json.dumps([item]))
+    return path
+
+
+@pytest.mark.parametrize(
+    'window',
+    [
+        {'from': 0, 'to': 0},
+        {'from': 900, 'to': 900},
+        {'from': 0, 'to': 900},
+        {'from': 900},
+        {},
+        None,
+        {'from': '900', 'to': 0},
+        {'from': True, 'to': 0},
+    ],
+)
+def test_datasource_query_with_an_empty_or_invalid_relative_range_fails_before_provisioning(
+    provisioner, tmp_path, window
+):
+    """Grafana rejects these windows with "invalid relative time range" (SCA-2055)."""
+    broken = {
+        **rule(),
+        'data': [
+            {'refId': 'A', 'datasourceUid': 'prometheus', 'relativeTimeRange': window},
+            {'refId': 'B', 'datasourceUid': '__expr__', 'relativeTimeRange': {'from': 0, 'to': 0}},
+        ],
+    }
+    with pytest.raises(ValueError, match='relative time range'):
+        provisioner.load_rules(_source_tree(tmp_path, [broken]))
+
+
+def test_expression_queries_keep_the_zero_window_and_datasource_queries_accept_a_past_window(provisioner, tmp_path):
+    valid = {
+        **rule(),
+        'data': [
+            {'refId': 'A', 'datasourceUid': 'prometheus', 'relativeTimeRange': {'from': 900, 'to': 0}},
+            {'refId': 'B', 'datasourceUid': 'gmp-cloud-run', 'relativeTimeRange': {'from': 300, 'to': 0}},
+            {'refId': 'C', 'datasourceUid': '__expr__', 'relativeTimeRange': {'from': 0, 'to': 0}},
+            {'refId': 'D', 'datasourceUid': '-100', 'relativeTimeRange': {'from': 0, 'to': 0}},
+        ],
+    }
+    assert list(provisioner.load_rules(_source_tree(tmp_path, [valid]))) == ['example']
+
+
+def test_invalid_window_fails_before_the_provisioner_touches_grafana(provisioner, tmp_path, monkeypatch):
+    broken = {
+        **rule(),
+        'data': [{'refId': 'A', 'datasourceUid': 'prometheus', 'relativeTimeRange': {'from': 0, 'to': 0}}],
+    }
+    path = _source_tree(tmp_path, [broken])
+
+    def refuse(*_args, **_kwargs):
+        raise AssertionError('provisioner reached Grafana')
+
+    monkeypatch.setattr(provisioner, 'Grafana', refuse)
+    monkeypatch.setattr(sys, 'argv', ['provision_monitoring_alerts.py', '--rules', str(path), '--lint'])
+    assert provisioner.main() == 1
 
 
 @pytest.mark.parametrize(
@@ -298,6 +364,40 @@ def test_grafana13_readback_defaults_are_not_drift(provisioner):
     assert provisioner.definition(desired)['notification_settings']['repeat_interval'] == '24h'
 
 
+def test_empty_mute_time_intervals_readback_is_not_drift(provisioner):
+    # Measured on omi-pipeline-projection-drain-stall after the 2026-11-18 prod
+    # run: Grafana drops the empty list on save and re-renders 24h as 1d.
+    desired = {
+        'uid': 'omi-pipeline-projection-drain-stall',
+        'notification_settings': {
+            'receiver': 'Omi - Services Alerting (Telegram)',
+            'repeat_interval': '24h',
+            'mute_time_intervals': [],
+        },
+    }
+    live = {
+        'uid': 'omi-pipeline-projection-drain-stall',
+        'notification_settings': {
+            'receiver': 'Omi - Services Alerting (Telegram)',
+            'repeat_interval': '1d',
+        },
+    }
+    assert provisioner.comparable(desired) == provisioner.comparable(live)
+    # Only comparison drops the empty list; the write payload keeps it.
+    assert provisioner.definition(desired)['notification_settings']['mute_time_intervals'] == []
+
+
+def test_empty_notification_lists_are_absent_but_nonempty_lists_still_drift(provisioner):
+    base = {'uid': 'r', 'notification_settings': {'receiver': 'x'}}
+    for key in ('group_by', 'mute_time_intervals', 'active_time_intervals'):
+        assert provisioner.comparable({**base, 'notification_settings': {'receiver': 'x', key: []}}) == (
+            provisioner.comparable(base)
+        )
+        assert provisioner.comparable({**base, 'notification_settings': {'receiver': 'x', key: ['a']}}) != (
+            provisioner.comparable(base)
+        )
+
+
 def test_readback_still_reports_semantic_changes(provisioner):
     base = {'uid': 'r', 'execErrState': 'KeepLast', 'data': [{'refId': 'A', 'model': {'intervalMs': 30000}}]}
     assert provisioner.comparable(base) != provisioner.comparable(dict(base, execErrState='Error'))
@@ -323,3 +423,62 @@ def test_regenerate_is_offline_preserves_order_and_rejects_duplicate_sources(pro
     with pytest.raises(ValueError, match='duplicate'):
         provisioner.regenerate_export(path)
     assert path.read_bytes() == first
+
+
+@pytest.mark.parametrize(
+    'uid,location,key,value,expected',
+    [
+        ('omi-redis-cache-conn-page', 'labels', 'paging_target', 'other', 'invalid paging_target'),
+        ('omi-redis-cache-conn-page', 'notification_settings', 'receiver', 'Telegram', 'unexpected notification'),
+        (
+            'omi-redis-cache-conn-warn',
+            'notification_settings',
+            'receiver',
+            'Omi - Redis phone wake',
+            'unexpected notification',
+        ),
+    ],
+)
+def test_split_and_combined_reject_wrong_redis_route(provisioner, tmp_path, uid, location, key, value, expected):
+    rules = [copy.deepcopy(provisioner.load_rules(provisioner.RULES)[uid])]
+    rules[0][location][key] = value
+    split = tmp_path / 'alerts'
+    split.mkdir()
+    (split / 'resilience.json').write_text(json.dumps(rules))
+    combined = tmp_path / 'alert-rules.json'
+    combined.write_text(json.dumps(rules))
+    with pytest.raises(ValueError, match=expected):
+        provisioner.load_rules(combined)
+
+
+def test_redis_promtool_exercises_the_committed_instant_query(provisioner):
+    import yaml
+
+    rule = provisioner.load_rules(provisioner.RULES)[provisioner.REDIS_PAGER_UID]
+    query, _, threshold = rule['data']
+    assert query['datasourceUid'] == 'prometheus' and query['model']['instant'] is True
+    assert rule['condition'] == threshold['refId'] and rule['for'] == '5m'
+    assert threshold['model']['conditions'][0]['evaluator'] == {'type': 'gt', 'params': [0]}
+    assert rule['noDataState'] == 'KeepLast'
+    paging = provisioner.ROOT / 'backend/paging'
+    fixture = yaml.safe_load((paging / 'redis-probe.test.yml').read_text())
+    manifest = yaml.safe_load((paging / 'release.yaml').read_text())
+    assert {' '.join(test['expr'].split()) for case in fixture['tests'] for test in case['promql_expr_test']} == {
+        ' '.join(query['model']['expr'].split()),
+        ' '.join(manifest['redisProbe']['scrape']['healthQuery'].split()),
+    }
+
+
+def test_bulk_apply_preserves_live_redis_pilot(provisioner, tmp_path):
+    uid = provisioner.REDIS_PAGER_UID
+    candidate = provisioner.load_rules(provisioner.RULES)[uid]
+    previous = rule(uid)
+    api = FakeGrafana({uid: previous, 'example': rule()})
+    desired = {uid: candidate, 'example': rule() | {'title': 'new'}}
+    backup = tmp_path / 'backup.json'
+
+    assert provisioner.reconcile(api, {uid: candidate, 'example': rule()}) == []
+    assert provisioner.reconcile(api, desired, backup=backup) == []
+    assert len(api.writes) == 1
+    assert api.writes[0][1] == provisioner.API + '/example'
+    assert api.live[uid] == previous

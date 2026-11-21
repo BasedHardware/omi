@@ -29,6 +29,8 @@ def world(monkeypatch):
     monkeypatch.delenv('PUSHER_PROJECTION_DEBT_DURABLE_ENABLED', raising=False)
     monkeypatch.setattr(projection.record_projection_rebuild, 'mark_due', MagicMock())
     monkeypatch.setattr(projection.record_projection_rebuild, 'mark_many', MagicMock())
+    # Cold rebuilds now check privacy before discovering any original audio.
+    monkeypatch.setattr(projection.record_projection_rebuild, 'preflight_projection', MagicMock(return_value=True))
     monkeypatch.delenv('BUCKET_AUDIO_DERIVED', raising=False)
     monkeypatch.setattr(projection.audio_archive, 'admitted', lambda *_: False)
     monkeypatch.setattr(projection, 'time', SimpleNamespace(monotonic=lambda: clock[0]))
@@ -199,7 +201,7 @@ def test_kill_switch_keeps_listing_while_archive_recomputes_overlays(world, monk
         monkeypatch.setenv('PUSHER_AUDIO_FILE_INCREMENTAL_ENABLED', '0')
     else:
         monkeypatch.setattr(projection.audio_archive, 'admitted', lambda *_: True)
-        monkeypatch.setattr(storage, 'list_packs', lambda *_: [])
+        monkeypatch.setattr(storage, 'list_packs', lambda *_, **_kwargs: [])
     cache = projection.PusherAudioProjection('u')
     cache.refresh('c', [world.add(100)])
     cache.refresh('c', [world.add(101)])
@@ -246,7 +248,7 @@ def test_real_update_conversation_checks_cached_revision_and_write_precondition(
     snapshot.to_dict.return_value = {'audio_files': [{'id': 'old', 'source_fingerprint': 'old'}]}
     monkeypatch.setattr(db, 'db', client)
     monkeypatch.setattr(db, 'get_firestore_client', lambda: client)
-    monkeypatch.setattr(db, '_prepare_conversation_for_write', lambda data, *_: data)
+    monkeypatch.setattr(db, '_prepare_conversation_for_write', lambda data, *_, **_kwargs: data)
     monkeypatch.setattr(db, 'guard_match_score_size', lambda *_: None)
     # Restore the actual function instead of world's projection update fake.
     update = REAL_UPDATE
@@ -268,6 +270,85 @@ REAL_UPDATE = db.update_conversation
 
 
 @pytest.mark.asyncio
+async def test_async_metadata_keeps_playback_and_identity_callbacks(world):
+    refreshed = MagicMock()
+    cache = projection.PusherAudioProjection('u', on_refresh=refreshed)
+    path = world.add(100)
+    assert await cache.defer_close_refresh('c', [path], closing=False)
+    await cache.persist_pending()
+    assert world.stored[0]['chunk_timestamps'] == [100]
+    refreshed.assert_called_once_with('c', True)
+    assert await cache.defer_close_refresh('c')
+    await cache.persist_pending()
+    assert refreshed.call_count == 2
+    assert 'c' in cache.finished
+
+
+@pytest.mark.asyncio
+async def test_new_closing_upload_rearms_debt_after_prior_refresh_retired_marker(world, monkeypatch):
+    from utils import pusher_playback_coordinator as workers
+
+    monkeypatch.setenv('AUDIO_ARCHIVE_READ_ENABLED', 'false')
+    monkeypatch.setattr(workers, '_owner', None)
+    marker = {}
+    writes = []
+
+    def mark(uid, cids):
+        version = len(writes) + 1
+        writes.append(version)
+        marker['version'] = version
+        return {'c': version}
+
+    def retire(uid, cid, *, observed_update_time):
+        assert marker['version'] == observed_update_time
+        marker.clear()
+        return True
+
+    monkeypatch.setattr(projection.record_projection_rebuild, 'mark_many', mark)
+    monkeypatch.setattr(projection.record_projection_rebuild, 'retire_observed', retire)
+    cache = projection.PusherAudioProjection('u')
+    assert await cache.defer_close_refresh('c', [world.add(100)])
+    await workers.coordinator().wait_owner('u')
+    assert not marker and world.stored[0]['chunk_timestamps'] == [100]
+    assert 'c' in cache.finished and 'c' in cache.durable_debt
+    assert await cache.defer_close_refresh('c', [world.add(101)])
+    await workers.coordinator().wait_owner('u')
+    assert writes == [1, 2]
+    assert world.stored[0]['chunk_timestamps'] == [100, 101]
+    assert not marker
+    assert await cache.defer_close_refresh('c')  # Only pathless close scans dedupe.
+    assert writes == [1, 2]
+
+
+@pytest.mark.asyncio
+async def test_fast_drain_rechecks_deleted_owner_before_projection(world, monkeypatch):
+    monkeypatch.setenv('AUDIO_DURABLE_OUTBOX_ENABLED', 'true')
+    monkeypatch.setenv('PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED', 'true')
+    monkeypatch.setattr(pusher, 'get_audio_bytes_webhook_seconds', lambda _: None)
+    monkeypatch.setattr(pusher, 'is_audio_bytes_app_enabled', lambda _: False)
+    monkeypatch.setattr(pusher.users_db, 'get_user_private_cloud_sync_enabled', lambda _: True)
+    monkeypatch.setattr(pusher.users_db, 'get_data_protection_level', lambda _: 'standard')
+    monkeypatch.setattr(pusher.ReadinessGate, 'is_serving', lambda: True)
+    monkeypatch.setattr(record_audio, 'set_record_upload_pending', MagicMock(return_value=True))
+    monkeypatch.setattr(record_audio, 'seal_record_audio', MagicMock(return_value='deleted'))
+    pcm = b'\x01\x00' * 160
+    receipt = AudioReceipt('bucket', 'path', '1', 'digest', 'manifest', '1', 'digest', 'digest', 'c', 100, 160, 16000)
+    monkeypatch.setattr(pusher, 'commit_pcm_window', lambda *_: receipt)
+    read = MagicMock(return_value=pcm)
+    upload = MagicMock()
+    monkeypatch.setattr(pusher, 'read_pcm', read)
+    monkeypatch.setattr(pusher, 'upload_audio_chunks_batch', upload)
+    world.gone[0] = True
+
+    from tests.unit.test_pusher_audio_timeline import FakeWebSocket
+
+    sock = FakeWebSocket([struct.pack('<I', 103) + b'c', struct.pack('<Id', 101, 100) + pcm])
+    await asyncio.wait_for(pusher._websocket_util_trigger(sock, 'u', 16000, audio_timeline=2), 5)
+    read.assert_not_called()
+    upload.assert_not_called()
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     'durable,ending',
     [
@@ -278,6 +359,8 @@ REAL_UPDATE = db.update_conversation
     ],
 )
 async def test_real_socket_flushes_keep_identity_fresh_and_finalize(world, monkeypatch, durable, ending):
+    # Exercise the synchronous rollback contract, including its inline retries.
+    monkeypatch.setenv('PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED', 'false')
     monkeypatch.setenv('AUDIO_DURABLE_OUTBOX_ENABLED', 'true' if durable else 'false')
     monkeypatch.setattr(pusher, 'get_audio_bytes_webhook_seconds', lambda _: None)
     monkeypatch.setattr(pusher, 'is_audio_bytes_app_enabled', lambda _: False)
@@ -397,7 +480,7 @@ def test_full_listing_race_cannot_clobber_other_pod(world, monkeypatch, mode):
     monkeypatch.setattr(db, 'list_audio_chunks', racing_list)
     if mode == 'archive':
         monkeypatch.setattr(projection.audio_archive, 'admitted', lambda *_: True)
-        monkeypatch.setattr(storage, 'list_packs', lambda *_: [])
+        monkeypatch.setattr(storage, 'list_packs', lambda *_, **_kwargs: [])
     assert cache.refresh('c', None if mode == 'unknown_paths' else [a]) is True
     assert world.stored[0]['chunk_timestamps'] == [100, 101]
     assert len(world.writes) == 2  # only the peer and the successful rebuild
@@ -538,7 +621,7 @@ def test_fleet_archive_read_recomputes_split_overlays_without_encoded_prefix_lis
     # not just when tests disable the archive phase.
     monkeypatch.setattr(projection.audio_archive, 'admitted', lambda *_: True)
     packs = [raw_pack(100.0004, 104.0004)]
-    pack_index = MagicMock(side_effect=lambda *_: packs)
+    pack_index = MagicMock(side_effect=lambda *_, **_kwargs: packs)
     monkeypatch.setattr(storage, 'list_packs', pack_index)
     cache = projection.PusherAudioProjection('u')
     cache.refresh('c', [world.add(100.0004)])
@@ -546,6 +629,7 @@ def test_fleet_archive_read_recomputes_split_overlays_without_encoded_prefix_lis
     cache.refresh('c', [world.add(102.0004)])
     assert len(world.lists) == 1
     assert pack_index.call_count == 2  # Existing raw index is consulted each time.
+    assert all(call.kwargs == {'reuse_manifest_bodies': True} for call in pack_index.call_args_list)
     assert all(c['path'].startswith('chunks/') for c in cache.inventory['c'].chunks)
     expected = [af.model_dump() for af in db.create_audio_files_from_chunks('u', 'c')]
     assert world.stored == expected
@@ -557,7 +641,7 @@ def test_fleet_archive_read_recomputes_split_overlays_without_encoded_prefix_lis
 def test_stop_pcm_raw_only_flushes_refresh_pack_projection_without_encoded_lists(world, monkeypatch):
     monkeypatch.setattr(projection.audio_archive, 'admitted', lambda *_: True)
     packs = [raw_pack(100, 101, 'first')]
-    monkeypatch.setattr(storage, 'list_packs', lambda *_: packs)
+    monkeypatch.setattr(storage, 'list_packs', lambda *_, **_kwargs: packs)
     cache = projection.PusherAudioProjection('u')
     assert cache.refresh('c', [packs[0]['path']]) is True
     assert cache.inventory['c'].chunks == []
@@ -575,7 +659,7 @@ def test_stop_pcm_raw_only_flushes_refresh_pack_projection_without_encoded_lists
 def test_archive_index_failure_uses_full_legacy_fallback_without_caching(world, monkeypatch):
     monkeypatch.setattr(projection.audio_archive, 'admitted', lambda *_: True)
     packs = [raw_pack(100, 106)]
-    monkeypatch.setattr(storage, 'list_packs', lambda *_: packs)
+    monkeypatch.setattr(storage, 'list_packs', lambda *_, **_kwargs: packs)
     cache = projection.PusherAudioProjection('u')
     cache.refresh('c', [world.add(100)])
     before = deepcopy(world.stored)
@@ -586,7 +670,7 @@ def test_archive_index_failure_uses_full_legacy_fallback_without_caching(world, 
     assert world.stored != before
     assert not cache.inventory.get('c')
     assert cache.close_debt == {'c'}
-    monkeypatch.setattr(storage, 'list_packs', lambda *_: packs)
+    monkeypatch.setattr(storage, 'list_packs', lambda *_, **_kwargs: packs)
     cache.refresh('c', [world.add(103)])
     expected = [af.model_dump() for af in db.create_audio_files_from_chunks('u', 'c')]
     assert world.stored == expected
@@ -655,9 +739,11 @@ def test_rebuild_refuses_incomplete_raw_index_without_metadata_write(world, monk
     world.add(100)
     monkeypatch.setattr(full_projection, 'projection_owner_gone', lambda *_: False)
     monkeypatch.setattr(projection.audio_archive, 'admitted', lambda *_: True)
-    monkeypatch.setattr(storage, 'list_packs', MagicMock(side_effect=OSError()))
+    read_originals = MagicMock(side_effect=OSError('synthetic raw index failure'))
+    monkeypatch.setattr(full_projection, 'validated_uncovered_packs', read_originals)
     with pytest.raises(OSError):
         full_projection.rebuild('u', 'c')
+    read_originals.assert_called_once()
     assert not world.writes
 
 
@@ -745,8 +831,8 @@ async def test_overflow_inventory_is_bounded_and_reports_failed_handoff(world, m
     cache = projection.PusherAudioProjection('u')
     monkeypatch.setattr(projection, 'MAX_MARKER_RETRIES', projection.MAX_CONVERSATIONS + 2)
     projection.record_projection_rebuild.mark_many.side_effect = OSError()
-    assert await cache.defer_rebuild('one')
-    assert await cache.defer_rebuild('two')
+    assert not await cache.defer_rebuild('one')  # Failed writes are never durable ACKs.
+    assert not await cache.defer_rebuild('two')
     assert not await cache.defer_rebuild('three')
     assert set(cache.marker_retry) == {'one', 'two'}
     await cache.persist_pending()
@@ -781,3 +867,84 @@ async def test_full_overflow_list_preserves_cached_close_debt_until_cleanup(worl
     await cache.persist_pending()
     assert not cache.marker_retry and not cache.close_debt
     assert any('cached' in call.args[1] for call in projection.record_projection_rebuild.mark_many.call_args_list)
+
+
+def test_full_discovery_names_its_cause_once_per_listing(world):
+    def counts():
+        return {cause: projection.FULL_DISCOVERIES.labels(cause=cause)._value.get() for cause in projection.FULL_CAUSES}
+
+    def delta(before):
+        return {cause: value - before[cause] for cause, value in counts().items() if value != before[cause]}
+
+    cache = projection.PusherAudioProjection('u')
+    before = counts()
+    cache.refresh('c', [world.add(100)])
+    assert delta(before) == {'no_inventory': 1}
+    cache.refresh('c', [world.add(101)])  # incremental append pays no discovery
+    assert delta(before) == {'no_inventory': 1}
+    world.clock[0] += 300
+    cache.refresh('c', [world.add(102)])
+    assert delta(before) == {'no_inventory': 1, 'listing_expired': 1}
+    cache.refresh('c', [world.add(50)])  # older than the cached tail needs listing order
+    assert delta(before) == {'no_inventory': 1, 'listing_expired': 1, 'order_fallback': 1}
+    world.conflict[0] = True
+    cache.refresh('c', [world.add(103)])
+    assert delta(before) == {'no_inventory': 1, 'listing_expired': 1, 'order_fallback': 1, 'cas_conflict': 1}
+    cache.refresh('c', [world.add(104)], force=True)
+    assert delta(before)['forced'] == 1
+    assert len(world.lists) == sum(delta(before).values())
+
+
+@pytest.mark.asyncio
+async def test_all_close_switches_off_preserves_legacy_debt_handoff(world, monkeypatch):
+    for key in (
+        'PUSHER_RECORD_CLOSE_NOTIFY_ENABLED',
+        'PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED',
+        'PUSHER_RECORD_SEAL_WAKE_ENABLED',
+    ):
+        monkeypatch.setenv(key, 'false')
+    cache = projection.PusherAudioProjection('u')
+    scheduled = MagicMock()
+    execute = MagicMock(side_effect=AssertionError('rollback may only schedule legacy handoff'))
+    monkeypatch.setattr(cache, '_start_marker_task', scheduled)
+    monkeypatch.setattr(projection, 'run_blocking', execute)
+    assert await cache.defer_rebuild('c')
+    assert cache.marker_retry == {'c': 1}
+    scheduled.assert_called_once_with()
+    execute.assert_not_called()
+    projection.record_projection_rebuild.mark_many.assert_not_called()
+    calls = []
+
+    async def legacy_execute(pool, fn, *args):
+        calls.append(pool)
+        fn(*args)
+
+    monkeypatch.setattr(projection, 'run_blocking', legacy_execute)
+    await cache._persist_markers()
+    assert calls == [projection.db_executor]
+    assert not cache.durable_debt
+    projection.record_projection_rebuild.mark_many.assert_called_once_with('u', {'c'})
+
+
+@pytest.mark.asyncio
+async def test_all_day_stream_keeps_new_marker_versions_and_reproves_evicted_ack(world, monkeypatch):
+    from utils import pusher_playback_coordinator
+
+    queue = SimpleNamespace(submit=MagicMock())
+    monkeypatch.setattr(pusher_playback_coordinator, 'coordinator', lambda: queue)
+    projection.record_projection_rebuild.mark_many.side_effect = lambda uid, cids: {
+        cid: 'version-' + cid for cid in cids
+    }
+    cache = projection.PusherAudioProjection('u')
+    for i in range(150):
+        cid = f'c-{i}'
+        assert await cache.defer_close_refresh(cid, [f'path-{i}'])
+        assert queue.submit.call_args.kwargs['observed_update_time'] == 'version-' + cid
+        assert len(cache.durable_debt) <= projection.MAX_CONVERSATIONS
+        assert len(cache.debt_versions) <= projection.MAX_CONVERSATIONS
+    # An evicted dedupe ACK is never a permanent False/failed-close result.
+    cache.finished.add('c-0')
+    cache.durable_debt.discard('c-0')
+    cache.debt_versions.pop('c-0', None)
+    assert await cache.defer_close_refresh('c-0')
+    assert queue.submit.call_args.kwargs['observed_update_time'] == 'version-c-0'

@@ -23,6 +23,10 @@ from zoneinfo import ZoneInfo
 from config.episodes import (
     INCREMENTAL_FEATURE,
     INCREMENTAL_TIMEOUT_SECONDS,
+    F_JOIN_JEV_LANE,
+    F_JOIN_NEW_CHARS,
+    F_JOIN_PREVIOUS_CHARS,
+    F_JOIN_TIMEOUT_SECONDS,
     JEV_LANE,
     JEV_TIMEOUT_SECONDS,
     MOMENT_TEXT_MAX_CHARS,
@@ -36,6 +40,8 @@ from utils.llm.notes_packet import get_evidence
 from utils.llm.notes_refactor_metrics import shadow
 from utils.llm.output_language import resolve_output_language
 from utils.episodes.state import IncrementalUpdate, parse_update
+from utils.summary_quality import NOTE_QUALITY_RULES
+from utils.conversations.transcript_for_llm import owner_safe_transcript_segments
 from utils.llm.clients import get_llm
 from utils.llm.jev_client import ask_jev
 from utils.llm.usage_tracker import track_usage
@@ -58,14 +64,16 @@ You receive the episode state so far (JSON) and the newest moment of speech. Ret
 Rules:
 """
 _MOMENT_LEGACY_LANGUAGE = '- Write in the language the people speak. Be concrete: names, places, numbers, decisions.\n'
-_MOMENT_RULES = """- "bullets": the whole episode so far, at most 8 short lines, newest information folded in, oldest
+_MOMENT_RULES = (
+    NOTE_QUALITY_RULES
+    + """- "bullets": the whole episode so far, at most 8 short lines, newest information folded in, oldest
   trivia dropped. Do not repeat a bullet in other words.
 - "title": a short topic for the whole episode (at most 6 words), not for this moment only.
 - "moment_heading": at most 4 words naming what this newest moment was about.
 - "people": names of the people taking part or addressed, never "Speaker 2".
 - Dialogue labels like "You", "Speaker A" or "Speaker B" are voice markers, not names. NEVER copy a
-  "Speaker" label or any number from one into any field; call that person "a speaker" or "another
-  speaker" until their name is known, and never invent one.
+  "Speaker" label or any number from one into any field. When identity is unknown, state the
+  supported point neutrally without a speaker attribution; never invent a name.
 - "title" and "moment_heading" must say what the speech was about; never a placeholder such as
   "New moment", "Conversation" or "Talking".
 - "open_questions": at most 4 things left unresolved, or [].
@@ -77,11 +85,12 @@ _MOMENT_RULES = """- "bullets": the whole episode so far, at most 8 short lines,
 - "drop_ids": ids of existing items the new speech cancels or shows are already done.
 - Speech can be noisy transcription. Ignore filler, ads, TV and background talk.
 - The "You" label (or the owner's own name) marks the person wearing Omi; report their words and
-  actions in the third person, like everyone else's.
+  actions in second person only when identified confidently; otherwise use neutral subject-focused notes.
 
 Reply with one JSON object only:
 {"title": "", "moment_heading": "", "bullets": [], "people": [], "open_questions": [], "items": [], "drop_ids": []}
 """
+)
 
 PROMPT_PREFIX = _MOMENT_OPENING + _MOMENT_LEGACY_LANGUAGE + _MOMENT_RULES
 
@@ -93,7 +102,7 @@ def _moment_prompt(output_language: str) -> str:
         _MOMENT_OPENING
         + '- Be concrete: names, places, numbers, decisions.\n'
         + '- Use names only from confident speaker evidence; hedge likely matches as "likely X"; '
-        'unknown voices are "a speaker". Never assign personal stories to a name without evidence.\n'
+        'unknown voices need no attribution. Never assign personal stories to a name without evidence.\n'
         + _MOMENT_RULES
         + f'\nWrite all output in {output_language}. Keep names and quoted words verbatim.\n'
     )
@@ -183,6 +192,7 @@ def render_moment(
     voice_order: Sequence[str] | None = None,
 ) -> MomentText:
     """Speaker-labelled lines, consecutive lines from one voice joined, head and tail kept."""
+    segments, _ = owner_safe_transcript_segments(segments)
     owner = owner_name or _resolve_owner_name(uid) or 'You'
     display = display_participants(
         segments, owner_name=owner, voice_order=voice_order, display_scope=conversation_id, defer_short_voices=True
@@ -357,7 +367,7 @@ def run_incremental_update(
 
     repair = (
         'Quality correction required: rewrite any bullet that mostly copies the newest moment as a concise '
-        'third-person summary. Short quotes and concise summaries may reuse speech. Do not start a bullet with '
+        'concrete neutral note. Short quotes and concise summaries may reuse speech. Do not start a bullet with '
         'a speaker label such as You:, Others:, or Speaker A:. '
         'Return the complete corrected JSON object.'
     )
@@ -432,4 +442,54 @@ def ask_same_occasion(state: str, *, ask=None) -> Optional[float]:
         return value if 0.0 <= value <= 1.0 else None
     except Exception as error:
         logger.warning('event=episode_boundary outcome=jev_error exception_type=%s', type(error).__name__)
+        return None
+
+
+def render_f_transcript(segments: Sequence[Mapping[str, Any]]) -> str:
+    """Variant F rendering: time order, ``You`` for the owner, a name or voice label otherwise,
+    consecutive lines from one label merged. Matches the offline F run's ``render``."""
+    rows = sorted(
+        (s for s in segments if str(s.get('text') or '').strip()),
+        key=lambda s: float(s.get('start') or 0.0),
+    )
+    lines: list[list[str]] = []
+    for segment in rows:
+        if segment.get('is_user'):
+            label = 'You'
+        else:
+            label = str(
+                segment.get('person_name') or segment.get('speaker_label') or segment.get('speaker') or 'Others'
+            )
+        text = str(segment['text']).strip()
+        if lines and lines[-1][0] == label:
+            lines[-1][1] += ' ' + text
+        else:
+            lines.append([label, text])
+    return '\n'.join(f'{label}: {text}' for label, text in lines)
+
+
+def f_boundary_state(previous: str, new: str) -> str:
+    """Variant F state: the previous member's transcript tail and the new speech's head, nothing else."""
+    previous = previous[-F_JOIN_PREVIOUS_CHARS:] if len(previous) > F_JOIN_PREVIOUS_CHARS else previous
+    new = new[:F_JOIN_NEW_CHARS]
+    return (
+        'EPISODE so far (full transcript of its last conversation):\n'
+        + (previous or '(no speech captured)')
+        + '\n\nNEW speech (full transcript):\n'
+        + (new or '(no speech captured)')
+    )
+
+
+def ask_same_occasion_f(state: str, *, ask=None) -> Optional[float]:
+    """Variant F: P(same occasion) on its own Jev lane, so its errors and timeouts are measured apart."""
+    try:
+        answers = (ask or ask_jev)(
+            state, BOUNDARY_QUESTIONS, lane=F_JOIN_JEV_LANE, timeout_seconds=F_JOIN_TIMEOUT_SECONDS, max_attempts=1
+        )
+        if answers is None:
+            return None
+        value = answers.noul(BOUNDARY_QUESTION)
+        return value if 0.0 <= value <= 1.0 else None
+    except Exception as error:
+        logger.warning('event=episode_boundary_f outcome=jev_error exception_type=%s', type(error).__name__)
         return None

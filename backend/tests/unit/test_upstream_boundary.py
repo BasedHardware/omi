@@ -252,6 +252,10 @@ class TestExtractionSeamFanOut:
             patch.object(pc, '_extract_memories', extract_memories),
             patch.object(pc, '_save_action_items', save_action_items),
             patch.object(pc.conversations_db, 'upsert_conversation'),
+            patch.object(pc.conversations_db, 'get_user_reprocess_app_snapshot', return_value=([], {}, None, 0)),
+            patch.object(pc.lifecycle_service, 'commit_user_reprocess_app_results', return_value=True),
+            patch.object(pc, '_current_user_reprocess_conversation', return_value={}),
+            patch.object(pc, 'deserialize_conversation', return_value=conversation),
             patch.object(pc, 'submit_with_context', side_effect=_capture_submit),
         ):
             pc.process_conversation("uid-boundary", "en", conversation, trigger=pc.ProcessingTrigger.USER_REPROCESS)

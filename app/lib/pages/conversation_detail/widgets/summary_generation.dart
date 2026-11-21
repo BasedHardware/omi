@@ -341,6 +341,14 @@ class SummaryFailureCard extends StatelessWidget {
           null,
           null,
         ),
+      SummaryFailureKind.transcriptionPending => (
+          l10n.summaryTranscriptionPendingTitle,
+          l10n.summaryTranscriptionPendingBody,
+          l10n.ok,
+          () async => provider.dismissSummaryFailure(),
+          null,
+          null,
+        ),
       SummaryFailureKind.generic => (
           l10n.summaryFailedTitle,
           l10n.summaryFailedBody,
@@ -356,8 +364,11 @@ class SummaryFailureCard extends StatelessWidget {
           () => showSummarizedAppsSheet(context),
         ),
     };
+    // Retrying is pointless while another reprocess runs; acknowledging never is.
+    final blocked = busy &&
+        failure.kind != SummaryFailureKind.rateLimited &&
+        failure.kind != SummaryFailureKind.transcriptionPending;
     // Batch retry is unavailable while speaker labels still need their own summary refresh.
-    final blocked = busy && failure.kind != SummaryFailureKind.rateLimited;
     final batchRetry = failure.kind == SummaryFailureKind.template || failure.kind == SummaryFailureKind.generic;
     final primaryBlocked = blocked || (batchRetry && failure.appIds.isNotEmpty && speakerRefreshPending);
 

@@ -6,6 +6,25 @@ sealed class RegisteredEvent {
   Map<String, Object> get properties;
 }
 
+enum OnDeviceTranscriptionUsedRoute {
+  allowance("allowance"),
+  custom("custom"),
+  offlineBatch("offline_batch");
+  const OnDeviceTranscriptionUsedRoute(this.wireName);
+  final String wireName;
+}
+
+final class OnDeviceTranscriptionUsed extends RegisteredEvent {
+  const OnDeviceTranscriptionUsed({required this.route, required this.audioMs, required this.segmentCount});
+  final OnDeviceTranscriptionUsedRoute route;
+  final int audioMs;
+  final int segmentCount;
+  @override
+  String get wireName => "On Device Transcription Used";
+  @override
+  Map<String, Object> get properties => {"route": route.wireName, "audio_ms": audioMs, "segment_count": segmentCount};
+}
+
 enum SavedPendantReconnectObservedTrigger {
   launch("launch"),
   resume("resume"),
@@ -142,6 +161,61 @@ final class SignInFailed extends RegisteredEvent {
   Map<String, Object> get properties => {"provider": provider.wireName, "error_class": errorClass.wireName};
 }
 
+enum SignInFailureDetailProvider {
+  apple("apple"),
+  google("google");
+  const SignInFailureDetailProvider(this.wireName);
+  final String wireName;
+}
+
+enum SignInFailureDetailErrorCode {
+  appleCanceled("apple_canceled"),
+  appleFailed("apple_failed"),
+  appleInvalidResponse("apple_invalid_response"),
+  appleNotHandled("apple_not_handled"),
+  appleNotInteractive("apple_not_interactive"),
+  appleUnknown("apple_unknown"),
+  appleCredentialExport("apple_credential_export"),
+  appleCredentialImport("apple_credential_import"),
+  appleMatchedExcludedCredential("apple_matched_excluded_credential"),
+  appleNotSupported("apple_not_supported"),
+  appleCredentialsError("apple_credentials_error"),
+  applePlatformError("apple_platform_error"),
+  appleMissingIdentityToken("apple_missing_identity_token"),
+  firebaseInvalidCredential("firebase_invalid_credential"),
+  firebaseInvalidCredentialAudience("firebase_invalid_credential_audience"),
+  firebaseInvalidCredentialStale("firebase_invalid_credential_stale"),
+  firebaseInvalidIdpResponse("firebase_invalid_idp_response"),
+  firebaseMissingOrInvalidNonce("firebase_missing_or_invalid_nonce"),
+  firebaseAccountExistsWithDifferentCredential("firebase_account_exists_with_different_credential"),
+  firebaseCredentialAlreadyInUse("firebase_credential_already_in_use"),
+  firebaseEmailAlreadyInUse("firebase_email_already_in_use"),
+  firebaseOperationNotAllowed("firebase_operation_not_allowed"),
+  firebaseAdminRestrictedOperation("firebase_admin_restricted_operation"),
+  firebaseUserDisabled("firebase_user_disabled"),
+  firebaseAppNotAuthorized("firebase_app_not_authorized"),
+  firebaseInvalidApiKey("firebase_invalid_api_key"),
+  firebaseTooManyRequests("firebase_too_many_requests"),
+  firebaseNetworkRequestFailed("firebase_network_request_failed"),
+  firebaseInternalError("firebase_internal_error"),
+  firebaseOther("firebase_other"),
+  network("network"),
+  timeout("timeout"),
+  other("other");
+  const SignInFailureDetailErrorCode(this.wireName);
+  final String wireName;
+}
+
+final class SignInFailureDetail extends RegisteredEvent {
+  const SignInFailureDetail({required this.provider, required this.errorCode});
+  final SignInFailureDetailProvider provider;
+  final SignInFailureDetailErrorCode errorCode;
+  @override
+  String get wireName => "Sign In Failure Detail";
+  @override
+  Map<String, Object> get properties => {"provider": provider.wireName, "error_code": errorCode.wireName};
+}
+
 enum OnboardingPermissionResultPermission {
   notifications("notifications"),
   location("location"),
@@ -219,6 +293,31 @@ final class DeviceConnectFailureShown extends RegisteredEvent {
   final DeviceConnectFailureShownPlatform platform;
   @override
   String get wireName => "Device Connect Failure Shown";
+  @override
+  Map<String, Object> get properties => {"failure_reason": failureReason.wireName, "platform": platform.wireName};
+}
+
+enum DevicePairingSettingsOpenedFailureReason {
+  bluetoothPermissionDenied("bluetooth_permission_denied"),
+  nearbyDevicesDenied("nearby_devices_denied");
+  const DevicePairingSettingsOpenedFailureReason(this.wireName);
+  final String wireName;
+}
+
+enum DevicePairingSettingsOpenedPlatform {
+  ios("ios"),
+  android("android"),
+  other("other");
+  const DevicePairingSettingsOpenedPlatform(this.wireName);
+  final String wireName;
+}
+
+final class DevicePairingSettingsOpened extends RegisteredEvent {
+  const DevicePairingSettingsOpened({required this.failureReason, required this.platform});
+  final DevicePairingSettingsOpenedFailureReason failureReason;
+  final DevicePairingSettingsOpenedPlatform platform;
+  @override
+  String get wireName => "Device Pairing Settings Opened";
   @override
   Map<String, Object> get properties => {"failure_reason": failureReason.wireName, "platform": platform.wireName};
 }
@@ -1701,7 +1800,8 @@ enum ConversationActionAction {
   open("open"),
   select("select"),
   copyConversationId("copy_conversation_id"),
-  testPrompt("test_prompt");
+  testPrompt("test_prompt"),
+  exportTranscript("export_transcript");
   const ConversationActionAction(this.wireName);
   final String wireName;
 }
@@ -2435,7 +2535,8 @@ enum PaywallOpenedSource {
   budget80("budget_80"),
   onboarding("onboarding"),
   ahaFirstSummary("aha_first_summary"),
-  freeCap("free_cap");
+  freeCap("free_cap"),
+  onPhoneBanner("on_phone_banner");
   const PaywallOpenedSource(this.wireName);
   final String wireName;
 }
@@ -2460,6 +2561,23 @@ final class PaywallOpened extends RegisteredEvent {
   String get wireName => "Paywall Opened";
   @override
   Map<String, Object> get properties => {"source": source.wireName, "current_plan": currentPlan.wireName};
+}
+
+enum FreeCapSheetChoiceChoice {
+  upgrade("upgrade"),
+  transcribeOnPhone("transcribe_on_phone"),
+  dismissed("dismissed");
+  const FreeCapSheetChoiceChoice(this.wireName);
+  final String wireName;
+}
+
+final class FreeCapSheetChoice extends RegisteredEvent {
+  const FreeCapSheetChoice({required this.choice});
+  final FreeCapSheetChoiceChoice choice;
+  @override
+  String get wireName => "Free Cap Sheet Choice";
+  @override
+  Map<String, Object> get properties => {"choice": choice.wireName};
 }
 
 enum UpgradePlanSelectedPlan {
@@ -2507,7 +2625,8 @@ enum UpgradePlanSelectedSource {
   budget80("budget_80"),
   onboarding("onboarding"),
   ahaFirstSummary("aha_first_summary"),
-  freeCap("free_cap");
+  freeCap("free_cap"),
+  onPhoneBanner("on_phone_banner");
   const UpgradePlanSelectedSource(this.wireName);
   final String wireName;
 }
@@ -2981,7 +3100,8 @@ enum PaywallVariantShownSource {
   budget80("budget_80"),
   onboarding("onboarding"),
   ahaFirstSummary("aha_first_summary"),
-  freeCap("free_cap");
+  freeCap("free_cap"),
+  onPhoneBanner("on_phone_banner");
   const PaywallVariantShownSource(this.wireName);
   final String wireName;
 }
@@ -3392,4 +3512,153 @@ final class SubscriptionPaymentIssuePortalOpened extends RegisteredEvent {
   String get wireName => "Subscription Payment Issue Portal Opened";
   @override
   Map<String, Object> get properties => {};
+}
+
+final class SubscriptionPaymentIssueMonthlyShown extends RegisteredEvent {
+  const SubscriptionPaymentIssueMonthlyShown();
+  @override
+  String get wireName => "Subscription Payment Issue Monthly Shown";
+  @override
+  Map<String, Object> get properties => {};
+}
+
+final class SubscriptionPaymentIssueMonthlyTapped extends RegisteredEvent {
+  const SubscriptionPaymentIssueMonthlyTapped();
+  @override
+  String get wireName => "Subscription Payment Issue Monthly Tapped";
+  @override
+  Map<String, Object> get properties => {};
+}
+
+final class SubscriptionPaymentIssueMonthlySwitched extends RegisteredEvent {
+  const SubscriptionPaymentIssueMonthlySwitched();
+  @override
+  String get wireName => "Subscription Payment Issue Monthly Switched";
+  @override
+  Map<String, Object> get properties => {};
+}
+
+enum SubscriptionPaymentIssueMonthlyFailedReason {
+  declined("declined"),
+  refused("refused"),
+  error("error");
+  const SubscriptionPaymentIssueMonthlyFailedReason(this.wireName);
+  final String wireName;
+}
+
+final class SubscriptionPaymentIssueMonthlyFailed extends RegisteredEvent {
+  const SubscriptionPaymentIssueMonthlyFailed({required this.reason});
+  final SubscriptionPaymentIssueMonthlyFailedReason reason;
+  @override
+  String get wireName => "Subscription Payment Issue Monthly Failed";
+  @override
+  Map<String, Object> get properties => {"reason": reason.wireName};
+}
+
+final class MobileDeviceHealthDailyRingRead extends RegisteredEvent {
+  const MobileDeviceHealthDailyRingRead({required this.disconnectsDuringRingRead, required this.disconnectsWithRingReadState, required this.rssiBelowMinus90, required this.rssiMinus90ToMinus80, required this.rssiMinus80ToMinus60, required this.rssiAtLeastMinus60, required this.rssiUnknown});
+  final int disconnectsDuringRingRead;
+  final int disconnectsWithRingReadState;
+  final int rssiBelowMinus90;
+  final int rssiMinus90ToMinus80;
+  final int rssiMinus80ToMinus60;
+  final int rssiAtLeastMinus60;
+  final int rssiUnknown;
+  @override
+  String get wireName => "Mobile Device Health Daily";
+  @override
+  Map<String, Object> get properties => {"disconnects_during_ring_read": disconnectsDuringRingRead, "disconnects_with_ring_read_state": disconnectsWithRingReadState, "ring_read_disconnect_rssi_below_minus90": rssiBelowMinus90, "ring_read_disconnect_rssi_minus90_to_minus80": rssiMinus90ToMinus80, "ring_read_disconnect_rssi_minus80_to_minus60": rssiMinus80ToMinus60, "ring_read_disconnect_rssi_at_least_minus60": rssiAtLeastMinus60, "ring_read_disconnect_rssi_unknown": rssiUnknown};
+}
+
+enum OrphanAudioRecoveryResult {
+  completed("completed"),
+  admissionPending("admission_pending"),
+  headless("headless"),
+  background("background"),
+  killSwitch("kill_switch"),
+  generationChanged("generation_changed"),
+  incompleteCensus("incomplete_census"),
+  sourcesChanged("sources_changed"),
+  budgetUnavailable("budget_unavailable"),
+  failed("failed");
+  const OrphanAudioRecoveryResult(this.wireName);
+  final String wireName;
+}
+
+final class OrphanAudioRecovery extends RegisteredEvent {
+  const OrphanAudioRecovery({required this.classWorkingCount, required this.classWorkingBytes, required this.classUnparseableCount, required this.classUnparseableBytes, required this.classRecoverableCount, required this.classRecoverableBytes, required this.classExpiredCount, required this.classExpiredBytes, required this.classOwnerUnknownCount, required this.classOwnerUnknownBytes, required this.age07Count, required this.age07Bytes, required this.age814Count, required this.age814Bytes, required this.age1528Count, required this.age1528Bytes, required this.age2945Count, required this.age2945Bytes, required this.ageOver45Count, required this.ageOver45Bytes, required this.ageUnknownCount, required this.ageUnknownBytes, required this.adopted, required this.changed, required this.referenced, required this.passCap, required this.dailyCap, required this.pressureCap, required this.result, required this.censusComplete, required this.expiredSinceCensus, required this.outsideDocuments});
+  final int classWorkingCount;
+  final int classWorkingBytes;
+  final int classUnparseableCount;
+  final int classUnparseableBytes;
+  final int classRecoverableCount;
+  final int classRecoverableBytes;
+  final int classExpiredCount;
+  final int classExpiredBytes;
+  final int classOwnerUnknownCount;
+  final int classOwnerUnknownBytes;
+  final int age07Count;
+  final int age07Bytes;
+  final int age814Count;
+  final int age814Bytes;
+  final int age1528Count;
+  final int age1528Bytes;
+  final int age2945Count;
+  final int age2945Bytes;
+  final int ageOver45Count;
+  final int ageOver45Bytes;
+  final int ageUnknownCount;
+  final int ageUnknownBytes;
+  final int adopted;
+  final int changed;
+  final int referenced;
+  final int passCap;
+  final int dailyCap;
+  final int pressureCap;
+  final OrphanAudioRecoveryResult result;
+  final bool censusComplete;
+  final int expiredSinceCensus;
+  final int outsideDocuments;
+  @override
+  String get wireName => "Orphan Audio Recovery";
+  @override
+  Map<String, Object> get properties => {"class_working_count": classWorkingCount, "class_working_bytes": classWorkingBytes, "class_unparseable_count": classUnparseableCount, "class_unparseable_bytes": classUnparseableBytes, "class_recoverable_count": classRecoverableCount, "class_recoverable_bytes": classRecoverableBytes, "class_expired_count": classExpiredCount, "class_expired_bytes": classExpiredBytes, "class_owner_unknown_count": classOwnerUnknownCount, "class_owner_unknown_bytes": classOwnerUnknownBytes, "age_0_7_count": age07Count, "age_0_7_bytes": age07Bytes, "age_8_14_count": age814Count, "age_8_14_bytes": age814Bytes, "age_15_28_count": age1528Count, "age_15_28_bytes": age1528Bytes, "age_29_45_count": age2945Count, "age_29_45_bytes": age2945Bytes, "age_over_45_count": ageOver45Count, "age_over_45_bytes": ageOver45Bytes, "age_unknown_count": ageUnknownCount, "age_unknown_bytes": ageUnknownBytes, "adopted": adopted, "changed": changed, "referenced": referenced, "passCap": passCap, "dailyCap": dailyCap, "pressureCap": pressureCap, "result": result.wireName, "census_complete": censusComplete, "expired_since_census": expiredSinceCensus, "outside_documents": outsideDocuments};
+}
+
+enum OrphanAudioReclaimResult {
+  completed("completed"),
+  admissionPending("admission_pending"),
+  headless("headless"),
+  background("background"),
+  killSwitch("kill_switch"),
+  generationChanged("generation_changed"),
+  incompleteCensus("incomplete_census"),
+  sourcesChanged("sources_changed"),
+  journalUnavailable("journal_unavailable"),
+  failed("failed");
+  const OrphanAudioReclaimResult(this.wireName);
+  final String wireName;
+}
+
+final class OrphanAudioReclaim extends RegisteredEvent {
+  const OrphanAudioReclaim({required this.deletedFiles, required this.deletedBytes, required this.working, required this.unknownCaptureTime, required this.captureTooYoung, required this.mtimeTooYoung, required this.outsideDocuments, required this.passCap, required this.sourcesChanged, required this.referenced, required this.fileChanged, required this.sidecarType, required this.durationMs, required this.result, required this.censusComplete});
+  final int deletedFiles;
+  final int deletedBytes;
+  final int working;
+  final int unknownCaptureTime;
+  final int captureTooYoung;
+  final int mtimeTooYoung;
+  final int outsideDocuments;
+  final int passCap;
+  final int sourcesChanged;
+  final int referenced;
+  final int fileChanged;
+  final int sidecarType;
+  final int durationMs;
+  final OrphanAudioReclaimResult result;
+  final bool censusComplete;
+  @override
+  String get wireName => "Orphan Audio Reclaim";
+  @override
+  Map<String, Object> get properties => {"deleted_files": deletedFiles, "deleted_bytes": deletedBytes, "working": working, "unknown_capture_time": unknownCaptureTime, "capture_too_young": captureTooYoung, "mtime_too_young": mtimeTooYoung, "outside_documents": outsideDocuments, "pass_cap": passCap, "sources_changed": sourcesChanged, "referenced": referenced, "file_changed": fileChanged, "sidecar_type": sidecarType, "duration_ms": durationMs, "result": result.wireName, "census_complete": censusComplete};
 }

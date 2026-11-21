@@ -30,6 +30,8 @@ import 'package:omi/utils/off_ui_isolate.dart';
 import 'package:omi/utils/conversation_cache_decode.dart';
 import 'package:omi/env/physical_qualification.dart';
 
+part 'preferences_memory_deletes.dart';
+
 typedef CapturePolicyBridge = Future<Object?> Function(String method, Map<String, Object> arguments);
 
 class SharedPreferencesUtil {
@@ -734,6 +736,12 @@ class SharedPreferencesUtil {
 
   set paywallOnDeviceSttConfigId(String value) => saveString('paywallOnDeviceSttConfigId', value);
 
+  /// Android "On Wi-Fi later" for the phone's Whisper model: '' none, 'pin' a free plan's phone
+  /// choice to persist pinned once the model lands, 'plain' a paid reader's own choice.
+  String get phoneModelOnWifiPending => getString('phoneModelOnWifiPending');
+
+  set phoneModelOnWifiPending(String value) => saveString('phoneModelOnWifiPending', value);
+
   // Whether offline recordings auto-sync to Omi when the device connects.
   // Defaults to true (auto-sync on) — the feature is opt-out from introduction.
   bool get autoSyncOfflineRecordings => getBool('autoSyncOfflineRecordings', defaultValue: true);
@@ -1373,43 +1381,24 @@ class SharedPreferencesUtil {
     saveInt('cachedMessagesSchema', 1);
   }
 
-  /// Last owner-scoped memory projection used for offline/restart rendering.
-  /// Memory.toJson deliberately includes optional temporal fields so a cached
-  /// assessment is never mistaken for a newly computed one after restart.
-  List<Memory> get cachedMemories {
-    final ownerUid = uid;
-    if (ownerUid.isEmpty) return [];
-    _scopeLegacyUserData(ownerUid);
-    return _decodeCachedList(
-      _userScopedKey('cachedMemories', ownerUid),
-      (json) => Memory.fromJson(json),
-    ).where((memory) => memory.uid == ownerUid).toList();
-  }
-
-  set cachedMemories(List<Memory> value) {
-    final ownerUid = uid;
-    if (ownerUid.isEmpty) return;
-    saveStringList(
-      _userScopedKey('cachedMemories', ownerUid),
-      value.map((memory) => jsonEncode(memory.toJson())).toList(),
-    );
-  }
-
   // Pending memories - memories created offline that need to be synced
   List<Memory> get pendingMemories {
     final ownerUid = uid;
     if (ownerUid.isEmpty) return [];
     _scopeLegacyUserData(ownerUid);
+    final deleted = confirmedMemoryDeletionIds;
     return _decodeCachedList(
       _userScopedKey('pendingMemories', ownerUid),
       (json) => Memory.fromJson(json),
-    ).where((memory) => memory.uid == ownerUid).toList();
+    ).where((memory) => memory.uid == ownerUid && !deleted.contains(memory.id)).toList();
   }
 
   set pendingMemories(List<Memory> value) {
     final ownerUid = uid;
     if (ownerUid.isEmpty) return;
-    final List<String> memories = value.map((e) => jsonEncode(e.toJson())).toList();
+    final deleted = confirmedMemoryDeletionIds;
+    final List<String> memories =
+        value.where((row) => !deleted.contains(row.id)).map((row) => jsonEncode(row.toJson())).toList();
     saveStringList(_userScopedKey('pendingMemories', ownerUid), memories);
   }
 

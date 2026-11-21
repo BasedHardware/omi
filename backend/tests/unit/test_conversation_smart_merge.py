@@ -1120,8 +1120,6 @@ def test_smart_absorb_cap_checks_retained_donor_patch(world, caplog):
 
 @pytest.mark.parametrize('rearms', [0, 2])
 def test_absorb_rearms_exhausted_survivor_transactionally_with_lifetime_cap(world, monkeypatch, rearms):
-    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'true')
-    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_PERCENT', '100')
     exhausted = dict(
         structured={'title': 'Synthetic minimum', 'overview': '', 'title_provenance': 'server_minimum'},
         sync_content_revision=3,

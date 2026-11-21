@@ -1,13 +1,16 @@
-"""Request-local routing seam. B2 will supply the directory resolution.
+"""Request bindings and the directory process cache supply IO-free plane routing.
 
-Without a binding every owner uses Firestore. The environment override is
+Without a binding or cached directory route an owner uses Firestore. The environment override is
 loaded once, like other process configuration, and is harness-only.
 """
 
 import os
+import sys
 from contextlib import contextmanager
 from contextvars import ContextVar
 from typing import Iterator, Literal
+
+from config import directory_routing
 
 from config.chat_first_e2e_fixture import is_chat_first_e2e_harness_runtime
 
@@ -29,12 +32,22 @@ def plane_for(uid: str) -> Plane:
     binding = _request_plane.get()
     if binding is not None and binding[0] == uid:
         return binding[1]
-    return 'cell' if uid in _TEST_CELL_UIDS else 'firestore'
+    if uid in _TEST_CELL_UIDS:
+        return 'cell'
+    # Never initialize serving imports from an SDK probe. In particular, the
+    # jobstore/user/probe import graph can still be partially initialized here.
+    router = sys.modules.get('database.directory.router')
+    cached_plane = getattr(router, 'cached_plane', None)
+    return cached_plane(uid) if cached_plane is not None else 'firestore'
 
 
 def has_cell_plane() -> bool:
     """Cheap probe gate; no path parsing, hashing, labels, or directory IO."""
-    return bool(_TEST_CELL_UIDS) or (_request_plane.get() or (None, None))[1] == 'cell'
+    return (
+        directory_routing.routing_active()
+        or bool(_TEST_CELL_UIDS)
+        or (_request_plane.get() or (None, None))[1] == 'cell'
+    )
 
 
 @contextmanager

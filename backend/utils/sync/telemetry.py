@@ -17,7 +17,7 @@ __all__ = [
     'new_attempt_ref',
 ]
 
-_SYNC_STT_MODELS = {'nova-3', 'velma-2', 'parakeet'}
+_SYNC_STT_MODELS = {'nova-3', 'velma-2', 'parakeet', 'stt-async-v5'}
 
 
 def bounded_sync_model(model: str | None) -> str:

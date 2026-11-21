@@ -25,6 +25,21 @@ void main() {
     SharedPreferences.setMockInitialValues({'uid': 'fixture-home'});
     await SharedPreferencesUtil.init(mirrorNativeAuthToken: false);
   });
+  test('lifecycle reads stay passive while detail opens carry explicit intent', () async {
+    final headers = <Map<String, String>>[];
+    final api = ConversationApi(
+        baseUrl: 'http://127.0.0.1:1/',
+        send: (request) async {
+          headers.add(request.headers);
+          return http.Response(jsonEncode(row(0).toJson()), 200);
+        });
+    await api.byId('c0');
+    expect(headers.single, isNot(contains('X-Omi-Recording-Detail')));
+    final provider = ConversationProvider(conversationApi: api, isSignedIn: () => true);
+    addTearDown(provider.dispose);
+    await provider.refreshTypedDetail('c0');
+    expect(headers.last['X-Omi-Recording-Detail'], '1');
+  });
   test('typed initial and older pages acknowledge held members and use the raw storage cursor', () async {
     final members = [for (var i = 0; i < 50; i++) row(i)];
     final offsets = <String?>[];

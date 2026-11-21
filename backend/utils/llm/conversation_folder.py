@@ -9,17 +9,18 @@ validation in each experiment or callsite.
 
 import logging
 from dataclasses import dataclass
-from typing import Any, Mapping, Optional, Sequence, Tuple, cast
+from typing import Any, Optional, Sequence, Tuple, cast
 
 from langchain_core.output_parsers import PydanticOutputParser
 from langchain_core.prompts import ChatPromptTemplate
 from pydantic import BaseModel, Field
 
+from database.ports.folders import FolderEntity
 from .clients import get_llm
 
 logger = logging.getLogger(__name__)
 
-FolderRecord = Mapping[str, object]
+FolderRecord = FolderEntity
 
 
 class FolderAssignment(BaseModel):
@@ -66,11 +67,11 @@ def build_folders_context(folders: Sequence[FolderRecord]) -> str:
 
     lines: list[str] = []
     for folder in folders:
-        folder_id = _str_or_empty(folder.get('id'))
-        name = _str_or_empty(folder.get('name'))
-        description = _str_or_empty(folder.get('description'))
-        is_default = _bool_or_false(folder.get('is_default'))
-        category_mapping = folder.get('category_mapping')
+        folder_id = _str_or_empty(folder.id)
+        name = _str_or_empty(folder.name)
+        description = _str_or_empty(folder.description)
+        is_default = _bool_or_false(folder.is_default)
+        category_mapping = folder.category_mapping
 
         # Format: folder_id | "Folder Name" → Description
         if description:
@@ -98,8 +99,8 @@ Overview: {overview}
 
 
 def get_default_folder_id(user_folders: Sequence[FolderRecord]) -> Optional[str]:
-    default_folder = next((f for f in user_folders if _bool_or_false(f.get('is_default'))), None)
-    return _optional_str(default_folder.get('id')) if default_folder else None
+    default_folder = next((f for f in user_folders if _bool_or_false(f.is_default)), None)
+    return _optional_str(default_folder.id) if default_folder else None
 
 
 def validate_folder_assignment(
@@ -118,7 +119,7 @@ def validate_folder_assignment(
     no category-aligned folder.
     """
 
-    valid_folder_ids = {_optional_str(f.get('id')) for f in user_folders}
+    valid_folder_ids = {_optional_str(f.id) for f in user_folders}
     category_folder_id = category_folder_id if category_folder_id in valid_folder_ids else None
     fallback_id = category_folder_id or default_folder_id
     via_category = fallback_id is not None and fallback_id == category_folder_id

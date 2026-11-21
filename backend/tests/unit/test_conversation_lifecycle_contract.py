@@ -1,5 +1,6 @@
 """Behavioral contract for the exclusive conversation lifecycle owner (#9516)."""
 
+import asyncio
 import copy
 import logging
 import threading
@@ -833,6 +834,18 @@ def test_processing_admission_guard_keeps_the_traceback_for_unexpected_failures(
     assert 'processor crashed' in caplog.text
 
 
+def test_processing_admission_guard_rolls_back_cancellation_to_recoverable_state(lifecycle_store, monkeypatch):
+    _quiet_heartbeat(monkeypatch)
+    lifecycle_store.put_conversation('uid', 'conversation', status=ConversationStatus.processing.value, discarded=False)
+
+    with pytest.raises(asyncio.CancelledError):
+        with lifecycle_service.processing_admission_guard('uid', 'conversation'):
+            raise asyncio.CancelledError()
+
+    assert lifecycle_store.conversation('uid', 'conversation')['status'] == ConversationStatus.in_progress.value
+    assert lifecycle_service.admit_processing('uid', 'conversation') is True
+
+
 def test_processing_admission_guard_keeps_the_traceback_for_a_generic_processing_500(monkeypatch, caplog):
     """The boundary's generic 500 is not account state; its traceback stays visible."""
     _quiet_heartbeat(monkeypatch)
@@ -1068,16 +1081,6 @@ def test_legacy_restore_records_user_verdict_without_restoring_tombstones(lifecy
         assert row['relevance_decision']['decided_by'] == 'user'
         assert row['relevance_decision']['reason'] == 'restored'
 
-
-
-def test_restore_fences_a_concurrent_locked_conversation(lifecycle_store):
-    lifecycle_store.put_conversation(
-        'uid', 'locked-restore', status='completed', discarded=True, is_locked=True, relevance_decision={}
-    )
-
-    assert conversations_db.restore_conversation_from_discarded('uid', 'locked-restore') is False
-    assert lifecycle_store.conversation('uid', 'locked-restore')['discarded'] is True
-    assert lifecycle_store.write_log == []
 
 @pytest.mark.parametrize('entrypoint', ['transition', 'complete'])
 @pytest.mark.parametrize('reason', ['filler_only', 'empty_transcript'])

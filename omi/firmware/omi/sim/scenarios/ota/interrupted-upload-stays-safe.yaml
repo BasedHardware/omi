@@ -1,0 +1,22 @@
+id: ota/interrupted-upload-stays-safe
+summary: >
+  An upload that stops before completion leaves the latch set: a stray
+  completion afterwards does not clear it and the warm reset returns to SAFE.
+  A cold power cycle still leaves SAFE (3.0.24: the latch is RAM-only).
+tags: [fix]
+initial: {charging: true}
+timeline:
+  - {t: 0, hold: 10600}
+  - {t: 15000, dfu: chunk}
+  - {t: 16000, dfu: stopped}
+  - {t: 17000, dfu: pending}
+  - {t: 20000, power: soft_reset}
+  - {t: 30000, power: cycle}
+end: 45000
+expect:
+  boot_count: 3
+  boots:
+    - {safe: true, latched: true, not_log: ["omi/bootstate=TRIAL"]}
+    - {reset: software, safe: true}
+    - {reset: power-on, safe: false, log: ["Device initialized successfully"]}
+  invariants: [no-stuck-safe]

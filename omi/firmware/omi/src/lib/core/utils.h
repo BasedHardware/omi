@@ -11,9 +11,12 @@
     }
 
 #define ASSERT_TRUE(result)                                                                                            \
-    if (!result) {                                                                                                     \
-        LOG_ERR("Error at %s:%d:%d", __FILE__, __LINE__, result);                                                      \
-        return -1;                                                                                                     \
-    }
+    do {                                                                                                               \
+        const int omi_assert_true_value_ = !!(result);                                                                 \
+        if (!omi_assert_true_value_) {                                                                                 \
+            LOG_ERR("Error at %s:%d:%d", __FILE__, __LINE__, omi_assert_true_value_);                                  \
+            return -1;                                                                                                 \
+        }                                                                                                              \
+    } while (0)
 
 #endif

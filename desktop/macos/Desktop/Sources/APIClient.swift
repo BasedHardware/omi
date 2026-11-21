@@ -248,7 +248,8 @@ actor APIClient {
     customBaseURL: String? = nil,
     includeBYOK: Bool = true,
     expectedOwnerId: String? = nil,
-    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil,
+    idempotencyKey: String? = nil
   ) async throws -> T {
     let authPolicy = try resolvedRequestAuthPolicy(
       expectedOwnerId: expectedOwnerId,
@@ -266,6 +267,9 @@ actor APIClient {
       includeBYOK: includeBYOK,
       expectedAuthOwnerId: authOwnerId)
     try validateExpectedOwner(authPolicy)
+    if let idempotencyKey {
+      request.setValue(idempotencyKey, forHTTPHeaderField: "Idempotency-Key")
+    }
 
     return try await performRequest(
       request,
@@ -968,12 +972,6 @@ extension APIClient {
   /// conversation detail API.
   func getOmiCapture(id: String) async throws -> ServerConversation {
     try await get("v1/conversations/\(id)?source=omi&include_discarded=false")
-  }
-
-  /// Deletes a conversation by ID
-  func deleteConversation(id: String) async throws {
-    try await delete("v1/conversations/\(id)?cascade=true")
-    invalidateConversationsCountCache()
   }
 
   /// Updates the starred status of a conversation

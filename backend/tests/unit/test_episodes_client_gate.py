@@ -67,8 +67,6 @@ def fake_redis(monkeypatch):
 @pytest.fixture(autouse=True)
 def _admitted_by_default(monkeypatch):
     monkeypatch.delenv(config.EPISODES_ENABLED_ENV, raising=False)
-    monkeypatch.delenv(config.EPISODES_PERCENT_ENV, raising=False)
-    monkeypatch.delenv(config.EPISODES_UID_ALLOWLIST_ENV, raising=False)
     monkeypatch.delenv(config.EPISODES_CLIENT_CHANNELS_ENV, raising=False)
 
 
@@ -155,10 +153,11 @@ def test_a_failed_write_is_retried_on_the_next_call(fake_redis):
     assert client_gate.note_client_seen('u', now=30) is True
 
 
-def test_an_unadmitted_caller_leaves_no_marker(fake_redis, http, monkeypatch):
+def test_beta_caller_refreshes_marker_even_when_episodes_are_disabled(fake_redis, http, monkeypatch):
     monkeypatch.setenv(config.EPISODES_ENABLED_ENV, 'off')
     assert http.get('/v1/episodes/live').json() == {'enabled': False, 'episode': None}
-    assert fake_redis.sets == []
+    assert len(fake_redis.sets) == 1
+    assert fake_redis.sets[0][0] == 'episodes:client_seen:uid-1'
 
 
 # --------------------------------------------------------------------------- the client channel is the cohort
@@ -273,8 +272,6 @@ def test_realtime_batches_reach_the_gate_only_when_admitted(fake_redis, monkeypa
 
 
 def test_the_allowlist_bypasses_the_percentage_but_not_the_marker(fake_redis, monkeypatch):
-    monkeypatch.setenv(config.EPISODES_PERCENT_ENV, '0')
-    monkeypatch.setenv(config.EPISODES_UID_ALLOWLIST_ENV, 'david')
     assert config.episodes_enabled_for('david') is True
     assert client_gate.episode_work_enabled('david') is False
     assert _run_moment(monkeypatch, 'david')[0] == []

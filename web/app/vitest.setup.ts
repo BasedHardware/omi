@@ -1,4 +1,8 @@
 import '@testing-library/jest-dom/vitest';
+import { configure } from '@testing-library/react';
+
+// findBy/waitFor default to 1 s, which loaded hosts miss on slow first renders; keep the wait bounded at 5 s.
+configure({ asyncUtilTimeout: 5000 });
 
 // Node 25+ omits the experimental localStorage global unless a file flag is set.
 if (

@@ -195,7 +195,7 @@ def test_only_finally_discarded_members_are_absent_from_live_and_list_http(store
             'relevance_decision': {'verdict': 'discard', 'decided_by': 'model', 'trigger': 'sync_update', 'arm': 'jev'},
         }
     )
-    monkeypatch.setattr(router, '_admitted', lambda *a: True)
+    monkeypatch.setattr(router, '_admitted', lambda *a, **kw: True)
     monkeypatch.setattr(home_read, 'get_firestore_client', lambda: store)
     monkeypatch.setattr(home_read.conversations, 'prepare_conversation_for_read', lambda row, uid: row)
     live = service.live_episode
@@ -367,6 +367,48 @@ def test_members_read_in_recorded_order_not_arrival_order(monkeypatch):
     assert [m['id'] for m in projected['members']] == ['earlier', 'later']
 
 
+def test_member_wire_carries_gist_and_home_step(monkeypatch):
+    monkeypatch.delenv('HOME_STEP_PROJECTION', raising=False)
+    row = {
+        'id': 'c',
+        'status': 'completed',
+        'started_at': START,
+        'finished_at': START + timedelta(minutes=2),
+        'structured': {'title': 'Launch plan', 'overview': 'notes', 'gist': 'Launch plan settled; Arjan owns rollout'},
+    }
+    wire = home_read.project_episode('u', _episode('c'), members={'c': row})
+    member = wire['members'][0]
+    assert member['gist'] == 'Launch plan settled; Arjan owns rollout'
+    assert member['home_step'] == 'ready'
+
+
+def test_member_wire_omits_home_step_when_the_projection_is_off(monkeypatch):
+    monkeypatch.setenv('HOME_STEP_PROJECTION', 'false')
+    row = {
+        'id': 'c',
+        'status': 'completed',
+        'started_at': START,
+        'finished_at': START + timedelta(minutes=2),
+        'structured': {'title': 'Launch plan', 'overview': 'notes', 'gist': 'A gist'},
+    }
+    member = home_read.project_episode('u', _episode('c'), members={'c': row})['members'][0]
+    assert member['gist'] == 'A gist'
+    assert 'home_step' not in member
+
+
+def test_member_wire_keeps_legacy_notes_without_a_gist(monkeypatch):
+    monkeypatch.delenv('HOME_STEP_PROJECTION', raising=False)
+    row = {
+        'id': 'c',
+        'status': 'completed',
+        'started_at': START,
+        'finished_at': START + timedelta(minutes=2),
+        'structured': {'title': 'Launch plan', 'overview': 'notes'},
+    }
+    member = home_read.project_episode('u', _episode('c'), members={'c': row})['members'][0]
+    assert member['gist'] == ''
+
+
 def test_member_field_projection_keeps_pending_deadline_and_delivery_receipt(store, monkeypatch):
     member = {
         'status': 'completed',
@@ -384,8 +426,13 @@ def test_member_field_projection_keeps_pending_deadline_and_delivery_receipt(sto
     }
 
 
-@pytest.mark.parametrize('outcome', ['pending', 'dead_letter', 'deadline', 'projected'])
-def test_home_http_returns_honest_batch_member_state(store, monkeypatch, outcome):
+@pytest.mark.parametrize(
+    'outcome',
+    ['pending', 'old_stamp', 'dead_letter', 'upload_failed', 'terminal_failed', 'deadline', 'max_age', 'projected'],
+)
+@pytest.mark.parametrize('queue_hold', ['true', 'false'])
+def test_home_http_returns_honest_batch_member_state(store, monkeypatch, outcome, queue_hold):
+    monkeypatch.setenv('HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED', queue_hold)
     from fastapi import FastAPI
     from fastapi.testclient import TestClient
     from routers import episodes as router
@@ -396,17 +443,29 @@ def test_home_http_returns_honest_batch_member_state(store, monkeypatch, outcome
     root.collection('episodes').document('batch').update({'conversation_ids': ['capture']})
     member = {
         'status': 'completed',
+        'record_lane_owner': 'batch_sync_v1',
+        'finished_at': datetime.now(timezone.utc) - timedelta(hours=25 if outcome == 'deadline' else 3),
         'episode_transcription_deadline_at': datetime.now(timezone.utc)
-        + timedelta(hours=-1 if outcome == 'deadline' else 1),
+        + timedelta(hours=-1 if outcome in {'deadline', 'old_stamp'} else 1),
         'server_batch_audio_start': START.timestamp(),
         'server_batch_audio_end': (START + timedelta(minutes=2)).timestamp(),
     }
+    if outcome == 'max_age':
+        member['episode_transcription_pending_at'] = datetime.now(timezone.utc) - timedelta(hours=25)
+        member['episode_transcription_deadline_at'] = member['episode_transcription_pending_at'] + timedelta(hours=2)
+    member['home_transcription_deadline_at'] = member['episode_transcription_deadline_at']
+    if 'episode_transcription_pending_at' in member:
+        member['home_transcription_pending_at'] = member['episode_transcription_pending_at']
     if outcome == 'dead_letter':
         member['finalization_status'] = 'dead_letter'
+    elif outcome == 'upload_failed':
+        member['record_upload_failed'] = True
+    elif outcome == 'terminal_failed':
+        member['status'] = 'failed'
     elif outcome == 'projected':
         member.update(record_projection_revision=1, structured={'title': 'Recovered transcript'})
     root.collection('conversations').document('capture').set(member)
-    monkeypatch.setattr(router, '_admitted', lambda *a: True)
+    monkeypatch.setattr(router, '_admitted', lambda *a, **kw: True)
     monkeypatch.setattr(home_read, 'get_firestore_client', lambda: store)
     monkeypatch.setattr(home_read.conversations, 'prepare_conversation_for_read', lambda row, uid: row)
     monkeypatch.setattr(home_read, 'schedule_missed_composes', lambda *a, **kw: 0)
@@ -421,8 +480,138 @@ def test_home_http_returns_honest_batch_member_state(store, monkeypatch, outcome
     wire = response.json()['episodes'][0]['members'][0]
     expected = {
         'pending': ('Transcribing…', 'processing'),
+        'old_stamp': ('Transcribing…', 'processing'),
+        'upload_failed': ("Couldn't transcribe", 'failed'),
+        'terminal_failed': ("Couldn't transcribe", 'failed'),
         'dead_letter': ("Couldn't transcribe", 'failed'),
         'deadline': ("Couldn't transcribe", 'failed'),
+        'max_age': ("Couldn't transcribe", 'failed'),
         'projected': ('Recovered transcript', 'completed'),
     }
+    if queue_hold == 'true':
+        expected['deadline'] = ('Transcribing…', 'processing')
+    else:
+        expected['old_stamp'] = ("Couldn't transcribe", 'failed')
     assert (wire['title'], wire['status']) == expected[outcome]
+    if outcome != 'projected':
+        assert response.json()['episodes'][0]['title'] == (wire['title'] if queue_hold == 'true' else '')
+        assert wire['home_step'] == ('failed' if wire['status'] == 'failed' else 'transcribing')
+
+
+def test_lost_projection_signal_is_recovered_from_visible_member_on_read(monkeypatch):
+    from utils.episodes import composer
+
+    monkeypatch.setenv('EPISODE_COMPOSER', 'true')
+    monkeypatch.delenv('EPISODE_COMPOSE_TRANSCRIPT_READY_ENABLED', raising=False)
+
+    episode = _episode('c')
+    episode.update(
+        status='closed',
+        closed_at=START,
+        composed_at=START,
+        composed_fingerprint='existing',
+        composer_version=composer.COMPOSER_VERSION,
+    )
+    episode['composed_notes'] = composer.notes_hash(episode)
+    member = {
+        'id': 'c',
+        'status': 'completed',
+        'structured': {'title': 'Recovered speech'},
+        'started_at': START,
+        'finished_at': START + timedelta(hours=1),
+        'episode_transcript_updated_at': START + timedelta(hours=2),
+    }
+    assert not composer.needs_compose(episode)
+    monkeypatch.setattr(home_read, 'user_zone_provider', lambda *a: 'UTC')
+    wire = home_read.project_episode('u', episode, members={'c': member})
+    assert composer.needs_compose(episode)
+    assert '_member_transcript_updated_at' not in wire
+    monkeypatch.setenv('EPISODE_COMPOSE_TRANSCRIPT_READY_ENABLED', 'false')
+    assert not composer.needs_compose(episode)
+    monkeypatch.delenv('EPISODE_COMPOSE_TRANSCRIPT_READY_ENABLED')
+    member['deleted'] = True
+    assert home_read.project_episode('u', episode, members={'c': member}) is None
+    assert not composer.needs_compose(episode)
+
+
+@pytest.mark.parametrize('switch', ['on', 'off'])
+def test_queued_episode_title_and_member_share_bound_and_rollback(monkeypatch, switch):
+    monkeypatch.setenv('HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED', switch)
+    now = datetime.now(timezone.utc)
+    episode = {
+        'id': 'episode',
+        'status': 'closed',
+        'title': 'Stored title',
+        'started_at': now - timedelta(hours=3, minutes=3),
+        'last_activity_at': now - timedelta(hours=3),
+        'conversation_ids': ['capture'],
+    }
+    member = {
+        'status': 'completed',
+        'started_at': episode['started_at'],
+        'finished_at': episode['last_activity_at'],
+        'episode_transcription_deadline_at': (now - timedelta(hours=1)).isoformat(),
+        'structured': {'title': '', 'overview': ''},
+    }
+    monkeypatch.setattr(home_read, 'user_zone_provider', lambda uid: lambda: 'UTC')
+    projected = home_read.project_episode('u', episode, members={'capture': member})
+    assert projected is not None
+    wire = projected['members'][0]
+    assert (wire['title'], wire['status']) == (
+        ('Transcribing…', 'processing') if switch == 'on' else ("Couldn't transcribe", 'failed')
+    )
+    assert projected['title'] == ('Transcribing…' if switch == 'on' else 'Stored title')
+    assert member['status'] == 'completed' and episode['title'] == 'Stored title'
+
+
+def test_home_24_hour_hold_and_composer_transcript_wait_are_independent(monkeypatch):
+    from utils.episodes import composer
+
+    monkeypatch.setenv('EPISODE_COMPOSER', 'true')
+    monkeypatch.setenv('HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED', 'true')
+    now = datetime.now(timezone.utc)
+    episode = _episode('c')
+    episode.update(
+        status='closed',
+        closed_at=now - timedelta(hours=3),
+        compose_pending_since=now,
+        compose_transcript_wait_started_at=now,
+        compose_transcript_wait_until=now + timedelta(hours=3),
+    )
+    row = {
+        'id': 'c',
+        'status': 'completed',
+        'started_at': now - timedelta(hours=4),
+        'finished_at': now - timedelta(hours=3),
+        'episode_transcription_pending_at': now - timedelta(hours=3),
+        'episode_transcription_deadline_at': now - timedelta(hours=1),
+        'structured': {},
+    }
+    monkeypatch.setattr(home_read, 'user_zone_provider', lambda _uid: lambda: 'UTC')
+    wire = home_read.project_episode('u', episode, members={'c': row})
+    assert wire['members'][0]['title'] == 'Transcribing…'
+    assert not composer.needs_compose(episode)
+    row['episode_transcript_updated_at'] = now + timedelta(seconds=1)
+    home_read.project_episode('u', episode, members={'c': row})
+    assert composer.needs_compose(episode)  # Receipt wakes a wait before any first compose.
+    row.pop('episode_transcript_updated_at')
+    episode['compose_transcript_wait_until'] = now - timedelta(seconds=1)
+    home_read.project_episode('u', episode, members={'c': row})
+    assert composer.needs_compose(episode)  # Compose expiry never flips the Home label to failed.
+    assert home_read.project_episode('u', episode, members={'c': row})['members'][0]['title'] == 'Transcribing…'
+
+
+def test_member_read_mask_preserves_recording_guard_after_rollback(store, monkeypatch):
+    row = {
+        'recording': True,
+        'home_hidden': True,
+        'status': 'completed',
+        'started_at': START,
+        'finished_at': START + timedelta(minutes=1),
+        'structured': {'title': 'Raw capture'},
+    }
+    store.collection('users').document('u').collection('conversations').document('r').set(row)
+    monkeypatch.setattr(home_read.conversations, 'prepare_conversation_for_read', lambda row, uid: row)
+    members = home_read._read_members('u', [{'conversation_ids': ['r']}], firestore_client=store)
+    assert members['r']['recording'] and members['r']['home_hidden']
+    assert home_read.project_episode('u', _episode('r'), members=members) is None

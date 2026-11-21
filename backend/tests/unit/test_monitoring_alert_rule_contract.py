@@ -6,6 +6,11 @@ from pathlib import Path
 
 import yaml
 from prometheus_client import CollectorRegistry
+from prometheus_client.parser import text_string_to_metric_families
+
+from paging.redis_probe.probe import Probe
+from scripts.redis_pager_route import REDIS_PAGER_RECEIVER, REDIS_PAGER_TARGET, REDIS_PAGER_UID
+from tests.unit.test_timeliness_metrics_are_scraped import FRESH_NEWEST, NEWEST
 from utils.lifecycle_metrics import PhaseMetrics
 
 REPO = Path(__file__).resolve().parents[3]
@@ -101,13 +106,14 @@ def test_batch_queue_safety_has_a_two_hour_page_and_a_separate_incomplete_scan_p
         assert 'omi-batch-queue-uncommitted-2h' not in rules
         late = rules['omi-batch-unit-unpublished-2h']
         nodes = {node['refId']: node for node in late['data']}
-        assert nodes['D']['model']['expression'] == '($A > 7200 && $B < 900) || ($C > 7200 && $F < 120)', export_name
+        assert nodes['D']['model']['expression'] == '($A > 7200 && $B < 1200) || ($C > 7200 && $F < 120)', export_name
         selector = '{namespace="prod-omi-backend"}'
         assert nodes['A']['model']['expr'] == (
-            'max(omi_batch_timeliness_new_oldest_age_seconds'
-            '{leg=~"uncommitted|quarantined|assignment_held|projection"} >= 0) or vector(0)'
+            'max((omi_batch_timeliness_new_oldest_age_seconds'
+            '{leg=~"uncommitted|quarantined|assignment_held|projection"} >= 0) '
+            f'and ignoring(leg) {FRESH_NEWEST}) or vector(0)'
         )
-        assert nodes['B']['model']['expr'] == '(time() - max(omi_batch_timeliness_observed_at_seconds)) or vector(1e9)'
+        assert nodes['B']['model']['expr'] == f'(time() - max({NEWEST})) or vector(1e9)'
         assert nodes['C']['model']['expr'] == f'max(omi_batch_pipeline_oldest_age_seconds{selector} >= 0) or vector(0)'
         assert (
             nodes['F']['model']['expr']
@@ -116,7 +122,7 @@ def test_batch_queue_safety_has_a_two_hour_page_and_a_separate_incomplete_scan_p
         blind = rules['omi-batch-queue-safety-blind']
         expr = blind['data'][0]['model']['expr']
         assert expr == (
-            f'((max(time() - omi_batch_pipeline_metrics_refreshed_at_seconds{selector}) >= bool 120) or vector(1))'
+            f'((max(time() - omi_batch_pipeline_metrics_refreshed_at_seconds{selector}) >= bool 900) or vector(1))'
             f' + (count(count by (priority) (omi_batch_pipeline_oldest_age_seconds{selector} != omi_batch_pipeline_oldest_age_seconds{selector})) or vector(0))'
             f' + (count(count by (priority) (omi_batch_pipeline_retry_age_seconds{selector} != omi_batch_pipeline_retry_age_seconds{selector})) or vector(0))'
         )
@@ -317,6 +323,25 @@ def test_combined_alert_export_matches_every_split_source_rule():
     assert combined.keys() == split.keys()
     for uid in combined:
         assert combined[uid] == split[uid], uid
+
+
+def test_datasource_backed_alert_queries_carry_a_nonzero_relative_range():
+    """Grafana rejects a datasource query whose relative range is 0s..0s.
+
+    A merged rule shipped ``relativeTimeRange`` ``{from: 0, to: 0}`` on a
+    Prometheus selector node; source lint passed but provisioning failed with
+    ``invalid relative time range [From: 0s, To: 0s]`` (SCA-2055/SCA-2062).
+    Expression nodes keep the 0s window Grafana ignores for them.
+    """
+    for export_name, rules in _all_rule_exports().items():
+        for uid, rule in rules.items():
+            for query in rule["data"]:
+                if query["datasourceUid"] in ("__expr__", "-100"):
+                    continue
+                window = query["relativeTimeRange"]
+                assert window["from"] > window["to"], f"{export_name}:{uid}:{query['refId']}"
+                assert window["from"] > 0, f"{export_name}:{uid}:{query['refId']}"
+                assert window["to"] >= 0, f"{export_name}:{uid}:{query['refId']}"
 
 
 def test_durable_queue_oldest_ready_alert_pages_on_age_absence_or_sustained_unknown():
@@ -781,7 +806,7 @@ def test_live_stt_evidence_loss_rules_are_volume_gated_settlement_proxies():
         warning = rules["omi-stt-evidence-loss"]
         critical = rules["omi-stt-evidence-loss-critical"]
         for rule, duration, threshold, severity in (
-            (warning, "15m", "0.01", "warning"),
+            (warning, "30m", "0.01", "warning"),
             (critical, "10m", "0.03", "critical"),
         ):
             assert rule["for"] == duration, f"{export_name}:{rule['uid']}"
@@ -1279,6 +1304,7 @@ def test_alert_rules_do_not_read_chain_only_series_without_documenting_the_depen
 # adding a new external metric to a rule requires naming it here.
 EXTERNAL_ALERT_METRICS = {
     "up": "Prometheus builtin target health",
+    "scrape_samples_scraped": "Prometheus builtin per-scrape sample count",
     # kube-state-metrics
     "kube_deployment_status_replicas": "kube-state-metrics",
     "kube_deployment_status_replicas_ready": "kube-state-metrics",
@@ -1294,6 +1320,8 @@ EXTERNAL_ALERT_METRICS = {
     "container_memory_working_set_bytes": "cAdvisor",
     # prometheus-stackdriver-exporter
     "stackdriver_firestore_instance_firestore_googleapis_com_document_read_count": "prometheus-stackdriver-exporter",
+    # GMP Cloud Monitoring native metric (gmp-cloud-run datasource)
+    "firestore_googleapis_com:document_read_count": "GMP Cloud Monitoring native metric",
     "stackdriver_https_lb_rule_loadbalancing_googleapis_com_https_backend_request_count": "prometheus-stackdriver-exporter",
     "stackdriver_internal_http_lb_rule_loadbalancing_googleapis_com_https_internal_backend_latencies_bucket": (
         "prometheus-stackdriver-exporter"
@@ -1302,6 +1330,10 @@ EXTERNAL_ALERT_METRICS = {
         "prometheus-stackdriver-exporter"
     ),
     "stackdriver_monitoring_last_scrape_error": "prometheus-stackdriver-exporter",
+    # Workspace gate runner (infra/metrics/pipeline-census/gate.py) writes a
+    # node_exporter textfile; it is not a backend process.
+    "omi_pipeline_ledger_gate_receipt_generated_at_seconds": "workspace census gate textfile",
+    "omi_pipeline_ledger_gate_verdict": "workspace census gate textfile",
     # Cloud Logging declarations, queried directly through GMP (never the local exporter).
     "logging_googleapis_com:user_omi_pipeline_upload_admission_503": "batch-projection/log-metrics.json",
     "logging_googleapis_com:user_omi_pipeline_firestore_contention_exhausted": "batch-projection/log-metrics.json",
@@ -1338,6 +1370,7 @@ _PROMQL_KEYWORDS = frozenset(
         "clamp_min",
         "clamp_max",
         "vector",
+        "scalar",
         "or",
         "and",
         "unless",
@@ -1350,6 +1383,7 @@ _PROMQL_KEYWORDS = frozenset(
         "histogram_quantile",
         "topk",
         "bottomk",
+        "quantile",
         "count",
         "max",
         "min",
@@ -1395,9 +1429,21 @@ def _declared_backend_metric_names() -> set[str]:
             registry = CollectorRegistry()
             PhaseMetrics(prefix, ['state'], registry=registry)
             names.update(metric.name for metric in registry.collect())
-        if path == REPO / 'backend/utils/executors.py':
-            # This helper constructs/reuses registered Gauge objects with fixed names.
+        if path in (
+            REPO / 'backend/utils/executors.py',
+            REPO / 'backend/utils/conversations/pipeline_ledger_metrics.py',
+        ):
+            # These helpers construct/reuse registered Gauge objects with fixed names.
             names |= set(re.findall(r"_gauge\(\s*['\"]([a-zA-Z0-9_:]+)['\"]", path.read_text(encoding='utf-8')))
+    # The standalone probe emits text exposition directly. Read a real
+    # populated snapshot so the gate follows its emitted sample names.
+    probe = Probe()
+    probe.sample = (1, 1, 0.0)
+    names.update(
+        sample.name
+        for family in text_string_to_metric_families(probe.metrics().decode("utf-8"))
+        for sample in family.samples
+    )
     return names
 
 
@@ -1832,7 +1878,6 @@ def test_inherited_datasource_targets_join_the_promql_gate():
 
 
 REDIS_CACHE_CONN_WARN = "omi-redis-cache-conn-warn"
-REDIS_CACHE_CONN_PAGE = "omi-redis-cache-conn-page"
 REDIS_CACHE_CONN_WARN_EXPR = (
     'sum(increase(omi_fallback_total{job=~"backend-listen-metrics|pusher-metrics",component="other",'
     'from_mode="cache_write",reason=~"auth_error|connection_error|timeout",outcome="degraded"}[10m])) or vector(0)'
@@ -1849,13 +1894,21 @@ def test_redis_cache_connection_alerts_watch_listen_and_pusher_fail_open():
     """Auth and connection fail-opens are omi_fallback_total, the same signal sibling rules use.
 
     capacity_full stays on its own reason so a maxmemory event does not page this rule.
-    The series did not exist during the 2026-10-08 AuthenticationError incident, so the
-    thresholds are structural: any sustained errors warn, and a ratio above half of
-    listen accepts pages.
+    Sustained errors warn. The pilot pages on either qualifying traffic impact
+    or a fresh failed PING even when there are no listen accepts.
     """
+    selector = f'{{job="omi-redis-serving-probe",target="{REDIS_PAGER_TARGET}"}}'
+    attempt = f'omi_redis_authenticated_ping_last_attempt_seconds{selector}'
+    expected_page_expr = (
+        f'((({REDIS_CACHE_CONN_RATIO_EXPR}) > bool 0.5)\n'
+        f' * ({REDIS_CACHE_CONN_TRAFFIC_EXPR} >= bool 50) == 1)\n'
+        f'or on() max((omi_redis_authenticated_ping_success{selector}\n'
+        f' and ({attempt} >= time() - 90)\n'
+        f' and ({attempt} <= time())) == bool 0)'
+    )
     for export_name, rules in _all_rule_exports().items():
         warn = rules[REDIS_CACHE_CONN_WARN]
-        page = rules[REDIS_CACHE_CONN_PAGE]
+        page = rules[REDIS_PAGER_UID]
         assert warn["ruleGroup"] == "Resilience", export_name
         assert warn["for"] == "10m", export_name
         assert warn["noDataState"] == "OK", export_name
@@ -1869,14 +1922,17 @@ def test_redis_cache_connection_alerts_watch_listen_and_pusher_fail_open():
 
         assert page["ruleGroup"] == "Resilience", export_name
         assert page["for"] == "5m", export_name
-        assert page["noDataState"] == "OK", export_name
+        assert page["noDataState"] == page["execErrState"] == "KeepLast", export_name
         assert page["labels"]["severity"] == "critical", export_name
         assert page["labels"]["impact"] == "user-experience", export_name
-        assert page["data"][0]["model"]["expr"] == REDIS_CACHE_CONN_TRAFFIC_EXPR, export_name
-        assert page["data"][1]["model"]["expr"] == REDIS_CACHE_CONN_RATIO_EXPR, export_name
-        assert page["data"][2]["model"]["expression"] == "$A >= 50 && $B > 0.5", export_name
-        assert page["notification_settings"]["receiver"] == "Omi - Services Alerting (Telegram)", export_name
-        assert "capacity_full" not in page["data"][1]["model"]["expr"], export_name
+        assert page["labels"]["paging_target"] == REDIS_PAGER_TARGET, export_name
+        assert page["data"][0]["model"]["expr"] == expected_page_expr, export_name
+        assert page["data"][1]["model"]["expression"] == "A", export_name
+        assert page["data"][2]["model"]["expression"] == "B", export_name
+        assert page["condition"] == page["data"][2]["refId"] == "C", export_name
+        assert page["data"][2]["model"]["conditions"][0]["evaluator"] == {"params": [0], "type": "gt"}, export_name
+        assert page["notification_settings"]["receiver"] == REDIS_PAGER_RECEIVER, export_name
+        assert "capacity_full" not in page["data"][0]["model"]["expr"], export_name
 
 
 def test_retired_loki_alerts_cannot_reenter_canonical_sources():
@@ -2102,10 +2158,13 @@ def test_lifecycle_pages_use_new_cohorts_freshness_and_imported_blind_companions
             assert page['data'][2]['model']['conditions'][0]['evaluator']['params'] == [threshold]
             assert page['for'] == pending
             assert page['noDataState'] == 'OK'
-            assert page['labels']['tier'] == 'page'
+            assert page['labels']['tier'] == ('agent' if prefix == 'omi_finalization_byok' else 'page')
+            assert page['isPaused'] == (prefix != 'omi_finalization_byok')
             if prefix != 'omi_finalization_byok':
                 assert '2026-11-04T09:27Z' in page['annotations']['scope']
-            assert not page['notification_settings']['mute_time_intervals']
+            assert page['notification_settings']['mute_time_intervals'] == (
+                ['omi-tier-silent'] if prefix == 'omi_finalization_byok' else []
+            )
             for suffix in ('', '-stale', '-blind'):
                 rule = rules[uid + suffix]
                 assert rule['uid'] in gate
@@ -2220,3 +2279,18 @@ def test_pusher_storage_queue_and_memory_alerts_observe_fresh_current_state():
                 assert 'workload="prod-omi-pusher",workload_type=~"deployment"' in expr
                 assert expr.count('timestamp(') == 2  # memory AND workload-owner freshness
                 assert expr.endswith('/ 3758096384')  # chart limit: 3.5 GiB
+
+
+def test_pusher_pcm_refusals_are_sustained_agent_only_pressure():
+    for export_name, rules in _all_rule_exports().items():
+        rule = rules['omi-pusher-storage-pcm-refusals']
+        assert rule['for'] == '30m', export_name
+        assert rule['labels']['tier'] == 'agent' and rule['labels']['audience'] == 'agent'
+        assert rule['labels']['owner'] == 'omi-lifecycle'
+        assert rule['noDataState'] == 'OK'
+        expr = rule['data'][0]['model']['expr']
+        assert 'sum by (stage) (rate(omi_pusher_storage_pcm_refusals_total{job="pusher-metrics"}[5m])' in expr
+        assert 'timestamp(' in expr and '< 120' in expr
+        assert rule['data'][2]['model']['conditions'][0]['evaluator'] == {'params': [0], 'type': 'gt'}
+        assert 'no receipt' in rule['annotations']['user_impact']
+        assert 'PUSHER_STORAGE_PCM_BUDGET_MB' in rule['annotations']['safe_next_action']

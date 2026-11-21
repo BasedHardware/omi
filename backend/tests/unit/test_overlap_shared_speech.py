@@ -5,7 +5,6 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from config.capture_shared_speech import shared_speech_mode
 from utils.conversations import overlap_shared_speech as matcher
 
 T0 = datetime(2026, 1, 1, tzinfo=timezone.utc)
@@ -170,32 +169,6 @@ def test_sub_microsecond_line_cannot_supply_sentence_evidence():
 def test_dense_layout_abstains_at_bounded_comparison_budget(monkeypatch):
     monkeypatch.setattr(matcher, 'MAX_COMPARISONS', 1)
     assert matcher.measure_overlap_shared_speech(row(), row()).reason == 'bounds'
-
-
-def test_mode_defaults_and_cohort_are_fail_closed(monkeypatch):
-    for key in ('CAPTURE_SHARED_SPEECH_MODE', 'CAPTURE_SHARED_SPEECH_UID_ALLOWLIST', 'CAPTURE_SHARED_SPEECH_PERCENT'):
-        monkeypatch.delenv(key, raising=False)
-    assert shared_speech_mode('synthetic') == 'off'
-    monkeypatch.setenv('CAPTURE_SHARED_SPEECH_MODE', 'on')
-    assert shared_speech_mode('synthetic') == 'off'
-    monkeypatch.setenv('CAPTURE_SHARED_SPEECH_UID_ALLOWLIST', ' synthetic ')
-    assert shared_speech_mode('synthetic') == 'on'
-    assert shared_speech_mode('other') == 'off'
-    monkeypatch.setenv('CAPTURE_SHARED_SPEECH_PERCENT', '100')
-    assert shared_speech_mode('other') == 'on'
-    monkeypatch.setenv('CAPTURE_SHARED_SPEECH_PERCENT', 'nan')
-    assert shared_speech_mode('other') == 'off'
-    monkeypatch.setenv('CAPTURE_SHARED_SPEECH_MODE', 'typo')
-    assert shared_speech_mode('synthetic') == 'off'
-
-
-def test_percentage_is_stable_and_shadow_is_scoped(monkeypatch):
-    monkeypatch.setenv('CAPTURE_SHARED_SPEECH_MODE', 'shadow')
-    monkeypatch.setenv('CAPTURE_SHARED_SPEECH_PERCENT', '5')
-    monkeypatch.delenv('CAPTURE_SHARED_SPEECH_UID_ALLOWLIST', raising=False)
-    modes = [shared_speech_mode(f'synthetic-{i}') for i in range(1000)]
-    assert modes == [shared_speech_mode(f'synthetic-{i}') for i in range(1000)]
-    assert 20 < modes.count('shadow') < 80
 
 
 def test_isolated_bad_line_cannot_supply_evidence_or_veto_strong_proven_speech():

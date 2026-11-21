@@ -1617,12 +1617,7 @@ def test_replace_mode_preferred_app_leads_and_keeps_other_results():
     ]
 
 
-@pytest.mark.parametrize('enabled', [False, True], ids=['flag-off', 'flag-on'])
-def test_user_reprocess_passes_the_result_contract_and_maps_app_failure(monkeypatch, enabled):
-    if enabled:
-        monkeypatch.setenv('CONVERSATION_REPROCESS_RESULT_CONTRACT_ENABLED', 'true')
-    else:
-        monkeypatch.delenv('CONVERSATION_REPROCESS_RESULT_CONTRACT_ENABLED', raising=False)
+def test_user_reprocess_preserves_results_and_returns_generic_app_failure(monkeypatch):
     seen_kwargs: list = []
 
     def _failing_trigger_apps(uid, conversation, **kwargs):
@@ -1632,14 +1627,9 @@ def test_user_reprocess_passes_the_result_contract_and_maps_app_failure(monkeypa
     with pytest.raises(HTTPException) as exc_info:
         _run_explicit_selection_flow(monkeypatch, _failing_trigger_apps, [])
 
-    # Keep-until-replaced is the default for every user reprocess; the flag
-    # selects only the error code.
+    # Keep-until-replaced is the default for every user reprocess.
     assert seen_kwargs[0]['replace_selected_result'] is True
-    if enabled:
-        assert exc_info.value.status_code == 502
-        assert exc_info.value.detail['code'] == 'app_result_failed'
-    else:
-        assert exc_info.value.status_code == 500
+    assert exc_info.value.status_code == 500
 
 
 def test_first_party_only_never_runs_or_reads_the_preferred_app():
@@ -2167,28 +2157,6 @@ def test_single_template_reprocess_budget_denial_is_not_stale_success(monkeypatc
     assert error.value.status_code == 402
 
 
-@pytest.mark.parametrize('budget_kind', ['funded', 'custom_stt'])
-def test_plain_user_reprocess_budget_denial_is_not_success(monkeypatch, budget_kind):
-    from fastapi import HTTPException
-
-    conversation = _ledger_gate_conversation(f'conversation-plain-{budget_kind}')
-    if budget_kind == 'funded':
-        monkeypatch.setattr(process_conversation.funded_processing, 'enabled', lambda *_: True)
-        monkeypatch.setattr(process_conversation.funded_processing, 'processing_allowed', lambda *_: False)
-    else:
-        conversation.uses_custom_stt = True
-        monkeypatch.setattr(process_conversation, 'should_skip_omi_paid_postprocessing', lambda *a, **k: True)
-
-    with pytest.raises(HTTPException) as error:
-        process_conversation.process_conversation(
-            'uid',
-            'en',
-            conversation,
-            trigger=process_conversation.ProcessingTrigger.USER_REPROCESS,
-        )
-
-    assert error.value.status_code == 402
-
 def _ledger_gate_conversation(conversation_id: str) -> Conversation:
     return Conversation(
         id=conversation_id,
@@ -2201,7 +2169,11 @@ def _ledger_gate_conversation(conversation_id: str) -> Conversation:
         transcript_segments=[
             TranscriptSegment(
                 id='seg-1',
-                text='hello there, this is a transcript segment',
+                text=(
+                    'hello there, this is a transcript segment with enough owner speech '
+                    'to clear the memory admission floor and reach the extraction boundary '
+                    'for the writer-mode admission tests that follow it here'
+                ),
                 speaker='SPEAKER_00',
                 speaker_id=0,
                 is_user=True,

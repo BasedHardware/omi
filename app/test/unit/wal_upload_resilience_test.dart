@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/services.dart';
@@ -8,12 +9,16 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/services/capture/capture_end.dart';
 import 'package:omi/services/wals/local_wal_sync.dart';
+import 'package:omi/services/wals/recording_wait_deferrals.dart';
+import 'package:omi/services/wals/mobile_batch_buffer.dart';
 import 'package:omi/services/wals/sync_rate_limiter.dart';
 import 'package:omi/services/wals/sync_upload_gate.dart';
 import 'package:omi/services/wals/wal.dart';
 import 'package:omi/services/wals/wal_interfaces.dart';
 import 'package:omi/utils/wal_file_manager.dart';
+import '../support/faulting_wal_writer.dart';
 
 /// Covers WAL upload failure scenarios that cause recordings to become stuck.
 ///
@@ -41,6 +46,22 @@ class _MockListener implements IWalSyncListener {
 
   @override
   void onWalSynced(Wal wal, {ServerConversation? conversation}) => syncedWals.add(wal);
+}
+
+class _UploadGateSpy implements SyncUploadGate {
+  int calls = 0;
+
+  @override
+  bool isRecordingWaiting({String? recordingGroup, String? filePath}) => false;
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) {
+    if (invocation.memberName == #upload) {
+      calls++;
+      return Future.value(UploadFilesResult.queued('accepted'));
+    }
+    return super.noSuchMethod(invocation);
+  }
 }
 
 Wal _makeWal({
@@ -122,6 +143,166 @@ void main() {
     );
     SyncRateLimiter.instance.clear();
     if (tempDir.existsSync()) tempDir.deleteSync(recursive: true);
+  });
+
+  for (final liveOnly in [false, true]) {
+    test('cancel during queued flush prevents the real ${liveOnly ? 'live' : 'fallback'} phone drain reaching its gate',
+        () async {
+      final gate = _UploadGateSpy();
+      final phone = LocalWalSyncImpl(listener, uploadGate: gate);
+      final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+      final wal = _makeWal(timerStart: now - (liveOnly ? 60 : 86400));
+      await File('${tempDir.path}/${wal.filePath}').writeAsBytes([1, 0, 0, 0, 42]);
+      phone.testWals = [wal];
+      final blocked = Completer<void>();
+      final queued = phone.testQueueWalIo(blocked.future);
+      final pass = liveOnly ? phone.syncLiveCaptureOnly() : phone.syncAll();
+      phone.cancelSync(); // The real drain has entered and is waiting on the buffer queue.
+      blocked.complete();
+      await queued;
+      await pass;
+      expect(gate.calls, 0);
+      expect(wal.status, WalStatus.miss);
+      expect(wal.isSyncing, isFalse);
+      expect(await File('${tempDir.path}/${wal.filePath}').readAsBytes(), [1, 0, 0, 0, 42]);
+      await phone.syncAll(); // Only a deliberately new pass may upload again.
+      expect(gate.calls, 1);
+    });
+  }
+
+  test('end watermark counts unknown clocks and refusals without counting accepted files or valid trailing silence',
+      () {
+    final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    final end = DateTime.fromMillisecondsSinceEpoch((now - 120) * 1000);
+    Wal row(int start, WalStatus status) => _makeWal(timerStart: start, status: status)..recordingSessionId = 'ended';
+    final refused = row(now - 180, WalStatus.uploadRejected)
+      ..uploadRejectionReason = WalUploadRejection.invalidCaptureTime;
+    sync.testWals = [
+      row(now - 180, WalStatus.miss),
+      row(2145916800, WalStatus.miss),
+      row(0, WalStatus.miss),
+      refused,
+      row(now - 180, WalStatus.inProgress),
+      row(now - 60, WalStatus.miss), // Trusted trailing silence after the end.
+      row(2145916800, WalStatus.uploaded),
+      row(2145916800, WalStatus.synced)..syncedAt = now,
+      row(now - 180, WalStatus.synced), // Transport only: no server proof.
+      row(now - 180, WalStatus.corrupted),
+      row(now - 180, WalStatus.outsideRecoveryWindow),
+      row(2145916800, WalStatus.miss)..recordingSessionId = 'other',
+    ];
+    expect(sync.pendingWalsForRecording('ended', through: end), 8);
+    expect(sync.pendingWalsForRecording('ended'), 9);
+  });
+
+  for (final operation in ['flush', 'close']) {
+    test('failed $operation seal stays pending from disk through cancel and replay until real upload acceptance',
+        () async {
+      SharedPreferencesUtil().uid = 'owner';
+      late FaultingWalWriter writer;
+      final producer = MobileBatchBuffer(
+        directory: tempDir,
+        publish: (_) async => fail('a failed seal must not publish'),
+        openWriter: (file) => writer = FaultingWalWriter(file),
+      );
+      await producer.initialize();
+      final now = DateTime.now();
+      expect(
+          producer.append([9], uid: 'owner', codec: BleAudioCodec.opus, now: now, recordingSessionId: 'sealed'), true);
+      if (operation == 'flush') {
+        writer.failFlush = true;
+      } else {
+        writer.failClose = true;
+      }
+      producer.seal();
+      expect(producer.failed, isTrue);
+      expect(producer.hasFrames, isFalse, reason: 'the failed writer has left the in-memory set');
+      // Recreate the observer as on restart: it has never held this WAL in memory.
+      final observer = MobileBatchBuffer(directory: tempDir, publish: (_) async {});
+      final sent = <int>[];
+      Future<int> pending() async =>
+          await observer.pendingJournalCount('sealed',
+              through: now, acceptedFileBytes: sync.captureEndAcceptedFileBytes('sealed')) +
+          sync.pendingWalsForRecording('sealed', through: now);
+      final reporter = CaptureEndReporter(
+        post: (signal, {required pendingWals, required sentAt}) async {
+          sent.add(pendingWals);
+          return true;
+        },
+        pendingWals: (_) => pending(),
+        disabled: () async => false,
+      );
+      await reporter.report(CaptureEndSignal(
+          recordingSessionId: 'sealed', type: CaptureEndType.userInitiated, lastSpeechAt: now, decidedAt: now));
+      expect(sent, [1], reason: 'the durable journal survives a failed seal and a fresh observer');
+      final recovered = await MobileBatchBuffer.recover(tempDir, []);
+      expect(recovered, hasLength(1));
+      await sync.addExternalWal(recovered.single, admittedGeneration: sync.sessionGeneration);
+      expect(await pending(), greaterThan(0), reason: 'journal replay/index admission is not server acceptance');
+      final blocked = Completer<void>();
+      final queued = sync.testQueueWalIo(blocked.future);
+      final cancelled = sync.syncAll();
+      sync.cancelSync();
+      blocked.complete();
+      await queued;
+      await cancelled;
+      await reporter.uploadAccepted('sealed');
+      expect(uploadAttempts, isEmpty);
+      expect(sent, [1], reason: 'cancellation cannot discharge pending evidence');
+      uploadResponse = (_) async => UploadFilesResult.queued('accepted-seal');
+      sync.onRecordingUploadAccepted = (session) => unawaited(reporter.uploadAccepted(session));
+      await sync.syncAll();
+      await reporter.uploadAccepted('sealed');
+      expect(sent, [1, 0]);
+      expect(await pending(), 0);
+      expect(tempDir.listSync().whereType<File>().where((file) => file.path.endsWith('.batch-journal')), hasLength(1),
+          reason: 'observing acceptance does not delete or rewrite recovery evidence');
+      expect(await File('${tempDir.path}/${recovered.single.filePath}').readAsBytes(), [1, 0, 0, 0, 9]);
+    });
+  }
+
+  test('end reporter reaches zero only after both clock classes in the same session are accepted', () async {
+    final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    final valid = _makeWal(timerStart: now - 60, filePath: 'audio_${now - 60}.bin')..recordingSessionId = 'mixed';
+    final future = _makeWal(timerStart: 2145916800, filePath: 'audio_2145916800.bin')
+      ..recordingSessionId = 'mixed'
+      ..markUploadRejected(reasonCode: WalUploadRejection.invalidCaptureTime, nowSeconds: now - 10 * 86400);
+    for (final wal in [valid, future]) {
+      await File('${tempDir.path}/${wal.filePath}').writeAsBytes([1, 0, 0, 0, 42]);
+    }
+    sync.testWals = [future, valid];
+    final sent = <int>[];
+    final reporter = CaptureEndReporter(
+      disabled: () async => false,
+      post: (signal, {required pendingWals, required sentAt}) async {
+        sent.add(pendingWals);
+        return true;
+      },
+      pendingWals: (signal) => sync.pendingWalsForRecording(signal.recordingSessionId, through: signal.decidedAt),
+    );
+    sync.onRecordingUploadAccepted = (session) => unawaited(reporter.uploadAccepted(session));
+    uploadResponse = (files) async {
+      if (files.single.uri.pathSegments.last == future.filePath) {
+        expect(valid.status, WalStatus.uploaded, reason: 'valid audio retains the first turn');
+        expect(sync.pendingWalsForRecording('mixed', through: DateTime.now()), 1);
+      }
+      return UploadFilesResult.queued('accepted-${uploadAttempts.length}');
+    };
+    await reporter.report(CaptureEndSignal(
+      recordingSessionId: 'mixed',
+      type: CaptureEndType.userInitiated,
+      lastSpeechAt: DateTime.now(),
+      decidedAt: DateTime.now(),
+    ));
+    await sync.syncAll();
+    await reporter.uploadAccepted('mixed'); // Settle the reporter's serialized observer queue.
+    expect(uploadAttempts, [
+      [valid.filePath],
+      [future.filePath]
+    ]);
+    expect(liveClaims.last, isFalse, reason: 'the unknown clock never claims a live manifest');
+    expect(sent, [2, 0], reason: 'accepting valid work must not hide the retained invalid-date refusal');
+    expect(future.status, WalStatus.uploaded);
   });
 
   // -------------------------------------------------------------------------
@@ -800,6 +981,81 @@ void main() {
       expect(result?.newConversationIds, ['recovered']);
       expect(wal.status, WalStatus.synced);
     });
+  });
+
+  test('after restart a shared conversation uploads one session while the other waits for custody', () async {
+    var now = DateTime.utc(2026, 11, 20);
+    const owner = 'record-wait-owner';
+    await SharedPreferencesUtil().saveString('uid', owner);
+    var canAccept = false;
+
+    LocalWalSyncImpl createLedger() => LocalWalSyncImpl(
+          listener,
+          now: () => now,
+          uploadGate: SyncUploadGate(
+            limiter: SyncRateLimiter.instance,
+            recordingWaits: RecordingWaitDeferrals(() => now, persist: true),
+            fairUseStatusLoader: () async => null,
+            uploader: (files,
+                {onUploadProgress,
+                conversationId,
+                captureEvidence,
+                recordingSessionId,
+                audioStartSeconds,
+                audioEndSeconds,
+                claimLiveCapture = false,
+                geolocation}) async {
+              uploadAttempts.add(files.map((file) => file.uri.pathSegments.last).toList());
+              if (recordingSessionId == 'waiting-session' && !canAccept) {
+                throw const SyncUploadHttpException(503, 'Custody pending',
+                    reasonCode: 'record_capture_pending', recordingWaitSeconds: 30);
+              }
+              return UploadFilesResult.queued('accepted-$recordingSessionId');
+            },
+          ),
+        );
+
+    final start = now.millisecondsSinceEpoch ~/ 1000 - 100;
+    final waiting = _makeWal(timerStart: start, filePath: 'waiting.bin')
+      ..conversationId = 'shared-conversation'
+      ..recordingSessionId = 'waiting-session';
+    final other = _makeWal(timerStart: start + 1, filePath: 'other.bin')
+      ..conversationId = 'shared-conversation'
+      ..recordingSessionId = 'other-session';
+    for (final wal in [waiting, other]) {
+      await File('${tempDir.path}/${wal.filePath}').writeAsBytes([1, 0, 0, 0, 42]);
+    }
+    final first = createLedger()..testWals = [waiting, other];
+    await expectLater(first.syncWal(wal: waiting), throwsA(isA<SyncUploadHttpException>()));
+    expect(waiting.status, WalStatus.miss);
+
+    final restarted = createLedger()..testWals = await WalFileManager.loadWals();
+    final restored = restarted.testWals.singleWhere((wal) => wal.recordingSessionId == 'waiting-session');
+    final retainedFile = File('${tempDir.path}/${restored.filePath}');
+    final deferred = await restarted.syncAll();
+    await expectLater(restarted.syncWal(wal: restored), throwsA(isA<SyncRecordingWaitException>()));
+    expect(uploadAttempts, [
+      ['waiting.bin'],
+      ['other.bin'],
+    ]);
+    expect(deferred?.localUploadFailures, 0);
+    final accepted = restarted.testWals.singleWhere((wal) => wal.recordingSessionId == 'other-session');
+    expect(accepted.status, WalStatus.uploaded);
+    expect(accepted.jobId, 'accepted-other-session');
+    expect(restored.status, WalStatus.miss);
+    expect(restored.retryCount, 0);
+    expect(restored.jobId, isNull);
+    expect(await retainedFile.readAsBytes(), [1, 0, 0, 0, 42]);
+
+    canAccept = true;
+    now = now.add(const Duration(seconds: 37));
+    await restarted.syncAll();
+
+    expect(uploadAttempts.last, ['waiting.bin']);
+    expect(uploadAttempts, hasLength(3));
+    expect(restored.status, WalStatus.uploaded);
+    expect(restored.jobId, 'accepted-waiting-session');
+    expect(retainedFile.existsSync(), isTrue);
   });
 
   group('syncAll: server-unavailable pacing', () {

@@ -131,9 +131,9 @@ class TestDevApiDeletedConversationGuard:
         mock_frames = MagicMock()
         monkeypatch.setattr('utils.screen_frames.store.delete_conversation_screen_frames', mock_frames)
         mock_delete_evidence = MagicMock()
-        monkeypatch.setattr(
-            'services.conversation_frame_evidence.delete_conversation_and_frame_evidence', mock_delete_evidence
-        )
+        from services import conversation_frame_evidence
+
+        monkeypatch.setattr(conversation_frame_evidence, 'delete_conversation_and_frame_evidence', mock_delete_evidence)
         monkeypatch.setattr(dev_routes.vector_db, 'delete_vector', MagicMock())
         monkeypatch.setattr(dev_routes.vector_db, 'delete_transcript_chunk_vectors', MagicMock())
 

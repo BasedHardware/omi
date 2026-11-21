@@ -2,14 +2,14 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import TYPE_CHECKING, Optional
 
 import typer
 from rich.markup import escape
 
 from omi_cli.client import path_segment
-from omi_cli.datetime_options import ISO_DATETIME_FORMATS
+from omi_cli.datetime_options import ISO_DATETIME_FORMATS, as_utc
 from omi_cli.errors import NotFoundError, UsageError
 from omi_cli.output import shorten
 from omi_cli.validation import bounded_text
@@ -42,14 +42,11 @@ def list_action_items(
     offset: int = typer.Option(0, "--offset", min=0),
 ) -> None:
     ctx = _ctx(typer_ctx)
-    if start_date is not None and end_date is not None:
-        s_cmp = start_date.astimezone(timezone.utc) if start_date.tzinfo is not None else start_date.replace(tzinfo=timezone.utc)
-        e_cmp = end_date.astimezone(timezone.utc) if end_date.tzinfo is not None else end_date.replace(tzinfo=timezone.utc)
-        if s_cmp > e_cmp:
-            raise UsageError(
-                message="Invalid date range",
-                detail="--start-date cannot be later than --end-date.",
-            )
+    if start_date is not None and end_date is not None and as_utc(start_date) > as_utc(end_date):
+        raise UsageError(
+            message="Invalid date range",
+            detail="--start-date cannot be later than --end-date.",
+        )
 
     params: dict[str, object] = {"limit": limit, "offset": offset}
     if completed is not None:

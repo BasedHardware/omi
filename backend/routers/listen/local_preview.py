@@ -21,7 +21,6 @@ from prometheus_client import Counter, Histogram
 from config.batch_live_preview import local_preview_batch_owned
 from config.cloud_live_stt import OFF, STREAM, local_preview_batch_enabled
 from config.server_batch import owned
-from routers.listen.visible_restore import attach_visible_restore
 from utils.metrics import (
     OMI_CLOUD_LIVE_STT_SAVED_SECONDS_TOTAL,
     OMI_LISTEN_LOCAL_PREVIEW_SESSIONS_TOTAL,
@@ -174,7 +173,7 @@ def revoke_local_preview(host, *, reason: str) -> None:
     record_fallback(
         component='stt_live_session',
         from_mode='local_preview',
-        to_mode='visible_restore' if batch_only_live_path(host) else 'live',
+        to_mode='batch_only' if batch_only_live_path(host) else 'live',
         reason=reason,
         outcome='degraded',
     )
@@ -188,10 +187,9 @@ def batch_only_live_path(host) -> bool:
 
 
 def restore_non_preview_path(receiver) -> None:
-    """Keep owned captures visible-only; unowned captures retain their normal live path."""
+    """Keep owned captures batch-only; unowned captures retain their normal live path."""
     if batch_only_live_path(receiver.host):
         close_rescinded_stream(receiver)
-        attach_visible_restore(receiver)
     # Otherwise leave any existing provider and demand policy intact. A deferred
     # session opens its normal non-preview stream on the next audio flush.
 

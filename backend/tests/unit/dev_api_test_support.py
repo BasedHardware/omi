@@ -13,9 +13,15 @@ from testing.import_isolation import AutoMockModule, load_module_fresh, stub_mod
 BACKEND_DIR = Path(__file__).resolve().parents[2]
 
 # Import real collector owners once, outside the temporary fake-module context.
+import database.firestore_cache_metrics  # noqa: F401
 import database.firestore_read_metrics  # noqa: F401
+import utils.capture.shadow  # noqa: F401
+import utils.conversations.summary_delivery  # noqa: F401
+import utils.list_version_check  # noqa: F401
 import utils.metrics  # noqa: F401
+import utils.observability.delivery  # noqa: F401
 import utils.observability.external_lists  # noqa: F401
+import utils.other.private_sync_get_metrics  # noqa: F401
 import utils.product_metrics  # noqa: F401
 import routers.developer_segments as _DEVELOPER_SEGMENTS_COLLECTOR_OWNER  # keep its Prometheus owner registered
 

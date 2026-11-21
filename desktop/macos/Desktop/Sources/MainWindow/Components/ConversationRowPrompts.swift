@@ -39,6 +39,7 @@ extension View {
 private struct ConversationRowPromptsHost: ViewModifier {
   @ObservedObject var prompts: ConversationRowPrompts
   let appState: AppState
+  @StateObject private var deleteFeedback = ConversationDeleteFeedback()
 
   func body(content: Content) -> some View {
     content
@@ -54,7 +55,11 @@ private struct ConversationRowPromptsHost: ViewModifier {
         confirmTitle: "Delete"
       ) {
         guard let conversation = prompts.deleteTarget else { return }
-        Task { _ = await appState.deleteConversation(conversation.id) }
+        Task { deleteFeedback.present(await appState.deleteConversation(conversation.id)) }
+      }
+      .conversationDeleteFeedback(deleteFeedback) {
+        guard let conversation = prompts.deleteTarget else { return }
+        Task { deleteFeedback.present(await appState.deleteConversation(conversation.id)) }
       }
       .dismissableSheet(
         isPresented: Binding(

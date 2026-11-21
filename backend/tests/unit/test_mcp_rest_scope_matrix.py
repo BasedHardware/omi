@@ -30,6 +30,7 @@ REST_TO_TOOL = {
     ("DELETE", "/v1/mcp/memories/{memory_id}"): "delete_memory",
     ("GET", "/v1/mcp/conversations"): "get_conversations",
     ("GET", "/v1/mcp/conversations/search"): "search_conversations",
+    ("GET", "/v1/mcp/conversations/deleted"): "get_deleted_conversations",
     ("GET", "/v1/mcp/conversations/{conversation_id}"): "get_conversation_by_id",
     ("GET", "/v1/mcp/action-items"): "get_action_items",
     ("GET", "/v1/mcp/action-items/search"): "search_action_items",

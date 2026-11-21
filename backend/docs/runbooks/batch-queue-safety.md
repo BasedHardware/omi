@@ -33,7 +33,7 @@ over-30-minute observation in another priority still reports TRIP, with
 `metrics_blind=true`; incomplete coverage never erases positively measured late work.
 The page-tier
 `omi-batch-queue-safety-blind` rule alerts after five minutes of scan blindness
-or absent observations, or after queue freshness is stale for two minutes
+or absent observations, or after queue freshness is stale for fifteen minutes
 plus five minutes pending. Capacity and timeliness sampling continue independently.
 
 ## Triage without weakening custody
@@ -74,8 +74,12 @@ Do not test notification delivery by notifying users.
 
 Rollback: restore the prior worker image and guard chart and restore the Grafana
 rule backup through the documented importer. Preserve the approved worker HPA
-min 4 / max 8 and baseline 4 (2026-11-06, David D4 / bc18db). Restore baseline/min
-6 and max 12 if GPU queue depth or ready_units climbs back past 50k.
+min 6 / max 16 and baseline 6 (David, 2026-11-20, superseding D4); see
+`batch-vendor-routing-capacity.md` for the node minimum and roll strategy.
+D4's conditional restore ("baseline/min 6 and max 12 if GPU queue depth or
+ready_units climbs back past 50k") is retired: the current bounds already meet
+or exceed it, so a backlog past 50k is a capacity decision for Release, not an
+automatic bound change.
 Disposition/redrive cannot be undone by
 resetting a paid token; stop further apply, preserve durable receipts, and
 replan after an uncertain result.
@@ -117,3 +121,18 @@ Rollback: set `"batch_metrics_oldest_leader": 0` in the existing
 `FIRESTORE_READ_LEVERS` JSON map, preserving other entries. This bypasses election,
 GPU throttling and export expiry, restoring the prior per-instance behavior and
 existing adapter freshness checks. There is no new environment variable.
+
+## 2026-11-08 production import preparation
+
+`omi-batch-queue-safety-blind` uses a 900s staleness budget, then 5m pending.
+The aggregate dry-run at 2026-11-08T14:05–14:59Z measured the worker-plane sample
+cadence at approximately 514s; the prior 120s arm was a false positive. This
+alert-only budget does not alter producer cadence or adapter freshness. Other
+query arms remain unchanged. Read back the 900s expression after import.
+
+`omi-batch-unit-unpublished-2h` lands paused for the known backlog. Its threshold
+and source freshness gates are unchanged. Unpause only after #24731/#24893
+drain work ships and both fresh sources stay below 7200s for 24h with no blind
+scan, via a separate owner-approved change. Missing/stale samples cannot prove
+recovery. Full import disposition and the five paused UIDs are in
+[the pipeline alert runbook](../../charts/monitoring/batch-projection/pipeline-alerts.md#production-import-disposition-lead2-ruling-699300-2026-11-08t1513z).

@@ -43,6 +43,7 @@ struct CalendarFetchParameters: Equatable {
 enum CalendarReaderError: LocalizedError, Equatable {
   case noBrowserFound
   case notSignedIn
+  case savedSelectionNeedsGrant
   case sessionExpired
   case cookieDecryptionFailed(String)
   case networkError(String)
@@ -56,6 +57,8 @@ enum CalendarReaderError: LocalizedError, Equatable {
     case .notSignedIn:
       return
         "Not signed into Google in any browser. Open calendar.google.com in Chrome, Arc, Brave, or Edge, sign in, then try again."
+    case .savedSelectionNeedsGrant:
+      return "Reconnect Google Calendar to restore access to your selected calendars."
     case .sessionExpired:
       return "Your Google session expired. Reload calendar.google.com in your browser to refresh it, then try again."
     case .cookieDecryptionFailed(let msg):
@@ -220,7 +223,15 @@ enum CalendarOutcomeParser {
 // MARK: - CalendarReaderService
 
 actor CalendarReaderService {
+  typealias LegacyRead = @Sendable (CalendarFetchParameters, Bool) async throws -> [CalendarEvent]
   static let shared = CalendarReaderService()
+  private let calendarAPI: APIClient
+  private let legacyRead: LegacyRead?
+
+  init(calendarAPI: APIClient = .shared, legacyRead: LegacyRead? = nil) {
+    self.calendarAPI = calendarAPI
+    self.legacyRead = legacyRead
+  }
 
   /// Read calendar events, preferring the account's server-held Google OAuth
   /// grant and falling back to the Chromium cookie reader.
@@ -229,9 +240,8 @@ actor CalendarReaderService {
   /// no Chromium browser installed, with cookies this machine cannot decrypt,
   /// and with the browser Keychain prompt declined — the three failure modes in
   /// issue #10459 that leave the cookie reader with nothing to recover to. The
-  /// cookie path stays for accounts that have never granted OAuth, so nobody
-  /// who is working today stops working. Retiring it belongs to that issue, not
-  /// to this fix.
+  /// cookie path stays for accounts confirmed not to have granted OAuth.
+  /// Retiring it belongs to that issue, not to this fix.
   ///
   /// Tries Arc, Chrome, Brave, and Edge across all Chromium profiles.
   /// Fetches events from `daysBack` days ago to `daysForward` days from now.
@@ -244,49 +254,71 @@ actor CalendarReaderService {
   ) async throws
     -> [CalendarEvent]
   {
-    // Absent grant and failed grant read both fall through to cookies.
-    if let granted = try? await readEventsViaGrant(
+    guard let owner = RuntimeOwnerIdentity.captureAuthorizationSnapshot() else { throw APIError.unauthorized }
+    // Only an absent grant falls through to the legacy browser reader. A failed
+    // grant read must not silently switch to an unselected calendar/account.
+    if let granted = try await readEventsViaGrant(
       daysBack: daysBack,
       daysForward: daysForward,
-      maxResults: maxResults
+      maxResults: maxResults,
+      authorizationSnapshot: owner
     ) {
+      guard RuntimeOwnerIdentity.isAuthorizationCurrent(owner) else { throw APIError.unauthorized }
       return granted
     }
 
+    guard RuntimeOwnerIdentity.isAuthorizationCurrent(owner) else { throw APIError.unauthorized }
+    if let legacyRead {
+      let result = try await legacyRead(
+        .normalized(daysBack: daysBack, daysForward: daysForward, maxResults: maxResults), userInitiated)
+      guard RuntimeOwnerIdentity.isAuthorizationCurrent(owner) else { throw APIError.unauthorized }
+      return result.sorted { $0.startTime > $1.startTime }
+    }
     if userInitiated {
       BrowserKeychainCache.shared.beginUserInitiatedOperation()
     }
     await APIKeyService.shared.waitForKeys()
+    guard RuntimeOwnerIdentity.isAuthorizationCurrent(owner) else { throw APIError.unauthorized }
     let events = try fetchCalendarViaCookies(
       daysBack: daysBack,
       daysForward: daysForward,
       maxResults: maxResults,
       userInitiated: userInitiated
     )
+    guard RuntimeOwnerIdentity.isAuthorizationCurrent(owner) else { throw APIError.unauthorized }
     return events.sorted { $0.startTime > $1.startTime }
   }
 
-  /// Returns nil when this account has no Google grant. Callers that can fall
-  /// back to cookies treat a thrown read the same way, so a backend blip cannot
-  /// take Calendar down for someone the cookie reader still serves.
+  /// Returns nil only when this account has no Google grant. Provider and
+  /// status failures propagate; cookies must not bypass a saved read selection.
   func readEventsViaGrant(
     daysBack: Int,
     daysForward: Int,
-    maxResults: Int
+    maxResults: Int,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
   ) async throws -> [CalendarEvent]? {
-    guard await hasGoogleGrant() else { return nil }
-    let events = try await APIClient.shared.googleCalendarGrantEvents(
+    guard let owner = authorizationSnapshot ?? RuntimeOwnerIdentity.captureAuthorizationSnapshot(),
+      RuntimeOwnerIdentity.isAuthorizationCurrent(owner)
+    else { throw APIError.unauthorized }
+    let status = try await calendarAPI.googleCalendarGrantStatus(authorizationSnapshot: owner)
+    if !status.connected {
+      guard let configured = status.readSelectionConfigured else { throw APIError.invalidResponse }
+      if configured { throw CalendarReaderError.savedSelectionNeedsGrant }
+      return nil
+    }
+    let events = try await calendarAPI.googleCalendarGrantEvents(
       daysBack: daysBack,
       daysForward: daysForward,
-      maxResults: maxResults
+      maxResults: maxResults,
+      authorizationSnapshot: owner
     )
     return events.sorted { $0.startTime > $1.startTime }
   }
 
-  /// A grant check must never be the reason a read fails: a backend hiccup here
-  /// reads as "no grant" and the cookie path still gets its turn.
+  /// Best-effort OAuth completion polling only. Event reads must use the
+  /// throwing grant check above, so failures cannot bypass read selection.
   func hasGoogleGrant() async -> Bool {
-    (try? await APIClient.shared.googleCalendarGrantConnected()) ?? false
+    (try? await calendarAPI.googleCalendarGrantConnected()) ?? false
   }
 
   /// Lightweight functional probe — does the integration actually work right now?
@@ -297,29 +329,12 @@ actor CalendarReaderService {
   /// one-time success. It runs the same real fetch path over a tiny window so a
   /// green result guarantees the whole chain (cookies → auth → API) works.
   func verifyConnection(userInitiated: Bool = false) async -> CalendarConnectionStatus {
-    // Same real-fetch standard as the cookie probe below, over the grant: a
-    // green result means the whole chain (grant → backend → Google) works.
-    if await hasGoogleGrant(),
-      (try? await APIClient.shared.googleCalendarGrantEvents(daysBack: 1, daysForward: 1, maxResults: 1)) != nil
-    {
-      return .connected(verifiedAt: Date())
-    }
-
-    if userInitiated {
-      BrowserKeychainCache.shared.beginUserInitiatedOperation()
-    }
     do {
-      await APIKeyService.shared.waitForKeys()
-      _ = try fetchCalendarViaCookies(
-        daysBack: 1,
-        daysForward: 1,
-        maxResults: 1,
-        userInitiated: userInitiated
-      )
+      _ = try await readEvents(daysBack: 1, daysForward: 1, maxResults: 1, userInitiated: userInitiated)
       return .connected(verifiedAt: Date())
     } catch let error as CalendarReaderError {
       switch error {
-      case .notSignedIn, .noBrowserFound:
+      case .notSignedIn, .noBrowserFound, .savedSelectionNeedsGrant:
         return .needsSignIn(message: error.errorDescription ?? "Sign into Google to connect.")
       case .sessionExpired:
         return .needsSignIn(message: error.errorDescription ?? "Your Google session expired.")
@@ -327,7 +342,7 @@ actor CalendarReaderService {
         return .error(message: error.errorDescription ?? "Couldn't verify the connection.")
       }
     } catch {
-      return .error(message: error.localizedDescription)
+      return .error(message: "Couldn’t verify Google Calendar. Reconnect or try again.")
     }
   }
 

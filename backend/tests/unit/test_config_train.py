@@ -16,8 +16,19 @@ ROOT = BACKEND.parent
 sys.path.insert(0, str(BACKEND / 'scripts'))
 
 import ops_train  # noqa: E402
+from scripts import select_backend_unit_tests as unit_selector  # noqa: E402
 
 PROD_HEADER = 'schema: omi.ops/v1\nenvironment: prod\nproject: based-hardware\nregion: us-central1\n'
+
+# Ruling 008024: production backlog capacity is intentionally not applied to staging.
+# Each field pins (prod, staging), so an exemption cannot hide drift on either side.
+INTENTIONAL_STAGING_QUEUE_CAPACITY_DIVERGENCES = {
+    'enrichment': {'max_concurrent_dispatches': (300, 50)},
+    'enrichment-fresh': {
+        'max_concurrent_dispatches': (30, 5),
+        'max_dispatches_per_second': (10.0, 2.0),
+    },
+}
 
 
 def test_fresh_queue_smoothing_keeps_concurrency_and_retry_ownership():
@@ -25,6 +36,22 @@ def test_fresh_queue_smoothing_keeps_concurrency_and_retry_ownership():
     assert queue['max_dispatches_per_second'] == 15
     assert queue['max_concurrent_dispatches'] == 160
     assert (queue['max_attempts'], queue['min_backoff'], queue['max_backoff']) == (5, '60s', '300s')
+
+
+@pytest.mark.parametrize(
+    'environment,service', [('prod', 'backend-integration'), ('staging', 'backend-integration-staging')]
+)
+def test_restored_integration_cadence_is_pinned_only_on_its_ops_service(environment, service):
+    services = yaml.safe_load((BACKEND / f'deploy/ops/{environment}.yaml').read_text())['cloud_run']
+    expected = {
+        'BATCH_PIPELINE_SERVING_SWEEP_PAGE_ROWS': '200',
+        'BATCH_PIPELINE_SERVING_TICK_SECONDS': '10',
+        'BATCH_PROJECTION_FINISH_CLASSIFY_PAGE_LIMIT': '16',
+    }
+    assert service in services
+    for name, config in services.items():
+        actual = {key: value for key, value in config.get('env', {}).items() if key in expected}
+        assert actual == (expected if name == service else {}), name
 
 
 def _container(image: str, env: dict[str, str], *, ports: bool = True, name: str = 'backend') -> dict[str, Any]:
@@ -54,8 +81,10 @@ class FakeGcloud:
         min_scale: int | None = None,
         pinned: bool = True,
         sidecar: bool = True,
+        memory: str = '8Gi',
     ) -> None:
         containers = [_container(image, env)]
+        containers[0]['resources']['limits']['memory'] = memory
         if sidecar:
             containers.append(_container('gcr.io/gmp/collector:1', {}, ports=False, name='collector'))
         revision = f'{name}-00001-abc'
@@ -111,14 +140,20 @@ class FakeGcloud:
             if (value := self._flag(args, '--min')) is not None:
                 svc['annotations'][ops_train.MIN_SCALE] = value
             env_flag = self._flag(args, '--update-env-vars')
+            memory = self._flag(args, '--memory')
+            container = self._flag(args, '--container')
+            containers = svc['template']['containers']
+            ingress = next(c for c in containers if c.get('name') == container) if container else containers[0]
             if env_flag is not None:
-                ingress = svc['template']['containers'][0]
                 env = {e['name']: e['value'] for e in ingress['env']}
                 env.update(dict(item.split('=', 1) for item in env_flag.split(',')))
                 ingress['env'] = [{'name': k, 'value': v} for k, v in env.items()]
+            if memory is not None:
+                ingress['resources']['limits']['memory'] = memory
+            if env_flag is not None or memory is not None:
                 revision = f'{args[3]}-{self._flag(args, "--revision-suffix")}'
                 svc['revisions'][revision] = copy.deepcopy(svc['template'])
-                if not svc['pinned']:
+                if not svc['pinned'] and '--no-traffic' not in args:
                     svc['traffic'] = [{'revisionName': revision, 'percent': 100, 'latestRevision': True}]
             return
         if args[:3] == ['run', 'services', 'update-traffic']:
@@ -215,9 +250,14 @@ def test_prod_carries_both_stall_repoints_and_recovery_16_8():
     # Plan C prod activation: the config-train creates C3's enrichment and C8's provider-stt queues before the
     # backend roll that points ENRICHMENT_ROUTE / PROVIDER_STT_TASKS_* at them (draining needs provider_stt_live).
     assert queues['enrichment'].enabled is True
+    enrichment = queues['enrichment']
+    assert (enrichment.fields['max_concurrent_dispatches'], enrichment.fields['max_dispatches_per_second']) == (
+        300,
+        25.0,
+    )
     fresh = queues['enrichment-fresh']
     assert fresh.enabled is True
-    assert (fresh.fields['max_concurrent_dispatches'], fresh.fields['max_dispatches_per_second']) == (5, 2.0)
+    assert (fresh.fields['max_concurrent_dispatches'], fresh.fields['max_dispatches_per_second']) == (30, 10.0)
     assert fresh.fields['max_attempts'] == -1
     provider = queues['provider-stt']
     assert provider.enabled is True
@@ -225,18 +265,35 @@ def test_prod_carries_both_stall_repoints_and_recovery_16_8():
     assert provider.fields['max_attempts'] == -1
 
 
-def test_staging_mirrors_prod_except_names():
+def test_staging_mirrors_prod_except_names_and_intentional_env_and_capacity_divergences():
     prod, staging = ops_train.load_ops('prod'), ops_train.load_ops('staging')
     staging_services = {s.name: s for s in staging.services}
     for svc in prod.services:
         twin = staging_services[f'{svc.name}-staging']
-        assert set(twin.env) == set(svc.env)
-        # Queue names carry the staging- prefix; every other ops value is identical.
-        assert all(twin.env[k] == (f'staging-{v}' if k.endswith('_QUEUE') else v) for k, v in svc.env.items())
+        shared_env = dict(svc.env)
+        # lead2 8b9c8f: only the production sweep owner has the 8/tick cap.
+        # Staging keeps the code default; all other env parity remains strict.
+        cap = 'SUMMARY_DEBT_REPAIR_ADMISSION_LIMIT'
+        assert cap not in twin.env
+        if svc.name == 'backend-integration':
+            assert shared_env.pop(cap) == '8'
+        else:
+            assert cap not in shared_env
+        assert set(twin.env) == set(shared_env)
+        # Queue names carry the staging- prefix; every shared ops value is identical.
+        assert all(twin.env[k] == (f'staging-{v}' if k.endswith('_QUEUE') else v) for k, v in shared_env.items())
+        assert (svc.memory is None) == (twin.memory is None)
         # Scaling (replica counts) is on contract (i)'s staging allowlist; only env must mirror.
     staging_queues = {q.name: q for q in staging.queues}
+    assert INTENTIONAL_STAGING_QUEUE_CAPACITY_DIVERGENCES.keys() <= {q.name for q in prod.queues}
     for queue in prod.queues:
-        assert staging_queues[f'staging-{queue.name}'].fields == queue.fields
+        expected = dict(queue.fields)
+        for field, (prod_value, staging_value) in INTENTIONAL_STAGING_QUEUE_CAPACITY_DIVERGENCES.get(
+            queue.name, {}
+        ).items():
+            assert queue.fields[field] == prod_value, (queue.name, field)
+            expected[field] = staging_value
+        assert staging_queues[f'staging-{queue.name}'].fields == expected
 
 
 # ----------------------------------------------------------------------------- schema
@@ -249,6 +306,9 @@ def test_staging_mirrors_prod_except_names():
         ('cloud_run:\n  backend:\n    env: {A: "a,b"}\n', 'short plain string'),
         ('cloud_run:\n  backend:\n    env: {A: 5}\n', 'short plain string'),
         ('cloud_run:\n  backend:\n    cpu: 2\n', 'unknown keys'),
+        ('cloud_run:\n  backend:\n    memory: 3\n', 'positive Mi or Gi'),
+        ('cloud_run:\n  backend:\n    memory: 0Gi\n', 'positive Mi or Gi'),
+        ('cloud_run:\n  backend:\n    memory: null\n', 'positive Mi or Gi'),
         ('cloud_run:\n  backend:\n    max_instances: {owner: g, floor: 9, ceiling: 8}\n', 'floor exceeds'),
         ('cloud_run:\n  backend:\n    max_instances: 2\n    min_instances: 3\n', 'min_instances exceeds'),
         ('cloud_tasks:\n  q:\n    min_backoff: 5\n', 'duration'),
@@ -396,6 +456,79 @@ def test_queue_values_compare_after_normalization():
 
 
 # ----------------------------------------------------------------------------- apply + verify
+
+
+@pytest.mark.parametrize('environment,suffix', [('prod', ''), ('staging', '-staging')])
+def test_memory_train_dry_run_and_rollback(environment, suffix, tmp_path):
+    # Use the full ops file, with all queues and non-memory settings already reconciled.
+    baseline = {f'backend{suffix}': '4Gi', f'backend-sync{suffix}': '6Gi'}
+    original = (ops_train.OPS_DIR / f'{environment}.yaml').read_text()
+    rollback = yaml.safe_load(original)
+    assert {name for name, cfg in rollback['cloud_run'].items() if 'memory' in cfg} == baseline.keys()
+    for name, memory in baseline.items():
+        rollback['cloud_run'][name]['memory'] = memory
+    spec = ops_train.parse_ops(yaml.safe_dump(rollback))
+    fake = FakeGcloud()
+    for svc in spec.services:
+        fake.add_service(
+            svc.name,
+            dict(svc.env),
+            memory=svc.memory or '8Gi',
+            pinned=False,
+            max_scale=svc.max_instances.floor if isinstance(svc.max_instances, ops_train.Bound) else svc.max_instances,
+            min_scale=svc.min_instances,
+        )
+    for queue in spec.queues:
+        live = fake.queues.setdefault(queue.name, {'state': 'RUNNING'})
+        for field, value in queue.fields.items():
+            section, key, _ = ops_train.QUEUE_FIELDS[field]
+            live.setdefault(section, {})[key] = value
+    assert not ops_train.build_plan(spec, fake).changes
+
+    candidate = copy.deepcopy(rollback)
+    for name in baseline:
+        candidate['cloud_run'][name]['memory'] = '3Gi'
+    path = tmp_path / f'{environment}.yaml'
+    report = tmp_path / 'plan.json'
+    target = dict.fromkeys(baseline, '3Gi')
+    for config, before, desired, revision in [
+        (candidate, baseline, target, 'cfg-trial'),
+        (rollback, target, baseline, 'cfg-rollback'),
+    ]:
+        path.write_text(yaml.safe_dump(config))
+        command = ['--env', environment, '--report', str(report)]
+        fake.calls.clear()
+        assert ops_train.main(['plan', *command], gcloud=fake, ops_dir=tmp_path) == ops_train.EXIT_CHANGES
+        plan = yaml.safe_load(report.read_text())['plan']
+        assert plan['blockers'] == []
+        assert plan['changes'] == [
+            dict(target='cloud_run', name=name, field='memory', live=before[name], desired=value, action='set')
+            for name, value in desired.items()
+        ]
+        assert fake.mutations() == []
+        assert ops_train.main(['apply', *command, '--revision-suffix', revision], gcloud=fake, ops_dir=tmp_path) == 0
+        assert [(call[2], call[3]) for call in fake.mutations()] == [
+            (action, name) for name in desired for action in ('update', 'update-traffic')
+        ]
+        for update in fake.mutations()[::2]:
+            assert {'--container=backend', '--no-traffic', f'--memory={desired[update[3]]}'} <= set(update)
+        for name, memory in desired.items():
+            containers = fake.services[name]['revisions'][f'{name}-{revision}']['containers']
+            assert containers[0]['resources']['limits'] == {'cpu': '2', 'memory': memory}
+            assert containers[1]['resources']['limits']['memory'] == '8Gi'
+
+
+@pytest.mark.parametrize('container,field', [(0, 'cpu'), (1, 'memory')])
+def test_memory_change_blocks_other_template_resource_drift(container, field):
+    spec = _spec('cloud_run:\n  backend:\n    memory: 3Gi\n')
+    fake = FakeGcloud()
+    fake.add_service('backend', {}, memory='4Gi')
+    template = fake.services['backend']['template']['containers']
+    template[0]['resources']['limits']['memory'] = '3Gi'
+    assert not ops_train.build_plan(spec, fake).blockers
+    template[container]['resources']['limits'][field] = '1' if field == 'cpu' else '1Gi'
+    plan = ops_train.build_plan(spec, fake)
+    assert any('template differs' in blocker for blocker in plan.blockers)
 
 
 def test_apply_routes_pinned_backfill_to_the_new_revision_and_verifies():
@@ -711,3 +844,35 @@ def test_staging_enrichment_stays_off_until_prod_turns_it_on():
     staging = yaml.safe_load((BACKEND / 'deploy/ops/staging.yaml').read_text())['cloud_tasks']
     for name, queue in prod.items():
         assert staging[f'staging-{name}'].get('enabled', True) == queue.get('enabled', True), name
+
+
+@pytest.mark.parametrize(
+    'source',
+    [
+        'backend/config/firestore_read_levers.py',
+        'backend/deploy/runtime_env/_base.yaml',
+        'backend/deploy/runtime_env/dev.overlay.yaml',
+        'backend/deploy/runtime_env/prod.overlay.yaml',
+        'backend/deploy/runtime_env.yaml',
+        'backend/deploy/compose_runtime_env.py',
+        'backend/deploy/generate_read_lever_manifest.py',
+        'backend/deploy/firestore_read_levers_manifest.json',
+        'backend/charts/batch-pipeline-worker/values.yaml',
+        'backend/charts/batch-pipeline-worker/dev_omi_batch-pipeline-worker_values.yaml',
+        'backend/charts/batch-pipeline-worker/prod_omi_batch-pipeline-worker_values.yaml',
+        'backend/charts/backend-listen/dev_omi_backend_listen_values.yaml',
+        'backend/charts/backend-listen/prod_omi_backend_listen_values.yaml',
+        'backend/charts/pusher/dev_omi_pusher_values.yaml',
+        'backend/charts/pusher/prod_omi_pusher_values.yaml',
+    ],
+)
+def test_read_lever_sources_select_existing_offline_unit_contracts(source):
+    required = {
+        'tests/unit/test_backend_runtime_env_validator.py',
+        'tests/unit/test_batch_pipeline_chart.py',
+        'tests/unit/test_config_train.py',
+        'tests/unit/test_runtime_env_sources.py',
+    }
+    selected, _ = unit_selector.tests_for_changed_paths([source], sorted(required | {'tests/unit/test_unrelated.py'}))
+    assert required <= set(selected)
+    assert 'tests/unit/test_unrelated.py' not in selected

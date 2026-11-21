@@ -28,7 +28,9 @@ NAMESPACE = 'batch_pipeline_dev'
 
 @pytest.fixture(autouse=True)
 def environment(monkeypatch):
-    monkeypatch.delenv('FIRESTORE_READ_LEVERS', raising=False)
+    # These contracts pin the live walk with every memo off. The owner-level memo
+    # (bpp_owner_memo) ships on by default, so it is switched off explicitly here.
+    monkeypatch.setenv('FIRESTORE_READ_LEVERS', '{"bpp_owner_memo": 0}')
     monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
 
 
@@ -46,17 +48,18 @@ def reads(monkeypatch):
 
 
 def enable(monkeypatch, on):
-    monkeypatch.setenv('FIRESTORE_READ_LEVERS', '{"batch_privacy_memoize": %d}' % (100 if on else 0))
+    monkeypatch.setenv(
+        'FIRESTORE_READ_LEVERS', '{"batch_privacy_memoize": %d, "bpp_owner_memo": 0}' % (100 if on else 0)
+    )
 
 
 def database():
     return StrictFirestore({('users', UID): {'data_protection_level': 'standard'}})
 
 
-@pytest.mark.parametrize('raw', [None, '{}', '{"batch_privacy_memoize": 0}'])
+@pytest.mark.parametrize('raw', ['{"bpp_owner_memo": 0}', '{"batch_privacy_memoize": 0, "bpp_owner_memo": 0}'])
 def test_default_off_retains_exact_reads_and_no_memo(monkeypatch, reads, raw):
-    if raw is not None:
-        monkeypatch.setenv('FIRESTORE_READ_LEVERS', raw)
+    monkeypatch.setenv('FIRESTORE_READ_LEVERS', raw)
     assert LEVER not in levers.KNOWN_LEVERS
     with pytest.raises(ValueError, match="unknown Firestore read lever"):
         levers.lever_percent(LEVER)
@@ -111,7 +114,7 @@ def projection_session(db):
     binding = ProjectionBinding(UID, 'job', 'content', ('segment',), target_conversation_id='source')
     store = SimpleNamespace(client=db, store=SimpleNamespace(namespace=NAMESPACE))
     store.ref = lambda table, key: db.collection(f'{NAMESPACE}_{table}').document(key)
-    session = ProjectionSession(store, 'segment', binding, 0, policy=SimpleNamespace())
+    session = ProjectionSession(store, 'segment', binding, 0, policy=SimpleNamespace(async_projection=False))
     db.rows[store.ref('jobs', 'segment').path] = {
         'projection_binding': asdict(binding),
         'owner_id': UID,

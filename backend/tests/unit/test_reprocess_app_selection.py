@@ -274,15 +274,10 @@ def test_successful_reprocess_schedules_durable_learning():
     assert tasks[0] == (run_speaker_learning_jobs, ('u1', 'c1'))
 
 
-@pytest.mark.parametrize('enabled', [False, True], ids=['flag-off', 'flag-on'])
-def test_busy_claim_answers_409_regardless_of_the_result_contract_flag(monkeypatch, enabled):
+def test_busy_claim_answers_409(monkeypatch):
     """Another writer owns the conversation: never report the stale row as an update."""
     from database import processing_attention as attention
 
-    if enabled:
-        monkeypatch.setenv('CONVERSATION_REPROCESS_RESULT_CONTRACT_ENABLED', 'true')
-    else:
-        monkeypatch.delenv('CONVERSATION_REPROCESS_RESULT_CONTRACT_ENABLED', raising=False)
     monkeypatch.setattr(attention, 'claim', lambda *a, **k: ({'operation_id': 'other'}, False))
     model, p1, p2, p3, p4, p5, p6, process_patch = _route_context(raw_app=None, available_app=None, enabled=False)
     with p1, p2, p3, p4, p5, p6, process_patch as process:
@@ -392,7 +387,8 @@ def test_http_reprocess_passes_explicit_restore_and_persisted_keep_to_classifica
     assert process.call_args.kwargs['defer_discarded_restore'] is discarded
     assert process.call_args.kwargs['expected_document_revision'] == revision
     assert process.call_args.kwargs['expected_user_lifecycle_revision'] == 0
-    restore.assert_not_called()
+    # A user_kept row re-runs restore registration on reprocess (register-first retry).
+    assert restore.call_count == int(discarded or stored_keep)
 
 
 
@@ -419,7 +415,13 @@ def test_batch_reprocess_defers_discarded_restore_to_atomic_result_commit(monkey
             conv_router.conversations_db.USER_LIFECYCLE_REVISION_FIELD: lifecycle_revision,
         },
     )
-    monkeypatch.setattr(conv_router, '_validate_reprocess_app_selection', lambda _uid, app_id: _app(app_id=app_id))
+    validated = []
+
+    def validate(_uid, app_id):
+        validated.append(app_id)
+        return _app(app_id=app_id)
+
+    monkeypatch.setattr(conv_router, '_validate_reprocess_app_selection', validate)
     monkeypatch.setattr(attention, 'generation', lambda _conversation: 1)
     monkeypatch.setattr(attention, 'claim', lambda *args, **kwargs: ({'operation_id': 'batch'}, True))
     monkeypatch.setattr(attention, 'owns_live_claim', lambda *args: True)
@@ -433,14 +435,25 @@ def test_batch_reprocess_defers_discarded_restore_to_atomic_result_commit(monkey
         process_patch as process,
         patch.object(conv_router.lifecycle_service, 'restore_discarded') as restore,
     ):
-        result = conv_router.reprocess_conversation(conversation_id='c1', app_ids=['summary-app'], uid='u1')
+        result = conv_router.reprocess_conversation(
+            conversation_id='c1', app_ids=['summary-app', 'second-app'], uid='u1'
+        )
 
     assert result.discarded is False
     assert result.sync_relevance == 'keep'
+    # Every selected template is validated and handed to processing as its own app object.
+    assert validated == ['summary-app', 'second-app']
+    assert process.call_args.kwargs['app_ids'] == ['summary-app', 'second-app']
+    explicit_apps = process.call_args.kwargs['explicit_apps']
+    assert {app_id: app.id for app_id, app in explicit_apps.items()} == {
+        'summary-app': 'summary-app',
+        'second-app': 'second-app',
+    }
     assert process.call_args.kwargs['defer_discarded_restore'] is True
     assert process.call_args.kwargs['expected_document_revision'] == revision
     assert process.call_args.kwargs['expected_user_lifecycle_revision'] == lifecycle_revision
-    restore.assert_not_called()
+    # The atomic commit restores visibility; the router still registers the recording obligation.
+    restore.assert_called_once_with('u1', 'c1')
 
 @pytest.mark.parametrize('status_code', [404, 402, 409])
 def test_discarded_reprocess_propagates_atomic_restore_fence_failure(status_code):

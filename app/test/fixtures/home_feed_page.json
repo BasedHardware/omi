@@ -1,0 +1,31 @@
+{
+  "items": [
+    {
+      "id": "episode:fixture",
+      "kind": "episode",
+      "detail_id": "fixture",
+      "sort_at": "2026-11-15T00:00:00Z",
+      "started_at": "2026-11-15T00:00:00Z",
+      "finished_at": null,
+      "title": "Backend fixture",
+      "emoji": "",
+      "preview": "Compact saved notes",
+      "status": "completed",
+      "home_step": null,
+      "starred": false,
+      "is_locked": false,
+      "has_tasks": false,
+      "member_count": 12,
+      "sources": [
+        "omi",
+        "desktop"
+      ],
+      "summary_available": false,
+      "revision": "policy:source:opaque"
+    }
+  ],
+  "next_cursor": null,
+  "has_more": false,
+  "truncated": false,
+  "generation": "fixture-generation"
+}

@@ -34,10 +34,12 @@ def dedupe_donor(incoming: list[dict], donor: dict, live: dict) -> DonorDedupe:
 
     Inputs already carry absolute ``timestamp`` values; offsets may be rebased.
     Receipt uniqueness is checked over the entire original donor, never slices.
-    Over-budget donors stay intact rather than claiming proof on a truncated pool.
+    Stored chapters use a bounded local lexical search instead of the 64-line
+    fresh-intake limit. Capture receipts are still checked over the whole donor;
+    slicing must never turn duplicate receipt identities into unique proof.
     """
     stored = live.get('transcript_segments') or []
-    if len(incoming) > MAX_INCOMING_SEGMENTS or len(stored) > MAX_LIVE_SEGMENTS:
+    if len(incoming) > MAX_LIVE_SEGMENTS or len(stored) > MAX_LIVE_SEGMENTS:
         return DonorDedupe(list(incoming), incomplete_reason='segment_cap')
     try:
         evidence = donor.get('capture_evidence')
@@ -56,6 +58,13 @@ def dedupe_donor(incoming: list[dict], donor: dict, live: dict) -> DonorDedupe:
             live_pinned=pinned_audio_timeline(live.get('audio_timeline')),
             verified_capture_indices=verified,
             require_capture_proof=False,
+            incoming_limit=MAX_LIVE_SEGMENTS,
+            # Long chapters overflow the old 30-minute candidate pool. Keep
+            # the same lexical/negation/number guards, searching locally.
+            # Unproved long-pool matches additionally need an unambiguous
+            # occurrence: exact placement or ordered clock-consistent neighbours.
+            midpoint_distance_seconds=(90.0 if max(len(incoming), len(stored)) > MAX_INCOMING_SEGMENTS else 1800.0),
+            require_occurrence_alignment=max(len(incoming), len(stored)) > MAX_INCOMING_SEGMENTS,
         )
         reference = [dict(segment, timestamp=origin + segment['start']) for segment in stored]
         lexical_kept_ids = {id(segment) for segment in lexical}

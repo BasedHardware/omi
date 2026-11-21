@@ -323,11 +323,10 @@ def test_relevance_context_does_not_bypass_episode_write_admission(timeline_stor
     monkeypatch.setattr(episodes, 'get_firestore_client', lambda: store)
     monkeypatch.setattr(episode_timeline, 'get_firestore_client', lambda: store)
     monkeypatch.setattr(relevance_io.conversations_db, 'get_firestore_client', lambda: store)
-    monkeypatch.setenv('EPISODES_UID_ALLOWLIST', '')
     if gate == 'kill_switch':
         monkeypatch.setenv('EPISODES_ENABLED', 'off')
     elif gate == 'cohort':
-        monkeypatch.setenv('EPISODES_PERCENT', '0')
+        monkeypatch.setenv('EPISODES_ENABLED', 'off')
     elif gate == 'client':
         monkeypatch.setattr(client_gate, 'client_seen', lambda uid: False)
     elif gate == 'recorded_time':

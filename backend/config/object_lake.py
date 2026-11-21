@@ -53,5 +53,51 @@ def key_cache_ttl_seconds() -> int:
     return max(0, value)
 
 
+_FAKE_KMS_STAGES = frozenset({'local', 'offline'})
+
+
+# Production stays refused at runtime too, not only in deploy validation, until
+# the C4 wipe-coverage gate is green.
+_WRITE_STAGES = _FAKE_KMS_STAGES | {'dev'}
+
+
+def _stage() -> str:
+    return os.getenv('OMI_ENV_STAGE', '').strip().lower()
+
+
+def fake_kms_allowed() -> bool:
+    return _stage() in _FAKE_KMS_STAGES
+
+
 def write_admitted(space_id: str) -> bool:
-    return bool(space_id) and write_enabled() and cohort_bucket(space_id, 'object-lake', bits=64) < write_percent()
+    return (
+        bool(space_id)
+        and _stage() in _WRITE_STAGES
+        and write_enabled()
+        and bool(bucket())
+        and bool(release())
+        and (bool(kms_key()) or fake_kms_allowed())
+        and cohort_bucket(space_id, 'object-lake', bits=64) < write_percent()
+    )
+
+
+def validate_write_settings(stage: str, enabled: object, percent: object) -> list[str]:
+    """Deployment gate independent of cohort admission or provisioned bindings."""
+    if stage.strip().lower() in _WRITE_STAGES:
+        return []
+    errors = []
+    reason = 'must stay off until the C4 wipe-coverage gate is green'
+    if str(enabled).strip().lower() in {'true', '1', 'on', 'yes'}:
+        errors.append(f'OBJECT_LAKE_WRITE_ENABLED {reason}')
+    try:
+        positive = float(str(percent)) > 0
+    except ValueError:
+        positive = False
+    if positive:
+        errors.append(f'OBJECT_LAKE_WRITE_PERCENT {reason}')
+    return errors
+
+
+def put_deadline_seconds() -> float:
+    """Pointer-success budget only; deletion authority comes from session fencing."""
+    return 5.0

@@ -34,6 +34,12 @@ require_relative 'rayban_dat_plugin_boundary'
 
 flutter_ios_podfile_setup
 
+# download.onnxruntime.ai is gone (#25949): same 1.23.0 pods from Omi's mirror. See vendor/onnxruntime/VENDORED.md.
+def omi_onnxruntime_mirror_pods
+  pod 'onnxruntime-c', :podspec => 'vendor/onnxruntime/onnxruntime-c.podspec.json'
+  pod 'onnxruntime-objc', :podspec => 'vendor/onnxruntime/onnxruntime-objc.podspec.json'
+end
+
 if ENV['OMI_RAYBAN_DAT'] == '1'
   RayBanDatPluginBoundary.prepare!(
     app_root: File.expand_path('..', __dir__),
@@ -47,6 +53,7 @@ if ENV['OMI_RAYBAN_DAT'] == '1'
     flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
 
     pod 'TwilioVoice', '~> 6.13'
+    omi_onnxruntime_mirror_pods
   end
 else
   # The default graph is untouched, including mcumgr_flutter firmware OTA.
@@ -57,6 +64,7 @@ else
     flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
 
     pod 'TwilioVoice', '~> 6.13'
+    omi_onnxruntime_mirror_pods
   end
 end
 

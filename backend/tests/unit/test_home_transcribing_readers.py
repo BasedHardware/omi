@@ -22,8 +22,8 @@ def capture(overdue=False):
     return {
         'id': 'capture',
         'created_at': now - timedelta(minutes=3),
-        'started_at': now - timedelta(seconds=45),
-        'finished_at': now - timedelta(seconds=20),
+        'started_at': now - timedelta(hours=25 if overdue else 0, seconds=45),
+        'finished_at': now - timedelta(hours=25 if overdue else 0, seconds=20),
         'source': 'desktop',
         'status': 'completed',
         'discarded': False,
@@ -31,7 +31,7 @@ def capture(overdue=False):
         'has_content': True,
         'has_photos': False,
         'record_lane_owner': 'batch_live_v1',
-        'home_transcription_pending_at': now,
+        'home_transcription_pending_at': now - timedelta(hours=25 if overdue else 0),
         'home_transcription_deadline_at': now + timedelta(seconds=-1 if overdue else 7200),
         'transcript_segments': [],
         'structured': {'title': '', 'overview': '', 'category': 'other'},
@@ -46,11 +46,13 @@ def test_developer_transcript_list_uses_presentation_collector(routes, monkeypat
     monkeypatch.setenv('HOME_TRANSCRIPTION_PRESENTATION_GATE', gate)
     monkeypatch.setattr(conversations, 'get_conversations_without_photos', _LIST_WITH_TRANSCRIPT)
     _install_listing(monkeypatch, {'capture': row})
-    assert not conversations.is_visible_conversation(row)
+    assert conversations.is_visible_conversation(row) is overdue
     result = client.get('/v1/dev/user/conversations?include_transcript=true')
     assert result.status_code == 200, result.text
     if gate == 'off':
-        assert result.json() == []
+        assert bool(result.json()) is overdue
+        if overdue:
+            assert result.json()[0]['structured']['title'] == ''
     else:
         assert result.json()[0]['structured']['title'] == ("Couldn't transcribe" if overdue else 'Transcribing…')
         assert result.json()[0]['transcript_included'] is True
@@ -81,7 +83,9 @@ def test_integration_list_uses_presentation_collector(monkeypatch, overdue, gate
         authorization='Bearer synthetic',
     )
     if gate == 'off':
-        assert result['conversations'] == []
+        assert bool(result['conversations']) is overdue
+        if overdue:
+            assert result['conversations'][0]['structured']['title'] == ''
     else:
         wire = result['conversations'][0]
         assert wire['structured']['title'] == ("Couldn't transcribe" if overdue else 'Transcribing…')
@@ -151,3 +155,21 @@ def test_hosted_mcp_projects_pending_and_overdue_captures(monkeypatch, overdue, 
         assert wire['structured']['title'] == ''
     assert 'home_transcription_deadline_at' not in wire
     assert row['status'] == 'completed' and row['structured']['title'] == ''
+
+
+@pytest.mark.parametrize('surface', ['list', 'detail'])
+def test_hosted_mcp_heals_old_deadline_using_loaded_row(monkeypatch, surface):
+    row = capture()
+    now = datetime.now(timezone.utc)
+    row.update(finished_at=now - timedelta(hours=3), home_transcription_deadline_at=now - timedelta(hours=1))
+    query = mcp_store(monkeypatch, row)
+    monkeypatch.setattr(tools, 'local_date_window', lambda *a: (None, None, timezone.utc))
+    if surface == 'list':
+        wire = tools.get_conversations('u', {'limit': 2})['conversations'][0]
+        assert query.stream.call_count == 1
+        assert query.get_all.call_count == 0
+    else:
+        wire = tools.get_conversation_by_id('u', {'conversation_id': 'capture'})['conversation']
+        assert query.get_all.call_count == 1
+        assert query.stream.call_count == 0
+    assert wire['structured']['title'] == 'Transcribing…'

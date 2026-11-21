@@ -9,11 +9,12 @@ into whichever folder the model half-liked. Low confidence must fall back to
 the default folder — or to None (unfiled), which beats misfiled.
 """
 
+from database.ports.folders import FolderEntity
 from utils.llm.conversation_folder import FolderAssignment, validate_folder_assignment
 
 FOLDERS = [
-    {'id': 'work', 'name': 'Work'},
-    {'id': 'personal', 'name': 'Personal'},
+    FolderEntity(id='work', name='Work'),
+    FolderEntity(id='personal', name='Personal'),
 ]
 
 

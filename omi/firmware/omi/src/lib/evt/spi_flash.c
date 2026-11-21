@@ -6,6 +6,8 @@
 #include <zephyr/pm/device.h>
 #include <zephyr/shell/shell.h>
 
+#include "boot_telemetry.h"
+
 static const struct device *const flash = DEVICE_DT_GET(DT_NODELABEL(spi_flash));
 static const struct gpio_dt_spec flash_mosi = GPIO_DT_SPEC_GET_OR(DT_NODELABEL(flash_mosi_pin), gpios, {0});
 static bool initialized;
@@ -34,6 +36,7 @@ static int cmd_flash_id(const struct shell *sh, size_t argc, char **argv)
 
     ret = flash_read_jedec_id(flash, id);
     if (ret < 0) {
+        omi_boot_telemetry_nor_failure();
         shell_error(sh, "Failed to read flash ID (%d)", ret);
         goto end;
     }
@@ -124,6 +127,7 @@ static int cmd_flash_read(const struct shell *sh, size_t argc, char **argv)
 
         ret = flash_read(flash, addr, buf, rd);
         if (ret < 0) {
+            omi_boot_telemetry_nor_failure();
             shell_error(sh, "Failed to read from flash (%d)", ret);
             goto end;
         }

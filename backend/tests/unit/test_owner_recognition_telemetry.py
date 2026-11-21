@@ -262,7 +262,8 @@ def test_process_conversation_observes_every_successful_persist():
     body = text[text.index('def process_conversation(') :]
     assert body.count('_observe_owner_recognition_completion(') == 2
     report = body[body.index('def report_persistence(') : body.index('is_initial_creation')]
-    assert 'if current and completed is not None:' in report
+    # Historical (backfilled v3) rows skip owner-recognition telemetry: legacy processing already observed them.
+    assert 'if current and completed is not None and not historical:' in report
     assert '_observe_owner_recognition_completion(completed)' in report
     fence = body.index('if not persisted:')
     assert body.index('report_persistence(persisted, completed=conversation)') < fence
@@ -761,6 +762,19 @@ def _stub_completed_reprocess(monkeypatch):
     monkeypatch.setattr(module, 'submit_with_context', lambda *args, **kwargs: None)
     monkeypatch.setattr(module, 'record_usage', lambda *args, **kwargs: None)
     monkeypatch.setattr(module.conversations_db, 'update_conversation', MagicMock())
+    # A user reprocess commits app results against the stored row and answers with it:
+    # the stored row here is whatever the processor last persisted.
+    stored: dict = {}
+
+    def _persist(_uid, payload, **_kwargs):
+        stored.clear()
+        stored.update(payload)
+        return True
+
+    monkeypatch.setattr(module.lifecycle_service, 'persist_processed_conversation', _persist)
+    monkeypatch.setattr(module.conversations_db, 'get_user_reprocess_app_snapshot', lambda *_: ([], {}, None, 0))
+    monkeypatch.setattr(module.lifecycle_service, 'commit_user_reprocess_app_results', lambda *_a, **_k: True)
+    monkeypatch.setattr(module, '_current_user_reprocess_conversation', lambda *_: dict(stored))
 
 
 def test_deferred_desktop_projection_counts_on_first_completed_reprocess(monkeypatch):

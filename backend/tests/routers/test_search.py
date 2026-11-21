@@ -12,6 +12,7 @@ from fastapi.testclient import TestClient
 import database.conversations as conversations_db
 import database.memories as memories_db
 import database.users as users_db
+from database.ports.folders import FolderEntity
 from routers import search as search_router
 from routers import users as users_router
 from utils.daily_summary_search import DAILY_SUMMARY_SEARCH_WINDOW, filter_daily_summaries
@@ -117,9 +118,9 @@ def test_filter_ignores_blank_query_and_malformed_fields():
 # --- overview counts ------------------------------------------------------
 
 FOLDERS = [
-    {'id': 'f-work', 'name': 'Work', 'icon': '💼', 'color': '#3B82F6', 'order': 0},
-    {'id': 'f-personal', 'name': 'Personal', 'icon': '👤', 'color': '#10B981', 'order': 1},
-    {'id': None, 'name': 'Broken'},
+    FolderEntity(id='f-work', name='Work', icon='💼', color='#3B82F6', order=0),
+    FolderEntity(id='f-personal', name='Personal', icon='👤', color='#10B981', order=1),
+    FolderEntity.model_construct(id=None, name='Broken'),
 ]
 
 
@@ -246,9 +247,18 @@ def test_count_people_uses_server_side_aggregation():
 def test_count_conversations_with_geolocation_filters_on_latitude():
     client = MagicMock()
     conversations_ref = client.collection.return_value.document.return_value.collection.return_value
-    conversations_ref.where.return_value.count.return_value.get.return_value = _aggregation(9)
+    located = conversations_ref.where.return_value
+    located.count.return_value.get.return_value = _aggregation(9)
+    # Hidden recordings carry the same geolocation as the conversations over them: never counted twice.
+    located.where.return_value.count.return_value.get.return_value = _aggregation(2)
 
-    assert conversations_db.count_conversations_with_geolocation('uid1', firestore_client=client) == 9
+    assert conversations_db.count_conversations_with_geolocation('uid1', firestore_client=client) == 7
+    recording_filter = located.where.call_args.kwargs['filter']
+    assert (recording_filter.field_path, recording_filter.op_string, recording_filter.value) == (
+        'recording',
+        '==',
+        True,
+    )
     field_filter = conversations_ref.where.call_args.kwargs['filter']
     assert field_filter.field_path == 'geolocation.latitude'
     # The client rewrites `!= None` into Firestore's unary IS_NOT_NULL filter.
