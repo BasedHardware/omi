@@ -2,8 +2,8 @@
 """Collect live serving state for an activation manifest, read-only. Output feeds activation_check.py.
 
 Reads only service metadata: Cloud Run services and the revisions receiving traffic (``status.traffic``,
-never the service spec), GKE Deployments, their running pods' image digests and ConfigMaps, Cloud Tasks
-queues and Cloud Scheduler jobs. It never reads Secrets, user data or request logs, and never writes.
+never the service spec), GKE Deployment selectors and their running pods' specs and image digests,
+Cloud Tasks queues and Cloud Scheduler jobs. It never reads Secrets, user data or request logs, and never writes.
 Only the env keys the manifest names are recorded; a Secret-backed key is recorded as its reference.
 
 Source identity is the image, not ``OMI_BACKEND_RELEASE_SHA``: env merges never remove a value, so that
@@ -102,47 +102,32 @@ def cloud_run_env(container: dict[str, Any], wanted: set[str]) -> dict[str, Any]
     return out
 
 
-def gke_env(container: dict[str, Any], wanted: set[str], configmap: Callable[[str], dict[str, str]]) -> dict[str, Any]:
-    """Explicit env wins over envFrom, as in Kubernetes. ConfigMap refs are resolved; Secrets never read."""
+def gke_env(container: dict[str, Any], wanted: set[str]) -> dict[str, Any]:
+    """Record evidence from the pod spec. Kubernetes resolves external env values at container startup."""
     out: dict[str, Any] = {}
     for source in container.get('envFrom', []) or []:
         prefix = source.get('prefix', '')
-        if 'configMapRef' in source:
-            name = source['configMapRef'].get('name', '')
-            try:
-                data = configmap(name)
-            except ReadError as error:
-                for key in wanted:
-                    out.setdefault(key, {'unknown': f'configmap {name}: {error}'})
-                continue
-            for key, value in data.items():
-                if prefix + key in wanted:
-                    out[prefix + key] = {'value': value}
-        elif 'secretRef' in source:
-            # Key names under a Secret are not readable without reading the Secret: leave them unknown
-            # unless an explicit entry or a ConfigMap supplies the key.
-            for key in wanted:
-                out.setdefault(key, {'unknown': f"may come from secret {source['secretRef'].get('name', '')}"})
+        for key in wanted:
+            if key.startswith(prefix):
+                out[key] = {'unknown': 'envFrom value at container startup is unavailable'}
     for entry in container.get('env', []) or []:
         name = entry.get('name')
         if name not in wanted:
             continue
         value_from = entry.get('valueFrom') or {}
-        if 'configMapKeyRef' in value_from:
-            ref = value_from['configMapKeyRef']
-            try:
-                data = configmap(ref.get('name', ''))
-            except ReadError as error:
-                out[name] = {'unknown': f"configmap {ref.get('name', '')}: {error}"}
-                continue
-            out[name] = {'value': data[ref['key']]} if ref.get('key') in data else {'value': ''}
-        elif 'secretKeyRef' in value_from:
+        value = entry.get('value', '')
+        if 'secretKeyRef' in value_from:
             ref = value_from['secretKeyRef']
-            out[name] = {'secret_ref': f"{ref.get('name', '')}:{ref.get('key', '')}"}
-        elif value_from:
-            out[name] = {'unknown': 'unsupported valueFrom'}
+            if ref.get('optional'):
+                out[name] = {'unknown': 'optional Secret binding at container startup is unavailable'}
+            else:
+                out[name] = {'secret_ref': f"{ref.get('name', '')}:{ref.get('key', '')}"}
+        elif 'configMapKeyRef' in value_from:
+            out[name] = {'unknown': 'ConfigMap value at container startup is unavailable'}
+        elif value_from or '$(' in value or '$$' in value:
+            out[name] = {'unknown': 'value depends on container startup'}
         else:
-            out[name] = {'value': entry.get('value', '')}
+            out[name] = {'value': value}
     return out
 
 
@@ -303,7 +288,6 @@ class Collector:
         # Promoted images (prod pusher) keep their commit tag only in the qualifying registry.
         self.promoted_registry = promoted_registry or self.registry
         self.kubectl = kubectl or ['kubectl']
-        self._configmaps: dict[tuple[str, str], dict[str, str]] = {}
 
     def gcloud_json(self, *args: str) -> Any:
         return json.loads(self.run(['gcloud', *args, '--project', self.project, '--format=json']))
@@ -347,12 +331,6 @@ class Collector:
             units.append(unit)
         return {'kind': 'cloud_run', 'serving': units}
 
-    def configmap(self, namespace: str, name: str) -> dict[str, str]:
-        if (namespace, name) not in self._configmaps:
-            doc = json.loads(self.run([*self.kubectl, '-n', namespace, 'get', 'configmap', name, '-o', 'json']))
-            self._configmaps[(namespace, name)] = doc.get('data') or {}
-        return self._configmaps[(namespace, name)]
-
     def digest_source(self, repository: str, digest: str, promoted_from: list[str]) -> str:
         try:
             return self.git.resolve(self.registry.source(repository, digest))
@@ -371,37 +349,48 @@ class Collector:
         selector = ((deploy.get('spec') or {}).get('selector') or {}).get('matchLabels') or {}
         if not selector:
             raise ReadError('deployment selector unreadable')
-        app = app_container(deploy['spec']['template']['spec']['containers'], container)
-        env = gke_env(app, wanted, lambda name: self.configmap(namespace, name))
         labels = ','.join(f'{k}={v}' for k, v in sorted(selector.items()))
         pods = json.loads(self.run([*self.kubectl, '-n', namespace, 'get', 'pods', '-l', labels, '-o', 'json']))
-        digests: dict[str, int] = {}
+        groups: dict[tuple[str, str, str], int] = {}
         for pod in pods.get('items', []):
-            if (pod.get('status') or {}).get('phase') != 'Running':
+            status = pod.get('status') or {}
+            if status.get('phase') != 'Running':
                 continue
-            for status in (pod.get('status') or {}).get('containerStatuses') or []:
-                if status.get('name') == app['name']:
-                    image_id = status.get('imageID', '').rpartition('@')[2]
-                    key = image_id if DIGEST.fullmatch(image_id) else ''
-                    digests[key] = digests.get(key, 0) + 1
-        total = sum(digests.values())
+            app = app_container((pod.get('spec') or {}).get('containers') or [], container)
+            repository = split_image(app.get('image', ''))[0]
+            image_id = next(
+                (
+                    item.get('imageID', '').rpartition('@')[2]
+                    for item in status.get('containerStatuses') or []
+                    if item.get('name') == app['name']
+                ),
+                '',
+            )
+            digest = image_id if DIGEST.fullmatch(image_id) else ''
+            # An env-only rollout can serve several configurations of the same image.
+            key = (repository, digest, json.dumps(gke_env(app, wanted), sort_keys=True))
+            groups[key] = groups.get(key, 0) + 1
+        total = sum(groups.values())
         if not total:
             raise ReadError('no running pods')
-        repository = split_image(app.get('image', ''))[0]
         units = []
-        for digest, count in sorted(digests.items()):
+        sources: dict[tuple[str, str], dict[str, str]] = {}
+        for index, ((repository, digest, env_json), count) in enumerate(sorted(groups.items()), start=1):
             unit: dict[str, Any] = {
-                'name': f'{deployment}@{digest[7:19] or "unknown"}',
+                'name': f'{deployment}@{digest[7:19] or "unknown"}-{index}',
                 'percent': round(100 * count / total, 1),
                 'pods': count,
-                'env': env,
+                'env': json.loads(env_json),
             }
-            try:
-                if not digest:
-                    raise ReadError('running image digest unknown')
-                unit['source_sha'] = self.digest_source(repository, digest, list(promoted_from))
-            except ReadError as error:
-                unit['source_error'] = str(error)
+            image = (repository, digest)
+            if image not in sources:
+                try:
+                    if not digest:
+                        raise ReadError('running image digest unknown')
+                    sources[image] = {'source_sha': self.digest_source(repository, digest, list(promoted_from))}
+                except ReadError as error:
+                    sources[image] = {'source_error': str(error)}
+            unit.update(sources[image])
             units.append(unit)
         return {'kind': 'gke', 'serving': units}
 

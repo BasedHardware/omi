@@ -397,38 +397,44 @@ def test_collector_reads_traffic_not_spec_and_never_secrets(manifest):
     assert not any('secrets' in argv for argv in calls)
 
 
-def test_collector_gke_resolves_configmaps_and_promoted_digests():
-    deployment = {
-        'spec': {
-            'selector': {'matchLabels': {'app': 'pusher'}},
-            'template': {
-                'spec': {
-                    'containers': [
-                        {
-                            'name': 'pusher',
-                            'image': 'gcr.io/prod/pusher@' + DIG_NEW,
-                            'envFrom': [{'configMapRef': {'name': 'shared'}}],
-                            'env': [
-                                {
-                                    'name': 'CONVERSATIONS_V3_STAGE',
-                                    'valueFrom': {'configMapKeyRef': {'name': 'shared', 'key': 'STAGE'}},
-                                },
-                                {'name': 'SYNC_TASKS_PROJECT', 'value': 'p'},
-                            ],
-                        }
-                    ]
-                }
-            },
-        }
+def _pusher_pod(app, digest, phase='Running'):
+    return {
+        'spec': {'containers': [app]},
+        'status': {
+            'phase': phase,
+            'containerStatuses': [{'name': 'pusher', 'imageID': 'gcr.io/prod/pusher@' + digest}],
+        },
     }
-    pod = lambda digest, phase='Running': {  # noqa: E731
-        'status': {'phase': phase, 'containerStatuses': [{'name': 'pusher', 'imageID': 'gcr.io/prod/pusher@' + digest}]}
+
+
+def test_collector_gke_counts_pods_and_resolves_promoted_digests():
+    deployment = {'spec': {'selector': {'matchLabels': {'app': 'pusher'}}}}
+    app = {
+        'name': 'pusher',
+        'image': 'gcr.io/prod/pusher@' + DIG_NEW,
+        'envFrom': [{'configMapRef': {'name': 'shared'}, 'prefix': 'SYNC_'}],
+        'env': [
+            {'name': 'CONVERSATIONS_V3_STAGE', 'valueFrom': {'configMapKeyRef': {'name': 'shared', 'key': 'STAGE'}}},
+            {'name': 'SYNC_TASKS_PROJECT', 'value': 'p'},
+            {'name': 'INVOKER', 'valueFrom': {'secretKeyRef': {'name': 'invoker', 'key': 'email'}}},
+            {
+                'name': 'OPTIONAL',
+                'valueFrom': {'secretKeyRef': {'name': 'invoker', 'key': 'optional', 'optional': True}},
+            },
+            {'name': 'EXPANDED', 'value': '$(SYNC_TASKS_PROJECT)'},
+        ],
     }
     runner, calls = _fake_runner(
         {
             ('get', 'deployment', 'prod-omi-pusher'): deployment,
-            ('get', 'configmap', 'shared'): {'data': {'STAGE': 'beta', 'SYNC_TASKS_HANDLER_URL': 'https://h'}},
-            ('get', 'pods'): {'items': [pod(DIG_NEW), pod(DIG_NEW), pod(DIG_OLD), pod(DIG_OLD, 'Pending')]},
+            ('get', 'pods'): {
+                'items': [
+                    _pusher_pod(app, DIG_NEW),
+                    _pusher_pod(app, DIG_NEW),
+                    _pusher_pod(app, DIG_OLD),
+                    _pusher_pod(app, DIG_OLD, 'Pending'),
+                ]
+            },
         }
     )
     collector = collect.Collector(
@@ -443,7 +449,15 @@ def test_collector_gke_resolves_configmaps_and_promoted_digests():
     result = collector.gke(
         'ns',
         'prod-omi-pusher',
-        {'CONVERSATIONS_V3_STAGE', 'SYNC_TASKS_PROJECT', 'SYNC_TASKS_HANDLER_URL'},
+        {
+            'CONVERSATIONS_V3_STAGE',
+            'SYNC_TASKS_PROJECT',
+            'SYNC_TASKS_HANDLER_URL',
+            'INVOKER',
+            'UNRELATED',
+            'EXPANDED',
+            'OPTIONAL',
+        },
         ['gcr.io/dev/pusher'],
     )
 
@@ -451,11 +465,68 @@ def test_collector_gke_resolves_configmaps_and_promoted_digests():
     assert set(units) == {NEW, OLD}
     assert units[NEW]['pods'] == 2 and units[OLD]['pods'] == 1
     assert units[NEW]['env'] == {
-        'CONVERSATIONS_V3_STAGE': {'value': 'beta'},
+        'CONVERSATIONS_V3_STAGE': {'unknown': 'ConfigMap value at container startup is unavailable'},
         'SYNC_TASKS_PROJECT': {'value': 'p'},
-        'SYNC_TASKS_HANDLER_URL': {'value': 'https://h'},
+        'SYNC_TASKS_HANDLER_URL': {'unknown': 'envFrom value at container startup is unavailable'},
+        'INVOKER': {'secret_ref': 'invoker:email'},
+        'OPTIONAL': {'unknown': 'optional Secret binding at container startup is unavailable'},
+        'EXPANDED': {'unknown': 'value depends on container startup'},
     }
-    assert not any('secret' in part for argv in calls for part in argv)
+    assert [argv[3:5] for argv in calls] == [['get', 'deployment'], ['get', 'pods']]
+
+
+@pytest.mark.parametrize(
+    ('old_binding', 'expected_verdict', 'expected_parity'),
+    [
+        ({'value': 'off'}, check.BLOCKED, check.MISSING),
+        (
+            {'valueFrom': {'configMapKeyRef': {'name': 'shared', 'key': 'STAGE'}}},
+            check.UNDETERMINED,
+            check.UNKNOWN,
+        ),
+    ],
+)
+def test_gke_mixed_generation_same_digest_cannot_pass_stage_parity(
+    manifest, old_binding, expected_verdict, expected_parity
+):
+    state = _state('state-ready.json')
+    ready_pusher = state['services']['pusher']['serving'][0]
+    stage = 'CONVERSATIONS_V3_STAGE'
+    new_app = {
+        'name': 'pusher',
+        'image': 'gcr.io/prod/pusher@' + DIG_NEW,
+        'env': [{'name': name, **value} for name, value in ready_pusher['env'].items()],
+    }
+    old_app = {**new_app, 'env': [entry for entry in new_app['env'] if entry['name'] != stage]}
+    old_app['env'].append({'name': stage, **old_binding})
+    new_pod = _pusher_pod(new_app, DIG_NEW)
+    old_pod = _pusher_pod(old_app, DIG_NEW)
+    deployment = {
+        'spec': {'selector': {'matchLabels': {'app': 'pusher'}}, 'template': {'spec': new_pod['spec']}},
+    }
+    runner, _ = _fake_runner(
+        {
+            ('get', 'deployment', 'pusher'): deployment,
+            ('get', 'pods'): {'items': [new_pod, old_pod]},
+            ('get', 'configmap', 'shared'): {'data': {'STAGE': 'beta'}},
+        }
+    )
+    sha = ready_pusher['source_sha']
+    collector = collect.Collector(
+        'proj',
+        'us-central1',
+        FakeGit({sha: set()}),
+        runner,
+        registry=FakeRegistry({('gcr.io/prod/pusher', DIG_NEW): sha}),
+    )
+
+    state['services']['pusher'] = collector.gke('ns', 'pusher', collect.manifest_env_keys(manifest)['pusher'])
+    units = state['services']['pusher']['serving']
+    assert len({u['name'] for u in units}) == 2
+    assert [u['pods'] for u in units] == [1, 1]
+    verdict = check.evaluate(manifest, state)
+    assert verdict.verdict == expected_verdict
+    assert f'env-equal:v3-stage:{stage}' in _by_status(verdict, expected_parity)
 
 
 def test_collect_end_to_end_marks_failures_unknown(manifest):
@@ -647,7 +718,10 @@ def test_gke_counts_pods_with_unreadable_digests_and_picks_the_named_container()
             },
         }
     }
-    bad_pod = {'status': {'phase': 'Running', 'containerStatuses': [{'name': 'app', 'imageID': 'garbage'}]}}
+    bad_pod = {
+        'spec': deployment['spec']['template']['spec'],
+        'status': {'phase': 'Running', 'containerStatuses': [{'name': 'app', 'imageID': 'garbage'}]},
+    }
     runner, _ = _fake_runner(
         {('get', 'deployment', 'd'): deployment, ('get', 'pods'): {'items': [bad_pod, copy.deepcopy(bad_pod)]}}
     )

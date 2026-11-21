@@ -56,8 +56,10 @@ but a controlled requirement could not be read), `3` invalid manifest or state.
 - Serving identity is the image: the OCI `org.opencontainers.image.revision` label of the running digest,
   else its commit tag. `OMI_BACKEND_RELEASE_SHA` is recorded as `release_env` only: env merges never remove
   a value, so it can name a release the revision does not serve.
-- GKE: the Deployment template env (ConfigMaps resolved; Secrets never read) and the image digests of its
-  Running pods, one serving unit per digest with its share of pods.
+- GKE: the Deployment selector and the specs and image digests of its Running pods. Pods with the same
+  image and environment evidence share a serving unit. ConfigMap-backed and `envFrom` keys report
+  unknown because their startup values are unavailable from the pod spec. Required Secret bindings are
+  recorded as references. Optional ones report unknown.
 - Gateway lanes: declared at the gateway's serving commit (`llm_gateway/config/lanes.yaml` plus the
   feature lanes of `generated_route_overrides.yaml`), read from local git.
 - Cloud Tasks queues and Cloud Scheduler jobs: one `list` per location. Absent from a successful list is
