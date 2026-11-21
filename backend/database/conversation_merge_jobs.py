@@ -320,6 +320,7 @@ def begin_recovery(job_id: str, *, firestore_client: Any = None) -> dict | None:
 ROLLBACK_CLEANUP_STEPS = frozenset(
     (
         'memories',
+        'action_items',
         'photos',
         'audio',
         'vector',

@@ -1094,19 +1094,30 @@ def _delete_conversation_and_related_data(
         # it on the deletion data message (#5085), so the merge has to send one per
         # open dated task, like the conversation delete path does.
         source_items = action_items_db.get_action_items_by_conversation(uid, conversation_id)
-        # Keep task IDs available for a retry if the vector provider fails.
-        if retain_capture and source_items:
-            delete_action_item_vectors_batch(uid, [item['id'] for item in source_items])
         if write_guard is None:
+            if retain_capture and source_items:
+                delete_action_item_vectors_batch(uid, [item['id'] for item in source_items])
             action_items_db.delete_action_items_for_conversation(uid, conversation_id)
         else:
             from database.space_store import FirestoreSpaceStore
+
+            def retire_source_tasks(tx: Any) -> None:
+                write_guard(tx.transaction)
+                tx.action_items.retire_conversation_documents(conversation_id, active_ids=[])
 
             def delete_source_tasks(tx: Any) -> None:
                 write_guard(tx.transaction)
                 tx.action_items.delete_conversation_documents(conversation_id)
 
-            FirestoreSpaceStore(uid, firestore_client=firestore_db).run(delete_source_tasks)
+            task_store = FirestoreSpaceStore(uid, firestore_client=firestore_db)
+            # Authorize the retraction before touching the vector provider.
+            # Retired rows retain their IDs across a failed provider call.
+            task_store.run(retire_source_tasks)
+            task_ids = action_items_db.get_action_item_ids(
+                uid, conversation_id=conversation_id, firestore_client=firestore_db
+            )
+            delete_action_item_vectors_batch(uid, task_ids)
+            task_store.run(delete_source_tasks)
     except Exception as e:
         logger.error(f"Error deleting action items for {conversation_id}: {e}")
         if retain_capture:
@@ -1199,6 +1210,15 @@ def cleanup_failed_merge_target(
 
     try:
         done('memories')
+        if rollback_step is not None:
+            from database import action_items
+
+            task_ids = action_items.get_action_item_ids(uid, conversation_id=merged_conversation_id)
+            if task_ids:
+                # Keep the Firestore rows as retry identities until vectors are gone.
+                delete_action_item_vectors_batch(uid, task_ids)
+                action_items.delete_action_items_for_conversation(uid, merged_conversation_id)
+            done('action_items')
         conversations_db.delete_conversation_photos(uid, merged_conversation_id)
         done('photos')
         delete_conversation_audio_files(uid, merged_conversation_id)

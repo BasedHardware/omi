@@ -413,6 +413,7 @@ def test_go_retraction_with_typesense_failure_does_not_receipt(store, monkeypatc
     monkeypatch.setattr(sync_jobs, 'release_job_run_lock', lambda *_: None)
     monkeypatch.setattr(merge, 'retraction_can_be_skipped', lambda *_args, **_kwargs: True)
     monkeypatch.setattr(action_items, 'get_action_items_by_conversation', lambda *_: [])
+    monkeypatch.setattr(action_items, 'get_action_item_ids', lambda *_args, **_kwargs: [])
     monkeypatch.setattr(merge, 'firestore_db', client)
     monkeypatch.setattr(space_store.FirestoreSpaceStore, 'run', lambda *_: None)
     monkeypatch.setattr(merge, 'delete_vector', lambda *_: None)
@@ -425,3 +426,63 @@ def test_go_retraction_with_typesense_failure_does_not_receipt(store, monkeypatc
     delete_search.assert_called_once_with(owner, 'a')
     assert 'go_cleanup_receipts' not in jobrow(store, admitted)
     assert row(store, 'a')['merge_job_id'] == job_id
+
+
+def test_rollback_takeover_retracts_provisional_tasks_and_vectors(store, monkeypatch, go_retraction_ports):
+    from unittest.mock import Mock
+
+    from database import action_items
+
+    _, _, merge, worker = go_retraction_ports
+    client, owner = store
+    job = admit(store)
+    job_id, target = job['job_id'], job['merge_target_id']
+    assert jobs.claim(job_id, firestore_client=client)
+    assert jobs.renew(job_id, 1, phase='target_started', firestore_client=client)
+    target_path = ('users', owner, 'conversations', target)
+    client.rows[target_path] = {'status': 'processing'}
+    tasks = {'pending', 'retired'}
+    vectors = set(tasks)
+    monkeypatch.setattr(jobs, '_now', lambda: NOW + jobs.LEASE)
+    monkeypatch.setattr(merge, 'MemoryService', Mock())
+    monkeypatch.setattr(merge.conversations_db, 'delete_conversation_photos', lambda *_: None)
+    monkeypatch.setattr(merge, 'delete_conversation_audio_files', lambda *_: None)
+    monkeypatch.setattr(merge, 'delete_vector', lambda *_: None)
+
+    def task_ids(uid, *, conversation_id):
+        assert (uid, conversation_id) == (owner, target)
+        return sorted(tasks)
+
+    def delete_tasks(uid, conversation_id):
+        assert (uid, conversation_id) == (owner, target)
+        tasks.clear()
+
+    def delete_vectors(uid, ids):
+        assert uid == owner
+        assert set(ids) == tasks
+        vectors.difference_update(ids)
+
+    def delete_target(uid, conversation_id, *, rollback_step):
+        assert (uid, conversation_id) == (owner, target)
+        assert not tasks and not vectors
+        client.rows.pop(target_path)
+        for step in jobs.ROLLBACK_CLEANUP_STEPS - {'memories', 'action_items', 'photos', 'audio', 'vector'}:
+            rollback_step(step)
+
+    monkeypatch.setattr(action_items, 'get_action_item_ids', task_ids)
+    monkeypatch.setattr(action_items, 'delete_action_items_for_conversation', delete_tasks)
+    monkeypatch.setattr(merge, 'delete_action_item_vectors_batch', Mock(side_effect=RuntimeError('vector unavailable')))
+    monkeypatch.setattr(merge.conversations_db, 'delete_conversation', delete_target)
+    assert worker.reconcile(job_id, firestore_client=client) == 'cleanup_pending'
+    assert tasks == vectors == {'pending', 'retired'}
+    assert not jobs.finish_recovery(
+        job_id,
+        jobrow(store, job)['lease_epoch'],
+        cleanup_steps=jobs.ROLLBACK_CLEANUP_STEPS - {'action_items'},
+        firestore_client=client,
+    )
+    monkeypatch.setattr(merge, 'delete_action_item_vectors_batch', delete_vectors)
+    monkeypatch.setattr(jobs, '_now', lambda: NOW + 2 * jobs.LEASE)
+    assert worker.reconcile(job_id, firestore_client=client) == 'rolled_back'
+    assert not tasks and not vectors
+    assert 'action_items' in jobrow(store, job)['rollback_cleanup_steps']

@@ -665,7 +665,14 @@ _add(
         'database.action_items.delete_action_items_for_conversation', base={'uid': UID, 'conversation_id': 'conv-1'}
     )
 )
-_add(DriverEntry('database.action_items.get_action_item_ids', base={'uid': UID}, neutrals={'budget': _BUDGET}))
+_add(
+    DriverEntry(
+        'database.action_items.get_action_item_ids',
+        base={'uid': UID},
+        domains={'conversation_id': [None, 'conv-1']},
+        neutrals={'budget': _BUDGET},
+    )
+)
 _add(
     DriverEntry(
         'database.action_item_dedup.may_have_recent_dedup_candidates',
