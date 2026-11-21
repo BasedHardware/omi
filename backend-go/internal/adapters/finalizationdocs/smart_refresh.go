@@ -30,6 +30,15 @@ func (s Store) updateRefresh(ctx context.Context, g queue.Guarded, claim finaliz
 		if !owns(job, claim) || !field[time.Time](job, "lease_expires_at").After(now) {
 			return queue.ErrLease
 		}
+		for _, ref := range []finalization.Ref{claim.Intent.Ref, result.Survivor} {
+			deleted, err := conversationTombstoned(tx, ref)
+			if err != nil {
+				return err
+			}
+			if deleted {
+				return finalization.ErrStale
+			}
+		}
 		donor, err := conversationRef(claim.Intent.Ref)
 		if err != nil {
 			return err

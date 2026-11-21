@@ -35,6 +35,9 @@ func (s Store) repointEpisode(tx *docstore.Tx, claim finalization.Claim, result 
 	if err != nil {
 		return err
 	}
+	if from.tombstoned || field[bool](from.row, "is_deleted") {
+		return finalization.ErrStale
+	}
 	episode := episodeOwner(from)
 	if episode == "" {
 		return nil

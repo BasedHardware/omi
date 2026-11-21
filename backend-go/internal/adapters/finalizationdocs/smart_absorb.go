@@ -64,6 +64,9 @@ func (s Store) absorb(tx *docstore.Tx, claim finalization.Claim, plan finalizati
 		field[int64](rows.donor, "finalization_revision") != claim.Intent.Revision || !absorbVisible(rows.target) {
 		return finalization.SmartAbsorbResult{}, finalization.ErrStale
 	}
+	if err := verifyAbsorbSidecars(tx, rows, claim.Intent.Ref); err != nil {
+		return finalization.SmartAbsorbResult{}, err
+	}
 	targetMerge := field[map[string]any](rows.target, "smart_merge")
 	prior := field[map[string]any](rows.donor, "smart_merge")
 	if field[bool](rows.donor, "deleted") && field[string](prior, "role") == "donor" &&
@@ -115,9 +118,6 @@ func sameAbsorbPartition(target, donor document) bool {
 func (s Store) appendAbsorb(tx *docstore.Tx, rows absorbRows, donorRef finalization.Ref, now time.Time) (finalization.SmartAbsorbResult, error) {
 	if !absorbPairRow(rows.target) || !absorbPairRow(rows.donor) || !sameAbsorbPartition(rows.target, rows.donor) {
 		return finalization.SmartAbsorbResult{}, finalization.ErrStale
-	}
-	if err := verifyAbsorbSidecars(tx, rows, donorRef); err != nil {
-		return finalization.SmartAbsorbResult{}, err
 	}
 	lineage, err := loadAbsorbLineage(tx, donorRef, rows)
 	if err != nil {
@@ -200,12 +200,7 @@ func markAbsorbDonors(tx *docstore.Tx, rows absorbRows, result finalization.Smar
 
 func verifyAbsorbSidecars(tx *docstore.Tx, rows absorbRows, donor finalization.Ref) error {
 	for _, ref := range []finalization.Ref{donor, rows.targetRef} {
-		marker, err := docstore.Doc("users", ref.Owner, "deleted_conversations", ref.ID)
-		if err != nil {
-			return err
-		}
-		var old document
-		found, err := tx.Get(marker, &old)
+		found, err := conversationTombstoned(tx, ref)
 		if err != nil {
 			return err
 		}
