@@ -20,7 +20,7 @@ import 'package:omi/services/wals/sync_wake_scope.dart';
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:omi/utils/analytics/analytics_manager.dart';
+import 'package:omi/utils/analytics/analytics_manager.dart' show AnalyticsManager;
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
@@ -1447,7 +1447,6 @@ class CaptureController extends ChangeNotifier
   bool _deviceIdentityStale(int? revision) => revision != null && _deviceIdentityRevision != revision;
 
   void _rollCaptureSession(String identity) {
-    _stopLimitlessCustomLiveWatch();
     _liveSocketIdentity = null;
     _mobileStandardBatchAllowed = false;
     _mobileStandardBatch?.authorize(false);
@@ -2746,7 +2745,7 @@ class CaptureController extends ChangeNotifier
     }
     if (_deviceIdentityStale(deviceRevision)) return;
     updateRecordingState(isPaused ? RecordingState.pause : RecordingState.deviceRecord);
-    if (Platform.isAndroid && connection is LimitlessDeviceConnection) {
+    if (connection is LimitlessDeviceConnection && connection.supportsCustomLiveRecovery) {
       _limitlessAudioConnection = connection;
       _refreshLimitlessCustomLiveWatch();
     }
@@ -2764,28 +2763,44 @@ class CaptureController extends ChangeNotifier
     if (connection == null) return;
     connection.stopCustomLiveAudioWatch();
     final device = _recordingDevice;
-    final recordingId = activeRecordingId;
-    final token = _sessionOwner?.token;
-    final deviceRevision = _deviceIdentityRevision;
+    final session = _capture.stagedReadModel.state.active;
+    final recordingId = session?.recordingId;
+    final accountId = session?.accountId;
     final captureRevision = _preferences.capturePolicy.revision;
     final config = _preferences.customSttConfig;
-    if (device == null || recordingId == null || !config.isEnabled || config.provider != SttProvider.customLive) return;
+    if (device == null ||
+        session == null ||
+        recordingId == null ||
+        accountId == null ||
+        accountId.isEmpty ||
+        !config.isEnabled ||
+        config.provider != SttProvider.customLive) {
+      return;
+    }
+    final configId = config.sttConfigId;
 
     bool isCurrent() {
+      final capture = _capture.stagedReadModel;
+      final currentSession = capture.state.active;
+      // DeviceProvider publishes normalized metadata after starting capture.
+      // Use the admitted recording and link, which survive that refresh.
       if (_captureControllerDisposed ||
-          _deviceIdentityStale(deviceRevision) ||
+          !identical(_limitlessAudioConnection, connection) ||
           !_admitsCapture(captureRevision) ||
-          !_captureSessionIsCurrent(token) ||
+          !_auth.isSignedIn() ||
+          _preferences.uid != accountId ||
           _recordingDevice?.id != device.id ||
+          currentSession?.sessionKey != session.sessionKey ||
+          currentSession?.recordingId != recordingId ||
           activeRecordingId != recordingId ||
           _bleBytesStream == null ||
           _omiCallActive ||
           _pendantSuspension != null ||
-          _capture.stagedReadModel.phase != CapturePhase.pendantLive ||
+          capture.phase != CapturePhase.pendantLive ||
           _preferences.batchModeEnabled) {
         return false;
       }
-      return _preferences.customSttConfig.sttConfigId == config.sttConfigId;
+      return _preferences.customSttConfig.sttConfigId == configId;
     }
 
     if (!isCurrent()) return;
@@ -3109,6 +3124,7 @@ class CaptureController extends ChangeNotifier
 
   @override
   void dispose() {
+    _stopLimitlessCustomLiveWatch();
     _clearIngressByteObserver();
     _uplinkSilence.cancel();
     _captureControllerDisposed = true;

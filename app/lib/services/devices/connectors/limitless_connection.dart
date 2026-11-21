@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/services/devices.dart';
@@ -170,6 +171,8 @@ class LimitlessDeviceConnection extends DeviceConnection {
     stopCustomLiveAudioWatch();
     _cancelStreamHealthWatch();
   }
+
+  bool get supportsCustomLiveRecovery => Platform.isAndroid;
 
   void watchCustomLiveAudio({
     required bool Function() captureIsCurrent,
