@@ -1376,3 +1376,62 @@ def test_release_requeues_unless_the_claimant_itself_attempted_completion(follow
     before = _requeues()
     f.runner.release_sibling_claim((1, f.binding))
     assert f.runner.pending[0] == 'x' and _requeues() == before + 1
+
+
+@pytest.mark.asyncio
+async def test_failed_claimant_does_not_duplicate_a_queued_targeted_recovery(followup, monkeypatch):
+    """lead2 custody review: a re-queue must not race a targeted wake into two tasks."""
+    f = followup
+    runner = f.runner
+    monkeypatch.setattr(projection_followup, 'MAX_FOLLOWUPS', 1)
+    started = []
+
+    class Task:
+        def __init__(self, segment):
+            self.segment, self.callbacks = segment, []
+
+        def add_done_callback(self, cb):
+            self.callbacks.append(cb)
+
+    def start(coro, name=None):
+        coro.close()
+        task = Task(started[-1] if started else None)
+        return task
+
+    def run(segment):
+        started.append(segment)
+
+        async def noop():
+            return None
+
+        return noop()
+
+    monkeypatch.setattr(projection_followup, 'start_background_task', start)
+    monkeypatch.setattr(runner, 'run', run)
+    runner.tasks['busy'] = object()  # the only slot is taken
+    await runner.schedule(['later'], discover=False)
+    assert list(runner.targeted_pending) == ['later'] and not started
+
+    # The claimant fails before its completion attempt; the sibling already skipped.
+    runner.sibling_claims[(1, f.binding)] = projection_followup.SiblingClaim(waiting=['later'])
+    runner.release_sibling_claim((1, f.binding))
+    assert 'later' not in runner.pending
+
+    runner.tasks.pop('busy')
+    monkeypatch.setattr(projection_followup, 'MAX_FOLLOWUPS', 4)
+    runner.launch()
+    assert started == ['later']
+    assert list(runner.tasks) == ['later'] and not runner.pending and not runner.targeted_pending
+
+
+def test_ordinary_launch_never_overwrites_a_running_segment(followup, monkeypatch):
+    f = followup
+    runner = f.runner
+    monkeypatch.setattr(projection_followup, 'MAX_FOLLOWUPS', 4)
+    owner = object()
+    runner.tasks['later'] = owner
+    runner.pending.append('later')
+    runner.prioritized.add('later')
+    monkeypatch.setattr(projection_followup, 'start_background_task', lambda *a, **k: pytest.fail('duplicate launch'))
+    runner.launch()
+    assert runner.tasks['later'] is owner and not runner.pending and 'later' not in runner.prioritized

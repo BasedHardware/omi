@@ -373,6 +373,10 @@ class ProjectionFollowups:
         self.launch_targeted()
         while self.pending and len(self.tasks) < projection_followup_slots(MAX_FOLLOWUPS) and not self.closed:
             segment = self.pending.popleft()
+            if segment in self.tasks:
+                # One task owns a segment's custody accounting; never overwrite it.
+                self.prioritized.discard(segment)
+                continue
             task = start_background_task(self.run(segment), name='batch_projection_followup')
             self.tasks[segment] = task
             if segment in self.prioritized:
@@ -466,7 +470,9 @@ class ProjectionFollowups:
                 self.requeue_sibling(sibling)
 
     def requeue_sibling(self, sibling):
-        if self.closed or sibling in self.pending:
+        # Already queued (ordinary or targeted recovery) or running: that copy owns
+        # the segment's probe. A second queue entry would launch a duplicate task.
+        if self.closed or sibling in self.pending or sibling in self.targeted_pending or sibling in self.tasks:
             return
         self.pending.appendleft(sibling)
         self.prioritized.add(sibling)
