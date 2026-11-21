@@ -335,8 +335,9 @@ class _FoundDevicesState extends State<FoundDevices> with WidgetsBindingObserver
         final isLiveDevice = liveDeviceId != null && liveDeviceId == provider.deviceId;
         final pairingType = isLiveDevice ? liveType : provider.deviceType;
         final showOmiStatus = isLiveDevice && pairingType == DeviceType.omi;
-        final batteryPercentage =
-            isLiveDevice && liveType == DeviceType.openglass ? liveBattery : provider.batteryPercentage;
+        final batteryPercentage = provider.isConnected && pairingType != DeviceType.omi
+            ? (isLiveDevice && liveType == DeviceType.openglass ? liveBattery : provider.batteryPercentage)
+            : -1;
         return MessageListener<OnboardingProvider>(
           showError: (error) {
             // The inline card owns connect-failure recovery and its shown event.
@@ -408,7 +409,7 @@ class _FoundDevicesState extends State<FoundDevices> with WidgetsBindingObserver
                     style: OmiType.footnote.copyWith(color: OmiColors.textSecondary),
                   ),
                 ),
-              if (provider.isConnected && pairingType != DeviceType.omi && batteryPercentage > 0)
+              if (batteryPercentage > 0)
                 Padding(
                   padding: const EdgeInsets.symmetric(vertical: 10),
                   child: Semantics(
