@@ -2183,9 +2183,9 @@ overlay:
       backend-projection-pump:
         derive_from: backend-integration
         env:
-          # The train pin on integration does not apply to the separately admitted pump.
-          BATCH_ACCOUNT_PRIVACY_WRITER_ENABLED: {value: 'true', category: ops_kill}
-          BATCH_PROJECTION_OUTBOX: {value: 'true', category: ops_kill}
+          # The two custody switches (BATCH_ACCOUNT_PRIVACY_WRITER_ENABLED, BATCH_PROJECTION_OUTBOX)
+          # are inherited from integration's false pins: David 2026-11-21 ~03:45Z (SCA-3318) keeps
+          # both off for the pump split; enabling either is its own custody admission.
           # Startup isolation, independent of the pump flag: stopping the pump keeps the
           # reconcilers off. Never unset here while the service runs (unset = full startup).
           OMI_PROCESS_ROLE:

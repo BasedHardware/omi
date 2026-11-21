@@ -225,7 +225,7 @@ def test_prod_pump_is_integration_plus_the_dark_overrides():
     for name in train_pins:
         assert integration['env'][name]['value'] == 'false', name
         assert services['backend-sync-backfill']['env'][name]['value'] == 'false', name
-        assert pump['env'][name]['value'] == 'true', name
+        assert pump['env'][name]['value'] == 'false', name  # SCA-3318: inherited, custody off
     assert pump['env']['BATCH_PIPELINE_INDEPENDENT_LANGUAGE_RECOVERY_ENABLED']['value'] == 'false'
 
 
@@ -489,7 +489,19 @@ def _run_inverse_step(tmp_path, step, documents, receipt=INVERSE_RECEIPT):
         'assert sys.argv[1] == "run"\n'
         'key = " ".join(arg for arg in sys.argv[2:] if not arg.startswith("--"))\n'
         'path = Path(__file__).with_name("fixtures.json")\n'
-        'print(json.dumps(json.loads(path.read_text())[key]))\n'
+        'fixtures = json.loads(path.read_text())\n'
+        'if key.startswith("services update-traffic"):\n'
+        '    with Path(__file__).with_name("writes.log").open("a") as log:\n'
+        '        log.write(" ".join(sys.argv[2:]) + "\\n")\n'
+        '    target = next(a.split("=", 1)[1] for a in sys.argv if a.startswith("--to-revisions="))\n'
+        '    name, percent = target.rsplit("=", 1)\n'
+        '    service = fixtures["services describe ' + PROJECTION_PUMP + '"]\n'
+        '    for section in ("spec", "status"):\n'
+        '        service[section]["traffic"] = [{"revisionName": name, "percent": int(percent)}]\n'
+        '    fixtures["services list"] = [service]\n'
+        '    path.write_text(json.dumps(fixtures))\n'
+        '    sys.exit(0)\n'
+        'print(json.dumps(fixtures[key]))\n'
     )
     gcloud.chmod(0o755)
     script = step['run'].replace('${{ inputs.project_id }}', 'based-hardware')
@@ -531,7 +543,7 @@ def _run_inverse_step(tmp_path, step, documents, receipt=INVERSE_RECEIPT):
 def test_pinned_but_unverified_base_blocks_retry_and_inverse(tmp_path, inverse_readback, break_readback):
     break_readback(*inverse_readback)
     for name in (
-        'Verify existing projection pump before any mutation',
+        'Verify existing projection pump, pinning a LATEST-routed base, before deploy mutations',
         'Reverify the projection pump inverse and capture its traffic snapshot',
     ):
         result = _run_inverse_step(tmp_path, _step_named(name), inverse_readback)
@@ -541,7 +553,7 @@ def test_pinned_but_unverified_base_blocks_retry_and_inverse(tmp_path, inverse_r
 
 
 def test_pinned_base_requires_release_disposition_and_live_proof(tmp_path, inverse_readback):
-    step = _step_named('Verify existing projection pump before any mutation')
+    step = _step_named('Verify existing projection pump, pinning a LATEST-routed base, before deploy mutations')
     result = _run_inverse_step(tmp_path, step, inverse_readback, receipt='')
     assert result.returncode != 0 and 'recorded Release disposition' in result.stderr
     assert not (tmp_path / 'steps.out').exists()
@@ -566,8 +578,13 @@ def test_latest_is_allowed_only_for_the_new_base_before_its_first_pin(tmp_path, 
     service['status']['traffic'][0]['latestRevision'] = True
     service['status'].update(latestReadyRevisionName=INVERSE_REVISION, latestCreatedRevisionName=INVERSE_REVISION)
 
-    existing = _step_named('Verify existing projection pump before any mutation')
-    assert _run_inverse_step(tmp_path, existing, inverse_readback).returncode != 0
+    existing = _step_named('Verify existing projection pump, pinning a LATEST-routed base, before deploy mutations')
+    # SCA-3318 changed this boundary: an existing service still on LATEST (live 2026-11-21, its
+    # first pin never ran) may be pinned, but only to the disposition's base that LATEST resolves to.
+    other_base = f'{PROJECTION_PUMP}-bbbbbbb-18-1-base'
+    receipt = f'01a1f818-f3a6-7183-bd19-9bd0f7e7bb75 {other_base} {"a" * 40} {INVERSE_IMAGE}'
+    assert _run_inverse_step(tmp_path, existing, inverse_readback, receipt=receipt).returncode != 0
+    assert not (tmp_path / 'writes.log').exists()
     before_pin = _step_named('Verify a newly created projection pump base before pinning')
     result = _run_inverse_step(tmp_path, before_pin, inverse_readback, receipt='')
     assert result.returncode == 0, result.stderr
@@ -1103,6 +1120,63 @@ def test_claimed_sibling_skip_ships_dark_on_integration_until_activation():
     services = _prod_services()
     for name in ('backend-integration', PROJECTION_PUMP):
         assert services[name]['env']['BATCH_PIPELINE_FOLLOWUP_CLAIMED_SIBLING_SKIP_ENABLED']['value'] == 'false', name
+
+
+def test_existing_latest_routed_pump_is_pinned_inside_the_locked_deploy():
+    """SCA-3318: a pump created but never pinned (100% via LATEST) is pinned by name, pre-pin verified."""
+    steps = {step.get('id') or step.get('name'): step for step in PUMP_ACTION['runs']['steps']}
+    script = steps['pump-service']['run']
+    existing = script[script.index('          1)') if '          1)' in script else script.index('1)') :]
+    pin = existing.index('update-traffic backend-projection-pump')
+    assert existing.index('--before-first-pin') < pin
+    assert existing.index('latestRevision') < existing.index('--before-first-pin')
+    assert '--to-revisions="$base=100"' in existing
+    assert pin < existing.rindex('--disposition="$RELEASE_DISPOSITION"')
+    pre_pin = existing[existing.index('latestRevision') : pin]
+    assert '--disposition="$RELEASE_DISPOSITION"' in pre_pin and '--before-first-pin' in pre_pin
+    assert '--new-base' not in pre_pin
+
+
+@pytest.mark.parametrize(
+    'disposition',
+    [
+        # UUID missing (three fields), malformed UUID, and a non-base revision.
+        f'{BASE_REVISION} {"a" * 40} gcr.io/based-hardware/backend@sha256:{"b" * 64}',
+        f'not-a-uuid {BASE_REVISION} {"a" * 40} gcr.io/based-hardware/backend@sha256:{"b" * 64}',
+        f'01a1fd00-0000-7000-8000-000000000000 backend-projection-pump-x {"a" * 40} '
+        f'gcr.io/based-hardware/backend@sha256:{"b" * 64}',
+    ],
+)
+def test_pre_pin_disposition_is_fully_validated_before_any_read(monkeypatch, disposition):
+    """#25945 panel F1: the LATEST pin path must reject a bad disposition before touching traffic."""
+    inverse = sys.modules[recovery.verify.__module__]
+
+    monkeypatch.setattr(inverse, '_read', lambda *a, **k: pytest.fail('read before validation'))
+    monkeypatch.setattr(
+        sys,
+        'argv',
+        ['verify', '--project=p', '--region=r', f'--disposition={disposition}', '--before-first-pin'],
+    )
+    assert inverse.main() != 0
+
+
+@pytest.mark.parametrize('route', ['latest', 'pinned'])
+def test_existing_pump_step_pins_only_a_latest_routed_base(tmp_path, inverse_readback, route):
+    """#25945 panel F1/F5: execute the step; a LATEST route is pre-pin verified, then pinned by name."""
+    service, revision, iam = inverse_readback
+    if route == 'latest':
+        for section in ('spec', 'status'):
+            service[section]['traffic'] = [{'latestRevision': True, 'percent': 100, 'revisionName': INVERSE_REVISION}]
+        service['status'].update(latestReadyRevisionName=INVERSE_REVISION, latestCreatedRevisionName=INVERSE_REVISION)
+    step = _step_named('Verify existing projection pump, pinning a LATEST-routed base, before deploy mutations')
+    result = _run_inverse_step(tmp_path, step, (service, revision, iam))
+    assert result.returncode == 0, result.stderr
+    writes = (tmp_path / 'writes.log').read_text().splitlines() if (tmp_path / 'writes.log').exists() else []
+    if route == 'latest':
+        assert len(writes) == 1 and f'--to-revisions={INVERSE_REVISION}=100' in writes[0]
+        assert (tmp_path / 'artifacts' / 'projection-pump-existing-latest-readback.txt').exists()
+    else:
+        assert writes == []
 
 
 def test_cap_recovery_waits_for_post_write_reconciliation(inverse_readback, monkeypatch, capsys):
