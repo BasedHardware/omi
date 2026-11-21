@@ -453,7 +453,7 @@
             {% endif %}
 
             <div class="action-buttons">
-                <a href="/disconnect?uid={{ uid }}" class="btn btn-danger btn-small">
+                <a href="/disconnect?uid={{ uid_q|default(uid) }}" class="btn btn-danger btn-small">
                     Disconnect Store
                 </a>
             </div>
@@ -590,7 +590,7 @@
             }
             
             // Redirect to OAuth flow
-            window.location.href = `/auth/shopify?uid=${uid}&shop=${shopDomain}`;
+            window.location.href = `/auth/shopify?uid=${encodeURIComponent(uid)}&shop=${encodeURIComponent(shopDomain)}`;
             return false;
         }
     </script>
