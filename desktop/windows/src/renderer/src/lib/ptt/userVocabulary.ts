@@ -1,10 +1,10 @@
 // The user's account-level custom transcription vocabulary — Source 1 of PTT
 // keyword boosting (see vocabulary.ts). On macOS this is
 // AssistantSettings.shared.effectiveVocabulary, the FIRST source fed into the
-// KeywordCollector so custom terms take priority over on-screen OCR. Windows has
-// no local vocabulary preference (the TranscriptionTab control is unbuilt); the
-// list is set on Mac/mobile and synced to the backend, so we fetch it from
-// GET /v1/users/transcription-preferences and cache it here.
+// KeywordCollector so custom terms take priority over on-screen OCR. The list lives
+// on the account (edited in Settings → Transcription here, or on Mac/mobile), so we
+// fetch it from GET /v1/users/transcription-preferences and cache it here; a save
+// from this app updates the cache directly (setUserVocabulary).
 //
 // Never blocks the PTT hot path: collectPttKeywords reads getUserVocabulary()
 // synchronously (a cache read), exactly like macOS reads an already-synced local
@@ -79,6 +79,18 @@ export function refreshUserVocabulary(): void {
       if (inFlight === build) inFlight = null
     })
   inFlight = build
+}
+
+/** Replace the cached list after this app saved it (Settings → Transcription), so
+ *  the next PTT turn uses it at once. Also supersedes an in-flight fetch, which may
+ *  have read the list from before the save. */
+export function setUserVocabulary(vocabulary: readonly string[]): void {
+  const uid = auth.currentUser?.uid ?? ''
+  if (!uid) return
+  generation++
+  inFlight = null
+  inFlightUid = ''
+  cached = { uid, vocabulary: [...vocabulary] }
 }
 
 /** Await the in-flight refresh — tests only (production never blocks on this). */
