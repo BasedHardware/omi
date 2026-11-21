@@ -1095,8 +1095,6 @@ def _delete_conversation_and_related_data(
         # open dated task, like the conversation delete path does.
         source_items = action_items_db.get_action_items_by_conversation(uid, conversation_id)
         if write_guard is None:
-            if retain_capture and source_items:
-                delete_action_item_vectors_batch(uid, [item['id'] for item in source_items])
             action_items_db.delete_action_items_for_conversation(uid, conversation_id)
         else:
             from database.space_store import FirestoreSpaceStore
@@ -1133,7 +1131,7 @@ def _delete_conversation_and_related_data(
         # find_similar_action_items feeds the extraction prompt so the LLM can suppress duplicate
         # tasks, and a deleted task's vector makes a real new task look like a duplicate.
         try:
-            if source_items and not retain_capture:
+            if source_items and write_guard is None:
                 delete_action_item_vectors_batch(uid, [item['id'] for item in source_items])
         except Exception as e:
             logger.error(f"Error deleting task vectors for {conversation_id}: {e}")
@@ -1147,7 +1145,9 @@ def _delete_conversation_and_related_data(
         delete_vector(uid, conversation_id)
         if write_guard is not None:
             write_guard(None)
-        conversations_db._delete_conversation_search_index(uid, conversation_id, strict=True)
+            conversations_db._delete_conversation_search_index(uid, conversation_id, strict=True)
+        else:
+            conversations_db._delete_conversation_search_index(uid, conversation_id)
         return
 
     try:

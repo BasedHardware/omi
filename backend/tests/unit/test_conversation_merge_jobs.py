@@ -472,6 +472,27 @@ def test_go_retraction_with_typesense_failure_does_not_receipt(store, monkeypatc
     assert row(store, 'a')['merge_job_id'] == job_id
 
 
+def test_sync_bridge_provider_cleanup_remains_best_effort(monkeypatch, sealed_provider_retraction):
+    from unittest.mock import Mock
+
+    from database import action_items
+    from utils.conversations import typesense_index
+
+    merge, _, admitted = sealed_provider_retraction
+    monkeypatch.setattr(action_items, 'get_action_items_by_conversation', lambda *_: [{'id': 'task-fixture'}])
+    delete_tasks = Mock()
+    monkeypatch.setattr(action_items, 'delete_action_items_for_conversation', delete_tasks)
+    monkeypatch.setattr(merge, 'delete_action_item_vectors_batch', Mock(side_effect=RuntimeError('vector unavailable')))
+    monkeypatch.setattr(merge, 'delete_vector', Mock())
+    monkeypatch.setattr(typesense_index, 'typesense_configured', lambda: True)
+    delete_search = Mock(return_value=False)
+    monkeypatch.setattr(typesense_index, 'delete_conversation_index_doc', delete_search)
+
+    merge.retract_sync_bridge_source(admitted['uid'], 'a')
+    delete_tasks.assert_called_once_with(admitted['uid'], 'a')
+    delete_search.assert_called_once_with(admitted['uid'], 'a')
+
+
 def test_rollback_takeover_retracts_provisional_tasks_and_vectors(store, monkeypatch, go_retraction_ports):
     from unittest.mock import Mock
 
