@@ -528,9 +528,11 @@ def test_backend_integration_deploy_pins_mcp_serving_capacity():
     assert '--cpu=2' in sync_flags
     # Backend's own prod shape (dev branch empty: dev keeps inheriting).
     assert (
-        "${{ inputs.runtime_env == 'prod' && '--cpu=2 --memory=4Gi --concurrency=20"
+        "${{ inputs.runtime_env == 'prod' && '--cpu=2 --concurrency=20"
         " --min-instances=3 --max-instances=100' || '' }}"
     ) in backend_flags
+    assert "format('--memory={0}', steps.ops-memory.outputs.backend)" in backend_flags
+    assert 'steps.ops-memory.outputs.backend_sync || inputs.backend_sync_memory' in sync_flags
 
 
 VERTEX_PT_CONTRACT = 'Company-paid Gemini text and vision generation may use only the active model'
