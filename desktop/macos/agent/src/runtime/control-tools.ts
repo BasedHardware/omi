@@ -89,6 +89,7 @@ const desktopCoordinatorBundleSchema = z.enum([
   "desktop.mail.read",
   "desktop.messaging.read",
   "desktop.messaging.send",
+  "desktop.compose.propose",
   "external.write_prepare",
   "external.write_send",
 ]);
