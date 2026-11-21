@@ -15850,4 +15850,7 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get stillWorkingOnIt => 'Toujours en cours.';
+
+  @override
+  String get deviceReadyToUse => 'Prêt à l\'emploi';
 }

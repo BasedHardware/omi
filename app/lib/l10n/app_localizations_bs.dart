@@ -15748,4 +15748,7 @@ class AppLocalizationsBs extends AppLocalizations {
 
   @override
   String get stillWorkingOnIt => 'Još radimo na tome.';
+
+  @override
+  String get deviceReadyToUse => 'Spremno za korištenje';
 }

@@ -15782,4 +15782,7 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get stillWorkingOnIt => 'ఇంకా పని జరుగుతోంది.';
+
+  @override
+  String get deviceReadyToUse => 'వాడుకకు సిద్ధం';
 }

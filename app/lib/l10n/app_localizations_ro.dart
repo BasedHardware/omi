@@ -15785,4 +15785,7 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get stillWorkingOnIt => 'Încă lucrăm la asta.';
+
+  @override
+  String get deviceReadyToUse => 'Pregătit pentru utilizare';
 }

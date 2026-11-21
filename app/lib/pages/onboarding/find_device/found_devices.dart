@@ -313,9 +313,14 @@ class _FoundDevicesState extends State<FoundDevices> with WidgetsBindingObserver
 
   @override
   Widget build(BuildContext context) {
+    final (liveDeviceId, liveConnected, charging) = context.select<DeviceProvider, (String?, bool, bool)>(
+      (device) => (device.connectedDevice?.id, device.isConnected, device.isCharging),
+    );
     return Consumer<OnboardingProvider>(
       builder: (context, provider, child) {
         final visibleDevices = provider.visibleDeviceList;
+        final showOmiStatus =
+            provider.deviceType == DeviceType.omi && liveDeviceId == provider.deviceId && liveConnected;
         return MessageListener<OnboardingProvider>(
           showError: (error) {
             // The inline card owns connect-failure recovery and its shown event.
@@ -347,7 +352,7 @@ class _FoundDevicesState extends State<FoundDevices> with WidgetsBindingObserver
                       : context.l10n.devicesFoundNearby(provider.nearbyDeviceCount),
                   style: OmiType.subhead.copyWith(color: OmiColors.textSecondary),
                 )
-              else
+              else if (!showOmiStatus)
                 Text(context.l10n.pairingSuccessful, style: OmiType.footnote.copyWith(color: OmiColors.textSecondary)),
               if (provider.pairingFailureReason != null && !provider.isConnected)
                 Padding(
@@ -374,7 +379,13 @@ class _FoundDevicesState extends State<FoundDevices> with WidgetsBindingObserver
                   textAlign: TextAlign.center,
                   style: OmiType.body.copyWith(fontWeight: FontWeight.w500),
                 ),
-              if (provider.isConnected && provider.batteryPercentage > 0)
+              if (provider.isConnected && showOmiStatus)
+                Text(
+                  charging ? context.l10n.charging : context.l10n.deviceReadyToUse,
+                  textAlign: TextAlign.center,
+                  style: OmiType.footnote.copyWith(color: OmiColors.textSecondary),
+                ),
+              if (provider.isConnected && provider.deviceType != DeviceType.omi && provider.batteryPercentage > 0)
                 Padding(
                   padding: const EdgeInsets.symmetric(vertical: 10),
                   child: Semantics(

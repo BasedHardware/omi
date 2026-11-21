@@ -15712,4 +15712,7 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get stillWorkingOnIt => 'Töötame veel selle kallal.';
+
+  @override
+  String get deviceReadyToUse => 'Valmis kasutamiseks';
 }

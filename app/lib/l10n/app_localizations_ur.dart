@@ -15731,4 +15731,7 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get stillWorkingOnIt => 'ابھی کام جاری ہے۔';
+
+  @override
+  String get deviceReadyToUse => 'استعمال کے لیے تیار';
 }

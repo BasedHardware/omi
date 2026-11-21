@@ -649,8 +649,9 @@ class _DeviceSettingsState extends State<DeviceSettings> {
           const SizedBox(height: OmiSpacing.xl),
           _liveSections(
             connected: connected != null,
-            batteryLevel: connected == null ? 0 : provider.batteryLevel,
+            batteryLevel: connected == null ? -1 : provider.batteryLevel,
             isCharging: connected != null && provider.isCharging,
+            onRetryBattery: connected?.type == DeviceType.omi ? provider.refreshBatteryLevel : null,
           ),
           if (deviceStreaming && canPause) ...[
             DeviceControlsGroup(paused: devicePaused, onToggle: () => _togglePause(capture)),
@@ -691,7 +692,12 @@ class _DeviceSettingsState extends State<DeviceSettings> {
 }
 
 extension _DeviceLiveSections on _DeviceSettingsState {
-  Widget _liveSections({required bool connected, required int batteryLevel, required bool isCharging}) {
+  Widget _liveSections({
+    required bool connected,
+    required int batteryLevel,
+    required bool isCharging,
+    required VoidCallback? onRetryBattery,
+  }) {
     const gap = SizedBox(height: OmiSpacing.xxl);
     return Builder(builder: (context) {
       // One WAL pass per sync notification, shared by the stat row's tiles.
@@ -732,8 +738,9 @@ extension _DeviceLiveSections on _DeviceSettingsState {
               return Column(children: [
                 Builder(
                     builder: (context) => DeviceStatsRow(
-                          batteryLevel: connected ? batteryLevel : 0,
+                          batteryLevel: batteryLevel,
                           isCharging: isCharging,
+                          onRetryBattery: batteryLevel < 20 && !isCharging ? onRetryBattery : null,
                           heardTodaySeconds: _heardTodaySeconds(context),
                           onDeviceSeconds: local.onDeviceSeconds,
                           phoneQueueSeconds: local.onPhoneSeconds,

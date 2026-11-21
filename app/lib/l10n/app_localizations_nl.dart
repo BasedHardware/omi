@@ -15760,4 +15760,7 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get stillWorkingOnIt => 'Er wordt nog aan gewerkt.';
+
+  @override
+  String get deviceReadyToUse => 'Klaar voor gebruik';
 }

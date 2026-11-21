@@ -15756,4 +15756,7 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get stillWorkingOnIt => 'Masih memprosesnya.';
+
+  @override
+  String get deviceReadyToUse => 'Sedia untuk digunakan';
 }

@@ -4735,5 +4735,6 @@
     "conversationLiveNoEdits": "Așteaptă să se încheie pentru a o modifica.",
     "finishedSummaryReady": "Rezumat gata",
     "writingSummaryStatus": "Se scrie rezumatul…",
-    "stillWorkingOnIt": "Încă lucrăm la asta."
+    "stillWorkingOnIt": "Încă lucrăm la asta.",
+    "deviceReadyToUse": "Pregătit pentru utilizare"
 }

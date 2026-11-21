@@ -4735,5 +4735,6 @@
     "conversationLiveNoEdits": "Hãy đợi đến khi kết thúc rồi hãy thay đổi.",
     "finishedSummaryReady": "Đã có tóm tắt",
     "writingSummaryStatus": "Đang viết tóm tắt…",
-    "stillWorkingOnIt": "Vẫn đang xử lý."
+    "stillWorkingOnIt": "Vẫn đang xử lý.",
+    "deviceReadyToUse": "Sẵn sàng để sử dụng"
 }

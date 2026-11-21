@@ -4735,5 +4735,6 @@
     "conversationLiveNoEdits": "Počkejte s úpravou, až skončí.",
     "finishedSummaryReady": "Shrnutí je připraveno",
     "writingSummaryStatus": "Vytváří se shrnutí…",
-    "stillWorkingOnIt": "Stále na tom pracujeme."
+    "stillWorkingOnIt": "Stále na tom pracujeme.",
+    "deviceReadyToUse": "Připraveno k použití"
 }

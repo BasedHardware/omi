@@ -15778,4 +15778,7 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get stillWorkingOnIt => 'Még dolgozunk rajta.';
+
+  @override
+  String get deviceReadyToUse => 'Használatra kész';
 }

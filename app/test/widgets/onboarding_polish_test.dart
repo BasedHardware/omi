@@ -111,9 +111,12 @@ class PairingHomeProvider extends HomeProvider {
   Future<void> setupHasSpeakerProfile() async {}
 }
 
-Widget connect(OnboardingProvider pairing) => MultiProvider(providers: [
+Widget connect(OnboardingProvider pairing, {DeviceProvider? device}) => MultiProvider(providers: [
       ChangeNotifierProvider<OnboardingProvider>.value(value: pairing),
-      ChangeNotifierProvider<DeviceProvider>(create: (_) => AuditDeviceProvider()),
+      if (device == null)
+        ChangeNotifierProvider<DeviceProvider>(create: (_) => AuditDeviceProvider())
+      else
+        ChangeNotifierProvider<DeviceProvider>.value(value: device),
       ChangeNotifierProvider<HomeProvider>(create: (_) => PairingHomeProvider()),
     ], child: const ConnectDevicePage());
 

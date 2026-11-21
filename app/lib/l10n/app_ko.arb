@@ -4735,5 +4735,6 @@
     "conversationLiveNoEdits": "변경하려면 종료될 때까지 기다려 주세요.",
     "finishedSummaryReady": "요약이 준비되었습니다",
     "writingSummaryStatus": "요약 작성 중…",
-    "stillWorkingOnIt": "아직 처리 중입니다."
+    "stillWorkingOnIt": "아직 처리 중입니다.",
+    "deviceReadyToUse": "사용 준비 완료"
 }

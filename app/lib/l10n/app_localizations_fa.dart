@@ -15712,4 +15712,7 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get stillWorkingOnIt => 'هنوز روی آن کار می‌کنیم.';
+
+  @override
+  String get deviceReadyToUse => 'آماده برای استفاده';
 }

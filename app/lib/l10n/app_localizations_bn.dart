@@ -15714,4 +15714,7 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get stillWorkingOnIt => 'এখনও কাজ চলছে।';
+
+  @override
+  String get deviceReadyToUse => 'ব্যবহারের জন্য প্রস্তুত';
 }

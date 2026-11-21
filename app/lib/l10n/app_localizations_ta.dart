@@ -15825,4 +15825,7 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get stillWorkingOnIt => 'இன்னும் அதில் வேலை செய்யப்படுகிறது.';
+
+  @override
+  String get deviceReadyToUse => 'பயன்படுத்தத் தயாராக உள்ளது';
 }

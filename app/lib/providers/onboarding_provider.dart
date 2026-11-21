@@ -399,13 +399,16 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
       }
       Logger.debug('Connected to device: ${device.name}');
       deviceId = device.id;
+      final firstOmiPairing = device.type == DeviceType.omi &&
+          !SharedPreferencesUtil().btDevices.any((saved) => saved.id.toUpperCase() == device.id.toUpperCase());
       await SharedPreferencesUtil().btDeviceSet(device);
       _syncSavedDevices();
       deviceName = device.name;
       deviceType = device.type;
       var cDevice = await _getConnectedDevice(deviceId);
       if (cDevice != null) {
-        deviceProvider!.setConnectedDevice(cDevice);
+        unawaited(deviceProvider!.setConnectedDevice(cDevice));
+        if (firstOmiPairing) deviceProvider!.beginFirstChargeCheck();
         SharedPreferencesUtil().deviceName = cDevice.name;
         deviceProvider!.setIsConnected(true);
       }

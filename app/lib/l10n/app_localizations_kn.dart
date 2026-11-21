@@ -15771,4 +15771,7 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get stillWorkingOnIt => 'ಇನ್ನೂ ಕೆಲಸ ನಡೆಯುತ್ತಿದೆ.';
+
+  @override
+  String get deviceReadyToUse => 'ಬಳಸಲು ಸಿದ್ಧ';
 }

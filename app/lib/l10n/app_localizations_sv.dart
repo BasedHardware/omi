@@ -15728,4 +15728,7 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get stillWorkingOnIt => 'Jobbar fortfarande på det.';
+
+  @override
+  String get deviceReadyToUse => 'Redo att använda';
 }

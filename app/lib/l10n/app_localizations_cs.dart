@@ -15719,4 +15719,7 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get stillWorkingOnIt => 'Stále na tom pracujeme.';
+
+  @override
+  String get deviceReadyToUse => 'Připraveno k použití';
 }

@@ -4735,5 +4735,6 @@
     "conversationLiveNoEdits": "Warte bis zum Ende, um sie zu ändern.",
     "finishedSummaryReady": "Zusammenfassung bereit",
     "writingSummaryStatus": "Zusammenfassung wird erstellt…",
-    "stillWorkingOnIt": "Wir arbeiten noch daran."
+    "stillWorkingOnIt": "Wir arbeiten noch daran.",
+    "deviceReadyToUse": "Einsatzbereit"
 }

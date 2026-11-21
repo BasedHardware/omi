@@ -15784,4 +15784,7 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String get stillWorkingOnIt => 'Сè уште се работи на тоа.';
+
+  @override
+  String get deviceReadyToUse => 'Подготовено за употреба';
 }

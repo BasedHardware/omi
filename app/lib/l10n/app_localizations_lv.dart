@@ -15755,4 +15755,7 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get stillWorkingOnIt => 'Vēl tiek pie tā strādāts.';
+
+  @override
+  String get deviceReadyToUse => 'Gatavs lietošanai';
 }

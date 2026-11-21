@@ -12292,5 +12292,6 @@
     "conversationLiveNoEdits": "Сачекајте да се заврши, па га измените.",
     "finishedSummaryReady": "Резиме је спреман",
     "writingSummaryStatus": "Пише се резиме…",
-    "stillWorkingOnIt": "Још увек радимо на томе."
+    "stillWorkingOnIt": "Још увек радимо на томе.",
+    "deviceReadyToUse": "Спремно за употребу"
 }

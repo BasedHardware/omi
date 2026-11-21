@@ -4735,5 +4735,6 @@
     "conversationLiveNoEdits": "انتظر حتى ينتهي قبل تغييره.",
     "finishedSummaryReady": "الملخص جاهز",
     "writingSummaryStatus": "جارٍ كتابة الملخص…",
-    "stillWorkingOnIt": "ما زلنا نعمل عليه."
+    "stillWorkingOnIt": "ما زلنا نعمل عليه.",
+    "deviceReadyToUse": "جاهز للاستخدام"
 }

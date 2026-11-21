@@ -15753,4 +15753,7 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get stillWorkingOnIt => 'Ще працюємо над цим.';
+
+  @override
+  String get deviceReadyToUse => 'Готово до використання';
 }

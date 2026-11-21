@@ -15755,4 +15755,7 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get stillWorkingOnIt => 'Усё яшчэ працуем над гэтым.';
+
+  @override
+  String get deviceReadyToUse => 'Гатова да выкарыстання';
 }

@@ -15711,4 +15711,7 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get stillWorkingOnIt => 'Vi arbejder stadig på det.';
+
+  @override
+  String get deviceReadyToUse => 'Klar til brug';
 }

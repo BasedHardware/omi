@@ -15822,4 +15822,7 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get stillWorkingOnIt => 'Εξακολουθούμε να δουλεύουμε πάνω σε αυτό.';
+
+  @override
+  String get deviceReadyToUse => 'Έτοιμο για χρήση';
 }

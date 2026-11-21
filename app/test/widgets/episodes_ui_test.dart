@@ -1214,7 +1214,7 @@ void main() {
     testWidgets('stats leave out a battery the device has not reported', (tester) async {
       await tester.pumpWidget(
         wrap(
-          const DeviceStatsRow(batteryLevel: 0, isCharging: false, heardTodaySeconds: 3 * 3600, onDeviceSeconds: 600),
+          const DeviceStatsRow(batteryLevel: -1, isCharging: false, heardTodaySeconds: 3 * 3600, onDeviceSeconds: 600),
         ),
       );
       expect(find.byKey(const Key('device_stat_battery')), findsNothing);
@@ -1226,6 +1226,20 @@ void main() {
       );
       expect(find.text('72%'), findsOneWidget);
       expect(find.text('to sync'), findsNothing);
+    });
+
+    testWidgets('a reported zero stays visible and offers the battery recheck', (tester) async {
+      var checks = 0;
+      await tester.pumpWidget(wrap(DeviceStatsRow(
+        batteryLevel: 0,
+        isCharging: false,
+        heardTodaySeconds: 0,
+        onDeviceSeconds: 0,
+        onRetryBattery: () => checks++,
+      )));
+      expect(find.text('0%'), findsOneWidget);
+      await tester.tap(find.text('Try Again'));
+      expect(checks, 1);
     });
 
     testWidgets('right now shows only the live episode', (tester) async {

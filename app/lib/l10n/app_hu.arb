@@ -4831,5 +4831,6 @@
     "conversationLiveNoEdits": "Módosítás előtt várd meg, míg véget ér.",
     "finishedSummaryReady": "Az összefoglaló kész",
     "writingSummaryStatus": "Összefoglaló írása…",
-    "stillWorkingOnIt": "Még dolgozunk rajta."
+    "stillWorkingOnIt": "Még dolgozunk rajta.",
+    "deviceReadyToUse": "Használatra kész"
 }

@@ -124,6 +124,11 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   int _lastNotifiedBatteryLevel = -1;
   DateTime? _lastBatteryNotifyTime;
   bool _hasLowBatteryAlerted = false;
+  static const _firstChargeSettleTime = Duration(seconds: 12);
+  static const _batteryRefreshTimeout = Duration(seconds: 3);
+  String? _firstChargeDeviceId;
+  Timer? _firstChargeCheck;
+  int _batterySampleRevision = 0;
   bool _havingNewFirmware = false;
   bool get havingNewFirmware =>
       _havingNewFirmware && pairedDevice != null && isConnected && _allowsFirmwareUpdateForPairedDevice;
@@ -641,29 +646,10 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
       batteryDeviceId,
       onBatteryLevelChange: (int value) {
         if (!_isCurrentBatterySession(generation, batterySession, batteryDeviceId)) return;
-        if (batteryLevel != value) {
-          batteryLevel = value;
-          BatteryWidgetService().updateBatteryInfo(
-            deviceName: connectedDevice?.name ?? '',
-            batteryLevel: value,
-            deviceType: connectedDevice?.type.name ?? 'omi',
-            isConnected: true,
-          );
-        }
-        if (batteryLevel < 20 && !_hasLowBatteryAlerted) {
-          _hasLowBatteryAlerted = true;
-          final ctx = globalNavigatorKey.currentContext;
-          unawaited(NotificationService.instance.createNotification(
-            title: ctx?.l10n.lowBatteryAlertTitle ?? "Low Battery Alert",
-            body: ctx?.l10n.lowBatteryAlertBody(value) ?? "Your battery is at $value%. Time for a recharge! 🔋",
-          ));
-        } else if (batteryLevel > 20) {
-          _hasLowBatteryAlerted = false;
-        }
         // Every callback is a sample. A stale 100 from before this charge cannot
         // notify; attribute it to the device this listener was opened for.
         _fullyChargedAlert.onBatterySample(batteryDeviceId, value);
-        _updateBatteryLevel(value);
+        _publishBatterySample(value);
       },
     );
     if (!_isCurrentBatterySession(generation, batterySession, batteryDeviceId)) {
@@ -672,6 +658,90 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     }
     _bleBatteryLevelListener = listener;
     notifyListeners();
+  }
+
+  void _publishBatterySample(int value) {
+    if (value < 0 || value > 100) return;
+    _batterySampleRevision++;
+    if (batteryLevel != value) {
+      BatteryWidgetService().updateBatteryInfo(
+        deviceName: connectedDevice?.name ?? '',
+        batteryLevel: value,
+        deviceType: connectedDevice?.type.name ?? 'omi',
+        isConnected: true,
+      );
+    }
+    _noteLowBattery(value);
+    _updateBatteryLevel(value);
+  }
+
+  void _noteLowBattery(int value) {
+    if (value > 20) _hasLowBatteryAlerted = false;
+    if (value >= 20 || _hasLowBatteryAlerted || _firstChargeDeviceId != null) return;
+    _hasLowBatteryAlerted = true;
+    final ctx = globalNavigatorKey.currentContext;
+    unawaited(NotificationService.instance.createNotification(
+      title: ctx?.l10n.lowBatteryAlertTitle ?? "Low Battery Alert",
+      body: ctx?.l10n.lowBatteryAlertBody(value) ?? "Your battery is at $value%. Time for a recharge! 🔋",
+    ));
+  }
+
+  /// Only the first pairing starts a settle window. An observed charge can
+  /// extend it until the charge signal falls, without holding up onboarding.
+  void beginFirstChargeCheck() {
+    final device = connectedDevice;
+    if (device == null || device.type != DeviceType.omi || _firstChargeDeviceId == device.id) return;
+    _firstChargeDeviceId = device.id;
+    _updateFirstChargeCheck(isCharging);
+  }
+
+  void _updateFirstChargeCheck(bool charging) {
+    if (_firstChargeDeviceId == null) return;
+    if (charging) {
+      _firstChargeCheck?.cancel();
+      _firstChargeCheck = null;
+    } else {
+      _firstChargeCheck ??= Timer(_firstChargeSettleTime, () async {
+        final check = _firstChargeCheck;
+        final sampleRevision = _batterySampleRevision;
+        final refreshed = await refreshBatteryLevel();
+        if (_firstChargeCheck != check) return;
+        _clearFirstChargeCheck();
+        if ((refreshed || _batterySampleRevision != sampleRevision) && batteryLevel >= 0) {
+          _noteLowBattery(batteryLevel);
+        }
+      });
+    }
+  }
+
+  void _clearFirstChargeCheck() {
+    _firstChargeCheck?.cancel();
+    _firstChargeCheck = null;
+    _firstChargeDeviceId = null;
+  }
+
+  /// A manual or delayed read uses the same display path as a live sample.
+  /// If a newer notification wins the race, leave its value on screen.
+  Future<bool> refreshBatteryLevel() async {
+    final deviceId = connectedDevice?.id;
+    if (deviceId == null || !isConnected) return false;
+    final generation = _sessionGeneration;
+    final batterySession = _batterySession;
+    final sampleRevision = _batterySampleRevision;
+    try {
+      final connection = await _chargingConnectionLoader(deviceId).timeout(_batteryRefreshTimeout);
+      if (connection == null || !_isCurrentBatterySession(generation, batterySession, deviceId)) return false;
+      final level = await connection.retrieveBatteryLevel().timeout(_batteryRefreshTimeout);
+      if (!_isCurrentBatterySession(generation, batterySession, deviceId) ||
+          _batterySampleRevision != sampleRevision ||
+          level < 0 ||
+          level > 100) return false;
+      _publishBatterySample(level);
+      return true;
+    } catch (e) {
+      Logger.debug('Battery refresh failed: $e');
+      return false;
+    }
   }
 
   Future<void> initiateChargingStatusListener({bool allowCaptureResume = true}) async {
@@ -693,6 +763,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     var initialObservationDone = currentStatus != null;
     // Failed reads are unknown: retain the last successful observation and UI state.
     if (currentStatus != null) {
+      _updateFirstChargeCheck(currentStatus);
       final chargeStarted = _chargeStarts.observe(connectedDevice!.id, currentStatus);
       // An initial read made by a sync wake is observation, not a charge-start event.
       if (chargeStarted && allowInitialResume) captureProvider?.onChargingStarted();
@@ -708,6 +779,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     final listener = await connection.getChargingStatusListener(
       onChargingStatusChange: (bool charging) {
         if (!_isCurrentBatterySession(generation, batterySession, deviceId)) return;
+        _updateFirstChargeCheck(charging);
         // Firmware notifies its current byte on subscribe. After a failed read,
         // that first sample inherits the initial read's observation-only gate.
         // A later scope must defer transport work, not consume an authorized
@@ -788,6 +860,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
 
   void _resetBatteryState() {
     _batterySession++;
+    _clearFirstChargeCheck();
     batteryLevel = -1;
     isCharging = false;
     _lastNotifiedBatteryLevel = -1;
@@ -986,6 +1059,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     }
     _bleBatteryLevelListener?.cancel();
     _bleChargingStatusListener?.cancel();
+    _clearFirstChargeCheck();
     _fullyChargedAlert.dispose();
     _discoveryTimer?.cancel();
     _disconnectRescanTimer?.cancel();

@@ -4735,5 +4735,6 @@
     "conversationLiveNoEdits": "รอให้จบก่อนจึงจะเปลี่ยนได้",
     "finishedSummaryReady": "สรุปพร้อมแล้ว",
     "writingSummaryStatus": "กำลังเขียนสรุป…",
-    "stillWorkingOnIt": "ยังดำเนินการอยู่"
+    "stillWorkingOnIt": "ยังดำเนินการอยู่",
+    "deviceReadyToUse": "พร้อมใช้งาน"
 }

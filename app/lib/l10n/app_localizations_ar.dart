@@ -15631,4 +15631,7 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get stillWorkingOnIt => 'ما زلنا نعمل عليه.';
+
+  @override
+  String get deviceReadyToUse => 'جاهز للاستخدام';
 }

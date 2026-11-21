@@ -20,9 +20,10 @@ class DeviceStatsRow extends StatelessWidget {
     this.catchUpSeconds,
     this.catchUpCaption,
     this.onOpenCatchUp,
+    this.onRetryBattery,
   });
 
-  /// Battery percent, or <= 0 when the device has not reported one.
+  /// Battery percent, or -1 when the device has not reported one.
   final int batteryLevel;
   final bool isCharging;
   final int heardTodaySeconds;
@@ -40,17 +41,23 @@ class DeviceStatsRow extends StatelessWidget {
   /// What the catch-up is waiting on ("when online"); the tile adds the chevron.
   final String? catchUpCaption;
   final VoidCallback? onOpenCatchUp;
+  final VoidCallback? onRetryBattery;
 
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
     final tiles = <Widget>[
-      if (batteryLevel > 0)
+      if (batteryLevel >= 0)
         _StatTile(
           key: const Key('device_stat_battery'),
           label: l10n.battery,
           value: '$batteryLevel%',
-          caption: isCharging ? l10n.charging : null,
+          caption: isCharging
+              ? l10n.charging
+              : onRetryBattery == null
+                  ? null
+                  : l10n.tryAgain,
+          onTap: onRetryBattery,
         ),
       _StatTile(
         key: const Key('device_stat_heard_today'),

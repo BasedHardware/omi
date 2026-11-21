@@ -11,6 +11,7 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/services/devices/connectors/omi_connection.dart';
+import 'package:omi/services/devices/models.dart';
 import 'package:omi/services/devices.dart';
 import 'package:omi/services/devices/fully_charged_alert_gate.dart';
 import 'package:omi/services/devices/transports/device_transport.dart';
@@ -18,6 +19,9 @@ import 'package:omi/services/services.dart';
 
 class _ChargingTransport implements DeviceTransport {
   List<int> value = const [1];
+  List<int> battery = const [3];
+  int batteryReads = 0;
+  Completer<List<int>>? pendingBattery;
   Completer<List<int>>? pendingRead;
   final notifications = StreamController<List<int>>.broadcast(sync: true);
 
@@ -25,7 +29,15 @@ class _ChargingTransport implements DeviceTransport {
   Stream<DeviceTransportState> get connectionStateStream => const Stream.empty();
 
   @override
+  Future<bool> isConnected() async => true;
+
+  @override
   Future<List<int>> readCharacteristic(String serviceUuid, String characteristicUuid) async {
+    if (characteristicUuid == batteryLevelCharacteristicUuid) {
+      batteryReads++;
+      if (pendingBattery != null) return pendingBattery!.future;
+      return battery;
+    }
     expect(characteristicUuid, OmiDeviceConnection.settingsChargingStatusCharacteristicUuid);
     if (pendingRead != null) return pendingRead!.future;
     return value;
@@ -99,6 +111,45 @@ void main() {
     } catch (_) {
       // Ignore if another suite already initialized the singleton.
     }
+  });
+
+  testWidgets('first charge rechecks after settling and keeps the latest reading', (tester) async {
+    final transport = _ChargingTransport();
+    final provider = _provider(transport, []);
+    addTearDown(transport.notifications.close);
+    addTearDown(provider.dispose);
+    provider.connectedDevice = _device();
+    provider.setIsConnected(true);
+    provider.batteryLevel = 3;
+    provider.beginFirstChargeCheck();
+    await provider.initiateChargingStatusListener();
+    await tester.pump(const Duration(seconds: 30));
+    expect(transport.batteryReads, 0);
+
+    transport.notifications.add([0]);
+    await tester.pump(const Duration(seconds: 11));
+    expect(transport.batteryReads, 0);
+    transport.battery = [91];
+    await tester.pump(const Duration(seconds: 1));
+    expect(transport.batteryReads, 1);
+    expect(provider.batteryLevel, 91);
+  });
+
+  testWidgets('a delayed battery read from a retired link is discarded', (tester) async {
+    final pending = Completer<List<int>>();
+    final transport = _ChargingTransport()..pendingBattery = pending;
+    final provider = _provider(transport, []);
+    addTearDown(transport.notifications.close);
+    addTearDown(provider.dispose);
+    provider.connectedDevice = _device();
+    provider.setIsConnected(true);
+    provider.beginFirstChargeCheck();
+    await tester.pump(const Duration(seconds: 12));
+    expect(transport.batteryReads, 1);
+    provider.setIsConnected(false);
+    pending.complete([91]);
+    await tester.pump();
+    expect(provider.batteryLevel, -1);
   });
 
   test('late charging read from a disconnected session cannot restore charging', () async {

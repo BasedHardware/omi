@@ -15725,4 +15725,7 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get stillWorkingOnIt => 'Yhä työn alla.';
+
+  @override
+  String get deviceReadyToUse => 'Valmis käytettäväksi';
 }
