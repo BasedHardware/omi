@@ -3455,9 +3455,6 @@ environments:
             value: omi-flags
             category: service_discovery
           OMI_FLAGS_SOURCE: {value: dual, category: rollout}
-          SONIOX_IDLE_COHORT_CLOSE_SECONDS: {value: '10', category: rollout}
-          SONIOX_IDLE_COHORT_REARM_SECONDS: {value: '2', category: rollout}
-          SONIOX_IDLE_COHORT_MAX_CLOSES_PER_HOUR: {value: '120', category: rollout}
           PARAKEET_WINDOW_REPLICA_RECOVERY_ENABLED:
             value: 'false'
             category: ops_kill
@@ -4072,6 +4069,8 @@ environments:
       services:
         backend:
           forbidden_env:
+          - BATCH_HELD_POLL_SKIP_ENABLED
+          - BATCH_PROJECTION_FINISH_BACKOFF_ENABLED
           - DEEPGRAM_SELF_HOSTED_ENABLED
           - DEEPGRAM_SELF_HOSTED_URL
           - DEEPGRAM_API_KEY
@@ -4081,7 +4080,6 @@ environments:
           - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
           - CONVERSATION_LLM_INPUT_DEDUPE_ENABLED
           - REPEAT_WORK_REVISION_ENABLED
-          - BATCH_PROJECTION_FINISH_BACKOFF_ENABLED
           capabilities:
           - conversation.finalize.persisted
           - memory.canonical.mutate
@@ -4504,9 +4502,6 @@ environments:
               category: ops_kill
             RECORD_SEAL_WAKE_PRESERVED_ENABLED:
               value: 'true'
-              category: ops_kill
-            BATCH_HELD_POLL_SKIP_ENABLED:
-              value: 'false'
               category: ops_kill
             QUIET_EMPTY_EXIT_ENABLED: {value: 'true', category: rollout}
             HOME_TRANSCRIPTION_PRESENTATION_GATE:
@@ -5074,13 +5069,9 @@ environments:
             RECORD_SEAL_WAKE_PRESERVED_ENABLED:
               value: 'true'
               category: ops_kill
-            BATCH_HELD_POLL_SKIP_ENABLED:
-              value: 'false'
-              category: ops_kill
             BATCH_PIPELINE_UPLOAD_COALESCING_ENABLED:
               value: 'true'
               category: ops_kill
-            BATCH_PROJECTION_FINISH_BACKOFF_ENABLED: {value: 'false', category: rollout}
             QUIET_EMPTY_EXIT_ENABLED: {value: 'true', category: rollout}
             HOME_TRANSCRIPTION_PRESENTATION_GATE:
               value: 'true'
@@ -5277,6 +5268,8 @@ environments:
           flags:
             --timeout: 3600s
           forbidden_env:
+          - BATCH_HELD_POLL_SKIP_ENABLED
+          - BATCH_PROJECTION_FINISH_BACKOFF_ENABLED
           - DEEPGRAM_SELF_HOSTED_ENABLED
           - DEEPGRAM_SELF_HOSTED_URL
           - DEEPGRAM_API_KEY
@@ -5635,9 +5628,6 @@ environments:
             RECORD_SEAL_WAKE_PRESERVED_ENABLED:
               value: 'true'
               category: ops_kill
-            BATCH_HELD_POLL_SKIP_ENABLED:
-              value: 'false'
-              category: ops_kill
             QUIET_EMPTY_EXIT_ENABLED: {value: 'true', category: rollout}
             OMI_FLAGS_FIRESTORE_PROJECT:
               value: based-hardware
@@ -5818,6 +5808,8 @@ environments:
               category: reliability
           provisional: true
           forbidden_env:
+          - BATCH_HELD_POLL_SKIP_ENABLED
+          - BATCH_PROJECTION_FINISH_BACKOFF_ENABLED
           - DEEPGRAM_SELF_HOSTED_ENABLED
           - DEEPGRAM_SELF_HOSTED_URL
           - DEEPGRAM_API_KEY
@@ -5828,7 +5820,6 @@ environments:
           - CONVERSATION_LLM_INPUT_DEDUPE_ENABLED
           - SYNC_REPROCESS_COALESCE_ENABLED
           - REPEAT_WORK_REVISION_ENABLED
-          - BATCH_PROJECTION_FINISH_BACKOFF_ENABLED
           service_account: backend-runtime@based-hardware.iam.gserviceaccount.com
         backend-integration:
           flags:
@@ -6147,13 +6138,9 @@ environments:
             RECORD_SEAL_WAKE_PRESERVED_ENABLED:
               value: 'true'
               category: ops_kill
-            BATCH_HELD_POLL_SKIP_ENABLED:
-              value: 'false'
-              category: ops_kill
             BATCH_PIPELINE_UPLOAD_COALESCING_ENABLED:
               value: 'true'
               category: ops_kill
-            BATCH_PROJECTION_FINISH_BACKOFF_ENABLED: {value: 'false', category: rollout}
             QUIET_EMPTY_EXIT_ENABLED: {value: 'true', category: rollout}
             OMI_FLAGS_FIRESTORE_PROJECT:
               value: based-hardware
@@ -6310,6 +6297,8 @@ environments:
               value: conversations-v3-backfill
               category: reliability
           forbidden_env:
+          - BATCH_HELD_POLL_SKIP_ENABLED
+          - BATCH_PROJECTION_FINISH_BACKOFF_ENABLED
           - DEEPGRAM_SELF_HOSTED_ENABLED
           - DEEPGRAM_SELF_HOSTED_URL
           - DEEPGRAM_API_KEY
@@ -6348,7 +6337,7 @@ environments:
               value: 'on'
               category: ops_kill
             BATCH_ACCOUNT_PRIVACY_WRITER_ENABLED:
-              value: 'true'
+              value: 'false'
               category: ops_kill
             HOME_LIVE_MEMBER_NOTES_BOUNDED_ENABLED:
               value: 'true'
@@ -6417,7 +6406,7 @@ environments:
               default: '0'
               category: rollout
             BATCH_PROJECTION_OUTBOX:
-              value: 'true'
+              value: 'false'
               category: ops_kill
             BATCH_PIPELINE_SERVING_ENABLED: {category: rollout, value: 'false'}
             BATCH_PIPELINE_WORKER_ENABLED:
@@ -6638,13 +6627,9 @@ environments:
             RECORD_SEAL_WAKE_PRESERVED_ENABLED:
               value: 'true'
               category: ops_kill
-            BATCH_HELD_POLL_SKIP_ENABLED:
-              value: 'false'
-              category: ops_kill
             BATCH_PIPELINE_UPLOAD_COALESCING_ENABLED:
               value: 'true'
               category: ops_kill
-            BATCH_PROJECTION_FINISH_BACKOFF_ENABLED: {value: 'false', category: rollout}
             QUIET_EMPTY_EXIT_ENABLED: {value: 'true', category: rollout}
             OMI_FLAGS_FIRESTORE_PROJECT:
               value: based-hardware
@@ -6807,6 +6792,8 @@ environments:
               value: conversations-v3-backfill
               category: reliability
           forbidden_env:
+          - BATCH_HELD_POLL_SKIP_ENABLED
+          - BATCH_PROJECTION_FINISH_BACKOFF_ENABLED
           - DEEPGRAM_SELF_HOSTED_ENABLED
           - DEEPGRAM_SELF_HOSTED_URL
           - DEEPGRAM_API_KEY

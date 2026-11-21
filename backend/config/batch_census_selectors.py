@@ -198,14 +198,14 @@ EXCEPTIONS: dict[str, SelectorException] = {
         32,
         'per bounded owner merge pass',
         'Use the indexed owner fresh head',
-        'f76d3ecffa550226a0699474c430d366403c6549ac802948f3e0d42e385a7d8e',
+        'ce0661bf89c35c56442397fc4787146dcf76b16b3ce978da53ff78d44ee51e63',
     ),
     'database.batch_pipeline_store.held_merge_owners': _legacy(
         'Legacy held marker page lacks per-owner recheck clock',
         100,
         'held owner maintenance pass',
         'Use owner recheck deadline',
-        '40727256100516ff02481c1946d8dfe971ca4baaafabe897764d825704139404',
+        '13aa38693bb7a0d90097e97cd3e92fcd8fbe8d3f9857a58af1abad2f04362e69',
     ),
     'database.batch_pipeline_store.longest_ready_pending': _legacy(
         'Oldest ready sibling determines bounded legacy head wait',
@@ -240,14 +240,14 @@ EXCEPTIONS: dict[str, SelectorException] = {
         160,
         'per bounded merge or pull owner decision',
         'Use indexed owner head and due projection events',
-        '2bcdc8ddc67bd87d0729bf5e58f0b2349cafb1d2ab59898cdabe72ea78b8a9a3',
+        'd8b65c2f63c59201f71cd1b25a72bd8eb0706cca7491421ab697744955619a1d',
     ),
     'database.batch_pipeline_store.projection_page': _legacy(
         'Legacy assignment and follow-up paths can revisit a state prefix',
         200,
         'projection sweep or bounded continuation',
         'Migrate to durable projection wake and qualified due readers',
-        '2208902067e1f1f57b8d207fef7e46f13f937fccb2f3e07376ed97c490ebf40d',
+        '316ffc0964dd270cd73c7e019125723cbeb88f64819d217463e68535975269c0',
     ),
     'database.batch_pipeline_store.protected_capture_page': _legacy(
         'Capture window enforces service cohort while availability is checked locally',
@@ -465,7 +465,7 @@ _SQL_PORTS = (
         'PostgresStore.fresh_pending',
         'fresh_pending',
         32,
-        '090b03960ee5acf0744ad9c9a5aa98880c203cf7b2af93888755f15458f5d4ae',
+        '846a4419b6e632047b99589b0d70f068f483a5c534f71844616e18d49a14bb8d',
     ),
     (
         'PostgresStore.ready_pending',
@@ -483,7 +483,7 @@ _SQL_PORTS = (
         'PostgresStore.held_merge_owners',
         'held_merge_owners',
         100,
-        '3698ae0a956164f3f60bb06c9942240a5af0d26ab2c3d47f4f694478368b0ed7',
+        '0bfaa2d046d66532cb928ed0d04286bb165a191a1325e926333cd34dc00333f4',
     ),
     (
         'PostgresStore.oldest_retry',
@@ -501,13 +501,13 @@ _SQL_PORTS = (
         'PostgresStore.first_pending_in',
         'first_ready_pending',
         1,
-        '277a50a8cbe668cab08a46670dff062e6abf945912f5afff11c33abc3dc9f82d',
+        '24b61e9b4f91a6bc1602110b44be64167f2587c6ada251fc29efa5cc5f9819a5',
     ),
     (
         'PostgresStore.pending_page_in',
         'pending_page',
         160,
-        '3e2e0bff822c60856ab9b7a2bcd30848b48e746acadab382071a2a28ef3ea1e9',
+        'a468b4a9c79f4d3ddca8e23bdfd46a0ca59c2021d1ee17108cfb9a2794d8b1fb',
     ),
     (
         'PostgresTransaction._fresh_first',
