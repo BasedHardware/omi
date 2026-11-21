@@ -328,13 +328,27 @@ def test_unreachable_upstream_releases_or_keeps_reservation(lab, monkeypatch):
 
 def test_session_tag_applies_when_headers_absent(lab, upstream):
     with _proxy(lab, upstream) as proxy:
+        url = proxy.url + '/v1/chat/completions'
         tagging.set_session_tag(proxy.url, 'memories', 'conv-9')
-        _post(proxy.url + '/v1/chat/completions', CHAT)
-        _post(proxy.url + '/v1/chat/completions', {**CHAT, 'n': 2}, {tagging.STAGE_HEADER: 'notes'})
+        _, inherited_headers, _ = _post(url, CHAT)
+        _, explicit_headers, _ = _post(url, {**CHAT, 'n': 2}, {tagging.STAGE_HEADER: 'notes'})
         tagging.set_session_tag(proxy.url, None)
-        _post(proxy.url + '/v1/chat/completions', {**CHAT, 'n': 3})
-    rows = [(call.stage, call.conversation_id) for call in lab.read_llm_calls('run-1')]
-    assert rows == [('memories', 'conv-9'), ('notes', None), (None, None)]
+        _, cleared_headers, _ = _post(url, {**CHAT, 'n': 3})
+
+    call_id_header = 'X-Pipeline-Lab-Call-Id'
+    inherited_id = inherited_headers[call_id_header]
+    explicit_id = explicit_headers[call_id_header]
+    cleared_id = cleared_headers[call_id_header]
+    assert len({inherited_id, explicit_id, cleared_id}) == 3
+
+    # Handlers can append their rows in a different order than the responses.
+    rows = lab.read_llm_calls('run-1')
+    assert len(rows) == 3
+    assert {call.id: (call.stage, call.conversation_id) for call in rows} == {
+        inherited_id: ('memories', 'conv-9'),
+        explicit_id: ('notes', None),
+        cleared_id: (None, None),
+    }
 
 
 def test_httpx_tagging_helper_tags_only_proxy_requests(lab, upstream):
