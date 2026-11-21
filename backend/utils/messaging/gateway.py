@@ -10,12 +10,12 @@ from dataclasses import replace
 from datetime import datetime, timezone
 
 from database.messaging import MessagingStore, TURN_TIMEOUT_SECONDS
-from utils.messaging.identity import key
+from utils.messaging.identity import key, coerce_utc_datetime
 from models.chat import SendMessageRequest
 from utils.chat_turn import run_chat_turn
 from utils.executors import db_executor, postprocess_executor, run_blocking, start_background_task
 from utils.messaging.access import require_access, SeatFull
-from utils.messaging.contracts import ChannelMessage, Principal, ReentryEvent
+from utils.messaging.contracts import Principal, ReentryEvent
 from utils.messaging.history import history_tool
 from utils.messaging.album_turn import inbox_message, prepare_for_generation
 from utils.messaging.outbound import ChannelReplySink
@@ -241,12 +241,18 @@ class Gateway:
         if claimed is None:
             return False
         path, payload = claimed
-        from utils.messaging.metrics import QUEUE_AGE
-
-        QUEUE_AGE.labels(self.adapter.channel).observe(
-            max(0, (datetime.now(timezone.utc) - datetime.fromisoformat(payload['received_at'])).total_seconds())
-        )
         try:
+            from utils.messaging.metrics import QUEUE_AGE
+
+            received_dt = coerce_utc_datetime(payload.get('received_at'))
+            if received_dt is not None:
+                QUEUE_AGE.labels(self.adapter.channel).observe(
+                    max(0, (datetime.now(timezone.utc) - received_dt).total_seconds())
+                )
+            else:
+                logging.getLogger(__name__).debug(
+                    "Failed to coerce received_at for QUEUE_AGE metric: %s", payload.get('received_at')
+                )
             async with asyncio.timeout(TURN_TIMEOUT_SECONDS):
                 result = await self._process_claimed(path, payload)
         except BaseException as error:
@@ -255,14 +261,28 @@ class Gateway:
                 # fully unwound failure must no longer block newer FIFO jobs.
                 await run_blocking(db_executor, self.store.settle, path)
                 self._log_failure(error)
-                await self._settle_provider_turn(inbox_message(payload), False)
+                try:
+                    await self._settle_provider_turn(inbox_message(payload), False)
+                except Exception as settle_error:
+                    logging.getLogger(__name__).warning(
+                        'Messaging provider turn failure settlement skipped provider=%s error_type=%s',
+                        self.adapter.provider,
+                        type(settle_error).__name__,
+                    )
                 return None  # settled failure: drain the next head, without replay
             raise
         else:
             # False is a lease miss: the row is pending again and its turn stays open.
-            message = inbox_message(payload)
-            if result is not False and message.provider_message_id not in self._settle_deferred:
-                await self._settle_provider_turn(message, True)
+            try:
+                message = inbox_message(payload)
+                if result is not False and message.provider_message_id not in self._settle_deferred:
+                    await self._settle_provider_turn(message, True)
+            except Exception as settle_error:
+                logging.getLogger(__name__).warning(
+                    'Messaging provider turn success settlement skipped provider=%s error_type=%s',
+                    self.adapter.provider,
+                    type(settle_error).__name__,
+                )
             return result
         finally:
             # A lease miss puts this head back to pending. Waking it here spins
@@ -270,11 +290,7 @@ class Gateway:
             # drain, admits it once the surface is free. A wake fault must not
             # replace the turn's own result.
             try:
-                clock = payload.get('received_at')
-                body = payload
-                if isinstance(clock, str):
-                    body = dict(payload, received_at=datetime.fromisoformat(clock))
-                await self._wake_pending(ChannelMessage(**body), skip_path=path)
+                await self._wake_pending(inbox_message(payload), skip_path=path)
             except Exception as error:
                 logging.getLogger(__name__).warning(
                     'Messaging next-head wake failed provider=%s error_type=%s',
