@@ -2,6 +2,7 @@
 
 from utils.conversations.v3 import policy, visibility
 from utils.conversations.v3.outline import SILENCE, playback_origin, sitdown as is_sitdown
+from utils.conversations.v3.word_floor import text_word_count
 
 from collections.abc import Iterator
 from copy import deepcopy
@@ -15,7 +16,7 @@ CAP = timedelta(hours=2)
 
 
 def word_count(lines):
-    return sum(len(line['text'].split()) for line in lines)
+    return sum(text_word_count(line.get('text') or '') for line in lines)
 
 
 def late_rewrite(*, previous_words, new_words, ended_at, now, rewrites):
@@ -409,7 +410,7 @@ def build(uid, window, recordings, existing=None, *, allocated=None):
     )
     manual_end = bool(window.get('manual_end') or (existing or {}).get('manual_end'))
     outline_kind = window.get('outline_kind', window['kind'])
-    words = window.get('_stretch_words', sum(len(s.get('text', '').split()) for s in segments))
+    words = window['_stretch_words'] if '_stretch_words' in window else word_count(segments)
     if (
         existing is not None
         and retained

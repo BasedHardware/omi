@@ -214,7 +214,17 @@ def store_summary(uid, cid, token, revision, structured, covers, *, live_input=N
 
 
 def settle_processing(
-    uid, cid, token, revision, covers, *, skipped=False, notes=False, content_hash=None, firestore_client=None
+    uid,
+    cid,
+    token,
+    revision,
+    covers,
+    *,
+    skipped=False,
+    notes=False,
+    content_hash=None,
+    word_floor_outcomes: tuple[bool, bool] | None = None,
+    firestore_client=None,
 ):
     """Settle one processing attempt; `notes` marks a completed notes write (arms the created delivery).
 
@@ -232,7 +242,7 @@ def settle_processing(
         if lease.get('token') != token or not lease.get('until') or lease['until'] <= datetime.now(timezone.utc):
             raise Conflict('processing_source_changed')
         if not row or not python_owns_finalization(row):
-            return False
+            return False, False
         if not skipped and not row.get('deleted') and row.get('sync_content_revision') != revision:
             decoded = store.decode_row(uid, snapshot)
             if not content_hash or processing_hash(decoded) != content_hash:
@@ -259,9 +269,18 @@ def settle_processing(
                 **({'v3_created_pending': True} if armed else {}),
             },
         )
-        return armed
+        settled = (
+            not skipped
+            and not row.get('deleted')
+            and row.get('status') == 'completed'
+            and row.get('v3_process_pending') is True
+        )
+        return armed, settled
 
-    return settle(client.transaction())
+    armed, settled = settle(client.transaction())
+    if settled and word_floor_outcomes is not None:
+        metrics.observe_word_floor(*word_floor_outcomes)
+    return armed
 
 
 CREATED_CLAIM = timedelta(minutes=5)

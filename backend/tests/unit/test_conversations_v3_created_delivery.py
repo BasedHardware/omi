@@ -99,6 +99,18 @@ def test_short_path_settle_writes_no_notes_and_owes_nothing(strict):
     assert 'v3_notes_written' not in strict.rows[C] and 'v3_created_pending' not in strict.rows[C]
 
 
+def test_completed_word_floor_is_observed_once_on_settlement(strict, monkeypatch):
+    strict.rows[C] = derived(v3_process_pending=True)
+    observe = Mock()
+    monkeypatch.setattr(writers.metrics, 'observe_word_floor', observe)
+    token = leases.acquire('synthetic', 'summary-c', firestore_client=strict)
+    for _ in range(2):
+        writers.settle_processing(
+            'synthetic', 'c', token, 1, AT, word_floor_outcomes=(True, False), firestore_client=strict
+        )
+    observe.assert_called_once_with(True, False)
+
+
 def test_discovery_skips_parked_deliveries_without_hiding_python_work(monkeypatch):
     def snapshot(cid, engine):
         return SimpleNamespace(id=cid, to_dict=lambda: {'finalization_engine': engine, 'finalization_owner_epoch': 1})

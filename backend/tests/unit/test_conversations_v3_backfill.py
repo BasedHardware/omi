@@ -337,6 +337,24 @@ def test_estimate_prices_each_stretch_on_the_live_notes_floors(monkeypatch):
     assert est['usd'] == pytest.approx(expected)
 
 
+@pytest.mark.parametrize('letter', ['界', 'あ'])
+def test_backfill_estimate_uses_script_aware_notes_floors(monkeypatch, letter):
+    sources = {}
+    for index, words in enumerate((19, 20, 299, 300)):
+        cid = f'capture-{index}'
+        row = legacy(cid, AT + timedelta(minutes=10 * index), words)
+        row['transcript_segments'][0]['text'] = letter * words
+        sources[cid] = as_derive(row)
+    monkeypatch.setattr(store, 'load_derive', lambda *a, **kw: (sources, {}, []))
+    estimate = backfill.estimate_partition(
+        'u', {'since': AT, 'until': AT + timedelta(days=1)}, RUN, now=AT + timedelta(days=2)
+    )
+    assert estimate['words'] == 19 + 20 + 299 + 300
+    assert estimate['no_model_windows'] == 1
+    assert estimate['short_task_calls'] == 2
+    assert estimate['notes_calls'] == 1
+
+
 # ---- loader ---------------------------------------------------------------------------------
 
 
