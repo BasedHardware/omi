@@ -1,0 +1,4 @@
+--swiftversion 6.0
+--indent 4
+--maxwidth 140
+--exclude Packages/OmiNetwork/Sources/OmiNetwork/Generated,build,**/.build

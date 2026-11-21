@@ -1,0 +1,12 @@
+included: [App, Extensions, Packages, Watch]
+excluded: [Packages/OmiNetwork/Sources/OmiNetwork/Generated, "**/.build"]
+disabled_rules: [identifier_name, trailing_comma, opening_brace]
+line_length: { warning: 140, error: 200 }
+file_length: { warning: 400, error: 600 }
+type_body_length: { warning: 300, error: 450 }
+type_name:
+  min_length: 2
+nesting:
+  type_level: 2
+cyclomatic_complexity:
+  ignores_case_statements: true

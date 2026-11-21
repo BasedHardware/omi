@@ -1,0 +1,22 @@
+#include "Base.xcconfig"
+
+// Debug = the Flutter app's "dev" flavor against the local harness (make dev-up).
+OMI_BUNDLE_ID = com.friend-app-with-wearable.ios12.development
+ASSETCATALOG_COMPILER_APPICON_NAME = AppIconDev
+OMI_API_SCHEME = http
+OMI_API_HOST = 127.0.0.1:8000
+OMI_APP_PROFILE = local_dev
+OMI_AUTH_EMULATOR_HOST = 127.0.0.1:9099
+OMI_FIREBASE_PLIST = $(SRCROOT)/Config/Firebase/GoogleService-Info-Local.plist
+// The local emulator config has no Google client; the button is hidden.
+OMI_GOOGLE_REVERSED_CLIENT_ID = omi-no-google
+
+SWIFT_OPTIMIZATION_LEVEL = -Onone
+DEBUG_INFORMATION_FORMAT = dwarf
+ONLY_ACTIVE_ARCH = YES
+ENABLE_TESTABILITY = YES
+GCC_PREPROCESSOR_DEFINITIONS = $(inherited) DEBUG=1
+SWIFT_ACTIVE_COMPILATION_CONDITIONS = $(inherited) DEBUG $(OMI_TIER)
+
+// Per-developer overrides (gitignored), see Secrets.xcconfig.example.
+#include? "Secrets.xcconfig"
