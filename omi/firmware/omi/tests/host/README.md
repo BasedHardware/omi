@@ -81,5 +81,13 @@ The same runner compiles the production connection-parameter request and update
 callback with host API shims. It checks the 600-unit timeout, unchanged interval
 range, three-call per-link cap (including API failures), good-interval budget
 retention, lifecycle resets, and independent slots. No sleep shim is provided.
+Add `--cv1-baseline` to compare BLE and storage against the public CV1 3.0.24
+sources. Eight high-interval callbacks after the initial request produce nine
+requests at a four-second timeout on .24 and three at six seconds on the
+candidate. The .24 probe also records sleeping retries on an immediate error.
+The storage harness stalls the initial drain INFO request at MTU 23 while
+the recorded backlog grows. Eight status polls call the flush-capable API
+eight times on .24 and zero times on the candidate. INFO and READ still
+request committed state once the MTU is sufficient. The ring API is stubbed.
 The diagnostics cache tests also pin negotiated parameters/PHY through split
 reads, refresh on offset zero, and omit connection info on API failure.

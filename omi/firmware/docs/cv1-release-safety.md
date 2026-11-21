@@ -81,6 +81,28 @@ an approved installed/restoration state. Never wire-flash stock MCUboot.
 - **G4 publish.** Step 4 with all three provenance inputs; the promoted
   attempt's simulator report is revalidated by code.
 
+### G0 evidence for the 3.0.24 baseline
+
+From the candidate checkout, with the public 3.0.24 commit available locally:
+
+```sh
+python3 omi/firmware/scripts/ci/cv1_g0_report.py --output /path/to/new-g0-report.json
+```
+
+The report runs the actual BLE connection-parameter and storage host probes against
+both revisions and replays the tagged and candidate workflow's release-body step
+offline. Each software check requires the observed 3.0.24 behavior and a candidate
+pass. Add `--sim-report /path/to/sim-report.json` to include the full simulator
+receipt from the same clean candidate SHA and version, with at least 40 fuzz seeds.
+On a shared host, use `omi-heavy run --` for both commands.
+
+Exit 1 means a software check or supplied simulator receipt failed. Exit 2 means
+the software checks passed and G0 remains blocked pending the stock-loader
+rejection evidence. Record that evidence separately with the boot-region hash,
+the signed payload hash, and pending and active image observations from the
+stock loader and qualified control. Review it alongside this report, the
+simulator receipt and the isolation result before closing G0.
+
 ## Rollout plan: new releases start at 1%, and David expands
 
 The workflow writes `rollout_percent:1` and `blocked:false` in the existing
