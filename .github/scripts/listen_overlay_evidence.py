@@ -354,6 +354,12 @@ def bindings(root, reader):
 def produce(request, reader, environ, root, private_file, overrides, now):
     validate_request(request, now)
     require(request['state'] == 'requested', 'request_already_bound')
+    # Retired once the candidate declares privateSecretEnv: the chart refuses any privateEnv overlay
+    # and renders references, so there is no overlay effect to prove (the train gate needs none).
+    from listen_helm_env_overrides import load_values
+
+    candidate = load_values(root / 'backend/charts/backend-listen/prod_omi_backend_listen_values.yaml')
+    require(not (candidate.get('privateSecretEnv') or {}).get('keys'), 'evidence_retired_private_secret_env')
     require(environ.get('GITHUB_REPOSITORY') == 'BasedHardware/omi'
             and environ.get('GITHUB_EVENT_NAME') == 'workflow_dispatch'
             and environ.get('GITHUB_REF') == 'refs/heads/main'

@@ -142,6 +142,15 @@ the legacy coverage trim is deleted (plan C, C11).
 
 ## Upload refusals and attention
 
+HTTP 503 `record_capture_pending` asks the app to retain the submitted WALs.
+The upload gate applies the response body's `retry_after_seconds` to that recording,
+using the WAL upload group (conversation, session, batch family, location)
+and bounded backoff with jitter on repeated refusals. WALs without a session
+ID are paced by the submitted file names. The wait survives an app restart for
+the signed-in account. Automatic and single-file
+uploads both respect it. Subsequent sync passes can send the WAL when the
+deadline passes, and acceptance clears the backoff.
+
 HTTP 400/413 is feedback for Omi, not a per-recording user repair. The ledger
 stores only a closed reason token, HTTP status, first refusal time and last
 attempt time. Daily attempts stop seven days after the first refusal, except
@@ -282,7 +291,10 @@ exception applies only to complete-census, entirely unreferenced audio with both
 clocks older than 67 days (`orphanReclaimAgeSeconds`), under David’s explicit ruling.
 
 The ledger's explicit foreground resume/15-minute recovery pass runs only after
-startup admission finishes; headless workers skip it. The shared read-only
+startup admission finishes; headless workers skip it. While live audio is arriving
+(a frame in the last minute) the pass runs at most every two hours instead, because
+its census walks every Documents file on the UI isolate (`orphanRecoveryDue`); it
+still runs, and the delay only defers adoption, never audio retention. The shared read-only
 inventory census runs outside the capture queue and includes active, retired,
 foreign, main, backup, temporary and quarantined rows, batch journals, native
 owner receipts, legacy jobs/preferences, ring checkpoint/download refs and

@@ -5,6 +5,7 @@ from datetime import datetime, timedelta, timezone
 
 from database import conversations_v3_fence as fence, conversations_v3_leases as leases
 from database import conversations_v3_processing as writers
+from models.finalization_owner import FinalizationOwnedElsewhere
 from utils.conversations.v3 import models, policy
 from utils.conversations.v3.triggers import enqueue
 from utils.observability.fallback import record_fallback
@@ -30,8 +31,11 @@ def run_external(fn, uid, language, conversation, *args, **kwargs):
     try:
         retry = policy.explicit_retry(row, kwargs.get('trigger'))
         with leases.keepalive(uid, 'summary-' + conversation.id, token), fence.writer(uid, conversation.id, token):
-            if not writers.begin_processing(uid, row, token, force=retry):
-                if conversation.is_locked:
+            outcome = writers.begin_processing(uid, row, token, force=retry)
+            if outcome is not True:
+                # A locked row is owned elsewhere and an exhausted row is already terminal: both are
+                # settled no-ops, so the outbox acknowledges them instead of looping on a 500.
+                if conversation.is_locked or outcome is writers.TERMINAL:
                     return conversation
                 raise RuntimeError('v3_processing_unavailable')
             conversation.tile_state = 'writing'
@@ -41,6 +45,8 @@ def run_external(fn, uid, language, conversation, *args, **kwargs):
                     result = fn(uid, language, conversation, *args, persistence_observer=observed, **kwargs)
                 if not persisted or not persisted[-1] or getattr(result.status, 'value', result.status) != 'completed':
                     raise RuntimeError('v3_processing_not_completed')
+            except FinalizationOwnedElsewhere:
+                raise
             except Exception:
                 writers.fail_processing(uid, conversation.id, token, revision, content_hash=content_hash)
                 raise

@@ -1,6 +1,6 @@
 """Home policy: positive wearer evidence may hide background; uncertainty may not."""
 
-MIN_HOME_WORDS = 300
+from utils.conversations.v3.word_floor import MIN_HOME_WORDS
 
 
 def hydrate_recognition(uid, recordings, windows):

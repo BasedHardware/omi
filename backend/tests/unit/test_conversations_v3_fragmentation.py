@@ -239,6 +239,37 @@ class FragmentationRepro(unittest.TestCase):
         ]
         assert [(piece['start'], piece['end']) for piece in rows[-1]['recording_pieces']] == [(370, 380)]
 
+    def test_fresh_prefix_finishes_when_published_speech_ends_the_open_stretch(self):
+        origin = datetime(2026, 11, 19, tzinfo=timezone.utc)
+        published_recording = {
+            'id': 'published',
+            'started_at': origin,
+            'transcript_segments': [{'id': 'tail', 'start': 60, 'end': 70, 'text': 'published speech'}],
+        }
+        late_recording = {
+            'id': 'late',
+            'started_at': origin,
+            'transcript_segments': [{'id': 'prefix', 'start': 40, 'end': 50, 'text': 'late speech'}],
+        }
+        entry = {'first_line': 1, 'kind': 'conversation', 'title': '', 'line': ''}
+        published_groups = outline.stretches([published_recording], origin + timedelta(minutes=10))
+        published_window = planner.windows(published_groups, [[entry]])[0]
+        published = planner.build('synthetic', published_window, {'published': published_recording})
+        published['status'] = 'completed'
+
+        published_recording['_v3_page_continues'] = True
+        recordings = {'published': published_recording, 'late': late_recording}
+        groups = outline.stretches(list(recordings.values()), origin + timedelta(minutes=10))
+        planned = planner.windows(groups, [[entry]])
+        assert [window['finished'] for window in planned] == [False]
+
+        prefix, retained = planner.preserve_finished_windows(planned, {published['id']: published}, recordings)
+        assert [line['segment']['id'] for line in prefix['lines']] == ['prefix']
+        assert retained['existing_id'] == published['id']
+        assert [line['segment']['id'] for line in retained['lines']] == ['tail']
+        assert retained['finished']
+        assert planner.build('synthetic', prefix, recordings)['status'] == 'processing'
+
     def test_only_the_last_stretch_stays_open(self):
         # Production shapes (2026-11-19): a backlog page's continuation marker held every stretch that
         # ends in the page's latest recording open, and speech stamped in the future kept stretches

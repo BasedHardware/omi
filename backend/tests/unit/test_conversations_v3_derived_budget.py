@@ -140,10 +140,12 @@ def test_commit_batches_stay_under_the_write_cap(strict, monkeypatch, remove, ex
         {
             'id': f'c{i}',
             'status': 'processing',
+            'created_at': T0,
+            'structured': {},
             'started_at': T0,
             'finished_at': T0,
             'v3_recording_ids': ['r'],
-            'transcript_segments': [{'text': 'short'}],
+            'transcript_segments': [{'text': 'short', 'is_user': True, 'start': 0, 'end': 0}],
         }
         for i in range(8)
     ]

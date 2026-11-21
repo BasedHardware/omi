@@ -10,12 +10,28 @@
 #                        listen-only fix without a full backend train. The push runs
 #                        in the same GitHub Environment as deploy, so the prod
 #                        registry keeps the prod approval and WIF binding.
+#   workerd-image-only  Publish only the admitted prod workerd image.
 #   repair-traffic-only  Restore Cloud Run traffic to the serving revisions.
 #   recover-pump-cap    SCA-3318 one-time service-level cap correction on the dark pump.
 
 name: Deploy Backend to Cloud RUN
 
-run-name: Deploy Backend (${{ inputs.environment || github.event_name }} ${{ inputs.mode || github.event_name }} service=${{ inputs.cloud_run_service || 'all' }} source=${{ inputs.release_sha || '' }} lock=${{ github.event.inputs.break_glass_lock == 'true' && 'break-glass' || 'prod-train' }} images=${{ inputs.service_images == '' && 'default' || 'override' }} eligibility=${{ github.event.inputs.skip_eligibility_proof == 'true' && 'bypass' || 'proof' }}) by ${{ inputs.requested_by || github.actor }}
+run-name: >-
+  ${{ inputs.selected_rollback_revision && format('Select {0}/{1}/{2} sha={3} lock={4} img={5} elig={6} by {7} inverse={8}',
+    inputs.environment, inputs.mode, inputs.cloud_run_service, inputs.release_sha,
+    github.event.inputs.break_glass_lock == 'true' && 'break-glass' || 'prod-train',
+    inputs.service_images == '' && 'default' || 'override',
+    github.event.inputs.skip_eligibility_proof == 'true' && 'bypass' || 'proof',
+    inputs.requested_by, inputs.selected_rollback_revision) ||
+    format('Deploy Backend ({0} {1} service={2} source={3} lock={4} images={5} eligibility={6}) by {7}',
+      inputs.environment || github.event_name,
+      inputs.mode || github.event_name,
+      inputs.cloud_run_service || 'all',
+      inputs.release_sha || '',
+      github.event.inputs.break_glass_lock == 'true' && 'break-glass' || 'prod-train',
+      inputs.service_images == '' && 'default' || 'override',
+      github.event.inputs.skip_eligibility_proof == 'true' && 'bypass' || 'proof',
+      inputs.requested_by || github.actor) }}
 
 on:
   workflow_dispatch:
@@ -48,6 +64,7 @@ on:
         options:
           - deploy
           - build-only
+          - workerd-image-only
           - repair-traffic-only
           - operator-qualify-publish
           - recover-pump-cap
@@ -65,6 +82,10 @@ on:
         default: 'all'
         type: choice
         options: [all, backend, backend-sync, backend-sync-backfill, backend-integration, backend-projection-pump]
+      selected_rollback_revision:
+        description: 'Named standard deploy only. Exact revision admitted at 100% serving before dispatch.'
+        required: false
+        default: ''
       deploy_gateway:
         description: 'Development only: deploy the LLM gateway binary with the backend stack (requires deploy_targets=all)'
         required: true
@@ -174,6 +195,7 @@ jobs:
     if: >-
       github.event.inputs.mode == 'deploy' ||
       github.event.inputs.mode == 'build-only' ||
+      github.event.inputs.mode == 'workerd-image-only' ||
       github.event.inputs.mode == 'recover-pump-cap'
     runs-on: ubuntu-latest
     steps:
@@ -186,6 +208,7 @@ jobs:
           WORKFLOW_MODE: ${{ github.event.inputs.mode }}
           CLOUD_RUN_SERVICE: ${{ github.event.inputs.cloud_run_service || 'all' }}
           SERVICE_IMAGES: ${{ github.event.inputs.service_images }}
+          SELECTED_ROLLBACK_REVISION: ${{ inputs.selected_rollback_revision }}
           REQUESTED_BY: ${{ github.event.inputs.requested_by }}
           RELEASE_SHA: ${{ github.event.inputs.release_sha }}
           SKIP_ELIGIBILITY: ${{ github.event.inputs.skip_eligibility_proof }}
@@ -196,6 +219,7 @@ jobs:
         run: |
           set -euo pipefail
           CLOUD_RUN_SERVICE="${CLOUD_RUN_SERVICE:-all}"
+          SELECTED_ROLLBACK_REVISION="${SELECTED_ROLLBACK_REVISION:-}"
           case "$CLOUD_RUN_SERVICE" in all|backend|backend-sync|backend-sync-backfill|backend-integration|backend-projection-pump) ;; *) exit 1 ;; esac
           if [[ "$CLOUD_RUN_SERVICE" != all ]]; then
             [[ "$WORKFLOW_MODE" == deploy && "$DEPLOY_TARGETS" == cloud-run-only && "$DEPLOY_ENVIRONMENT" == prod && "$BREAK_GLASS_LOCK" != true && "$SKIP_ELIGIBILITY" != true ]] || exit 1
@@ -223,6 +247,12 @@ jobs:
               echo '```'
             } >> "$GITHUB_STEP_SUMMARY"
           fi
+          if [[ "$WORKFLOW_MODE" == workerd-image-only ]]; then
+            if [[ "$DEPLOY_ENVIRONMENT" != prod || "$SKIP_ELIGIBILITY" == true || "$BREAK_GLASS_LOCK" == true ]]; then
+              echo 'workerd-image-only requires prod and normal release admission.' >&2
+              exit 1
+            fi
+          fi
           INTEGRATION_ONLY=false
           INTEGRATION_IMAGE=''
           POST_WRAP_GUARD=internal
@@ -248,6 +278,17 @@ jobs:
             }
             [[ "$CLOUD_RUN_SERVICE" == all || "$CLOUD_RUN_SERVICE" == backend-integration ]] || exit 1
             INTEGRATION_ONLY=true
+          fi
+          if [[ "$CLOUD_RUN_SERVICE" != all && "$CLOUD_RUN_SERVICE" != backend-projection-pump && "$INTEGRATION_ONLY" != true ]]; then
+            if [[ ! "$SELECTED_ROLLBACK_REVISION" =~ ^${CLOUD_RUN_SERVICE}-[a-z0-9]([a-z0-9-]*[a-z0-9])?$ ||
+                  ${#SELECTED_ROLLBACK_REVISION} -gt 63 ]]; then
+              echo 'Named deploy requires the admitted selected_rollback_revision.' >&2
+              exit 1
+            fi
+            ROLLBACK_REVISION="$SELECTED_ROLLBACK_REVISION"
+          elif [[ -n "$SELECTED_ROLLBACK_REVISION" ]]; then
+            echo 'selected_rollback_revision applies only to a named standard deploy.' >&2
+            exit 1
           fi
           printf 'integration_only=%s\nintegration_image=%s\npost_wrap_guard=%s\nrollback_revision=%s\n' "$INTEGRATION_ONLY" "$INTEGRATION_IMAGE" "$POST_WRAP_GUARD" "$ROLLBACK_REVISION" >> "$GITHUB_OUTPUT"
           if [[ "$DEPLOY_ENVIRONMENT" == prod && "$WORKFLOW_MODE" == deploy &&
@@ -310,8 +351,10 @@ jobs:
             .break_glass_lock == "false" and .skip_eligibility_proof == "false" and
             .deploy_gateway == "false" and
             ([.service_images, .pump_release_disposition, .break_glass_confirm,
-              .break_glass_reason, .release_version] | all(. == "" or . == null)) and
+              .break_glass_reason, .release_version, .selected_rollback_revision] | all(. == "" or . == null)) and
             (.requested_by | test("[^[:space:]]"))' "$GITHUB_EVENT_PATH" >/dev/null
+          # Cloud Run v2 can return literal outer quotes as part of the etag.
+          etag_pattern='^([A-Za-z0-9_+/=-]{1,200}|"[A-Za-z0-9_+/=-]{1,200}")$'
           [[ "$GITHUB_EVENT_NAME" == workflow_dispatch && "$GITHUB_REF" == refs/heads/main &&
              "$GITHUB_REPOSITORY" == BasedHardware/omi && "$GITHUB_RUN_ATTEMPT" == 1 &&
              "$DEPLOY_ENVIRONMENT" == prod && "$DEPLOY_TARGETS" == cloud-run-only &&
@@ -319,7 +362,7 @@ jobs:
              "$CONTROL_SHA" =~ ^[0-9a-f]{40}$ && "$CONTROL_SHA" == "$WORKFLOW_CONTROL_SHA" &&
              "$WORKFLOW_CONTROL_SHA" == "$GITHUB_SHA" &&
              "$RELEASE_SHA" == f7060aa1a0c9e3481790d497140096ae99f9b062 &&
-             "$APPROVED_ETAG" =~ ^[A-Za-z0-9_+/=-]{1,200}$ ]]
+             "$APPROVED_ETAG" =~ $etag_pattern ]]
           jq -n --arg control "$CONTROL_SHA" --arg etag "$APPROVED_ETAG" --arg source "$RELEASE_SHA" \
             '{issue:"SCA-3318", service:"backend-projection-pump", control:$control, etag:$etag,
               base_source:$source, forward_max:4, inverse_max:20}' >> "$GITHUB_STEP_SUMMARY"
@@ -404,13 +447,13 @@ jobs:
             --cloud-run-service backend-sync-backfill \
             --cloud-run-service backend-integration || true
 
-  # Source admission is shared by deploy and build-only so both modes enforce the
+  # Source admission is shared by deploy and image-only modes so they enforce the
   # one Release Eligibility proof (and break-glass audit) for the exact SHA.
   firestore_readiness:
     needs: validate-production-boundary
     if: >-
       github.ref == 'refs/heads/main' &&
-      (github.event.inputs.mode == 'deploy' || github.event.inputs.mode == 'build-only')
+      (github.event.inputs.mode == 'deploy' || github.event.inputs.mode == 'build-only' || github.event.inputs.mode == 'workerd-image-only')
     environment: ${{ github.event.inputs.environment == 'prod' && 'prod' || 'development' }}
     permissions:
       actions: 'read'
@@ -741,6 +784,73 @@ jobs:
             echo "Nothing was deployed. Roll backend-listen to this image with:"
             echo ""
             echo "\`gh workflow run gcp_backend_listen_helm.yml --ref main -f environment=${DEPLOY_ENVIRONMENT} -f branch=main -f mode=deploy -f image_tag=${SHORT_SHA}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  publish-workerd:
+    name: Build and publish workerd production image
+    needs: [validate-production-boundary, firestore_readiness]
+    if: >-
+      github.ref == 'refs/heads/main' &&
+      inputs.mode == 'workerd-image-only' &&
+      inputs.environment == 'prod' &&
+      needs.firestore_readiness.outputs.break_glass == 'false'
+    environment: prod
+    permissions:
+      contents: 'read'
+      id-token: 'write'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout admitted workerd source
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.firestore_readiness.outputs.admitted_sha }}
+          persist-credentials: false
+
+      - name: Google Auth (WIF)
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: projects/208440318997/locations/global/workloadIdentityPools/omi-gha-deploy-prod/providers/github
+          service_account: omi-ci-deployer-prod@based-hardware.iam.gserviceaccount.com
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v3
+        with:
+          project_id: ${{ vars.GCP_PROJECT_ID }}
+
+      - name: Configure Docker for GCR
+        run: gcloud auth configure-docker --quiet
+
+      - name: Publish admitted workerd image
+        env:
+          ADMITTED_SHA: ${{ needs.firestore_readiness.outputs.admitted_sha }}
+        run: |
+          set -euo pipefail
+          [[ "$ADMITTED_SHA" =~ ^[a-f0-9]{40}$ && "$(git rev-parse HEAD)" == "$ADMITTED_SHA" ]]
+          repository="gcr.io/based-hardware/workerd"
+          image="$repository:${ADMITTED_SHA:0:7}"
+
+          if digest="$(gcloud container images describe "$image" --format='value(image_summary.digest)' 2>"$RUNNER_TEMP/workerd-describe.err")"; then
+            [[ "$digest" =~ ^sha256:[a-f0-9]{64}$ ]]
+            revision="$(docker buildx imagetools inspect "$repository@$digest" --format '{{ index .Image.Config.Labels "org.opencontainers.image.revision" }}')"
+            if [[ "$revision" != "$ADMITTED_SHA" ]]; then
+              echo "::error::Existing workerd tag has a different source revision."
+              exit 1
+            fi
+          elif grep -qF "[${image}] is not found or is not a valid name" "$RUNNER_TEMP/workerd-describe.err"; then
+            docker build --platform linux/amd64 --label "org.opencontainers.image.revision=$ADMITTED_SHA" \
+              --tag "$image" --file backend-go/Dockerfile backend-go
+            docker push "$image"
+            digest="$(gcloud container images describe "$image" --format='value(image_summary.digest)')"
+            [[ "$digest" =~ ^sha256:[a-f0-9]{64}$ ]]
+          else
+            cat "$RUNNER_TEMP/workerd-describe.err" >&2
+            exit 1
+          fi
+
+          {
+            echo "### Workerd production image published"
+            echo "- Source SHA: \`$ADMITTED_SHA\`"
+            echo "- Image: \`$repository@$digest\`"
           } >> "$GITHUB_STEP_SUMMARY"
 
   # Plan B B2 release train: build-only also publishes every role image

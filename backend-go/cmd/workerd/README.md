@@ -1,9 +1,13 @@
 # workerd
 
-Runs the Go queue worker process. Family lanes supply their declarations and handlers in
-`run`. The initial dev image runs with an empty registry, so queued jobs remain untouched.
-It validates the Firestore project and encryption secret at startup. Firestore clients and
-runtime cloud permissions arrive with the families that use them.
+Runs the Go queue worker process. The finalization kind is declared in the queue registry.
+The ordinary handler joins the registry once its serving ports are present. The current
+composition can opt into summary repair and the keyed notes gateway while the remaining
+serving effects are pending.
+Summary repair shares the Python scheduler's Firestore lease and writes wakes for the
+existing enrichment dispatcher. Archive and retraction clients are wired when their
+configuration is present. The retraction receiver must be deployed and workerd must
+run with the configured OIDC invoker identity before explicit-merge dispatch can use it.
 
 The health listener serves `GET /health` and `GET /ready`. Readiness requires the expected
 Postgres migration checksums. The separate metrics listener serves `GET /metrics` for a
@@ -20,6 +24,19 @@ Lane B needs to provide a bounded drain and fenced handback API before enabling 
 | `DATABASE_URL` | required | PostgreSQL URL with explicit host, user and database; TLS required except for loopback hosts |
 | `FIRESTORE_PROJECT` | required | Google Cloud project ID |
 | `ENCRYPTION_SECRET` | required | At least 32 bytes, per `crypt.Check` |
+| `WORKER_QUIET_RECOVERY_ENABLED` | false | Drive due quiet wakes once the archive and ordinary serving handler are configured |
+| `WORKER_EPISODE_INTAKE_AUDIENCE`, `WORKER_EPISODE_INTAKE_CALLER` | unset | Enable the internal intake repair route for the configured Google workload identity |
+| `WORKER_FINALIZATION_GATEWAY_ENABLED` | false | Configure the keyed finalization notes gateway |
+| `OMI_LLM_GATEWAY_URL`, `OMI_LLM_GATEWAY_SERVICE_TOKEN` | unset | Required when the keyed gateway is enabled. `LLM_GATEWAY_SERVICE_TOKEN` is the token fallback |
+| `WORKER_SUMMARY_REPAIR_ENABLED` | false | Run the due-summary scan in workerd |
+| `ENRICHMENT_MAX_AGE_HOURS` | 72 | Nonnegative hours, with zero disabling age-based scan phases |
+| `WORKER_FINALIZATION_ARCHIVE_ENABLED` | false | Enable the read-only recording archive client independently of quiet recovery |
+| `BUCKET_PRIVATE_CLOUD_SYNC` | unset | Required when the finalization archive or quiet recovery is enabled |
+| `BUCKET_AUDIO_DERIVED` | unset | Optional regional recording bucket used when the archive client is enabled |
+| `BUCKET_OBJECT_LAKE`, `OBJECT_LAKE_KMS_KEY` | unset | Both configure guarded offloaded transcript reads |
+| `OBJECT_LAKE_READ_ENABLED` | true | Disable offloaded transcript reads independently of inline reads |
+| `WORKER_MERGE_RETRACTION_ENABLED` | false | Provider retraction transport. Keep disabled pending cleanup authorization and the receiver in SCA-3545. |
+| `WORKER_MERGE_RETRACTION_ORIGIN` | unset | Required HTTPS backend origin when provider retraction transport is enabled |
 | `HEALTH_PORT` | 8080 | 1–65535 |
 | `METRICS_PORT` | 9090 | 1–65535, distinct from health |
 | `SHUTDOWN_SECONDS` | 25 | 5–300 seconds |
@@ -46,3 +63,39 @@ the worker Deployment.
 | Queue and PostgreSQL failures use closed log fields without remote error text | `TestReportQueueErrorUsesClosedClassification` |
 | Queue observer metrics constrain all labels to declared values and `unknown` | `TestQueueObserverUsesOnlyDeclaredLabels` |
 | The metrics listener counts real Postgres jobs that lack a local handler | `TestMetricsScrapeCountsJobsWithNoHandler` |
+
+## Keyed finalization notes gateway
+
+Enable the gateway after all replicas support the keyed operations endpoint and
+its retention policies. The adapter uses the original queue job creation time
+for the 29-day POST cutoff. Retries recover by GET with the same job/step UUID.
+A bare 404 is retryable and does not trigger fallback dispatch. The workerd
+registry still requires the complete set of serving ports.
+
+| Rule | Test |
+| --- | --- |
+| Default-off composition and explicit config | `TestWorkerdFinalizationGatewayIsOptIn` |
+| F10. One notes POST across a lost response and a retryable bare 404 during recovery | `TestF10WorkerdRecoversNotesThroughKeyedGateway` |
+| F10. The durable creation time enforces the paid replay cutoff | `TestF10WorkerdRefusesPaidSubmissionAtOriginalJobCutoff` |
+
+## Serving sync episode intake
+
+For the serving sync producer, set `SYNC_EPISODE_INTAKE_ORIGIN` to the private HTTPS
+workerd origin and `WORKER_EPISODE_INTAKE_AUDIENCE` to the same audience used by
+workerd. The Python episode hook selects the owner and completes its recovery notes first.
+
+## Private account erase listener
+
+The erase listener is off by default. Configure `ERASE_PORT` on a distinct private port,
+`ERASE_AUDIENCE`, `ERASE_CALLER_SUBJECT` with the deletion executor's numeric Google service
+account subject, and `ERASE_TLS_CERT` and `ERASE_TLS_KEY` with mounted TLS files. Route it only
+from the authenticated deletion executor. Set `ERASE_FIRESTORE_PROJECT` and
+`ERASE_FIRESTORE_DATABASE` to the deletion executor's authoritative data plane project and
+database. Use `(default)` explicitly for the default database or the configured named ID
+(for example, `staging`).
+It returns an acknowledgement for the matching armed generation and claim only after the
+queue-only erase commits. `TestEraseRequiresAuthenticatedArmedGenerationAndCommit` covers
+the listener's acceptance and acknowledgement conditions.
+
+The endpoint depends on Lane B's queue-only operation and read-only marker reader. See
+[the deletion rollout](../../docs/account-deletion-erase.md) for activation and rollback.

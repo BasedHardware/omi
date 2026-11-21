@@ -3,6 +3,7 @@
 
 import argparse
 import copy
+import http.client
 import json
 import re
 import subprocess
@@ -80,7 +81,7 @@ class RunAPI:
         except HTTPError as error:
             print(f'PUMP_CAP_API_ERROR stage={stage} status={error.code}', file=sys.stderr, flush=True)
             raise ValueError('Cloud Run request was refused') from None
-        except (URLError, OSError, UnicodeError, ValueError):
+        except (URLError, OSError, UnicodeError, ValueError, http.client.HTTPException):
             print(f'PUMP_CAP_API_ERROR stage={stage} status=unconfirmed', file=sys.stderr, flush=True)
             raise ValueError('Cloud Run request failed or response was unreadable') from None
         if not isinstance(doc, dict):
@@ -110,6 +111,29 @@ class RunAPI:
 
     def complete(self, operation, cap, *, submitted, sleep=time.sleep):
         name = operation.get('name')
+        if not submitted:
+            # Safe shape marker: key names and types only, never values.
+            metadata = operation.get('metadata')
+            print(
+                'PUMP_CAP_VALIDATE_SHAPE '
+                f'keys={",".join(sorted(operation))} done={operation.get("done") is True} '
+                f'metadata_type={(metadata.get("@type") or "absent") if isinstance(metadata, dict) else "absent" if metadata is None else type(metadata).__name__}',
+                flush=True,
+            )
+            if operation.get('done') is not True and 'error' not in operation:
+                # Cloud Run v2 does not persist validate-only operations: GET on
+                # the returned name is 404 (run 44862200539). Never poll it.
+                # Accept only the operation's own Service preview, and only
+                # when it names the exact pump service and the requested cap.
+                if (
+                    isinstance(metadata, dict)
+                    and metadata.get('@type') == SERVICE_TYPE
+                    and metadata.get('name') in RESOURCE_NAMES
+                    and isinstance(metadata.get('scaling'), dict)
+                    and metadata['scaling'].get('maxInstanceCount') == cap
+                ):
+                    return
+                raise ValueError('Cloud Run validation returned no exact pump service preview')
         if submitted or operation.get('done') is not True:
             if not isinstance(name, str) or not OPERATION_NAME.fullmatch(name):
                 raise ValueError('Cloud Run returned no bound operation identity')
@@ -182,6 +206,45 @@ def snapshot(api, read, cap):
     return start, revision, policy
 
 
+SETTLE_SECONDS = 120
+
+
+def settled_snapshot(api, read, cap):
+    """Wait (read-only, bounded) for Cloud Run to finish reconciling, then snapshot once.
+
+    A done operation can precede `reconciling: false` and `observedGeneration == generation`
+    by a few seconds (run 44900134239 refused 5 s after a write that had landed). Only that
+    settling state, or a transient read failure, is waited out. A terminal failed condition
+    refuses at once, and any other mismatch still refuses in snapshot().
+    """
+    deadline = time.monotonic() + SETTLE_SECONDS
+    attempt = 0
+    while True:
+        attempt += 1
+        try:
+            service = api.service()
+        except ValueError:
+            service = None  # RunAPI already printed a safe PUMP_CAP_API_ERROR marker.
+        if service is not None:
+            reconciling = service.get('reconciling', False) is not False
+            observed = bool(service.get('generation')) and service.get('observedGeneration') == service.get(
+                'generation'
+            )
+            state = service.get('terminalCondition', {}).get('state')
+            if not reconciling and observed:
+                if state == 'CONDITION_SUCCEEDED':
+                    print(f'PUMP_CAP_SETTLED attempts={attempt}', flush=True)
+                    return snapshot(api, read, cap)
+                if state == 'CONDITION_FAILED':
+                    print('PUMP_CAP_SETTLE_FAILED terminal condition failed', file=sys.stderr, flush=True)
+                    raise ValueError('Cloud Run service reconciled to a failed condition')
+        if time.monotonic() >= deadline:
+            print(f'PUMP_CAP_SETTLE_TIMEOUT attempts={attempt}', file=sys.stderr, flush=True)
+            raise ValueError('Cloud Run service did not finish reconciling within the read budget')
+        print(f'PUMP_CAP_SETTLING attempt={attempt}', flush=True)
+        time.sleep(5)
+
+
 def stable_shape(snapshot_value):
     service, revision, policy = snapshot_value
     config = copy.deepcopy({key: value for key, value in service.items() if key not in SERVER_FIELDS})
@@ -207,7 +270,7 @@ def recover(api, read, approved_etag):
     )
     try:
         api.complete(api.patch(version, AFTER, validate_only=False), AFTER, submitted=True)
-        after = snapshot(api, read, AFTER)
+        after = settled_snapshot(api, read, AFTER)
         if after[0]['etag'] == version or stable_shape(after) != stable_shape(before):
             raise ValueError('post-write version or preserved shape mismatch')
         api.complete(api.patch(after[0]['etag'], BEFORE, validate_only=True), BEFORE, submitted=False)

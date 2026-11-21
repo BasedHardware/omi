@@ -290,7 +290,7 @@ batch:
   - backend/utils/batch_pipeline/projection_disposition.py
   - backend/utils/batch_pipeline/projection_drain.py
   - backend/utils/batch_pipeline/projection_drain_diagnostics.py
-  - backend/utils/batch_pipeline/projection_finish_backoff.py
+  - backend/utils/batch_pipeline/projection_finish_page.py
   - backend/utils/batch_pipeline/projection_followup.py
   - backend/utils/batch_pipeline/projection_hold_observability.py
   - backend/utils/batch_pipeline/projection_hold_policy.py

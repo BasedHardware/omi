@@ -231,7 +231,6 @@ def test_helper_kill_switch_budget_entries_match_the_live_registry():
         'CONVERSATION_TERMINAL_FAMILY_MODE',
         'BATCH_ALLOWANCE_INTAKE_PARK_ENABLED',
         'BATCH_HELD_DEAD_LETTER_ENABLED',
-        'BATCH_HELD_POLL_SKIP_ENABLED',
         'SERVER_BATCH_UNSUPPORTED_LANGUAGES',
         rollout_name,
         'BATCH_PIPELINE_SERVING_PROJECTION_SWEEP',
@@ -529,6 +528,8 @@ def test_reconnect_dark_rollout_has_a_dated_release_ramp():
     flag = next(item for item in flags['flags'] if item['key'] == 'LISTEN_BATCH_RECONNECT_ENABLED')
     assert flag['lifecycle'] == 'rollout'
     assert flag['fail'] == 'closed'
-    assert flag['review_by'] == budget['names'][flag['key']]['review_by'] == '2026-11-20'
+    assert flag['review_by'] == '2026-11-20'
+    # The registry extends by an extension block, never by moving review_by; the budget follows it.
+    assert budget['names'][flag['key']]['review_by'] == flag['extension']['until'] == '2026-11-23'
     assert flag['ramp']['done_by'] == '2026-11-20'
     assert 'Release' in flag['ramp']['expander'] and 'Quality' in flag['ramp']['expander']

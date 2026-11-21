@@ -1,0 +1,237 @@
+# Pinned to query A of the committed Redis page by the monitoring unit test.
+evaluation_interval: 30s
+tests:
+  - name: maintenance-shaped input with fresh healthy probe stays quiet
+    interval: 30s
+    input_series:
+      - series: &accepts 'omi_listen_accepted_total{job="backend-listen-metrics"}'
+        values: '0+20x26'
+      - series: &failures 'omi_fallback_total{job="backend-listen-metrics",component="other",from_mode="cache_write",reason="connection_error",outcome="degraded"}'
+        values: '0x26'
+      - series: &probe 'omi_redis_authenticated_ping_success{job="omi-redis-serving-probe",target="prod-serving-redis"}'
+        values: '1x26'
+      - series: &attempt 'omi_redis_authenticated_ping_last_attempt_seconds{job="omi-redis-serving-probe",target="prod-serving-redis"}'
+        values: '0+30x26'
+    promql_expr_test:
+      - expr: &condition >-
+          (((sum(increase(omi_fallback_total{job=~"backend-listen-metrics|pusher-metrics",component="other",from_mode="cache_write",reason=~"auth_error|connection_error|timeout",outcome="degraded"}[5m])) / clamp_min(sum(increase(omi_listen_accepted_total{job="backend-listen-metrics"}[5m])), 1)) > bool 0.5)
+           * (sum(increase(omi_listen_accepted_total{job="backend-listen-metrics"}[5m])) >= bool 50) == 1)
+          or on() max((omi_redis_authenticated_ping_success{job="omi-redis-serving-probe",target="prod-serving-redis"}
+           and (omi_redis_authenticated_ping_last_attempt_seconds{job="omi-redis-serving-probe",target="prod-serving-redis"} >= time() - 90)
+           and (omi_redis_authenticated_ping_last_attempt_seconds{job="omi-redis-serving-probe",target="prod-serving-redis"} <= time())) == bool 0)
+        eval_time: 13m
+        exp_samples:
+          - labels: '{}'
+            value: 0
+  - name: fresh failure at zero listen accepts
+    interval: 30s
+    input_series:
+      - series: *accepts
+        values: '0x10'
+      - series: *probe
+        values: '0x10'
+      - series: *attempt
+        values: '0+30x10'
+    promql_expr_test:
+      - expr: *condition
+        eval_time: 5m
+        exp_samples:
+          - labels: '{}'
+            value: 1
+  - name: fresh failure with absent listen metrics
+    interval: 30s
+    input_series:
+      - series: *probe
+        values: '0x10'
+      - series: *attempt
+        values: '0+30x10'
+    promql_expr_test:
+      - expr: *condition
+        eval_time: 5m
+        exp_samples:
+          - labels: '{}'
+            value: 1
+  - name: fresh failure wins over a fresh healthy peer
+    interval: 30s
+    input_series:
+      - series: *probe
+        values: '1x10'
+      - series: *attempt
+        values: '0+30x10'
+      - series: &peer 'omi_redis_authenticated_ping_success{job="omi-redis-serving-probe",target="prod-serving-redis",instance="peer"}'
+        values: '0x10'
+      - series: &peer_attempt 'omi_redis_authenticated_ping_last_attempt_seconds{job="omi-redis-serving-probe",target="prod-serving-redis",instance="peer"}'
+        values: '0+30x10'
+    promql_expr_test:
+      - expr: *condition
+        eval_time: 5m
+        exp_samples:
+          - labels: '{}'
+            value: 1
+  - name: both branches fire as one instance
+    interval: 30s
+    input_series:
+      - series: *accepts
+        values: '0+20x10'
+      - series: *failures
+        values: '0+20x10'
+      - series: *probe
+        values: '0x10'
+      - series: *attempt
+        values: '0+30x10'
+    promql_expr_test:
+      - expr: *condition
+        eval_time: 5m
+        exp_samples:
+          - labels: '{}'
+            value: 1
+  - name: ratio establishes impact when the probe is missing
+    interval: 30s
+    input_series:
+      - series: *accepts
+        values: '0+20x10'
+      - series: *failures
+        values: '0+20x10'
+    promql_expr_test:
+      - expr: *condition
+        eval_time: 5m
+        exp_samples:
+          - labels: '{}'
+            value: 1
+  - name: freshly scraped stale attempt supplies no outage evidence
+    interval: 30s
+    input_series:
+      - series: *probe
+        values: '0x10'
+      - series: *attempt
+        values: '30x10'
+    promql_expr_test:
+      - expr: *condition
+        eval_time: 5m
+        exp_samples: []
+  - name: absent probe with a quiet ratio stays unknown
+    interval: 30s
+    input_series:
+      - series: *accepts
+        values: '0+20x10'
+      - series: *failures
+        values: '0x10'
+    promql_expr_test:
+      - expr: *condition
+        eval_time: 5m
+        exp_samples: []
+  - name: stale or wrong-target failure cannot mask a fresh healthy probe
+    interval: 30s
+    input_series:
+      - series: *peer
+        values: '0x10'
+      - series: *peer_attempt
+        values: '30x10'
+      - series: 'omi_redis_authenticated_ping_success{job="omi-redis-serving-probe",target="isolated-other"}'
+        values: '0x10'
+      - series: 'omi_redis_authenticated_ping_last_attempt_seconds{job="omi-redis-serving-probe",target="isolated-other"}'
+        values: '0+30x10'
+      - series: *probe
+        values: '1x10'
+      - series: *attempt
+        values: '0+30x10'
+    promql_expr_test:
+      - expr: *condition
+        eval_time: 5m
+        exp_samples:
+          - labels: '{}'
+            value: 0
+  - name: future attempt timestamp supplies no outage evidence
+    interval: 30s
+    input_series:
+      - series: *probe
+        values: '0x10'
+      - series: *attempt
+        values: '330x10'
+    promql_expr_test:
+      - expr: *condition
+        eval_time: 5m
+        exp_samples: []
+  - name: fresh recovery clears the independent outage at zero traffic
+    interval: 30s
+    input_series:
+      - series: *probe
+        values: '0x8 1 1'
+      - series: *attempt
+        values: '0+30x10'
+    promql_expr_test:
+      - expr: *condition
+        eval_time: 4m
+        exp_samples:
+          - labels: '{}'
+            value: 1
+      - expr: *condition
+        eval_time: 5m
+        exp_samples:
+          - labels: '{}'
+            value: 0
+  - name: scrape and sampler health accept a fresh explicit Redis failure
+    interval: 30s
+    input_series:
+      - series: &up 'up{job="omi-redis-serving-probe"}'
+        values: '1x10'
+      - series: *probe
+        values: '0x10'
+      - series: *attempt
+        values: '0+30x10'
+    promql_expr_test:
+      - expr: &health >-
+          (
+          (min(up{job="omi-redis-serving-probe"}) == bool 1)
+          * on() (count(omi_redis_authenticated_ping_success{job="omi-redis-serving-probe",target="prod-serving-redis"}
+          and (omi_redis_authenticated_ping_last_attempt_seconds{job="omi-redis-serving-probe",target="prod-serving-redis"} >= time() - 90)
+          and (omi_redis_authenticated_ping_last_attempt_seconds{job="omi-redis-serving-probe",target="prod-serving-redis"} <= time())) > bool 0)
+          ) or on() vector(0)
+        eval_time: 5m
+        exp_samples:
+          - labels: '{}'
+            value: 1
+  - name: scrape and sampler health fail when the target disappears
+    interval: 30s
+    input_series: []
+    promql_expr_test:
+      - expr: *health
+        eval_time: 5m
+        exp_samples:
+          - labels: '{}'
+            value: 0
+  - name: scrape and sampler health fail when Prometheus cannot scrape
+    interval: 30s
+    input_series:
+      - series: *up
+        values: '0x10'
+      - series: *probe
+        values: '1x10'
+      - series: *attempt
+        values: '0+30x10'
+    promql_expr_test:
+      - expr: *health
+        eval_time: 5m
+        exp_samples:
+          - labels: '{}'
+            value: 0
+  - name: scrape and sampler health fail on a stalled sampler and recover
+    interval: 30s
+    input_series:
+      - series: *up
+        values: '1x10'
+      - series: *probe
+        values: '0x10'
+      - series: *attempt
+        values: '30x8 270 300'
+    promql_expr_test:
+      - expr: *health
+        eval_time: 4m
+        exp_samples:
+          - labels: '{}'
+            value: 0
+      - expr: *health
+        eval_time: 5m
+        exp_samples:
+          - labels: '{}'
+            value: 1

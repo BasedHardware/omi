@@ -71,12 +71,6 @@
       "review_by": "2026-12-06",
       "registry": "config/feature-flags.yaml"
     },
-    "BATCH_HELD_POLL_SKIP_ENABLED": {
-      "owner": "firestore-lead",
-      "review_by": "2026-12-02",
-      "registry": "config/feature-flags.yaml",
-      "reason": "2026-11-18: turned off on all four prod workloads because the registry's enable gates (replay, integration-first ramp, terminal-loss/SLA/read and D+2 settled-SKU evidence) were never recorded. Indexes READY and state census PASS (0) verified. Renewed to 2026-12-02 for a recorded gated ramp; delete the flag if that ramp does not happen."
-    },
     "BATCH_LEGACY_CAPACITY_FALLBACK_ENABLED": {
       "owner": "overflow / two-lane lead",
       "review_by": "2026-11-29"
@@ -1266,7 +1260,8 @@
     },
     "LISTEN_BATCH_RECONNECT_ENABLED": {
       "owner": "capture-quality / Release",
-      "review_by": "2026-11-20"
+      "review_by": "2026-11-23",
+      "reason": "Aligned 2026-11-21 to the registry extension (until 2026-11-23, David's 2026-11-17 bulk ruling: extend); ramp not expanded by 2026-11-20 and the lapsed date turned main's unit tests red"
     },
     "LISTEN_BATCH_RECONNECT_GRACE_SECONDS": {
       "owner": "capture-quality / Release",

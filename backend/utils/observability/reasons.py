@@ -374,6 +374,7 @@ class ConsumerReason(StrEnum):
     STALE_TOKEN = 'stale_token'
     LEASE_HELD = 'lease_held'
     EMPTY_OUTPUT_BLOCKED = 'empty_output_blocked'
+    V3_CUSTODY_CONFLICT = 'v3_custody_conflict'
 
 
 class RampReason(StrEnum):

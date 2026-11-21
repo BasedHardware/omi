@@ -33,7 +33,7 @@ class _FakeLocalSync implements LocalWalSync {
   final added = <Wal>[];
 
   @override
-  int get sessionGeneration => 1;
+  int sessionGeneration = 1;
 
   @override
   Future<void> addExternalWal(Wal wal, {required int admittedGeneration}) async => added.add(wal);
@@ -109,6 +109,8 @@ class _RingModel implements DeviceConnection {
   /// Acknowledgements to swallow: the advance is applied, the ack never arrives.
   int loseAcks = 0;
 
+  int? deferAdvanceAt;
+
   /// Drop the link after this many records of the next read (then clears).
   int? dropAfterRecords;
 
@@ -179,6 +181,9 @@ class _RingModel implements DeviceConnection {
   }) async {
     if (expectedEpoch != epoch) return const RingCommandAck(status: RingProtocol.ackRingIdMismatch);
     advances.add((newReadSeq, expectedRingId));
+    if (deferAdvanceAt case final deferred? when newReadSeq >= deferred) {
+      return null;
+    }
     if (newReadSeq > writeSeq) return const RingCommandAck(status: RingProtocol.ackSeqOutOfRange);
     if (newReadSeq > readSeq) readSeq = newReadSeq;
     if (loseAcks > 0) {
@@ -271,8 +276,10 @@ void main() {
       );
 
   RingStorageSyncImpl syncFor(_RingModel ring, _FakeLocalSync local, Wal wal,
-      {PendantRingCustody? custody, DateTime Function()? clock}) {
-    final sync = RingStorageSyncImpl(_Listener(), clock: clock)
+      {PendantRingCustody? custody,
+      DateTime Function()? clock,
+      Timer Function(Duration, void Function())? transferTimer}) {
+    final sync = RingStorageSyncImpl(_Listener(), clock: clock, transferTimer: transferTimer)
       ..testConnection = ring
       ..testCustody = custody ?? newCustody()
       ..testWals = [wal]
@@ -284,6 +291,59 @@ void main() {
   }
 
   int framesStored(_FakeLocalSync local) => local.added.fold(0, (sum, w) => sum + w.totalFrames);
+
+  for (final confirmation in ['live ACK', 'device INFO']) {
+    test('delayed reclaim confirmed by $confirmation resumes without downloading twice', () async {
+      final ring = _RingModel(readSeq: 1000, writeSeq: 1240)..deferAdvanceAt = 1120;
+      final local = _FakeLocalSync();
+      final custody = newCustody();
+      final wal = ringWal(ring);
+      final sync = syncFor(ring, local, wal, custody: custody, transferTimer: (delay, callback) {
+        if (delay != const Duration(seconds: 1)) return Timer(delay, callback);
+        return Timer(Duration.zero, () async {
+          expect(ring.reads, [(1000, 120)]);
+          expect(framesStored(local), 120 * _framesPerRecord);
+          ring.readSeq = 1120;
+          ring.deferAdvanceAt = null;
+          if (confirmation == 'live ACK') await custody.markAdvanced('pendant-1', ring.epoch, 1120);
+          callback();
+        });
+      });
+
+      await sync.syncAll();
+
+      expect(ring.reads, [(1000, 120), (1120, 120)]);
+      expect(ring.delivered, List.generate(240, (index) => 1000 + index));
+      expect(framesStored(local), 240 * _framesPerRecord);
+      expect(wal.status, WalStatus.synced);
+    });
+  }
+
+  for (final scenario in ['timeout', 'reconnect', 'account change']) {
+    test('leaves reclaim pending after $scenario during confirmation', () async {
+      final ring = _RingModel(readSeq: 1000, writeSeq: 1240)..deferAdvanceAt = 1120;
+      final local = _FakeLocalSync();
+      final wal = ringWal(ring);
+      var waits = 0;
+      final sync = syncFor(ring, local, wal, transferTimer: (delay, callback) {
+        if (delay != const Duration(seconds: 1)) return Timer(delay, callback);
+        return Timer(Duration.zero, () {
+          waits++;
+          if (scenario == 'reconnect') ring.epoch++;
+          if (scenario == 'account change') local.sessionGeneration++;
+          callback();
+        });
+      });
+
+      await sync.syncAll();
+
+      expect(waits, scenario == 'timeout' ? 8 : 1);
+      expect(ring.reads, [(1000, 120)]);
+      expect(ring.readSeq, lessThan(1120));
+      expect(framesStored(local), 120 * _framesPerRecord);
+      expect(wal.status, WalStatus.miss);
+    });
+  }
 
   test('a backlog larger than one window is read in bounded ranges, each released before the next', () async {
     final ring = _RingModel(readSeq: 1000, writeSeq: 1500);

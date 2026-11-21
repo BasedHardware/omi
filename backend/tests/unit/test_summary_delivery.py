@@ -152,9 +152,20 @@ def test_actions_events_title_and_empty_sections_do_not_satisfy_summary():
 
 def test_empty_model_output_retains_debt_and_prior_good_output(enabled):
     row = debt()
-    with pytest.raises(delivery.SummaryOutputUnavailable):
-        delivery.merge_result(row, minimum(), 'u', now=300)
+    token = delivery.PROCESS_CONTEXT.set({'owner': 'worker', 'claimed': False})
+    try:
+        with pytest.raises(delivery.SummaryOutputUnavailable):
+            delivery.merge_result(row, minimum(), 'u', now=300)
+    finally:
+        delivery.PROCESS_CONTEXT.reset(token)
     assert row['summary_due_at'] == 220
+    # A request path has no consumer to catch the fence: it records the empty
+    # attempt and commits with the debt still armed instead of raising.
+    request_write = minimum()
+    receipt = delivery.merge_result(row, request_write, 'u', now=300)
+    assert receipt is not None and receipt['reason'] == 'empty_output' and not receipt['present']
+    assert request_write['summary_due_at'] == 220
+    assert not request_write.get('summary_completed_at')
     # A failed model attempt never gets to overwrite a prior usable summary:
     # the enriched row now commits (no lane stranding without an outbox), but
     # the banked content and receipts are re-applied onto the write instead
@@ -174,6 +185,40 @@ def test_empty_model_output_retains_debt_and_prior_good_output(enabled):
     assert empty_write['summary_output_present'] is True
     assert empty_write['summary_completed_at'] == 150
     assert empty_write['summary_due_at'] is None
+
+
+@pytest.mark.parametrize(
+    'ownership',
+    [
+        {'finalization_job_id': 'job-1'},
+        {'finalization_engine': 'go', 'finalization_owner_epoch': 1},
+        {'finalization_owner_epoch': 1},
+    ],
+)
+def test_empty_output_on_a_finalization_owned_row_keeps_the_job_retryable(enabled, ownership):
+    """The repair pass refuses a generation-owned row, so the raise must survive."""
+    row = {**debt(), **ownership}
+    assert delivery.refusal(row) == 'generation_owned'
+    with pytest.raises(delivery.SummaryOutputUnavailable):
+        delivery.merge_result(row, minimum(), 'u', now=300)
+
+
+def test_empty_output_on_a_projection_verified_row_commits_with_debt(enabled):
+    """A verified batch-projection handoff is repair-eligible, so the empty attempt commits."""
+    row = {
+        **debt(),
+        'finalization_job_id': 'job-1',
+        'finalization_revision': 4,
+        'record_lane_owner': 'batch_live_v1',
+        'record_projection_revision': 4,
+        'summary_projection_finalization': {'job_id': 'job-1', 'revision': 4},
+    }
+    assert delivery.refusal(row) is None
+    write = minimum()
+    receipt = delivery.merge_result(row, write, 'u', now=300)
+    assert receipt is not None and receipt['reason'] == 'empty_output' and not receipt['present']
+    assert write['summary_due_at'] == 220
+    assert not write.get('summary_completed_at')
 
 
 def test_lost_ack_does_not_emit_second_terminal_receipt(enabled):
@@ -649,6 +694,30 @@ def test_real_notes_retire_the_minimums_title_marker_so_the_row_is_not_held_as_s
     summarized = {**existing, 'summary_output_present': True, 'summary_completed_at': 300}
     again = _notes(summarized, {'title': 'Again', 'overview': 'New notes'}, 400)
     assert again['structured']['title_provenance'] is DELETE_FIELD
+
+
+@pytest.mark.parametrize('overview', ['', 'We chose what to plant.'])
+def test_historical_title_marker_is_retired_only_when_notes_land(overview):
+    existing = {
+        'processing_tier': 'historical',
+        'structured': {'title': 'Garden planning', 'title_provenance': 'historical_minimum'},
+    }
+    write = {
+        'status': 'completed',
+        'processing_tier': 'historical',
+        'terminal_no_derived_effects': True,
+        'structured': {'title': 'Planning the garden', 'overview': overview},
+    }
+    delivery.prepare(write, 'u', now=200)
+    delivery.merge_result(existing, write, 'u', now=300)
+    stored = _stored_after_merge(existing, write)
+
+    if overview:
+        assert 'title_provenance' not in stored['structured']
+    else:
+        assert stored['structured']['title_provenance'] == 'historical_minimum'
+    assert stored.get('summary_completed_at') == (300 if overview else None)
+    assert stored.get('summary_due_at') is None
 
 
 def test_minimum_empty_and_new_rows_keep_their_title_marker_untouched(enabled):

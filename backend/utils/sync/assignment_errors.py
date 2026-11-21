@@ -24,7 +24,7 @@ class SyncAssignmentConflictReason(StrEnum):
     RECORD_FINALIZE_PENDING = 'record_finalize_pending'
     RECORD_ROUTE_OWNER_CHANGED = 'record_route_owner_changed'
     RECORD_PRIVACY_CHANGED = 'record_privacy_changed'
-    V3_CUSTODY = 'v3_custody'
+    V3_CUSTODY = 'v3_custody'  # Explicit redirect refused. Enrichment defers with a bounded budget.
 
 
 SYNC_ASSIGNMENT_CONFLICT_SUBTYPES = frozenset(reason.value for reason in SyncAssignmentConflictReason)

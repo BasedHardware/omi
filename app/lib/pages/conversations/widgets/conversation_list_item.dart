@@ -64,6 +64,7 @@ String conversationRowTitle(BuildContext context, ServerConversation conversatio
     if (seconds <= 0) return l10n.discardedConversation;
     return l10n.discardedConversationTitle(OmiDuration.compact(seconds, l10n));
   }
+  if (awaitsLiveTitle(conversation, title: conversation.structured.title.decodeString)) return l10n.listening;
   return conversationDisplayTitle(
     conversation,
     l10n,
@@ -822,6 +823,11 @@ class _ConversationListItemState extends State<ConversationListItem> {
           builder: (context) {
             final duration = _getConversationDuration(context);
             // Keyed like the meta row's live length: the row's one live length, found the same way.
+            // An untitled live row already reads "Listening" as its title: the line under it says Live.
+            if (awaitsLiveTitle(widget.conversation, title: widget.conversation.structured.title.decodeString)) {
+              return Text([l10n.live, if (duration.isNotEmpty) duration].join(' · '),
+                  key: const Key('conversation_row_live_length'), style: style, maxLines: 1);
+            }
             return Text(duration.isEmpty ? l10n.listening : l10n.listeningWithDuration(duration),
                 key: const Key('conversation_row_live_length'), style: style, maxLines: 1);
           }),
