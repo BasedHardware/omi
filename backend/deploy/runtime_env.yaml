@@ -38,8 +38,6 @@ environments:
             value: ''
             category: ops_kill
           STALE_IN_PROGRESS_RECOVERY_ENABLED: {value: 'true', category: rollout}
-          STT_CAP_DISPATCH_ENFORCEMENT: {value: 'false', category: rollout}
-          STT_CAP_DISPATCH_COHORT: {value: '', category: rollout}
           STT_CAP_DISPATCH_LANES: {value: live, category: rollout}
           UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED: {value: 'false', category: rollout}
           UNLIMITED_V2_BACKFILL_HOURS_CAP_HOURS: {value: '24', category: rollout}
@@ -388,6 +386,8 @@ environments:
           BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'false', category: rollout}
           BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
           BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST: {value: '', category: rollout}
+          STT_CAP_DISPATCH_ENFORCEMENT: {value: 'false', category: rollout}
+          STT_CAP_DISPATCH_COHORT: {value: '', category: rollout}
           PUSHER_RECORD_CLOSE_NOTIFY_ENABLED: {value: 'false', category: rollout}
           PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_PERCENT: {value: '100', category: rollout}
           PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_UID_SHA256S: {value: '', category: rollout}
@@ -2984,8 +2984,6 @@ environments:
             value: af,ar,az,be,bn,bs,ca,cy,eu,fa,gl,gu,he,hi,id,kk,kn,ko,mk,ml,mr,ms,no,pa,sq,sr,sw,ta,te,th,tl,tr,ur,vi,zh
             category: ops_kill
           STALE_IN_PROGRESS_RECOVERY_ENABLED: {value: 'true', category: rollout}
-          STT_CAP_DISPATCH_ENFORCEMENT: {value: 'false', category: rollout}
-          STT_CAP_DISPATCH_COHORT: {value: '', category: rollout}
           STT_CAP_DISPATCH_LANES: {value: live, category: rollout}
           UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED: {value: 'true', category: rollout}
           UNLIMITED_V2_BACKFILL_HOURS_CAP_HOURS: {value: '24', category: rollout}
@@ -3334,6 +3332,18 @@ environments:
           BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'true', category: rollout}
           BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
           BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST: {value: '', category: rollout}
+          STT_CAP_DISPATCH_ENFORCEMENT:
+            secret:
+              name: prod-omi-backend-listen-private-env
+              key: STT_CAP_DISPATCH_ENFORCEMENT
+          STT_CAP_DISPATCH_COHORT:
+            secret:
+              name: prod-omi-backend-listen-private-env
+              key: STT_CAP_DISPATCH_COHORT
+          MEDIA_NOISE_MODE_SERVE_UID_SHA256S:
+            secret:
+              name: prod-omi-backend-listen-private-env
+              key: MEDIA_NOISE_MODE_SERVE_UID_SHA256S
           MEDIA_NOISE_MODE: {value: shadow, category: rollout}
           MEDIA_NOISE_MODE_SERVE_PERCENT: {value: '0', category: rollout}
           NOTES_SHORT_CLIP_FLOOR: {value: 'true', category: rollout}
@@ -4100,6 +4110,9 @@ environments:
             SCREEN_FRAME_SIGNING_SECRET:
               secret: SCREEN_FRAME_SIGNING_SECRET
               version: latest
+            CONVERSATIONS_V3_LIVE_RECAP_COHORT:
+              secret: CONVERSATIONS_V3_LIVE_RECAP_COHORT
+              version: '1'
             SONIOX_API_KEY:
               secret: SONIOX_API_KEY
               version: latest
@@ -5297,7 +5310,7 @@ environments:
               value: 'on'
               category: ops_kill
             BATCH_ACCOUNT_PRIVACY_WRITER_ENABLED:
-              value: 'true'
+              value: 'false'
               category: ops_kill
             HOME_LIVE_MEMBER_NOTES_BOUNDED_ENABLED:
               value: 'true'
@@ -5376,7 +5389,7 @@ environments:
               default: '0'
               category: rollout
             BATCH_PROJECTION_OUTBOX:
-              value: 'true'
+              value: 'false'
               category: ops_kill
             BATCH_PIPELINE_SERVING_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_WORKER_ENABLED:
@@ -5844,7 +5857,7 @@ environments:
               value: 'on'
               category: ops_kill
             BATCH_ACCOUNT_PRIVACY_WRITER_ENABLED:
-              value: 'true'
+              value: 'false'
               category: ops_kill
             HOME_LIVE_MEMBER_NOTES_BOUNDED_ENABLED:
               value: 'true'
@@ -5913,7 +5926,7 @@ environments:
               default: '0'
               category: rollout
             BATCH_PROJECTION_OUTBOX:
-              value: 'true'
+              value: 'false'
               category: ops_kill
             BATCH_PIPELINE_SERVING_ENABLED: {category: rollout, value: 'true'}
             BATCH_PIPELINE_WORKER_ENABLED:
@@ -6074,6 +6087,24 @@ environments:
             BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'on', category: rollout}
+            BATCH_PIPELINE_BACKLOG_RELEASE_WRITER:
+              value: enabled
+              category: config
+            BATCH_PIPELINE_BACKLOG_RELEASE_STATE:
+              value: open
+              category: config
+            BATCH_PIPELINE_BACKLOG_RELEASE_RATE_PER_HOUR:
+              value: '60'
+              category: config
+            BATCH_PIPELINE_BACKLOG_RELEASE_REACH_SECONDS:
+              value: '0'
+              category: config
+            BATCH_PIPELINE_BACKLOG_RELEASE_MODE:
+              value: allowlist_only
+              category: config
+            BATCH_PIPELINE_BACKLOG_RELEASE_OWNER_KEYS:
+              value: 30a9aadced4e2bc0aec94b34ebd9c4563f37e64b84399557fd24a0377dd8e223,70a8958da857b008477b9ab8ba52205bf5d4f7f61b4ed18d1e48b70344a3e80d,aac672257a5b347976517c0d65483bc11538a6c75cf3d16523cf6a4f884bf5e1,c68953b9fdbdcd5528b856fd4d50097e14c6b5eb4f48968115783ade222e59b1,cbf55865bc7f785d18a634a4615a21f052bbea40f4b9d5e726dec3dcbae40c26,cc49ba0944135998f50e3a8c1655ff8ce39ed6e6177e0fa2d9a5b7a83af99d87,f5d5e95afa2e18b4073f43099f4499f99326a2d3f2c50219dfa26013060cb177
+              category: config
             BATCH_PIPELINE_SERVING_SWEEP_PAGE_ROWS: {value: '200', category: rollout}
             BATCH_PIPELINE_SERVING_TICK_SECONDS: {value: '10', category: rollout}
             BATCH_PROJECTION_FINISH_CLASSIFY_PAGE_LIMIT: {value: '16', category: rollout}
@@ -6562,6 +6593,24 @@ environments:
             BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'on', category: rollout}
+            BATCH_PIPELINE_BACKLOG_RELEASE_WRITER:
+              value: enabled
+              category: config
+            BATCH_PIPELINE_BACKLOG_RELEASE_STATE:
+              value: open
+              category: config
+            BATCH_PIPELINE_BACKLOG_RELEASE_RATE_PER_HOUR:
+              value: '60'
+              category: config
+            BATCH_PIPELINE_BACKLOG_RELEASE_REACH_SECONDS:
+              value: '0'
+              category: config
+            BATCH_PIPELINE_BACKLOG_RELEASE_MODE:
+              value: allowlist_only
+              category: config
+            BATCH_PIPELINE_BACKLOG_RELEASE_OWNER_KEYS:
+              value: 30a9aadced4e2bc0aec94b34ebd9c4563f37e64b84399557fd24a0377dd8e223,70a8958da857b008477b9ab8ba52205bf5d4f7f61b4ed18d1e48b70344a3e80d,aac672257a5b347976517c0d65483bc11538a6c75cf3d16523cf6a4f884bf5e1,c68953b9fdbdcd5528b856fd4d50097e14c6b5eb4f48968115783ade222e59b1,cbf55865bc7f785d18a634a4615a21f052bbea40f4b9d5e726dec3dcbae40c26,cc49ba0944135998f50e3a8c1655ff8ce39ed6e6177e0fa2d9a5b7a83af99d87,f5d5e95afa2e18b4073f43099f4499f99326a2d3f2c50219dfa26013060cb177
+              category: config
             BATCH_PIPELINE_SERVING_SWEEP_PAGE_ROWS: {value: '200', category: rollout}
             BATCH_PIPELINE_SERVING_TICK_SECONDS: {value: '10', category: rollout}
             BATCH_PROJECTION_FINISH_CLASSIFY_PAGE_LIMIT: {value: '16', category: rollout}

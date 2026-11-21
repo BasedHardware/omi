@@ -149,6 +149,16 @@ FIELD_SITES = {
             ),
         ),
     ],
+    # Reviewed live re-derive: an in-memory planning copy of a protected row, offered as a published
+    # finished window so it keeps its lines; it is never written.
+    'database/conversations_v3_rederive.py': [
+        (
+            'load_live_rederive',
+            'status',
+            "'completed' if row.get('status') == 'in_progress' else row.get('status')",
+            ('_v3_protected', 'status'),
+        ),
+    ],
     # Reviewed backfill run ledger: run and partition status, not a conversation lifecycle field.
     'database/conversations_v3_backfill_runs.py': [
         ('create_run.create', 'status', "'planned'", ('created_at', 'run_id', 'status', 'updated_at')),
@@ -253,6 +263,21 @@ FIELD_SITES = {
         ),
     ],
     'utils/conversations/v3/service.py': [
+        (
+            '_retire_patch',
+            'summary_due_at',
+            'None',
+            (
+                'deleted',
+                'discarded',
+                'summary_due_at',
+                'sync_content_revision',
+                'sync_merged_into',
+                'v3_claims_transferred_to',
+                'v3_derived',
+                'v3_rederive_live_run',
+            ),
+        ),
         ('reconcile.plan', 'status', "prior['status']", ('status',)),
         ('recording_short_path.guarded', 'status', 'ConversationStatus.completed', ('status',)),
     ],
@@ -3361,6 +3386,7 @@ FIELD_SITES = {
         ('merge_result', 'summary_due_at', 'None', ('summary_due_at',)),
         ('merge_result', 'summary_due_at', 'None', ('summary_due_at',)),
         ('merge_result', 'summary_due_at', 'None', ('summary_due_at',)),
+        ('merge_result', 'summary_due_at', 'current + deadline_seconds()', ('summary_due_at',)),
         ('merge_result', 'summary_first_pending_at', 'accepted', ('summary_first_pending_at',)),
         ('prepare', 'summary_due_at', 'None', ('summary_due_at',)),
         ('prepare', 'summary_due_at', 'None', ('summary_due_at',)),

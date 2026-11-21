@@ -5,7 +5,7 @@ description: >-
 
 inputs:
   rollback_revision:
-    description: 'Exact retained integration predecessor; explicit integration-only binding must match the serving 200/10 revision'
+    description: 'Exact admitted predecessor for a named deploy or integration canary'
     required: false
     default: 'backend-integration-provfix-off1114'
   post_wrap_guard:
@@ -220,6 +220,9 @@ runs:
              "${{ inputs.integration_image }}" =~ ^gcr\.io/based-hardware/(backend|backend-workers)@sha256:[0-9a-f]{64}$ &&
              ("$BOUND_SERVICE_IMAGES" == "integration-canary=${{ inputs.integration_image }},post_wrap_guard=${{ inputs.post_wrap_guard }}" ||
               ("${{ inputs.post_wrap_guard }}" == internal && "$BOUND_SERVICE_IMAGES" == "integration-canary=${{ inputs.integration_image }}")) ]] || exit 1
+        elif [[ "$CLOUD_RUN_SERVICE" != all ]]; then
+          [[ "$ROLLBACK_REVISION" =~ ^${CLOUD_RUN_SERVICE}-[a-z0-9]([a-z0-9-]*[a-z0-9])?$ &&
+             ${#ROLLBACK_REVISION} -le 63 ]] || exit 1
         else
           [[ "$ROLLBACK_REVISION" == backend-integration-provfix-off1114 ]] || exit 1
         fi
@@ -564,7 +567,11 @@ runs:
               ("${{ inputs.deploy_profile }}" == "auto-dev" ||
                "${{ inputs.environment }}" == "prod" ||
                "${{ inputs.environment }}" == "development") ]]; then
-          PREFLIGHT_ARGS+=(--repair-traffic)
+          # Named deploys must refuse drift against their admitted inverse.
+          # Do not rewrite requested traffic before that comparison.
+          if [[ "${{ inputs.cloud_run_service }}" == all ]]; then
+            PREFLIGHT_ARGS+=(--repair-traffic)
+          fi
           if [[ "${{ inputs.deploy_profile }}" == manual ]]; then
             history_args=()
             if [[ "$(git rev-parse --is-shallow-repository)" == true ]]; then
@@ -1231,11 +1238,13 @@ runs:
         set -euo pipefail
         # Integration carries its cap on the serving revision (no service cap), so a capacity revision's
         # cap survives the next train instead of being reset to the former 35 literal (2026-11-20).
-        # Like the headroom gate, the cap is the minimum of the service cap (when set) and the cap of
-        # every revision receiving traffic, never the latest template (it can be a no-traffic
-        # candidate). An uncapped receiving revision, or a fresh service, contributes the default
-        # (35 in prod). Each cap is validated whole before any arithmetic; bounds are the 500 ceiling
-        # here and the headroom gate. Any lookup failure stops the deploy.
+        # The cap is the minimum of the service cap (when set) and the cap of every revision
+        # receiving traffic (the headroom gate's min-of-caps rule), never the latest template (it can
+        # be a no-traffic candidate). Unlike the gate, which refuses these cases, an uncapped
+        # receiving revision contributes the default (35 in prod), and with no service cap and no
+        # receiving revision (including a fresh service) the cap is the default. A cap over 500 also
+        # falls back to the default; that bound is the resolver's own, not the gate's. Each cap is
+        # validated whole before any arithmetic. Any lookup failure stops the deploy.
         LISTING="$(gcloud run services list \
           --project="$CLOUD_RUN_PROJECT" --region="$CLOUD_RUN_REGION" \
           --filter="metadata.name=$CLOUD_RUN_SERVICE" \
@@ -1657,12 +1666,19 @@ runs:
         ${{ inputs.integration_only != 'true' && (success()) }}
       id: cloud-run-traffic-snapshot
       shell: bash
+      env:
+        CLOUD_RUN_SERVICE: ${{ inputs.cloud_run_service }}
+        ROLLBACK_REVISION: ${{ inputs.rollback_revision }}
       run: |
+        set -euo pipefail
         scope_args=()
         if [[ " $SELECTED_CLOUD_RUN_SERVICES " == *" backend "* ]]; then scope_args+=(--service backend); fi
         if [[ " $SELECTED_CLOUD_RUN_SERVICES " == *" backend-sync "* ]]; then scope_args+=(--service backend-sync); fi
         if [[ " $SELECTED_CLOUD_RUN_SERVICES " == *" backend-sync-backfill "* ]]; then scope_args+=(--service backend-sync-backfill); fi
         if [[ " $SELECTED_CLOUD_RUN_SERVICES " == *" backend-integration "* ]]; then scope_args+=(--service backend-integration); fi
+        if [[ "${{ inputs.deploy_profile }}" == manual && "$CLOUD_RUN_SERVICE" != all ]]; then
+          scope_args+=(--expected-serving-revision "$ROLLBACK_REVISION")
+        fi
         python3 "$DEPLOY_CONTROL_SCRIPTS/cloud_run_traffic_snapshot.py" capture \
           "${scope_args[@]}" \
           --project "${{ inputs.project_id }}" \

@@ -138,6 +138,10 @@ String? _walLocationBatchKey(Wal wal) {
 String recordingGroupKey(Wal wal) =>
     '${wal.conversationId}|${wal.recordingSessionId}|${isMobileStandardBatchWal(wal)}|${_walLocationBatchKey(wal) ?? ''}';
 
+/// Legacy WALs without a session ID can share a conversation with unrelated
+/// audio. The upload gate paces those by the individual submitted file names.
+String? recordingWaitGroupKey(Wal wal) => wal.recordingSessionId?.isNotEmpty == true ? recordingGroupKey(wal) : null;
+
 /// Gap at which two id-less recordings on one device count as separate runs.
 /// Chunks of one file are exactly contiguous; the chunker's floor division can
 /// shave a second off a computed run boundary.

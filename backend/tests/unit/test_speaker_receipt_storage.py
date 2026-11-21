@@ -69,6 +69,7 @@ def test_migration_reencodes_receipt_and_transcript_from_current_transaction(
         StrictFirestoreCollection, 'select', lambda self, fields: SimpleNamespace(stream=lambda: []), raising=False
     )
     monkeypatch.setattr(db, 'db', store)
+    monkeypatch.setattr(db.conversations_v3_backfill_runs, '_live_run_ids', lambda *a, **kw: [])
     db.migrate_conversations_level_batch('u', ['c'], target)
     saved = read(world)
     assert saved['transcript_segments'] == expected['transcript_segments']
@@ -90,7 +91,7 @@ def test_migration_reencodes_receipt_and_transcript_from_current_transaction(
     monkeypatch.setattr(
         store,
         'get_all',
-        lambda refs, field_paths: [SimpleNamespace(exists=True, id='c', reference=ref) for ref in refs],
+        lambda refs, field_paths: [SimpleNamespace(exists=True, id='c', reference=ref, to_dict=dict) for ref in refs],
     )
     db.migrate_conversations_level_batch('u', ['c'], target)
     assert store.rows[path] == before

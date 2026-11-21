@@ -47,6 +47,8 @@ class DeploymentContract:
     expected_env: tuple[tuple[str, str], ...] = ()
     required_secret_name: bool = False
     expected_volume_secret: tuple[tuple[str, str], ...] = ()
+    # (environment, secret): one more Secret a secretKeyRef may target in that environment only.
+    extra_secret: tuple[tuple[str, str], ...] = ()
 
 
 # Adding a first-party service means adding one concise entry here.  The
@@ -59,6 +61,8 @@ CONTRACTS = (
         required_env=("OMI_ENV_STAGE", "GOOGLE_CLOUD_PROJECT"),
         expected_env=(("OMI_ENV_STAGE", "{environment}"), ("GOOGLE_CLOUD_PROJECT", "{project}")),
         required_secret_name=True,
+        # Private listen env (privateSecretEnv), synced from Secret Manager LISTEN_PRIVATE_ENV.
+        extra_secret=(("prod", "prod-omi-backend-listen-private-env"),),
     ),
     DeploymentContract(
         service="pusher",
@@ -197,6 +201,7 @@ def validate_rendered_deployment(
             errors.append(f"{prefix}: {name} must be {rendered_expected!r}, got {actual!r}")
 
     expected_secret = f"{environment}-omi-backend-secrets"
+    allowed_secrets = {expected_secret, *(name for env_name, name in contract.extra_secret if env_name == environment)}
     rendered_secret_refs: list[dict[str, Any]] = []
     for entry in env.values():
         ref = _mapping(_mapping(entry.get("valueFrom")).get("secretKeyRef"))
@@ -204,7 +209,7 @@ def validate_rendered_deployment(
             rendered_secret_refs.append(ref)
             if not ref.get("name") or not ref.get("key"):
                 errors.append(f"{prefix}: secretKeyRef for {entry.get('name')!r} needs non-empty name and key")
-            elif ref.get("name") != expected_secret:
+            elif ref.get("name") not in allowed_secrets:
                 errors.append(
                     f"{prefix}: secretKeyRef for {entry.get('name')!r} must target {expected_secret!r}, "
                     f"got {ref.get('name')!r}"

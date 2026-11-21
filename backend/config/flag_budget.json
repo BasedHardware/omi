@@ -376,6 +376,11 @@
     "BATCH_PIPELINE_RECOVERY_WAKE_LEASE_SECONDS": {
       "seeded": "2026-10-25"
     },
+    "BATCH_PIPELINE_RETAINED_DIGEST_HOLD_ENABLED": {
+      "owner": "Goal: Pipeline",
+      "review_by": "2026-12-19",
+      "registry": "config/feature-flags.yaml"
+    },
     "BATCH_PIPELINE_REUSE_LIVE_ENABLED": {
       "seeded": "2026-10-25"
     },
