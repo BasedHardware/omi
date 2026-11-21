@@ -24,25 +24,13 @@
 {{- if or (lt (int .Values.worker.unitSeconds) 1) (gt (int .Values.worker.unitSeconds) 7200) }}
 {{- fail "dedicated batch units must be in [1,7200] seconds" }}
 {{- end }}
+{{- $preserveLiveEnv := concat (.Values.worker.preserveLiveEnv | default list) (.instance.preserveLiveEnv | default list) }}
 {{- $current := dict }}
-{{- if or .Values.worker.preserveLiveUidAllowlist .Values.autoscaling.enabled (hasKey .instance "fixedReplicas") }}
+{{- if or $preserveLiveEnv .Values.autoscaling.enabled (hasKey .instance "fixedReplicas") }}
 {{- $current = lookup "apps/v1" "Deployment" .Release.Namespace .instance.name }}
 {{- end }}
-{{- $uidAllowlist := merge (dict "name" "BATCH_PIPELINE_UID_ALLOWLIST") .Values.worker.uidAllowlist }}
-{{- if and .Values.worker.preserveLiveUidAllowlist $current }}
-{{- $uidAllowlist = dict }}
-{{- range $container := $current.spec.template.spec.containers }}
-{{- if eq $container.name "worker" }}
-{{- range $env := $container.env }}
-{{- if eq $env.name "BATCH_PIPELINE_UID_ALLOWLIST" }}
-{{- $uidAllowlist = $env }}
-{{- end }}
-{{- end }}
-{{- end }}
-{{- end }}
-{{- if and (eq .instance.name .Release.Name) (not (or $uidAllowlist.value $uidAllowlist.valueFrom)) }}
-{{- fail "the live production worker must have a nonempty BATCH_PIPELINE_UID_ALLOWLIST binding" }}
-{{- end }}
+{{- if not $current }}
+{{- $preserveLiveEnv = list }}
 {{- end }}
 apiVersion: apps/v1
 kind: Deployment
@@ -135,15 +123,19 @@ spec:
           ports:
             - {name: http, containerPort: 8080}
           env:
+            {{- if not (has "ROLLOUT_POD_TEMPLATE_HASH" $preserveLiveEnv) }}
             # Immutable rollout exporter identity, including supervised GPU children.
             - name: ROLLOUT_POD_TEMPLATE_HASH
               valueFrom:
                 fieldRef: {fieldPath: "metadata.labels['pod-template-hash']"}
+            {{- end }}
             - {name: BATCH_PIPELINE_SERVING_METRICS_MIN_REFRESH_SECONDS, value: {{ .Values.worker.servingMetricsMinRefreshSeconds | quote }}}
             - {name: BATCH_CONTROL_CANDIDATE_FANOUT, value: {{ .Values.worker.controlCandidateFanout | quote }}}
             - {name: BATCH_ADMISSION_PARALLEL_CALLS, value: {{ .Values.worker.admissionParallelCalls | quote }}}
             - {name: BATCH_PIPELINE_IDLE_POLL_MAX_SECONDS, value: {{ .Values.worker.idlePollMaxSeconds | quote }}}
+            {{- if not (has "FIRESTORE_READ_LEVERS" $preserveLiveEnv) }}
             - {name: FIRESTORE_READ_LEVERS, value: {{ .Values.worker.firestoreReadLevers | quote }}}
+            {{- end }}
             {{- if hasKey .Values.worker "heldPollSkipEnabled" }}
             - {name: BATCH_HELD_POLL_SKIP_ENABLED, value: {{ .Values.worker.heldPollSkipEnabled | quote }}}
             {{- end }}
@@ -166,8 +158,12 @@ spec:
             - {name: STT_CAP_DISPATCH_ENFORCEMENT, value: {{ .Values.worker.capDispatchEnforcement | quote }}}
             - {name: STT_CAP_DISPATCH_COHORT, value: {{ .Values.worker.capDispatchCohort | quote }}}
             - {name: STT_CAP_DISPATCH_LANES, value: {{ .Values.worker.capDispatchLanes | quote }}}
+            {{- if not (has "UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED" $preserveLiveEnv) }}
             - {name: UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED, value: {{ .Values.worker.unlimitedV2BackfillHoursCapEnabled | default false | quote }}}
+            {{- end }}
+            {{- if not (has "UNLIMITED_V2_BACKFILL_HOURS_CAP_HOURS" $preserveLiveEnv) }}
             - {name: UNLIMITED_V2_BACKFILL_HOURS_CAP_HOURS, value: {{ .Values.worker.unlimitedV2BackfillHoursCapHours | default "24" | quote }}}
+            {{- end }}
             - {name: BATCH_PIPELINE_WORKER_RELEASE, value: {{ .Release.Name | quote }}}
             - name: POD_NAMESPACE
               valueFrom:
@@ -211,11 +207,11 @@ spec:
             # No `default` here: Helm's default treats 0 as empty, which would
             # silently turn the documented 0-disable into 10.
             - {name: BATCH_PIPELINE_STRICT_VAD_SHADOW_PERCENT, value: {{ .Values.worker.strictVadShadowPercent | quote }}}
-            {{- if hasKey .Values.worker "shadowLanguageOnly" }}
+            {{- if and (hasKey .Values.worker "shadowLanguageOnly") (not (has "BATCH_PIPELINE_SHADOW_LANGUAGE_ONLY" $preserveLiveEnv)) }}
             - {name: BATCH_PIPELINE_SHADOW_LANGUAGE_ONLY, value: {{ .Values.worker.shadowLanguageOnly | quote }}}
             {{- end }}
-            {{- with $uidAllowlist }}
-            - {{ toYaml . | nindent 14 | trim }}
+            {{- if not (has "BATCH_PIPELINE_UID_ALLOWLIST" $preserveLiveEnv) }}
+            - {{ merge (dict "name" "BATCH_PIPELINE_UID_ALLOWLIST") .Values.worker.uidAllowlist | toYaml | nindent 14 | trim }}
             {{- end }}
             - {name: BATCH_PIPELINE_SHARED_LIVE_ENABLED, value: "false"}
             - {name: BATCH_PIPELINE_POOL_KIND, value: dedicated_batch}
@@ -254,6 +250,12 @@ spec:
                   name: {{ .Values.secretName }}
                   key: SONIOX_API_KEY
                   optional: true
+            {{- if $preserveLiveEnv }}
+            {{- $liveEnv := include "batch-pipeline-worker.liveEnv" (dict "deployment" $current "container" "worker" "names" $preserveLiveEnv) | fromYamlArray }}
+            {{- with $liveEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+            {{- end }}
           startupProbe:
             httpGet: {path: /ready, port: http}
             periodSeconds: 10

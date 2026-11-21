@@ -42,6 +42,12 @@ nodeSelector:
 # to 0. Needs batch-pipeline-t4-pool (n1-standard-8 + T4, zones a/b/c/f).
 t4Fallback:
   enabled: true
+  # The fallback has its own live scope and read/backfill policy.
+  preserveLiveEnv:
+    - BATCH_PIPELINE_SHADOW_LANGUAGE_ONLY
+    - FIRESTORE_READ_LEVERS
+    - UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED
+    - UNLIMITED_V2_BACKFILL_HOURS_CAP_HOURS
 tolerations:
   - key: omi.ai/batch-pipeline
     operator: Equal
@@ -68,9 +74,12 @@ worker:
   packingSampleRate: null
   omitRecordSealRepairFreshEnabled: true
   capDispatchCohort: null
-  # An upgrade copies each GPU Deployment's binding from the cluster. Without
-  # live state, require a private binding before the rendered pod can start.
-  preserveLiveUidAllowlist: true
+  # The depth-only roll preserves each GPU Deployment's existing bindings,
+  # including keys absent from its pod template.
+  preserveLiveEnv:
+    - BATCH_PIPELINE_UID_ALLOWLIST
+    - ROLLOUT_POD_TEMPLATE_HASH
+  # Without live state, require a private binding before the pod can start.
   uidAllowlist:
     value: null
     valueFrom:
@@ -165,3 +174,4 @@ recordSealRepair:
 recordSealWorker:
   # Serve /metrics idle; an enabled runtime with the refused policy exits before readiness.
   runtimeEnabled: false
+  preserveLiveFreshEnv: true
