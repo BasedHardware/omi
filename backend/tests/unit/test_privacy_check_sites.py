@@ -42,6 +42,8 @@ def test_production_module_is_named_with_each_shape(monkeypatch):
     before = {s: count(label, s) for s in ('no_transaction', 'snapshots', 'attempt', 'no_attempt')}
     _call_from(module, 'privacy.assert_batch_write_allowed(db, db.transaction(), UID, conversation_ids=["c"])', db)
     _call_from(module, 'privacy.assert_batch_write_allowed(db, None, UID, conversation_ids=["c"])', db)
+    # A nontransactional export is a different loop from the preflight: it counts as snapshots.
+    _call_from(module, 'privacy.assert_batch_write_allowed(db, None, UID, conversation_ids=["c"], snapshots={})', db)
     _call_from(
         module,
         'privacy.assert_batch_write_allowed(db, db.transaction(), UID, conversation_ids=["c"], snapshots={})',
@@ -55,7 +57,7 @@ def test_production_module_is_named_with_each_shape(monkeypatch):
     )
     assert {s: count(label, s) - before[s] for s in before} == {
         'no_transaction': 1,
-        'snapshots': 1,
+        'snapshots': 2,
         'attempt': 1,
         'no_attempt': 1,
     }

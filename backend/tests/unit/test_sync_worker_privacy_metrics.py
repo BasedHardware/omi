@@ -33,6 +33,7 @@ metrics.owner_shadow_error('attempt', TimeoutError('synthetic-private-detail'))
 metrics.compare('batch', 'account_deleted', 'allow')
 metrics.memo_result('batch', 'hit')
 metrics.negative_lookup('conversations', 'shadow', 'mismatch')
+metrics.check_site('attempt')
 Counter('unrelated_total', 'Not privacy').inc()
 print('ready', flush=True)
 sys.stdin.read()
@@ -94,6 +95,9 @@ async def test_child_counters_survive_reaping_without_double_count_or_file_growt
             assert (
                 before[('privacy_decision_mismatch_total', (('family', 'batch'), ('reason', 'stale_allow')))] == attempt
             )
+            assert (
+                before[('omi_batch_privacy_check_sites_total', (('caller', 'other'), ('shape', 'attempt')))] == attempt
+            )
             assert before[('privacy_conversations_walked_total', (('mode', 'live'),))] == attempt
             assert before[('privacy_conversations_walked_total', (('mode', 'shadow'),))] == attempt
             assert (
@@ -127,6 +131,7 @@ async def test_child_counters_survive_reaping_without_double_count_or_file_growt
                 'privacy_shadow_checks_total',
                 'privacy_memo_requests_total',
                 'privacy_negative_lookup_total',
+                'omi_batch_privacy_check_sites_total',
             }
             assert (
                 before[
@@ -205,6 +210,7 @@ def test_memo_ineligible_counter_survives_isolated_job_exits():
     from utils.sync.worker_privacy_metrics import COUNTERS
 
     assert 'privacy_memo_ineligible' in COUNTERS
+    assert 'omi_batch_privacy_check_sites' in COUNTERS  # SCA-3508: sync child leases issue checks too
 
 
 @pytest.mark.parametrize('killed', [False, True])

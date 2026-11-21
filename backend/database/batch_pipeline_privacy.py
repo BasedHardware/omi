@@ -125,9 +125,9 @@ def assert_batch_write_allowed(
     """
     metrics.called('batch')
     metrics.check_site(
-        'no_transaction'
-        if transaction is None
-        else 'snapshots' if snapshots is not None else 'attempt' if current_attempt() is not None else 'no_attempt'
+        'snapshots'
+        if snapshots is not None
+        else 'no_transaction' if transaction is None else 'attempt' if current_attempt() is not None else 'no_attempt'
     )
     # A generation-memo hit would hide the live lookups needed for shadow proof.
     negative_shadow = lever_enabled('privacy_negative_lookup_cache', uid) and lever_enabled(
