@@ -228,7 +228,7 @@ class AudioPlayerUtils extends ChangeNotifier {
     return result.path == null ? null : File(result.path!);
   }
 
-  Future<void> shareRecordingAsAudio(List<Wal> wals) async {
+  Future<void> shareRecordingAsAudio(List<Wal> wals, {bool Function()? canShare}) async {
     final start = wals.map((w) => w.timerStart).reduce((a, b) => a < b ? a : b);
     final tempDir = await getTemporaryDirectory();
     final shareDir = await tempDir.createTemp('omi-recording-');
@@ -242,6 +242,10 @@ class AudioPlayerUtils extends ChangeNotifier {
     if (file == null) {
       await shareDir.delete(recursive: true);
       throw Exception('No audio on this phone for this recording');
+    }
+    if (canShare != null && !canShare()) {
+      await shareDir.delete(recursive: true);
+      throw StateError('Recording changed before export');
     }
     await SharePlus.instance.share(ShareParams(
       files: [XFile(file.path, mimeType: 'audio/wav')],

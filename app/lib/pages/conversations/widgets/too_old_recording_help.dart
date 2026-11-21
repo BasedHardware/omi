@@ -37,3 +37,16 @@ class TooOldRecordingHelp extends StatelessWidget {
         ],
       );
 }
+
+/// The parent recording row owns the tap and its existing detail route.
+class TooOldRecordingChevron extends StatelessWidget {
+  const TooOldRecordingChevron({super.key});
+
+  @override
+  Widget build(BuildContext context) => Icon(
+        Icons.chevron_right,
+        color: OmiColors.textSecondary,
+        size: 18,
+        semanticLabel: context.l10n.recordingDetails,
+      );
+}

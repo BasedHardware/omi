@@ -18,6 +18,48 @@ extension _WalAccountPurge on LocalWalSyncImpl {
       _retiredWals.any((w) => identical(w, wal)) ||
       _foreignWals.any((w) => identical(w, wal));
 
+  Future<bool> _deleteWal(
+    Wal wal, {
+    required int generation,
+    Map<Wal, WalFileIdentity>? exportOffered,
+  }) async {
+    bool canDelete() =>
+        _isCurrent(generation) &&
+        _isTrackedWal(wal) &&
+        (exportOffered == null ||
+            wal.status != WalStatus.outsideRecoveryWindow ||
+            exportOffered[wal] == wal.fileIdentity);
+
+    if (!canDelete()) return false;
+    final filePath = wal.filePath;
+    if (filePath != null && filePath.isNotEmpty) {
+      try {
+        final fullPath = await Wal.getFilePath(filePath);
+        if (fullPath == null) return false;
+        if (!canDelete() || (exportOffered != null && wal.filePath != filePath)) return false;
+        final type = await FileSystemEntity.type(fullPath, followLinks: false);
+        if (!canDelete() || (exportOffered != null && wal.filePath != filePath)) return false;
+        if (type == FileSystemEntityType.file || type == FileSystemEntityType.link) {
+          if (!_fileReferencedByOtherWal(wal, fullPath.split('/').last)) {
+            await File(fullPath).delete();
+            final sidecar = File(nativeBatchGeolocationSidecarPath(fullPath));
+            if (await sidecar.exists()) await sidecar.delete();
+            if (!_isCurrent(generation)) return false;
+          }
+        } else if (type != FileSystemEntityType.notFound) {
+          return false;
+        }
+      } catch (e) {
+        Logger.debug(e.toString());
+        return false;
+      }
+    }
+
+    final removed = _wals.remove(wal) | _retiredWals.remove(wal) | _foreignWals.remove(wal);
+    if (removed && wal.holdForUser && _isCurrent(generation)) heldRevision.value++;
+    return removed;
+  }
+
   /// Foreign-owner records left by accounts deleted from this phone are removed at
   /// load instead of parked forever: the user asked for that data to go, and a parked
   /// backlog of a dead account would otherwise be rewritten into the index on every

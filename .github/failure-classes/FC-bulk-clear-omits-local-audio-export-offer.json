@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "id": "FC-bulk-clear-omits-local-audio-export-offer",
+  "family": "product-intent",
+  "violated_contract": "When Clear All would delete recordings marked Too old, the app must offer an audio export for those recordings before accepting an irreversible action. A new or replaced recording cannot inherit consent from an older dialog.",
+  "canonical_prevention": "Use the same export offer on both Offline Sync pages. Bind the offer to the visible WAL instances, exact file metadata and current session. Recheck the offer and live status at the phone file-deletion boundary. An unoffered Too old file stays on disk.",
+  "canonical_prevention_artifact": [
+    "app/test/providers/sync_provider_terminal_wal_state_test.dart",
+    "app/test/widgets/sync_completion_truth_test.dart",
+    "app/test/pages/conversations/offline_sync_recording_blocks_test.dart"
+  ],
+  "evidence_prs": [],
+  "status": "open"
+}

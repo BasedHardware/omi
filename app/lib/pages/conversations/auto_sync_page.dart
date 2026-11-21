@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/models/sync_state.dart';
+import 'package:omi/pages/conversations/clear_all_recordings.dart';
 import 'package:omi/pages/conversations/local_storage_page.dart';
 import 'package:omi/pages/conversations/sync_cooldown_copy.dart';
 import 'package:omi/pages/conversations/sync_pending_work.dart' show walAttentionLabel;
@@ -43,11 +44,13 @@ import 'package:omi/pages/conversations/wal_delete_confirmation.dart';
 /// stale numbers being corrected. It also runs when the clear throws, because a
 /// clear that failed part-way still deleted files and leaves the card just as
 /// wrong; the failure itself still propagates to the caller.
-({Future<void> Function() synced, Future<void> Function() pending, Future<void> Function() all})
-    buildStorageClearActions({
+({
+  Future<void> Function() synced,
+  Future<void> Function() pending,
+  Future<void> Function(Future<void> Function()) all,
+}) buildStorageClearActions({
   required Future<void> Function() clearSynced,
   required Future<void> Function() clearPending,
-  required Future<void> Function() clearAll,
   required Future<void> Function() refreshDeviceStorage,
 }) {
   Future<void> thenRefresh(Future<void> Function() clear) async {
@@ -61,7 +64,7 @@ import 'package:omi/pages/conversations/wal_delete_confirmation.dart';
   return (
     synced: () => thenRefresh(clearSynced),
     pending: () => thenRefresh(clearPending),
-    all: () => thenRefresh(clearAll),
+    all: thenRefresh,
   );
 }
 
@@ -631,7 +634,10 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
                 ),
               ),
               const SizedBox(width: 10),
-              if (state != WalSyncDisplayState.outsideRecoveryWindow) _blockTrailing(block, state),
+              if (state == WalSyncDisplayState.outsideRecoveryWindow)
+                const TooOldRecordingChevron()
+              else
+                _blockTrailing(block, state),
             ]),
             if (state == WalSyncDisplayState.outsideRecoveryWindow) ...[
               const SizedBox(height: 8),
@@ -818,7 +824,10 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
                 ),
               ),
               const SizedBox(width: 10),
-              if (state != WalSyncDisplayState.outsideRecoveryWindow) _rowTrailing(wal, state),
+              if (state == WalSyncDisplayState.outsideRecoveryWindow)
+                const TooOldRecordingChevron()
+              else
+                _rowTrailing(wal, state),
             ]),
             if (state == WalSyncDisplayState.outsideRecoveryWindow) ...[
               const SizedBox(height: 8),
@@ -1053,17 +1062,16 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
   // Manage storage
   // ─────────────────────────────────────────
 
-  void _showManageStorageSheet(BuildContext context, SyncProvider provider) {
+  Future<void> _showManageStorageSheet(BuildContext context, SyncProvider provider) async {
     // Built before the sheet's async callbacks run, so the clear handlers do not
     // reach through a BuildContext across an await — and so every action is
     // paired with the storage re-read at a single construction site.
     final clearActions = buildStorageClearActions(
       clearSynced: provider.deleteAllSyncedWals,
       clearPending: provider.deleteAllPendingWals,
-      clearAll: provider.deleteAllClearableWals,
       refreshDeviceStorage: context.read<DeviceProvider>().refreshRingStorageStatus,
     );
-    showOmiSheet<void>(
+    final offer = await showOmiSheet<WalClearAllOffer>(
       context: context,
       title: context.l10n.manageStorage,
       padding: const EdgeInsets.fromLTRB(OmiSpacing.xl, OmiSpacing.xs, OmiSpacing.xl, OmiSpacing.xl),
@@ -1097,20 +1105,7 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
                 context.l10n.pendingFilesDeleted);
           }
         },
-        onClearAll: () async {
-          Navigator.of(sheetContext).pop();
-          final confirmed = await showOmiConfirm(
-            context,
-            title: context.l10n.deleteAllFiles,
-            message: context.l10n.deleteAllFilesWarning,
-            confirmLabel: context.l10n.clearAll,
-            destructive: true,
-          );
-          if (confirmed && context.mounted) {
-            await _clearVerified(
-                provider, List<Wal>.of(provider.allWals), clearActions.all, context.l10n.allFilesDeleted);
-          }
-        },
+        onClearAll: () => Navigator.of(sheetContext).pop(provider.prepareClearAllWals()),
         onToggleAutoRemove: (value) async {
           SharedPreferencesUtil().autoRemoveSyncedCopies = value;
           if (value) {
@@ -1122,6 +1117,10 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
         },
       ),
     );
+    if (offer == null || !context.mounted) return;
+    final confirmed = await confirmClearAllRecordings(context, tooOld: offer.tooOld, share: offer.share);
+    if (!confirmed || !context.mounted) return;
+    await _clearVerified(provider, offer.targets, () => clearActions.all(offer.clear), context.l10n.allFilesDeleted);
   }
 
   // ─────────────────────────────────────────
