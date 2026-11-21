@@ -52,8 +52,12 @@ def load_app():
     fastapi = ModuleType("fastapi")
     fastapi.FastAPI = FastAPI
     fastapi.Request = object
+    fastapi.Depends = lambda dependency: dependency
     fastapi.Query = Query
     fastapi.HTTPException = HTTPException
+
+    tools_auth = ModuleType("whoop_tools_auth")
+    tools_auth.require_whoop_tools_auth = lambda request: None
 
     responses = ModuleType("fastapi.responses")
     responses.HTMLResponse = _Response
@@ -86,6 +90,7 @@ def load_app():
             "requests": requests,
             "dotenv": dotenv,
             "fastapi": fastapi,
+            "whoop_tools_auth": tools_auth,
             "fastapi.responses": responses,
             "db": db,
             "models": models,
