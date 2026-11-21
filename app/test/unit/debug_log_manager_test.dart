@@ -7,6 +7,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/utils/debug_log_manager.dart';
+import 'package:omi/services/auth/auth_token_result.dart';
+import 'package:omi/services/notifications/fcm_token_registration.dart';
 
 class _Documents extends PathProviderPlatform {
   _Documents(this.path);
@@ -92,6 +94,7 @@ void main() {
     await DebugLogManager.setEnabled(false);
     try {
       await DebugLogManager.logEvent('disabled', {'payload': 'ignored'});
+      await logPushRegistration(PushRegistrationStage.apns, PushRegistrationResult.unavailable);
       expect(await (await DebugLogManager.getLogFile())!.readAsString(), isEmpty);
     } finally {
       await DebugLogManager.setEnabled(true);
@@ -104,6 +107,7 @@ void main() {
     final obstruction = await Directory(file.path).create();
     try {
       await DebugLogManager.logError(StateError('failed-write'));
+      await logPushRegistration(PushRegistrationStage.persistence, PushRegistrationResult.accepted);
     } finally {
       await obstruction.delete();
     }
@@ -113,5 +117,41 @@ void main() {
     expect(lines, hasLength(1));
     expect((jsonDecode(lines.single) as Map<String, dynamic>)['message'], 'Bad state: recovered');
     await DebugLogManager.clear();
+  });
+  test('registration failures reach the developer export without credential or exception text', () async {
+    const owner = AuthSessionSnapshot(ownerUid: 'private-account', generation: 1);
+    final registrar = FcmTokenRegistration(
+      capture: () => owner,
+      isCurrent: (_) => true,
+      readApns: () async => 'private-apns-token',
+      readToken: () async => throw StateError('private-fcm-token and private-account'),
+      readTimeZone: () async => 'private-time-zone',
+      persist: (_, __, ___) async => true,
+      requiresApns: true,
+      retryDelays: const [],
+    );
+    try {
+      await registrar.refresh();
+      // Await the same production write queue before reading the export file.
+      await logPushRegistration(PushRegistrationStage.http, PushRegistrationResult.declined, httpStatus: 503);
+      final file = (await DebugLogManager.listLogFiles()).first;
+      final raw = await file.readAsString();
+      expect(raw, isNot(contains('private-')));
+      expect(raw, isNot(contains('StateError')));
+      final rows = const LineSplitter().convert(raw).map((line) => jsonDecode(line) as Map<String, dynamic>).toList();
+      expect(rows.map((row) => (row['stage'], row['result'])), [
+        ('token', 'exception'),
+        ('retry', 'exhausted'),
+        ('http', 'declined'),
+      ]);
+      expect(rows.last['http_status'], 503);
+      for (final row in rows) {
+        expect(row.keys.toSet().difference({'timestamp', 'level', 'type', 'stage', 'result', 'http_status'}), isEmpty);
+        expect(row['type'], 'push_registration');
+      }
+    } finally {
+      registrar.dispose();
+      await DebugLogManager.clear();
+    }
   });
 }
