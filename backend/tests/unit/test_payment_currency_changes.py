@@ -46,6 +46,7 @@ def case(monkeypatch):
             monkeypatch.setenv(f'STRIPE_{plan}_{"MONTHLY" if interval == "month" else "ANNUAL"}_PRICE_ID', usd)
             prices[usd] = price(usd, 1999 * factor, interval, 'usd')
             prices[jpy] = price(jpy, amount * factor, interval, 'jpy')
+    prices['price_stale_usd_fixture'] = price('price_stale_usd_fixture', 1999, 'month', 'usd')
     now = int(time.time())
     obj = dict(
         id='sub_jpy_fixture',
@@ -140,12 +141,23 @@ def test_same_tier_annual_schedule_uses_jpy_for_both_phases(case):
     case['write'].assert_not_called()
 
 
-@pytest.mark.parametrize('target', ['price_unlimited_v2_month_fixture', 'price_unknown'])
+@pytest.mark.parametrize('target', ['price_stale_usd_fixture', 'price_unknown'])
 def test_stale_usd_or_unlisted_price_has_no_billing_writes(case, target):
     response = case['client'].post('/v1/payments/upgrade-subscription', json={'price_id': target})
     assert response.status_code in (400, 409), response.text
     for key in ('release', 'modify', 'schedule_create', 'schedule_modify', 'write'):
         case[key].assert_not_called()
+
+
+def test_base_usd_price_resolves_to_jpy_on_upgrade(case):
+    response = case['client'].post(
+        '/v1/payments/upgrade-subscription', json={'price_id': 'price_unlimited_v2_month_fixture'}
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()['status'] == 'success'
+    case['modify'].assert_called_once()
+    assert case['modify'].call_args.kwargs['items'][0]['price'] == PRO_MONTH
+    case['write'].assert_called_once()
 
 
 def test_jpy_variant_is_not_new_checkout_target(case):
