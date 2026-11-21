@@ -65,6 +65,7 @@ def stretch_cohesion_enabled() -> bool:
 
 
 DEFAULT_BOUNDARY_SECONDS = 300
+HISTORICAL_SITDOWN_TIMING = (900, 3600)
 # Stamped by the transaction that makes new recording speech visible; custom lock timing counts from it.
 SPEECH_LANDED_FIELD = 'v3_speech_landed_at'
 

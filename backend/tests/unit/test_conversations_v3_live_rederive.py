@@ -29,7 +29,7 @@ from routers import conversations as conversation_routes
 from scripts import conversations_v3_backfill as script
 from services import conversation_frame_evidence
 from utils.conversations import merge_conversations
-from utils.conversations.v3 import backfill, service
+from utils.conversations.v3 import Conflict, backfill, service
 from utils.other import lake_wipe
 from utils.retrieval.tool_services import action_items as task_service
 from utils.task_intelligence import task_source_validation
@@ -1721,6 +1721,105 @@ def test_undo_groups_restore_rows_sharing_a_source_together():
 # ---- dry-run and operator -----------------------------------------------------------------------
 
 
+def test_historical_partition_refuses_a_short_silence_gap():
+    first = source('first', AT)
+    second = source('second', first['finished_at'] + timedelta(seconds=899))
+    parts = backfill.plan_partitions([first, second], SINCE, UNTIL, max_rows=1)
+    assert len(parts) == 2 and not parts[0]['forced_cut']
+    with pytest.raises(Conflict, match='rederive_live_boundary'):
+        backfill.plan_partitions([first, second], SINCE, UNTIL, max_rows=1, historical_sitdown=True)
+    second = source('second', first['finished_at'] + timedelta(seconds=900))
+    parts = backfill.plan_partitions([first, second], SINCE, UNTIL, max_rows=1, historical_sitdown=True)
+    assert parts[0]['until'] == parts[1]['since'] == second['started_at']
+    assert not any(part['forced_cut'] for part in parts)
+
+
+def test_historical_estimate_uses_the_landing_clock_and_checks_speech_at_seam(owner, strict):
+    landed = AT + timedelta(hours=1)
+    first = source('first', AT, v3_speech_landed_at=landed)
+    owner(first)
+    partition = {'since': SINCE, 'until': first['finished_at'] + timedelta(seconds=900)}
+    options = {'historical_sitdown': True, 'internal_end': True}
+    with pytest.raises(Conflict, match='rederive_live_open'):
+        backfill.estimate_live_partition(UID, partition, 'dry-run', now=landed + timedelta(seconds=3599), **options)
+    settled = landed + timedelta(seconds=3600)
+    estimate = backfill.estimate_live_partition(UID, partition, 'dry-run', now=settled, **options)
+    assert estimate['stretches'] == 1 and estimate['open_stretches'] == 0
+    first['transcript_segments'][0]['end'] += 1
+    owner(first)
+    with pytest.raises(Conflict, match='rederive_live_boundary'):
+        backfill.estimate_live_partition(UID, partition, 'dry-run', now=settled, **options)
+    del first['v3_speech_landed_at']
+    owner(first)
+    with pytest.raises(Conflict, match='rederive_live_landing_unknown'):
+        backfill.estimate_live_partition(UID, partition, 'dry-run', now=settled, **options)
+    assert not strict.transactions
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('historical', [False, True])
+async def test_live_rederive_timing_reaches_the_outline_and_planner(owner, strict, monkeypatch, historical):
+    monkeypatch.setenv('CONVERSATIONS_V3_SILENCE_GAP_SECONDS', '900')
+    monkeypatch.setenv('CONVERSATIONS_V3_LOCK_SECONDS', '3600')
+    monkeypatch.setenv('CONVERSATIONS_V3_STRETCH_COHESION', 'on')
+    first = source('first', AT, words=310, v3_speech_landed_at=AT + timedelta(minutes=1))
+    second = source('second', AT + timedelta(minutes=11), words=310, v3_speech_landed_at=AT + timedelta(minutes=12))
+    owner(first, second, fragment('c1', first), fragment('c2', second))
+    outlined = []
+
+    def fixed_outline(uid, messages):
+        outlined.append(messages)
+        if not historical:
+            return ONE_CHAPTER
+        return reply(
+            {'first_line': 1, 'title': 'First subject', 'kind': 'conversation', 'people': ['A']},
+            {'first_line': 2, 'title': 'Second subject', 'kind': 'conversation', 'people': ['A']},
+        )
+
+    monkeypatch.setattr(service.models, 'outline', fixed_outline)
+    report = {}
+    outcome = await service.reconcile(
+        UID,
+        derive=True,
+        live=True,
+        since=SINCE,
+        until=UNTIL,
+        run_id=RUN,
+        report=report,
+        historical_timing=[900, 3600] if historical else None,
+    )
+    assert outcome == 'committed'
+    if historical:
+        assert len(outlined) == 1
+        assert 'Find the sit-downs first' in outlined[0][0][1]
+        assert '10 min without speech' in outlined[0][1][1]
+        assert report['windows_after'] == 1 and report['rows_retired'] == 1
+        assert conversations(strict)['c2']['sync_merged_into'] == 'c1'
+    else:
+        assert len(outlined) == 2
+        assert report['windows_after'] == 2 and report['rows_retired'] == 0
+
+
+@pytest.mark.asyncio
+async def test_historical_worker_blocks_on_timing_drift(owner, strict, monkeypatch):
+    monkeypatch.setenv('CONVERSATIONS_V3_SILENCE_GAP_SECONDS', '900')
+    monkeypatch.setenv('CONVERSATIONS_V3_LOCK_SECONDS', '300')
+    monkeypatch.setattr(service.models, 'outline', lambda *a: pytest.fail('outlined with mismatched timing'))
+    report = {}
+    outcome = await service.reconcile(
+        UID,
+        derive=True,
+        live=True,
+        since=SINCE,
+        until=UNTIL,
+        run_id=RUN,
+        report=report,
+        historical_timing=[900, 3600],
+    )
+    assert outcome == 'blocked' and report['blocked_reason'] == 'rederive_live_timing'
+    assert not conversations(strict)
+
+
 def test_dry_run_preview_counts_before_and_after_and_writes_nothing(owner, strict):
     sources, rows = lunch()
     owner(*sources, *rows)
@@ -1732,16 +1831,17 @@ def test_dry_run_preview_counts_before_and_after_and_writes_nothing(owner, stric
     assert est['outline_calls'] == 1 and est['usd'] > 0
 
 
-def test_operator_dry_run_prints_the_preview_without_uids(tmp_path, monkeypatch, capsys):
+@pytest.mark.parametrize('historical', [False, True])
+def test_operator_dry_run_prints_the_preview_without_uids(tmp_path, monkeypatch, capsys, historical):
     secret_uid = 'synthetic-owner-uid-123'
     owners = tmp_path / 'owners.txt'
     owners.write_text(secret_uid + '\n')
     meta = [{'id': 'r0', 'recording': True, 'started_at': AT, 'finished_at': AT + timedelta(minutes=1)}]
     monkeypatch.setattr(store, 'backfill_window_metadata', lambda *a: meta)
-    monkeypatch.setattr(
-        backfill,
-        'estimate_live_partition',
-        lambda *a, **kw: {
+
+    def estimate(*args, historical_sitdown, **kwargs):
+        assert historical_sitdown == historical
+        return {
             'rows_eligible': 18,
             'visible_before': 18,
             'windows_after': 1,
@@ -1751,14 +1851,18 @@ def test_operator_dry_run_prints_the_preview_without_uids(tmp_path, monkeypatch,
             'notes_calls': 1,
             'short_task_calls': 0,
             'usd': 0.01,
-        },
-    )
+        }
+
+    monkeypatch.setattr(backfill, 'estimate_live_partition', estimate)
     monkeypatch.setattr(runs, 'list_runs', lambda uid: [])
     monkeypatch.setattr(backfill, 'create_run', lambda *a, **kw: pytest.fail('dry-run wrote a run'))
     args = ['run', '--owners-file', str(owners), '--mode', 'rederive-live', '--dry-run']
+    if historical:
+        args.append('--historical-sitdown')
     assert script.main([*args, '--since', SINCE.isoformat(), '--until', UNTIL.isoformat()]) == 0
     out = capsys.readouterr().out
     assert secret_uid not in out
+    assert ('silence_seconds=900 landing_lock_seconds=3600' in out) == historical
     assert 'windows=18->1' in out and 'visible=18->1' in out and 'rows_retired_est=17' in out and 'llm_calls=2' in out
     # The live edge is the live builder's.
     with pytest.raises(SystemExit):
@@ -1766,7 +1870,8 @@ def test_operator_dry_run_prints_the_preview_without_uids(tmp_path, monkeypatch,
 
 
 @pytest.mark.asyncio
-async def test_a_live_run_step_replans_with_the_live_loader(monkeypatch):
+@pytest.mark.parametrize('historical_timing', [None, [900, 3600]])
+async def test_a_live_run_step_replans_with_the_live_loader(monkeypatch, historical_timing):
     calls = []
 
     async def reconcile(uid, **kw):
@@ -1783,6 +1888,8 @@ async def test_a_live_run_step_replans_with_the_live_loader(monkeypatch):
         'mode': backfill.LIVE_MODE,
         'partitions': [{'since': SINCE, 'until': UNTIL, 'status': 'pending'}],
     }
+    if historical_timing is not None:
+        run['historical_timing'] = historical_timing
     monkeypatch.setattr(backfill, 'run_blocking', blocking)
     monkeypatch.setattr(runs, 'get_run', lambda *a, **kw: deepcopy(run))
     monkeypatch.setattr(runs, 'update_run', lambda *a, **kw: run)
@@ -1796,6 +1903,7 @@ async def test_a_live_run_step_replans_with_the_live_loader(monkeypatch):
     )
     await backfill.run_step(UID, RUN, 0, 'derive')
     assert calls[0]['live'] is True and calls[0]['derive'] is True and calls[0]['rederive'] is False
+    assert calls[0]['historical_timing'] == historical_timing
     # The settled partition records the owner-surface baselines undo compares against, for its own copies.
     assert baselines == [(RUN, ['c0'])]
 
