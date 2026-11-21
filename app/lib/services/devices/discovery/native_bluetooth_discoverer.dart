@@ -9,6 +9,7 @@ import 'package:omi/services/devices/discovery/device_locator.dart';
 import 'package:omi/services/devices/models.dart';
 import 'package:omi/utils/logger.dart';
 import 'device_discoverer.dart';
+import 'plaud_discovery.dart';
 
 /// BLE discoverer backed by native platform APIs via Pigeon.
 /// iOS: CoreBluetooth. Android: BluetoothLeScanner + CompanionDeviceManager.
@@ -35,10 +36,11 @@ class NativeBluetoothDiscoverer extends DeviceDiscoverer {
     final previousCallback = BleBridge.instance.peripheralDiscoveredCallback;
 
     BleBridge.instance.peripheralDiscoveredCallback = (BlePeripheral peripheral) {
-      if (peripheral.name.isNotEmpty) {
+      final named = withNotePinFallbackName(peripheral);
+      if (named.name.isNotEmpty) {
         // Deduplicate by UUID
-        results.removeWhere((p) => p.uuid == peripheral.uuid);
-        results.add(peripheral);
+        results.removeWhere((p) => p.uuid == named.uuid);
+        results.add(named);
       }
     };
 
@@ -103,7 +105,7 @@ class NativeBluetoothDiscoverer extends DeviceDiscoverer {
 
   static bool _isPlaud(BlePeripheral p) {
     final name = p.name.toLowerCase();
-    return name.startsWith('plaud') || name.contains('notepin') || _hasService(p, plaudServiceUuid);
+    return name.startsWith('plaud') || name.contains('notepin') || hasPlaudServiceUuid(p);
   }
 
   static bool _isFieldy(BlePeripheral p) {
