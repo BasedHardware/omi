@@ -154,3 +154,76 @@ def test_memory_pretty_preserves_markup_like_content(authed_profile, respx_mock,
     result = cli_runner.invoke(app, ["--no-color", *command])
     assert result.exit_code == 0, result.output
     assert "[draft] literal [/bold] :warning:" in result.stdout
+
+
+@pytest.mark.parametrize("content", ["", "   ", "\t\n"])
+def test_memory_create_rejects_blank_content_before_network(authed_profile, respx_mock, cli_runner, content) -> None:
+    result = cli_runner.invoke(app, ["--json", "memory", "create", content])
+    assert result.exit_code == 1
+    assert "content cannot be empty" in result.stderr.lower()
+    assert len(respx_mock.calls) == 0
+
+
+@pytest.mark.parametrize("content", ["", "  "])
+def test_memory_update_rejects_blank_content_before_network(authed_profile, respx_mock, cli_runner, content) -> None:
+    result = cli_runner.invoke(app, ["--json", "memory", "update", "m1", "--content", content])
+    assert result.exit_code == 1
+    assert "content cannot be empty" in result.stderr.lower()
+    assert len(respx_mock.calls) == 0
+
+
+@pytest.mark.parametrize(
+    "invoke_args",
+    [
+        ["memory", "create"],
+        ["memory", "update", "m1", "--content"],
+    ],
+)
+def test_memory_rejects_raw_content_over_500_chars(authed_profile, respx_mock, cli_runner, invoke_args) -> None:
+    """The raw string is what the backend caps at 500, so trailing whitespace cannot smuggle it past the CLI."""
+    oversized = ("a" * 500) + "   "
+    result = cli_runner.invoke(app, ["--json", *invoke_args, oversized])
+    assert result.exit_code == 1
+    assert "at most 500 characters" in result.stderr.lower()
+    assert "503" in result.stderr
+    assert len(respx_mock.calls) == 0
+
+
+def test_memory_create_accepts_500_char_boundary(authed_profile, respx_mock, cli_runner) -> None:
+    boundary = "a" * 500
+    route = respx_mock.post("/v1/dev/user/memories").respond(json={"id": "m1", "content": boundary, "tags": []})
+    result = cli_runner.invoke(app, ["--json", "memory", "create", boundary])
+    assert result.exit_code == 0, result.output
+    body = json.loads(route.calls.last.request.content)
+    assert body["content"] == boundary
+
+
+def test_memory_create_strips_content_and_tags_before_post(authed_profile, respx_mock, cli_runner) -> None:
+    route = respx_mock.post("/v1/dev/user/memories").respond(json={"id": "m1", "content": "trimmed", "tags": ["work"]})
+    result = cli_runner.invoke(app, ["--json", "memory", "create", "  trimmed  ", "--tag", "  work  "])
+    assert result.exit_code == 0, result.output
+    body = json.loads(route.calls.last.request.content)
+    assert body["content"] == "trimmed"
+    assert body["tags"] == ["work"]
+
+
+def test_memory_update_strips_content_and_tags_before_patch(authed_profile, respx_mock, cli_runner) -> None:
+    route = respx_mock.patch("/v1/dev/user/memories/m1").respond(json={"id": "m1", "content": "new", "tags": ["x"]})
+    result = cli_runner.invoke(app, ["--json", "memory", "update", "m1", "--content", "  new  ", "--tag", "  x  "])
+    assert result.exit_code == 0, result.output
+    body = json.loads(route.calls.last.request.content)
+    assert body == {"content": "new", "tags": ["x"]}
+
+
+@pytest.mark.parametrize(
+    "invoke_args",
+    [
+        ["memory", "create", "ok", "--tag"],
+        ["memory", "update", "m1", "--tag"],
+    ],
+)
+def test_memory_rejects_blank_tags_before_network(authed_profile, respx_mock, cli_runner, invoke_args) -> None:
+    result = cli_runner.invoke(app, ["--json", *invoke_args, "   "])
+    assert result.exit_code == 1
+    assert "tags cannot be empty" in result.stderr.lower()
+    assert len(respx_mock.calls) == 0
