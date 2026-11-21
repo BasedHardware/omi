@@ -842,14 +842,9 @@ def test_import_fails_closed_when_a_referenced_mute_timing_is_uncommitted(
         verifier._run_live_stt_import("https://monitor.omi.me", "secret")
 
 
-# Ruling699300 / PR #24938 deliberately pauses these gated backlog pages.
-# Pin that disposition independently; do not infer this set
-# from current isPaused values, which would hide a new accidental pause.
-APPROVED_PAUSED_GATED_UIDS = {
-    'omi-batch-unit-unpublished-2h',
-    'omi-record-pending-dwell',
-    'omi-enrichment-fresh-dwell',
-}
+# SCA-2116 (2026-11-14) retired the ruling699300 import pauses; no gated page
+# rule may land paused. Keep the pin empty so a new accidental pause is visible.
+APPROVED_PAUSED_GATED_UIDS: set[str] = set()
 
 
 def test_live_stt_fleet_scope_reports_only_the_import_allowlist(
@@ -874,7 +869,7 @@ def test_live_stt_fleet_scope_reports_only_the_import_allowlist(
     )
     assert "COMMITTED_BUT_ABSENT (0): -" in report
     assert "LIVE_BUT_UNCOMMITTED (0): -" in report
-    assert f"PRESENT_BUT_PAUSED (3): {', '.join(sorted(APPROVED_PAUSED_GATED_UIDS))}" in report
+    assert "PRESENT_BUT_PAUSED (0): -" in report
 
 
 @pytest.mark.parametrize(("exists", "method"), [(False, "POST"), (True, "PUT")])
