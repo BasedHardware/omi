@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -49,10 +50,18 @@ func newServer(port int, handler http.Handler) *http.Server {
 }
 
 // serve owns the workers and their store after startup.
-func serve(ctx context.Context, cfg config, store *queue.Store, workers *queue.Workers, registry *prometheus.Registry, extra ...*http.Server) error {
+func serve(ctx context.Context, cfg config, store *queue.Store, workers *queue.Workers, registry *prometheus.Registry, maintenance func(context.Context), intake http.Handler, extra ...*http.Server) error {
 	lifetime, cancel := context.WithCancel(ctx)
 	defer cancel()
-	health := newServer(cfg.healthPort, healthHandler(lifetime.Done(), store.Ready))
+	var maintenanceGroup sync.WaitGroup
+	if maintenance != nil {
+		maintenanceGroup.Go(func() { maintenance(lifetime) })
+	}
+	mux := healthHandler(lifetime.Done(), store.Ready)
+	if intake != nil {
+		mux.Handle("POST "+episodeIntakePath, intake)
+	}
+	health := newServer(cfg.healthPort, mux)
 	metrics := newServer(cfg.metricsPort, metricsHandler(registry))
 	ended := make(chan error, 2+len(extra))
 	go listen(health, "health", ended)
@@ -78,6 +87,7 @@ func serve(ctx context.Context, cfg config, store *queue.Store, workers *queue.W
 	go func() {
 		defer close(stopped)
 		workers.Stop()
+		maintenanceGroup.Wait()
 		store.Close()
 	}()
 	shutdown, end := context.WithTimeout(context.WithoutCancel(ctx), cfg.stopTimeout)
