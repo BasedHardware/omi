@@ -15332,6 +15332,10 @@ class AppLocalizationsJa extends AppLocalizations {
   String get onTheWayServerWork => 'サーバーが報告した処理';
 
   @override
+  String get firmwareUpdateCheckUnavailable =>
+      'お使いのデバイスの最新ファームウェアを確認できませんでした。インターネット接続を確認し、Omiアプリが最新であることを確かめてから、もう一度お試しください。';
+
+  @override
   String get finishNothingToProcess => 'まだ処理するものがありません。';
 
   @override

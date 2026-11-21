@@ -15682,6 +15682,10 @@ class AppLocalizationsTl extends AppLocalizations {
   String get onTheWayServerWork => 'Trabahong iniulat ng server';
 
   @override
+  String get firmwareUpdateCheckUnavailable =>
+      'Hindi makumpirma ang pinakabagong firmware para sa iyong device. Tingnan ang iyong koneksyon sa internet at tiyaking updated ang Omi app, pagkatapos ay subukang muli.';
+
+  @override
   String get finishNothingToProcess => 'Wala pang ipoproseso.';
 
   @override

@@ -15661,6 +15661,10 @@ class AppLocalizationsEl extends AppLocalizations {
   String get onTheWayServerWork => 'Εργασία που αναφέρει ο διακομιστής';
 
   @override
+  String get firmwareUpdateCheckUnavailable =>
+      'Δεν ήταν δυνατή η επιβεβαίωση του πιο πρόσφατου υλικολογισμικού για τη συσκευή σας. Ελέγξτε τη σύνδεσή σας στο διαδίκτυο και βεβαιωθείτε ότι η εφαρμογή Omi είναι ενημερωμένη και, στη συνέχεια, δοκιμάστε ξανά.';
+
+  @override
   String get finishNothingToProcess => 'Δεν υπάρχει ακόμα κάτι για επεξεργασία.';
 
   @override

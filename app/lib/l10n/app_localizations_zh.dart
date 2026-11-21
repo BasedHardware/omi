@@ -15308,6 +15308,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get onTheWayServerWork => '服务器报告的任务';
 
   @override
+  String get firmwareUpdateCheckUnavailable => '无法确认你的设备的最新固件。请检查网络连接并确保 Omi 应用为最新版本，然后重试。';
+
+  @override
   String get finishNothingToProcess => '还没有可处理的内容。';
 
   @override

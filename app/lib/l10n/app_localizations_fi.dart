@@ -15564,6 +15564,10 @@ class AppLocalizationsFi extends AppLocalizations {
   String get onTheWayServerWork => 'Palvelimen ilmoittama työ';
 
   @override
+  String get firmwareUpdateCheckUnavailable =>
+      'Laitteesi uusinta laiteohjelmistoa ei voitu vahvistaa. Tarkista internetyhteys ja varmista, että Omi-sovellus on ajan tasalla, ja yritä sitten uudelleen.';
+
+  @override
   String get finishNothingToProcess => 'Ei vielä mitään käsiteltävää.';
 
   @override

@@ -12243,6 +12243,7 @@
     "onWifiLater": "Kasnije na Wi-Fi",
     "conversationWritingSummary": "Pišemo vaš sažetak…",
     "onTheWayServerWork": "Rad prijavljen sa servera",
+    "firmwareUpdateCheckUnavailable": "Nije moguće potvrditi najnoviji firmver za vaš uređaj. Provjerite internetsku vezu i uvjerite se da je aplikacija Omi ažurirana, a zatim pokušajte ponovo.",
     "finishNothingToProcess": "Još nema ništa za obradu.",
     "finishStillProcessing": "Još se obrađuje. Pojavit će se na početnoj.",
     "finishBackToHome": "Nazad na početnu",

@@ -4686,6 +4686,7 @@
     "onWifiLater": "Sau, qua Wi-Fi",
     "conversationWritingSummary": "Đang viết bản tóm tắt của bạn…",
     "onTheWayServerWork": "Công việc do máy chủ báo cáo",
+    "firmwareUpdateCheckUnavailable": "Không thể xác nhận firmware mới nhất cho thiết bị của bạn. Hãy kiểm tra kết nối internet và đảm bảo ứng dụng Omi đã được cập nhật, sau đó thử lại.",
     "finishNothingToProcess": "Chưa có gì để xử lý.",
     "finishStillProcessing": "Vẫn đang xử lý. Nó sẽ xuất hiện ở Trang chủ.",
     "finishBackToHome": "Về Trang chủ",

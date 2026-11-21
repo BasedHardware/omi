@@ -12243,6 +12243,7 @@
     "onWifiLater": "بعداً با Wi-Fi",
     "conversationWritingSummary": "در حال نوشتن خلاصه شما…",
     "onTheWayServerWork": "کار گزارش‌شده توسط سرور",
+    "firmwareUpdateCheckUnavailable": "تأیید آخرین فریم‌ور دستگاه شما ممکن نشد. اتصال اینترنت خود را بررسی کنید و مطمئن شوید برنامه Omi به‌روز است، سپس دوباره امتحان کنید.",
     "finishNothingToProcess": "هنوز چیزی برای پردازش نیست.",
     "finishStillProcessing": "هنوز در حال پردازش است. در صفحه اصلی نمایش داده می‌شود.",
     "finishBackToHome": "بازگشت به صفحه اصلی",

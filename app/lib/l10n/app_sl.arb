@@ -12243,6 +12243,7 @@
     "onWifiLater": "Pozneje prek Wi-Fi",
     "conversationWritingSummary": "Pišemo vaš povzetek…",
     "onTheWayServerWork": "Delo, ki ga poroča strežnik",
+    "firmwareUpdateCheckUnavailable": "Najnovejše vdelane programske opreme za vašo napravo ni bilo mogoče potrditi. Preverite internetno povezavo in se prepričajte, da je aplikacija Omi posodobljena, nato poskusite znova.",
     "finishNothingToProcess": "Še ni ničesar za obdelavo.",
     "finishStillProcessing": "Še v obdelavi. Prikazalo se bo na začetni strani.",
     "finishBackToHome": "Nazaj na začetno",

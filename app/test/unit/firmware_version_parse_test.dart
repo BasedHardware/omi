@@ -67,14 +67,15 @@ void main() {
     expect(result.$3, '2.0.0');
   });
 
-  test('firmware below the minimum still reports the zero sentinel', () async {
+  test('firmware below the minimum reports a below-minimum message', () async {
     final result = await DeviceUtils.shouldUpdateFirmware(
       currentFirmware: '0.9.0',
       latestFirmwareDetails: valid,
     );
 
-    expect(result.$1, '0');
+    expect(result.$1, 'Current firmware is below the minimum version required for this update');
     expect(result.$2, isFalse);
+    expect(result.$3, '2.0.0');
   });
 
   test('an up to date device is told so', () async {
@@ -82,5 +83,36 @@ void main() {
 
     expect(result.$1, 'You are already on the latest version');
     expect(result.$2, isFalse);
+  });
+
+  // The firmware update page sends an unusable release to the failed-check state (with Try Again) and
+  // an unreadable device revision to its own message, so the classification must keep them apart.
+  for (final (name, details, status) in [
+    ('empty answer', <String, dynamic>{}, FirmwareUpdateCheck.releaseUnavailable),
+    ('draft release', {...valid, 'draft': true}, FirmwareUpdateCheck.releaseUnavailable),
+    ('missing minimum version', {...valid, 'min_version': null}, FirmwareUpdateCheck.releaseUnavailable),
+    ('unparsable latest version', {...valid, 'version': 'x'}, FirmwareUpdateCheck.releaseUnavailable),
+    ('below minimum version', {...valid, 'min_version': '1.8.0'}, FirmwareUpdateCheck.notConfirmed),
+    (
+      'newer app required',
+      {...valid, 'min_app_version': '99.0.0', 'min_app_version_code': '999999'},
+      FirmwareUpdateCheck.notConfirmed
+    ),
+    ('older device', valid, FirmwareUpdateCheck.updateAvailable),
+  ]) {
+    test('$name is classified as ${status.name}', () async {
+      final result = await DeviceUtils.checkFirmwareUpdate(currentFirmware: '1.5.0', latestFirmwareDetails: details);
+      expect(result.status, status);
+    });
+  }
+
+  test('an unreadable revision is unknown even when the release is unusable', () async {
+    final result = await DeviceUtils.checkFirmwareUpdate(currentFirmware: 'Unknown', latestFirmwareDetails: const {});
+    expect(result.status, FirmwareUpdateCheck.currentVersionUnknown);
+  });
+
+  test('a device on the latest release is confirmed up to date', () async {
+    final result = await DeviceUtils.checkFirmwareUpdate(currentFirmware: '2.0.0', latestFirmwareDetails: valid);
+    expect(result.status, FirmwareUpdateCheck.upToDate);
   });
 }

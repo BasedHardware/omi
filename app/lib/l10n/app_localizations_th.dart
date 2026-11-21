@@ -15485,6 +15485,10 @@ class AppLocalizationsTh extends AppLocalizations {
   String get onTheWayServerWork => 'งานที่เซิร์ฟเวอร์รายงาน';
 
   @override
+  String get firmwareUpdateCheckUnavailable =>
+      'ไม่สามารถยืนยันเฟิร์มแวร์ล่าสุดสำหรับอุปกรณ์ของคุณได้ ตรวจสอบการเชื่อมต่ออินเทอร์เน็ตและตรวจสอบให้แน่ใจว่าแอป Omi เป็นเวอร์ชันล่าสุด แล้วลองอีกครั้ง';
+
+  @override
   String get finishNothingToProcess => 'ยังไม่มีอะไรให้ประมวลผล';
 
   @override

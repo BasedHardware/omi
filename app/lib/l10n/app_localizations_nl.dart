@@ -15599,6 +15599,10 @@ class AppLocalizationsNl extends AppLocalizations {
   String get onTheWayServerWork => 'Door de server gemeld werk';
 
   @override
+  String get firmwareUpdateCheckUnavailable =>
+      'De nieuwste firmware voor je apparaat kon niet worden bevestigd. Controleer je internetverbinding en zorg dat de Omi-app up-to-date is. Probeer het daarna opnieuw.';
+
+  @override
   String get finishNothingToProcess => 'Nog niets om te verwerken.';
 
   @override

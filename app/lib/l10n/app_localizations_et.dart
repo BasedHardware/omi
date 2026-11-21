@@ -15552,6 +15552,10 @@ class AppLocalizationsEt extends AppLocalizations {
   String get onTheWayServerWork => 'Serveri teatatud töö';
 
   @override
+  String get firmwareUpdateCheckUnavailable =>
+      'Sinu seadme uusimat püsivara ei õnnestunud kinnitada. Kontrolli internetiühendust ja veendu, et Omi rakendus on ajakohane, seejärel proovi uuesti.';
+
+  @override
   String get finishNothingToProcess => 'Veel pole midagi töödelda.';
 
   @override

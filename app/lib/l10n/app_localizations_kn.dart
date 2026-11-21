@@ -15610,6 +15610,10 @@ class AppLocalizationsKn extends AppLocalizations {
   String get onTheWayServerWork => 'ಸರ್ವರ್ ವರದಿ ಮಾಡಿದ ಕೆಲಸ';
 
   @override
+  String get firmwareUpdateCheckUnavailable =>
+      'ನಿಮ್ಮ ಸಾಧನದ ಇತ್ತೀಚಿನ ಫರ್ಮ್‌ವೇರ್ ಅನ್ನು ಖಚಿತಪಡಿಸಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ. ನಿಮ್ಮ ಇಂಟರ್ನೆಟ್ ಸಂಪರ್ಕವನ್ನು ಪರಿಶೀಲಿಸಿ ಮತ್ತು Omi ಆ್ಯಪ್ ನವೀಕರಿಸಲಾಗಿದೆಯೇ ಎಂದು ಖಚಿತಪಡಿಸಿಕೊಳ್ಳಿ, ನಂತರ ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.';
+
+  @override
   String get finishNothingToProcess => 'ಇನ್ನೂ ಪ್ರಕ್ರಿಯೆಗೊಳಿಸಲು ಏನೂ ಇಲ್ಲ.';
 
   @override

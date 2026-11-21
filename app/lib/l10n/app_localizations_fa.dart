@@ -15552,6 +15552,10 @@ class AppLocalizationsFa extends AppLocalizations {
   String get onTheWayServerWork => 'کار گزارش‌شده توسط سرور';
 
   @override
+  String get firmwareUpdateCheckUnavailable =>
+      'تأیید آخرین فریم‌ور دستگاه شما ممکن نشد. اتصال اینترنت خود را بررسی کنید و مطمئن شوید برنامه Omi به‌روز است، سپس دوباره امتحان کنید.';
+
+  @override
   String get finishNothingToProcess => 'هنوز چیزی برای پردازش نیست.';
 
   @override

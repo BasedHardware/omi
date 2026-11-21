@@ -4686,6 +4686,7 @@
     "onWifiLater": "لاحقًا عبر Wi-Fi",
     "conversationWritingSummary": "جارٍ كتابة ملخصك…",
     "onTheWayServerWork": "عمل أبلغ عنه الخادم",
+    "firmwareUpdateCheckUnavailable": "تعذّر التحقق من أحدث برنامج ثابت لجهازك. تحقّق من اتصالك بالإنترنت وتأكّد من تحديث تطبيق Omi، ثم حاول مرة أخرى.",
     "finishNothingToProcess": "لا يوجد شيء لمعالجته بعد.",
     "finishStillProcessing": "لا تزال المعالجة جارية. ستظهر على الشاشة الرئيسية.",
     "finishBackToHome": "العودة إلى الرئيسية",

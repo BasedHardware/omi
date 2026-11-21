@@ -15543,6 +15543,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get onTheWayServerWork => 'Server-reported work';
 
   @override
+  String get firmwareUpdateCheckUnavailable =>
+      'Couldn\'t confirm the latest firmware for your device. Check your internet connection and make sure the Omi app is up to date, then try again.';
+
+  @override
   String get finishNothingToProcess => 'Nothing to process yet.';
 
   @override

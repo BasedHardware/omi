@@ -4721,6 +4721,7 @@
     "onWifiLater": "Nanti via Wi-Fi",
     "conversationWritingSummary": "Menulis ringkasan Anda…",
     "onTheWayServerWork": "Pekerjaan yang dilaporkan server",
+    "firmwareUpdateCheckUnavailable": "Tidak dapat memastikan firmware terbaru untuk perangkat Anda. Periksa koneksi internet Anda dan pastikan aplikasi Omi sudah diperbarui, lalu coba lagi.",
     "finishNothingToProcess": "Belum ada yang perlu diproses.",
     "finishStillProcessing": "Masih diproses. Ini akan muncul di Beranda.",
     "finishBackToHome": "Kembali ke Beranda",

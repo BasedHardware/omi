@@ -15570,6 +15570,10 @@ class AppLocalizationsTr extends AppLocalizations {
   String get onTheWayServerWork => 'Sunucunun bildirdiği işler';
 
   @override
+  String get firmwareUpdateCheckUnavailable =>
+      'Cihazınız için en son donanım yazılımı doğrulanamadı. İnternet bağlantınızı kontrol edin ve Omi uygulamasının güncel olduğundan emin olun, ardından tekrar deneyin.';
+
+  @override
   String get finishNothingToProcess => 'Henüz işlenecek bir şey yok.';
 
   @override

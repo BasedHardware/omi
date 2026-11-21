@@ -15555,6 +15555,10 @@ class AppLocalizationsSk extends AppLocalizations {
   String get onTheWayServerWork => 'Práca hlásená serverom';
 
   @override
+  String get firmwareUpdateCheckUnavailable =>
+      'Nepodarilo sa overiť najnovší firmvér pre vaše zariadenie. Skontrolujte pripojenie na internet a uistite sa, že aplikácia Omi je aktuálna, a potom to skúste znova.';
+
+  @override
   String get finishNothingToProcess => 'Zatiaľ nie je čo spracovať.';
 
   @override

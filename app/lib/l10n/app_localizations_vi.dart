@@ -15560,6 +15560,10 @@ class AppLocalizationsVi extends AppLocalizations {
   String get onTheWayServerWork => 'Công việc do máy chủ báo cáo';
 
   @override
+  String get firmwareUpdateCheckUnavailable =>
+      'Không thể xác nhận firmware mới nhất cho thiết bị của bạn. Hãy kiểm tra kết nối internet và đảm bảo ứng dụng Omi đã được cập nhật, sau đó thử lại.';
+
+  @override
   String get finishNothingToProcess => 'Chưa có gì để xử lý.';
 
   @override

@@ -15559,6 +15559,10 @@ class AppLocalizationsCs extends AppLocalizations {
   String get onTheWayServerWork => 'Práce hlášená serverem';
 
   @override
+  String get firmwareUpdateCheckUnavailable =>
+      'Nepodařilo se ověřit nejnovější firmware pro vaše zařízení. Zkontrolujte připojení k internetu a ujistěte se, že je aplikace Omi aktuální, a zkuste to znovu.';
+
+  @override
   String get finishNothingToProcess => 'Zatím není co zpracovat.';
 
   @override

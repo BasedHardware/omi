@@ -4728,6 +4728,7 @@
     "onWifiLater": "Senere på Wi-Fi",
     "conversationWritingSummary": "Skriver dit resumé…",
     "onTheWayServerWork": "Arbejde rapporteret af serveren",
+    "firmwareUpdateCheckUnavailable": "Vi kunne ikke bekræfte den nyeste firmware til din enhed. Tjek din internetforbindelse, og sørg for, at Omi-appen er opdateret, og prøv derefter igen.",
     "finishNothingToProcess": "Intet at behandle endnu.",
     "finishStillProcessing": "Behandles stadig. Den vises på Hjem.",
     "finishBackToHome": "Tilbage til Hjem",

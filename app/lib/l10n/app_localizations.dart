@@ -27303,6 +27303,12 @@ abstract class AppLocalizations {
   /// **'Server-reported work'**
   String get onTheWayServerWork;
 
+  /// Firmware update page: the server answered but the device cannot be confirmed up to date (its firmware is below the release minimum, or the release needs a newer app), so it is not reported as up to date.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t confirm the latest firmware for your device. Check your internet connection and make sure the Omi app is up to date, then try again.'**
+  String get firmwareUpdateCheckUnavailable;
+
   /// Brief notice after tapping Finish on the live capture page when nothing was heard since the last conversation, so no conversation is made.
   ///
   /// In en, this message translates to:

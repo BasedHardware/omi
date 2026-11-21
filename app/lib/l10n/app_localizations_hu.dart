@@ -15618,6 +15618,10 @@ class AppLocalizationsHu extends AppLocalizations {
   String get onTheWayServerWork => 'A szerver által jelzett munka';
 
   @override
+  String get firmwareUpdateCheckUnavailable =>
+      'Nem sikerült ellenőrizni az eszközöd legújabb firmware-ét. Ellenőrizd az internetkapcsolatot, és győződj meg róla, hogy az Omi alkalmazás naprakész, majd próbáld újra.';
+
+  @override
   String get finishNothingToProcess => 'Még nincs mit feldolgozni.';
 
   @override

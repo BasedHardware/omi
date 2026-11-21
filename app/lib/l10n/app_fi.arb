@@ -4686,6 +4686,7 @@
     "onWifiLater": "Myöhemmin Wi-Fillä",
     "conversationWritingSummary": "Kirjoitetaan yhteenvetoasi…",
     "onTheWayServerWork": "Palvelimen ilmoittama työ",
+    "firmwareUpdateCheckUnavailable": "Laitteesi uusinta laiteohjelmistoa ei voitu vahvistaa. Tarkista internetyhteys ja varmista, että Omi-sovellus on ajan tasalla, ja yritä sitten uudelleen.",
     "finishNothingToProcess": "Ei vielä mitään käsiteltävää.",
     "finishStillProcessing": "Käsitellään yhä. Se näkyy kotinäkymässä.",
     "finishBackToHome": "Takaisin kotiin",

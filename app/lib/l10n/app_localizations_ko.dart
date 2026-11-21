@@ -15338,6 +15338,9 @@ class AppLocalizationsKo extends AppLocalizations {
   String get onTheWayServerWork => '서버에서 보고한 작업';
 
   @override
+  String get firmwareUpdateCheckUnavailable => '기기의 최신 펌웨어를 확인하지 못했습니다. 인터넷 연결을 확인하고 Omi 앱이 최신 버전인지 확인한 후 다시 시도하세요.';
+
+  @override
   String get finishNothingToProcess => '아직 처리할 내용이 없어요.';
 
   @override

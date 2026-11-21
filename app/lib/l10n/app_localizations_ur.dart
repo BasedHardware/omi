@@ -15571,6 +15571,10 @@ class AppLocalizationsUr extends AppLocalizations {
   String get onTheWayServerWork => 'سرور کی بتائی ہوئی کارروائی';
 
   @override
+  String get firmwareUpdateCheckUnavailable =>
+      'آپ کے آلے کے لیے تازہ ترین فرم ویئر کی تصدیق نہیں ہو سکی۔ اپنا انٹرنیٹ کنکشن چیک کریں اور یقینی بنائیں کہ Omi ایپ اپ ڈیٹ ہے، پھر دوبارہ کوشش کریں۔';
+
+  @override
   String get finishNothingToProcess => 'ابھی پروسیس کرنے کے لیے کچھ نہیں ہے۔';
 
   @override

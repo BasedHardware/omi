@@ -15624,6 +15624,10 @@ class AppLocalizationsMk extends AppLocalizations {
   String get onTheWayServerWork => 'Работа пријавена од серверот';
 
   @override
+  String get firmwareUpdateCheckUnavailable =>
+      'Не можевме да го потврдиме најновиот фирмвер за вашиот уред. Проверете ја интернет-врската и уверете се дека апликацијата Omi е ажурирана, а потоа обидете се повторно.';
+
+  @override
   String get finishNothingToProcess => 'Сè уште нема ништо за обработка.';
 
   @override

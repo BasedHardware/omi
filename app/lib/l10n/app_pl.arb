@@ -4721,6 +4721,7 @@
     "onWifiLater": "Później przez Wi-Fi",
     "conversationWritingSummary": "Piszemy podsumowanie…",
     "onTheWayServerWork": "Praca zgłoszona przez serwer",
+    "firmwareUpdateCheckUnavailable": "Nie udało się potwierdzić najnowszego oprogramowania układowego dla Twojego urządzenia. Sprawdź połączenie z internetem i upewnij się, że aplikacja Omi jest aktualna, a następnie spróbuj ponownie.",
     "finishNothingToProcess": "Na razie nie ma czego przetworzyć.",
     "finishStillProcessing": "Nadal trwa przetwarzanie. Pojawi się na ekranie głównym.",
     "finishBackToHome": "Wróć do ekranu głównego",

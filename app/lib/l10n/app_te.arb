@@ -12243,6 +12243,7 @@
     "onWifiLater": "తర్వాత Wi-Fiలో",
     "conversationWritingSummary": "మీ సారాంశం రాస్తున్నాం…",
     "onTheWayServerWork": "సర్వర్ నివేదించిన పని",
+    "firmwareUpdateCheckUnavailable": "మీ పరికరానికి తాజా ఫర్మ్‌వేర్‌ను నిర్ధారించలేకపోయాము. మీ ఇంటర్నెట్ కనెక్షన్‌ను తనిఖీ చేసి, Omi యాప్ నవీకరించబడిందని నిర్ధారించుకోండి, ఆపై మళ్లీ ప్రయత్నించండి.",
     "finishNothingToProcess": "ఇంకా ప్రాసెస్ చేయడానికి ఏమీ లేదు.",
     "finishStillProcessing": "ఇంకా ప్రాసెస్ అవుతోంది. ఇది హోమ్‌లో కనిపిస్తుంది.",
     "finishBackToHome": "హోమ్‌కు తిరిగి వెళ్లండి",

@@ -4782,6 +4782,7 @@
     "onWifiLater": "Később Wi-Fin",
     "conversationWritingSummary": "Összefoglaló írása…",
     "onTheWayServerWork": "A szerver által jelzett munka",
+    "firmwareUpdateCheckUnavailable": "Nem sikerült ellenőrizni az eszközöd legújabb firmware-ét. Ellenőrizd az internetkapcsolatot, és győződj meg róla, hogy az Omi alkalmazás naprakész, majd próbáld újra.",
     "finishNothingToProcess": "Még nincs mit feldolgozni.",
     "finishStillProcessing": "Még feldolgozás alatt. Megjelenik a Kezdőlapon.",
     "finishBackToHome": "Vissza a Kezdőlapra",

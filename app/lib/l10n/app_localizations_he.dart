@@ -15447,6 +15447,10 @@ class AppLocalizationsHe extends AppLocalizations {
   String get onTheWayServerWork => 'עבודה שדווחה מהשרת';
 
   @override
+  String get firmwareUpdateCheckUnavailable =>
+      'לא ניתן היה לאמת את הקושחה העדכנית ביותר למכשיר שלך. בדוק את החיבור לאינטרנט וודא שאפליקציית Omi מעודכנת, ואז נסה שוב.';
+
+  @override
   String get finishNothingToProcess => 'עדיין אין מה לעבד.';
 
   @override

@@ -12243,6 +12243,7 @@
     "onWifiLater": "नंतर Wi-Fi वर",
     "conversationWritingSummary": "तुमचा सारांश लिहित आहे…",
     "onTheWayServerWork": "सर्व्हरने नोंदवलेले काम",
+    "firmwareUpdateCheckUnavailable": "तुमच्या डिव्हाइससाठी नवीनतम फर्मवेअरची खात्री करता आली नाही. तुमचे इंटरनेट कनेक्शन तपासा आणि Omi अ‍ॅप अद्ययावत असल्याची खात्री करा, नंतर पुन्हा प्रयत्न करा.",
     "finishNothingToProcess": "अजून प्रक्रिया करण्यासाठी काहीही नाही.",
     "finishStillProcessing": "अजून प्रक्रिया सुरू आहे. हे होमवर दिसेल.",
     "finishBackToHome": "होमवर परत जा",

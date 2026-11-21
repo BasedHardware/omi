@@ -15595,6 +15595,10 @@ class AppLocalizationsBe extends AppLocalizations {
   String get onTheWayServerWork => 'Праца паводле сервера';
 
   @override
+  String get firmwareUpdateCheckUnavailable =>
+      'Не ўдалося праверыць апошнюю прашыўку для вашай прылады. Праверце падключэнне да інтэрнэту і пераканайцеся, што праграма Omi абноўлена, затым паспрабуйце яшчэ раз.';
+
+  @override
   String get finishNothingToProcess => 'Пакуль няма чаго апрацоўваць.';
 
   @override

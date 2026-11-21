@@ -4686,6 +4686,7 @@
     "onWifiLater": "Hiljem Wi-Fi kaudu",
     "conversationWritingSummary": "Kirjutame sinu kokkuvõtet…",
     "onTheWayServerWork": "Serveri teatatud töö",
+    "firmwareUpdateCheckUnavailable": "Sinu seadme uusimat püsivara ei õnnestunud kinnitada. Kontrolli internetiühendust ja veendu, et Omi rakendus on ajakohane, seejärel proovi uuesti.",
     "finishNothingToProcess": "Veel pole midagi töödelda.",
     "finishStillProcessing": "Veel töödeldakse. See ilmub avalehele.",
     "finishBackToHome": "Tagasi avalehele",

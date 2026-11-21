@@ -4686,6 +4686,7 @@
     "onWifiLater": "Senere på Wi-Fi",
     "conversationWritingSummary": "Skriver sammendraget ditt…",
     "onTheWayServerWork": "Arbeid rapportert av serveren",
+    "firmwareUpdateCheckUnavailable": "Kunne ikke bekrefte den nyeste fastvaren for enheten din. Sjekk internettforbindelsen og sørg for at Omi-appen er oppdatert, og prøv deretter på nytt.",
     "finishNothingToProcess": "Ingenting å behandle ennå.",
     "finishStillProcessing": "Behandles fortsatt. Den vises på Hjem.",
     "finishBackToHome": "Tilbake til Hjem",

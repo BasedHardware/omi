@@ -15583,6 +15583,10 @@ class AppLocalizationsLt extends AppLocalizations {
   String get onTheWayServerWork => 'Serverio praneštas darbas';
 
   @override
+  String get firmwareUpdateCheckUnavailable =>
+      'Nepavyko patvirtinti naujausios jūsų įrenginio programinės aparatinės įrangos. Patikrinkite interneto ryšį ir įsitikinkite, kad Omi programėlė atnaujinta, tada bandykite dar kartą.';
+
+  @override
   String get finishNothingToProcess => 'Kol kas nėra ką apdoroti.';
 
   @override

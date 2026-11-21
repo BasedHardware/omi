@@ -15542,6 +15542,10 @@ class AppLocalizationsHi extends AppLocalizations {
   String get onTheWayServerWork => 'सर्वर द्वारा बताया गया काम';
 
   @override
+  String get firmwareUpdateCheckUnavailable =>
+      'आपके डिवाइस के लिए नवीनतम फ़र्मवेयर की पुष्टि नहीं हो सकी। अपना इंटरनेट कनेक्शन जाँचें और सुनिश्चित करें कि Omi ऐप अपडेट है, फिर दोबारा कोशिश करें।';
+
+  @override
   String get finishNothingToProcess => 'अभी प्रोसेस करने के लिए कुछ नहीं है।';
 
   @override

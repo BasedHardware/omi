@@ -4721,6 +4721,7 @@
     "onWifiLater": "Plus tard en Wi-Fi",
     "conversationWritingSummary": "Rédaction de votre résumé…",
     "onTheWayServerWork": "Traitement signalé par le serveur",
+    "firmwareUpdateCheckUnavailable": "Impossible de confirmer le dernier firmware pour votre appareil. Vérifiez votre connexion Internet et assurez-vous que l'application Omi est à jour, puis réessayez.",
     "finishNothingToProcess": "Rien à traiter pour l'instant.",
     "finishStillProcessing": "Traitement en cours. Elle apparaîtra sur l'accueil.",
     "finishBackToHome": "Retour à l'accueil",

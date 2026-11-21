@@ -15593,6 +15593,10 @@ class AppLocalizationsUk extends AppLocalizations {
   String get onTheWayServerWork => 'Робота за даними сервера';
 
   @override
+  String get firmwareUpdateCheckUnavailable =>
+      'Не вдалося перевірити останню прошивку для вашого пристрою. Перевірте підключення до інтернету й переконайтеся, що застосунок Omi оновлено, потім спробуйте ще раз.';
+
+  @override
   String get finishNothingToProcess => 'Поки що нічого обробляти.';
 
   @override

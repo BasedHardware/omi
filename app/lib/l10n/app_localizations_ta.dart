@@ -15663,6 +15663,10 @@ class AppLocalizationsTa extends AppLocalizations {
   String get onTheWayServerWork => 'சேவையகம் தெரிவித்த பணி';
 
   @override
+  String get firmwareUpdateCheckUnavailable =>
+      'உங்கள் சாதனத்திற்கான சமீபத்திய ஃபர்ம்வேரை உறுதிப்படுத்த முடியவில்லை. உங்கள் இணைய இணைப்பைச் சரிபார்த்து, Omi ஆப் புதுப்பிக்கப்பட்டுள்ளதா என உறுதிசெய்து, மீண்டும் முயலவும்.';
+
+  @override
   String get finishNothingToProcess => 'இன்னும் செயலாக்க எதுவும் இல்லை.';
 
   @override

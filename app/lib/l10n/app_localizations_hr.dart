@@ -15596,6 +15596,10 @@ class AppLocalizationsHr extends AppLocalizations {
   String get onTheWayServerWork => 'Rad koji je prijavio poslužitelj';
 
   @override
+  String get firmwareUpdateCheckUnavailable =>
+      'Nije moguće potvrditi najnoviji firmver za vaš uređaj. Provjerite internetsku vezu i provjerite je li aplikacija Omi ažurirana, a zatim pokušajte ponovno.';
+
+  @override
   String get finishNothingToProcess => 'Još nema ničega za obradu.';
 
   @override

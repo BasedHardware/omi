@@ -15574,6 +15574,10 @@ class AppLocalizationsId extends AppLocalizations {
   String get onTheWayServerWork => 'Pekerjaan yang dilaporkan server';
 
   @override
+  String get firmwareUpdateCheckUnavailable =>
+      'Tidak dapat memastikan firmware terbaru untuk perangkat Anda. Periksa koneksi internet Anda dan pastikan aplikasi Omi sudah diperbarui, lalu coba lagi.';
+
+  @override
   String get finishNothingToProcess => 'Belum ada yang perlu diproses.';
 
   @override

@@ -12243,6 +12243,7 @@
     "onWifiLater": "מאוחר יותר ב-Wi-Fi",
     "conversationWritingSummary": "כותבים את הסיכום שלך…",
     "onTheWayServerWork": "עבודה שדווחה מהשרת",
+    "firmwareUpdateCheckUnavailable": "לא ניתן היה לאמת את הקושחה העדכנית ביותר למכשיר שלך. בדוק את החיבור לאינטרנט וודא שאפליקציית Omi מעודכנת, ואז נסה שוב.",
     "finishNothingToProcess": "עדיין אין מה לעבד.",
     "finishStillProcessing": "עדיין בעיבוד. זה יופיע במסך הבית.",
     "finishBackToHome": "חזרה למסך הבית",

@@ -4686,6 +4686,7 @@
     "onWifiLater": "बाद में Wi-Fi पर",
     "conversationWritingSummary": "आपका सारांश लिखा जा रहा है…",
     "onTheWayServerWork": "सर्वर द्वारा बताया गया काम",
+    "firmwareUpdateCheckUnavailable": "आपके डिवाइस के लिए नवीनतम फ़र्मवेयर की पुष्टि नहीं हो सकी। अपना इंटरनेट कनेक्शन जाँचें और सुनिश्चित करें कि Omi ऐप अपडेट है, फिर दोबारा कोशिश करें।",
     "finishNothingToProcess": "अभी प्रोसेस करने के लिए कुछ नहीं है।",
     "finishStillProcessing": "अभी प्रोसेस हो रहा है। यह होम पर दिखेगा।",
     "finishBackToHome": "होम पर वापस जाएं",

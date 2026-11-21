@@ -15596,6 +15596,10 @@ class AppLocalizationsMs extends AppLocalizations {
   String get onTheWayServerWork => 'Kerja yang dilaporkan pelayan';
 
   @override
+  String get firmwareUpdateCheckUnavailable =>
+      'Tidak dapat mengesahkan perisian tegar terkini untuk peranti anda. Semak sambungan internet anda dan pastikan apl Omi dikemas kini, kemudian cuba lagi.';
+
+  @override
   String get finishNothingToProcess => 'Belum ada apa-apa untuk diproses.';
 
   @override

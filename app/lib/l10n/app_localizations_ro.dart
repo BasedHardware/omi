@@ -15624,6 +15624,10 @@ class AppLocalizationsRo extends AppLocalizations {
   String get onTheWayServerWork => 'Activitate raportată de server';
 
   @override
+  String get firmwareUpdateCheckUnavailable =>
+      'Nu am putut confirma cel mai recent firmware pentru dispozitivul tău. Verifică conexiunea la internet și asigură-te că aplicația Omi este actualizată, apoi încearcă din nou.';
+
+  @override
   String get finishNothingToProcess => 'Încă nu este nimic de procesat.';
 
   @override

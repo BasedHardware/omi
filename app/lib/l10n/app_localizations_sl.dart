@@ -15588,6 +15588,10 @@ class AppLocalizationsSl extends AppLocalizations {
   String get onTheWayServerWork => 'Delo, ki ga poroča strežnik';
 
   @override
+  String get firmwareUpdateCheckUnavailable =>
+      'Najnovejše vdelane programske opreme za vašo napravo ni bilo mogoče potrditi. Preverite internetno povezavo in se prepričajte, da je aplikacija Omi posodobljena, nato poskusite znova.';
+
+  @override
   String get finishNothingToProcess => 'Še ni ničesar za obdelavo.';
 
   @override

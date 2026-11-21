@@ -4686,6 +4686,7 @@
     "onWifiLater": "後で Wi-Fi で",
     "conversationWritingSummary": "要約を作成しています…",
     "onTheWayServerWork": "サーバーが報告した処理",
+    "firmwareUpdateCheckUnavailable": "お使いのデバイスの最新ファームウェアを確認できませんでした。インターネット接続を確認し、Omiアプリが最新であることを確かめてから、もう一度お試しください。",
     "finishNothingToProcess": "まだ処理するものがありません。",
     "finishStillProcessing": "まだ処理中です。ホームに表示されます。",
     "finishBackToHome": "ホームに戻る",

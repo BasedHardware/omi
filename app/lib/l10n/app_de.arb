@@ -4686,6 +4686,7 @@
     "onWifiLater": "Später über WLAN",
     "conversationWritingSummary": "Deine Zusammenfassung wird geschrieben…",
     "onTheWayServerWork": "Vom Server gemeldete Arbeit",
+    "firmwareUpdateCheckUnavailable": "Die neueste Firmware für dein Gerät konnte nicht bestätigt werden. Prüfe deine Internetverbindung und stelle sicher, dass die Omi-App aktuell ist. Versuche es dann erneut.",
     "finishNothingToProcess": "Noch nichts zu verarbeiten.",
     "finishStillProcessing": "Wird noch verarbeitet. Es erscheint auf der Startseite.",
     "finishBackToHome": "Zur Startseite",

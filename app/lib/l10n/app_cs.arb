@@ -4686,6 +4686,7 @@
     "onWifiLater": "Později přes Wi-Fi",
     "conversationWritingSummary": "Píšeme vaše shrnutí…",
     "onTheWayServerWork": "Práce hlášená serverem",
+    "firmwareUpdateCheckUnavailable": "Nepodařilo se ověřit nejnovější firmware pro vaše zařízení. Zkontrolujte připojení k internetu a ujistěte se, že je aplikace Omi aktuální, a zkuste to znovu.",
     "finishNothingToProcess": "Zatím není co zpracovat.",
     "finishStillProcessing": "Stále se zpracovává. Objeví se na domovské stránce.",
     "finishBackToHome": "Zpět domů",

@@ -12243,6 +12243,7 @@
     "onWifiLater": "Подоцна на Wi-Fi",
     "conversationWritingSummary": "Го пишуваме вашето резиме…",
     "onTheWayServerWork": "Работа пријавена од серверот",
+    "firmwareUpdateCheckUnavailable": "Не можевме да го потврдиме најновиот фирмвер за вашиот уред. Проверете ја интернет-врската и уверете се дека апликацијата Omi е ажурирана, а потоа обидете се повторно.",
     "finishNothingToProcess": "Сè уште нема ништо за обработка.",
     "finishStillProcessing": "Сè уште се обработува. Ќе се појави на почетната.",
     "finishBackToHome": "Назад кон почетна",

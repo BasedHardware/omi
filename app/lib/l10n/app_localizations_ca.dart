@@ -15636,6 +15636,10 @@ class AppLocalizationsCa extends AppLocalizations {
   String get onTheWayServerWork => 'Feina indicada pel servidor';
 
   @override
+  String get firmwareUpdateCheckUnavailable =>
+      'No s\'ha pogut confirmar el firmware més recent per al teu dispositiu. Comprova la connexió a internet i assegura\'t que l\'app Omi està actualitzada; després torna-ho a provar.';
+
+  @override
   String get finishNothingToProcess => 'Encara no hi ha res per processar.';
 
   @override

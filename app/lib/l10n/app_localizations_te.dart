@@ -15622,6 +15622,10 @@ class AppLocalizationsTe extends AppLocalizations {
   String get onTheWayServerWork => 'సర్వర్ నివేదించిన పని';
 
   @override
+  String get firmwareUpdateCheckUnavailable =>
+      'మీ పరికరానికి తాజా ఫర్మ్‌వేర్‌ను నిర్ధారించలేకపోయాము. మీ ఇంటర్నెట్ కనెక్షన్‌ను తనిఖీ చేసి, Omi యాప్ నవీకరించబడిందని నిర్ధారించుకోండి, ఆపై మళ్లీ ప్రయత్నించండి.';
+
+  @override
   String get finishNothingToProcess => 'ఇంకా ప్రాసెస్ చేయడానికి ఏమీ లేదు.';
 
   @override

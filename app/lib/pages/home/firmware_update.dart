@@ -9,6 +9,7 @@ import 'package:omi/pages/home/home_navigation.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/utils/analytics/intercom.dart';
+import 'package:omi/utils/device.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/firmware_update_battery.dart';
 import 'package:omi/utils/firmware_install_verification.dart';
@@ -32,6 +33,10 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
   /// The firmware check got no answer.
   bool checkFailed = false;
 
+  /// The check confirmed the device needs nothing (latest, or already on stable). Any other answer without
+  /// an offer shows [updateMessage] instead of "up to date".
+  bool isConfirmedCurrent = false;
+
   // Store reference to provider for safe disposal
   DeviceProvider? _deviceProvider;
 
@@ -51,6 +56,7 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
     setState(() {
       isLoading = true;
       checkFailed = false;
+      isConfirmedCurrent = false;
     });
 
     if (widget.isRollback) {
@@ -62,6 +68,7 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
       if (mounted) {
         setState(() {
           shouldUpdate = isKnownFirmwareVersion(stableVersion) && !alreadyStable;
+          isConfirmedCurrent = alreadyStable;
           updateMessage = alreadyStable
               ? context.l10n.alreadyOnStableFirmware
               : shouldUpdate
@@ -79,12 +86,17 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
             serialNumber: device.serialNumber,
           ));
       if (!answered) return _failCheck();
-      var result = await shouldUpdateFirmware(currentFirmware: widget.device!.firmwareRevision);
+      final result = await checkFirmwareUpdate(currentFirmware: widget.device!.firmwareRevision);
+      // An answer with no usable release (empty, draft, unparsable) is as inconclusive as no answer.
+      if (result.status == FirmwareUpdateCheck.releaseUnavailable) return _failCheck();
       if (mounted) {
         setState(() {
-          shouldUpdate = result.$2;
-          updateMessage =
-              widget.device!.firmwareRevision.isEmpty ? context.l10n.unableToDetermineFirmwareVersion : result.$1;
+          shouldUpdate = result.status == FirmwareUpdateCheck.updateAvailable;
+          isConfirmedCurrent = result.status == FirmwareUpdateCheck.upToDate;
+          // An unreadable device revision gets no Try Again: a re-check would reuse the same revision.
+          updateMessage = result.status == FirmwareUpdateCheck.currentVersionUnknown
+              ? context.l10n.unableToDetermineFirmwareVersion
+              : context.l10n.firmwareUpdateCheckUnavailable;
           isLoading = false;
         });
       }
@@ -412,8 +424,8 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        // Up to date status (only when not needing update)
-        if (!shouldUpdate) ...[
+        // Up to date status (only when the check confirmed it)
+        if (!shouldUpdate && isConfirmedCurrent) ...[
           Padding(
             padding: const EdgeInsets.only(left: OmiSpacing.xxs, bottom: OmiSpacing.sm),
             child: Row(
@@ -426,6 +438,21 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
                 ),
                 const SizedBox(width: OmiSpacing.xs),
                 FaIcon(FontAwesomeIcons.circleCheck, color: OmiColors.success, size: 14),
+              ],
+            ),
+          ),
+        ] else if (!shouldUpdate) ...[
+          Padding(
+            key: const Key('firmware_update_check_not_confirmed'),
+            padding: const EdgeInsets.only(left: OmiSpacing.xxs, bottom: OmiSpacing.sm),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Flexible(
+                  child: Text(updateMessage, style: OmiType.subhead.copyWith(color: OmiColors.textSecondary)),
+                ),
+                const SizedBox(width: OmiSpacing.xs),
+                FaIcon(FontAwesomeIcons.circleExclamation, color: OmiColors.warning, size: 14),
               ],
             ),
           ),

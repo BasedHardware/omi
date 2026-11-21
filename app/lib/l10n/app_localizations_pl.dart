@@ -15604,6 +15604,10 @@ class AppLocalizationsPl extends AppLocalizations {
   String get onTheWayServerWork => 'Praca zgłoszona przez serwer';
 
   @override
+  String get firmwareUpdateCheckUnavailable =>
+      'Nie udało się potwierdzić najnowszego oprogramowania układowego dla Twojego urządzenia. Sprawdź połączenie z internetem i upewnij się, że aplikacja Omi jest aktualna, a następnie spróbuj ponownie.';
+
+  @override
   String get finishNothingToProcess => 'Na razie nie ma czego przetworzyć.';
 
   @override

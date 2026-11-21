@@ -15563,6 +15563,10 @@ class AppLocalizationsNo extends AppLocalizations {
   String get onTheWayServerWork => 'Arbeid rapportert av serveren';
 
   @override
+  String get firmwareUpdateCheckUnavailable =>
+      'Kunne ikke bekrefte den nyeste fastvaren for enheten din. Sjekk internettforbindelsen og sørg for at Omi-appen er oppdatert, og prøv deretter på nytt.';
+
+  @override
   String get finishNothingToProcess => 'Ingenting å behandle ennå.';
 
   @override
