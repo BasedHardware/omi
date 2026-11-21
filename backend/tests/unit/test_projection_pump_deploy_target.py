@@ -213,11 +213,15 @@ def test_prod_pump_is_integration_plus_the_dark_overrides():
     assert list(services)[: len(FOUR)] == list(FOUR)
     assert pump['secrets'] == integration['secrets']
     assert pump['flags'] == integration['flags']
-    assert pump['forbidden_env'] == integration['forbidden_env']
+    assert set(pump['forbidden_env']) == set(integration['forbidden_env']) | {'HOME_FEED_ENABLED'}
     assert pump['service_account'] == integration['service_account']
     train_pins = {'BATCH_ACCOUNT_PRIVACY_WRITER_ENABLED', 'BATCH_PROJECTION_OUTBOX'}
-    overridden = set(DARK_OVERRIDES) | {'BATCH_PIPELINE_INDEPENDENT_LANGUAGE_RECOVERY_ENABLED'} | train_pins
+    overridden = (
+        set(DARK_OVERRIDES) | {'BATCH_PIPELINE_INDEPENDENT_LANGUAGE_RECOVERY_ENABLED', 'HOME_FEED_ENABLED'} | train_pins
+    )
     assert set(pump['env']) - set(integration['env']) <= overridden
+    assert integration['env']['HOME_FEED_ENABLED'] == {'value': 'false', 'category': 'ops_kill'}
+    assert 'HOME_FEED_ENABLED' not in pump['env']
     for name in set(integration['env']) - overridden:
         assert pump['env'][name] == integration['env'][name], name
     for name, value in DARK_OVERRIDES.items():
@@ -265,12 +269,30 @@ def test_derive_from_merges_own_keys_over_the_composed_source():
     assert config['cloud_run']['services']['src']['env']['B'] == {'value': '2'}
 
 
+def test_derive_from_excludes_env_and_guards_removal_from_the_live_service():
+    config = _env_config(
+        {
+            'src': {
+                'env': {'A': {'value': '1'}, 'B': {'value': '2'}},
+                'forbidden_env': ['OLD_KEY'],
+            },
+            'derived': {'derive_from': 'src', 'exclude_env': ['A']},
+        }
+    )
+    COMPOSER['_resolve_derived_services'](config)
+    derived = config['cloud_run']['services']['derived']
+    assert derived['env'] == {'B': {'value': '2'}}
+    assert derived['forbidden_env'] == ['OLD_KEY', 'A']
+    assert 'derive_from' not in derived and 'exclude_env' not in derived
+
+
 @pytest.mark.parametrize(
     'services',
     [
         {'derived': {'derive_from': 'missing'}},
         {'a': {}, 'b': {'derive_from': 'a'}, 'c': {'derive_from': 'b'}},
         {'a': {}, 'c': {'derive_from': 'b'}, 'b': {'derive_from': 'a'}},
+        {'src': {}, 'derived': {'derive_from': 'src', 'exclude_env': 'A'}},
     ],
 )
 def test_derive_from_refuses_unknown_sources_and_chains(services):
@@ -317,6 +339,8 @@ def test_rendered_pump_env_is_dark_and_keeps_only_the_required_secrets(prod_stat
     assert 'SONIOX_API_KEY' in secret_names
     forbidden = set(_prod_services()[PROJECTION_PUMP]['forbidden_env'])
     assert forbidden and forbidden.isdisjoint(rendered)
+    assert 'HOME_FEED_ENABLED' in forbidden
+    assert 'HOME_FEED_ENABLED' not in rendered
 
 
 def _deploy_step():

@@ -1843,6 +1843,8 @@ overlay:
         - REPEAT_WORK_REVISION_ENABLED
         - HOSTED_DIARIZATION_API_URL
         env:
+          # Preserve the serving value (ro-prod readback, 2026-11-16; SCA-2470).
+          HOME_FEED_ENABLED: {value: 'false', category: ops_kill}
           # Unlimited backfill day cap, enforced only at sync upload (retryable 503 backfill_capacity until the
           # next UTC day). Rollback: 'false' in one config train (David 2026-11-18, support-packet decision 13).
           UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED: {value: 'true', category: rollout}
@@ -2160,6 +2162,10 @@ overlay:
       # Ramp and rollback: docs/listen_pusher_pipeline/changes/2026-11-19-projection-pump-deploy-target.md.
       backend-projection-pump:
         derive_from: backend-integration
+        # The Home feed kill switch applies to the serving integration role only. Keep it
+        # out of the pump's rendered env and remove any prior live value during deploy.
+        exclude_env:
+        - HOME_FEED_ENABLED
         env:
           # The two custody switches (BATCH_ACCOUNT_PRIVACY_WRITER_ENABLED, BATCH_PROJECTION_OUTBOX)
           # are inherited from integration's false pins: David 2026-11-21 ~03:45Z (SCA-3318) keeps

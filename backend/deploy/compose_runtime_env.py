@@ -47,7 +47,10 @@ _CLOUD_RUN_SERVICE_ORDER = (
 )
 # A service may declare ``derive_from: <service>`` to start from that service's fully
 # composed section (env, secrets, flags, identity, forbidden_env) and override keys.
+# ``exclude_env`` removes inherited env keys and adds them to ``forbidden_env`` so deploys
+# clear any live residue instead of retaining an old value.
 DERIVE_FROM_KEY = 'derive_from'
+DERIVE_EXCLUDE_ENV_KEY = 'exclude_env'
 # Prod-only services that staging never runs (SCA-3120): compose_staging drops them.
 STAGING_EXCLUDED_SERVICES = ('backend-projection-pump',)
 _GKE_SERVICE_ORDER = ('backend-listen', 'parakeet', 'pusher')
@@ -139,7 +142,8 @@ def _resolve_derived_services(env_config: ConfigDict) -> None:
     """Expand ``derive_from`` so a derived service carries its source's composed contract.
 
     The source is read after the base and overlay merge, so the derived service tracks
-    every later change to its source; its own keys deep-merge on top. Chains are refused.
+    every later change to its source; its own keys deep-merge on top. ``exclude_env`` removes
+    selected keys from the resolved env and adds deploy removal guards. Chains are refused.
     """
     cloud_run = _as_config_dict(env_config.get('cloud_run')) or {}
     services = _as_config_dict(cloud_run.get('services'))
@@ -157,8 +161,29 @@ def _resolve_derived_services(env_config: ConfigDict) -> None:
         # Checked against the declared set, so a chain is refused whatever the mapping order.
         if source_name in derived:
             raise ValueError(f'Cloud Run service {name} derives from derived service {source_name!r}')
-        own = {key: value for key, value in config.items() if key != DERIVE_FROM_KEY}
-        services[name] = _deep_merge(source, own)
+        excluded_env = config.get(DERIVE_EXCLUDE_ENV_KEY, [])
+        if not isinstance(excluded_env, list) or any(not isinstance(key, str) or not key for key in excluded_env):
+            raise ValueError(f'Cloud Run service {name} exclude_env must be a list of non-empty env names')
+        if len(excluded_env) != len(set(excluded_env)):
+            raise ValueError(f'Cloud Run service {name} exclude_env contains duplicate names')
+
+        own = {key: value for key, value in config.items() if key not in (DERIVE_FROM_KEY, DERIVE_EXCLUDE_ENV_KEY)}
+        resolved = cast(ConfigDict, _deep_merge(source, own))
+        env = _as_config_dict(resolved.get('env'))
+        for key in excluded_env:
+            if env is not None:
+                env.pop(key, None)
+        if excluded_env:
+            forbidden = resolved.get('forbidden_env')
+            if forbidden is None:
+                forbidden = []
+            if not isinstance(forbidden, list):
+                raise ValueError(f'Cloud Run service {name} forbidden_env must be a list')
+            for key in excluded_env:
+                if key not in forbidden:
+                    forbidden.append(key)
+            resolved['forbidden_env'] = forbidden
+        services[name] = resolved
 
 
 def _overlay_path(env: str, runtime_env_dir: Path = RUNTIME_ENV_DIR) -> Path:

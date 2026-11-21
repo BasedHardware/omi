@@ -6078,6 +6078,9 @@ environments:
             BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'on', category: rollout}
+            HOME_FEED_ENABLED:
+              value: 'false'
+              category: ops_kill
             BATCH_PIPELINE_SERVING_SWEEP_PAGE_ROWS: {value: '200', category: rollout}
             BATCH_PIPELINE_SERVING_TICK_SECONDS: {value: '10', category: rollout}
             BATCH_PROJECTION_FINISH_CLASSIFY_PAGE_LIMIT: {value: '16', category: rollout}
@@ -6804,6 +6807,7 @@ environments:
           - CONVERSATION_LLM_INPUT_DEDUPE_ENABLED
           - REPEAT_WORK_REVISION_ENABLED
           - HOSTED_DIARIZATION_API_URL
+          - HOME_FEED_ENABLED
           service_account: backend-runtime@based-hardware.iam.gserviceaccount.com
       jobs:
         notifications-job:
