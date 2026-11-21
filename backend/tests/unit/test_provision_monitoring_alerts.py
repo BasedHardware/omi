@@ -4,6 +4,8 @@ import copy
 import json
 import runpy
 import sys
+import urllib.response
+from io import BytesIO
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -61,6 +63,40 @@ def test_read_only_check_detects_paused_and_timing_drift_without_writes(provisio
     assert 'isPaused,notification_settings' in differences[0]
     assert differences[1] == 'unmanaged: live but uncommitted (retained)'
     assert api.writes == []
+
+
+@pytest.mark.parametrize(
+    'method,status,body,expected',
+    [
+        ('DELETE', 204, b'', None),
+        ('DELETE', 204, b'{"body": true}', {'body': True}),
+        ('GET', 200, b'{"body": true}', {'body': True}),
+        ('DELETE', 200, b'', 'invalid'),
+        ('GET', 204, b'', 'invalid'),
+    ],
+)
+def test_response_parser_allows_only_empty_delete_204(provisioner, monkeypatch, method, status, body, expected):
+    class Opener:
+        def open(self, request, timeout):
+            return urllib.response.addinfourl(BytesIO(body), {}, request.full_url, code=status)
+
+    monkeypatch.setattr(provisioner.urllib.request, 'build_opener', lambda *_: Opener())
+    api = provisioner.Grafana('https://monitor.omi.me', 'fake-test-token')
+    if expected == 'invalid':
+        with pytest.raises(ValueError, match='response is not JSON'):
+            api.request(provisioner.API + '/selected', method=method)
+    else:
+        assert api.request(provisioner.API + '/selected', method=method) == expected
+
+
+def test_response_parser_still_rejects_http_errors(provisioner, monkeypatch):
+    class Opener:
+        def open(self, request, timeout):
+            raise provisioner.urllib.error.HTTPError(request.full_url, 403, 'redact', {}, BytesIO(b'private'))
+
+    monkeypatch.setattr(provisioner.urllib.request, 'build_opener', lambda *_: Opener())
+    with pytest.raises(ValueError, match='HTTP 403'):
+        provisioner.Grafana('https://monitor.omi.me', 'fake-test-token').request(provisioner.API, method='DELETE')
 
 
 def test_apply_backs_up_before_writes_and_strips_runtime_fields(provisioner, tmp_path):
