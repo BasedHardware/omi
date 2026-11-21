@@ -97,14 +97,22 @@ async def perplexity_web_search_tool(
         query="What are the latest developments in AI in 2025?"
         Returns web search results with citations about recent AI developments
     """
-    logger.info(f"🔍 perplexity_web_search_tool called - query: {query}")
+    clean_query = str(query or "").strip()
+    if not clean_query:
+        return "Error: Search query cannot be empty."
 
-    return await _perplexity_gateway_search(query)
+    logger.info(f"🔍 perplexity_web_search_tool called - query: {clean_query}")
+
+    return await _perplexity_gateway_search(clean_query)
 
 
 async def _perplexity_gateway_search(query: str) -> str:
+    clean_query = str(query or "").strip()
+    if not clean_query:
+        return "Error: Search query cannot be empty."
+
     try:
-        response = await _post_gateway_chat_completion(query)
+        response = await _post_gateway_chat_completion(clean_query)
         if response.status_code != 200:
             logger.error(
                 f"❌ perplexity_web_search_tool - Gateway API error: {response.status_code} - "
@@ -122,7 +130,7 @@ async def _perplexity_gateway_search(query: str) -> str:
         # call, and any hop-2 failure keeps the first formatted answer.
         logger.info("🔁 perplexity_web_search_tool - Thin result, retrying with primary-source query rewrite")
         try:
-            retry_response = await _post_gateway_chat_completion(query + WEB_SEARCH_RETRIEVAL_APPENDIX)
+            retry_response = await _post_gateway_chat_completion(clean_query + WEB_SEARCH_RETRIEVAL_APPENDIX)
             if retry_response.status_code != 200:
                 logger.error(
                     f"❌ perplexity_web_search_tool - Hop-2 Gateway API error: {retry_response.status_code} - "
@@ -168,17 +176,29 @@ def _looks_like_thin_miss(text: str) -> bool:
 
 
 def _model_text(result: dict[str, Any]) -> str:
+    if not isinstance(result, dict):
+        return ''
     try:
-        content: Any = result['choices'][0]['message']['content']
+        choices = result.get('choices')
+        if not isinstance(choices, list) or len(choices) == 0 or not isinstance(choices[0], dict):
+            return ''
+        content: Any = choices[0].get('message', {}).get('content')
     except (KeyError, IndexError, TypeError):
         return ''
     return content if isinstance(content, str) else ''
 
 
 def _format_perplexity_response(result: dict[str, Any]) -> str:
-    if 'choices' in result and len(result['choices']) > 0:
-        content: Any = result['choices'][0]['message']['content']
-        answer = untrusted_block('Perplexity answer', generated('Web search answer', str(content)))
+    if not isinstance(result, dict):
+        logger.error(f"⚠️ perplexity_web_search_tool - Unexpected response format: {sanitize(str(result)[:200])}")
+        return "Error: Unexpected response format from Perplexity API"
+
+    choices = result.get('choices')
+    if isinstance(choices, list) and len(choices) > 0 and isinstance(choices[0], dict):
+        msg = choices[0].get('message')
+        content: Any = msg.get('content') if isinstance(msg, dict) else None
+        content_str = str(content) if content is not None else ''
+        answer = untrusted_block('Perplexity answer', generated('Web search answer', content_str))
         formatted_result = f"Web Search Results:\n\n{answer}\n\n"
 
         citations = _extract_citations(result)
@@ -197,15 +217,18 @@ def _format_perplexity_response(result: dict[str, Any]) -> str:
             for i, citation in enumerate(citations[:10], 1):
                 if isinstance(citation, dict):
                     cit = cast(dict[str, Any], citation)
-                    url = cit.get('url', cit.get('citation', ''))
-                    title = cit.get('title', '')
+                    raw_url = cit.get('url', cit.get('citation', ''))
+                    url = str(raw_url).strip() if raw_url is not None else ''
+                    raw_title = cit.get('title', '')
+                    title = str(raw_title).strip() if raw_title is not None else ''
                     citation_text = f"{i}. {title}" if title else f"{i}. Web citation"
                     if url:
                         citation_text += f"\n   {url}"
                     displayed_citations.append(citation_text)
-                elif isinstance(citation, str):
-                    displayed_citations.append(f"{i}. {citation}")
-            formatted_result += "\n".join(untrusted_block("web citation", citation) for citation in displayed_citations)
+                elif isinstance(citation, str) and citation.strip():
+                    displayed_citations.append(f"{i}. {citation.strip()}")
+            if displayed_citations:
+                formatted_result += "\n".join(untrusted_block("web citation", citation) for citation in displayed_citations)
             if len(citations) > 10:
                 formatted_result += "\n" + truncation_note(
                     shown=10,
@@ -222,7 +245,16 @@ def _format_perplexity_response(result: dict[str, Any]) -> str:
 
 
 def _extract_citations(result: dict[str, Any]) -> list[Any]:
+    if not isinstance(result, dict):
+        return []
     citations: Any = result.get('citations') or result.get('search_results')
-    if citations:
+    if citations and isinstance(citations, list):
         return citations
-    return result.get('choices', [{}])[0].get('message', {}).get('citations', [])
+    choices = result.get('choices')
+    if isinstance(choices, list) and len(choices) > 0 and isinstance(choices[0], dict):
+        msg = choices[0].get('message')
+        if isinstance(msg, dict):
+            cit = msg.get('citations')
+            if isinstance(cit, list):
+                return cit
+    return []
