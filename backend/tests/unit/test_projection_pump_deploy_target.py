@@ -1370,7 +1370,7 @@ def test_integration_serving_sweep_is_off_and_the_pump_keeps_its_loop():
         'category': 'ops_kill',
     }
     assert services[PROJECTION_PUMP]['env']['BATCH_PIPELINE_SERVING_PROJECTION_SWEEP'] == {
-        'value': 'on',
+        'value': 'true',
         'category': 'ops_kill',
     }
     assert services[PROJECTION_PUMP]['env']['BATCH_PIPELINE_PROJECTION_PUMP_ENABLED']['value'] == 'true'

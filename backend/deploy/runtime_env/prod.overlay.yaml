@@ -2191,7 +2191,7 @@ overlay:
           BATCH_PIPELINE_PROJECTION_PUMP_ENABLED: {value: 'true', category: rollout}
           # The pump's loop runs in 'pump' mode, which ignores this switch (projection_drain.py); pin the
           # inherited value back to the default so the pump's env keeps its meaning.
-          BATCH_PIPELINE_SERVING_PROJECTION_SWEEP: {value: 'on', category: ops_kill}
+          BATCH_PIPELINE_SERVING_PROJECTION_SWEEP: {value: 'true', category: ops_kill}
           # SCA-3318 one-key activation: keep the serving dark successor's silence-skip value (false);
           # widening the skip to the pump is a separate later change. Rollback for the pump key: 'false'.
           BATCH_PIPELINE_SILENCE_READ_SKIP_ENABLED: {value: 'false', category: ops_kill}

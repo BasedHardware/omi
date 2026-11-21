@@ -6583,7 +6583,7 @@ environments:
               value: 'false'
               category: ops_kill
             BATCH_PIPELINE_SERVING_PROJECTION_SWEEP:
-              value: 'on'
+              value: 'true'
               category: ops_kill
             BATCH_PIPELINE_SILENCE_READ_SKIP_ENABLED:
               value: 'false'
