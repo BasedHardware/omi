@@ -130,7 +130,7 @@ _SITE_WRAPPERS = frozenset(
         ('database.batch_pipeline_projection_session', 'guard'),
     }
 )
-_SITE_SHAPES = frozenset({'no_transaction', 'snapshots', 'attempt', 'no_attempt'})
+_SITE_SHAPES = frozenset({'no_transaction', 'snapshots', 'attempt', 'no_attempt', 'other'})
 TTL_CACHE = Counter(
     'privacy_ttl_cache_total', '60s-bounded privacy decision reuse (hit, miss, store)', ['family', 'result']
 )
@@ -391,7 +391,7 @@ def check_site(shape):
     """Count one live batch check against its first non-privacy calling module."""
     current = frame = None
     try:
-        shape = shape if shape in _SITE_SHAPES else 'no_attempt'
+        shape = shape if shape in _SITE_SHAPES else 'other'
         caller = 'other'
         current = inspect.currentframe()
         frame = current.f_back if current is not None else None

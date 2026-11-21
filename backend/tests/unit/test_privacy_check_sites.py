@@ -2,6 +2,8 @@
 
 import json
 
+import pytest
+
 from database import batch_pipeline_privacy as privacy, privacy_check_metrics as metrics
 from database.batch_privacy_attempt import batch_privacy_attempt
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
@@ -110,9 +112,23 @@ def test_attribution_does_not_leave_a_frame_cycle():
 
 
 def test_unknown_shape_is_bounded():
-    before = count('other', 'no_attempt')
+    before = count('other', 'other')
     metrics.check_site('surprise')
-    assert count('other', 'no_attempt') == before + 1
+    assert count('other', 'other') == before + 1
+
+
+@pytest.mark.parametrize('profile', ('cloud_run_gmp_sidecar.yaml', 'cloud_run_gmp_sync.yaml'))
+def test_site_counter_survives_both_cloud_run_keep_rules(profile):
+    """FC-metric-dropped-by-scrape-allowlist: integration and sync use the explicit sync profile."""
+    import re
+    from pathlib import Path
+
+    import yaml
+
+    config = yaml.safe_load((Path(__file__).resolve().parents[2] / 'deploy' / profile).read_text(encoding='utf-8'))
+    keep = [rule for rule in config['spec']['endpoints'][0]['metricRelabeling'] if rule['action'] == 'keep']
+    assert len(keep) == 1
+    assert re.fullmatch(keep[0]['regex'], 'omi_batch_privacy_check_sites_total')
 
 
 def test_forwarding_wrapper_is_attributed_to_its_caller(monkeypatch):
