@@ -35,18 +35,26 @@ func prepareReplay(backend, corpus, output, testKey string, includeValues bool) 
 		return replayInput{}, err
 	}
 	fixtureDir := filepath.Join(filepath.Dir(backend), "backend-go", "tools", "replay", "corpus")
-	if isCI() && (filepath.Dir(canonical) != fixtureDir || !ciReplayCorpusAllowed(filepath.Base(canonical))) {
-		return replayInput{}, errors.New("CI may only read reviewed synthetic replay corpora")
-	}
 	reportPath, err := outsideWorktree(output)
 	if err != nil {
 		return replayInput{}, err
 	}
-	data, err := loadCorpus(canonical)
+	hostname, err := os.Hostname()
 	if err != nil {
-		return replayInput{}, err
+		return replayInput{}, fmt.Errorf("check replay corpus host: %w", err)
 	}
-	if err := validateCorpusLocation(backend, canonical, testKey, includeValues, data); err != nil {
+	trustedFixture := filepath.Dir(canonical) == fixtureDir && ciReplayCorpusAllowed(filepath.Base(canonical))
+	if pathErr := validateCorpusPath(backend, canonical, testKey, includeValues, hostname, isCI()); pathErr != nil {
+		return replayInput{}, pathErr
+	}
+	var data []byte
+	if trustedFixture {
+		// Hash the open fixture before loading it into memory or parsing it.
+		data, err = loadVerifiedSyntheticCorpus(canonical)
+	} else {
+		data, err = loadCorpus(canonical)
+	}
+	if err != nil {
 		return replayInput{}, err
 	}
 	return replayInput{backend: backend, reportPath: reportPath, corpus: data}, nil
@@ -132,19 +140,38 @@ func loadCorpus(path string) (data []byte, err error) {
 }
 
 func validateCorpusLocation(backend, corpus, testKey string, includeValues bool, data []byte) error {
+	hostname, err := os.Hostname()
+	if err != nil {
+		return fmt.Errorf("check replay corpus host: %w", err)
+	}
+	if err := validateCorpusPath(backend, corpus, testKey, includeValues, hostname, isCI()); err != nil {
+		return err
+	}
 	fixtureDir := filepath.Join(filepath.Dir(backend), "backend-go", "tools", "replay", "corpus")
 	name := filepath.Base(corpus)
-	if filepath.Dir(corpus) == fixtureDir && approvedSyntheticCorpus(name, data) {
+	if filepath.Dir(corpus) == fixtureDir && ciReplayCorpusAllowed(name) && !approvedSyntheticCorpus(name, data) {
+		return errors.New("replay corpus does not match its reviewed synthetic digest")
+	}
+	return nil
+}
+
+func validateCorpusPath(backend, corpus, testKey string, includeValues bool, hostname string, ci bool) error {
+	fixtureDir := filepath.Join(filepath.Dir(backend), "backend-go", "tools", "replay", "corpus")
+	name := filepath.Base(corpus)
+	if filepath.Dir(corpus) == fixtureDir && ciReplayCorpusAllowed(name) {
 		if testKey != "" {
 			return errors.New("reviewed synthetic fixtures use the default replay key")
 		}
 		return nil
 	}
+	if ci {
+		return errors.New("CI may only read reviewed synthetic replay corpora")
+	}
 	if _, err := outsideWorktree(corpus); err != nil {
 		return errors.New("only reviewed synthetic corpora may be replayed from Git")
 	}
-	if isCI() {
-		return errors.New("CI may not read private replay corpora")
+	if err := ownerCorpusHostAllowed(hostname, false); err != nil {
+		return err
 	}
 	if includeValues || testKey == "" {
 		return errors.New("private replay requires an external test key and a report without values")
@@ -256,6 +283,43 @@ func approvedSyntheticCorpus(name string, data []byte) bool {
 	expected, ok := syntheticDigests()[name]
 	digest := sha256.Sum256(data)
 	return ok && expected == hex.EncodeToString(digest[:])
+}
+
+func loadVerifiedSyntheticCorpus(path string) (data []byte, err error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, fmt.Errorf("open reviewed replay corpus: %w", err)
+	}
+	defer func() { err = errors.Join(err, file.Close()) }()
+	info, err := file.Stat()
+	if err != nil {
+		return nil, fmt.Errorf("inspect reviewed replay corpus: %w", err)
+	}
+	if !info.Mode().IsRegular() || info.Size() > maxCorpusBytes {
+		return nil, errors.New("replay corpus must be a regular file of at most 16 MiB")
+	}
+	hash := sha256.New()
+	size, copyErr := io.Copy(hash, io.LimitReader(file, maxCorpusBytes+1))
+	if copyErr != nil {
+		return nil, fmt.Errorf("verify reviewed replay corpus: %w", copyErr)
+	}
+	if size > maxCorpusBytes {
+		return nil, errors.New("replay corpus exceeds 16 MiB")
+	}
+	if got, want := hex.EncodeToString(hash.Sum(nil)), syntheticDigests()[filepath.Base(path)]; got != want {
+		return nil, errors.New("replay corpus does not match its reviewed synthetic digest")
+	}
+	if _, seekErr := file.Seek(0, io.SeekStart); seekErr != nil {
+		return nil, fmt.Errorf("rewind reviewed replay corpus: %w", seekErr)
+	}
+	data, err = io.ReadAll(io.LimitReader(file, maxCorpusBytes+1))
+	if len(data) > maxCorpusBytes {
+		return nil, errors.New("replay corpus exceeds 16 MiB")
+	}
+	if err == nil && !approvedSyntheticCorpus(filepath.Base(path), data) {
+		return nil, errors.New("replay corpus changed while it was being loaded")
+	}
+	return data, err
 }
 
 func syntheticDigests() map[string]string {

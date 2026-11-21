@@ -12,6 +12,16 @@ from testing.finalization_replay.corpus import FIXED_DATE, pack, seed_document
 QUEUE_COLLECTIONS = {'conversation_finalization_jobs', 'conversation_finalization_projection_shards'}
 
 
+def _same_snapshot_value(left, right):
+    if type(left) is not type(right):
+        return False
+    if isinstance(left, dict):
+        return left.keys() == right.keys() and all(_same_snapshot_value(left[key], right[key]) for key in left)
+    if isinstance(left, (list, tuple)):
+        return len(left) == len(right) and all(_same_snapshot_value(a, b) for a, b in zip(left, right, strict=True))
+    return left == right
+
+
 def _documents(collection):
     # list_documents also returns missing parents that own populated subcollections.
     for ref in collection.list_documents():
@@ -67,13 +77,13 @@ class CaseState:
         return prompt_tokens, completion_tokens
 
     def record_embedding_request(self, values):
-        from testing.finalization_replay.metrics import token_estimate
+        from testing.finalization_replay.metrics import embedding_token_estimate
 
         if not isinstance(values, list):
             values = [values]
         with self._metrics_lock:
             self.provider_calls.append('openai-embeddings')
-            self.embedding_tokens += sum(token_estimate(value) for value in values)
+            self.embedding_tokens += sum(embedding_token_estimate(value) for value in values)
 
     def add_firestore_operations(self, **counts):
         with self._metrics_lock:
@@ -169,7 +179,7 @@ class CaseState:
         changed = {
             path: after.get(path)
             for path in sorted(before.keys() | after.keys())
-            if before.get(path) != after.get(path)
+            if not _same_snapshot_value(before.get(path), after.get(path))
         }
         document = self.conversation.get().to_dict()
         return {

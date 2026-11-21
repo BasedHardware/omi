@@ -1,6 +1,7 @@
 """Check that the two emulator runs prove both parity and drift detection."""
 
 import json
+import os
 from pathlib import Path
 import re
 import sys
@@ -53,6 +54,16 @@ def verify_cost(report):
             require(measured['embedding_tokens'] >= 0, (name, side, 'embedding token count'))
             ops = measured['firestore_operations']
             require(all(type(value) is int and value >= 0 for value in ops.values()), (name, side, 'Firestore counts'))
+            observation = case.get(side)
+            if observation is not None:
+                observed_activity = bool(observation.get('provider_calls')) or bool(
+                    observation.get('derived_documents')
+                ) or observation.get('updated_at_changed') is True or bool(observation.get('effects'))
+                total_cost = tokens['total'] + measured['embedding_tokens'] + sum(ops.values())
+                require(
+                    not observed_activity or total_cost > 0,
+                    (name, side, 'observed activity has an all-zero cost row'),
+                )
         row = next(item for item in rows if item['case'] == name)
         require(row['python'] == cost['python'] and row['go'] == cost['go'], (name, 'cost row mismatch'))
 
@@ -91,6 +102,32 @@ def verify_corpus_map(parity, gaps):
     verify_cost(gaps)
 
 
+def verify_unexplained_count(report):
+    measured = sum(
+        1 for case in report['cases'] for diff in case['differences'] if not diff.get('reason')
+    )
+    require(
+        measured == report['unexplained_differences'],
+        'per-commit unexplained-difference count is inconsistent',
+    )
+
+
+def verify_departures(gaps):
+    by_name = {case['name']: case for case in gaps['cases']}
+    erase = by_name['erase-removes-owner-and-jobs']
+    erase_evidence = erase['go_evidence']['erasure']
+    require(erase_evidence['user_document_absent'] is True, 'Go erasure left the owner document')
+    require(erase_evidence['jobs_for_uid'] == erase_evidence['tenants_for_uid'] == 0, 'Go erasure left database rows')
+    require(erase['go']['conversation'] is None, 'Go erasure replay retained a conversation row')
+    unreadable = by_name['unreadable-ciphertext-dead-letters']
+    job = unreadable['go_evidence']['job']
+    require(job['reason'] == 'transcript_unreadable', 'Go did not preserve the typed decrypt error')
+    require(job['state'] == 'parked', 'Go unreadable transcript job was not parked')
+    require(job['outcome'] == 'failure', 'Go unreadable transcript was not recorded as a failed job')
+    require(unreadable['go']['conversation']['finalization_status'] == 'dead_letter', 'Go unreadable transcript did not dead-letter')
+    require('conv-structure' not in unreadable['go']['provider_calls'], 'Go sent unreadable ciphertext to note generation')
+
+
 def main():
     parity_path, gaps_path = map(Path, sys.argv[1:])
     parity = json.loads(parity_path.read_text())
@@ -109,18 +146,9 @@ def main():
     failed = [case for case in gaps['cases'] if case['errors']]
     require(not failed and gaps['failed_cases'] == 0, [(case['name'], case['errors']) for case in failed])
     require(gaps['unexplained_differences'] > 0, gaps['unexplained_differences'])
-    measured = sum(1 for case in gaps['cases'] for diff in case['differences'] if not diff.get('reason'))
-    require(measured == gaps['unexplained_differences'], 'per-commit unexplained-difference count is inconsistent')
+    verify_unexplained_count(gaps)
     by_name = {case['name']: case for case in gaps['cases']}
-    erase = by_name['erase-removes-owner-and-jobs']
-    erase_evidence = erase['go_evidence']['erasure']
-    require(erase_evidence['user_document_absent'] is True, 'Go erasure left the owner document')
-    require(erase_evidence['jobs_for_uid'] == erase_evidence['tenants_for_uid'] == 0, 'Go erasure left database rows')
-    require(erase['go']['conversation'] is None, 'Go erasure replay retained a conversation row')
-    unreadable = by_name['unreadable-ciphertext-dead-letters']
-    require(unreadable['go_evidence']['job']['reason'] == 'transcript_unreadable', 'Go did not preserve the typed decrypt error')
-    require(unreadable['go']['conversation']['finalization_status'] == 'dead_letter', 'Go unreadable transcript did not dead-letter')
-    require('conv-structure' not in unreadable['go']['provider_calls'], 'Go sent unreadable ciphertext to note generation')
+    verify_departures(gaps)
     missing_worker = by_name['worker-missing-row-fence']
     require(missing_worker['go_evidence']['job']['outcome'] == 'fenced', 'Go worker did not fence the deleted row')
     require('conv-structure' not in missing_worker['go']['provider_calls'], 'Go worker called the model after losing its row')
@@ -256,5 +284,40 @@ def main():
             require(by_name[name][side]['status'] == 'completed', (name, side, by_name[name][side]['status']))
 
 
+def write_value_free_report(report, path):
+    for case in report['cases']:
+        case.pop('python', None)
+        case.pop('go', None)
+    encoded = json.dumps(report, ensure_ascii=True, allow_nan=False, indent=2) + '\n'
+    flags = os.O_WRONLY | os.O_CREAT | os.O_TRUNC
+    descriptor = os.open(path, flags, 0o600)
+    try:
+        os.fchmod(descriptor, 0o600)
+        with os.fdopen(descriptor, 'w', encoding='utf-8') as output:
+            descriptor = -1
+            output.write(encoded)
+    finally:
+        if descriptor >= 0:
+            os.close(descriptor)
+
+
+def verify_task_reports(output_dir, parity_path, gaps_path):
+    parity = json.loads(Path(parity_path).read_text())
+    gaps = json.loads(Path(gaps_path).read_text())
+    verify_corpus_map(parity, gaps)
+    for report in (parity, gaps):
+        failed = [case for case in report['cases'] if case['errors']]
+        require(not failed and report['failed_cases'] == 0, [(case['name'], case['errors']) for case in failed])
+        verify_unexplained_count(report)
+    verify_departures(gaps)
+    destination = Path(output_dir)
+    destination.mkdir(mode=0o700, parents=True, exist_ok=True)
+    write_value_free_report(parity, destination / 'parity.json')
+    write_value_free_report(gaps, destination / 'gaps.json')
+
+
 if __name__ == '__main__':
-    main()
+    if len(sys.argv) == 5 and sys.argv[1] == '--task-output':
+        verify_task_reports(sys.argv[2], sys.argv[3], sys.argv[4])
+    else:
+        main()

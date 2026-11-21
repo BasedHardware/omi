@@ -35,6 +35,19 @@ def token_estimate(value) -> int:
     return len(_encoding().encode('\n'.join(_content(value))))
 
 
+def embedding_token_estimate(value) -> int:
+    """Count text embeddings with the pinned encoding and token-ID inputs exactly."""
+    if type(value) is int:
+        return 1
+    if isinstance(value, (list, tuple)):
+        if all(type(token) is int for token in value):
+            return len(value)
+        return sum(embedding_token_estimate(item) for item in value)
+    if isinstance(value, (str, dict)):
+        return token_estimate(value)
+    return 0
+
+
 @contextmanager
 def measure(state):
     global _ACTIVE_STATE

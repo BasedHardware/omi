@@ -74,12 +74,49 @@ func TestPrivateCorpusRequiresRedactedReportAndExternalKey(t *testing.T) {
 		key           string
 		includeValues bool
 	}{{key: ""}, {key: key, includeValues: true}} {
-		if err := validateCorpusLocation(t.TempDir(), corpus, option.key, option.includeValues, nil); err == nil {
+		if err := validateCorpusPath(t.TempDir(), corpus, option.key, option.includeValues, "m5-mbp", false); err == nil {
 			t.Fatal("private corpus was allowed without a key or with values")
 		}
 	}
-	if err := validateCorpusLocation(t.TempDir(), corpus, key, false, nil); err != nil {
+	if err := validateCorpusPath(t.TempDir(), corpus, key, false, "m5-mbp", false); err != nil {
 		t.Fatalf("private corpus outside Git was rejected: %v", err)
+	}
+}
+
+func TestGenericCorpusRejectsOwnerManifestOffM5(t *testing.T) {
+	t.Parallel()
+	privateDir := t.TempDir()
+	corpus := filepath.Join(privateDir, "owner-manifest.json")
+	key := filepath.Join(privateDir, "test-key")
+	if err := os.WriteFile(key, []byte("synthetic-placeholder"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	err := validateCorpusPath(t.TempDir(), corpus, key, false, "david-mbp", false)
+	if err == nil || err.Error() != "owner corpora may only be opened on m5-mbp" {
+		t.Fatalf("generic private corpus path policy = %v, want off-m5 refusal", err)
+	}
+}
+
+func TestCIRejectsOwnerBytesAtFixturePathBeforeCorpusLoad(t *testing.T) {
+	t.Setenv("CI", "true")
+	repo := t.TempDir()
+	backend := filepath.Join(repo, "backend")
+	if err := os.MkdirAll(backend, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	fixtures := filepath.Join(repo, "backend-go", "tools", "replay", "corpus")
+	if err := os.MkdirAll(fixtures, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	corpus := filepath.Join(fixtures, "admission-parity.json")
+	ownerBytes := []byte(`{"version":1,"cases":[{"name":"owner-private-transcript"}]}`)
+	if err := os.WriteFile(corpus, ownerBytes, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	outputDir := t.TempDir()
+	_, err := prepareReplay(backend, corpus, filepath.Join(outputDir, "report.json"), "", false)
+	if err == nil || err.Error() != "replay corpus does not match its reviewed synthetic digest" {
+		t.Fatalf("prepareReplay() = %v, want pre-load trusted-fixture digest refusal", err)
 	}
 }
 
@@ -154,7 +191,7 @@ func TestPrivateCorpusIsNeverReadInCI(t *testing.T) {
 	t.Setenv("CI", "true")
 	dir := t.TempDir()
 	err := validateCorpusLocation("/outside/backend", filepath.Join(dir, "corpus.json"), filepath.Join(dir, "key"), false, []byte(`{}`))
-	if err == nil || err.Error() != "CI may not read private replay corpora" {
+	if err == nil || err.Error() != "CI may only read reviewed synthetic replay corpora" {
 		t.Fatalf("validateCorpusLocation() = %v, want private corpus CI refusal", err)
 	}
 }

@@ -5,6 +5,7 @@ from __future__ import annotations
 from contextlib import contextmanager
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
+import os
 from pathlib import Path
 import re
 from selectors import DefaultSelector, EVENT_READ
@@ -18,6 +19,32 @@ from uuid import uuid4
 
 from testing.finalization_replay.corpus import pack
 from testing.finalization_replay.providers import response
+
+
+@contextmanager
+def _isolated_libpq_environment():
+    saved = {name: value for name, value in os.environ.items() if name.startswith('PG')}
+    try:
+        for name in saved:
+            os.environ.pop(name, None)
+        yield
+    finally:
+        os.environ.update(saved)
+
+
+def _connect_loopback(connect, dsn):
+    parsed = urlsplit(dsn)
+    if parsed.hostname != '127.0.0.1' or not parsed.port:
+        raise ValueError('replay database connection must target loopback')
+    with _isolated_libpq_environment():
+        return connect(
+            dsn,
+            autocommit=True,
+            connect_timeout=5,
+            host='127.0.0.1',
+            hostaddr='127.0.0.1',
+            port=parsed.port,
+        )
 
 
 @contextmanager
@@ -37,7 +64,8 @@ def replay_database(dsn):
     ):
         raise ValueError('replay requires a loopback TEST_DATABASE_URL with sslmode=disable')
     database = f'replay_{uuid4().hex}'
-    with connect(dsn, autocommit=True, connect_timeout=5) as connection:
+    connection_context = _connect_loopback(connect, dsn)
+    with connection_context as connection:
         connection.execute(sql.SQL('CREATE DATABASE {}').format(sql.Identifier(database)))
         try:
             yield urlunsplit(parsed._replace(path=f'/{database}'))
@@ -256,7 +284,7 @@ def _admit(proc, url, state, database):
         'reason': job.get('reason'),
         'outcome': job.get('outcome'),
     }
-    with connect(database) as connection, connection.cursor() as cursor:
+    with _connect_loopback(connect, database) as connection, connection.cursor() as cursor:
         cursor.execute('SELECT meta FROM queue_jobs WHERE job_key = %s', (job_id,))
         metadata = cursor.fetchone()
     if metadata is None:
@@ -267,7 +295,7 @@ def _admit(proc, url, state, database):
         status, _ = _request('POST', f'{url}/v1/users/{state.uid}/erase')
         if status != 200:
             raise RuntimeError('Go replay erase was refused')
-        with connect(database) as connection, connection.cursor() as cursor:
+        with _connect_loopback(connect, database) as connection, connection.cursor() as cursor:
             cursor.execute('SELECT count(*) FROM queue_jobs WHERE uid = %s', (state.uid,))
             jobs_for_uid = cursor.fetchone()[0]
             cursor.execute('SELECT count(*) FROM queue_tenants WHERE uid = %s', (state.uid,))
