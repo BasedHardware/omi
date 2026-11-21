@@ -209,9 +209,9 @@ def test_new_finalization_status_needs_a_table_row():
     assert set(ast.literal_eval(declaration.value.slice)) == {
         row.state for row in STATES if row.machine == 'finalization'
     }
-    # These three labels are helper return envelopes, never persisted job
-    # statuses. A fourth literal still needs explicit review and a state row.
-    response_statuses = {'missing', 'identity_mismatch', 'recorded'}
+    # The exact writer inventory tracks these helper responses. Persisted job
+    # statuses are declared separately in the state table above.
+    response_statuses = {'missing', 'identity_mismatch', 'recorded', 'fenced'}
     allowed = {row.state for row in STATES if row.machine in {'conversation', 'finalization'}} | response_statuses
     assert literal_states((BACKEND / 'database/conversation_finalization_jobs.py').read_text(), 'status') <= allowed
 
