@@ -16,4 +16,5 @@ report the total and the fraction labeled `below`. Both methods measure the
 same settled cohort of first-pass automatic conversations containing the
 target scripts. Record the window and both shares, and use the script-aware
 share as the prospective baseline. The metric contains no transcript or
-conversation identifiers.
+conversation identifiers and adds four counter series per replica to the
+backend-sync scrape profile.
