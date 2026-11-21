@@ -1,0 +1,9 @@
+fastapi==0.162.2
+uvicorn[standard]==0.54.0
+pydantic-settings==2.16.2
+httpx==0.28.1
+x402[httpx,evm]==2.27.0
+
+# Testing
+pytest==9.2.0
+pytest-asyncio==1.4.1.post1
