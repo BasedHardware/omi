@@ -29,16 +29,22 @@ spec:
             - name: DATABASE_URL
               valueFrom:
                 secretKeyRef:
-                  name: dev-omi-workerd-runtime
+                  name: {{ printf "%s-omi-workerd-runtime" .Values.environment }}
                   key: DATABASE_URL
             - name: ENCRYPTION_SECRET
               valueFrom:
                 secretKeyRef:
-                  name: dev-omi-workerd-runtime
+                  name: {{ printf "%s-omi-workerd-runtime" .Values.environment }}
                   key: ENCRYPTION_SECRET
-            - {name: FIRESTORE_PROJECT, value: based-hardware-dev}
+            - {name: FIRESTORE_PROJECT, value: {{ include "workerd.project" . | quote }}}
             - {name: WORKERS, value: {{ .Values.workers | quote }}}
             - {name: SHUTDOWN_SECONDS, value: "25"}
+            {{- if .Values.intake.enabled }}
+            - name: WORKER_EPISODE_INTAKE_AUDIENCE
+              value: {{ required "intake.audience is required" (trim .Values.intake.audience) | quote }}
+            - name: WORKER_EPISODE_INTAKE_CALLER
+              value: {{ required "intake.caller is required" (trim .Values.intake.caller) | quote }}
+            {{- end }}
           ports:
             - {name: health, containerPort: 8080}
             - {name: metrics, containerPort: 9090}
@@ -53,5 +59,4 @@ spec:
           livenessProbe:
             httpGet: {path: /health, port: health}
           resources:
-            requests: {cpu: 100m, memory: 64Mi}
-            limits: {memory: 256Mi}
+            {{- toYaml .Values.resources | nindent 12 }}

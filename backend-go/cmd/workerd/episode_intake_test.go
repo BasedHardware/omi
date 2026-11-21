@@ -52,3 +52,50 @@ func TestEpisodeIntakeRequiresConfiguredWorkloadAndForwardsVersion(t *testing.T)
 		t.Fatalf("received %d callbacks", calls)
 	}
 }
+
+func TestEpisodeIntakeHandlerRequiresBothIdentitySettings(t *testing.T) {
+	t.Parallel()
+	runtime := finalizationRuntime{family: &finalization.Service{}}
+	for _, cfg := range []config{
+		{},
+		{episodeIntakeAudience: "fixture-audience"},
+		{episodeIntakeCaller: "sync@fixture.iam.gserviceaccount.com"},
+	} {
+		if runtime.episodeIntakeHandler(cfg) != nil {
+			t.Fatal("incomplete identity configured an intake handler")
+		}
+	}
+}
+
+func TestEpisodeIntakeRejectsInvalidBodySuffix(t *testing.T) {
+	t.Parallel()
+	const body = `{"owner":"owner","conversation":"clip","written":"1970-01-01T00:00:01Z"}`
+	const caller = "sync@fixture.iam.gserviceaccount.com"
+	endpoint := episodeIntakeEndpoint{
+		caller: caller,
+		validate: func(context.Context, string, string) (*idtoken.Payload, error) {
+			return &idtoken.Payload{
+				Issuer: "https://accounts.google.com",
+				Claims: map[string]any{"email": caller, "email_verified": true},
+			}, nil
+		},
+	}
+	for _, test := range []struct {
+		name   string
+		suffix string
+	}{
+		{"trailing JSON value", " {}"},
+		{"oversized whitespace after valid JSON", strings.Repeat(" ", 2049-len(body))},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, episodeIntakePath, strings.NewReader(body+test.suffix))
+			req.Header.Set("Authorization", "Bearer valid")
+			response := httptest.NewRecorder()
+			endpoint.ServeHTTP(response, req)
+			if response.Code != http.StatusBadRequest {
+				t.Fatalf("got %d, want %d", response.Code, http.StatusBadRequest)
+			}
+		})
+	}
+}

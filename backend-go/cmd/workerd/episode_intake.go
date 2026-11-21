@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -23,7 +24,7 @@ type episodeIntakeEndpoint struct {
 }
 
 func (m *finalizationRuntime) episodeIntakeHandler(cfg config) http.Handler {
-	if cfg.episodeIntakeAudience == "" {
+	if cfg.episodeIntakeAudience == "" || cfg.episodeIntakeCaller == "" {
 		return nil
 	}
 	return episodeIntakeEndpoint{
@@ -46,7 +47,8 @@ func (h episodeIntakeEndpoint) ServeHTTP(w http.ResponseWriter, r *http.Request)
 	}
 	d := json.NewDecoder(http.MaxBytesReader(w, r.Body, 2048))
 	d.DisallowUnknownFields()
-	if err := d.Decode(&req); err != nil || !validIntakeID(req.Owner) || !validIntakeID(req.Conversation) || req.Written.IsZero() {
+	if err := d.Decode(&req); err != nil || !errors.Is(d.Decode(new(any)), io.EOF) ||
+		!validIntakeID(req.Owner) || !validIntakeID(req.Conversation) || req.Written.IsZero() {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}

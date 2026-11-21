@@ -15,7 +15,7 @@ import (
 
 const probeTimeout = 2 * time.Second
 
-func healthHandler(stopping <-chan struct{}, ready func(context.Context) error) *http.ServeMux {
+func healthHandler(stopping <-chan struct{}, ready func(context.Context) error, intake http.Handler) *http.ServeMux {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -34,6 +34,9 @@ func healthHandler(stopping <-chan struct{}, ready func(context.Context) error) 
 			w.WriteHeader(http.StatusOK)
 		}
 	})
+	if intake != nil {
+		mux.Handle("POST "+episodeIntakePath, intake)
+	}
 	return mux
 }
 
@@ -57,10 +60,7 @@ func serve(ctx context.Context, cfg config, store *queue.Store, workers *queue.W
 	if maintenance != nil {
 		maintenanceGroup.Go(func() { maintenance(lifetime) })
 	}
-	mux := healthHandler(lifetime.Done(), store.Ready)
-	if intake != nil {
-		mux.Handle("POST "+episodeIntakePath, intake)
-	}
+	mux := healthHandler(lifetime.Done(), store.Ready, intake)
 	health := newServer(cfg.healthPort, mux)
 	metrics := newServer(cfg.metricsPort, metricsHandler(registry))
 	ended := make(chan error, 2+len(extra))

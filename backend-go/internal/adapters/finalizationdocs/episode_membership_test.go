@@ -3,8 +3,12 @@ package finalizationdocs
 import (
 	"encoding/json"
 	"errors"
+	"slices"
 	"testing"
 	"time"
+
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	"github.com/BasedHardware/omi/backend-go/internal/finalization"
 	"github.com/BasedHardware/omi/backend-go/internal/platform/crypt"
@@ -93,5 +97,70 @@ func TestF26IntakeThenAbsorbRepointsMembershipAndReceiptsOnce(t *testing.T) {
 		if len(ids) != 1 || ids[0] != ns+"speech" {
 			t.Fatal("receipt namespaces did not move exactly once")
 		}
+	}
+}
+
+func TestRepairEpisodeIntakeRequiresCurrentReceiptAndExistingMembership(t *testing.T) {
+	t.Parallel()
+	store, bench, req := setup(t)
+	ref := req.Ref
+	root := "users/" + ref.Owner + "/"
+	episodePath := root + "episodes/covering"
+	linkPath := root + "episode_links/" + ref.ID
+	now := store.Clock.Now()
+	put(t, bench, episodePath, document{"status": "live", "state_version": int64(7),
+		"started_at": now.Add(-time.Minute), "conversation_ids": []string{ref.ID}})
+	put(t, bench, root+"episode_links/current", document{"episode_id": "covering"})
+	row := document{"status": "completed", "started_at": now, "finished_at": now}
+	snapshotTime := func(path string) time.Time {
+		t.Helper()
+		snapshot, err := bench.Raw.Doc(path).Get(t.Context())
+		if err != nil {
+			t.Fatal(err)
+		}
+		return snapshot.UpdateTime
+	}
+
+	h := queuetest.Open(t, queuetest.Policy(), finalization.Declaration(Causes()...))
+	service := finalization.Service{Queue: h.Store, EpisodeIntake: store}
+	put(t, bench, conversationPath, row)
+	unbound := snapshotTime(conversationPath)
+	episodeVersion := snapshotTime(episodePath)
+	if id, err := service.RepairEpisodeIntake(t.Context(), ref, unbound); err != nil || id != "" {
+		t.Fatalf("unbound intake must do nothing: %q %v", id, err)
+	}
+	if !snapshotTime(conversationPath).Equal(unbound) || !snapshotTime(episodePath).Equal(episodeVersion) {
+		t.Fatal("unbound intake modified conversation or covering episode")
+	}
+	// Python selected the episode, but the reverse link is missing.
+	row["episode_id"] = "covering"
+	put(t, bench, conversationPath, row)
+	receipt := snapshotTime(conversationPath)
+	if _, err := service.RepairEpisodeIntake(t.Context(), ref, receipt.Add(-time.Second)); !errors.Is(err, finalization.ErrStale) {
+		t.Fatalf("stale repair receipt: %v", err)
+	}
+	if !snapshotTime(conversationPath).Equal(receipt) {
+		t.Fatal("stale repair changed the conversation")
+	}
+	if _, err := bench.Raw.Doc(linkPath).Get(t.Context()); status.Code(err) != codes.NotFound {
+		t.Fatalf("stale repair changed the link: %v", err)
+	}
+	if id, err := service.RepairEpisodeIntake(t.Context(), ref, receipt); err != nil || id != "covering" {
+		t.Fatalf("valid repair: %q %v", id, err)
+	}
+	if bound := read(t, bench, linkPath); bound["episode_id"] != "covering" ||
+		!slices.Contains(field[[]any](bound, "episode_ids"), any("covering")) {
+		t.Fatalf("valid repair did not bind episode: %v", bound)
+	}
+	if read(t, bench, conversationPath)["episode_id"] != "covering" {
+		t.Fatal("valid repair did not bind conversation")
+	}
+	boundConversation, boundLink := snapshotTime(conversationPath), snapshotTime(linkPath)
+	if id, err := service.RepairEpisodeIntake(t.Context(), ref, receipt); err != nil || id != "covering" {
+		t.Fatalf("bound replay: %q %v", id, err)
+	}
+	if !snapshotTime(conversationPath).Equal(boundConversation) || !snapshotTime(linkPath).Equal(boundLink) ||
+		!snapshotTime(episodePath).Equal(episodeVersion) {
+		t.Fatal("bound replay modified conversation, link or episode")
 	}
 }
