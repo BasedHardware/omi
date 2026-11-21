@@ -389,9 +389,9 @@ async def test_private_playback_follows_concurrent_bridge_before_enrichment(foll
         None,
     )
     assert calls == [
-        ('bridge', 'head', {}),
+        ('bridge', 'head', {'require_python_owner': True}),
         ('playback', 'head'),
-        ('bridge', 'head', {'audio_source_id': 'head'}),
+        ('bridge', 'head', {'audio_source_id': 'head', 'require_python_owner': True}),
         ('enrichment', 'survivor'),
     ]
 

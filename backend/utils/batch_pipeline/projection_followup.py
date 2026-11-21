@@ -753,6 +753,7 @@ class ProjectionFollowups:
                         finish_sync_bridges,
                         binding.owner_id,
                         canonical,
+                        require_python_owner=True,
                         **({'silent': True} if receipt.get('silent_redrive') else {}),
                     )
                 if receipt.get('audio_required') and not binding.native_record:
@@ -783,6 +784,7 @@ class ProjectionFollowups:
                             binding.owner_id,
                             canonical,
                             audio_source_id=canonical,
+                            require_python_owner=True,
                             **({'silent': True} if receipt.get('silent_redrive') else {}),
                         )
                 canonicals.append(canonical)
