@@ -3570,6 +3570,25 @@ final class MobileDeviceHealthDailyRingRead extends RegisteredEvent {
   Map<String, Object> get properties => {"disconnects_during_ring_read": disconnectsDuringRingRead, "disconnects_with_ring_read_state": disconnectsWithRingReadState, "ring_read_disconnect_rssi_below_minus90": rssiBelowMinus90, "ring_read_disconnect_rssi_minus90_to_minus80": rssiMinus90ToMinus80, "ring_read_disconnect_rssi_minus80_to_minus60": rssiMinus80ToMinus60, "ring_read_disconnect_rssi_at_least_minus60": rssiAtLeastMinus60, "ring_read_disconnect_rssi_unknown": rssiUnknown};
 }
 
+enum WalStopDrainResult {
+  drained("drained"),
+  pending("pending"),
+  failed("failed"),
+  superseded("superseded");
+  const WalStopDrainResult(this.wireName);
+  final String wireName;
+}
+
+final class WalStopDrain extends RegisteredEvent {
+  const WalStopDrain({required this.lateFramesIndexed, required this.result});
+  final int lateFramesIndexed;
+  final WalStopDrainResult result;
+  @override
+  String get wireName => "WAL Stop Drain";
+  @override
+  Map<String, Object> get properties => {"late_frames_indexed": lateFramesIndexed, "result": result.wireName};
+}
+
 enum OrphanAudioRecoveryResult {
   completed("completed"),
   admissionPending("admission_pending"),
