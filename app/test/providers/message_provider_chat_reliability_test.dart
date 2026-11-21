@@ -97,6 +97,66 @@ void main() {
     expect(provider.messages.any((m) => m.id == 'late-history'), isFalse);
   });
 
+  test('a local message added while history is loading is preserved without duplication when the load completes', () async {
+    final pending = Completer<List<ServerMessage>>();
+    final greeting = ServerMessage(
+      'greeting',
+      DateTime.now().subtract(const Duration(minutes: 1)),
+      'Hey there!',
+      MessageSender.ai,
+      MessageType.text,
+      null,
+      false,
+      [],
+      [],
+      [],
+    );
+    final provider = MessageProvider(sessionsApi: _FakeSessions())
+      ..legacyMessagesLoader = ({appId, dropdownSelected = false}) => pending.future;
+    addTearDown(provider.dispose);
+
+    final refresh = provider.refreshMessages();
+    await Future.microtask(() {});
+    provider.addMessageLocally('hello while loading');
+
+    pending.complete([greeting]);
+    await refresh;
+
+    expect(provider.messages.map((m) => m.text).toList(), ['Hey there!', 'hello while loading']);
+  });
+
+  test('a streamed reply replaces its placeholder by identity even when messages are reordered mid-stream', () async {
+    final gate = Completer<void>();
+    final provider = MessageProvider(sessionsApi: _FakeSessions())
+      ..replyStreamOverride = (text, {appId, filesId, context, chatSessionId}) async* {
+        yield ServerMessageChunk('reply', 'partial ', MessageChunkType.data);
+        await gate.future;
+        yield ServerMessageChunk(
+          'reply',
+          '',
+          MessageChunkType.done,
+          message: _message('ai-final', sender: MessageSender.ai),
+        );
+      };
+    addTearDown(provider.dispose);
+
+    provider.addMessageLocally('question');
+    final sendFuture = provider.sendMessageStreamToServer('question');
+    await Future.microtask(() {});
+
+    // Insert an earlier message at index 0 while the stream is paused so the placeholder moves.
+    provider.messages.insert(0, _message('earlier-row', sender: MessageSender.ai));
+    gate.complete();
+    await sendFuture;
+
+    expect(provider.messages.map((m) => m.id).toList(), [
+      'earlier-row',
+      provider.messages[1].id,
+      'ai-final',
+    ]);
+    expect(provider.messages[1].text, 'question');
+  });
+
   group('classified reply failures', () {
     for (final kind in [
       ChatStreamFailureClass.offline,
