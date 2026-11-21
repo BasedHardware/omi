@@ -69,6 +69,8 @@ def update_run(
 
     `expect` refuses the write unless the run is in one of those states, so a stopped run (undoing,
     undone, blocked) cannot be advanced by a late task.
+    `expected_drain_seq` also requires the partition to still be in notes at the observed sequence.
+    Use it for every notes continuation and commit, even when the scan cursor did not move.
     """
     client = firestore_client or get_firestore_client()
     ref = run_ref(client, uid, run_id)

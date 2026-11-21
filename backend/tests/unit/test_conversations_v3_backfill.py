@@ -5,6 +5,7 @@ derive pass and require identical windows, Home decisions and notes inputs; the 
 allowed are the backfill stamps and the notes marker the backfill drains itself.
 """
 
+import asyncio
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
@@ -720,6 +721,56 @@ def test_late_continuation_cannot_replace_a_newer_cursor(strict):
         is None
     )
     assert strict.rows[path]['partitions'] == [part]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('stale_remaining', [1, 0], ids=['deadline-before-first-page', 'stale-completion'])
+async def test_stale_drain_cannot_overwrite_newer_progress(direct, strict, monkeypatch, stale_remaining):
+    uid = 'synthetic'
+    path = ('users', uid, runs.COLLECTION, RUN)
+    strict.rows[path] = {'status': 'running', 'partitions': [{'status': 'notes'}, {'status': 'pending'}]}
+    monkeypatch.setattr(runs, 'get_firestore_client', lambda: strict)
+    enqueue = Mock()
+    monkeypatch.setattr(backfill, 'enqueue_step', enqueue)
+    stale_started, finish_stale = asyncio.Event(), asyncio.Event()
+    active_started, finish_active = asyncio.Event(), asyncio.Event()
+    pending = {'processed': 0, 'failed': 0, 'remaining': 1, 'scan_pending': True}
+
+    async def stale_drain(uid, **kwargs):
+        stale_started.set()
+        await finish_stale.wait()
+        return {**pending, 'remaining': stale_remaining, 'scan_pending': bool(stale_remaining)}
+
+    async def active_drain(uid, **kwargs):
+        active_started.set()
+        await finish_active.wait()
+        return {**pending, 'scan_after': 'third'}
+
+    drain = AsyncMock(side_effect=[pending, {**pending, 'scan_after': 'second'}])
+    results = iter([stale_drain, drain, drain, active_drain])
+
+    async def interleaved_drain(uid, **kwargs):
+        return await next(results)(uid, **kwargs)
+
+    monkeypatch.setattr(service, 'drain_backfill', interleaved_drain)
+    stale = asyncio.create_task(backfill.run_step(uid, RUN, 0, 'drain'))
+    await stale_started.wait()
+    await backfill.run_step(uid, RUN, 0, 'drain')
+    await backfill.run_step(uid, RUN, 0, 'drain')
+    active = asyncio.create_task(backfill.run_step(uid, RUN, 0, 'drain'))
+    await active_started.wait()
+    finish_stale.set()
+    stale_result = await stale
+    after_stale = deepcopy(strict.rows[path]['partitions'][0])
+    finish_active.set()
+    active_result = await active
+
+    assert stale_result['outcome'] == 'stopped'
+    assert (after_stale['status'], after_stale['drain_seq'], after_stale['notes_scan_after']) == ('notes', 2, 'second')
+    assert active_result['outcome'] == 'draining'
+    final = strict.rows[path]['partitions'][0]
+    assert (final['status'], final['drain_seq'], final['notes_scan_after']) == ('notes', 3, 'third')
+    assert [call.args[2:5] for call in enqueue.call_args_list] == [(0, 'drain', seq) for seq in (1, 2, 3)]
 
 
 @pytest.fixture
