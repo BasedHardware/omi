@@ -3,7 +3,9 @@
 
 import ast
 import copy
+from contextlib import redirect_stderr
 import hashlib
+import io
 import re
 import json
 import os
@@ -623,18 +625,44 @@ class ReleaseTests(unittest.TestCase):
 
     def test_cv1_publish_requires_minimum_firmware_for_update_offer(self):
         workflow = (g0.REPO / g0.WORKFLOW).read_text()
-        blank = g0.replay_offer(workflow, g0.REPO, self.root / 'blank', '')
+        blank = g0.replay_offer(workflow, g0.REPO, self.root / 'blank', '', version='3.0.25')
         self.assertEqual(blank['exit_code'], 1)
         self.assertTrue(blank['required_minimum_error'])
         self.assertFalse(blank['body_written'])
         self.assertFalse(blank['output_written'])
 
         # The stock app requires the resulting min_version to show a newer release.
-        explicit = g0.replay_offer(workflow, g0.REPO, self.root / 'explicit', '3.0.6')
+        explicit = g0.replay_offer(workflow, g0.REPO, self.root / 'explicit', '3.0.6', version='3.0.25')
         self.assertEqual(explicit['exit_code'], 0)
-        self.assertTrue(explicit['version_emitted'])
+        self.assertEqual(explicit['release_versions'], ['3.0.25'])
         self.assertTrue(explicit['output_written'])
         self.assertEqual(explicit['minimums'], ['3.0.6'])
+
+    def test_g0_cli_distinguishes_usage_error_from_written_blocked_receipt(self):
+        with patch.object(sys, 'argv', ['cv1_g0_report.py']), redirect_stderr(io.StringIO()):
+            with self.assertRaises(SystemExit) as error:
+                g0.main()
+        self.assertEqual(error.exception.code, 2)
+
+        repo = self.root / 'repo'
+        conf = repo / 'omi/firmware/omi/omi.conf'
+        conf.parent.mkdir(parents=True)
+        conf.write_text('CONFIG_BT_DIS_FW_REV_STR="3.0.25"\n')
+        output = self.root / 'g0.json'
+        passed = {'baseline_reproduced': True, 'candidate_passed': True}
+        with (
+            patch.object(g0, 'REPO', repo),
+            patch.object(g0, 'git', side_effect=['a' * 40, '']),
+            patch.object(g0, 'host_checks', return_value={'ble-retry-churn': passed, 'recording-polls-stalled-drain': passed}),
+            patch.object(g0, 'offer_check', return_value=passed) as offer,
+            patch.object(sys, 'argv', ['cv1_g0_report.py', '--output', str(output)]),
+        ):
+            self.assertEqual(g0.main(), 3)
+        self.assertEqual(offer.call_args.args[1], '3.0.25')
+        report = json.loads(output.read_text())
+        self.assertEqual(report['firmware_version'], '3.0.25')
+        self.assertEqual(report['software_verdict'], 'pass')
+        self.assertEqual(report['g0_verdict'], 'blocked')
 
     def test_g0_simulator_requires_exact_clean_source_and_40_seeds(self):
         path = self.root / 'g0-simulator.json'
@@ -652,6 +680,12 @@ class ReleaseTests(unittest.TestCase):
             path.write_text(json.dumps(report))
             with self.assertRaisesRegex(ValueError, 'at least 40'):
                 g0.simulator_receipt(path, sha, False, version)
+            for seeds in (40.5, 40.0, '40', True, False):
+                with self.subTest(seeds=seeds):
+                    report['fuzz']['seeds'] = seeds
+                    path.write_text(json.dumps(report))
+                    with self.assertRaisesRegex(ValueError, 'seed count must be an integer'):
+                        g0.simulator_receipt(path, sha, False, version)
 
     def test_body_writes_policy_without_affecting_other_families(self):
         body = self.root / 'body.md'

@@ -15,6 +15,7 @@ from cv1_release import SIM_SCENARIOS, sim_catalog, validate_sim_report
 
 REPO = Path(__file__).resolve().parents[4]
 BASELINE_SHA = '2fd0a9d94f238b6c338d6c67aec1e77f783159d9'  # Omi_CV1_v3.0.24
+BASELINE_VERSION = '3.0.24'
 WORKFLOW = '.github/workflows/firmware_release.yml'
 BODY_SCRIPT = 'omi/firmware/scripts/ci/make-release-body.sh'
 HOST_RUNNER = 'omi/firmware/omi/tests/run_host_regressions.py'
@@ -24,7 +25,7 @@ def git(*args):
     return subprocess.check_output(['git', '-C', REPO, *args], text=True, timeout=20)
 
 
-def replay_offer(workflow, root, temp, minimum):
+def replay_offer(workflow, root, temp, minimum, *, version):
     """Execute only the checked-in release-body step with local inputs."""
     step = workflow.split('      - name: Generate release body\n', 1)[1].split('\n      - name:', 1)[0]
     command = textwrap.dedent(step.split('        run: |\n', 1)[1])
@@ -33,8 +34,8 @@ def replay_offer(workflow, root, temp, minimum):
         PATH=os.environ['PATH'],
         RUNNER_TEMP=str(temp),
         GITHUB_OUTPUT=str(temp / 'github-output'),
-        TITLE='Omi CV1 Firmware v3.0.24',
-        VER='3.0.24',
+        TITLE=f'Omi CV1 Firmware v{version}',
+        VER=version,
         MIN_FW=minimum,
     )
     result = subprocess.run(['bash', '-e', '-c', command], cwd=root, env=env, capture_output=True, text=True, timeout=10)
@@ -43,29 +44,29 @@ def replay_offer(workflow, root, temp, minimum):
     return {
         'exit_code': result.returncode,
         'body_written': body.exists(),
-        'version_emitted': 'release_firmware_version:3.0.24' in metadata,
+        'release_versions': [line.partition(':')[2] for line in metadata if line.startswith('release_firmware_version:')],
         'minimums': [line.partition(':')[2] for line in metadata if line.startswith('minimum_firmware_required:')],
         'output_written': (temp / 'github-output').exists(),
         'required_minimum_error': 'minimum_firmware_required is required' in result.stdout + result.stderr,
     }
 
 
-def offer_check(temp):
+def offer_check(temp, candidate_version):
     root = temp / 'public-source'
     script = root / BODY_SCRIPT
     script.parent.mkdir(parents=True)
     script.write_text(git('show', f'{BASELINE_SHA}:{BODY_SCRIPT}'))
-    baseline = replay_offer(git('show', f'{BASELINE_SHA}:{WORKFLOW}'), root, temp / 'public', '')
+    baseline = replay_offer(git('show', f'{BASELINE_SHA}:{WORKFLOW}'), root, temp / 'public', '', version=BASELINE_VERSION)
     workflow = (REPO / WORKFLOW).read_text()
-    blank = replay_offer(workflow, REPO, temp / 'candidate-blank', '')
-    supplied = replay_offer(workflow, REPO, temp / 'candidate-supplied', '3.0.6')
+    blank = replay_offer(workflow, REPO, temp / 'candidate-blank', '', version=candidate_version)
+    supplied = replay_offer(workflow, REPO, temp / 'candidate-supplied', '3.0.6', version=candidate_version)
     return {
         'evidence': 'offline release workflow replay',
-        'baseline_reproduced': baseline['exit_code'] == 0 and baseline['version_emitted']
+        'baseline_reproduced': baseline['exit_code'] == 0 and baseline['release_versions'] == [BASELINE_VERSION]
         and baseline['output_written'] and not baseline['minimums'],
         'candidate_passed': blank['exit_code'] == 1 and blank['required_minimum_error']
         and not blank['body_written'] and not blank['output_written']
-        and supplied['exit_code'] == 0 and supplied['version_emitted']
+        and supplied['exit_code'] == 0 and supplied['release_versions'] == [candidate_version]
         and supplied['output_written'] and supplied['minimums'] == ['3.0.6'],
         'baseline': baseline,
         'candidate': {'blank_minimum': blank, 'explicit_minimum': supplied},
@@ -112,19 +113,26 @@ def simulator_receipt(path, sha, dirty, version):
         raise ValueError('Simulator receipt requires a clean firmware and release workflow checkout')
     raw = path.read_bytes()
     report = json.loads(raw)
+    fuzz = report.get('fuzz') if isinstance(report, dict) else None
+    seeds = fuzz.get('seeds') if isinstance(fuzz, dict) else None
+    if type(seeds) is not int:
+        raise ValueError('Simulator fuzz seed count must be an integer')
     validate_sim_report(report, sha, version, sim_catalog(REPO / SIM_SCENARIOS))
-    if report['fuzz']['seeds'] < 40:
+    if seeds < 40:
         raise ValueError('G0 requires at least 40 simulator fuzz seeds')
     return {
         'verdict': 'pass',
         'sha256': hashlib.sha256(raw).hexdigest(),
         'scenarios': report['counts']['passed'],
-        'fuzz_seeds': report['fuzz']['seeds'],
+        'fuzz_seeds': seeds,
     }
 
 
 def main():
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(
+        description=__doc__,
+        epilog='Exit 1: check failed. Exit 2: usage error. Exit 3: software checks passed and G0 remains blocked.',
+    )
     parser.add_argument('--output', required=True, type=Path, help='new JSON receipt path')
     parser.add_argument('--sim-report', type=Path, help='optional full simulator receipt for this exact clean SHA')
     args = parser.parse_args()
@@ -151,7 +159,7 @@ def main():
     with args.output.open('x', encoding='utf-8') as output, tempfile.TemporaryDirectory(prefix='cv1-g0-') as tmp:
         for name, check in (
             ('host probes', lambda: host_checks(Path(tmp))),
-            ('workflow replay', lambda: {'missing-update-offer': offer_check(Path(tmp))}),
+            ('workflow replay', lambda: {'missing-update-offer': offer_check(Path(tmp), version)}),
         ):
             try:
                 report['checks'].update(check())
@@ -167,7 +175,7 @@ def main():
             report['errors'].append(f'simulator receipt: {error}')
         json.dump(report, output, indent=2)
         output.write('\n')
-    return 2 if software_ok and not report['errors'] else 1
+    return 3 if software_ok and not report['errors'] else 1
 
 
 if __name__ == '__main__':
