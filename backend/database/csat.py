@@ -100,9 +100,10 @@ def normalize_config(raw: Dict[str, Any] | None) -> Dict[str, Any]:
     }
 
 
-def _fetch_config() -> Dict[str, Any]:
+def _fetch_config(firestore_client: Any = None) -> Dict[str, Any]:
+    client = firestore_client if firestore_client is not None else get_firestore_client()
     try:
-        doc = get_firestore_client().collection(CONFIG_COLLECTION).document(CONFIG_DOC).get()
+        doc = client.collection(CONFIG_COLLECTION).document(CONFIG_DOC).get()
         if not getattr(doc, 'exists', False):
             return dict(DEFAULT_CONFIG)
         raw: object = doc.to_dict()
@@ -112,10 +113,12 @@ def _fetch_config() -> Dict[str, Any]:
         return dict(DEFAULT_CONFIG)
 
 
-def get_product_config() -> Dict[str, Any]:
+def get_product_config(firestore_client: Any = None) -> Dict[str, Any]:
     """Return the product CSAT config, normalized, cached for 60s."""
     try:
-        fetched = get_memory_cache().get_or_fetch(_CACHE_KEY, _fetch_config, ttl=_CACHE_TTL_SECONDS)
+        fetched = get_memory_cache().get_or_fetch(
+            _CACHE_KEY, lambda: _fetch_config(firestore_client=firestore_client), ttl=_CACHE_TTL_SECONDS
+        )
         raw = cast(Dict[str, Any], fetched) if isinstance(fetched, dict) else dict(DEFAULT_CONFIG)
         return normalize_config(raw)
     except Exception as e:
@@ -131,27 +134,33 @@ def submit_rating(
     score: int,
     comment: str,
     revision: int,
+    firestore_client: Any = None,
 ) -> Tuple[str, bool]:
     """Create the user's one rating doc for the platform.
 
     The comment is dropped server-side when the score is above the current
-    `comment_max_score` (the client may still send one — the server wins).
+    `comment_max_score` (the client may still send one - the server wins).
     Returns `(doc_id, created)`; `created=False` means a rating already
     existed and was left untouched.
     """
-    config = get_product_config()
+    config = get_product_config(firestore_client=firestore_client)
     effective_comment = comment if score <= config['comment_max_score'] else ''
-    doc_id = f'{platform}_{uid}'
+    clean_platform = (platform or '').strip()
+    clean_app_version = (app_version or '').strip()[:MAX_APP_VERSION_LENGTH]
+    clean_comment = (effective_comment or '').strip()[:MAX_COMMENT_LENGTH]
+
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    doc_id = f'{clean_platform}_{uid}'
     payload: Dict[str, Any] = {
         'uid': uid,
-        'platform': platform,
-        'app_version': app_version[:MAX_APP_VERSION_LENGTH],
+        'platform': clean_platform,
+        'app_version': clean_app_version,
         'score': score,
-        'comment': effective_comment,
+        'comment': clean_comment,
         'revision': max(0, revision),
         'created_at': int(time.time()),
     }
-    ref = get_firestore_client().collection(RATINGS_COLLECTION).document(doc_id)
+    ref = client.collection(RATINGS_COLLECTION).document(doc_id)
     try:
         ref.create(payload)
     except (AlreadyExists, Conflict):
