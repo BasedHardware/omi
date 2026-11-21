@@ -391,3 +391,37 @@ def test_go_retraction_fences_writes_after_initial_validation(store, monkeypatch
     assert not worker.retract_go_merge_source(job_id, 1, 1, 0)
     assert 'test_retracted' not in row(store, 'a')
     assert 'go_cleanup_receipts' not in jobrow(store, admitted)
+
+
+def test_go_retraction_with_typesense_failure_does_not_receipt(store, monkeypatch, go_retraction_ports):
+    from unittest.mock import Mock
+
+    from database import action_items, space_store
+    from utils.conversations import typesense_index
+
+    sync_jobs, access, merge, worker = go_retraction_ports
+    client, owner = store
+    admitted = admit(store)
+    job_id, target = admitted['job_id'], admitted['merge_target_id']
+    assert jobs.claim(job_id, firestore_client=client)
+    jobrow(store, admitted).update(phase='source_cleanup', go_cleanup_epoch=1)
+    client.rows[('users', owner, 'conversations', target)] = {'status': 'completed'}
+    row(store, 'a')['transcript_corrections_moved_to'] = target
+    monkeypatch.setattr(jobs, 'client_for', lambda _: client)
+    monkeypatch.setattr(access, 'should_skip_background_account_mutation', lambda _: False)
+    monkeypatch.setattr(sync_jobs, 'try_acquire_job_run_lock', lambda _: 'lock')
+    monkeypatch.setattr(sync_jobs, 'release_job_run_lock', lambda *_: None)
+    monkeypatch.setattr(merge, 'retraction_can_be_skipped', lambda *_args, **_kwargs: True)
+    monkeypatch.setattr(action_items, 'get_action_items_by_conversation', lambda *_: [])
+    monkeypatch.setattr(merge, 'firestore_db', client)
+    monkeypatch.setattr(space_store.FirestoreSpaceStore, 'run', lambda *_: None)
+    monkeypatch.setattr(merge, 'delete_vector', lambda *_: None)
+    monkeypatch.setattr(typesense_index, 'typesense_configured', lambda: True)
+    delete_search = Mock(return_value=False)
+    monkeypatch.setattr(typesense_index, 'delete_conversation_index_doc', delete_search)
+
+    with pytest.raises(RuntimeError, match='search cleanup incomplete'):
+        worker.retract_go_merge_source(job_id, 1, 1, 0)
+    delete_search.assert_called_once_with(owner, 'a')
+    assert 'go_cleanup_receipts' not in jobrow(store, admitted)
+    assert row(store, 'a')['merge_job_id'] == job_id

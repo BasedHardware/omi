@@ -1094,6 +1094,9 @@ def _delete_conversation_and_related_data(
         # it on the deletion data message (#5085), so the merge has to send one per
         # open dated task, like the conversation delete path does.
         source_items = action_items_db.get_action_items_by_conversation(uid, conversation_id)
+        # Keep task IDs available for a retry if the vector provider fails.
+        if retain_capture and source_items:
+            delete_action_item_vectors_batch(uid, [item['id'] for item in source_items])
         if write_guard is None:
             action_items_db.delete_action_items_for_conversation(uid, conversation_id)
         else:
@@ -1117,7 +1120,7 @@ def _delete_conversation_and_related_data(
         # find_similar_action_items feeds the extraction prompt so the LLM can suppress duplicate
         # tasks, and a deleted task's vector makes a real new task look like a duplicate.
         try:
-            if source_items:
+            if source_items and not retain_capture:
                 delete_action_item_vectors_batch(uid, [item['id'] for item in source_items])
         except Exception as e:
             logger.error(f"Error deleting task vectors for {conversation_id}: {e}")
@@ -1127,7 +1130,7 @@ def _delete_conversation_and_related_data(
         # in-flight worker may still be uploading to that immutable source ID.
         # Propagate errors so the durable ancestry can replay cleanup on retry.
         delete_vector(uid, conversation_id)
-        conversations_db._delete_conversation_search_index(uid, conversation_id)
+        conversations_db._delete_conversation_search_index(uid, conversation_id, strict=True)
         return
 
     try:
