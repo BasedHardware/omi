@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart' show CustomSemanticsAction;
 
 import 'package:provider/provider.dart';
 
@@ -122,6 +123,8 @@ class NeedsAttentionSection extends StatelessWidget {
                     if (index > 0) Divider(height: 1, thickness: 1, indent: 64, color: OmiColors.surface2),
                     _AttentionRow(
                       key: ValueKey('activity_attention_${item.id}'),
+                      dismissKey: ValueKey('activity_attention_dismiss_${item.id}'),
+                      onDismiss: () => store.dismiss(item),
                       title: item.title ??
                           (item.notesOnly || item.kind == 'conversation_summary_failed'
                               ? l.attentionSummaryFailed
@@ -331,6 +334,8 @@ class _AttentionRow extends StatelessWidget {
     required this.onRetry,
     required this.onTap,
     this.retryLabel,
+    this.onDismiss,
+    this.dismissKey,
   });
 
   final String title;
@@ -340,8 +345,43 @@ class _AttentionRow extends StatelessWidget {
   final VoidCallback? onTap;
   final String? retryLabel;
 
+  /// Server attention rows only: swipe left (or the VoiceOver action) clears the row for good.
+  final VoidCallback? onDismiss;
+  final Key? dismissKey;
+
   @override
   Widget build(BuildContext context) {
+    final row = _row(context);
+    if (onDismiss == null || busy) return row;
+    final label = context.l10n.dismiss;
+    return Semantics(
+      customSemanticsActions: {CustomSemanticsAction(label: label): onDismiss!},
+      child: Dismissible(
+        key: dismissKey ?? UniqueKey(),
+        direction: DismissDirection.endToStart,
+        onDismissed: (_) {
+          OmiHaptics.medium();
+          onDismiss!();
+        },
+        background: Container(
+          color: OmiColors.surface3,
+          padding: const EdgeInsetsDirectional.only(end: 20),
+          alignment: AlignmentDirectional.centerEnd,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              Text(label, style: OmiType.subhead.copyWith(fontWeight: FontWeight.w600)),
+              const SizedBox(width: 10),
+              ExcludeSemantics(child: Icon(Icons.close_rounded, color: OmiColors.textPrimary)),
+            ],
+          ),
+        ),
+        child: row,
+      ),
+    );
+  }
+
+  Widget _row(BuildContext context) {
     return InkWell(
       onTap: onTap,
       child: Padding(

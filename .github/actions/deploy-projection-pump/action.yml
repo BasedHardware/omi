@@ -1,0 +1,722 @@
+name: Deploy backend projection pump
+description: >-
+  SCA-3120. Deploy the dedicated backend-projection-pump Cloud Run service from an
+  admitted release SHA whose fat backend image a train or build-only run already
+  published. Manual production, cloud-run-only, singleton selection only; the four
+  backend-stack services are never read for mutation, rendered differently or moved.
+  The service ships dark (both batch loops off in the runtime manifest), internal
+  ingress, no public invoker, fixed 4 instances, CPU always allocated.
+
+inputs:
+  admitted_sha:
+    description: 'Release Eligibility-admitted source SHA'
+    required: true
+  reviewed_control_sha:
+    description: 'Full SHA approved by independent review for the deploy controls'
+    required: true
+  release_disposition:
+    description: 'Release comment UUID and expected revision, source SHA and pinned image for an existing pump'
+    required: false
+    default: ''
+  environment:
+    description: 'GitHub environment name; only prod is accepted'
+    required: true
+  runtime_env:
+    description: 'Backend runtime env slug; only prod is accepted'
+    required: true
+  workload_identity_provider:
+    description: 'WIF provider resource name for the production deployer'
+    required: true
+  workload_identity_service_account:
+    description: 'Production deployer service account for WIF'
+    required: true
+  project_id:
+    description: 'GCP project ID; only based-hardware is accepted'
+    required: true
+  region:
+    description: 'Cloud Run region; only us-central1 is accepted'
+    required: false
+    default: us-central1
+  release_version:
+    description: 'Optional release version label for the deployment summary'
+    required: false
+    default: ''
+
+runs:
+  using: composite
+  steps:
+    - name: Validate projection pump deploy boundary
+      shell: bash
+      env:
+        REVIEWED_CONTROL_SHA: ${{ inputs.reviewed_control_sha }}
+        WORKFLOW_CONTROL_SHA: ${{ github.workflow_sha }}
+      run: |
+        set -euo pipefail
+        [[ "${{ inputs.environment }}" == prod && "${{ inputs.runtime_env }}" == prod &&
+           "${{ inputs.project_id }}" == based-hardware && "${{ inputs.region }}" == us-central1 &&
+           "${{ inputs.admitted_sha }}" =~ ^[0-9a-f]{40}$ ]] || {
+          echo 'backend-projection-pump deploys only to prod based-hardware/us-central1 from an exact admitted SHA.' >&2
+          exit 1
+        }
+        if [[ ! "$REVIEWED_CONTROL_SHA" =~ ^[0-9a-f]{40}$ ||
+              "$REVIEWED_CONTROL_SHA" != "$WORKFLOW_CONTROL_SHA" ||
+              "$WORKFLOW_CONTROL_SHA" != "$GITHUB_SHA" ]]; then
+          echo 'The pump dispatch must run the independently reviewed workflow control SHA.' >&2
+          exit 1
+        fi
+
+    - name: Checkout workflow-owned deploy-control source
+      uses: actions/checkout@v7
+      with:
+        ref: ${{ github.workflow_sha }}
+        path: .workflow-source
+
+    - name: Stage immutable workflow validation source and deploy-control scripts
+      shell: bash
+      env:
+        ADMITTED_SOURCE: ${{ inputs.admitted_sha }}
+        WORKFLOW_CONTROL_SHA: ${{ github.workflow_sha }}
+      run: |
+        set -euo pipefail
+        test "$(git -C .workflow-source rev-parse HEAD)" = "$WORKFLOW_CONTROL_SHA"
+        {
+          echo "admitted_source=$ADMITTED_SOURCE"
+          echo "dispatch_control=$WORKFLOW_CONTROL_SHA"
+          for path in .github/workflows/gcp_backend.yml .github/actions/deploy-projection-pump/action.yml .github backend/scripts backend/deploy; do
+            object="$(git -C .workflow-source rev-parse "HEAD:$path")"
+            printf '%s=%s\n' "$path" "$object"
+          done
+        } > "$RUNNER_TEMP/pump-deploy-control.txt"
+        workflow_source="$RUNNER_TEMP/pump-deploy-workflow-source"
+        control_source="$RUNNER_TEMP/pump-deploy-control-source"
+        rm -rf "$workflow_source" "$control_source"
+        mkdir -p "$workflow_source" "$control_source"
+        cp -a .workflow-source/.github "$workflow_source/.github"
+        cp -a .workflow-source/backend "$control_source/backend"
+        cp -a .workflow-source/.github "$control_source/.github"
+        rm -rf .workflow-source
+
+    - name: Checkout admitted runtime source
+      uses: actions/checkout@v7
+      with:
+        ref: ${{ inputs.admitted_sha }}
+        # Full history: build-only publishes the full-history abbreviation, and a
+        # shallow clone can shorten an ambiguous SHA to a different tag.
+        fetch-depth: 0
+
+    - name: Install immutable workflow validation source and deploy-control scripts
+      shell: bash
+      run: |
+        set -euo pipefail
+        workflow_root="$GITHUB_WORKSPACE/.deploy-workflow-source"
+        control_root="$GITHUB_WORKSPACE/.deploy-control"
+        rm -rf "$workflow_root" "$control_root"
+        mkdir -p "$workflow_root" "$control_root"
+        cp -a "$RUNNER_TEMP/pump-deploy-workflow-source/.github" "$workflow_root/.github"
+        cp -a "$RUNNER_TEMP/pump-deploy-control-source/backend" "$control_root/backend"
+        cp -a "$RUNNER_TEMP/pump-deploy-control-source/.github" "$control_root/.github"
+        rm -rf "$RUNNER_TEMP/pump-deploy-workflow-source" "$RUNNER_TEMP/pump-deploy-control-source"
+        printf 'DEPLOY_CONTROL_SCRIPTS=%s\n' "$control_root/backend/scripts" >> "$GITHUB_ENV"
+        printf 'DEPLOY_WORKFLOW_ROOT=%s\n' "$workflow_root" >> "$GITHUB_ENV"
+        mkdir -p artifacts
+        cp "$RUNNER_TEMP/pump-deploy-control.txt" artifacts/projection-pump-deploy-control.txt
+        {
+          echo '### Projection pump dispatch custody'
+          echo '```text'
+          cat artifacts/projection-pump-deploy-control.txt
+          echo '```'
+        } >> "$GITHUB_STEP_SUMMARY"
+
+    - name: Google Auth (WIF)
+      uses: google-github-actions/auth@v3
+      with:
+        workload_identity_provider: ${{ inputs.workload_identity_provider }}
+        service_account: ${{ inputs.workload_identity_service_account }}
+
+    - name: Set up gcloud
+      uses: google-github-actions/setup-gcloud@v3
+
+    - name: Compute short SHA
+      id: image-tag
+      shell: bash
+      run: |
+        SHORT_SHA="$(git rev-parse --short=7 HEAD)"
+        test "$(git rev-parse HEAD)" = "${{ inputs.admitted_sha }}"
+        echo "short_sha=${SHORT_SHA}" >> "$GITHUB_OUTPUT"
+        echo "revision_suffix=${SHORT_SHA}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" >> "$GITHUB_OUTPUT"
+
+    # The pump never builds or pushes: it ships the fat backend image a train or a
+    # build-only run of this exact release_sha already published, and never moves :latest.
+    - name: Resolve projection pump image
+      id: service-images
+      shell: bash
+      env:
+        SHORT_SHA: ${{ steps.image-tag.outputs.short_sha }}
+      run: |
+        set -euo pipefail
+        python3 "$DEPLOY_CONTROL_SCRIPTS/resolve_service_images.py" \
+          --cloud-run-service backend-projection-pump \
+          --service-images '' \
+          --project "${{ inputs.project_id }}" \
+          --short-sha "$SHORT_SHA" \
+          --admitted-sha "${{ inputs.admitted_sha }}" \
+          --deploy-targets cloud-run-only \
+          --deploy-gateway false \
+          --base-service backend \
+          --github-output "$GITHUB_OUTPUT"
+
+    - name: Require the published admitted backend image
+      id: published-image
+      shell: bash
+      env:
+        IMAGE: ${{ steps.service-images.outputs.backend_projection_pump }}
+      run: |
+        set -euo pipefail
+        # Fail closed: only an existing digest proves the tag; any describe error stops here.
+        digest="$(gcloud container images describe "$IMAGE" --format='value(image_summary.digest)')"
+        [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]] || {
+          echo "ERROR: ${IMAGE} is not published; run a backend train or mode=build-only for this release_sha first." >&2
+          exit 1
+        }
+        # The tag is resolved once, here. Every later step deploys and verifies this
+        # digest, so a tag that moves mid-run cannot put other contents under this release.
+        echo "ref=${IMAGE%:*}@${digest}" >> "$GITHUB_OUTPUT"
+        echo "backend-projection-pump ships ${IMAGE%:*}@${digest} (tag ${IMAGE##*:})"
+
+    # A listing distinguishes a first create from a describe/API failure. For an
+    # existing service, verify what is serving before any deploy or probe mutation.
+    # The one write allowed here pins an existing LATEST route to the disposition's
+    # verified base by name: the same revision keeps serving (SCA-3318).
+    - name: Verify existing projection pump, pinning a LATEST-routed base, before deploy mutations
+      id: pump-service
+      shell: bash
+      env:
+        RELEASE_DISPOSITION: ${{ inputs.release_disposition }}
+      run: |
+        set -euo pipefail
+        count="$(gcloud run services list \
+          --project="${{ inputs.project_id }}" --region="${{ inputs.region }}" \
+          --filter='metadata.name=backend-projection-pump' --format=json \
+          | jq -er '
+              if type != "array" then error("invalid service list")
+              elif length == 0 then 0
+              elif length == 1 and .[0].metadata.name == "backend-projection-pump" then 1
+              else error("unexpected projection pump service listing") end')"
+        case "$count" in
+          0)
+            if [[ -n "$RELEASE_DISPOSITION" ]]; then
+              echo 'The approved inverse is missing. Release must reassess before a first create.' >&2
+              exit 1
+            fi
+            echo 'exists=false' >> "$GITHUB_OUTPUT"
+            ;;
+          1)
+            mkdir -p artifacts
+            # An existing service still routed through LATEST (a first create whose pin never
+            # ran, SCA-3318) is pinned here, inside this prod-train run, to the base the
+            # disposition names, after the same pre-pin verification a first create gets.
+            latest="$(gcloud run services describe backend-projection-pump \
+              --project="${{ inputs.project_id }}" --region="${{ inputs.region }}" --format=json \
+              | jq -er '[.status.traffic[] | select((.percent // 0) > 0)]
+                  | if length == 1 and (.[0].latestRevision // false) then "true" else "false" end')"
+            if [[ "$latest" == true ]]; then
+              # The full four-field disposition (Release comment UUID, base revision, source,
+              # digest) is validated by the verifier before any traffic write.
+              python3 "$DEPLOY_CONTROL_SCRIPTS/verify_projection_pump_inverse.py" \
+                --project="${{ inputs.project_id }}" --region="${{ inputs.region }}" \
+                --disposition="$RELEASE_DISPOSITION" \
+                --before-first-pin | tee artifacts/projection-pump-existing-latest-readback.txt
+              read -r _ base _ <<< "$RELEASE_DISPOSITION"
+              gcloud run services update-traffic backend-projection-pump \
+                --project="${{ inputs.project_id }}" --region="${{ inputs.region }}" \
+                --to-revisions="$base=100" --quiet
+            fi
+            python3 "$DEPLOY_CONTROL_SCRIPTS/verify_projection_pump_inverse.py" \
+              --project="${{ inputs.project_id }}" --region="${{ inputs.region }}" \
+              --disposition="$RELEASE_DISPOSITION" | tee artifacts/projection-pump-existing-dark-readback.txt
+            echo 'exists=true' >> "$GITHUB_OUTPUT"
+            ;;
+          *) exit 1 ;;
+        esac
+
+    - name: Install Python deps for deploy scripts
+      shell: bash
+      run: python3 -m pip install -q pyyaml
+
+    - name: Preflight required projection pump secrets before mutations
+      shell: bash
+      run: |
+        set -euo pipefail
+        python3 "$DEPLOY_CONTROL_SCRIPTS/preflight-cloud-run-deploy.py" \
+          --service backend-projection-pump \
+          --env="${{ inputs.runtime_env }}" \
+          --project="${{ inputs.project_id }}" \
+          --manifest="$GITHUB_WORKSPACE/backend/deploy/runtime_env.yaml" \
+          --check-secrets
+
+    - name: Validate projection pump GMP config without Secret Manager
+      shell: bash
+      run: |
+        set -euo pipefail
+        python3 "$DEPLOY_CONTROL_SCRIPTS/attach_cloud_run_gmp_sidecar.py" \
+          --prepare-config \
+          --config-env \
+          --project="${{ inputs.project_id }}" \
+          --config="$DEPLOY_CONTROL_SCRIPTS/../deploy/cloud_run_gmp_projection_pump.yaml"
+
+    # Read-only: handler URLs keep pointing at backend-sync exactly as the stack renders them.
+    - name: Resolve production account-deletion task target
+      id: account-deletion-target
+      shell: bash
+      run: |
+        set -euo pipefail
+        SYNC_SERVICE_URL="$(
+          gcloud run services describe backend-sync \
+            --region="${{ inputs.region }}" \
+            --project="${{ inputs.project_id }}" \
+            --format='value(status.url)'
+        )"
+        SYNC_TASKS_INVOKER_SA="$(
+          gcloud run services describe backend-sync \
+            --region="${{ inputs.region }}" \
+            --project="${{ inputs.project_id }}" \
+            --format=json \
+            | jq -r '.spec.template.spec.containers[0].env[]? | select(.name == "SYNC_TASKS_INVOKER_SA") | .value'
+        )"
+        test -n "$SYNC_SERVICE_URL"
+        test -n "$SYNC_TASKS_INVOKER_SA"
+        {
+          echo "account_deletion_handler_url=${SYNC_SERVICE_URL}/v1/users/account-deletion-wipes/run"
+          echo "listen_finalization_tasks_handler_url=${SYNC_SERVICE_URL}/v1/conversation-finalization-jobs/run"
+          echo "listen_finalization_tasks_invoker_sa=${SYNC_TASKS_INVOKER_SA}"
+          echo "sync_tasks_handler_url=${SYNC_SERVICE_URL}/v2/sync-jobs/run"
+          echo "sync_tasks_invoker_sa=${SYNC_TASKS_INVOKER_SA}"
+        } >> "$GITHUB_OUTPUT"
+
+    - name: Determine whether this deploy requests gateway-first serving
+      id: gateway-intent
+      shell: bash
+      run: |
+        python3 "$DEPLOY_CONTROL_SCRIPTS/verify-llm-gateway-serving.py" \
+          --environment="${{ inputs.runtime_env }}" \
+          --project="${{ inputs.project_id }}" \
+          --region="${{ inputs.region }}" \
+          --listener-values="backend/charts/backend-listen/${{ inputs.runtime_env }}_omi_backend_listen_values.yaml" \
+          --intent-only >> "$GITHUB_OUTPUT"
+
+    - name: Get GKE credentials for gateway serving gate
+      if: ${{ steps.gateway-intent.outputs.enabled == 'true' }}
+      uses: google-github-actions/get-gke-credentials@v3
+      with:
+        cluster_name: ${{ env.GKE_CLUSTER }}
+        location: ${{ inputs.region }}
+        project_id: ${{ inputs.project_id }}
+
+    - name: Verify LLM gateway control plane before promotion
+      id: gateway-serving
+      if: ${{ steps.gateway-intent.outputs.enabled == 'true' }}
+      shell: bash
+      run: |
+        python3 "$DEPLOY_CONTROL_SCRIPTS/verify-llm-gateway-serving.py" \
+          --environment="${{ inputs.runtime_env }}" \
+          --project="${{ inputs.project_id }}" \
+          --region="${{ inputs.region }}" \
+          --github-output "$GITHUB_OUTPUT"
+
+    - name: Probe LLM gateway from the Cloud Run VPC before promotion
+      if: ${{ steps.gateway-intent.outputs.enabled == 'true' }}
+      shell: bash
+      run: |
+        bash "$DEPLOY_CONTROL_SCRIPTS/probe-llm-gateway-from-cloud-run.sh" \
+          --project "${{ inputs.project_id }}" \
+          --region "${{ inputs.region }}" \
+          --image "${{ steps.published-image.outputs.ref }}" \
+          --gateway-url "${{ steps.gateway-serving.outputs.gateway_url }}" \
+          --network "${{ env.CLOUD_RUN_VPC_NETWORK }}" \
+          --subnet "${{ env.CLOUD_RUN_VPC_SUBNET }}" \
+          --vpc-egress private-ranges-only \
+          --lane omi:auto:public-shared-conversation-chat \
+          --lane omi:auto:memory-l2 \
+          --name-suffix "pump-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+
+    - name: Reject an inert gateway endpoint when source-controlled gateway mode is requested
+      if: ${{ steps.gateway-intent.outputs.enabled == 'true' }}
+      shell: bash
+      env:
+        GATEWAY_URL: ${{ steps.gateway-serving.outputs.gateway_url }}
+      run: |
+        set -euo pipefail
+        if [[ -z "$GATEWAY_URL" || "$GATEWAY_URL" == "http://127.0.0.1:9" ]]; then
+          echo "Gateway mode requires a verified non-sentinel endpoint." >&2
+          exit 1
+        fi
+
+    # Same renderer, manifest and inputs as deploy-backend-stack; only the pump outputs are used.
+    - name: Render backend runtime env
+      id: runtime-env
+      shell: bash
+      env:
+        ACCOUNT_DELETION_HANDLER_URL: ${{ steps.account-deletion-target.outputs.account_deletion_handler_url }}
+        LISTEN_FINALIZATION_TASKS_HANDLER_URL: ${{ steps.account-deletion-target.outputs.listen_finalization_tasks_handler_url }}
+        LISTEN_FINALIZATION_TASKS_INVOKER_SA: ${{ steps.account-deletion-target.outputs.listen_finalization_tasks_invoker_sa }}
+        CLOUD_RUN_VPC_NETWORK: ${{ env.CLOUD_RUN_VPC_NETWORK }}
+        CLOUD_RUN_VPC_SUBNET: ${{ env.CLOUD_RUN_VPC_SUBNET }}
+        GOOGLE_CLIENT_ID: ${{ env.GOOGLE_CLIENT_ID }}
+        MCP_OAUTH_CLAUDE_CLIENT_ID: ${{ env.MCP_OAUTH_CLAUDE_CLIENT_ID }}
+        MCP_OAUTH_CLAUDE_CLIENT_NAME: ${{ env.MCP_OAUTH_CLAUDE_CLIENT_NAME }}
+        MCP_OAUTH_CLAUDE_REDIRECT_URIS: ${{ env.MCP_OAUTH_CLAUDE_REDIRECT_URIS }}
+        OMI_LLM_GATEWAY_URL: ${{ steps.gateway-serving.outputs.gateway_url || 'http://127.0.0.1:9' }}
+        PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_AUDIENCE: ${{ env.PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_AUDIENCE }}
+        PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_INVOKER_SA: ${{ env.PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_INVOKER_SA }}
+        SYNC_LEDGER_FENCE_MODE: ${{ env.SYNC_LEDGER_FENCE_MODE }}
+        SYNC_TASKS_HANDLER_URL: ${{ steps.account-deletion-target.outputs.sync_tasks_handler_url }}
+        SYNC_TASKS_INVOKER_SA: ${{ steps.account-deletion-target.outputs.sync_tasks_invoker_sa }}
+      run: |
+        python3 "$DEPLOY_CONTROL_SCRIPTS/render_backend_runtime_env.py" \
+          --env ${{ inputs.runtime_env }} \
+          --manifest "$GITHUB_WORKSPACE/backend/deploy/runtime_env.yaml" \
+          --state-output "$RUNNER_TEMP/backend-runtime-env-state.json" >> "$GITHUB_OUTPUT"
+
+    - name: Validate backend runtime env before deploy
+      shell: bash
+      env:
+        SYNC_LEDGER_FENCE_MODE: ${{ env.SYNC_LEDGER_FENCE_MODE }}
+      run: |
+        python3 "$DEPLOY_CONTROL_SCRIPTS/validate-backend-runtime-env.py" \
+          --env ${{ inputs.runtime_env }} \
+          --manifest "$GITHUB_WORKSPACE/backend/deploy/runtime_env.yaml" \
+          --check-workflows \
+          --workflow-root "$DEPLOY_WORKFLOW_ROOT" \
+          --cloud-run-service backend-projection-pump \
+          --cloud-run-state "$RUNNER_TEMP/backend-runtime-env-state.json"
+
+    - name: Require dark batch flags on first create
+      if: ${{ steps.pump-service.outputs.exists == 'false' }}
+      shell: bash
+      run: |
+        jq -e '
+          .services["backend-projection-pump"].env
+          | map(select(.name == "BATCH_PIPELINE_SERVING_ENABLED" or .name == "BATCH_PIPELINE_PROJECTION_PUMP_ENABLED"))
+          | sort_by(.name)
+          | map({name, value})
+          | . == [
+              {"name": "BATCH_PIPELINE_PROJECTION_PUMP_ENABLED", "value": "false"},
+              {"name": "BATCH_PIPELINE_SERVING_ENABLED", "value": "false"}
+            ]
+        ' "$RUNNER_TEMP/backend-runtime-env-state.json" > /dev/null
+
+    # Fixed size (min == max == 4) with CPU always allocated; internal ingress and no
+    # public invoker. Scaling literals live here only: ops/prod.yaml takes no entry until
+    # the service exists, because the config-train blocks on an unreadable service.
+    - name: Deploy backend-projection-pump to Cloud Run
+      id: deploy-backend-projection-pump
+      uses: google-github-actions/deploy-cloudrun@v3
+      with:
+        service: backend-projection-pump
+        region: ${{ inputs.region }}
+        project_id: ${{ inputs.project_id }}
+        image: ${{ steps.published-image.outputs.ref }}
+        no_traffic: ${{ steps.pump-service.outputs.exists == 'true' }}
+        flags: >-
+          --revision-suffix=${{ steps.image-tag.outputs.revision_suffix }}-base
+          --remove-env-vars=HOSTED_PUSHER_API_URL,MEMORY_ENABLED_USERS,MEMORY_CANONICAL_PROMOTION_CRON_ENABLED,MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS,MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED,BASIC_TIER_MINUTES_LIMIT_PER_MONTH,BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH,BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH,BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH,CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST,CONVERSATION_RELEVANCE_JEV_ENABLED,CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT,CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP,CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT,CONVERSATION_RELEVANCE_JEV_RESCUE,MEMORY_OWNER_JEV_FLIP_ENABLED,MEMORY_OWNER_JEV_FLIP_PERCENT,MEMORY_OWNER_JEV_SHADOW_PERCENT,MEMORY_OWNER_JEV_SHADOW_DAILY_CAP,CONVERSATION_SMART_MERGE_UID_ALLOWLIST,CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE,DESKTOP_PENDANT_CALL_LINK_MODE,DESKTOP_PENDANT_CALL_LINK_PERCENT,MEETING_NOTES_EPISODE_SELECTION,MEETING_NOTES_EPISODE_JEV_THRESHOLD,MEETING_NOTES_EPISODE_SELECTION_EFFORT,MEETING_NOTES_EPISODE_SELECTION_TIMEOUT_SECONDS,CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED,CONVERSATION_OCR_CONTEXT_ENABLED,MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED,SCREEN_FRAME_EGRESS_ENABLED,MEMORY_BELIEF_MODEL_ENABLED,FREE_TIER_MEMORY_SUPPRESSION,FREE_TIER_MEMORY_SUPPRESSION_COHORT,KNOWLEDGE_LEDGER_DRAIN_ENABLED,KNOWLEDGE_LEDGER_DRAIN_UID_ALLOWLIST,MEMORY_DAILY_MEMORY_SWEEP_ENABLED,MEMORY_DAILY_MEMORY_SWEEP_KILL_SWITCH,MEMORY_DAILY_MEMORY_SWEEP_MODEL_ENABLED,MEMORY_DAILY_MEMORY_SWEEP_MODEL_NAME,MEMORY_DAILY_MEMORY_SWEEP_MAX_MODEL_CANDIDATES,MEMORY_DAILY_MEMORY_SWEEP_MAX_MODEL_COST_USD,MEMORY_DAILY_MEMORY_SWEEP_COHORT_ENABLED,MEMORY_DAILY_MEMORY_SWEEP_COHORT_FLAG,MEMORY_DAILY_MEMORY_SWEEP_COHORT_NAME,MEMORY_DAILY_MEMORY_SWEEP_COHORT_TIMEOUT_SECONDS,MEMORY_DAILY_MEMORY_SWEEP_TIMEZONE_RECONCILIATION_ENABLED,MEMORY_DAILY_MEMORY_SWEEP_STAGGER_SECONDS,DEEPGRAM_SELF_HOSTED_ENABLED,DEEPGRAM_SELF_HOSTED_URL${{ steps.runtime-env.outputs.backend_projection_pump_remove_env_extra }}
+          ${{ steps.runtime-env.outputs.cloud_run_flags }}
+          ${{ steps.runtime-env.outputs.backend_projection_pump_identity_flags }}
+          ${{ steps.runtime-env.outputs.backend_projection_pump_flags }}
+          --cpu=2
+          --memory=4Gi
+          --concurrency=80
+          --min-instances=4
+          --max-instances=4
+          --no-cpu-throttling
+          --ingress=internal
+          --no-allow-unauthenticated
+        env_vars: |-
+          ${{ steps.runtime-env.outputs.backend_projection_pump_env_vars }}
+          OMI_BACKEND_RELEASE_SHA=${{ inputs.admitted_sha }}
+        secrets: ${{ steps.runtime-env.outputs.backend_projection_pump_secrets }}
+
+    # A first create serves LATEST. Inspect the new base before pinning traffic,
+    # then prove the named route before attaching the zero-traffic sidecar.
+    - name: Verify a newly created projection pump base before pinning
+      if: ${{ steps.pump-service.outputs.exists == 'false' }}
+      shell: bash
+      run: |
+        set -euo pipefail
+        python3 "$DEPLOY_CONTROL_SCRIPTS/verify_projection_pump_inverse.py" \
+          --project="${{ inputs.project_id }}" --region="${{ inputs.region }}" \
+          --new-base "backend-projection-pump-${{ steps.image-tag.outputs.revision_suffix }}-base" "${{ inputs.admitted_sha }}" "${{ steps.published-image.outputs.ref }}" \
+          --before-first-pin
+
+    # A created service routes LATEST to the base revision; the zero-traffic sidecar
+    # attachment refuses latestRevision routing, so pin the dark base revision by name.
+    - name: Pin a newly created projection pump service to its base revision
+      if: ${{ steps.pump-service.outputs.exists == 'false' }}
+      shell: bash
+      run: |
+        set -euo pipefail
+        gcloud run services update-traffic backend-projection-pump \
+          --project="${{ inputs.project_id }}" --region="${{ inputs.region }}" \
+          --to-revisions="backend-projection-pump-${{ steps.image-tag.outputs.revision_suffix }}-base=100" --quiet
+
+    - name: Verify the pinned first projection pump base
+      if: ${{ steps.pump-service.outputs.exists == 'false' }}
+      shell: bash
+      run: |
+        set -euo pipefail
+        python3 "$DEPLOY_CONTROL_SCRIPTS/verify_projection_pump_inverse.py" \
+          --project="${{ inputs.project_id }}" --region="${{ inputs.region }}" \
+          --new-base "backend-projection-pump-${{ steps.image-tag.outputs.revision_suffix }}-base" "${{ inputs.admitted_sha }}" "${{ steps.published-image.outputs.ref }}" \
+          | tee artifacts/projection-pump-first-dark-readback.txt
+
+    - name: Attach revision-aware Managed Prometheus to the projection pump candidate
+      shell: bash
+      run: |
+        set -euo pipefail
+        python3 "$DEPLOY_CONTROL_SCRIPTS/attach_cloud_run_gmp_sidecar.py" \
+          --project="${{ inputs.project_id }}" \
+          --region="${{ inputs.region }}" \
+          --service=backend-projection-pump \
+          --base-revision="backend-projection-pump-${{ steps.image-tag.outputs.revision_suffix }}-base" \
+          --final-revision="backend-projection-pump-${{ steps.image-tag.outputs.revision_suffix }}" \
+          --ingress-container=backend-projection-pump \
+          --config="$DEPLOY_CONTROL_SCRIPTS/../deploy/cloud_run_gmp_projection_pump.yaml" \
+          --config-env \
+          --expected-env-state="$RUNNER_TEMP/backend-runtime-env-state.json"
+
+    - name: Capture projection pump revision
+      id: capture-backend-projection-pump-revision
+      shell: bash
+      run: |
+        echo "revision=backend-projection-pump-${{ steps.image-tag.outputs.revision_suffix }}" >> "$GITHUB_OUTPUT"
+
+    - name: Wait for the projection pump revision to become ready
+      shell: bash
+      run: |
+        python3 "$DEPLOY_CONTROL_SCRIPTS/preflight-cloud-run-deploy.py" \
+          --wait-revision-ready backend-projection-pump=${{ steps.capture-backend-projection-pump-revision.outputs.revision }} \
+          --env ${{ inputs.runtime_env }} \
+          --project ${{ inputs.project_id }} \
+          --region ${{ inputs.region }}
+
+    - name: Verify projection pump release provenance
+      shell: bash
+      run: |
+        set -euo pipefail
+        expected='${{ inputs.admitted_sha }}'
+        revision='${{ steps.capture-backend-projection-pump-revision.outputs.revision }}'
+        actual="$(gcloud run revisions describe "$revision" \
+          --region='${{ inputs.region }}' --project='${{ inputs.project_id }}' \
+          --format='json(metadata.name,metadata.labels,spec.containers[].env)' \
+          | jq -er --arg revision "$revision" --arg service backend-projection-pump '
+              select(.metadata.name == $revision and .metadata.labels["serving.knative.dev/service"] == $service)
+              | [.spec.containers[].env[]? | select(.name == "OMI_BACKEND_RELEASE_SHA") | .value]
+              | unique | if length == 1 then .[0] else error("source stamp missing or ambiguous") end')"
+        [[ "$actual" == "$expected" ]] || { echo 'Candidate source stamp mismatch: backend-projection-pump' >&2; exit 1; }
+
+    # Read back the access and shape this service must never lose: internal ingress, no
+    # allUsers/allAuthenticatedUsers binding, fixed 4/4, CPU always allocated,
+    # OMI_PROCESS_ROLE=projection_pump and BATCH_PIPELINE_SERVING_ENABLED=false (both refused
+    # unconditionally). Only the pump flag and the ledger name follow the rendered manifest.
+    - name: Verify projection pump ingress, invoker and fixed shape
+      shell: bash
+      env:
+        REVISION: ${{ steps.capture-backend-projection-pump-revision.outputs.revision }}
+      run: |
+        set -euo pipefail
+        umask 077
+        gcloud run services describe backend-projection-pump \
+          --project='${{ inputs.project_id }}' --region='${{ inputs.region }}' --format=json > "$RUNNER_TEMP/pump-service.json"
+        gcloud run services get-iam-policy backend-projection-pump \
+          --project='${{ inputs.project_id }}' --region='${{ inputs.region }}' --format=json > "$RUNNER_TEMP/pump-iam.json"
+        python3 "$DEPLOY_CONTROL_SCRIPTS/verify_projection_pump_shape.py" \
+          --service "$RUNNER_TEMP/pump-service.json" \
+          --iam-policy "$RUNNER_TEMP/pump-iam.json" \
+          --revision "$REVISION" \
+          --expected-env-state "$RUNNER_TEMP/backend-runtime-env-state.json"
+
+    - name: Validate backend runtime env after deploy
+      shell: bash
+      env:
+        SYNC_LEDGER_FENCE_MODE: ${{ env.SYNC_LEDGER_FENCE_MODE }}
+      run: |
+        python3 "$DEPLOY_CONTROL_SCRIPTS/validate-backend-runtime-env.py" \
+          --env ${{ inputs.runtime_env }} \
+          --manifest "$GITHUB_WORKSPACE/backend/deploy/runtime_env.yaml" \
+          --check-workflows \
+          --workflow-root "$DEPLOY_WORKFLOW_ROOT" \
+          --cloud-run-service backend-projection-pump \
+          --check-live-cloud-run
+
+    - name: Report live projection pump env drift from manifest
+      shell: bash
+      run: |
+        python3 "$DEPLOY_CONTROL_SCRIPTS/check_cloud_run_env_drift.py" \
+          --env ${{ inputs.runtime_env }} \
+          --project ${{ inputs.project_id }} \
+          --region ${{ inputs.region }} \
+          --manifest "$GITHUB_WORKSPACE/backend/deploy/runtime_env.yaml" \
+          --service backend-projection-pump \
+          --rendered-state "$RUNNER_TEMP/backend-runtime-env-state.json" \
+          --summary-file "$GITHUB_STEP_SUMMARY"
+
+    - name: Accept no-traffic projection pump candidate
+      id: verify-projection-pump-candidate
+      shell: bash
+      run: |
+        python3 "$DEPLOY_CONTROL_SCRIPTS/verify_backend_release_vector.py" \
+          --candidate \
+          --cloud-run-only \
+          --cloud-run-service backend-projection-pump \
+          --commit-sha "${{ inputs.admitted_sha }}" \
+          --short-sha "${{ steps.image-tag.outputs.short_sha }}" \
+          --expected-image "${{ steps.published-image.outputs.ref }}" \
+          --deploy-run-id "${{ github.run_id }}" \
+          --deploy-run-attempt "${{ github.run_attempt }}" \
+          --project "${{ inputs.project_id }}" \
+          --region "${{ inputs.region }}" \
+          --environment "${{ inputs.runtime_env }}" \
+          --evidence-path artifacts/projection-pump-candidate-release-vector.json
+
+    - name: Reverify the projection pump inverse and capture its traffic snapshot
+      id: pump-traffic-snapshot
+      shell: bash
+      env:
+        PUMP_EXISTS: ${{ steps.pump-service.outputs.exists }}
+        RELEASE_DISPOSITION: ${{ inputs.release_disposition }}
+      run: |
+        set -euo pipefail
+        if [[ "$PUMP_EXISTS" == true ]]; then
+          expected=(--disposition="$RELEASE_DISPOSITION")
+        else
+          expected=(--new-base "backend-projection-pump-${{ steps.image-tag.outputs.revision_suffix }}-base" "${{ inputs.admitted_sha }}" "${{ steps.published-image.outputs.ref }}")
+        fi
+        python3 "$DEPLOY_CONTROL_SCRIPTS/verify_projection_pump_inverse.py" \
+          --project="${{ inputs.project_id }}" --region="${{ inputs.region }}" \
+          "${expected[@]}" --snapshot artifacts/projection-pump-pre-promotion-traffic-snapshot.json \
+          | tee artifacts/projection-pump-inverse-readback.txt
+
+    - name: Verify the validated projection pump revision is still current
+      shell: bash
+      run: |
+        test "$(gcloud run services describe backend-projection-pump --project=${{ inputs.project_id }} --region=${{ inputs.region }} --format='value(status.latestCreatedRevisionName)')" = "${{ steps.capture-backend-projection-pump-revision.outputs.revision }}"
+
+    - name: Shift projection pump traffic to the validated revision
+      id: shift-projection-pump-traffic
+      shell: bash
+      run: |
+        set -euo pipefail
+        gcloud run services update-traffic backend-projection-pump --project=${{ inputs.project_id }} --region=${{ inputs.region }} --to-revisions=${{ steps.capture-backend-projection-pump-revision.outputs.revision }}=100 --quiet
+
+    - name: Verify serving projection pump release vector
+      id: verify-serving-projection-pump
+      shell: bash
+      run: |
+        python3 "$DEPLOY_CONTROL_SCRIPTS/verify_backend_release_vector.py" \
+          --cloud-run-only \
+          --cloud-run-service backend-projection-pump \
+          --commit-sha "${{ inputs.admitted_sha }}" \
+          --short-sha "${{ steps.image-tag.outputs.short_sha }}" \
+          --expected-image "${{ steps.published-image.outputs.ref }}" \
+          --deploy-run-id "${{ github.run_id }}" \
+          --deploy-run-attempt "${{ github.run_attempt }}" \
+          --project "${{ inputs.project_id }}" \
+          --region "${{ inputs.region }}" \
+          --environment "${{ inputs.runtime_env }}" \
+          --evidence-path artifacts/projection-pump-serving-release-vector.json
+
+    - name: Restore projection pump traffic snapshot after failed promotion
+      if: >-
+        ${{ (failure() || cancelled()) && steps.pump-traffic-snapshot.outcome == 'success' &&
+        (steps.shift-projection-pump-traffic.outcome == 'failure' || steps.shift-projection-pump-traffic.outcome == 'cancelled' ||
+         steps.verify-serving-projection-pump.outcome == 'failure' || steps.verify-serving-projection-pump.outcome == 'cancelled') }}
+      shell: bash
+      run: |
+        set -euo pipefail
+        history_args=()
+        if [[ "$(git rev-parse --is-shallow-repository)" == true ]]; then
+          history_args=(--unshallow)
+        fi
+        git fetch --no-tags "${history_args[@]}" origin +refs/heads/main:refs/remotes/origin/main
+        python3 "$DEPLOY_CONTROL_SCRIPTS/cloud_run_traffic_snapshot.py" restore \
+          --snapshot artifacts/projection-pump-pre-promotion-traffic-snapshot.json \
+          --release-floor-check "$DEPLOY_WORKFLOW_ROOT/.github/scripts/verify_backend_release_floor.py" \
+          --evidence-path artifacts/projection-pump-traffic-restore.json
+
+    - name: Projection pump deploy status report
+      if: ${{ always() }}
+      shell: bash
+      run: |
+        expect_args=()
+        if [[ "${{ steps.shift-projection-pump-traffic.outcome }}" == success ]]; then
+          expect_args=(--expect-cloud-run-traffic backend-projection-pump=${{ steps.capture-backend-projection-pump-revision.outputs.revision }})
+        fi
+        python3 "$DEPLOY_CONTROL_SCRIPTS/deploy_status_report.py" \
+          --env ${{ inputs.runtime_env }} \
+          --project ${{ inputs.project_id }} \
+          --region ${{ inputs.region }} \
+          --cloud-run-service backend-projection-pump \
+          --include-cloud-run \
+          "${expect_args[@]}" | tee "$RUNNER_TEMP/projection-pump-deploy-status.txt"
+        {
+          echo ""
+          echo "### backend-projection-pump rollout status"
+          echo ""
+          echo '```text'
+          cat "$RUNNER_TEMP/projection-pump-deploy-status.txt"
+          echo '```'
+        } >> "$GITHUB_STEP_SUMMARY"
+
+    - name: Record verified projection pump selection custody
+      if: ${{ success() && steps.verify-serving-projection-pump.outcome == 'success' }}
+      shell: bash
+      env:
+        ADMITTED_SOURCE: ${{ inputs.admitted_sha }}
+        WORKFLOW_CONTROL: ${{ github.workflow_sha }}
+      run: |
+        python3 - <<'PYTHON'
+        import json, os, re
+        from pathlib import Path
+        source, control = (os.environ[k] for k in ('ADMITTED_SOURCE', 'WORKFLOW_CONTROL'))
+        if not all(re.fullmatch('[0-9a-f]{40}', value) for value in (source, control)):
+            raise ValueError('immutable selection source required')
+        target = Path('artifacts/cloud-run-selection.json')
+        target.parent.mkdir(exist_ok=True)
+        target.write_text(json.dumps(dict(schema=1, source=source, control=control, selection='backend-projection-pump',
+            run_id=int(os.environ['GITHUB_RUN_ID']), run_attempt=int(os.environ['GITHUB_RUN_ATTEMPT'])), sort_keys=True)+'\n')
+        PYTHON
+
+    - name: Upload verified projection pump selection custody
+      if: ${{ success() && steps.verify-serving-projection-pump.outcome == 'success' }}
+      uses: actions/upload-artifact@v7
+      with:
+        name: cloud-run-selection-${{ github.run_id }}-${{ github.run_attempt }}
+        path: artifacts/cloud-run-selection.json
+        if-no-files-found: error
+
+    - name: Upload projection pump release-vector evidence
+      if: ${{ always() }}
+      uses: actions/upload-artifact@v7
+      with:
+        name: projection-pump-deployment-evidence-${{ github.run_id }}-${{ github.run_attempt }}
+        path: |
+          artifacts/projection-pump-deploy-control.txt
+          artifacts/projection-pump-existing-dark-readback.txt
+          artifacts/projection-pump-existing-latest-readback.txt
+          artifacts/projection-pump-first-dark-readback.txt
+          artifacts/projection-pump-inverse-readback.txt
+          artifacts/projection-pump-candidate-release-vector.json
+          artifacts/projection-pump-pre-promotion-traffic-snapshot.json
+          artifacts/projection-pump-serving-release-vector.json
+          artifacts/projection-pump-traffic-restore.json
+        if-no-files-found: warn
+
+    - name: Generate deployment summary
+      if: ${{ always() }}
+      uses: ./.deploy-workflow-source/.github/actions/deployment-summary
+      with:
+        environment: ${{ inputs.environment }}
+        release_version: ${{ inputs.release_version }}
+        status: ${{ job.status }}
+        service: backend-projection-pump
+        deployment_tag: ${{ steps.image-tag.outputs.short_sha }}

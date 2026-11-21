@@ -169,6 +169,8 @@ env:
   - name: RECORD_TOKEN_LEASE_DEPLOYED_AT
     valueFrom:
       configMapKeyRef: {name: dev-omi-backend-config, key: RECORD_TOKEN_LEASE_DEPLOYED_AT}
+  - name: BATCH_ACCOUNT_PRIVACY_WRITER_ENABLED
+    value: "true"
   - name: CONVERSATION_TERMINAL_FAMILY_MODE
     value: "on"
   - name: HOME_TRANSCRIPTION_PRESENTATION_GATE
@@ -229,6 +231,8 @@ env:
     value: "true"
   - name: BATCH_PIPELINE_ENABLED
     value: "false"
+  - name: BATCH_PIPELINE_PACKING_SAMPLE_RATE
+    value: "0.001"
   - name: BATCH_PIPELINE_UID_ALLOWLIST
     value: ""
   - name: FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED
@@ -257,6 +261,12 @@ env:
     value: "true"
   - name: STALE_IN_PROGRESS_RECOVERY_ENABLED
     value: "true"
+  - name: CONVERSATIONS_V3_RECORDING_ROTATION
+    value: "off"
+  - name: CONVERSATIONS_V3_ROTATION_MIN_SECONDS
+    value: "180"
+  - name: CONVERSATIONS_V3_ROTATION_MAX_SECONDS
+    value: "300"
   - name: SYNC_POLL_BACKOFF_ENABLED
     value: "false"
   - name: BATCH_PIPELINE_AUTHORITATIVE_LABELS_ENABLED
@@ -745,9 +755,8 @@ env:
   - name: EDGE_SHADOW_URL
     value: "ws://dev-omi-listen-edge.dev-omi-backend.svc.cluster.local:8080/v1/shadow"
   # EDGE_SHADOW_TOKEN (sent as x-edge-shadow-token; must match listen-edge's)
-  # is a secret: never committed here, set only through privateEnv
-  # (LISTEN_PRIVATE_VALUES_YAML), which adds the entry at rollout. Unset,
-  # listen sends no token.
+  # is a secret: never committed here. Development has no private value
+  # source (prod uses privateSecretEnv); unset, listen sends no token.
   # Audio-timeline v2: one capture coordinate for segments and stored audio.
   # Admits new eligible recordings only (single-channel, server STT);
   # existing v1 sessions and resumed v1 conversations are unaffected.

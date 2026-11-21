@@ -25,6 +25,16 @@ VISIBLE_LATENCY = Histogram(
 )
 SUMMARY_LATENCY = Histogram('omi_conversations_v3_end_to_summary_seconds', 'End to stored summary')
 SUMMARY_WRITES = Counter('omi_conversations_v3_summary_writes_total', 'First writes and late rewrites', ['kind'])
+WORD_FLOOR_COMPLETIONS = Counter(
+    'omi_conversations_v3_word_floor_completions_total',
+    'First automatic v3 processing settlements containing Han, kana, Hangul or Thai letters',
+    ['method', 'floor'],
+)
+# Initialize each series so a later first occurrence has a zero baseline.
+for method in ('legacy', 'script_aware'):
+    for floor in ('below', 'met'):
+        WORD_FLOOR_COMPLETIONS.labels(method, floor)
+
 MODEL_CALLS = Counter('omi_conversations_v3_model_calls_total', 'Metered model calls', ['kind'])
 NON_V3 = Gauge(
     'omi_conversations_v3_active_pendant_users_legacy',
@@ -52,3 +62,8 @@ def terminal_failure(reason):
     TERMINAL_FAILURES.labels(
         reason if reason in {'outline', 'transcription', 'attempts_exhausted'} else 'processing'
     ).inc()
+
+
+def observe_word_floor(legacy_below: bool, script_aware_below: bool) -> None:
+    for method, below in (('legacy', legacy_below), ('script_aware', script_aware_below)):
+        WORD_FLOOR_COMPLETIONS.labels(method, 'below' if below else 'met').inc()

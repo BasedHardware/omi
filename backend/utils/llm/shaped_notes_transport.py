@@ -2,11 +2,14 @@
 
 from contextlib import asynccontextmanager
 from typing import TYPE_CHECKING, Any, AsyncIterator
+from uuid import uuid4
 
 import anthropic
 import httpx
 from langchain_core.language_models import BaseChatModel
 from langchain_openai import ChatOpenAI
+
+from utils.conversations.v3 import recap_telemetry
 
 if TYPE_CHECKING:
     from langchain_anthropic import ChatAnthropic
@@ -56,6 +59,17 @@ def _isolated_anthropic(model: ChatAnthropic, transport: httpx.AsyncClient) -> C
     return isolated
 
 
+async def _recap_request(request: httpx.Request) -> None:
+    observation = recap_telemetry.admit_dispatch()
+    if observation is not None:
+        # The gateway records this UUID on every underlying provider attempt,
+        # including its own retries/failures. The hook runs once per SDK HTTP
+        # dispatch. No provider receipt means the paid count is unverified.
+        gateway_request = str(uuid4())
+        request.headers['X-Omi-Request-Id'] = gateway_request
+        observation.record('gateway_dispatch', gateway_request=gateway_request)
+
+
 @asynccontextmanager
 async def isolated_notes_model(model: BaseChatModel) -> AsyncIterator[BaseChatModel]:
     """Copy model configuration, never reuse/mutate its cached async connection pool.
@@ -70,7 +84,15 @@ async def isolated_notes_model(model: BaseChatModel) -> AsyncIterator[BaseChatMo
     """
     if not isinstance(model, (ChatOpenAI, ChatAnthropic)):
         raise TypeError('Shaped notes requires an OpenAI-compatible or Anthropic notes lane')
-    async with httpx.AsyncClient() as transport:
+    if recap_telemetry.active():
+        from utils.llm.gateway_client import GatewayContextChatOpenAI
+
+        if not isinstance(model, GatewayContextChatOpenAI):
+            raise TypeError('Live recap requires the accounted gateway notes lane')
+        transport = httpx.AsyncClient(event_hooks={'request': [_recap_request]})
+    else:
+        transport = httpx.AsyncClient()
+    async with transport:
         if isinstance(model, ChatAnthropic):
             yield _isolated_anthropic(model, transport)
             return

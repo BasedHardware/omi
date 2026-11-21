@@ -24,6 +24,7 @@ from models.conversation_continuity import continuation_timeout
 from config.refactor_modes import serving_for, quiet_empty_exit_enabled
 from config.server_batch import owned, proven_empty
 from config import listen_reconnect
+from models.finalization_owner import REFUSAL as FINALIZATION_OWNER_REFUSAL, python_owns_finalization
 from utils.conversations.lifecycle_clocks import speech_clock
 
 QUIET_CHECK_KIND = 'listen_quiet_check'
@@ -85,6 +86,8 @@ def arm_quiet_check(
     def arm(transaction: Any) -> dict[str, Any] | None:
         row = row_ref.get(transaction=transaction).to_dict() or {}
         job = job_ref.get(transaction=transaction).to_dict() or {}
+        if not python_owns_finalization(row):
+            return None
         if row.get('source') not in QUIET_SOURCES or row.get('status') != 'in_progress':
             return None
         if any(
@@ -185,6 +188,8 @@ def _evaluate_quiet_check(
     @firestore.transactional
     def evaluate(transaction: Any) -> dict[str, Any]:
         job = job_ref.get(transaction=transaction).to_dict() or {}
+        if not python_owns_finalization(job):
+            return {'status': 'done', 'reason': FINALIZATION_OWNER_REFUSAL}
         if job.get('kind') != QUIET_CHECK_KIND or job.get('status') != QUIET_CHECK_STATUS:
             return {'status': 'stale'}
         if isinstance(job.get('dispatch_generation'), bool) or job.get('dispatch_generation') != generation:
@@ -194,11 +199,11 @@ def _evaluate_quiet_check(
             client.collection('users').document(job['uid']).collection('conversations').document(job['conversation_id'])
         )
         row = row_ref.get(transaction=transaction).to_dict() or {}
-        if not row:
+        if not row or not python_owns_finalization(row):
             transaction.update(
                 job_ref, {'status': 'quiet_done', 'reconcile_after_at': firestore.DELETE_FIELD, 'updated_at': now}
             )
-            return {'status': 'done', 'reason': 'missing_conversation'}
+            return {'status': 'done', 'reason': FINALIZATION_OWNER_REFUSAL if row else 'missing_conversation'}
         deadline = quiet_deadline(row, job.get('quiet_timeout_seconds'), uid=job['uid'])
         lease_expiry = jobs_db.recording_session_lease_expiry(
             transaction,
@@ -309,7 +314,7 @@ def ensure_quiet_check_progress(job_id: str, *, firestore_client: Any = None) ->
     @firestore.transactional
     def repair(transaction: Any) -> bool:
         job = ref.get(transaction=transaction).to_dict() or {}
-        if job.get('kind') != QUIET_CHECK_KIND:
+        if job.get('kind') != QUIET_CHECK_KIND or not python_owns_finalization(job):
             return False
         now = _now()
         reconcile_at = job.get('reconcile_after_at')

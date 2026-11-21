@@ -11,6 +11,7 @@ import logging
 from datetime import datetime, timedelta, timezone
 
 from database import conversations as conversations_db, conversations_v3_processing as writers
+from models.finalization_owner import python_owns_finalization
 from utils.app_integrations import ExternalIntegrationFanoutError, trigger_external_integrations
 from utils.conversations.factory import deserialize_conversation
 from utils.conversations.v3 import metrics, policy
@@ -40,6 +41,8 @@ async def deliver(uid):
                 # The claim saw the row, so an empty read is a failed decode, not an absence: retry it
                 # (the attempt cap bounds a row that never reads back).
                 raise LookupError('v3_created_payload_unreadable')
+            if not python_owns_finalization(data):
+                continue
             if not policy.created_eligible(data):
                 # Re-checked on the payload actually sent: a row that turned private, hidden, locked or
                 # deleted after the claim must never reach an external integration.

@@ -624,17 +624,22 @@ def test_chart_rejects_unapproved_startup_env_key(helm, startup_values, runtime)
     assert 'accepts only the seven conversations-v3 startup keys' in result.stderr
 
 
-def test_listen_chart_rejects_private_override_of_pinned_startup_env(helm, startup_values):
+@pytest.mark.parametrize(
+    ('overrides', 'private_source'),
+    [
+        (
+            ('--set-json', 'privateSecretEnv.keys=[]', '--set-string', 'privateEnv.CONVERSATIONS_V3_STAGE=off'),
+            'privateEnv',
+        ),
+        (('--set-json', 'privateSecretEnv.keys=["CONVERSATIONS_V3_STAGE"]'), 'privateSecretEnv'),
+    ],
+)
+def test_listen_chart_rejects_private_override_of_pinned_startup_env(helm, startup_values, overrides, private_source):
     result = _render_prod_gke_deployment(
-        helm,
-        'backend-listen',
-        '--set-json',
-        f'conversationsV3StartupEnv={json.dumps(startup_values)}',
-        '--set-string',
-        'privateEnv.CONVERSATIONS_V3_STAGE=off',
+        helm, 'backend-listen', '--set-json', f'conversationsV3StartupEnv={json.dumps(startup_values)}', *overrides
     )
     assert result.returncode != 0
-    assert 'privateEnv cannot override a conversationsV3StartupEnv key' in result.stderr
+    assert f'{private_source} cannot override a conversationsV3StartupEnv key' in result.stderr
 
 
 def test_collect_end_to_end_marks_failures_unknown(manifest):

@@ -22,7 +22,7 @@ from __future__ import annotations
 import logging
 import math
 import time
-from typing import Any, Callable
+from typing import Any, Callable, NamedTuple
 
 from google.cloud import firestore
 from prometheus_client import Counter
@@ -36,7 +36,12 @@ COLLECTION = 'stt_cap_hold_reservations'
 DOCUMENT = 'current'
 STALE_SECONDS = 6 * 3600  # alert threshold only; a pending reservation is never released by age
 PRUNE_SECONDS = 7 * 24 * 3600  # other-period entries no longer count; drop them after a week
-MAX_OPEN = 200  # far above a backlog page; a bound, not a quota
+# A bound, not a quota. One sweep admits up to 100 turns x 10 items for a single owner before any batch
+# outcome can settle, so a page-sized bound refused legitimate hand-offs: production owners sat at 201-205
+# live holds (censored at the old 200) and their held audio stopped advancing. 1000 matches that burst
+# ceiling, and the ledger document stays ~150 KB, far under Firestore's 1 MiB limit. The settle pass in
+# reserve() keeps terminal entries out, so this bounds live work only.
+MAX_OPEN = 1000
 OUTCOMES = ('projected', 'failed', 'abandoned', 'pruned', 'stale')
 
 logger = logging.getLogger(__name__)
@@ -71,6 +76,26 @@ def _valid_units(units: object) -> float:
     return float(units)
 
 
+class ReservationBoundExceeded(ValueError):
+    """A ledger is full of live reservations: the hand-off is deferred, not failed.
+
+    ``live`` is the entry count after the settle pass and ``settled`` is how many terminal entries that
+    pass released. ``settled == 0`` means every entry is genuinely live (backpressure); ``settled > 0``
+    means terminal entries were released and the ledger is still full, which is the deadlock signature.
+    """
+
+    def __init__(self, live: int, settled: int) -> None:
+        super().__init__('cap-hold reservation bound exceeded')
+        self.live = live
+        self.settled = settled
+
+
+class _Ledger(NamedTuple):
+    units: float
+    settled: int
+    live: int
+
+
 def reserve(
     uid: str,
     hold_id: str,
@@ -88,18 +113,38 @@ def reserve(
     stamp = time.time() if now is None else now
 
     @firestore.transactional
-    def commit(transaction: Any) -> None:
+    def commit(transaction: Any) -> bool:
         snapshot = ref.get(transaction=transaction)
         entries = _entries(snapshot.to_dict() if snapshot.exists else None)
         if hold_id in entries:
-            return
+            return True
         if len(entries) >= MAX_OPEN:
-            raise ValueError('cap-hold reservation bound exceeded')
+            return False
         entries[hold_id] = {'units': units, 'period': period, 'batch_job_id': batch_job_id, 'reserved_at': stamp}
         transaction.set(ref, {'entries': entries})
+        return True
 
-    with external_write_fence(uid, firestore_client=client):
-        commit(client.transaction())
+    def try_reserve() -> bool:
+        with external_write_fence(uid, firestore_client=client):
+            return commit(client.transaction())
+
+    if not try_reserve():
+        # Older sweeps could erase a projected hold without releasing its reservation.
+        # Settle those entries outside the reservation transaction, then recheck the bound.
+        ledger = _open_ledger(uid, period, status_reader=batch_status, now=stamp, firestore_client=client)
+        if not try_reserve():
+            logger.warning(
+                'event=cap_hold_reservation outcome=bound_exceeded live=%d settled=%d max_open=%d',
+                ledger.live,
+                ledger.settled,
+                MAX_OPEN,
+            )
+            raise ReservationBoundExceeded(live=ledger.live, settled=ledger.settled)
+
+
+def release_projected(uid: str, hold_id: str, batch_job_id: str) -> None:
+    """Release the matching reservation after the hand-off's projection has been verified."""
+    _settle(uid, {hold_id: (batch_job_id, 'projected')}, {}, time.time(), get_firestore_client())
 
 
 def open_units(
@@ -117,56 +162,77 @@ def open_units(
     error log and ``outcome=stale``. Entries from another period stop counting immediately and are pruned
     after ``PRUNE_SECONDS``.
     """
+    return _open_ledger(uid, period, status_reader=status_reader, now=now, firestore_client=firestore_client).units
+
+
+def _open_ledger(
+    uid: str,
+    period: str,
+    *,
+    status_reader: StatusReader,
+    now: float | None = None,
+    firestore_client: Any = None,
+) -> _Ledger:
+    """Settle known outcomes once and report open units, entries released, and entries still live."""
     client = firestore_client or get_firestore_client()
     ref = _ref(uid, client)
     snapshot = ref.get()
     entries = _entries(snapshot.to_dict() if snapshot.exists else None)
     if not entries:
-        return 0.0
+        return _Ledger(0.0, 0, 0)
     stamp = time.time() if now is None else now
-    settled: dict[str, str] = {}
-    stale: list[str] = []
+    settled: dict[str, tuple[str, str]] = {}
+    stale: dict[str, str] = {}
     for hold_id, entry in entries.items():
         age = stamp - float(entry.get('reserved_at') or 0)
+        batch_job_id = str(entry.get('batch_job_id') or '')
         if entry.get('period') != period and age >= PRUNE_SECONDS:
-            settled[hold_id] = 'pruned'
+            settled[hold_id] = (batch_job_id, 'pruned')
             continue
-        outcome = status_reader(uid, str(entry.get('batch_job_id') or ''))
+        outcome = status_reader(uid, batch_job_id)
         if outcome in ('projected', 'failed', 'abandoned'):
-            settled[hold_id] = outcome
+            settled[hold_id] = (batch_job_id, outcome)
         elif age >= STALE_SECONDS and not entry.get('stale_at'):
-            stale.append(hold_id)
+            stale[hold_id] = batch_job_id
     if settled or stale:
         _settle(uid, settled, stale, stamp, client)
-    return sum(
+    units = sum(
         float(entry.get('units') or 0)
         for hold_id, entry in entries.items()
         if hold_id not in settled and entry.get('period') == period
     )
+    return _Ledger(units, len(settled), len(entries) - len(settled))
 
 
-def _settle(uid: str, settled: dict[str, str], stale: list[str], stamp: float, client: Any) -> None:
+def _settle(uid: str, settled: dict[str, tuple[str, str]], stale: dict[str, str], stamp: float, client: Any) -> None:
     ref = _ref(uid, client)
 
     @firestore.transactional
-    def commit(transaction: Any) -> None:
+    def commit(transaction: Any) -> list[str]:
         snapshot = ref.get(transaction=transaction)
         entries = _entries(snapshot.to_dict() if snapshot.exists else None)
-        for hold_id in settled:
-            entries.pop(hold_id, None)
-        for hold_id in stale:
-            if hold_id in entries:
-                entries[hold_id] = {**entries[hold_id], 'stale_at': stamp}
-        transaction.set(ref, {'entries': entries})
+        outcomes = []
+        for hold_id, (batch_job_id, outcome) in settled.items():
+            entry = entries.get(hold_id)
+            if entry is not None and str(entry.get('batch_job_id') or '') == batch_job_id:
+                del entries[hold_id]
+                outcomes.append(outcome)
+        for hold_id, batch_job_id in stale.items():
+            entry = entries.get(hold_id)
+            if entry is not None and str(entry.get('batch_job_id') or '') == batch_job_id and not entry.get('stale_at'):
+                entries[hold_id] = {**entry, 'stale_at': stamp}
+                outcomes.append('stale')
+        if outcomes:
+            transaction.set(ref, {'entries': entries})
+        return outcomes
 
     with external_write_fence(uid, firestore_client=client):
-        commit(client.transaction())
-    for outcome in settled.values():
+        outcomes = commit(client.transaction())
+    for outcome in outcomes:
         CAP_HOLD_RESERVATIONS_RELEASED.labels(outcome=_bounded_outcome(outcome)).inc()
-    for _ in stale:
-        # Alertable: still reserved and still counted; the batch job has not reached a terminal state.
-        CAP_HOLD_RESERVATIONS_RELEASED.labels(outcome='stale').inc()
-        logger.error('event=cap_hold_reservation outcome=stale stale_seconds=%d', STALE_SECONDS)
+        if outcome == 'stale':
+            # Alertable: still reserved and still counted; the batch job has not reached a terminal state.
+            logger.error('event=cap_hold_reservation outcome=stale stale_seconds=%d', STALE_SECONDS)
 
 
 def batch_status(uid: str, batch_job_id: str) -> str:

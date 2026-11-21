@@ -117,9 +117,7 @@ def test_apply_is_hint_only_idempotent_and_preserves_real_holds():
     assert again['scanned'] == 1 and again['matched'] == again['updated'] == 0
 
 
-@pytest.mark.parametrize('enabled', ['true', 'false'])
-def test_apply_stamps_both_clocks_regardless_of_the_lever(monkeypatch, enabled):
-    monkeypatch.setenv('BATCH_PROJECTION_FINISH_BACKOFF_ENABLED', enabled)
+def test_apply_stamps_both_clocks():
     client, rows, _, _ = client_for({'a': GHOST})
     counts = repair.reconcile(client, 'batch_pipeline_test_held', apply=True)
     assert counts['updated'] == 1

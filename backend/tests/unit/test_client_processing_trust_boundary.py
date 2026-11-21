@@ -643,10 +643,15 @@ PINNED_CONVERSATION_FIELDS: FrozenSet[str] = frozenset(
         'uses_custom_stt',
         # Server-only route arbitration metadata; Conversation marks it excluded from dumps.
         'record_lane_owner',
+        # Server-only finalization ownership. Both fields are excluded from dumps and wire schemas.
+        'finalization_engine',
+        'finalization_owner_epoch',
         # Server-authored partial audio proof metadata, not client display text.
         'record_audio_partial',
         'structured',
         'client_processing',
+        # Server-generated, coverage-validated preview for the authenticated detail route.
+        'live_summary',
         # Authenticated owner-confirmed edits, not device-authored display projections.
         # Corrections deliberately enter summarization; overview is the owned override.
         'user_corrections',
@@ -770,6 +775,11 @@ PINNED_CONVERSATION_FIELDS: FrozenSet[str] = frozenset(
         # planner and processing settle (utils/conversations/v3/), never client-authored.
         # NOT projection-family: clients need them (Home visibility and tile state).
         'backfilled',
+        # Historical processing tier (T1+): the server-stamped tier marker and the
+        # read-time open projection. Never client-authored; clients need both to
+        # offer the open-time summary, so neither is projection-family.
+        'processing_tier',
+        'summary_on_open',
         'home_hidden',
         'home_hidden_reason',
         'kind',
@@ -2311,6 +2321,30 @@ def test_red_proof_walrus_alias_fails_rebind_scan() -> None:
     assert any(site.startswith('walrus:conversation_ref:') for site in rebinds)
     # The production source has no assignment expression to report.
     assert not [site for site in collect_intent_txn_write_surface(source)[1] if site.startswith('walrus:')]
+
+
+@pytest.mark.parametrize('locked', [False, True])
+def test_live_recap_stays_out_of_lists_and_integrations(render_mod, locked):
+    payload = {
+        'is_locked': locked,
+        'live_summary': {'overview': 'private recap'},
+        'v3_live_summary': {'ciphertext': 'private receipt'},
+    }
+    for redact in (render_mod.redact_conversation_for_list, render_mod.redact_conversation_for_integration):
+        result = redact(dict(payload))
+        assert 'live_summary' not in result
+        assert 'v3_live_summary' not in result
+
+
+def test_integration_hides_generated_live_sections_after_datetime_serialization(render_mod):
+    payload = {
+        'v3_derived': True,
+        'status': 'in_progress',
+        'summary_covers_through': '2026-11-19T12:00:00Z',
+        'structured': {'overview': 'Editable notes', 'sections': [{'body_markdown': 'Generated live recap'}]},
+    }
+    result = render_mod.redact_conversation_for_integration(payload)
+    assert result['structured'] == {'overview': 'Editable notes'}
 
 
 @pytest.mark.parametrize('coverage', ['unknown', 'incomplete', 'mapped', None])

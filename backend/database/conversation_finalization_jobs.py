@@ -55,6 +55,7 @@ from database.firestore_index_registry import (
 )
 from database.people_stats_cache import invalidate_people_stats_cache
 from models.client_processing import PROJECTION_FAMILY_FIELDS
+from models.finalization_owner import REFUSAL as FINALIZATION_OWNER_REFUSAL, python_owns_finalization
 from models.conversation_continuity import continuation_timeout
 from utils.conversations.backfill_stats import same_timestamp_revision
 from utils.account_cutover.fence import background_job_should_skip_account
@@ -84,6 +85,7 @@ TERMINAL_JOB_STATUSES = frozenset({'completed', 'dead_letter'})
 NONTERMINAL_JOB_STATUSES = frozenset({'queued', 'leased', 'blocked_byok'})
 DEFAULT_LEASE_SECONDS = 1500
 DEFAULT_RECONCILE_STALE_SECONDS = 300
+OWNERSHIP_RECHECK_INTERVAL = timedelta(hours=1)
 # Bound transport failures separately from accepted worker claims. Holding the
 # job leaves its latest task valid; transport failure is not processing failure.
 MAX_UNCLAIMED_REPLAY_DISPATCHES = 5
@@ -248,7 +250,8 @@ def _claim_result(
 
 def _is_current_lease(job: dict[str, Any], dispatch_generation: int, lease_epoch: int) -> bool:
     return (
-        job.get('status') == 'leased'
+        python_owns_finalization(job)
+        and job.get('status') == 'leased'
         and int(job.get('dispatch_generation') or 1) == dispatch_generation
         and int(job.get('lease_epoch') or 0) == lease_epoch
     )
@@ -363,6 +366,8 @@ def recovery_admission_refusal(
     ``(uid, conversation_id, revision)`` identity cannot safely re-admit a
     terminal generation. Those rows page for manual review instead.
     """
+    if not python_owns_finalization(conversation):
+        return FINALIZATION_OWNER_REFUSAL
     if recovery_cutoff is None:
         return 'no_cutoff'
     status = getattr(conversation.get('status'), 'value', conversation.get('status'))
@@ -559,7 +564,7 @@ def _create_or_get_finalization_intent_txn(
 ) -> FinalizationIntent:
     """Persist finalization ownership before any pusher or task handoff.
 
-    Every return runs ``_apply_snapshot_bound_projection`` in ``finally``.
+    Non-fenced returns run ``_apply_snapshot_bound_projection`` in ``finally``.
     A new exit inside the ``try`` is therefore bound automatically; do not
     add a conversation write, or a return, outside that ``try``.
     """
@@ -573,6 +578,9 @@ def _create_or_get_finalization_intent_txn(
             return intent
 
         loaded: dict[str, Any] = conversation_snapshot.to_dict() or {}
+        if not python_owns_finalization(loaded):
+            intent = _no_finalization_intent(FINALIZATION_OWNER_REFUSAL)
+            return intent
         conversation = loaded
         if trigger is ProcessingTrigger.SILENT_BACKFILL:
             if extra_updates:
@@ -671,7 +679,11 @@ def _create_or_get_finalization_intent_txn(
             existing_ref = jobs_collection.document(existing_job_id)
             existing_snapshot = existing_ref.get(transaction=transaction)
             if getattr(existing_snapshot, 'exists', False):
-                intent = _intent_from_job(existing_job_id, existing_snapshot.to_dict() or {})
+                job = existing_snapshot.to_dict() or {}
+                if not python_owns_finalization(job):
+                    intent = _no_finalization_intent(FINALIZATION_OWNER_REFUSAL)
+                    return intent
+                intent = _intent_from_job(existing_job_id, job)
                 return intent
 
         if not admission['accepted'] or not admission['fanout_key']:
@@ -684,6 +696,9 @@ def _create_or_get_finalization_intent_txn(
         job_snapshot = job_ref.get(transaction=transaction)
         if getattr(job_snapshot, 'exists', False):
             job = job_snapshot.to_dict() or {}
+            if not python_owns_finalization(job):
+                intent = _no_finalization_intent(FINALIZATION_OWNER_REFUSAL)
+                return intent
             # Lifecycle fields stay owned by this attach; extra_updates may only
             # contribute a snapshot-bound projection, never identity or status.
             lifecycle_updates.update(
@@ -783,7 +798,7 @@ def _create_or_get_finalization_intent_txn(
         # Only on a normal exit. An exception aborts the transaction, so the
         # write would never commit; attempting it can only replace the real
         # traceback with a binding error raised inside ``finally``.
-        if not raised:
+        if not raised and intent['status'] != FINALIZATION_OWNER_REFUSAL:
             _apply_snapshot_bound_projection(
                 transaction,
                 conversation_ref,
@@ -872,6 +887,8 @@ def _resume_blocked_byok_job_txn(
             'created': False,
         }
     job = snapshot.to_dict() or {}
+    if not python_owns_finalization(job):
+        return _no_finalization_intent(FINALIZATION_OWNER_REFUSAL)
     if job.get('status') == 'blocked_byok' and job.get('requires_byok'):
         transaction.update(
             job_ref,
@@ -918,6 +935,8 @@ def _claim_finalization_job_txn(
     if not getattr(snapshot, 'exists', False):
         return _claim_result('missing')
     job = snapshot.to_dict() or {}
+    if not python_owns_finalization(job):
+        return _claim_result(FINALIZATION_OWNER_REFUSAL)
     if account_deletion_collection is not None and isinstance(job.get('uid'), str):
         marker = account_deletion_collection.document(job['uid']).get(transaction=transaction)
         deletion_status = normalize_account_deletion_status(
@@ -940,6 +959,8 @@ def _claim_finalization_job_txn(
         return _claim_result('blocked_byok')
     if int(job.get('dispatch_generation') or 1) != dispatch_generation:
         return _claim_result('stale_generation')
+    if job.get('finalization_waiting_on_owner'):
+        return _claim_result('not_actionable')
     if job.get('sync_revision_waiting') and not (
         # BYOK work resumes only in a live session holding credentials; it
         # cannot use a credential-free Cloud Task generation for this replay.
@@ -1095,6 +1116,8 @@ def _complete_server_batch_capture_txn(
         return 'missing'
     job = job_snapshot.to_dict() or {}
     current = conversation_snapshot.to_dict() or {}
+    if not python_owns_finalization(job) or not python_owns_finalization(current):
+        return 'fenced'
     same_generation = job.get('dispatch_generation') == dispatch_generation and job.get('lease_epoch') == lease_epoch
     if not same_generation:
         return 'lease_conflict'
@@ -1366,6 +1389,8 @@ def _fanout_claim(status: str, fanout_key: str | None) -> FinalizationFanoutClai
 
 def _conversation_admits_fanout(conversation: Mapping[str, Any], job: Mapping[str, Any], job_id: str) -> bool:
     """Require the immutable job binding to still name a completed conversation."""
+    if not python_owns_finalization(conversation):
+        return False
     if conversation.get('discarded') or conversation.get('status') != 'completed':
         return False
     if conversation.get('finalization_job_id') != job_id:
@@ -1397,6 +1422,8 @@ def _claim_finalization_fanout_txn(
     if not getattr(snapshot, 'exists', False):
         return _fanout_claim('missing', None)
     job = snapshot.to_dict() or {}
+    if not python_owns_finalization(job):
+        return _fanout_claim('fenced', None)
     fanout_key = _fanout_key(job)
     if job.get('fanout_status') == 'completed':
         return _fanout_claim('completed', fanout_key)
@@ -1584,9 +1611,14 @@ def _mark_finalization_retryable_txn(
     now: datetime,
     projection_collection: Any | None = None,
     count_attempt: bool = True,
+    ownership_target_id: str | None = None,
 ) -> bool:
-    if not count_attempt and failure_code not in {'record_owner_contention', 'live_episode_notes'}:
-        raise ValueError('only route contention or live episode settlement may defer without a processing attempt')
+    if not count_attempt and failure_code not in {
+        'record_owner_contention',
+        'live_episode_notes',
+        FINALIZATION_OWNER_REFUSAL,
+    }:
+        raise ValueError('only ownership and live episode settlement waits may defer without a processing attempt')
     snapshot = job_ref.get(transaction=transaction)
     if not getattr(snapshot, 'exists', False):
         return False
@@ -1594,6 +1626,8 @@ def _mark_finalization_retryable_txn(
     if not _is_current_lease(job, dispatch_generation, lease_epoch):
         return False
     attempt_count = int(job.get('attempt_count') or 0) + int(count_attempt)
+    park = failure_code == FINALIZATION_OWNER_REFUSAL and not count_attempt and ownership_target_id is not None
+    retry_after = OWNERSHIP_RECHECK_INTERVAL if park else get_finalization_reconcile_stale_after()
     transaction.update(
         job_ref,
         {
@@ -1601,8 +1635,9 @@ def _mark_finalization_retryable_txn(
             'updated_at': now,
             'lease_expires_at': now,
             'attempt_count': attempt_count,
-            'reconcile_after_at': now + get_finalization_reconcile_stale_after(),
+            'reconcile_after_at': now + retry_after,
             'last_failure_code': failure_code,
+            **({'finalization_waiting_on_owner': ownership_target_id} if park else {}),
             # A contention-only delivery did no processing. Refund its durable
             # worker slot too, or the next claim would count it as a killed worker.
             **(
@@ -1624,6 +1659,7 @@ def mark_finalization_retryable(
     *,
     firestore_client: Any = None,
     count_attempt: bool = True,
+    ownership_target_id: str | None = None,
 ) -> bool:
     client = _client(firestore_client)
     transaction = client.transaction()
@@ -1637,6 +1673,7 @@ def mark_finalization_retryable(
         _now(),
         client.collection(FINALIZATION_PROJECTION_COLLECTION),
         count_attempt,
+        ownership_target_id,
     )
 
 
@@ -1805,6 +1842,7 @@ def _dead_letter_finalization_job(
         conversation_ref is not None
         and isinstance(uid, str)
         and isinstance(conversation, Mapping)
+        and python_owns_finalization(conversation)
         and conversation.get('status') == 'processing'
         and not conversation.get('discarded')
         and conversation.get('finalization_job_id') == job_ref.id
@@ -1912,7 +1950,10 @@ def _terminalize_exhausted_requeued_job_txn(
     if not getattr(snapshot, 'exists', False):
         return False
     job = snapshot.to_dict() or {}
-    if str(job.get('status') or '') != 'queued':
+    if not python_owns_finalization(job) or str(job.get('status') or '') != 'queued':
+        return False
+    if job.get('finalization_waiting_on_owner'):
+        # The row may have parked since the sweep read its candidate snapshot.
         return False
     if int(job.get('dispatch_generation') or 1) != expected_dispatch_generation:
         return False
@@ -1943,6 +1984,7 @@ def _terminalize_exhausted_requeued_job_txn(
         conversation_ref is not None
         and isinstance(uid, str)
         and isinstance(conversation, Mapping)
+        and python_owns_finalization(conversation)
         and conversation.get('status') == 'processing'
         and not conversation.get('discarded')
         and conversation.get('finalization_job_id') == job_ref.id
@@ -2032,6 +2074,8 @@ def _record_meeting_receipt_txn(
     if not getattr(conversation_snapshot, 'exists', False):
         return {'status': 'missing'}
     conversation = conversation_snapshot.to_dict() or {}
+    if not python_owns_finalization(conversation):
+        return {'status': 'fenced'}
     existing_job_id = conversation.get('finalization_job_id')
     job_id = (
         finalization_job_id
@@ -2045,6 +2089,8 @@ def _record_meeting_receipt_txn(
     job_ref = jobs_collection.document(job_id)
     job_snapshot = job_ref.get(transaction=transaction)
     job = (job_snapshot.to_dict() or {}) if getattr(job_snapshot, 'exists', False) else {}
+    if not python_owns_finalization(job):
+        return {'status': 'fenced'}
     if job and (job.get('uid') != uid or job.get('conversation_id') != conversation_id):
         return {'status': 'identity_mismatch'}
 
@@ -2336,6 +2382,8 @@ def _claim_finalization_replay_txn(
             'created': False,
         }
     job = snapshot.to_dict() or {}
+    if not python_owns_finalization(job):
+        return _no_finalization_intent(FINALIZATION_OWNER_REFUSAL)
     status = str(job.get('status') or '')
     if byok_only and not job.get('requires_byok'):
         return _intent_from_job(job_ref.id, job)
@@ -2398,6 +2446,17 @@ def _claim_finalization_replay_txn(
     if status not in ('queued', 'leased'):
         return _intent_from_job(job_ref.id, job)
 
+    ownership_target_id = job.get('finalization_waiting_on_owner')
+    if ownership_target_id:
+        due = parse_timestamp(job.get('reconcile_after_at'))
+        if (due is not None and now < due) or conversation_ref_for_job is None:
+            return _intent_from_job(job_ref.id, job)
+        survivor = conversation_ref_for_job(job['uid'], ownership_target_id).get(transaction=transaction).to_dict()
+        if survivor is not None and not python_owns_finalization(survivor):
+            transaction.update(job_ref, {'reconcile_after_at': now + OWNERSHIP_RECHECK_INTERVAL})
+            return _intent_from_job(job_ref.id, job)
+    clear_wait = {'finalization_waiting_on_owner': firestore.DELETE_FIELD} if ownership_target_id else {}
+
     if job.get('requires_byok'):
         transaction.update(
             job_ref,
@@ -2409,6 +2468,7 @@ def _claim_finalization_replay_txn(
                 'lease_epoch': int(job.get('lease_epoch') or 0) + 1,
                 'lease_expires_at': firestore.DELETE_FIELD,
                 'reconcile_after_at': firestore.DELETE_FIELD,
+                **clear_wait,
             },
         )
         _record_projection_delta(transaction, projection_collection, job, **{status: -1, 'blocked_byok': 1})
@@ -2476,6 +2536,7 @@ def _claim_finalization_replay_txn(
             'replay_dispatches_without_claim': unclaimed_dispatches + 1,
             'replay_observed_lease_epoch': lease_epoch,
             'replay_dispatch_suspended_at': firestore.DELETE_FIELD,
+            **clear_wait,
         },
     )
     if status == 'leased':
@@ -2662,7 +2723,11 @@ def get_finalization_replay_candidates(*, limit: int = 100, firestore_client: An
         sum((snapshot.to_dict() or {}).get('kind') == 'listen_quiet_check' for snapshot in snapshots),
         bool(cursor),
     )
-    return [(snapshot.to_dict() or {}) | {'job_id': snapshot.id} for snapshot in snapshots]
+    return [
+        row | {'job_id': snapshot.id}
+        for snapshot in snapshots
+        if python_owns_finalization(row := snapshot.to_dict() or {})
+    ]
 
 
 def get_finalization_replay_oldest_overdue_age_seconds(*, firestore_client: Any = None) -> float:
@@ -2688,6 +2753,8 @@ def defer_finalization_replay(candidate: dict[str, Any], *, firestore_client: An
     @firestore.transactional
     def defer(transaction: Any) -> bool:
         current = ref.get(transaction=transaction).to_dict() or {}
+        if not python_owns_finalization(current):
+            return False
         now = _now()
         due = current.get('reconcile_after_at')
         if not isinstance(due, datetime) or due > now:
@@ -2790,7 +2857,7 @@ def get_stale_processing_orphan_candidates(
             if uid is None:
                 continue
             data = snapshot.to_dict() or {}
-            if data.get('deleted') or data.get('discarded') or data.get('deferred'):
+            if not python_owns_finalization(data) or any(data.get(key) for key in ('deleted', 'discarded', 'deferred')):
                 continue
             admitted_at = parse_timestamp(data.get('processing_admitted_at'))
             if admitted_at is not None and admitted_at > cutoff:
@@ -3147,7 +3214,7 @@ def _renew_processing_lease_txn(transaction: Any, conversation_ref: Any, now: da
     if not getattr(snapshot, 'exists', False):
         return False
     data = snapshot.to_dict() or {}
-    if data.get('status') != 'processing' or data.get('discarded'):
+    if not python_owns_finalization(data) or data.get('status') != 'processing' or data.get('discarded'):
         return False
     transaction.update(conversation_ref, {'processing_admitted_at': now})
     return True
@@ -3174,7 +3241,8 @@ def _reacquire_deferred_processing_txn(transaction: Any, conversation_ref: Any, 
         return False
     data = snapshot.to_dict() or {}
     if (
-        data.get('status') not in {'processing', 'completed'}
+        not python_owns_finalization(data)
+        or data.get('status') not in {'processing', 'completed'}
         or data.get('discarded')
         or data.get('deferred') is not True
     ):
@@ -3365,7 +3433,7 @@ def _abandon_byok_finalization_job_txn(
         return _byok_abandonment('missing')
     job = snapshot.to_dict() or {}
     status = str(job.get('status') or '')
-    if not bool(job.get('requires_byok')):
+    if not python_owns_finalization(job) or not job.get('requires_byok'):
         return _byok_abandonment('fenced')
     if status not in ('queued', 'leased', 'blocked_byok') or status != expected_status:
         return _byok_abandonment('fenced')
@@ -3398,6 +3466,9 @@ def _abandon_byok_finalization_job_txn(
         conversation_ref = conversation_ref_for_job(uid, conversation_id)
         conversation_snapshot = conversation_ref.get(transaction=transaction)
         conversation = conversation_snapshot.to_dict() if getattr(conversation_snapshot, 'exists', False) else None
+
+    if isinstance(conversation, Mapping) and not python_owns_finalization(conversation):
+        return _byok_abandonment('fenced')
 
     closes_conversation = (
         conversation_ref is not None
@@ -3463,7 +3534,8 @@ def _abandon_byok_finalization_job_txn(
         # A desktop lazy row intentionally stays on `processing` and is owned by
         # its own lane, exactly as the bare-`processing` sweep treats it.
         return _byok_abandonment('abandoned', 'deferred')
-    transaction.update(conversation_ref, terminal)
+    if closes_conversation:
+        transaction.update(conversation_ref, terminal)
     return _byok_abandonment('abandoned', 'closed')
 
 

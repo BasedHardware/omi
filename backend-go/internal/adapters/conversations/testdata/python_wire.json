@@ -1,0 +1,164 @@
+{
+  "control": {
+    "generation": "0000000000000000000000000000000a",
+    "ready": false
+  },
+  "dirty": {
+    "home_dirty": true
+  },
+  "finalized": {
+    "created_at": {
+      "$timestamp": "2026-01-02T03:04:05.100000+00:00"
+    },
+    "data_protection_level": "enhanced",
+    "discarded": true,
+    "finalization_status": "completed",
+    "finished_at": {
+      "$timestamp": "2026-01-02T03:05:06.123456+00:00"
+    },
+    "home_content_invalidated": false,
+    "home_source_version": "00000000000000000000000000000009",
+    "id": "enhanced_zlib",
+    "started_at": {
+      "$timestamp": "2026-01-02T03:04:05.100000+00:00"
+    },
+    "status": "completed",
+    "structured": {
+      "emoji": "💬",
+      "overview": "Final overview",
+      "sections": [],
+      "title": "Final title"
+    },
+    "summary_covers_through": {
+      "$timestamp": "2026-01-02T03:05:06.123456+00:00"
+    },
+    "transcript_segments": "AgICAgICAgICAgICJJkaJHQYt4L1ehXfjK0iwt8x9jJbzQJ8LykdIjBOQTR3ycwNYS5ZhH4ENa+hFxksSokT8SJTpd2Cb7PzsMkvburzSw/oa7xSR1O7lZsJTFku3runwP0xv9BxU2zMEVab1WhSIkLUm3V9A/ktVR3wCxUF/nn6iMrKKlb9zuAxt64t7VYha3hwuKlZVCfOZaRxHXZo1rDoiUztvnt7Dot3k3g7g7qNUMgkOOgei2jmN10dVTIBX/ikt6pgP8X/mHTHnHdp37XwUQvRZ6Veb2A3/hCiSTbhHeimfvbIX4h98s074IAhUzL8K/0m/nsiCR/IwQ3/wnvsQ/950w==",
+    "transcript_segments_compressed": true
+  },
+  "rows": {
+    "enhanced_json": {
+      "created_at": {
+        "$timestamp": "2026-01-02T03:04:05.100000+00:00"
+      },
+      "data_protection_level": "enhanced",
+      "discarded": false,
+      "finalization_status": "leased",
+      "home_content_invalidated": false,
+      "home_source_version": "00000000000000000000000000000005",
+      "id": "enhanced_json",
+      "started_at": {
+        "$timestamp": "2026-01-02T03:04:05.100000+00:00"
+      },
+      "status": "processing",
+      "structured": {
+        "emoji": "💬",
+        "overview": "Draft",
+        "sections": [],
+        "title": "Pending"
+      },
+      "transcript_segments": "AQEBAQEBAQEBAQEBMd4UWVBJxhlOh2AbGtLIbr4HxSADjtzChac5e/6OgO9jtHwJ9e1hZwo8AgSEmiezcH7RlLxTTyB/D/7HsUDljZUCGSqgw2q/X4VJ2WE56v//wg4csd72Nh89ukD68/VnLuKxz3NmRzD38b29TZLnEo0r0VKv/KOnjmd9K8FiYgYHZXwh/2lTc1BODGEyREjOSUZQCWfonBUDuAqLAY5CTQ2JsbUuj2ISBZN+vb8pcSdpPlEBduIGsg==",
+      "transcript_segments_compressed": false
+    },
+    "enhanced_zlib": {
+      "created_at": {
+        "$timestamp": "2026-01-02T03:04:05.100000+00:00"
+      },
+      "data_protection_level": "enhanced",
+      "discarded": false,
+      "finalization_status": "leased",
+      "home_content_invalidated": false,
+      "home_source_version": "00000000000000000000000000000007",
+      "id": "enhanced_zlib",
+      "started_at": {
+        "$timestamp": "2026-01-02T03:04:05.100000+00:00"
+      },
+      "status": "processing",
+      "structured": {
+        "emoji": "💬",
+        "overview": "Draft",
+        "sections": [],
+        "title": "Pending"
+      },
+      "transcript_segments": "AgICAgICAgICAgICJJkaJHQYt4L1ehXfjK0iwt8x9jJbzQJ8LykdIjBOQTR3ycwNYS5ZhH4ENa+hFxksSokT8SJTpd2Cb7PzsMkvburzSw/oa7xSR1O7lZsJTFku3runwP0xv9BxU2zMEVab1WhSIkLUm3V9A/ktVR3wCxUF/nn6iMrKKlb9zuAxt64t7VYha3hwuKlZVCfOZaRxHXZo1rDoiUztvnt7Dot3k3g7g7qNUMgkOOgei2jmN10dVTIBX/ikt6pgP8X/mHTHnHdp37XwUQvRZ6Veb2A3/hCiSTbhHeimfvbIX4h98s074IAhUzL8K/0m/nsiCR/IwQ3/wnvsQ/950w==",
+      "transcript_segments_compressed": true
+    },
+    "standard_list": {
+      "created_at": {
+        "$timestamp": "2026-01-02T03:04:05.100000+00:00"
+      },
+      "data_protection_level": "standard",
+      "discarded": false,
+      "finalization_status": "leased",
+      "home_content_invalidated": false,
+      "home_source_version": "00000000000000000000000000000001",
+      "id": "standard_list",
+      "started_at": {
+        "$timestamp": "2026-01-02T03:04:05.100000+00:00"
+      },
+      "status": "processing",
+      "structured": {
+        "emoji": "💬",
+        "overview": "Draft",
+        "sections": [],
+        "title": "Pending"
+      },
+      "transcript_segments": [
+        {
+          "end": 2.5,
+          "id": "s1",
+          "is_user": true,
+          "start": 0.25,
+          "text": "A synthetic café note."
+        },
+        {
+          "end": 3.25,
+          "id": "s2",
+          "is_user": false,
+          "start": 2.5,
+          "text": ""
+        }
+      ]
+    },
+    "standard_zlib": {
+      "created_at": {
+        "$timestamp": "2026-01-02T03:04:05.100000+00:00"
+      },
+      "data_protection_level": "standard",
+      "discarded": false,
+      "finalization_status": "leased",
+      "home_content_invalidated": false,
+      "home_source_version": "00000000000000000000000000000003",
+      "id": "standard_zlib",
+      "started_at": {
+        "$timestamp": "2026-01-02T03:04:05.100000+00:00"
+      },
+      "status": "processing",
+      "structured": {
+        "emoji": "💬",
+        "overview": "Draft",
+        "sections": [],
+        "title": "Pending"
+      },
+      "transcript_segments": {
+        "$bytes": "eJyLrlbKTFGyUlAqNlTSUVAqSa0oAfEcFYor80oyUksykxWSE9NiSg0MUi0V8vJLUvVAyopLEotA6gz0jEyB3NQ8kBFGeiB2ZnF8aXFqEZBfUlSaWqujALfACNkCZFMgGiGGGENMRJiSlphTnFobCwDHIS+X"
+      },
+      "transcript_segments_compressed": true
+    }
+  },
+  "segments": [
+    {
+      "end": 2.5,
+      "id": "s1",
+      "is_user": true,
+      "start": 0.25,
+      "text": "A synthetic café note."
+    },
+    {
+      "end": 3.25,
+      "id": "s2",
+      "is_user": false,
+      "start": 2.5,
+      "text": ""
+    }
+  ]
+}

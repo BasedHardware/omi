@@ -9,6 +9,7 @@ import 'package:omi/backend/http/api/conversations_v3.dart' as api;
 import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/backend/schema/conversation_v3.dart';
 
 typedef ConversationsLiveFetcher = Future<ApiResult<api.ConversationsLiveRead>> Function();
 
@@ -50,6 +51,8 @@ class ConversationsV3Provider extends ChangeNotifier {
   Future<void>? _reading;
   Timer? _poll;
   bool Function()? _pollWhen;
+  bool Function()? _rowsPending;
+  Future<void> Function()? _refreshRows;
   int _watchers = 0;
   bool _disposed = false;
 
@@ -141,22 +144,42 @@ class ConversationsV3Provider extends ChangeNotifier {
     return a.id == b.id &&
         a.structured.title == b.structured.title &&
         a.v3?.tileState == b.v3?.tileState &&
+        a.v3?.homeHidden == b.v3?.homeHidden &&
+        a.startedAt == b.startedAt &&
         a.finishedAt == b.finishedAt &&
         a.transcriptSegments.length == b.transcriptSegments.length;
   }
 
   /// Home calls this while it is on screen; pair each call with [unwatch]. A tick is skipped while
-  /// [when] says Home is covered (a pushed page).
-  void watch({bool Function()? when}) {
+  /// [when] says Home is covered (a pushed page). While [rowsPending] says a listed conversation is
+  /// still transcribing or writing its summary, each tick also runs [refreshRows], so its row moves
+  /// on to done without a pull-to-refresh (X7).
+  void watch({bool Function()? when, bool Function()? rowsPending, Future<void> Function()? refreshRows}) {
     _watchers++;
     if (when != null) _pollWhen = when;
+    if (rowsPending != null) _rowsPending = rowsPending;
+    if (refreshRows != null) _refreshRows = refreshRows;
     if (_poll != null) return;
     unawaited(refresh());
-    _poll = Timer.periodic(pollInterval, (_) {
-      if (_pollWhen?.call() == false) return;
-      unawaited(refresh());
-    });
+    _poll = Timer.periodic(pollInterval, (_) => tick());
   }
+
+  /// One poll: the live conversation, and the list while a row is mid-pipeline.
+  @visibleForTesting
+  void tick() {
+    if (_pollWhen?.call() == false) return;
+    unawaited(refresh());
+    final refreshRows = _refreshRows;
+    if (v3 && refreshRows != null && (_rowsPending?.call() ?? false)) {
+      unawaited(refreshRows().catchError((Object _) {}));
+    }
+  }
+
+  /// Whether any of [conversations] is still transcribing or writing its summary.
+  static bool anyMidPipeline(Iterable<ServerConversation> conversations) => conversations.any((c) {
+        final tile = c.v3?.tileState;
+        return tile == ConversationTileState.transcribing || tile == ConversationTileState.writing;
+      });
 
   void unwatch() {
     if (_watchers > 0) _watchers--;
@@ -164,6 +187,8 @@ class ConversationsV3Provider extends ChangeNotifier {
     _poll?.cancel();
     _poll = null;
     _pollWhen = null;
+    _rowsPending = null;
+    _refreshRows = null;
   }
 
   @override

@@ -341,8 +341,11 @@ upload-failed rule off until the writers have drained, then enable it in the
 chart. New Jobs take the chart env; stop active repair Jobs for immediate rollback.
 Overlap rollback must also set `RECORD_SEAL_OVERLAP_TRIM_ENABLED=false` on every
 CPU admission role. It is declared in both listen charts and the Cloud Run
-runtime manifest; listen's `privateEnv.RECORD_SEAL_OVERLAP_TRIM_ENABLED=false`
-override emits exactly one env entry. Apply the same false value to CPU roles
+runtime manifest. In prod the listen value is a literal in
+`prod_omi_backend_listen_values.yaml`: change it by a reviewed PR and listen deploy,
+because the chart refuses any `privateEnv` overlay once `privateSecretEnv` is set (#25660).
+In dev the `privateEnv.RECORD_SEAL_OVERLAP_TRIM_ENABLED=false` override still emits
+exactly one env entry. Apply the same false value to CPU roles
 and worker `recordSealRules.overlapTrimEnabled`; a worker-only override does not
 roll back CPU admission. Environment-only revisions can retain the same image.
 
@@ -800,17 +803,16 @@ local-send phase/exception attribution and the listen-train acceptance checks.
 ### unlimited_v2 backfill/import daily transcribed-hours cap
 
 `UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED` (default `false`) and
-`UNLIMITED_V2_BACKFILL_HOURS_CAP_HOURS` (default `24`) are a separate, default-off
+`UNLIMITED_V2_BACKFILL_HOURS_CAP_HOURS` (default `24`; prod Cloud Run on at 24 since 2026-11-18; prod backend-listen pinned off until the follow-up after the SCA-3516 listen roll) are a separate
 admission cap for the `unlimited_v2` plan. It counts the `transcription_seconds`
 already recorded on `users/{uid}/hourly_usage` for the current UTC user-day — the
-same basis `unit_cost_user_day.tx_sec` uses — and refuses managed **backfill/import**
-transcription once that day reached the cap level. Only the sync `backfill` lane
-and the batch `backfill` lane pass the backfill marker; live listen and fresh
-sync/batch capture never do, so live capture is untouched even on a user-day above
-the cap. The meter is the total day seconds (it cannot separate backfill from live
+same basis `unit_cost_user_day.tx_sec` uses — and defers sync **backfill** uploads once that day reached the cap level. It is
+enforced only at sync upload admission; live listen, fresh capture, sync segments
+and batch units never consult it. The meter is the total day seconds (it cannot separate backfill from live
 seconds); the admission lane is the exact separation for the work being admitted.
-Above the cap the answer is identical to an exhausted allowance: offline segments
-are durably held. Free, Plus and the deprecated paid tiers are unchanged in both
+Above the cap the upload gets the retryable 503 `backfill_capacity` with
+`Retry-After` to the next UTC day, before any audio is consumed; no server hold is
+created. Free, Plus and the deprecated paid tiers are unchanged in both
 modes, and an unreadable plan or meter read admits transcription. Deployment,
 readback and activation: [runbook](runbooks/unlimited-v2-backfill-hours-cap.md);
 rollout note:
@@ -5618,24 +5620,6 @@ Every reopen starts a new provider speaker scope (see below), so the VAD policy
 keeps the prod values. Lower VAD thresholds wait for speaker scope to survive a
 reopen: keep the conversation scope and remap the new socket's `SPEAKER_N`.
 
-A uid-hash treatment cohort can run tighter values on a static percent of users
-without touching the global knobs: `SONIOX_IDLE_COHORT_PERCENT` (default `0`,
-the cohort kill switch) selects sessions by
-`cohort_bucket(uid, 'soniox-idle-close', bits=64)`, and in-cohort sessions read
-`SONIOX_IDLE_COHORT_CLOSE_SECONDS`, `SONIOX_IDLE_COHORT_MAX_CLOSES_PER_HOUR`
-and `SONIOX_IDLE_COHORT_REARM_SECONDS` when set, each falling back to the
-global knob when unset. The cohort is also the speech gate: its overrides may
-go below the global floors (close down to 5 s, one second past the VAD
-hangover; re-arm down to 1 s; cap up to 240 closes per hour), so the treatment
-arm connects Soniox only around speech while the arm metrics price it against
-today's policy. The global knobs keep their floors. Out-of-cohort sessions always keep the global values,
-and `SONIOX_IDLE_CLOSE_SECONDS=0` disables the idle wrapper for everyone
-either way. The receiver-owned budget resolves the arm once per logical session,
-consulting the listen request's uid only while the cohort is armed (percent > 0
-plus at least one override), so identity-bypass and unauthenticated paths never
-touch `request.uid`; the `omi_soniox_idle_cohort_*` companions carry the same
-closes/reopens/latency/avoided series labelled `arm=control|treatment`.
-
 The first raw VAD silence decision starts a monotonic timer. After the threshold
 and the normal VAD hangover, a skipped-silence chunk schedules a planned close:
 queue `finalize` behind admitted audio, queue the empty end-of-audio frame, drain
@@ -8293,9 +8277,15 @@ page; recovery and repair still return them through pending assignment to
 persisted/ready. Unchanged finishable receipts are retried each cycle: a sibling
 or destination can unblock them without changing their own result version.
 Already-ready siblings in one discovered page share a content-completion
-probe for their exact immutable binding. Every row still rechecks its receipt
-and privacy fences; persisted rows still finish their own side effects and
-probe completion. Failed/cancelled probes clear their marker. Each new
+probe for their exact immutable binding. With the default-on
+`BATCH_PIPELINE_FOLLOWUP_EARLY_COALESCE_ENABLED`, a duplicate can skip the
+read-only session check after a successful same-process, same-page probe.
+Its ready receipt and pinned policy must match, the first live deletion and
+privacy walk must cover all of its inputs and outputs, and a fresh privacy
+token must match the token revision in that walk. The proof expires within
+60 seconds. Any uncertainty runs the full check. Set the switch to `false`
+to restore the original check order. Persisted rows still finish their own
+side effects and probe completion. Failed/cancelled probes clear their marker. Each new
 discovery page gets a fresh probe; an older page keeps its marker until its
 queued/running rows finish. Priority/owed recovery work bypasses sharing,
 including owed rows also found by discovery or woken before their probe. Thus an
@@ -10304,8 +10294,15 @@ See the [capacity runbook](./runbooks/batch-vendor-routing-capacity.md#overflow-
 conversation deletion batch-purge consumer shares one resumable owner scan for a
 sealed group of fresh obligations. `false`, `off`, `0` or `no` returns members to
 legacy execution, preserving their per-conversation journals and legacy progress.
-Task payloads and the reconciler protocol are unchanged. Coalescing also requires
-Release's expiring all-consumers-new marker; missing/stale readiness stays legacy.
-Revoke readiness, switch off and drain groups before routing an old binary, whose
-completion cannot fence a re-arm. See the
+Task payloads and the reconciler protocol are unchanged. The workspace release
+floor excludes older workers whose completion cannot fence a re-arm. For
+emergency handback, roll out the switch off to all purge consumers. See the
 [rollback and canary contract](runbooks/conversation-purge-coalescing.md).
+
+### Live conversation transcript and recap
+
+The authenticated live conversation row may include `v3_recording_ids`. The phone matches those source IDs against its active capture before showing on-device transcript lines in the detail. When the server transcript covers a line's time interval, it replaces that local line.
+
+Opening Summary requests the first eligible recap. Each subsequent five-minute interval of uninterrupted viewing can update the recap when there is new speech. Switching tabs, covering the detail or backgrounding the app resets the interval. An unchanged transcript reuses the displayed result.
+
+A `GET /v1/conversations/{conversation_id}/summary/live-catchup/stream` requests a recap of the current projected speech. The server checks the exact live conversation, the caller's compute policy and the summary lease. The detail response may include `live_summary.structured` and `live_summary.summary_covers_through`. The timestamp identifies the last speech included in that recap. A strictly later append preserves the earlier preview. Correcting covered speech invalidates it. Final processing uses its own summary and coverage fields.

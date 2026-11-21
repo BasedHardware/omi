@@ -46,6 +46,9 @@ class LiveAudioArchive:
         # the resolved decision for the connection lifetime.
         self._admitted_snapshot: dict[str, bool] = {}
         self._server_audio_marked: set[str] = set()
+        # Retired recording -> successor. A frame still addressed to a retired recording
+        # (bound before the switch, appended after) joins the successor, never the sealed row.
+        self.retargets: dict[str, str] = {}
 
     def _admitted(self, uid: str, phase: str) -> bool:
         if phase not in self._admitted_snapshot:
@@ -71,7 +74,17 @@ class LiveAudioArchive:
         async with self.lock:
             await self._append(raw, conversation_id, timestamp, samples, channel, decoded, source_frame)
 
+    async def retarget(self, retired: str, successor: str) -> None:
+        """After this returns, no frame can join `retired`; its packs can be finished and sealed."""
+        async with self.lock:
+            self.retargets[retired] = successor
+            for key in [key for key, value in self.retargets.items() if value == retired]:
+                self.retargets[key] = successor
+            while len(self.retargets) > 64:
+                self.retargets.pop(next(iter(self.retargets)))
+
     async def _append(self, raw, conversation_id, timestamp, samples, channel, decoded, source_frame):
+        conversation_id = self.retargets.get(conversation_id, conversation_id)
         request = self.host.request
         # Consent is read before admission: with LIVE default-on, a host that
         # does not carry the consent attribute (older hosts, test doubles)

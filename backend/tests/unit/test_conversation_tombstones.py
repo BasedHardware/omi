@@ -82,6 +82,7 @@ def function(path, name, namespace):
         namespace.setdefault('destructive_operation_gate', lambda *args, **kwargs: nullcontext())
         namespace.setdefault('CONVERSATION_DELETE_GATE_WAIT_SECONDS', 0.0)
         namespace.setdefault('deferred_batch_purges', lambda uid: nullcontext())
+        namespace.setdefault('_legal_hold_defers_delete', lambda uid: False)
         function(path, '_delete_conversation_under_gate', namespace)
     node = next(
         n
@@ -228,6 +229,8 @@ def test_account_wipe_enumerates_tombstones_even_without_root(store, monkeypatch
         'delete_user_data',
         {
             'db': store,
+            'account_authority_writer_enabled': lambda: True,
+            'get_data_plane_firestore_client': lambda: store,
             'logger': MagicMock(),
             'delete_collection_recursive': purge,
         },

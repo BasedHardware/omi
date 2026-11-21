@@ -89,17 +89,15 @@ invoker SA and its endpoint-specific OIDC audience. Configure
 named task before the cohort ramp. Do not enable a worker without runtime-image,
 identity, index-readiness and route qualification.
 
-First deploy this SHA at the prod default memory (6Gi since the 2026-10-24
-costcut promotion; development keeps 8Gi) through GitHub Actions. For a
+First deploy this SHA at the memory limit declared for `backend-sync` in
+`backend/deploy/ops/prod.yaml` through GitHub Actions. For a
 separate memory trial, the lead creates a tagged **no-traffic** revision at
 the trial size from that already-built same-SHA image, routes at most 5% to it
-and waits ≥12h. Only after qualification/full promotion change the prod
-fallback here (or set GitHub environment variable `BACKEND_SYNC_MEMORY`)
-for future deployments; the backend-stack action validates
-`4Gi|5Gi|6Gi|8Gi`. Since the 2026-10-24 costcut, the manual workflow's fallback is `6Gi`
-for prod and `8Gi` for development, and the dev-only deploys (auto-dev) keep the action's
-`8Gi` default. The deployment remains through the existing release admission and
-GitHub Actions workflow. Rollback: redeploy the admitted image at the prior size.
+and waits ≥12h. After qualification, record the production limit in
+`backend/deploy/ops/prod.yaml`. Use the config train to change or restore
+the limit on the serving image. Normal production deployments read the
+same ops value. Development keeps the action's `8Gi` default and the manual
+workflow's `BACKEND_SYNC_MEMORY` override.
 Watch memory peak, OOMs, queue age and retry rate; 4.9 GiB is an observed sample
 peak, not qualification for the largest batch. At 6Gi the 1-min per-instance max was
 4.74 GiB on 2026-10-25 and at most 3.96 GiB from 10-27 to 11-02, so a 5Gi trial

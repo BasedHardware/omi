@@ -207,6 +207,7 @@ getTranscriptWidget(
   String layoutIdentity = 'transcript',
   List<Widget> leadingItems = const [],
   List<String> leadingItemIds = const [],
+  Widget? trailingItem,
   TranscriptSegmentBuilder? segmentBuilder,
   void Function(TranscriptSegment segment)? onConfirmSpeakerLabel,
   void Function(TranscriptSegment segment)? onRejectSpeakerLabel,
@@ -229,7 +230,7 @@ getTranscriptWidget(
   }
 
   final bool showPhotos = photos.isNotEmpty;
-  final bool showTranscript = segments.isNotEmpty;
+  final bool showTranscript = segments.isNotEmpty || trailingItem != null;
 
   Widget buildPhotos() {
     return PhotosGridComponent(photos: photos, conversationId: conversationId);
@@ -259,6 +260,7 @@ getTranscriptWidget(
       layoutIdentity: layoutIdentity,
       leadingItems: leadingItems,
       leadingItemIds: leadingItemIds,
+      trailingItem: trailingItem,
       segmentBuilder: segmentBuilder,
       onConfirmSpeakerLabel: onConfirmSpeakerLabel,
       onRejectSpeakerLabel: onRejectSpeakerLabel,

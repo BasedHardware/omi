@@ -290,6 +290,24 @@ def exhausted_requeue(store, monkeypatch):
     return enqueue
 
 
+def test_exhausted_requeue_probes_parked_survivor(store, monkeypatch, exhausted_requeue):
+    survivor_path = (*ROW_PATH[:-1], 'synthetic-survivor')
+    store.rows[survivor_path] = {'finalization_engine': 'go', 'finalization_owner_epoch': 1}
+    store.rows[JOB_PATH].update(finalization_waiting_on_owner=survivor_path[-1], reconcile_after_at=NOW)
+    before_job = deepcopy(store.rows[JOB_PATH])
+    before_row = deepcopy(store.rows[ROW_PATH])
+    record_dead_letter = Mock()
+    monkeypatch.setattr(service, '_record_dead_letter', record_dead_letter)
+
+    result = service.reconcile_listen_finalization_jobs(firestore_client=store)
+
+    assert result['terminalized'] == result['retired'] == result['requeued'] == 0
+    assert store.rows[JOB_PATH] == {**before_job, 'reconcile_after_at': NOW + jobs.OWNERSHIP_RECHECK_INTERVAL}
+    assert store.rows[ROW_PATH] == before_row
+    exhausted_requeue.assert_not_called()
+    record_dead_letter.assert_not_called()
+
+
 @pytest.mark.parametrize(
     ('failure_code', 'row_code'),
     [(code, 'processing_failed') for code in sorted(service.SMART_MERGE_INCOMPLETE_CODES)]

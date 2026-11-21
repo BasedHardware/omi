@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "id": "FC-whitespace-count-understates-transcript-content",
+  "family": "input-tolerance",
+  "violated_contract": "A transcript length gate must account for scripts that do not separate words with whitespace. Counting a complete Han, kana or Thai utterance as one word can hide it on Home or skip its notes and tasks.",
+  "canonical_prevention": "Use the same script-aware content count for v3 projection, notes admission and their estimates. Exercise both sides of each gate with unspaced and mixed-script speech.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_conversations_v3_engine.py",
+    "backend/tests/unit/test_conversations_v3_stream.py"
+  ],
+  "evidence_prs": [],
+  "status": "open"
+}

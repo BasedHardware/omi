@@ -1,0 +1,5 @@
+Flask
+google-cloud-firestore==2.20.0
+gunicorn
+httpx
+requests

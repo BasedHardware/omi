@@ -36,6 +36,7 @@ FAKE_GCLOUD = r'''#!/usr/bin/env python3
 import json
 import os
 import sys
+import time
 
 args = sys.argv[1:]
 with open(os.environ["FAKE_GCLOUD_LOG"], "a", encoding="utf-8") as log:
@@ -62,6 +63,8 @@ if args[:3] == ["compute", "network-endpoint-groups", "list"]:
         listed = [item for item in listed if not item["zone"].endswith("/" + missing_zone)]
     print(json.dumps(listed))
 elif args[:3] == ["compute", "backend-services", "describe"]:
+    if os.environ.get("FAKE_DESCRIBE_HANG"):
+        time.sleep(60)
     attached_zones = ["us-central1-a", "us-central1-b"]
     if os.environ.get("FAKE_ALL_ATTACHED"):
         attached_zones = ["us-central1-a", "us-central1-b", "us-central1-c", "us-central1-f"]
@@ -87,6 +90,8 @@ elif args[:3] == ["compute", "backend-services", "add-backend"]:
             file=sys.stderr,
         )
         sys.exit(1)
+    elif os.environ.get("FAKE_ADD_MODE") == "hang":
+        time.sleep(60)
     elif os.environ.get("FAKE_ADD_MODE") == "permission-denied-generic":
         print("PERMISSION_DENIED raw-resource-id", file=sys.stderr)
         sys.exit(1)
@@ -122,6 +127,7 @@ class ReconcileListenNegZonesTest(unittest.TestCase):
         global_neg=False,
         status_omits_f=False,
         f_foreign_owner=False,
+        describe_hang=False,
     ):
         env = os.environ.copy()
         env["PATH"] = f"{self.bin_dir}{os.pathsep}{env.get('PATH', '')}"
@@ -142,6 +148,8 @@ class ReconcileListenNegZonesTest(unittest.TestCase):
             env["FAKE_STATUS_OMITS_F"] = "1"
         if f_foreign_owner:
             env["FAKE_F_FOREIGN_OWNER"] = "1"
+        if describe_hang:
+            env["FAKE_DESCRIBE_HANG"] = "1"
         return subprocess.run(
             [
                 sys.executable,
@@ -195,6 +203,23 @@ class ReconcileListenNegZonesTest(unittest.TestCase):
             self.assertIn("--traffic-duration=LONG", call)
             self.assertNotIn("--max-rate-per-endpoint", " ".join(call))
             self.assertNotIn("--max-connections-per-endpoint", " ".join(call))
+
+    def test_hung_attach_fails_in_bounded_time(self):
+        result = self._run("--attach-timeout=1", add_mode="hang")
+
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("failed to attach zone us-central1-c: gcloud timed out after 1s", result.stderr)
+        self.assertNotIn("Traceback", result.stderr)
+        add_calls = [call for call in self._gcloud_calls() if "add-backend" in call]
+        self.assertEqual(len(add_calls), 1)
+
+    def test_hung_read_fails_before_any_attach(self):
+        result = self._run("--read-timeout=1", describe_hang=True)
+
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("backend service read timed out after 1s", result.stderr)
+        self.assertNotIn("Traceback", result.stderr)
+        self.assertTrue(all("add-backend" not in call for call in self._gcloud_calls()))
 
     def test_attach_permission_error_reports_denied_permission_and_resource(self):
         result = self._run(add_mode="permission-denied")

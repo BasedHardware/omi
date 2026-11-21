@@ -132,30 +132,47 @@ def test_cpu_admission_switch_is_declared_in_runtime_manifest_and_listen_chart()
         for service in config['cloud_run']['services'].values():
             assert service['env'][key]['value'] == 'true'
         values = backend / f'charts/backend-listen/{stage}_omi_backend_listen_values.yaml'
-        entries = yaml.load(values.read_text(), Loader=yaml.CSafeLoader)['env']
-        assert next(e for e in entries if e['name'] == key)['value'] == 'true'
-        rendered = subprocess.run(
-            [
-                'helm',
-                'template',
-                'sealrules-test',
-                str(backend / 'charts/backend-listen'),
-                '-f',
-                str(values),
-                '--set-string',
-                'image.tag=synthetic',
-                '--set-string',
-                f'privateEnv.{key}=false',
-            ],
-            capture_output=True,
-            text=True,
-        )
-        assert rendered.returncode == 0
-        deployment = next(
-            d for d in yaml.load_all(rendered.stdout, Loader=yaml.CSafeLoader) if d and d['kind'] == 'Deployment'
-        )
-        entries = deployment['spec']['template']['spec']['containers'][0]['env']
-        assert [e['value'] for e in entries if e['name'] == key] == ['false']
+        stage_values = yaml.load(values.read_text(), Loader=yaml.CSafeLoader)
+        assert next(e for e in stage_values['env'] if e['name'] == key)['value'] == 'true'
+
+        def render(*overrides):
+            return subprocess.run(
+                [
+                    'helm',
+                    'template',
+                    'sealrules-test',
+                    str(backend / 'charts/backend-listen'),
+                    '-f',
+                    str(values),
+                    '--set-string',
+                    'image.tag=synthetic',
+                    *overrides,
+                ],
+                capture_output=True,
+                text=True,
+            )
+
+        def listen_env(result):
+            assert result.returncode == 0, result.stderr
+            deployment = next(
+                d for d in yaml.load_all(result.stdout, Loader=yaml.CSafeLoader) if d and d['kind'] == 'Deployment'
+            )
+            return [
+                e.get('value')
+                for e in deployment['spec']['template']['spec']['containers'][0]['env']
+                if e['name'] == key
+            ]
+
+        assert listen_env(render()) == ['true']
+        rendered = render('--set-string', f'privateEnv.{key}=false')
+        if (stage_values.get('privateSecretEnv') or {}).get('keys'):
+            # The chart's guard fires only when privateSecretEnv.keys is non-empty. Such a stage refuses
+            # any literal privateEnv overlay, so this switch changes only by editing the values file
+            # (a reviewed deploy), not by an overlay.
+            assert rendered.returncode != 0
+            assert 'privateEnv is retired once privateSecretEnv is set' in rendered.stderr
+        else:
+            assert listen_env(rendered) == ['false']
         pusher_values = backend / f'charts/pusher/{stage}_omi_pusher_values.yaml'
         pusher_entries = yaml.load(pusher_values.read_text(), Loader=yaml.CSafeLoader)['env']
         assert next(e for e in pusher_entries if e['name'] == key)['value'] == 'true'
