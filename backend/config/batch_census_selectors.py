@@ -465,7 +465,7 @@ _SQL_PORTS = (
         'PostgresStore.fresh_pending',
         'fresh_pending',
         32,
-        '090b03960ee5acf0744ad9c9a5aa98880c203cf7b2af93888755f15458f5d4ae',
+        '846a4419b6e632047b99589b0d70f068f483a5c534f71844616e18d49a14bb8d',
     ),
     (
         'PostgresStore.ready_pending',
@@ -483,7 +483,7 @@ _SQL_PORTS = (
         'PostgresStore.held_merge_owners',
         'held_merge_owners',
         100,
-        '3698ae0a956164f3f60bb06c9942240a5af0d26ab2c3d47f4f694478368b0ed7',
+        '0bfaa2d046d66532cb928ed0d04286bb165a191a1325e926333cd34dc00333f4',
     ),
     (
         'PostgresStore.oldest_retry',
@@ -501,13 +501,13 @@ _SQL_PORTS = (
         'PostgresStore.first_pending_in',
         'first_ready_pending',
         1,
-        '277a50a8cbe668cab08a46670dff062e6abf945912f5afff11c33abc3dc9f82d',
+        '24b61e9b4f91a6bc1602110b44be64167f2587c6ada251fc29efa5cc5f9819a5',
     ),
     (
         'PostgresStore.pending_page_in',
         'pending_page',
         160,
-        '3e2e0bff822c60856ab9b7a2bcd30848b48e746acadab382071a2a28ef3ea1e9',
+        'a468b4a9c79f4d3ddca8e23bdfd46a0ca59c2021d1ee17108cfb9a2794d8b1fb',
     ),
     (
         'PostgresTransaction._fresh_first',
