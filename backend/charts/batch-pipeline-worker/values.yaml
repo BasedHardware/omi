@@ -255,7 +255,9 @@ recordSealRepair:
   suspend: true
   runtimeEnabled: true
   jobsDiscovery: "on"
-  # Shared by repair, CPU seal worker and every GPU Deployment variant.
+  # Used by the repair CronJob and by the CPU seal worker and GPU variants
+  # when their live fresh-repair binding is not being preserved.
+  # The production depth-only overlay preserves that binding or its absence.
   # Serving hosts also need the matching runtime-env/listen overlay switch.
   freshEnabled: true
   # Forbid still prevents overlap; minute ticks bound restart gaps after a 25m run.

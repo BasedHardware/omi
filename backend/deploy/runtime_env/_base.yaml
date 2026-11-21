@@ -2924,8 +2924,3 @@ firestore_read_lever_policy:
       lifecycle_record_pending_head:
         value: 5
         expires: '2026-11-24'
-    chart/prod/batch-pipeline-worker:
-      privacy_checks_shadow:
-        value: 10
-        # Margin-40 panel F3: retain excluded backfill/worker shadow scope; no rollout expansion.
-        expires: '2026-11-24'

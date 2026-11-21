@@ -786,12 +786,7 @@
         "sync_allowance_single_resolve",
         "tombstone_negative_cache"
       ],
-      "lever_expiry": {
-        "privacy_checks_shadow": {
-          "expires": "2026-11-24",
-          "value": 10
-        }
-      }
+      "lever_expiry": {}
     },
     "chart/prod/pusher": {
       "effective": {

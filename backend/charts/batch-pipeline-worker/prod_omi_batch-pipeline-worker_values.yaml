@@ -72,12 +72,12 @@ worker:
   RECORD_FRESH_MERGE_ENABLED: null
   projectionOutbox: null
   packingSampleRate: null
-  omitRecordSealRepairFreshEnabled: true
   capDispatchCohort: null
   # The depth-only roll preserves each GPU Deployment's existing bindings,
   # including keys absent from its pod template.
   preserveLiveEnv:
     - BATCH_PIPELINE_UID_ALLOWLIST
+    - RECORD_SEAL_REPAIR_FRESH_ENABLED
     - ROLLOUT_POD_TEMPLATE_HASH
   # Without live state, require a private binding before the pod can start.
   uidAllowlist:
