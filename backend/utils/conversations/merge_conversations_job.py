@@ -106,15 +106,14 @@ def reconcile(job_id: str, *, firestore_client: Any = None) -> str:
     # Never release sources before provisional target retraction succeeds.
     from utils.conversations.merge_conversations import cleanup_failed_merge_target
 
-    client = store.client_for(firestore_client)
-    target = (
-        client.collection('users').document(job['uid']).collection('conversations').document(job['merge_target_id'])
-    )
-    if target.get().exists and not cleanup_failed_merge_target(job['uid'], job['merge_target_id']):
+    completed_steps: set[str] = set()
+    if not cleanup_failed_merge_target(job['uid'], job['merge_target_id'], rollback_step=completed_steps.add):
         return 'cleanup_pending'
     return (
         'rolled_back'
-        if store.finish_recovery(job_id, job['lease_epoch'], firestore_client=firestore_client)
+        if store.finish_recovery(
+            job_id, job['lease_epoch'], cleanup_steps=completed_steps, firestore_client=firestore_client
+        )
         else 'fenced'
     )
 

@@ -310,7 +310,31 @@ def begin_recovery(job_id: str, *, firestore_client: Any = None) -> dict | None:
     return commit(client.transaction())
 
 
-def finish_recovery(job_id: str, epoch: int, *, firestore_client: Any = None) -> bool:
+ROLLBACK_CLEANUP_STEPS = frozenset(
+    (
+        'memories',
+        'photos',
+        'audio',
+        'vector',
+        'speaker_enrollment',
+        'capture_group',
+        'primary',
+        'quiet_check',
+        'processing_backlog',
+        'corrections',
+        'pipeline_ledger',
+        'proactivity',
+        'children',
+        'search',
+    )
+)
+
+
+def finish_recovery(
+    job_id: str, epoch: int, *, cleanup_steps: set[str] | frozenset[str] = frozenset(), firestore_client: Any = None
+) -> bool:
+    if cleanup_steps != ROLLBACK_CLEANUP_STEPS:
+        return False
     client = client_for(firestore_client)
     ref = client.collection(COLLECTION).document(job_id)
 
@@ -340,8 +364,18 @@ def finish_recovery(job_id: str, epoch: int, *, firestore_client: Any = None) ->
             return False
         refs = [_source(client, owner, cid) for cid in row['conversation_ids']]
         sources = [source.get(transaction=transaction).to_dict() or {} for source in refs]
-        for source, data in zip(refs, sources):
-            if data.get('status') == 'merging' and data.get('merge_job_id') == job_id:
+        tombstones = [
+            source.parent.parent.collection('deleted_conversations').document(source.id).get(transaction=transaction)
+            for source in refs
+        ]
+        for source, data, tombstone in zip(refs, sources, tombstones):
+            if (
+                not tombstone.exists
+                and not data.get('deleted')
+                and not data.get('is_deleted')
+                and data.get('status') == 'merging'
+                and data.get('merge_job_id') == job_id
+            ):
                 from utils.conversations.terminal_relevance import stamp_terminal_decision
 
                 terminal = {**data, 'status': 'completed'}
@@ -360,6 +394,7 @@ def finish_recovery(job_id: str, epoch: int, *, firestore_client: Any = None) ->
                 status='dead_letter',
                 phase='rolled_back',
                 failure_code='merge_lease_expired',
+                rollback_cleanup_steps=sorted(cleanup_steps),
                 updated_at=_now(),
                 reconcile_after_at=firestore.DELETE_FIELD,
             ),

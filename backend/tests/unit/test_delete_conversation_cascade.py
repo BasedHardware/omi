@@ -291,3 +291,45 @@ def test_failed_ancestor_purge_keeps_survivor_for_retry(store, monkeypatch):
     with pytest.raises(RuntimeError, match='retraction unavailable'):
         merge_conversations.delete_conversation_with_sync_sources('uid-1', 'conv-1')
     assert conversation.exists
+
+
+def test_rollback_records_sibling_cleanup_only_after_it_succeeds(store, monkeypatch):
+    conversation = _seed_conversation(store)
+    ledger_path = 'users/uid-1/pipeline_ledger/conv-1'
+    original = _FakeDocumentReference.delete
+    completed = set()
+
+    def delete(self):
+        if self.path == ledger_path:
+            raise RuntimeError('synthetic ledger delete failure')
+        original(self)
+
+    monkeypatch.setattr(_FakeDocumentReference, 'delete', delete)
+    with pytest.raises(RuntimeError, match='ledger delete failure'):
+        conversations_db.delete_conversation('uid-1', 'conv-1', rollback_step=completed.add)
+    assert not conversation.exists
+    assert {'primary', 'corrections'} <= completed
+    assert {'pipeline_ledger', 'proactivity', 'search'}.isdisjoint(completed)
+
+    monkeypatch.setattr(_FakeDocumentReference, 'delete', original)
+    completed.clear()
+    conversations_db.delete_conversation('uid-1', 'conv-1', rollback_step=completed.add)
+    assert ledger_path in store.deleted
+    assert {'pipeline_ledger', 'proactivity', 'search'} <= completed
+
+
+def test_rollback_search_failure_blocks_cleanup_receipt(store, monkeypatch):
+    from utils.conversations import typesense_index
+
+    conversation = _seed_conversation(store)
+    monkeypatch.setattr(typesense_index, 'typesense_configured', lambda: True)
+    monkeypatch.setattr(typesense_index, 'delete_conversation_index_doc', lambda *_: False)
+    completed = set()
+
+    with pytest.raises(RuntimeError, match='rollback search cleanup incomplete'):
+        conversations_db.delete_conversation('uid-1', 'conv-1', rollback_step=completed.add)
+    assert not conversation.exists
+    assert 'search' not in completed
+
+    # The ordinary delete retains its established fail-open search hook.
+    conversations_db.delete_conversation('uid-1', 'conv-1')

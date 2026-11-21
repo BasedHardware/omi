@@ -1156,7 +1156,9 @@ def _delete_conversation_and_related_data(
         logger.error(f"Error deleting conversation {conversation_id}: {e}")
 
 
-def cleanup_failed_merge_target(uid: str, merged_conversation_id: str) -> bool:
+def cleanup_failed_merge_target(
+    uid: str, merged_conversation_id: str, *, rollback_step: Callable[[str], None] | None = None
+) -> bool:
     """Retract merged-target memories and remove its artifacts.
 
     Returns True when cleanup completed. Canonical retraction failure aborts
@@ -1175,13 +1177,22 @@ def cleanup_failed_merge_target(uid: str, merged_conversation_id: str) -> bool:
         )
         return False
 
+    def done(step: str) -> None:
+        if rollback_step is not None:
+            rollback_step(step)
+
     try:
+        done('memories')
         conversations_db.delete_conversation_photos(uid, merged_conversation_id)
+        done('photos')
         delete_conversation_audio_files(uid, merged_conversation_id)
+        done('audio')
         delete_vector(uid, merged_conversation_id)
-        # Delete the row last so a failed artifact sweep leaves discoverable
-        # debt for the same reserved target on the next rollback attempt.
-        conversations_db.delete_conversation(uid, merged_conversation_id)
+        done('vector')
+        if rollback_step is None:
+            conversations_db.delete_conversation(uid, merged_conversation_id)
+        else:
+            conversations_db.delete_conversation(uid, merged_conversation_id, rollback_step=rollback_step)
     except Exception as error:
         logger.warning('event=merge_rollback_cleanup outcome=retry exception_type=%s', type(error).__name__)
         return False

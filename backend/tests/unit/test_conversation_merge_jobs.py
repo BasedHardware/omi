@@ -24,6 +24,12 @@ def admit(store):
     return jobs.admit(owner, ['a', 'b'], True, firestore_client=client)
 
 
+def finish_clean_rollback(job_id, epoch, *, firestore_client):
+    return jobs.finish_recovery(
+        job_id, epoch, cleanup_steps=jobs.ROLLBACK_CLEANUP_STEPS, firestore_client=firestore_client
+    )
+
+
 def row(store, cid):
     return store[0].rows[('users', store[1], 'conversations', cid)]
 
@@ -90,7 +96,7 @@ def test_expiry_fences_old_worker_and_restores_only_exact_source_bindings(store,
     assert recovery['recovery'] == 'rollback'
     assert not jobs.renew(job['job_id'], 1, firestore_client=store[0])
     row(store, 'b')['merge_job_id'] = 'new-generation'
-    assert jobs.finish_recovery(job['job_id'], recovery['lease_epoch'], firestore_client=store[0])
+    assert finish_clean_rollback(job['job_id'], recovery['lease_epoch'], firestore_client=store[0])
     assert row(store, 'a')['status'] == 'completed'
     assert row(store, 'b')['status'] == 'merging'
     assert row(store, 'b')['merge_job_id'] == 'new-generation'
@@ -101,7 +107,7 @@ def test_crash_before_worker_claim_also_rolls_back_durable_admission(store, monk
     job = admit(store)
     monkeypatch.setattr(jobs, '_now', lambda: NOW + jobs.LEASE)
     recovery = jobs.begin_recovery(job['job_id'], firestore_client=store[0])
-    assert jobs.finish_recovery(job['job_id'], recovery['lease_epoch'], firestore_client=store[0])
+    assert finish_clean_rollback(job['job_id'], recovery['lease_epoch'], firestore_client=store[0])
     assert all(row(store, cid)['status'] == 'completed' for cid in ('a', 'b'))
     assert all(row(store, cid)['relevance_decision']['verdict'] == 'keep' for cid in ('a', 'b'))
 
@@ -122,7 +128,7 @@ def test_crash_rollback_preserves_legacy_rule_discard_and_visibility(store, monk
     job = admit(store)
     monkeypatch.setattr(jobs, '_now', lambda: NOW + jobs.LEASE)
     recovery = jobs.begin_recovery(job['job_id'], firestore_client=store[0])
-    assert jobs.finish_recovery(job['job_id'], recovery['lease_epoch'], firestore_client=store[0])
+    assert finish_clean_rollback(job['job_id'], recovery['lease_epoch'], firestore_client=store[0])
     assert row(store, 'a')['relevance_decision'] == prior
     assert not visible_conversation(row(store, 'a'))
 
@@ -134,7 +140,7 @@ def test_pretransfer_crash_is_still_safe_to_roll_back(store, monkeypatch):
     monkeypatch.setattr(jobs, '_now', lambda: NOW + jobs.LEASE + timedelta(seconds=1))
     recovery = jobs.begin_recovery(job['job_id'], firestore_client=store[0])
     assert recovery['recovery'] == 'rollback'
-    assert jobs.finish_recovery(job['job_id'], recovery['lease_epoch'], firestore_client=store[0])
+    assert finish_clean_rollback(job['job_id'], recovery['lease_epoch'], firestore_client=store[0])
     assert all(row(store, cid)['status'] == 'completed' for cid in ('a', 'b'))
 
 
@@ -206,7 +212,7 @@ def test_merge_rollback_retires_old_debt_and_preserves_reopened_owner(store, mon
     row(store, 'b').update(status='in_progress', merge_job_id='new-owner')
     monkeypatch.setattr(jobs, '_now', lambda: NOW + jobs.LEASE)
     recovery = jobs.begin_recovery(job['job_id'], firestore_client=client)
-    assert jobs.finish_recovery(job['job_id'], recovery['lease_epoch'], firestore_client=client)
+    assert finish_clean_rollback(job['job_id'], recovery['lease_epoch'], firestore_client=client)
     assert client.rows[paths[0]]['status'] == 'quiet_done'
     assert client.rows[paths[1]]['status'] == 'waiting_quiet'
 
@@ -287,15 +293,58 @@ def test_rollback_retains_all_sources_until_provisional_target_is_absent(store, 
     path = ('users', owner, 'conversations', job['merge_target_id'])
     client.rows[path] = {'status': 'processing'}
 
-    assert not jobs.finish_recovery(job['job_id'], recovery['lease_epoch'], firestore_client=client)
+    assert not finish_clean_rollback(job['job_id'], recovery['lease_epoch'], firestore_client=client)
     assert all(row(store, cid)['merge_job_id'] == job['job_id'] for cid in ('a', 'b'))
     assert jobrow(store, job)['phase'] == 'recovering'
 
     del client.rows[path]
     deletion_path = ('account_deletions', owner)
     client.rows[deletion_path] = {'wipe_status': 'pending'}
-    assert not jobs.finish_recovery(job['job_id'], recovery['lease_epoch'], firestore_client=client)
+    assert not finish_clean_rollback(job['job_id'], recovery['lease_epoch'], firestore_client=client)
     assert all(row(store, cid)['status'] == 'merging' for cid in ('a', 'b'))
     client.rows[deletion_path]['wipe_status'] = 'cancelled'
-    assert jobs.finish_recovery(job['job_id'], recovery['lease_epoch'], firestore_client=client)
+    assert finish_clean_rollback(job['job_id'], recovery['lease_epoch'], firestore_client=client)
     assert all(row(store, cid)['status'] == 'completed' for cid in ('a', 'b'))
+
+
+def test_rollback_with_absent_target_retries_sibling_cleanup_and_skips_tombstoned_source(
+    store, monkeypatch, go_retraction_ports
+):
+    _, _, merge, worker = go_retraction_ports
+    client, owner = store
+    job = admit(store)
+    target_path = ('users', owner, 'conversations', job['merge_target_id'])
+    client.rows[target_path] = {'status': 'processing'}
+    attempt = []
+
+    def cleanup(uid, target, *, rollback_step):
+        assert (uid, target) == (owner, job['merge_target_id'])
+        attempt.append(target_path in client.rows)
+        client.rows.pop(target_path, None)
+        for step in jobs.ROLLBACK_CLEANUP_STEPS - {'pipeline_ledger'}:
+            rollback_step(step)
+        if len(attempt) == 1:
+            return False
+        rollback_step('pipeline_ledger')
+        return True
+
+    monkeypatch.setattr(merge, 'cleanup_failed_merge_target', cleanup)
+    monkeypatch.setattr(jobs, '_now', lambda: NOW + jobs.LEASE)
+
+    assert worker.reconcile(job['job_id'], firestore_client=client) == 'cleanup_pending'
+    assert target_path not in client.rows
+    assert all(row(store, cid)['status'] == 'merging' for cid in ('a', 'b'))
+    assert not jobs.finish_recovery(
+        job['job_id'],
+        jobrow(store, job)['lease_epoch'],
+        cleanup_steps=jobs.ROLLBACK_CLEANUP_STEPS - {'pipeline_ledger'},
+        firestore_client=client,
+    )
+    client.rows[('users', owner, 'deleted_conversations', 'a')] = {'conversation_id': 'a'}
+    monkeypatch.setattr(jobs, '_now', lambda: NOW + 2 * jobs.LEASE)
+
+    assert worker.reconcile(job['job_id'], firestore_client=client) == 'rolled_back'
+    assert attempt == [True, False]
+    assert row(store, 'a')['status'] == 'merging'
+    assert row(store, 'b')['status'] == 'completed'
+    assert jobrow(store, job)['rollback_cleanup_steps'] == sorted(jobs.ROLLBACK_CLEANUP_STEPS)
