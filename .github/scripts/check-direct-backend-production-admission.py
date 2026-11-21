@@ -31,7 +31,27 @@ CONTROL_CHECKOUT = (
 )
 GATEWAY_WORKFLOW = Path(".github/workflows/gcp_llm_gateway.yml")
 LISTEN_WORKFLOW = Path(".github/workflows/gcp_backend_listen_helm.yml")
-LISTEN_EVIDENCE_CHECKOUT = "ref: ${{ inputs.mode == 'evidence' && inputs.expected_sha || (github.event.inputs.environment == 'prod' && 'main' || github.event.inputs.branch) }}"
+LISTEN_PINNED_CHECKOUT = (
+    "ref: ${{ inputs.control_sha != '' && github.sha || "
+    "(inputs.mode == 'evidence' && inputs.expected_sha || "
+    "(github.event.inputs.environment == 'prod' && 'main' || github.event.inputs.branch)) }}"
+)
+LISTEN_EXACT_CONTROL_STEP = """name: Verify exact listen control SHA
+        if: ${{ inputs.control_sha != '' }}
+        shell: bash
+        env:
+          CONTROL_SHA: ${{ inputs.control_sha }}
+          DEPLOY_ENV: ${{ inputs.environment }}
+          DEPLOY_MODE: ${{ inputs.mode }}
+        run: |
+          set -euo pipefail
+          if [[ "$GITHUB_EVENT_NAME" != workflow_dispatch || "$DEPLOY_ENV" != prod || "$DEPLOY_MODE" != deploy ||
+                ! "$CONTROL_SHA" =~ ^[0-9a-f]{40}$ || "$CONTROL_SHA" == 0000000000000000000000000000000000000000 ||
+                "$CONTROL_SHA" != "$GITHUB_SHA" || "$CONTROL_SHA" != "$(git rev-parse HEAD)" ]]; then
+            echo "::error title=Listen control mismatch::The production workflow and checkout must match the admitted control SHA."
+            exit 1
+          fi"""
+LISTEN_LEGACY_ANCESTRY = 'if ! git merge-base --is-ancestor "$EXPECTED_SHA" "$CHECKED_OUT_SHA"; then'
 LISTEN_EVIDENCE_CONTROL = CONTROL_CHECKOUT.replace('.github/firestore-workflow', '.github/listen-evidence-control')
 LISTEN_EXPORTER_CHECKOUT = "ref: ${{ needs.helm-upgrade.outputs.checked_out_sha }}"
 GATEWAY_RELEASE_SHA_INPUT = (
@@ -40,6 +60,37 @@ GATEWAY_RELEASE_SHA_INPUT = (
     "        required: false\n"
     "        default: ''"
 )
+
+
+def validate_listen_control_admission(text: str) -> list[str]:
+    """Require the pinned checkout and blocking guard before any deploy steps."""
+    trigger, _, helm_job = text.partition("\n  helm-upgrade:\n")
+    helm_job = helm_job.partition("\n  deploy-neg-coverage-exporter:\n")[0]
+    steps = re.split(r"(?m)^      - ", helm_job.partition("\n    steps:\n")[2])[1:]
+    checkout = (
+        "name: Checkout\n"
+        "        uses: actions/checkout@v7\n"
+        "        with:\n"
+        f"          {LISTEN_PINNED_CHECKOUT}\n"
+        "          fetch-depth: 0"
+    )
+    errors = []
+    if not re.search(
+        r"(?m)^      control_sha:\n        description: [^\n]+\n"
+        r"        required: false\n        default: ''\n        type: string$",
+        trigger,
+    ):
+        errors.append(f"{LISTEN_WORKFLOW} must expose the optional control_sha string input")
+    if (
+        len(steps) < 3
+        or not steps[0].startswith("name: Validate Environment Input\n")
+        or steps[1].rstrip() != checkout
+        or steps[2].rstrip() != LISTEN_EXACT_CONTROL_STEP
+    ):
+        errors.append(f"{LISTEN_WORKFLOW} must pin the dispatch checkout and verify exact control before deployment")
+    if LISTEN_LEGACY_ANCESTRY not in helm_job:
+        errors.append(f"{LISTEN_WORKFLOW} must retain expected_sha containment for legacy admission")
+    return errors
 
 
 def validate_gateway_release_admission(text: str) -> list[str]:
@@ -136,8 +187,10 @@ def validate(root: Path) -> list[str]:
     for relative in WORKFLOWS:
         path = root / relative
         text = path.read_text(encoding="utf-8") if path.exists() else ""
-        expected_checkout = PUSHER_CHECKOUT if relative == PUSHER_WORKFLOW else LISTEN_EVIDENCE_CHECKOUT if relative == LISTEN_WORKFLOW else CHECKOUT
-        if expected_checkout not in text:
+        expected_checkout = PUSHER_CHECKOUT if relative == PUSHER_WORKFLOW else CHECKOUT
+        if relative == LISTEN_WORKFLOW:
+            errors.extend(validate_listen_control_admission(text))
+        elif expected_checkout not in text:
             errors.append(f"{relative} must reject caller refs for production checkout")
         if ORIGIN_MAIN_FETCH not in text or ANCESTRY_GUARD not in text:
             errors.append(f"{relative} must prove production source is on fresh origin/main")
