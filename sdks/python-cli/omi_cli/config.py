@@ -19,9 +19,10 @@ import math
 import os
 import secrets
 import sys
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Iterator, Optional
 
 import tomli_w
 
@@ -321,6 +322,125 @@ def _has_non_directory_parent(path: Path) -> bool:
     return False
 
 
+def _ensure_config_parent(path: Path) -> None:
+    parent = path.parent
+    parent_existed = parent.exists()
+    parent.mkdir(parents=True, exist_ok=True)
+    # Do not change permissions on a pre-existing, user-selected directory.
+    if not parent_existed:
+        try:
+            os.chmod(parent, 0o700)
+        except OSError:
+            pass
+
+
+def _windows_config_lock(fd: int, *, unlock: bool) -> None:
+    """Lock or unlock byte zero on a synchronous Windows file descriptor.
+
+    LockFileEx without LOCKFILE_FAIL_IMMEDIATELY waits in the kernel rather
+    than polling. The existing msvcrt implementation uses the same one-byte
+    range, so a running older CLI and a newer CLI still coordinate. Because
+    the Windows call is synchronous, Ctrl-C may not be observed until the
+    waiting call returns; closing the descriptor releases any acquired lock.
+    """
+    import ctypes
+    import msvcrt
+    from ctypes import wintypes
+
+    # OVERLAPPED's internal fields are ULONG_PTR (pointer-sized), and its
+    # offset is two DWORDs even on 64-bit Windows. Zero initialization gives
+    # the same byte-zero lock range used by the earlier msvcrt implementation.
+    class _Overlapped(ctypes.Structure):
+        _fields_ = [
+            ("Internal", ctypes.c_size_t),
+            ("InternalHigh", ctypes.c_size_t),
+            ("Offset", wintypes.DWORD),
+            ("OffsetHigh", wintypes.DWORD),
+            ("hEvent", wintypes.HANDLE),
+        ]
+
+    # These attributes exist only on Windows; keep platform-independent type
+    # checking of the rest of the CLI possible on non-Windows hosts.
+    windows_ctypes: Any = ctypes
+    windows_crt: Any = msvcrt
+    kernel32 = windows_ctypes.WinDLL("kernel32", use_last_error=True)
+    overlapped = _Overlapped()
+    handle = windows_crt.get_osfhandle(fd)
+    if unlock:
+        operation = kernel32.UnlockFileEx
+        operation.argtypes = [
+            wintypes.HANDLE,
+            wintypes.DWORD,
+            wintypes.DWORD,
+            wintypes.DWORD,
+            ctypes.POINTER(_Overlapped),
+        ]
+        operation.restype = wintypes.BOOL
+        succeeded = operation(handle, 0, 1, 0, ctypes.byref(overlapped))
+    else:
+        operation = kernel32.LockFileEx
+        operation.argtypes = [
+            wintypes.HANDLE,
+            wintypes.DWORD,
+            wintypes.DWORD,
+            wintypes.DWORD,
+            wintypes.DWORD,
+            ctypes.POINTER(_Overlapped),
+        ]
+        operation.restype = wintypes.BOOL
+        # LOCKFILE_EXCLUSIVE_LOCK only: a synchronous handle waits in the
+        # kernel when this byte is held by another process.
+        succeeded = operation(handle, 0x00000002, 0, 1, 0, ctypes.byref(overlapped))
+    if not succeeded:
+        raise windows_ctypes.WinError(windows_ctypes.get_last_error())
+
+
+def _acquire_config_lock(fd: int) -> None:
+    if sys.platform == "win32":
+        _windows_config_lock(fd, unlock=False)
+    else:
+        import fcntl
+
+        fcntl.flock(fd, fcntl.LOCK_EX)
+
+
+def _release_config_lock(fd: int) -> None:
+    if sys.platform == "win32":
+        _windows_config_lock(fd, unlock=True)
+    else:
+        import fcntl
+
+        fcntl.flock(fd, fcntl.LOCK_UN)
+
+
+@contextmanager
+def locked_config(path: Optional[Path] = None) -> Iterator[Config]:
+    """Load fresh config while holding its cross-process read/modify/write lock.
+
+    Callers explicitly call :func:`save` inside this context when they change
+    the config. Merely entering it never creates or rewrites the TOML file,
+    and load errors retain save()'s existing refusal behavior. Keep prompts
+    and network requests outside this short local transaction.
+
+    The credential-free sibling ``config.toml.lock`` is deliberately retained:
+    deleting it or locking the replaced TOML inode would let waiters acquire
+    different locks. Every in-tree config writer uses this context; save()
+    itself remains the low-level atomic snapshot writer.
+    """
+    p = path or default_config_path()
+    _ensure_config_parent(p)
+    lock_path = p.with_name(p.name + ".lock")
+    fd = os.open(lock_path, os.O_RDWR | os.O_CREAT | getattr(os, "O_BINARY", 0), 0o600)
+    try:
+        _acquire_config_lock(fd)
+        try:
+            yield load(p)
+        finally:
+            _release_config_lock(fd)
+    finally:
+        os.close(fd)
+
+
 def save(config: Config) -> None:
     """Persist the config to disk with secure (owner-only) permissions.
 
@@ -339,17 +459,7 @@ def save(config: Config) -> None:
         raise ConfigWriteRefused(
             f"refusing to overwrite {config.path}: {config.load_error}. " "Fix or remove the config file and try again."
         )
-    parent = config.path.parent
-    parent_existed = parent.exists()
-    parent.mkdir(parents=True, exist_ok=True)
-    # Owner-only perms on a directory we create ourselves. Leave a
-    # pre-existing (e.g. user-selected via $OMI_CONFIG, possibly shared)
-    # directory's permissions untouched — best-effort, don't fail on it.
-    if not parent_existed:
-        try:
-            os.chmod(parent, 0o700)
-        except OSError:
-            pass
+    _ensure_config_parent(config.path)
 
     payload: dict[str, Any] = {
         **config.extra,
