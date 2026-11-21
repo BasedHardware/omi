@@ -9,6 +9,7 @@ from __future__ import annotations
 from utils.observability.delivery import record_delivery
 from utils.observability.sweep_age import skip_ancient
 from utils.observability.fallback import record_fallback
+from utils.observability.reasons import ConsumerReason
 
 import hashlib
 import math
@@ -74,6 +75,8 @@ COALESCED = Counter('sync_reprocess_coalesced_total', 'Sync updates folded into 
 UNBOUND = Counter('sync_reprocess_unbound_total', 'Sync obligations awaiting a complete worker binding', ['action'])
 # A conversation row at Firestore's 1 MiB ceiling refuses every enrichment write (#23341).
 HELD_DOCUMENT_SIZE_LIMIT = 'document_size_limit'
+V3_CUSTODY_DEFER_REASON = ConsumerReason.V3_CUSTODY_CONFLICT.value
+V3_CUSTODY_MAX_DEFERS = 2
 
 
 def custody_deferred_since(row: Row, reason: str, now: float) -> float:
@@ -492,6 +495,10 @@ def mark_update(
         if old and old.get('dormant'):
             row.pop('merge_hold', None)
             row.pop('sync_hold_requested', None)
+            if old.get('held_reason') == V3_CUSTODY_DEFER_REASON:
+                # A producer admitted new work. Give it a fresh custody budget.
+                for field in ('held_reason', 'held_at', 'v3_custody_defers', 'deferred_reason', 'deferred_since'):
+                    row.pop(field, None)
         if sync_hold or merge_hold:
             row['sync_hold'] = True
             if sync_hold and not merge_hold:

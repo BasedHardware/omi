@@ -11,6 +11,7 @@ Mirrors ``utils.enrichment.outbox.run`` outcome for outcome, with every settleme
 | deferred (live target, missing) | DEFERRED not_due | ``defer`` at +120s |
 | redirected | STALE redirected | consumer: ``custody.transfer_redirect`` moved the obligation |
 | blocked (empty budget spent) | STALE empty_output_blocked | consumer: ``record_empty_failure`` retired it |
+| v3 custody conflict | DEFERRED / DISCARDED v3_custody_conflict | ``defer`` twice, then ``ack`` holds the row |
 | callback pending / empty output | RETRY callback_pending | ``release``: 409, the queue retry claims again |
 | transient Firestore / gateway fault | RETRY dependency_warming | ``release``: 409, the queue retry claims again |
 
@@ -35,6 +36,7 @@ from database.outbox import Claim, OutboxKind, Outcome
 from utils.observability.reasons import ConsumerReason, RetryReason
 from utils.workers.consumer import Result, Role
 from utils.sync import processing_hold
+from utils.sync.assignment_errors import SyncAssignmentConflict, SyncAssignmentConflictReason
 from utils.enrichment import early_abort
 
 logger = logging.getLogger(__name__)
@@ -184,6 +186,13 @@ class EnrichmentConsumer:
         try:
             return self._deliver(claim, heartbeat)
         except Exception as error:
+            if isinstance(error, SyncAssignmentConflict) and error.subtype == SyncAssignmentConflictReason.V3_CUSTODY:
+                from utils.enrichment.outbox import LIVE_DEFER_SECONDS, V3_CUSTODY_MAX_DEFERS
+
+                reason = ConsumerReason.V3_CUSTODY_CONFLICT
+                if (claim.payload.get('v3_custody_defers') or 0) >= V3_CUSTODY_MAX_DEFERS:
+                    return Result(Outcome.DISCARDED, reason)
+                return Result(Outcome.DEFERRED, reason, available_at=time.time() + LIVE_DEFER_SECONDS)
             if not _transient_dependency(error):
                 raise
             logger.warning(
