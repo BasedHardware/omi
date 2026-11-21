@@ -34,7 +34,10 @@ class _LocalSyncs {
 
   Future<void> deleteAllPendingWals() => phone.deleteAllPendingWals();
 
-  Future<void> deleteAllCorruptedWals() => phone.deleteAllCorruptedWals();
+  Future<void> deleteAllCorruptedWals({Map<Wal, WalFileIdentity> exportOffered = const {}}) =>
+      phone.deleteAllCorruptedWals(exportOffered: exportOffered);
+
+  void clearUserData() => phone.clearUserData();
 }
 
 class _WalService implements IWalService {
@@ -115,6 +118,7 @@ void main() {
 
   tearDown(() async {
     provider?.dispose();
+    provider = null;
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
       const MethodChannel('plugins.flutter.io/path_provider'),
       null,
@@ -207,7 +211,79 @@ void main() {
     expect(syncProvider.walsForDisplayFilter(WalDisplayFilter.all), containsAll([tooOld, retryable]));
 
     await syncProvider.deleteAllClearableWals();
+    expect(syncProvider.allWals, [tooOld], reason: 'Bulk deletion without an export offer preserves Too old audio');
 
-    expect(syncProvider.allWals, isEmpty, reason: 'Clear All must still be able to remove it');
+    await syncProvider.prepareClearAllWals().clear();
+    expect(syncProvider.allWals, isEmpty, reason: 'An explicit clear can remove offered audio');
+  });
+
+  test('Clear all removes the offered original and preserves a same-path replacement and newly Too old file', () async {
+    final removed = _wal(timerStart: 1000, filePath: 'offered.bin')..markOutsideRecoveryWindow();
+    final replaced = _wal(timerStart: 2000, filePath: 'replacement.bin')..markOutsideRecoveryWindow();
+    final newlyTooOld = _wal(timerStart: 3000, filePath: 'newly-old.bin');
+    for (final wal in [removed, replaced, newlyTooOld]) {
+      await File('${tempDir.path}/${wal.filePath}').writeAsBytes([1, 2]);
+    }
+    localSync.testWals = [removed, replaced, newlyTooOld];
+    final syncProvider = SyncProvider(
+      walService: _WalService(_LocalSyncs(localSync)),
+      uploadGate: _offlineGate(),
+      startBackgroundSync: false,
+    );
+    provider = syncProvider;
+    await syncProvider.initialized;
+    final intent = syncProvider.prepareClearAllWals();
+    expect(intent.tooOld, [removed, replaced]);
+
+    final replacement = _wal(timerStart: replaced.timerStart, filePath: replaced.filePath)..markOutsideRecoveryWindow();
+    localSync.testWals = [removed, replacement, newlyTooOld..markOutsideRecoveryWindow()];
+    expect(syncProvider.allWals, contains(replaced), reason: 'the provider has not refreshed');
+    await expectLater(intent.share([replaced]), throwsStateError);
+    await expectLater(intent.clear(), throwsStateError, reason: 'the caller must report retained files');
+
+    expect(syncProvider.allWals, [replacement, newlyTooOld]);
+    expect(await File('${tempDir.path}/offered.bin').exists(), isFalse);
+    expect(await File('${tempDir.path}/replacement.bin').readAsBytes(), [1, 2]);
+    expect(await File('${tempDir.path}/newly-old.bin').readAsBytes(), [1, 2]);
+  });
+
+  test('unoffered audio becoming Too old during path lookup stays on disk', () async {
+    final wal = _wal(timerStart: 1000, filePath: 'became-old.bin');
+    final file = await File('${tempDir.path}/${wal.filePath}').writeAsBytes([1, 2]);
+    localSync.testWals = [wal];
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
+      const MethodChannel('plugins.flutter.io/path_provider'),
+      (call) async {
+        if (call.method != 'getApplicationDocumentsDirectory') return null;
+        wal.markOutsideRecoveryWindow();
+        return tempDir.path;
+      },
+    );
+
+    await localSync.deleteAllPendingWals();
+
+    expect(wal.status, WalStatus.outsideRecoveryWindow);
+    expect(await localSync.getAllWals(), [wal]);
+    expect(await file.readAsBytes(), [1, 2]);
+  });
+
+  test('a session change invalidates both actions on an old Clear all dialog', () async {
+    final wal = _wal(timerStart: 1000, filePath: 'previous-session.bin')..markOutsideRecoveryWindow();
+    final file = await File('${tempDir.path}/${wal.filePath}').writeAsBytes([1, 2]);
+    localSync.testWals = [wal];
+    final syncProvider = SyncProvider(
+      walService: _WalService(_LocalSyncs(localSync)),
+      uploadGate: _offlineGate(),
+      startBackgroundSync: false,
+    );
+    provider = syncProvider;
+    await syncProvider.initialized;
+    final intent = syncProvider.prepareClearAllWals();
+
+    syncProvider.clearUserData();
+
+    await expectLater(intent.clear(), throwsStateError);
+    await expectLater(intent.share(intent.tooOld), throwsStateError);
+    expect(await file.readAsBytes(), [1, 2]);
   });
 }

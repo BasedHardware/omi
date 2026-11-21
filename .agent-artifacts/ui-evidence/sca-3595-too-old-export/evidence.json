@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-too-old-recording.png",
+      "platform": "mobile-ios",
+      "description": "A synthetic Too old group with an opening chevron and Download Audio",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "002-mobile-ios-clear-all-export-offer.png",
+      "platform": "mobile-ios",
+      "description": "Clear All presents Cancel, Download Audio and a separate destructive choice",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "003-mobile-ios-too-old-export-list.png",
+      "platform": "mobile-ios",
+      "description": "The export list shows a selectable synthetic recording with its date and duration",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ]
+}

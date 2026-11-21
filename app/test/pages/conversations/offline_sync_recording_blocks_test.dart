@@ -88,6 +88,7 @@ class _Sync extends ChangeNotifier with WalDerivedSyncViews implements SyncProvi
   final List<Wal> relistOnDiscover;
   final deleted = <Wal>[];
   final shared = <List<Wal>>[];
+  bool failShare = false;
   int retried = 0;
   int discovered = 0;
   String? skipDeleteId;
@@ -99,7 +100,10 @@ class _Sync extends ChangeNotifier with WalDerivedSyncViews implements SyncProvi
   @override
   bool canPlayOrShareWal(Wal wal) => wal.filePath != null;
   @override
-  Future<void> shareRecordingAsWav(List<Wal> wals) async => shared.add(wals);
+  Future<void> shareRecordingAsWav(List<Wal> wals, {bool Function()? canShare}) async {
+    if (failShare) throw StateError('Recording changed');
+    shared.add(wals);
+  }
 
   @override
   List<Wal> get retryableAttentionWals => wals.where((w) => isRetryableSyncState(w.syncDisplayState)).toList();
@@ -137,7 +141,29 @@ class _Sync extends ChangeNotifier with WalDerivedSyncViews implements SyncProvi
   }
 
   @override
-  Future<void> deleteAllClearableWals() => deleteAllPendingWals();
+  Future<void> deleteAllClearableWals({Map<Wal, WalFileIdentity> exportOffered = const {}}) async {
+    for (final wal in List<Wal>.of(wals)) {
+      if (wal.status != WalStatus.outsideRecoveryWindow || exportOffered.containsKey(wal)) await deleteWal(wal);
+    }
+  }
+
+  @override
+  ({
+    List<Wal> targets,
+    List<Wal> tooOld,
+    Future<void> Function() clear,
+    Future<void> Function(List<Wal>) share,
+  }) prepareClearAllWals() {
+    final targets = List<Wal>.of(wals);
+    final tooOld = targets.where((wal) => wal.status == WalStatus.outsideRecoveryWindow).toList();
+    return (
+      targets: targets,
+      tooOld: tooOld,
+      clear: () => deleteAllClearableWals(exportOffered: {for (final wal in tooOld) wal: wal.fileIdentity}),
+      share: shareRecordingAsWav,
+    );
+  }
+
   @override
   Future<void> deleteAllSyncedWals() async {
     for (final wal in List<Wal>.of(syncedWals)) {
@@ -294,6 +320,12 @@ void main() {
     expect(find.text("Too old to sync — Omi can't accept it"), findsOneWidget);
     expect(find.text('Delete'), findsOneWidget);
     expect(find.textContaining('30m'), findsOneWidget, reason: 'ten 3 min files read as one 30 min recording');
+    final row = find.byType(Dismissible);
+    final chevron = find.descendant(of: row, matching: find.byIcon(Icons.chevron_right));
+    expect(chevron, findsOneWidget);
+    await tester.tap(chevron);
+    await tester.pumpAndSettle();
+    expect(find.text("Too old to sync — Omi can't accept it"), findsWidgets);
   });
 
   testWidgets("the recording's Delete removes every file it is made of", (tester) async {
@@ -526,6 +558,55 @@ void main() {
       await swipe(tester);
       expect(find.text(uploadedCopy), findsOneWidget);
     });
+  });
+
+  testWidgets('Clear all offers the entire Too old group for download before a separate destructive choice',
+      (tester) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+    addTearDown(() => debugDefaultTargetPlatformOverride = null);
+    final rows = _tooOldAfternoon();
+    final offered = List<Wal>.of(rows);
+    final sync = await _pump(tester, rows);
+
+    Future<void> openClearAll() async {
+      await tester.tap(find.text('Manage Storage'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Clear All'));
+      await tester.pumpAndSettle();
+    }
+
+    await openClearAll();
+    expect(find.widgetWithText(OmiAlertDialog, 'Download Audio'), findsOneWidget);
+    await _frame(tester, '001-mobile-ios-clear-all-export-offer');
+    await tester.tap(find.descendant(of: find.byType(OmiAlertDialog), matching: find.text('Download Audio')));
+    await tester.pumpAndSettle();
+    expect(sync.deleted, isEmpty);
+    final exportSheet = find.byType(OmiSheetScaffold);
+    await _frame(tester, '002-mobile-ios-too-old-export-list');
+    final share = find.descendant(of: exportSheet, matching: find.byIcon(Icons.ios_share_rounded));
+    sync.failShare = true;
+    await tester.tap(share);
+    await tester.pumpAndSettle();
+    expect(find.text('Export failed. Please try again.'), findsOneWidget);
+    expect(sync.deleted, isEmpty);
+    sync.failShare = false;
+    await tester.tap(share);
+    await tester.pumpAndSettle();
+    expect(sync.shared.single, rows);
+    expect(sync.deleted, isEmpty);
+
+    await tester.tap(find.descendant(of: exportSheet, matching: find.byType(OmiCloseButton)));
+    await tester.pumpAndSettle();
+    await openClearAll();
+    await tester.tap(find.descendant(of: find.byType(OmiAlertDialog), matching: find.text('Cancel')));
+    await tester.pumpAndSettle();
+    expect(sync.deleted, isEmpty);
+
+    await openClearAll();
+    await tester.tap(find.descendant(of: find.byType(OmiAlertDialog), matching: find.text('Clear All')));
+    await tester.pumpAndSettle();
+    expect(sync.deleted, offered);
+    debugDefaultTargetPlatformOverride = null;
   });
 
   testWidgets('partial bulk Pending cleanup reports failure and keeps the skipped recording', (tester) async {

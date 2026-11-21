@@ -20,7 +20,11 @@ void main() {
   /// what its action did and — just as importantly — what the others did not.
   ({
     List<String> calls,
-    ({Future<void> Function() synced, Future<void> Function() pending, Future<void> Function() all}) actions
+    ({
+      Future<void> Function() synced,
+      Future<void> Function() pending,
+      Future<void> Function(Future<void> Function()) all,
+    }) actions
   }) subject({Future<void> Function()? clearPending}) {
     final calls = <String>[];
     return (
@@ -28,7 +32,6 @@ void main() {
       actions: buildStorageClearActions(
         clearSynced: () async => calls.add('clear synced'),
         clearPending: clearPending ?? () async => calls.add('clear pending'),
-        clearAll: () async => calls.add('clear all'),
         refreshDeviceStorage: () async => calls.add('refresh'),
       ),
     );
@@ -55,7 +58,7 @@ void main() {
   test('clearing every recording re-reads the storage snapshot afterwards', () async {
     final s = subject();
 
-    await s.actions.all();
+    await s.actions.all(() async => s.calls.add('clear all'));
 
     expect(s.calls, ['clear all', 'refresh']);
   });

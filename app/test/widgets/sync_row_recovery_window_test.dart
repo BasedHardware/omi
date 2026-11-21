@@ -84,17 +84,17 @@ SyncUploadGate _offlineGate() => SyncUploadGate(
     );
 
 Widget _app(Widget child, SyncProvider provider) {
-  return MaterialApp(
-    localizationsDelegates: const [
-      AppLocalizations.delegate,
-      GlobalMaterialLocalizations.delegate,
-      GlobalWidgetsLocalizations.delegate,
-      GlobalCupertinoLocalizations.delegate,
-    ],
-    supportedLocales: AppLocalizations.supportedLocales,
-    home: ChangeNotifierProvider<SyncProvider>.value(
-      value: provider,
-      child: Scaffold(backgroundColor: Colors.black, body: child),
+  return ChangeNotifierProvider<SyncProvider>.value(
+    value: provider,
+    child: MaterialApp(
+      localizationsDelegates: const [
+        AppLocalizations.delegate,
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
+      supportedLocales: AppLocalizations.supportedLocales,
+      home: Scaffold(backgroundColor: Colors.black, body: child),
     ),
   );
 }
@@ -174,6 +174,18 @@ void main() {
     expect(find.text("Too old to sync — Omi can't accept it"), findsOneWidget);
     expect(find.text('Try Again'), findsNothing);
     expect(find.text('Waiting to sync'), findsNothing);
+  });
+
+  testWidgets('the Too old row chevron opens the existing shareable recording detail', (tester) async {
+    await pumpRow(tester, makeWal(WalStatus.outsideRecoveryWindow));
+    final chevron = find.byIcon(Icons.chevron_right);
+
+    await tester.tap(chevron);
+    await tester.pumpAndSettle();
+    expect(find.text('Recording Details'), findsOneWidget);
+    await tester.tap(find.byIcon(Icons.more_horiz));
+    await tester.pumpAndSettle();
+    expect(find.text(lookupAppLocalizations(const Locale('en')).shareRecording), findsOneWidget);
   });
 
   testWidgets('a still-retryable recording keeps its Retry affordance', (tester) async {

@@ -50,6 +50,13 @@ List<SyncedConversationPointer> sortSyncedConversationPointers(Iterable<SyncedCo
   return sorted;
 }
 
+typedef WalClearAllOffer = ({
+  List<Wal> targets,
+  List<Wal> tooOld,
+  Future<void> Function() clear,
+  Future<void> Function(List<Wal>) share,
+});
+
 class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSyncProgressListener {
   /// Machine-readable error state consumed by sync surfaces, which own the
   /// localized copy. Providers must not embed user-facing English in state.
@@ -821,15 +828,49 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
     }
   }
 
-  /// Clears every local recording category. Unlike the retryable Pending
-  /// action, this deliberately includes terminally corrupted phone WALs.
-  Future<void> deleteAllClearableWals() async {
+  /// Capture the rows in the confirmation and the session that owns them.
+  WalClearAllOffer prepareClearAllWals() {
+    final generation = _sessionGeneration;
+    final LocalWalSyncImpl phone = _walService.getSyncs().phone;
+    final phoneGeneration = phone.sessionGeneration;
+    final targets = List<Wal>.unmodifiable(allWals);
+    final tooOld = List<Wal>.unmodifiable(targets.where((wal) => wal.status == WalStatus.outsideRecoveryWindow));
+    final exportOffered = Map<Wal, WalFileIdentity>.identity();
+    for (final wal in tooOld) {
+      exportOffered[wal] = wal.fileIdentity;
+    }
+    return (
+      targets: targets,
+      tooOld: tooOld,
+      clear: () async {
+        if (!_isCurrent(generation)) throw StateError('Recording session changed');
+        await deleteAllClearableWals(exportOffered: exportOffered);
+        if (!_isCurrent(generation) || allWals.any((wal) => wal.status == WalStatus.outsideRecoveryWindow)) {
+          throw StateError('Clear All retained recordings');
+        }
+      },
+      share: (wals) async {
+        bool stillOffered() =>
+            _isCurrent(generation) &&
+            wals.every((wal) {
+              final identity = exportOffered[wal];
+              return identity != null && phone.ownsOfferedAudio(wal, identity, phoneGeneration);
+            });
+        if (!stillOffered()) throw StateError('Recording changed');
+        await shareRecordingAsWav(wals, canShare: stillOffered);
+      },
+    );
+  }
+
+  Future<void> deleteAllClearableWals({Map<Wal, WalFileIdentity> exportOffered = const {}}) async {
     final generation = _sessionGeneration;
     final syncs = _walService.getSyncs();
     try {
       await syncs.deleteAllSyncedWals();
+      if (!_isCurrent(generation)) return;
       await syncs.deleteAllPendingWals();
-      await syncs.deleteAllCorruptedWals();
+      if (!_isCurrent(generation)) return;
+      await syncs.deleteAllCorruptedWals(exportOffered: exportOffered);
     } finally {
       await _refreshWals(generation);
     }
@@ -1187,7 +1228,8 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
     await _audioPlayerUtils.shareAsAudio(wal);
   }
 
-  Future<void> shareRecordingAsWav(List<Wal> wals) => _audioPlayerUtils.shareRecordingAsAudio(wals);
+  Future<void> shareRecordingAsWav(List<Wal> wals, {bool Function()? canShare}) =>
+      _audioPlayerUtils.shareRecordingAsAudio(wals, canShare: canShare);
 
   Future<void> seekToPosition(Duration position) async {
     await _audioPlayerUtils.seekToPosition(position);

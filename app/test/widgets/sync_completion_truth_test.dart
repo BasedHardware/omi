@@ -25,6 +25,8 @@ import '../helpers/sfpro_font_fixtures.dart';
 class _Sync extends ChangeNotifier with WalDerivedSyncViews implements SyncProvider {
   _Sync(this.wals);
   final List<Wal> wals;
+  int cleared = 0;
+  final shared = <List<Wal>>[];
   @override
   SyncState get syncState => const SyncState();
   @override
@@ -53,7 +55,12 @@ class _Sync extends ChangeNotifier with WalDerivedSyncViews implements SyncProvi
   @override
   int get needsAttentionWalsCount => wals.where((w) => w.status == WalStatus.corrupted).length;
   @override
-  int get clearableWalsCount => 0;
+  int get clearableWalsCount => wals.length;
+  @override
+  List<Wal> get syncedWals => wals.where((wal) => wal.status == WalStatus.synced).toList();
+  @override
+  List<Wal> get pendingDeletableWals => missingWals;
+
   @override
   List<Wal> get retryableAttentionWals => derivedWals.retryable;
   @override
@@ -75,6 +82,27 @@ class _Sync extends ChangeNotifier with WalDerivedSyncViews implements SyncProvi
   Future<void> refreshWals() async {}
   @override
   Future<void> discoverDeviceWals({String? firmwareVersion}) async {}
+
+  @override
+  ({
+    List<Wal> targets,
+    List<Wal> tooOld,
+    Future<void> Function() clear,
+    Future<void> Function(List<Wal>) share,
+  }) prepareClearAllWals() {
+    final targets = List<Wal>.of(wals);
+    return (
+      targets: targets,
+      tooOld: targets.where((wal) => wal.status == WalStatus.outsideRecoveryWindow).toList(),
+      clear: () async {
+        cleared++;
+        wals.clear();
+        notifyListeners();
+      },
+      share: (rows) async => shared.add(rows),
+    );
+  }
+
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
@@ -95,7 +123,7 @@ class _User extends ChangeNotifier implements UserProvider {
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
-Future<void> _pump(WidgetTester tester, Widget page, WalStatus status, {List<Wal>? recordings}) async {
+Future<_Sync> _pump(WidgetTester tester, Widget page, WalStatus status, {List<Wal>? recordings}) async {
   SharedPreferences.setMockInitialValues({});
   await SharedPreferencesUtil.init();
   tester.view.physicalSize = const Size(390, 844);
@@ -168,6 +196,7 @@ Future<void> _pump(WidgetTester tester, Widget page, WalStatus status, {List<Wal
   } else {
     await tester.pumpAndSettle();
   }
+  return sync;
 }
 
 Future<void> _capture(WidgetTester tester, String name) async {
@@ -184,6 +213,38 @@ Future<void> _capture(WidgetTester tester, String name) async {
 }
 
 void main() {
+  testWidgets('classic Clear all offers export without deleting a Too old recording', (tester) async {
+    final l = lookupAppLocalizations(const Locale('en'));
+    final sync = await _pump(tester, const SyncPage(), WalStatus.outsideRecoveryWindow);
+    final offered = sync.wals.single;
+
+    Future<void> openClearAll() async {
+      await tester.tap(find.byTooltip(l.manageStorage));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(l.clearAll));
+      await tester.pumpAndSettle();
+    }
+
+    await openClearAll();
+    final dialog = find.byType(OmiAlertDialog);
+    await tester.tap(find.descendant(of: dialog, matching: find.text(l.downloadAudio)));
+    await tester.pumpAndSettle();
+    await tester
+        .tap(find.descendant(of: find.byType(OmiSheetScaffold), matching: find.byIcon(Icons.ios_share_rounded)));
+    await tester.pumpAndSettle();
+    expect(sync.shared, [
+      [offered]
+    ]);
+    expect(sync.cleared, 0);
+    await tester.tap(find.descendant(of: find.byType(OmiSheetScaffold), matching: find.byType(OmiCloseButton)));
+    await tester.pumpAndSettle();
+
+    await openClearAll();
+    await tester.tap(find.descendant(of: dialog, matching: find.text(l.clearAll)));
+    await tester.pumpAndSettle();
+    expect(sync.cleared, 1);
+  });
+
   testWidgets('legacy Offline Sync never claims completion while a recording needs attention', (tester) async {
     await _pump(tester, const SyncPage(), WalStatus.corrupted);
     expect(find.text('1 recording need attention'), findsOneWidget);
