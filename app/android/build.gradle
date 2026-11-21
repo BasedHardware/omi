@@ -1,3 +1,21 @@
+// posthog_flutter 5.28.0 compiles its Kotlin against the PostHog Android SDK
+// 3.x API (PostHogOnFeatureFlags, RRStyle, getFeatureFlagPayload). Both the
+// plugin and app declare the closed range [3.51.0,4.0.0], which Gradle reads
+// as *including* 4.0.0. When posthog-android 4.0.0 (core 7.0.0) published on
+// 2026-11-20, resolution jumped to it and :posthog_flutter:compileDebugKotlin
+// failed on the removed symbols (run 44867593537). Force the last 3.x release
+// on every project so the plugin's own compile classpath stays on the API it
+// was written for; the app's direct dependency alone cannot do this because
+// the plugin resolves its own configuration.
+allprojects {
+    configurations.all {
+        resolutionStrategy {
+            force 'com.posthog:posthog-android:3.77.1'
+            force 'com.posthog:posthog:6.49.1'
+        }
+    }
+}
+
 allprojects {
     repositories {
         google()
