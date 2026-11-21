@@ -2710,6 +2710,7 @@ def process_conversation(
     recovery_transcript_decoded: bool = True,
     prior_relevance_decision: Mapping[str, Any] | None = None,
     created_webhook_observer: Callable[[Callable[[], None]], None] | None = None,
+    action_items_observer: Callable[[Callable[[], None]], None] | None = None,
     first_party_only: bool = False,
     derived_effects_transcript_sha256: str | None = None,
     finalization_fence: tuple[str, int, int] | None = None,
@@ -3270,7 +3271,7 @@ def process_conversation(
                 pass  # Coalesced memory, vector and task work is durably owned above.
             elif template_only or app_failed:
                 pass
-            elif is_reprocess:
+            elif is_reprocess and action_items_observer is None:
                 # Same fail-closed idea as memory source replacement: a transient
                 # destructive-op fence must be observable on the sync reprocess
                 # path instead of disappearing into postprocess_executor.
@@ -3282,7 +3283,14 @@ def process_conversation(
                         uid, conversation.id, {DERIVED_EFFECTS_TRANSCRIPT_FIELD: effects_transcript}
                     )
             else:
-                submit_with_context(postprocess_executor, _save_action_items, uid, conversation, people, trigger)
+                submit_action_items = lambda: submit_with_context(
+                    postprocess_executor, _save_action_items, uid, conversation, people, trigger
+                )
+                if action_items_observer is None:
+                    submit_action_items()
+                else:
+                    # A merge target can disappear on takeover before seal.
+                    action_items_observer(submit_action_items)
             if not (template_only or app_failed):
                 submit_with_context(postprocess_executor, update_goal_progress, uid, conversation)
             # Daily backend-owned AI profile refresh: no-op unless stale, bounded per process.

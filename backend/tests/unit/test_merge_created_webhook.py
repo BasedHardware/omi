@@ -75,12 +75,19 @@ def _install(monkeypatch, transfer_result):
         lambda uid, new_id, conversation_ids: events.append(('merge_completed', new_id)),
     )
 
-    def process(uid, language, conversation, *, created_webhook_observer=None, **kwargs):
+    def process(uid, language, conversation, *, created_webhook_observer=None, action_items_observer=None, **kwargs):
         # process_conversation's MERGE contract (not a reprocess): send the created
         # webhook during processing, or hand that send to the observer.
         def send():
             events.append(('created_webhook', conversation.id))
 
+        def submit_tasks():
+            events.append(('action_items_submitted', conversation.id))
+
+        if action_items_observer is None:
+            submit_tasks()
+        else:
+            action_items_observer(submit_tasks)
         if created_webhook_observer is None:
             send()
         else:
@@ -91,7 +98,7 @@ def _install(monkeypatch, transfer_result):
     return events, fail
 
 
-def test_transfer_rollback_never_announces_the_merged_conversation_it_deletes(monkeypatch):
+def test_transfer_rollback_never_announces_or_submits_tasks_for_deleted_target(monkeypatch):
     from database.review_store import ReviewConflict
 
     def conflict():
@@ -121,6 +128,7 @@ def test_committed_merge_announces_the_merged_conversation_once_transfer_succeed
     merged_id = next(conversation_id for event, conversation_id in events if event == 'transfer')
     assert events == [
         ('transfer', merged_id),
+        ('action_items_submitted', merged_id),
         ('created_webhook', merged_id),
         ('delete', 'c1'),
         ('delete', 'c2'),

@@ -441,6 +441,7 @@ def perform_merge_async(
         # 8. Process conversation to generate title, summary, action items, memories, etc.
         # Its created webhook is held until a failure can no longer roll the record back.
         created_webhook_sends: List[Callable[[], None]] = []
+        sealed_action_item_writes: List[Callable[[], None]] = []
         if reprocess or new_conversation.manual_end:
             try:
                 with lifecycle_service.processing_admission_guard(uid, new_conversation_id, rollback_on_failure=False):
@@ -450,6 +451,7 @@ def perform_merge_async(
                         new_conversation,
                         trigger=ProcessingTrigger.MERGE,
                         created_webhook_observer=created_webhook_sends.append,
+                        action_items_observer=sealed_action_item_writes.append,
                     )
             except Exception as e:
                 logger.error(f"Error processing merged conversation: {e}")
@@ -473,6 +475,10 @@ def perform_merge_async(
         ):
             # Undo receipts now name the merged record. Recovery must retain it.
             failure_phase = MergeFailurePhase.SOURCE_DELETION_STARTED
+            # A rollback can still win before transfer. Do not even submit task
+            # work until the transaction has made this target permanent.
+            for submit_action_items in sealed_action_item_writes:
+                submit_action_items()
 
         # transfer() returns only once committed, so failure handling now keeps the merged
         # record; had it raised, the rollback would have deleted it. Announce it only now.
