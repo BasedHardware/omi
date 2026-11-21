@@ -187,6 +187,30 @@ export function finalizedToolResultOutcome(result: string): "succeeded" | "faile
   return payload?.ok === true ? "succeeded" : "failed";
 }
 
+/**
+ * Swift tools whose executor can report that it ran but could not observe its
+ * effect. Only these may lower their own success to `outcome_unknown`.
+ */
+export const EXECUTOR_OUTCOME_UNKNOWN_TOOLS: ReadonlySet<string> = new Set(["send_message"]);
+
+/**
+ * The ledger status for a finalized Swift executor result.
+ *
+ * `send_message` marks an unconfirmed send `outcome_unknown: true` (exactly the
+ * boolean). That records the invocation as `outcome_unknown` instead of
+ * `succeeded`, so later receipts never describe it as a completed send. The
+ * flag can only lower a success to unknown; it never turns a failure into
+ * anything else, and other tools cannot use it.
+ */
+export function finalizedToolInvocationLedgerOutcome(
+  result: string,
+  toolName: string,
+): "succeeded" | "failed" | "outcome_unknown" {
+  const outcome = finalizedToolResultOutcome(result);
+  if (outcome !== "succeeded" || !EXECUTOR_OUTCOME_UNKNOWN_TOOLS.has(toolName)) return outcome;
+  return parseObject(result)?.outcome_unknown === true ? "outcome_unknown" : "succeeded";
+}
+
 function parseObject(value: string): Record<string, unknown> | null {
   try {
     const parsed = JSON.parse(value) as unknown;

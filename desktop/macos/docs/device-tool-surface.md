@@ -69,6 +69,72 @@ A `send_message` grant carries a `resourceRef` of the recipient handle.
 Approving a message to one person does not authorize a message to anyone else;
 the policy re-requires dispatch when the handle differs.
 
+### Checking a send
+
+After `send_message` runs, the executor confirms the send from the Messages
+history through `MessagesReaderService`, the same reader behind
+`read_message_history`. Before sending it records the newest message row id.
+Afterwards it reads only outgoing rows past that id, in the recipient's direct
+chats (one per service), whose text equals what was sent once line endings and
+whitespace are normalised, and which are dated no more than a second before the
+send started. A row that matched once is tracked by row id from then on, so a
+later change to its date cannot drop it.
+
+The check reads every half second. It stops early only when the reads have
+shown the same single delivered row, and no error row, for a full second;
+otherwise it reads for 5 seconds and decides over every new row, so a failed
+iMessage attempt followed by the text-message fallback reads as sent:
+
+| Status | Meaning |
+|---|---|
+| `delivered` | The one new row without an error is marked delivered. |
+| `sent` | That row is marked sent, not yet delivered. |
+| `not_delivered` | Every new row carries an error (`ok: false`). |
+| `unconfirmed` | No new row, a row not yet sent, two identical new rows, a recipient that matches two different stored numbers, or an unreadable history. |
+
+`unconfirmed` is an unknown outcome, not a failure: the result carries
+`outcome_unknown: true` and the kernel ledger records the invocation as
+`outcome_unknown` (only `send_message` may do this). A send that times out is
+checked the same way and reports only the service the history shows. A stop
+before Messages is asked returns `cancelled` with nothing sent. The send is
+never retried, and the result asks the model to have the person check Messages
+before anything is sent again. Only the status and timing are logged.
+
+The accepted limit: an identical message sent to the same person from another
+of the person's devices within a second of Omi's send can confirm it.
+
+### How handles match
+
+`read_message_history` and the send check find a person's chats with one rule
+(`MessagesReaderService.chatsForHandle`, `MessagingHandle`):
+
+- Email addresses match without case, so `sam@example.com` reads the
+  `Sam@Example.com` chat.
+- Phone numbers match when both are international (`+`, `00`, or `011` in North
+  America) or both national with equal digits, or when a national number, after
+  an optional trunk prefix ("0" in most places, "8" in Russia and some
+  neighbours, "8 0" in Belarus, "06" in Hungary, "1" in North America), is the
+  international number without a real calling code.
+- Which calling codes count: when the chat's sending account is a phone number
+  (`chat.account_login` "P:+1…"), only that account's code, because Messages
+  resolves a national number through the account. Otherwise every code in the
+  ITU table counts; the Mac's region is not preferred. A Mac set to India that
+  texts a US number typed nationally therefore matches the +1 chat.
+- A request that matches two different stored numbers (for example "+1…" and
+  "+91…" with the same national digits, or an Italian "06…" against both
+  "+3906…" and "+396…") makes the send check unconfirmed (`ambiguous_recipient`)
+  rather than choosing. `read_message_history` still reads one chat: direct
+  first, then the most recently active.
+- Two different international numbers never match.
+- Extensions and a "(0)" inside an international number are ignored.
+- Argentine mobiles written nationally with the "15" prefix are not rewritten to
+  the international "9" form and do not match.
+
+Before this rule, `read_message_history` matched the stored handle string
+exactly. It now also matches the other spellings of the same number and email,
+so an exact request such as `+14155550123` can read a more recently active
+direct chat stored as `4155550123`. The direct chat still wins over a group.
+
 ### AppleScript injection
 
 Recipient handles, message bodies, and attachment paths are passed to

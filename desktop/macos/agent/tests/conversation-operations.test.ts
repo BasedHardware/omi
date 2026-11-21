@@ -77,6 +77,17 @@ describe("conversation operation context", () => {
     store.close();
   });
 
+  it("records an executor-reported unknown outcome as outcome_unknown rather than succeeded", () => {
+    const { store, surface, prepare } = fixture();
+    const identity = prepare();
+    markToolInvocationDispatched(store, identity, 101);
+    const record = completeToolInvocation(store, { ...identity, outcome: "outcome_unknown", result: "{}", nowMs: 102 });
+    expect(record).toMatchObject({ status: "outcome_unknown", errorCode: "executor_reported_outcome_unknown" });
+    expect(conversationOperationReceipts(store, { ownerId: "owner", conversationId: surface.conversationId }))
+      .toMatchObject([{ status: "outcome_unknown", retryPolicy: "never_auto_retry" }]);
+    store.close();
+  });
+
   it("reconstructs unknown dispatched writes after process restart rather than claiming success", () => {
     const { databasePath, store, surface, prepare } = fixture();
     markToolInvocationDispatched(store, prepare(), 101);

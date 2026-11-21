@@ -1,0 +1,3 @@
+{
+  "change": "Omi now checks Messages after sending a text and says whether it was delivered, sent, not delivered, or could not be confirmed"
+}

@@ -1,3 +1,4 @@
+import OmiSupport
 import XCTest
 
 @testable import Omi_Computer
@@ -139,19 +140,6 @@ private final class OwnerTransitionPause: @unchecked Sendable {
       return continuation
     }
     continuation?.resume()
-  }
-}
-
-private final class LockedCounter: @unchecked Sendable {
-  private let lock = NSLock()
-  private var value = 0
-
-  func increment() {
-    lock.withLock { value += 1 }
-  }
-
-  func read() -> Int {
-    lock.withLock { value }
   }
 }
 
@@ -466,7 +454,7 @@ final class KnowledgeGraphPaginationTests: XCTestCase {
     await viewModel.prepareCanonicalAtlas()
     let rebuilt = await viewModel.rebuildCanonicalAtlas()
     XCTAssertFalse(rebuilt)
-    XCTAssertEqual(viewModelFetches.read(), 0)
+    XCTAssertEqual(viewModelFetches.count, 0)
 
     pause.release()
     _ = try await transition.value
@@ -507,7 +495,7 @@ final class KnowledgeGraphPaginationTests: XCTestCase {
     await viewModel.prepareCanonicalAtlas()
     await viewModel.prepareCanonicalAtlas()
 
-    XCTAssertEqual(fetches.read(), 1, "A catalog-only atlas is a settled atlas, not an empty retry loop")
+    XCTAssertEqual(fetches.count, 1, "A catalog-only atlas is a settled atlas, not an empty retry loop")
     XCTAssertFalse(viewModel.isEmpty)
     XCTAssertFalse(viewModel.isLoading)
     XCTAssertEqual(viewModel.canonicalAtlasProjection?.snapshot.nodes.map(\.id), ["memory-only"])
