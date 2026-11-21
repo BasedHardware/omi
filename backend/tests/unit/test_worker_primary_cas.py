@@ -31,6 +31,11 @@ def cluster(tmp_path):
                 'namespace': carrier.NAMESPACE,
                 'uid': f'deployment-{i}',
                 'resourceVersion': '1',
+                'labels': {'app.kubernetes.io/managed-by': 'Helm'},
+                'annotations': {
+                    'meta.helm.sh/release-name': carrier.PRIMARY,
+                    'meta.helm.sh/release-namespace': carrier.NAMESPACE,
+                },
             },
             'spec': {
                 'replicas': i,
@@ -51,21 +56,36 @@ def cluster(tmp_path):
             },
         }
 
-    version = {'groupVersion': 'apps/v1', 'version': 'v1'}
+    # Helm 4 maps every rendered object using discovery, including objects
+    # outside --show-only. Only Deployment lookups return live objects here.
+    resources = {
+        'v1': {'configmaps': 'ConfigMap', 'serviceaccounts': 'ServiceAccount'},
+        'apps/v1': {'deployments': 'Deployment'},
+        'autoscaling/v2': {'horizontalpodautoscalers': 'HorizontalPodAutoscaler'},
+        'batch/v1': {'cronjobs': 'CronJob'},
+        'monitoring.googleapis.com/v1': {'podmonitorings': 'PodMonitoring'},
+        'rbac.authorization.k8s.io/v1': {'roles': 'Role', 'rolebindings': 'RoleBinding'},
+    }
     discovery = {
         '/version': {'gitVersion': 'v1.32.0', 'major': '1', 'minor': '32'},
         '/api': {'kind': 'APIVersions', 'versions': ['v1']},
-        '/api/v1': {'kind': 'APIResourceList', 'groupVersion': 'v1', 'resources': []},
-        '/apis': {
-            'kind': 'APIGroupList',
-            'groups': [{'name': 'apps', 'versions': [version], 'preferredVersion': version}],
-        },
-        '/apis/apps/v1': {
-            'kind': 'APIResourceList',
-            'groupVersion': 'apps/v1',
-            'resources': [{'name': 'deployments', 'kind': 'Deployment', 'namespaced': True, 'verbs': ['get']}],
-        },
+        '/apis': {'kind': 'APIGroupList', 'groups': []},
     }
+    for group_version, kinds in resources.items():
+        if '/' in group_version:
+            group, version = group_version.split('/')
+            preferred = {'groupVersion': group_version, 'version': version}
+            discovery['/apis']['groups'].append({'name': group, 'versions': [preferred], 'preferredVersion': preferred})
+            path = f'/apis/{group_version}'
+        else:
+            path = f'/api/{group_version}'
+        discovery[path] = {
+            'kind': 'APIResourceList',
+            'groupVersion': group_version,
+            'resources': [
+                {'name': plural, 'kind': kind, 'namespaced': True, 'verbs': ['get']} for plural, kind in kinds.items()
+            ],
+        }
 
     class Handler(BaseHTTPRequestHandler):
         def do_GET(self):
@@ -121,6 +141,8 @@ def render(kubeconfig, *args):
             '--set-string',
             f'image.digest={DIGEST}',
             '--dry-run=server',
+            # The loopback fixture provides discovery and live objects only.
+            '--disable-openapi-validation',
             '--kubeconfig',
             str(kubeconfig),
             *args,
