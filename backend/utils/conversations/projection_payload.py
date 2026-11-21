@@ -127,3 +127,108 @@ def client_processing_mutation(projection: Any) -> dict[str, Any]:
     """
     dumped = projection.model_dump(mode='json') if hasattr(projection, 'model_dump') else projection
     return {'client_processing': dumped}
+
+
+def custom_stt_source_token(conversation: Any) -> str | None:
+    """Extract normalized string source token from a conversation or create payload."""
+    raw = getattr(conversation, 'source', None)
+    token = getattr(raw, 'value', raw)
+    return token if isinstance(token, str) else None
+
+
+def should_skip_custom_stt_postprocessing(
+    uid: str,
+    conversation: Any,
+    skip_fn: Any,
+    *,
+    strict_bool: bool = False,
+) -> bool:
+    """Check whether Omi-paid post-processing is skipped for a custom-STT conversation."""
+    raw_flag = getattr(conversation, 'uses_custom_stt', False)
+    custom_stt = (raw_flag is True) if strict_bool else bool(raw_flag)
+    if not custom_stt:
+        return False
+    return bool(skip_fn(uid, uses_custom_stt=custom_stt, source=custom_stt_source_token(conversation)))
+
+
+def complete_exhausted_custom_stt_conversation(
+    uid: str,
+    conversation: Any,
+    *,
+    generated_conversation_id: str | None,
+    client_projection: Any,
+    has_refresh_fence: bool,
+    hooks: tuple[Any, Any, Any, Any],
+    on_persisted: Any,
+) -> Any:
+    """Persist a zero-LLM completed conversation when custom-STT processing credits are exhausted.
+
+    Live `/v4/listen?custom_stt=enabled` and ingress creates intentionally bypass managed-STT
+    credit checks at capture time, then hit `should_skip_omi_paid_postprocessing` during
+    post-processing. Mutating `status` only in memory left Firestore rows stranded in
+    `status='processing'` with blank titles and caused durable finalization to fence as
+    `lifecycle persistence lost` (#23923). Reprocesses of already-completed enriched rows still
+    preserve their existing summaries without overwriting them.
+    """
+    from models.conversation import Conversation, CreateConversation, ExternalIntegrationCreateConversation
+    from models.conversation_enums import ConversationStatus
+    from utils.conversations.recovery import TERMINAL_NO_DERIVED_EFFECTS_FIELD
+    from utils.conversations.sync_hold_completion import defer_held_budget_denial
+    from utils.free_tier_processing_policy import client_summaries_at_cap_enabled
+
+    build_structured, materialize_conversation, lifecycle_service, log = hooks
+    is_initial_creation = isinstance(conversation, (CreateConversation, ExternalIntegrationCreateConversation))
+
+    log.info(
+        'custom-STT processing budget exhausted: skipping Omi-paid post-processing uid=%s conv=%s',
+        uid,
+        getattr(conversation, 'id', '?'),
+    )
+    if not is_initial_creation and not isinstance(conversation, Conversation):
+        on_persisted(False, None)
+        return conversation
+
+    existing_structured = getattr(conversation, 'structured', None)
+    has_existing_title = bool((getattr(existing_structured, 'title', '') or '').strip())
+    if not is_initial_creation and (
+        has_refresh_fence or (conversation.status == ConversationStatus.completed and has_existing_title)
+    ):
+        defer_held_budget_denial()
+        on_persisted(False, None)
+        return conversation
+
+    structured = existing_structured if has_existing_title else build_structured(conversation)
+    result = materialize_conversation(
+        uid,
+        structured,
+        conversation,
+        generated_conversation_id,
+        relevance_discarded=False,
+    )
+    allow_projection = bool(client_summaries_at_cap_enabled())
+    effective_projection = (
+        client_projection
+        if allow_projection and client_projection is not None
+        else getattr(conversation, 'client_processing', None)
+    )
+    if effective_projection is not None:
+        result.client_processing = effective_projection
+    had_summary_retryable = getattr(result, 'summary_retryable', None) is not None
+    result.deferred = False
+    result.discarded = False
+    result.status = ConversationStatus.completed
+    if getattr(result, 'processing_state', None) is not None:
+        result.processing_state = None
+    result.summary_retryable = None
+    payload = omit_null_processing_state(strip_client_processing(result.model_dump()))
+    if had_summary_retryable:
+        payload['summary_retryable'] = None
+    payload[TERMINAL_NO_DERIVED_EFFECTS_FIELD] = True
+    if is_initial_creation:
+        if allow_projection and client_projection is not None:
+            payload.update(client_processing_mutation(client_projection))
+        persisted = lifecycle_service.create_completed_conversation(uid, payload, idempotent=True)
+    else:
+        persisted = lifecycle_service.persist_processed_conversation(uid, payload)
+    on_persisted(persisted, result)
+    return result
