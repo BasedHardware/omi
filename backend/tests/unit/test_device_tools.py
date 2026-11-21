@@ -7,6 +7,7 @@ from unittest.mock import patch
 import pytest
 
 from utils import device_tools
+from utils.llm import user_voice
 from utils.device_tools import (
     DEVICE_TOOL_NAMES,
     DEVICE_TOOL_MIN_TIMEOUT_SECONDS,
@@ -74,7 +75,10 @@ async def _run_blocking_inline(_executor, fn, *args):
 
 @pytest.fixture(autouse=True)
 def inline_executor():
-    with patch.object(device_tools, 'run_blocking', _run_blocking_inline):
+    with (
+        patch.object(device_tools, 'run_blocking', _run_blocking_inline),
+        patch.object(user_voice, '_load_user_voice_settings', return_value={}),
+    ):
         yield
 
 
