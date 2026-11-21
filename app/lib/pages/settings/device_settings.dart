@@ -651,7 +651,17 @@ class _DeviceSettingsState extends State<DeviceSettings> {
             connected: connected != null,
             batteryLevel: connected == null ? -1 : provider.batteryLevel,
             isCharging: connected != null && provider.isCharging,
-            onRetryBattery: connected?.type == DeviceType.omi ? provider.refreshBatteryLevel : null,
+            onRetryBattery: connected?.type == DeviceType.omi
+                ? () async {
+                    final refreshed = await provider.refreshBatteryLevel();
+                    if (context.mounted &&
+                        provider.isConnected &&
+                        provider.connectedDevice?.id == connected?.id &&
+                        !refreshed) {
+                      OmiFeedback.error(context, context.l10n.firmwareBatteryUnavailable);
+                    }
+                  }
+                : null,
           ),
           if (deviceStreaming && canPause) ...[
             DeviceControlsGroup(paused: devicePaused, onToggle: () => _togglePause(capture)),

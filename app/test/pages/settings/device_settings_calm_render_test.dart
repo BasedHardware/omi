@@ -40,7 +40,7 @@ const _output = String.fromEnvironment('DEVICE_SETTINGS_RENDER_OUTPUT');
 const _frame = Key('device_settings_frame');
 
 class _Device extends ChangeNotifier implements DeviceProvider {
-  _Device(this.batteryLevel);
+  _Device(this.batteryLevel, this.refreshResult);
 
   final device = BtDevice(id: 'omi-evidence', name: 'Omi', type: DeviceType.omi, rssi: -40);
   @override
@@ -55,11 +55,12 @@ class _Device extends ChangeNotifier implements DeviceProvider {
   bool get isConnecting => false;
   @override
   final int batteryLevel;
+  final bool refreshResult;
   int batteryChecks = 0;
   @override
   Future<bool> refreshBatteryLevel() async {
     batteryChecks++;
-    return true;
+    return refreshResult;
   }
 
   @override
@@ -223,7 +224,7 @@ void main() {
     });
   }
 
-  Future<_Device> pumpDevice(WidgetTester tester, {int batteryLevel = 72}) async {
+  Future<_Device> pumpDevice(WidgetTester tester, {int batteryLevel = 72, bool refreshResult = true}) async {
     debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
     tester.view.physicalSize = const Size(390, 844);
     tester.view.devicePixelRatio = 1;
@@ -235,7 +236,7 @@ void main() {
       loadPending: () async => const ApiSuccess(PendingWorkSnapshot.disabled),
       loadAttention: () async => const ApiSuccess(AttentionItemsPage.disabled),
     );
-    final device = _Device(batteryLevel);
+    final device = _Device(batteryLevel, refreshResult);
     final capture = _Capture();
     final sync = _Sync([_stalledUpload()]);
     final conversations = ConversationProvider(isSignedIn: () => false);
@@ -301,5 +302,15 @@ void main() {
     await writeFrame(tester, '003-mobile-ios-low-battery-recheck');
     await tester.tap(find.text('Try Again'));
     expect(device.batteryChecks, 1);
+  });
+
+  testWidgets('a failed battery recheck explains the failure and keeps the reported level', (tester) async {
+    await pumpDevice(tester, batteryLevel: 3, refreshResult: false);
+    await tester.tap(find.text('Try Again'));
+    await tester.pump();
+    expect(find.text(lookupAppLocalizations(const Locale('en')).firmwareBatteryUnavailable), findsOneWidget);
+    expect(find.text('3%'), findsOneWidget);
+    expect(find.text('Try Again'), findsOneWidget);
+    debugDefaultTargetPlatformOverride = null;
   });
 }

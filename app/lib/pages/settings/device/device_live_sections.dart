@@ -136,6 +136,7 @@ class _StatTile extends StatelessWidget {
       label: [label, value, if (caption != null) caption!, if (secondCaption != null) secondCaption!].join(', '),
       button: onTap != null,
       excludeSemantics: true,
+      onTap: onTap,
       child: onTap == null
           ? content
           : InkWell(

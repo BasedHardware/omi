@@ -38,7 +38,7 @@ class _ChargingTransport implements DeviceTransport {
       if (pendingBattery != null) return pendingBattery!.future;
       return battery;
     }
-    expect(characteristicUuid, OmiDeviceConnection.settingsChargingStatusCharacteristicUuid);
+    expectSync(characteristicUuid, OmiDeviceConnection.settingsChargingStatusCharacteristicUuid);
     if (pendingRead != null) return pendingRead!.future;
     return value;
   }
@@ -114,7 +114,8 @@ void main() {
   });
 
   testWidgets('first charge rechecks after settling and keeps the latest reading', (tester) async {
-    final transport = _ChargingTransport();
+    final pendingStatus = Completer<List<int>>();
+    final transport = _ChargingTransport()..pendingRead = pendingStatus;
     final provider = _provider(transport, []);
     addTearDown(transport.notifications.close);
     addTearDown(provider.dispose);
@@ -122,7 +123,11 @@ void main() {
     provider.setIsConnected(true);
     provider.batteryLevel = 3;
     provider.beginFirstChargeCheck();
-    await provider.initiateChargingStatusListener();
+    final listening = provider.initiateChargingStatusListener();
+    await tester.pump(const Duration(seconds: 15));
+    expect(transport.batteryReads, 0);
+    pendingStatus.complete([1]);
+    await listening;
     await tester.pump(const Duration(seconds: 30));
     expect(transport.batteryReads, 0);
 
@@ -144,13 +149,16 @@ void main() {
 
   testWidgets('a delayed battery read from a retired link is discarded', (tester) async {
     final pending = Completer<List<int>>();
-    final transport = _ChargingTransport()..pendingBattery = pending;
+    final transport = _ChargingTransport()
+      ..pendingBattery = pending
+      ..value = [0];
     final provider = _provider(transport, []);
     addTearDown(transport.notifications.close);
     addTearDown(provider.dispose);
     provider.connectedDevice = _device();
     provider.setIsConnected(true);
     provider.beginFirstChargeCheck();
+    await provider.initiateChargingStatusListener();
     await tester.pump(const Duration(seconds: 12));
     expect(transport.batteryReads, 1);
     provider.setIsConnected(false);

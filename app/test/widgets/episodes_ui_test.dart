@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui' show SemanticsAction;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -1229,6 +1230,7 @@ void main() {
     });
 
     testWidgets('a reported zero stays visible and offers the battery recheck', (tester) async {
+      final semantics = tester.ensureSemantics();
       var checks = 0;
       await tester.pumpWidget(wrap(DeviceStatsRow(
         batteryLevel: 0,
@@ -1238,9 +1240,12 @@ void main() {
         onRetryBattery: () => checks++,
       )));
       expect(find.text('0%'), findsOneWidget);
-      expect(tester.getSize(find.byKey(const Key('device_stat_battery'))).height, greaterThanOrEqualTo(44));
+      final battery = find.byKey(const Key('device_stat_battery'));
+      expect(tester.getSize(battery).height, greaterThanOrEqualTo(44));
+      expect(tester.getSemantics(battery).getSemanticsData().hasAction(SemanticsAction.tap), isTrue);
       await tester.tap(find.text('Try Again'));
       expect(checks, 1);
+      semantics.dispose();
     });
 
     testWidgets('right now shows only the live episode', (tester) async {

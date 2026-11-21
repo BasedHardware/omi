@@ -128,6 +128,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   static const _batteryRefreshTimeout = Duration(seconds: 3);
   String? _firstChargeDeviceId;
   Timer? _firstChargeCheck;
+  bool _chargingStatusReady = false;
   int _batterySampleRevision = 0;
   bool _havingNewFirmware = false;
   bool get havingNewFirmware =>
@@ -692,10 +693,11 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     final device = connectedDevice;
     if (device == null || device.type != DeviceType.omi || _firstChargeDeviceId == device.id) return;
     _firstChargeDeviceId = device.id;
-    _updateFirstChargeCheck(isCharging);
+    if (_chargingStatusReady) _updateFirstChargeCheck(isCharging);
   }
 
   void _updateFirstChargeCheck(bool charging) {
+    _chargingStatusReady = true;
     if (_firstChargeDeviceId == null) return;
     if (charging) {
       _firstChargeCheck?.cancel();
@@ -732,11 +734,8 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
       final connection = await _chargingConnectionLoader(deviceId).timeout(_batteryRefreshTimeout);
       if (connection == null || !_isCurrentBatterySession(generation, batterySession, deviceId)) return false;
       final level = await connection.retrieveBatteryLevel().timeout(_batteryRefreshTimeout);
-      if (!_isCurrentBatterySession(generation, batterySession, deviceId) ||
-          _batterySampleRevision != sampleRevision ||
-          level < 0 ||
-          level > 100) return false;
-      _publishBatterySample(level, refresh: true);
+      if (!_isCurrentBatterySession(generation, batterySession, deviceId) || level < 0 || level > 100) return false;
+      if (_batterySampleRevision == sampleRevision) _publishBatterySample(level, refresh: true);
       return true;
     } catch (e) {
       Logger.debug('Battery refresh failed: $e');
@@ -753,9 +752,11 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
 
     var connection = await _chargingConnectionLoader(deviceId);
     if (!_isCurrentBatterySession(generation, batterySession, deviceId)) return;
-    if (connection == null) return;
     // TODO(astra): non-Omi connections, including Friend Pendant, expose no charging-status API. (#5491)
-    if (connection is! OmiDeviceConnection) return;
+    if (connection is! OmiDeviceConnection) {
+      _updateFirstChargeCheck(isCharging);
+      return;
+    }
 
     final currentStatus = await connection.readChargingStatus();
     if (!_isCurrentBatterySession(generation, batterySession, deviceId)) return;
@@ -802,6 +803,9 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
       return;
     }
     _bleChargingStatusListener = listener;
+    // If the initial read was unavailable, begin a bounded check once setup has
+    // finished. Until then the default false value does not imply an unplug.
+    _updateFirstChargeCheck(isCharging);
   }
 
   Future<void> _presentFullyChargedNotification(String deviceId) async {
@@ -861,6 +865,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   void _resetBatteryState() {
     _batterySession++;
     _clearFirstChargeCheck();
+    _chargingStatusReady = false;
     batteryLevel = -1;
     isCharging = false;
     _lastNotifiedBatteryLevel = -1;
