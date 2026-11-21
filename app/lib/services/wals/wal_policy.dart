@@ -76,11 +76,13 @@ bool canClaimLiveCapture(List<Wal> batch, List<Wal> pendingForConversation, int 
 /// the same bytes forever. The per-recording manual Retry
 /// ([LocalWalSyncImpl.syncWal]) deliberately ignores this budget.
 bool isAutoUploadEligible(Wal wal, {int? nowSeconds}) =>
+    // A manual refusal never releases user-held audio into a later auto drain.
+    !wal.holdForUser &&
     !wal.onDeviceOnly &&
     wal.storage == WalStorage.disk &&
     ((wal.status == WalStatus.uploadRejected &&
             wal.refusalRetryDue(nowSeconds ?? DateTime.now().millisecondsSinceEpoch ~/ 1000)) ||
-        (!wal.holdForUser && wal.status == WalStatus.miss && wal.retryCount < walMaxAutoRetries));
+        (wal.status == WalStatus.miss && wal.retryCount < walMaxAutoRetries));
 
 /// Pause tolerance for saved utterance gaps and WAL edges; coverage only suppresses automatic
 /// repair, never deletes audio, so short gaps are treated as pauses while the copy stays recoverable.
@@ -229,7 +231,7 @@ extension InvalidCaptureTimeRepair on LocalWalSyncImpl {
         .where((wal) =>
             wal.storage == WalStorage.disk &&
             !wal.onDeviceOnly &&
-            (!wal.holdForUser || wal.status == WalStatus.uploadRejected) &&
+            !wal.holdForUser &&
             (wal.status == WalStatus.miss || wal.status == WalStatus.uploadRejected) &&
             walCaptureTimeClass(wal, nowSeconds) == WalCaptureTimeClass.unknown)
         .toList();

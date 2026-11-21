@@ -2,16 +2,26 @@
 # One metadata-only readiness probe
 
 This is preparation for one exact session, not a runtime or serving admission.
-The published image in `readiness_contract.py` passed native AMD64 qualification
-and publication in [Actions run 43851897045](https://github.com/BasedHardware/omi/actions/runs/43851897045).
-Its frozen source expects the exact migration 0001..0008 vector. Main also has
-0009 for a separate PostgreSQL-primary worker roll; never run migrations,
-rebuild the image or substitute main's vector to make this probe pass.
+The candidate image in `readiness_contract.py` has a verified local OCI export.
+Its `qualification_run` remains null until the existing Release executor supplies
+actual native AMD64 qualification and immutable publication receipts for this
+exact digest. The original `a79982bb…` base passed native qualification and immutable publication in
+[Actions run 43960712883](https://github.com/BasedHardware/omi/actions/runs/43960712883);
+that receipt does not qualify the derivative candidate. Its frozen source expects the exact migration 0001..0008 vector. Main also has
+0009 for a separate PostgreSQL-primary worker roll; never run migrations or
+substitute main's source/vector to make this probe pass. A readiness-helper
+change requires a new exact artifact and fresh qualification as described below.
 
 `readiness_probe.py` is a local renderer and verifier. It has no Kubernetes,
 cloud, SQL, credential or execution interface. It does not initialize state.
 Its UID-precondition DELETE request refuses deletion of a later Pod that reuses
 the name. It neither sends the request nor proves cleanup succeeded.
+
+`qualification_run` is provenance metadata, deliberately not an authorization
+input to this offline renderer/verifier. It remains null while qualification is
+pending. Rendering a manifest grants no execution permission: the existing Release
+executor must separately verify exact-candidate native qualification, publication
+and fresh packet admission before any create. An image-pull result is not that gate.
 
 Use one bare Pod created once with a fresh 128-bit random run token. It has
 no replacement controller, `restartPolicy: Never`, a 90-second active deadline
@@ -42,6 +52,57 @@ addition; it also bypasses the scheduler, so it must never bypass its taint,
 resource or policy checks. Do not resize, add capacity, alter access, relax
 admission or change a node to fit it. Escalate any genuinely ungranted guarded
 delta as a concrete action. The sole existing Release executor owns execution.
+
+## Source-check correction and qualification gate
+
+The earlier cached-image attempt on `8b0bf0de…` terminated with exit 2 and
+`TimeoutExpired`; its exact UID cleanup was verified. No SQL-readiness or rollback
+receipt was accepted. The previous qualification's wrong-host refusal did not
+exercise the real source checks at the admitted resource limit.
+
+`runner_readiness.py` is the versioned candidate for the in-image `readiness.py`.
+It retains full HEAD and tracked/untracked cleanliness checks, bounds HEAD to 5s
+and status to 30s within the unchanged 50s probe deadline, and adds fixed failure
+stages and bounded error categories only to HOLD reports. Each Git call is also
+capped by the actual remaining overall budget; the source allowance does not
+reserve a fixed amount of time for credentials or SQL. The successful metadata
+report stays unchanged.
+
+A source-only GKE diagnostic on 2026-11-17 completed the strict status scan cleanly
+in 14.641372s, after an earlier metadata attempt timed out at the former 15s cap.
+The 30s allocation gives that stage headroom without changing the total deadline,
+Pod deadline or resources. One observation does not bound future scans, establish
+a root cause, or prove SQL readiness. The rebuilt image requires fresh native
+acceptance and a separately reviewed actual metadata attempt.
+
+The candidate uses a readiness-only derivative of the verified `a79982bb…` base.
+Its original 13 layers remain byte-for-byte identical; the sole added filesystem
+layer replaces `/opt/runner/readiness.py`. Runtime configuration differs only in
+three provenance labels: the new build-input hash and the explicit original
+base manifest/build-input hashes. The frozen source, dependencies, supervisor,
+process guard and original `/build/` inputs remain unchanged. The fixture includes
+the actual derivative recipe, verifier, closed input manifest and provenance.
+The attempted full rebuild's offline dependency install failed with local Docker
+VM ENOSPC; that failed receipt is retained and is not qualification evidence.
+
+Before publication, qualification now runs the exact new image with the correct
+hostname, UID1000, read-only root, no network, 0.5 CPU and 512Mi without extra swap. It executes the
+real source checks before an injected credential refusal; no real ADC or SQL call
+is needed. This check runs before the broader 2-CPU smoke, avoiding that smoke's
+source access as a prerequisite. It is not a guarantee of cold host page cache or
+future Kubernetes startup latency. Its exact runner hash and fixed refusal proof
+are required by publication admission, in addition to all 58 native fixture tests
+without skips and exact image identity/cleanup checks.
+Proof-critical checks use explicit failures and refuse optimized Python, so `-O`
+cannot suppress them. A malformed runner hash refuses before host/container access.
+
+Any source-stage timeout holds before publication. Do not drop tracked-file
+content checks, untracked-file checks, or extend the global/Pod/waiter deadlines
+or resources to clear the gate. A new image/build/fixture contract and actual
+native publication receipt are required before another separately reviewed live
+metadata attempt. Old image receipts remain historical evidence. No source change
+here admits persistent state, serving, or a Firestore authority flip.
+
 
 ## Concrete execution packet
 
@@ -127,3 +188,8 @@ needs its own readiness and retained-state first-install/fencing acceptance.
 No state adoption, copy, index serving, schema grant, authority flip or savings
 claim follows. Fleet writer/deletion coverage, erasure reserves, privacy/restore,
 cohort and absolute operating limits remain separate gates.
+# Source and failure receipt details
+
+The runner explicitly requests all nonignored untracked files from Git, so a local or global `status.showUntrackedFiles=no` setting cannot hide them. SQL-stage failures, including rollback and close failures, emit the same bounded HOLD fields as pre-SQL failures; successful metadata receipts retain their exact schema.
+
+Native source qualification uses the probe's shared environment values, captures stdout separately from stderr, and requires stdout to contain exactly one JSON proof. Additional stdout is refused rather than discarded. Missing or malformed runner hashes refuse in preflight, qualification and publication.

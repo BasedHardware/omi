@@ -2,6 +2,140 @@
   "indexes": [
     {
       "collectionGroup": "conversations",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "v3_pending",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "started_at",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "conversations",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "v3_pending",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "v3_pending_since",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "conversations",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        {
+          "fieldPath": "v3_pending",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "v3_pending_since",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "conversations",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        {
+          "fieldPath": "source",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "created_at",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "conversations",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "v3_derived",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "finished_at",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "started_at",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "conversations",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "recording",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "geolocation.latitude",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "conversations",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "discarded",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "recording",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "started_at",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "conversations",
       "queryScope": "COLLECTION_GROUP",
       "fields": [
         {
@@ -100,6 +234,42 @@
         },
         {
           "fieldPath": "blocked_byok_at",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "batch_pipeline_prod_results",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "projection_outbox_kind",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "projection_outbox_due_at",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "batch_pipeline_dev_results",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "projection_outbox_kind",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "projection_outbox_due_at",
           "order": "ASCENDING"
         },
         {
@@ -6436,6 +6606,75 @@
       ]
     },
     {
+      "collectionGroup": "conversations",
+      "fieldPath": "v3_pending",
+      "ttl": false,
+      "indexes": [
+        {
+          "queryScope": "COLLECTION",
+          "order": "ASCENDING"
+        },
+        {
+          "queryScope": "COLLECTION",
+          "order": "DESCENDING"
+        },
+        {
+          "queryScope": "COLLECTION",
+          "arrayConfig": "CONTAINS"
+        },
+        {
+          "queryScope": "COLLECTION_GROUP",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "conversations",
+      "fieldPath": "v3_process_pending",
+      "ttl": false,
+      "indexes": [
+        {
+          "queryScope": "COLLECTION",
+          "order": "ASCENDING"
+        },
+        {
+          "queryScope": "COLLECTION",
+          "order": "DESCENDING"
+        },
+        {
+          "queryScope": "COLLECTION",
+          "arrayConfig": "CONTAINS"
+        },
+        {
+          "queryScope": "COLLECTION_GROUP",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "conversations",
+      "fieldPath": "v3_audio_purge_pending",
+      "ttl": false,
+      "indexes": [
+        {
+          "queryScope": "COLLECTION",
+          "order": "ASCENDING"
+        },
+        {
+          "queryScope": "COLLECTION",
+          "order": "DESCENDING"
+        },
+        {
+          "queryScope": "COLLECTION",
+          "arrayConfig": "CONTAINS"
+        },
+        {
+          "queryScope": "COLLECTION_GROUP",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
       "collectionGroup": "record_custody_recoveries",
       "fieldPath": "recorded_at",
       "ttl": false,
@@ -6599,6 +6838,29 @@
     {
       "collectionGroup": "pipeline_ledger",
       "fieldPath": "stage",
+      "ttl": false,
+      "indexes": [
+        {
+          "queryScope": "COLLECTION",
+          "order": "ASCENDING"
+        },
+        {
+          "queryScope": "COLLECTION",
+          "order": "DESCENDING"
+        },
+        {
+          "queryScope": "COLLECTION",
+          "arrayConfig": "CONTAINS"
+        },
+        {
+          "queryScope": "COLLECTION_GROUP",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "deleted_conversations",
+      "fieldPath": "deleted_at",
       "ttl": false,
       "indexes": [
         {
@@ -7051,6 +7313,18 @@
     {
       "collectionGroup": "conversations",
       "fieldPath": "owner_recognition_diagnostics",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "batch_pipeline_prod_jobs",
+      "fieldPath": "packing_observation",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "batch_pipeline_dev_jobs",
+      "fieldPath": "packing_observation",
       "ttl": false,
       "indexes": []
     }

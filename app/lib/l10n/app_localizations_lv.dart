@@ -1126,6 +1126,11 @@ class AppLocalizationsLv extends AppLocalizations {
   String get nameUpdatedSuccessfully => 'Vārds veiksmīgi atjaunināts!';
 
   @override
+  String calendarReadSelectionHelp(String calendar) {
+    return 'Lasīt atlasītos kalendārus. Jauniem notikumiem tiek izmantots $calendar.';
+  }
+
+  @override
   String get calendarSettings => 'Kalendāra iestatījumi';
 
   @override
@@ -9101,7 +9106,7 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get deleteWhileProcessingMessage =>
-      'Šis ieraksts ir augšupielādēts, bet Omi vēl veido sarunu. Ja to tagad izdzēsīsiet un apstrāde neizdosies, to nevarēs atjaunot. Vai tomēr dzēst?';
+      'Šis ieraksts jau ir augšupielādēts, un Omi to apstrādā. Dzēšot šeit, tiek noņemta tālrunī esošā kopija. Ja apstrāde neizdosies, Omi nevarēs mēģināt vēlreiz no šī tālruņa.';
 
   @override
   String get syncCardAllBackedUp => 'Visi ieraksti sinhronizēti';
@@ -12256,7 +12261,7 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String diagnosticsSincePairingSummary(int drops, int failed) {
-    return 'Kopš savienošanas pārī: pārrāvumi $drops, neveiksmīgi savienojumi $failed.';
+    return 'Kopš savienošanas pārī: $drops atkārtoti savienojumi, $failed neizdevušies savienojumi.';
   }
 
   @override
@@ -13496,16 +13501,6 @@ class AppLocalizationsLv extends AppLocalizations {
   }
 
   @override
-  String syncCardTranscribingAmount(String amount) {
-    return '$amount pārvēršana sarunās';
-  }
-
-  @override
-  String syncCardTranscribedOf(String done, String total) {
-    return 'Gatavs $done no $total · varat atstāt šo ekrānu';
-  }
-
-  @override
   String syncCardReadyAmount(String amount) {
     return '$amount gatavs sinhronizācijai';
   }
@@ -13529,7 +13524,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get syncDetailsWaitingOnPhone => 'Gaida šajā tālrunī';
 
   @override
-  String get syncDetailsTranscribing => 'Atšifrē Omi';
+  String get syncDetailsTranscribing => 'Augšupielādēts, gaida serveri';
 
   @override
   String get syncDetailsAudioFiles => 'Audio faili';
@@ -13987,6 +13982,12 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get summaryBusyBody => 'Omi jau apstrādā šo sarunu. Kopsavilkums parādīsies šeit, kad tas būs gatavs.';
+
+  @override
+  String get summaryTranscriptionPendingTitle => 'Vēl nav transkribēts';
+
+  @override
+  String get summaryTranscriptionPendingBody => 'Kopsavilkums parādīsies, kad transkripcija būs gatava.';
 
   @override
   String get summaryCheckAgain => 'Pārbaudīt vēlreiz';
@@ -14520,14 +14521,6 @@ class AppLocalizationsLv extends AppLocalizations {
   @override
   String deviceCatchingUpProgress(int done, int total) {
     return '$done no $total min';
-  }
-
-  @override
-  String get deviceRecently => 'Nesen';
-
-  @override
-  String deviceDisconnectedFor(String duration) {
-    return 'Atvienots $duration';
   }
 
   @override
@@ -15469,6 +15462,11 @@ class AppLocalizationsLv extends AppLocalizations {
   }
 
   @override
+  String firmwareUpdateNotInstalledCv1Message(String version) {
+    return 'Atjauninājums netika instalēts. Jūsu kulons joprojām darbojas ar pašreizējo programmaparatūru ($version). Lūdzu, sazinieties ar atbalstu, nevis mēģiniet atjaunināt vēlreiz.';
+  }
+
+  @override
   String get firmwareUpdateUnconfirmedMessage =>
       'Couldn\'t confirm the update. Your pendant hasn\'t reconnected yet. Keep it nearby and check its firmware version before trying again.';
 
@@ -15507,6 +15505,10 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get processingDeleteScopeChanged => 'Apstrādes saraksts ir mainījies. Pārskatiet to un mēģiniet vēlreiz.';
+
+  @override
+  String get syncTooOldExplanation =>
+      'This recording is older than Omi\'s sync window, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
 
   @override
   String freeCapTitle(int minutes) {
@@ -15584,4 +15586,173 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get onWifiLater => 'Vēlāk ar Wi-Fi';
+
+  @override
+  String get conversationWritingSummary => 'Rakstām jūsu kopsavilkumu…';
+
+  @override
+  String get onTheWayServerWork => 'Servera ziņotais darbs';
+
+  @override
+  String get finishNothingToProcess => 'Pagaidām nav ko apstrādāt.';
+
+  @override
+  String get finishStillProcessing => 'Joprojām tiek apstrādāts. Tas parādīsies sākumlapā.';
+
+  @override
+  String get finishBackToHome => 'Atpakaļ uz sākumu';
+
+  @override
+  String get conversationSummaryWhenItEnds => 'Kopsavilkums, kad šī saruna beigsies';
+
+  @override
+  String get deviceUploadsWaitingOnServer => 'Augšupielādes gaida serverī';
+
+  @override
+  String get deviceUploadsWaitingOnServerSubtitle => 'Jūsu audio ir droši jūsu ierīcē vai tālrunī';
+
+  @override
+  String conversationSummaryThrough(String time) {
+    return 'Kopsavilkums līdz $time';
+  }
+
+  @override
+  String get conversationRecentTranscript => 'Jaunākā transkripcija';
+
+  @override
+  String get finishAlreadySaved => 'Jau saglabāta. Tā ir sadaļā Sākums.';
+
+  @override
+  String get finishAudioNotReceived => 'Audio vēl ir ceļā.';
+
+  @override
+  String get finishFailedOffline => 'Neizdevās. Jūsu audio ir drošībā.';
+
+  @override
+  String get finishFailed => 'Neizdevās. Jūsu audio ir drošībā.';
+
+  @override
+  String get micBlockedCannotRecord => 'Atļaujiet piekļuvi mikrofonam, lai ierakstītu.';
+
+  @override
+  String get couldNotStartRecording => 'Neizdevās sākt ierakstīšanu.';
+
+  @override
+  String get restorePurchasesFailed => 'Neizdevās pārbaudīt jūsu plānu.';
+
+  @override
+  String get firmwareCheckFailed => 'Neizdevās pārbaudīt atjauninājumus.';
+
+  @override
+  String get conversationStillPublic => 'Tā vēl ir kopīgota ar saiti.';
+
+  @override
+  String get goalSaveFailed => 'Neizdevās saglabāt jūsu mērķi.';
+
+  @override
+  String get goalDeleteFailed => 'Neizdevās dzēst. Mērķis ir atjaunots.';
+
+  @override
+  String get goalsLoadFailed => 'Neizdevās ielādēt jūsu mērķus.';
+
+  @override
+  String get missingTargetEndedRecording => 'Šis ieraksts jau ir beidzies.';
+
+  @override
+  String get missingTargetMemory => 'Šī atmiņa ir pazudusi.';
+
+  @override
+  String get missingTargetTask => 'Šis uzdevums ir pazudis.';
+
+  @override
+  String get missingTargetConversation => 'Neizdevās atvērt šo sarunu.';
+
+  @override
+  String get couldNotRefreshConversations => 'Neizdevās atsvaidzināt.';
+
+  @override
+  String get connectDeviceForOfflineSync => 'Pievienojiet savu Omi, lai sinhronizētu.';
+
+  @override
+  String get useDifferentAccountMessage => 'Jūs tiksiet izrakstīti, un šī telefona Omi iestatījumi tiks atiestatīti.';
+
+  @override
+  String get rayBanMetaNotFoundAfterSetup => 'Brilles nav atrastas. Vai tās ir ieslēgtas?';
+
+  @override
+  String get couldNotMoveTask => 'Neizdevās pārvietot uzdevumu.';
+
+  @override
+  String lockedTasksKept(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Izdzēsts. $count bloķēti uzdevumi tika paturēti.',
+      one: 'Izdzēsts. 1 bloķēts uzdevums tika paturēts.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get settingNotSaved => 'Neizdevās saglabāt šīs izmaiņas.';
+
+  @override
+  String get couldNotLoadNotificationSettings => 'Neizdevās ielādēt jūsu iestatījumus.';
+
+  @override
+  String get waitForOmiToFinish => 'Gaidiet, līdz Omi pabeidz.';
+
+  @override
+  String get voiceNoteTooShort => 'Pārāk īss. Turiet nospiestu, lai ierakstītu.';
+
+  @override
+  String get submitAppMissingFields =>
+      'Pievienojiet nosaukumu, aprakstu, attēlu, kategoriju un iespēju, lai iesniegtu.';
+
+  @override
+  String get appSetupNotFinished => 'Iestatīšana vēl nav pabeigta.';
+
+  @override
+  String get finishNothingKeptTitle => 'Nav ko paturēt';
+
+  @override
+  String get submitAppFinishDetails => 'Aizpildiet augstāk redzamos iespēju un cenas datus, lai iesniegtu.';
+
+  @override
+  String get finishNothingNew => 'Vēl nav nekas jauns.';
+
+  @override
+  String get takingLongerThanUsual => 'Tas aizņem vairāk laika nekā parasti. Drīz tas būs sadaļā Sākums.';
+
+  @override
+  String get couldNotCheckOnIt => 'Neizdevās pārbaudīt. Mēģiniet vēlreiz.';
+
+  @override
+  String get upgradeToOpenThisOne => 'Jauniniet, lai atvērtu šo.';
+
+  @override
+  String get missingTargetConversationGone => 'Šī saruna tika izdzēsta.';
+
+  @override
+  String get cantConnectRightNow => 'Pašlaik nevar izveidot savienojumu.';
+
+  @override
+  String get loadOlderFailed => 'Neizdevās ielādēt iepriekšējos. Pieskarieties, lai mēģinātu vēlreiz.';
+
+  @override
+  String listeningWithDuration(String duration) {
+    return 'Klausās · $duration';
+  }
+
+  @override
+  String get conversationLiveNoEdits => 'Uzgaidiet, līdz saruna beidzas, lai to mainītu.';
+
+  @override
+  String get finishedSummaryReady => 'Kopsavilkums gatavs';
+
+  @override
+  String get writingSummaryStatus => 'Tiek rakstīts kopsavilkums…';
+
+  @override
+  String get stillWorkingOnIt => 'Vēl tiek pie tā strādāts.';
 }

@@ -1117,6 +1117,11 @@ class AppLocalizationsTh extends AppLocalizations {
   String get nameUpdatedSuccessfully => 'อัปเดตชื่อสำเร็จ!';
 
   @override
+  String calendarReadSelectionHelp(String calendar) {
+    return 'อ่านปฏิทินที่เลือก กิจกรรมใหม่จะใช้ $calendar';
+  }
+
+  @override
   String get calendarSettings => 'การตั้งค่าปฏิทิน';
 
   @override
@@ -9032,7 +9037,7 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get deleteWhileProcessingMessage =>
-      'การบันทึกนี้อัปโหลดแล้วแต่ Omi ยังสร้างบทสนทนาอยู่ หากลบตอนนี้และการประมวลผลล้มเหลว จะกู้คืนไม่ได้ ลบต่อไปหรือไม่?';
+      'การบันทึกนี้อัปโหลดแล้วและ Omi กำลังประมวลผลอยู่ การลบที่นี่จะลบสำเนาบนโทรศัพท์ หากการประมวลผลล้มเหลว Omi จะลองใหม่จากโทรศัพท์เครื่องนี้ไม่ได้';
 
   @override
   String get syncCardAllBackedUp => 'ซิงค์การบันทึกทั้งหมดแล้ว';
@@ -12163,7 +12168,7 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String diagnosticsSincePairingSummary(int drops, int failed) {
-    return 'ตั้งแต่จับคู่: หลุด $drops ครั้ง เชื่อมต่อล้มเหลว $failed ครั้ง';
+    return 'ตั้งแต่จับคู่: เชื่อมต่อใหม่ $drops ครั้ง เชื่อมต่อล้มเหลว $failed ครั้ง';
   }
 
   @override
@@ -13397,16 +13402,6 @@ class AppLocalizationsTh extends AppLocalizations {
   }
 
   @override
-  String syncCardTranscribingAmount(String amount) {
-    return 'กำลังแปลง $amount เป็นบทสนทนา';
-  }
-
-  @override
-  String syncCardTranscribedOf(String done, String total) {
-    return 'เสร็จแล้ว $done จาก $total · ออกจากหน้าจอนี้ได้เลย';
-  }
-
-  @override
   String syncCardReadyAmount(String amount) {
     return '$amount พร้อมซิงค์';
   }
@@ -13430,7 +13425,7 @@ class AppLocalizationsTh extends AppLocalizations {
   String get syncDetailsWaitingOnPhone => 'รอจากโทรศัพท์เครื่องนี้';
 
   @override
-  String get syncDetailsTranscribing => 'กำลังถอดเสียงบน Omi';
+  String get syncDetailsTranscribing => 'อัปโหลดแล้ว กำลังรอเซิร์ฟเวอร์';
 
   @override
   String get syncDetailsAudioFiles => 'ไฟล์เสียง';
@@ -13886,6 +13881,12 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get summaryBusyBody => 'Omi กำลังประมวลผลบทสนทนานี้อยู่แล้ว สรุปจะปรากฏที่นี่เมื่อเสร็จสิ้น';
+
+  @override
+  String get summaryTranscriptionPendingTitle => 'ยังไม่ได้ถอดเสียง';
+
+  @override
+  String get summaryTranscriptionPendingBody => 'สรุปจะปรากฏเมื่อการถอดเสียงพร้อม';
 
   @override
   String get summaryCheckAgain => 'ตรวจสอบอีกครั้ง';
@@ -14415,14 +14416,6 @@ class AppLocalizationsTh extends AppLocalizations {
   @override
   String deviceCatchingUpProgress(int done, int total) {
     return '$done จาก $total นาที';
-  }
-
-  @override
-  String get deviceRecently => 'ล่าสุด';
-
-  @override
-  String deviceDisconnectedFor(String duration) {
-    return 'ตัดการเชื่อมต่อ $duration';
   }
 
   @override
@@ -15360,6 +15353,11 @@ class AppLocalizationsTh extends AppLocalizations {
   }
 
   @override
+  String firmwareUpdateNotInstalledCv1Message(String version) {
+    return 'ติดตั้งอัปเดตไม่สำเร็จ จี้ของคุณยังใช้งานได้ด้วยเฟิร์มแวร์ปัจจุบัน ($version) โปรดติดต่อฝ่ายสนับสนุนแทนการลองอัปเดตซ้ำ';
+  }
+
+  @override
   String get firmwareUpdateUnconfirmedMessage =>
       'Couldn\'t confirm the update. Your pendant hasn\'t reconnected yet. Keep it nearby and check its firmware version before trying again.';
 
@@ -15398,6 +15396,10 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get processingDeleteScopeChanged => 'รายการที่กำลังประมวลผลเปลี่ยนไป โปรดตรวจสอบรายการแล้วลองอีกครั้ง';
+
+  @override
+  String get syncTooOldExplanation =>
+      'This recording is older than Omi\'s sync window, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
 
   @override
   String freeCapTitle(int minutes) {
@@ -15475,4 +15477,172 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get onWifiLater => 'ภายหลังผ่าน Wi-Fi';
+
+  @override
+  String get conversationWritingSummary => 'กำลังเขียนสรุปของคุณ…';
+
+  @override
+  String get onTheWayServerWork => 'งานที่เซิร์ฟเวอร์รายงาน';
+
+  @override
+  String get finishNothingToProcess => 'ยังไม่มีอะไรให้ประมวลผล';
+
+  @override
+  String get finishStillProcessing => 'ยังประมวลผลอยู่ จะแสดงที่หน้าหลัก';
+
+  @override
+  String get finishBackToHome => 'กลับไปหน้าหลัก';
+
+  @override
+  String get conversationSummaryWhenItEnds => 'สรุปเมื่อการสนทนานี้จบลง';
+
+  @override
+  String get deviceUploadsWaitingOnServer => 'อัปโหลดที่กำลังรออยู่บนเซิร์ฟเวอร์';
+
+  @override
+  String get deviceUploadsWaitingOnServerSubtitle => 'เสียงของคุณปลอดภัยบนอุปกรณ์หรือโทรศัพท์ของคุณ';
+
+  @override
+  String conversationSummaryThrough(String time) {
+    return 'สรุปถึง $time';
+  }
+
+  @override
+  String get conversationRecentTranscript => 'บทถอดความล่าสุด';
+
+  @override
+  String get finishAlreadySaved => 'บันทึกเสร็จแล้ว อยู่ที่หน้าหลัก';
+
+  @override
+  String get finishAudioNotReceived => 'เสียงยังอยู่ระหว่างทาง';
+
+  @override
+  String get finishFailedOffline => 'ไม่สำเร็จ แต่เสียงของคุณปลอดภัย';
+
+  @override
+  String get finishFailed => 'ไม่สำเร็จ แต่เสียงของคุณปลอดภัย';
+
+  @override
+  String get micBlockedCannotRecord => 'อนุญาตไมโครโฟนเพื่อบันทึกเสียง';
+
+  @override
+  String get couldNotStartRecording => 'เริ่มการบันทึกเสียงไม่สำเร็จ';
+
+  @override
+  String get restorePurchasesFailed => 'ตรวจสอบแพ็กเกจของคุณไม่สำเร็จ';
+
+  @override
+  String get firmwareCheckFailed => 'ตรวจสอบอัปเดตไม่สำเร็จ';
+
+  @override
+  String get conversationStillPublic => 'ยังแชร์ผ่านลิงก์อยู่';
+
+  @override
+  String get goalSaveFailed => 'บันทึกเป้าหมายของคุณไม่สำเร็จ';
+
+  @override
+  String get goalDeleteFailed => 'ลบไม่สำเร็จ เป้าหมายถูกคืนกลับมาแล้ว';
+
+  @override
+  String get goalsLoadFailed => 'โหลดเป้าหมายของคุณไม่สำเร็จ';
+
+  @override
+  String get missingTargetEndedRecording => 'การบันทึกนั้นจบแล้ว';
+
+  @override
+  String get missingTargetMemory => 'ความทรงจำนั้นไม่มีแล้ว';
+
+  @override
+  String get missingTargetTask => 'งานนั้นไม่มีแล้ว';
+
+  @override
+  String get missingTargetConversation => 'เปิดบทสนทนานี้ไม่สำเร็จ';
+
+  @override
+  String get couldNotRefreshConversations => 'รีเฟรชไม่สำเร็จ';
+
+  @override
+  String get connectDeviceForOfflineSync => 'เชื่อมต่อ Omi ของคุณเพื่อซิงก์';
+
+  @override
+  String get useDifferentAccountMessage => 'คุณจะออกจากระบบ และการตั้งค่า Omi ของโทรศัพท์เครื่องนี้จะถูกรีเซ็ต';
+
+  @override
+  String get rayBanMetaNotFoundAfterSetup => 'ไม่พบแว่น เปิดอยู่ไหม';
+
+  @override
+  String get couldNotMoveTask => 'ย้ายงานไม่สำเร็จ';
+
+  @override
+  String lockedTasksKept(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'ลบแล้ว มีงานที่ล็อกไว้ $count รายการที่ยังเก็บไว้',
+      one: 'ลบแล้ว มีงานที่ล็อกไว้ 1 รายการที่ยังเก็บไว้',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get settingNotSaved => 'บันทึกการเปลี่ยนแปลงนี้ไม่สำเร็จ';
+
+  @override
+  String get couldNotLoadNotificationSettings => 'โหลดการตั้งค่าของคุณไม่สำเร็จ';
+
+  @override
+  String get waitForOmiToFinish => 'รอให้ Omi เสร็จก่อน';
+
+  @override
+  String get voiceNoteTooShort => 'สั้นเกินไป กดค้างเพื่อบันทึกเสียง';
+
+  @override
+  String get submitAppMissingFields => 'เพิ่มชื่อ คำอธิบาย รูปภาพ หมวดหมู่ และความสามารถก่อนส่ง';
+
+  @override
+  String get appSetupNotFinished => 'การตั้งค่ายังไม่เสร็จสมบูรณ์';
+
+  @override
+  String get finishNothingKeptTitle => 'ไม่มีอะไรต้องเก็บ';
+
+  @override
+  String get submitAppFinishDetails => 'กรอกรายละเอียดความสามารถและราคาด้านบนให้ครบก่อนส่ง';
+
+  @override
+  String get finishNothingNew => 'ยังไม่มีอะไรใหม่';
+
+  @override
+  String get takingLongerThanUsual => 'ใช้เวลานานกว่าปกติ จะอยู่ในหน้าหลักเร็ว ๆ นี้';
+
+  @override
+  String get couldNotCheckOnIt => 'ตรวจสอบไม่สำเร็จ ลองอีกครั้ง';
+
+  @override
+  String get upgradeToOpenThisOne => 'อัปเกรดเพื่อเปิดบทสนทนานี้';
+
+  @override
+  String get missingTargetConversationGone => 'บทสนทนานั้นถูกลบไปแล้ว';
+
+  @override
+  String get cantConnectRightNow => 'เชื่อมต่อไม่ได้ในตอนนี้';
+
+  @override
+  String get loadOlderFailed => 'โหลดรายการเก่ากว่าไม่สำเร็จ แตะเพื่อลองอีกครั้ง';
+
+  @override
+  String listeningWithDuration(String duration) {
+    return 'กำลังฟัง · $duration';
+  }
+
+  @override
+  String get conversationLiveNoEdits => 'รอให้จบก่อนจึงจะเปลี่ยนได้';
+
+  @override
+  String get finishedSummaryReady => 'สรุปพร้อมแล้ว';
+
+  @override
+  String get writingSummaryStatus => 'กำลังเขียนสรุป…';
+
+  @override
+  String get stillWorkingOnIt => 'ยังดำเนินการอยู่';
 }

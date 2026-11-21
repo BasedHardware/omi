@@ -11,6 +11,7 @@ from uuid import uuid4
 
 from google.cloud import firestore
 
+from models.finalization_owner import python_owns_finalization
 from database.quiet_check_retirement import stop_quiet_checks_for_job
 from database.account_deletion_policy import account_deletion_marker_blocks_access
 from database._client import get_firestore_client
@@ -48,7 +49,8 @@ def admit(uid: str, conversation_ids: list[str], reprocess: bool, *, firestore_c
         if account_deletion_marker_blocks_access(
             marker_exists=deleting.exists, raw_status=(deleting.to_dict() or {}).get('wipe_status')
         ) or any(
-            row.get('status') != 'completed'
+            not python_owns_finalization(row)
+            or row.get('status') != 'completed'
             or row.get('deleted')
             or row.get('is_locked')
             or row.get('merge_job_id')
@@ -160,7 +162,8 @@ def renew(job_id: str, epoch: int, *, phase: str | None = None, firestore_client
                 )
                 or any(doc.exists for doc in tombstones)
                 or any(
-                    data.get('merge_job_id') != job_id
+                    not python_owns_finalization(data)
+                    or data.get('merge_job_id') != job_id
                     or data.get('status') != 'merging'
                     or data.get('deleted')
                     or data.get('is_locked')
@@ -261,7 +264,11 @@ def finish_recovery(job_id: str, epoch: int, *, firestore_client: Any = None) ->
         refs = [_source(client, row['uid'], cid) for cid in row['conversation_ids']]
         sources = [source.get(transaction=transaction).to_dict() or {} for source in refs]
         for source, data in zip(refs, sources):
-            if data.get('status') == 'merging' and data.get('merge_job_id') == job_id:
+            if (
+                python_owns_finalization(data)
+                and data.get('status') == 'merging'
+                and data.get('merge_job_id') == job_id
+            ):
                 from utils.conversations.terminal_relevance import stamp_terminal_decision
 
                 terminal = {**data, 'status': 'completed'}

@@ -74,6 +74,12 @@ class DeviceDiagnosticsContractTest {
         }
     }
 
+    @Test fun `manual intent wins over a simultaneous timeout or remote termination`() {
+        for (status in listOf(0, 8, 19, 34)) {
+            assertEquals("manual", BleDisconnectReason.connectionErrorFromStatus(status, isManual = true))
+        }
+    }
+
     @Test fun `local host termination does not claim another phone paired`() {
         // HCI 0x16 reports local termination, not the reason the host requested it.
         assertEquals("gatt_error_22", BleDisconnectReason.fromStatus(0x16))
@@ -194,6 +200,33 @@ class DeviceDiagnosticsContractTest {
 @RunWith(RobolectricTestRunner::class)
 @Config(application = Application::class, sdk = [35])
 class FeedbackDiagnosticsServiceParityTest {
+    @Test fun `reconnect history keys use event timestamp, respect the enabled guard and retire with identity`() {
+        val app = RuntimeEnvironment.getApplication()
+        DeviceHealthPersistence.setPolicy(app, true, 7, true)
+        val prefs = app.getSharedPreferences("ble_diagnostics", Context.MODE_PRIVATE)
+        assertFalse(BleConnectionHistory.connectedBefore(prefs, "device", DeviceHealthPersistence.enabled(app)))
+        BleConnectionHistory.connected(prefs, "device")
+        val restored = app.getSharedPreferences("ble_diagnostics", Context.MODE_PRIVATE)
+        assertTrue(BleConnectionHistory.connectedBefore(restored, "device", DeviceHealthPersistence.enabled(app)))
+        assertFalse(BleConnectionHistory.connectedBefore(restored, "device", false))
+        // An older audio outage is not the timestamp of this disconnect row.
+        prefs.edit().putLong("audio_outage_DEVICE", 1000L).commit()
+        BleConnectionHistory.disconnected(prefs, "device", 15000L)
+        assertEquals(15000L, BleConnectionHistory.eventTimestamp(restored, "device"))
+        val recovery = BleReconnectDiagnostics()
+        recovery.record(BleConnectionHistory.eventTimestamp(restored, "device"), "disconnect", false)
+        assertEquals(2000L, recovery.recovered(17000L, BleConnectionHistory.connectedBefore(restored, "device", DeviceHealthPersistence.enabled(app)))!!.durationMs)
+        BleConnectionHistory.connected(prefs, "device")
+        assertFalse(prefs.contains("reconnect_event_DEVICE"))
+        BleConnectionHistory.disconnected(prefs, "device", 18000L)
+        assertTrue(restored.contains("ever_connected_DEVICE"))
+        assertTrue(restored.contains("reconnect_event_DEVICE"))
+        DeviceHealthPersistence.setPolicy(app, false, 8, true)
+        assertFalse(restored.contains("ever_connected_DEVICE"))
+        assertFalse(restored.contains("reconnect_event_DEVICE"))
+        assertFalse(BleConnectionHistory.connectedBefore(restored, "device", DeviceHealthPersistence.enabled(app)))
+    }
+
     @Test fun `a callback captured before retirement cannot record in the next identity`() {
         val app = RuntimeEnvironment.getApplication()
         OmiBleManager.initialize(app)

@@ -143,6 +143,9 @@ dependencies:
 
 dependency_overrides:
   js: ^0.7.1
+  # Vendored with a one-time BGTask registration guard; see packages/flutter_background_service_ios/README.md.
+  flutter_background_service_ios:
+    path: packages/flutter_background_service_ios
   uuid: ^4.4.0
   opus_flutter_ios:
     git:

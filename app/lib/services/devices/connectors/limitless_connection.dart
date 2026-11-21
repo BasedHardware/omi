@@ -1,9 +1,11 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/services/devices.dart';
 import 'package:omi/services/devices/connectors/device_connection.dart';
 import 'package:omi/services/devices/connectors/limitless_clock_drift.dart';
+import 'package:omi/services/devices/connectors/limitless_realtime_health.dart';
 import 'package:omi/services/devices/models.dart';
 import 'package:omi/services/devices/transports/device_transport.dart';
 import 'package:omi/services/devices/transports/native_ble_transport.dart';
@@ -60,6 +62,8 @@ class LimitlessDeviceConnection extends DeviceConnection {
   int _audioFramesSinceStreamActivation = 0;
   int _streamReactivationAttempts = 0;
   bool _streamHealthCheckInFlight = false;
+  LimitlessRealtimeHealth? _customLiveHealth;
+  bool Function(int epoch)? _startCustomLiveWatch;
 
   /// Drift of pendant RTC vs phone at connect, before forward clock sync.
   /// Null when no Type-8 clock was observed (fail-open: no correction).
@@ -150,6 +154,7 @@ class LimitlessDeviceConnection extends DeviceConnection {
   Future<void> _disconnect() async {
     _closed = true;
     _pendingReinit = false;
+    stopCustomLiveAudioWatch();
     _cancelStreamHealthWatch();
     await _transportReconnectSubscription?.cancel();
     _transportReconnectSubscription = null;
@@ -162,7 +167,53 @@ class LimitlessDeviceConnection extends DeviceConnection {
   }
 
   @override
-  void onPhysicalConnectionLost() => _cancelStreamHealthWatch();
+  void onPhysicalConnectionLost() {
+    // Native recovery can retain the capture owner without starting it again.
+    // Close the old epoch now and let reconnect setup try the retained binding.
+    _closeCustomLiveAudioWatch();
+    _cancelStreamHealthWatch();
+  }
+
+  bool get supportsCustomLiveRecovery => Platform.isAndroid;
+
+  void watchCustomLiveAudio({
+    required bool Function() captureIsCurrent,
+    required void Function() onEnabled,
+    required void Function(LimitlessRealtimeHealthOutcome) report,
+  }) {
+    stopCustomLiveAudioWatch();
+    // The coordinator may install the listener while the first BLE setup settles.
+    _startCustomLiveWatch = (epoch) {
+      bool isCurrent() =>
+          _isCurrentSession(epoch) && _isInitialized && !_isBatchMode && !_realtimeSuppressed && captureIsCurrent();
+
+      if (!isCurrent()) return false;
+      _cancelStreamHealthWatch();
+      _customLiveHealth = LimitlessRealtimeHealth(
+        window: _streamHealthWindow,
+        isCurrent: isCurrent,
+        reactivate: () async {
+          if (_isReinitializing) return; // The current setup already enables the stream.
+          await transport.writeCharacteristic(limitlessServiceUuid, limitlessTxCharUuid, _encodeEnableDataStream());
+        },
+        report: report,
+      );
+      onEnabled();
+      return true;
+    };
+    if (_isInitialized) _startCustomLiveWatch?.call(connectionEpoch);
+  }
+
+  void stopCustomLiveAudioWatch() {
+    _startCustomLiveWatch = null;
+    _closeCustomLiveAudioWatch();
+  }
+
+  void _closeCustomLiveAudioWatch() {
+    final previous = _customLiveHealth;
+    _customLiveHealth = null;
+    previous?.close();
+  }
 
   void _attachRxSubscription() {
     _rxSubscription?.cancel();
@@ -245,7 +296,10 @@ class LimitlessDeviceConnection extends DeviceConnection {
   Future<void> setRealtimeAudioSuppressed(bool suppressed) async {
     if (_closed) return;
     _realtimeSuppressed = suppressed;
-    if (suppressed) _cancelStreamHealthWatch();
+    if (suppressed) {
+      stopCustomLiveAudioWatch();
+      _cancelStreamHealthWatch();
+    }
     final epoch = connectionEpoch;
     if (!_isInitialized || _isBatchMode || !_isCurrentSession(epoch)) return;
     try {
@@ -451,6 +505,7 @@ class LimitlessDeviceConnection extends DeviceConnection {
       DebugLogManager.logEvent('limitless_first_audio_frame', {'frames': frames.length});
     }
     _audioFramesSinceStreamActivation += frames.length;
+    _customLiveHealth?.observeFrame();
     _streamHealthTimer?.cancel();
     _streamHealthTimer = null;
     for (final frame in frames) {
@@ -476,6 +531,7 @@ class LimitlessDeviceConnection extends DeviceConnection {
   }
 
   void _armStreamHealthWatch({required String reason, bool resetAttempts = true}) {
+    if (_customLiveHealth != null || (_startCustomLiveWatch?.call(connectionEpoch) ?? false)) return;
     _streamHealthGeneration++;
     final generation = _streamHealthGeneration;
     _streamHealthTimer?.cancel();
@@ -1351,6 +1407,7 @@ class LimitlessDeviceConnection extends DeviceConnection {
     if (!_isInitialized) return;
 
     try {
+      stopCustomLiveAudioWatch();
       _cancelStreamHealthWatch();
       // Clear all buffers before switching modes to prevent cross-contamination
       _rawDataBuffer.clear();

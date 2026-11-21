@@ -505,6 +505,28 @@ def test_quiet_deadline_and_recovery_admission_share_speech_clock_in_serve(store
 from google.api_core.exceptions import InvalidArgument as FirestoreInvalidArgument
 
 
+@pytest.mark.parametrize(
+    'structured,refusal',
+    [
+        ({'title': 'Discussion notes'}, None),
+        ({'title': 'Discussion 3'}, None),
+        ({'title': 'Pilot budget'}, 'protected_content'),
+        # A gist is content the minimum would drop, so it refuses admission.
+        ({'title': 'Discussion notes', 'gist': 'Pilot budget approval'}, 'protected_content'),
+        ({'title': 'Discussion notes', 'participants': [{'name': 'Alex'}]}, None),
+        ({'title': 'Discussion notes', 'insights': [{'text': 'Budget is tight.'}]}, None),
+        ({'title': 'Discussion notes', 'salience': 'highlight'}, None),
+    ],
+)
+def test_recovery_admission_ignores_a_placeholder_title(store, monkeypatch, structured, refusal):
+    """A placeholder-only row is admitted; a real title, a note body or a gist refuses it."""
+    monkeypatch.setenv('LIFECYCLE_V2_MODE', 'serve')
+    row = store.rows[ROW]
+    row['structured'] = structured
+    row['last_speech_at'] = NOW - timedelta(minutes=5)
+    assert jobs.recovery_admission_refusal('synthetic', row, NOW - timedelta(seconds=120)) == refusal
+
+
 @pytest.mark.parametrize('legacy_finish', [None, NOW + timedelta(hours=1)])
 def test_quiet_run_admits_speech_only_or_stale_heartbeat_row_once(store, monkeypatch, legacy_finish):
     """Exercise the whole check -> admission path, including its second quiet fence."""
@@ -972,3 +994,20 @@ def test_quiet_empty_storage_proof_reads_archive_and_raw(store, monkeypatch, obj
     listing.assert_called_once_with(
         'synthetic', 'old', max_count=4096, require_archive=True, include_raw=True, source_metadata=True
     )
+
+
+def test_foreign_conversation_retires_python_quiet_check(store, monkeypatch):
+    quiet.arm('synthetic', 'old', 120, firestore_client=store)
+    store.rows[ROW].update(finalization_engine='go', finalization_owner_epoch=1)
+    before = dict(store.rows[ROW])
+    _advance(monkeypatch, 361)
+    job_id = checks.quiet_check_id('synthetic', 'old')
+
+    assert checks.evaluate_quiet_check(job_id, 1, firestore_client=store) == {
+        'status': 'done',
+        'reason': 'finalization_owned_elsewhere',
+    }
+    assert _job(store)['status'] == 'quiet_done'
+    assert _job(store)['dispatch_generation'] == 1
+    assert _job(store)['reconcile_after_at'] == firestore.DELETE_FIELD
+    assert store.rows[ROW] == before

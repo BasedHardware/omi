@@ -153,10 +153,11 @@ def test_a_failed_write_is_retried_on_the_next_call(fake_redis):
     assert client_gate.note_client_seen('u', now=30) is True
 
 
-def test_an_unadmitted_caller_leaves_no_marker(fake_redis, http, monkeypatch):
+def test_beta_caller_refreshes_marker_even_when_episodes_are_disabled(fake_redis, http, monkeypatch):
     monkeypatch.setenv(config.EPISODES_ENABLED_ENV, 'off')
     assert http.get('/v1/episodes/live').json() == {'enabled': False, 'episode': None}
-    assert fake_redis.sets == []
+    assert len(fake_redis.sets) == 1
+    assert fake_redis.sets[0][0] == 'episodes:client_seen:uid-1'
 
 
 # --------------------------------------------------------------------------- the client channel is the cohort

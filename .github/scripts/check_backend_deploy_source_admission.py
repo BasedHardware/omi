@@ -24,12 +24,12 @@ FIRESTORE_GATE_STEP = "Verify serving Firestore indexes"
 FIRESTORE_GATE_USES = "./.github/firestore-workflow/.github/actions/firestore-readiness"
 AUTO_PROOF_SHA = "${{ github.event.workflow_run.head_sha }}"
 AUTO_PROOF_RUN_ATTEMPT = "${{ github.event.workflow_run.run_attempt }}"
-AUTO_FIRESTORE_ADMITTED_SHA = "${{ steps.admitted_source.outputs.admitted_sha }}"
+AUTO_ADMITTED_SHA = "${{ needs.admit_source.outputs.admitted_sha }}"
 AUTO_DEPLOY_ADMITTED_SHA = "${{ needs.firestore_readiness.outputs.admitted_sha }}"
 MANUAL_ADMITTED_SHA = "${{ needs.firestore_readiness.outputs.admitted_sha }}"
 AUTO_SOURCE_ADMISSION_CONDITION = "\n".join(
     (
-        "needs.scope.outputs.applies == 'true' &&",
+        "(needs.scope.outputs.applies == 'true' || needs.scope.outputs.workerd == 'true') &&",
         "github.event.workflow_run.conclusion == 'success' &&",
         "github.event.workflow_run.event == 'push' &&",
         "github.event.workflow_run.run_attempt == 1 &&",
@@ -40,7 +40,7 @@ AUTO_SOURCE_ADMISSION_CONDITION = "\n".join(
 MANUAL_DEPLOY_CONDITION = "\n".join(
     (
         "github.ref == 'refs/heads/main' &&",
-        "(github.event.inputs.mode == 'deploy' || github.event.inputs.mode == 'build-only')",
+        "(github.event.inputs.mode == 'deploy' || github.event.inputs.mode == 'build-only' || github.event.inputs.mode == 'workerd-image-only')",
     )
 )
 MANUAL_TRAFFIC_REPAIR_CONDITION = "\n".join(
@@ -50,7 +50,7 @@ MANUAL_TRAFFIC_REPAIR_CONDITION = "\n".join(
     )
 )
 MANUAL_DEPLOY_JOB_NEEDS = "needs: [validate-production-boundary, firestore_readiness, record_break_glass]"
-MANUAL_DEPLOY_JOB_CONDITION = "\n".join(
+_MANUAL_ADMITTED_JOB_CONDITION = "\n".join(
     (
         "always() &&",
         "github.ref == 'refs/heads/main' &&",
@@ -60,7 +60,19 @@ MANUAL_DEPLOY_JOB_CONDITION = "\n".join(
         "(needs.record_break_glass.result == 'success' || needs.record_break_glass.result == 'skipped')",
     )
 )
-MANUAL_BUILD_ONLY_JOB_CONDITION = MANUAL_DEPLOY_JOB_CONDITION.replace(
+# SCA-3120: the stack deploy job never runs for the explicit projection pump selection;
+# deploy-projection-pump owns that singleton under the same admission jobs.
+MANUAL_DEPLOY_JOB_CONDITION = _MANUAL_ADMITTED_JOB_CONDITION.replace(
+    "github.event.inputs.mode == 'deploy' &&",
+    "github.event.inputs.mode == 'deploy' &&\ngithub.event.inputs.cloud_run_service != 'backend-projection-pump' &&",
+)
+MANUAL_PROJECTION_PUMP_JOB_CONDITION = _MANUAL_ADMITTED_JOB_CONDITION.replace(
+    "github.event.inputs.mode == 'deploy' &&",
+    "github.event.inputs.mode == 'deploy' &&\n"
+    "github.event.inputs.environment == 'prod' &&\n"
+    "github.event.inputs.cloud_run_service == 'backend-projection-pump' &&",
+)
+MANUAL_BUILD_ONLY_JOB_CONDITION = _MANUAL_ADMITTED_JOB_CONDITION.replace(
     "github.event.inputs.mode == 'deploy' &&", "github.event.inputs.mode == 'build-only' &&"
 ).replace("always() &&", "always() && !cancelled() &&", 1)
 MANUAL_BUILD_ONLY_HEAD_CHECK = '"$head_sha" != "$ADMITTED_SHA"'
@@ -278,6 +290,8 @@ def validate_auto_workflow(text: str, root: Path = ROOT) -> list[str]:
     ):
         require_fragment(errors, text, fragment, message)
 
+    admit_job = mapping_block(text, "admit_source", 2)
+    admission_steps = None if admit_job is None else mapping_block(admit_job, "steps", 4)
     firestore_job = mapping_block(text, "firestore_readiness", 2)
     readiness_steps = None if firestore_job is None else mapping_block(firestore_job, "steps", 4)
     scope_job = mapping_block(text, "scope", 2)
@@ -311,11 +325,17 @@ def validate_auto_workflow(text: str, root: Path = ROOT) -> list[str]:
             require_fragment(errors, scope_checkout, fragment, message)
         if "fetch-depth: 0" in scope_checkout:
             errors.append("auto backend scope decision must not fetch full history")
+        require_fragment(
+            errors,
+            scope_job,
+            "outputs:\n      applies: ${{ steps.scope.outputs.applies }}\n      workerd: ${{ steps.scope.outputs.workerd }}",
+            "auto backend scope decision must publish backend and workerd decisions",
+        )
         scope_decision = require_step(
             errors,
             scope_steps,
-            "Decide whether the triggering commit can affect the backend deployment",
-            "backend deployment scope decision",
+            "Decide backend and workerd build scope",
+            "backend and workerd build scope decision",
         )
         for fragment, message in (
             (f"RELEASE_SHA: {AUTO_PROOF_SHA}", "auto backend scope decision must bind the triggering SHA"),
@@ -329,6 +349,9 @@ def validate_auto_workflow(text: str, root: Path = ROOT) -> list[str]:
                 "auto backend scope decision must publish an in-scope result",
             ),
             ("echo \"applies=false\" >> \"$GITHUB_OUTPUT\"", "auto backend scope decision must publish a no-op result"),
+            ("grep -Eq '^backend-go/' <<<\"$changed_files\"", "auto backend scope decision must select workerd source changes"),
+            ("echo \"workerd=true\" >> \"$GITHUB_OUTPUT\"", "auto backend scope decision must publish workerd source changes"),
+            ("echo \"workerd=false\" >> \"$GITHUB_OUTPUT\"", "auto backend scope decision must publish workerd no-ops"),
             ("Green no-op", "auto backend scope decision must summarize green no-ops"),
         ):
             require_fragment(errors, scope_decision, fragment, message)
@@ -348,30 +371,38 @@ def validate_auto_workflow(text: str, root: Path = ROOT) -> list[str]:
         ):
             if forbidden in scope_decision:
                 errors.append(message)
-    if firestore_job is None:
+    if admit_job is None:
         errors.append("auto backend deploy is missing its source-admission job")
     else:
         require_fragment(
             errors,
-            firestore_job,
+            admit_job,
             "needs: scope",
             "auto source-admission job must depend on the scope decision",
         )
-        condition = folded_job_condition(firestore_job)
+        require_fragment(
+            errors,
+            admit_job,
+            "permissions:\n      actions: 'read'\n      contents: 'read'",
+            "auto source-admission job must have only GitHub read permissions",
+        )
+        if any(fragment in admit_job for fragment in ("environment:", "id-token:", "google-github-actions/auth", "gcloud")):
+            errors.append("auto source-admission job must not have cloud access")
+        condition = folded_job_condition(admit_job)
         if condition != AUTO_SOURCE_ADMISSION_CONDITION:
             errors.append("auto source-admission job must use exactly the fail-closed Release Eligibility predicate")
         require_fragment(
             errors,
-            firestore_job,
+            admit_job,
             "outputs:\n      admitted_sha: ${{ steps.admitted_source.outputs.admitted_sha }}",
             "auto source-admission job must publish one admitted SHA",
         )
-    if readiness_steps is None:
+    if admission_steps is None:
         errors.append("auto backend deploy source-admission job must contain its steps")
     else:
         main_checkout = require_step(
             errors,
-            readiness_steps,
+            admission_steps,
             "Checkout current main for automatic source admission",
             "current-main automatic admission checkout",
         )
@@ -383,11 +414,15 @@ def validate_auto_workflow(text: str, root: Path = ROOT) -> list[str]:
 
         admission = require_step(
             errors,
-            readiness_steps,
+            admission_steps,
             "Resolve and verify the newest proven main source",
             "automatic release-proof freshness validation",
         )
         validate_fail_closed_step(errors, admission, "automatic release-proof freshness validation")
+        main_index = named_step_index(admission_steps, "Checkout current main for automatic source admission")
+        admission_index = named_step_index(admission_steps, "Resolve and verify the newest proven main source")
+        if main_index is not None and admission_index is not None and admission_index < main_index:
+            errors.append("automatic source admission must check out current main before verifying the proof")
         for fragment, message in (
             (f"RELEASE_SHA: {AUTO_PROOF_SHA}", "automatic source admission must bind the proof SHA"),
             (
@@ -443,30 +478,102 @@ def validate_auto_workflow(text: str, root: Path = ROOT) -> list[str]:
             ),
         ):
             require_fragment(errors, admission, fragment, message)
-        admission_index = named_step_index(readiness_steps, "Resolve and verify the newest proven main source")
+    if firestore_job is None or readiness_steps is None:
+        errors.append("auto backend deploy is missing its Firestore readiness job")
+    else:
+        for fragment, message in (
+            ("needs: [scope, admit_source]", "Firestore readiness must wait for source admission"),
+            ("if: needs.scope.outputs.applies == 'true'\n", "Firestore readiness must run only for backend deployment"),
+            (f"admitted_sha: {AUTO_ADMITTED_SHA}", "Firestore readiness must forward the checked SHA"),
+        ):
+            require_fragment(errors, firestore_job, fragment, message)
+        checkout = require_step(
+            errors, readiness_steps, "Checkout admitted Firestore source", "admitted Firestore source checkout"
+        )
+        require_fragment(errors, checkout, f"ref: {AUTO_ADMITTED_SHA}", "Firestore must check the admitted SHA")
         checkout_index = named_step_index(readiness_steps, "Checkout admitted Firestore source")
         gate_index = named_step_index(readiness_steps, FIRESTORE_GATE_STEP)
-        if admission_index is not None and checkout_index is not None and admission_index > checkout_index:
-            errors.append(
-                "automatic release-proof freshness validation must run before admitted-source checkout or execution"
-            )
-        if admission_index is not None and gate_index is not None and admission_index > gate_index:
-            errors.append("automatic release-proof freshness validation must run before the Firestore readiness gate")
         if checkout_index is not None and gate_index is not None and checkout_index > gate_index:
             errors.append("admitted-source checkout must run before the Firestore readiness gate")
         validate_firestore_gate_steps(
             errors,
             readiness_steps,
-            source_sha_binding=AUTO_FIRESTORE_ADMITTED_SHA,
+            source_sha_binding=AUTO_ADMITTED_SHA,
             verify_credential_project="true",
             label="automatic backend source admission",
         )
 
     deploy_job = mapping_block(text, "deploy", 2)
-    if deploy_job is None or "    needs: firestore_readiness" not in (deploy_job or ""):
-        errors.append("auto backend deploy must depend on the source-admission job")
-    elif re.search(r"(?m)^    if:", deploy_job):
-        errors.append("auto backend deploy must not override source-admission dependency")
+    if deploy_job is None:
+        errors.append("auto backend deploy is missing its deployment job")
+    else:
+        require_fragment(
+            errors,
+            deploy_job,
+            "needs: [scope, firestore_readiness]",
+            "auto backend deploy must depend on both scope and source admission",
+        )
+        require_fragment(
+            errors,
+            deploy_job,
+            "if: needs.scope.outputs.applies == 'true'",
+            "auto backend deploy must run only for backend changes",
+        )
+        if "needs.scope.outputs.workerd" in deploy_job:
+            errors.append("auto backend deployment must not be triggered by workerd-only changes")
+
+    publish_job = mapping_block(text, "publish_workerd", 2)
+    if publish_job is None:
+        errors.append("auto backend deploy is missing its workerd image publishing job")
+    else:
+        for fragment, message in (
+            ("needs: [scope, admit_source]", "workerd publishing must depend on scope and source admission"),
+            ("if: needs.scope.outputs.workerd == 'true'", "workerd publishing must run only for workerd changes"),
+            (
+                "outputs:\n      image_digest: ${{ steps.publish.outputs.digest }}",
+                "workerd publishing must expose the pushed image digest",
+            ),
+            (
+                f"ref: {AUTO_ADMITTED_SHA}",
+                "workerd publishing must check out the admitted source SHA",
+            ),
+            (
+                "workload_identity_provider: projects/1031333818730/locations/global/workloadIdentityPools/omi-gha-deploy-dev/providers/github",
+                "workerd publishing must use the development workload identity provider",
+            ),
+            (
+                "service_account: omi-ci-deployer-dev@based-hardware-dev.iam.gserviceaccount.com",
+                "workerd publishing must use the development deployer identity",
+            ),
+            (
+                "docker build --platform linux/amd64 --tag \"$image\" --file backend-go/Dockerfile backend-go",
+                "workerd publishing must build the admitted backend-go image",
+            ),
+            ('docker push "$image"', "workerd publishing must push the image to the development registry"),
+            (
+                "gcloud container images describe \"$image\" --format='value(image_summary.digest)'",
+                "workerd publishing must resolve the registry image digest",
+            ),
+            ('echo "digest=$digest" >> "$GITHUB_OUTPUT"', "workerd publishing must publish the resolved digest"),
+            (
+                "Deployment: none; dev services were not changed.",
+                "workerd publishing must state that it does not deploy development services",
+            ),
+        ):
+            require_fragment(errors, publish_job, fragment, message)
+        if re.search(r"(?m)^        [\"']?(?:if|continue-on-error)[\"']?:", publish_job):
+            errors.append("workerd publishing steps must not be conditionally skipped or tolerated")
+        for fragment in (
+            "deploy-backend-stack",
+            "deploy-cloudrun",
+            "gcloud run",
+            "kubectl",
+            "helm upgrade",
+            "helm install",
+            "update-traffic",
+        ):
+            if fragment in publish_job:
+                errors.append(f"workerd image publishing must not deploy development services ({fragment})")
 
     if text.count(AUTO_PROOF_SHA) != 3:
         errors.append(
@@ -478,7 +585,7 @@ def validate_auto_workflow(text: str, root: Path = ROOT) -> list[str]:
     allowed_github_sha = "ref: ${{ github.sha }}\n        path: .workflow-source"
     if "github.sha" in contract.replace(allowed_github_sha, ""):
         errors.append("auto backend deploy must not use github.sha after workflow_run admission")
-    if text.count(f"ref: {AUTO_FIRESTORE_ADMITTED_SHA}") != 1:
+    if text.count(f"ref: {AUTO_ADMITTED_SHA}") != 2:
         errors.append("auto backend deploy must check out the verified SHA before Firestore readiness")
     if "FIRESTORE_SOURCE_COMMIT" in text:
         errors.append("auto backend deploy must bind Firestore readiness through the composite, not inline env")
@@ -633,15 +740,66 @@ def validate_manual_workflow(text: str, root: Path = ROOT) -> list[str]:
         )
         if folded_job_condition(deploy_job) != MANUAL_DEPLOY_JOB_CONDITION:
             errors.append("manual deployment must gate break-glass deploys on a successful audit record")
+        # Scoped to the deploy job: the projection pump job carries the same line (SCA-3120).
         require_fragment(
             errors,
-            contract,
+            deploy_job,
             f"admitted_sha: {MANUAL_ADMITTED_SHA}",
             "manual deployment must pass the admitted SHA to the deploy composite action",
         )
         if contract.count('--commit-sha "${{ inputs.admitted_sha }}"') != 3:
             errors.append("manual deployment must bind every release vector to the admitted SHA")
+    pump_job = mapping_block(text, "deploy-projection-pump", 2)
+    if pump_job is None:
+        errors.append("manual backend deploy is missing its projection pump deployment job")
+    else:
+        require_fragment(
+            errors,
+            pump_job,
+            MANUAL_DEPLOY_JOB_NEEDS,
+            "projection pump deployment must depend on production-boundary validation, source admission, and break-glass audit",
+        )
+        if folded_job_condition(pump_job) != MANUAL_PROJECTION_PUMP_JOB_CONDITION:
+            errors.append(
+                "projection pump deployment must run only for an admitted prod backend-projection-pump selection"
+            )
+        require_fragment(
+            errors,
+            pump_job,
+            f"admitted_sha: {MANUAL_ADMITTED_SHA}",
+            "projection pump deployment must pass the admitted SHA to its composite action",
+        )
     errors.extend(validate_manual_build_only_job(text))
+    errors.extend(validate_workerd_publish_job(text))
+    return errors
+
+
+def validate_workerd_publish_job(text: str) -> list[str]:
+    job = mapping_block(text, "publish-workerd", 2)
+    if job is None:
+        return ["manual backend workflow is missing its workerd image-only job"]
+
+    errors: list[str] = []
+    condition = "\n".join((
+        "github.ref == 'refs/heads/main' &&",
+        "inputs.mode == 'workerd-image-only' &&",
+        "inputs.environment == 'prod' &&",
+        "needs.firestore_readiness.outputs.break_glass == 'false'",
+    ))
+    if folded_job_condition(job) != condition:
+        errors.append("workerd publish must run only for the normal admitted main-ref production image-only mode")
+    for fragment in (
+        "needs: [validate-production-boundary, firestore_readiness]",
+        MANUAL_BUILD_ONLY_ADMITTED_CHECKOUT,
+        f"ADMITTED_SHA: {MANUAL_ADMITTED_SHA}",
+        "environment: prod",
+        'repository="gcr.io/based-hardware/workerd"',
+        "--file backend-go/Dockerfile backend-go",
+    ):
+        require_fragment(errors, job, fragment, f"workerd publish must retain {fragment}")
+    for fragment in MANUAL_BUILD_ONLY_FORBIDDEN:
+        if fragment in job:
+            errors.append(f"workerd publish must not touch a serving surface: {fragment}")
     return errors
 
 

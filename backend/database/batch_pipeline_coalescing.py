@@ -5,18 +5,11 @@ released only after every original member is bound to admitted work (or purge).
 Group/member/source writes recheck live authority in their own transaction.
 """
 
-import hashlib
-import json
 from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
 from config import batch_pipeline_coalescing as config
-
-
-def digest(value):
-    return hashlib.sha256(
-        json.dumps(value, sort_keys=True, separators=(',', ':'), allow_nan=False).encode()
-    ).hexdigest()
+from database.batch_pipeline_coalescing_identity import digest
 
 
 def authorize(tx, row):

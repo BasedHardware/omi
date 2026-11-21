@@ -138,6 +138,10 @@ String? _walLocationBatchKey(Wal wal) {
 String recordingGroupKey(Wal wal) =>
     '${wal.conversationId}|${wal.recordingSessionId}|${isMobileStandardBatchWal(wal)}|${_walLocationBatchKey(wal) ?? ''}';
 
+/// Legacy WALs without a session ID can share a conversation with unrelated
+/// audio. The upload gate paces those by the individual submitted file names.
+String? recordingWaitGroupKey(Wal wal) => wal.recordingSessionId?.isNotEmpty == true ? recordingGroupKey(wal) : null;
+
 /// Gap at which two id-less recordings on one device count as separate runs.
 /// Chunks of one file are exactly contiguous; the chunker's floor division can
 /// shave a second off a computed run boundary.
@@ -186,7 +190,7 @@ Map<Wal, String> recordingGroupKeys(List<Wal> wals) {
 
 /// Batches one recording may consume before a drain with other recordings
 /// waiting moves on to them (36 × 300s = 3h of audio). Oldest-first ordering
-/// is kept for the 30-day backfill deadline, but a pathological recording
+/// is kept for the server's backfill deadline, but a pathological recording
 /// (hours of overnight noise) otherwise monopolizes every interrupted pass —
 /// each restart re-enters it at the head — and the small recordings behind it
 /// starve (#14688). A drain with nothing else pending keeps its full-pass
@@ -213,8 +217,8 @@ const drainRecordingShareWindowSeconds = 24 * 3600;
 ///
 /// Live capture keeps newest-first because only it can still claim a capture
 /// manifest and reach its still-running conversation. Everything older is
-/// racing a hard server deadline — `SYNC_BACKFILL_MAX_AGE_SECONDS` (30 days),
-/// after which the upload is refused with `backfill_lookback_exceeded` and the
+/// racing a hard server deadline — `SYNC_BACKFILL_MAX_AGE_SECONDS` (60 days in
+/// prod, 30 on dev; mirrored as `serverSyncLookbackSeconds`), after which the upload is refused with `backfill_lookback_exceeded` and the
 /// recording can never sync. A drain that is interrupted (rate-limit break,
 /// cancelled run, app backgrounding) truncates from the tail, so ordering
 /// history newest-first starved exactly the recordings with the least recovery

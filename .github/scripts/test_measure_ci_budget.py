@@ -4,7 +4,7 @@
 import unittest
 from datetime import datetime, timezone
 
-from measure_ci_budget import DAYS, Github, collect, summarize, upsert_issue
+from measure_ci_budget import DAYS, Github, collect, collect_main_pushes, markdown, summarize, upsert_issue
 
 
 class FakeGithub(Github):
@@ -54,6 +54,34 @@ class SamplerTests(unittest.TestCase):
         self.assertEqual(collect(api, self.budget, self.now), [])
         self.assertEqual(len(api.calls), DAYS)
         self.assertTrue(all("per_page=1" in path for _, path, _ in api.calls))
+
+    def test_main_pushes_are_counted_and_reported(self):
+        budget = dict(self.budget, workflows={"checks.yml": {"triggers": {"pull_request": {}}}, "unit.yml": {"triggers": {"push": {}}}, "idle.yml": {"triggers": {"push": {}}}})
+
+        class MainGithub(FakeGithub):
+            def request(self, method, path, body=None):
+                self.calls.append((method, path, body))
+                if "/workflows/unit.yml/runs" in path:
+                    return {"total_count": 14, "workflow_runs": [{"id": 7}]}
+                if "/runs/7/jobs" in path:
+                    return {"jobs": [
+                        {"conclusion": "success", "started_at": "2026-09-28T00:00:00Z", "completed_at": "2026-09-28T00:06:00Z"},
+                        {"conclusion": "skipped", "started_at": None, "completed_at": None},
+                        {"conclusion": "success", "started_at": "2026-09-28T00:00:00Z", "completed_at": "2026-09-28T00:04:00Z"},
+                    ]}
+                return {"total_count": 0, "workflow_runs": []}
+
+        api = MainGithub()
+        rows = collect_main_pushes(api, budget, self.now)
+        self.assertEqual(rows, {"unit.yml": {"runs_per_week": 14, "sampled_run_job_minutes": 10.0, "projected_minutes_per_day": 20.0}})
+        list_calls = [path for _, path, _ in api.calls if "/runs?" in path]
+        self.assertEqual(len(list_calls), 2)
+        self.assertTrue(all("event=push" in path and "branch=main" in path for path in list_calls))
+        report = summarize(self.budget, [], self.now)
+        report["main_push"] = rows
+        body = markdown(report)
+        self.assertIn("Push to main (reported, not gated)", body)
+        self.assertIn("| unit.yml | 14 | 10.0 | 20.0 |", body)
 
 
 if __name__ == "__main__":

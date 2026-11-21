@@ -26,6 +26,7 @@ import sys
 import tempfile
 
 if __package__:
+    from .runtime_env_canary_ops import RETIRED_BATCH_ENV
     from .integration_canary_metrics import (
         Clock,
         Metrics,
@@ -41,6 +42,7 @@ if __package__:
         io_budget,
     )
 else:
+    from runtime_env_canary_ops import RETIRED_BATCH_ENV
     from integration_canary_metrics import (
         Clock,
         Metrics,
@@ -66,7 +68,6 @@ QUALITY = {
     'HOME_TRANSCRIPTION_MAX_AGE_SECONDS': '86400',
     'RECORD_SEAL_REPAIR_FRESH_ENABLED': 'true',
 }
-BACKOFF = 'BATCH_PROJECTION_FINISH_BACKOFF_ENABLED'
 PROVIDER = 'BATCH_PIPELINE_PROVIDER_BACKLOG_RELEASE_ENABLED'
 STAMP = 'OMI_BACKEND_RELEASE_SHA'
 DIGEST = re.compile(r'sha256:[0-9a-f]{64}')
@@ -138,14 +139,11 @@ def env_map(entries):
     return result
 
 
-def contract(service, entries):
+def contract(entries):
     env = env_map(entries)
     for name, value in QUALITY.items():
         require(env.get(name) == {'name': name, 'value': value}, 'quality_contract')
-    if service in ('backend-sync', SERVICE):
-        require(env.get(BACKOFF) == {'name': BACKOFF, 'value': 'false'}, 'backoff_contract')
-    else:
-        require(BACKOFF not in env, 'backoff_contract')
+    require(not RETIRED_BATCH_ENV.intersection(env), 'retired_batch_env')
     require(PROVIDER not in env or env[PROVIDER] == {'name': PROVIDER, 'value': 'false'}, 'provider_contract')
     return env
 
@@ -731,7 +729,7 @@ class Controller:
             template_config(rev) == template_config(self.state['plan']['spec']['template']), 'candidate_config_drift'
         )
         require(app(rev['spec'])['image'] == self.state['image'], 'candidate_digest_drift')
-        env = contract(SERVICE, app(rev['spec']).get('env', []))
+        env = contract(app(rev['spec']).get('env', []))
         require(env.get(STAMP) == {'name': STAMP, 'value': self.state['source']}, 'candidate_stamp_drift')
         image = (
             self.registry.verify(self.state['image'], self.state['source'], restored_defaults=True)
@@ -759,7 +757,7 @@ class Controller:
         runtime_services = runtime_state.get('services', {})
         require(set(self.selected_services()) <= set(runtime_services), 'runtime_services_missing')
         for service in self.selected_services():
-            contract(service, runtime_services[service]['env'])
+            contract(runtime_services[service]['env'])
         original = self.state['services'][SERVICE]
         doc = self.integration()
         require(doc == original['service'], 'candidate_prepare_drift')
@@ -771,19 +769,20 @@ class Controller:
         result['spec']['template'] = template(old_rev, self.state['candidate'])
         ingress = app(result['spec']['template']['spec'])
         live_env = env_map(ingress.get('env', []))
-        declared = contract(SERVICE, runtime_services[SERVICE]['env'])
+        declared = contract(runtime_services[SERVICE]['env'])
         forbidden = runtime_services[SERVICE].get('forbidden_env', [])
         require(isinstance(forbidden, list) and all(isinstance(k, str) for k in forbidden), 'invalid_forbidden_env')
         require(not set(forbidden) & set(declared), 'forbidden_env_declared')
+        require(RETIRED_BATCH_ENV <= set(forbidden), 'retired_batch_env_not_removed')
         if self.state.get('profile') == 'integration-only':
-            require(set(RESTORED_DEFAULTS) <= set(forbidden), 'restored_defaults_not_removed')
-            expected = {key: value for key, value in live_env.items() if key not in RESTORED_DEFAULTS}
+            removals = set(RESTORED_DEFAULTS) | RETIRED_BATCH_ENV
+            require(removals <= set(forbidden), 'restored_defaults_not_removed')
+            expected = {key: value for key, value in live_env.items() if key not in removals}
             expected.update(
                 {
                     key: {'name': key, 'value': value}
                     for key, value in {
                         **QUALITY,
-                        BACKOFF: 'false',
                         PROVIDER: 'false',
                         STAMP: self.state['source'],
                     }.items()
@@ -794,7 +793,7 @@ class Controller:
         for name, entry in live_env.items():
             protected = 'valueFrom' in entry or 'QUEUE' in name or name.startswith(OPS_PREFIXES)
             named_decision = name in QUALITY or (
-                self.state.get('profile') == 'integration-only' and name in {BACKOFF, PROVIDER, STAMP}
+                self.state.get('profile') == 'integration-only' and name in {PROVIDER, STAMP}
             )
             if protected and not named_decision and name not in forbidden:
                 require(name not in declared or declared[name] == entry, 'serving_ops_env_changed')

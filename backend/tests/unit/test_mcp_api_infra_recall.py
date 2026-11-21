@@ -28,6 +28,7 @@ def core():
         'database.vector_db',
         query_vectors=Mock(return_value=[]),
         embeddings=SimpleNamespace(embed_query=Mock(return_value=[1.0])),
+        index=object(),  # a configured index; an unconfigured one reports keyword_only
     )
     search = module(
         'utils.conversations.search',
@@ -95,10 +96,12 @@ def test_empty_embedding_does_not_query_vector_provider(core):
 def test_stale_vector_hydration_recovers_keywords(core):
     handler, db, vector, _, _ = core
     vector.query_vectors.return_value = ['deleted']
-    db.get_mcp_conversations_by_id.side_effect = [[], [row()]]
-    assert (
-        handler.search_conversations_core('owner', 'budget', limit=10, start_dt=None, end_dt=None)[0]['id'] == 'keyword'
-    )
+    db.get_mcp_conversations_by_id.side_effect = lambda uid, ids, **_: [row(cid) for cid in ids if cid != 'deleted']
+    assert [
+        r['id'] for r in handler.search_conversations_core('owner', 'budget', limit=1, start_dt=None, end_dt=None)
+    ] == ['keyword']
+    # The stale vector id took the only slot, so the keyword hit is hydrated in a second read.
+    assert [call.args[1] for call in db.get_mcp_conversations_by_id.call_args_list] == [['deleted'], ['keyword']]
 
 
 def test_index_failure_is_actionable_and_not_silent_empty(core):
@@ -119,9 +122,9 @@ def test_hydrated_dates_filter_stale_index_and_keep_end_day_fraction(core):
         row('outside', datetime(2026, 10, 2, tzinfo=timezone.utc)),
         row('inside', end),
     ]
+    search.keyword_search_conversation_ids.return_value = []
     rows = handler.search_conversations_core('owner', 'budget', limit=10, start_dt=None, end_dt=end)
     assert [r['id'] for r in rows] == ['inside']
-    search.keyword_search_conversation_ids.assert_not_called()
 
 
 def test_shared_search_can_return_cards_without_hydrating_transcripts(core):

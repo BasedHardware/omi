@@ -77,21 +77,15 @@ HASH_LENGTH = 12
 REDACTED_HASH = 'redacted'
 
 
-# backend-listen env names whose prod values can be replaced at deploy time from
-# the LISTEN_PRIVATE_VALUES_YAML protected-environment secret (the chart's
-# privateEnv mechanism: a privateEnv key replaces the chart env entry of the
-# same name). Without the exact deployed override state these chart defaults
-# are not provable exact values, so the comparison degrades them to unchecked
-# instead of asserting the checked-in literal — the same presence-only contract
-# backend/scripts/ops/drift_check.py holds for them. Sourced from that module
-# (single definition) when importable, with an inline fallback for standalone runs.
+# backend-listen env names replaced out of band at deploy time (empty since privateSecretEnv):
+# degraded to presence-only, as in backend/scripts/ops/drift_check.py, which defines them.
 def _listen_private_env() -> frozenset[str]:
     try:
         from ops.drift_check import LISTEN_PRIVATE_ENV
 
         return frozenset(LISTEN_PRIVATE_ENV)
     except ImportError:  # pragma: no cover - exercised only outside a repo checkout
-        return frozenset(('STT_CAP_DISPATCH_ENFORCEMENT', 'STT_CAP_DISPATCH_COHORT', 'STT_CAP_DISPATCH_LANES'))
+        return frozenset()  # privateEnv retired: private names are chart-declared secretKeyRefs
 
 
 LISTEN_PRIVATE_ENV = _listen_private_env()
@@ -137,7 +131,9 @@ LIVE_MANAGED_ENV_ALLOWLIST: dict[str, frozenset[str]] = {
             'DREAM_AGENT_FULL_CONTEXT_UIDS',
         }
     ),
-    'backend-integration': frozenset({'OMI_BACKEND_RELEASE_SHA'}),
+    'backend-integration': frozenset({'OMI_BACKEND_RELEASE_SHA', 'BATCH_PIPELINE_MERGE_STALE_HEAD_UID_ALLOWLIST'}),
+    # SCA-3120: derived from backend-integration, deployed only by its explicit selection.
+    'backend-projection-pump': frozenset({'OMI_BACKEND_RELEASE_SHA', 'BATCH_PIPELINE_MERGE_STALE_HEAD_UID_ALLOWLIST'}),
 }
 
 
@@ -1011,6 +1007,12 @@ def expected_gke_env_from_values(
         if isinstance(entry.get('valueFrom'), dict) and isinstance(entry['valueFrom'].get('configMapKeyRef'), dict):
             keyref_hashes[name] = env_entry_hash(entry)
         expected[name] = env_entry_hash(entry)
+    # Mirror the listen template: one secretKeyRef per privateSecretEnv name.
+    secret_env = values.get('privateSecretEnv') or {}
+    if workload == 'backend-listen' and isinstance(secret_env, dict):
+        for name in secret_env.get('keys') or []:
+            ref = {'name': secret_env.get('secretName'), 'key': name, 'optional': False}
+            expected[str(name)] = env_entry_hash({'name': name, 'valueFrom': {'secretKeyRef': ref}})
     return expected, keyref_hashes
 
 

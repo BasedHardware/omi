@@ -58,10 +58,16 @@ class TranscriptWidget extends StatefulWidget {
   final bool followLatest;
   final TranscriptScrollState? scrollState;
   final double jumpToLatestButtonBottom;
+
+  /// Must change whenever the segments' ids or text change without the list instance or its length
+  /// changing (an in-place edit). An update with the same list instance, length, version, leading
+  /// items and layout identity skips re-indexing segment keys, so a caller that edits [segments] in
+  /// place at constant length and keeps the default 0 leaves stale keys. Pass a fresh list instead.
   final int contentVersion;
   final String layoutIdentity;
   final List<Widget> leadingItems;
   final List<String> leadingItemIds;
+  final Widget? trailingItem;
   final TranscriptSegmentBuilder? segmentBuilder;
 
   /// Counts render objects inspected by scroll geometry reporting in tests.
@@ -128,6 +134,7 @@ class TranscriptWidget extends StatefulWidget {
     this.layoutIdentity = 'transcript',
     this.leadingItems = const [],
     this.leadingItemIds = const [],
+    this.trailingItem,
     this.segmentBuilder,
     this.onScrollGeometryProbe,
     this.onScrollRevealProbe,
@@ -371,7 +378,10 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
     final shouldFollow = !_userHasScrolled && !widget.isConversationDetail;
 
     if (contentChanged && !shouldFollow) _pendingAnchorRestore = true;
-    _syncSegmentKeys();
+    // The same list at the same length and version holds the ids already indexed. A live capture
+    // re-renders this widget on every capture notify; re-indexing every line each time is
+    // O(transcript) per notify.
+    if (contentChanged || !identical(widget.segments, oldWidget.segments)) _syncSegmentKeys();
 
     if (widget.followCurrentSegment &&
         (widget.followTargetSegmentId != oldWidget.followTargetSegmentId ||
@@ -869,7 +879,15 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
 
       final segmentIndex = idx - widget.leadingItems.length - 1;
       if (segmentIndex == widget.segments.length) {
-        return SizedBox(key: const ValueKey('transcript_bottom_spacing'), height: widget.bottomMargin + 120);
+        const key = ValueKey('transcript_bottom_spacing');
+        final trailing = widget.trailingItem;
+        final height = widget.bottomMargin + 120;
+        if (trailing == null) return SizedBox(key: key, height: height);
+        return Column(
+          key: key,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [trailing, SizedBox(height: height)],
+        );
       }
 
       final segment = widget.segments[segmentIndex];

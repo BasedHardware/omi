@@ -24,6 +24,15 @@ old, missing, invalid or empty configuration cannot serve an owner-memo decision
 The previously shipped id-set memo retains its existing levers and semantics.
 A later reviewed admission config requires cost-lead GO; this PR supplies none.
 
+## Later API admission supersedes this historical packet
+
+The 2026-11-17 O2b stage-2 order separately admitted prod backend, backend-sync
+and backend-integration to owner enforcement 100/shadow 0/decision cache 0.
+The source-only re-land below did not grant that admission. Its default-off code
+fence and other consumer exclusions remain intact; the original per-surface
+snapshot below is historical. See the [current API admission and inverse](runbooks/privacy-check-shadow.md#current-api-owner-memo-admission-2026-11-17)
+and [current source role split](../deploy/runtime_env/README.md#api-owner-memo-source-carry-o2b-2026-11-17).
+
 ## Per-surface packet
 
 | Consumer | Source disposition | Admission/readback owner |

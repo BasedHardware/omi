@@ -16,3 +16,7 @@ Its explicit `us-central1` region and `us-central1-a` zone labels model the
 two topology labels observed in the 2026-11-16 admission dry-run. Only those
 reviewed string values are accepted; this synthetic fixture proves no current
 node placement. Release must independently refresh node UID and topology.
+
+The image fields pin the current candidate from `readiness_contract.py`. Updating
+that identity does not turn this synthetic serialization fixture into evidence
+of native qualification, live admission or execution.

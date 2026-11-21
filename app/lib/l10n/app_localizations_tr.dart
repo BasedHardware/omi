@@ -1126,6 +1126,11 @@ class AppLocalizationsTr extends AppLocalizations {
   String get nameUpdatedSuccessfully => 'İsim başarıyla güncellendi!';
 
   @override
+  String calendarReadSelectionHelp(String calendar) {
+    return 'Seçili takvimleri oku. Yeni etkinlikler $calendar takvimini kullanır.';
+  }
+
+  @override
   String get calendarSettings => 'Takvim ayarları';
 
   @override
@@ -9089,7 +9094,7 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get deleteWhileProcessingMessage =>
-      'Bu kayıt yüklendi ancak Omi hâlâ konuşmayı oluşturuyor. Şimdi silerseniz ve işleme başarısız olursa kurtarılamaz. Yine de silinsin mi?';
+      'Bu kayıt zaten yüklendi ve Omi onu işliyor. Burada silmek telefondaki kopyayı kaldırır. İşleme başarısız olursa Omi bu telefondan yeniden deneyemez.';
 
   @override
   String get syncCardAllBackedUp => 'Tüm kayıtlar eşitlendi';
@@ -12237,7 +12242,7 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String diagnosticsSincePairingSummary(int drops, int failed) {
-    return 'Eşleştirmeden beri: $drops kopma, $failed başarısız bağlantı.';
+    return 'Eşleştirmeden beri: $drops yeniden bağlantı, $failed başarısız bağlantı.';
   }
 
   @override
@@ -13477,16 +13482,6 @@ class AppLocalizationsTr extends AppLocalizations {
   }
 
   @override
-  String syncCardTranscribingAmount(String amount) {
-    return '$amount konuşmalara dönüştürülüyor';
-  }
-
-  @override
-  String syncCardTranscribedOf(String done, String total) {
-    return '$done / $total tamamlandı · bu ekrandan çıkabilirsiniz';
-  }
-
-  @override
   String syncCardReadyAmount(String amount) {
     return '$amount senkronize edilmeye hazır';
   }
@@ -13510,7 +13505,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get syncDetailsWaitingOnPhone => 'Bu telefonda bekliyor';
 
   @override
-  String get syncDetailsTranscribing => 'Omi\'de yazıya dökülüyor';
+  String get syncDetailsTranscribing => 'Yüklendi, sunucu bekleniyor';
 
   @override
   String get syncDetailsAudioFiles => 'Ses dosyaları';
@@ -13966,6 +13961,12 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get summaryBusyBody => 'Omi bu konuşma üzerinde zaten çalışıyor. Özet tamamlandığında burada görünecek.';
+
+  @override
+  String get summaryTranscriptionPendingTitle => 'Henüz yazıya dökülmedi';
+
+  @override
+  String get summaryTranscriptionPendingBody => 'Özet, döküm hazır olduğunda görünecek.';
 
   @override
   String get summaryCheckAgain => 'Tekrar kontrol et';
@@ -14499,14 +14500,6 @@ class AppLocalizationsTr extends AppLocalizations {
   @override
   String deviceCatchingUpProgress(int done, int total) {
     return '$done/$total dk';
-  }
-
-  @override
-  String get deviceRecently => 'Son zamanlarda';
-
-  @override
-  String deviceDisconnectedFor(String duration) {
-    return '$duration bağlantı kesildi';
   }
 
   @override
@@ -15445,6 +15438,11 @@ class AppLocalizationsTr extends AppLocalizations {
   }
 
   @override
+  String firmwareUpdateNotInstalledCv1Message(String version) {
+    return 'Güncelleme yüklenmedi. Kolyeniz mevcut yazılımıyla ($version) çalışmaya devam ediyor. Güncellemeyi yeniden denemek yerine lütfen destekle iletişime geçin.';
+  }
+
+  @override
   String get firmwareUpdateUnconfirmedMessage =>
       'Couldn\'t confirm the update. Your pendant hasn\'t reconnected yet. Keep it nearby and check its firmware version before trying again.';
 
@@ -15483,6 +15481,10 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get processingDeleteScopeChanged => 'İşleme listesi değişti. Listeyi gözden geçirip yeniden deneyin.';
+
+  @override
+  String get syncTooOldExplanation =>
+      'This recording is older than Omi\'s sync window, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
 
   @override
   String freeCapTitle(int minutes) {
@@ -15560,4 +15562,172 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get onWifiLater => 'Sonra Wi-Fi\'da';
+
+  @override
+  String get conversationWritingSummary => 'Özetiniz yazılıyor…';
+
+  @override
+  String get onTheWayServerWork => 'Sunucunun bildirdiği işler';
+
+  @override
+  String get finishNothingToProcess => 'Henüz işlenecek bir şey yok.';
+
+  @override
+  String get finishStillProcessing => 'Hâlâ işleniyor. Ana sayfada görünecek.';
+
+  @override
+  String get finishBackToHome => 'Ana Sayfaya Dön';
+
+  @override
+  String get conversationSummaryWhenItEnds => 'Bu konuşma bittiğinde özet';
+
+  @override
+  String get deviceUploadsWaitingOnServer => 'Sunucuda bekleyen yüklemeler';
+
+  @override
+  String get deviceUploadsWaitingOnServerSubtitle => 'Sesiniz cihazınızda veya telefonunuzda güvende';
+
+  @override
+  String conversationSummaryThrough(String time) {
+    return '$time itibariyle özet';
+  }
+
+  @override
+  String get conversationRecentTranscript => 'Son transkript';
+
+  @override
+  String get finishAlreadySaved => 'Zaten kaydedildi. Ana sayfada.';
+
+  @override
+  String get finishAudioNotReceived => 'Ses henüz yolda.';
+
+  @override
+  String get finishFailedOffline => 'İşlem gerçekleştirilemedi. Sesiniz güvende.';
+
+  @override
+  String get finishFailed => 'İşlem gerçekleştirilemedi. Sesiniz güvende.';
+
+  @override
+  String get micBlockedCannotRecord => 'Kayıt için mikrofona izin verin.';
+
+  @override
+  String get couldNotStartRecording => 'Kayıt başlatılamadı.';
+
+  @override
+  String get restorePurchasesFailed => 'Planınız kontrol edilemedi.';
+
+  @override
+  String get firmwareCheckFailed => 'Güncellemeler kontrol edilemedi.';
+
+  @override
+  String get conversationStillPublic => 'Hâlâ bağlantıyla paylaşılıyor.';
+
+  @override
+  String get goalSaveFailed => 'Hedefiniz kaydedilemedi.';
+
+  @override
+  String get goalDeleteFailed => 'Silinemedi. Hedef geri getirildi.';
+
+  @override
+  String get goalsLoadFailed => 'Hedefleriniz yüklenemedi.';
+
+  @override
+  String get missingTargetEndedRecording => 'O kayıt sona erdi.';
+
+  @override
+  String get missingTargetMemory => 'O anı artık yok.';
+
+  @override
+  String get missingTargetTask => 'O görev artık yok.';
+
+  @override
+  String get missingTargetConversation => 'Bu konuşma açılamadı.';
+
+  @override
+  String get couldNotRefreshConversations => 'Yenilenemedi.';
+
+  @override
+  String get connectDeviceForOfflineSync => 'Eşitlemek için Omi cihazınızı bağlayın.';
+
+  @override
+  String get useDifferentAccountMessage => 'Oturumunuz kapatılacak ve bu telefonun Omi ayarları sıfırlanacak.';
+
+  @override
+  String get rayBanMetaNotFoundAfterSetup => 'Gözlük bulunamadı. Açık mı?';
+
+  @override
+  String get couldNotMoveTask => 'Görev taşınamadı.';
+
+  @override
+  String lockedTasksKept(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Silindi. $count kilitli görev korundu.',
+      one: 'Silindi. 1 kilitli görev korundu.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get settingNotSaved => 'Bu değişiklik kaydedilemedi.';
+
+  @override
+  String get couldNotLoadNotificationSettings => 'Ayarlarınız yüklenemedi.';
+
+  @override
+  String get waitForOmiToFinish => 'Omi\'nin bitmesini bekleyin.';
+
+  @override
+  String get voiceNoteTooShort => 'Çok kısa. Kaydetmek için basılı tutun.';
+
+  @override
+  String get submitAppMissingFields => 'Göndermek için ad, açıklama, görsel, kategori ve yetenek ekleyin.';
+
+  @override
+  String get appSetupNotFinished => 'Kurulum henüz tamamlanmadı.';
+
+  @override
+  String get finishNothingKeptTitle => 'Saklanacak Bir Şey Yok';
+
+  @override
+  String get submitAppFinishDetails => 'Göndermek için yukarıdaki yetenek ve fiyatlandırma bilgilerini tamamlayın.';
+
+  @override
+  String get finishNothingNew => 'Henüz yeni bir şey yok.';
+
+  @override
+  String get takingLongerThanUsual => 'Her zamankinden uzun sürüyor. Kısa süre içinde ana sayfada olacak.';
+
+  @override
+  String get couldNotCheckOnIt => 'Kontrol edilemedi. Tekrar deneyin.';
+
+  @override
+  String get upgradeToOpenThisOne => 'Bunu açmak için yükseltme yapın.';
+
+  @override
+  String get missingTargetConversationGone => 'O konuşma silindi.';
+
+  @override
+  String get cantConnectRightNow => 'Şu anda bağlanılamıyor.';
+
+  @override
+  String get loadOlderFailed => 'Eskiler yüklenemedi. Tekrar denemek için dokunun.';
+
+  @override
+  String listeningWithDuration(String duration) {
+    return 'Dinliyor · $duration';
+  }
+
+  @override
+  String get conversationLiveNoEdits => 'Değiştirmek için bitmesini bekleyin.';
+
+  @override
+  String get finishedSummaryReady => 'Özet hazır';
+
+  @override
+  String get writingSummaryStatus => 'Özet yazılıyor…';
+
+  @override
+  String get stillWorkingOnIt => 'Hâlâ üzerinde çalışılıyor.';
 }

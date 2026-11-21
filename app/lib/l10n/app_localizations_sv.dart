@@ -1125,6 +1125,11 @@ class AppLocalizationsSv extends AppLocalizations {
   String get nameUpdatedSuccessfully => 'Namnet har uppdaterats!';
 
   @override
+  String calendarReadSelectionHelp(String calendar) {
+    return 'Läs valda kalendrar. Nya händelser använder $calendar.';
+  }
+
+  @override
   String get calendarSettings => 'Kalenderinställningar';
 
   @override
@@ -9083,7 +9088,7 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get deleteWhileProcessingMessage =>
-      'Den här inspelningen har laddats upp men Omi skapar fortfarande konversationen. Om du tar bort den nu och bearbetningen misslyckas kan den inte återställas. Ta bort ändå?';
+      'Den här inspelningen är redan uppladdad och Omi bearbetar den. Att radera den här tar bort kopian på telefonen. Om bearbetningen misslyckas kan Omi inte försöka igen från den här telefonen.';
 
   @override
   String get syncCardAllBackedUp => 'Alla inspelningar synkroniserade';
@@ -12232,7 +12237,7 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String diagnosticsSincePairingSummary(int drops, int failed) {
-    return 'Sedan kopplingen: $drops avbrott, $failed misslyckade anslutningar.';
+    return 'Sedan parkoppling: $drops återanslutningar, $failed misslyckade anslutningar.';
   }
 
   @override
@@ -13470,16 +13475,6 @@ class AppLocalizationsSv extends AppLocalizations {
   }
 
   @override
-  String syncCardTranscribingAmount(String amount) {
-    return 'Gör om $amount till konversationer';
-  }
-
-  @override
-  String syncCardTranscribedOf(String done, String total) {
-    return '$done av $total klart · du kan lämna den här skärmen';
-  }
-
-  @override
   String syncCardReadyAmount(String amount) {
     return '$amount redo att synkronisera';
   }
@@ -13503,7 +13498,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get syncDetailsWaitingOnPhone => 'Väntar på den här telefonen';
 
   @override
-  String get syncDetailsTranscribing => 'Transkriberas på Omi';
+  String get syncDetailsTranscribing => 'Uppladdat, väntar på servern';
 
   @override
   String get syncDetailsAudioFiles => 'Ljudfiler';
@@ -13960,6 +13955,12 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get summaryBusyBody => 'Omi arbetar redan med det här samtalet. Sammanfattningen visas här när den är klar.';
+
+  @override
+  String get summaryTranscriptionPendingTitle => 'Inte transkriberad än';
+
+  @override
+  String get summaryTranscriptionPendingBody => 'Sammanfattningen visas när transkriptionen är klar.';
 
   @override
   String get summaryCheckAgain => 'Kontrollera igen';
@@ -14495,14 +14496,6 @@ class AppLocalizationsSv extends AppLocalizations {
   @override
   String deviceCatchingUpProgress(int done, int total) {
     return '$done av $total min';
-  }
-
-  @override
-  String get deviceRecently => 'Nyligen';
-
-  @override
-  String deviceDisconnectedFor(String duration) {
-    return 'Frånkopplad i $duration';
   }
 
   @override
@@ -15443,6 +15436,11 @@ class AppLocalizationsSv extends AppLocalizations {
   }
 
   @override
+  String firmwareUpdateNotInstalledCv1Message(String version) {
+    return 'Uppdateringen installerades inte. Ditt hänge fungerar fortfarande med den nuvarande firmwaren ($version). Kontakta supporten i stället för att försöka uppdatera igen.';
+  }
+
+  @override
   String get firmwareUpdateUnconfirmedMessage =>
       'Couldn\'t confirm the update. Your pendant hasn\'t reconnected yet. Keep it nearby and check its firmware version before trying again.';
 
@@ -15481,6 +15479,10 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get processingDeleteScopeChanged => 'Bearbetningslistan har ändrats. Granska listan och försök igen.';
+
+  @override
+  String get syncTooOldExplanation =>
+      'This recording is older than Omi\'s sync window, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
 
   @override
   String freeCapTitle(int minutes) {
@@ -15558,4 +15560,172 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get onWifiLater => 'Senare via Wi-Fi';
+
+  @override
+  String get conversationWritingSummary => 'Skriver din sammanfattning…';
+
+  @override
+  String get onTheWayServerWork => 'Arbete rapporterat av servern';
+
+  @override
+  String get finishNothingToProcess => 'Inget att bearbeta än.';
+
+  @override
+  String get finishStillProcessing => 'Bearbetas fortfarande. Den visas på Hem.';
+
+  @override
+  String get finishBackToHome => 'Tillbaka till Hem';
+
+  @override
+  String get conversationSummaryWhenItEnds => 'Sammanfattning när det här samtalet avslutas';
+
+  @override
+  String get deviceUploadsWaitingOnServer => 'Uppladdningar som väntar på servern';
+
+  @override
+  String get deviceUploadsWaitingOnServerSubtitle => 'Ditt ljud är säkert på din enhet eller telefon';
+
+  @override
+  String conversationSummaryThrough(String time) {
+    return 'Sammanfattning till $time';
+  }
+
+  @override
+  String get conversationRecentTranscript => 'Senaste transkription';
+
+  @override
+  String get finishAlreadySaved => 'Redan sparat. Du hittar den under Hem.';
+
+  @override
+  String get finishAudioNotReceived => 'Ljudet är fortfarande på väg.';
+
+  @override
+  String get finishFailedOffline => 'Det gick inte. Ditt ljud är säkert.';
+
+  @override
+  String get finishFailed => 'Det gick inte. Ditt ljud är säkert.';
+
+  @override
+  String get micBlockedCannotRecord => 'Tillåt mikrofonåtkomst för att spela in.';
+
+  @override
+  String get couldNotStartRecording => 'Kunde inte starta inspelningen.';
+
+  @override
+  String get restorePurchasesFailed => 'Kunde inte kontrollera din plan.';
+
+  @override
+  String get firmwareCheckFailed => 'Kunde inte söka efter uppdateringar.';
+
+  @override
+  String get conversationStillPublic => 'Den är fortfarande delad via länk.';
+
+  @override
+  String get goalSaveFailed => 'Kunde inte spara ditt mål.';
+
+  @override
+  String get goalDeleteFailed => 'Kunde inte radera. Målet återställdes.';
+
+  @override
+  String get goalsLoadFailed => 'Kunde inte hämta dina mål.';
+
+  @override
+  String get missingTargetEndedRecording => 'Den inspelningen har avslutats.';
+
+  @override
+  String get missingTargetMemory => 'Det minnet finns inte längre.';
+
+  @override
+  String get missingTargetTask => 'Den uppgiften finns inte längre.';
+
+  @override
+  String get missingTargetConversation => 'Kunde inte öppna den här konversationen.';
+
+  @override
+  String get couldNotRefreshConversations => 'Kunde inte uppdatera.';
+
+  @override
+  String get connectDeviceForOfflineSync => 'Anslut din Omi för att synka.';
+
+  @override
+  String get useDifferentAccountMessage => 'Du blir utloggad och Omi-inställningarna på den här telefonen återställs.';
+
+  @override
+  String get rayBanMetaNotFoundAfterSetup => 'Glasögonen hittades inte. Är de påslagna?';
+
+  @override
+  String get couldNotMoveTask => 'Kunde inte flytta uppgiften.';
+
+  @override
+  String lockedTasksKept(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Borttaget. $count låsta uppgifter behölls.',
+      one: 'Borttaget. 1 låst uppgift behölls.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get settingNotSaved => 'Kunde inte spara ändringen.';
+
+  @override
+  String get couldNotLoadNotificationSettings => 'Kunde inte hämta dina inställningar.';
+
+  @override
+  String get waitForOmiToFinish => 'Vänta tills Omi är klar.';
+
+  @override
+  String get voiceNoteTooShort => 'För kort. Håll in för att spela in.';
+
+  @override
+  String get submitAppMissingFields => 'Lägg till namn, beskrivning, bild, kategori och förmåga för att skicka.';
+
+  @override
+  String get appSetupNotFinished => 'Konfigurationen är inte klar än.';
+
+  @override
+  String get finishNothingKeptTitle => 'Inget att behålla';
+
+  @override
+  String get submitAppFinishDetails => 'Fyll i uppgifterna om förmåga och prissättning ovan för att skicka.';
+
+  @override
+  String get finishNothingNew => 'Inget nytt ännu.';
+
+  @override
+  String get takingLongerThanUsual => 'Tar längre tid än vanligt. Du hittar den under Hem.';
+
+  @override
+  String get couldNotCheckOnIt => 'Kunde inte kontrollera läget. Försök igen.';
+
+  @override
+  String get upgradeToOpenThisOne => 'Uppgradera för att öppna den här.';
+
+  @override
+  String get missingTargetConversationGone => 'Den konversationen har raderats.';
+
+  @override
+  String get cantConnectRightNow => 'Kan inte ansluta just nu.';
+
+  @override
+  String get loadOlderFailed => 'Kunde inte hämta äldre. Tryck för att försöka igen.';
+
+  @override
+  String listeningWithDuration(String duration) {
+    return 'Lyssnar · $duration';
+  }
+
+  @override
+  String get conversationLiveNoEdits => 'Vänta tills den avslutats innan du ändrar den.';
+
+  @override
+  String get finishedSummaryReady => 'Sammanfattning klar';
+
+  @override
+  String get writingSummaryStatus => 'Skriver sammanfattning…';
+
+  @override
+  String get stillWorkingOnIt => 'Jobbar fortfarande på det.';
 }

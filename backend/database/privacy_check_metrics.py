@@ -12,11 +12,13 @@ from dataclasses import dataclass, field
 import threading
 import time
 
+from google.api_core import exceptions as google_errors
 from prometheus_client import Counter, Gauge, Histogram
 from config.plan_catalog import PlanType
 from database.batch_privacy_attempt import PrivacyAttempt, token_version
 from database.firestore_tier_context import current_tier
 from utils.async_tasks import create_named_task, drain_tasks, wait_for_event
+from utils.batch_pipeline.artifact_reads import ArtifactReadLimit
 
 logger = logging.getLogger(__name__)
 FAMILIES = frozenset({'batch', 'external', 'tombstone', 'deletion_marker'})
@@ -40,6 +42,11 @@ REASONS = frozenset(
 )
 CHECKS = Counter('privacy_checks_total', 'Privacy check decisions', ['family', 'mode', 'reason', 'plan_group'])
 CALLS = Counter('privacy_check_calls_total', 'Privacy check calls including invalid inputs', ['family', 'mode'])
+ACCOUNT_AUTHORITY_WRITES = Counter(
+    'omi_batch_pipeline_account_privacy_writes_total',
+    'Committed account authority writes observed by the Firestore interceptor',
+    ['writer_class', 'field_group', 'certified'],
+)
 READS = Counter(
     'privacy_check_reads_total', 'Privacy document reads issued', ['family', 'mode', 'result', 'plan_group']
 )
@@ -66,6 +73,11 @@ OWNER_COMPARISONS = Counter(
     'privacy_owner_comparison_total',
     'Owner candidate comparisons by bounded transactional call shape',
     ['shape', 'result', 'candidate_source'],
+)
+OWNER_SHADOW_ERRORS = Counter(
+    'privacy_owner_shadow_error_total',
+    'Owner candidate failures by bounded call shape and exception class',
+    ['shape', 'error_class'],
 )
 MEMO_REQUESTS = Counter('privacy_memo_requests_total', 'Candidate decision reuse', ['family', 'result'])
 NEGATIVE_LOOKUPS = Counter(
@@ -328,11 +340,22 @@ def called(family):
 
 
 TTL_KILL = Gauge('privacy_ttl_cache_disabled', '1 when the privacy decision cache kill switch is set or unreadable')
+TTL_SWITCH_READS = Counter(
+    'privacy_ttl_cache_switch_reads_total', 'Actual privacy kill-switch polls by closed read outcome', ['result']
+)
 
 
 def ttl_kill_state(disabled):
     try:
         TTL_KILL.set(1 if disabled else 0)
+    except Exception:
+        pass
+
+
+def ttl_switch_read(result):
+    try:
+        result = result if result in {'clear', 'disabled', 'error'} else 'error'
+        TTL_SWITCH_READS.labels(result).inc()
     except Exception:
         pass
 
@@ -582,5 +605,32 @@ def owner_comparison(shape, result, source):
     source = source if source in {'owner_hit', 'fresh_read', 'session_hit', 'ttl_hit'} else 'unknown'
     try:
         OWNER_COMPARISONS.labels(shape, result, source).inc()
+    except Exception:
+        pass
+
+
+def owner_shadow_error(shape, error):
+    """Classify without exception messages, custom type names, paths or payloads."""
+    shape = shape if shape in {'attempt', 'no_attempt', 'snapshots'} else 'other'
+    error_class = 'other'
+    for kind, label in (
+        (google_errors.DeadlineExceeded, 'deadline_exceeded'),
+        (google_errors.Aborted, 'aborted'),
+        (google_errors.FailedPrecondition, 'failed_precondition'),
+        (google_errors.PermissionDenied, 'permission_denied'),
+        (google_errors.ResourceExhausted, 'resource_exhausted'),
+        (google_errors.ServiceUnavailable, 'service_unavailable'),
+        (google_errors.InvalidArgument, 'invalid_argument'),
+        (TimeoutError, 'timeout'),
+        (ValueError, 'value_error'),
+        (TypeError, 'type_error'),
+        (ArtifactReadLimit, 'artifact_read_limit'),
+        (RuntimeError, 'runtime_error'),
+    ):
+        if isinstance(error, kind):
+            error_class = label
+            break
+    try:
+        OWNER_SHADOW_ERRORS.labels(shape, error_class).inc()
     except Exception:
         pass

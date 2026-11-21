@@ -30,6 +30,48 @@ class _TestEnvFields implements EnvFields {
 }
 
 void main() {
+  test('reconnect outcomes observe identity continuity without another start or gap recovery claim', () {
+    final events = <({String name, Map<String, dynamic> properties})>[];
+    final telemetry = RecordingLifecycleTelemetry(
+        emitter: (name, properties) => events.add((name: name, properties: properties)), idFactory: () => 'retained');
+    telemetry.prepare(source: 'pendant_live');
+    telemetry.markStarted();
+    telemetry.reconnectOutcome('reconnect_resumed');
+    expect(telemetry.recordingId, 'retained');
+    telemetry.markStarted();
+    telemetry.reconnectOutcome('reconnect_grace_expired_fresh');
+    telemetry.complete(reason: 'device_disconnected');
+    expect(events.where((e) => e.name == RecordingLifecycleTelemetry.startedEvent), hasLength(1));
+    expect(events.where((e) => e.name == 'Recording Observation').map((e) => e.properties['stage']),
+        ['reconnect_resumed', 'reconnect_grace_expired_fresh']);
+    expect(
+        events.where((e) => e.name == 'Recording Observation').every((e) => e.properties['recording_id'] == 'retained'),
+        isTrue);
+  });
+  test('Custom Live detection counts eligibility once per recording across reconnects', () {
+    final stages = <String>[];
+    final telemetry = RecordingLifecycleTelemetry(emitter: (name, properties) {
+      if (name == 'Recording Observation') stages.add(properties['stage'] as String);
+    });
+    telemetry.prepare(source: 'pendant_live');
+    telemetry.observeCustomLiveAudioEligibility();
+    telemetry.observeCustomLiveAudioDetection(enabled: true);
+    telemetry.reconnectOutcome('reconnect_resumed');
+    telemetry.observeCustomLiveAudioEligibility();
+    telemetry.observeCustomLiveAudioDetection(enabled: true);
+    telemetry.complete(reason: 'user_stopped');
+    telemetry.prepare(source: 'pendant_live');
+    telemetry.observeCustomLiveAudioEligibility();
+    telemetry.observeCustomLiveAudioDetection(enabled: false);
+    expect(stages, [
+      'custom_live_audio_detection_eligible',
+      'custom_live_audio_detection_enabled',
+      'reconnect_resumed',
+      'custom_live_audio_detection_eligible',
+      'custom_live_audio_detection_disabled',
+    ]);
+  });
+
   TestWidgetsFlutterBinding.ensureInitialized();
 
   setUpAll(() async {

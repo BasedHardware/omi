@@ -152,9 +152,20 @@ def test_actions_events_title_and_empty_sections_do_not_satisfy_summary():
 
 def test_empty_model_output_retains_debt_and_prior_good_output(enabled):
     row = debt()
-    with pytest.raises(delivery.SummaryOutputUnavailable):
-        delivery.merge_result(row, minimum(), 'u', now=300)
+    token = delivery.PROCESS_CONTEXT.set({'owner': 'worker', 'claimed': False})
+    try:
+        with pytest.raises(delivery.SummaryOutputUnavailable):
+            delivery.merge_result(row, minimum(), 'u', now=300)
+    finally:
+        delivery.PROCESS_CONTEXT.reset(token)
     assert row['summary_due_at'] == 220
+    # A request path has no consumer to catch the fence: it records the empty
+    # attempt and commits with the debt still armed instead of raising.
+    request_write = minimum()
+    receipt = delivery.merge_result(row, request_write, 'u', now=300)
+    assert receipt is not None and receipt['reason'] == 'empty_output' and not receipt['present']
+    assert request_write['summary_due_at'] == 220
+    assert not request_write.get('summary_completed_at')
     # A failed model attempt never gets to overwrite a prior usable summary:
     # the enriched row now commits (no lane stranding without an outbox), but
     # the banked content and receipts are re-applied onto the write instead
@@ -174,6 +185,40 @@ def test_empty_model_output_retains_debt_and_prior_good_output(enabled):
     assert empty_write['summary_output_present'] is True
     assert empty_write['summary_completed_at'] == 150
     assert empty_write['summary_due_at'] is None
+
+
+@pytest.mark.parametrize(
+    'ownership',
+    [
+        {'finalization_job_id': 'job-1'},
+        {'finalization_engine': 'go', 'finalization_owner_epoch': 1},
+        {'finalization_owner_epoch': 1},
+    ],
+)
+def test_empty_output_on_a_finalization_owned_row_keeps_the_job_retryable(enabled, ownership):
+    """The repair pass refuses a generation-owned row, so the raise must survive."""
+    row = {**debt(), **ownership}
+    assert delivery.refusal(row) == 'generation_owned'
+    with pytest.raises(delivery.SummaryOutputUnavailable):
+        delivery.merge_result(row, minimum(), 'u', now=300)
+
+
+def test_empty_output_on_a_projection_verified_row_commits_with_debt(enabled):
+    """A verified batch-projection handoff is repair-eligible, so the empty attempt commits."""
+    row = {
+        **debt(),
+        'finalization_job_id': 'job-1',
+        'finalization_revision': 4,
+        'record_lane_owner': 'batch_live_v1',
+        'record_projection_revision': 4,
+        'summary_projection_finalization': {'job_id': 'job-1', 'revision': 4},
+    }
+    assert delivery.refusal(row) is None
+    write = minimum()
+    receipt = delivery.merge_result(row, write, 'u', now=300)
+    assert receipt is not None and receipt['reason'] == 'empty_output' and not receipt['present']
+    assert write['summary_due_at'] == 220
+    assert not write.get('summary_completed_at')
 
 
 def test_lost_ack_does_not_emit_second_terminal_receipt(enabled):
@@ -245,13 +290,17 @@ def test_repair_gauge_is_declared_for_production_scraping(gauge):
     assert metric.name in inventory['declared_metrics']
 
 
-def test_repair_counter_is_declared_for_production_scraping():
+@pytest.mark.parametrize(
+    ('counter', 'labelnames'),
+    [(delivery.REPAIR, ('outcome',)), (delivery.REPAIR_DISCOVERY, ('phase', 'outcome'))],
+)
+def test_repair_counter_is_declared_for_production_scraping(counter, labelnames):
     import json
     from pathlib import Path
 
-    metric = next(iter(delivery.REPAIR.collect()))
+    metric = next(iter(counter.collect()))
     assert metric.type == 'counter'
-    assert delivery.REPAIR._labelnames == ('outcome',)
+    assert counter._labelnames == labelnames
     inventory = json.loads(
         (Path(__file__).resolve().parents[3] / 'backend/charts/monitoring/metric-inventory.prod.json').read_text()
     )
@@ -598,3 +647,89 @@ def test_emitted_continuation_cursor_keeps_rollback_shapes(rotating_repair, monk
         assert cursor['path'] == path and cursor['due'] == 220
         due_conversations(now=now, after=cursor, firestore_client=client)
         assert client.shapes[-1].uses_cursors
+
+
+def _stored_after_merge(existing, write):
+    """Apply the processing write's leaf mask the way Firestore stores it."""
+    from google.cloud.firestore import DELETE_FIELD
+    from database.conversations import _processing_result_update_fields
+
+    stored = deepcopy(existing)
+    for path, value in _processing_result_update_fields(write).items():
+        *parents, leaf = path.split('.')
+        node = stored
+        for name in parents:
+            node = node.setdefault(name, {})
+        if value is DELETE_FIELD:
+            node.pop(leaf, None)
+        else:
+            node[leaf] = value
+    return stored
+
+
+def _notes(existing, structured, now):
+    write = {'status': 'completed', 'structured': structured}
+    delivery.prepare(write, 'u', now=now)
+    delivery.merge_result(existing, write, 'u', now=now + 100)
+    return write
+
+
+def test_real_notes_retire_the_minimums_title_marker_so_the_row_is_not_held_as_settling(enabled):
+    # Prod 2026-11-17 (a sync piece): after real notes the merge write kept
+    # structured.title_provenance='server_minimum', so the settling-fragment
+    # filter hid the summarized row from the list until two hours after its end.
+    from google.cloud.firestore import DELETE_FIELD
+    from utils.conversations.fragment_visibility import is_settling_fragment
+
+    finished = datetime.now(timezone.utc)
+    existing = {**debt(), 'started_at': finished, 'finished_at': finished}
+    assert is_settling_fragment(existing)
+    notes = _notes(existing, {'title': 'Fundraising intros', 'overview': 'Real notes'}, 200)
+    assert notes['structured']['title_provenance'] is DELETE_FIELD
+    assert notes['summary_title_provenance'] == 'generated'
+    stored = _stored_after_merge(existing, notes)
+    assert 'title_provenance' not in stored['structured']
+    assert not is_settling_fragment(stored)
+    # A reprocess of a row that kept the stale marker also clears it.
+    summarized = {**existing, 'summary_output_present': True, 'summary_completed_at': 300}
+    again = _notes(summarized, {'title': 'Again', 'overview': 'New notes'}, 400)
+    assert again['structured']['title_provenance'] is DELETE_FIELD
+
+
+@pytest.mark.parametrize('overview', ['', 'We chose what to plant.'])
+def test_historical_title_marker_is_retired_only_when_notes_land(overview):
+    existing = {
+        'processing_tier': 'historical',
+        'structured': {'title': 'Garden planning', 'title_provenance': 'historical_minimum'},
+    }
+    write = {
+        'status': 'completed',
+        'processing_tier': 'historical',
+        'terminal_no_derived_effects': True,
+        'structured': {'title': 'Planning the garden', 'overview': overview},
+    }
+    delivery.prepare(write, 'u', now=200)
+    delivery.merge_result(existing, write, 'u', now=300)
+    stored = _stored_after_merge(existing, write)
+
+    if overview:
+        assert 'title_provenance' not in stored['structured']
+    else:
+        assert stored['structured']['title_provenance'] == 'historical_minimum'
+    assert stored.get('summary_completed_at') == (300 if overview else None)
+    assert stored.get('summary_due_at') is None
+
+
+def test_minimum_empty_and_new_rows_keep_their_title_marker_untouched(enabled):
+    existing = debt()
+    # Another stand-in states its own marker; an empty model result is not notes.
+    for structured in (minimum()['structured'], {'title': 'T', 'overview': ''}):
+        write = {'status': 'completed', 'structured': dict(structured)}
+        delivery.prepare(write, 'u', now=200)
+        assert not delivery.retires_title_marker(existing, write)
+    # A row with no stored marker has nothing to delete.
+    created = {'status': 'completed', 'structured': {'title': 'T', 'overview': 'Notes'}}
+    delivery.prepare(created, 'u', now=200)
+    assert delivery.retires_title_marker(existing, created)
+    assert not delivery.retires_title_marker({}, created)
+    assert not delivery.retires_title_marker({'structured': {'title': 'Old', 'overview': 'Old'}}, created)

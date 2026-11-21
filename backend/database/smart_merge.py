@@ -16,6 +16,7 @@ transaction.
 
 from __future__ import annotations
 
+from models.finalization_owner import python_owns_finalization
 from database import transcript_pointer
 
 import logging
@@ -309,7 +310,7 @@ def record_decision(uid: str, conversation_id: str, record: Mapping[str, Any], *
     @firestore.transactional
     def write(transaction) -> bool:
         row = ref.get(transaction=transaction).to_dict()
-        if not row or row.get('deleted'):
+        if not row or not python_owns_finalization(row) or row.get('deleted'):
             return False
         transaction.update(ref, {DECISION_FIELD: dict(record)})
         return True
@@ -362,7 +363,7 @@ def absorb_conversation(
         size_bucket = None
         survivor_raw = survivor_ref.get(transaction=transaction).to_dict()
         donor_raw = donor_ref.get(transaction=transaction).to_dict()
-        if not donor_raw:
+        if not donor_raw or not python_owns_finalization(donor_raw) or not python_owns_finalization(survivor_raw or {}):
             return AbsorbResult('rejected', 'conversation_not_eligible')
         if finalization_fence is not None:
             job_id, generation, epoch = finalization_fence
@@ -621,7 +622,7 @@ def claim_survivor_refresh(
     @firestore.transactional
     def claim(transaction) -> Optional[int]:
         row = ref.get(transaction=transaction).to_dict()
-        if not row or row.get('deleted'):
+        if not row or not python_owns_finalization(row) or row.get('deleted'):
             return None
         state = dict(row.get(SMART_MERGE_FIELD) or {})
         revision = int(state.get('revision') or 0)

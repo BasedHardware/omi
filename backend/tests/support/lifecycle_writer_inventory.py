@@ -1,6 +1,15 @@
 """Reviewed payload sites, including values/keys and duplicate sites. Never refresh in a test."""
 
 FIELD_SITES = {
+    'database/batch_summary_debt.py': [
+        ('arm_projection_summary', 'summary_due_at', "candidate['summary_due_at']", ('summary_due_at',)),
+        (
+            'arm_projection_summary',
+            'summary_first_pending_at',
+            "candidate['summary_first_pending_at']",
+            ('summary_first_pending_at',),
+        ),
+    ],
     # R40: own retained-audio fallback preserves its committed owner-log slot.
     'database/batch_pipeline_source_fallback.py': [
         (
@@ -13,11 +22,9 @@ FIELD_SITES = {
                 'lease_until',
                 'merge_pending',
                 'policy',
-                'protocol_version',
                 'requires_compute_admission',
                 'source_alias_fallback',
                 'source_conversation_ids',
-                'source_reuse_version',
                 'state',
                 'stt_route',
                 'token',
@@ -27,7 +34,14 @@ FIELD_SITES = {
             'merge_ready',
             'projection_state',
             "'pending'",
-            ('projection_redriven_at', 'projection_state', 'protocol_version', 'result', 'source_reuse_version'),
+            (
+                'projection_block_type',
+                'projection_blocked_since',
+                'projection_redriven_at',
+                'projection_state',
+                'protocol_version',
+                'result',
+            ),
         ),
         ('merge_ready', 'state', "'committed'", ('merge_pending', 'state')),
     ],
@@ -48,11 +62,9 @@ FIELD_SITES = {
                 'policy',
                 'policy_source',
                 'priority',
-                'protocol_version',
                 'ready_at',
                 'result',
                 'source_alias',
-                'source_alias_version',
                 'source_conversation_ids',
                 'state',
                 'token',
@@ -98,6 +110,176 @@ FIELD_SITES = {
                 'total_segments',
             ),
         ),
+    ],
+    # Reviewed backfill re-derive: resets a prior backfilled copy to an open window before the lease-fenced commit.
+    'database/conversations_v3.py': [
+        (
+            '_rederive_prior',
+            'status',
+            "'in_progress'",
+            (
+                'discarded',
+                'manual_end',
+                'status',
+                'structured',
+                'summary_covers_through',
+                'title_locked',
+                'v3_notes_written',
+                'v3_process_attempts',
+                'v3_process_failed',
+                'v3_process_failure_reason',
+                'v3_process_fingerprint',
+                'v3_rewrites',
+            ),
+        ),
+        # The claim transfer transaction redirects settled donors and clears legacy notes debt.
+        (
+            'commit_projection.commit',
+            'summary_due_at',
+            'None',
+            (
+                'deleted',
+                'discarded',
+                'home_hidden',
+                'summary_due_at',
+                'sync_content_revision',
+                'sync_merged_into',
+                'v3_claims_transferred_to',
+                'v3_refined',
+            ),
+        ),
+    ],
+    # Reviewed live re-derive: an in-memory planning copy of a protected row, offered as a published
+    # finished window so it keeps its lines; it is never written.
+    'database/conversations_v3_rederive.py': [
+        (
+            'load_live_rederive',
+            'status',
+            "'completed' if row.get('status') == 'in_progress' else row.get('status')",
+            ('_v3_protected', 'status'),
+        ),
+    ],
+    # Reviewed backfill run ledger: run and partition status, not a conversation lifecycle field.
+    'database/conversations_v3_backfill_runs.py': [
+        ('create_run.create', 'status', "'planned'", ('created_at', 'run_id', 'status', 'updated_at')),
+        ('update_run.update', 'status', 'status', ('status',)),
+    ],
+    # Reviewed backfill run ledger: partition plan/step status and operator results, not conversation fields.
+    'utils/conversations/v3/backfill.py': [
+        ('plan_partitions', 'status', "'pending'", ('documents', 'forced_cut', 'since', 'status', 'until')),
+        ('plan_partitions', 'status', "'pending'", ('documents', 'forced_cut', 'since', 'status', 'until')),
+        ('resume_run', 'status', "'pending'", ('status',)),
+        ('resume_run', 'status', "(run or {}).get('status')", ('outcome', 'status')),
+        ('run_step', 'status', "'blocked'", ('reason', 'status')),
+        ('run_step', 'status', "'committed'", ('status',)),
+        ('run_step', 'status', "'deriving'", ('code_sha', 'status')),
+        ('run_step', 'status', "'notes'", ('status',)),
+        ('run_step', 'status', "'notes'", ('status',)),
+    ],
+    # Reviewed v3 lease-fenced projection/processing payloads; no test-time refresh.
+    'database/conversations_v3_processing.py': [
+        (
+            'begin_processing.begin',
+            'status',
+            "'processing'",
+            (
+                'status',
+                'summary_retryable',
+                'tile_state',
+                'v3_process_attempts',
+                'v3_process_failed',
+                'v3_process_failure_reason',
+                'v3_process_fingerprint',
+                'v3_process_pending',
+            ),
+        ),
+        (
+            'failure_patch',
+            'status',
+            "'completed'",
+            (
+                'status',
+                'summary_retryable',
+                'tile_state',
+                'v3_process_failed',
+                'v3_process_failure_reason',
+                'v3_process_pending',
+            ),
+        ),
+        (
+            'store_summary.persist',
+            'status',
+            "'completed'",
+            ('status', 'v3_open_locked', 'v3_process_pending', 'v3_unlocked'),
+        ),
+    ],
+    'utils/conversations/v3/planner.py': [
+        (
+            'build',
+            'status',
+            "'processing' if window['finished'] else 'in_progress'",
+            (
+                'audio_files',
+                'created_at',
+                'data_protection_level',
+                'discarded',
+                'finished_at',
+                'geolocation',
+                'home_hidden',
+                'home_hidden_reason',
+                'id',
+                'is_locked',
+                'kind',
+                'language',
+                'manual_end',
+                'outline_kind',
+                'private_cloud_sync_enabled',
+                'recording_pieces',
+                'source',
+                'started_at',
+                'status',
+                'structured',
+                'tile_state',
+                'title_locked',
+                'transcript_segments',
+                'uses_custom_stt',
+                'v3_derived',
+                'v3_recording_ids',
+            ),
+        ),
+        (
+            'unavailable_preview',
+            'status',
+            "'completed'",
+            (
+                '_v3_claims',
+                'home_hidden',
+                'home_hidden_reason',
+                'status',
+                'tile_state',
+                'v3_process_pending',
+                'v3_unlocked',
+            ),
+        ),
+    ],
+    'utils/conversations/v3/service.py': [
+        (
+            '_retire_patch',
+            'summary_due_at',
+            'None',
+            (
+                'deleted',
+                'discarded',
+                'summary_due_at',
+                'sync_content_revision',
+                'sync_merged_into',
+                'v3_claims_transferred_to',
+                'v3_derived',
+                'v3_rederive_live_run',
+            ),
+        ),
+        ('reconcile.plan', 'status', "prior['status']", ('status',)),
+        ('recording_short_path.guarded', 'status', 'ConversationStatus.completed', ('status',)),
     ],
     'utils/batch_pipeline/empty_transcription.py': [
         (
@@ -493,7 +675,7 @@ FIELD_SITES = {
         (
             'ProjectionSession.persist',
             'state',
-            "'ready' if superseded else 'persisted'",
+            "'ready' if superseded or silence else 'persisted'",
             (
                 'audio_required',
                 'conversation_id',
@@ -1250,6 +1432,8 @@ FIELD_SITES = {
                 'updated_at',
             ),
         ),
+        ('_record_meeting_receipt_txn', 'status', "'fenced'", ('status',)),
+        ('_record_meeting_receipt_txn', 'status', "'fenced'", ('status',)),
         ('_record_meeting_receipt_txn', 'status', "'identity_mismatch'", ('status',)),
         ('_record_meeting_receipt_txn', 'status', "'missing'", ('status',)),
         ('_record_meeting_receipt_txn', 'status', "'recorded'", ('job_id', 'status')),
@@ -1472,6 +1656,7 @@ FIELD_SITES = {
         # Dark quiet-check retirement names the orphan-repair exit; it does
         # not terminalize the capture or create another arm site.
         ('_evaluate_quiet_check.evaluate', 'status', "'done'", ('exit', 'reason', 'status')),
+        ('_evaluate_quiet_check.evaluate', 'status', "'done'", ('reason', 'status')),
         ('_evaluate_quiet_check.evaluate', 'status', "'done'", ('reason', 'status')),
         ('_evaluate_quiet_check.evaluate', 'status', "'done'", ('reason', 'status')),
         ('_evaluate_quiet_check.evaluate', 'status', "'done'", ('status',)),
@@ -3065,7 +3250,6 @@ FIELD_SITES = {
                 'token',
             ),
         ),
-        ('Scheduler.recover.commit', 'state', "'ready'", ('state',)),
         (
             'Scheduler.redrive_in_transaction',
             'state',
@@ -3091,6 +3275,8 @@ FIELD_SITES = {
             "'retry'",
             ('available_at', 'failure', 'lease_until', 'retry_started_at', 'state', 'token'),
         ),
+        # Shared by Scheduler.recover and the merge's stale-head promotion.
+        ('requeue_due_retry', 'state', "'ready'", ('state',)),
     ],
     'utils/batch_pipeline/shadow_projection.py': [
         ('plan', 'status', "'empty'", ('parts', 'planned_writes', 'reads', 'status')),
@@ -3187,15 +3373,25 @@ FIELD_SITES = {
         ('_store_deferred_conversation', 'status', 'ConversationStatus.processing', ('status',)),
         ('process_conversation', 'status', 'ConversationStatus.completed', ('status',)),
         ('process_conversation', 'status', 'ConversationStatus.completed', ('status',)),
+        ('process_conversation', 'status', 'ConversationStatus.completed', ('status',)),
         ('process_user_expression_measurement_callback', 'status', 'task_status', ('status',)),
     ],
     'utils/conversations/summary_delivery.py': [
+        (
+            '_merge_historical',
+            'summary_completed_at',
+            "existing.get('summary_completed_at') or current",
+            ('summary_completed_at',),
+        ),
+        ('_merge_historical', 'summary_due_at', 'None', ('summary_due_at',)),
         ('merge_result', 'summary_completed_at', 'current', ('summary_completed_at',)),
         ('merge_result', 'summary_completed_at', "existing['summary_completed_at']", ('summary_completed_at',)),
         ('merge_result', 'summary_due_at', 'None', ('summary_due_at',)),
         ('merge_result', 'summary_due_at', 'None', ('summary_due_at',)),
         ('merge_result', 'summary_due_at', 'None', ('summary_due_at',)),
+        ('merge_result', 'summary_due_at', 'current + deadline_seconds()', ('summary_due_at',)),
         ('merge_result', 'summary_first_pending_at', 'accepted', ('summary_first_pending_at',)),
+        ('prepare', 'summary_due_at', 'None', ('summary_due_at',)),
         ('prepare', 'summary_due_at', 'None', ('summary_due_at',)),
         ('prepare', 'summary_due_at', 'None', ('summary_due_at',)),
         ('prepare', 'summary_due_at', 'None', ('summary_due_at',)),
@@ -3210,8 +3406,8 @@ FIELD_SITES = {
             'current + deadline_seconds()',
             ('summary_blocked_reason', 'summary_due_at', 'summary_empty_failures', 'summary_empty_rearms'),
         ),
-        ('stamp_projection_debt', 'summary_due_at', 'current + deadline_seconds()', ('summary_due_at',)),
-        ('stamp_projection_debt', 'summary_first_pending_at', 'current', ('summary_first_pending_at',)),
+        ('stamp_projection_debt', 'summary_due_at', 'accepted + deadline_seconds()', ('summary_due_at',)),
+        ('stamp_projection_debt', 'summary_first_pending_at', 'accepted', ('summary_first_pending_at',)),
     ],
     'utils/conversations/transcript_for_llm.py': [
         ('render_cluster_transcript', 'status', "'resolved' if resolution_available else 'unavailable'", ('status',))
@@ -3706,6 +3902,15 @@ FIELD_SITES = {
             ('date', 'generated_at', 'status', 'timezone'),
         )
     ],
+    # Read-only MCP card projection: reports the stored status; never written back.
+    'utils/mcp_server/helpers.py': [
+        (
+            'conversation_state_fields',
+            'status',
+            'status if isinstance(status, str) else None',
+            ('duration_seconds', 'status'),
+        )
+    ],
     'utils/mcp_server/oauth.py': [('mcp_authorize_consent', 'status', 'str(exc)', ('code', 'retryable', 'status'))],
     'utils/mcp_server/registry.py': [
         (
@@ -3719,6 +3924,27 @@ FIELD_SITES = {
             'status',
             "{'type': 'string'}",
             ('has_more', 'promoted', 'ready', 'retry_after_seconds', 'status'),
+        ),
+        # The conversation card's output schema (a JSON Schema, not a payload).
+        (
+            '<module>',
+            'status',
+            "{'type': ['string', 'null'], 'description': 'in_progress or processing means still being captured or written'}",
+            (
+                'calendar_event_id',
+                'call_platform',
+                'discarded',
+                'duration_seconds',
+                'is_call',
+                'kind',
+                'participants',
+                'participants_included',
+                'person_ids',
+                'shown_on_home',
+                'source',
+                'status',
+                'summary_covers_through',
+            ),
         ),
     ],
     'utils/memory/atom_keyword_index.py': [
@@ -4396,7 +4622,10 @@ FIELD_SITES = {
             ('duration', 'id', 'signed_url', 'status'),
         ),
         ('download_audio_file_response', 'status', "'pending'", ('poll_after_ms', 'status')),
+        ('download_audio_file_response', 'status', "entry['status']", ('poll_after_ms', 'status')),
+        ('get_audio_signed_urls', 'status', "entry['status']", ('duration', 'id', 'signed_url', 'status')),
         ('precache_audio_files', 'status', "'no_audio'", ('message', 'status')),
+        ('precache_audio_files', 'status', "'started'", ('audio_file_count', 'status')),
         ('precache_audio_files', 'status', "'started'", ('audio_file_count', 'status')),
         ('precache_audio_files', 'status', "'started'", ('audio_file_count', 'status')),
     ],
@@ -4542,6 +4771,14 @@ FIELD_SITES = {
 # Unclassified sites remain visible pending the typed-outcome redesign.
 KNOWN_TERMINAL_WRITERS = {
     'conversation': {
+        (
+            'database/conversations_v3.py',
+            'commit_projection.commit',
+        ): 'known_extra_writer: lifecycle v3 projection; lease/revision/claim fenced',
+        (
+            'utils/conversations/v3/service.py',
+            'recording_short_path.guarded',
+        ): 'in-memory completion projection after lifecycle.complete',
         ('database/conversation_finalization_jobs.py', '_apply_snapshot_bound_projection'): 'unclassified',
         ('database/conversation_recorded_time.py', 'create_if_absent.create'): 'unclassified',
         ('database/conversations.py', 'release_share_email_recipients'): 'unclassified',

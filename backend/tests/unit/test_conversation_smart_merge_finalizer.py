@@ -481,3 +481,30 @@ async def test_preview_batch_registration_precedes_every_live_notes_wait(harness
             await _finalize()
         assert events == ['register']
     notes.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_donor_foreign_survivor_defers_without_retry_budget(harness, resumes, monkeypatch):
+    from unittest.mock import Mock
+
+    from utils.sync import processing_hold
+
+    calls, row = harness
+    row.update(_DONOR)
+    resumes['error'] = processing_hold.finalization_owner_deferral(target_id='p')
+    retry = Mock(return_value=True)
+    monkeypatch.setattr(finalizer.finalization_jobs_db, 'mark_finalization_retryable', retry)
+    original = finalizer.run_blocking
+
+    async def run(executor, function, *args, **kwargs):
+        if function is retry:
+            return function(*args, **kwargs)
+        return await original(executor, function, *args, **kwargs)
+
+    monkeypatch.setattr(finalizer, 'run_blocking', run)
+
+    assert await _finalize() is finalizer.ConversationFinalizationDisposition.deferred
+    retry.assert_called_once_with(
+        'job', 1, 1, 'finalization_owned_elsewhere', count_attempt=False, ownership_target_id='p'
+    )
+    assert finalizer.lifecycle_service.claim_finalization_fanout not in calls

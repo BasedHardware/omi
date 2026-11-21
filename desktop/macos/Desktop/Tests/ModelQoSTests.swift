@@ -43,9 +43,16 @@ final class ModelQoSTests: XCTestCase {
       ModelQoS.activeTier = tier
       XCTAssertEqual(ModelQoS.Claude.chat, "claude-sonnet-4-6")
       XCTAssertEqual(ModelQoS.Claude.floatingBar, "claude-sonnet-4-6")
-      XCTAssertEqual(ModelQoS.Claude.chatLabQuery, "claude-sonnet-4-20250514")
+      XCTAssertEqual(ModelQoS.Claude.chatLabQuery, "claude-sonnet-4-6")
       XCTAssertEqual(ModelQoS.Claude.chatLabGrade, "claude-haiku-4-5-20251001")
       XCTAssertEqual(ModelQoS.Claude.defaultSelection, "claude-sonnet-4-6")
+    }
+  }
+
+  func testChatLabQueriesTrackMainChatAcrossTiers() {
+    for tier in ModelTier.allCases {
+      ModelQoS.activeTier = tier
+      XCTAssertEqual(ModelQoS.Claude.chatLabQuery, ModelQoS.Claude.chat)
     }
   }
 
@@ -136,12 +143,12 @@ final class ModelQoSTests: XCTestCase {
     wait(for: [expectation], timeout: 1.0)
   }
 
-  // MARK: - Model count (6 unique model IDs across both tiers)
+  // MARK: - Model count (5 unique model IDs across both tiers)
 
-  func testSixUniqueModelIDs() {
-    // Premium: flash for Gemini → 5 unique
-    // Max: pro for Gemini → 5 unique
-    // Combined across tiers: 6 unique (flash, pro, embedding + 3 Claude)
+  func testFiveUniqueModelIDs() {
+    // Premium: flash for Gemini → 4 unique
+    // Max: pro for Gemini → 4 unique
+    // Combined across tiers: 5 unique (flash, pro, embedding + Sonnet and Haiku)
     var allModels: Set<String> = []
     for tier in ModelTier.allCases {
       ModelQoS.activeTier = tier
@@ -156,6 +163,6 @@ final class ModelQoSTests: XCTestCase {
         ModelQoS.Gemini.embedding,
       ])
     }
-    XCTAssertEqual(allModels.count, 6, "Expected 6 unique model IDs across tiers: \(allModels)")
+    XCTAssertEqual(allModels.count, 5, "Expected 5 unique model IDs across tiers: \(allModels)")
   }
 }

@@ -5,6 +5,7 @@ quota and never grant enrollment consent. Paid naming cards retain the existing
 manual tagging and quality-gated, preference-controlled teaching behavior.
 """
 
+from utils.conversations.layer import read_product as read_product_conversation
 import asyncio
 import contextvars
 import hashlib
@@ -660,7 +661,7 @@ def _apply_owner_answer(
         )
         if request.answer == SpeakerTagPromptAnswer.skip:
             owner_confirmation_db.record(uid, request.conversation_id, 'skip', evidence)
-            raw = conversations_db.get_conversation(uid, request.conversation_id)
+            raw = read_product_conversation(conversations_db.get_conversation, uid, request.conversation_id)
             identities = []
         else:
             raw, resolved, *_ = conversations_db.assign_conversation_speaker(
@@ -746,7 +747,7 @@ def apply_answer(
     # Naming a voice by hand is free on every plan; only automatic non-owner suggestions are paid
     # (get_prompts withholds them), so an answer to an already-served card is never refused here.
 
-    conversation = conversations_db.get_conversation(uid, request.conversation_id) or {}
+    conversation = read_product_conversation(conversations_db.get_conversation, uid, request.conversation_id) or {}
     origin = metric_origin(
         uid, conversation, request.segment_ids, request.origin.value, current_ids(uid, [conversation])
     )

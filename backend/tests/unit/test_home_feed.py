@@ -190,6 +190,71 @@ def test_prepare_preserves_legacy_missing_started_at_and_late_import_order(store
     assert 'recorded_start' not in store.docs['users/u/conversations/legacy']
 
 
+@pytest.mark.parametrize(
+    ('receipt', 'locked', 'preview', 'title'),
+    [
+        ('done', False, '', 'Recording'),
+        (None, False, '', ''),
+        ('done', True, '', ''),
+        ('done', False, 'Useful notes', 'Discussion notes'),
+    ],
+)
+def test_prepared_feed_labels_only_unlocked_receipt_bearing_ready_recordings(store, receipt, locked, preview, title):
+    row = conversation(is_locked=locked)
+    row['record_projection_revision'] = receipt
+    row['structured'] = {'title': 'Discussion notes', 'overview': preview}
+    store.put('users/u/conversations/c', row)
+    drain(store)
+    cards = home_feed.feed('u', firestore_client=store)['items']
+    assert [card['home_step'] for card in cards] == [home_feed.home_step.READY]
+    assert [card['title'] for card in cards] == [title]
+    assert [card['preview'] for card in cards] == [preview]
+
+
+@pytest.mark.parametrize('title', ['Discussion notes', 'Discussion 7'])
+def test_prepared_feed_preserves_an_explicit_fallback_shaped_user_title(store, title):
+    row = conversation(user_title=title)
+    row['structured'] = {'title': 'Generated headline'}
+    store.put('users/u/conversations/c', row)
+    drain(store)
+    cards = home_feed.feed('u', firestore_client=store)['items']
+    assert [card['home_step'] for card in cards] == [home_feed.home_step.READY]
+    assert [card['title'] for card in cards] == [title]
+    assert [card['preview'] for card in cards] == ['']
+
+
+@pytest.mark.parametrize(
+    'notes',
+    [
+        {'sections': [{'body_markdown': 'Section body'}]},
+        {'action_items': [{'description': 'A follow-up'}]},
+        {'events': [{'title': 'A follow-up'}]},
+    ],
+)
+def test_prepared_feed_preserves_the_headline_when_notes_have_no_preview(store, notes):
+    row = conversation()
+    row['structured'] = {'title': 'Discussion notes', **notes}
+    store.put('users/u/conversations/c', row)
+    drain(store)
+    [card] = home_feed.feed('u', firestore_client=store)['items']
+    assert card['home_step'] == home_feed.home_step.READY
+    assert card['title'] == 'Discussion notes'
+    assert card['preview'] == ''
+
+
+def test_prepared_feed_preserves_a_prior_encrypted_headline_when_note_evidence_is_unknown(store):
+    row = conversation()
+    row['structured'] = {'title': 'Discussion notes'}
+    path = 'users/u/conversations/c'
+    store.put(path, row)
+    drain(store)
+    display = reveal_display('u', store.docs[path]['home_display'])
+    display.pop('notes_pending')
+    store.docs[path]['home_display'] = encrypt(json.dumps(display), 'u')
+    [card] = home_feed.feed('u', firestore_client=store)['items']
+    assert card['title'] == 'Discussion notes'
+
+
 def test_projected_get_never_reads_members_transcripts_or_calls_generation(store, monkeypatch):
     store.put('users/u/conversations/c', conversation())
     drain(store)
@@ -473,3 +538,30 @@ def test_ready_member_policy_rollback_requires_fully_prepared_replacement(store,
         home_feed.feed('u', firestore_client=store)
     drain(store)
     assert home_feed.feed('u', firestore_client=store)['items'][0]['kind'] == 'episode'
+
+
+@pytest.mark.parametrize('hidden_field', ['recording', 'home_hidden'])
+def test_prepare_excludes_recordings_and_home_hidden_rows(store, hidden_field):
+    store.put('users/u/conversations/visible', conversation())
+    store.put('users/u/conversations/hidden', conversation(**{hidden_field: True}))
+    drain(store)
+    result = home_feed.feed('u', firestore_client=store, episodes_admitted=False)
+    assert [item['detail_id'] for item in result['items']] == ['visible']
+
+
+def test_v3_failure_and_manual_intent_are_not_hidden_by_legacy_home_step(monkeypatch):
+    from database import home_feed as feed
+
+    assert 'v3_derived' in feed.CONVERSATION_FIELDS
+    row = {
+        'id': 'v3',
+        'v3_derived': True,
+        'home_hidden': False,
+        'status': 'completed',
+        'summary_retryable': True,
+        'tile_state': 'failed',
+        'structured': {'title': 'A plan'},
+    }
+    assert feed._visible(row)
+    assert not feed._visible(dict(row, home_hidden=True))
+    assert not feed._visible(dict(row, v3_derived=False))

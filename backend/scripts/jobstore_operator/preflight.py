@@ -6,9 +6,11 @@ from pathlib import Path
 import re
 import shutil
 from registry_access import validate_evidence
+from image_smoke import source_refusal_program
 
 
 def check(contract, environment, free_bytes):
+    source_refusal_program(contract.get('readiness_sha256'))
     source = environment.get('REQUESTED_SOURCE', '')
     if not re.fullmatch('[0-9a-f]{40}', source) or source != contract['source_sha']:
         raise ValueError('EXACT_RUNTIME_SOURCE_REQUIRED')

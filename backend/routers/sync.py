@@ -10,6 +10,7 @@ job polling is window-admitted because an unbounded reconciler drain produced th
 from database import sync_redrive
 from database.sync_snapshot_resolve_cache import sync_snapshot_resolve_job
 from database.legal_holds import DestructiveOperationInProgress
+from utils import backfill_hours_cap
 from utils.sync import minimal_redrive, redrive_policy, playback_build
 from utils.other.playback_identity import PlaybackSourceChanged
 from utils.capture.coverage_endpoint import router as coverage_router
@@ -24,7 +25,7 @@ import time
 import uuid as _uuid
 from dataclasses import replace
 from datetime import datetime, timezone
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, UploadFile, File, Depends, HTTPException, Query, Request, Response, Header
 from fastapi.responses import JSONResponse, StreamingResponse
@@ -691,6 +692,13 @@ def sync_local_files(uid: str = Depends(auth.get_current_user_uid)):
     )
 
 
+def _backfill_day_cap_defers(uid: str, lane: SyncLane, repair_identity: Optional[str], allowance: Any) -> bool:
+    """Whether the unlimited_v2 backfill day cap defers this upload (historical lane only, never repairs)."""
+    if lane is not SyncLane.BACKFILL or repair_identity is not None or not backfill_hours_cap.cap_enabled():
+        return False
+    return backfill_hours_cap.defers_upload(uid, allowance)
+
+
 @router.post(  # v2 async sync-local-files
     "/v2/sync-local-files",
     status_code=202,
@@ -896,6 +904,13 @@ async def sync_local_files_v2(
                 'detail': 'Historical recovery is paused; local audio was not consumed',
             },
         )
+    try:
+        OMI_SYNC_RECORDING_AGE_SECONDS.labels(lane=lane_decision.lane.value).observe(
+            lane_decision.maximum_age_seconds or 0
+        )
+    except Exception:
+        pass
+
     if not lane_decision.automatic_recovery_allowed and repair_identity is None:
         return JSONResponse(
             status_code=422,
@@ -905,13 +920,6 @@ async def sync_local_files_v2(
                 'lane': lane_decision.lane.value,
             },
         )
-    try:
-        OMI_SYNC_RECORDING_AGE_SECONDS.labels(lane=lane_decision.lane.value).observe(
-            lane_decision.maximum_age_seconds or 0
-        )
-    except Exception:
-        pass
-
     if fresh_refused:
         return await _fair_use_restriction_response(
             uid=uid,
@@ -941,6 +949,28 @@ async def sync_local_files_v2(
             allowance.reason not in TRANSCRIPTION_ALLOWANCE_TRANSIENT_REASONS
             and allowance.reason != 'usage_budget_exhausted'
         )
+
+    # The unlimited_v2 backfill day cap is enforced here and only here: an over-cap
+    # historical upload is refused retryably before any audio is consumed, so the
+    # phone keeps it and retries after the UTC day rolls. No server hold is created.
+    if backfill_hours_cap.cap_enabled() and lane_decision.lane is SyncLane.BACKFILL and repair_identity is None:
+        if allowance is None:
+            allowance = await run_blocking(critical_executor, resolve_transcription_allowance, uid)
+        if await run_blocking(
+            critical_executor, _backfill_day_cap_defers, uid, lane_decision.lane, repair_identity, allowance
+        ):
+            logger.info('sync_upload_refused uid=%s status=503 reason=backfill_day_cap', uid)
+            return JSONResponse(
+                status_code=503,
+                headers={
+                    'Retry-After': str(retry_after_until_next_utc_day()),
+                    'X-Omi-Rate-Limit-Reason': 'backfill_capacity',
+                },
+                content={
+                    'code': 'backfill_capacity',
+                    'detail': 'Daily historical recovery limit reached; local audio was not consumed',
+                },
+            )
 
     # Detect source
     source = detect_source_from_filenames([f.filename for f in files])
@@ -3980,13 +4010,23 @@ async def _run_conversation_merge_job(payload: dict, task_retry_count: int):
         if not conversation.get('audio_files'):
             return JSONResponse(status_code=200, content={'status': 'dropped', 'reason': 'no_audio_files'})
         audio_files = conversation['audio_files']
+        if conversation.get('recording_pieces') is not None:
+            from utils.conversations.v3.audio import playback_snapshot
+
+            conversation = await run_blocking(db_executor, playback_snapshot, uid, conversation)
         fingerprint = sync_playback.conversation_merge_fingerprint(conversation, demand=demand)
         if payload_fingerprint and payload_fingerprint != fingerprint:
             PLAYBACK_WRITES.labels('skipped').inc()
             return JSONResponse(status_code=200, content={'status': 'superseded'})
 
-        artifact_fingerprint = compute_audio_files_fingerprint(
-            audio_files, origin=conversation.get('started_at') or conversation.get('created_at'), source_identity=True
+        artifact_fingerprint = (
+            conversation['_v3_playback_fingerprint']
+            if conversation.get('recording_pieces') is not None
+            else compute_audio_files_fingerprint(
+                audio_files,
+                origin=conversation.get('started_at') or conversation.get('created_at'),
+                source_identity=True,
+            )
         )
         stamp = conversation.get('conversation_audio') or {}
         if stamp.get('audio_files_fingerprint') in (fingerprint, artifact_fingerprint) and (
@@ -4035,6 +4075,7 @@ async def _run_conversation_merge_job(payload: dict, task_retry_count: int):
                     started_at_ts,
                     artifact_fingerprint,
                     strict_sources=demand,
+                    **({'conversation': conversation} if conversation.get('recording_pieces') is not None else {}),
                 )
         except PlaybackSourceChanged:
             return await _refuse_changed_playback_source(payload, fingerprint=fingerprint)

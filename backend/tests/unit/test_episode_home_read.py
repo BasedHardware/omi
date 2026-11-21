@@ -195,7 +195,7 @@ def test_only_finally_discarded_members_are_absent_from_live_and_list_http(store
             'relevance_decision': {'verdict': 'discard', 'decided_by': 'model', 'trigger': 'sync_update', 'arm': 'jev'},
         }
     )
-    monkeypatch.setattr(router, '_admitted', lambda *a: True)
+    monkeypatch.setattr(router, '_admitted', lambda *a, **kw: True)
     monkeypatch.setattr(home_read, 'get_firestore_client', lambda: store)
     monkeypatch.setattr(home_read.conversations, 'prepare_conversation_for_read', lambda row, uid: row)
     live = service.live_episode
@@ -465,7 +465,7 @@ def test_home_http_returns_honest_batch_member_state(store, monkeypatch, outcome
     elif outcome == 'projected':
         member.update(record_projection_revision=1, structured={'title': 'Recovered transcript'})
     root.collection('conversations').document('capture').set(member)
-    monkeypatch.setattr(router, '_admitted', lambda *a: True)
+    monkeypatch.setattr(router, '_admitted', lambda *a, **kw: True)
     monkeypatch.setattr(home_read, 'get_firestore_client', lambda: store)
     monkeypatch.setattr(home_read.conversations, 'prepare_conversation_for_read', lambda row, uid: row)
     monkeypatch.setattr(home_read, 'schedule_missed_composes', lambda *a, **kw: 0)
@@ -599,3 +599,19 @@ def test_home_24_hour_hold_and_composer_transcript_wait_are_independent(monkeypa
     home_read.project_episode('u', episode, members={'c': row})
     assert composer.needs_compose(episode)  # Compose expiry never flips the Home label to failed.
     assert home_read.project_episode('u', episode, members={'c': row})['members'][0]['title'] == 'Transcribing…'
+
+
+def test_member_read_mask_preserves_recording_guard_after_rollback(store, monkeypatch):
+    row = {
+        'recording': True,
+        'home_hidden': True,
+        'status': 'completed',
+        'started_at': START,
+        'finished_at': START + timedelta(minutes=1),
+        'structured': {'title': 'Raw capture'},
+    }
+    store.collection('users').document('u').collection('conversations').document('r').set(row)
+    monkeypatch.setattr(home_read.conversations, 'prepare_conversation_for_read', lambda row, uid: row)
+    members = home_read._read_members('u', [{'conversation_ids': ['r']}], firestore_client=store)
+    assert members['r']['recording'] and members['r']['home_hidden']
+    assert home_read.project_episode('u', _episode('r'), members=members) is None

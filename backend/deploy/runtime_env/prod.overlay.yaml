@@ -3,6 +3,9 @@ environment: prod
 compute_project: based-hardware
 data_plane_project: based-hardware
 overlay:
+  # v3 kill switch on every writer: 'off' stops new v3 admission (marked rows keep draining), 'on' admits
+  # by stage. Re-enabled 2026-11-18 after the v3-app admission gate (#25658) and commit hardening (#25661).
+  conversations_v3: 'on'
   llm_gateway:
     env:
       OMI_FLAGS_FIRESTORE_PROJECT: {value: based-hardware, category: service_discovery}
@@ -45,6 +48,39 @@ overlay:
       values_file: backend/charts/parakeet/prod_omi_parakeet_lid_values.yaml
     backend-listen:
       env:
+        # Unlimited backfill day cap (retryable 503 backfill_capacity until the next UTC day; David 2026-11-18,
+        # support-packet decision 13). Listen also admits sync backfill uploads (/v2/sync-local-files), so this
+        # pin leaves listen admission uncapped exactly as it is today: serving image 44d0a4f runs it 'false'.
+        # Listen roll SCA-3516 preserves live behaviour (Shipping ruling 2026-11-21 13:25Z); turning it on for
+        # listen is the follow-up config change after that roll. Rollback of this pin: set 'true'.
+        UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED: {value: 'false', category: rollout}
+        UNLIMITED_V2_BACKFILL_HOURS_CAP_HOURS: {value: '24', category: rollout}
+        # Pinned off for the listen roll (SCA-3516): image 44d0a4f has neither the account privacy
+        # writer nor packing observation, so off reproduces today's behaviour. A first activation of
+        # the privacy writer on listen is a custody decision (David). Rollback: revert the pinning PR.
+        BATCH_ACCOUNT_PRIVACY_WRITER_ENABLED: {value: 'false', category: ops_kill}
+        BATCH_PIPELINE_PACKING_SAMPLE_RATE: {value: '0', category: ops_kill}
+        # Mirrors the listen chart (2026-11-18 fold of live values).
+        # Private: names only; values are the Secret Manager document LISTEN_PRIVATE_ENV
+        # synced by the backend-secrets chart (listen chart privateSecretEnv). Enforcement
+        # stays private by ruling (lead2 4e5e71/45689e, b2cf73); the cohort and digests are uid-bearing.
+        STT_CAP_DISPATCH_ENFORCEMENT:
+          secret:
+            name: prod-omi-backend-listen-private-env
+            key: STT_CAP_DISPATCH_ENFORCEMENT
+        STT_CAP_DISPATCH_COHORT:
+          secret:
+            name: prod-omi-backend-listen-private-env
+            key: STT_CAP_DISPATCH_COHORT
+        MEDIA_NOISE_MODE_SERVE_UID_SHA256S:
+          secret:
+            name: prod-omi-backend-listen-private-env
+            key: MEDIA_NOISE_MODE_SERVE_UID_SHA256S
+        MEDIA_NOISE_MODE: {value: shadow, category: rollout}
+        MEDIA_NOISE_MODE_SERVE_PERCENT: {value: '0', category: rollout}
+        NOTES_SHORT_CLIP_FLOOR: {value: 'true', category: rollout}
+        # Shared backend routes: silent read skipping on for listen too (SCA-1824); kill switch: set false.
+        BATCH_PIPELINE_SILENCE_READ_SKIP_ENABLED: {value: 'true', category: ops_kill}
         PUSHER_RECORD_CLOSE_NOTIFY_ENABLED: {value: 'false', category: rollout}
         PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_PERCENT: {value: '100', category: rollout}
         PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_UID_SHA256S: {value: '', category: rollout}
@@ -148,16 +184,6 @@ overlay:
           value: '100'
         PARAKEET_WINDOW_MAX_SESSIONS:
           value: '16'
-        # Soniox idle-close treatment values (the speech gate); the cohort percent lives in the listen chart only.
-        SONIOX_IDLE_COHORT_CLOSE_SECONDS:
-          value: '10'
-          category: rollout
-        SONIOX_IDLE_COHORT_REARM_SECONDS:
-          value: '2'
-          category: rollout
-        SONIOX_IDLE_COHORT_MAX_CLOSES_PER_HOUR:
-          value: '120'
-          category: rollout
         # Keep off until deadline-capped POST timeouts are censored as first-text deadlines.
         PARAKEET_WINDOW_REPLICA_RECOVERY_ENABLED:
           value: 'false'
@@ -300,6 +326,12 @@ overlay:
           category: rollout
     pusher:
       env:
+        # The conversations v3 reconcile dispatch (utils/conversations/v3/triggers.py) runs on the
+        # recording writes pusher makes. Without this binding each enqueue raised RuntimeError and the
+        # owner waited for the 5-minute sweeper (rows pending 10+ minutes). HANDLER_URL/INVOKER_SA come
+        # from the shared ConfigMap; pusher-runtime holds cloudtasks.enqueuer and actAs on the invoker.
+        SYNC_TASKS_PROJECT: {value: based-hardware, category: reliability}
+        SYNC_TASKS_LOCATION: {value: us-central1, category: reliability}
         PUSHER_RECORD_CLOSE_NOTIFY_ENABLED: {value: 'false', category: rollout}
         PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_PERCENT: {value: '100', category: rollout}
         PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_UID_SHA256S: {value: '', category: rollout}
@@ -546,6 +578,9 @@ overlay:
     services:
       backend:
         forbidden_env:
+        # Cloud Run preserves omitted env entries. Remove the retired rollout keys.
+        - BATCH_HELD_POLL_SKIP_ENABLED
+        - BATCH_PROJECTION_FINISH_BACKOFF_ENABLED
         - DEEPGRAM_SELF_HOSTED_ENABLED
         - DEEPGRAM_SELF_HOSTED_URL
         - DEEPGRAM_API_KEY
@@ -557,11 +592,10 @@ overlay:
         # removes live leftovers so the env never restates the default.
         - CONVERSATION_LLM_INPUT_DEDUPE_ENABLED
         - REPEAT_WORK_REVISION_ENABLED
-        # Finish backoff is declared only where the finish sweep can run (backend-integration,
-        # backend-sync). A hand-set true was left on this service on 2026-11-13; deploy removes it
-        # (SCA-2283).
-        - BATCH_PROJECTION_FINISH_BACKOFF_ENABLED
         secrets:
+          CONVERSATIONS_V3_LIVE_RECAP_COHORT:
+            secret: CONVERSATIONS_V3_LIVE_RECAP_COHORT
+            version: '1'
           SONIOX_API_KEY:
             secret: SONIOX_API_KEY
             version: latest
@@ -596,11 +630,19 @@ overlay:
             secret: MCP_OAUTH_CLIENTS_JSON
             version: latest
         env:
+          # Unlimited backfill day cap, enforced only at sync upload (retryable 503 backfill_capacity until the
+          # next UTC day). Rollback: 'false' in one config train (David 2026-11-18, support-packet decision 13).
+          UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED: {value: 'true', category: rollout}
+          UNLIMITED_V2_BACKFILL_HOURS_CAP_HOURS: {value: '24', category: rollout}
+          # Silent read skipping on (SCA-1824 canary READBACK -13.5% reads); kill switch: set false.
+          BATCH_PIPELINE_SILENCE_READ_SKIP_ENABLED: {value: 'true', category: ops_kill}
+          # SCA-3555: main reads an absent claimed-sibling skip as ON; pin the serving behaviour off
+          # until David's activation (SCA-3508). Activation sets 'true'; rollback is this 'false'.
+          BATCH_PIPELINE_FOLLOWUP_CLAIMED_SIBLING_SKIP_ENABLED: {value: 'false', category: ops_kill}
           PUSHER_RECORD_CLOSE_NOTIFY_ENABLED: {value: 'false', category: rollout}
           PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_PERCENT: {value: '100', category: rollout}
           PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_UID_SHA256S: {value: '', category: rollout}
           PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED: {value: 'true', category: ops_kill}
-          # Kill switch: set BATCH_HELD_POLL_SKIP_ENABLED=false.
           EPISODE_COMPOSER_DEFAULT_CONTEXT_ENABLED: {value: 'true', category: ops_kill}
           EPISODE_COMPOSER_CONTEXT_ENABLED: {value: 'true', category: ops_kill}
           EPISODE_COMPOSER_DETAIL_ENABLED: {value: 'true', category: ops_kill}
@@ -620,7 +662,6 @@ overlay:
           RECORD_NOTES_EAGER_ENABLED: {value: 'false', category: ops_kill}
           RECORD_FOLLOWUP_WAKE_ENABLED: {value: 'true', category: ops_kill}
           RECORD_SEAL_WAKE_PRESERVED_ENABLED: {value: 'true', category: ops_kill}
-          BATCH_HELD_POLL_SKIP_ENABLED: {value: 'true', category: ops_kill}
           # Quiet-check empty exit (David 0192a6, lead2 9b4ffd); evaluated on backend-sync. Kill switch: false.
           QUIET_EMPTY_EXIT_ENABLED: {value: 'true', category: rollout}
           BATCH_INPUT_EXPIRING_ENABLED: {value: 'true', category: ops_kill}
@@ -656,13 +697,12 @@ overlay:
           OMI_FLAGS_FIRESTORE_PROJECT: {value: based-hardware, category: service_discovery}
           OMI_FLAGS_FIRESTORE_DATABASE: {value: omi-flags, category: service_discovery}
           OMI_FLAGS_SOURCE: {value: dual, category: rollout}
-          # Pinned per-service Cloud Run literal (SCA-2173, 2026-11-14; SCA-2222 Train 1):
-          # privacy_negative_lookup_cache=100; privacy_checks_shadow=0; batch_timeliness_leader=100.
-          # usage_month_cache=100; usage_month_total=100 (integration/sync/backend 100; backfill 0).
-          # Monthly epoch stays c2fs_20261026_r1; base/GKE/jobs/desktop/dev stay 0/v1 (#24194 guard).
-          # Privacy cache kill switch: set only privacy_negative_lookup_cache=0 in this full JSON literal.
-          # Source-pin rollback: revert the pin change and regenerate runtime_env.yaml.
-          FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"action_items_ttl120":100,"backfill_task_reads":100,"bpp_decision_cache":100,"bpp_generation_memo":100,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":100,"historical_scan_memo":100,"ledger_purge_coalesce":100,"lifecycle_record_pending_head":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":100,"people_scan_dedupe":100,"privacy_checks_shadow":10,"privacy_ttl60":0,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"sync_snapshot_resolve_cache":100,"usage_month_cache":100,"usage_month_total":100,"privacy_negative_lookup_cache":0,"batch_timeliness_leader":100,"bpp_owner_memo_enforce":0}', category: rollout}
+          # Margin-40 O2b stage 2, 2026-11-17: API owner-memo enforcement 100,
+          # shadow 0; decision/negative/TTL60 caches 0. Preserve all other map entries.
+          # Runtime inverse: enforce 0 + shadow 10 via the existing Release route,
+          # or ops_kill_switches/privacy_decision_cache; source revert does not apply it.
+          # Reconcile source after an inverse before another train reasserts this map.
+          FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"action_items_ttl120":100,"backfill_task_reads":100,"bpp_decision_cache":0,"bpp_generation_memo":100,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":100,"historical_scan_memo":100,"ledger_purge_coalesce":100,"lifecycle_record_pending_head":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":100,"people_scan_dedupe":100,"privacy_checks_shadow":0,"privacy_ttl60":0,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"sync_snapshot_resolve_cache":100,"usage_month_cache":100,"usage_month_total":100,"privacy_negative_lookup_cache":0,"batch_timeliness_leader":100,"bpp_owner_memo_enforce":100}', category: rollout}
           FSR_USAGE_MONTH_TOTAL_EPOCH: {value: c2fs_20261026_r1, category: rollout}
           # Batch ladder 2026-10-29 (lead ruling 12:15Z): pin shadow 25 so a Cloud Run deploy
           # cannot reset the hand-applied ladder state again (11:13Z deploy reset incident);
@@ -972,6 +1012,9 @@ overlay:
         flags:
           --timeout: 3600s
         forbidden_env:
+        # Cloud Run preserves omitted env entries. Remove the retired rollout keys.
+        - BATCH_HELD_POLL_SKIP_ENABLED
+        - BATCH_PROJECTION_FINISH_BACKOFF_ENABLED
         - DEEPGRAM_SELF_HOSTED_ENABLED
         - DEEPGRAM_SELF_HOSTED_URL
         - DEEPGRAM_API_KEY
@@ -990,11 +1033,21 @@ overlay:
             secret: DREAM_AGENT_FEEDBACK_SALT
             version: latest
         env:
+          # Unlimited backfill day cap, enforced only at sync upload (retryable 503 backfill_capacity until the
+          # next UTC day). Rollback: 'false' in one config train (David 2026-11-18, support-packet decision 13).
+          UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED: {value: 'true', category: rollout}
+          UNLIMITED_V2_BACKFILL_HOURS_CAP_HOURS: {value: '24', category: rollout}
+          # Operator-only per-owner v3 backfill/repair route (scripts/conversations_v3_backfill.py); off = route 404s.
+          CONVERSATIONS_V3_BACKFILL: {value: 'on', category: ops_kill}
+          # Silent read skipping on (SCA-1824 canary READBACK -13.5% reads); kill switch: set false.
+          BATCH_PIPELINE_SILENCE_READ_SKIP_ENABLED: {value: 'true', category: ops_kill}
+          # SCA-3555: main reads an absent claimed-sibling skip as ON; pin the serving behaviour off
+          # until David's activation (SCA-3508). Activation sets 'true'; rollback is this 'false'.
+          BATCH_PIPELINE_FOLLOWUP_CLAIMED_SIBLING_SKIP_ENABLED: {value: 'false', category: ops_kill}
           PUSHER_RECORD_CLOSE_NOTIFY_ENABLED: {value: 'false', category: rollout}
           PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_PERCENT: {value: '100', category: rollout}
           PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_UID_SHA256S: {value: '', category: rollout}
           PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED: {value: 'true', category: ops_kill}
-          # Kill switch: set BATCH_HELD_POLL_SKIP_ENABLED=false.
           EPISODE_COMPOSER_DEFAULT_CONTEXT_ENABLED: {value: 'true', category: ops_kill}
           EPISODE_COMPOSER_CONTEXT_ENABLED: {value: 'true', category: ops_kill}
           EPISODE_COMPOSER_DETAIL_ENABLED: {value: 'true', category: ops_kill}
@@ -1011,13 +1064,8 @@ overlay:
           RECORD_NOTES_EAGER_ENABLED: {value: 'false', category: ops_kill}
           RECORD_FOLLOWUP_WAKE_ENABLED: {value: 'true', category: ops_kill}
           RECORD_SEAL_WAKE_PRESERVED_ENABLED: {value: 'true', category: ops_kill}
-          BATCH_HELD_POLL_SKIP_ENABLED: {value: 'true', category: ops_kill}
           # Kill switch: set BATCH_PIPELINE_UPLOAD_COALESCING_ENABLED=false.
           BATCH_PIPELINE_UPLOAD_COALESCING_ENABLED: {value: 'true', category: ops_kill}
-          # Projection finish backoff: backend-sync can run the same sweep through its authenticated
-          # /v2/batch-pipeline/reconcile and batch /metrics routes, so it carries the same value as
-          # backend-integration (SCA-2173, review SCA-2270). Off since 2026-11-14 19:41Z (SCA-2283).
-          BATCH_PROJECTION_FINISH_BACKOFF_ENABLED: {value: 'false', category: rollout}
           # Quiet-check empty exit (David 0192a6, lead2 9b4ffd); evaluated on backend-sync. Kill switch: false.
           QUIET_EMPTY_EXIT_ENABLED: {value: 'true', category: rollout}
           BATCH_INPUT_EXPIRING_ENABLED: {value: 'true', category: ops_kill}
@@ -1031,11 +1079,15 @@ overlay:
           HOME_PROCESSING_MAX_AGE_SECONDS: {value: '21600', category: config}
           BATCH_FINAL_PASS_ENABLED: {value: 'true', category: ops_kill}
           # Standing batch vendor route table (lead2 863cd6, David 49b7e4/065da8): compact JSON of
-          # backend/deploy/batch-pipeline/vendor_route_table.prod.json (en-overflow-1104b), pinned by
+          # backend/deploy/batch-pipeline/vendor_route_table.prod.json (en-overflow-1116), pinned by
           # tests/unit/test_batch_vendor_route_table_prod.py. Fresh English overflows to Modulate past
           # the GPU SLO; percent is the runtime ramp. Kill switches: BATCH_VENDOR_OVERFLOW_ENABLED /
           # BATCH_VENDOR_ROUTING_ENABLED = false. Removing the line serves the builtin table.
-          BATCH_VENDOR_ROUTE_TABLE: {value: '{"schema_version":1,"table_version":"en-overflow-1104b","selection":"ordered","gpu_floor_percent":0.0,"routes":{"gpu":{"price_usd_per_audio_hour":null,"daily_audio_hours_cap":null,"monthly_budget_usd":null,"failover_only":false,"speaker_turns":"discard"},"modulate":{"price_usd_per_audio_hour":0.06,"daily_audio_hours_cap":3000.0,"monthly_budget_usd":null,"failover_only":false,"speaker_turns":"discard"},"soniox":{"price_usd_per_audio_hour":null,"daily_audio_hours_cap":1000.0,"monthly_budget_usd":null,"failover_only":true,"speaker_turns":"discard"}},"rows":[{"language_class":"en","options":[{"route":"gpu","quality_tier":"accepted","quality_source":"legacy_parity"},{"route":"modulate","quality_tier":"accepted","quality_source":"legacy_parity"},{"route":"soniox","quality_tier":"accepted","quality_source":"staging_drill"}]},{"language_class":"gpu_supported","options":[{"route":"gpu","quality_tier":"accepted","quality_source":"legacy_parity"}]},{"language_class":"gpu_unsupported","options":[{"route":"modulate","quality_tier":"accepted","quality_source":"legacy_parity"},{"route":"soniox","quality_tier":"accepted","quality_source":"staging_drill"}]},{"language_class":"*","options":[{"route":"gpu","quality_tier":"accepted","quality_source":"legacy_parity"}]}]}', category: rollout}
+          BATCH_VENDOR_ROUTE_TABLE: {value: '{"schema_version":1,"table_version":"en-overflow-1116","selection":"ordered","gpu_floor_percent":0.0,"routes":{"gpu":{"price_usd_per_audio_hour":null,"daily_audio_hours_cap":null,"monthly_budget_usd":null,"failover_only":false,"speaker_turns":"discard"},"modulate":{"price_usd_per_audio_hour":0.06,"daily_audio_hours_cap":5000.0,"monthly_budget_usd":null,"failover_only":false,"speaker_turns":"discard"},"soniox":{"price_usd_per_audio_hour":null,"daily_audio_hours_cap":1000.0,"monthly_budget_usd":null,"failover_only":true,"speaker_turns":"discard"}},"rows":[{"language_class":"en","options":[{"route":"gpu","quality_tier":"accepted","quality_source":"legacy_parity"},{"route":"modulate","quality_tier":"accepted","quality_source":"legacy_parity"},{"route":"soniox","quality_tier":"accepted","quality_source":"staging_drill"}]},{"language_class":"gpu_supported","options":[{"route":"gpu","quality_tier":"accepted","quality_source":"legacy_parity"}]},{"language_class":"gpu_unsupported","options":[{"route":"modulate","quality_tier":"accepted","quality_source":"legacy_parity"},{"route":"soniox","quality_tier":"accepted","quality_source":"staging_drill"}]},{"language_class":"*","options":[{"route":"gpu","quality_tier":"accepted","quality_source":"legacy_parity"}]}]}', category: rollout}
+          # RECENT English also overflows while its own GPU backlog is past the SLO (David 2026-11-16,
+          # L4 stockout: ~35k RECENT ready, FRESH ~4). Modulate cap 3000 -> 5000 audio-h/day in the same
+          # ruling. Rollback: 'fresh' (today's FRESH-only overflow).
+          BATCH_VENDOR_OVERFLOW_PRIORITIES: {value: 'fresh,recent', category: config}
           # Allowance-exhausted batch units park 2 h between admission re-checks instead of 30 min
           # (David 065da8, 2026-11-04; interim pending the upgrade-latency ruling). Authorize-compute
           # reads it per decision. Kill switch: '60' restores the short cycle; removing the line
@@ -1064,13 +1116,12 @@ overlay:
           OMI_FLAGS_FIRESTORE_PROJECT: {value: based-hardware, category: service_discovery}
           OMI_FLAGS_FIRESTORE_DATABASE: {value: omi-flags, category: service_discovery}
           OMI_FLAGS_SOURCE: {value: dual, category: rollout}
-          # Pinned per-service Cloud Run literal (SCA-2173, 2026-11-14; SCA-2222 Train 1):
-          # privacy_negative_lookup_cache=100; privacy_checks_shadow=0; batch_timeliness_leader=100.
-          # usage_month_cache=100; usage_month_total=100 (integration/sync/backend 100; backfill 0).
-          # Monthly epoch stays c2fs_20261026_r1; base/GKE/jobs/desktop/dev stay 0/v1 (#24194 guard).
-          # Privacy cache kill switch: set only privacy_negative_lookup_cache=0 in this full JSON literal.
-          # Source-pin rollback: revert the pin change and regenerate runtime_env.yaml.
-          FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"action_items_ttl120":100,"backfill_task_reads":100,"bpp_decision_cache":100,"bpp_generation_memo":100,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":100,"historical_scan_memo":100,"ledger_purge_coalesce":100,"lifecycle_record_pending_head":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":100,"people_scan_dedupe":100,"privacy_checks_shadow":10,"privacy_ttl60":0,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"sync_snapshot_resolve_cache":100,"usage_month_cache":100,"usage_month_total":100,"privacy_negative_lookup_cache":0,"batch_timeliness_leader":100,"bpp_owner_memo_enforce":0}', category: rollout}
+          # Margin-40 O2b stage 2, 2026-11-17: API owner-memo enforcement 100,
+          # shadow 0; decision/negative/TTL60 caches 0. Preserve all other map entries.
+          # Runtime inverse: enforce 0 + shadow 10 via the existing Release route,
+          # or ops_kill_switches/privacy_decision_cache; source revert does not apply it.
+          # Reconcile source after an inverse before another train reasserts this map.
+          FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"action_items_ttl120":100,"backfill_task_reads":100,"bpp_decision_cache":0,"bpp_generation_memo":100,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":100,"historical_scan_memo":100,"ledger_purge_coalesce":100,"lifecycle_record_pending_head":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":100,"people_scan_dedupe":100,"privacy_checks_shadow":0,"privacy_ttl60":0,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"sync_snapshot_resolve_cache":100,"usage_month_cache":100,"usage_month_total":100,"privacy_negative_lookup_cache":0,"batch_timeliness_leader":100,"bpp_owner_memo_enforce":100}', category: rollout}
           FSR_USAGE_MONTH_TOTAL_EPOCH: {value: c2fs_20261026_r1, category: rollout}
           # Batch ladder 2026-10-29 (lead ruling 12:15Z): pin shadow 25 so a Cloud Run deploy
           # cannot reset the hand-applied ladder state again (11:13Z deploy reset incident);
@@ -1336,8 +1387,11 @@ overlay:
           SYNC_BACKFILL_GLOBAL_DAILY_HOURS:
             value: '1665'
             category: rollout
+          # 60 days: checked once at upload admission; a backlog that older app builds or slow
+          # drains cannot clear within 30 days is refused with a terminal 422 on the phone.
+          # Rollback: '2592000' (30 days) in one config train.
           SYNC_BACKFILL_MAX_AGE_SECONDS:
-            value: '2592000'
+            value: '5184000'
             category: rollout
           SYNC_BACKFILL_ORDER:
             value: 'newest'
@@ -1400,6 +1454,9 @@ overlay:
             secret: SONIOX_API_KEY
             version: latest
         forbidden_env:
+        # Cloud Run preserves omitted env entries. Remove the retired rollout keys.
+        - BATCH_HELD_POLL_SKIP_ENABLED
+        - BATCH_PROJECTION_FINISH_BACKOFF_ENABLED
         - DEEPGRAM_SELF_HOSTED_ENABLED
         - DEEPGRAM_SELF_HOSTED_URL
         - DEEPGRAM_API_KEY
@@ -1410,16 +1467,20 @@ overlay:
         - CONVERSATION_LLM_INPUT_DEDUPE_ENABLED
         - SYNC_REPROCESS_COALESCE_ENABLED
         - REPEAT_WORK_REVISION_ENABLED
-        # Finish backoff is declared only where the finish sweep can run (backend-integration,
-        # backend-sync). A hand-set true was left on this service on 2026-11-13; deploy removes it
-        # (SCA-2283).
-        - BATCH_PROJECTION_FINISH_BACKOFF_ENABLED
         env:
+          # SCA-2283: retain the behavior of the serving pre-flag image until custody admission.
+          BATCH_ACCOUNT_PRIVACY_WRITER_ENABLED: {value: 'false', category: ops_kill}
+          BATCH_PROJECTION_OUTBOX: {value: 'false', category: ops_kill}
+          # Unlimited backfill day cap, enforced only at sync upload (retryable 503 backfill_capacity until the
+          # next UTC day). Rollback: 'false' in one config train (David 2026-11-18, support-packet decision 13).
+          UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED: {value: 'true', category: rollout}
+          UNLIMITED_V2_BACKFILL_HOURS_CAP_HOURS: {value: '24', category: rollout}
+          # Silent read skipping on (SCA-1824 canary READBACK -13.5% reads); kill switch: set false.
+          BATCH_PIPELINE_SILENCE_READ_SKIP_ENABLED: {value: 'true', category: ops_kill}
           PUSHER_RECORD_CLOSE_NOTIFY_ENABLED: {value: 'false', category: rollout}
           PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_PERCENT: {value: '100', category: rollout}
           PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_UID_SHA256S: {value: '', category: rollout}
           PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED: {value: 'true', category: ops_kill}
-          # Kill switch: set BATCH_HELD_POLL_SKIP_ENABLED=false.
           EPISODE_COMPOSER_DEFAULT_CONTEXT_ENABLED: {value: 'true', category: ops_kill}
           EPISODE_COMPOSER_CONTEXT_ENABLED: {value: 'true', category: ops_kill}
           EPISODE_COMPOSER_DETAIL_ENABLED: {value: 'true', category: ops_kill}
@@ -1436,7 +1497,6 @@ overlay:
           RECORD_NOTES_EAGER_ENABLED: {value: 'false', category: ops_kill}
           RECORD_FOLLOWUP_WAKE_ENABLED: {value: 'true', category: ops_kill}
           RECORD_SEAL_WAKE_PRESERVED_ENABLED: {value: 'true', category: ops_kill}
-          BATCH_HELD_POLL_SKIP_ENABLED: {value: 'true', category: ops_kill}
           # Quiet-check empty exit (David 0192a6, lead2 9b4ffd); evaluated on backend-sync. Kill switch: false.
           QUIET_EMPTY_EXIT_ENABLED: {value: 'true', category: rollout}
           BATCH_INPUT_EXPIRING_ENABLED: {value: 'true', category: ops_kill}
@@ -1453,11 +1513,15 @@ overlay:
           HOME_PROCESSING_MAX_AGE_SECONDS: {value: '21600', category: config}
           BATCH_FINAL_PASS_ENABLED: {value: 'true', category: ops_kill}
           # Standing batch vendor route table (lead2 863cd6, David 49b7e4/065da8): compact JSON of
-          # backend/deploy/batch-pipeline/vendor_route_table.prod.json (en-overflow-1104b), pinned by
+          # backend/deploy/batch-pipeline/vendor_route_table.prod.json (en-overflow-1116), pinned by
           # tests/unit/test_batch_vendor_route_table_prod.py. Fresh English overflows to Modulate past
           # the GPU SLO; percent is the runtime ramp. Kill switches: BATCH_VENDOR_OVERFLOW_ENABLED /
           # BATCH_VENDOR_ROUTING_ENABLED = false. Removing the line serves the builtin table.
-          BATCH_VENDOR_ROUTE_TABLE: {value: '{"schema_version":1,"table_version":"en-overflow-1104b","selection":"ordered","gpu_floor_percent":0.0,"routes":{"gpu":{"price_usd_per_audio_hour":null,"daily_audio_hours_cap":null,"monthly_budget_usd":null,"failover_only":false,"speaker_turns":"discard"},"modulate":{"price_usd_per_audio_hour":0.06,"daily_audio_hours_cap":3000.0,"monthly_budget_usd":null,"failover_only":false,"speaker_turns":"discard"},"soniox":{"price_usd_per_audio_hour":null,"daily_audio_hours_cap":1000.0,"monthly_budget_usd":null,"failover_only":true,"speaker_turns":"discard"}},"rows":[{"language_class":"en","options":[{"route":"gpu","quality_tier":"accepted","quality_source":"legacy_parity"},{"route":"modulate","quality_tier":"accepted","quality_source":"legacy_parity"},{"route":"soniox","quality_tier":"accepted","quality_source":"staging_drill"}]},{"language_class":"gpu_supported","options":[{"route":"gpu","quality_tier":"accepted","quality_source":"legacy_parity"}]},{"language_class":"gpu_unsupported","options":[{"route":"modulate","quality_tier":"accepted","quality_source":"legacy_parity"},{"route":"soniox","quality_tier":"accepted","quality_source":"staging_drill"}]},{"language_class":"*","options":[{"route":"gpu","quality_tier":"accepted","quality_source":"legacy_parity"}]}]}', category: rollout}
+          BATCH_VENDOR_ROUTE_TABLE: {value: '{"schema_version":1,"table_version":"en-overflow-1116","selection":"ordered","gpu_floor_percent":0.0,"routes":{"gpu":{"price_usd_per_audio_hour":null,"daily_audio_hours_cap":null,"monthly_budget_usd":null,"failover_only":false,"speaker_turns":"discard"},"modulate":{"price_usd_per_audio_hour":0.06,"daily_audio_hours_cap":5000.0,"monthly_budget_usd":null,"failover_only":false,"speaker_turns":"discard"},"soniox":{"price_usd_per_audio_hour":null,"daily_audio_hours_cap":1000.0,"monthly_budget_usd":null,"failover_only":true,"speaker_turns":"discard"}},"rows":[{"language_class":"en","options":[{"route":"gpu","quality_tier":"accepted","quality_source":"legacy_parity"},{"route":"modulate","quality_tier":"accepted","quality_source":"legacy_parity"},{"route":"soniox","quality_tier":"accepted","quality_source":"staging_drill"}]},{"language_class":"gpu_supported","options":[{"route":"gpu","quality_tier":"accepted","quality_source":"legacy_parity"}]},{"language_class":"gpu_unsupported","options":[{"route":"modulate","quality_tier":"accepted","quality_source":"legacy_parity"},{"route":"soniox","quality_tier":"accepted","quality_source":"staging_drill"}]},{"language_class":"*","options":[{"route":"gpu","quality_tier":"accepted","quality_source":"legacy_parity"}]}]}', category: rollout}
+          # RECENT English also overflows while its own GPU backlog is past the SLO (David 2026-11-16,
+          # L4 stockout: ~35k RECENT ready, FRESH ~4). Modulate cap 3000 -> 5000 audio-h/day in the same
+          # ruling. Rollback: 'fresh' (today's FRESH-only overflow).
+          BATCH_VENDOR_OVERFLOW_PRIORITIES: {value: 'fresh,recent', category: config}
           # Allowance-exhausted batch units park 2 h between admission re-checks instead of 30 min
           # (David 065da8, 2026-11-04; interim pending the upgrade-latency ruling). Authorize-compute
           # reads it per decision. Kill switch: '60' restores the short cycle; removing the line
@@ -1478,13 +1542,11 @@ overlay:
           # Graduation of the David-approved on-demand playback (DEC-BTR-004): build playback
           # artifacts on open/play/download only. Kill switch: set false.
           PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
-          # Pinned per-service Cloud Run literal (ec191a row 3; unchanged by SCA-2173/SCA-2222 Train 1):
-          # privacy_negative_lookup_cache=100; privacy_checks_shadow=100; batch_timeliness_leader=0.
-          # usage_month_cache=0; usage_month_total=0 (integration/sync/backend 100; backfill 0).
-          # Monthly epoch stays c2fs_20261026_r1; base/GKE/jobs/desktop/dev stay 0/v1 (#24194 guard).
-          # Privacy cache kill switch: set only privacy_negative_lookup_cache=0 in this full JSON literal.
-          # Source-pin rollback: revert the pin change and regenerate runtime_env.yaml.
-          FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"action_items_ttl120":100,"backfill_task_reads":100,"bpp_decision_cache":100,"bpp_generation_memo":100,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":100,"historical_scan_memo":100,"ledger_purge_coalesce":100,"lifecycle_record_pending_head":5,"mcp_conversation_cards_cache":100,"memory_list_index_window":100,"people_scan_dedupe":100,"privacy_checks_shadow":10,"privacy_ttl60":0,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"sync_snapshot_resolve_cache":100,"usage_month_cache":0,"usage_month_total":0,"privacy_negative_lookup_cache":0,"batch_timeliness_leader":0,"bpp_owner_memo_enforce":0}', category: rollout}
+          # O4 excluded consumer: preserve decision cache 0, owner enforcement 0,
+          # shadow 10, negative/TTL60 caches 0 (Release 2026-11-17 reconciliation).
+          # This does not admit backfill enforcement when the shared kill switch clears.
+          # Monthly reader/epoch and every unrelated lever keep their existing values.
+          FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"action_items_ttl120":100,"backfill_task_reads":100,"bpp_decision_cache":0,"bpp_generation_memo":100,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":100,"historical_scan_memo":100,"ledger_purge_coalesce":100,"lifecycle_record_pending_head":5,"mcp_conversation_cards_cache":100,"memory_list_index_window":100,"people_scan_dedupe":100,"privacy_checks_shadow":10,"privacy_ttl60":0,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"sync_snapshot_resolve_cache":100,"usage_month_cache":0,"usage_month_total":0,"privacy_negative_lookup_cache":0,"batch_timeliness_leader":0,"bpp_owner_memo_enforce":0}', category: rollout}
           FSR_USAGE_MONTH_TOTAL_EPOCH: {value: c2fs_20261026_r1, category: rollout}
           # Batch ladder 2026-10-29 (lead ruling 12:15Z): pin shadow 25 so a Cloud Run deploy
           # cannot reset the hand-applied ladder state again (11:13Z deploy reset incident);
@@ -1713,8 +1775,11 @@ overlay:
           SYNC_BACKFILL_GLOBAL_DAILY_HOURS:
             value: '1665'
             category: rollout
+          # 60 days: checked once at upload admission; a backlog that older app builds or slow
+          # drains cannot clear within 30 days is refused with a terminal 422 on the phone.
+          # Rollback: '2592000' (30 days) in one config train.
           SYNC_BACKFILL_MAX_AGE_SECONDS:
-            value: '2592000'
+            value: '5184000'
             category: rollout
           SYNC_BACKFILL_ORDER:
             value: 'newest'
@@ -1778,6 +1843,9 @@ overlay:
             secret: SONIOX_API_KEY
             version: latest
         forbidden_env:
+        # Cloud Run preserves omitted env entries. Remove the retired rollout keys.
+        - BATCH_HELD_POLL_SKIP_ENABLED
+        - BATCH_PROJECTION_FINISH_BACKOFF_ENABLED
         - DEEPGRAM_SELF_HOSTED_ENABLED
         - DEEPGRAM_SELF_HOSTED_URL
         - DEEPGRAM_API_KEY
@@ -1789,11 +1857,28 @@ overlay:
         - REPEAT_WORK_REVISION_ENABLED
         - HOSTED_DIARIZATION_API_URL
         env:
+          # Unlimited backfill day cap, enforced only at sync upload (retryable 503 backfill_capacity until the
+          # next UTC day). Rollback: 'false' in one config train (David 2026-11-18, support-packet decision 13).
+          UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED: {value: 'true', category: rollout}
+          UNLIMITED_V2_BACKFILL_HOURS_CAP_HOURS: {value: '24', category: rollout}
+          # Margin-40 O1 inverse: full deploys must retain the admitted 200/10/class16 cadence.
+          BATCH_PIPELINE_SERVING_SWEEP_PAGE_ROWS: {value: '200', category: rollout}
+          BATCH_PIPELINE_SERVING_TICK_SECONDS: {value: '10', category: rollout}
+          BATCH_PROJECTION_FINISH_CLASSIFY_PAGE_LIMIT: {value: '16', category: rollout}
+          # SCA-2283: retain the behavior of the serving pre-flag image until custody admission.
+          BATCH_ACCOUNT_PRIVACY_WRITER_ENABLED: {value: 'false', category: ops_kill}
+          BATCH_PROJECTION_OUTBOX: {value: 'false', category: ops_kill}
+          # SCA-3544: #25920's claimed-sibling skip ships dark until David's activation on SCA-3508.
+          # Activation sets this value to 'true' (Cloud Run merges env, so deleting the key would leave false).
+          BATCH_PIPELINE_FOLLOWUP_CLAIMED_SIBLING_SKIP_ENABLED: {value: 'false', category: ops_kill}
+          # BATCH_PIPELINE_MERGE_STALE_HEAD_UID_ALLOWLIST (#25673 canary) is a private uid binding:
+          # it is omitted here so deploys keep the live value; set it on the service at deploy time.
+          # Silent read skipping on (SCA-1824 canary READBACK -13.5% reads); kill switch: set false.
+          BATCH_PIPELINE_SILENCE_READ_SKIP_ENABLED: {value: 'true', category: ops_kill}
           PUSHER_RECORD_CLOSE_NOTIFY_ENABLED: {value: 'false', category: rollout}
           PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_PERCENT: {value: '100', category: rollout}
           PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_UID_SHA256S: {value: '', category: rollout}
           PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED: {value: 'true', category: ops_kill}
-          # Kill switch: set BATCH_HELD_POLL_SKIP_ENABLED=false.
           EPISODE_COMPOSER_DEFAULT_CONTEXT_ENABLED: {value: 'true', category: ops_kill}
           EPISODE_COMPOSER_CONTEXT_ENABLED: {value: 'true', category: ops_kill}
           EPISODE_COMPOSER_DETAIL_ENABLED: {value: 'true', category: ops_kill}
@@ -1810,13 +1895,8 @@ overlay:
           RECORD_NOTES_EAGER_ENABLED: {value: 'false', category: ops_kill}
           RECORD_FOLLOWUP_WAKE_ENABLED: {value: 'true', category: ops_kill}
           RECORD_SEAL_WAKE_PRESERVED_ENABLED: {value: 'true', category: ops_kill}
-          BATCH_HELD_POLL_SKIP_ENABLED: {value: 'true', category: ops_kill}
           # Kill switch: set BATCH_PIPELINE_UPLOAD_COALESCING_ENABLED=false.
           BATCH_PIPELINE_UPLOAD_COALESCING_ENABLED: {value: 'true', category: ops_kill}
-          # Projection finish backoff. Off: turned off in production on 2026-11-14 19:41Z on a 5xx
-          # trigger and kept off by ruling (SCA-2173, SCA-2283). It saved nothing while on, because
-          # async-policy finish rows are never deferred; #25314 is the fix for those reads.
-          BATCH_PROJECTION_FINISH_BACKOFF_ENABLED: {value: 'false', category: rollout}
           # Quiet-check empty exit (David 0192a6, lead2 9b4ffd); evaluated on backend-sync. Kill switch: false.
           QUIET_EMPTY_EXIT_ENABLED: {value: 'true', category: rollout}
           BATCH_INPUT_EXPIRING_ENABLED: {value: 'true', category: ops_kill}
@@ -1835,11 +1915,15 @@ overlay:
           # so its batch final pass can only fall back. Keep the URL absent here or re-enable the pass.
           BATCH_FINAL_PASS_ENABLED: {value: 'false', category: ops_kill}
           # Standing batch vendor route table (lead2 863cd6, David 49b7e4/065da8): compact JSON of
-          # backend/deploy/batch-pipeline/vendor_route_table.prod.json (en-overflow-1104b), pinned by
+          # backend/deploy/batch-pipeline/vendor_route_table.prod.json (en-overflow-1116), pinned by
           # tests/unit/test_batch_vendor_route_table_prod.py. Fresh English overflows to Modulate past
           # the GPU SLO; percent is the runtime ramp. Kill switches: BATCH_VENDOR_OVERFLOW_ENABLED /
           # BATCH_VENDOR_ROUTING_ENABLED = false. Removing the line serves the builtin table.
-          BATCH_VENDOR_ROUTE_TABLE: {value: '{"schema_version":1,"table_version":"en-overflow-1104b","selection":"ordered","gpu_floor_percent":0.0,"routes":{"gpu":{"price_usd_per_audio_hour":null,"daily_audio_hours_cap":null,"monthly_budget_usd":null,"failover_only":false,"speaker_turns":"discard"},"modulate":{"price_usd_per_audio_hour":0.06,"daily_audio_hours_cap":3000.0,"monthly_budget_usd":null,"failover_only":false,"speaker_turns":"discard"},"soniox":{"price_usd_per_audio_hour":null,"daily_audio_hours_cap":1000.0,"monthly_budget_usd":null,"failover_only":true,"speaker_turns":"discard"}},"rows":[{"language_class":"en","options":[{"route":"gpu","quality_tier":"accepted","quality_source":"legacy_parity"},{"route":"modulate","quality_tier":"accepted","quality_source":"legacy_parity"},{"route":"soniox","quality_tier":"accepted","quality_source":"staging_drill"}]},{"language_class":"gpu_supported","options":[{"route":"gpu","quality_tier":"accepted","quality_source":"legacy_parity"}]},{"language_class":"gpu_unsupported","options":[{"route":"modulate","quality_tier":"accepted","quality_source":"legacy_parity"},{"route":"soniox","quality_tier":"accepted","quality_source":"staging_drill"}]},{"language_class":"*","options":[{"route":"gpu","quality_tier":"accepted","quality_source":"legacy_parity"}]}]}', category: rollout}
+          BATCH_VENDOR_ROUTE_TABLE: {value: '{"schema_version":1,"table_version":"en-overflow-1116","selection":"ordered","gpu_floor_percent":0.0,"routes":{"gpu":{"price_usd_per_audio_hour":null,"daily_audio_hours_cap":null,"monthly_budget_usd":null,"failover_only":false,"speaker_turns":"discard"},"modulate":{"price_usd_per_audio_hour":0.06,"daily_audio_hours_cap":5000.0,"monthly_budget_usd":null,"failover_only":false,"speaker_turns":"discard"},"soniox":{"price_usd_per_audio_hour":null,"daily_audio_hours_cap":1000.0,"monthly_budget_usd":null,"failover_only":true,"speaker_turns":"discard"}},"rows":[{"language_class":"en","options":[{"route":"gpu","quality_tier":"accepted","quality_source":"legacy_parity"},{"route":"modulate","quality_tier":"accepted","quality_source":"legacy_parity"},{"route":"soniox","quality_tier":"accepted","quality_source":"staging_drill"}]},{"language_class":"gpu_supported","options":[{"route":"gpu","quality_tier":"accepted","quality_source":"legacy_parity"}]},{"language_class":"gpu_unsupported","options":[{"route":"modulate","quality_tier":"accepted","quality_source":"legacy_parity"},{"route":"soniox","quality_tier":"accepted","quality_source":"staging_drill"}]},{"language_class":"*","options":[{"route":"gpu","quality_tier":"accepted","quality_source":"legacy_parity"}]}]}', category: rollout}
+          # RECENT English also overflows while its own GPU backlog is past the SLO (David 2026-11-16,
+          # L4 stockout: ~35k RECENT ready, FRESH ~4). Modulate cap 3000 -> 5000 audio-h/day in the same
+          # ruling. Rollback: 'fresh' (today's FRESH-only overflow).
+          BATCH_VENDOR_OVERFLOW_PRIORITIES: {value: 'fresh,recent', category: config}
           # Allowance-exhausted provider-STT units park 24 h between admission re-checks on this service
           # (David 2026-11-13; interim until a plan change or renewal wakes held units). At 2 h, 83% of
           # provider-stt queue wakes were re-checks of units still refused. 86400 is the code's maximum;
@@ -1871,13 +1955,12 @@ overlay:
           # Graduation of the David-approved on-demand playback (DEC-BTR-004): build playback
           # artifacts on open/play/download only. Kill switch: set false.
           PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
-          # Pinned per-service Cloud Run literal (SCA-2173, 2026-11-14; SCA-2222 Train 1):
-          # privacy_negative_lookup_cache=100; privacy_checks_shadow=0; batch_timeliness_leader=100.
-          # usage_month_cache=100; usage_month_total=100 (integration/sync/backend 100; backfill 0).
-          # Monthly epoch stays c2fs_20261026_r1; base/GKE/jobs/desktop/dev stay 0/v1 (#24194 guard).
-          # Privacy cache kill switch: set only privacy_negative_lookup_cache=0 in this full JSON literal.
-          # Source-pin rollback: revert the pin change and regenerate runtime_env.yaml.
-          FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"action_items_ttl120":100,"backfill_task_reads":100,"bpp_decision_cache":100,"bpp_generation_memo":100,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":100,"historical_scan_memo":100,"ledger_purge_coalesce":100,"lifecycle_record_pending_head":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":100,"people_scan_dedupe":100,"privacy_checks_shadow":10,"privacy_ttl60":0,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"sync_snapshot_resolve_cache":100,"usage_month_cache":100,"usage_month_total":100,"privacy_negative_lookup_cache":0,"batch_timeliness_leader":100,"bpp_owner_memo_enforce":0}', category: rollout}
+          # Margin-40 O2b stage 2, 2026-11-17: API owner-memo enforcement 100,
+          # shadow 0; decision/negative/TTL60 caches 0. Preserve all other map entries.
+          # Runtime inverse: enforce 0 + shadow 10 via the existing Release route,
+          # or ops_kill_switches/privacy_decision_cache; source revert does not apply it.
+          # Reconcile source after an inverse before another train reasserts this map.
+          FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"action_items_ttl120":100,"backfill_task_reads":100,"bpp_decision_cache":0,"bpp_generation_memo":100,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":100,"historical_scan_memo":100,"ledger_purge_coalesce":100,"lifecycle_record_pending_head":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":100,"people_scan_dedupe":100,"privacy_checks_shadow":0,"privacy_ttl60":0,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"sync_snapshot_resolve_cache":100,"usage_month_cache":100,"usage_month_total":100,"privacy_negative_lookup_cache":0,"batch_timeliness_leader":100,"bpp_owner_memo_enforce":100}', category: rollout}
           FSR_USAGE_MONTH_TOTAL_EPOCH: {value: c2fs_20261026_r1, category: rollout}
           # Batch ladder 2026-10-29 (lead ruling 12:15Z): pin shadow 25 so a Cloud Run deploy
           # cannot reset the hand-applied ladder state again (11:13Z deploy reset incident);
@@ -2080,6 +2163,41 @@ overlay:
             value: 'true'
             category: rollout
         service_account: backend-runtime@based-hardware.iam.gserviceaccount.com
+      # SCA-3120: dedicated projection pump, prod only (never dev, auto-dev or staging).
+      # Deployed only by gcp_backend.yml cloud_run_service=backend-projection-pump through
+      # .github/actions/deploy-projection-pump; `all` keeps the four services above.
+      # Starts from backend-integration's composed contract (env, secrets incl. the
+      # SONIOX_API_KEY that main.py's validate_streaming_stt_env requires, identity,
+      # forbidden_env, --timeout) and overrides only the keys below. Ships dark: both
+      # batch loops off. OMI_PROCESS_ROLE=projection_pump keeps main.py startup to the
+      # pump's set (no FSR reconcilers, messaging or cohort pollers); see config/process_role.py.
+      # Ramp and rollback: docs/listen_pusher_pipeline/changes/2026-11-19-projection-pump-deploy-target.md.
+      backend-projection-pump:
+        derive_from: backend-integration
+        env:
+          # The two custody switches (BATCH_ACCOUNT_PRIVACY_WRITER_ENABLED, BATCH_PROJECTION_OUTBOX)
+          # are inherited from integration's false pins: David 2026-11-21 ~03:45Z (SCA-3318) keeps
+          # both off for the pump split; enabling either is its own custody admission.
+          # Startup isolation, independent of the pump flag: stopping the pump keeps the
+          # reconcilers off. Never unset here while the service runs (unset = full startup).
+          OMI_PROCESS_ROLE:
+            value: projection_pump
+          # Kill switches stay off on first deploy. Enable the pump on this service only,
+          # never on backend-integration (the selector is service-wide). Rollback: 'false'.
+          BATCH_PIPELINE_SERVING_ENABLED: {value: 'false', category: rollout}
+          BATCH_PIPELINE_PROJECTION_PUMP_ENABLED: {value: 'true', category: rollout}
+          # SCA-3318 one-key activation: keep the serving dark successor's silence-skip value (false);
+          # widening the skip to the pump is a separate later change. Rollback for the pump key: 'false'.
+          BATCH_PIPELINE_SILENCE_READ_SKIP_ENABLED: {value: 'false', category: ops_kill}
+          # Bundle (ii) safe start: one page per tick, 2 s post-work sleep, 8 owner drains.
+          BATCH_PIPELINE_PUMP_SWEEP_PAGES: {value: '1', category: rollout}
+          BATCH_PIPELINE_PUMP_TICK_SECONDS: {value: '2', category: rollout}
+          BATCH_PIPELINE_MAX_OWNER_DRAINS: {value: '8', category: rollout}
+          # Bill this service's Firestore reads to itself, not to backend-integration.
+          FIRESTORE_READ_LEDGER_SERVICE:
+            value: backend-projection-pump
+          # Independent language recovery stays on the recovery role (backend-integration) only.
+          BATCH_PIPELINE_INDEPENDENT_LANGUAGE_RECOVERY_ENABLED: {value: 'false', category: ops_kill}
     jobs:
       notifications-job:
         flags:

@@ -240,6 +240,49 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
+  testWidgets('scrolling a long list with a collapsed day does not prefetch the next page', (tester) async {
+    tester.view.physicalSize = const Size(800, 1600);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final today = DateUtils.dateOnly(DateTime.now());
+    final yesterday = today.subtract(const Duration(days: 1));
+    ServerConversation conversation(String id, DateTime date) => ServerConversation(
+          id: id,
+          createdAt: date,
+          structured: Structured(id, 'Overview', emoji: '💬', category: 'work'),
+          status: ConversationStatus.completed,
+        );
+    final firstPage = [
+      for (var i = 0; i < 5; i++) conversation('today-$i', today),
+      for (var i = 0; i < 45; i++) conversation('yesterday-$i', yesterday),
+    ];
+    var requests = 0;
+    final provider = ConversationProvider(
+      conversationListFetcher: () async => (items: firstPage, ok: true),
+      isSignedIn: () => true,
+    );
+    provider.conversationPageFetcherOverride = () async {
+      requests++;
+      return (items: [conversation('older', yesterday.subtract(const Duration(days: 1)))], ok: true, truncated: false);
+    };
+    addTearDown(provider.dispose);
+    final screen = await buildTypedConversationScreen(provider);
+    await tester.runAsync(() => provider.fetchConversations());
+    await tester.pumpWidget(screen);
+    await tester.pump();
+
+    await tester.tap(find.byKey(ValueKey('collapse_day_${today.toIso8601String()}')));
+    await tester.pump();
+    for (var i = 0; i < 6; i++) {
+      await tester.drag(find.byType(Scrollable).first, const Offset(0, -3000));
+      await tester.pump();
+    }
+    expect(requests, 0);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
   testWidgets('collapsed Home card days load older cards only when requested', (tester) async {
     tester.view.physicalSize = const Size(800, 1600);
     tester.view.devicePixelRatio = 1;

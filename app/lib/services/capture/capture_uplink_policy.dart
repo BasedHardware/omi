@@ -146,6 +146,7 @@ extension _CaptureUplinkPolicy on CaptureController {
   }
 
   Future<void> _cancelUplinkAudio() async {
+    _stopLimitlessCustomLiveWatch();
     final previous = _bleBytesStream;
     _bleBytesStream = null;
     await previous?.cancel();

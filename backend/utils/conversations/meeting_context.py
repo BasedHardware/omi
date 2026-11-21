@@ -11,9 +11,18 @@ import database.calendar_meetings as calendar_db
 import database.redis_db as redis_db
 from models.calendar_context import CalendarMeetingContext, MeetingParticipant, MeetingParticipantSources
 from utils.conversations.meeting_participants import looks_like_ai_agent_name
-from models.conversation import CalendarEventLink, Conversation, CreateConversation
+from models.conversation import (
+    CalendarEventLink,
+    Conversation,
+    CreateConversation,
+    ExternalIntegrationCreateConversation,
+)
 
 logger = logging.getLogger(__name__)
+
+# Create models that carry a resolved meeting context as a field. A persisted
+# `Conversation` carries it in `external_data['calendar_meeting_context']`.
+_MEETING_CONTEXT_FIELD_MODELS = (CreateConversation, ExternalIntegrationCreateConversation)
 
 MAX_SCREEN_CONTEXT_ROWS = 80
 MAX_SCREEN_CONTEXT_CHARACTERS = 12_000
@@ -973,8 +982,22 @@ def stored_meeting_context(conversation: Any) -> Optional[CalendarMeetingContext
 
 
 def store_meeting_context(conversation: Any, context: CalendarMeetingContext) -> None:
-    if isinstance(conversation, CreateConversation):
+    """Attach a resolved meeting context to the conversation being processed.
+
+    Create models carry it as a field, the same way the client create path does;
+    a persisted ``Conversation`` carries it in
+    ``external_data['calendar_meeting_context']``. Never raises: a model that can
+    carry the context neither way is left untouched, because losing the context
+    is always better than failing the conversation that carries it.
+    """
+    if isinstance(conversation, _MEETING_CONTEXT_FIELD_MODELS):
         conversation.calendar_meeting_context = context
+        return
+    if not hasattr(conversation, 'external_data'):
+        logger.warning(
+            'Meeting context not stored: %s carries neither calendar_meeting_context nor external_data',
+            type(conversation).__name__,
+        )
         return
     external_data = dict(getattr(conversation, 'external_data', None) or {})
     external_data['calendar_meeting_context'] = context.model_dump(mode='json')

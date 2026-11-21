@@ -218,15 +218,21 @@ def test_telemetry_error_cannot_change_runtime_admission(runtime, monkeypatch):
     assert all(s.value == 0 for m in rp.RUNTIME_PERCENT_SOURCE.collect() for s in m.samples)
 
 
-def test_gpu_entrypoint_exports_private_registry_and_each_supervised_process(runtime):
+@pytest.fixture
+def gpu_worker():
+    # Cold runtime imports belong in setup. The call checks serving and merging metrics.
     from diarizer import batch_pipeline_runtime as worker
 
+    return worker
+
+
+def test_gpu_entrypoint_exports_private_registry_and_each_supervised_process(runtime, gpu_worker):
     registry = CollectorRegistry()
-    server = worker.health_server(worker.RuntimeState(), registry, 0, '127.0.0.1')
+    server = gpu_worker.health_server(gpu_worker.RuntimeState(), registry, 0, '127.0.0.1')
     try:
         with urlopen(f'http://127.0.0.1:{server.server_port}/metrics', timeout=5) as response:
             page = response.read()
-        merged = worker.merge_metrics([(0, page), (1, page)])
+        merged = gpu_worker.merge_metrics([(0, page), (1, page)])
         rows = [
             s
             for f in text_string_to_metric_families(merged.decode())
@@ -334,6 +340,10 @@ def test_gke_podmonitoring_scrapes_consumer_port_and_revision(chart, suffix):
             env['ROLLOUT_POD_TEMPLATE_HASH']['valueFrom']['fieldRef']['fieldPath']
             == "metadata.labels['pod-template-hash']"
         )
+        if chart == 'pusher':
+            # The API server stores fieldRef.apiVersion=v1; the Pusher release receipt compares
+            # the rendered PodTemplate with the live one, so the chart must render the default.
+            assert env['ROLLOUT_POD_TEMPLATE_HASH']['valueFrom']['fieldRef']['apiVersion'] == 'v1'
         monitoring = next(
             d
             for d in docs

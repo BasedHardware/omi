@@ -176,6 +176,19 @@ class ResultLog:
     def run(self, operation, **_):
         return operation(Tx(self))
 
+    def note_head_blocked(self, sid, now, block_type):
+        row = self.results.get(sid)
+        if row is None:
+            return False
+        if row.get('projection_blocked_since') is not None or row.get('projection_state') not in (
+            'pending',
+            'persisted',
+            'ready',
+        ):
+            return False
+        row.update({'projection_blocked_since': now, 'projection_block_type': block_type})
+        return True
+
     def read(self, sid):
         if sid not in self.results:
             raise ProjectionBlocked('committed result and durable intake binding required')
@@ -189,7 +202,7 @@ class ResultLog:
 
         class Session:
             policy = SimpleNamespace(projection_contention=False, projection_timing=False)
-            # Mirrors ProjectionSession.now for the finish-backoff fields.
+            # Mirrors ProjectionSession.now for the shared finish clock.
             session_now = now
 
             def prepare(self, transaction, **_):
@@ -201,15 +214,19 @@ class ResultLog:
             def persist(self, transaction, planned=None, **_):
                 return self.persist_empty()
 
-            def persist_empty(self, *, superseded=False, quarantined=False, privacy_deleted=False):
+            def persist_empty(self, *, superseded=False, quarantined=False, privacy_deleted=False, silence=False):
                 log.check(self)
                 receipt = {
-                    'state': 'quarantined' if quarantined else 'superseded' if superseded else 'persisted',
+                    'state': (
+                        'quarantined'
+                        if quarantined
+                        else 'superseded' if superseded else 'ready' if silence else 'persisted'
+                    ),
                     'conversation_id': None,
                     'enrichment_required': False,
                     'audio_required': False,
                 }
-                state = 'quarantine_held' if quarantined else 'persisted'
+                state = 'quarantine_held' if quarantined else 'ready' if silence else 'persisted'
                 log.results[sid].update(projection=receipt, projection_state=state)
                 log.results[sid].pop('projection_finish_due_at', None)
                 log.results[sid].pop('projection_finish_backoff_step', None)
@@ -247,19 +264,6 @@ class ResultLog:
             self.results[sid]['projection_finish_due_at'] = -1.0
             return True
         return False
-
-    def defer_finish(self, sid, state, now):
-        """Mirrors ProjectionStore.defer_finish: fence on the row's own state."""
-        from config.batch_pipeline import projection_finish_backoff_delay
-
-        row = self.results[sid]
-        if row.get('projection_state') != state:
-            return False
-        step = row.get('projection_finish_backoff_step')
-        step = min(step + 1, 2) if isinstance(step, int) and step >= 0 else 0
-        row.update(projection_finish_due_at=now + projection_finish_backoff_delay(step))
-        row['projection_finish_backoff_step'] = step
-        return True
 
     def check(self, session):
         row = self.results[session.segment_id]
@@ -381,8 +385,8 @@ def test_walk_stops_at_first_fenced_row_and_never_skips_it():
     log.session = Mock(side_effect=RuntimeError('synthetic outage'))
     assert projector.project_owner(BURST) == []
     log.session = real
-    # The touched content's earlier persisted sibling is still owed a follow-up.
-    assert projector.project_owner(BURST) == ids
+    # The silent sibling is already ready; only the unassigned tail needs walking.
+    assert projector.project_owner(BURST) == ids[1:]
 
 
 # --- record-target conflicts cannot wedge the owner chain ------------------------
@@ -558,7 +562,7 @@ def test_generic_poison_head_holds_and_unblocks_the_chain():
     assert log.results[ids[0]]['projection_state'] == 'quarantine_held'
     assert log.results[ids[0]]['projection']['state'] == 'quarantined'
     assert log.jobs[ids[0]]['recovery_state'] == 'held'
-    assert log.results[ids[1]]['projection_state'] == 'persisted'
+    assert log.results[ids[1]]['projection_state'] == 'ready'
     assert log.projection_watermark(owner_key(BURST)) == ids[-1]
     # Held rows never arm retention: the hold path writes no expiry receipt.
     assert 'expires_at' not in log.results[ids[0]]

@@ -13,6 +13,7 @@ WHERE app_namespace = :app_namespace AND build_number = :build_number
     'Device Pairing Blocked',
     'Device Scan Empty',
     'Device Connect Failed',
-    'Device Connect Failure Shown'
+    'Device Connect Failure Shown',
+    'Device Pairing Settings Opened'
   )
 GROUP BY event ORDER BY event;

@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
 
 import 'package:omi/backend/http/api/pending_work.dart' as api;
+import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/schema/pending_work.dart';
 
@@ -18,12 +19,21 @@ class PendingWorkStore extends ChangeNotifier {
     Future<ApiResult<AttentionRetryResult>> Function(String id, {required String idempotencyKey})? retry,
     Future<ApiResult<List<AttentionRetryResult>>> Function({required String idempotencyKey})? retryAll,
     Future<ApiResult<void>> Function(List<String> ids)? markSeen,
+    Future<ApiResult<void>> Function(String id)? dismiss,
+    List<String> Function(String uid)? loadDismissed,
+    void Function(String uid, List<String> conversationIds)? saveDismissed,
+    String Function()? currentUid,
     String Function()? newKey,
   })  : _loadPending = loadPending ?? api.getPendingWork,
         _loadAttention = loadAttention ?? api.getAttentionItems,
         _retry = retry ?? api.retryAttentionItem,
         _retryAll = retryAll ?? api.retryAllAttentionItems,
         _markSeen = markSeen ?? api.markAttentionItemsSeen,
+        _dismiss = dismiss ?? api.dismissAttentionItem,
+        _loadDismissed = loadDismissed ?? ((uid) => SharedPreferencesUtil().getStringList('$_dismissedKey.$uid')),
+        _saveDismissed =
+            saveDismissed ?? ((uid, ids) => SharedPreferencesUtil().saveStringList('$_dismissedKey.$uid', ids)),
+        _currentUid = currentUid ?? (() => SharedPreferencesUtil().uid),
         _newKey = newKey ?? (() => const Uuid().v4());
 
   static PendingWorkStore instance = PendingWorkStore();
@@ -33,6 +43,10 @@ class PendingWorkStore extends ChangeNotifier {
   final Future<ApiResult<AttentionRetryResult>> Function(String id, {required String idempotencyKey}) _retry;
   final Future<ApiResult<List<AttentionRetryResult>>> Function({required String idempotencyKey}) _retryAll;
   final Future<ApiResult<void>> Function(List<String> ids) _markSeen;
+  final Future<ApiResult<void>> Function(String id) _dismiss;
+  final List<String> Function(String uid) _loadDismissed;
+  final void Function(String uid, List<String> conversationIds) _saveDismissed;
+  final String Function() _currentUid;
   final String Function() _newKey;
 
   List<PendingWorkItem> _pending = const [];
@@ -61,6 +75,12 @@ class PendingWorkStore extends ChangeNotifier {
     retryErrors.clear();
     _session++;
     _retryAllKey = null;
+    _seenFailedConversations.clear();
+    // The next read loads the signed-in account's own list; nothing of the old one is kept or re-saved.
+    _dismissedOwner = null;
+    _dismissedSet = {};
+    failedConversationsSeen.value++;
+    _pendingAnswered = false;
     notifyListeners();
   }
 
@@ -86,8 +106,34 @@ class PendingWorkStore extends ChangeNotifier {
         for (final item in attention)
           if (item.conversationId != null) item.conversationId!,
         ..._acceptedNotes.values,
+        ..._dismissedConversations,
       };
   final Map<String, String> _acceptedNotes = {};
+
+  /// A dismissed row's conversation must not come back as Activity's projected failure row, also
+  /// after a relaunch. Kept on the device per account, newest last, bounded. A new attention item
+  /// for the conversation (a new failure) takes it off the list.
+  String? _dismissedOwner;
+  Set<String> _dismissedSet = {};
+  static const _maxDismissed = 500;
+  static const _dismissedKey = 'dismissedAttentionConversations';
+
+  Set<String> get _dismissedConversations {
+    final owner = _currentUid();
+    if (owner != _dismissedOwner) {
+      _dismissedOwner = owner;
+      _dismissedSet = owner.isEmpty ? {} : {..._loadDismissed(owner)};
+    }
+    return _dismissedSet;
+  }
+
+  void _saveDismissedConversations() {
+    final owner = _dismissedOwner;
+    if (owner == null || owner.isEmpty) return;
+    final ids = _dismissedSet.toList();
+    _saveDismissed(owner, ids.length > _maxDismissed ? ids.sublist(ids.length - _maxDismissed) : ids);
+  }
+
   final Set<String> retryErrors = {};
   final Map<String, String?> _acceptedOperations = {};
   final Set<String> _retrying = {};
@@ -97,11 +143,31 @@ class PendingWorkStore extends ChangeNotifier {
   /// Lights Home's bell next to new recaps. Server read state, so the phone and the Mac agree.
   final ValueNotifier<bool> hasUnseenAttention = ValueNotifier(false);
 
+  /// v3 conversations that failed and that Activity has shown, so the bell's attention dot lights
+  /// once per failure (X5). Local: v3 failures have no server attention item yet.
+  final Set<String> _seenFailedConversations = {};
+
+  /// Bumps when [markFailedConversationsSeen] adds an id or a dismiss changes the hidden set, so the
+  /// bell re-reads.
+  final ValueNotifier<int> failedConversationsSeen = ValueNotifier(0);
+
+  bool hasUnseenFailedConversation(Iterable<String> failedIds) =>
+      failedIds.any((id) => !_seenFailedConversations.contains(id));
+
+  void markFailedConversationsSeen(Iterable<String> ids) {
+    final before = _seenFailedConversations.length;
+    _seenFailedConversations.addAll(ids);
+    if (_seenFailedConversations.length != before) failedConversationsSeen.value++;
+  }
+
   /// One key per item per failed attempt, so a double tap or a lost response replays the same claim.
   final Map<String, String> _retryKeys = {};
   String? _retryAllKey;
 
   int _generation = 0;
+
+  /// True once this account's pending read has answered; until then a failed read keeps old Home.
+  bool _pendingAnswered = false;
 
   /// Re-reads both server views. A failed read keeps the last good rows: a flaky network must not
   /// empty the bell or drop the card.
@@ -116,11 +182,14 @@ class PendingWorkStore extends ChangeNotifier {
       case ApiSuccess(:final data):
         _pending = data.enabled ? data.items : const [];
         homeProcessingToday = data.enabled && data.homeProcessingToday;
+        _pendingAnswered = true;
       case ApiFailure(:final problem) when problem.kind == ApiProblemKind.notFound:
         _pending = const [];
         homeProcessingToday = false;
       case ApiFailure():
-        homeProcessingToday = false;
+        // A flaky read keeps the last good answer (X17): dropping the flag would empty Activity's
+        // attention and processing lists, which it gates. With no answer yet, old Home stays.
+        if (!_pendingAnswered) homeProcessingToday = false;
     }
     if (attentionRevision == _attentionRevision) {
       switch (attention) {
@@ -145,6 +214,10 @@ class PendingWorkStore extends ChangeNotifier {
 
   void _setAttention(List<AttentionItem> items) {
     _attention = items;
+    final dismissed = _dismissedConversations;
+    final before = dismissed.length;
+    dismissed.removeWhere((id) => items.any((i) => i.conversationId == id));
+    if (dismissed.length != before) _saveDismissedConversations();
     _acceptedNotes.removeWhere((id, conversation) =>
         items.any((item) => item.notesOnly && item.conversationId == conversation && item.id != id));
     _acceptedNotes.removeWhere((id, _) => items.any((i) =>
@@ -241,6 +314,55 @@ class PendingWorkStore extends ChangeNotifier {
     hasUnseenAttention.value = false;
     notifyListeners();
     await _markSeen(unseen);
+  }
+
+  /// Removes one item at once and tells the server. A failed request puts the row back with the
+  /// same quiet error line as a failed retry; a 404 means it is already gone.
+  Future<bool> dismiss(AttentionItem item) async {
+    final index = _attention.indexWhere((i) => i.id == item.id);
+    if (index < 0) return false;
+    final session = _session;
+    _attentionRevision++;
+    final removed = _attention[index];
+    final retryKey = _retryKeys[item.id];
+    retryErrors.remove(item.id);
+    _setAttention([
+      for (final i in _attention)
+        if (i.id != item.id) i
+    ]);
+    final conversationId = removed.conversationId;
+    // Another live item for the same conversation keeps it visible: only a conversation with no
+    // remaining row is hidden from the failure projection.
+    final suppressing = conversationId != null &&
+        !_attention.any((i) => i.conversationId == conversationId) &&
+        _dismissedConversations.add(conversationId);
+    if (suppressing) _saveDismissedConversations();
+    // The bell re-reads its failed-conversation dot, which now skips this conversation.
+    failedConversationsSeen.value++;
+    notifyListeners();
+    final result = await _read(() => _dismiss(item.id));
+    if (session != _session) return false;
+    switch (result) {
+      case ApiSuccess():
+        return true;
+      case ApiFailure(:final problem) when problem.kind == ApiProblemKind.notFound:
+        return true;
+      case ApiFailure():
+        if (suppressing) {
+          _dismissedConversations.remove(conversationId);
+          _saveDismissedConversations();
+          failedConversationsSeen.value++;
+        }
+        if (!_attention.any((i) => i.id == item.id)) {
+          _attentionRevision++;
+          _setAttention([..._attention]..insert(index.clamp(0, _attention.length), removed));
+          // An ambiguous earlier retry keeps its claim, so the next Try Again cannot start a second run.
+          if (retryKey != null) _retryKeys[item.id] = retryKey;
+        }
+        retryErrors.add(item.id);
+        notifyListeners();
+        return false;
+    }
   }
 
   void _replace(String id, AttentionItem Function(AttentionItem) change) {

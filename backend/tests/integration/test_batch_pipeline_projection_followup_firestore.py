@@ -2,12 +2,15 @@
 
 import pytest
 
-from tests.integration.test_batch_pipeline_projection_firestore import lane, active_rows
+from tests.integration.test_batch_pipeline_projection_firestore import lane, active_rows, multipart
 
 import asyncio
 from database import batch_pipeline_projection_claim as claims
+from database import batch_pipeline_projection_outbox as outbox_rows
 from database.batch_pipeline_projection import ProjectionBlocked
-from utils.batch_pipeline import projection_followup
+from database.batch_pipeline_projection_session import ProjectionSession
+from utils.batch_pipeline import projection, projection_followup
+from utils.batch_pipeline.projection_outbox import ProjectionOutbox
 from utils.sync import reprocess
 import fakeredis
 from utils.batch_pipeline.projection_followup import ProjectionFollowups
@@ -21,6 +24,200 @@ from utils.batch_pipeline.serving import Serving
 from tests.unit.test_batch_pipeline_scheduler import MemoryStore
 
 pytestmark = pytest.mark.integration
+
+
+@pytest.fixture
+def outbox_lane(lane, monkeypatch):
+    monkeypatch.setenv('BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED', 'true')
+    redis = fakeredis.FakeRedis()
+    monkeypatch.setattr(claims, '_redis_client', lambda: redis)
+    return lane
+
+
+@pytest.mark.asyncio
+async def test_projection_outbox_lost_wake_and_lost_ack_keep_one_receipt_and_charge(outbox_lane, monkeypatch):
+    lane = outbox_lane
+    batch = lane.seed()
+    committed = lane.finish(batch)
+    now = [3.0]
+    clock = lambda: now[0]
+    outbox = ProjectionOutbox(lane.store, lane.projector, clock=clock)
+    (page,) = outbox.scan(10)  # Commit succeeded without delivering a wake.
+    assert page.key == outbox_rows.Obligation(batch.ids[0], committed['log_sequence'])
+
+    settle = outbox_rows.settle
+
+    def lost_ack(*args):
+        raise RuntimeError('simulated crash after apply')
+
+    monkeypatch.setattr(outbox_rows, 'settle', lost_ack)
+    # Duplicate deliveries share the same durable claim, even before the
+    # existing Redis and projection receipt fences.
+    results = await asyncio.gather(outbox.deliver(page.key), outbox.deliver(page.key), return_exceptions=True)
+    assert sum(isinstance(result, RuntimeError) for result in results) == 1
+    ref = lane.projector.store.ref('results', batch.ids[0])
+    applied = ref.get().to_dict()
+    assert applied['projection_state'] == 'completed' and applied[outbox_rows.TOKEN_FIELD]
+    assert batch.ledger.get().to_dict()['status'] == 'completed'
+    assert len(lane.published) == 1
+    assert len(lane.tasks) == 1
+    assert len(active_rows(lane)) == 1
+    assert lane.loads == [batch.ids[0]]
+
+    monkeypatch.setattr(outbox_rows, 'settle', settle)
+    now[0] = applied[outbox_rows.DUE_FIELD]
+    (retry,) = outbox.scan(10)
+    await outbox.deliver(retry.key)
+    final = ref.get().to_dict()
+    assert final['projection'] == applied['projection']
+    assert final[outbox_rows.REASON_FIELD] == 'completed' and final[outbox_rows.DUE_FIELD] is None
+    assert len(lane.published) == 1 and lane.loads == [batch.ids[0]]
+    (usage,) = lane.user.collection('hourly_usage').stream()
+    assert usage.to_dict()['speech_seconds'] == 4
+
+
+@pytest.mark.asyncio
+async def test_projection_outbox_rechecks_privacy_before_apply(outbox_lane):
+    lane = outbox_lane
+    batch = lane.seed()
+    entry = lane.finish(batch)
+    lane.client.collection('account_deletions').document(lane.uid).set({'wipe_status': 'queued'})
+    outbox = ProjectionOutbox(lane.store, lane.projector, clock=lambda: 3.0)
+    await outbox.deliver(outbox_rows.Obligation(entry['segment_id'], entry['log_sequence']))
+    assert not lane.published and not active_rows(lane) and not lane.tasks
+    assert not list(lane.user.collection('hourly_usage').stream())
+    result = lane.projector.store.ref('results', batch.ids[0]).get().to_dict()
+    assert result['projection_state'] != 'completed'
+    assert result[outbox_rows.REASON_FIELD] in {'held', 'blocked'}
+
+
+@pytest.mark.asyncio
+async def test_projection_outbox_fences_a_claim_replaced_after_its_snapshot(outbox_lane, monkeypatch):
+    lane = outbox_lane
+    batch = lane.seed()
+    entry = lane.finish(batch)
+    key = outbox_rows.Obligation(entry['segment_id'], entry['log_sequence'])
+    outbox = ProjectionOutbox(lane.store, lane.projector, clock=lambda: 3.0)
+    prepare = ProjectionSession.prepare
+    replaced = False
+
+    def supersede(session, transaction, **kwargs):
+        nonlocal replaced
+        if not replaced:
+            session.result_ref.update({outbox_rows.TOKEN_FIELD: 'replacement'})
+            replaced = True
+        return prepare(session, transaction, **kwargs)
+
+    monkeypatch.setattr(ProjectionSession, 'prepare', supersede)
+    await outbox.deliver(key)
+    result = lane.projector.store.ref('results', key.segment_id).get().to_dict()
+    assert replaced and result[outbox_rows.TOKEN_FIELD] == 'replacement'
+    assert result['projection_state'] == 'pending' and not result.get('projection')
+    assert not lane.published and not active_rows(lane)
+    assert not list(lane.user.collection('hourly_usage').stream())
+
+
+@pytest.mark.asyncio
+async def test_projection_outbox_rechecks_the_claim_before_fair_use_dispatch(outbox_lane, monkeypatch):
+    lane = outbox_lane
+    batch = lane.seed()
+    entry = lane.finish(batch)
+    key = outbox_rows.Obligation(entry['segment_id'], entry['log_sequence'])
+    outbox = ProjectionOutbox(lane.store, lane.projector, clock=lambda: 3.0)
+    ref = lane.projector.store.ref('results', key.segment_id)
+    prepare = lane.projector.store.prepare_accounting
+
+    def supersede_after_accounting(*args, **kwargs):
+        accounting = prepare(*args, **kwargs)
+        ref.update({outbox_rows.TOKEN_FIELD: 'replacement'})
+        return accounting
+
+    fair_use = Mock()
+    monkeypatch.setattr(lane.projector.store, 'prepare_accounting', supersede_after_accounting)
+    monkeypatch.setattr(projection, 'record_speech', fair_use)
+    await outbox.deliver(key)
+
+    fair_use.assert_not_called()
+    assert ref.get().to_dict()[outbox_rows.TOKEN_FIELD] == 'replacement'
+    assert batch.ledger.get().to_dict()['status'] == 'processing'
+    assert not lane.published and not list(lane.user.collection('hourly_usage').stream())
+
+
+@pytest.mark.asyncio
+async def test_projection_outbox_defers_a_successor_and_drains_after_predecessor(outbox_lane):
+    lane = outbox_lane
+    batch = lane.seed(('head', 'later'))
+    assert lane.finish(batch, 1) is None
+    head = lane.finish(batch, 0)
+    later = lane.merge.commit_next(lane.uid, 2)
+    now = [3.0]
+    outbox = ProjectionOutbox(lane.store, lane.projector, clock=lambda: now[0])
+    later_key = outbox_rows.Obligation(later['segment_id'], later['log_sequence'])
+    await outbox.deliver(later_key)
+    result_ref = lane.projector.store.ref('results', batch.ids[1])
+    delayed = result_ref.get().to_dict()
+    assert delayed['projection_state'] == 'pending' and delayed[outbox_rows.REASON_FIELD] == 'predecessor'
+    assert not active_rows(lane)
+    await outbox.deliver(outbox_rows.Obligation(head['segment_id'], head['log_sequence']))
+    now[0] = delayed[outbox_rows.DUE_FIELD]
+    await outbox.deliver(later_key)
+    assert batch.ledger.get().to_dict()['status'] == 'completed'
+    assert result_ref.get().to_dict()[outbox_rows.REASON_FIELD] == 'completed'
+
+
+@pytest.mark.asyncio
+async def test_projection_outbox_replays_an_unstamped_predecessor(outbox_lane, monkeypatch):
+    lane = outbox_lane
+    monkeypatch.setenv('BATCH_PIPELINE_SWEEP_OWNER_CHAIN_ENABLED', 'true')
+    monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_PREDECESSOR_REPLAY_ENABLED', 'true')
+    monkeypatch.setenv('BATCH_PIPELINE_OWNER_DRAIN_ENABLED', 'false')
+    batch = lane.seed(('head', 'later'))
+    assert lane.finish(batch, 1) is None
+    monkeypatch.setenv('BATCH_PROJECTION_OUTBOX', 'false')
+    head = lane.finish(batch, 0)
+    assert outbox_rows.KIND_FIELD not in head
+    monkeypatch.setenv('BATCH_PROJECTION_OUTBOX', 'true')
+    later = lane.merge.commit_next(lane.uid, 2)
+    outbox = ProjectionOutbox(lane.store, lane.projector, clock=lambda: 3.0)
+    await outbox.deliver(outbox_rows.Obligation(later['segment_id'], later['log_sequence']))
+
+    head_result = lane.projector.store.ref('results', head['segment_id']).get().to_dict()
+    assert head_result['projection_state'] == 'persisted'
+    assert head['segment_id'] in lane.projector.chain_followups
+
+
+@pytest.mark.asyncio
+async def test_projection_outbox_recovers_partial_multipart_without_early_ack(outbox_lane, monkeypatch):
+    lane = outbox_lane
+    batch = multipart(lane, 3)
+    original = projection.build_incoming
+    created = []
+
+    def interruption(item, *args, **kwargs):
+        created.append(item.capture_at)
+        if len(created) == 2:
+            raise ConnectionError('synthetic interruption between parts')
+        return original(item, *args, **kwargs)
+
+    monkeypatch.setattr(projection, 'build_incoming', interruption)
+    now = [3.0]
+    outbox = ProjectionOutbox(lane.store, lane.projector, clock=lambda: now[0])
+    key = outbox_rows.Obligation(batch.ids[0], 1)
+    await outbox.deliver(key)
+    ref = lane.projector.store.ref('results', batch.ids[0])
+    partial = ref.get().to_dict()
+    assert len(partial['projection_parts']) == 1
+    assert partial['projection_state'] == 'pending' and partial[outbox_rows.REASON_FIELD] == 'retry'
+    assert not lane.published and not list(lane.user.collection('hourly_usage').stream())
+
+    monkeypatch.setattr(projection, 'build_incoming', original)
+    now[0] = partial[outbox_rows.DUE_FIELD]
+    await outbox.deliver(key)
+    assert len(ref.get().to_dict()['projection_parts']) == 3
+    assert ref.get().to_dict()[outbox_rows.REASON_FIELD] == 'completed'
+    assert all(row['sync_content_revision'] == 1 for row in active_rows(lane))
+    (usage,) = lane.user.collection('hourly_usage').stream()
+    assert usage.to_dict()['speech_seconds'] == 3
 
 
 @pytest.mark.asyncio
@@ -187,8 +384,11 @@ async def test_followup_timeout_replays_enrichment_without_duplicate_debt_or_usa
 
 
 @pytest.mark.asyncio
-async def test_projection_discovery_drains_beyond_101_ready_rows_without_reprojection(lane, monkeypatch):
+@pytest.mark.parametrize('silence_skip', ['false', 'true'])
+async def test_projection_discovery_drains_beyond_101_ready_rows_without_reprojection(lane, monkeypatch, silence_skip):
     """The old first page pins forever; both real scanners must escape it."""
+
+    monkeypatch.setenv('BATCH_PIPELINE_SILENCE_READ_SKIP_ENABLED', silence_skip)
 
     monkeypatch.setenv('BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED', 'true')
     # Isolate paginated discovery. Newer owner-chain walking and pending-only
@@ -221,14 +421,15 @@ async def test_projection_discovery_drains_beyond_101_ready_rows_without_reproje
     lane.projector.sweep()
     assert lane.projector.store.ref('results', batch.ids[-1]).get().to_dict()['projection']
     assert lane.projector.store.ref('results', later.ids[0]).get().to_dict()['projection']
-    # The follow-up cursor starts independently at the blocked head. Its first
-    # page cannot complete content while the final sibling is only persisted.
+    # The follow-up cursor starts at the head. Enabled silence assignment is
+    # already ready, so the first page can complete the whole upload. Rollback
+    # retains the old persisted sibling and independent cursor boundary.
     runner = projection_followup.ProjectionFollowups(lane.projector)
     await runner.schedule()
     while runner.tasks:
         await asyncio.gather(*list(runner.tasks.values()))
         await asyncio.sleep(0)
-    assert batch.ledger.get().to_dict()['status'] == 'processing'
+    assert batch.ledger.get().to_dict()['status'] == ('completed' if silence_skip == 'true' else 'processing')
     assert later.ledger.get().to_dict()['status'] == 'processing'
     await runner.schedule()
     while runner.tasks:

@@ -1,0 +1,15 @@
+{{- if .Values.podMonitoring.enabled }}
+apiVersion: monitoring.googleapis.com/v1
+kind: PodMonitoring
+metadata:
+  name: {{ .Release.Name }}
+spec:
+  targetLabels:
+    fromPod:
+      - {from: service_name, to: service_name}
+  selector:
+    matchLabels:
+      {{- include "workerd.labels" . | nindent 6 }}
+  endpoints:
+    - {port: metrics, path: /metrics, interval: 15s}
+{{- end }}

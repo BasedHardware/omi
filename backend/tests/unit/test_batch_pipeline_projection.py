@@ -582,6 +582,7 @@ def test_default_off_projection_uses_one_existing_read_and_no_claim(monkeypatch)
 
 
 def test_dark_control_preserves_empty_race_failure_boundary(monkeypatch, binding):
+    monkeypatch.setenv('BATCH_PIPELINE_SILENCE_READ_SKIP_ENABLED', 'false')
     from dataclasses import asdict
     from utils.batch_pipeline.contracts import WorkItem, Priority
     from utils.batch_pipeline.projection import Projector
@@ -622,6 +623,31 @@ def test_contention_control_retains_existing_expired_transaction_restart(monkeyp
     )
     assert operation.call_count == client.transaction.call_count == 2
     assert operation.call_args_list[0] != operation.call_args_list[1]
+
+
+@pytest.mark.parametrize('engine', ['go', 'pending'])
+def test_projection_bridge_refuses_foreign_target_before_followup(binding, monkeypatch, engine):
+    from utils.sync import processing_hold
+
+    projector = projection.Projector(Mock(), Mock(), playback=Mock())
+    monkeypatch.setattr(projector.store, 'settle_deleted_output', Mock())
+    monkeypatch.setattr(projector.store, 'mark_enrichment', Mock())
+    receipt = {'state': 'persisted', 'conversation_id': 'donor', 'audio_required': True, 'enrichment_required': True}
+    read = Mock(
+        side_effect=[
+            {'deleted': True, 'sync_merged_into': 'target'},
+            {'finalization_engine': engine, 'finalization_owner_epoch': 1},
+        ]
+    )
+    monkeypatch.setattr(bridge, 'read_metadata', read)
+    policy = resolve_stage_policy(binding.owner_id, 'projection')
+
+    with pytest.raises(processing_hold.ProcessingDeferred, match='finalization_owned_elsewhere'):
+        projector.finish_part(Mock(), binding, receipt, None, policy=policy)
+
+    assert [call.args[2] for call in read.call_args_list] == ['donor', 'target']
+    projector.playback.assert_not_called()
+    projector.store.mark_enrichment.assert_not_called()
 
 
 @pytest.mark.parametrize('enabled', [False, True])

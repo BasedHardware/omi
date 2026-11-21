@@ -452,6 +452,21 @@ def test_finish_refuses_different_kind_fresh_owner():
 
 
 @pytest.mark.parametrize("outcome", ["failed", "completed"])
+def test_finish_cannot_release_account_deletion_with_unresolved_remote_erase(outcome):
+    now = legal_holds.datetime.now(legal_holds.timezone.utc)
+    path = "legal_hold_deletion_gates/uid1"
+    original = {**_gate(kind="account_deletion"), "remote_inflight": True, "remote_target": "go_queue_erase"}
+    client = _FakeClient({path: original})
+
+    with pytest.raises(legal_holds.LegalHoldAuthorityUnavailable, match="remote outcome is unresolved"):
+        legal_holds._finish_destructive_operation_transaction.to_wrap(
+            client.transaction(), client, "uid1", "account_deletion", "token-1", outcome, now
+        )
+
+    assert client.docs[path] == original
+
+
+@pytest.mark.parametrize("outcome", ["failed", "completed"])
 def test_finish_same_outcome_is_idempotent_but_opposite_outcome_fails(outcome):
     now = legal_holds.datetime.now(legal_holds.timezone.utc)
     original = _gate(state=outcome)
