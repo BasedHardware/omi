@@ -103,7 +103,7 @@ jobs:
           if [[ "$go_changed" == true ]]; then
             echo "go_changed=true" >> "$GITHUB_OUTPUT"
           fi
-          git rev-list --first-parent --merges --reverse "$range" > "$RUNNER_TEMP/port-merges"
+          git rev-list --first-parent --reverse "$range" > "$RUNNER_TEMP/port-merges"
           : > "$RUNNER_TEMP/port-candidates.ndjson"
           while IFS= read -r sha; do
             prs=$(gh api --paginate --slurp "repos/$REPO/commits/$sha/pulls?per_page=100" |
@@ -162,64 +162,66 @@ jobs:
         with:
           enable-cache: true
           cache-dependency-glob: backend/pylock.toml
-      - name: Run the replay oracle at each merge commit and open tasks
+      - name: Compare replay results at each merge and first parent
+        if: steps.scope.outputs.has_candidates == 'true'
+        env:
+          TEST_DATABASE_URL: postgres://postgres:test@127.0.0.1:5432/postgres?sslmode=disable
+        run: |
+          set -euo pipefail
+          generator="$GITHUB_WORKSPACE/.github/scripts/go_port_tasks.py"
+          replay="$GITHUB_WORKSPACE/backend-go/tools/replay/test.sh"
+          scratch=$(mktemp -d "$RUNNER_TEMP/go-port-replay.XXXXXXXX")
+          worktree="$scratch/worktree"
+          cleanup() {
+            if [[ -d "$worktree" ]]; then
+              git worktree remove --force "$worktree"
+            fi
+            rm -rf "$scratch"
+          }
+          trap cleanup EXIT
+
+          replay_at() {
+            local sha=$1
+            local reports="$scratch/$sha"
+            [[ ! -f "$reports/gaps.json" ]] || return 0
+            git worktree add --quiet --detach "$worktree" "$sha"
+            (
+              cd "$worktree/backend"
+              ./scripts/sync-python-deps.sh
+              .venv/bin/python -c "import tiktoken; tiktoken.encoding_for_model('text-embedding-3-large')"
+            )
+            # Use the current wrapper with the target tree's source and corpus.
+            # Older commits predate the wrapper's value-free report mode.
+            REPLAY_TASK_OUTPUT_DIR="$reports" "$replay" "$worktree/backend-go"
+            git worktree remove --force "$worktree"
+          }
+
+          : > "$scratch/tasks.ndjson"
+          while IFS= read -r candidate; do
+            pr=$(jq -r '.pr' <<< "$candidate")
+            sha=$(jq -r '.merge_sha' <<< "$candidate")
+            parent=$(git rev-parse "$sha^1")
+            title=$(jq -r '.title' <<< "$candidate")
+            changed_count=$(jq -r '.changed_files' <<< "$candidate")
+            replay_at "$parent"
+            replay_at "$sha"
+            python "$generator" --pr "$pr" --pr-title="$title" --merge-sha "$sha" --parent-sha "$parent" \
+              --changed-files "$changed_count" \
+              --oracle-report "$scratch/$sha/parity.json" \
+              --oracle-report "$scratch/$sha/gaps.json" \
+              --parent-report "$scratch/$parent/parity.json" \
+              --parent-report "$scratch/$parent/gaps.json" \
+              < "$RUNNER_TEMP/pr-$pr-files.json" >> "$scratch/tasks.ndjson"
+          done < "$RUNNER_TEMP/port-candidates.ndjson"
+          jq -s 'add // []' "$scratch/tasks.ndjson" > "$RUNNER_TEMP/go-port-tasks.json"
+      - name: Publish replay follow-ups
         if: steps.scope.outputs.has_candidates == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
-          TEST_DATABASE_URL: postgres://postgres:test@127.0.0.1:5432/postgres?sslmode=disable
         run: |
-          set -euo pipefail
-          existing_tasks="$RUNNER_TEMP/existing-go-port-tasks.json"
-          gh api --paginate --slurp "repos/$REPO/issues?state=all&labels=task&per_page=100" > "$existing_tasks"
-          worktree=""
-          cleanup_worktree() {
-            if [[ -n "$worktree" ]]; then
-              git worktree remove --force "$worktree" >/dev/null 2>&1 || true
-            fi
-          }
-          trap cleanup_worktree EXIT
-          while IFS= read -r candidate; do
-            pr=$(jq -r '.pr' <<< "$candidate")
-            sha=$(jq -r '.merge_sha' <<< "$candidate")
-            title=$(jq -r '.title' <<< "$candidate")
-            changed_count=$(jq -r '.changed_files' <<< "$candidate")
-            pr_files="$RUNNER_TEMP/pr-$pr-task-files.json"
-            gh api --paginate --slurp "repos/$REPO/pulls/$pr/files?per_page=100" | jq 'add' > "$pr_files"
-            worktree="$RUNNER_TEMP/omi-merge-$sha-$pr-$GITHUB_RUN_ID"
-            reports="$RUNNER_TEMP/go-port-replay-$sha-$pr-$GITHUB_RUN_ID"
-            task_file="$RUNNER_TEMP/go-port-tasks-$sha-$pr.json"
-            git worktree add --quiet --detach "$worktree" "$sha"
-            (cd "$worktree/backend" && ./scripts/sync-python-deps.sh)
-            (
-              cd "$worktree/backend-go"
-              export REPLAY_TASK_OUTPUT_DIR="$reports"
-              export TEST_DATABASE_URL
-              ./tools/replay/test.sh
-            )
-            generator="$GITHUB_WORKSPACE/.github/scripts/go_port_tasks.py"
-            python "$generator" --pr "$pr" --pr-title "$title" --merge-sha "$sha" \
-              --changed-files "$changed_count" \
-              --oracle-report "$reports/parity.json" \
-              --oracle-report "$reports/gaps.json" \
-              < "$pr_files" > "$task_file"
-            while IFS= read -r task; do
-              marker=$(jq -r '.marker' <<< "$task")
-              issue_number=$(jq -r --arg marker "$marker" \
-                '.[][] | select(.pull_request == null and ((.body // "") | contains($marker))) | .number' \
-                "$existing_tasks" | head -n 1)
-              if [[ -n "$issue_number" ]]; then
-                echo "Port task already exists as issue #$issue_number ($marker)"
-                continue
-              fi
-              issue_title=$(jq -r '.title' <<< "$task")
-              issue_body="$RUNNER_TEMP/go-port-task-$pr-$(jq -r '.family' <<< "$task").md"
-              jq -r '.body' <<< "$task" > "$issue_body"
-              gh issue create --repo "$REPO" --title "$issue_title" --label task --body-file "$issue_body"
-            done < <(jq -c '.[]' "$task_file")
-            git worktree remove --force "$worktree"
-            worktree=""
-          done < "$RUNNER_TEMP/port-candidates.ndjson"
+          python .github/scripts/go_port_tasks.py --publish "$REPO" --summary "$GITHUB_STEP_SUMMARY" \
+            < "$RUNNER_TEMP/go-port-tasks.json"
 
   port-task-tests:
     if: github.event_name == 'pull_request'

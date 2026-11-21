@@ -132,7 +132,7 @@
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "SCA-3180: main-push port tasks run the current replay oracle in each mapped PR's exact merge commit, then open an idempotent GitHub Issue through gh issue create with the existing task label. It stays outside the pinned nightly and uses the built-in workflow token with issues:write. P50 is provisional until action runs are measured.",
+      "rationale": "SCA-3180: main-push port tasks compare emulator replay at each mapped PR's merge and first parent, with SHA reuse within the run. The existing GitHub task route caps new port issues and adds corpus follow-ups to rolling issues. It stays outside the pinned nightly and uses the built-in workflow token with issues:write. P50 is provisional until action runs are measured.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {

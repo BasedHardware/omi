@@ -4,9 +4,11 @@ import argparse
 import base64
 from collections import Counter
 import hashlib
+import importlib.util
 import json
 from pathlib import Path
 import re
+import subprocess
 import sys
 import zlib
 
@@ -21,6 +23,14 @@ GO_CHECK_PATHS = (
     "backend-go/docs/port-map.yaml",
 )
 GO_CHECK_PREFIXES = ("backend-go/", "backend/testing/finalization_replay/")
+
+
+# Use the replay oracle's reviewed normalization for volatile fixture document IDs.
+_verify_spec = importlib.util.spec_from_file_location(
+    "replay_verify", PORT_MAP.parents[1] / "tools/replay/verify.py"
+)
+_replay_verify = importlib.util.module_from_spec(_verify_spec)
+_verify_spec.loader.exec_module(_replay_verify)
 
 
 def load_port_map(path):
@@ -139,96 +149,166 @@ def load_oracle_reports(report_paths):
     }
 
 
-def escape_markdown(value):
-    return re.sub(r"([\\`*_{}\[\]()#+.!|>~])", r"\\\1", value)
-
-
-def _difference_report(report):
-    compact = {
-        "version": report["version"],
-        "unexplained_differences": report["unexplained_differences"],
-        "expected_differences": report["expected_differences"],
-        "failed_cases": report["failed_cases"],
-        "cases": [],
-    }
-    for case in report["cases"]:
-        counts = Counter(
-            (diff["path"], diff["kind"], diff.get("reason", ""))
+def unexplained_delta(parent, merge):
+    def identities(report):
+        return Counter(
+            (case["name"], _replay_verify.stable_path(diff["path"]), diff["kind"])
+            for case in report["cases"]
             for diff in case["differences"]
+            if not diff.get("reason")
         )
-        differences = []
-        for (path, kind, reason), count in sorted(counts.items()):
-            entry = [path, kind, count]
-            if reason:
-                entry.append(reason)
-            differences.append(entry)
-        compact["cases"].append([case["name"], differences])
-    raw = json.dumps(compact, ensure_ascii=False, separators=(",", ":"), sort_keys=True).encode("utf-8")
-    if len(raw) <= 50_000:
-        return f"```json\n{raw.decode('utf-8')}\n```"
+
+    before, after = identities(parent), identities(merge)
+    return {"added": sorted((after - before).elements()), "removed": sorted((before - after).elements())}
+
+
+def escape_markdown(value):
+    escaped = re.sub(r"([\\`*_{}\[\]()#+.!|>~])", r"\\\1", value)
+    return escaped.replace("&", "&amp;").replace("<", "&lt;").replace("@", "&#64;")
+
+
+def _difference_report(delta):
+    raw = json.dumps(delta, ensure_ascii=True, separators=(",", ":")).encode("ascii")
+    if len(raw) <= 50_000 and b"```" not in raw:
+        return f"```json\n{raw.decode('ascii')}\n```"
     encoded = base64.b85encode(zlib.compress(raw, level=9)).decode("ascii")
-    case_counts = []
-    for case in report["cases"]:
-        count = sum(not diff.get("reason") for diff in case["differences"])
-        case_counts.append(f"{case['name']}: {count}")
     return (
-        "Value-free report compressed as zlib + base85 UTF-8 JSON. Counts by case: "
-        + "; ".join(case_counts)
-        + f". SHA-256 of the uncompressed JSON: `{hashlib.sha256(raw).hexdigest()}`.\n\n"
-        + "Decode the payload with Python: `zlib.decompress(base64.b85decode(payload))`.\n\n"
-        + "```text\n"
-        + encoded
-        + "\n```"
+        "Value-free delta compressed as zlib + base85 JSON. "
+        f"SHA-256 of the uncompressed JSON: `{hashlib.sha256(raw).hexdigest()}`.\n\n"
+        "Decode the payload with Python: `zlib.decompress(base64.b85decode(payload))`.\n\n"
+        f"```text\n{encoded}\n```"
     )
 
 
-def port_tasks(pr_number, families, paths, merge_sha, pr_title, report):
-    source = f"https://github.com/BasedHardware/omi/pull/{pr_number}"
-    if not re.fullmatch(r"[0-9a-f]{40}", merge_sha):
-        raise ValueError("merge SHA must be a full lowercase commit SHA")
+def port_tasks(pr_number, families, paths, merge_sha, pr_title, delta, parent_sha):
+    for sha in (merge_sha, parent_sha):
+        if not re.fullmatch(r"[0-9a-f]{40}", sha):
+            raise ValueError("merge and parent SHAs must be full lowercase commit SHAs")
     pr_title = " ".join(pr_title.split())
     if not pr_title:
         raise ValueError("PR title must be nonempty")
+    matches = matching_families(families, paths)
+    if not matches:
+        return []
+
+    source = f"https://github.com/BasedHardware/omi/pull/{pr_number}"
+    behavior = escape_markdown(pr_title)
+    context = (
+        f"Python PR [#{pr_number}]({source}) merged as `{merge_sha}`. "
+        f"Changed behavior: {behavior}.\n\n"
+    )
+    if delta["added"] or delta["removed"]:
+        files = "\n".join(
+            f"- Go {family}: " + ", ".join(f"`{path}`" for path in matched)
+            for family, matched in matches.items()
+        )
+        marker = f"<!-- omi-go-port-delta:{merge_sha}:{pr_number} -->"
+        body = (
+            f"{context}Affected families and mapped paths:\n{files}\n\n"
+            f"Replay against first parent `{parent_sha}` found "
+            f"{len(delta['added'])} added and {len(delta['removed'])} removed unexplained differences. "
+            "Review the merged diff and port the affected behavior or record why no Go change is needed. "
+            "Each delta entry lists the replay case, JSON Pointer path, and difference kind.\n\n"
+            f"{_difference_report(delta)}\n\n{marker}"
+        )
+        return [{"task_type": "port", "pr": pr_number, "title": f"Port Python PR #{pr_number} to Go",
+                 "body": body, "marker": marker}]
+
     tasks = []
-    for family, python_paths in sorted(families.items()):
-        matched = sorted(paths.intersection(python_paths))
-        if not matched:
-            continue
-        behavior = escape_markdown(pr_title)
+    for family, matched in matches.items():
         files = ", ".join(f"`{path}`" for path in matched)
-        marker = f"<!-- omi-go-port-task:{merge_sha}:{pr_number}:{family} -->"
-        if report["unexplained_differences"]:
-            task_type = "port"
-            title = f"Port Python PR #{pr_number} to Go {family}"
-            body = (
-                f"Python PR [#{pr_number}]({source}) merged as `{merge_sha}` and changes behavior: {behavior}.\n\n"
-                f"Mapped paths: {files}. Review the merged diff and port the changed behavior to the Go {family} "
-                "family under `backend-go/`, or record why no Go change is needed.\n\n"
-                f"Replay reported {report['unexplained_differences']} unexplained and "
-                f"{report['expected_differences']} allowed differences across {len(report['cases'])} cases. "
-                "The value-free report follows.\n\n"
-                f"{_difference_report(report)}\n\n{marker}"
-            )
-        else:
-            task_type = "corpus"
-            title = f"Add Go replay corpus case for Python PR #{pr_number}: {pr_title}"
-            title = title[:250]
-            body = (
-                f"Python PR [#{pr_number}]({source}) merged as `{merge_sha}` changes behavior: {behavior}.\n\n"
-                f"Mapped paths: {files}. The replay oracle is green at this merge commit: "
-                f"0 unexplained differences across {len(report['cases'])} cases. Add a synthetic replay corpus case "
-                f"that exercises the named behavior ({behavior}) for the Go {family} family, and map it to the "
-                f"relevant contract rule.\n\n{marker}"
-            )
+        marker = f"<!-- omi-go-corpus-pr:{merge_sha}:{pr_number}:{family} -->"
         tasks.append({
             "family": family,
-            "task_type": task_type,
-            "title": title,
-            "body": body,
+            "task_type": "corpus",
+            "pr": pr_number,
+            "title": f"Add Go replay corpus cases for {family}",
+            "body": (
+                f"{context}Mapped paths: {files}. The unexplained replay differences are unchanged "
+                f"from first parent `{parent_sha}`. Add a synthetic case for the changed behavior "
+                f"and map it to the relevant Go {family} contract rule.\n\n{marker}"
+            ),
             "marker": marker,
             "matched_paths": matched,
         })
     return tasks
+
+
+def corpus_issue_marker(family):
+    return f"<!-- omi-go-corpus:{family} -->"
+
+
+def github_api(endpoint, *, payload=None, method="POST"):
+    argv = ["gh", "api"]
+    if payload is None:
+        argv += ["--paginate", "--slurp"]
+    else:
+        argv += ["--method", method, "--input", "-"]
+    result = subprocess.run(
+        [*argv, endpoint], input=None if payload is None else json.dumps(payload),
+        stdout=subprocess.PIPE, text=True, check=True,
+    )
+    data = json.loads(result.stdout)
+    if payload is None:
+        return [record for page in data for record in page]
+    return data
+
+
+def publish_tasks(tasks, repo, summary, *, issue_limit=5, api=github_api):
+    endpoint = f"repos/{repo}/issues"
+    issues = [
+        issue for issue in api(f"{endpoint}?state=all&labels=task&per_page=100")
+        if "pull_request" not in issue
+    ]
+    rolling = {}
+    for family in sorted({task["family"] for task in tasks if task["task_type"] == "corpus"}):
+        marker = corpus_issue_marker(family)
+        matches = [issue for issue in issues if marker in (issue.get("body") or "")]
+        if len(matches) != 1:
+            raise ValueError(f"expected one provisioned task issue with marker {marker}, got {len(matches)}")
+        rolling[family] = matches[0]
+
+    comment_markers = {}
+    created = 0
+    skipped = []
+    for task in tasks:
+        marker = task["marker"]
+        if task["task_type"] == "port":
+            if any(marker in (issue.get("body") or "") for issue in issues):
+                continue
+            if created >= issue_limit:
+                skipped.append(f"- PR #{task['pr']}: {task['title']}")
+                continue
+            issue = api(endpoint, payload={"title": task["title"], "body": task["body"], "labels": ["task"]})
+            issues.append(issue)
+            print(f"Opened {issue['html_url']}")
+            created += 1
+            continue
+
+        issue = rolling[task["family"]]
+        issue_endpoint = f"{endpoint}/{issue['number']}"
+        if issue_endpoint not in comment_markers:
+            comments = api(f"{issue_endpoint}/comments?per_page=100")
+            comment_markers[issue_endpoint] = {
+                line for comment in comments for line in (comment.get("body") or "").splitlines()
+                if line.startswith("<!-- omi-go-corpus-pr:")
+            }
+        markers = comment_markers[issue_endpoint]
+        if marker in markers:
+            continue
+        if issue["state"] == "closed":
+            api(issue_endpoint, method="PATCH", payload={"state": "open"})
+            issue["state"] = "open"
+        comment = api(f"{issue_endpoint}/comments", payload={"body": task["body"]})
+        markers.add(marker)
+        print(f"Posted {comment['html_url']}")
+
+    with summary.open("a", encoding="utf-8") as output:
+        output.write(f"## Go replay follow-ups\n\nOpened {created} of at most {issue_limit} new issues.\n")
+        if skipped:
+            output.write("\nIssue cap reached. Rerun this job to process these deferred follow-ups.\n\n")
+            output.write("\n".join(skipped) + "\n")
+    return skipped
 
 
 def main():
@@ -240,10 +320,19 @@ def main():
     parser.add_argument("--oracle-report", action="append", help="Replay JSON report; repeat for each corpus")
     parser.add_argument("--scope-only", action="store_true", help="Print true if the input paths need Go checks")
     parser.add_argument("--mapped-only", action="store_true", help="Print matching port-map families and paths")
+    parser.add_argument("--parent-sha", help="Full first-parent SHA")
+    parser.add_argument("--parent-report", action="append", help="First-parent report; repeat for each corpus")
+    parser.add_argument("--publish", metavar="REPO", help="Publish classified task drafts from stdin")
+    parser.add_argument("--summary", type=Path, help="GitHub Actions job summary path")
     args = parser.parse_args()
     if args.changed_files is not None and args.changed_files < 0:
         parser.error("--changed-files must be nonnegative")
     try:
+        if args.publish:
+            if args.summary is None:
+                parser.error("--publish requires --summary")
+            publish_tasks(json.load(sys.stdin), args.publish, args.summary)
+            return
         families = load_port_map(PORT_MAP)
         paths = changed_paths(json.load(sys.stdin), args.changed_files)
         if args.scope_only:
@@ -254,11 +343,13 @@ def main():
             return
         if args.pr is None or args.pr < 1:
             parser.error("--pr must be positive")
-        if not args.merge_sha or not args.pr_title or not args.oracle_report:
-            parser.error("--pr-title, --merge-sha, and at least one --oracle-report are required")
+        if not all((args.merge_sha, args.pr_title, args.oracle_report, args.parent_sha, args.parent_report)):
+            parser.error("--pr-title, --merge-sha, --oracle-report, --parent-sha, and --parent-report are required")
+        parent = load_oracle_reports(args.parent_report)
         report = load_oracle_reports(args.oracle_report)
-        tasks = port_tasks(args.pr, families, paths, args.merge_sha, args.pr_title, report)
-    except (OSError, ValueError, yaml.YAMLError) as error:
+        delta = unexplained_delta(parent, report)
+        tasks = port_tasks(args.pr, families, paths, args.merge_sha, args.pr_title, delta, args.parent_sha)
+    except (OSError, ValueError, subprocess.CalledProcessError, yaml.YAMLError) as error:
         parser.exit(2, f"{parser.prog}: {error}\n")
     print(json.dumps(tasks, ensure_ascii=False, separators=(",", ":")))
 

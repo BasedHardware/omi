@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # CI-runnable emulator contract. Run from any directory.
 set -euo pipefail
-cd "$(dirname "$0")/../.."
+cd "${1:-$(dirname "$0")/../..}"
 go_root=$PWD
 python_bin=${REPLAY_PYTHON:-"$go_root/../backend/.venv/bin/python"}
 test -x "$python_bin"
