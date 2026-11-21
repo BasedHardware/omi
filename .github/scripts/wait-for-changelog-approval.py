@@ -9,9 +9,11 @@ the status reached ``success`` 16m43s after PR creation.
 
 This helper replaces that race with a bounded wait on the exact head SHA. It
 never merges and never tags: it only reports whether the exact head is approved,
-and fails closed with the PR, head and reason on timeout, a rejected approval, an
+records the authoritative ``refs/heads/main`` SHA at that moment, and fails
+closed with the PR, head and reason on timeout, a rejected approval, an
 unreadable status, or a changed head. The caller must still bind its merge to
-the same SHA (``gh pr merge --match-head-commit``).
+the same SHA (``gh pr merge --match-head-commit``) and compare every fresh base
+read to the recorded SHA.
 """
 
 from __future__ import annotations
@@ -52,6 +54,11 @@ OUTCOME_HEAD_CHANGED = "head-changed"
 OUTCOME_PR_NOT_OPEN = "pr-not-open"
 OUTCOME_BASE_CHANGED = "base-changed"
 OUTCOME_UNTRUSTED = "status-untrusted"
+OUTCOME_BASE_UNREADABLE = "base-unreadable"
+
+# The authoritative base is the branch ref, never the PR's baseRefOid: GitHub
+# reported baseRefOid 0a0abbffc54c while refs/heads/main was 8e9537e2e2bd.
+DEFAULT_BASE_REF = "refs/heads/main"
 
 SECRET_PATTERNS = (
     re.compile(r"(?i)(authorization:\s*bearer\s*)\S+"),
@@ -168,6 +175,21 @@ def is_trusted_creator(status: StatusSnapshot) -> bool:
     return status.creator_id == GITHUB_ACTIONS_BOT_ID or status.creator_login == GITHUB_ACTIONS_BOT_LOGIN
 
 
+def fetch_base_sha(repository: str, base_ref: str, *, request_timeout_seconds: int) -> str:
+    """Read the authoritative branch ref SHA (``refs/heads/main``), not baseRefOid."""
+    api_ref = base_ref[len("refs/"):] if base_ref.startswith("refs/") else base_ref
+    payload = gh_json(
+        ["api", f"repos/{repository}/git/ref/{api_ref}"],
+        request_timeout_seconds=request_timeout_seconds,
+    )
+    if not isinstance(payload, dict):
+        raise TransientReadError("GitHub API returned an unexpected base ref payload")
+    sha = str((payload.get("object") or {}).get("sha") or "")
+    if not SHA_RE.fullmatch(sha):
+        raise TransientReadError(f"base ref {base_ref} returned an unexpected SHA: {sha!r}")
+    return sha
+
+
 def _evidence(
     *,
     repository: str,
@@ -176,6 +198,8 @@ def _evidence(
     expected_head_sha: str,
     observed_head_sha: str,
     context: str,
+    base_ref: str,
+    base_sha: str,
     outcome: str,
     reason: str,
     waited_seconds: float,
@@ -191,6 +215,8 @@ def _evidence(
         "expected_head_sha": expected_head_sha,
         "observed_head_sha": observed_head_sha,
         "context": context,
+        "base_ref": base_ref,
+        "base_sha": base_sha,
         "approved": outcome == OUTCOME_APPROVED,
         "outcome": outcome,
         "reason": reason,
@@ -208,11 +234,13 @@ def wait_for_approval(
     pr_number: int,
     expected_head_sha: str,
     context: str = STATUS_CONTEXT,
+    base_ref: str = DEFAULT_BASE_REF,
     timeout_seconds: int = DEFAULT_TIMEOUT_SECONDS,
     poll_seconds: int = DEFAULT_POLL_SECONDS,
     max_consecutive_read_errors: int = DEFAULT_MAX_CONSECUTIVE_READ_ERRORS,
     fetch_pr: Callable[[], PullRequestSnapshot],
     fetch_status: Callable[[], StatusSnapshot | None],
+    fetch_base_sha: Callable[[], str],
     clock: Callable[[], float] | None = None,
     sleep: Callable[[float], None] | None = None,
     log: Callable[[str], None] | None = None,
@@ -235,9 +263,11 @@ def wait_for_approval(
     deadline = started + timeout_seconds
     attempts = 0
     consecutive_errors = 0
+    base_errors = 0
     history: list[dict[str, object]] = []
     pr_url = ""
     observed_head = ""
+    captured_base = ""
 
     def finish(outcome: str, reason: str) -> dict[str, object]:
         evidence = _evidence(
@@ -247,6 +277,8 @@ def wait_for_approval(
             expected_head_sha=expected_head_sha,
             observed_head_sha=observed_head,
             context=context,
+            base_ref=base_ref,
+            base_sha=captured_base,
             outcome=outcome,
             reason=reason,
             waited_seconds=clock() - started,
@@ -256,7 +288,8 @@ def wait_for_approval(
             history=history,
         )
         log(f"changelog approval wait: outcome={outcome} pr={pr_url or pr_number} "
-            f"head={observed_head or expected_head_sha} reason={reason}")
+            f"head={observed_head or expected_head_sha} base={captured_base or '<unread>'} "
+            f"reason={reason}")
         return evidence
 
     def read_failed(what: str, error: Exception) -> dict[str, object] | None:
@@ -330,7 +363,33 @@ def wait_for_approval(
             if status.state == "success":
                 if not history or history[-1].get("state") != "success":
                     history.append(entry)
-                return finish(OUTCOME_APPROVED, f"status {context!r} is success on the exact head")
+                # Record the authoritative base ref at the moment approval
+                # succeeds; the merge step compares every fresh read to it.
+                try:
+                    base_sha = fetch_base_sha()
+                    base_errors = 0
+                except TransientReadError as error:
+                    base_errors += 1
+                    if base_errors >= max_consecutive_read_errors:
+                        return finish(
+                            OUTCOME_UNREADABLE,
+                            f"could not read the base ref after {base_errors} consecutive attempts: {error}",
+                        )
+                    if clock() >= deadline:
+                        return finish(OUTCOME_TIMEOUT, f"timed out reading the base ref: {error}")
+                    sleep(min(poll_seconds, max(0.0, deadline - clock())))
+                    continue
+                if not SHA_RE.fullmatch(base_sha):
+                    return finish(
+                        OUTCOME_BASE_UNREADABLE,
+                        f"base ref {base_ref} returned {base_sha!r}, expected a 40-character SHA",
+                    )
+                captured_base = base_sha
+                return finish(
+                    OUTCOME_APPROVED,
+                    f"status {context!r} is success on the exact head; "
+                    f"base {base_ref} is {base_sha}",
+                )
             if status.state in ("failure", "error"):
                 history.append(entry)
                 return finish(
@@ -362,6 +421,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--pr-number", type=int, required=True)
     parser.add_argument("--expected-head-sha", required=True)
     parser.add_argument("--context", default=STATUS_CONTEXT)
+    parser.add_argument("--base-ref", default=DEFAULT_BASE_REF)
     parser.add_argument("--timeout-seconds", type=int, default=DEFAULT_TIMEOUT_SECONDS)
     parser.add_argument("--poll-seconds", type=int, default=DEFAULT_POLL_SECONDS)
     parser.add_argument("--request-timeout-seconds", type=int, default=DEFAULT_REQUEST_TIMEOUT_SECONDS)
@@ -380,6 +440,7 @@ def main(argv: list[str] | None = None) -> int:
         pr_number=args.pr_number,
         expected_head_sha=args.expected_head_sha,
         context=args.context,
+        base_ref=args.base_ref,
         timeout_seconds=args.timeout_seconds,
         poll_seconds=args.poll_seconds,
         max_consecutive_read_errors=args.max_consecutive_read_errors,
@@ -389,6 +450,10 @@ def main(argv: list[str] | None = None) -> int:
         ),
         fetch_status=lambda: fetch_status(
             args.repository, args.expected_head_sha, args.context,
+            request_timeout_seconds=args.request_timeout_seconds,
+        ),
+        fetch_base_sha=lambda: fetch_base_sha(
+            args.repository, args.base_ref,
             request_timeout_seconds=args.request_timeout_seconds,
         ),
     )
@@ -412,12 +477,14 @@ def main(argv: list[str] | None = None) -> int:
                 handle.write(f"outcome={evidence['outcome']}\n")
                 handle.write(f"pr_url={evidence['pull_request']['url']}\n")
                 handle.write(f"head_sha={evidence['expected_head_sha']}\n")
+                handle.write(f"base_ref={evidence['base_ref']}\n")
+                handle.write(f"base_sha={evidence['base_sha']}\n")
 
     if evidence["approved"]:
         print(
             "CHANGELOG_APPROVAL_WAIT_OK "
             f"pr={evidence['pull_request']['url']} head={evidence['expected_head_sha']} "
-            f"waited={evidence['waited_seconds']}s"
+            f"base={evidence['base_sha']} waited={evidence['waited_seconds']}s"
         )
         return 0
 

@@ -330,6 +330,7 @@ jobs:
             --pr-number "${{ steps.changelog-pr.outputs.number }}" \
             --expected-head-sha "${{ steps.changelog.outputs.commit }}" \
             --context "UI author approval" \
+            --base-ref "refs/heads/main" \
             --timeout-seconds 1500 \
             --poll-seconds 15 \
             --evidence "$RUNNER_TEMP/desktop-changelog-approval-wait.json" \
@@ -344,23 +345,37 @@ jobs:
           set -euo pipefail
           PR_NUMBER="${{ steps.changelog-pr.outputs.number }}"
           CHANGELOG_COMMIT="${{ steps.changelog.outputs.commit }}"
-
-          # Re-read the full merge precondition immediately before merging. The
-          # wait proved the status on this SHA, but the base can change after the
-          # final poll, so one snapshot keeps state, base and head consistent.
-          # --match-head-commit then binds the merge itself to the same SHA.
-          PR_SNAPSHOT=$(gh pr view "$PR_NUMBER" \
-            --json state,baseRefName,headRefOid \
-            --jq '.state + " " + .baseRefName + " " + .headRefOid')
-          test "$PR_SNAPSHOT" = "OPEN main $CHANGELOG_COMMIT"
+          # The authoritative base recorded when the approval wait succeeded.
+          # Never use the PR's baseRefOid: GitHub reported 0a0abbffc54c while
+          # refs/heads/main was 8e9537e2e2bd.
+          BASE_SHA="${{ steps.approval.outputs.base_sha }}"
+          test -n "$BASE_SHA"
 
           # The approval wait above is the gate. This loop only absorbs
-          # transient merge API errors; every attempt is bound to the same head.
+          # transient merge API errors; every attempt revalidates the PR
+          # snapshot and the live base ref, and is bound to the same head.
           # Do not fall back to a non-admin merge: a transient --admin failure
           # (e.g. HTTP 502) would otherwise retry without override and fail on
           # branch policy (see run 30581710658 / PR #10910).
           merge_ok=0
           for attempt in 1 2 3; do
+            # One atomic PR snapshot: state, base name and head must all still
+            # match, so a base change after the final poll cannot slip through.
+            PR_SNAPSHOT=$(gh pr view "$PR_NUMBER" \
+              --json state,baseRefName,headRefOid \
+              --jq '.state + " " + .baseRefName + " " + .headRefOid')
+            if [ "$PR_SNAPSHOT" != "OPEN main $CHANGELOG_COMMIT" ]; then
+              echo "CHANGELOG_MERGE_PRECONDITION_CHANGED pr=$PR_NUMBER head=$CHANGELOG_COMMIT expected='OPEN main $CHANGELOG_COMMIT' actual='$PR_SNAPSHOT'" >&2
+              exit 1
+            fi
+            # A fresh branch-ref read immediately before each attempt. A newer
+            # main commit would make the consolidation stale for the release
+            # notes, so stop before merging instead of landing it.
+            CURRENT_BASE=$(git ls-remote origin refs/heads/main | awk '{print $1}')
+            if [ "$CURRENT_BASE" != "$BASE_SHA" ]; then
+              echo "CHANGELOG_MERGE_BASE_MOVED pr=$PR_NUMBER head=$CHANGELOG_COMMIT expected_base=$BASE_SHA current_base=$CURRENT_BASE" >&2
+              exit 1
+            fi
             if gh pr merge "$PR_NUMBER" --admin --merge --match-head-commit "$CHANGELOG_COMMIT"; then
               merge_ok=1
               break
@@ -378,14 +393,22 @@ jobs:
           PR_URL=$(gh pr view "$PR_NUMBER" --json url --jq '.url')
           test -n "$MERGED_MAIN_SHA"
 
-          # Normal merge commit ancestry: the merge commit's second parent is
-          # the exact approved head, and that head is reachable from main.
+          # Normal merge commit ancestry: the merge commit's first parent is the
+          # base captured at approval, and its second parent is the exact
+          # approved head. The merge API pins the head, so the first-parent
+          # check covers branch movement between the final read and the merge.
           git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+          MERGE_BASE_PARENT=$(git rev-parse "${MERGED_MAIN_SHA}^1")
+          if [ "$MERGE_BASE_PARENT" != "$BASE_SHA" ]; then
+            echo "CHANGELOG_MERGE_BASE_MISMATCH merge=$MERGED_MAIN_SHA pr=$PR_NUMBER head=$CHANGELOG_COMMIT expected_base=$BASE_SHA actual_base=$MERGE_BASE_PARENT action=reviewed-revert" >&2
+            exit 1
+          fi
           test "$(git rev-parse "${MERGED_MAIN_SHA}^2")" = "$CHANGELOG_COMMIT"
           test "$(git merge-base --is-ancestor "$CHANGELOG_COMMIT" origin/main && echo ok)" = "ok"
 
           {
             echo "merged_main_sha=$MERGED_MAIN_SHA"
+            echo "base_sha=$BASE_SHA"
             echo "url=$PR_URL"
           } >> "$GITHUB_OUTPUT"
 
