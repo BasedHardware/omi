@@ -86,6 +86,14 @@ class TestOwnerResilience:
     def test_owner_valid_user_id_returns_uid(self, edit_tools):
         assert edit_tools.owner({"configurable": {"user_id": "user_123"}}) == "user_123"
 
+    def test_owner_whitespace_only_user_id_raises_permission_error(self, edit_tools):
+        with pytest.raises(PermissionError, match="Authenticated owner required"):
+            edit_tools.owner({"configurable": {"user_id": "   "}})
+
+    def test_owner_non_string_user_id_raises_permission_error(self, edit_tools):
+        with pytest.raises(PermissionError, match="Authenticated owner required"):
+            edit_tools.owner({"configurable": {"user_id": 12345}})
+
 
 class TestTurnRefsResilience:
     def test_initialize_turn_refs_handles_none(self):
@@ -148,6 +156,23 @@ class TestEditToolsArgumentValidation:
         res = edit_tools.rename_person.func("person_1", "a" * 101, config=valid_config)
         assert "invalid_name" in res
         assert "1 to 100 characters" in res
+
+    def test_update_conversation_rejects_none_correction(self, edit_tools, valid_config):
+        res = edit_tools.update_conversation.func(
+            conversation_id="conv_1",
+            correction=None,
+            title="New Title",
+            config=valid_config,
+        )
+        assert "invalid_correction" in res
+
+    def test_edit_memory_rejects_none_content(self, edit_tools, valid_config):
+        res = edit_tools.edit_memory.func(
+            memory_id="m_1",
+            content=None,
+            config=valid_config,
+        )
+        assert res == "Error: memory content must contain 1 to 20000 characters."
 
     def test_tools_raise_permission_error_on_none_configurable(self, edit_tools):
         bad_config = {"configurable": None}
