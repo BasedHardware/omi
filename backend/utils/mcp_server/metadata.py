@@ -9,6 +9,7 @@ from utils.mcp_scopes import MCP_SUPPORTED_SCOPES
 MCP_AUTHORIZATION_SERVER_URL = os.getenv("MCP_AUTHORIZATION_SERVER_URL", "https://api.omi.me")
 MCP_AUTHORIZATION_ENDPOINT = f"{MCP_AUTHORIZATION_SERVER_URL}/authorize"
 MCP_TOKEN_ENDPOINT = f"{MCP_AUTHORIZATION_SERVER_URL}/token"
+MCP_REGISTRATION_ENDPOINT = f"{MCP_AUTHORIZATION_SERVER_URL}/api/oauth/register"
 # Protected-resource metadata is per path (RFC 9728 §3.3: ``resource`` equals
 # the described URL): challenges on ``/v1/mcp`` advertise the canonical
 # document, challenges on ``/v1/mcp/sse`` the legacy one.
@@ -60,6 +61,7 @@ def authorization_server_document() -> Dict[str, Any]:
         "issuer": MCP_AUTHORIZATION_SERVER_URL,
         "authorization_endpoint": MCP_AUTHORIZATION_ENDPOINT,
         "token_endpoint": MCP_TOKEN_ENDPOINT,
+        "registration_endpoint": MCP_REGISTRATION_ENDPOINT,
         "response_types_supported": ["code"],
         "grant_types_supported": ["authorization_code", "refresh_token"],
         "code_challenge_methods_supported": ["S256"],
