@@ -1712,12 +1712,16 @@ def test_record_close_notify_renders_on_every_cloud_run_listener(environment, se
         assert [(name, value) for name, value in rendered if name == key] == [(key, expected)]
 
 
-def test_prod_silence_read_skip_is_on_for_every_serving_role():
+def test_prod_silence_read_skip_is_on_for_every_role_but_the_pump_pin():
     key = 'BATCH_PIPELINE_SILENCE_READ_SKIP_ENABLED'
     prod = _MANIFEST['environments']['prod']
-    # backend-projection-pump derives from backend-integration and runs the same projection path.
-    for name in ('backend', 'backend-sync', 'backend-sync-backfill', 'backend-integration', 'backend-projection-pump'):
+    for name in ('backend', 'backend-sync', 'backend-sync-backfill', 'backend-integration'):
         assert prod['cloud_run']['services'][name]['env'][key] == {'value': 'true', 'category': 'ops_kill'}
+    # SCA-3318: the pump's one-key activation keeps its dark successor's false; widening it is a later change.
+    assert prod['cloud_run']['services']['backend-projection-pump']['env'][key] == {
+        'value': 'false',
+        'category': 'ops_kill',
+    }
     assert prod['gke']['backend-listen']['env'][key] == {'value': 'true', 'category': 'ops_kill'}
     chart = Path(__file__).resolve().parents[2] / 'charts/backend-listen/prod_omi_backend_listen_values.yaml'
     values = yaml.safe_load(chart.read_text())
