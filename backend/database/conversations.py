@@ -33,7 +33,6 @@ from database.account_deletion_policy import account_deletion_marker_blocks_acce
 from google.api_core.exceptions import AlreadyExists, Conflict, FailedPrecondition, NotFound
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
-from google.cloud.firestore_v1.field_path import FieldPath
 from prometheus_client import Counter, REGISTRY
 from threading import Lock
 import utils.other.hume as hume
@@ -1532,6 +1531,7 @@ def persist_processing_result_with_lifecycle(
     independent of observers.
     """
     from database.conversations_v3_fence import permits, wake_repairs
+    from database.conversation_processing_result import stamp_native_visibility, update_fields
     from database.recurring_voice_privacy import filter_processing_write
 
     conversation_data.pop('updated_at', None)
@@ -1795,18 +1795,7 @@ def persist_processing_result_with_lifecycle(
                 )
 
         _offload_processing_transcript(uid, write_data, existing)
-        if (
-            write_data.get('status') == ConversationStatus.completed
-            and write_data.get('summary_output_present') is True
-            and not any(write_data.get(key) for key in ('discarded', 'terminal_no_derived_effects', 'deferred'))
-        ):
-            from utils.conversations.v3 import policy as v3_policy
-
-            visibility_receipt = v3_policy.native_manual_notes_receipt(existing)
-            if visibility_receipt:
-                # Commit with the genuine notes, before the builder can observe
-                # a new upload revision and revoke the transient native proof.
-                write_data[v3_policy.NATIVE_MANUAL_NOTES_VISIBILITY] = visibility_receipt
+        stamp_native_visibility(existing, write_data)
         summary_receipt = summary_delivery.merge_result(existing, write_data, uid)
         ledger_stages = pipeline_ledger.summary_stages(summary_receipt)
         delivery_outcome = summary_terminal_outcome(existing, write_data)
@@ -1814,7 +1803,7 @@ def persist_processing_result_with_lifecycle(
             transaction, uid, conversation_data['id'], existing, write_data, firestore_client=db
         )
         if family_enabled:
-            transaction.update(conversation_ref, _processing_result_update_fields(write_data))
+            transaction.update(conversation_ref, update_fields(write_data))
         else:
             transaction.set(conversation_ref, write_data, merge=True)
         if notes_refresh_state_write is not None:
@@ -3379,26 +3368,6 @@ def claim_conversation_status_in_txn(
             updates['terminal_family'] = terminal_family
             updates['terminal_family_at'] = terminal_family_at
     return updates
-
-
-def _processing_result_update_fields(data: Mapping[str, Any]) -> dict:
-    """Preserve set(merge=True)'s recursive leaf mask in one update of an existing row.
-
-    Empty maps replace that map; arrays and scalars are leaves. FieldPath quotes
-    literal dotted/backtick keys rather than treating them as update paths.
-    """
-    fields = {}
-
-    def visit(value, path):
-        if isinstance(value, dict) and value:
-            for key, child in value.items():
-                visit(child, (*path, key))
-        else:
-            fields[FieldPath(*path).to_api_repr()] = value
-
-    for key, value in data.items():
-        visit(value, (key,))
-    return fields
 
 
 def claim_conversation_status(

@@ -49,13 +49,7 @@ from utils.batch_pipeline.projection_hold_observability import log_projection_ho
 from utils.batch_pipeline.scheduler import owner_key
 from utils.sync.processing_hold import MAX_HOLD_SECONDS
 from utils.sync import capture_end, processing_hold
-from utils.conversations.v3.policy import (
-    NATIVE_MANUAL_INPUT_REVISION,
-    NATIVE_MANUAL_PROOF,
-    NATIVE_MANUAL_READY,
-    NATIVE_MANUAL_STOP,
-    native_manual_binding,
-)
+from database import batch_pipeline_native_finish as native_finish
 from database.batch_pipeline_projection_protocol import (
     PROJECTION_HEAD_BLOCK_TYPE,
     PROJECTION_HEAD_BLOCKED_SINCE,
@@ -84,72 +78,6 @@ def usage_stamp(now: datetime, usage_period: Any) -> datetime:
     start = datetime(int(match.group(1)), int(match.group(2)), 1, tzinfo=timezone.utc)
     end = (start + timedelta(days=32)).replace(day=1)
     return end - timedelta(seconds=1) if now >= end else now
-
-
-def _native_manual_upload_revision(job) -> int | None:
-    legacy = job.get('record_input_upload_revision')
-    explicit = job.get(NATIVE_MANUAL_INPUT_REVISION)
-    if type(explicit) is not int or explicit < 1:
-        return None
-    if legacy is not None and (type(legacy) is not int or explicit != legacy):
-        return None
-    return explicit
-
-
-def _native_manual_unit_matches(job, entry, binding, sibling, upload_revision, sealed_at):
-    parts = entry.get('projection_parts')
-    count = entry.get('projection_part_count')
-    return (
-        _native_manual_upload_revision(job) == upload_revision
-        and job.get('record_sealed_at') == sealed_at
-        and job.get('owner_id') == binding.owner_id
-        and job.get('privacy_generation') == binding.privacy_generation
-        and job.get('result') is not None
-        and job.get('result') == entry.get('result')
-        and entry.get('owner_key') == owner_key(binding.owner_id)
-        and entry.get('segment_id') == sibling
-        and entry.get('capture_at') == job.get('capture_at')
-        and entry.get('projection_state') in {'ready', 'completed'}
-        and not entry.get('projection_redriven_at')
-        and (
-            not parts
-            and count is None
-            or type(count) is int
-            and count > 0
-            and count == len(parts or {})
-            and set(parts or {}) == {str(index) for index in range(count)}
-        )
-    )
-
-
-def _native_manual_receipts_match(target, receipts):
-    # Match original destinations, before _visible follows donor redirects and deduplicates.
-    return bool(
-        receipts
-        and all(
-            receipt.get('state') == 'ready'
-            and receipt.get('conversation_id') == target
-            and not any(receipt.get(key) for key in ('disposition', 'privacy_reason', 'size_rollover_outputs'))
-            for receipt in receipts
-        )
-    )
-
-
-def _native_manual_ready_patch(row, upload_revision, sealed_at, now):
-    if (
-        row.get(NATIVE_MANUAL_READY) is not None
-        or row.get('v3_manual_end')
-        or capture_end.seal_barrier(row) is not None
-    ):
-        return None
-    patch = {
-        'v3_manual_end': True,
-        NATIVE_MANUAL_READY: upload_revision,
-        NATIVE_MANUAL_PROOF: {'seal': sealed_at, 'intent': row.get(NATIVE_MANUAL_STOP)},
-        'v3_pending': True,
-        'v3_pending_since': row.get('v3_pending_since') or datetime.fromtimestamp(now, timezone.utc),
-    }
-    return patch if native_manual_binding({**row, **patch}) else None
 
 
 class ProjectionStore:
@@ -917,7 +845,7 @@ class ProjectionStore:
             captured_seconds = 0.0
             terminal_empty_count = 0
             target = binding.target_conversation_id
-            upload_revision = _native_manual_upload_revision(session.job)
+            upload_revision = native_finish.upload_revision(session.job)
             sealed_at = session.job.get('record_sealed_at')
             native_manual_candidate = bool(
                 target
@@ -970,7 +898,7 @@ class ProjectionStore:
                     erased_count += 1
                     continue
                 if native_manual_candidate:
-                    native_manual_candidate = _native_manual_unit_matches(
+                    native_manual_candidate = native_finish.unit_matches(
                         job, entry, binding, sibling, upload_revision, sealed_at
                     )
                 if entry.get('result', {}).get('outcome') == 'no_recoverable_speech':
@@ -993,7 +921,7 @@ class ProjectionStore:
             native_manual_candidate = (
                 native_manual_candidate
                 and not (source_deleted or erased_count or terminal_empty_count)
-                and _native_manual_receipts_match(target, receipts)
+                and native_finish.receipts_match(target, receipts)
             )
             conversation_rows = {}
             new, updated = (
@@ -1209,7 +1137,7 @@ class ProjectionStore:
                 and set(new + updated) == {target}
                 and seconds > 0
             ):
-                ready_patch = _native_manual_ready_patch(
+                ready_patch = native_finish.ready_patch(
                     conversation_rows.get(target) or {}, upload_revision, sealed_at, now
                 )
                 if ready_patch:

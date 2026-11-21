@@ -11,7 +11,7 @@ import pytest
 from google.auth.credentials import AnonymousCredentials
 from google.cloud import firestore
 
-from database.conversations import _processing_result_update_fields
+from database.conversation_processing_result import update_fields
 
 pytestmark = pytest.mark.skipif(not os.getenv('FIRESTORE_EMULATOR_HOST'), reason='local Firestore emulator required')
 
@@ -33,7 +33,7 @@ def test_atomic_processor_update_matches_legacy_merge_over_nonmap_parents(parent
     @firestore.transactional
     def commit(transaction):
         assert atomic.get(transaction=transaction).exists
-        transaction.update(atomic, _processing_result_update_fields(payload))
+        transaction.update(atomic, update_fields(payload))
 
     commit(client.transaction())
     assert atomic.get().to_dict() == legacy.get().to_dict()

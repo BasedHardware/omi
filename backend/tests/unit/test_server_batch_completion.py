@@ -261,7 +261,7 @@ def test_failed_transaction_publishes_no_effects(monkeypatch, failure):
 
 
 def test_full_native_manual_promotion_is_bound_to_raw_receipts_and_the_current_seal():
-    from database import batch_pipeline_projection as projection
+    from database import batch_pipeline_native_finish as native_finish
 
     row = {
         **capture(),
@@ -275,7 +275,7 @@ def test_full_native_manual_promotion_is_bound_to_raw_receipts_and_the_current_s
         'v3_native_manual_stop': {'job_id': JOB, 'revision': 3, 'finished_at': NOW},
     }
     receipt = {'state': 'ready', 'conversation_id': CID}
-    assert projection._native_manual_receipts_match(CID, [receipt, receipt])
+    assert native_finish.receipts_match(CID, [receipt, receipt])
     for change in (
         {'conversation_id': 'redirected'},
         {'state': 'persisted'},
@@ -284,9 +284,9 @@ def test_full_native_manual_promotion_is_bound_to_raw_receipts_and_the_current_s
         {'privacy_reason': 'conversation_deleted'},
         {'size_rollover_outputs': [{'conversation_id': CID}]},
     ):
-        assert not projection._native_manual_receipts_match(CID, [receipt, {**receipt, **change}])
+        assert not native_finish.receipts_match(CID, [receipt, {**receipt, **change}])
 
-    ready = projection._native_manual_ready_patch(row, 7, NOW.timestamp(), NOW.timestamp())
+    ready = native_finish.ready_patch(row, 7, NOW.timestamp(), NOW.timestamp())
     assert ready == {
         'v3_manual_end': True,
         'v3_native_manual_ready_revision': 7,
@@ -309,24 +309,19 @@ def test_full_native_manual_promotion_is_bound_to_raw_receipts_and_the_current_s
         {'finalization_revision': 4},
         {'v3_native_manual_stop': None},
     ):
-        assert projection._native_manual_ready_patch({**row, **change}, 7, NOW.timestamp(), NOW.timestamp()) is None
+        assert native_finish.ready_patch({**row, **change}, 7, NOW.timestamp(), NOW.timestamp()) is None
 
 
 def test_native_manual_upload_proof_uses_admission_fields_not_current_row():
-    from database import batch_pipeline_projection as projection
+    from database import batch_pipeline_native_finish as native_finish
 
-    assert projection._native_manual_upload_revision({'v3_native_manual_input_revision': 7}) == 7
-    assert projection._native_manual_upload_revision({'record_input_upload_revision': 7}) is None
+    assert native_finish.upload_revision({'v3_native_manual_input_revision': 7}) == 7
+    assert native_finish.upload_revision({'record_input_upload_revision': 7}) is None
     assert (
-        projection._native_manual_upload_revision(
-            {'v3_native_manual_input_revision': 1, 'record_input_upload_revision': True}
-        )
+        native_finish.upload_revision({'v3_native_manual_input_revision': 1, 'record_input_upload_revision': True})
         is None
     )
-    assert projection._native_manual_upload_revision({'record_upload_revision': 7}) is None
+    assert native_finish.upload_revision({'record_upload_revision': 7}) is None
     assert (
-        projection._native_manual_upload_revision(
-            {'record_input_upload_revision': 7, 'v3_native_manual_input_revision': 8}
-        )
-        is None
+        native_finish.upload_revision({'record_input_upload_revision': 7, 'v3_native_manual_input_revision': 8}) is None
     )

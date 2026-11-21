@@ -18,7 +18,7 @@ from typing import Any, Callable, Literal, Mapping, NotRequired, TypedDict
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
-from config import server_batch, listen_reconnect
+from config import listen_reconnect
 from config.episodes import home_transcription_deadline_seconds
 from config.firestore_read_levers import lever_enabled
 from config.account_cutover import cutover_enforcement_enabled
@@ -61,7 +61,7 @@ from utils.conversations.backfill_stats import same_timestamp_revision
 from utils.account_cutover.fence import background_job_should_skip_account
 from utils.conversations.terminal_relevance import stamp_terminal_decision
 from utils.conversations.processing_trigger import PROCESSING_MODES, ProcessingTrigger, is_recovery_trigger
-from utils.conversations.v3.policy import NATIVE_MANUAL_STOP
+from database.server_batch_capture_handoff import capture_allowed, manual_stop_patch
 from utils.conversations.lifecycle_clocks import speech_clock
 from utils.conversations.recovery import (
     TERMINAL_NO_DERIVED_EFFECTS_FIELD,
@@ -1133,22 +1133,14 @@ def _complete_server_batch_capture_txn(
         and current.get('finalization_job_id') == job_ref.id
         and current.get('finalization_revision') == revision
     )
-    capture_allowed = (
-        server_batch.owned(capture)
-        and server_batch.owned(current)
-        and current.get('external_data') == capture.get('external_data')
-        and current.get(server_batch.MARKER) == capture.get(server_batch.MARKER)
-        and bool(current.get('private_cloud_sync_enabled'))
-        and current.get('data_protection_level', 'enhanced') in {'standard', 'enhanced'}
-        and not any(current.get(key) for key in ('deleted', 'discarded', 'is_locked', 'uses_custom_stt'))
-    )
+    allowed = capture_allowed(capture, current)
     # Only this primitive's committed terminal is an idempotent success. A
     # generic completed/fenced job must never authorize a raw-capture handoff.
     if job.get('status') == 'completed':
         return (
             'completed'
             if bound
-            and capture_allowed
+            and allowed
             and current.get('status') == 'completed'
             and job.get('finalization_outcome') == 'server_batch_capture'
             and job.get('terminal_outcome') == 'success'
@@ -1158,28 +1150,18 @@ def _complete_server_batch_capture_txn(
         )
     if not _is_current_lease(job, dispatch_generation, lease_epoch):
         return 'lease_conflict'
-    if not bound or not capture_allowed or current.get('status') != 'processing':
+    if not bound or not allowed or current.get('status') != 'processing':
         transaction.update(job_ref, _fenced_finalization_update(now))
         _record_projection_delta(transaction, projection_collection, job, leased=-1, completed=1, stale=1)
         return 'fenced'
 
     terminal = {**current, 'status': 'completed'}
     stamp_terminal_decision(terminal, path='lifecycle_terminal')
-    # Persist intent without exposing a manual cut before the full native transcript.
-    manual_stop = (
-        {NATIVE_MANUAL_STOP: {'job_id': job_ref.id, 'revision': revision, 'finished_at': current['finished_at']}}
-        if (
-            current.get('recording') is True
-            and job.get('processing_trigger') == ProcessingTrigger.CLIENT_FINALIZE.value
-            and current.get('finished_at') is not None
-        )
-        else {}
-    )
     transaction.update(
         conversation_ref,
         {
             'status': 'completed',
-            **manual_stop,
+            **manual_stop_patch(current, job, job_ref.id, revision),
             'relevance_decision': terminal['relevance_decision'],
             'home_transcription_pending_at': now,
             'home_transcription_deadline_at': now + timedelta(seconds=home_transcription_deadline_seconds()),
