@@ -146,10 +146,7 @@ def stretches(members, now, *, silence_gap=SILENCE, lock_delay=SILENCE, settle_o
             [
                 utc(row['finished_at'])
                 for row in members
-                if row.get('v3_manual_end')
-                and row.get('finished_at')
-                and policy.NATIVE_MANUAL_READY not in row
-                and policy.NATIVE_MANUAL_STOP not in row
+                if row.get('v3_manual_end') and row.get('finished_at') and policy.NATIVE_MANUAL_READY not in row
             ]
         )
     )
@@ -170,7 +167,8 @@ def stretches(members, now, *, silence_gap=SILENCE, lock_delay=SILENCE, settle_o
             and prior_line is native_tails.get(prior_line['conversation_id'])
             and line['conversation_id'] != prior_line['conversation_id']
             and isinstance(next_start, datetime)
-            and next_start >= native_cuts[prior_line['conversation_id']]
+            and native_cuts[prior_line['conversation_id']] <= min(next_start, now)
+            and previous['end'] <= max(prior_line['end'], native_cuts[prior_line['conversation_id']])
             and previous['end'] <= line['start']
         )
         if native_cut or silence or (previous and previous['manual_end']):

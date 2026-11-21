@@ -699,6 +699,22 @@ async def reconcile(
         # A re-derive reuses prior ids; a prior copy no rebuilt window claims is retired with the commit.
         remove = [cid for cid in existing if cid not in planned] if derive and rederive else []
         retire, commit_recordings, commit_existing, priors = {}, recordings, existing, []
+        if not (derive or on_open):
+            # The natural plan may join several revoked native windows into one.
+            # Retire unmatched tiles and release their claims in the projection commit.
+            retire = {
+                cid: {
+                    'deleted': True,
+                    'home_hidden': True,
+                    'v3_derived': False,
+                    'v3_process_pending': False,
+                    'summary_due_at': None,
+                    policy.NATIVE_MANUAL_BINDING: None,
+                    'sync_content_revision': int(prior.get('sync_content_revision') or 0) + 1,
+                }
+                for cid, prior in existing.items()
+                if cid not in planned and not prior.get('deleted') and _revoked_native_window(prior, recordings)
+            }
         if live:
             rows, retire, touched, sources, priors, outcome = _live_outcome(
                 rows, existing, recordings, since=since, until=until, run_id=run_id

@@ -663,3 +663,21 @@ def test_copy_carries_the_recording_location_and_keeps_its_own():
         'geolocation': kept,
     }
     assert planner.build('u', window, {'r': row}, prior)['geolocation'] == kept
+
+
+def test_native_tail_cannot_cut_when_earlier_overlapping_speech_continues_past_stop():
+    end = NOW + timedelta(seconds=30)
+    overlapping = recording('overlapping', segments=[{'text': 'continuous speech', 'start': 0, 'end': 60}])
+    native = recording('native', at=NOW + timedelta(seconds=10), **native_ready_fields(end))
+    successor = recording('successor', at=NOW + timedelta(seconds=70))
+    (group,) = outline.stretches([overlapping, native, successor], NOW + timedelta(seconds=90))
+    assert not group['manual_end'] and not group['finished']
+    assert [line['conversation_id'] for line in group['lines']] == ['overlapping', 'native', 'successor']
+
+
+def test_inert_native_stop_does_not_mask_legacy_manual_end():
+    end = NOW + timedelta(seconds=12)
+    legacy = recording('legacy', finished_at=end, v3_manual_end=True, v3_native_manual_stop={'finished_at': end})
+    (group,) = outline.stretches([legacy], end + timedelta(seconds=1))
+    assert group['legacy_manual_end'] and group['finished']
+    assert not group['native_manual_end']

@@ -597,7 +597,7 @@ def commit_projection(
 ):
     """Commit derived rows and source claims; returns the ids of source recordings that kept moving.
 
-    ``retire`` (live re-derive only) maps a row id to the soft-retirement patch the final batch applies:
+    ``retire`` maps a row id to the soft-retirement patch the final batch applies:
     its claims leave every loaded recording with the same commit that writes the rows absorbing them.
 
     A recording that only received more speech during the pass does not fail the commit (a live
@@ -629,7 +629,8 @@ def commit_projection(
             or len(all_absorbed) != len(set(all_absorbed))
         ):
             raise Conflict('source_changed')
-    retired = {cid for cid, patch in retire.items() if patch.get('sync_merged_into')}
+    redirected = {cid for cid, patch in retire.items() if patch.get('sync_merged_into')}
+    retired = {cid for cid, patch in retire.items() if patch.get('deleted')}
     failure_transitions = {
         r['id']: r.get('v3_process_failed') and not (existing.get(r['id']) or {}).get('v3_process_failed') for r in rows
     }
@@ -689,7 +690,7 @@ def commit_projection(
         absorbed = {cid: row['id'] for row in batch_rows for cid in row.get('_v3_absorbed', ())}
         if absorbed and merge_donors_have_tasks(uid, absorbed, firestore_client=client, transaction=tx):
             raise Conflict('source_changed')
-        if retired and merge_donors_have_tasks(uid, retired, firestore_client=client, transaction=tx):
+        if redirected and merge_donors_have_tasks(uid, redirected, firestore_client=client, transaction=tx):
             raise Conflict('rederive_live_donor_tasks')
         for cid in [*(row['id'] for row in batch_rows), *absorbed, *(retire if final else ())]:
             tombstone = (

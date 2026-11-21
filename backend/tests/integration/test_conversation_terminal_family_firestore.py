@@ -41,3 +41,43 @@ def test_atomic_processor_update_matches_legacy_merge_over_nonmap_parents(parent
     assert result['structured']['title'] == 'new'
     assert result['structured']['nested'] == {'literal.dot': 'new'}
     assert result['status'] == 'completed' and result['kept'] == 'outside'
+
+
+@pytest.mark.parametrize('overview', ['Actual notes', ''])
+def test_legacy_background_notes_commit_native_visibility(monkeypatch, overview):
+    from database import conversations as db
+    from tests.unit.test_conversations_v3_native_manual_visibility_writes import rows
+    from utils.conversations import lifecycle
+    from utils.conversations.v3 import policy
+
+    assert os.environ['FIRESTORE_EMULATOR_HOST'].startswith(('127.0.0.1:', 'localhost:'))
+    client = firestore.Client(project='demo-lcphase2a', credentials=AnonymousCredentials())
+    uid = 'native-visibility-' + uuid4().hex
+    source, derived = rows()
+    conversations = client.collection('users').document(uid).collection('conversations')
+    raw = conversations.document('r')
+    target = conversations.document(derived['id'])
+    raw.set(source)
+    target.set(derived)
+    monkeypatch.setattr(db, 'db', client)
+    monkeypatch.setattr(db.pipeline_ledger, 'record_summary', lambda *args, **kwargs: None)
+    monkeypatch.setattr(db, '_terminal_family_serving', lambda uid: False)
+    try:
+        assert lifecycle.persist_processed_conversation(
+            uid,
+            {
+                'id': derived['id'],
+                'status': 'completed',
+                'sync_content_revision': derived['sync_content_revision'],
+                'structured': {'title': 'Title', 'overview': overview},
+                'data_protection_level': 'standard',
+            },
+        )
+        saved = target.get().to_dict()
+        assert not saved.get('v3_notes_written')
+        assert saved['structured']['overview'] == overview
+        expected = policy.native_manual_notes_receipt(derived) if overview else None
+        assert saved.get(policy.NATIVE_MANUAL_NOTES_VISIBILITY) == expected
+    finally:
+        target.delete()
+        raw.delete()

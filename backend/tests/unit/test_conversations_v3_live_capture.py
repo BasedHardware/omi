@@ -364,3 +364,58 @@ def test_promoted_native_source_custody_change_is_not_a_speech_only_race(strict,
             'synthetic', token, {'r': loaded(before, 1)}, {}, [window(start)], [], firestore_client=strict
         )
     assert C not in strict.rows and strict.rows[R]['v3_pending'] is True
+
+
+@pytest.mark.asyncio
+async def test_adjacent_revoked_native_windows_retire_unmatched_pending_tile(strict, monkeypatch):
+    start = datetime.now(timezone.utc) - timedelta(minutes=2)
+    rid_paths = {'r': R, 'second': (*R[:-1], 'second')}
+    for offset, (rid, path) in enumerate(rid_paths.items()):
+        began = start + timedelta(seconds=30 * offset)
+        strict.rows[path] = live(began, id=rid, **native_ready_fields(began + timedelta(seconds=20)))
+
+    def load(uid):
+        existing = {
+            path[-1]: {**deepcopy(row), '_v3_revision': 1}
+            for path, row in strict.rows.items()
+            if path[2] == 'conversations' and row.get('v3_derived')
+        }
+        return {rid: loaded(strict.rows[path], 1) for rid, path in rid_paths.items()}, existing, []
+
+    async def blocking(pool, fn, *args, **kwargs):
+        return fn(*args, **kwargs)
+
+    async def no_processing(uid):
+        return None
+
+    monkeypatch.setattr(store, 'get_firestore_client', lambda: strict)
+    monkeypatch.setattr(store, 'load', load)
+    monkeypatch.setattr(service, 'run_blocking', blocking)
+    monkeypatch.setattr(service, 'drain_processing', no_processing)
+    monkeypatch.setattr(service, 'has_pending', lambda uid: False)
+    monkeypatch.setattr(service, 'enqueue', lambda *a, **kw: None)
+    monkeypatch.setattr(service.context, 'outline_sources', lambda *a: ({}, [], []))
+    monkeypatch.setattr(
+        service.models,
+        'outline',
+        lambda *a: json.dumps(
+            {'conversations': [{'first_line': 1, 'kind': 'conversation', 'title': 'Live plan', 'line': 'You planned.'}]}
+        ),
+    )
+    assert await service.reconcile('synthetic') == 'committed'
+    pending = sorted(load('synthetic')[1].values(), key=lambda row: row['started_at'])
+    assert len(pending) == 2 and all(row['v3_process_pending'] for row in pending)
+    for path in rid_paths.values():
+        strict.rows[path].update(record_upload_revision=8, v3_pending=True)
+
+    for _ in range(2):
+        assert await service.reconcile('synthetic') == 'committed'
+        (_, existing, _) = load('synthetic')
+        (replacement,) = existing.values()
+        assert replacement['id'] == pending[0]['id']
+        assert replacement['v3_recording_ids'] == ['r', 'second']
+        assert replacement['status'] == 'in_progress' and not replacement['v3_process_pending']
+        retired = strict.rows[(*R[:-1], pending[1]['id'])]
+        assert retired['deleted'] and retired['home_hidden'] and not retired['v3_process_pending']
+        for path in rid_paths.values():
+            assert {claim['conversation_id'] for claim in strict.rows[path]['claims']} == {replacement['id']}
