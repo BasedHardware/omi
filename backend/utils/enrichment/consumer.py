@@ -33,6 +33,7 @@ from typing import Any, Callable, ClassVar, Iterator
 from fastapi import HTTPException
 
 from database.outbox import Claim, OutboxKind, Outcome
+from utils.enrichment.outbox import LIVE_DEFER_SECONDS, V3_CUSTODY_MAX_DEFERS
 from utils.observability.reasons import ConsumerReason, RetryReason
 from utils.workers.consumer import Result, Role
 from utils.sync import processing_hold
@@ -187,8 +188,6 @@ class EnrichmentConsumer:
             return self._deliver(claim, heartbeat)
         except Exception as error:
             if isinstance(error, SyncAssignmentConflict) and error.subtype == SyncAssignmentConflictReason.V3_CUSTODY:
-                from utils.enrichment.outbox import LIVE_DEFER_SECONDS, V3_CUSTODY_MAX_DEFERS
-
                 reason = ConsumerReason.V3_CUSTODY_CONFLICT
                 if (claim.payload.get('v3_custody_defers') or 0) >= V3_CUSTODY_MAX_DEFERS:
                     return Result(Outcome.DISCARDED, reason)
