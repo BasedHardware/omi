@@ -529,7 +529,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
         return;
       }
       pairedDevice = info;
-      if (info.type == DeviceType.openglass && _firstChargeDeviceId == info.id) {
+      if (info.type == DeviceType.openglass) {
         _clearFirstChargeCheck();
       }
       if (connection != null) {
@@ -666,7 +666,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     if (batteryLevel < 0 &&
         _firstChargeDeviceId == null &&
         (connection == null || connection is OmiDeviceConnection) &&
-        DeviceConnectionFactory.resolveDeviceType(device) == DeviceType.omi) {
+        DeviceConnectionFactory.resolveDeviceType(capabilityNormalizedDevice ?? device) == DeviceType.omi) {
       _scheduleBatteryRead(_batteryRetryDelays.first, nextRetry: 1);
     }
     notifyListeners();

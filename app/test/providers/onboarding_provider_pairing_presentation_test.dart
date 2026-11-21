@@ -12,7 +12,6 @@ import 'package:omi/gen/pigeon_communicator.g.dart';
 import 'package:omi/l10n/app_localizations_en.dart';
 import 'package:omi/pages/onboarding/find_device/pairing_failure_card.dart';
 import 'package:omi/providers/onboarding_provider.dart';
-import 'package:omi/services/devices/connectors/device_connection.dart';
 import 'package:omi/services/devices/pairing_failure.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/ui/ui.dart';
@@ -31,6 +30,10 @@ class DiscoveryDeviceProvider extends AuditDeviceProvider {
   DiscoveryDeviceProvider({super.device, super.connected, super.battery});
 
   bool? chargingNow;
+  BtDevice? resolvedDevice;
+
+  @override
+  BtDevice? get capabilityNormalizedDevice => resolvedDevice ?? super.capabilityNormalizedDevice;
 
   @override
   bool get isCharging => chargingNow ?? false;
@@ -40,6 +43,11 @@ class DiscoveryDeviceProvider extends AuditDeviceProvider {
 
   void updateCharging(bool value) {
     chargingNow = value;
+    notifyListeners();
+  }
+
+  void resolveGlass(BtDevice discovered) {
+    resolvedDevice = discovered.copyWith(type: DeviceType.openglass);
     notifyListeners();
   }
 
@@ -183,13 +191,11 @@ void main() {
     await tester.pumpWidget(polish.host(polish.connect(provider, device: live)));
     await tester.pump();
     await tester.pump();
-    final type = DeviceConnectionFactory.resolveDeviceType(device);
-    expect(type, DeviceType.openglass);
     provider
       ..isConnected = true
       ..deviceId = device.id
       ..deviceName = device.name
-      ..deviceType = type
+      ..deviceType = device.type
       ..batteryPercentage = live.batteryLevel
       ..setLoading(false);
     await tester.pump();
@@ -197,6 +203,33 @@ void main() {
     expect(find.text(l10n.pairingSuccessful), findsOneWidget);
     expect(find.text('72%'), findsOneWidget);
     expect(find.text(l10n.deviceReadyToUse), findsNothing);
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('late Glass capability switches pairing to the live battery without changing the discovered type',
+      (tester) async {
+    final device = BtDevice(id: 'glass-capability', name: 'Omi', type: DeviceType.omi, rssi: -50);
+    final live = DiscoveryDeviceProvider(device: device, connected: true, battery: 72);
+    addTearDown(live.dispose);
+    await tester.pumpWidget(polish.host(polish.connect(provider, device: live)));
+    await tester.pump();
+    provider
+      ..isConnected = true
+      ..deviceId = device.id
+      ..deviceName = device.name
+      ..deviceType = device.type
+      ..batteryPercentage = -1
+      ..setLoading(false);
+    await tester.pump();
+    final l10n = AppLocalizationsEn();
+    expect(find.text(l10n.connected), findsOneWidget);
+    expect(find.text('72%'), findsNothing);
+
+    live.resolveGlass(device);
+    await tester.pump();
+    expect(find.text(l10n.pairingSuccessful), findsOneWidget);
+    expect(find.text('72%'), findsOneWidget);
+    expect(provider.deviceType, DeviceType.omi);
     await tester.pumpWidget(const SizedBox());
   });
 

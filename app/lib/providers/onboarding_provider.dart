@@ -408,7 +408,7 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
       await SharedPreferencesUtil().btDeviceSet(device);
       _syncSavedDevices();
       deviceName = device.name;
-      deviceType = resolvedDeviceType;
+      deviceType = device.type;
       var cDevice = await _getConnectedDevice(deviceId);
       if (cDevice != null) {
         unawaited(deviceProvider!.setConnectedDevice(cDevice));
@@ -419,10 +419,6 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
       finishFirstChargePreparation?.call();
       finishFirstChargePreparation = null;
       var connectedDevice = deviceProvider!.connectedDevice;
-      final normalizedDevice = deviceProvider!.capabilityNormalizedDevice;
-      if (normalizedDevice?.id == device.id && normalizedDevice?.type == DeviceType.openglass) {
-        deviceType = DeviceType.openglass;
-      }
       batteryPercentage = deviceProvider!.batteryLevel;
       isConnected = true;
       isClicked = false;

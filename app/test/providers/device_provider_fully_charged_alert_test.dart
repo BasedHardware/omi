@@ -224,6 +224,32 @@ void main() {
     expect(provider.settingsBatteryLevel, 80);
   });
 
+  testWidgets('first-charge retry exhaustion keeps an earlier low sample off Settings', (tester) async {
+    final transport = _ChargingTransport()
+      ..value = [0]
+      ..battery = [];
+    final provider = _provider(transport, []);
+    addTearDown(transport.notifications.close);
+    addTearDown(transport.batteryNotifications.close);
+    addTearDown(provider.dispose);
+    provider.connectedDevice = _device();
+    provider.setIsConnected(true);
+    provider.batteryLevel = 3;
+    provider.prepareFirstChargeCheck(_device().id);
+    await provider.initiateChargingStatusListener();
+    await provider.initiateBleBatteryListener();
+    for (final delay in [12, 2, 4, 8, 30]) {
+      await tester.pump(Duration(seconds: delay));
+    }
+    expect(transport.batteryReads, 4);
+    expect(provider.batteryLevel, 3);
+    expect(provider.settingsBatteryLevel, -1);
+    expect(provider.hasLowBatteryAlertedForTesting, isFalse);
+
+    transport.batteryNotifications.add([80]);
+    expect(provider.settingsBatteryLevel, 80);
+  });
+
   testWidgets('charging again drops an in-flight check and restarts the settle wait', (tester) async {
     final pending = Completer<List<int>>();
     final transport = _ChargingTransport()
