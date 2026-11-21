@@ -1435,3 +1435,47 @@ def test_ordinary_launch_never_overwrites_a_running_segment(followup, monkeypatc
     monkeypatch.setattr(projection_followup, 'start_background_task', lambda *a, **k: pytest.fail('duplicate launch'))
     runner.launch()
     assert runner.tasks['later'] is owner and not runner.pending and 'later' not in runner.prioritized
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('case', ['released_after_attempt', 'released_without_attempt', 'page_cleared_during_check'])
+async def test_claim_state_changes_during_the_proof_check(ready_followup, monkeypatch, case):
+    """Exact-head panel F1: pin the non-live coalesce branch and the post-await page re-checks."""
+    f, _authority = ready_followup
+    monkeypatch.setenv(SKIP, 'true')
+    key = (1, f.binding)
+    head, release = await _claimant_holding_completion(f)
+    original = f.runner.read_persisted
+
+    def read_persisted(segment, *, prior=None, hints=None):
+        result = original(segment, prior=prior, hints=hints)
+        if segment == 'later' and prior:
+            if case == 'released_after_attempt':
+                f.runner.sibling_claims.pop(key)  # claimant released; its attempt stays registered
+            elif case == 'released_without_attempt':
+                f.runner.sibling_claims.pop(key)
+                f.runner.completion_attempts.discard(key)
+            else:
+                f.runner.pages.pop('later')
+            if case != 'released_after_attempt':
+                release.set()  # this sibling reaches its own completion; don't make it wait
+        return result
+
+    monkeypatch.setattr(f.runner, 'read_persisted', read_persisted)
+    before = _skips()
+    result = await f.run('later')
+    release.set()
+    await head
+    if case == 'released_after_attempt':
+        assert result == 'coalesced' and _skips() == before + 1
+    else:
+        assert _skips() == before
+
+
+def test_cancelled_task_does_not_count_a_dropped_requeue(followup):
+    """Exact-head panel F2: shutdown drops the queue, so it must not count a requeue."""
+    f = followup
+    f.runner.sibling_requeue.add('x')
+    before = _requeues()
+    f.runner.finished('x', SimpleNamespace(cancelled=lambda: True))
+    assert _requeues() == before and not f.runner.pending and f.runner.closed

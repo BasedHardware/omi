@@ -404,7 +404,7 @@ class ProjectionFollowups:
     def finished(self, segment, task, *, targeted=False):
         self.tasks.pop(segment, None)
         self.forget_page(segment)
-        if segment in self.sibling_requeue:
+        if segment in self.sibling_requeue and not task.cancelled():
             self.sibling_requeue.discard(segment)
             self.requeue_sibling(segment)
         if task.cancelled():
