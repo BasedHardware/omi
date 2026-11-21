@@ -2,6 +2,7 @@
 
 import asyncio
 import heapq
+import time
 import pytest
 
 
@@ -22,6 +23,14 @@ class VirtualClock:
         if self.task is None or self.task.done():
             self.task = asyncio.create_task(self.drive())
         await future
+
+    async def until(self, predicate, timeout=2):
+        """Drive virtual time behind an unchanged real-wall test watchdog."""
+        deadline = time.monotonic() + timeout
+        while not predicate():
+            if time.monotonic() >= deadline:
+                raise TimeoutError()
+            await self.sleep(0.01)
 
     async def drive(self):
         while self.waiters:
@@ -47,3 +56,16 @@ def virtual_clock(monkeypatch):
     monkeypatch.setattr(resilient_stream, 'clock', lambda: timer.now)
     monkeypatch.setattr(recovery_state, 'clock', lambda: timer.now)
     return timer
+
+
+@pytest.fixture
+async def coordinated_replay_clock(monkeypatch, virtual_clock):
+    """Put asyncio timeout/deadline waits on the replay clock for positive pacing tests.
+
+    Negative real-deadline tests keep the unpatched event loop. The offset avoids
+    moving already-scheduled callbacks to a different clock epoch.
+    """
+    loop = asyncio.get_running_loop()
+    origin = loop.time()
+    monkeypatch.setattr(loop, 'time', lambda: origin + virtual_clock.now)
+    return virtual_clock
