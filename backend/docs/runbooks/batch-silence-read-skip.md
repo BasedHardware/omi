@@ -2,7 +2,10 @@
 
 Prepared 2026-11-12. Integration canary 2026-11-21T13:20:14Z (`backend-integration-sca1824-on`,
 SCA-1824): one clean hour, target-caller reads −13.5% against the 11-20 control hours
-(19.98M→17.36M/h), guard clean. The expansion to every role is #25959 (2026-11-21).
+(19.98M→17.36M/h), guard clean. The expansion was prepared in #25959 (2026-11-21).
+The listen image roll preserves the live `false` value (SCA-3516). Enable it on
+listen as a separate, explicitly approved step, with T2 lost-speech and custody
+checks, listen 5xx and reconnect-rate guards, and a readback.
 
 `BATCH_PIPELINE_SILENCE_READ_SKIP_ENABLED` defaults **on**. Set `false`, `off`, or
 `0` to restore the full processing path for subsequent silent projections. Existing
