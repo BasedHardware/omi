@@ -1274,7 +1274,9 @@ async def drain_backfill(uid, *, deadline, keep_going=None, concurrency=BACKFILL
             break
         await asyncio.gather(*(one(row) for row in rows[start : start + concurrency]))
     left = await run_blocking(db_executor, store.pending_backfill_processing, uid)
-    counts['remaining'] = sum(1 for row in left if row and python_owns_finalization(row))
+    remaining = [row for row in left if row]
+    counts['remaining'] = len(remaining)
+    counts['ownership_blocked'] = sum(not python_owns_finalization(row) for row in remaining)
     return counts
 
 
