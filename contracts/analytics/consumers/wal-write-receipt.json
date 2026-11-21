@@ -1,0 +1,13 @@
+{
+  "id": "wal-write-receipt",
+  "kind": "question",
+  "owner": "dazheng",
+  "events": [
+    "walWriteReceipt"
+  ],
+  "namespace_property": "$app_namespace",
+  "question": "How many live WAL files reached the index through exact receipt replay, and which conditions withheld replay?",
+  "zero_policy": "No events is unknown until build identity, consent, ingestion and an interrupted write are verified.",
+  "query": "contracts/analytics/consumers/wal-write-receipt.sql",
+  "posthog_query": "SELECT properties['result'], count(), sum(toInt64OrZero(toString(properties['recovered']))), sum(toInt64OrZero(toString(properties['withheld']))) FROM events WHERE event = 'WAL Write Receipt' AND properties['$app_namespace'] = '{app_namespace}' AND properties['build_number'] = '{build_number}' GROUP BY properties['result']"
+}

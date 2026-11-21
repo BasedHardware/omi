@@ -10,6 +10,7 @@ import 'dart:async';
 import 'native_custody_diagnostics.dart';
 import 'ring_custody_diagnostics.dart';
 import 'recording_inventory.dart';
+import 'live_wal_receipt.dart';
 import 'package:path/path.dart' as path;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:omi/services/experiments/orphan_audio_recovery.dart';
@@ -78,6 +79,7 @@ import 'package:omi/services/wals/upload_trace.dart';
 part 'capture_committed_custody.dart';
 part 'on_device_prepared_upload.dart';
 part 'wal_policy.dart';
+part 'live_wal_receipt_replay.dart';
 part 'wal_job_reconciliation.dart';
 part 'wal_index_persistence.dart';
 part 'device_chunk_persistence.dart';
@@ -726,7 +728,12 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
       DebugLogManager.logEvent('wal_initial_admission_failed', {'retry': 'next_save'});
       return;
     }
+    await _recoverLiveWalReceipts(generation);
     if (_headlessIndexLoad) {
+      if (!_walReady.isCompleted) _walReady.complete();
+      return;
+    }
+    if (!_isCurrent(generation)) {
       if (!_walReady.isCompleted) _walReady.complete();
       return;
     }
@@ -1176,10 +1183,11 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
 
   int _storageFileSeq = 0;
 
-  Future<String> _uniqueStorageFileName(Wal wal) async {
+  Future<String> _uniqueStorageFileName(Wal wal, {String? writeId}) async {
     final claimable = captureEvidenceWalClaimable(wal);
     final planned = wal.filePath;
-    var name = claimable && planned != null && planned.isNotEmpty ? planned.split('/').last : wal.getFileName();
+    final name = claimable && planned != null && planned.isNotEmpty ? planned.split('/').last : wal.getFileName();
+    if (writeId != null) return LiveWalReceipt.uniqueName(name, writeId);
     if (!_fileReferencedByOtherWal(wal, name) && !await _localFileExistsByName(name)) return name;
     for (;;) {
       final candidate = walCollisionName(name, _storageFileSeq++, claimable);
@@ -1208,7 +1216,11 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
         // A policy edge may share a partially filled chunk with previously sent
         // frames. Conservatively retain the whole chunk; never upload its local tail.
         // Custody was latched when these frames were captured.
-        final fileName = await _uniqueStorageFileName(wal);
+        final owner = wal.ownerUid;
+        final writeId = LiveWalReceipt.writeEnabled && owner != null && owner.isNotEmpty && owner != 'legacy'
+            ? LiveWalReceipt.newId()
+            : null;
+        final fileName = await _uniqueStorageFileName(wal, writeId: writeId);
         String? filePath = await Wal.getFilePath(fileName);
         if (filePath == null) {
           DebugLogManager.logError('LocalWalSync flush error: Flush failed: cannot get file path', null, null, {
@@ -1228,21 +1240,36 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
           break;
         }
         final file = File(filePath);
+        if (writeId != null) _liveWalWrites.add(fileName);
         try {
+          String? digest;
+          if (writeId != null) {
+            // Exclusive creation keeps a failed receipt from falling through
+            // to an overwrite. Use the reserved name even without a receipt:
+            // the index may still commit, and an interrupted write cannot
+            // fall through to heuristic ownership under a different account.
+            await file.create(exclusive: true);
+            try {
+              digest = await LiveWalReceipt.prepare(file, wal, writeId, data);
+            } catch (_) {
+              _emitLiveWalReceipt(WalWriteReceiptResult.publishFailed);
+            }
+          }
           await file.writeAsBytes(data, flush: true);
+          wal.fileSha256 = digest ?? (wal.liveRingId == null ? null : sha256.convert(data).toString());
+          wal.liveFileWriteId = digest == null ? null : writeId;
+          if (wal.liveRingId != null) wal.liveDeviceId = wal.device;
+          wal.filePath = fileName;
+          wal.storage = WalStorage.disk;
         } catch (e) {
-          Logger.debug('LocalWalSync: flush write failed for ${wal.id}: $e');
+          Logger.debug('LocalWalSync: flush write failed: ${e.runtimeType}');
           _releaseAdmission(data.length);
           if (_isPendantWal(wal)) _pendantBlockedByStorage = true;
           break;
+        } finally {
+          if (writeId != null) _liveWalWrites.remove(fileName);
         }
         _consumeAdmission(data.length);
-        if (wal.liveRingId != null) {
-          wal.fileSha256 = sha256.convert(data).toString();
-          wal.liveDeviceId = wal.device;
-        }
-        wal.filePath = fileName;
-        wal.storage = WalStorage.disk;
         if (wal.liveRingId != null && wal.liveOrdinalStart != null) {
           _liveProofPendingWalIds.add(_durableKey(wal));
         }
@@ -1696,8 +1723,12 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
         final type = await FileSystemEntity.type(fullPath, followLinks: false);
         if (!_isCurrent(generation) || !_isTrackedWal(wal)) return false;
         if (type == FileSystemEntityType.file || type == FileSystemEntityType.link) {
-          if (!_fileReferencedByOtherWal(wal, fullPath.split('/').last)) {
-            await File(fullPath).delete();
+          final file = File(fullPath);
+          if (_fileReferencedByOtherWal(wal, fullPath.split('/').last)) {
+            if (wal.liveFileWriteId != null && !await LiveWalReceipt.retireForSharedDeletion(file, wal)) return false;
+          } else {
+            await file.delete();
+            if (wal.liveFileWriteId != null) await LiveWalReceipt.retireAfterFileDeletion(file, wal);
             final sidecar = File(nativeBatchGeolocationSidecarPath(fullPath));
             if (await sidecar.exists()) await sidecar.delete();
             if (!_isCurrent(generation)) return false;
@@ -2180,6 +2211,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
   bool _pendantBlockedByStorage = false;
 
   final Set<String> _liveProofPendingWalIds = {};
+  final Set<String> _liveWalWrites = {};
 
   bool _isPendantWal(Wal wal) =>
       _deviceId != null && _deviceId!.isNotEmpty && _deviceId != 'phone' && wal.device == _deviceId;
