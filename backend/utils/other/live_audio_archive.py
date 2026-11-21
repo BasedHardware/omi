@@ -8,6 +8,8 @@ from collections.abc import Awaitable, Callable
 from config.audio_archive import admitted
 from config.audio_outbox import enabled as audio_outbox_enabled
 from config.audio_custody import framed_pack
+from config.batch_pipeline_projection_rebuild import enabled as projection_debt_enabled
+from database import record_projection_rebuild
 from utils.other.audio_frame_table import FRAME_SCHEMA
 from database.server_batch_audio import note_server_batch_audio, note_server_batch_audio_received
 from models.message_event import AudioCustodyEvent
@@ -17,6 +19,7 @@ from utils.other.storage import archive_capture_bytes
 from utils.other.audio_outbox import commit_capture
 from utils.other.audio_outbox_metrics import BACKPRESSURE, record_failure, record_would_drop
 from utils.observability.fallback import record_fallback
+from utils.other.relay_recovery_metrics import SAMPLES
 
 
 class LiveAudioArchive:
@@ -43,11 +46,20 @@ class LiveAudioArchive:
         # the resolved decision for the connection lifetime.
         self._admitted_snapshot: dict[str, bool] = {}
         self._server_audio_marked: set[str] = set()
+        # Retired recording -> successor. A frame still addressed to a retired recording
+        # (bound before the switch, appended after) joins the successor, never the sealed row.
+        self.retargets: dict[str, str] = {}
 
     def _admitted(self, uid: str, phase: str) -> bool:
         if phase not in self._admitted_snapshot:
             self._admitted_snapshot[phase] = admitted(uid, phase)
         return self._admitted_snapshot[phase]
+
+    def _producer_kwargs(self, conversation_id):
+        controller = getattr(self.host, 'conversations', None)
+        lookup = getattr(controller, 'batch_producer_token', None)
+        token = lookup(conversation_id) if callable(lookup) else None
+        return {'producer_token': token} if isinstance(token, str) else {}
 
     async def append(
         self,
@@ -62,7 +74,17 @@ class LiveAudioArchive:
         async with self.lock:
             await self._append(raw, conversation_id, timestamp, samples, channel, decoded, source_frame)
 
+    async def retarget(self, retired: str, successor: str) -> None:
+        """After this returns, no frame can join `retired`; its packs can be finished and sealed."""
+        async with self.lock:
+            self.retargets[retired] = successor
+            for key in [key for key, value in self.retargets.items() if value == retired]:
+                self.retargets[key] = successor
+            while len(self.retargets) > 64:
+                self.retargets.pop(next(iter(self.retargets)))
+
     async def _append(self, raw, conversation_id, timestamp, samples, channel, decoded, source_frame):
+        conversation_id = self.retargets.get(conversation_id, conversation_id)
         request = self.host.request
         # Consent is read before admission: with LIVE default-on, a host that
         # does not carry the consent attribute (older hosts, test doubles)
@@ -111,7 +133,13 @@ class LiveAudioArchive:
             # The bytes are already retained in the active pack if this write fails;
             # teardown can still commit them. Only a proven never-received row may
             # be reclaimed by an expired recording lease.
-            if not await run_blocking(db_executor, note_server_batch_audio_received, request.uid, conversation_id):
+            if not await run_blocking(
+                db_executor,
+                note_server_batch_audio_received,
+                request.uid,
+                conversation_id,
+                **self._producer_kwargs(conversation_id),
+            ):
                 raise RuntimeError('server batch capture owner unavailable before first audio')
             self._server_audio_marked.add(conversation_id)
         # Queue bounded commits ahead of pusher's batched upload without
@@ -295,6 +323,13 @@ class LiveAudioArchive:
                 metadata,
                 frames,
             )
+            if pack.conversation_id and not getattr(self.host, 'is_multi_channel', False) and projection_debt_enabled():
+                # A successful relay send is not proof that pusher consumed it.
+                # Persist socket-independent, coalesced recovery work before
+                # releasing this pack or publishing any phone custody receipt.
+                # Failure keeps the exact pack/identity in uncommitted for retry.
+                await run_blocking(db_executor, record_projection_rebuild.mark_due, request.uid, pack.conversation_id)
+            SAMPLES.labels(stage='committed').inc(sum(frame['samples'] for frame in frames))
             if getattr(self.host, 'server_batch_only', False) is True and pack.conversation_id:
                 # Zero-sample originals are retained above, but their arrival
                 # clocks cannot expand or shrink the decoded-audio obligation.
@@ -311,6 +346,7 @@ class LiveAudioArchive:
                         pack.conversation_id,
                         min(start for start, _ in spans),
                         max(end for _, end in spans),
+                        **self._producer_kwargs(pack.conversation_id),
                     ):
                         raise RuntimeError('desktop batch capture owner unavailable')
             # A failed/disconnected delivery leaves the producer unacknowledged;

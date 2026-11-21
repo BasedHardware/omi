@@ -9,6 +9,7 @@ from __future__ import annotations
 from utils.observability.delivery import record_delivery
 from utils.observability.sweep_age import skip_ancient
 from utils.observability.fallback import record_fallback
+from utils.observability.reasons import ConsumerReason
 
 import hashlib
 import math
@@ -74,6 +75,8 @@ COALESCED = Counter('sync_reprocess_coalesced_total', 'Sync updates folded into 
 UNBOUND = Counter('sync_reprocess_unbound_total', 'Sync obligations awaiting a complete worker binding', ['action'])
 # A conversation row at Firestore's 1 MiB ceiling refuses every enrichment write (#23341).
 HELD_DOCUMENT_SIZE_LIMIT = 'document_size_limit'
+V3_CUSTODY_DEFER_REASON = ConsumerReason.V3_CUSTODY_CONFLICT.value
+V3_CUSTODY_MAX_DEFERS = 2
 
 
 def custody_deferred_since(row: Row, reason: str, now: float) -> float:
@@ -227,6 +230,11 @@ def _conversation_finished_at(uid: str, conversation_id: str) -> object:
     )
     data = snapshot.to_dict() or {}
     return data.get('finished_at') if data.get('finished_at') is not None else data.get('created_at')
+
+
+def conversation_finished_at(uid: str, conversation_id: str) -> object:
+    """Public read of the freshness clock (``finished_at``, else ``created_at``) for lane checks."""
+    return _conversation_finished_at(uid, conversation_id)
 
 
 def _recent_conversation(uid: str, conversation_id: str, now: float) -> bool:
@@ -487,6 +495,10 @@ def mark_update(
         if old and old.get('dormant'):
             row.pop('merge_hold', None)
             row.pop('sync_hold_requested', None)
+            if old.get('held_reason') == V3_CUSTODY_DEFER_REASON:
+                # A producer admitted new work. Give it a fresh custody budget.
+                for field in ('held_reason', 'held_at', 'v3_custody_defers', 'deferred_reason', 'deferred_since'):
+                    row.pop(field, None)
         if sync_hold or merge_hold:
             row['sync_hold'] = True
             if sync_hold and not merge_hold:
@@ -522,6 +534,34 @@ def mark_update(
             row.update(task_token=uuid.uuid4().hex, task_due_at=row['due_at'])
             wake = True
         return row, ({**row, '_wake': wake}, old is not None)
+
+    return update
+
+
+def expedite_update(now: float) -> Callable[[Row | None], tuple[Row | None, Row | None]]:
+    """The CAS operation behind ``FirestoreEnrichmentOutbox.expedite``: an open obligation becomes due now.
+
+    It never creates, reopens or re-leases a row, so it cannot start an extra
+    processing run: a missing, dormant, parked, empty-blocked, leased or already
+    due row is returned unchanged. Moving the wake re-arms its named task under a
+    new token; the old task fails its stale-token check.
+    """
+
+    def update(old: Row | None) -> tuple[Row | None, Row | None]:
+        from utils.enrichment.age_gate import parked
+
+        if (
+            not old
+            or old.get('dormant')
+            or parked(old)
+            or old.get('summary_blocked_reason') in summary_delivery.EMPTY_BLOCKED_REASONS
+            or float(old.get('lease_until') or 0) > now
+            or float(old.get('due_at') or 0) <= now
+        ):
+            return old, None
+        row = dict(old)
+        row.update(due_at=now, task_due_at=now, task_token=uuid.uuid4().hex, version=int(old.get('version') or 0) + 1)
+        return row, row
 
     return update
 
@@ -973,6 +1013,7 @@ def sweep(
                 and fresh_queue
                 and enrichment_config.route() == 'enrichment_queue'
                 and first_summary_pending(row)
+                and not row.get('fresh_demoted')
                 and valid_dispatch_binding(row.get('dispatch'))
                 and row['dispatch']['queue'] == enrichment_config.primary_queue()
             ):

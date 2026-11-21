@@ -21,6 +21,13 @@ from scripts.runtime_env_validation import manifest as manifest_validation
 ROOT = Path(__file__).resolve().parents[3]
 
 
+@pytest.fixture(autouse=True)
+def action_runner_scope(tmp_path, monkeypatch):
+    # Execute snippets with the actual runner's environment-file protocol.
+    monkeypatch.setenv('GITHUB_ENV', str(tmp_path / 'github-env'))
+    monkeypatch.setenv('SELECTED_CLOUD_RUN_SERVICES', ' '.join(SERVICES))
+
+
 def snapshot():
     return {
         'source': SOURCE,
@@ -383,9 +390,9 @@ def test_snapshot_restore_exclusion_does_not_touch_integration():
         module['restore_snapshot'](snap, exclude_services=['unknown'])
 
 
-def step_script(name, values=None):
+def step_script(name, values=None, *, index=-1):
     action = yaml.safe_load((ROOT / '.github/actions/deploy-backend-stack/action.yml').read_text())
-    script = [s['run'] for s in action['runs']['steps'] if s['name'] == name][-1]
+    script = [s['run'] for s in action['runs']['steps'] if s['name'] == name][index]
     context = {
         'inputs.integration_canary': 'true',
         'inputs.integration_only': 'false',
@@ -483,7 +490,9 @@ def test_actual_traffic_shell_routes_only_through_controller_for_ruled_source(ca
         assert 'update-traffic backend-integration' in calls[-1] and 'integration-new=100' in calls[-1]
 
 
-def test_other_services_still_restore_when_integration_rollback_refuses_foreign_drift(tmp_path):
+@pytest.mark.parametrize('shallow', ['true', 'false'])
+@pytest.mark.parametrize('auto_dev', [False, True])
+def test_failed_promotion_restore_checks_release_floor(tmp_path, shallow, auto_dev):
     log = tmp_path / 'calls'
     path = tmp_path / 'python3'
     path.write_text(
@@ -491,25 +500,56 @@ def test_other_services_still_restore_when_integration_rollback_refuses_foreign_
         'case "$1" in *integration_canary_controller.py) exit 42;; esac\n'
     )
     path.chmod(0o700)
+    git = tmp_path / 'git'
+    git.write_text(
+        '#!/bin/sh\nprintf "%s\\n" "git $*" >> "$CALLS"\n'
+        'case "$1" in rev-parse) printf "%s\\n" "$SHALLOW";; fetch) exit 0;; *) exit 1;; esac\n'
+    )
+    git.chmod(0o700)
+    script = step_script('Restore Cloud Run traffic snapshot after failed promotion', index=0 if auto_dev else -1)
     result = subprocess.run(
-        ['bash', '-c', step_script('Restore Cloud Run traffic snapshot after failed promotion')],
+        ['bash', '-c', script],
         env=dict(
             os.environ,
             PATH=str(tmp_path) + ':' + os.environ['PATH'],
             CALLS=str(log),
+            SHALLOW=shallow,
             DEPLOY_CONTROL_SCRIPTS='/controls',
+            DEPLOY_WORKFLOW_ROOT='/workflow',
             RUNNER_TEMP=str(tmp_path),
         ),
         capture_output=True,
         text=True,
         timeout=10,
     )
-    assert result.returncode == 42
+    assert result.returncode == (0 if auto_dev else 42)
     calls = log.read_text().splitlines()
-    assert len(calls) == 2
-    assert 'integration_canary_controller.py rollback' in calls[0]
-    assert 'cloud_run_traffic_snapshot.py restore' in calls[1]
-    assert '--exclude-service backend-integration' in calls[1]
+    if not auto_dev:
+        assert 'integration_canary_controller.py rollback' in calls.pop(0)
+    assert len(calls) == 3
+    assert calls[0] == 'git rev-parse --is-shallow-repository'
+    unshallow = ' --unshallow' if shallow == 'true' else ''
+    assert calls[1] == f'git fetch --no-tags{unshallow} origin +refs/heads/main:refs/remotes/origin/main'
+    assert 'cloud_run_traffic_snapshot.py restore' in calls[2]
+    assert ('--exclude-service backend-integration' in calls[2]) == (not auto_dev)
+    assert '--release-floor-check /workflow/.github/scripts/verify_backend_release_floor.py' in calls[2]
+
+
+def test_integration_prepare_unshallows_before_the_release_floor_check():
+    """The floor verifier needs the rollback revision's history (review desk, 2026-11-19)."""
+    prepare = next(
+        step
+        for step in yaml.safe_load((ROOT / '.github/actions/deploy-backend-stack/action.yml').read_text())['runs'][
+            'steps'
+        ]
+        if step.get('id') == 'integration-transport-prepare'
+    )
+    script = prepare['run']
+    shallow = script.index('git rev-parse --is-shallow-repository')
+    fetch = script.index('git fetch --no-tags "${history_args[@]}" origin +refs/heads/main:refs/remotes/origin/main')
+    floor = script.index('verify_backend_release_floor.py')
+    assert shallow < fetch < floor
+    assert 'history_args=(--unshallow)' in script[shallow:fetch]
 
 
 def test_actual_renderer_and_native_cloud_validator_share_same_canary_composition(monkeypatch, tmp_path):
@@ -644,9 +684,12 @@ def test_full_validator_checks_selected_integration_composition_and_ignores_no_c
     selected['services']['backend-integration']['revision']['spec']['containers'][0]['env'] = deepcopy(
         rendered['services']['backend-integration']['env']
     )
-    selected['services']['backend-integration']['revision']['spec']['containers'][0]['env'].extend(
-        {'name': key, 'value': value} for key, value in RESTORED_DEFAULTS.items()
-    )
+    # The runtime manifest now carries cadence explicitly. Replace those values
+    # for this retained inverse instead of duplicating their env names.
+    env = selected['services']['backend-integration']['revision']['spec']['containers'][0]['env']
+    env[:] = [entry for entry in env if entry['name'] not in RESTORED_DEFAULTS]
+    env.extend({'name': key, 'value': value} for key, value in RESTORED_DEFAULTS.items())
+    assert len({entry['name'] for entry in env}) == len(env)
     private.write_text(json.dumps(selected))
     renderer = runpy.run_path(str(ROOT / 'backend/scripts/render_backend_runtime_env.py'))
     original = parsed_canary_validation_inputs[ROOT / 'backend/deploy/runtime_env.yaml']['environments']['prod']

@@ -25,7 +25,7 @@ def test_pending_privacy_artifact_repairs_identity_only_after_object_erasure(mon
         assert owner == 'synthetic-owner' and uri == data['uri']
         reference.update.assert_not_called()
 
-    purge._erase_artifact('synthetic-owner', 'batch_pipeline_prod', snapshot, data, erase)
+    assert purge._erase_artifact('synthetic-owner', 'batch_pipeline_prod', snapshot, data, erase) is True
     update = reference.update.call_args.args[0]
     assert update['owner_id'] == 'synthetic-owner'
     assert update['owner_key'] == privacy_owner_key('synthetic-owner')
@@ -232,3 +232,18 @@ def test_from_segments_ttl_policy_is_separately_reviewable_and_defaults_do_not_e
         'projects/demo-synthetic/databases/(default)/collectionGroups/from_segments_chunks/fields/expires_at'
     ]
     assert len(ttl_resources('demo-synthetic')) == 19
+
+
+def test_account_operation_ttl_targets_only_replay_receipts():
+    import json
+    from pathlib import Path
+
+    from database.batch_account_authority import ACCOUNT_OPERATION_RETENTION
+
+    policy = (
+        Path(__file__).resolve().parents[2] / 'deploy' / 'batch-pipeline' / 'account-privacy-receipt-retention.json'
+    )
+    assert json.loads(policy.read_text())['receipt_retention_days'] == ACCOUNT_OPERATION_RETENTION.days == 90
+    assert ttl_resources('demo-synthetic', policy_path=policy) == [
+        'projects/demo-synthetic/databases/(default)/collectionGroups/account_operations/fields/expires_at'
+    ]

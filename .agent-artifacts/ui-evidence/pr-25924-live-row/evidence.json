@@ -1,0 +1,47 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-v3-home-live-row.png",
+      "platform": "mobile-ios",
+      "description": "Home with a titled conversation in progress: it leads Today.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "003-mobile-ios-v3-home-live-placeholder.png",
+      "platform": "mobile-ios",
+      "description": "Between server windows while the pendant streams: the Listening placeholder sits first under Today, not above the day list.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "009-mobile-ios-v3-placeholder-in-today.png",
+      "platform": "mobile-ios",
+      "description": "Streaming before the server opens a window: Listening / Live placeholder is the first row under Today.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "010-mobile-ios-v3-live-page-listening.png",
+      "platform": "mobile-ios",
+      "description": "The live page opened from the placeholder shows the title Listening until the server names the conversation (transcript bubble text renders as bars in the test font).",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "011-mobile-ios-v3-live-row-untitled.png",
+      "platform": "mobile-ios",
+      "description": "Server window opened but untitled: same slot, reads Listening over Live \u00b7 11m, never a date.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "012-mobile-ios-v3-live-row-titled.png",
+      "platform": "mobile-ios",
+      "description": "The server names it: Launch checklist in the same slot, Listening \u00b7 11m under it.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ]
+}

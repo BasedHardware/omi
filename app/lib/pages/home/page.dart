@@ -86,6 +86,7 @@ import 'home_deep_links.dart';
 import 'home_navigation.dart';
 import 'home_prompt_gate.dart';
 import 'widgets/battery_info_widget.dart';
+import 'widgets/home_recording_bar.dart';
 
 class HomePageWrapper extends StatefulWidget {
   final String? navigateToRoute;
@@ -460,9 +461,16 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
     );
   }
 
+  HomeProvider? _homeForNewest;
+
+  void _showNewest() => WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _scrollToTop(HomeProvider.homeTab);
+      });
+
   @override
   void initState() {
     ListenClientState.startSurfaceReporting();
+    _homeForNewest = context.read<HomeProvider?>()?..onShowNewest = _showNewest;
     unawaited(
       _backgroundResourceTelemetry.recoverInterrupted(
         launchContext: classifyBackgroundInterruptLaunch(
@@ -780,6 +788,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
 
       updateEntitlement();
       _overflowUsage = usage;
+      final capture = _captureProvider!;
+      usage.onPhoneChoiceChanged = () => unawaited(capture.onTranscriptionSettingsChanged());
       _overflowEntitlementListener = () {
         updateEntitlement();
         if (mounted) _freemiumHandler.checkAndShowPaywall(context, _captureProvider!);
@@ -957,12 +967,18 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                 left: 16,
                                 right: 16,
                                 bottom: homeChatBarOffset(context),
-                                child: Row(
-                                  children: [
-                                    Expanded(child: _buildChatBar(context)),
-                                    const SizedBox(width: 10),
-                                    const HomeRecordButton(),
-                                  ],
+                                // While this phone records, the row is the recording bar: the
+                                // confirmation, Undo for the first seconds, then Wrap Up.
+                                child: Builder(
+                                  builder: (context) => context.select<CaptureProvider, bool>(HomeRecordingBar.showsFor)
+                                      ? const HomeRecordingBar()
+                                      : Row(
+                                          children: [
+                                            Expanded(child: _buildChatBar(context)),
+                                            const SizedBox(width: 10),
+                                            const HomeRecordButton(),
+                                          ],
+                                        ),
                                 ),
                               ),
                             ],
@@ -1115,6 +1131,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
 
   @override
   void dispose() {
+    if (_homeForNewest?.onShowNewest == _showNewest) _homeForNewest?.onShowNewest = null;
     HomeNavigation.unregister(_openRoute);
     _promptGate.detach();
     // These prompts close over this Home; a later Home (after sign-out and sign-in) enqueues its own.
@@ -1149,6 +1166,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
     _homeWidgets?.dispose();
     // Clean up freemium handler
     if (_overflowEntitlementListener != null) _overflowUsage?.removeListener(_overflowEntitlementListener!);
+    _overflowUsage?.onPhoneChoiceChanged = null;
     _onDeviceRunner?.dispose();
     _freemiumHandler.dispose();
     // Remove foreground task callback to prevent memory leak

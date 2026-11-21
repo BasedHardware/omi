@@ -32,7 +32,7 @@ def _mapping(value: Any) -> Mapping[str, Any]:
     return value if isinstance(value, Mapping) else {}
 
 
-def _traffic_entries(value: Any) -> list[dict[str, Any]]:
+def _traffic_entries(value: Any, *, strict: bool = False) -> list[dict[str, Any]]:
     """Keep only routing fields that are safe and sufficient for restoration."""
     entries: list[dict[str, Any]] = []
     if not isinstance(value, list):
@@ -42,9 +42,15 @@ def _traffic_entries(value: Any) -> list[dict[str, Any]]:
         revision = entry.get('revisionName')
         latest = entry.get('latestRevision')
         percent = entry.get('percent')
+        if percent is None and isinstance(entry.get('tag'), str) and entry['tag']:
+            continue
         if not isinstance(percent, int) or isinstance(percent, bool) or not 0 <= percent <= 100:
+            if strict:
+                raise ValueError('traffic entry has an invalid allocation')
             continue
         if not (isinstance(revision, str) and revision) and latest is not True:
+            if strict:
+                raise ValueError('traffic entry has no revision target')
             continue
         sanitized: dict[str, Any] = {'percent': percent}
         if isinstance(revision, str) and revision:
@@ -72,7 +78,7 @@ def _is_not_found(exc: subprocess.CalledProcessError) -> bool:
     return 'not found' in evidence or 'notfound' in evidence
 
 
-def sanitize_service_document(service: str, document: Mapping[str, Any]) -> dict[str, Any]:
+def sanitize_service_document(service: str, document: Mapping[str, Any], *, strict: bool = False) -> dict[str, Any]:
     """Produce a bounded artifact with no Cloud Run template or secret data."""
     spec = _mapping(document.get('spec'))
     status = _mapping(document.get('status'))
@@ -80,9 +86,9 @@ def sanitize_service_document(service: str, document: Mapping[str, Any]) -> dict
     latest_created = status.get('latestCreatedRevisionName')
     return {
         'service': service,
-        'spec': {'traffic': _traffic_entries(spec.get('traffic'))},
+        'spec': {'traffic': _traffic_entries(spec.get('traffic'), strict=strict)},
         'status': {
-            'traffic': _traffic_entries(status.get('traffic')),
+            'traffic': _traffic_entries(status.get('traffic'), strict=strict),
             'latestReadyRevisionName': latest_ready if isinstance(latest_ready, str) and latest_ready else None,
             'latestCreatedRevisionName': latest_created if isinstance(latest_created, str) and latest_created else None,
         },
@@ -113,6 +119,7 @@ def capture_snapshot(
     region: str,
     services: Sequence[str],
     allow_missing: bool = False,
+    expected_serving_revision: str | None = None,
     fetcher: Callable[..., Mapping[str, Any]] = _fetch_service,
 ) -> dict[str, Any]:
     """Capture only the durable routing state needed to undo a promotion."""
@@ -120,6 +127,8 @@ def capture_snapshot(
         raise ValueError('at least one Cloud Run service is required')
     if len(set(services)) != len(services):
         raise ValueError('Cloud Run services must not be repeated')
+    if expected_serving_revision is not None and (len(services) != 1 or allow_missing):
+        raise ValueError('an admitted serving revision requires exactly one existing service')
     captured: dict[str, dict[str, Any]] = {}
     missing: list[str] = []
     for service in services:
@@ -130,10 +139,16 @@ def capture_snapshot(
                 missing.append(service)
                 continue
             raise
-        captured[service] = sanitize_service_document(service, document)
+        captured[service] = sanitize_service_document(service, document, strict=expected_serving_revision is not None)
     for service, service_snapshot in captured.items():
         try:
-            restore_targets(service_snapshot)
+            requested = restore_targets(service_snapshot)
+            if expected_serving_revision is not None:
+                observed = restore_targets(service_snapshot, traffic_source='status')
+                if observed != [(expected_serving_revision, 100)]:
+                    raise ValueError('observed traffic differs from the admitted 100% serving revision')
+                if sorted(requested) != sorted(observed):
+                    raise ValueError('requested restore traffic differs from observed traffic')
         except ValueError as exc:
             raise ValueError(f'{service}: cannot capture a restorable traffic snapshot: {exc}') from exc
     return {
@@ -191,7 +206,12 @@ def restore_targets(
             continue
         revision = entry.get('revisionName')
         if not isinstance(revision, str) or not revision:
-            if entry.get('latestRevision') is True and isinstance(fallback, str) and fallback:
+            if (
+                traffic_source == 'spec'
+                and entry.get('latestRevision') is True
+                and isinstance(fallback, str)
+                and fallback
+            ):
                 revision = fallback
             else:
                 raise ValueError('snapshot has a latestRevision traffic target without a captured ready revision')
@@ -245,8 +265,9 @@ def delete_service_command(*, project: str, region: str, service: str) -> list[s
 
 
 def _observed_targets(document: Mapping[str, Any]) -> list[tuple[str, int]]:
-    sanitized = sanitize_service_document('observed', document)
-    return restore_targets(sanitized, traffic_source='status')
+    status = _mapping(document.get('status'))
+    observed = {'status': {'traffic': _traffic_entries(status.get('traffic'), strict=True)}}
+    return restore_targets(observed, traffic_source='status')
 
 
 def restore_snapshot(
@@ -257,6 +278,7 @@ def restore_snapshot(
     remove_tag: str | None = None,
     delete_missing: bool = False,
     exclude_services: Sequence[str] = (),
+    release_floor_check: Path | None = None,
 ) -> dict[str, Any]:
     """Restore and observe every recorded route, retaining bounded evidence."""
     project = cast(str, snapshot['project'])
@@ -300,6 +322,25 @@ def restore_snapshot(
             'targets': [{'revision': revision, 'percent': percent} for revision, percent in targets],
             'command': ' '.join(command),
         }
+        if release_floor_check:
+            try:
+                for revision, _ in targets:
+                    execute(
+                        [
+                            sys.executable,
+                            str(release_floor_check),
+                            '--revision',
+                            revision,
+                            '--project',
+                            project,
+                            '--region',
+                            region,
+                        ]
+                    )
+            except subprocess.CalledProcessError:
+                result.update({'result': 'failed', 'error': f'backend release floor rejected {revision}'})
+                results[service] = result
+                continue
         try:
             execute(command)
         except subprocess.CalledProcessError as exc:
@@ -376,6 +417,9 @@ def main() -> int:
     capture.add_argument('--region', default=DEFAULT_REGION)
     capture.add_argument('--service', action='append', dest='services', default=[])
     capture.add_argument('--allow-missing', action='store_true')
+    capture.add_argument(
+        '--expected-serving-revision', help='require this admitted revision at 100%% in both traffic vectors'
+    )
     capture.add_argument('--output', type=Path, required=True)
     restore = commands.add_parser('restore', help='restore Cloud Run traffic from a recorded snapshot')
     restore.add_argument('--snapshot', type=Path, required=True)
@@ -383,6 +427,7 @@ def main() -> int:
     restore.add_argument('--remove-tag')
     restore.add_argument('--delete-missing', action='store_true')
     restore.add_argument('--exclude-service', action='append', default=[])
+    restore.add_argument('--release-floor-check', type=Path)
     args = parser.parse_args()
     try:
         if args.command == 'capture':
@@ -391,6 +436,7 @@ def main() -> int:
                 region=args.region,
                 services=tuple(args.services or DEFAULT_SERVICES),
                 allow_missing=args.allow_missing,
+                expected_serving_revision=args.expected_serving_revision,
             )
             _write_json(args.output, snapshot)
             print(f'captured sanitized Cloud Run traffic snapshot at {args.output}')
@@ -401,6 +447,7 @@ def main() -> int:
             remove_tag=args.remove_tag,
             delete_missing=args.delete_missing,
             exclude_services=args.exclude_service,
+            release_floor_check=args.release_floor_check,
         )
         _write_json(args.evidence_path, evidence)
         print(json.dumps(evidence, indent=2, sort_keys=True))

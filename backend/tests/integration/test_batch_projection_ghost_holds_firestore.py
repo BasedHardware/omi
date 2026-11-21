@@ -15,6 +15,7 @@ import pytest
 
 from config.batch_pipeline import HELD_DEAD_LETTER_SECONDS
 from database import batch_pipeline_projection_release as release_module
+from database.batch_pipeline_projection_outbox import DUE_FIELD as PROJECTION_OUTBOX_DUE_FIELD
 from database.batch_pipeline_projection_release import (
     RELEASE_PAGE,
     RELEASE_TICK_SECONDS,
@@ -286,6 +287,7 @@ def seed_targeted_batch(lane):
 @pytest.mark.parametrize('recovery_state', [None, 'recovered'], ids=['recovery-none', 'recovery-recovered'])
 def test_repaired_ready_hint_completes_ledger_and_publishes_without_reassignment(lane, monkeypatch, recovery_state):
     monkeypatch.delenv('BATCH_PIPELINE_PROJECTION_GHOST_SETTLE_COHORT', raising=False)
+    monkeypatch.setenv('BATCH_PROJECTION_OUTBOX', 'true')
     batch = seed_targeted_batch(lane)
     lane.finish(batch)
     segment = batch.ids[0]
@@ -316,6 +318,7 @@ def test_repaired_ready_hint_completes_ledger_and_publishes_without_reassignment
         'projection_finish_due_at': committed_at + 86400,
         'projection_followup_due_at': committed_at + 86400,
         'projection_finish_backoff_step': 0,
+        PROJECTION_OUTBOX_DUE_FIELD: committed_at + 86400,
     }
     assert projection_page(lane.client, lane.store.namespace, states=('ready',))[0] == [segment]
     # Drive the ordinary ready-receipt replay path, including the real ledger,
@@ -525,7 +528,7 @@ async def test_settle_wake_tail_uses_real_completion_and_rechecks_privacy(lane, 
         assert batch.ledger.get().to_dict()['status'] == 'processing'
         assert ref.get().to_dict()['projection_state'] != 'completed'
     else:
-        completion.assert_called_once_with(segment, batch.binding)
+        completion.assert_called_once_with(segment, batch.binding, silence=False)
         assert ref.get().to_dict()['projection_state'] == 'completed'
         assert batch.ledger.get().to_dict()['status'] == 'completed'
         assert len(lane.published) == 1

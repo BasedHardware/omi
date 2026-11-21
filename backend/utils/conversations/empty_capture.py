@@ -19,6 +19,7 @@ from config.transcription_pending import stale_empty_noise_enabled
 from utils.conversations.fragment_visibility import is_user_curated
 from utils.conversations.home_titles import summary_owed
 from utils.conversations.summary_delivery import present
+from utils.summary_quality import valid_title
 
 
 def applies(row: Mapping[str, Any], *, now: datetime | None = None) -> bool:
@@ -30,7 +31,7 @@ def applies(row: Mapping[str, Any], *, now: datetime | None = None) -> bool:
         or row.get('has_content') is not False
         or is_user_curated(row)
         or present(row.get('structured') or {})
-        or str((row.get('structured') or {}).get('title') or '').strip()
+        or valid_title((row.get('structured') or {}).get('title'))
         or summary_owed(row)
         or any(
             row.get(key)

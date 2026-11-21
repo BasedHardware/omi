@@ -13,7 +13,7 @@ from config.batch_pipeline import (
 from config.policy import BatchUnitPolicy
 from config.stt_provider_policy import PARAKEET_SUPPORTED_LANGUAGES_BY_MODEL, normalized_stt_language
 from utils.batch_pipeline.contracts import WorkItem
-from utils.batch_pipeline.scheduler import owner_key
+from utils.batch_pipeline.scheduler import owner_key, stored_identity
 
 PARAKEET_MODEL = 'nvidia/parakeet-tdt-0.6b-v3'
 
@@ -94,6 +94,8 @@ def enqueue_in_transaction(
     revision fence and late-capture watermark, but never touches queues or
     control shards, so no GPU pull can lease it.
     """
+    if getattr(item, 'source_alias_of', None):
+        raise ValueError('source aliases cannot enter paid queues')
     if route.stt_route != 'provider':
         raise ValueError('only provider routes bypass the GPU ring')
     if item.requires_compute_admission:
@@ -110,8 +112,9 @@ def enqueue_in_transaction(
     ):
         raise ValueError('pending recording owner cannot change')
     if previous and not pending_record:
+        stored = stored_identity(previous)
         if any(
-            previous.get(key) != value
+            stored.get(key) != value
             for key, value in immutable.items()
             if not (key == 'privacy_generation' and value is None)
         ) or previous.get('stt_route') != asdict(route):

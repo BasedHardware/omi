@@ -149,6 +149,24 @@ void main() {
     });
   }
 
+  test('held unknown clocks neither spend nor receive the automatic recovery budget', () async {
+    final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    final held = await writeWal(2145916800)
+      ..holdForUser = true;
+    held.clockRecoveryValidBatches = maxValidBatchesBeforeClockRecovery - 1;
+    final waiting = await writeWal(2145916900);
+    final valid = await writeWal(now - 60);
+    sync.testWals = [held, waiting, valid];
+    expect(await sync.reserveClockRecoveryBudget([valid], sync.sessionGeneration, now), isTrue);
+    expect(held.clockRecoveryValidBatches, maxValidBatchesBeforeClockRecovery - 1);
+    expect(waiting.clockRecoveryValidBatches, 1,
+        reason: 'a held row cannot advance the shared spent counter of unheld rows');
+    final restored = await WalFileManager.loadWals();
+    expect(
+        restored.singleWhere((w) => w.holdForUser).clockRecoveryValidBatches, maxValidBatchesBeforeClockRecovery - 1);
+    expect(restored.singleWhere((w) => w.filePath == waiting.filePath).clockRecoveryValidBatches, 1);
+  });
+
   test('clock-class turn survives repeated service restarts and yields back to valid audio after each batch', () async {
     final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
     final unknown = [
@@ -156,11 +174,9 @@ void main() {
         await writeWal(2145916800 + i * 60, conversationId: 'shared', seconds: 300)
           ..recordingSessionId = 'same-session',
     ];
-    // An already submitted held refusal retains its existing automatic recovery
-    // authority; a held miss still requires the user's explicit submission.
-    unknown.first
-      ..markUploadRejected(reasonCode: WalUploadRejection.invalidCaptureTime, nowSeconds: now - 10 * 86400)
-      ..holdForUser = true;
+    // This unheld refusal participates in automatic clock recovery. Held rows
+    // require a fresh explicit user action, covered by orphan recovery tests.
+    unknown.first.markUploadRejected(reasonCode: WalUploadRejection.invalidCaptureTime, nowSeconds: now - 10 * 86400);
     final firstValid = await writeWal(now - 100, conversationId: 'shared', seconds: 300)
       ..recordingSessionId = 'same-session';
     sync.testWals = [...unknown, firstValid];

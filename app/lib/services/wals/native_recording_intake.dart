@@ -123,6 +123,9 @@ class NativeRecordingIntake {
         // after the ledger confirms this exact entry is durably indexed.
         if (jobs.containsKey(name) && existing.status == WalStatus.miss) {
           existing.status = WalStatus.uploaded;
+          // Same stamp as the local upload paths: the catching-up display cap
+          // measures a handle's age from this time.
+          existing.uploadedAt = DateTime.now().millisecondsSinceEpoch ~/ 1000;
           existing.jobId = jobs[name];
           existing.holdForUser = info.holdForUser;
           needsPersist = true;
@@ -194,6 +197,7 @@ class NativeRecordingIntake {
           totalFrames: frames,
           storage: WalStorage.disk,
           status: job == null ? WalStatus.miss : WalStatus.uploaded,
+          uploadedAt: job == null ? 0 : DateTime.now().millisecondsSinceEpoch ~/ 1000,
           filePath: name,
           device: info.marker,
           ownerUid: owner,

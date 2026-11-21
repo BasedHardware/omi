@@ -273,19 +273,19 @@ class Session:
     def validate_plan(self, transaction, planned):
         pass
 
-    def persist(self, transaction, planned=None, **_):
+    def persist(self, transaction, planned=None, *, silence=False, **_):
         assigned = planned[0] if planned else {}
-        receipt = {'state': 'persisted', 'conversation_id': assigned.get('id')}
+        receipt = {'state': 'ready' if silence else 'persisted', 'conversation_id': assigned.get('id')}
         row = self.log.results[self.segment_id]
-        row.update(projection=receipt, projection_state='persisted')
+        row.update(projection=receipt, projection_state=receipt['state'])
         self.log.owners.setdefault(row['owner_key'], {})['projection_watermark'] = self.segment_id
         self.log.persist_order.append(self.segment_id)
         return receipt
 
-    def persist_empty(self, **_):
+    def persist_empty(self, **options):
         self.log.lanes.spend('assignment_transaction')
         self.prepare(None)
-        return self.persist(None)
+        return self.persist(None, **options)
 
 
 class Conversations:

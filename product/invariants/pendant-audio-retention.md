@@ -27,10 +27,35 @@ The design had been accepted through two review rounds as an "accepted trade." A
 - Surface to the user, when a pause is active, that capture is suspended — the UI must never show a live/listening state while frames are being discarded.
 - Add a regression test for any change that alters when the phone stops consuming pendant audio, asserting either continued delivery or verified device retention.
 
+## Explicit exception: stranded orphan audio older than 67 days
+
+David's 2026-11-17 ruling, item 2 (`ruling-2026-11-17-orphans.md`, recorded in chat;
+source: `omi-workspace/data/run-2026-11-17-pendant-diag/`), authorizes automatic deletion
+without user action or alarming UI only after a **complete census**, with **no reference
+anywhere** (all index generations, live/retired/foreign/held rows, ring custody, batch
+journals and owner receipts), excluding working `.part`/`.torn`, `omibatch` and
+`omimobilebatch` files, and only when **both filename capture time and mtime are more
+than 67 days old** (the 60-day production sync lookback plus the retention contract's
+7-day margin; David's 2026-11-18 decision, item 2, in
+`omi-workspace/data/run-2026-11-18-support-packet/decisions.md`, replaced the ruling's
+original 45 days, which assumed a 30-day lookback). Single-account ownership is explicitly **not required**: references
+protect every account's rows. This exception does not authorize deleting indexed or
+otherwise referenced recordings, including refused uploads.
+
+The foreground admitted ledger revalidates size, mtime and non-reference before each
+unlink, records a durable tombstone first, and works in small queue batches. Unknown
+or unreadable `orphan_audio_reclaim_off` retains all audio. See the
+[custody contract](../../app/lib/services/wals/CUSTODY.md#stranded-orphan-reclaim)
+for the exact protocol and ramp. The mobile custody lead starts with David's device
+and expands fleet-wide within a week only when census unreferenced count falls by
+exactly the deleted count and missing-recording reports do not rise.
+
 ## Guard tests
 
 - `app/test/services/capture/tiered_capture_test.dart` — current firmware keeps live delivery beyond silence, queued expiry has no pause effects, historical automatic pauses recover, and manual mute survives restart.
 - `app/test/services/capture/resume_sync_fence_test.dart` — historical pause recovery reconciles the uplink after coalesced sync scopes, including charging-edge admission and zero-transport sync wakes.
+
+- `app/test/unit/wal_orphan_reclaim_test.dart` — age/reference exclusions, multi-account reclaim, destructive flag, fresh fences and tombstone crash retry.
 
 ## Surfaces
 

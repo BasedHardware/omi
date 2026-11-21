@@ -43,10 +43,12 @@ class BleBridge implements BleFlutterApi {
   final Map<String, CaptureIngressHealth> _ingressHealth = {};
   final Set<String> _nativeIngressOwners = {};
   final Set<String> _recoveryDisconnects = {};
+  final Set<String> _unexpectedDisconnects = {};
   final Map<String, int> _connectionRevisions = {};
 
   bool nativeOwnsIngress(String deviceId) => _nativeIngressOwners.contains(deviceId.toUpperCase());
   bool preservesCaptureIntent(String deviceId) => _recoveryDisconnects.contains(deviceId.toUpperCase());
+  bool allowsRecordingReconnect(String deviceId) => _unexpectedDisconnects.contains(deviceId.toUpperCase());
 
   void setNativeIngressOwner(String deviceId, bool authorized) {
     final key = deviceId.toUpperCase();
@@ -188,6 +190,7 @@ class BleBridge implements BleFlutterApi {
     _deviceReadyCallbacks.remove(key);
     _nativeIngressOwners.remove(key);
     _recoveryDisconnects.remove(key);
+    _unexpectedDisconnects.remove(key);
     _invalidateIngress(key);
   }
 
@@ -215,6 +218,7 @@ class BleBridge implements BleFlutterApi {
     final key = peripheralUuid.toUpperCase();
     _connectionRevisions[key] = (_connectionRevisions[key] ?? 0) + 1;
     _recoveryDisconnects.remove(key);
+    _unexpectedDisconnects.remove(key);
     if (_ingressHealth[key]?.reason != CaptureIngressHealth.cccdRecoveryReason) _invalidateIngress(key);
     _deviceReadyCallbacks[key]?.call(services);
   }
@@ -223,6 +227,20 @@ class BleBridge implements BleFlutterApi {
   Future<void> onPeripheralDisconnected(String peripheralUuid, String? error) async {
     final key = peripheralUuid.toUpperCase();
     final cccdRecovery = error == 'cccd_timeout' || error == 'cccd_timeout_exhausted';
+    // Native supplies stable iOS reasons; Android carries the HCI status.
+    // Unknown, manual, adapter-off and pairing failures never retain identity.
+    const reconnectReasons = {
+      'connection_timeout',
+      'remote_device_terminated',
+      'gatt_status_8',
+      'gatt_status_34',
+      'gatt_status_19',
+    };
+    if (reconnectReasons.contains(error)) {
+      _unexpectedDisconnects.add(key);
+    } else {
+      _unexpectedDisconnects.remove(key);
+    }
     if (error == 'capture_recovery' || cccdRecovery) {
       _recoveryDisconnects.add(key);
     } else {

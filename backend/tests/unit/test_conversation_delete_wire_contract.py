@@ -74,8 +74,10 @@ def _delete_client(monkeypatch) -> TestClient:
         'MemoryService',
     ):
         monkeypatch.setattr(conversations, name, MagicMock())
+    monkeypatch.setattr(conversations.conversation_tombstones, 'is_deleted', lambda *args: False)
     monkeypatch.setattr(conversations.conversation_tombstones, 'record_deletion', MagicMock())
     monkeypatch.setattr(conversations, 'destructive_operation_gate', lambda *args, **kwargs: nullcontext())
+    monkeypatch.setattr(conversations, '_legal_hold_defers_delete', lambda uid: False)
     monkeypatch.setattr(conversations.conversations_db, 'get_conversation', lambda *args: {})
     monkeypatch.setattr(conversations.conversations_db, 'get_conversation_raw_snapshot', lambda *args, **kwargs: {})
     monkeypatch.setattr(conversations, 'retraction_can_be_skipped', lambda *args, **kwargs: True)
@@ -388,3 +390,36 @@ def test_upload_finishing_after_http_delete_final_listing_leaves_no_object(monke
         assert statuses == [204]
         assert not doc.get().exists and not list(bucket.list_blobs())
         deleted.assert_called_once()
+
+
+@pytest.mark.parametrize('cascade', ['false', 'true'])
+def test_already_deleted_skips_gate_and_obligation_rearm(monkeypatch, cascade):
+    with _delete_client(monkeypatch) as client:
+        monkeypatch.setattr(conversations.conversation_tombstones, 'is_deleted', lambda *args: True)
+        monkeypatch.setattr(conversations.conversations_db, 'get_conversation_raw_snapshot', lambda *a, **k: None)
+        gate = MagicMock(side_effect=AssertionError('must not acquire gate'))
+        deferred = MagicMock(side_effect=AssertionError('must not arm deferred purge'))
+        accept = MagicMock(side_effect=AssertionError('must not accept again'))
+        monkeypatch.setattr(conversations, 'destructive_operation_gate', gate)
+        monkeypatch.setattr(conversations, 'deferred_batch_purges', deferred)
+        monkeypatch.setattr(conversations.conversation_tombstones, 'accept_deletion', accept)
+        response = client.delete(f'/v1/conversations/gone?cascade={cascade}')
+
+    assert response.status_code == 204
+    assert response.content == b''
+    assert response.headers['X-Omi-Delete-Outcome'] == 'already_deleted'
+    gate.assert_not_called()
+    deferred.assert_not_called()
+    accept.assert_not_called()
+    conversations.conversation_tombstones.record_deletion.assert_not_called()
+    conversations.delete_conversation_and_frame_evidence.assert_not_called()
+
+
+def test_tombstone_with_remaining_live_row_still_runs_cleanup(monkeypatch):
+    with _delete_client(monkeypatch) as client:
+        monkeypatch.setattr(conversations.conversation_tombstones, 'is_deleted', lambda *args: True)
+        monkeypatch.setattr(conversations.conversations_db, 'get_conversation_raw_snapshot', lambda *a, **k: {})
+        response = client.delete('/v1/conversations/remaining?cascade=false')
+    assert response.status_code == 204
+    assert response.headers['X-Omi-Delete-Outcome'] == 'tombstoned'
+    conversations.conversation_tombstones.record_deletion.assert_called_once()

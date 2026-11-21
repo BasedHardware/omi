@@ -7,13 +7,14 @@ BACKEND_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 cd "$BACKEND_DIR"
 
 usage() {
-  echo "usage: $0 [--all | --changed-files <repo-relative-path-list>] [--shard <total>/<index>]" >&2
+  echo "usage: $0 [--all | --changed-files <repo-relative-path-list> [--rotation <k>/<n>]] [--shard <total>/<index>]" >&2
   exit 2
 }
 
 mode=""
 changed_files_arg=""
 shard_spec=""
+rotation_spec=""
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --all)
@@ -31,6 +32,11 @@ while [ "$#" -gt 0 ]; do
       shard_spec="$2"
       shift
       ;;
+    --rotation)
+      [ "$#" -ge 2 ] && [[ "$2" =~ ^[0-9]+/[0-9]+$ ]] || usage
+      rotation_spec="$2"
+      shift
+      ;;
     *)
       usage
       ;;
@@ -38,6 +44,8 @@ while [ "$#" -gt 0 ]; do
   shift
 done
 [ -n "$mode" ] || usage
+# A rotating full-suite slice only widens a changed-files selection.
+[ -z "$rotation_spec" ] || [ "$mode" = "--changed-files" ] || usage
 
 # Sharding: the suite's cost is per-file pytest process startup (measured
 # 2026-09-10, run 34430370667: 1126 files, one session each, 19m18s of a
@@ -87,6 +95,9 @@ if [ "$mode" = "--all" ]; then
   selector_args+=(--all)
 else
   selector_args+=(--changed-files "$changed_files_arg")
+  if [ -n "$rotation_spec" ]; then
+    selector_args+=(--rotation "$rotation_spec")
+  fi
 fi
 "$PYTHON_BIN" scripts/select_backend_unit_tests.py "${selector_args[@]}"
 
@@ -96,7 +107,7 @@ shard_note=""
 # changed-files run whose paths do not affect the typed boundary typechecks
 # nowhere and must not hand shard 1's capacity to its siblings).
 will_typecheck=1
-if [ "$mode" != "--all" ] && ! "$SCRIPT_DIR/needs-typecheck.sh" "$changed_files_arg"; then
+if [ "$mode" != "--all" ] && [ "${BACKEND_UNIT_FORCE_TYPECHECK:-0}" != "1" ] && ! "$SCRIPT_DIR/needs-typecheck.sh" "$changed_files_arg"; then
   will_typecheck=0
 fi
 if [ "$shard_total" -ge 2 ]; then

@@ -3,6 +3,11 @@ part of 'local_wal_sync.dart';
 extension _WalIndexPersistence on LocalWalSyncImpl {
   Future<bool> _saveWalsToFile(int generation) async {
     if (!_isCurrent(generation)) return false;
+    if (_initialIndexAdmissionPending) {
+      await _initializeWals();
+      if (_initialIndexAdmissionPending) return false;
+    }
+    if (!_isCurrent(generation)) return false;
     // A save joins all earlier disk writes. After a failure the next caller
     // retries dirty identities; no caller can claim durable before rename.
     final pending = _indexWriteInFlight;

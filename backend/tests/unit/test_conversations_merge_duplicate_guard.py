@@ -79,6 +79,7 @@ def conv():
 
     conversations_db_stub = AutoMockModule("database.conversations")
     conversations_db_stub.get_conversation = MagicMock(return_value={"id": "c1", "status": "completed"})
+    conversations_db_stub.is_soft_deleted = lambda row: bool(row.get('deleted'))
 
     # Deletion's typed lake error is a lazy collaborator of this isolated router.
     object_lake_stub = ModuleType("utils.other.object_lake")
@@ -175,7 +176,9 @@ def test_merge_atomic_admission_loss_schedules_nothing(conv, monkeypatch):
     from starlette.background import BackgroundTasks
     from unittest.mock import Mock
 
-    monkeypatch.setattr(conv.conversations_db, 'get_conversation', lambda _uid, cid: {'id': cid, 'status': 'completed'})
+    monkeypatch.setattr(
+        conv.conversations_db, 'get_conversation', lambda _uid, cid, **kwargs: {'id': cid, 'status': 'completed'}
+    )
     monkeypatch.setattr(conv.lifecycle_service.merge_jobs, 'admit', Mock(return_value=None))
     legacy_claim = Mock(side_effect=AssertionError('manual admission must be atomic'))
     monkeypatch.setattr(conv.lifecycle_service, 'begin_merge', legacy_claim)
@@ -197,7 +200,9 @@ def test_merge_endpoint_always_uses_durable_admission_and_returns_exact_target(c
     import utils.conversations.merge_conversations as worker
 
     monkeypatch.setenv('LIFECYCLE_V2_MODE', mode)
-    monkeypatch.setattr(conv.conversations_db, 'get_conversation', lambda _uid, cid: {'id': cid, 'status': 'completed'})
+    monkeypatch.setattr(
+        conv.conversations_db, 'get_conversation', lambda _uid, cid, **kwargs: {'id': cid, 'status': 'completed'}
+    )
     monkeypatch.setattr(worker, 'validate_merge_compatibility', lambda _rows: (True, None, None))
     monkeypatch.setattr(
         conv.lifecycle_service, 'begin_merge', lambda *_args: pytest.fail('nonrecoverable admission must not run')

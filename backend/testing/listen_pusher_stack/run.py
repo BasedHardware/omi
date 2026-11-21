@@ -59,20 +59,41 @@ class StackFailure(AssertionError):
     """An actionable scenario assertion failure."""
 
 
+def _reserved_emulator_port() -> int | None:
+    """The Firestore emulator's own port, which no stack child may bind.
+
+    The kernel only withholds ports that are *bound right now*. If the emulator
+    has exited (or has not bound yet), a stack child could be handed its port
+    and then answer the Firestore gRPC client with HTTP/1.1, which surfaces as
+    ``Trying to connect an http1.x server (HTTP status 400)`` instead of an
+    honest connection refusal. Excluding the port keeps that failure legible.
+    """
+    host = os.getenv('FIRESTORE_EMULATOR_HOST', '')
+    _, _, port = host.rpartition(':')
+    return int(port) if port.isdigit() else None
+
+
 def _free_ports(count: int) -> list[int]:
     """Reserve and return `count` distinct ephemeral ports on loopback.
 
     Holding all probe sockets open simultaneously guarantees that the kernel
     allocates non-conflicting, unique port numbers across the stack's services (#19802).
+    The Firestore emulator's port is skipped explicitly; see
+    ``_reserved_emulator_port``.
     """
+    reserved = _reserved_emulator_port()
     probes = []
     ports = []
     try:
-        for _ in range(count):
+        while len(ports) < count:
             probe = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             probe.bind(('127.0.0.1', 0))
+            port = int(probe.getsockname()[1])
+            if port == reserved:
+                probe.close()
+                continue
             probes.append(probe)
-            ports.append(int(probe.getsockname()[1]))
+            ports.append(port)
         return ports
     finally:
         for probe in probes:

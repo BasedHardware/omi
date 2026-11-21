@@ -2,14 +2,15 @@
 """Config-train (B4): plan, apply and verify the ops file against live serving state.
 
 The ops file (`backend/deploy/ops/<env>.yaml`) holds the values that operators
-own: queue re-points, Cloud Tasks queue rates and retries, and service-level
-Cloud Run scaling. A backend train never sets them; this tool is their only
-writer.
+own: queue re-points, Cloud Tasks queue rates and retries, and Cloud Run
+service scaling and ingress memory. Backend deploys consume the ops-owned
+memory limits when building new revisions.
 
     ops_train.py validate [--env prod]           schema check, no cloud access
     ops_train.py plan --env prod [--report F]    diff against live serving state
     ops_train.py apply --env prod --revision-suffix S [--report F]
     ops_train.py render-env --env prod --service backend-sync
+    ops_train.py render-memory --env prod --service backend-sync
 
 Exit codes: 0 no difference (or applied and verified), 2 plan has changes,
 3 blocked (a precondition failed; nothing was applied), 1 error.
@@ -18,10 +19,9 @@ Safety properties:
 - Cloud Run env is read from the revision that serves traffic
   (`status.traffic`), never from `spec.template`, which a failed no-traffic
   deploy can leave pointing at an unqualified image (10-18 23:48Z).
-- An env change is refused while the template differs from the serving revision
-  in anything but ops-owned keys, so a config-train can never promote an image
-  or env that no train qualified.
-- Every env change routes 100% of traffic to the new named revision explicitly
+- A revision change is refused while the template differs from the serving
+  revision in anything but ops-owned fields that the update reasserts.
+- Every revision change routes 100% of traffic to the new named revision explicitly
   and verifies that it serves. `backend-sync-backfill` pins traffic to a named
   revision, so an unrouted update never serves (10-19 04:52Z).
 - Values are printed only for keys declared in the ops file, and the schema
@@ -69,7 +69,8 @@ QUEUE_FIELDS = {
     'max_doublings': ('retryConfig', 'maxDoublings', '--max-doublings'),
     'log_sampling_ratio': ('stackdriverLoggingConfig', 'samplingRatio', '--log-sampling-ratio'),
 }
-SERVICE_FIELDS = {'env', 'max_instances', 'min_instances'}
+SERVICE_FIELDS = {'env', 'max_instances', 'min_instances', 'memory'}
+MEMORY_LIMIT = re.compile(r'[1-9][0-9]{0,3}(?:Mi|Gi)')
 MAX_SCALE = 'run.googleapis.com/maxScale'
 MIN_SCALE = 'run.googleapis.com/minScale'
 
@@ -94,6 +95,7 @@ class ServiceSpec:
     env: Mapping[str, str]
     max_instances: int | Bound | None = None
     min_instances: int | None = None
+    memory: str | None = None
 
 
 @dataclass(frozen=True)
@@ -165,9 +167,12 @@ def _parse_service(name: str, raw: Any) -> ServiceSpec:
     upper = max_instances.floor if isinstance(max_instances, Bound) else max_instances
     if min_instances is not None and upper is not None and min_instances > upper:
         raise OpsError(f'{where}: min_instances exceeds max_instances')
-    if not env and max_instances is None and min_instances is None:
+    memory = raw.get('memory')
+    if 'memory' in raw and (not isinstance(memory, str) or not MEMORY_LIMIT.fullmatch(memory)):
+        raise OpsError(f'{where}.memory: expected a positive Mi or Gi limit, e.g. 3Gi')
+    if not env and max_instances is None and min_instances is None and memory is None:
         raise OpsError(f'{where}: declares nothing')
-    return ServiceSpec(name, env, max_instances, min_instances)
+    return ServiceSpec(name, env, max_instances, min_instances, memory)
 
 
 def _parse_queue(name: str, raw: Any) -> QueueSpec:
@@ -323,11 +328,21 @@ def _digest(value: Any) -> str:
     return hashlib.sha256(json.dumps(value, sort_keys=True, default=str).encode()).hexdigest()[:12]
 
 
-def template_drift(template: Mapping[str, Any], serving: Mapping[str, Any], ops_keys: set[str]) -> list[str]:
-    """Where the template differs from the serving revision, ignoring only ops-owned env keys.
+def _without_memory(resources: Mapping[str, Any] | None) -> dict[str, Any]:
+    result = dict(resources or {})
+    limits = {k: v for k, v in (result.pop('limits', None) or {}).items() if k != 'memory'}
+    if limits:
+        result['limits'] = limits
+    return result
+
+
+def template_drift(
+    template: Mapping[str, Any], serving: Mapping[str, Any], ops_keys: set[str], *, write_memory: bool = False
+) -> list[str]:
+    """Compare revision specs, excluding the ingress fields the update will reassert.
 
     The whole revision spec counts (service account, concurrency, timeout, volumes, probes,
-    mounts, ports), not just image and env: an env apply builds its revision from the template
+    mounts, ports), not just image and env: a revision update builds from the template
     and then routes 100% to it, so any other difference would ship unqualified (M1 L07-2).
     """
 
@@ -346,13 +361,21 @@ def template_drift(template: Mapping[str, Any], serving: Mapping[str, Any], ops_
             return drift + [f'containers:{sorted(left)}!={sorted(right)}']
         left = {f'#{i}': c for i, c in enumerate(lc)}
         right = {f'#{i}': c for i, c in enumerate(rc)}
+    if not left:
+        return drift
+    template_ingress, serving_ingress = _ingress(template), _ingress(serving)
     for name in sorted(left):
         a, b = left[name], right[name]
+        ingress = a is template_ingress and b is serving_ingress
         for key in sorted((set(a) | set(b)) - {'name', 'env'}):
-            if _digest(a.get(key)) != _digest(b.get(key)):
+            before, after = a.get(key), b.get(key)
+            if ingress and write_memory and key == 'resources':
+                before, after = _without_memory(before), _without_memory(after)
+            if _digest(before) != _digest(after):
                 drift.append(f'{name}.{key}')
-        env_a = {k: v for k, v in _env_map(a).items() if k not in ops_keys}
-        env_b = {k: v for k, v in _env_map(b).items() if k not in ops_keys}
+        ignored_env = ops_keys if ingress else set()
+        env_a = {k: v for k, v in _env_map(a).items() if k not in ignored_env}
+        env_b = {k: v for k, v in _env_map(b).items() if k not in ignored_env}
         for key in sorted(set(env_a) | set(env_b)):
             if _digest(env_a.get(key)) != _digest(env_b.get(key)):
                 drift.append(f'{name}.env.{key}')
@@ -376,6 +399,12 @@ class ServiceState:
     serving_env: dict[str, Any]
     max_scale: int | None
     min_scale: int | None
+    ingress_name: str | None
+    memory: str | None
+
+
+def _is_revision_change(change: Change) -> bool:
+    return change.target == 'cloud_run' and (change.field.startswith('env.') or change.field == 'memory')
 
 
 @dataclass
@@ -430,29 +459,36 @@ def plan_service(spec: OpsSpec, svc: ServiceSpec, gcloud: Gcloud, plan: Plan) ->
     serving_spec = revision.get('spec') or {}
     template_spec = ((service.get('spec') or {}).get('template') or {}).get('spec') or {}
     annotations = (service.get('metadata') or {}).get('annotations') or {}
-    serving_env = _env_map(_ingress(serving_spec))
+    ingress = _ingress(serving_spec)
+    template_ingress = _ingress(template_spec) if template_spec.get('containers') else {}
+    serving_env = _env_map(ingress)
     state = ServiceState(
         name=svc.name,
         serving_revision=revision_name,
         serving_env=serving_env,
         max_scale=_annotation_int(annotations, MAX_SCALE),
         min_scale=_annotation_int(annotations, MIN_SCALE),
+        ingress_name=template_ingress.get('name'),
+        memory=((ingress.get('resources') or {}).get('limits') or {}).get('memory'),
     )
     plan.services[svc.name] = state
 
-    env_changes = [
+    revision_changes = [
         Change('cloud_run', svc.name, f'env.{key}', serving_env.get(key), value, 'set')
         for key, value in svc.env.items()
         if serving_env.get(key) != value
     ]
-    if env_changes:
-        drift = template_drift(template_spec, serving_spec, set(svc.env))
+    if svc.memory is not None and state.memory != svc.memory:
+        revision_changes.append(Change('cloud_run', svc.name, 'memory', state.memory, svc.memory, 'set'))
+    if revision_changes:
+        # An env update reasserts memory too, so drift on that limit is safe to overwrite.
+        drift = template_drift(template_spec, serving_spec, set(svc.env), write_memory=svc.memory is not None)
         if drift:
             plan.blockers.append(
                 f'{svc.name}: template differs from serving revision {revision_name} in {drift[:6]}; '
-                'an env update would ship it. Run a train or repair traffic first'
+                'a revision update would ship it. Run a train or repair traffic first'
             )
-    plan.changes.extend(env_changes)
+    plan.changes.extend(revision_changes)
 
     if isinstance(svc.max_instances, Bound):
         live = state.max_scale
@@ -540,21 +576,26 @@ def apply_plan(spec: OpsSpec, plan: Plan, gcloud: Gcloud, revision_suffix: str) 
         (by_service if change.target == 'cloud_run' else by_queue).setdefault(change.name, []).append(change)
     services = {svc.name: svc for svc in spec.services}
     for name, changes in by_service.items():
-        env = {c.field.split('.', 1)[1]: c.desired for c in changes if c.field.startswith('env.')}
-        scale = {c.field: c.desired for c in changes if not c.field.startswith('env.')}
+        revise = any(_is_revision_change(change) for change in changes)
+        scale = {c.field: c.desired for c in changes if not _is_revision_change(c)}
+        svc = services[name]
         args = ['run', 'services', 'update', name, *_location(spec)]
         if 'max_instances' in scale:
             args.append(f'--max={scale["max_instances"]}')
         if 'min_instances' in scale:
             args.append(f'--min={scale["min_instances"]}')
-        if env:
-            # Re-assert every ops key, not only the changed ones, so the new revision is complete.
-            full = dict(services[name].env)
-            args.append('--update-env-vars=' + ','.join(f'{k}={v}' for k, v in sorted(full.items())))
-            args.append(f'--revision-suffix={revision_suffix}')
+        if revise:
+            args.extend([f'--revision-suffix={revision_suffix}', '--no-traffic'])
+            if container := plan.services[name].ingress_name:
+                args.append(f'--container={container}')
+            # Reassert the owned ingress fields excluded by the revision drift guard.
+            if svc.env:
+                args.append('--update-env-vars=' + ','.join(f'{k}={v}' for k, v in sorted(svc.env.items())))
+            if svc.memory is not None:
+                args.append(f'--memory={svc.memory}')
         gcloud.run(args)
         applied.append(f'cloud_run/{name}')
-        if env:
+        if revise:
             revision = f'{name}-{revision_suffix}'
             gcloud.run(['run', 'services', 'update-traffic', name, *_location(spec), f'--to-revisions={revision}=100'])
             applied.append(f'traffic/{name}={revision}')
@@ -575,7 +616,7 @@ def apply_plan(spec: OpsSpec, plan: Plan, gcloud: Gcloud, revision_suffix: str) 
 
 def verify_applied(spec: OpsSpec, before: Plan, gcloud: Gcloud, revision_suffix: str) -> Plan:
     after = build_plan(spec, gcloud)
-    for name in {c.name for c in before.changes if c.target == 'cloud_run' and c.field.startswith('env.')}:
+    for name in {c.name for c in before.changes if _is_revision_change(c)}:
         expected = f'{name}-{revision_suffix}'
         state = after.services.get(name)
         if state is None or state.serving_revision != expected:
@@ -630,9 +671,10 @@ def main(argv: Sequence[str] | None = None, *, gcloud: Gcloud | None = None, ops
         command.add_argument('--report')
         if name == 'apply':
             command.add_argument('--revision-suffix', required=True)
-    render = sub.add_parser('render-env')
-    render.add_argument('--env', choices=ENVIRONMENTS, required=True)
-    render.add_argument('--service', required=True)
+    for name in ('render-env', 'render-memory'):
+        render = sub.add_parser(name)
+        render.add_argument('--env', choices=ENVIRONMENTS, required=True)
+        render.add_argument('--service', required=True)
     args = parser.parse_args(argv)
 
     try:
@@ -646,6 +688,12 @@ def main(argv: Sequence[str] | None = None, *, gcloud: Gcloud | None = None, ops
             for line in render_env(spec, args.service):
                 print(line)
             return EXIT_OK
+        if args.command == 'render-memory':
+            for service in spec.services:
+                if service.name == args.service and service.memory is not None:
+                    print(service.memory)
+                    return EXIT_OK
+            raise OpsError(f'{args.service}: no ops-owned memory limit in {spec.environment}')
         client = gcloud or GcloudCli()
         plan = build_plan(spec, client)
         _print_plan(plan)

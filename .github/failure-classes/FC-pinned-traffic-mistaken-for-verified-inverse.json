@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "id": "FC-pinned-traffic-mistaken-for-verified-inverse",
+  "family": "deploy-prerequisite",
+  "violated_contract": "A named traffic pin only identifies a route. It does not establish that the revision is Ready, matches the admitted release, or satisfies the deployment's runtime and access contract. A failed or interrupted first creation can leave a pinned revision that a rerun would accept as a rollback target without ever verifying it.",
+  "canonical_prevention": "Require live verification of the serving revision and the service access policy before retry mutations. Bind the rollback snapshot to the same verified requested and serving traffic readback. Exercise interruption after pinning in a workflow regression check.",
+  "canonical_prevention_artifact": [
+    "backend/scripts/verify_projection_pump_inverse.py",
+    "backend/tests/unit/test_projection_pump_deploy_target.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [".github/actions/deploy-projection-pump/**"],
+  "status": "open"
+}

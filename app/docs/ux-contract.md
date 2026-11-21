@@ -77,6 +77,11 @@ There are exactly two ways out, and they mean different things.
   destructive: true)`. A clean sheet just closes.
 - A progress sheet that cannot be cancelled blocks back with `PopScope` and pops with its **own**
   context, never the page's.
+- **Every editor guards unsaved input, not only sheets.** An inline editor (a summary or title
+  being edited in place) and a full-page form (create or edit an app, a profile page with Save)
+  ask the same `confirmDiscardChanges` question on back, the iOS edge swipe and system back while
+  dirty. A full page wraps its body in `OmiUnsavedChangesGuard(isDirty:, child:)`
+  (`lib/ui/components/omi_edit_sheet.dart`). A clean editor just closes.
 
 ## 3. Controls
 
@@ -244,6 +249,18 @@ participant lists, the speaker filter and every copied, shared or exported trans
 - **Motion** `OmiMotion`: quick 150 ms (a control answering a press), standard 250 ms (content
   changing in place), emphasized 400 ms (a surface arriving or leaving). Read durations through
   `OmiMotion.of(context)`, which is zero under Reduce Motion.
+  Motion rules (David, 2026-11-19). New and changed motion follows them; existing motion moves to
+  them as its code is touched:
+  - *Direction is meaning.* A deeper page slides in from the side, something over the page rises
+    from below, and content changing in the same place cross-fades. There are no other route
+    transitions.
+  - *Nothing teleports.* A thing that changes state changes in place; a thing that moves is seen
+    moving.
+  - *The control answers first.* Press feedback lands within `OmiMotion.quick`, before any network.
+  - *Loading keeps the shape.* Placeholders match the final layout. A full-page spinner is for first
+    launch only.
+  - *Leaving is faster than arriving.* An exit runs at about two thirds of its entrance.
+  - *One thing moves at a time.* Reduce Motion turns every movement into a fade.
 - **Haptics** `OmiHaptics`: `selection()` for tabs, segments and navigation, `light()` for
   toggles, `medium()` for record start/stop and completions, `success()` / `error()` for outcomes.
 - The theme (`buildOmiTheme()`) sets the app bar (black, centred title, white icons), the spinner,
@@ -326,6 +343,45 @@ guidance.
 - Contrast: body text ≥ 4.5:1 on its surface; no grey darker than `textTertiary` for text.
 - Motion honours Reduce Motion (`OmiMotion.of`); live status changes (toasts, recording state) are
   announced (`OmiFeedback` marks its text as a live region).
+
+## 17. Outcomes
+
+Every tap ends in something the reader can see. §1–§16 cover what a control looks like; these
+rules cover what happens after it is tapped. Guards: `silent-catch`, `generic-error`,
+`material-page-route` and `pop-before-await` in the ratchet, and the outcome tests beside each
+primary action (Finish: `test/widgets/finish_outcome_test.dart`).
+
+1. **A finishing action lands on its result.** Finish, Save, Submit and Import open the thing they
+   made, in a processing state until it is ready. The app never sends the reader Home as the
+   answer; Home is their choice. Finish from every entry point (the live page, Home's Wrap Up, the
+   record button) returns one typed `FinishOutcome` (`lib/services/capture/finish_outcome.dart`)
+   and is presented by `presentFinishOutcome`, so no caller can receive a bare null.
+2. **A failure is never a value.** A request that failed is not "empty", "up to date", "Free plan"
+   or "no change". A function a page calls separates *nothing there* from *could not find out*,
+   and the page shows `OmiErrorState` or `OmiPartialNotice` for the second.
+3. **Nothing is cleared before the request that could fail.** The transcript, form, selection or
+   sheet stays until the server has answered. On failure the reader is still looking at what they
+   made, with Try Again. Close a sheet after its request succeeds, not before (`pop-before-await`).
+4. **A write that fails says so where the reader is looking.** An optimistic change that rolls
+   back shows `OmiFeedback.error(…, actionLabel: l10n.tryAgain, onAction:)`. A rollback with no
+   message is a bug, and so is a `catch` that only logs (`silent-catch`).
+5. **A guard that refuses says why.** If an action cannot run now, the control is disabled with a
+   stated reason, or the tap answers with `OmiFeedback.info`. A bare `return` after the reader
+   chose is a bug.
+6. **Quiet unless they must act, never silent.** Work the app retries on its own shows a small
+   persistent status where the thing lives (the row, the header) and no toast. The app interrupts
+   only when the reader has to do something or data is at risk.
+7. **One job, one path.** Two controls that do the same thing call the same function and give the
+   same feedback (Finish and Wrap Up; Share and the visibility menu).
+8. **The message names the cause.** `somethingWentWrong` is the last resort for a cause the app
+   does not know, and then it carries Try Again (`generic-error`). A known cause has its own
+   sentence and its own next step: offline, mic blocked (Open Settings), locked, timed out, and a
+   target that no longer exists (`OmiMissingTarget.message`, `lib/ui/feedback/omi_missing_target.dart`).
+9. **A busy control shows it on itself**, stays the same size, and ignores a second tap. A wait
+   with no end has a timeout that leads to an error state.
+
+Push a page with `routeToPage` / `omiPageRoute`, never `MaterialPageRoute(` (`material-page-route`):
+the shared route keeps the platform transition and back swipe in one place.
 
 ## Adding to this contract
 

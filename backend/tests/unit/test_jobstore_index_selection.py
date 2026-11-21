@@ -7,7 +7,7 @@ import pytest
 from database import batch_pipeline_shadow_hook as hook
 from database.jobstore import dual_store, index_config
 from database.jobstore.dual_store import DualStore
-from database.jobstore.index_store import INDEX_READS_TOTAL, IndexStore
+from database.jobstore.index_store import INDEX_PRIMARY_SCAN_SUCCESS_TIMESTAMP, INDEX_READS_TOTAL, IndexStore
 
 
 @pytest.fixture
@@ -123,6 +123,7 @@ def test_private_worker_registry_exports_index_and_existing_parity_collectors(
         monkeypatch.setenv(disabled_switch, 'off')
     collectors = hook.shadow_parity_collectors()
     assert INDEX_READS_TOTAL in collectors
+    assert INDEX_PRIMARY_SCAN_SUCCESS_TIMESTAMP in collectors
     assert dual_store.SHADOW_PARITY_TOTAL in collectors
 
 
@@ -131,10 +132,13 @@ def test_private_worker_registry_keeps_other_modes_separate(configured, monkeypa
     monkeypatch.setenv('BATCH_JOBSTORE_MODE', mode)
     collectors = hook.shadow_parity_collectors()
     assert INDEX_READS_TOTAL not in collectors
+    assert INDEX_PRIMARY_SCAN_SUCCESS_TIMESTAMP in collectors
     if mode == 'shadow':
         assert dual_store.SHADOW_PARITY_TOTAL in collectors
     else:
-        assert collectors == ()
+        from database.batch_pipeline_recovery_metrics import RECOVERY_COLLECTORS
+
+        assert collectors == RECOVERY_COLLECTORS
 
 
 def test_index_answers_preserve_optional_async_serving_parity(configured, monkeypatch):
@@ -145,3 +149,22 @@ def test_index_answers_preserve_optional_async_serving_parity(configured, monkey
     store = hook.shadow_from_env(primary)
     assert store.due('leased', 1) == ['primary']
     assert queued == [('due', ('leased', 1, 100), {})]
+
+
+@pytest.mark.parametrize('bps', ['', 'invalid', '100', '10000'])
+def test_production_copy_policy_cannot_certify_unpartitioned_query_coverage(configured, monkeypatch, bps):
+    primary, mirror = configured
+    primary.namespace = mirror.shadow.namespace = 'batch_pipeline_prod'
+    monkeypatch.setenv('OMI_ENV_STAGE', 'prod')
+    monkeypatch.setenv('JOBSTORE_PRODUCTION_MIRROR_SAMPLE_BPS', bps)
+    # Grant even the factory's configuration check: it is not coverage proof.
+    monkeypatch.setattr(index_config, 'jobstore_production_mirror_configured', lambda: True)
+    store = index_config.index_from_env(mirror)
+    monkeypatch.setattr(store._index, 'due', lambda *_args: pytest.fail('incomplete PG answer admitted'))
+    metric = INDEX_READS_TOTAL.labels(
+        query='due_leased', source='firestore', reason='coverage_unknown', outcome='returned'
+    )
+    before = metric._value.get()
+    assert store.due('leased', 1) == ['primary']
+    assert store.due('leased', 2) == ['primary']
+    assert metric._value.get() == before + 2

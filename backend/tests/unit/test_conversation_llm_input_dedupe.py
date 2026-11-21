@@ -54,6 +54,7 @@ def test_notes_unchanged_skips_changed_inputs_run(enabled, monkeypatch):
 def test_notes_v4_only_rebuys_old_checkpoint_when_scaled_packet_changes(
     enabled, monkeypatch, words, scaled, regenerates
 ):
+    monkeypatch.setattr(dedupe, 'NOTES_UNSCALED_PREVIOUS_VERSION', 'notes-3')
     from models.structured import Structured
 
     monkeypatch.setattr(dedupe, 'noise_skip_enabled', lambda: True)
@@ -394,6 +395,7 @@ def test_implementation_digest_is_the_explicit_prompt_version():
 
 @pytest.mark.parametrize('feature', ['notes', 'l1'])
 def test_predeploy_checkpoint_survives_deploy_and_repeated_kill_switch_flips(enabled, monkeypatch, feature):
+    monkeypatch.setattr(dedupe, 'NOTES_UNSCALED_PREVIOUS_VERSION', 'notes-3')
     from config.llm_input_legacy import LEGACY_IMPLEMENTATIONS
     from models.structured import Structured
 
@@ -425,6 +427,7 @@ def test_predeploy_checkpoint_survives_deploy_and_repeated_kill_switch_flips(ena
 
 @pytest.mark.parametrize('flag', ['true', 'off'])
 def test_dependency_qualified_notes_checkpoint_survives_prompt_version_bump(enabled, monkeypatch, flag):
+    monkeypatch.setattr(dedupe, 'NOTES_UNSCALED_PREVIOUS_VERSION', 'notes-3')
     from models.structured import Structured
 
     monkeypatch.setenv('EPISODE_COMPOSER_REUSE', flag)
@@ -460,6 +463,7 @@ def test_historical_checkpoint_cannot_mask_changed_route(enabled, monkeypatch, f
 
 
 def test_additive_gist_does_not_rebuy_a_stable_l8a_checkpoint(enabled, monkeypatch):
+    monkeypatch.setattr(dedupe, 'NOTES_UNSCALED_PREVIOUS_VERSION', 'notes-3')
     from models.structured import Structured
 
     original = dedupe.implementation_digest
@@ -513,6 +517,7 @@ def test_dependency_upgrade_invalidates_checkpoint_in_both_modes(
 def test_historical_aliases_require_the_recorded_dependency_versions(
     enabled, monkeypatch, dependency_identity, feature, dependency, flag
 ):
+    monkeypatch.setattr(dedupe, 'NOTES_UNSCALED_PREVIOUS_VERSION', 'notes-3')
     monkeypatch.setenv('EPISODE_COMPOSER_REUSE', flag)
     monkeypatch.setattr(
         dedupe,
@@ -566,3 +571,149 @@ def test_key_modes_do_not_read_dependency_metadata_per_call(enabled, monkeypatch
         monkeypatch.setenv('EPISODE_COMPOSER_REUSE', flag)
         for feature in ('notes', 'l1'):
             assert dedupe.fingerprint(feature, {'text': 'unchanged'})
+
+
+@pytest.mark.parametrize(
+    'version,words', [('notes-3', 200), ('notes-4', 200), ('notes-4', 6000), ('notes-8', 200), ('notes-8', 6000)]
+)
+def test_quality_contract_reuses_clean_old_checkpoint_without_a_paid_call(enabled, monkeypatch, version, words):
+    from models.structured import Structured
+    from copy import deepcopy
+
+    monkeypatch.setattr(dedupe, 'noise_skip_enabled', lambda: True)
+    monkeypatch.setenv('CONVERSATION_NOTES_SCALED_DETAIL_ENABLED', 'true')
+    captured = []
+    real_fingerprint = dedupe.fingerprint
+
+    def capture(feature, inputs):
+        captured.append(deepcopy(inputs))
+        return real_fingerprint(feature, inputs)
+
+    monkeypatch.setattr(dedupe, 'fingerprint', capture)
+    prefix = {'context': 'FULL TRANSCRIPT\n' + 'budget ' * words}
+    note = Structured(title='Pilot budget', overview='The budget is $8,000.')
+    generate = Mock(return_value=note)
+    hashes = {}
+    dedupe.notes('u', enabled, prefix, generate, hashes)
+    old_inputs = deepcopy(captured[-1])
+    if 'scaled_detail' in old_inputs:
+        old_inputs['scaled_detail']['version'] = version
+    old_version = version + ':' + dedupe.stable_implementation('notes').split(':', 1)[1]
+    row = {
+        **hashes,
+        dedupe.NOTES_HASH: dedupe._fingerprint('notes', old_inputs, old_version),
+        'structured': note.model_dump(),
+    }
+    monkeypatch.setattr(dedupe, '_stored', lambda *a, **kw: row)
+    claim = Mock(side_effect=AssertionError('clean checkpoint must not reserve a paid repair'))
+    monkeypatch.setattr(dedupe, '_claim_quality_repair', claim)
+    generate.reset_mock()
+    for _ in range(3):
+        current = {}
+        output = dedupe.notes('u', enabled, prefix, generate, current)
+        row.update(current, structured=output.model_dump())
+    generate.assert_not_called()
+    claim.assert_not_called()
+    dedupe.notes('u', enabled, {'context': 'changed content'}, generate, {})
+    generate.assert_called_once()
+
+
+@pytest.mark.parametrize('violation', ['capture_availability', 'empty_heading'])
+@pytest.mark.parametrize('repair_fails', [False, True])
+def test_only_visible_concrete_violations_get_one_reserved_regeneration(enabled, monkeypatch, violation, repair_fails):
+    from models.structured import Structured
+
+    old = Structured(title='Pilot budget', overview='The budget is $8,000. Transcript is missing.')
+    if violation == 'empty_heading':
+        old = Structured(
+            title='Pilot budget',
+            overview='The budget is $8,000.',
+            sections=[{'heading': '', 'body_markdown': 'Approval Friday.'}],
+        )
+    generate = Mock(return_value=old)
+    hashes = {}
+    dedupe.notes('u', enabled, 'unchanged', generate, hashes)
+    row = {**hashes, 'structured': old.model_dump()}
+    monkeypatch.setattr(dedupe, '_stored', lambda *a, **kw: row)
+    claims = set()
+
+    def claim(uid, conversation, saved, key):
+        if key in claims:
+            return False
+        claims.add(key)
+        return True
+
+    monkeypatch.setattr(dedupe, '_claim_quality_repair', claim)
+    metric = Mock()
+    monkeypatch.setattr(dedupe, 'QUALITY_REGENERATIONS', metric)
+    generate.reset_mock()
+    generate.side_effect = RuntimeError('paid repair failed') if repair_fails else None
+    generate.return_value = old  # Even an unsuccessful model repair cannot loop.
+    for attempt in range(3):
+        current = {}
+        if repair_fails and attempt == 0:
+            with pytest.raises(RuntimeError):
+                dedupe.notes('u', enabled, 'unchanged', generate, current)
+            assert current == {}
+        else:
+            output = dedupe.notes('u', enabled, 'unchanged', generate, current)
+            row.update(current, structured=output.model_dump())
+    assert generate.call_count == 1 and len(claims) == 1
+    metric.labels.assert_called_once_with(reason=violation)
+    metric.labels.return_value.inc.assert_called_once()
+
+
+def test_hidden_checkpoint_is_filtered_without_a_quality_regeneration(enabled, monkeypatch):
+    from models.structured import Structured
+
+    old = Structured(title='Pilot budget', overview='Budget approved. Transcript is missing.')
+    generate = Mock(return_value=old)
+    hashes = {}
+    dedupe.notes('u', enabled, 'unchanged', generate, hashes)
+    row = {**hashes, 'structured': old.model_dump(), 'relevance_decision': {'verdict': 'discard'}}
+    monkeypatch.setattr(dedupe, '_stored', lambda *a, **kw: row)
+    claim = Mock(side_effect=AssertionError('hidden output must not reserve a paid repair'))
+    monkeypatch.setattr(dedupe, '_claim_quality_repair', claim)
+    generate.reset_mock()
+    output = dedupe.notes('u', enabled, 'unchanged', generate, {})
+    assert output.overview == 'Budget approved.'
+    generate.assert_not_called()
+    claim.assert_not_called()
+
+
+def test_filtered_empty_result_is_reused_after_single_quality_repair(enabled, monkeypatch):
+    from models.structured import Structured
+
+    old = Structured(title='Pilot budget', overview='Transcript is missing.')
+    generate = Mock(return_value=old)
+    hashes = {}
+    dedupe.notes('u', enabled, 'unchanged', generate, hashes)
+    row = {**hashes, 'structured': old.model_dump()}
+    monkeypatch.setattr(dedupe, '_stored', lambda *a, **kw: row)
+    claim = Mock(return_value=True)
+    monkeypatch.setattr(dedupe, '_claim_quality_repair', claim)
+    generate.reset_mock()
+    generate.return_value = Structured(title='Pilot budget', overview='')
+    for _ in range(3):
+        current = {}
+        output = dedupe.notes('u', enabled, 'unchanged', generate, current)
+        row.update(current, structured=output.model_dump())
+    generate.assert_called_once()
+    claim.assert_called_once()
+    assert row[dedupe.QUALITY_FILTER_HASH]
+
+
+def test_repair_reservation_error_reuses_filtered_output_without_spending(enabled, monkeypatch):
+    from models.structured import Structured
+
+    old = Structured(title='Budget', overview='Approval Friday. Transcript is missing.')
+    generate = Mock(return_value=old)
+    hashes = {}
+    dedupe.notes('u', enabled, 'unchanged', generate, hashes)
+    row = {**hashes, 'structured': old.model_dump()}
+    monkeypatch.setattr(dedupe, '_stored', lambda *a, **kw: row)
+    monkeypatch.setattr(dedupe.notes_quality_repair, 'claim', Mock(side_effect=RuntimeError('storage unavailable')))
+    generate.reset_mock()
+    output = dedupe.notes('u', enabled, 'unchanged', generate, {})
+    assert output.overview == 'Approval Friday.'
+    generate.assert_not_called()

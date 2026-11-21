@@ -35,6 +35,10 @@ class LeaveFlowExit {
 
 /// One step of a leave flow: back button, step indicator, a large title and subtitle, the step's
 /// body and a bottom action area.
+///
+/// Title, subtitle and [body] scroll together above [actions], which stay on screen at every text
+/// size (cancelling must always be reachable). So [body] must not scroll on its own: pass a
+/// `Column`, not a `ListView`.
 class LeaveFlowStepScaffold extends StatelessWidget {
   const LeaveFlowStepScaffold({
     super.key,
@@ -74,23 +78,31 @@ class LeaveFlowStepScaffold extends StatelessWidget {
             title: _StepIndicator(step: step, count: stepCount),
           ),
           body: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(OmiSpacing.xl, OmiSpacing.md, OmiSpacing.xl, 0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Semantics(header: true, child: Text(title, style: OmiType.title2)),
-                    if (subtitle != null) ...[
-                      const SizedBox(height: OmiSpacing.xxs),
-                      Text(subtitle!, style: OmiType.subhead.copyWith(color: OmiColors.textSecondary)),
+              Expanded(
+                child: SingleChildScrollView(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(OmiSpacing.xl, OmiSpacing.md, OmiSpacing.xl, 0),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Semantics(header: true, child: Text(title, style: OmiType.title2)),
+                            if (subtitle != null) ...[
+                              const SizedBox(height: OmiSpacing.xxs),
+                              Text(subtitle!, style: OmiType.subhead.copyWith(color: OmiColors.textSecondary)),
+                            ],
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: OmiSpacing.lg),
+                      body,
                     ],
-                  ],
+                  ),
                 ),
               ),
-              const SizedBox(height: OmiSpacing.lg),
-              Expanded(child: body),
               SafeArea(
                 top: false,
                 child: Padding(

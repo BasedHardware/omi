@@ -457,6 +457,7 @@ def test_real_protection_migration_preserves_or_deletes_optional_scores(monkeypa
         return original(value, uid, level)
 
     monkeypatch.setattr(db, '_protect_json_value', protect)
+    monkeypatch.setattr(db.conversations_v3_backfill_runs, '_live_run_ids', lambda *a, **kw: [])
     db.migrate_conversations_level_batch('u', ['c'], target)
     raw = store.rows[path]
     assert raw['data_protection_level'] == target

@@ -13,6 +13,7 @@ resolved language as part of the next update, and the episode only stamps
 """
 
 from __future__ import annotations
+from utils.conversations.layer import read_product as read_product_conversation
 
 import logging
 from typing import Any, Mapping, Optional
@@ -35,8 +36,12 @@ def conversation_language(uid: str, conversation_id: str, firestore_client: Any)
     if not conversation_id:
         return ''
     try:
-        row = conversations.get_conversation_raw_snapshot(
-            uid, conversation_id, field_paths=['language'], firestore_client=firestore_client
+        row = read_product_conversation(
+            conversations.get_conversation_raw_snapshot,
+            uid,
+            conversation_id,
+            field_paths=['language'],
+            firestore_client=firestore_client,
         )
         return str((row or {}).get('language') or '')
     except Exception as error:

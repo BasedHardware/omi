@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "id": "FC-roll-releases-capacity-before-replacement-exists",
+  "family": "destroy-after-quiescence",
+  "violated_contract": "A rollout of a workload that holds scarce, autoscaled capacity (GPU nodes that a stockout can make unobtainable) must never leave that capacity unclaimed while replacements do not yet exist. Each node may be released only to its own replacement. A strategy that stops every old pod and creates replacements only after the slowest one exits (Kubernetes Recreate) leaves idle nodes for as long as one hung drain lasts; the cluster autoscaler returns them after its unneeded-node timer, and in a stockout they cannot be bought back. A pod-count floor does not protect them, because the rollout itself removed the pods it counts.",
+  "canonical_prevention": "The batch-pipeline-worker chart renders every worker Deployment with RollingUpdate, maxSurge 0 (no surge GPU) and a bounded percentage maxUnavailable, so each replacement is created as soon as its predecessor is told to stop and takes the freed node seconds after that pod exits. The preserve-live image-only helper admits only Recreate or RollingUpdate with an explicit zero maxSurge. The batch-pipeline-pool node minimum equals the HPA floor (operator-managed, in the capacity runbook).",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_batch_pipeline_chart.py",
+    ".github/scripts/test_worker_image_only.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/charts/batch-pipeline-worker/templates/deployment.yaml",
+    ".github/scripts/worker_image_only.py"
+  ],
+  "status": "open"
+}

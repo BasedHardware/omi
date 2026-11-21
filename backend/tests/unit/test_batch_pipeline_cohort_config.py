@@ -126,6 +126,18 @@ def test_batch_pipeline_admission_is_configured_without_uid_allowlists(manifest,
     assert prod_hosts['backend-integration']['BATCH_PIPELINE_TERMINAL_EMPTY_DISPOSITION_ENABLED']['value'] == 'true'
 
 
+def test_home_feed_kill_switch_is_pinned_only_on_prod_integration(manifest, recovery_base_hosts):
+    for stage, config in manifest.items():
+        for service, service_config in config['cloud_run']['services'].items():
+            env = service_config['env']
+            if stage == 'prod' and service == 'backend-integration':
+                assert env['HOME_FEED_ENABLED'] == {'value': 'false', 'category': 'ops_kill'}
+            else:
+                assert 'HOME_FEED_ENABLED' not in env, f'{stage}/{service}'
+    for service, service_config in recovery_base_hosts.items():
+        assert 'HOME_FEED_ENABLED' not in service_config['env'], f'base/{service}'
+
+
 def test_prod_sync_redrive_and_summary_deadline_manifest_fail_safe(manifest, monkeypatch):
     from config import summary_guarantee
 

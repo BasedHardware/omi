@@ -253,7 +253,9 @@ def _iter_user_data_export_from_spool(uid: str, memories_spool: IO[str] | None) 
 
     yield '  "conversations": [\n'
     first = True
-    conversations = iter_portability_guarded(conversations_db.iter_all_conversations(uid, include_discarded=True))
+    conversations = iter_portability_guarded(
+        conversations_db.iter_all_conversations(uid, include_discarded=True, include_recordings=True)
+    )
     try:
         for conv in conversations:
             if conv is None:

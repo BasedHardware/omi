@@ -1,3 +1,4 @@
+import gc
 import importlib.util
 import json
 import os
@@ -55,6 +56,9 @@ def checkout_graph_cache(contracts_module):
             contracts_module.first_party_import_closure(contract, contract.entrypoints, _import_trees=trees)
             contracts_module.first_party_import_closure(contract, contract.smoke_entrypoints, _import_trees=trees)
             contracts_module.third_party_dependency_modules(contract, _trees=dependency_trees)
+    # Finish collecting the checkout scan's temporary objects during setup.
+    # Otherwise a later small test can be charged for collecting across both AST caches.
+    gc.collect()
     return cached, trees, dependency_trees
 
 
@@ -291,6 +295,14 @@ def test_shared_import_parse_keeps_lazy_imports_and_each_image_copy_surface(cont
     package.mkdir()
     (package / '__init__.py').write_text('', encoding='utf-8')
     (package / 'child.py').write_text('import json\n', encoding='utf-8')
+    template = replace(
+        _contract(contracts_module, 'pusher'),
+        target=None,
+        build_context=tmp_path,
+        source_root=tmp_path,
+        entrypoint_source_root=tmp_path,
+        entrypoints=('main',),
+    )
     contracts = []
     for name, copies in (
         ('complete', 'COPY added.py ./\nCOPY package/ ./package/\n'),
@@ -299,18 +311,7 @@ def test_shared_import_parse_keeps_lazy_imports_and_each_image_copy_surface(cont
     ):
         dockerfile = tmp_path / name
         dockerfile.write_text('FROM python\nWORKDIR /app\nCOPY main.py ./\n' + copies, encoding='utf-8')
-        contracts.append(
-            replace(
-                _contract(contracts_module, 'pusher'),
-                name=name,
-                dockerfile=dockerfile,
-                target=None,
-                build_context=tmp_path,
-                source_root=tmp_path,
-                entrypoint_source_root=tmp_path,
-                entrypoints=('main',),
-            )
-        )
+        contracts.append(replace(template, name=name, dockerfile=dockerfile))
 
     errors = contracts_module.check_source_closures(contracts)
     assert not any(error.startswith('complete:') for error in errors)
@@ -448,6 +449,10 @@ assert structured.ActionItem.__module__ == "models.structured"
 assert structured.Event.__module__ == "models.structured"
 assert structured.Section.__module__ == "models.structured"
 assert structured.Structured(title="fallback").title == "fallback"
+# Runtime images load this fallback: stored v3 rows with {'name'} participants must read back.
+legacy = structured.Structured(participants=[{"name": "A"}, {"name": "B", "source": "roster"}])
+assert [(p.name, p.source) for p in legacy.participants] == [("A", "transcript"), ("B", "roster")]
+assert "source" in structured.Participant.model_json_schema()["required"]
 '''
     environment = dict(os.environ)
     environment['PYTHONPATH'] = str(tmp_path)
@@ -640,7 +645,13 @@ def _requirement_pin(requirements_text: str, package: str) -> str:
     raise AssertionError(f'{package} pin missing from requirements')
 
 
-def test_pusher_installs_typesense_because_finalization_indexes_conversations():
+@pytest.fixture(scope='module')
+def pusher_lock_packages() -> dict[str, str]:
+    lock = tomllib.loads((BACKEND_DIR / 'pusher' / 'pylock.toml').read_text(encoding='utf-8'))
+    return {package['name']: package['version'] for package in lock['packages']}
+
+
+def test_pusher_installs_typesense_because_finalization_indexes_conversations(pusher_lock_packages):
     """process_conversation → lifecycle → typesense_index is reachable in the pusher image.
 
     Auto-deploy smoke failed from 2026-09-01 onward with
@@ -650,8 +661,7 @@ def test_pusher_installs_typesense_because_finalization_indexes_conversations():
     pusher = (BACKEND_DIR / 'pusher' / 'requirements.txt').read_text(encoding='utf-8')
     backend = (BACKEND_DIR / 'requirements.txt').read_text(encoding='utf-8')
     assert _requirement_pin(pusher, 'typesense') == _requirement_pin(backend, 'typesense')
-    pylock = (BACKEND_DIR / 'pusher' / 'pylock.toml').read_text(encoding='utf-8')
-    assert 'name = "typesense"' in pylock
+    assert 'typesense' in pusher_lock_packages
 
 
 def test_pusher_imageio_ffmpeg_exclusion_keeps_its_system_ffmpeg_fallback():
@@ -675,18 +685,16 @@ def test_pusher_imageio_ffmpeg_exclusion_keeps_its_system_ffmpeg_fallback():
     assert 'install --no-install-recommends ffmpeg' in dockerfile
 
 
-def test_pusher_posthog_pin_matches_backend_cohort_flag_client():
+def test_pusher_posthog_pin_matches_backend_cohort_flag_client(pusher_lock_packages):
     """PR #20533 enabled cohort dispatch, but pusher lacked the lazy PostHog SDK."""
     pusher = (BACKEND_DIR / 'pusher' / 'requirements.txt').read_text(encoding='utf-8')
     backend = (BACKEND_DIR / 'requirements.txt').read_text(encoding='utf-8')
     pin = _requirement_pin(backend, 'posthog')
     assert _requirement_pin(pusher, 'posthog') == pin
-    lock = tomllib.loads((BACKEND_DIR / 'pusher' / 'pylock.toml').read_text(encoding='utf-8'))
-    packages = {package['name']: package['version'] for package in lock['packages']}
-    assert packages['posthog'] == pin.split('==', 1)[1]
+    assert pusher_lock_packages['posthog'] == pin.split('==', 1)[1]
 
 
-def test_pusher_lock_covers_mentor_v2_lazy_imports():
+def test_pusher_lock_covers_mentor_v2_lazy_imports(pusher_lock_packages):
     """Packages audited in the pusher-only venv, including function-local imports.
 
     PR #20533's cohort dispatch exposed a missing lazy PostHog import that the
@@ -731,9 +739,9 @@ def test_pusher_lock_covers_mentor_v2_lazy_imports():
         'typesense': 'typesense',
         'ulid': 'python-ulid',
     }
-    lock = tomllib.loads((BACKEND_DIR / 'pusher' / 'pylock.toml').read_text(encoding='utf-8'))
-    installed_packages = {package['name'] for package in lock['packages']}
-    missing = {module: package for module, package in module_distributions.items() if package not in installed_packages}
+    missing = {
+        module: package for module, package in module_distributions.items() if package not in pusher_lock_packages
+    }
     assert not missing, f'Mentor v2 modules missing from pusher lock: {missing}'
 
 
@@ -1113,10 +1121,11 @@ def test_build_only_entries_are_validated(contracts_module, tmp_path, override, 
         ('nllb-translation', {'omi_logging'}),
     ],
 )
-def test_copied_gpu_shims_do_not_probe_checkout_only_imports(contracts_module, name, excluded_modules):
+def test_copied_gpu_shims_do_not_probe_checkout_only_imports(contracts_module, checkout_graph, name, excluded_modules):
+    _, dependency_trees = checkout_graph
     contract = _contract(contracts_module, name)
     assert excluded_modules <= contract.dependency_probe_exclusions
-    dependencies = contracts_module.third_party_dependency_modules(contract)
+    dependencies = contracts_module.third_party_dependency_modules(contract, _trees=dependency_trees)
     assert not any(
         module == shim or module.startswith(shim + '.') for module in dependencies for shim in excluded_modules
     )

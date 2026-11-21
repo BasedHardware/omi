@@ -57,6 +57,8 @@ abstract final class ValueMomentPaywall {
     if (_spent(moment) || PaywallPacing.shownRecently() || !ownsOmi(conversation)) return false;
     if (moment == PaywallMoment.ahaFirstSummary && !_summarized(conversation)) return false;
     if (usage != null && !mayOffer(usage, moment)) return false;
+    // At the cloud cap the free plan's own sheet (upgrade first, this phone second) is the offer.
+    if (moment == PaywallMoment.freeCap && usage != null && FreemiumSwitchHandler.freeCapEligible(usage)) return false;
     return (queue ?? PromptQueue.instance).enqueue(
       'value-moment-${moment.source}',
       PromptPriority.low,

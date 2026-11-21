@@ -55,3 +55,20 @@ this file only pins the code-enforced steps. Run the commands from `backend/`.
      tests/unit/test_firestore_field_indexes.py > /tmp/guard-tests.txt
    BACKEND_UNIT_TEST_FILE_LIST=/tmp/guard-tests.txt bash test.sh
    ```
+
+## Recurring batch and sync selectors
+
+The query-shape guard also evaluates batch and sync row selection. A recurring
+state page needs an actionable upper due bound. Use the clock maintained by the
+writer for the eligibility transition, such as `available_at`, `lease_until` or
+`projection_followup_due_at`. An upper bound on enqueue time usually admits the
+same waiting rows. Every alternative in a state selection needs a bound.
+
+For a reviewed finite scan or compatibility path, record the owner, reason,
+maximum rows per query, cadence, expiry and removal condition in
+`config/batch_census_selectors.py`. A cursor argument alone proves only that a
+single page can continue. Show where the caller advances it and stops at the
+end of the scan. The guard pins existing exception bodies and tests executed
+Firestore query shapes and PostgreSQL selector statements. Remove an exception
+when the due path replaces it. Aggregate census counts and keyed existence
+reads retain their own contracts.
