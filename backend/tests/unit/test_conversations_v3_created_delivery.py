@@ -301,6 +301,29 @@ def test_explicit_retry_settle_wakes_the_owner_to_deliver(monkeypatch):
     assert len(wakes) == 1 and wakes[0][0] == 'u'
 
 
+def test_exhausted_row_settles_as_a_no_op_instead_of_raising(monkeypatch):
+    monkeypatch.setattr(processing.leases, 'acquire', lambda *a: 'token')
+    monkeypatch.setattr(processing.leases, 'keepalive', lambda *a: nullcontext())
+    monkeypatch.setattr(processing.leases, 'release', lambda *a: None)
+    monkeypatch.setattr(processing.fence, 'writer', lambda *a: nullcontext())
+    monkeypatch.setattr(processing.writers, 'begin_processing', lambda *a, **kw: writers.TERMINAL)
+    conversation = SimpleNamespace(id='c', is_locked=False, model_dump=lambda: {'id': 'c'})
+    assert (
+        processing.run_external(lambda *a, **kw: pytest.fail('paid work ran'), 'u', 'en', conversation) is conversation
+    )
+
+
+def test_unavailable_row_still_raises(monkeypatch):
+    monkeypatch.setattr(processing.leases, 'acquire', lambda *a: 'token')
+    monkeypatch.setattr(processing.leases, 'keepalive', lambda *a: nullcontext())
+    monkeypatch.setattr(processing.leases, 'release', lambda *a: None)
+    monkeypatch.setattr(processing.fence, 'writer', lambda *a: nullcontext())
+    monkeypatch.setattr(processing.writers, 'begin_processing', lambda *a, **kw: False)
+    conversation = SimpleNamespace(id='c', is_locked=False, model_dump=lambda: {'id': 'c'})
+    with pytest.raises(RuntimeError, match='v3_processing_unavailable'):
+        processing.run_external(lambda *a, **kw: pytest.fail('paid work ran'), 'u', 'en', conversation)
+
+
 @pytest.mark.asyncio
 async def test_a_full_page_schedules_a_continuation_for_the_rest(strict, delivery, monkeypatch):
     strict.rows[C] = derived()
