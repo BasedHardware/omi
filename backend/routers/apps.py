@@ -23,7 +23,7 @@ from fastapi import APIRouter, Body, Depends, Form, UploadFile, File, HTTPExcept
 from fastapi.responses import HTMLResponse
 
 from langchain_core.messages import SystemMessage, HumanMessage
-from utils.apps import _clamp_review_score, fetch_app_chat_tools_from_manifest
+from utils.apps import _extract_rating_stats, fetch_app_chat_tools_from_manifest
 from utils.executors import (
     critical_executor,
     db_executor,
@@ -172,12 +172,7 @@ router = APIRouter(route_class=MultipartMaxPartSizeRoute)
 
 
 def _safe_app_from_dict(app: Optional[dict]) -> Optional[App]:
-    if not isinstance(app, dict):
-        return None
-    try:
-        return App(**app)
-    except (ValidationError, TypeError):
-        return None
+    return App.deserialize_safe(app)
 
 
 class AppSelectOption(PydanticBaseModel):
@@ -760,9 +755,7 @@ def search_apps(
 
         # Calculate average from reviews
         reviews = apps_reviews.get(app_dict['id'], {})
-        scores = [_clamp_review_score(x['score']) for x in reviews.values()]
-        app_dict['rating_avg'] = sum(scores) / len(scores) if scores else None
-        app_dict['rating_count'] = len(scores)
+        app_dict['rating_avg'], app_dict['rating_count'] = _extract_rating_stats(reviews)
 
         # Skip a malformed/legacy app document rather than 500 the whole search page.
         try:
@@ -1070,10 +1063,12 @@ async def get_or_create_user_persona(uid: str = Depends(auth.get_current_user_ui
     # Check if user already has a persona
     persona = await run_blocking(db_executor, get_user_persona_by_uid, uid)
     if persona:
-        safe_persona = _safe_app_from_dict(persona)
-        if safe_persona is not None:
-            return safe_persona
+        if safe := _safe_app_from_dict(persona):
+            return safe
         logger.warning('Existing persona for uid=%s is malformed; regenerating clean persona', uid)
+        if corrupt_id := persona.get('id'):
+            await run_blocking(db_executor, delete_app_from_db, corrupt_id)
+            await run_blocking(db_executor, delete_app_cache_by_id, corrupt_id)
 
     if generated_compute_configured():
         await run_blocking(db_executor, require_generated_compute, uid, 'persona_clone')
@@ -1082,7 +1077,6 @@ async def get_or_create_user_persona(uid: str = Depends(auth.get_current_user_ui
 
     # Generate a unique ID for the persona
     persona_id = str(ULID())
-
     # Create persona data
     persona_data = {
         'id': persona_id,
@@ -1449,8 +1443,7 @@ def reply_to_review(app_id: str, data: ReplyToReviewRequest, uid: str = Depends(
 @router.get('/v1/apps/{app_id}/reviews', tags=['v1'], response_model=List[AppReview])
 def app_reviews(app_id: str):
     reviews = get_app_reviews(app_id)
-    reviews = [details for details in reviews.values() if details.get('review')]
-    return reviews
+    return AppReview.from_records(reviews.values())
 
 
 @router.patch('/v1/apps/{app_id}/change-visibility', tags=['v1'], response_model=AppMutationResponse)
