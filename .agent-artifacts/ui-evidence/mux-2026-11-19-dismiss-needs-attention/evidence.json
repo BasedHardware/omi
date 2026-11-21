@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-activity-dismiss-before-after.png",
+      "platform": "mobile-ios",
+      "description": "Activity Needs attention, 5 seeded failed-summary rows. BEFORE (main): start, then 3 left swipes and a relaunch, still 5 rows. AFTER: mid-swipe Dismiss background, then 3 swipes and a relaunch, 2 rows left.",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "002-mobile-ios-activity-dark-before-after.png",
+      "platform": "mobile-ios",
+      "description": "Dark appearance, BEFORE (left) and AFTER (right): the rows look the same; dismiss adds no visible control.",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "003-mobile-ios-activity-xxxl-before-after.png",
+      "platform": "mobile-ios",
+      "description": "Largest accessibility text, BEFORE (left) and AFTER (right): identical; the rows already break at this size on main (Try Again squeezes the text), not changed here.",
+      "captured_by": "agent",
+      "source": "screencapture"
+    }
+  ]
+}
