@@ -12,6 +12,7 @@ from datetime import datetime, timezone
 import pytest
 
 import database.batch_pipeline_store as batch_store
+from database import batch_pipeline_projection_outbox as projection_outbox
 from database.jobstore import dual_store
 from database.jobstore.dual_store import SHADOW_PARITY_TOTAL, DualStore, ShadowParityOutcome, compare
 from testing.pipeline_sim.store import CustomerData, SimStore
@@ -101,6 +102,27 @@ def test_writes_mirror_after_commit_and_reads_match(stores):
     assert store.drain(5)
     assert count('queues', 'write', 'mirrored') == before[0] + 1
     assert count('queues', 'read', 'match') == before[1] + 1
+
+
+def test_projection_outbox_metadata_patches_refresh_the_result_mirror(stores):
+    primary, shadow, store = stores
+    key = projection_outbox.Obligation('synthetic', 1)
+    address = ('results', key.segment_id)
+    row = {
+        'log_sequence': key.revision,
+        'projection_state': 'pending',
+        projection_outbox.KIND_FIELD: projection_outbox.KIND,
+        **projection_outbox.metadata(10.0, None, None),
+    }
+    primary.apply(address, row)
+    shadow.rows[address] = row.copy()
+    token = projection_outbox.claim(store, key, lambda: 10.0)
+    assert token is not None and store.drain(5)
+    assert shadow.rows[address][projection_outbox.TOKEN_FIELD] == token
+    assert projection_outbox.settle(store, key, token, lambda: 11.0, 'incomplete') == 'incomplete'
+    assert store.drain(5)
+    assert shadow.rows[address] == primary.rows[address]
+    assert shadow.rows[address][projection_outbox.DUE_FIELD] == 71.0
 
 
 def test_repair_lineage_stays_firestore_only_and_reads_still_match(stores):
@@ -874,6 +896,20 @@ def test_serving_parity_reports_changing_pairs_and_refuses_mutations():
     assert compare_serving_query(Changing(), Changing(), 'due', 'retry', 10, 1) == 'unknown'
     with pytest.raises(ValueError):
         compare_serving_query(Changing(), Changing(), 'acquire_pull_claim', 'shard', 'token', 1, 30)
+
+
+def test_packing_telemetry_uses_only_the_primary_projected_read(stores, monkeypatch):
+    primary, _, store = stores
+    rows = [{'segment_id': 'synthetic'}]
+    read = Mock(return_value=rows)
+    compare = Mock()
+    monkeypatch.setenv('JOBSTORE_SHADOW_QUERY_PARITY', 'on')
+    monkeypatch.setattr(primary, 'packing_candidates', read)
+    monkeypatch.setattr(store, 'observe_discovery', compare)
+
+    assert store.packing_candidates('owner') is rows
+    read.assert_called_once_with('owner')
+    compare.assert_not_called()
 
 
 @pytest.mark.parametrize('stage,namespace', [('prod', 'batch_pipeline_dev'), ('dev', 'batch_pipeline_prod')])

@@ -46,7 +46,7 @@ from tests.support.firestore_review_query_drivers import registry_extension as o
 from tests.support.firestore_dream_query_drivers import registry_extension as dream_drivers
 from tests.support.firestore_usage_units_driver import DRIVER as USAGE_UNITS_DRIVER
 from tests.support.firestore_batch_pipeline_drivers import entries as batch_pipeline_entries
-from tests.support.firestore_allowance_hold_drivers import entries as allowance_hold_entries, StoreArgument
+from tests.support.firestore_allowance_hold_drivers import entries as allowance_hold_entries
 from tests.support.firestore_batch_privacy_drivers import entries as batch_privacy_entries
 from tests.support.firestore_home_feed_drivers import entries as home_feed_entries
 from tests.support.firestore_composer_default_context_drivers import entries as composer_default_context_entries
@@ -158,6 +158,12 @@ _DEV_KEY = 'omi_dev_' + 'a' * 32
 _MCP_KEY = 'omi_mcp_' + 'a' * 32
 
 BODY_DIGEST = {
+    'llm_gateway.gateway.idempotency._request_body': '821d003b89db821c83bd02ba648b9f4a0fba5081d9e450a7cac38192b6382abd',
+    'database.legal_holds.list_legal_holds': 'adb83d85cbbabaa98a4d435147d92e2139b4e483c19a9c09e695c5f7fa4c517b',
+    'utils.support.holds._events': '360ff57663deaf3c17c934276f219cce74f4a468dc28c8a1145623524625927e',
+    'utils.support.holds._held_deferred_deletes': '612a521045553ef1b02d1eb81aac37a3c63a75c598ce5e99484c007c7c87e878',
+    'utils.support.retention._select_conversations': 'f36920350f4e3a557e0e474e8801ae414c21ce67203e0627f7a39ba820243d16',
+    'database.conversations_v3.commit_projection': '1839fb90b6ce564158f484f9608796e98a401dc0b9b0b6222c60fee1d66514ad',
     'database.batch_pipeline_conversation_purge_scans._claim': 'faa5dabcf01dc5bd377b2e14a149282aa2db93b2872cdc97a3b756157701532c',
     'database.batch_pipeline_conversation_purge_scans.run_job': '1916be25d4e9d5b8a350a665ae0fce626ccc56f68fc66107e8f4b0bb1243b00e',
     'database.batch_pipeline_store.FirestoreStore.protected_retries': 'b55d2960c94057cb8df9b9cdd2e7728b6af63728bc0a2cb6f5bd333efed443a2',
@@ -202,7 +208,9 @@ BODY_DIGEST = {
     # Re-reviewed 2026-11-05: forward presentation visibility only; cursor/query/budget bounds unchanged.
     'database.batch_pipeline_store.FirestoreTransaction.ready_predecessor': '345662386754d78758580d321467fcd012838fc0a9ae8194eeb7b3e6ede54f14',
     'database.batch_pipeline_store.projection_pending': '52cc913cca9086557133a8f7118b9980ce5f13649897207fafcfa221513a5629',
-    'database.batch_pipeline_store.FirestoreStore.projection_page': '96f024578c9d338e4fb3a528f1c59801c928167da8ddf0d2747d686700b46ff5',
+    'database.batch_pipeline_store.FirestoreStore.projection_page': '4284286d5c06295eaea7b2bd915d0bdc5028bd24534e0426f08fd384b055e628',
+    'database.batch_pipeline_store.FirestoreStore.projection_page_with_outbox': 'f13299101963feeb96452b98bd9efa5df4d171133ecbf8179ea00ef2fee69140',
+    'database.batch_pipeline_store.FirestoreStore.projection_outbox_page': 'd14bfb2b36919dacd8c818eeaadb5c21120d7de1cd77c7a082b73e09ad0242c5',
     'database.batch_pipeline_store.FirestoreStore.projection_successor': '96adabf372104327c5a8065ef2ff06621648ee242b3415d04b047d50ded9e6b1',
     'database.batch_pipeline_store.FirestoreTransaction.service_frontier': '56b1e013fd6925c981be2186d76458211b724187b771ddc5ebb0eaa47820c44b',
     'database.batch_pipeline_store.reseed_hinted_activation': 'b962f088769367e4902876ef9dd91de299238b945f13610829e5f1f1acd8d449',
@@ -268,8 +276,9 @@ BODY_DIGEST = {
     'database.jobstore.backfill._pages': 'b4170ee77666433d35e0d46a3ea23eed96930160fca3b84b9ffb4810c321b94f',
     'database.jobstore.backfill.backfill': '4b979526157be71d49595ebc54f6c01eb5fd307279b245e07907a5dc86fe8ad8',
     'database.jobstore.backfill.backfill_table': '4ee7bc177237443422fcd2fbef51e7dde2d6841f20751b26fa6b943d39824343',
-    # Reviewed 2026-11-18: bounded serving rotation; query helper driven below, callbacks add only PG SQL.
-    'database.jobstore.reconcile.process_page': '3566a8c6c32bd741726fab3eb915f2a39a6a5c5dfe3b4c353eadab2ef2425244',
+    # Reviewed 2026-11-15: bounded reconcile-page operator CLI, not a serving caller.
+    'database.jobstore.reconcile._primary_keys': '47158c3d453cda1ca78ea73d191f342a72e677bb2012ac67ee0c172f4e673cc8',
+    'database.jobstore.reconcile.process_page': '0a7c1c343f8a0397e152558629477f9d0127e9e10a73fa829c7863d7209a0eea',
     'database.pinecone_partition_state._uncertain_mutations_are_deletes': '6b08a953074c2ae24cc1cf503ee5ae2e32049b62d3446e11248d5f72253b162d',
     'database.pinecone_partition_state.uncertain_mutations_are_deletes': '49b0052e3a4aeb004ae9680393cd599fe972e1716ec3089a9ac163c445c6d384',
 }
@@ -408,6 +417,8 @@ _add(
         domains={'collection': ['conversation_batch_purge_jobs', 'conversation_erasure_jobs']},
     )
 )
+# The pager's separate operations database uses a built-in next_at index.
+_add(DriverEntry('paging.store.due_deliveries', base={'now': T0}))
 # Sealed owner groups use an existing single-field uid index on obligations.
 _add(
     DriverEntry(
@@ -537,6 +548,12 @@ _add(
 )
 
 _add(DriverEntry('database.account_deletion_transitions.read_agent_vm_migration_journals', base={'uid': UID}))
+_add(
+    DriverEntry(
+        'database.go_queue_erase.readback',
+        base={'now': T0, 'collection': ref_collection('account_deletions')},
+    )
+)
 
 _add(
     DriverEntry(
@@ -637,6 +654,7 @@ _add(
         neutrals={
             'document_id': (None, 'optional doc id; absent does not change query'),
             'reuse_finished': (True, 'filters streamed key matches in Python; query unchanged'),
+            'check_undo_removals': (False, 'adds only owner-scoped removal marker and conversation point reads'),
         },
         setup=_seed_action_items_control,
         trials=2,
@@ -3625,6 +3643,13 @@ for entry in (
     *batch_privacy_entries(),
     *home_feed_entries(),
     *conversations_v3_entries(),
+    CoveredByEntry(
+        'database.conversations_v3.commit_projection',
+        covered_by=('database.conversations_v3.merge_donors_have_tasks',),
+        reason='Refinement and live repair use the same bounded donor-task query and write point markers with donor redirects.',
+        expect_observed=False,
+        body_digest=BODY_DIGEST['database.conversations_v3.commit_projection'],
+    ),
     *memory_ledger_drivers(),
     *outside_drivers.DRIVERS.values(),
     *outside_drivers.COVERED_BY.values(),
@@ -3790,6 +3815,14 @@ _add(
         reason='Builder consumed by its registered serving parent',
         expect_observed=False,
         body_digest=BODY_DIGEST['database.proactivity_producers.task_items_query'],
+    )
+)
+
+_add(
+    SkipEntry(
+        'llm_gateway.gateway.idempotency._request_body',
+        reason='FastAPI Request.stream() reads incoming HTTP body bytes, without a Firestore query.',
+        body_digest=BODY_DIGEST['llm_gateway.gateway.idempotency._request_body'],
     )
 )
 
@@ -4389,57 +4422,49 @@ for _key, _reason in (
         'database.jobstore.backfill.backfill',
         'Lane 12 A6 staging backfill: loops backfill_table per table; no query of its own.',
     ),
+    (
+        'database.jobstore.reconcile._primary_keys',
+        'Bounded reconcile-page operator CLI only, never serving: one batch collection page ordered by '
+        'document id, optional document-id start_after, and explicit limit; bounded RPC with retries disabled. '
+        'No filters or composite index; built-in document-id ordering only.',
+    ),
+    (
+        'database.jobstore.reconcile.process_page',
+        'Bounded reconcile-page operator CLI only: orchestrates the pinned _primary_keys helper for primary '
+        'discovery or a limited PG key page, then exact-key primary get_all rereads. No additional Firestore '
+        'query shape; row/read/statement/deadline budgets and commit-only cursor checked by '
+        'tests/unit/test_jobstore_reconcile.py.',
+    ),
 ):
     _add(SkipEntry(_key, reason=_reason, body_digest=BODY_DIGEST[_key]))
 
 
-# The bounded source page is now reachable from the supervised serving tick,
-# so exercise every table/cursor shape rather than keeping an operator-only skip.
-class _JobstorePageBudget:
-    def __deepcopy__(self, memo):
-        from database.jobstore.reconcile import _Budget, PageCounts
-
-        return _Budget(3, 20, 500, PageCounts())
-
-
-_add(
-    DriverEntry(
-        'database.jobstore.reconcile._primary_keys',
-        base={'primary': StoreArgument('batch_pipeline_prod')},
-        domains={
-            'table': [
-                'jobs',
-                'queues',
-                'owners',
-                'control',
-                'results',
-                'gpus',
-                'intakes',
-                'artifacts',
-                'allowance_holds',
-                'pull_claims',
-                'merge_holds',
-            ],
-            'after': [None, 'cursor'],
-        },
-        neutrals={
-            'limit': (10, 'bounded page size; no filter/index effect'),
-            'budget': (_JobstorePageBudget(), 'RPC timeout/read cap only; fresh budget supplied per trial'),
-        },
-    )
-)
-_add(
-    CoveredByEntry(
-        'database.jobstore.reconcile.process_page',
-        covered_by=('database.jobstore.reconcile._primary_keys',),
-        reason='Serving-hosted bounded rotation/CLI share the driven document-id page. '
-        'Copy-source discovery is SQL; fresh get_all uses exact document references. '
-        'Cursor load/advance callbacks run in the same PG transaction and add no Firestore shape. '
-        'Row/read/SQL/deadline budgets remain tested in test_jobstore_reconcile.py.',
-        expect_observed=False,
-        body_digest=BODY_DIGEST['database.jobstore.reconcile.process_page'],
-    )
-)
+# Support operator CLI (scripts/support/ops.py): audited, ticket-scoped operator reads, never serving.
+for _key, _reason in (
+    (
+        'database.legal_holds.list_legal_holds',
+        'Support operator CLI `hold list` only: bounded limit() scan of the small legal_holds collection by '
+        'document id (no filter, no order); active/review state filtered in Python.',
+    ),
+    (
+        'utils.support.holds._events',
+        'Support operator CLI `hold status` only: bounded limit() read of one account\'s '
+        'legal_holds/{uid}/events subcollection in default document-id order (no filter, no order_by, '
+        'no composite index); the newest are kept in Python.',
+    ),
+    (
+        'utils.support.holds._held_deferred_deletes',
+        'Support operator CLI `hold status/release` only: one account\'s deleted_conversations tombstones, '
+        'paged by document id (built-in __name__ order, start_after, limit) up to a fixed cap; held_deferred '
+        'filtered in Python.',
+    ),
+    (
+        'utils.support.retention._select_conversations',
+        'Support operator CLI `retention check` only: one account\'s conversations, created_at range with '
+        'order on the same field and an explicit cap (single-field index, no composite).',
+    ),
+):
+    _add(SkipEntry(_key, reason=_reason, body_digest=BODY_DIGEST[_key]))
 
 
 # Transparent raw-snapshot transport: the callers above continue to own every

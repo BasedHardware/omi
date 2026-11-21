@@ -44,6 +44,7 @@ from scripts.runtime_env_validation.common import (
     _as_config_dict,
     _as_config_list,
     _config_map_names,
+    _chart_env_entries,
     _env_entries_by_name,
     _expected_flag_value,
     _get_env_config,
@@ -117,7 +118,7 @@ def _validate_gke(env_config: ConfigDict, *, strict_provisional: bool) -> list[V
             continue
         values_file = ROOT / service_config['values_file']
         values = _load_yaml(values_file)
-        actual_env = _env_entries_by_name(values.get('env', []))
+        actual_env = _chart_env_entries(values)
         # GKE ports are declared in Helm values, while the host may come from
         # the manifest's shared ConfigMap. Validate the effective pair.
         if 'REDIS_DB_HOST' in (service_config.get('env') or {}):

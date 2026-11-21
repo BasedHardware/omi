@@ -113,6 +113,9 @@ _FINALIZATION_REPLAY_LISTEN_ONLY = frozenset(
 # none of those surfaces and never starts the dedicated GPU process.
 _BATCH_PIPELINE_LISTEN_ONLY = frozenset(
     {
+        # Account protection, consent and erasure writers are mounted by the
+        # API. Pusher finalizes conversations without mutating account policy.
+        'BATCH_ACCOUNT_PRIVACY_WRITER_ENABLED',
         # Held expiry/requeue is owned by main.py maintenance/RPC and GPU workers;
         # pusher does not run the held maintenance loop or worker failure writer.
         'BATCH_HELD_DEAD_LETTER_ENABLED',
@@ -128,6 +131,8 @@ _BATCH_PIPELINE_LISTEN_ONLY = frozenset(
         'BATCH_CONTROL_CANDIDATE_FANOUT',
         'BATCH_ADMISSION_PARALLEL_CALLS',
         'BATCH_PIPELINE_IDLE_POLL_MAX_SECONDS',
+        # Packing telemetry belongs to sync intake and pull. Pusher owns neither.
+        'BATCH_PIPELINE_PACKING_SAMPLE_RATE',
         # Listen admits/suppresses managed live STT; pusher only retains audio.
         'SERVER_BATCH_UNSUPPORTED_LANGUAGES',
         'BATCH_PIPELINE_ENABLED',
@@ -163,22 +168,6 @@ _RECORD_LATENCY_LISTEN_ONLY = frozenset(
         'RECORD_NOTES_EAGER_ENABLED',
         'RECORD_FOLLOWUP_WAKE_ENABLED',
         'RECORD_SEAL_WAKE_PRESERVED_ENABLED',
-    }
-)
-# Listen's users/conversation routes synchronously erase retained jobstore copies.
-# pusher/main.py mounts no account/conversation purge routes and has no call to
-# batch_pipeline_shadow_hook.purge_owner; sharing finalization does not make it
-# an erasure executor. These production target/context bindings stay on listen.
-_JOBSTORE_ERASURE_LISTEN_ONLY = frozenset(
-    {
-        'BATCH_JOBSTORE_MODE',
-        'FIRESTORE_DATABASE_ID',
-        'JOBSTORE_PG_DATABASE',
-        'JOBSTORE_PG_HOST',
-        'JOBSTORE_PG_USER',
-        'JOBSTORE_PRODUCTION_MIRROR',
-        'JOBSTORE_SHADOW_NAMESPACES',
-        'OMI_DEPLOYMENT',
     }
 )
 # Only the listen lifecycle loop rotates live v3 recordings; pusher never owns a capture socket.
@@ -437,7 +426,6 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
     | _RECONNECT_RECOVERY_LISTEN_ONLY
     | _V3_ROTATION_LISTEN_ONLY
     | (_BATCH_PIPELINE_LISTEN_ONLY - {'BATCH_PIPELINE_UID_ALLOWLIST'})
-    | _JOBSTORE_ERASURE_LISTEN_ONLY
     | _FINALIZATION_REPLAY_LISTEN_ONLY,
 }
 
@@ -491,6 +479,10 @@ PUSHER_ONLY_ALLOWED: dict[str, frozenset[str]] = {
             "TRANSCRIPTION_SHADOW_UID_ALLOWLIST",
             "TRANSCRIPTION_SHADOW_PERCENT",
             "TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS",
+            # Listen reads its STT cap enforcement and fallback cohort from privateSecretEnv (Secret
+            # Manager references, not env literals); pusher keeps its public observe-only values.
+            "STT_CAP_DISPATCH_ENFORCEMENT",
+            "STT_CAP_DISPATCH_COHORT",
         }
     )
     | frozenset(PROD_FINAL_PASS_SHADOW_VALUES),

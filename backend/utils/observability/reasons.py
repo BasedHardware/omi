@@ -332,6 +332,26 @@ class DueMarkerSweepOutcome(StrEnum):
     ERROR = 'error'
 
 
+class SummaryRepairDiscoveryOutcome(StrEnum):
+    """Bounded counts for a summary repair discovery phase."""
+
+    UNKNOWN = 'unknown'
+    QUERIES = 'queries'
+    QUERY_ERROR = 'query_error'
+    FETCHED = 'fetched'
+    EXAMINED = 'examined'
+    UNEXAMINED = 'unexamined'
+    ROW_REFUSED = 'row_refused'
+    INVALID_PATH = 'invalid_path'
+    ACCOUNT_DELETION_BLOCKED = 'account_deletion_blocked'
+    EXPIRED = 'expired'
+    OWNER_DEFERRED = 'owner_deferred'
+    ATTEMPTED = 'attempted'
+    ADMITTED = 'admitted'
+    NOT_ADMITTED = 'not_admitted'
+    REDRIVE_ERROR = 'redrive_error'
+
+
 class RetryReason(StrEnum):
     UNKNOWN = 'unknown'
     LOCKED = 'locked'
@@ -354,6 +374,7 @@ class ConsumerReason(StrEnum):
     STALE_TOKEN = 'stale_token'
     LEASE_HELD = 'lease_held'
     EMPTY_OUTPUT_BLOCKED = 'empty_output_blocked'
+    V3_CUSTODY_CONFLICT = 'v3_custody_conflict'
 
 
 class RampReason(StrEnum):
@@ -820,6 +841,7 @@ class FallbackReason(StrEnum):
 
     UNKNOWN = 'unknown'
     INPUT_MISSING = 'input_missing'
+    RETAINED_DIGEST_CHANGED = 'retained_digest_changed'
     INITIALIZATION_FAILED = 'initialization_failed'
     CONNECTION_LOST = 'connection_lost'
     SEND_FAILED = 'send_failed'

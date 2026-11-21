@@ -436,23 +436,3 @@ def test_quality_switch_binding_cannot_disappear_from_its_owning_cohost(gate, ch
     value = 'false' if key == 'EPISODE_EMPTY_MEMBER_CLEANUP_ENABLED' else 'true'
     replace_once(values, f'  - name: {key}\n    value: "{value}"\n', '')
     assert any(key in error and 'no longer' in error for error in gate.validate_preflight(chart_fixture))
-
-
-@pytest.mark.parametrize(
-    'key',
-    [
-        'BATCH_JOBSTORE_MODE',
-        'FIRESTORE_DATABASE_ID',
-        'JOBSTORE_PG_DATABASE',
-        'JOBSTORE_PG_HOST',
-        'JOBSTORE_PG_USER',
-        'JOBSTORE_PRODUCTION_MIRROR',
-        'JOBSTORE_SHADOW_NAMESPACES',
-        'OMI_DEPLOYMENT',
-    ],
-)
-def test_production_jobstore_erasure_target_belongs_to_listen_not_pusher(gate, key):
-    assert key in gate.LISTEN_ONLY_ALLOWED['prod']
-    pusher, _ = gate._read_values(REPO_ROOT, 'pusher', 'prod')
-    assert key not in pusher
-    assert gate.validate_preflight(REPO_ROOT) == []

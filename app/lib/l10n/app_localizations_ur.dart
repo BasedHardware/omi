@@ -9101,7 +9101,7 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get deleteWhileProcessingMessage =>
-      'یہ ریکارڈنگ اپ لوڈ ہو چکی ہے لیکن Omi ابھی گفتگو بنا رہا ہے۔ اگر آپ اسے ابھی حذف کریں اور پروسیسنگ ناکام ہو جائے تو اسے بحال نہیں کیا جا سکے گا۔ پھر بھی حذف کریں؟';
+      'یہ ریکارڈنگ پہلے ہی اپ لوڈ ہو چکی ہے اور Omi اس پر کارروائی کر رہا ہے۔ یہاں حذف کرنے سے فون کی کاپی ہٹ جاتی ہے۔ اگر کارروائی ناکام ہوئی تو Omi اس فون سے دوبارہ کوشش نہیں کر سکے گا۔';
 
   @override
   String get syncCardAllBackedUp => 'تمام ریکارڈنگز سنک ہو گئیں';
@@ -14504,14 +14504,6 @@ class AppLocalizationsUr extends AppLocalizations {
   }
 
   @override
-  String get deviceRecently => 'حال ہی میں';
-
-  @override
-  String deviceDisconnectedFor(String duration) {
-    return '$duration تک منقطع';
-  }
-
-  @override
   String get deviceControls => 'کنٹرولز';
 
   @override
@@ -15447,6 +15439,11 @@ class AppLocalizationsUr extends AppLocalizations {
   }
 
   @override
+  String firmwareUpdateNotInstalledCv1Message(String version) {
+    return 'اپ ڈیٹ انسٹال نہیں ہوئی۔ آپ کا پینڈنٹ موجودہ فرم ویئر ($version) پر کام کر رہا ہے۔ اپ ڈیٹ دوبارہ آزمانے کے بجائے براہ کرم سپورٹ سے رابطہ کریں۔';
+  }
+
+  @override
   String get firmwareUpdateUnconfirmedMessage =>
       'Couldn\'t confirm the update. Your pendant hasn\'t reconnected yet. Keep it nearby and check its firmware version before trying again.';
 
@@ -15581,4 +15578,157 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get finishBackToHome => 'ہوم پر واپس جائیں';
+
+  @override
+  String get conversationSummaryWhenItEnds => 'یہ گفتگو ختم ہونے پر خلاصہ';
+
+  @override
+  String get deviceUploadsWaitingOnServer => 'اپ لوڈز سرور پر انتظار میں ہیں';
+
+  @override
+  String get deviceUploadsWaitingOnServerSubtitle => 'آپ کا آڈیو آپ کی ڈیوائس یا فون پر محفوظ ہے';
+
+  @override
+  String conversationSummaryThrough(String time) {
+    return '$time تک کا خلاصہ';
+  }
+
+  @override
+  String get conversationRecentTranscript => 'حالیہ ٹرانسکرپٹ';
+
+  @override
+  String get finishAlreadySaved => 'پہلے ہی محفوظ ہو چکی ہے۔ یہ ہوم پر موجود ہے۔';
+
+  @override
+  String get finishAudioNotReceived => 'آڈیو ابھی آ رہی ہے۔';
+
+  @override
+  String get finishFailedOffline => 'درخواست مکمل نہیں ہو سکی۔ آپ کی آڈیو محفوظ ہے۔';
+
+  @override
+  String get finishFailed => 'درخواست مکمل نہیں ہو سکی۔ آپ کی آڈیو محفوظ ہے۔';
+
+  @override
+  String get micBlockedCannotRecord => 'ریکارڈ کرنے کے لیے مائیکروفون کی اجازت دیں۔';
+
+  @override
+  String get couldNotStartRecording => 'ریکارڈنگ شروع نہیں ہو سکی۔';
+
+  @override
+  String get restorePurchasesFailed => 'آپ کے پلان کی تصدیق نہیں ہو سکی۔';
+
+  @override
+  String get firmwareCheckFailed => 'اپ ڈیٹ کی جانچ نہیں ہو سکی۔';
+
+  @override
+  String get conversationStillPublic => 'یہ ابھی بھی لنک کے ذریعے شیئر ہے۔';
+
+  @override
+  String get goalSaveFailed => 'آپ کا ہدف محفوظ نہیں ہو سکا۔';
+
+  @override
+  String get goalDeleteFailed => 'حذف نہیں ہو سکا۔ ہدف بحال کر دیا گیا ہے۔';
+
+  @override
+  String get goalsLoadFailed => 'آپ کے اہداف لوڈ نہیں ہو سکے۔';
+
+  @override
+  String get missingTargetEndedRecording => 'وہ ریکارڈنگ ختم ہو چکی ہے۔';
+
+  @override
+  String get missingTargetMemory => 'وہ یاد اب موجود نہیں ہے۔';
+
+  @override
+  String get missingTargetTask => 'وہ کام اب موجود نہیں ہے۔';
+
+  @override
+  String get missingTargetConversation => 'یہ بات چیت کھولی نہیں جا سکی۔';
+
+  @override
+  String get couldNotRefreshConversations => 'ریفریش نہیں ہو سکا۔';
+
+  @override
+  String get connectDeviceForOfflineSync => 'سنک کے لیے اپنا Omi جوڑیں۔';
+
+  @override
+  String get useDifferentAccountMessage => 'آپ سائن آؤٹ ہو جائیں گے اور اس فون کی Omi ترتیبات ری سیٹ ہو جائیں گی۔';
+
+  @override
+  String get rayBanMetaNotFoundAfterSetup => 'چشمے نہیں ملے۔ کیا یہ آن ہیں؟';
+
+  @override
+  String get couldNotMoveTask => 'کام کو منتقل نہیں کیا جا سکا۔';
+
+  @override
+  String lockedTasksKept(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'حذف ہو گئے۔ $count مقفل کام محفوظ رکھے گئے۔',
+      one: 'حذف ہو گئے۔ 1 مقفل کام محفوظ رکھا گیا۔',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get settingNotSaved => 'یہ تبدیلی محفوظ نہیں ہو سکی۔';
+
+  @override
+  String get couldNotLoadNotificationSettings => 'آپ کی ترتیبات لوڈ نہیں ہو سکیں۔';
+
+  @override
+  String get waitForOmiToFinish => 'Omi کے مکمل ہونے کا انتظار کریں۔';
+
+  @override
+  String get voiceNoteTooShort => 'بہت مختصر ہے۔ ریکارڈ کرنے کے لیے دبائے رکھیں۔';
+
+  @override
+  String get submitAppMissingFields => 'جمع کرانے کے لیے نام، تفصیل، تصویر، زمرہ اور صلاحیت شامل کریں۔';
+
+  @override
+  String get appSetupNotFinished => 'سیٹ اپ ابھی مکمل نہیں ہوا۔';
+
+  @override
+  String get finishNothingKeptTitle => 'محفوظ رکھنے کے لیے کچھ نہیں';
+
+  @override
+  String get submitAppFinishDetails => 'جمع کرانے کے لیے اوپر صلاحیت اور قیمت کی تفصیلات مکمل کریں۔';
+
+  @override
+  String get finishNothingNew => 'ابھی کچھ نیا نہیں۔';
+
+  @override
+  String get takingLongerThanUsual => 'عام وقت سے زیادہ لگ رہا ہے۔ یہ ہوم پر آ جائے گا۔';
+
+  @override
+  String get couldNotCheckOnIt => 'اس کی جانچ نہیں ہو سکی۔ دوبارہ کوشش کریں۔';
+
+  @override
+  String get upgradeToOpenThisOne => 'اسے کھولنے کے لیے اپ گریڈ کریں۔';
+
+  @override
+  String get missingTargetConversationGone => 'یہ بات چیت حذف ہو چکی ہے۔';
+
+  @override
+  String get cantConnectRightNow => 'ابھی رابطہ نہیں ہو سکتا۔';
+
+  @override
+  String get loadOlderFailed => 'پرانے آئٹم لوڈ نہیں ہو سکے۔ دوبارہ کوشش کے لیے ٹیپ کریں۔';
+
+  @override
+  String listeningWithDuration(String duration) {
+    return 'سن رہا ہے · $duration';
+  }
+
+  @override
+  String get conversationLiveNoEdits => 'تبدیلی کے لیے اس کے ختم ہونے تک انتظار کریں۔';
+
+  @override
+  String get finishedSummaryReady => 'خلاصہ تیار ہے';
+
+  @override
+  String get writingSummaryStatus => 'خلاصہ لکھا جا رہا ہے…';
+
+  @override
+  String get stillWorkingOnIt => 'ابھی کام جاری ہے۔';
 }

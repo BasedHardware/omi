@@ -395,8 +395,8 @@ def test_live_skips_a_capture_that_never_closed(monkeypatch):
     assert routes.get_live_conversation('u', 'beta')['conversation'] is None
 
 
-@pytest.mark.parametrize('recording', [False, True])
-def test_live_response_is_compact_and_never_a_recording(monkeypatch, recording):
+@pytest.mark.parametrize('recording, locked', [(False, False), (False, True), (True, False)])
+def test_live_response_is_compact_and_never_a_recording(monkeypatch, recording, locked):
     started = datetime.now(timezone.utc) - timedelta(minutes=3)
     _serve_windows(
         monkeypatch,
@@ -409,6 +409,8 @@ def test_live_response_is_compact_and_never_a_recording(monkeypatch, recording):
                 'v3_derived': True,
                 'tile_state': 'live',
                 'recording': recording,
+                'is_locked': locked,
+                'v3_recording_ids': ['old-recording'] * 8 + ['raw-a', 'invalid/path', 'raw-b'],
                 'transcript_segments': [{'text': 'private capture'}],
                 'structured': {'title': 'Plan', 'emoji': '🌳', 'overview': 'omit'},
             }
@@ -422,6 +424,11 @@ def test_live_response_is_compact_and_never_a_recording(monkeypatch, recording):
 
         wire = ConversationsLiveResponse(**result).model_dump(exclude_unset=True)
         assert 'transcript_segments' not in wire['conversation']
+        if locked:
+            assert wire['conversation']['is_locked'] is True
+            assert 'v3_recording_ids' not in wire['conversation']
+        else:
+            assert wire['conversation']['v3_recording_ids'] == ['old-recording'] * 5 + ['raw-a', 'raw-b']
         assert wire['conversation']['structured'] == {'title': 'Plan', 'emoji': '🌳'}
         import json
         from pathlib import Path

@@ -15,6 +15,7 @@ from unittest.mock import MagicMock, Mock
 import pytest
 
 from database import batch_pipeline_store as firestore_store
+from database import batch_pipeline_projection_outbox as projection_outbox
 from database.batch_pipeline_projection_finish_backfill import BACKFILL_KEY, BACKFILL_VERSION
 from database.batch_pipeline_projection_followup_backfill import (
     BACKFILL_KEY as FOLLOWUP_BACKFILL_KEY,
@@ -138,6 +139,24 @@ def test_every_serving_read_is_in_the_executable_parity_census():
         'check_privacy',
         'flush',
     }
+
+
+@pytest.mark.parametrize('query,args', [('projection_page_with_outbox', ()), ('projection_outbox_page', (10.0, 5))])
+def test_outbox_observation_compares_nonempty_pages(query, args):
+    primary, shadow = (SimStore(CustomerData(), namespace='batch_pipeline_dev') for _ in range(2))
+    address = ('results', 'synthetic')
+    row = {
+        'committed_at': 3.0,
+        'log_sequence': 1,
+        'projection_state': 'pending',
+        projection_outbox.KIND_FIELD: projection_outbox.KIND,
+        projection_outbox.DUE_FIELD: 3,
+    }
+    primary.apply(address, row)
+    shadow.apply(address, {**row, projection_outbox.DUE_FIELD: 3.0})
+    assert compare_serving_query(primary, shadow, query, *args, budget_s=5) == 'match'
+    shadow.apply(address, {**row, projection_outbox.DUE_FIELD: None})
+    assert compare_serving_query(primary, shadow, query, *args, budget_s=5) == 'mismatch'
 
 
 @pytest.mark.parametrize('backend', [PostgresStore, SimStore])

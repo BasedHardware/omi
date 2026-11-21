@@ -14,7 +14,8 @@ from contextlib import ExitStack, nullcontext
 
 from fastapi.responses import StreamingResponse
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, BackgroundTasks, Header
-from typing import Annotated, Any, Dict, List, Literal, Optional
+from typing import Annotated, Any, Dict, List, Literal, Optional, cast
+from starlette.datastructures import Headers
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -28,7 +29,12 @@ from database.account_deletion_marker import account_deletion_blocks_user_work
 import database.users as users_db
 from utils.agent_capabilities.errors import TRANSCRIPT_EDIT_HTTP_ERRORS
 from database import conversation_tombstones
-from database.legal_holds import destructive_operation_gate
+from database.legal_holds import (
+    LegalHoldActive,
+    LegalHoldAuthorityUnavailable,
+    assert_account_deletion_permitted,
+    destructive_operation_gate,
+)
 from utils.other.account_gate_http import account_gate_busy_http_exception
 from database.firestore_read_metrics import FirestoreReadSite
 from utils.list_version_check import ListVersionCheck
@@ -80,7 +86,11 @@ from utils.conversations.factory import deserialize_conversation
 from utils.conversations.processing_trigger import ProcessingTrigger
 from utils.conversations.reprocess_contract import DERIVED_EFFECTS_TRANSCRIPT_FIELD, FIRST_PARTY_SUMMARY_SOURCE
 from utils.conversations.analytics import build_conversation_analytics
-from utils.conversations.render import redact_conversations_for_list
+from utils.conversations.render import (
+    present_generated_note_sections,
+    redact_conversations_for_list,
+    redact_legacy_live_recap_sections,
+)
 from utils.conversations.onopen_translation import translate_open_page
 from utils.conversations.mcp_transcript_search import (
     attach_match_snippets_to_conversations,
@@ -165,13 +175,13 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-from config.conversations_v3 import conversations_v3_enabled
+from config.conversations_v3 import conversations_v3_enabled, live_recap_enabled
 from config.app_channel import APP_CHANNEL_HEADER, app_channel
 from utils.episodes import client_gate
 from models.conversation import ConversationsLiveResponse
 from utils.conversations.v3 import audio as v3_audio, client_capability as v3_client_capability, summary as v3_summary
-from utils.conversations.v3 import live as v3_live
-from database import conversations_v3_live
+from utils.conversations.v3 import live as v3_live, policy as v3_policy
+from database import conversations_v3_live, conversations_v3_processing
 from utils.conversations import list_page_headers
 
 router = APIRouter()
@@ -201,6 +211,13 @@ def get_live_conversation(
     )
     if compact is not None:
         compact['finished_at'] = row.get('finished_at')
+        if row.get('is_locked'):
+            compact['is_locked'] = True
+        elif isinstance(row.get('v3_recording_ids'), list):
+            # Identifiers only, from the authenticated owner's existing live-window read.
+            compact['v3_recording_ids'] = [
+                rid for rid in row['v3_recording_ids'][-8:] if isinstance(rid, str) and rid and '/' not in rid
+            ]
     if compact and 'structured' in compact:
         compact['structured'] = {
             key: compact['structured'][key] for key in ('title', 'emoji') if key in compact['structured']
@@ -919,6 +936,8 @@ def reprocess_conversation(
     # on the raw doc because the Conversation model does not carry `deleted`.
     if conversations_db.is_soft_deleted(conversation):
         raise HTTPException(status_code=404, detail="Conversation not found")
+    if app_id and historical_tier.is_historical(conversation):
+        raise HTTPException(status_code=400, detail='Historical conversations can only be reprocessed with Omi notes')
     if transcribing_hold.retry_pending(conversation):
         pending = transcribing_hold.retry_wire(conversation)
         if pending is None:
@@ -932,6 +951,7 @@ def reprocess_conversation(
         return pending
     from database import processing_attention as attention_db
 
+    explicit_app = _validate_reprocess_app_selection(uid, app_id) if app_id else None
     historical_slots = historical_projection.admit_reprocess(uid, conversation_id, conversation)
     input_generation = attention_db.generation(conversation)
     was_discarded = bool(conversation.get('discarded'))
@@ -941,8 +961,6 @@ def reprocess_conversation(
     conversation = deserialize_conversation(conversation)
     if not language_code:
         language_code = conversation.language or 'en'
-
-    explicit_app = _validate_reprocess_app_selection(uid, app_id) if app_id else None
 
     # Reprocess is a new user intent once the prior writer finishes. Share the
     # active writer across app selections to avoid racing summary writes.
@@ -1365,7 +1383,16 @@ def get_conversation_by_id(
             response.headers['X-Translation-Status'] = translation_status
             if next_cursor is not None:
                 response.headers['X-Translation-Cursor'] = next_cursor
-    return historical_projection.project(transcribing_hold.project(conversation))
+    preview = None
+    if conversation.get('id') == conversation_id and live_recap_enabled(uid):
+        preview = conversations_v3_processing.read_live_summary(uid, conversation)
+    else:
+        redact_legacy_live_recap_sections(conversation)
+    conversation.pop('live_summary', None)
+    conversation.pop(v3_policy.LIVE_SUMMARY_FIELD, None)
+    if preview:
+        conversation['live_summary'] = preview
+    return present_generated_note_sections(historical_projection.project(transcribing_hold.project(conversation)))
 
 
 @router.patch(
@@ -1628,6 +1655,12 @@ def delete_conversation(
         and conversations_db.get_conversation_raw_snapshot(uid, conversation_id, field_paths=['id']) is None
     ):
         return Response(status_code=204, headers={'X-Omi-Delete-Outcome': 'already_deleted'})
+    released_during_delete = False
+    if _legal_hold_defers_delete(uid):
+        held_response = _accept_held_conversation_delete(uid, conversation_id, cascade, http_request)
+        if held_response is not None:
+            return held_response
+        released_during_delete = True
     db_client = getattr(db_client_module, 'db', None) if cascade else None
     memory_service = MemoryService(db_client=db_client) if cascade else None
     # Acquire before recording delete intent, so a delete that can neither run nor be
@@ -1663,11 +1696,15 @@ def delete_conversation(
             _delete_conversation_under_gate(
                 conversation_id, background_tasks, cascade, http_request, uid, memory_service, db_client
             )
+            if released_during_delete:
+                # Only now is it physically gone: until here the marker keeps it on release follow-up.
+                conversation_tombstones.clear_legal_hold_deferral(uid, conversation_id)
             return Response(status_code=204, headers={'X-Omi-Delete-Outcome': 'tombstoned'})
     except RuntimeError as error:
         if type(error).__name__ not in {
             'DestructiveGateTakeover',
             'DestructiveOperationInProgress',
+            'LegalHoldActive',
             'LegalHoldAuthorityUnavailable',
         }:
             raise
@@ -1698,6 +1735,49 @@ def _gate_busy_with_same_account_delete(error: BaseException, uid: str, db_clien
         return gate_busy_with_peer(error, uid, kind='explicit_memory_deletion', firestore_client=db_client) is True
     except Exception:  # noqa: BLE001 - an unreadable gate keeps the retryable 409
         return False
+
+
+def _legal_hold_defers_delete(uid: str) -> bool:
+    """True when the account is under an active legal hold and deferral is on.
+
+    P7 Decision 4: a hold blocks physical disposal, never product access. Without
+    this, a non-cascade delete never consulted the hold and physically erased the
+    record, audio and frames. Kill switch: ``LEGAL_HOLD_DEFER_SINGLE_DELETE=false``
+    restores the previous behavior. An unreadable hold authority raises, and the
+    caller maps it to ``account_gate_busy`` like every other fenced delete.
+    """
+    if os.getenv('LEGAL_HOLD_DEFER_SINGLE_DELETE', 'true').strip().lower() in ('0', 'false', 'off', 'no'):
+        return False
+    try:
+        assert_account_deletion_permitted(uid)
+    except LegalHoldActive:
+        return True
+    except LegalHoldAuthorityUnavailable as error:
+        raise account_gate_busy_http_exception() from error
+    return False
+
+
+def _accept_held_conversation_delete(
+    uid: str, conversation_id: str, cascade: bool, http_request: Request
+) -> Response | None:
+    """Hide and retain a held account's conversation; physical erasure waits for release.
+
+    A cascade delete still owes its erasure: the runner finishes it ``held`` and
+    re-checks hourly, then erases after release. A non-cascade delete arms no
+    erasure (the runner only cascades); the tombstone marks it for release review.
+    The hold lives on another Firestore client, so it cannot join the tombstone
+    transaction: a non-cascade accept re-reads it after commit. A release that
+    landed in between may have scanned before the tombstone existed, so the
+    request returns ``None`` and the caller deletes normally.
+    """
+    conversation_tombstones.accept_deletion(uid, conversation_id, legal_hold_deferred=True, arm_erasure=cascade)
+    if not cascade and not _legal_hold_defers_delete(uid):
+        logger.info('event=conversation_delete outcome=held_released_during_delete')
+        return None
+    logger.info('event=conversation_delete outcome=held_deferred cascade=%s', cascade)
+    record_product_event('conversation_deleted', request=http_request)
+    # 204, no body: released mobile clients gate delete success on exactly 204.
+    return Response(status_code=204, headers={'X-Omi-Delete-Outcome': 'held_deferred'})
 
 
 def _accept_conversation_delete(uid: str, conversation_id: str, http_request: Request) -> Response:
@@ -2934,9 +3014,15 @@ def open_historical_summary(
     },
 )
 async def conversation_summary_stream(conversation_id: str, uid: str = Depends(auth.get_current_user_uid)):
+    def reject_live_target(conversation):
+        if v3_policy.live_summary_target(conversation) and not conversation.get('v3_unlocked'):
+            detail = 'use_live_recap_stream' if live_recap_enabled(uid) else 'live_recap_unavailable'
+            raise HTTPException(404, detail)
+
     conversation = await run_blocking(db_executor, _get_valid_conversation_by_id, uid, conversation_id)
+    reject_live_target(conversation)
     await run_blocking(db_executor, require_generated_compute, uid, 'conversation_v3_summary_open')
-    if conversation.get('v3_derived') and conversation.get('status') == 'in_progress':
+    if v3_summary.needs_open_reconcile(conversation):
         from utils.conversations.v3.service import reconcile
 
         try:
@@ -2949,9 +3035,43 @@ async def conversation_summary_stream(conversation_id: str, uid: str = Depends(a
         except Exception as exc:
             logger.warning('event=v3_on_open_reconcile outcome=stored exception_type=%s', type(exc).__name__)
         conversation = await run_blocking(db_executor, _get_valid_conversation_by_id, uid, conversation_id)
+        reject_live_target(conversation)
     token = await v3_summary.prepare(uid, conversation)
     return StreamingResponse(
         v3_summary.stream(uid, conversation, token=token),
+        media_type='text/event-stream',
+        headers={'Cache-Control': 'no-cache'},
+    )
+
+
+@router.get(
+    '/v1/conversations/{conversation_id}/summary/live-catchup/stream',
+    tags=['conversations'],
+    response_class=StreamingResponse,
+    responses={200: {'content': {'text/event-stream': {'schema': {'type': 'string'}}}}},
+)
+async def conversation_live_catchup_stream(
+    conversation_id: str, uid: str = Depends(auth.get_current_user_uid), request: Request = cast(Request, None)
+):
+    from utils.conversations.v3.recap_telemetry import observe
+
+    if not live_recap_enabled(uid):
+        raise HTTPException(404, 'live_recap_unavailable')
+    observation = observe(uid, request.headers if request is not None else Headers())
+    observation.record('request_received')
+    try:
+        row = await run_blocking(db_executor, _get_valid_conversation_by_id, uid, conversation_id)
+        if row.get('id') != conversation_id or not v3_policy.live_summary_target(row):
+            raise HTTPException(status_code=404, detail='Live conversation not available')
+        if not live_recap_enabled(uid):
+            raise HTTPException(404, 'live_recap_unavailable')
+        await run_blocking(db_executor, require_generated_compute, uid, 'conversation_v3_summary_open')
+    except HTTPException:
+        observation.record('admission_refused')
+        raise
+    token = await v3_summary.prepare(uid, row, live=True, observation=observation)
+    return StreamingResponse(
+        v3_summary.stream(uid, row, token=token, live=True, observation=observation),
         media_type='text/event-stream',
         headers={'Cache-Control': 'no-cache'},
     )

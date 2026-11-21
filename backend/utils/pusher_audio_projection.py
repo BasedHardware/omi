@@ -15,6 +15,7 @@ from config.pusher_record import close_fast_path_enabled
 from config.batch_pipeline_projection_rebuild import enabled as durable_debt_enabled
 from database import conversations as conversations_db, record_projection_rebuild
 from database.audio_chunk_metadata import audio_chunk_entry
+from utils.other.private_sync_get_metrics import Reader, object_get_reader
 from utils.other import storage
 from utils.batch_pipeline.record_projection_rebuild import (
     projected_chunks,
@@ -66,6 +67,7 @@ class Inventory:
     listed_at: float
 
 
+@object_get_reader(Reader.PLAYBACK_INVENTORY)
 def get_uploaded_audio_chunks(uid: str, conversation_id: str, paths: List[str]) -> List[Dict[str, Any]]:
     """Read exact encoded objects; never discover siblings or raw archive packs.
 
@@ -177,7 +179,11 @@ class PusherAudioProjection:
             if chunks is None:
                 if enabled():
                     discovery = discover(
-                        self.uid, conversation_id, strict_raw=force and durable_debt_enabled(), fallback=record_fallback
+                        self.uid,
+                        conversation_id,
+                        strict_raw=force and durable_debt_enabled(),
+                        fallback=record_fallback,
+                        reuse_manifest_bodies=not force,
                     )
                     if discovery is None:
                         self.inventory.pop(conversation_id, None)
@@ -193,7 +199,7 @@ class PusherAudioProjection:
                 # Raw fragments can shrink or split as encoded coverage grows;
                 # re-derive them, never append yesterday's projected fragments.
                 try:
-                    listed = projected_chunks(self.uid, conversation_id, chunks)
+                    listed = projected_chunks(self.uid, conversation_id, chunks, reuse_manifest_bodies=True)
                 except Exception:
                     # An incremental encoded view is not a full fallback.
                     # Rediscover encoded siblings before matching main's

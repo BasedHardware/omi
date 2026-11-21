@@ -118,12 +118,15 @@ def decode_units(
             if early and received_at is not None:
                 unit = replace(unit, stored_capture_at=received_at - (early_frames - early_committed_frames) / RATE)
                 early_committed_frames += len(pcm) // 2
+            if received_at is None:
+                unit = replace(unit, source_frames=len(pcm) // 2 - padding_frames)
             return unit
 
         pending = bytearray()
         pending_runs = []
         start = 0.0
         pending_early = False
+        padding_frames = 0
         for path in sorted(
             wavs,
             key=lambda value: (
@@ -150,11 +153,13 @@ def decode_units(
                 yield packed_unit(start, bytes(pending), pending_runs, pending_early)
                 pending.clear()
                 pending_runs = []
+                padding_frames = 0
             if not pending:
                 start = capture
                 pending_early = early
             elif gap > 0:
                 pending.extend(b'\0' * (gap * 2))
+                padding_frames += gap
             offset = 0
             while offset < len(pcm):
                 take = min(unit_frames * 2 - len(pending), len(pcm) - offset)
@@ -167,6 +172,7 @@ def decode_units(
                     yield packed_unit(start, bytes(pending), pending_runs, pending_early)
                     pending.clear()
                     pending_runs = []
+                    padding_frames = 0
                     start = capture + offset / (2 * RATE)
         if pending:
             yield packed_unit(start, bytes(pending), pending_runs, pending_early)

@@ -66,6 +66,8 @@ import 'package:omi/services/capture/capture_session_owner.dart';
 import 'package:omi/services/capture/capture_wedge_monitor.dart';
 import 'package:omi/services/capture/capture_continuity_monitor.dart';
 import 'package:omi/services/capture/empty_recording_notice.dart';
+import 'package:omi/services/capture/capture_start_errors.dart';
+import 'package:omi/services/capture/finish_outcome.dart';
 import 'package:omi/services/capture/live_finalize_gate.dart';
 import 'package:omi/services/capture/optimistic_processing.dart';
 import 'package:omi/services/capture/speaker_suggestions.dart';
@@ -107,6 +109,7 @@ import 'package:omi/backend/schema/message_event.dart'
         MessageEvent,
         MessageServiceStatusEvent,
         ConversationProcessingStartedEvent,
+        ConversationSessionEvent,
         ConversationEvent,
         LastConversationEvent,
         SpeakerLabelSuggestionEvent,
@@ -862,6 +865,30 @@ class CaptureController extends ChangeNotifier
   /// conversation so the pipeline can be joined without timing heuristics.
   String? get activeRecordingId => _recordingTelemetry.recordingId;
 
+  ({String uid, String recordingId, CaptureSessionToken? token})? _liveSocketIdentity;
+
+  /// Recording provenance from this phone's active listen connection. A
+  /// per-user in-progress pointer or a nearby timestamp cannot prove it.
+  String? get verifiedLiveServerRecordingId {
+    final identity = _liveSocketIdentity;
+    final socket = _socket;
+    if (identity == null ||
+        socket == null ||
+        identity.uid.isEmpty ||
+        identity.uid != _preferences.uid ||
+        identity.recordingId != activeRecordingId ||
+        !_captureSessionIsCurrent(identity.token) ||
+        socket.state != SocketServiceState.connected ||
+        socket.stoppedIntentionally ||
+        !socket.hasCurrentListenOwner(identity.uid) ||
+        socket.clientConversationId != identity.recordingId) {
+      return null;
+    }
+    // Listen rotates its own recording-session identifier on silence, even
+    // when the direct connection and its client capture identifier stay valid.
+    return socket.liveRecording?.recordingId;
+  }
+
   // Identifies a conversation boundary within a continuous recording. This is
   // presentation/action identity, not another capture authorization generation.
   int _systemSurfaceConversationRevision = 0;
@@ -1213,18 +1240,19 @@ class CaptureController extends ChangeNotifier
 
   /// Completes when the last Process Now request has an answer.
   Future<void>? _processInFlight;
-  Future<CreateConversationResponse?>? _lastProcessRequest;
+  Future<InProgressProcessOutcome>? _lastProcessRequest;
   bool _firstCaptureProcess = false;
 
-  /// Finish through the coordinator and return that exact Process Now response.
-  /// Used by onboarding to avoid attributing an unrelated list refresh to this capture.
-  Future<CreateConversationResponse?> finishCaptureWithResult() async {
+  /// Finish through the coordinator and return that exact Process Now answer, with why it has no
+  /// conversation when it has none (transport, not found, empty). Throws [StateError] when this
+  /// finish made no request (a phone Transcribe Later recording).
+  Future<InProgressProcessOutcome> finishCaptureWithOutcome() async {
     _lastProcessRequest = null;
     _firstCaptureProcess = true;
     try {
       await finishCapture();
       final request = _lastProcessRequest;
-      if (request == null) throw StateError('capture did not request live processing');
+      if (request == null) throw FinishMadeNoRequest();
       return await request;
     } finally {
       _firstCaptureProcess = false;
@@ -1417,6 +1445,7 @@ class CaptureController extends ChangeNotifier
   bool _deviceIdentityStale(int? revision) => revision != null && _deviceIdentityRevision != revision;
 
   void _rollCaptureSession(String identity) {
+    _liveSocketIdentity = null;
     _mobileStandardBatchAllowed = false;
     _mobileStandardBatch?.authorize(false);
     _localPreview.end(send: _openSocketSender);
@@ -1980,7 +2009,11 @@ class CaptureController extends ChangeNotifier
       return;
     }
     if (!identical(_socket, socket)) {
+      _socket?.unsubscribe(this);
       _socket = socket;
+      final recordingId = activeRecordingId;
+      _liveSocketIdentity =
+          recordingId == null ? null : (uid: _preferences.uid, recordingId: recordingId, token: sessionToken);
       _lastPublishedSocketCustomStt = socket.customSttMode;
       _localPreview.socketPublished(declared: socket.localPreview, send: _sendPendantToSocket);
       _socket?.subscribe(this, this);
@@ -2938,6 +2971,7 @@ class CaptureController extends ChangeNotifier
   }
 
   void clearUserData() {
+    _liveSocketIdentity = null;
     if (_captureInstance != null) unawaited(_dispatchLogged(const CaptureIdentityChanged()));
     _mobileStandardBatchAllowed = false;
     _mobileStandardBatch?.authorize(false);
@@ -3124,10 +3158,17 @@ class CaptureController extends ChangeNotifier
     }
   }
 
+  /// Set when the last phone start was refused because the microphone permission is denied.
+  bool _phoneStartMicDenied = false;
+
+  /// Throws [MicPermissionDenied] when the microphone is blocked, so the record button can say so
+  /// and offer Open Settings instead of a generic error (ux-contract §15, §17.8).
   streamRecording({bool resumeCapture = true}) async {
+    _phoneStartMicDenied = false;
     final outcome = await _capture.dispatch(PhoneStartRequested(resumePolicy: resumeCapture));
     outcome.throwIfFailed();
     if (outcome.result != true) {
+      if (_phoneStartMicDenied) throw MicPermissionDenied();
       throw StateError('phone recording start refused');
     }
   }
@@ -3160,6 +3201,7 @@ class CaptureController extends ChangeNotifier
     _prefetchedMicPermission = false;
     if (!micPermissionGranted) {
       Logger.error('[CaptureProvider] microphone permission denied, not starting phone mic');
+      _phoneStartMicDenied = true;
       await _setCaptureForegroundRequired(false);
       _clearSessionLocation();
       updateRecordingState(RecordingState.stop);
@@ -3392,6 +3434,7 @@ class CaptureController extends ChangeNotifier
     _prefetchedMicPermission = false;
     if (!micPermissionGranted) {
       Logger.error('[CaptureProvider] microphone permission denied, not starting phone mic batch');
+      _phoneStartMicDenied = true;
       await _setCaptureForegroundRequired(false);
       _clearSessionLocation();
       updateRecordingState(RecordingState.stop);
@@ -4100,6 +4143,11 @@ class CaptureController extends ChangeNotifier
 
   @override
   void onMessageEventReceived(MessageEvent event) {
+    if (event is ConversationSessionEvent) {
+      notifyListeners();
+      return;
+    }
+
     if (event is ConversationProcessingStartedEvent) {
       _lastServerClose =
           (id: event.memory.id, at: DateTime.now(), previewWords: _previewWords, previewSession: _previewSession);
@@ -4314,7 +4362,7 @@ class CaptureController extends ChangeNotifier
             ? _processInProgressConversationOverride!().then((result) =>
                 InProgressProcessOutcome(response: result, absence: result == null ? ProcessAbsence.transport : null))
             : processInProgressConversationOutcome();
-    if (confirmedProcessing) _lastProcessRequest = request.then((outcome) => outcome.response);
+    if (confirmedProcessing) _lastProcessRequest = request;
     _processInFlight = request.then((_) {}, onError: (_) {});
     request.then<void>((outcome) async {
       final conversationId = await OptimisticProcessingPlaceholder.applyProcessResult(
@@ -4976,6 +5024,7 @@ class CaptureController extends ChangeNotifier
         checkPhonePermission: () async {
           final granted = await _requestMicrophonePermission();
           _prefetchedMicPermission = granted;
+          if (!granted) _phoneStartMicDenied = true;
           return granted;
         },
         clearPhonePermissionGrant: () => _prefetchedMicPermission = false,

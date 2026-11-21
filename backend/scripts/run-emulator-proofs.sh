@@ -59,6 +59,8 @@ run_proof() {
 # ordinary unit shards intentionally do not stand up emulator services.
 run_proof "record custody append (committed reply loss, retries, privacy)" \
   "$PYTHON" -m pytest -q -p no:cacheprovider tests/integration/test_record_custody_append_emulator.py
+run_proof "LLM gateway idempotency (claim, replay, expiry, stale settlement)" \
+  "$PYTHON" -m pytest -q -p no:cacheprovider tests/integration/test_llm_gateway_idempotency_firestore.py
 run_proof "record nojob seal (synthetic cleanup ownership)" \
   "$PYTHON" -m pytest -q -p no:cacheprovider tests/unit/test_record_seal_nojob_emulator.py
 run_proof "pipeline ledger (fence, reopen, ordering, delete, erasure)" \
@@ -97,6 +99,7 @@ run_proof "Dream idle parking keeps every wakeup (park/acquire vs concurrent mar
   "$PYTHON" scripts/dream_park_race_emulator_test.py
 run_proof "summary task recovery, concurrency and expiry" \
   "$PYTHON" -m pytest \
+  tests/integration/test_summary_debt_repair_firestore.py \
   tests/integration/test_summary_task_promotion_emulator.py \
   tests/integration/test_candidate_accept_expiry_emulator.py -q
 run_proof "desktop screen sync frame request delivery, expiry and quota" \

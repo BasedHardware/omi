@@ -1,0 +1,127 @@
+{
+  "version": 1,
+  "cases": [
+    {
+      "name": "kept-with-effects",
+      "recording": {
+        "duration_s": 25,
+        "segments": [
+          {
+            "text": "This is a synthetic roadmap planning conversation for the hermetic replay oracle."
+          },
+          {
+            "text": "We decided to review the plan and send the meeting notes."
+          },
+          {
+            "text": "Our test lab opens on Tuesday and the team will bring the completed synthetic planning worksheet."
+          }
+        ]
+      },
+      "apps": [
+        "fixture",
+        "audit"
+      ],
+      "memories": [
+        "Our test lab opens on Tuesday"
+      ],
+      "repeat": true,
+      "responses": {
+        "conv-structure": {
+          "title": "Synthetic replay",
+          "overview": "Reviewed two agendas and assigned the synthetic planning worksheet.",
+          "action_items": [
+            {
+              "description": "Send the meeting notes",
+              "capture_kind": "clear_commitment",
+              "capture_owner": "user",
+              "capture_confidence": 1,
+              "ownership_confidence": 1,
+              "concrete_deliverable": true,
+              "source_segment_ids": [
+                "segment-1"
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "word-floor",
+      "recording": {
+        "duration_s": 25,
+        "segments": [
+          {
+            "text": "Only a few words."
+          }
+        ]
+      },
+      "min_words": 12
+    },
+    {
+      "name": "empty-capture",
+      "recording": {
+        "duration_s": 1,
+        "segments": []
+      }
+    },
+    {
+      "name": "unicode-transcript",
+      "recording": {
+        "duration_s": 25,
+        "segments": [
+          {
+            "text": "Mañana revisamos la agenda del equipo y enviamos el plan de pruebas."
+          },
+          {
+            "text": "合成テストの議事録を保存します。"
+          }
+        ]
+      }
+    },
+    {
+      "name": "compressed-standard",
+      "document": {
+        "transcript_segments_compressed": true,
+        "transcript_segments": {
+          "$bytes": "eJxFTTsOwjAMvYqVGVAHJi7CgBCyklewaJPIdqVWiLvjTmzv/26fJCVdKOU2d4UZynFIB0pij8WgYbkuCMGc1YMOgVH3zjmQY93FdAV1zm8U8pcYjZJdWuWJFLlpkfokqd6I6X8Uy1wtq3SnsLBCsxhiAWTeNBKKPvFGY9OZ/ZS+9x/FjTwj"
+        }
+      }
+    },
+    {
+      "name": "enhanced-compressed",
+      "document": {
+        "transcript_segments": "qJs/QB5O0MEOAucZqHyMnCJJSN4uwWJi2yirSuHU2Spcy3EcU4mM99nku30A5uN1WC3aqWKnPJ2+tek3wQ21iQ2sCdl4mTqSntP/TEs6ROaAThzEBYXhIMu8GnZzO8ngRJjhPWCQLilBFR05iOgaoMrBfoVPP1JdPgJ6fNXt/5PU2CiY2/DkR6y917dKjbDjM7Fr7fTqVutj6pnWL1QahocjVZxSZmgfQn94hku2/Tdc51qJAF68g5aZAXx2/s1CUuWCq9YIpWRgEi1pfNmQak05ax4oJsBIFr6bL8g8Ji5KgbogwOrG5XprdgiaUg5On0Fq6lsgkJUGuRhlP62Gv2hOFsU8nuOTCRzgWT9GmMO1tI8PA95cFHqsQhXBkMKccDk=",
+        "transcript_segments_compressed": true,
+        "data_protection_level": "enhanced"
+      }
+    },
+    {
+      "name": "own-key-resume",
+      "own_key": true,
+      "recording": {
+        "duration_s": 28,
+        "segments": [
+          {
+            "text": "We finished testing own key admission for the synthetic conversation. This sentence records enough words to send the notes request."
+          }
+        ]
+      }
+    },
+    {
+      "name": "last-attempt-webhook",
+      "final_attempt": true,
+      "apps": [
+        "unavailable-fixture"
+      ],
+      "unavailable_app": "unavailable-fixture",
+      "recording": {
+        "duration_s": 61,
+        "segments": [
+          {
+            "text": "This synthetic recording tests the last delivery attempt. We reviewed both agendas, finished the worksheet, and agreed to post the test report once everyone has confirmed the final schedule."
+          }
+        ]
+      }
+    }
+  ]
+}

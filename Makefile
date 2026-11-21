@@ -150,6 +150,11 @@ mobile-session:
 mobile-verify:
 	$(BASH) scripts/dev-harness/mobile-verify.sh $(ARGS)
 
+# Pipeline lab CLI (backend/testing/pipeline_lab); wrap heavy commands in omi-heavy.
+.PHONY: pipeline-lab
+pipeline-lab:
+	cd backend && .venv/bin/python -m testing.pipeline_lab $(ARGS)
+
 list-memory-scenarios:
 	$(PYTHON_RUNNER) scripts/dev-harness/list-memory-scenarios.py
 

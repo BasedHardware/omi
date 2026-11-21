@@ -485,6 +485,11 @@ class RecordingPiece(BaseModel):
     end: float = Field(ge=0)
 
 
+class LiveSummaryPreview(BaseModel):
+    structured: Structured
+    summary_covers_through: datetime
+
+
 class Conversation(BaseModel):
     title_content_units: float = Field(default=0, exclude=True)
     notes_quality_filter_input_hash: Optional[str] = Field(default=None, exclude=True)
@@ -520,6 +525,7 @@ class Conversation(BaseModel):
     recording_pieces: Optional[List[RecordingPiece]] = None
     manual_end: Optional[bool] = None
     summary_covers_through: Optional[datetime] = None
+    live_summary: Optional[LiveSummaryPreview] = None
     v3_pending: SkipJsonSchema[Optional[bool]] = Field(default=None, exclude=True)
     v3_derived: SkipJsonSchema[Optional[bool]] = None
     v3_recording_ids: SkipJsonSchema[Optional[List[str]]] = None
@@ -668,6 +674,8 @@ class Conversation(BaseModel):
         data = handler(self)
         if not self.processing_deferred and 'processing_deferred' not in self.model_fields_set:
             data.pop('processing_deferred', None)
+        if self.live_summary is None:
+            data.pop('live_summary', None)
         if self.home_step is None:
             data.pop('home_step', None)
         for name in ('processing_tier', 'summary_on_open'):
@@ -993,6 +1001,20 @@ class ExternalIntegrationCreateConversation(BaseModel):
     source: ConversationSource = ConversationSource.workflow
     language: Optional[str] = None
 
+    # Server-resolved meeting identity for this capture, carried as a field the
+    # same way `CreateConversation` carries it. The pre-summarization resolver
+    # attaches it here; `_get_conversation_obj` moves it into
+    # `external_data['calendar_meeting_context']` on the persisted Conversation,
+    # which is the shape every reader already understands. Client input is
+    # discarded: only the server resolver may attach a context, so this cannot
+    # change which conversations get one.
+    calendar_meeting_context: SkipJsonSchema[Optional[CalendarMeetingContext]] = None
+
+    @field_validator('calendar_meeting_context', mode='before')
+    @classmethod
+    def ignore_client_meeting_context(cls, value):
+        return None
+
     app_id: Optional[str] = None
 
     client_device_id: Optional[str] = None
@@ -1138,6 +1160,9 @@ class LiveConversation(BaseModel):
     created_at: datetime
     status: ConversationStatus
     tile_state: Optional[Literal['live', 'transcribing', 'writing', 'done', 'failed']] = None
+
+    is_locked: SkipJsonSchema[Optional[bool]] = None
+    v3_recording_ids: SkipJsonSchema[Optional[List[str]]] = None
 
 
 class ConversationsLiveResponse(BaseModel):
