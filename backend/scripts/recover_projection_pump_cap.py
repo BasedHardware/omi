@@ -213,22 +213,30 @@ def settled_snapshot(api, read, cap):
 
     A done operation can precede `reconciling: false` and `observedGeneration == generation`
     by a few seconds (run 44900134239 refused 5 s after a write that had landed). Only that
-    settling state is waited out; any other mismatch still refuses at once in snapshot().
+    settling state, or a transient read failure, is waited out. A terminal failed condition
+    refuses at once, and any other mismatch still refuses in snapshot().
     """
     deadline = time.monotonic() + SETTLE_SECONDS
     attempt = 0
     while True:
         attempt += 1
-        service = api.service()
-        settled = (
-            service.get('reconciling', False) is False
-            and service.get('observedGeneration') == service.get('generation')
-            and service.get('terminalCondition', {}).get('state') == 'CONDITION_SUCCEEDED'
-        )
-        if settled:
-            print(f'PUMP_CAP_SETTLED attempts={attempt}', flush=True)
-            return snapshot(api, read, cap)
+        try:
+            service = api.service()
+        except ValueError:
+            service = None  # RunAPI already printed a safe PUMP_CAP_API_ERROR marker.
+        if service is not None:
+            reconciling = service.get('reconciling', False) is not False
+            observed = service.get('observedGeneration') == service.get('generation')
+            state = service.get('terminalCondition', {}).get('state')
+            if not reconciling and observed:
+                if state == 'CONDITION_SUCCEEDED':
+                    print(f'PUMP_CAP_SETTLED attempts={attempt}', flush=True)
+                    return snapshot(api, read, cap)
+                if state == 'CONDITION_FAILED':
+                    print('PUMP_CAP_SETTLE_FAILED terminal condition failed', file=sys.stderr, flush=True)
+                    raise ValueError('Cloud Run service reconciled to a failed condition')
         if time.monotonic() >= deadline:
+            print(f'PUMP_CAP_SETTLE_TIMEOUT attempts={attempt}', file=sys.stderr, flush=True)
             raise ValueError('Cloud Run service did not finish reconciling within the read budget')
         print(f'PUMP_CAP_SETTLING attempt={attempt}', flush=True)
         time.sleep(5)

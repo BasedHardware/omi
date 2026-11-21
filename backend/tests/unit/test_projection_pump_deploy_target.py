@@ -1105,7 +1105,7 @@ def test_claimed_sibling_skip_ships_dark_on_integration_until_activation():
         assert services[name]['env']['BATCH_PIPELINE_FOLLOWUP_CLAIMED_SIBLING_SKIP_ENABLED']['value'] == 'false', name
 
 
-def test_cap_recovery_waits_for_post_write_reconciliation(inverse_readback, monkeypatch):
+def test_cap_recovery_waits_for_post_write_reconciliation(inverse_readback, monkeypatch, capsys):
     """Run 44900134239: the write landed, but the first post-write read was still reconciling."""
     api = _recovery_fixture(inverse_readback)
     original_patch, reads = api.patch, {'n': 0}
@@ -1126,13 +1126,17 @@ def test_cap_recovery_waits_for_post_write_reconciliation(inverse_readback, monk
         return original_service()
 
     api.patch, api.service = patch, service
-    monkeypatch.setattr(recovery.time, 'sleep', lambda _s: None)
+    sleeps = []
+    monkeypatch.setattr(recovery.time, 'sleep', sleeps.append)
     recovery.recover(api, api.read, 'approved-version')
     assert [item for item in api.cap_requests if not item[2]] == [('approved-version', 4, False)]
     assert reads['n'] >= 3
+    assert sleeps and set(sleeps) == {5}
+    out = capsys.readouterr().out
+    assert 'PUMP_CAP_SETTLING attempt=1' in out and f'PUMP_CAP_SETTLED attempts={len(sleeps) + 1}' in out
 
 
-def test_cap_recovery_settle_wait_is_bounded(inverse_readback, monkeypatch):
+def test_cap_recovery_settle_wait_is_bounded(inverse_readback, monkeypatch, capsys):
     api = _recovery_fixture(inverse_readback)
     original_patch = api.patch
 
@@ -1148,4 +1152,38 @@ def test_cap_recovery_settle_wait_is_bounded(inverse_readback, monkeypatch):
     monkeypatch.setattr(recovery.time, 'monotonic', lambda: now['t'])
     with pytest.raises(ValueError, match='independent Release reconciliation'):
         recovery.recover(api, api.read, 'approved-version')
+    assert [item for item in api.cap_requests if not item[2]] == [('approved-version', 4, False)]
+    assert 'PUMP_CAP_SETTLE_TIMEOUT' in capsys.readouterr().err
+
+
+@pytest.mark.parametrize('case', ['transient_read', 'terminal_failure'])
+def test_cap_recovery_settle_retries_reads_but_not_a_failed_condition(inverse_readback, monkeypatch, capsys, case):
+    """#25948 panel F1/F2: a transient GET is retried; a failed terminal condition refuses at once."""
+    api = _recovery_fixture(inverse_readback)
+    original_patch, original_service, calls = api.patch, api.service, {'n': 0, 'written': False}
+
+    def patch(etag, cap, *, validate_only):
+        result = original_patch(etag, cap, validate_only=validate_only)
+        calls['written'] = calls['written'] or not validate_only
+        if not validate_only and case == 'terminal_failure':
+            api.state['terminalCondition'] = {'state': 'CONDITION_FAILED'}
+        return result
+
+    def service():
+        if calls['written'] and case == 'transient_read' and calls['n'] < 2:
+            calls['n'] += 1
+            raise ValueError('Cloud Run request failed or response was unreadable')
+        return original_service()
+
+    api.patch, api.service = patch, service
+    sleeps = []
+    monkeypatch.setattr(recovery.time, 'sleep', sleeps.append)
+    if case == 'transient_read':
+        recovery.recover(api, api.read, 'approved-version')
+        assert sleeps == [5, 5]
+    else:
+        with pytest.raises(ValueError, match='independent Release reconciliation'):
+            recovery.recover(api, api.read, 'approved-version')
+        assert sleeps == []
+        assert 'PUMP_CAP_SETTLE_FAILED' in capsys.readouterr().err
     assert [item for item in api.cap_requests if not item[2]] == [('approved-version', 4, False)]
