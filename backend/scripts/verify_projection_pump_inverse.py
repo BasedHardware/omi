@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Verify the live dark projection-pump revision before using it as an inverse."""
+"""Verify the live projection-pump revision before using it as an inverse (dark, or activated once pinned)."""
 
 from __future__ import annotations
 
@@ -21,6 +21,20 @@ DARK_ENV = {
     'FIRESTORE_READ_LEDGER_SERVICE': SERVICE,
     'OMI_PROCESS_ROLE': PROCESS_ROLE,
 }
+PUMP_FLAG = 'BATCH_PIPELINE_PROJECTION_PUMP_ENABLED'
+# SCA-3318: after step 2 the pinned, routed inverse is the activated pump. Only its pump flag may
+# differ from DARK_ENV, and only as the exact literal 'true'. A base before its first pin and a new
+# create stay dark.
+ACTIVE_ENV = {**DARK_ENV, PUMP_FLAG: 'true'}
+
+
+def expected_routed_env(app: Mapping[str, Any], *, pinned_disposition: bool) -> Mapping[str, str]:
+    if not pinned_disposition:
+        return DARK_ENV
+    flags = [e for e in app.get('env', []) if e.get('name') == PUMP_FLAG]
+    if len(flags) == 1 and 'valueFrom' not in flags[0] and flags[0].get('value') == 'true':
+        return ACTIVE_ENV
+    return DARK_ENV
 
 
 @dataclass(frozen=True)
@@ -108,7 +122,7 @@ def verify(
         service,
         iam_policy,
         revision=expected.revision,
-        manifest_env=DARK_ENV,
+        manifest_env=expected_routed_env(app, pinned_disposition=bool(expected.disposition) and not before_first_pin),
         revision_document=revision,
     )
     if errors:
@@ -162,7 +176,7 @@ def main() -> int:
         print('Stop and record a Release disposition before recovering an existing pump service.', file=sys.stderr)
         return 1
 
-    print(f'Verified dark serving revision {expected.revision}, source {expected.source}, image {expected.image}.')
+    print(f'Verified serving pump inverse {expected.revision}, source {expected.source}, image {expected.image}.')
     if expected.disposition:
         print(f'Release disposition (operator-supplied): {expected.disposition}')
     return 0
