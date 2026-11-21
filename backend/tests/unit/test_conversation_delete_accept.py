@@ -413,6 +413,29 @@ def test_hold_released_during_a_held_non_cascade_delete_falls_through_to_normal_
     assert _tombstone(plane, 'c1')['legal_hold_deferred'] is False, 'erased: release follow-up owes nothing'
 
 
+def test_a_failed_normal_delete_after_release_keeps_the_follow_up_marker(plane, cascade, monkeypatch):
+    from fastapi import HTTPException
+
+    from database import conversation_tombstones as tombstones
+
+    accept = tombstones.accept_deletion
+
+    def accept_then_release(*args, **kwargs):
+        accept(*args, **kwargs)
+        _hold(plane, active=False)
+
+    def lake_unavailable(*args, **kwargs):
+        raise HTTPException(status_code=503, detail='lake unavailable')
+
+    monkeypatch.setattr(tombstones, 'accept_deletion', accept_then_release)
+    monkeypatch.setattr(conversations, '_delete_conversation_under_gate', lake_unavailable)
+    _hold(plane)
+    with TestClient(cascade.app, raise_server_exceptions=False) as client:
+        response = client.delete('/v1/conversations/c1')
+    assert response.status_code == 503
+    assert _tombstone(plane, 'c1')['legal_hold_deferred'] is True, 'still retained: release follow-up must list it'
+
+
 def test_held_non_cascade_delete_keeps_an_obligation_an_earlier_accept_armed(plane, cascade):
     plane.docs[f'users/{UID}/{conversation_tombstones.COLLECTION}/c1'] = {'conversation_id': 'c1'}
     plane.docs[f'{ERASURES}/{purge_jobs.erasure_job_id(UID, "c1")}'] = {'uid': UID, 'conversation_id': 'c1'}

@@ -335,3 +335,26 @@ def test_operator_cli_wires_every_group_and_audits_the_run(client, capsys, monke
     (audit,) = _actions(client).values()
     assert audit["command"] == "hold status" and audit["outcome"] == "succeeded"
     assert audit["principal"] == "support-operator@example.iam.gserviceaccount.com"
+
+
+def test_hold_transaction_with_audit_and_event_reads_before_it_writes():
+    # backend/AGENTS.md: transaction tests use StrictFirestore, which rejects any read after a write.
+    from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
+
+    strict = StrictFirestore()
+    audit = {
+        "ticket": "ic-1",
+        "reason": "preserve",
+        "actor": "aryan",
+        "agent": "vm",
+        "review_by": NOW + timedelta(days=30),
+    }
+    legal_holds.place_legal_hold(UID, issuer="admin", active=True, firestore_client=strict, now=NOW, audit=audit)
+    hold = strict.rows[("legal_holds", UID)]
+    assert hold["active"] is True and hold["ticket"] == "ic-1" and hold["placed_by"] == "aryan"
+    events = [key for key in strict.rows if key[:3] == ("legal_holds", UID, "events")]
+    assert len(events) == 1
+    legal_holds.place_legal_hold(UID, issuer="admin", active=False, firestore_client=strict, now=NOW, audit=audit)
+    assert strict.rows[("legal_holds", UID)]["active"] is False
+    assert len([key for key in strict.rows if key[:3] == ("legal_holds", UID, "events")]) == 2
+    assert all(transaction.has_written for transaction in strict.transactions)

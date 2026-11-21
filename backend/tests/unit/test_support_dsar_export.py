@@ -341,3 +341,15 @@ def test_summary_is_content_free(seams):
     assert record.summary["audio_objects"] == 4
     assert record.summary["section_conversations"] == 2
     assert {"sections", "section_records", "zip_bytes", "url_days"} <= set(record.summary)
+
+
+def test_module_imports_need_no_encryption_secret():
+    # utils.encryption raises at import without ENCRYPTION_SECRET; hold, retention and
+    # account commands load this module through the CLI and must not need the secret.
+    import ast
+    import pathlib
+
+    tree = ast.parse(pathlib.Path(dsar_export.__file__).read_text())
+    top = {node.module for node in tree.body if isinstance(node, ast.ImportFrom)}
+    top |= {alias.name for node in tree.body if isinstance(node, ast.Import) for alias in node.names}
+    assert not top & {"utils", "utils.encryption", "services.users.data_export", "database.chat"}

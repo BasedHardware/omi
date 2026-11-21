@@ -37,9 +37,6 @@ from google.cloud import storage
 from config.record_wal_storage import private_archive_bucket
 from database.audio_timeline import get_extension_for_path
 from database.support_actions import ActionContext, ActionRecord
-from services.users.data_export import iter_user_data_export
-from utils import encryption
-from utils.other.portability_read import PortabilityReadContext
 
 EXPORT_BUCKET = "based-hardware-privacy-exports"
 MAX_URL_DAYS = 7
@@ -81,10 +78,17 @@ def _storage_client() -> Any:
 def _export_chunks(uid: str) -> Iterator[str]:
     """The in-app export body, eagerly validated and spooled by the service."""
 
+    # Imported here: the data-export chain imports utils.encryption, which needs
+    # ENCRYPTION_SECRET at import time. Other operator commands must not need it.
+    from services.users.data_export import iter_user_data_export
+    from utils.other.portability_read import PortabilityReadContext
+
     return iter_user_data_export(uid, read_context=PortabilityReadContext())
 
 
 def _decrypt_audio(data: bytes, uid: str) -> bytes:
+    from utils import encryption
+
     return encryption.decrypt_audio_file(data, uid)
 
 
@@ -336,8 +340,10 @@ def _readme(
             "- audio/: stored recording chunks, playback MP3s and per-conversation WAV recordings",
             "  for this account (see Not included for audio this export does not yet cover).",
             "  audio/chunks/: stored recording chunks, decrypted. *.bin and *.batch.bin are raw",
-            "  16-bit little-endian mono PCM; *.opus are Opus packets, each prefixed with",
-            "  a 4-byte big-endian length (the format Omi stores).",
+            "  16-bit little-endian mono PCM. *.opus files hold Opus packets in Omi's own framing:",
+            "  a 4-byte little-endian packet count, a 4-byte little-endian length of the original",
+            "  PCM in bytes, then each packet as a 2-byte little-endian length followed by the",
+            "  packet bytes. Decode each packet as Opus, 16 kHz mono, 20 ms frames.",
             "  audio/playback/: MP3 playback files built from those chunks.",
             "  audio/recordings/: per-conversation WAV recordings.",
             f"  Decrypted objects: {audio_decrypted}; objects stored unencrypted: {audio_raw}.",

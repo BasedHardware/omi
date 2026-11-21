@@ -1655,10 +1655,12 @@ def delete_conversation(
         and conversations_db.get_conversation_raw_snapshot(uid, conversation_id, field_paths=['id']) is None
     ):
         return Response(status_code=204, headers={'X-Omi-Delete-Outcome': 'already_deleted'})
+    released_during_delete = False
     if _legal_hold_defers_delete(uid):
         held_response = _accept_held_conversation_delete(uid, conversation_id, cascade, http_request)
         if held_response is not None:
             return held_response
+        released_during_delete = True
     db_client = getattr(db_client_module, 'db', None) if cascade else None
     memory_service = MemoryService(db_client=db_client) if cascade else None
     # Acquire before recording delete intent, so a delete that can neither run nor be
@@ -1694,6 +1696,9 @@ def delete_conversation(
             _delete_conversation_under_gate(
                 conversation_id, background_tasks, cascade, http_request, uid, memory_service, db_client
             )
+            if released_during_delete:
+                # Only now is it physically gone: until here the marker keeps it on release follow-up.
+                conversation_tombstones.clear_legal_hold_deferral(uid, conversation_id)
             return Response(status_code=204, headers={'X-Omi-Delete-Outcome': 'tombstoned'})
     except RuntimeError as error:
         if type(error).__name__ not in {
@@ -1768,7 +1773,6 @@ def _accept_held_conversation_delete(
     conversation_tombstones.accept_deletion(uid, conversation_id, legal_hold_deferred=True, arm_erasure=cascade)
     if not cascade and not _legal_hold_defers_delete(uid):
         logger.info('event=conversation_delete outcome=held_released_during_delete')
-        conversation_tombstones.clear_legal_hold_deferral(uid, conversation_id)
         return None
     logger.info('event=conversation_delete outcome=held_deferred cascade=%s', cascade)
     record_product_event('conversation_deleted', request=http_request)
