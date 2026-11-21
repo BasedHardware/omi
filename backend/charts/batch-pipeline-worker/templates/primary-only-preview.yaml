@@ -1,4 +1,4 @@
-{{- if .Values.rollout.primaryOnlyPreview }}
+{{- if (.Values.rollout | default dict).primaryOnlyPreview }}
 {{- if or (not .Values.enabled) (ne .Values.stage "prod") (ne .Release.Namespace "prod-omi-backend") (ne .Release.Name "prod-omi-batch-pipeline-worker") }}
 {{- fail "primary-only preview requires the production batch worker release" }}
 {{- end }}
