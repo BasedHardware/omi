@@ -116,7 +116,7 @@ class RunAPI:
             print(
                 'PUMP_CAP_VALIDATE_SHAPE '
                 f'keys={",".join(sorted(operation))} done={operation.get("done") is True} '
-                f'metadata_type={metadata.get("@type") if isinstance(metadata, dict) else type(metadata).__name__}',
+                f'metadata_type={(metadata.get("@type") or "absent") if isinstance(metadata, dict) else "absent" if metadata is None else type(metadata).__name__}',
                 flush=True,
             )
             if operation.get('done') is not True and 'error' not in operation:
@@ -128,7 +128,8 @@ class RunAPI:
                     isinstance(metadata, dict)
                     and metadata.get('@type') == SERVICE_TYPE
                     and metadata.get('name') in RESOURCE_NAMES
-                    and metadata.get('scaling', {}).get('maxInstanceCount') == cap
+                    and isinstance(metadata.get('scaling'), dict)
+                    and metadata['scaling'].get('maxInstanceCount') == cap
                 ):
                     return
                 raise ValueError('Cloud Run validation returned no exact pump service preview')

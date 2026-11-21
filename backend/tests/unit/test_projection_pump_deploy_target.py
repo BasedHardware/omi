@@ -913,7 +913,7 @@ def test_cap_validation_never_polls_an_unpersisted_operation(monkeypatch, capsys
     with pytest.raises(ValueError, match='no exact pump service preview'):
         api.complete({'name': recovery.OPERATIONS + 'operation'}, 4, submitted=False, sleep=lambda _: None)
     out = capsys.readouterr().out
-    assert 'PUMP_CAP_VALIDATE_SHAPE keys=name done=False metadata_type=NoneType' in out
+    assert 'PUMP_CAP_VALIDATE_SHAPE keys=name done=False metadata_type=absent' in out
     assert recovery.OPERATIONS not in out  # key names only, never values
 
 
@@ -924,6 +924,7 @@ def test_cap_validation_never_polls_an_unpersisted_operation(monkeypatch, capsys
         {'@type': 'type.googleapis.com/other', 'name': recovery.RESOURCE, 'scaling': {'maxInstanceCount': 4}},
         {'@type': recovery.SERVICE_TYPE, 'name': recovery.RESOURCE + '-x', 'scaling': {'maxInstanceCount': 4}},
         'not-a-dict',
+        {'@type': recovery.SERVICE_TYPE, 'name': recovery.RESOURCE, 'scaling': None},
     ],
 )
 def test_cap_validation_preview_must_name_the_exact_service_and_cap(monkeypatch, metadata):
