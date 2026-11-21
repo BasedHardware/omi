@@ -61,24 +61,33 @@ void main() {
 
   test('the downsell is offered once, and not again after a relaunch', () async {
     var opens = 0;
-    await SignupOffers.upsell('u1', () async => opens++);
+    await SignupOffers.upsell('u1', () async => (opens++, false).$2);
     expect(opens, 1);
     await _relaunch();
-    await SignupOffers.upsell('u1', () async => opens++);
+    await SignupOffers.upsell('u1', () async => (opens++, false).$2);
     expect(opens, 1);
+  });
+
+  test('offline or no plans: the downsell showed nothing, so the next launch offers it', () async {
+    var opens = 0;
+    await SignupOffers.upsell('u1', () async => (opens++, null).$2);
+    await _relaunch();
+    await SignupOffers.upsell('u1', () async => (opens++, false).$2);
+    expect(opens, 2);
+    expect(SharedPreferencesUtil().getBool(SignupOffers.upsellKey('u1')), isTrue);
   });
 
   test('per account, and cleared when onboarding completes', () async {
     await SignupOffers.paywall('u1', () async => false);
-    await SignupOffers.upsell('u1', () async {});
+    await SignupOffers.upsell('u1', () async => false);
     var opens = 0;
     await SignupOffers.paywall('u2', () async => (opens++, false).$2);
-    await SignupOffers.upsell('u2', () async => opens++);
+    await SignupOffers.upsell('u2', () async => (opens++, false).$2);
     expect(opens, 2);
 
     SignupOffers.clear('u1');
     await SignupOffers.paywall('u1', () async => (opens++, false).$2);
-    await SignupOffers.upsell('u1', () async => opens++);
+    await SignupOffers.upsell('u1', () async => (opens++, false).$2);
     expect(opens, 4);
   });
 }

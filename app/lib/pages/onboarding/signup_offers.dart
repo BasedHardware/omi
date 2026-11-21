@@ -23,11 +23,12 @@ abstract final class SignupOffers {
     return purchased;
   }
 
-  /// Shows the downsell through [open] unless this account already left it.
-  static Future<void> upsell(String uid, Future<void> Function() open) async {
+  /// Shows the downsell through [open] unless this account already left it. [open] returns null when
+  /// no sheet was shown (offline, plans not loaded): nothing is stored then.
+  static Future<void> upsell(String uid, Future<bool?> Function() open) async {
     if (uid.isNotEmpty && SharedPreferencesUtil().getBool(upsellKey(uid))) return;
-    await open();
-    if (uid.isNotEmpty) await SharedPreferencesUtil().saveBool(upsellKey(uid), true);
+    final answer = await open();
+    if (answer != null && uid.isNotEmpty) await SharedPreferencesUtil().saveBool(upsellKey(uid), true);
   }
 
   static void clear(String uid) {

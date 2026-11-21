@@ -30,6 +30,7 @@ import 'package:omi/pages/onboarding/variants/pocket/pocket_onboarding_flow.dart
 import 'package:omi/pages/onboarding/variants/yinka/yinka_onboarding_flow.dart';
 import 'package:omi/pages/paywall/trial_upsell_sheet.dart';
 import 'package:omi/pages/onboarding/web_onboarding_page.dart';
+import 'package:omi/pages/paywall/paywall_checkout.dart';
 import 'package:omi/pages/paywall/paywall_router.dart';
 import 'package:omi/services/experiments/onboarding_variant_gate.dart';
 import 'package:omi/services/experiments/paywall_experiment.dart';
@@ -73,6 +74,11 @@ class OnboardingWrapper extends StatefulWidget {
         setupPageEnabled: setupPageEnabled,
         knowledgeGraphStepEnabled: knowledgeGraphStepEnabled,
       );
+
+  @visibleForTesting
+  static bool? signupPaywallAnswerForTesting(
+          {required bool shown, required bool purchased, Map<String, dynamic>? plans}) =>
+      _OnboardingWrapperState.signupPaywallAnswer(shown: shown, purchased: purchased, plans: plans);
 
   @visibleForTesting
   static int resumeStepForTesting(int saved) => _OnboardingWrapperState.resolveResumeStep(saved);
@@ -305,11 +311,11 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
     final config = PaywallExperiment.current;
     if (!mounted || config.variant != PaywallVariant.trial || !config.onboardingPaywall) return;
     _signupPaywallShown = true;
-    // The router needs the subscription (trial eligibility) that sign-in only started fetching.
-    final usage = context.read<UsageProvider>();
-    if (usage.subscription == null) await usage.fetchSubscription();
-    if (!mounted) return;
     _signupPaywallPurchased = await SignupOffers.paywall(SharedPreferencesUtil().uid, () async {
+      // The router needs the subscription (trial eligibility) that sign-in only started fetching.
+      final usage = context.read<UsageProvider>();
+      if (usage.subscription == null) await usage.fetchSubscription();
+      if (!mounted) return null;
       bool purchased = false;
       final shown = await PaywallRouter.openVariant(
         context,
@@ -317,8 +323,16 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
         config: config,
         onResult: (result) => purchased = result == true,
       );
-      return shown ? purchased : null;
+      return signupPaywallAnswer(shown: shown, purchased: purchased, plans: usage.availablePlans);
     });
+  }
+
+  /// What the sign-up paywall's return counts as: bought, closed, or null (not stored) when no page
+  /// was shown or the page could not load the plans and so offered nothing.
+  static bool? signupPaywallAnswer({required bool shown, required bool purchased, Map<String, dynamic>? plans}) {
+    if (!shown) return null;
+    if (purchased) return true;
+    return PaywallOffer.fromCatalog(plans) == null ? null : false;
   }
 
   /// Enters the steps after sign-in and consent: Pocket's flow. The other arms are debug-only: Reid's
