@@ -30,9 +30,7 @@ func TestWorkerdValidatesArchiveAndRetractionComposition(t *testing.T) {
 	t.Parallel()
 	env := fixtureEnv()
 	env["BUCKET_AUDIO_DERIVED"] = "regional-fixture"
-	if _, err := readConfig(envLookup(env), false); err == nil {
-		t.Fatal("derived archive accepted a missing private bucket")
-	}
+	env["WORKER_FINALIZATION_ARCHIVE_ENABLED"] = "true"
 	env["BUCKET_PRIVATE_CLOUD_SYNC"] = "private-fixture"
 	env["WORKER_MERGE_RETRACTION_ORIGIN"] = "https://backend.fixture.test"
 	if _, err := readConfig(envLookup(env), false); err == nil {
@@ -101,5 +99,50 @@ func TestNotesDedupeMatchesPythonKillSwitch(t *testing.T) {
 		if err != nil || cfg.notesDedupe != tc.want {
 			t.Errorf("notes dedupe for %q = %t, want %t: %v", env["CONVERSATION_LLM_INPUT_DEDUPE_ENABLED"], cfg.notesDedupe, tc.want, err)
 		}
+	}
+}
+
+func TestWorkerdArchiveActivation(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name, archive, quiet, private, derived string
+		wantArchive, wantError                 bool
+	}{
+		{name: "derived bucket alone", derived: "regional"},
+		{name: "configured buckets with switches off", archive: "false", quiet: "false", private: "private", derived: "regional"},
+		{name: "archive needs private bucket", archive: "true", derived: "regional", wantError: true},
+		{name: "quiet recovery needs private bucket", quiet: "true", derived: "regional", wantError: true},
+		{name: "archive enabled", archive: "true", private: "private", derived: "regional", wantArchive: true},
+		{name: "quiet recovery enables archive", quiet: "true", private: "private", wantArchive: true},
+		{name: "invalid archive switch", archive: "invalid", wantError: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			env := fixtureEnv()
+			for key, value := range map[string]string{
+				"WORKER_FINALIZATION_ARCHIVE_ENABLED": tc.archive,
+				"WORKER_QUIET_RECOVERY_ENABLED":       tc.quiet,
+				"BUCKET_PRIVATE_CLOUD_SYNC":           tc.private,
+				"BUCKET_AUDIO_DERIVED":                tc.derived,
+			} {
+				if value != "" {
+					env[key] = value
+				}
+			}
+			cfg, err := readConfig(envLookup(env), false)
+			if (err != nil) != tc.wantError {
+				t.Fatalf("archive config error = %v, want error %v", err, tc.wantError)
+			}
+			if tc.wantError {
+				return
+			}
+			if tc.wantArchive {
+				if cfg.privateArchive != tc.private || cfg.derivedArchive != tc.derived {
+					t.Fatalf("wrong archive buckets: private=%q derived=%q", cfg.privateArchive, cfg.derivedArchive)
+				}
+			} else if cfg.privateArchive != "" || cfg.derivedArchive != "" {
+				t.Fatal("disabled archive populated bucket configuration")
+			}
+		})
 	}
 }

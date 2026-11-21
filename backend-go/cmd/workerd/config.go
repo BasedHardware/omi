@@ -110,11 +110,21 @@ func (c *config) readFinalizationAdapters(lookup lookupEnv) error {
 	default:
 		c.notesDedupe = true
 	}
-	private, _ := lookup("BUCKET_PRIVATE_CLOUD_SYNC")
-	derived, _ := lookup("BUCKET_AUDIO_DERIVED")
-	c.privateArchive, c.derivedArchive = strings.TrimSpace(private), strings.TrimSpace(derived)
-	if c.privateArchive == "" && (c.derivedArchive != "" || c.quietRecovery) {
-		return errors.New("recording archive requires BUCKET_PRIVATE_CLOUD_SYNC")
+	archiveEnabled := false
+	if raw, set := lookup("WORKER_FINALIZATION_ARCHIVE_ENABLED"); set {
+		enabled, err := strconv.ParseBool(raw)
+		if err != nil {
+			return errors.New("WORKER_FINALIZATION_ARCHIVE_ENABLED must be a boolean")
+		}
+		archiveEnabled = enabled
+	}
+	if archiveEnabled || c.quietRecovery {
+		private, _ := lookup("BUCKET_PRIVATE_CLOUD_SYNC")
+		derived, _ := lookup("BUCKET_AUDIO_DERIVED")
+		c.privateArchive, c.derivedArchive = strings.TrimSpace(private), strings.TrimSpace(derived)
+		if c.privateArchive == "" {
+			return errors.New("recording archive requires BUCKET_PRIVATE_CLOUD_SYNC")
+		}
 	}
 	if err := c.readObjectLake(lookup); err != nil {
 		return err
