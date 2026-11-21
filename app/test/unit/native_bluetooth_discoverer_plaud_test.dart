@@ -108,6 +108,13 @@ void main() {
       expect(withNotePinFallbackName(BlePeripheral(uuid: 'x', name: '', rssi: -60, serviceUuids: [])).name, isEmpty);
     });
 
+    test('named non-PLAUD peripheral advertising short UUID 1910 is not PLAUD (#20033)', () {
+      final other = BlePeripheral(uuid: 'x', name: 'Other Gadget', rssi: -60, serviceUuids: ['1910']);
+
+      expect(NativeBluetoothDiscoverer.isPlaud(other), isFalse);
+      expect(NativeBluetoothDiscoverer.isSupportedPeripheral(withNotePinFallbackName(other)), isFalse);
+    });
+
     test('named peripheral keeps its own name', () {
       final p = BlePeripheral(uuid: 'x', name: 'My Recorder', rssi: -60, serviceUuids: [plaudServiceUuid]);
 
