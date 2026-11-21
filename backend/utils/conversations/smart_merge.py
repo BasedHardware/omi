@@ -892,7 +892,7 @@ def refresh_survivor(
     if processing_hold.owns_runtime() and not settled:
         row = conversations_db.get_conversation(uid, survivor_id, read_site=FirestoreReadSite.SMART_MERGE)
         if row is not None and not python_owns_finalization(row):
-            raise processing_hold.finalization_owner_deferral()
+            raise processing_hold.finalization_owner_deferral(target_id=survivor_id)
         if row and not row.get('deleted') and processing_hold.enabled_for(row) and processing_hold.sync_sourced(row):
             if not refresh_owed(row) or int(smart_merge_state(row).get('delegated_revision') or 0) >= revision(row):
                 return
@@ -938,7 +938,7 @@ def _refresh_claimed(uid: str, survivor_id: str, claimed: int, *, owner: str, sk
             raise SmartMergeIncomplete('survivor_changed_before_refresh')
         return
     if not python_owns_finalization(row):
-        raise processing_hold.finalization_owner_deferral()
+        raise processing_hold.finalization_owner_deferral(target_id=survivor_id)
     if skip_processing:
         # Unchanged/immaterial/capped content still settles the merge ledger.
         # Use both revision fences before releasing the owed refresh.
@@ -971,7 +971,7 @@ def _refresh_claimed(uid: str, survivor_id: str, claimed: int, *, owner: str, sk
                 smart_merge_refresh=(claimed, owner),
             )
         except FinalizationOwnedElsewhere as error:
-            raise processing_hold.finalization_owner_deferral() from error
+            raise processing_hold.finalization_owner_deferral(target_id=survivor_id) from error
         except member_notes.LiveMemberNotesDeferred:
             raise  # Outer custody owner releases the lease and schedules the wait.
         except Exception:

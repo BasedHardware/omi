@@ -85,6 +85,7 @@ TERMINAL_JOB_STATUSES = frozenset({'completed', 'dead_letter'})
 NONTERMINAL_JOB_STATUSES = frozenset({'queued', 'leased', 'blocked_byok'})
 DEFAULT_LEASE_SECONDS = 1500
 DEFAULT_RECONCILE_STALE_SECONDS = 300
+OWNERSHIP_RECHECK_INTERVAL = timedelta(hours=1)
 # Bound transport failures separately from accepted worker claims. Holding the
 # job leaves its latest task valid; transport failure is not processing failure.
 MAX_UNCLAIMED_REPLAY_DISPATCHES = 5
@@ -958,6 +959,8 @@ def _claim_finalization_job_txn(
         return _claim_result('blocked_byok')
     if int(job.get('dispatch_generation') or 1) != dispatch_generation:
         return _claim_result('stale_generation')
+    if job.get('finalization_waiting_on_owner'):
+        return _claim_result('not_actionable')
     if job.get('sync_revision_waiting') and not (
         # BYOK work resumes only in a live session holding credentials; it
         # cannot use a credential-free Cloud Task generation for this replay.
@@ -1608,6 +1611,7 @@ def _mark_finalization_retryable_txn(
     now: datetime,
     projection_collection: Any | None = None,
     count_attempt: bool = True,
+    ownership_target_id: str | None = None,
 ) -> bool:
     if not count_attempt and failure_code not in {
         'record_owner_contention',
@@ -1622,6 +1626,8 @@ def _mark_finalization_retryable_txn(
     if not _is_current_lease(job, dispatch_generation, lease_epoch):
         return False
     attempt_count = int(job.get('attempt_count') or 0) + int(count_attempt)
+    park = failure_code == FINALIZATION_OWNER_REFUSAL and not count_attempt and ownership_target_id is not None
+    retry_after = OWNERSHIP_RECHECK_INTERVAL if park else get_finalization_reconcile_stale_after()
     transaction.update(
         job_ref,
         {
@@ -1629,8 +1635,9 @@ def _mark_finalization_retryable_txn(
             'updated_at': now,
             'lease_expires_at': now,
             'attempt_count': attempt_count,
-            'reconcile_after_at': now + get_finalization_reconcile_stale_after(),
+            'reconcile_after_at': now + retry_after,
             'last_failure_code': failure_code,
+            **({'finalization_waiting_on_owner': ownership_target_id} if park else {}),
             # A contention-only delivery did no processing. Refund its durable
             # worker slot too, or the next claim would count it as a killed worker.
             **(
@@ -1652,6 +1659,7 @@ def mark_finalization_retryable(
     *,
     firestore_client: Any = None,
     count_attempt: bool = True,
+    ownership_target_id: str | None = None,
 ) -> bool:
     client = _client(firestore_client)
     transaction = client.transaction()
@@ -1665,6 +1673,7 @@ def mark_finalization_retryable(
         _now(),
         client.collection(FINALIZATION_PROJECTION_COLLECTION),
         count_attempt,
+        ownership_target_id,
     )
 
 
@@ -2434,6 +2443,17 @@ def _claim_finalization_replay_txn(
     if status not in ('queued', 'leased'):
         return _intent_from_job(job_ref.id, job)
 
+    ownership_target_id = job.get('finalization_waiting_on_owner')
+    if ownership_target_id:
+        due = parse_timestamp(job.get('reconcile_after_at'))
+        if (due is not None and now < due) or conversation_ref_for_job is None:
+            return _intent_from_job(job_ref.id, job)
+        survivor = conversation_ref_for_job(job['uid'], ownership_target_id).get(transaction=transaction).to_dict()
+        if survivor is not None and not python_owns_finalization(survivor):
+            transaction.update(job_ref, {'reconcile_after_at': now + OWNERSHIP_RECHECK_INTERVAL})
+            return _intent_from_job(job_ref.id, job)
+    clear_wait = {'finalization_waiting_on_owner': firestore.DELETE_FIELD} if ownership_target_id else {}
+
     if job.get('requires_byok'):
         transaction.update(
             job_ref,
@@ -2445,6 +2465,7 @@ def _claim_finalization_replay_txn(
                 'lease_epoch': int(job.get('lease_epoch') or 0) + 1,
                 'lease_expires_at': firestore.DELETE_FIELD,
                 'reconcile_after_at': firestore.DELETE_FIELD,
+                **clear_wait,
             },
         )
         _record_projection_delta(transaction, projection_collection, job, **{status: -1, 'blocked_byok': 1})
@@ -2512,6 +2533,7 @@ def _claim_finalization_replay_txn(
             'replay_dispatches_without_claim': unclaimed_dispatches + 1,
             'replay_observed_lease_epoch': lease_epoch,
             'replay_dispatch_suspended_at': firestore.DELETE_FIELD,
+            **clear_wait,
         },
     )
     if status == 'leased':
