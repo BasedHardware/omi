@@ -22,6 +22,8 @@ HOLD_ISSUER = "admin"
 DEFAULT_REVIEW_DAYS = 180
 MAX_REVIEW_DAYS = 730
 _EVENTS_SHOWN = 20
+# Place and release are a handful a year per account; this bound is never reached in practice.
+_EVENTS_SCAN = 2000
 # Paged by document id; an operator read of one account, at most this many tombstones.
 _TOMBSTONE_SCAN_LIMIT = 50000
 _TOMBSTONE_PAGE = 500
@@ -63,10 +65,11 @@ def _document_dict(client: Any, path: str) -> dict[str, Any] | None:
 def _events(client: Any, uid: str) -> list[dict[str, Any]]:
     # Literal segments keep the path visible to the Firestore collection-budget scanner.
     collection = client.collection(f"legal_holds/{uid}/events")
-    # Event ids are timestamp-prefixed: newest first, then shown in time order.
-    newest = collection.order_by("__name__", direction="DESCENDING").limit(_EVENTS_SHOWN).stream()
-    rows = [{"id": snapshot.id, **(snapshot.to_dict() or {})} for snapshot in newest]
-    return sorted(rows, key=lambda row: row["id"])
+    # Event ids are timestamp-prefixed, so the default (ascending) id order is time order.
+    # A descending order by id needs a composite index on the events collection group
+    # that does not exist; read a bounded page in the default order and keep the newest.
+    rows = [{"id": snapshot.id, **(snapshot.to_dict() or {})} for snapshot in collection.limit(_EVENTS_SCAN).stream()]
+    return sorted(rows, key=lambda row: row["id"])[-_EVENTS_SHOWN:]
 
 
 def _held_deferred_deletes(client: Any, uid: str) -> dict[str, Any]:

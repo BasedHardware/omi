@@ -54,7 +54,9 @@ class _Collection:
     def order_by(self, field, direction="ASCENDING"):
         assert field == "__name__"  # rows are already in document-id order
         if direction == "DESCENDING":
-            return _Collection(self.client, self.path, self._limit, self._after, descending=True)
+            # Production has no composite index for a descending id order on these
+            # subcollections and answers 400 FailedPrecondition (2026-11-21).
+            raise AssertionError("descending __name__ order needs a composite index that does not exist")
         return self
 
     def start_after(self, snapshot):
