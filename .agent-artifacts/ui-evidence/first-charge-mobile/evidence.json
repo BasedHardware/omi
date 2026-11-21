@@ -16,9 +16,9 @@
       "source": "visual-audit"
     },
     {
-      "file": "003-mobile-ios-low-battery-recheck.png",
+      "file": "003-mobile-ios-battery-checking.png",
       "platform": "mobile-ios",
-      "description": "Device Settings keeps the reported battery percentage beside an inline retry.",
+      "description": "Device Settings shows a dash while the first-charge battery check is pending.",
       "captured_by": "agent",
       "source": "visual-audit"
     }

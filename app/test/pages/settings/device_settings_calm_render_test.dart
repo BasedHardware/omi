@@ -40,7 +40,8 @@ const _output = String.fromEnvironment('DEVICE_SETTINGS_RENDER_OUTPUT');
 const _frame = Key('device_settings_frame');
 
 class _Device extends ChangeNotifier implements DeviceProvider {
-  _Device(this.batteryLevel, this.refreshResult);
+  _Device(this.batteryLevel, {required bool firstChargePending})
+      : settingsBatteryLevel = firstChargePending ? -1 : batteryLevel;
 
   final device = BtDevice(id: 'omi-evidence', name: 'Omi', type: DeviceType.omi, rssi: -40);
   @override
@@ -54,13 +55,14 @@ class _Device extends ChangeNotifier implements DeviceProvider {
   @override
   bool get isConnecting => false;
   @override
-  final int batteryLevel;
-  final bool refreshResult;
-  int batteryChecks = 0;
+  int batteryLevel;
   @override
-  Future<bool> refreshBatteryLevel() async {
-    batteryChecks++;
-    return refreshResult;
+  int settingsBatteryLevel;
+
+  void publishBatteryLevel(int level) {
+    batteryLevel = level;
+    settingsBatteryLevel = level;
+    notifyListeners();
   }
 
   @override
@@ -224,7 +226,7 @@ void main() {
     });
   }
 
-  Future<_Device> pumpDevice(WidgetTester tester, {int batteryLevel = 72, bool refreshResult = true}) async {
+  Future<_Device> pumpDevice(WidgetTester tester, {int batteryLevel = 72, bool firstChargePending = false}) async {
     debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
     tester.view.physicalSize = const Size(390, 844);
     tester.view.devicePixelRatio = 1;
@@ -236,7 +238,7 @@ void main() {
       loadPending: () async => const ApiSuccess(PendingWorkSnapshot.disabled),
       loadAttention: () async => const ApiSuccess(AttentionItemsPage.disabled),
     );
-    final device = _Device(batteryLevel, refreshResult);
+    final device = _Device(batteryLevel, firstChargePending: firstChargePending);
     final capture = _Capture();
     final sync = _Sync([_stalledUpload()]);
     final conversations = ConversationProvider(isSignedIn: () => false);
@@ -295,22 +297,25 @@ void main() {
     expect(tester.widget<OmiSettingsRow>(offlineSync.hitTestable()).onTap, isNotNull);
   });
 
-  testWidgets('Device Settings offers a recheck with the reported low level', (tester) async {
-    final device = await pumpDevice(tester, batteryLevel: 3);
-    expect(find.text('3%'), findsOneWidget);
-    expect(find.text('Try Again'), findsOneWidget);
-    await writeFrame(tester, '003-mobile-ios-low-battery-recheck');
-    await tester.tap(find.text('Try Again'));
-    expect(device.batteryChecks, 1);
-  });
-
-  testWidgets('a failed battery recheck explains the failure and keeps the reported level', (tester) async {
-    await pumpDevice(tester, batteryLevel: 3, refreshResult: false);
-    await tester.tap(find.text('Try Again'));
-    await tester.pump();
-    expect(find.text(lookupAppLocalizations(const Locale('en')).firmwareBatteryUnavailable), findsOneWidget);
-    expect(find.text('3%'), findsOneWidget);
-    expect(find.text('Try Again'), findsOneWidget);
-    debugDefaultTargetPlatformOverride = null;
+  testWidgets('Device Settings shows a dash until the first-charge check returns a reading', (tester) async {
+    final device = await pumpDevice(tester, batteryLevel: 3, firstChargePending: true);
+    final battery = find.byKey(const Key('device_stat_battery'));
+    final dash = find.descendant(of: battery, matching: find.text('—'));
+    final semantics = tester.ensureSemantics();
+    try {
+      expect(dash, findsOneWidget);
+      expect(tester.getSemantics(battery).label, startsWith('Battery, Unknown'));
+      expect(find.text('3%'), findsNothing);
+      expect(find.text('Try Again'), findsNothing);
+      await writeFrame(tester, '003-mobile-ios-battery-checking');
+      device.publishBatteryLevel(0);
+      await tester.pump();
+      expect(dash, findsNothing);
+      expect(find.text('0%'), findsOneWidget);
+      expect(find.text('Try Again'), findsNothing);
+    } finally {
+      semantics.dispose();
+      debugDefaultTargetPlatformOverride = null;
+    }
   });
 }

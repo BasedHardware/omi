@@ -34,6 +34,7 @@ import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/sync_provider.dart';
 import 'package:omi/services/devices.dart';
+import 'package:omi/services/devices/connectors/device_connection.dart';
 import 'package:omi/services/devices/connectors/rayban_meta_connection.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/services/sync_health_watchdog.dart';
@@ -630,6 +631,9 @@ class _DeviceSettingsState extends State<DeviceSettings> {
     );
     final paired = provider.pairedDevice;
     final connected = provider.connectedDevice;
+    final showUnknownBattery = provider.isConnected &&
+        connected != null &&
+        DeviceConnectionFactory.resolveDeviceType(paired?.id == connected.id ? paired! : connected) == DeviceType.omi;
     const gap = SizedBox(height: OmiSpacing.xxl);
 
     final deviceStreaming = capture != null && deviceSource != null && deviceSource != 'phone';
@@ -649,19 +653,13 @@ class _DeviceSettingsState extends State<DeviceSettings> {
           const SizedBox(height: OmiSpacing.xl),
           _liveSections(
             connected: connected != null,
-            batteryLevel: connected == null ? -1 : provider.batteryLevel,
+            batteryLevel: connected == null
+                ? -1
+                : showUnknownBattery
+                    ? provider.settingsBatteryLevel
+                    : provider.batteryLevel,
             isCharging: connected != null && provider.isCharging,
-            onRetryBattery: connected?.type == DeviceType.omi
-                ? () async {
-                    final refreshed = await provider.refreshBatteryLevel();
-                    if (context.mounted &&
-                        provider.isConnected &&
-                        provider.connectedDevice?.id == connected?.id &&
-                        !refreshed) {
-                      OmiFeedback.error(context, context.l10n.firmwareBatteryUnavailable);
-                    }
-                  }
-                : null,
+            showUnknownBattery: showUnknownBattery,
           ),
           if (deviceStreaming && canPause) ...[
             DeviceControlsGroup(paused: devicePaused, onToggle: () => _togglePause(capture)),
@@ -706,7 +704,7 @@ extension _DeviceLiveSections on _DeviceSettingsState {
     required bool connected,
     required int batteryLevel,
     required bool isCharging,
-    required VoidCallback? onRetryBattery,
+    required bool showUnknownBattery,
   }) {
     const gap = SizedBox(height: OmiSpacing.xxl);
     return Builder(builder: (context) {
@@ -750,7 +748,7 @@ extension _DeviceLiveSections on _DeviceSettingsState {
                     builder: (context) => DeviceStatsRow(
                           batteryLevel: batteryLevel,
                           isCharging: isCharging,
-                          onRetryBattery: batteryLevel < 20 && !isCharging ? onRetryBattery : null,
+                          showUnknownBattery: showUnknownBattery,
                           heardTodaySeconds: _heardTodaySeconds(context),
                           onDeviceSeconds: local.onDeviceSeconds,
                           phoneQueueSeconds: local.onPhoneSeconds,

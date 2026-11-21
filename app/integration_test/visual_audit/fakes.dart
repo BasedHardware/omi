@@ -138,6 +138,8 @@ class AuditDeviceProvider extends ChangeNotifier implements DeviceProvider {
   @override
   int get batteryLevel => battery;
   @override
+  int get settingsBatteryLevel => batteryLevel;
+  @override
   bool get isCharging => charging;
   @override
   bool? get observedChargingStatus => charging;

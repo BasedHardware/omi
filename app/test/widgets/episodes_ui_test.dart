@@ -1229,24 +1229,22 @@ void main() {
       expect(find.text('to sync'), findsNothing);
     });
 
-    testWidgets('a reported zero stays visible and offers the battery recheck', (tester) async {
+    testWidgets('a reported zero stays visible without a battery action', (tester) async {
       final semantics = tester.ensureSemantics();
-      var checks = 0;
-      await tester.pumpWidget(wrap(DeviceStatsRow(
-        batteryLevel: 0,
-        isCharging: false,
-        heardTodaySeconds: 0,
-        onDeviceSeconds: 0,
-        onRetryBattery: () => checks++,
-      )));
-      expect(find.text('0%'), findsOneWidget);
-      final battery = find.byKey(const Key('device_stat_battery'));
-      expect(tester.getSize(battery).height, greaterThanOrEqualTo(44));
-      expect(tester.getSemantics(battery).getSemanticsData().hasAction(SemanticsAction.tap), isTrue);
-      expect(find.descendant(of: battery, matching: find.byIcon(Icons.chevron_right)), findsNothing);
-      await tester.tap(find.text('Try Again'));
-      expect(checks, 1);
-      semantics.dispose();
+      try {
+        await tester.pumpWidget(wrap(const DeviceStatsRow(
+          batteryLevel: 0,
+          isCharging: false,
+          heardTodaySeconds: 0,
+          onDeviceSeconds: 0,
+        )));
+        expect(find.text('0%'), findsOneWidget);
+        final battery = find.byKey(const Key('device_stat_battery'));
+        expect(tester.getSemantics(battery).getSemanticsData().hasAction(SemanticsAction.tap), isFalse);
+        expect(find.text('Try Again'), findsNothing);
+      } finally {
+        semantics.dispose();
+      }
     });
 
     testWidgets('right now shows only the live episode', (tester) async {

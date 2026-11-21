@@ -24,6 +24,7 @@ class _ChargingTransport implements DeviceTransport {
   Completer<List<int>>? pendingBattery;
   Completer<List<int>>? pendingRead;
   final notifications = StreamController<List<int>>.broadcast(sync: true);
+  final batteryNotifications = StreamController<List<int>>.broadcast(sync: true);
 
   @override
   Stream<DeviceTransportState> get connectionStateStream => const Stream.empty();
@@ -44,7 +45,8 @@ class _ChargingTransport implements DeviceTransport {
   }
 
   @override
-  Stream<List<int>> getCharacteristicStream(String serviceUuid, String characteristicUuid) => notifications.stream;
+  Stream<List<int>> getCharacteristicStream(String serviceUuid, String characteristicUuid) =>
+      characteristicUuid == batteryLevelCharacteristicUuid ? batteryNotifications.stream : notifications.stream;
 
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
@@ -123,6 +125,7 @@ void main() {
     provider.setIsConnected(true);
     provider.batteryLevel = 3;
     provider.prepareFirstChargeCheck(_device().id);
+    expect(provider.settingsBatteryLevel, -1);
     final listening = provider.initiateChargingStatusListener();
     await tester.pump(const Duration(seconds: 15));
     expect(transport.batteryReads, 0);
@@ -141,13 +144,7 @@ void main() {
     await tester.pump(const Duration(seconds: 1));
     expect(transport.batteryReads, 1);
     expect(provider.batteryLevel, 91);
-
-    var notifications = 0;
-    provider.addListener(() => notifications++);
-    transport.battery = [92];
-    expect(await provider.refreshBatteryLevel(), isTrue);
-    expect(provider.batteryLevel, 92);
-    expect(notifications, 1);
+    expect(provider.settingsBatteryLevel, 91);
   });
 
   testWidgets('a delayed battery read from a retired link is discarded', (tester) async {
@@ -171,7 +168,7 @@ void main() {
     expect(provider.batteryLevel, -1);
   });
 
-  testWidgets('an early low reading alerts after the first pairing recheck fails', (tester) async {
+  testWidgets('first-charge failure backs off and a valid zero ends the check', (tester) async {
     final transport = _ChargingTransport()..value = [0];
     final provider = _provider(transport, []);
     addTearDown(transport.notifications.close);
@@ -181,15 +178,79 @@ void main() {
     await provider.setConnectedDevice(device);
     provider.setIsConnected(true);
     await provider.initiateChargingStatusListener();
-    expect(await provider.refreshBatteryLevel(), isTrue);
-    expect(provider.batteryLevel, 3);
+    provider.batteryLevel = 3;
+    expect(provider.settingsBatteryLevel, -1);
     expect(provider.hasLowBatteryAlertedForTesting, isFalse);
     finish();
     transport.battery = [];
     await tester.pump(const Duration(seconds: 12));
-    expect(transport.batteryReads, 2);
+    expect(transport.batteryReads, 1);
     expect(provider.batteryLevel, 3);
+    expect(provider.settingsBatteryLevel, -1);
+    expect(provider.hasLowBatteryAlertedForTesting, isFalse);
+    await tester.pump(const Duration(seconds: 1));
+    expect(transport.batteryReads, 1);
+    await tester.pump(const Duration(seconds: 1));
+    expect(transport.batteryReads, 2);
+    transport.battery = [0];
+    await tester.pump(const Duration(seconds: 3));
+    expect(transport.batteryReads, 2);
+    await tester.pump(const Duration(seconds: 1));
+    expect(transport.batteryReads, 3);
+    expect(provider.settingsBatteryLevel, 0);
     expect(provider.hasLowBatteryAlertedForTesting, isTrue);
+    await tester.pump(const Duration(seconds: 9));
+    expect(transport.batteryReads, 3);
+  });
+
+  testWidgets('missing battery stops retrying after three attempts and accepts a later notification', (tester) async {
+    final transport = _ChargingTransport()..battery = [255];
+    final provider = _provider(transport, []);
+    addTearDown(transport.batteryNotifications.close);
+    addTearDown(provider.dispose);
+    provider.connectedDevice = _device();
+    provider.setIsConnected(true);
+    await provider.initiateBleBatteryListener();
+    await tester.pump(const Duration(seconds: 2));
+    expect(transport.batteryReads, 1);
+    await tester.pump(const Duration(seconds: 4));
+    expect(transport.batteryReads, 2);
+    await tester.pump(const Duration(seconds: 8));
+    expect(transport.batteryReads, 3);
+    await tester.pump(const Duration(minutes: 1));
+    expect(transport.batteryReads, 3);
+    expect(provider.settingsBatteryLevel, -1);
+    transport.batteryNotifications.add([80]);
+    expect(provider.settingsBatteryLevel, 80);
+  });
+
+  testWidgets('charging again drops an in-flight check and restarts the settle wait', (tester) async {
+    final pending = Completer<List<int>>();
+    final transport = _ChargingTransport()
+      ..value = [0]
+      ..pendingBattery = pending;
+    final provider = _provider(transport, []);
+    addTearDown(transport.notifications.close);
+    addTearDown(provider.dispose);
+    provider.connectedDevice = _device();
+    provider.setIsConnected(true);
+    provider.prepareFirstChargeCheck(_device().id);
+    await provider.initiateChargingStatusListener();
+    await tester.pump(const Duration(seconds: 12));
+    expect(transport.batteryReads, 1);
+    transport.notifications.add([1]);
+    pending.complete([3]);
+    await tester.pump(const Duration(seconds: 30));
+    expect(transport.batteryReads, 1);
+    expect(provider.settingsBatteryLevel, -1);
+    expect(provider.hasLowBatteryAlertedForTesting, isFalse);
+
+    transport.notifications.add([0]);
+    transport.pendingBattery = null;
+    transport.battery = [90];
+    await tester.pump(const Duration(seconds: 12));
+    expect(transport.batteryReads, 2);
+    expect(provider.settingsBatteryLevel, 90);
   });
 
   test('late charging read from a disconnected session cannot restore charging', () async {
