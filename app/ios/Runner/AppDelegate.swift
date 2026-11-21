@@ -180,6 +180,7 @@ final class QuickActionsIconPatcher: NSObject {
       }
       self.runPeriodicSync(task)
     }
+    OnDeviceOverflowPlugin.registerBackgroundTask()
     QuickActionsIconPatcher.shared.startObserving()
     SwiftFlutterForegroundTaskPlugin.setPluginRegistrantCallback { registry in
       GeneratedPluginRegistrant.register(with: registry)
