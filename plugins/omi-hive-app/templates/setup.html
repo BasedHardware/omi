@@ -483,9 +483,11 @@
             {% endif %}
 
             <div class="action-buttons">
-                <a href="/disconnect?uid={{ uid }}" class="btn btn-danger btn-small">
-                    Disconnect
-                </a>
+                <form method="post" action="/disconnect?uid={{ uid | urlencode }}" style="display: contents;">
+                    <button type="submit" class="btn btn-danger btn-small" style="font-family: inherit;">
+                        Disconnect
+                    </button>
+                </form>
             </div>
         </div>
 
