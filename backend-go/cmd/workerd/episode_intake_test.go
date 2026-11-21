@@ -52,3 +52,17 @@ func TestEpisodeIntakeRequiresConfiguredWorkloadAndForwardsVersion(t *testing.T)
 		t.Fatalf("received %d callbacks", calls)
 	}
 }
+
+func TestEpisodeIntakeHandlerRequiresBothIdentitySettings(t *testing.T) {
+	t.Parallel()
+	runtime := finalizationRuntime{family: &finalization.Service{}}
+	for _, cfg := range []config{
+		{},
+		{episodeIntakeAudience: "fixture-audience"},
+		{episodeIntakeCaller: "sync@fixture.iam.gserviceaccount.com"},
+	} {
+		if runtime.episodeIntakeHandler(cfg) != nil {
+			t.Fatal("incomplete identity configured an intake handler")
+		}
+	}
+}

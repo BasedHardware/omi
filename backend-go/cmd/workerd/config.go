@@ -85,6 +85,8 @@ func (c *config) readWorkerConfig(lookup lookupEnv) error {
 	}
 	c.episodeIntakeAudience, _ = lookup("WORKER_EPISODE_INTAKE_AUDIENCE")
 	c.episodeIntakeCaller, _ = lookup("WORKER_EPISODE_INTAKE_CALLER")
+	c.episodeIntakeAudience = strings.TrimSpace(c.episodeIntakeAudience)
+	c.episodeIntakeCaller = strings.TrimSpace(c.episodeIntakeCaller)
 	if (c.episodeIntakeAudience == "") != (c.episodeIntakeCaller == "") ||
 		(c.episodeIntakeCaller != "" && !strings.HasSuffix(c.episodeIntakeCaller, ".iam.gserviceaccount.com")) {
 		return errors.New("episode intake requires an OIDC audience and service account email")

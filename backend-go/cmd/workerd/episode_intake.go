@@ -23,7 +23,7 @@ type episodeIntakeEndpoint struct {
 }
 
 func (m *finalizationRuntime) episodeIntakeHandler(cfg config) http.Handler {
-	if cfg.episodeIntakeAudience == "" {
+	if cfg.episodeIntakeAudience == "" || cfg.episodeIntakeCaller == "" {
 		return nil
 	}
 	return episodeIntakeEndpoint{

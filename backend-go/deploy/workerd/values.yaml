@@ -1,3 +1,4 @@
+environment: dev
 image:
   digest: ""
 replicaCount: 1
@@ -6,3 +7,14 @@ podMonitoring:
   enabled: true
 migration:
   enabled: false
+resources:
+  requests: {cpu: 100m, memory: 64Mi}
+  limits: {memory: 256Mi}
+intake:
+  enabled: false
+  hostname: ""
+  addressName: ""
+  tlsSecretName: ""
+  audience: ""
+  caller: ""
+  firestoreServiceAccount: ""
