@@ -104,6 +104,7 @@ spec:
           {{- end }}
           image: "{{ required "image.repository is required" .Values.image.repository }}{{ if .Values.image.digest }}@{{ .Values.image.digest }}{{ else }}:{{ required "image.tag is required" .Values.image.tag }}{{ end }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
+          {{- $v3StartupEnv := .Values.conversationsV3StartupEnv | default dict }}
           {{- with .Values.envFrom }}
           envFrom:
             {{- toYaml . | nindent 12 }}
@@ -125,7 +126,7 @@ spec:
               value: /var/run/parakeet-shape/route.json
             {{- end }}
             {{- range .Values.env }}
-            {{- if not (or (hasKey $privateEnv .name) (has .name $secretKeys)) }}
+            {{- if not (or (hasKey $privateEnv .name) (has .name $secretKeys) (hasKey $v3StartupEnv .name)) }}
             - name: {{ .name }}
               {{- if eq .name "GOOGLE_CLOUD_PROJECT" }}
               value: {{ required "runtimeGcpProjectId is required" $.Values.runtimeGcpProjectId | quote }}
@@ -137,7 +138,13 @@ spec:
               {{- end }}
             {{- end }}
             {{- end }}
+            {{- if $v3StartupEnv }}
+            {{- include "backend-listen.conversationsV3StartupEnv" . | nindent 12 }}
+            {{- end }}
             {{- range $name, $value := $privateEnv }}
+            {{- if hasKey $v3StartupEnv $name }}
+            {{- fail "privateEnv cannot override a conversationsV3StartupEnv key" }}
+            {{- end }}
             {{- if not (regexMatch "^[A-Z][A-Z0-9_]*$" $name) }}
             {{- fail "privateEnv has a key that is not an env var name" }}
             {{- end }}
@@ -148,6 +155,9 @@ spec:
               value: {{ $value | quote }}
             {{- end }}
             {{- range $secretKeys }}
+            {{- if hasKey $v3StartupEnv . }}
+            {{- fail "privateSecretEnv cannot override a conversationsV3StartupEnv key" }}
+            {{- end }}
             - name: {{ . }}
               valueFrom:
                 secretKeyRef:
