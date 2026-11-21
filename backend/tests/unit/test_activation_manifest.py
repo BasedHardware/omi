@@ -82,7 +82,7 @@ def test_cli_exit_codes_and_text(capsys):
     assert payload['verdict'] == 'READY' and payload['counts']['missing'] == 0
 
 
-@pytest.mark.parametrize('field', ['project', 'environment', 'feature'])
+@pytest.mark.parametrize('field', ['project', 'environment', 'feature', 'region', 'cluster'])
 @pytest.mark.parametrize('bad_value', [None, 'unrelated', '', ' ', 123])
 def test_checker_rejects_wrong_or_missing_state_identity(manifest, tmp_path, capsys, field, bad_value):
     state = _state('state-ready.json')
@@ -615,7 +615,24 @@ def test_release_pins_each_startup_value_in_the_pod_spec(manifest, helm, startup
     deployment = yaml.safe_load(pinned.stdout)
     old_app = old_deployment['spec']['template']['spec']['containers'][0]
     app = deployment['spec']['template']['spec']['containers'][0]
-    assert app['envFrom'] == old_app['envFrom']
+    assert app['envFrom'] == old_app['envFrom'] == [{'configMapRef': {'name': 'prod-omi-backend-config'}}]
+    old_entries = {entry['name']: entry for entry in old_app['env']}
+    assert old_entries['CONVERSATIONS_V3_STAGE']['valueFrom']['configMapKeyRef'] == {
+        'name': 'prod-omi-backend-config',
+        'key': 'CONVERSATIONS_V3_STAGE',
+    }
+    assert 'value' in old_entries['SYNC_TASKS_PROJECT']
+    assert 'SYNC_TASKS_HANDLER_URL' not in old_entries
+    assert 'CONVERSATIONS_V3_TASKS_URL' not in old_entries
+    assert 'CONVERSATIONS_V3' not in old_entries
+    # Test metadata only, including a listen-private reference rendered by the production chart.
+    secret_key = 'OPENAI_API_KEY' if runtime == 'pusher' else 'STT_CAP_DISPATCH_COHORT'
+    secret_ref = old_entries[secret_key]['valueFrom']['secretKeyRef']
+    assert collect.gke_env(old_app, {secret_key}) == {
+        secret_key: {
+            'secret_ref': f"{secret_ref['name']}:{secret_ref['key']}",
+        }
+    }
     assert [entry for entry in app['env'] if entry['name'] not in startup_values] == [
         entry for entry in old_app['env'] if entry['name'] not in startup_values
     ]
@@ -626,8 +643,16 @@ def test_release_pins_each_startup_value_in_the_pod_spec(manifest, helm, startup
     repository = app['image'].rpartition(':')[0]
     state = _state('state-ready.json')
     sha = state['services'][runtime]['serving'][0]['source_sha']
-    pods = {'items': [_gke_pod(app, DIG_NEW)]}
-    runner, calls = _fake_runner({('get', 'deployment', runtime): deployment, ('get', 'pods'): pods})
+    pods = {'items': [_gke_pod(old_app, DIG_NEW)]}
+    runner, calls = _fake_runner(
+        {
+            ('get', 'deployment', runtime): deployment,
+            ('get', 'pods'): pods,
+            # These current ConfigMap values agree with the desired rollout. Nothing
+            # shows that the legacy container started with this version of the data.
+            ('get', 'configmap', 'prod-omi-backend-config'): {'data': startup_values},
+        }
+    )
     collector = collect.Collector(
         'proj',
         'us-central1',
@@ -638,6 +663,25 @@ def test_release_pins_each_startup_value_in_the_pod_spec(manifest, helm, startup
     )
     wanted = collect.manifest_env_keys(manifest)[runtime]
     state['services'][runtime] = collector.gke('ns', runtime, wanted)
+    legacy_env = state['services'][runtime]['serving'][0]['env']
+    assert legacy_env['CONVERSATIONS_V3_STAGE'] == {
+        'unknown': 'ConfigMap value at container startup is unavailable',
+    }
+    for key in ('CONVERSATIONS_V3', 'SYNC_TASKS_INVOKER_SA', 'SYNC_TASKS_HANDLER_URL', 'CONVERSATIONS_V3_TASKS_URL'):
+        assert legacy_env[key] == {'unknown': 'envFrom value at container startup is unavailable'}
+    for key in ('SYNC_TASKS_PROJECT', 'SYNC_TASKS_LOCATION'):
+        assert legacy_env[key] == {'value': old_entries[key]['value']}
+    verdict = check.evaluate(manifest, state)
+    unknown = _by_status(verdict, check.UNKNOWN)
+    assert verdict.verdict == check.UNDETERMINED
+    assert f'env:v3-task-target:{runtime}:CONVERSATIONS_V3_TASKS_URL|SYNC_TASKS_HANDLER_URL' in unknown
+    assert f'env:v3-kill-switch:{runtime}:CONVERSATIONS_V3' in unknown
+
+    pods['items'][:] = [_gke_pod(app, DIG_NEW)]
+    state['services'][runtime] = collector.gke('ns', runtime, wanted)
+    assert state['services'][runtime]['serving'][0]['env'] == {
+        key: {'value': value} for key, value in startup_values.items()
+    }
     assert check.evaluate(manifest, state).verdict == check.READY
 
     # A same-image rollout cannot borrow the new spec's values for a legacy pod.
@@ -646,7 +690,7 @@ def test_release_pins_each_startup_value_in_the_pod_spec(manifest, helm, startup
     verdict = check.evaluate(manifest, state)
     assert verdict.verdict == check.UNDETERMINED
     assert f'env:v3-stage:{runtime}:CONVERSATIONS_V3_STAGE' in _by_status(verdict, check.UNKNOWN)
-    assert [argv[3:5] for argv in calls] == [['get', 'deployment'], ['get', 'pods']] * 2
+    assert [argv[3:5] for argv in calls] == [['get', 'deployment'], ['get', 'pods']] * 3
 
 
 @pytest.mark.parametrize('runtime', ['pusher', 'backend-listen'])
@@ -705,6 +749,7 @@ def test_collector_uses_the_manifest_target(manifest, monkeypatch, tmp_path, exp
     def fake_collect(data, collector):
         assert collector.project == manifest['project']
         assert collector.region == manifest['region']
+        assert collector.cluster == manifest['cluster']
         assert collector.kubectl[:2] == ['kubectl', '--kubeconfig']
         assert collector.kubectl[2] != '/ambient/kubeconfig'
         return _state('state-ready.json')
@@ -750,13 +795,40 @@ def test_collector_leaves_gke_unread_when_target_credentials_fail(manifest, monk
     assert collect.main(['--manifest', str(MANIFEST_PATH), '--out', str(tmp_path / 'state.json')]) == 0
 
 
-def test_programmatic_collector_rejects_other_project(manifest):
+@pytest.mark.parametrize('field', ['project', 'region', 'cluster'])
+def test_programmatic_collector_rejects_conflicting_target(manifest, field):
     def unexpected_read(argv):
-        pytest.fail('collection must reject a conflicting project before reading')
+        pytest.fail('collection must reject a conflicting target before reading')
 
-    collector = collect.Collector('other-project', 'us-central1', FakeGit({}), unexpected_read)
-    with pytest.raises(collect.activation_check.InvalidInput, match='project'):
+    target = {name: manifest[name] for name in ('project', 'region', 'cluster')}
+    target[field] = 'other-target'
+    collector = collect.Collector(**target, git=FakeGit({}), runner=unexpected_read)
+    with pytest.raises(collect.activation_check.InvalidInput, match=f'collector {field}'):
         collect.collect(manifest, collector)
+
+
+def test_cloud_run_only_snapshot_requires_explicit_null_cluster(manifest):
+    data = copy.deepcopy(manifest)
+    data.pop('cluster')
+    data['services'] = {'backend': {'kind': 'cloud_run'}}
+    data['order'] = [['backend']]
+    data.pop('gateway_lanes')
+    data.pop('env')
+    state = _state('state-ready.json')
+    with pytest.raises(check.InvalidInput, match=r'state[.]cluster'):
+        check.evaluate(data, state)
+    state['cluster'] = None
+    assert check.evaluate(data, state).verdict == check.READY
+    del state['cluster']
+    with pytest.raises(check.InvalidInput, match=r'state[.]cluster'):
+        check.evaluate(data, state)
+
+
+def test_gke_snapshot_rejects_null_cluster(manifest):
+    state = _state('state-ready.json')
+    state['cluster'] = None
+    with pytest.raises(check.InvalidInput, match=r'state[.]cluster'):
+        check.evaluate(manifest, state)
 
 
 def test_collect_end_to_end_marks_failures_unknown(manifest):
@@ -786,12 +858,19 @@ def test_collect_end_to_end_marks_failures_unknown(manifest):
         }
     )
     state = collect.collect(
-        manifest, Stub(manifest['project'], manifest['region'], git, runner, registry=FakeRegistry({}))
+        manifest,
+        Stub(
+            manifest['project'],
+            manifest['region'],
+            git,
+            runner,
+            registry=FakeRegistry({}),
+            cluster=manifest['cluster'],
+        ),
     )
 
-    assert {field: state[field] for field in ('project', 'environment', 'feature')} == {
-        field: manifest[field] for field in ('project', 'environment', 'feature')
-    }
+    for field in ('project', 'environment', 'feature', 'region', 'cluster'):
+        assert state[field] == manifest[field]
     assert state['services']['backend']['error'].startswith('ReadError')
     assert state['services']['llm-gateway']['serving'][0]['lanes'] == [
         'omi:auto:chat-agent',

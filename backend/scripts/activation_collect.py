@@ -282,8 +282,11 @@ class Collector:
         registry: Registry | None = None,
         kubectl: list[str] | None = None,
         promoted_registry: Registry | None = None,
+        *,
+        cluster: str | None = None,
     ):
-        self.project, self.region, self.git, self.run = project, region, git, runner
+        self.project, self.region, self.cluster = project, region, cluster
+        self.git, self.run = git, runner
         self.registry = registry or Registry(lambda: self.run(['gcloud', 'auth', 'print-access-token']))
         # Promoted images (prod pusher) keep their commit tag only in the qualifying registry.
         self.promoted_registry = promoted_registry or self.registry
@@ -426,8 +429,8 @@ def _objects(collector: Collector, kind: list[str], items: list[dict[str, Any]])
 
 def collect(manifest: dict[str, Any], collector: Collector) -> dict[str, Any]:
     activation_check.validate_manifest(manifest)
-    for name in ('project', 'region'):
-        if getattr(collector, name) != manifest[name]:
+    for name in ('project', 'region', 'cluster'):
+        if getattr(collector, name) != manifest.get(name):
             raise activation_check.InvalidInput(f'collector {name} does not match manifest.{name}')
     wanted = manifest_env_keys(manifest)
     services: dict[str, Any] = {}
@@ -474,6 +477,8 @@ def collect(manifest: dict[str, Any], collector: Collector) -> dict[str, Any]:
         'environment': manifest['environment'],
         'collected_at': dt.datetime.now(dt.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'),
         'project': collector.project,
+        'region': collector.region,
+        'cluster': collector.cluster,
         'services': services,
         'queues': queues,
         'scheduler_jobs': jobs,
@@ -549,7 +554,9 @@ def main(argv: list[str] | None = None) -> int:
                     timeout=90,
                 ).stdout
             )
-        collector = Collector(project, region, Git(args.repo), kubectl=kubectl, promoted_registry=promoted)
+        collector = Collector(
+            project, region, Git(args.repo), kubectl=kubectl, promoted_registry=promoted, cluster=cluster
+        )
         state = collect(manifest, collector)
     text = json.dumps(state, indent=2, sort_keys=True) + '\n'
     if args.out:

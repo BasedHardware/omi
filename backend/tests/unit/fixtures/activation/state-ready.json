@@ -8,6 +8,7 @@
       "c6e0bb6c56a23b58bc930f6b75159637095b0720": true
     }
   },
+  "cluster": "prod-omi-gke",
   "collected_at": "2026-11-19T00:00:00Z",
   "environment": "prod",
   "feature": "conversations-v3",
@@ -23,6 +24,7 @@
       "state": "RUNNING"
     }
   },
+  "region": "us-central1",
   "scheduler_jobs": {
     "conversations-v3-legacy-users": {
       "exists": true,

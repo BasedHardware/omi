@@ -40,7 +40,7 @@ EXIT = {READY: 0, BLOCKED: 1, UNDETERMINED: 2}
 EXIT_INVALID = 3
 ACTIVATE = 'activate'
 SCHEMA_VERSION = 1
-IDENTITY_FIELDS = ('project', 'environment', 'feature')
+IDENTITY_FIELDS = ('project', 'environment', 'feature', 'region')
 
 
 class InvalidInput(ValueError):
@@ -114,7 +114,7 @@ def _require_target_fields(data: dict[str, Any], label: str, fields: Iterable[st
 def validate_manifest(manifest: Any) -> dict[str, Any]:
     _require(isinstance(manifest, dict), 'manifest: mapping')
     _require(manifest.get('schema_version') == SCHEMA_VERSION, 'manifest.schema_version: 1')
-    _require_target_fields(manifest, 'manifest', (*IDENTITY_FIELDS, 'region'))
+    _require_target_fields(manifest, 'manifest', IDENTITY_FIELDS)
     services = manifest.get('services')
     _require(isinstance(services, dict) and services, 'manifest.services: mapping')
     for name, svc in services.items():
@@ -169,6 +169,9 @@ def validate_state(state: Any) -> dict[str, Any]:
     _require(isinstance(state, dict), 'state: mapping')
     _require(state.get('schema_version') == SCHEMA_VERSION, 'state.schema_version: 1')
     _require_target_fields(state, 'state', IDENTITY_FIELDS)
+    _require('cluster' in state, 'state.cluster: required (null for a manifest without a cluster)')
+    if state['cluster'] is not None:
+        _require_target_fields(state, 'state', ('cluster',))
     for key in ('services', 'queues', 'scheduler_jobs', 'ancestry'):
         table = state.get(key, {})
         _require(isinstance(table, dict), f'state.{key}: mapping')
@@ -428,8 +431,8 @@ def _objects(manifest, state, step, kind: str, state_key: str, ready_states: Ite
 def evaluate(manifest: dict[str, Any], state: dict[str, Any], step: str = ACTIVATE) -> Verdict:
     validate_manifest(manifest)
     validate_state(state)
-    for field in IDENTITY_FIELDS:
-        _require(state[field] == manifest[field], f'state.{field}: does not match manifest.{field}')
+    for field in (*IDENTITY_FIELDS, 'cluster'):
+        _require(state[field] == manifest.get(field), f'state.{field}: does not match manifest.{field}')
     due = _due_services(manifest, step)
     results: list[Result] = []
     for group in manifest['order']:

@@ -33,13 +33,13 @@ but a controlled requirement could not be read), `3` invalid manifest or state.
 
 ## Format (schema_version 1)
 
-- `project`, `environment` and `feature` identify the activation target. A snapshot must declare all
-  three and match the manifest exactly. Invalid identity stops the check with exit 3. Recollect old
-  live snapshots that lack identity metadata.
-- `region` selects the Cloud Run region and GKE cluster location. GKE manifests also declare
-  `cluster`. The collector uses a temporary kubeconfig for the manifest cluster. Any explicit
+- `project`, `environment`, `feature`, `region` and `cluster` identify the activation target.
+  A snapshot must declare all five and match the manifest exactly. A manifest without a GKE cluster
+  uses an explicit JSON `null` in the snapshot's `cluster` field. Invalid identity stops the check
+  with exit 3. Recollect older live snapshots that lack identity metadata.
+- `region` selects the Cloud Run region and GKE cluster location. GKE manifests declare a cluster name.
+  The collector fetches credentials for that cluster into a temporary kubeconfig. Any explicit
   `--project`, `--region` or `--cluster` argument must agree with the manifest.
-
 - `services.<name>`: `kind: cloud_run` (`service`) or `kind: gke` (`namespace`, `deployment`). `contains`
   lists full commit SHAs, each with a `why`; every serving unit must serve a source tree that has the
   commit as an ancestor (not an exact SHA). `promoted_from` names registries that hold a promoted digest's
@@ -66,8 +66,9 @@ but a controlled requirement could not be read), `3` invalid manifest or state.
 - GKE: the Deployment selector and the specs and image digests of its Running pods. Pods with the same
   image and environment evidence share a serving unit. Explicit literal `env` entries take precedence
   over `envFrom`. Required values supplied only by ConfigMaps or `envFrom` report unknown because their
-  startup values are unavailable from the pod spec. Required Secret bindings are recorded as references.
-  Optional ones report unknown.
+  startup values are unavailable from the pod spec. Updates to a ConfigMap leave existing container
+  environments unchanged. Required Secret bindings are recorded as references. Optional ones report
+  unknown.
 - Gateway lanes: declared at the gateway's serving commit (`llm_gateway/config/lanes.yaml` plus the
   feature lanes of `generated_route_overrides.yaml`), read from local git.
 - Cloud Tasks queues and Cloud Scheduler jobs: one `list` per location. Absent from a successful list is
