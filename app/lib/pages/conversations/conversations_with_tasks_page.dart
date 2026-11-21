@@ -10,6 +10,7 @@ import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/pages/conversations/widgets/conversation_list_item.dart';
+import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/conversation_task_presence_provider.dart';
 import 'package:omi/providers/folder_provider.dart';
 import 'package:omi/services/auth_service.dart';
@@ -226,6 +227,10 @@ class _ConversationsWithTasksPageState extends State<ConversationsWithTasksPage>
   Widget build(BuildContext context) {
     final l10n = context.l10n;
     final folders = context.watch<FolderProvider?>()?.folders ?? const [];
+    // The server page still lists a conversation whose delete has not settled. Hide it the way every
+    // other list does: gone at once, back on Undo, gone for good once the server confirms.
+    final history = context.watch<ConversationProvider?>();
+    final rows = history == null ? _rows : _rows.where((row) => !history.isHiddenByDelete(row.id)).toList();
     return Scaffold(
       key: const ValueKey('conversations_with_tasks_page'),
       appBar: AppBar(leading: const OmiBackButton(), title: Text(l10n.hasTasksFilter), actions: [
@@ -296,10 +301,10 @@ class _ConversationsWithTasksPageState extends State<ConversationsWithTasksPage>
         Expanded(
             child: ListView.builder(
           key: const PageStorageKey('task_conversation_results'),
-          itemCount: _rows.length + 1,
+          itemCount: rows.length + 1,
           itemBuilder: (context, index) {
-            if (index < _rows.length) {
-              final row = _rows[index];
+            if (index < rows.length) {
+              final row = rows[index];
               return ConversationListItem(
                 key: ValueKey('task_conversation_${row.id}'),
                 conversation: row,
@@ -321,7 +326,7 @@ class _ConversationsWithTasksPageState extends State<ConversationsWithTasksPage>
                           onPressed: () => _load(reset: _retryReset),
                           child: Text(l10n.retry)),
                     ])),
-              if (!_loading && !_failed && _rows.isEmpty && _cursor == null)
+              if (!_loading && !_failed && rows.isEmpty && _cursor == null)
                 OmiEmptyState(icon: Icons.checklist_rounded, title: l10n.noResultsFound),
               if (!_loading && !_failed && _cursor != null)
                 TextButton(
