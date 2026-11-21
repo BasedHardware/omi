@@ -187,6 +187,8 @@ final class QuickActionsIconPatcher: NSObject {
     SwiftFlutterBackgroundServicePlugin.registerTaskIdentifier(
       taskIdentifier: SwiftFlutterBackgroundServicePlugin.taskIdentifier
     )
+    // Same for flutter_foreground_task: its isBgTaskRegistered guard makes the plugin's own call a no-op.
+    SwiftFlutterForegroundTaskPlugin.registerAppRefreshForBackgroundLaunch()
     QuickActionsIconPatcher.shared.startObserving()
     SwiftFlutterForegroundTaskPlugin.setPluginRegistrantCallback { registry in
       GeneratedPluginRegistrant.register(with: registry)
