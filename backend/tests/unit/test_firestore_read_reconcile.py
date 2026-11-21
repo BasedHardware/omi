@@ -258,3 +258,12 @@ def test_reconcile_reduces_to_tier_shares_for_the_cut_list():
     result = reconcile_module.reconcile(DAY, 100, records)
     assert result["reads_by_tier"] == {"basic": 5, "unattributed": 90, "unlimited": 2}
     assert sum(result["reads_by_tier"].values()) == result["instrumented"]
+
+
+def test_missing_projection_pump_snapshot_makes_the_day_incomplete():
+    """SCA-3120: the pump is a required ledger service before its flag turns on."""
+    assert "backend-projection-pump" in reconcile_module.REQUIRED_SERVICES
+    assert "backend-projection-pump" not in reconcile_module.HOT_SERVICES
+    missing = _records(instrumented=99, services=reconcile_module.REQUIRED_SERVICES - {"backend-projection-pump"})
+    assert reconcile_module.reconcile(DAY, 100, missing)["outcome"] == "incomplete"
+    assert reconcile_module.reconcile(DAY, 100, _records(instrumented=99))["outcome"] == "healthy"

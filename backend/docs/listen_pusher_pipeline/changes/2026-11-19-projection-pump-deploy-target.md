@@ -210,7 +210,8 @@ Record the run ID and independent serving and dark baseline readback in the Rele
   requires snapshots only from the four shipped services, so a silent pump ledger would still
   read as complete. Adding the pump to `SHIPPED_SERVICES` before the service exists would make
   every reconcile incomplete, so it lands as its own change after the dark deploy is read back
-  and before the pump flag is enabled. Owner: SCA-3120.
+  and before the pump flag is enabled. Owner: SCA-3120. Done in the step-2 activation PR (#25966):
+  the pump is in `SHIPPED_SERVICES`, not in `HOT_SERVICES`; the dark successor already emits snapshots.
 - **Inherited invoker grants.** The pre-traffic check reads the service's own IAM policy and
   permits direct bindings only for private Cloud Run viewers. It does not read project or folder policy: a
   principal granted `roles/run.invoker` at the project can invoke every Cloud Run service in

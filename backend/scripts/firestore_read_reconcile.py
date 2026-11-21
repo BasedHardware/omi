@@ -24,6 +24,9 @@ SHIPPED_SERVICES = frozenset(
         "backend-sync",
         "backend-sync-backfill",
         "backend-integration",
+        # SCA-3120/SCA-3318: required before the pump flag turns on, so a silent pump ledger
+        # makes the day incomplete instead of under-counting reads.
+        "backend-projection-pump",
         "desktop-backend",
         "backend-listen",
         "pusher",
