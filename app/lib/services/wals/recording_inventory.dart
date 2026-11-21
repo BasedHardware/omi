@@ -1,3 +1,4 @@
+import 'live_wal_receipt.dart';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math' show min;
@@ -483,6 +484,7 @@ Future<RecordingOrphanCensus> captureRecordingCensus(
   final candidates = audio.values
       .where((m) =>
           _audio(path.basename(m.filePath)) &&
+          !LiveWalReceipt.isManagedBasename(path.basename(m.filePath)) &&
           !allReferences.contains(m.filePath) &&
           !referencedNames.contains(path.basename(m.filePath).toLowerCase()))
       .toList();

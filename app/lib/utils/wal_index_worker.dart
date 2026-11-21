@@ -1,3 +1,4 @@
+import 'package:omi/services/wals/live_wal_receipt.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -136,12 +137,14 @@ void _runIndexWorker((String, String?, SendPort, SendPort?) args) async {
       }
       // Best effort backup of the previous *durable* snapshot. Validation and
       // copying also stay on this isolate, including first save after restart.
+      var backupProof = <String, LiveWalIndexEntry>{};
       try {
         if (await file.exists()) {
-          jsonDecode(await file.readAsString());
-          final tmp = File('${backup.path}.tmp');
-          await file.copy(tmp.path);
+          final previous = jsonDecode(await file.readAsString());
+          final bindings = LiveWalReceipt.indexBindings(previous);
+          final tmp = await file.copy('${backup.path}.tmp');
           await tmp.rename(backup.path);
+          backupProof = bindings;
         }
       } on FileSystemException catch (_) {
         // A backup failure must not prevent a durable main index write.
@@ -160,6 +163,9 @@ void _runIndexWorker((String, String?, SendPort, SendPort?) args) async {
       final tmp = File('$path.tmp');
       await tmp.writeAsString(content, flush: true);
       await tmp.rename(path);
+      if (backupProof.isNotEmpty) {
+        await LiveWalReceipt.retireCommitted(backup, LiveWalReceipt.bindings(rows.values), backupProof);
+      }
       events.send((id, null));
     } catch (error) {
       events.send((id, error.toString()));
