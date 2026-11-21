@@ -886,13 +886,17 @@ case "$1" in
 esac
 """,
                 "java": "#!/bin/sh\necho '    java.version = 21.0.1' >&2\n",
+                "brew": "#!/bin/sh\nexit 1\n",
             }.items():
                 path = fake_bin / name
                 path.write_text(body, encoding="utf-8")
                 path.chmod(0o755)
 
             env = os.environ.copy()
-            env["PATH"] = f"{fake_bin}:/usr/bin:/bin"
+            ambient_path = os.environ.get("PATH", "")
+            dirname_bin = shutil.which("dirname")
+            dirname_dir = f":{Path(dirname_bin).parent}" if dirname_bin else ""
+            env["PATH"] = f"{fake_bin}:{ambient_path}{dirname_dir}:/usr/bin:/bin" if ambient_path else f"{fake_bin}:/usr/bin:/bin"
             # The stub supervisor ignores --cleanup-path and run.sh execs it, so keep mktemp in the sandbox.
             env["TMPDIR"] = str(root)
             result = subprocess.run(["bash", str(runner)], text=True, capture_output=True, env=env, check=False)
