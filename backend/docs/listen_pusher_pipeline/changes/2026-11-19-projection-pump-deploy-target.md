@@ -143,6 +143,10 @@ pump no longer competes for any of them.
 | 5. Right-size CPU, memory and N | SCA-3120 owner reads back | As step 3 | Revert the size change |
 
 Rollback order at any step: serving sweep back on first, then the pump flag off, then delete the service.
+Deleting the service also needs `backend-projection-pump` removed from the read reconcile's required
+set first (`firestore_read_reconcile.py`), or every later day scores incomplete. A first create stays
+dark by policy (the first-create gate refuses an activated manifest): recreate from a manifest with
+the pump flag `false`, read back the dark base, then activate as step 2.
 
 After step 2 the routed pump revision is the activated one. The pre-mutation inverse check
 (`verify_projection_pump_inverse.py --disposition`) accepts a pinned routed revision whose

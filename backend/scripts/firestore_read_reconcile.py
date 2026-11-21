@@ -49,6 +49,15 @@ REQUIRED_SERVICES = SHIPPED_SERVICES - COMPLETENESS_EXCLUDED
 # The projection pump runs at fixed min instances and sweeps every tick, so a stale pump snapshot
 # means unaccounted reads (SCA-3120).
 HOT_SERVICES = frozenset({"backend", "backend-listen", "backend-projection-pump", "pusher"}) - COMPLETENESS_EXCLUDED
+# A service required only from its first full day of ledger snapshots, so the D-2 cron does not
+# score earlier days red. The pump's first full day is 2026-11-22 (no 11-20 rows; 11-21 from 15:40Z).
+REQUIRED_FROM = {"backend-projection-pump": "2026-11-22"}
+
+
+def _required_on(day: str, services: frozenset[str]) -> frozenset[str]:
+    return frozenset(s for s in services if day >= REQUIRED_FROM.get(s, ""))
+
+
 HOT_TAIL = dt.timedelta(minutes=15)
 COUNTERS = ("lookup", "not_found", "query")
 ERROR_BAR = {
@@ -130,17 +139,16 @@ def reconcile(day: str, billed: float, records: Iterable[Mapping[str, Any]]) -> 
     billed = float(billed)
     residual = billed - instrumented
     residual_pct = residual / billed * 100 if billed else None
+    hot = _required_on(day, HOT_SERVICES)
     latest_hot: dict[str, dt.datetime | None] = {}
     for (service, _epoch), stamp in emitted.items():
-        if service not in HOT_SERVICES:
+        if service not in hot:
             continue
         previous = latest_hot.get(service)
         if stamp is not None and (previous is None or stamp > previous):
             latest_hot[service] = stamp
-    tail_ok = all(
-        (stamp := latest_hot.get(service)) is not None and stamp >= day_end - HOT_TAIL for service in HOT_SERVICES
-    )
-    complete = REQUIRED_SERVICES <= services and not unscoped and tail_ok and billed > 0
+    tail_ok = all((stamp := latest_hot.get(service)) is not None and stamp >= day_end - HOT_TAIL for service in hot)
+    complete = _required_on(day, REQUIRED_SERVICES) <= services and not unscoped and tail_ok and billed > 0
     if not complete:
         outcome = "incomplete"
     elif -0.02 <= residual / billed <= 0.02:
