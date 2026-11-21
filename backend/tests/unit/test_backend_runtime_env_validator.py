@@ -3794,12 +3794,19 @@ def test_prod_sync_backfill_lookback_is_sixty_days_and_no_release_reach_undercut
 
 def test_prod_unlimited_backfill_day_cap_is_on_at_24_hours_on_every_declaring_surface():
     # Enforced only at sync upload (retryable 503 backfill_capacity); dev keeps it off.
+    # Exception: prod backend-listen pins it 'false' so the listen roll (SCA-3516) preserves the serving
+    # image's behaviour; sync uploads are served by backend-sync. Turning listen on is its own config
+    # change after that roll (Shipping ruling 2026-11-21 13:25Z). Remove this exception then.
     manifest = yaml.safe_load((ROOT / 'deploy/runtime_env.yaml').read_text())
+    listen = manifest['environments']['prod']['gke']['backend-listen']['env']
+    assert listen['UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED']['value'] == 'false'
+    assert listen['UNLIMITED_V2_BACKFILL_HOURS_CAP_HOURS']['value'] == '24'
+    manifest['environments']['prod']['gke'].pop('backend-listen')
     for stage, expected in (('prod', 'true'), ('dev', 'false')):
         environment = manifest['environments'][stage]
         enabled = list(_settings_named(environment, 'UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED'))
         hours = list(_settings_named(environment, 'UNLIMITED_V2_BACKFILL_HOURS_CAP_HOURS'))
-        assert len(enabled) == len(hours) >= 5
+        assert len(enabled) == len(hours) >= 4
         assert {setting['value'] for setting in enabled} == {expected}
         assert {setting['value'] for setting in hours} == {'24'}
     services = manifest['environments']['prod']['cloud_run']['services']
