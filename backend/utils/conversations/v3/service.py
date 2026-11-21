@@ -127,7 +127,7 @@ async def _drain_blocked(uid, reason):
 def recording_short_path(fn):
     @wraps(fn)
     def guarded(uid, language_code, conversation, *args, **kwargs):
-        if isinstance(conversation, Conversation) and not conversation._python_finalization_owner:
+        if isinstance(conversation, Conversation) and not conversation.python_finalization_owned:
             raise FinalizationOwnedElsewhere()
         if not policy.flag(conversation, 'recording'):
             if policy.flag(conversation, 'v3_derived') and not fence.current():

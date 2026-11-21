@@ -2721,7 +2721,7 @@ def process_conversation(
     ``first_party_only`` requests Omi notes; the derived-effects digest identifies
     the transcript last used for memories, tasks and goal progress.
     """
-    if isinstance(conversation, Conversation) and not conversation._python_finalization_owner:
+    if isinstance(conversation, Conversation) and not conversation.python_finalization_owned:
         raise FinalizationOwnedElsewhere()
     member_notes.before_notes(uid, conversation, trigger, finalization_fence=finalization_fence)
     generated_conversation_id = str(uuid.uuid4()) if _is_ingress_create(conversation) else None
