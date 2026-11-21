@@ -190,3 +190,39 @@ func TestF38UnstampedLegacyTerminalDoesNotChangeTheProjection(t *testing.T) {
 		t.Fatal("legacy terminal contributed to the current generation")
 	}
 }
+
+func TestF32ConversationTombstoneRefusesFanoutAndRedrive(t *testing.T) {
+	t.Parallel()
+	t.Run("fanout", func(t *testing.T) {
+		t.Parallel()
+		store, bench, g, claim := admitted(t)
+		beginClaim(t, store, g, claim)
+		completedRow(t, bench)
+		putDeleteIntent(t, bench, claim.Intent.Ref)
+		got, err := store.ClaimFanout(t.Context(), g, claim)
+		if err != nil || got.State != finalization.FanoutStale {
+			t.Fatalf("tombstoned row reached fanout: %+v %v", got, err)
+		}
+	})
+	t.Run("redrive", func(t *testing.T) {
+		t.Parallel()
+		store, bench, g, claim := admitted(t)
+		beginClaim(t, store, g, claim)
+		if state, err := store.DeadLetter(t.Context(), g, claim, CauseUnavailable, true); err != nil || state != finalization.TerminalDeadLetter {
+			t.Fatalf("dead letter: %v %v", state, err)
+		}
+		putDeleteIntent(t, bench, claim.Intent.Ref)
+		a := queue.AdmittingForTest(t, claim.Intent.Ref.Owner)
+		if err := store.PrepareRedrive(t.Context(), a, claim.Intent, claim.Epoch, 0); !errors.Is(err, queue.ErrState) {
+			t.Fatalf("tombstoned row was redriven: %v", err)
+		}
+		if job := read(t, bench, jobs+"/"+claim.Intent.JobID); job["status"] != deadLetter {
+			t.Fatalf("redrive mutated the parked job: %v", job)
+		}
+	})
+}
+
+func putDeleteIntent(t *testing.T, bench docstoretest.Bench, ref finalization.Ref) {
+	t.Helper()
+	put(t, bench, "users/"+ref.Owner+"/deleted_conversations/"+ref.ID, map[string]any{"conversation_id": ref.ID})
+}

@@ -104,6 +104,10 @@ func (s *Service) Work(ctx context.Context, run *queue.Run) queue.Outcome {
 	if outcome := completionOutcome(state); outcome != nil {
 		return outcome
 	}
+	pending, err := s.recoverNotes(ctx, run, claim)
+	if err != nil {
+		return s.workError(ctx, run, claim, err)
+	}
 	snapshot, err := s.load(ctx, run, claim)
 	if err != nil {
 		return s.workError(ctx, run, claim, err)
@@ -118,7 +122,7 @@ func (s *Service) Work(ctx context.Context, run *queue.Run) queue.Outcome {
 	if startErr := s.startEpisode(ctx, run, claim, snapshot); startErr != nil {
 		return s.workError(ctx, run, claim, startErr)
 	}
-	if processErr := s.process(ctx, run, claim, snapshot); processErr != nil {
+	if processErr := s.process(ctx, run, claim, snapshot, pending); processErr != nil {
 		return s.workError(ctx, run, claim, processErr)
 	}
 	if fanoutErr := s.fanout(ctx, run, claim); fanoutErr != nil {

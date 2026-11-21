@@ -31,6 +31,15 @@ type finalizationDocuments struct {
 	notesDedupe bool
 }
 
+func (f finalizationDocuments) CheckLive(ctx context.Context, g queue.Guarded, intent finalization.Intent) error {
+	ref := conversations.Ref{Owner: intent.Ref.Owner, ID: intent.Ref.ID}
+	err := f.store.CheckLive(ctx, g, ref, intent.JobID, intent.Revision)
+	if errors.Is(err, docstore.ErrMissing) || errors.Is(err, conversations.ErrRestricted) {
+		return finalization.ErrStale
+	}
+	return err
+}
+
 func (f finalizationDocuments) Load(ctx context.Context, g queue.Guarded, ref finalization.Ref) (finalization.Conversation, error) {
 	row, err := f.store.Load(ctx, g, conversations.Ref{Owner: ref.Owner, ID: ref.ID})
 	if errors.Is(err, docstore.ErrMissing) || errors.Is(err, conversations.ErrRestricted) || errors.Is(err, objectlake.ErrRestricted) {

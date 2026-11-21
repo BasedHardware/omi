@@ -106,7 +106,7 @@ func (s Store) Load(ctx context.Context, g queue.Guarded, ref Ref) (Conversation
 	var row map[string]any
 	err = s.Docs.Fenced(ctx, g, ref.Owner, func(tx *docstore.Tx) error {
 		var getErr error
-		row, getErr = get(tx, path)
+		row, getErr = get(tx, ref, path)
 		return getErr
 	})
 	if err != nil {
@@ -122,6 +122,26 @@ func (s Store) Load(ctx context.Context, g queue.Guarded, ref Ref) (Conversation
 	return result, nil
 }
 
+// CheckLive rechecks the primary row and deletion intent before a gateway call.
+func (s Store) CheckLive(ctx context.Context, g queue.Guarded, ref Ref, jobID string, revision int64) error {
+	path, err := docstore.Doc("users", ref.Owner, "conversations", ref.ID)
+	if err != nil {
+		return classify(err)
+	}
+	return classify(s.Docs.Fenced(ctx, g, ref.Owner, func(tx *docstore.Tx) error {
+		row, err := get(tx, ref, path)
+		if err != nil {
+			return err
+		}
+		status := Status(field[string](row, "status"))
+		if (status != Processing && status != Completed) || field[bool](row, "discarded") ||
+			field[string](row, "finalization_job_id") != jobID || field[int64](row, "finalization_revision") != revision {
+			return docstore.ErrMissing
+		}
+		return nil
+	}))
+}
+
 // ApplyFinalization updates the existing conversation if its stored contents still match
 // the revision read before processing. A changed revision requires a fresh load and decision.
 // ErrLifecycleRefused reports that a terminal transition was refused, after any content
@@ -134,7 +154,7 @@ func (s Store) ApplyFinalization(ctx context.Context, g queue.Guarded, revision 
 	}
 	var refused bool
 	err = s.Docs.Fenced(ctx, g, ref.Owner, func(tx *docstore.Tx) error {
-		row, getErr := get(tx, path)
+		row, getErr := get(tx, ref, path)
 		if getErr != nil {
 			return getErr
 		}
@@ -161,13 +181,25 @@ func (s Store) ApplyFinalization(ctx context.Context, g queue.Guarded, revision 
 	return classify(err)
 }
 
-func get(tx *docstore.Tx, path docstore.Ref) (map[string]any, error) {
+func get(tx *docstore.Tx, ref Ref, path docstore.Ref) (map[string]any, error) {
+	tombstone, err := docstore.Doc("users", ref.Owner, "deleted_conversations", ref.ID)
+	if err != nil {
+		return nil, err
+	}
+	var marker map[string]any
+	deleted, err := tx.Get(tombstone, &marker)
+	if err != nil {
+		return nil, err
+	}
+	if deleted {
+		return nil, docstore.ErrMissing
+	}
 	var row map[string]any
 	found, err := tx.Get(path, &row)
 	if err != nil {
 		return nil, err
 	}
-	if !found || field[bool](row, "deleted") {
+	if !found || field[bool](row, "deleted") || field[bool](row, "is_deleted") {
 		return nil, docstore.ErrMissing
 	}
 	if field[bool](row, "is_locked") || field[string](row, "data_protection_level") == "private" {

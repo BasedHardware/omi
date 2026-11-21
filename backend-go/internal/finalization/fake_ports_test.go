@@ -46,6 +46,11 @@ func (p *fakePorts) Admit(_ context.Context, a queue.Admitting, req AdmissionReq
 	return p.intent, nil
 }
 
+func (p *fakePorts) CheckLive(ctx context.Context, g queue.Guarded, intent Intent) error {
+	_, err := p.Load(ctx, g, intent.Ref)
+	return err
+}
+
 func (p *fakePorts) Load(_ context.Context, g queue.Guarded, _ Ref) (Conversation, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()

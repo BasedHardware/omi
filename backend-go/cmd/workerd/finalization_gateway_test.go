@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -173,6 +174,33 @@ func TestF10WorkerdRefusesPaidSubmissionAtOriginalJobCutoff(t *testing.T) {
 	settled := h.Settled(job.Key)
 	if settled.Reason == nil || *settled.Reason != llmgateway.CauseExpired {
 		t.Fatalf("expected the gateway replay cutoff cause: %+v", settled)
+	}
+}
+
+type deleteBeforeNotes struct {
+	bench docstoretest.Bench
+}
+
+func (d deleteBeforeNotes) Wait(ctx context.Context, _ queue.Guarded, claim finalization.Claim, _ finalization.Conversation) (bool, error) {
+	ref := claim.Intent.Ref
+	_, err := d.bench.Raw.Doc("users/"+ref.Owner+"/deleted_conversations/"+ref.ID).Set(ctx, map[string]any{"conversation_id": ref.ID})
+	return false, err
+}
+
+func TestF32TombstoneBeforeNotesFencesGatewayDispatch(t *testing.T) {
+	t.Parallel()
+	h, runtime, job, bench := gatewayTestJob(t)
+	runtime.family.Meeting = deleteBeforeNotes{bench: bench}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Errorf("delete intent allowed gateway request %s", r.Method)
+		http.NotFound(w, r)
+	}))
+	t.Cleanup(server.Close)
+	bindGatewayFixture(t, runtime, server.URL, clock.System{})
+	h.Start(workerdHandlers(runtime.family))
+	settled := h.Settled(job.Key)
+	if settled.Outcome == nil || *settled.Outcome != queue.TerminalFenced {
+		t.Fatalf("delete intent did not fence finalization: %+v", settled)
 	}
 }
 

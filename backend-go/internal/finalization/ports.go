@@ -61,6 +61,7 @@ type Notes struct {
 // ApplyFinalization atomically persists completion and, when supplied, generated
 // notes with their hashes. It preserves owner edits and rejects stale input.
 type Documents interface {
+	CheckLive(ctx context.Context, g queue.Guarded, intent Intent) error
 	Load(ctx context.Context, g queue.Guarded, ref Ref) (Conversation, error)
 	ApplyFinalization(ctx context.Context, g queue.Guarded, claim Claim, before Conversation, notes *Notes, inputHash string, outputHash string) error
 }

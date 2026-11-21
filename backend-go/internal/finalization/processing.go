@@ -37,18 +37,14 @@ func (s *Service) load(ctx context.Context, run *queue.Run, claim Claim) (Conver
 	return snapshot, nil
 }
 
-func (s *Service) process(ctx context.Context, run *queue.Run, claim Claim, snapshot Conversation) error {
+func (s *Service) process(ctx context.Context, run *queue.Run, claim Claim, snapshot Conversation, pending recoveredNotes) error {
 	if snapshot.Discarded {
 		return ErrStale
-	}
-	pending, err := s.recoverNotes(ctx, run)
-	if err != nil {
-		return err
 	}
 	if !rules.NeedsNotes(snapshot.Status, snapshot.PendingMinimum) {
 		return nil
 	}
-	snapshot, err = s.waitForEvidence(ctx, run, claim, snapshot)
+	snapshot, err := s.waitForEvidence(ctx, run, claim, snapshot)
 	if err != nil || !rules.NeedsNotes(snapshot.Status, snapshot.PendingMinimum) {
 		return err
 	}

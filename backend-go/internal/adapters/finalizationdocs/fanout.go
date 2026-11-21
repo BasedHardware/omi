@@ -108,6 +108,10 @@ func boundConversation(tx *docstore.Tx, claim finalization.Claim) (docstore.Ref,
 	if err != nil {
 		return docstore.Ref{}, nil, err
 	}
+	deleted, err := conversationTombstoned(tx, claim.Intent.Ref)
+	if err != nil || deleted {
+		return ref, nil, err
+	}
 	var row document
 	found, err := tx.Get(ref, &row)
 	if err != nil {
@@ -119,4 +123,13 @@ func boundConversation(tx *docstore.Tx, claim finalization.Claim) (docstore.Ref,
 		return ref, nil, nil
 	}
 	return ref, row, nil
+}
+
+func conversationTombstoned(tx *docstore.Tx, ref finalization.Ref) (bool, error) {
+	tombstone, err := docstore.Doc("users", ref.Owner, "deleted_conversations", ref.ID)
+	if err != nil {
+		return false, err
+	}
+	var marker document
+	return tx.Get(tombstone, &marker)
 }

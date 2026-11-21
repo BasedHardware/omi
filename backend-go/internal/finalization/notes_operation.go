@@ -22,7 +22,7 @@ type recoveredNotes struct {
 	committed bool
 }
 
-func (s *Service) recoverNotes(ctx context.Context, run *queue.Run) (recoveredNotes, error) {
+func (s *Service) recoverNotes(ctx context.Context, run *queue.Run, claim Claim) (recoveredNotes, error) {
 	var pending recoveredNotes
 	job := run.Job()
 	if job.Step != StepNotes || len(job.Checkpoint) == 0 || string(job.Checkpoint) == "null" {
@@ -35,6 +35,9 @@ func (s *Service) recoverNotes(ctx context.Context, run *queue.Run) (recoveredNo
 	err := run.Guard(ctx, func(ctx context.Context, g queue.Guarded) error {
 		if s.Gateway.OperationID(g, op.Step) != op.ID {
 			return queue.Classify(ErrInvalid, queue.Fail(CauseInvalid))
+		}
+		if err := s.Documents.CheckLive(ctx, g, claim.Intent); err != nil {
+			return err
 		}
 		text, err := s.Gateway.Recover(ctx, g, op.Step)
 		pending.text, pending.committed = text, err == nil
@@ -75,6 +78,9 @@ func (s *Service) resumeNotes(ctx context.Context, run *queue.Run, claim Claim, 
 func (s *Service) recoverLegacyNotes(ctx context.Context, run *queue.Run, claim Claim, snapshot Conversation, req CompletionRequest, hash string) error {
 	var text string
 	err := run.Guard(ctx, func(ctx context.Context, g queue.Guarded) error {
+		if err := s.Documents.CheckLive(ctx, g, claim.Intent); err != nil {
+			return err
+		}
 		var callErr error
 		text, callErr = s.Gateway.Recover(ctx, g, req.Step)
 		return callErr
@@ -112,6 +118,9 @@ func (s *Service) postNotes(ctx context.Context, run *queue.Run, claim Claim, sn
 	req.JobCreatedAt = run.Job().CreatedAt
 	var text string
 	err := run.Guard(ctx, func(ctx context.Context, g queue.Guarded) error {
+		if err := s.Documents.CheckLive(ctx, g, claim.Intent); err != nil {
+			return err
+		}
 		var callErr error
 		text, callErr = s.Gateway.Complete(ctx, g, req)
 		return callErr
