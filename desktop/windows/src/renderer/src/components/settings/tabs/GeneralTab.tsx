@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import {
+  BellRing,
   LayoutDashboard,
   MessageSquarePlus,
   MessagesSquare,
@@ -13,6 +14,12 @@ import {
 } from 'lucide-react'
 import type { MeetingMode, RewindSettings } from '../../../../../shared/types'
 import { getPreferences, onPreferencesChange, setPreferences } from '../../../lib/preferences'
+import {
+  MUTE_REMINDER_INTERVAL_OPTIONS,
+  normalizeMuteReminderIntervalMinutes,
+  normalizeMuteReminderUrgency,
+  type MuteReminderUrgency
+} from '../../../lib/capture/muteReminder'
 import { SettingRow } from '../SettingRow'
 import { Toggle } from '../Toggle'
 import { FontSizeCard } from '../FontSizeCard'
@@ -33,6 +40,7 @@ export function GeneralTab(): React.JSX.Element {
       {/* macOS General leads with the capture-status cards (spec §3.1). */}
       <ScreenCaptureRow />
       <AudioRecordingRow />
+      <MutedRecordingReminderRow />
       <ActionAutomationRow />
       <ScreenAnalysisRow />
       <SettingRow
@@ -178,6 +186,85 @@ function AudioRecordingRow(): React.JSX.Element {
       subtitle={on ? 'Recording and transcribing audio' : 'Audio recording is paused'}
       keywords="audio recording microphone transcribe listening voice"
       control={<Toggle on={on} onChange={change} label="Audio Recording" />}
+    />
+  )
+}
+
+// Prolonged-mute reminder (#20215): reminds users when audio recording remains
+// muted/paused for an extended period without capturing or inspecting any
+// audio, screen, or transcript content while muted.
+function MutedRecordingReminderRow(): React.JSX.Element {
+  const [urgency, setUrgency] = useState<MuteReminderUrgency>(() =>
+    normalizeMuteReminderUrgency(getPreferences().muteReminderUrgency)
+  )
+  const [intervalMinutes, setIntervalMinutes] = useState<number>(() =>
+    normalizeMuteReminderIntervalMinutes(getPreferences().muteReminderIntervalMinutes)
+  )
+
+  useEffect(
+    () =>
+      onPreferencesChange((p) => {
+        setUrgency(normalizeMuteReminderUrgency(p.muteReminderUrgency))
+        setIntervalMinutes(normalizeMuteReminderIntervalMinutes(p.muteReminderIntervalMinutes))
+      }),
+    []
+  )
+
+  const handleUrgencyChange = (next: MuteReminderUrgency): void => {
+    setUrgency(next)
+    setPreferences({ muteReminderUrgency: next })
+  }
+
+  const handleIntervalChange = (nextMinutes: number): void => {
+    const normalized = normalizeMuteReminderIntervalMinutes(nextMinutes)
+    setIntervalMinutes(normalized)
+    setPreferences({ muteReminderIntervalMinutes: normalized })
+  }
+
+  return (
+    <SettingRow
+      icon={BellRing}
+      dot={urgency === 'off' ? 'off' : 'on'}
+      title="Muted recording reminder"
+      subtitle="Remind you when audio recording stays paused for an extended break so you don't accidentally miss conversations. Never captures or inspects audio while muted."
+      keywords="mute muted paused recording reminder notification alert break microphone"
+      control={
+        <div className="flex items-center gap-2">
+          <select
+            aria-label="Muted recording reminder urgency"
+            value={urgency}
+            onChange={(e) => handleUrgencyChange(e.target.value as MuteReminderUrgency)}
+            className="rounded-md bg-white/10 px-2 py-1.5 text-sm text-white focus:outline-none"
+          >
+            <option value="standard" className="bg-neutral-900">
+              Standard (notification)
+            </option>
+            <option value="subtle" className="bg-neutral-900">
+              Subtle (silent banner)
+            </option>
+            <option value="high" className="bg-neutral-900">
+              High (notification + chime)
+            </option>
+            <option value="off" className="bg-neutral-900">
+              Off
+            </option>
+          </select>
+          {urgency !== 'off' && (
+            <select
+              aria-label="Muted recording reminder interval"
+              value={intervalMinutes}
+              onChange={(e) => handleIntervalChange(Number(e.target.value))}
+              className="rounded-md bg-white/10 px-2 py-1.5 text-sm text-white focus:outline-none"
+            >
+              {MUTE_REMINDER_INTERVAL_OPTIONS.map((mins) => (
+                <option key={mins} value={mins} className="bg-neutral-900">
+                  Every {mins < 60 ? `${mins}m` : `${mins / 60}h`}
+                </option>
+              ))}
+            </select>
+          )}
+        </div>
+      }
     />
   )
 }
