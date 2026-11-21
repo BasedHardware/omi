@@ -1,6 +1,7 @@
 {
   "schema_version": 1,
   "id": "FC-repository-text-io-inherits-host-locale",
+  "family": "input-tolerance",
   "violated_contract": "Repository text artifacts must be decoded and encoded consistently on every supported host; relying on the process locale makes UTF-8 source and generated files unreadable on Windows code pages such as CP936.",
   "canonical_prevention": "Declare UTF-8 on every pathlib text read and write in portable OpenAPI contract scripts and tests, and enforce that static property with one AST-based guard covering the generator, exporter, schema inventory, and REST inventory surfaces.",
   "canonical_prevention_artifact": [

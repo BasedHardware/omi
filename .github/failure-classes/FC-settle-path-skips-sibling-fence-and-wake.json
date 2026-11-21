@@ -1,6 +1,7 @@
 {
   "schema_version": 1,
   "id": "FC-settle-path-skips-sibling-fence-and-wake",
+  "family": "write-fence",
   "violated_contract": "A repair path that flips a durable row into an eligible state must apply the same transaction-level eligibility fence as the normal release path, and must hand the row to the follow-up scheduler. Skipping the fence settles rows the normal path refuses; skipping the hand-off leaves the row waiting for a full discovery-cursor wrap over the backlog.",
   "canonical_prevention": "Route every settle or release writer through one shared eligibility check, fail closed with a classified skip, and pass settled ids to the bounded tail channel behind a kill switch. Test per skip class and that completion fences still refuse deleted or privacy-blocked rows.",
   "canonical_prevention_artifact": [

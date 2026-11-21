@@ -1,6 +1,7 @@
 {
   "schema_version": 1,
   "id": "FC-self-hosted-qualification-residue",
+  "family": "ci-merge-integrity",
   "violated_contract": "A trusted self-hosted qualification runner must not admit new work while exact-provenance residue from an abandoned run can retain processes, ports, containers, leases, run stages, or required disk capacity.",
   "canonical_prevention": "The dedicated qualification lane and its self-hosted runner are removed. Reintroduction is rejected by the desktop release-process guards.",
   "canonical_prevention_artifact": [

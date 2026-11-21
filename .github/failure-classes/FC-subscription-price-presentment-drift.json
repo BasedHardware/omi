@@ -1,6 +1,7 @@
 {
   "schema_version": 1,
   "id": "FC-subscription-price-presentment-drift",
+  "family": "cross-boundary-contract",
   "violated_contract": "A subscription offer must disclose the same unambiguous currency, full recurring amount and billing interval that its selected price charges in checkout, including the amount after a free trial. Locale-dependent dollar symbols, server-formatted strings and automatic presentment conversion must not split that contract.",
   "canonical_prevention": "Format purchase amounts from the selected catalog currency and Stripe minor units through one shared client formatter, carry those strings into the web paywall, disclose post-trial totals beside the action, and pin checkout to the selected price's original currency with Adaptive Pricing disabled. Exercise real rendered purchase surfaces and checkout handoffs in multiple locales and retain zero-decimal legacy management coverage.",
   "canonical_prevention_artifact": [

@@ -1,6 +1,7 @@
 {
   "schema_version": 1,
   "id": "FC-readiness-qualified-without-runtime-source-check",
+  "family": "test-fidelity",
   "violated_contract": "A production-readiness artifact must be exercised through its actual source-verification path under the admitted runtime resource limits before qualification; an earlier workload-binding refusal or a higher-resource smoke cannot certify that path.",
   "canonical_prevention": "Run the exact image on native AMD64 with correct workload binding, read-only filesystem, no network and admitted resources. Require full source checks to reach an injected credential refusal before real credentials or SQL, and bind that proof into publication admission. Keep bounded failure-stage diagnostics and full tracked/untracked source cleanliness.",
   "canonical_prevention_artifact": [

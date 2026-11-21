@@ -1,6 +1,7 @@
 {
   "schema_version": 1,
   "id": "FC-ptt-owner-boundary-bootstrap-hang",
+  "family": "test-fidelity",
   "violated_contract": "Owner-boundary PushToTalkStateMachineTests must install the production voice-turn effect handler without starting a physical or warm capture lifecycle; using beginPushToTalkForAutomation() for handler install still calls startListening() and can hang forever on polluted RealtimeHub/singleton state in parallel CI.",
   "canonical_prevention": "Provide a DEBUG-only installOwnerBoundaryEffectHandlerForTesting() (or equivalent) that only configures the automation bar and effect handler, and use it from owner-boundary tests instead of beginPushToTalkForAutomation()+cleanup().",
   "evidence_prs": [10141],
