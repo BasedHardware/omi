@@ -749,3 +749,27 @@ def test_default_consumer_defers_foreign_finalization(state, monkeypatch, claime
     processor.assert_not_called()
     index.assert_not_called()
     quiet_stop.assert_not_called()
+
+
+def test_default_consumer_defers_a_processor_ownership_refusal(state, monkeypatch):
+    from types import SimpleNamespace
+
+    from models.finalization_owner import FinalizationOwnedElsewhere
+
+    rows, tasks = state
+    outbox.mark('u', 'c', 'en', now=100)
+    key = outbox.key('u', 'c')
+    rows[key]['summary_seen'] = True  # No PROCESS_CONTEXT for a follow-up.
+    monkeypatch.setattr(custody, 'discard_blocked', lambda _: False)
+    monkeypatch.setattr(callback.conversations_db, 'get_conversation', lambda *_: {'id': 'c'})
+    monkeypatch.setattr(callback, 'deserialize_conversation', lambda _: SimpleNamespace(discarded=False))
+    monkeypatch.setattr(callback, 'episodes_enabled_for', lambda _: False)
+    processor = Mock(side_effect=FinalizationOwnedElsewhere)
+    monkeypatch.setattr(callback, 'process_conversation', processor)
+
+    result = run_push(EnrichmentConsumer(ENRICHMENT_OUTBOX), ENRICHMENT_OUTBOX, key, tasks[-1]['task_token'], now=700)
+
+    assert result.outcome == 'deferred'
+    assert rows[key]['deferred_reason'] == 'finalization_owned_elsewhere'
+    assert rows[key]['lease_until'] == 0
+    processor.assert_called_once()

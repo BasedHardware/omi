@@ -1068,7 +1068,8 @@ def retrieve_vad_segments(
 @observe_sync_failures
 def _reprocess_conversation_after_update(uid: str, conversation_id: str, language: str, *, user_selected: bool = False):
     """Reassess relevance and regenerate notes after sync appends."""
-    from models.finalization_owner import REFUSAL as FINALIZATION_OWNER_REFUSAL, python_owns_finalization
+    from models.finalization_owner import REFUSAL as FINALIZATION_OWNER_REFUSAL
+    from models.finalization_owner import FinalizationOwnedElsewhere, python_owns_finalization
 
     conversation_data = conversations_db.get_conversation(uid, conversation_id)
     context = PROCESS_CONTEXT.get()
@@ -1262,6 +1263,8 @@ def _reprocess_conversation_after_update(uid: str, conversation_id: str, languag
             # sync_update means a previous enrichment, sync_intake or absence does not.
             prior_relevance_decision=prior_decision if isinstance(prior_decision, dict) else None,
         )
+    except FinalizationOwnedElsewhere as error:
+        raise processing_hold.finalization_owner_deferral() from error
     except ConversationAbsorbed as absorbed:
         if context is not None:
             context['redirect_to'] = absorbed.canonical_id

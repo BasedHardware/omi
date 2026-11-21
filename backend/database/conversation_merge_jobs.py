@@ -264,7 +264,11 @@ def finish_recovery(job_id: str, epoch: int, *, firestore_client: Any = None) ->
         refs = [_source(client, row['uid'], cid) for cid in row['conversation_ids']]
         sources = [source.get(transaction=transaction).to_dict() or {} for source in refs]
         for source, data in zip(refs, sources):
-            if data.get('status') == 'merging' and data.get('merge_job_id') == job_id:
+            if (
+                python_owns_finalization(data)
+                and data.get('status') == 'merging'
+                and data.get('merge_job_id') == job_id
+            ):
                 from utils.conversations.terminal_relevance import stamp_terminal_decision
 
                 terminal = {**data, 'status': 'completed'}

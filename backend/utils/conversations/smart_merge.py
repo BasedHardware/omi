@@ -53,7 +53,7 @@ from config.conversation_smart_merge import (
 )
 from config.jev_decisions import JEV_MODEL
 from config.merge_before_processing import enabled as merge_before_processing_enabled
-from models.finalization_owner import python_owns_finalization
+from models.finalization_owner import FinalizationOwnedElsewhere, python_owns_finalization
 from database import conversations as conversations_db
 from database import notifications as notification_db
 from database import smart_merge as smart_merge_db
@@ -800,7 +800,7 @@ def finish_absorb(uid: str, donor_id: str, *, owner: str, resumed: bool = False)
         _cleanup_flattened_ancestors(uid, donor_id, donor, survivor_id)
         step = 'refresh'
         refresh_survivor(uid, survivor_id, owner=owner)
-    except member_notes.LiveMemberNotesDeferred:
+    except (member_notes.LiveMemberNotesDeferred, processing_hold.ProcessingDeferred):
         raise  # Scheduling waits retain donor custody without spending retry budget.
     except Exception as error:
         # Bounded: no ids, no message text (provider errors can quote transcript).
@@ -891,6 +891,8 @@ def refresh_survivor(
     """Regenerate the survivor once for its current revision, under a short lease."""
     if processing_hold.owns_runtime() and not settled:
         row = conversations_db.get_conversation(uid, survivor_id, read_site=FirestoreReadSite.SMART_MERGE)
+        if row is not None and not python_owns_finalization(row):
+            raise processing_hold.finalization_owner_deferral()
         if row and not row.get('deleted') and processing_hold.enabled_for(row) and processing_hold.sync_sourced(row):
             if not refresh_owed(row) or int(smart_merge_state(row).get('delegated_revision') or 0) >= revision(row):
                 return
@@ -935,6 +937,8 @@ def _refresh_claimed(uid: str, survivor_id: str, claimed: int, *, owner: str, sk
         if row and not row.get('deleted'):
             raise SmartMergeIncomplete('survivor_changed_before_refresh')
         return
+    if not python_owns_finalization(row):
+        raise processing_hold.finalization_owner_deferral()
     if skip_processing:
         # Unchanged/immaterial/capped content still settles the merge ledger.
         # Use both revision fences before releasing the owed refresh.
@@ -966,6 +970,8 @@ def _refresh_claimed(uid: str, survivor_id: str, claimed: int, *, owner: str, sk
                 persistence_observer=lambda owned: persistence.__setitem__('owned', owned),
                 smart_merge_refresh=(claimed, owner),
             )
+        except FinalizationOwnedElsewhere as error:
+            raise processing_hold.finalization_owner_deferral() from error
         except member_notes.LiveMemberNotesDeferred:
             raise  # Outer custody owner releases the lease and schedules the wait.
         except Exception:

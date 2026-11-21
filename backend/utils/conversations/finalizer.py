@@ -23,7 +23,9 @@ from config.episodes import episodes_enabled_for
 from config.episode_attach import noop_schedule_enabled
 from config.rollout_cohorts import warm_rollout_cohorts
 
-from models.finalization_owner import python_owns_finalization
+from models.finalization_owner import REFUSAL as FINALIZATION_OWNER_REFUSAL
+from models.finalization_owner import FinalizationOwnedElsewhere, python_owns_finalization
+from utils.sync.processing_hold import ProcessingDeferred
 from database import conversations as conversations_db
 from database import conversation_finalization_jobs as finalization_jobs_db
 from database.firestore_read_metrics import FirestoreReadSite
@@ -771,6 +773,21 @@ async def finalize_persisted_conversation(
         await _episode_after_absorb(uid, conversation_id, trigger)
         return ConversationFinalizationDisposition(fanout['status'])
     except Exception as error:
+        if isinstance(error, FinalizationOwnedElsewhere):
+            return ConversationFinalizationDisposition.fenced
+        if isinstance(error, ProcessingDeferred) and error.reason == FINALIZATION_OWNER_REFUSAL:
+            yielded = await run_blocking(
+                db_executor,
+                finalization_jobs_db.mark_finalization_retryable,
+                finalization_job_id,
+                dispatch_generation,
+                lease_epoch,
+                error.reason,
+                count_attempt=False,
+            )
+            return (
+                ConversationFinalizationDisposition.deferred if yielded else ConversationFinalizationDisposition.fenced
+            )
         # Provider and validation exceptions can contain transcript excerpts.
         # Collapse them onto a closed operational vocabulary before emitting a
         # metric or log; never include the exception message or user identity.

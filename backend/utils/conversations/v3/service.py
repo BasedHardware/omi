@@ -1047,6 +1047,8 @@ async def drain_processing(uid):
             continue
         try:
             await _process_leased(uid, row, token)
+        except FinalizationOwnedElsewhere:
+            continue
         finally:
             await run_blocking(db_executor, leases.release, uid, 'summary-' + row['id'], token)
     # Settled notes arm the conversation-created obligation; deliver after every summary lease is released.
