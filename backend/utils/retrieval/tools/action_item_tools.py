@@ -159,41 +159,31 @@ def get_action_items_tool(
     )
 
     # Get config from parameter or context variable (like other tools do)
-    cfg: Optional[Dict[str, Any]] = cast(Optional[Dict[str, Any]], config)
-    if cfg is None:
-        try:
-            ctx_cfg: object = agent_config_context.get()
-            if ctx_cfg:
-                cfg = cast(Optional[Dict[str, Any]], ctx_cfg)
-                logger.info(f"🔧 get_action_items_tool - got config from context variable")
-        except LookupError:
-            logger.warning(f"❌ get_action_items_tool - config not found in context variable")
-            cfg = None
-
-    # Safely access config
     try:
+        cfg: Optional[Dict[str, Any]] = cast(Optional[Dict[str, Any]], config)
+        if cfg is None:
+            try:
+                ctx_cfg: object = agent_config_context.get()
+                if ctx_cfg:
+                    cfg = cast(Optional[Dict[str, Any]], ctx_cfg)
+                    logger.info(f"🔧 get_action_items_tool - got config from context variable")
+            except LookupError:
+                logger.warning(f"❌ get_action_items_tool - config not found in context variable")
+                cfg = None
+
         if cfg is None:
             logger.info(f"❌ get_action_items_tool - config is None")
             return "Error: Configuration not available"
 
-        if 'configurable' not in cfg:
-            logger.info(
-                f"❌ get_action_items_tool - config['configurable'] not found. Config keys: {list(cfg.keys()) if cfg else 'None'}"
-            )
-            return "Error: Configuration format invalid"
-
-        configurable: Any = cfg.get('configurable')
-        uid = configurable.get('user_id')
+        uid, configurable = _extract_user_context(cfg)
         if not uid:
-            logger.info(
-                f"❌ get_action_items_tool - no user_id in config. Configurable keys: {list(configurable.keys()) if configurable else 'None'}"
-            )
+            logger.info(f"❌ get_action_items_tool - no user_id in config. Config keys: {list(cfg.keys())}")
             return "Error: User ID not found in configuration"
         clock = clock_for_config(cfg, uid)
 
         logger.info(f"✅ get_action_items_tool - uid: {uid}, limit: {limit}")
     except Exception as config_error:
-        logger.error(f"❌ get_action_items_tool - error accessing config: {config_error}", exc_info=True)
+        logger.error(f"❌ get_action_items_tool - error accessing config: {type(config_error).__name__}", exc_info=True)
         return "Error: Configuration error."
 
     # Hard-scope: force conversation_id and intersect creation dates with chat_scope (#4515).
@@ -210,10 +200,17 @@ def get_action_items_tool(
     if scope_err:
         return f"Error: {scope_err}"
 
-    # Cap at 500 per call
-    if limit > 500:
-        logger.info(f"⚠️ get_action_items_tool - limit capped from {limit} to 500")
-        limit = 500
+    try:
+        clean_limit = int(limit)
+    except (TypeError, ValueError):
+        clean_limit = 50
+    try:
+        clean_offset = int(offset)
+    except (TypeError, ValueError):
+        clean_offset = 0
+
+    limit = max(1, min(clean_limit, 500))
+    offset = max(0, clean_offset)
 
     # Parse created_at dates if provided (must be ISO format with timezone)
     start_dt = None
@@ -385,6 +382,23 @@ def get_action_items_tool(
     return _bounded_action_items_result(result.strip(), results_truncated, order=order)
 
 
+def _extract_user_context(cfg: Any) -> Tuple[Optional[str], Dict[str, Any]]:
+    """Safely extract user_id and configurable dictionary from config.
+
+    Handles nested configurable dicts, top-level user_id, and uninitialized None configurables.
+    """
+    if cfg is None:
+        return None, {}
+    raw_configurable = cfg.get('configurable') if hasattr(cfg, 'get') else None
+    configurable: Dict[str, Any] = raw_configurable if isinstance(raw_configurable, dict) else {}
+    raw_uid = configurable.get('user_id')
+    if not raw_uid and hasattr(cfg, 'get'):
+        raw_uid = cfg.get('user_id')
+    if isinstance(raw_uid, str) and raw_uid.strip():
+        return raw_uid.strip(), configurable
+    return None, configurable
+
+
 @tool
 def create_action_item_tool(
     description: str,
@@ -426,35 +440,33 @@ def create_action_item_tool(
     logger.info('create_action_item_tool called')
 
     # Get config from parameter or context variable (like other tools do)
-    cfg: Optional[Dict[str, Any]] = cast(Optional[Dict[str, Any]], config)
-    if cfg is None:
-        try:
-            ctx_cfg: object = agent_config_context.get()
-            if ctx_cfg:
-                cfg = cast(Optional[Dict[str, Any]], ctx_cfg)
-                logger.info(f"🔧 create_action_item_tool - got config from context variable")
-        except LookupError:
-            logger.warning(f"❌ create_action_item_tool - config not found in context variable")
-            cfg = None
-
-    if cfg is None:
-        logger.info(f"❌ create_action_item_tool - config is None")
-        return "Error: Configuration not available"
-
     try:
-        configurable: Any = cfg.get('configurable')
-        uid = configurable.get('user_id')
-    except (KeyError, TypeError, AttributeError) as e:
-        logger.error(f"❌ create_action_item_tool - error accessing config: {e}", exc_info=True)
+        cfg: Optional[Dict[str, Any]] = cast(Optional[Dict[str, Any]], config)
+        if cfg is None:
+            try:
+                ctx_cfg: object = agent_config_context.get()
+                if ctx_cfg:
+                    cfg = cast(Optional[Dict[str, Any]], ctx_cfg)
+                    logger.info(f"🔧 create_action_item_tool - got config from context variable")
+            except LookupError:
+                logger.warning(f"❌ create_action_item_tool - config not found in context variable")
+                cfg = None
+
+        if cfg is None:
+            logger.info(f"❌ create_action_item_tool - config is None")
+            return "Error: Configuration not available"
+
+        uid, configurable = _extract_user_context(cfg)
+        if not uid:
+            logger.info(f"❌ create_action_item_tool - no user_id in config")
+            return "Error: User ID not found in configuration"
+        clock = clock_for_config(cfg, uid)
+    except Exception as e:
+        logger.error(f"❌ create_action_item_tool - error accessing config: {type(e).__name__}", exc_info=True)
         return "Error: Configuration not available"
 
-    if not uid:
-        logger.info(f"❌ create_action_item_tool - no user_id in config")
-        return "Error: User ID not found in configuration"
-    clock = clock_for_config(cfg, uid)
-
-    # Validate description
-    if not description or not description.strip():
+    clean_desc = str(description or '').strip()
+    if not clean_desc:
         return "Error: Description is required to create an action item."
 
     if conversation_id is not None:
@@ -467,7 +479,7 @@ def create_action_item_tool(
 
     # Prepare action item data
     action_item_data: Dict[str, Any] = {
-        'description': description.strip(),
+        'description': clean_desc,
         'completed': False,
         'conversation_id': conversation_id,
     }
@@ -626,35 +638,37 @@ def update_action_item_tool(
     )
 
     # Get config from parameter or context variable (like other tools do)
-    cfg: Optional[Dict[str, Any]] = cast(Optional[Dict[str, Any]], config)
-    if cfg is None:
-        try:
-            ctx_cfg: object = agent_config_context.get()
-            if ctx_cfg:
-                cfg = cast(Optional[Dict[str, Any]], ctx_cfg)
-                logger.info(f"🔧 update_action_item_tool - got config from context variable")
-        except LookupError:
-            logger.warning(f"❌ update_action_item_tool - config not found in context variable")
-            cfg = None
-
-    if cfg is None:
-        logger.info(f"❌ update_action_item_tool - config is None")
-        return "Error: Configuration not available"
-
     try:
-        configurable: Any = cfg.get('configurable')
-        uid = configurable.get('user_id')
-    except (KeyError, TypeError, AttributeError) as e:
-        logger.error(f"❌ update_action_item_tool - error accessing config: {e}", exc_info=True)
+        cfg: Optional[Dict[str, Any]] = cast(Optional[Dict[str, Any]], config)
+        if cfg is None:
+            try:
+                ctx_cfg: object = agent_config_context.get()
+                if ctx_cfg:
+                    cfg = cast(Optional[Dict[str, Any]], ctx_cfg)
+                    logger.info(f"🔧 update_action_item_tool - got config from context variable")
+            except LookupError:
+                logger.warning(f"❌ update_action_item_tool - config not found in context variable")
+                cfg = None
+
+        if cfg is None:
+            logger.info(f"❌ update_action_item_tool - config is None")
+            return "Error: Configuration not available"
+
+        uid, configurable = _extract_user_context(cfg)
+        if not uid:
+            logger.info(f"❌ update_action_item_tool - no user_id in config")
+            return "Error: User ID not found in configuration"
+        clock = clock_for_config(cfg, uid)
+    except Exception as e:
+        logger.error(f"❌ update_action_item_tool - error accessing config: {type(e).__name__}", exc_info=True)
         return "Error: Configuration not available"
 
-    if not uid:
-        logger.info(f"❌ update_action_item_tool - no user_id in config")
-        return "Error: User ID not found in configuration"
-    clock = clock_for_config(cfg, uid)
+    clean_item_id = str(action_item_id or '').strip()
+    if not clean_item_id:
+        return "Error: Action item ID is required."
 
     # Check if action item exists and is not soft-deleted
-    resolved_id, ref_error = resolve_edit_ref(configurable, 'tasks', action_item_id, parameter='action_item_id')
+    resolved_id, ref_error = resolve_edit_ref(configurable, 'tasks', clean_item_id, parameter='action_item_id')
     if ref_error:
         return ref_error
     assert resolved_id is not None
