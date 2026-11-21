@@ -5324,6 +5324,34 @@
       "correlation": null
     },
     {
+      "id": "walStopDrain",
+      "wire_name": "WAL Stop Drain",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "lateFramesIndexed": {
+          "type": "int",
+          "wire_name": "late_frames_indexed"
+        },
+        "result": {
+          "type": "enum",
+          "wire_name": "result",
+          "values": [
+            "drained",
+            "pending",
+            "failed",
+            "superseded"
+          ]
+        }
+      },
+      "consumers": [
+        "wal-stop-drain"
+      ],
+      "correlation": null
+    },
+    {
       "id": "orphanAudioRecovery",
       "wire_name": "Orphan Audio Recovery",
       "status": "active",

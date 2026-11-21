@@ -121,6 +121,149 @@ void main() {
     });
   }
 
+  test('stop indexes pendant packets admitted during successive index writes', () async {
+    final entered = List.generate(2, (_) => Completer<void>());
+    final release = List.generate(2, (_) => Completer<void>());
+    var write = entered.length;
+    final sync = LocalWalSyncImpl(
+      _MockListener(),
+      freeDiskBytes: () async => 1 << 40,
+      persistWals: (wals) async {
+        if (write < entered.length) {
+          final current = write++;
+          entered[current].complete();
+          await release[current].future;
+        }
+        expect(await WalFileManager.saveWals(wals), isTrue);
+      },
+    );
+    addTearDown(() async {
+      for (final barrier in release) {
+        if (!barrier.isCompleted) barrier.complete();
+      }
+      await sync.stop();
+    });
+    sync.start();
+    await sync.walReady;
+    await sync.onAudioCodecChanged(BleAudioCodec.opus);
+    sync.setDeviceInfo('devkit-1', 'Omi DevKit');
+    for (var i = 0; i < 50; i++) {
+      sync.onFrameCaptured(frame(i, 0));
+    }
+
+    write = 0;
+    final stopping = sync.stop();
+    final lateFrames = <WalFrame>[];
+    for (var phase = 0; phase < entered.length; phase++) {
+      await entered[phase].future.timeout(const Duration(seconds: 5));
+      for (var i = 50 + phase * 5; i < 55 + phase * 5; i++) {
+        final captured = sync.onFrameCaptured(frame(i, 0));
+        lateFrames.add(captured);
+        expect(sync.lastFrameAccepted, isTrue);
+        // The socket accepted the write, but has yet to confirm custody.
+        sync.markFrameSynced(captured.syncKey);
+        expect(sync.isFrameDurable(captured), isFalse);
+      }
+      release[phase].complete();
+    }
+    await stopping;
+
+    expect(lateFrames.every(sync.isFrameDurable), isTrue);
+    sync.onFrameCaptured(frame(60, 0));
+    expect(sync.lastFrameAccepted, isFalse);
+
+    final restarted = LocalWalSyncImpl(_MockListener(), persistWals: (_) async {});
+    restarted.start();
+    addTearDown(restarted.stop);
+    await restarted.walReady;
+    final index = restarted.testWals;
+    expect(index.map((wal) => wal.totalFrames), [50, 5, 5]);
+    expect(index.every((wal) => wal.syncedAt == 0), isTrue);
+    final payloads = <int>[];
+    for (final wal in index) {
+      final bytes = await File('${tempDir.path}/${wal.filePath}').readAsBytes();
+      final header = ByteData.sublistView(bytes);
+      for (var offset = 0; offset < bytes.length; offset += 6) {
+        expect(header.getUint32(offset, Endian.little), 2);
+        expect(bytes[offset + 4], 0xAA);
+        payloads.add(bytes[offset + 5]);
+      }
+    }
+    expect(payloads, orderedEquals(List<int>.generate(60, (i) => i)));
+  });
+
+  for (final replace in [false, true]) {
+    test('stop leaves a tail usable after ${replace ? 'restart during flush' : 'index failure'}', () async {
+      final entered = Completer<void>();
+      final release = Completer<void>();
+      var holdWrite = false;
+      final sync = LocalWalSyncImpl(
+        _MockListener(),
+        freeDiskBytes: () async => 1 << 40,
+        persistWals: (wals) async {
+          if (holdWrite) {
+            holdWrite = false;
+            entered.complete();
+            await release.future;
+            if (!replace) throw const FileSystemException('injected stop save failure');
+          }
+          expect(await WalFileManager.saveWals(wals), isTrue);
+        },
+      );
+      addTearDown(() async {
+        if (!release.isCompleted) release.complete();
+        await sync.stop();
+      });
+      sync.start();
+      await sync.walReady;
+      sync.setDeviceInfo('devkit-1', 'Omi DevKit');
+      sync.onFrameCaptured(frame(0, 0));
+
+      holdWrite = true;
+      final stopping = sync.stop();
+      final stopped = replace ? stopping : expectLater(stopping, throwsA(isA<FileSystemException>()));
+      await entered.future.timeout(const Duration(seconds: 5));
+      if (replace) sync.start();
+      final late = sync.onFrameCaptured(frame(1, 0));
+      release.complete();
+      await stopped;
+      expect(sync.isFrameDurable(late), isFalse);
+      expect(sync.testFrames, [late]);
+      if (replace) {
+        sync.onFrameCaptured(frame(2, 0));
+        expect(sync.lastFrameAccepted, isTrue);
+      }
+
+      await sync.stop();
+      expect(sync.isFrameDurable(late), isTrue);
+      final rows = await WalFileManager.loadWals();
+      expect(rows.fold<int>(0, (count, wal) => count + wal.totalFrames), replace ? 3 : 2);
+    });
+  }
+
+  test('stop durably seals a short phone-mic tail', () async {
+    final sync = LocalWalSyncImpl(
+      _MockListener(),
+      freeDiskBytes: () async => 1 << 40,
+      persistWals: (wals) async {
+        expect(await WalFileManager.saveWals(wals), isTrue);
+      },
+    );
+    sync.start();
+    await sync.walReady;
+    sync.setDeviceInfo('phone-mic', 'Phone');
+    for (var i = 0; i < 5; i++) {
+      sync.onFrameCaptured(WalFrame(payload: [i], syncKey: FrameSyncKey([i])));
+    }
+    await sync.stop();
+
+    final index = await WalFileManager.loadWals();
+    expect(index, hasLength(1));
+    expect(index.single.device, 'phone-mic');
+    expect(index.single.totalFrames, 5);
+    expect(audioFiles(), hasLength(1));
+  });
+
   test('finalizeCurrentSession produces a fsynced audio file AND a persisted index entry', () async {
     final sync = LocalWalSyncImpl(_MockListener());
     sync.setDeviceInfo('devkit-1', 'Omi DevKit');

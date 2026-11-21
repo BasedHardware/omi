@@ -176,6 +176,11 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
   final bool Function()? _orphanForegroundOverride;
   final void Function(Map<String, Object?>)? _orphanTelemetryOverride;
 
+  static const stopTailDrainEnabled = !bool.fromEnvironment('OMI_WAL_STOP_TAIL_DRAIN_OFF');
+  int _startEpoch = 0;
+  bool _stopIngressClosed = false;
+  Future<void>? _stopDrain;
+
   Future<void> _bufferQueue = Future.value();
   Future<void>? _initializationInFlight;
   bool _initialIndexAdmissionPending = false;
@@ -463,9 +468,8 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
   @visibleForTesting
   List<WalFrame> get testFrames => _frames;
 
-  /// Whether the most recent [onFrameCaptured] kept the frame (false when a
-  /// storage-blocked pendant buffer was full and the frame was dropped).
-  /// Reporting only; capture behaviour is unchanged.
+  /// Whether the most recent [onFrameCaptured] admitted the frame, before
+  /// shutdown closed ingress or pendant storage pressure refused it.
   bool get lastFrameAccepted => _lastFrameAccepted;
   bool _lastFrameAccepted = true;
 
@@ -576,6 +580,9 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
   void start() {
     // Boot recovery can start the same singleton again while its init tail saves.
     if (_flushingTimer?.isActive ?? false) return;
+    _startEpoch++;
+    _stopIngressClosed = false;
+    _stopDrain = null;
     if (_initializationInFlight == null) _initialIndexAdmissionPending = true;
     _headlessIndexLoad = false;
     _initializeWals();
@@ -784,7 +791,9 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
   }
 
   @override
-  Future stop() async {
+  Future<void> stop() async {
+    final pending = _stopDrain;
+    if (pending != null) return pending;
     _orphanFrameCache = const OrphanAudioFrameCache.empty();
     final generation = _sessionGeneration;
     BleBridge.instance.removeBatchRecordingFinalizedListener(_onNativeRecordingFinalized);
@@ -795,13 +804,70 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
       WidgetsBinding.instance.removeObserver(this);
     } catch (_) {}
 
-    await _drainPendantTail(generation);
-    await _enqueueBuffer(() async => _chunk(generation));
-    await _enqueueBuffer(() => _flush(generation));
+    if (!stopTailDrainEnabled) {
+      await _drainPendantTail(generation);
+      await _enqueueBuffer(() async => _chunk(generation));
+      await _enqueueBuffer(() => _flush(generation));
+      _frames = [];
+      _pendingPhoneOnly = false;
+      _frameSynced = [];
+      return;
+    }
 
-    _frames = [];
-    _pendingPhoneOnly = false;
-    _frameSynced = [];
+    final startEpoch = _startEpoch;
+    final drain = _enqueueBuffer(() => _drainOnStop(generation, startEpoch));
+    _stopDrain = drain;
+    try {
+      await drain;
+    } finally {
+      if (identical(_stopDrain, drain)) _stopDrain = null;
+    }
+  }
+
+  Future<void> _drainOnStop(int generation, int startEpoch) async {
+    bool current() => _isCurrent(generation) && _startEpoch == startEpoch;
+    var result = WalStopDrainResult.superseded;
+    var firstFlush = true;
+    var lateFramesIndexed = 0;
+    try {
+      while (current()) {
+        final lateFrames = firstFlush ? const <WalFrame>[] : List<WalFrame>.of(_frames);
+        _sealPendantTail(generation, retainUnconfirmed: true);
+        if (_frames.isEmpty) {
+          await _flush(generation);
+        } else {
+          await _finalizeCurrentSession(generation, retainUnconfirmed: true);
+        }
+        if (!current()) break;
+        lateFramesIndexed += lateFrames.where(isFrameDurable).length;
+        // Refused audio writes and unavailable index admission can leave WALs
+        // in memory without throwing. Keep both those WALs and newly arrived
+        // frames for retry, and do not spin during shutdown.
+        if (_wals.any((wal) => wal.storage == WalStorage.mem || wal.data.isNotEmpty)) {
+          result = WalStopDrainResult.pending;
+          break;
+        }
+        if (_frames.isEmpty) {
+          result = WalStopDrainResult.drained;
+          break;
+        }
+        firstFlush = false;
+      }
+    } catch (_) {
+      result = WalStopDrainResult.failed;
+      rethrow;
+    } finally {
+      // The last empty check and closure must have no await between them.
+      if (current()) {
+        _stopIngressClosed = true;
+        if (_frames.isEmpty) _pendingPhoneOnly = false;
+      }
+      if (!firstFlush || result != WalStopDrainResult.drained) {
+        try {
+          const TypedEvents().emit(WalStopDrain(lateFramesIndexed: lateFramesIndexed, result: result));
+        } catch (_) {/* Diagnostics never affect custody. */}
+      }
+    }
   }
 
   @override
@@ -991,11 +1057,13 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     int generation, {
     required bool extendMemWal,
     required int legacySelectionTimerStart,
+    bool retainUnconfirmed = false,
   }) {
     for (final run in walEvidenceRunRanges(selection)) {
       final runFrames = selection.sublist(run.start, run.end);
       final runSynced = selectionSynced.sublist(run.start, run.end);
-      final shouldStored = _keepsLiveSafetyCopy ||
+      final shouldStored = retainUnconfirmed ||
+          _keepsLiveSafetyCopy ||
           SharedPreferencesUtil().unlimitedLocalStorageEnabled ||
           runSynced.any((synced) => !synced);
       if (!shouldStored) continue;
@@ -1107,7 +1175,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
       });
 
   /// Move the complete pendant tail into WAL custody before any I/O yields.
-  bool _sealPendantTail(int generation) {
+  bool _sealPendantTail(int generation, {bool retainUnconfirmed = false}) {
     if (!_isCurrent(generation)) return false;
     final indices = <int>[];
     for (var i = 0; i < _frames.length; i++) {
@@ -1117,7 +1185,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     final frames = indices.map((i) => _frames[i]).toList();
     final synced = indices.map((i) => _frameSynced[i]).toList();
 
-    var shouldStore = SharedPreferencesUtil().unlimitedLocalStorageEnabled;
+    var shouldStore = retainUnconfirmed || SharedPreferencesUtil().unlimitedLocalStorageEnabled;
     if (!shouldStore) shouldStore = synced.any((s) => !s);
     if (!shouldStore) {
       _removeFrameIndices(indices);
@@ -1140,6 +1208,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
         generation,
         extendMemWal: false,
         legacySelectionTimerStart: timerStart,
+        retainUnconfirmed: retainUnconfirmed,
       );
     } else {
       final wal = Wal(
@@ -1814,7 +1883,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
   /// [_WalDiscard]. Returns how many WALs were removed.
   Future<int> discardRecording(String recordingSessionId) => _discardRecording(recordingSessionId);
 
-  Future<void> _finalizeCurrentSession(int generation) async {
+  Future<void> _finalizeCurrentSession(int generation, {bool retainUnconfirmed = false}) async {
     if (_frames.isEmpty) return;
 
     final high = _frames.length;
@@ -1830,7 +1899,8 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
 
     // Same shouldStored check as _chunk(): one unconfirmed frame is enough to
     // retain the session. A transport send is not transcript confirmation.
-    bool shouldStored = _keepsLiveSafetyCopy || SharedPreferencesUtil().unlimitedLocalStorageEnabled;
+    bool shouldStored =
+        retainUnconfirmed || _keepsLiveSafetyCopy || SharedPreferencesUtil().unlimitedLocalStorageEnabled;
     if (!shouldStored) {
       shouldStored = _frameSynced.sublist(0, high).any((synced) => !synced);
     }
@@ -1844,6 +1914,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
           generation,
           extendMemWal: false,
           legacySelectionTimerStart: timerStart,
+          retainUnconfirmed: retainUnconfirmed,
         );
       } else {
         final syncedOffset = syncedPrefixCount(_frameSynced.sublist(0, high));
@@ -2084,6 +2155,10 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
 
   @override
   WalFrame onFrameCaptured(WalFrame frame, {String? captureRoot}) {
+    if (_stopIngressClosed) {
+      _lastFrameAccepted = false;
+      return frame;
+    }
     if (LocalSttCustody.keepsPhoneAudio || OnDeviceTranscriptionController.instance.shouldKeepAudioLocal) {
       _pendingPhoneOnly = true;
       for (final wal in _wals.where((w) => w.storage == WalStorage.mem)) {
