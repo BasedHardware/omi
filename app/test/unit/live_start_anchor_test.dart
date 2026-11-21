@@ -166,6 +166,105 @@ void main() {
       anchor.resolve(episode: null, captureStart: _t0, streaming: true, now: _t0);
       expect(anchor.resolve(episode: null, captureStart: null, streaming: false, now: _t0), isNull);
     });
+
+    test('a pendant wear start does not count time a closed episode already owns', () {
+      final anchor = LiveStartAnchor();
+      final wearStart = DateTime.utc(2026, 11, 9, 3, 7);
+      final closedEnd = DateTime.utc(2026, 11, 9, 6, 27);
+      final before = DateTime.utc(2026, 11, 9, 6, 0);
+      // Before the closed episode is known, the wear session's start is the fallback.
+      expect(anchor.resolve(episode: null, captureStart: wearStart, streaming: true, now: before), wearStart);
+      // The episode closed at 06:27 and the live stretch continues from its end, not from 03:07.
+      final now = DateTime.utc(2026, 11, 9, 7, 30);
+      expect(
+        anchor.resolve(episode: null, captureStart: wearStart, streaming: true, now: now, closedFloor: closedEnd),
+        closedEnd,
+      );
+      // The wear session keeps reporting its earlier start on later polls; the floor still holds.
+      final later = now.add(const Duration(minutes: 2));
+      expect(
+        anchor.resolve(episode: null, captureStart: wearStart, streaming: true, now: later, closedFloor: closedEnd),
+        closedEnd,
+      );
+      expect(later.difference(closedEnd), const Duration(hours: 1, minutes: 5));
+    });
+
+    test('a closed floor earlier than the wear start changes nothing', () {
+      final anchor = LiveStartAnchor();
+      final wearStart = DateTime.utc(2026, 11, 9, 3, 7);
+      final earlierClose = DateTime.utc(2026, 11, 9, 2, 0);
+      final now = DateTime.utc(2026, 11, 9, 4, 0);
+      expect(
+        anchor.resolve(episode: null, captureStart: wearStart, streaming: true, now: now, closedFloor: earlierClose),
+        wearStart,
+      );
+    });
+
+    test('a closed episode that ends after now is not yet a floor', () {
+      final anchor = LiveStartAnchor();
+      final wearStart = DateTime.utc(2026, 11, 9, 3, 7);
+      final now = DateTime.utc(2026, 11, 9, 6, 0);
+      final futureClose = DateTime.utc(2026, 11, 9, 6, 27);
+      expect(
+        anchor.resolve(episode: null, captureStart: wearStart, streaming: true, now: now, closedFloor: futureClose),
+        wearStart,
+      );
+    });
+
+    test('an episode that holds the anchor still wins over a closed floor', () {
+      final anchor = LiveStartAnchor();
+      final started = DateTime.utc(2026, 11, 9, 6, 40);
+      final now = DateTime.utc(2026, 11, 9, 7, 0);
+      expect(
+        anchor.resolve(
+          episode: _episode(started),
+          captureStart: null,
+          streaming: true,
+          now: now,
+          closedFloor: DateTime.utc(2026, 11, 9, 6, 27),
+        ),
+        started,
+      );
+    });
+  });
+
+  group('closed Home episode floor', () {
+    test('is the newest closed episode end by now; open and future episodes do not count', () {
+      final provider = EpisodeProvider();
+      final now = DateTime.utc(2026, 11, 9, 7, 30);
+      final older = Episode(
+        id: 'older',
+        live: false,
+        startedAt: DateTime.utc(2026, 11, 9, 2, 26),
+        lastActivityAt: DateTime.utc(2026, 11, 9, 4, 0),
+        closedAt: DateTime.utc(2026, 11, 9, 4, 0),
+        title: '',
+        conversationIds: const ['c1'],
+      );
+      final newest = Episode(
+        id: 'newest',
+        live: false,
+        startedAt: DateTime.utc(2026, 11, 9, 2, 26),
+        lastActivityAt: DateTime.utc(2026, 11, 9, 6, 26),
+        closedAt: DateTime.utc(2026, 11, 9, 6, 27),
+        title: '',
+        conversationIds: const ['c2'],
+      );
+      final future = Episode(
+        id: 'future',
+        live: false,
+        startedAt: DateTime.utc(2026, 11, 9, 7, 0),
+        lastActivityAt: DateTime.utc(2026, 11, 9, 8, 0),
+        closedAt: DateTime.utc(2026, 11, 9, 8, 0),
+        title: '',
+        conversationIds: const ['c3'],
+      );
+      final open = _episode(DateTime.utc(2026, 11, 9, 6, 40), id: 'open');
+      provider.debugSetLive(null);
+      provider.debugSetHomeEpisodes([older, newest, future, open]);
+      expect(provider.closedEpisodeFloor(now), DateTime.utc(2026, 11, 9, 6, 27));
+      expect(provider.closedEpisodeFloor(DateTime.utc(2026, 11, 9, 1, 0)), isNull);
+    });
   });
 
   test('a watcher polls sooner until the live episode appears, then relaxes', () {

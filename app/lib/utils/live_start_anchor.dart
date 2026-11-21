@@ -30,12 +30,15 @@ class LiveStartAnchor {
     _episodeId = null;
   }
 
+  /// [closedFloor] is the end of the newest closed episode that ended before [now]. Capture time
+  /// from before it is already counted by that episode, so the fallback never starts earlier.
   DateTime? resolve({
     required Episode? episode,
     required DateTime? captureStart,
     String? captureId,
     required bool streaming,
     required DateTime now,
+    DateTime? closedFloor,
   }) {
     final authoritative = episode?.timerStartedAt;
     if (authoritative != null) {
@@ -93,6 +96,8 @@ class LiveStartAnchor {
     }
     final floor = _captureFloor;
     if (floor != null && captureStart != null && captureStart.isBefore(floor)) captureStart = floor;
+    final closed = closedFloor != null && !closedFloor.isAfter(now) ? closedFloor : null;
+    if (closed != null && captureStart != null && captureStart.isBefore(closed)) captureStart = closed;
     if (captureStart != null && !captureStart.isAfter(now)) {
       if (!_hasCaptureStart || _start == null || captureStart.isBefore(_start!)) _start = captureStart;
       _hasCaptureStart = true;
@@ -106,6 +111,9 @@ class LiveStartAnchor {
     if (captureStart != null && !captureStart.isAfter(now) && (_start == null || captureStart.isBefore(_start!))) {
       _start = captureStart;
     }
+    // A pendant wear session keeps its earliest start, which can predate a closed episode. Raise the
+    // stored start so the live stretch begins after that episode, not at the wear session's start.
+    if (closed != null && _start != null && _start!.isBefore(closed)) _start = closed;
     return _start;
   }
 }

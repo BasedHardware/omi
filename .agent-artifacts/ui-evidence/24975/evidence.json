@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-listening-row-before-fix.png",
+      "platform": "mobile-ios",
+      "description": "Home Listening row, pendant case before the fix: 4h 23m (counts from the 03:07 wear start, inside a closed episode)",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "001-mobile-ios-listening-row-after-fix.png",
+      "platform": "mobile-ios",
+      "description": "Home Listening row, same case after the fix: 1h 3m (counts from the closed episode end at 06:27)",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "002-mobile-ios-live-page-before-fix.png",
+      "platform": "mobile-ios",
+      "description": "Live page, pendant case before the fix: 4h 23m 0s, since 3:07 AM",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "002-mobile-ios-live-page-after-fix.png",
+      "platform": "mobile-ios",
+      "description": "Live page, same case after the fix: 1h 3m 0s, since 6:27 AM",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ]
+}

@@ -22,7 +22,8 @@ abstract final class EpisodePresentation {
   /// (the server opens it at the first words), else the earliest capture start seen while
   /// streaming. [anchor] keeps that start across the moments a source briefly reads null (a
   /// pendant health lease lapsing, a socket reconnect), so the label never drops to 0s and back.
-  static Duration elapsed(Episode? episode, CaptureProvider capture, DateTime now, {LiveStartAnchor? anchor}) {
+  static Duration elapsed(Episode? episode, CaptureProvider capture, DateTime now,
+      {LiveStartAnchor? anchor, DateTime? closedFloor}) {
     final start = (anchor ?? LiveStartAnchor()).resolve(
       episode: episode,
       captureStart: capture.liveCaptureStartedAt,
@@ -31,6 +32,7 @@ abstract final class EpisodePresentation {
       captureId: capture.liveCaptureSource == 'phone' ? capture.activeRecordingId : null,
       streaming: streamingSource(capture) != null,
       now: now,
+      closedFloor: closedFloor,
     );
     if (start == null) return Duration.zero;
     final span = now.difference(start);
