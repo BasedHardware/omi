@@ -147,12 +147,8 @@ explicit prod values): candidate fanout 16, parallel admission true, idle max 10
 and `firestoreReadLevers: '{}'` outside prod. Prod keeps integration's non-privacy map except `usage_month_cache:0` and
 `usage_month_total:0`. The API-only O2b admission below does not move the worker:
 its source retains `bpp_decision_cache:100`, `privacy_checks_shadow:10` and
-`bpp_owner_memo_enforce:0`, plus `batch_timeliness_leader:100` and held-poll skip.
-The offline parity check requires exactly that named role split and still rejects
-other divergence. Its kill switch is setting `heldPollSkipEnabled` to false.
-Projection finish backoff remains at its code default, off (SCA-2024).
-The three control knobs
-also have matching base declarations on serving batch hosts; pusher does not run
+`bpp_owner_memo_enforce:0`, plus `batch_timeliness_leader:100`. The offline parity check requires
+that role split. The three control knobs also have matching base declarations on serving batch hosts; pusher does not run
 the batch scheduler/pump and the co-host contract classifies them listen-only.
 The retired WQ12 privacy lever is absent from worker and serving-role literals.
 Worker rollback: 64 / false / 2 / `{}` respectively. See

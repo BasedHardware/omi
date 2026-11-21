@@ -176,16 +176,6 @@ overlay:
           value: '100'
         PARAKEET_WINDOW_MAX_SESSIONS:
           value: '16'
-        # Soniox idle-close treatment values (the speech gate); the cohort percent lives in the listen chart only.
-        SONIOX_IDLE_COHORT_CLOSE_SECONDS:
-          value: '10'
-          category: rollout
-        SONIOX_IDLE_COHORT_REARM_SECONDS:
-          value: '2'
-          category: rollout
-        SONIOX_IDLE_COHORT_MAX_CLOSES_PER_HOUR:
-          value: '120'
-          category: rollout
         # Keep off until deadline-capped POST timeouts are censored as first-text deadlines.
         PARAKEET_WINDOW_REPLICA_RECOVERY_ENABLED:
           value: 'false'
@@ -580,6 +570,9 @@ overlay:
     services:
       backend:
         forbidden_env:
+        # Cloud Run preserves omitted env entries. Remove the retired rollout keys.
+        - BATCH_HELD_POLL_SKIP_ENABLED
+        - BATCH_PROJECTION_FINISH_BACKOFF_ENABLED
         - DEEPGRAM_SELF_HOSTED_ENABLED
         - DEEPGRAM_SELF_HOSTED_URL
         - DEEPGRAM_API_KEY
@@ -591,10 +584,6 @@ overlay:
         # removes live leftovers so the env never restates the default.
         - CONVERSATION_LLM_INPUT_DEDUPE_ENABLED
         - REPEAT_WORK_REVISION_ENABLED
-        # Finish backoff is declared only where the finish sweep can run (backend-integration,
-        # backend-sync). A hand-set true was left on this service on 2026-11-13; deploy removes it
-        # (SCA-2283).
-        - BATCH_PROJECTION_FINISH_BACKOFF_ENABLED
         secrets:
           CONVERSATIONS_V3_LIVE_RECAP_COHORT:
             secret: CONVERSATIONS_V3_LIVE_RECAP_COHORT
@@ -643,7 +632,6 @@ overlay:
           PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_PERCENT: {value: '100', category: rollout}
           PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_UID_SHA256S: {value: '', category: rollout}
           PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED: {value: 'true', category: ops_kill}
-          # Kill switch: set BATCH_HELD_POLL_SKIP_ENABLED=false.
           EPISODE_COMPOSER_DEFAULT_CONTEXT_ENABLED: {value: 'true', category: ops_kill}
           EPISODE_COMPOSER_CONTEXT_ENABLED: {value: 'true', category: ops_kill}
           EPISODE_COMPOSER_DETAIL_ENABLED: {value: 'true', category: ops_kill}
@@ -663,7 +651,6 @@ overlay:
           RECORD_NOTES_EAGER_ENABLED: {value: 'false', category: ops_kill}
           RECORD_FOLLOWUP_WAKE_ENABLED: {value: 'true', category: ops_kill}
           RECORD_SEAL_WAKE_PRESERVED_ENABLED: {value: 'true', category: ops_kill}
-          BATCH_HELD_POLL_SKIP_ENABLED: {value: 'false', category: ops_kill}
           # Quiet-check empty exit (David 0192a6, lead2 9b4ffd); evaluated on backend-sync. Kill switch: false.
           QUIET_EMPTY_EXIT_ENABLED: {value: 'true', category: rollout}
           BATCH_INPUT_EXPIRING_ENABLED: {value: 'true', category: ops_kill}
@@ -1014,6 +1001,9 @@ overlay:
         flags:
           --timeout: 3600s
         forbidden_env:
+        # Cloud Run preserves omitted env entries. Remove the retired rollout keys.
+        - BATCH_HELD_POLL_SKIP_ENABLED
+        - BATCH_PROJECTION_FINISH_BACKOFF_ENABLED
         - DEEPGRAM_SELF_HOSTED_ENABLED
         - DEEPGRAM_SELF_HOSTED_URL
         - DEEPGRAM_API_KEY
@@ -1044,7 +1034,6 @@ overlay:
           PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_PERCENT: {value: '100', category: rollout}
           PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_UID_SHA256S: {value: '', category: rollout}
           PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED: {value: 'true', category: ops_kill}
-          # Kill switch: set BATCH_HELD_POLL_SKIP_ENABLED=false.
           EPISODE_COMPOSER_DEFAULT_CONTEXT_ENABLED: {value: 'true', category: ops_kill}
           EPISODE_COMPOSER_CONTEXT_ENABLED: {value: 'true', category: ops_kill}
           EPISODE_COMPOSER_DETAIL_ENABLED: {value: 'true', category: ops_kill}
@@ -1061,13 +1050,8 @@ overlay:
           RECORD_NOTES_EAGER_ENABLED: {value: 'false', category: ops_kill}
           RECORD_FOLLOWUP_WAKE_ENABLED: {value: 'true', category: ops_kill}
           RECORD_SEAL_WAKE_PRESERVED_ENABLED: {value: 'true', category: ops_kill}
-          BATCH_HELD_POLL_SKIP_ENABLED: {value: 'false', category: ops_kill}
           # Kill switch: set BATCH_PIPELINE_UPLOAD_COALESCING_ENABLED=false.
           BATCH_PIPELINE_UPLOAD_COALESCING_ENABLED: {value: 'true', category: ops_kill}
-          # Projection finish backoff: backend-sync can run the same sweep through its authenticated
-          # /v2/batch-pipeline/reconcile and batch /metrics routes, so it carries the same value as
-          # backend-integration (SCA-2173, review SCA-2270). Off since 2026-11-14 19:41Z (SCA-2283).
-          BATCH_PROJECTION_FINISH_BACKOFF_ENABLED: {value: 'false', category: rollout}
           # Quiet-check empty exit (David 0192a6, lead2 9b4ffd); evaluated on backend-sync. Kill switch: false.
           QUIET_EMPTY_EXIT_ENABLED: {value: 'true', category: rollout}
           BATCH_INPUT_EXPIRING_ENABLED: {value: 'true', category: ops_kill}
@@ -1456,6 +1440,9 @@ overlay:
             secret: SONIOX_API_KEY
             version: latest
         forbidden_env:
+        # Cloud Run preserves omitted env entries. Remove the retired rollout keys.
+        - BATCH_HELD_POLL_SKIP_ENABLED
+        - BATCH_PROJECTION_FINISH_BACKOFF_ENABLED
         - DEEPGRAM_SELF_HOSTED_ENABLED
         - DEEPGRAM_SELF_HOSTED_URL
         - DEEPGRAM_API_KEY
@@ -1466,10 +1453,6 @@ overlay:
         - CONVERSATION_LLM_INPUT_DEDUPE_ENABLED
         - SYNC_REPROCESS_COALESCE_ENABLED
         - REPEAT_WORK_REVISION_ENABLED
-        # Finish backoff is declared only where the finish sweep can run (backend-integration,
-        # backend-sync). A hand-set true was left on this service on 2026-11-13; deploy removes it
-        # (SCA-2283).
-        - BATCH_PROJECTION_FINISH_BACKOFF_ENABLED
         env:
           # SCA-2283: retain the behavior of the serving pre-flag image until custody admission.
           BATCH_ACCOUNT_PRIVACY_WRITER_ENABLED: {value: 'false', category: ops_kill}
@@ -1484,7 +1467,6 @@ overlay:
           PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_PERCENT: {value: '100', category: rollout}
           PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_UID_SHA256S: {value: '', category: rollout}
           PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED: {value: 'true', category: ops_kill}
-          # Kill switch: set BATCH_HELD_POLL_SKIP_ENABLED=false.
           EPISODE_COMPOSER_DEFAULT_CONTEXT_ENABLED: {value: 'true', category: ops_kill}
           EPISODE_COMPOSER_CONTEXT_ENABLED: {value: 'true', category: ops_kill}
           EPISODE_COMPOSER_DETAIL_ENABLED: {value: 'true', category: ops_kill}
@@ -1501,7 +1483,6 @@ overlay:
           RECORD_NOTES_EAGER_ENABLED: {value: 'false', category: ops_kill}
           RECORD_FOLLOWUP_WAKE_ENABLED: {value: 'true', category: ops_kill}
           RECORD_SEAL_WAKE_PRESERVED_ENABLED: {value: 'true', category: ops_kill}
-          BATCH_HELD_POLL_SKIP_ENABLED: {value: 'false', category: ops_kill}
           # Quiet-check empty exit (David 0192a6, lead2 9b4ffd); evaluated on backend-sync. Kill switch: false.
           QUIET_EMPTY_EXIT_ENABLED: {value: 'true', category: rollout}
           BATCH_INPUT_EXPIRING_ENABLED: {value: 'true', category: ops_kill}
@@ -1848,6 +1829,9 @@ overlay:
             secret: SONIOX_API_KEY
             version: latest
         forbidden_env:
+        # Cloud Run preserves omitted env entries. Remove the retired rollout keys.
+        - BATCH_HELD_POLL_SKIP_ENABLED
+        - BATCH_PROJECTION_FINISH_BACKOFF_ENABLED
         - DEEPGRAM_SELF_HOSTED_ENABLED
         - DEEPGRAM_SELF_HOSTED_URL
         - DEEPGRAM_API_KEY
@@ -1878,7 +1862,6 @@ overlay:
           PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_PERCENT: {value: '100', category: rollout}
           PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_UID_SHA256S: {value: '', category: rollout}
           PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED: {value: 'true', category: ops_kill}
-          # Kill switch: set BATCH_HELD_POLL_SKIP_ENABLED=false.
           EPISODE_COMPOSER_DEFAULT_CONTEXT_ENABLED: {value: 'true', category: ops_kill}
           EPISODE_COMPOSER_CONTEXT_ENABLED: {value: 'true', category: ops_kill}
           EPISODE_COMPOSER_DETAIL_ENABLED: {value: 'true', category: ops_kill}
@@ -1895,13 +1878,8 @@ overlay:
           RECORD_NOTES_EAGER_ENABLED: {value: 'false', category: ops_kill}
           RECORD_FOLLOWUP_WAKE_ENABLED: {value: 'true', category: ops_kill}
           RECORD_SEAL_WAKE_PRESERVED_ENABLED: {value: 'true', category: ops_kill}
-          BATCH_HELD_POLL_SKIP_ENABLED: {value: 'false', category: ops_kill}
           # Kill switch: set BATCH_PIPELINE_UPLOAD_COALESCING_ENABLED=false.
           BATCH_PIPELINE_UPLOAD_COALESCING_ENABLED: {value: 'true', category: ops_kill}
-          # Projection finish backoff. Off: turned off in production on 2026-11-14 19:41Z on a 5xx
-          # trigger and kept off by ruling (SCA-2173, SCA-2283). It saved nothing while on, because
-          # async-policy finish rows are never deferred; #25314 is the fix for those reads.
-          BATCH_PROJECTION_FINISH_BACKOFF_ENABLED: {value: 'false', category: rollout}
           # Quiet-check empty exit (David 0192a6, lead2 9b4ffd); evaluated on backend-sync. Kill switch: false.
           QUIET_EMPTY_EXIT_ENABLED: {value: 'true', category: rollout}
           BATCH_INPUT_EXPIRING_ENABLED: {value: 'true', category: ops_kill}

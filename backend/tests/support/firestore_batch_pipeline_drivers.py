@@ -20,12 +20,6 @@ def _repair_age_orders(client):
     return patch.object(refactor_modes, 'record_seal_repair_age_order', side_effect=cycle((False, True)))
 
 
-def _poll_skip_modes(client):
-    from database import batch_pipeline_store
-
-    return patch.object(batch_pipeline_store, 'held_poll_skip_enabled', side_effect=cycle((False, True)))
-
-
 def entries():
     namespaces = ['batch_pipeline_prod', 'batch_pipeline_dev']
     return (
@@ -513,10 +507,8 @@ def entries():
         ),
         DriverEntry(
             'database.batch_pipeline_store.first_pending',
-            trials=2,
-            patchers=(_poll_skip_modes,),
             base={'owner_key': 'owner-hash'},
-            domains={'namespace': namespaces, 'skip_terminal': [False, True]},
+            domains={'namespace': namespaces},
             neutrals={'transaction': (None, 'transaction binding only, no shape change')},
         ),
         CoveredByEntry(
@@ -528,10 +520,8 @@ def entries():
         ),
         DriverEntry(
             'database.batch_pipeline_store.pending_page',
-            trials=2,
-            patchers=(_poll_skip_modes,),
             base={'owner_key': 'owner-hash'},
-            domains={'namespace': namespaces, 'skip_terminal': [False, True]},
+            domains={'namespace': namespaces},
             neutrals={
                 'limit': (129, 'first_pending shape; only the bounded stale-head page size differs'),
                 'transaction': (None, 'transaction binding only, no shape change'),
@@ -604,8 +594,6 @@ def entries():
         ),
         DriverEntry(
             'database.batch_pipeline_store.fresh_pending',
-            trials=2,
-            patchers=(_poll_skip_modes,),
             base={'owner_key': 'owner-hash'},
             domains={'namespace': namespaces},
             neutrals={'limit': (8, 'bounded page size')},

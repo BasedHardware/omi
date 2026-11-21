@@ -198,14 +198,14 @@ EXCEPTIONS: dict[str, SelectorException] = {
         32,
         'per bounded owner merge pass',
         'Use the indexed owner fresh head',
-        'f76d3ecffa550226a0699474c430d366403c6549ac802948f3e0d42e385a7d8e',
+        'ce0661bf89c35c56442397fc4787146dcf76b16b3ce978da53ff78d44ee51e63',
     ),
     'database.batch_pipeline_store.held_merge_owners': _legacy(
         'Legacy held marker page lacks per-owner recheck clock',
         100,
         'held owner maintenance pass',
         'Use owner recheck deadline',
-        '40727256100516ff02481c1946d8dfe971ca4baaafabe897764d825704139404',
+        '13aa38693bb7a0d90097e97cd3e92fcd8fbe8d3f9857a58af1abad2f04362e69',
     ),
     'database.batch_pipeline_store.longest_ready_pending': _legacy(
         'Oldest ready sibling determines bounded legacy head wait',
@@ -240,14 +240,14 @@ EXCEPTIONS: dict[str, SelectorException] = {
         160,
         'per bounded merge or pull owner decision',
         'Use indexed owner head and due projection events',
-        '2bcdc8ddc67bd87d0729bf5e58f0b2349cafb1d2ab59898cdabe72ea78b8a9a3',
+        'd8b65c2f63c59201f71cd1b25a72bd8eb0706cca7491421ab697744955619a1d',
     ),
     'database.batch_pipeline_store.projection_page': _legacy(
         'Legacy assignment and follow-up paths can revisit a state prefix',
         200,
         'projection sweep or bounded continuation',
         'Migrate to durable projection wake and qualified due readers',
-        '2208902067e1f1f57b8d207fef7e46f13f937fccb2f3e07376ed97c490ebf40d',
+        '316ffc0964dd270cd73c7e019125723cbeb88f64819d217463e68535975269c0',
     ),
     'database.batch_pipeline_store.protected_capture_page': _legacy(
         'Capture window enforces service cohort while availability is checked locally',

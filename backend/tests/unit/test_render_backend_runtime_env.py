@@ -1404,36 +1404,14 @@ def test_firestore_cut_switches_preserve_operator_next_roll_policy(environment):
     services = _MANIFEST['environments'][environment]['cloud_run']['services']
     for name, service in services.items():
         env = service['env']
-        # SCA-2173 / SCA-2283 (2026-11-14): finish backoff is declared off for prod backend-integration,
-        # which runs the finish sweep, and for prod backend-sync, which can reach the same sweep through
-        # its reconcile and batch metrics routes (review SCA-2270). It was turned off in production at
-        # 19:41Z and stays off by ruling. No other service or environment declares it (SCA-1993).
-        # SCA-3120: the prod projection pump derives integration's env, so it carries the same values.
-        if environment == 'prod' and name in ('backend-integration', 'backend-sync', 'backend-projection-pump'):
-            assert env['BATCH_PROJECTION_FINISH_BACKOFF_ENABLED'] == {'value': 'false', 'category': 'rollout'}
+        retired = {'BATCH_PROJECTION_FINISH_BACKOFF_ENABLED', 'BATCH_HELD_POLL_SKIP_ENABLED'}
+        assert not retired.intersection(env)
+        assert not retired.intersection(service.get('secrets', {}))
+        assert retired.intersection(service.get('forbidden_env', [])) == (retired if environment == 'prod' else set())
+        if environment == 'prod' and name in ('backend-sync', 'backend-integration', 'backend-projection-pump'):
+            assert env['BATCH_PIPELINE_UPLOAD_COALESCING_ENABLED'] == {'value': 'true', 'category': 'ops_kill'}
         else:
-            assert 'BATCH_PROJECTION_FINISH_BACKOFF_ENABLED' not in env
-        # A hand-set true was left on prod backend and backend-sync-backfill. Deploy merges env, so
-        # leaving the key out would keep it; the removal list is what turns it off there (SCA-2283).
-        removed = 'BATCH_PROJECTION_FINISH_BACKOFF_ENABLED' in service.get('forbidden_env', [])
-        assert removed == (environment == 'prod' and name in ('backend', 'backend-sync-backfill'))
-        expected = {}
-        if environment == 'prod':
-            # 2026-11-18: turned off on all four prod workloads. The registry's enable
-            # gates (replay, integration-first ramp, terminal-loss/SLA/read and D+2
-            # settled-SKU evidence) were never recorded, so the owner kept the
-            # documented default-off rollback. See config/feature-flags.yaml.
-            expected['BATCH_HELD_POLL_SKIP_ENABLED'] = 'false'
-            if name in ('backend-sync', 'backend-integration', 'backend-projection-pump'):
-                expected['BATCH_PIPELINE_UPLOAD_COALESCING_ENABLED'] = 'true'
-        switches = {
-            key: env[key]
-            for key in ('BATCH_HELD_POLL_SKIP_ENABLED', 'BATCH_PIPELINE_UPLOAD_COALESCING_ENABLED')
-            if key in env
-        }
-        assert switches == {key: {'value': value, 'category': 'ops_kill'} for key, value in expected.items()}
-        rendered = {entry['name']: entry['value'] for entry in _MODULE['_render_env_entries'](switches)}
-        assert rendered == expected
+            assert 'BATCH_PIPELINE_UPLOAD_COALESCING_ENABLED' not in env
 
 
 @pytest.mark.parametrize('environment', ['dev', 'prod'])
