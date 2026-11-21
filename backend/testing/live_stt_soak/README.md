@@ -20,6 +20,41 @@ prod endpoints. Coordinator alone applies these manifests.
 
 ## Run from repository root
 
+For a **fake-only local Mac run without a cluster**, use the same app, real
+adapters, public fixture and report parser with owned local emulator processes:
+
+```bash
+PYTHONPATH=backend backend/.venv/bin/python -m testing.live_stt_soak.local \
+  --firestore-jar /path/to/cloud-firestore-emulator.jar \
+  --sessions 16 --minutes 10 \
+  --order parakeet-window,soniox,modulate-velma-2 --output /path/to/fresh/counts
+```
+
+Java and redis-server must already be installed (or pass `--java`/`--redis`).
+Ports 6379, 8085, 8080, 9090 and 9155 must be free; the runner never kills existing
+listeners. It owns and reaps only the emulator and listen PIDs it starts.
+Every child receives an allowlisted environment, empty temporary HOME and
+CLOUDSDK_CONFIG, a demo Firestore project and local Redis/Firestore endpoints.
+ADC must fail before startup. Fixed `local-protocol-peer` values satisfy the
+adapters' nonempty key checks; they carry no provider authentication value.
+The fake adapter transport redirects to loopback; Python socket resolution and
+connect calls reject external destinations. No dotenv file is loaded.
+Transient emulator data is deleted after process cleanup. stdout/stderr from
+listen and the emulators are discarded, so artifacts contain metrics and
+session counts without transcript text or audio.
+
+Repeat with the Modulate-first window order and a fresh output directory.
+Use `--no-recovery --minutes 5` for the legacy control. Paid-adapter 1011
+faults use `--order soniox,modulate-velma-2 --fault-after 12` (reverse the order
+to fault the other adapter). Window orders always inject a 503 after capture.
+The runner uses batches of four if the one-minute load average exceeds 30 at
+admission; each session still receives the requested duration. On macOS it
+registers listen-process RSS and CPU collectors because Prometheus' built-in
+process collector is Linux-only. CPU per session is the listen-process CPU
+delta divided by session count, an amortized measure rather than task-level
+CPU attribution. Local evidence cannot qualify real paid transports, GPU or
+backfill headroom, image startup/pull, fleet routing, or cluster monitoring.
+
 Use the reviewed merged image containing this directory **and** #20391's
 implemented flag. No unmerged-head build path exists in the current workflows;
 see [image admission](../../docs/runbooks/listen-stt-canary-design.md).
