@@ -80,7 +80,7 @@ overlay:
         MEDIA_NOISE_MODE_SERVE_PERCENT: {value: '0', category: rollout}
         NOTES_SHORT_CLIP_FLOOR: {value: 'true', category: rollout}
         # Shared backend routes: silent read skipping on for listen too (SCA-1824); kill switch: set false.
-        BATCH_PIPELINE_SILENCE_READ_SKIP_ENABLED: {value: 'true', category: ops_kill}
+        BATCH_PIPELINE_SILENCE_READ_SKIP_ENABLED: {value: 'false', category: ops_kill}
         PUSHER_RECORD_CLOSE_NOTIFY_ENABLED: {value: 'false', category: rollout}
         PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_PERCENT: {value: '100', category: rollout}
         PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_UID_SHA256S: {value: '', category: rollout}
