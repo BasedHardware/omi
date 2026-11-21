@@ -42,6 +42,8 @@ class _Device extends ChangeNotifier implements DeviceProvider {
   @override
   int get batteryLevel => 75;
   @override
+  int get settingsBatteryLevel => batteryLevel;
+  @override
   bool get isCharging => false;
   @override
   bool get havingNewFirmware => false;

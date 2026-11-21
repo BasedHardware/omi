@@ -4735,5 +4735,6 @@
     "conversationLiveNoEdits": "終了してから変更してください。",
     "finishedSummaryReady": "要約が完了しました",
     "writingSummaryStatus": "要約を作成中…",
-    "stillWorkingOnIt": "まだ処理中です。"
+    "stillWorkingOnIt": "まだ処理中です。",
+    "deviceReadyToUse": "使用準備完了"
 }

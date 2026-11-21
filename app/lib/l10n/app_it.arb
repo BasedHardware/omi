@@ -4735,5 +4735,6 @@
     "conversationLiveNoEdits": "Attendi la fine per modificarla.",
     "finishedSummaryReady": "Riepilogo pronto",
     "writingSummaryStatus": "Scrittura del riepilogo…",
-    "stillWorkingOnIt": "Ancora al lavoro."
+    "stillWorkingOnIt": "Ancora al lavoro.",
+    "deviceReadyToUse": "Pronto per l'uso"
 }

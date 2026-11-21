@@ -4735,5 +4735,6 @@
     "conversationLiveNoEdits": "Odota, että se päättyy, ennen kuin muutat sitä.",
     "finishedSummaryReady": "Tiivistelmä valmis",
     "writingSummaryStatus": "Kirjoitetaan tiivistelmää…",
-    "stillWorkingOnIt": "Yhä työn alla."
+    "stillWorkingOnIt": "Yhä työn alla.",
+    "deviceReadyToUse": "Valmis käytettäväksi"
 }

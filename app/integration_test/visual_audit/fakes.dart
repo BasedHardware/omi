@@ -112,7 +112,7 @@ List<SingleChildWidget> defaultAuditProviders({UsageProvider Function()? usage})
 class AuditDeviceProvider extends ChangeNotifier implements DeviceProvider {
   AuditDeviceProvider({
     this.connected = false,
-    this.battery = 0,
+    this.battery = -1,
     this.charging = false,
     this.newFirmware = false,
     this.device,
@@ -132,11 +132,19 @@ class AuditDeviceProvider extends ChangeNotifier implements DeviceProvider {
   @override
   BtDevice? get pairedDevice => device;
   @override
+  BtDevice? get capabilityNormalizedDevice => device;
+  @override
   bool get hasRememberedDevice => device?.id.isNotEmpty ?? false;
   @override
   int get batteryLevel => battery;
   @override
+  int get settingsBatteryLevel => batteryLevel;
+  @override
   bool get isCharging => charging;
+  @override
+  bool? get observedChargingStatus => charging;
+  @override
+  VoidCallback prepareFirstChargeCheck(String deviceId) => () {};
   @override
   bool get havingNewFirmware => newFirmware;
   @override

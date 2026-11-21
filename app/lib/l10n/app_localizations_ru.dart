@@ -15771,4 +15771,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get stillWorkingOnIt => 'Всё ещё работаем над этим.';
+
+  @override
+  String get deviceReadyToUse => 'Готово к использованию';
 }

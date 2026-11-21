@@ -15492,4 +15492,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get stillWorkingOnIt => 'まだ処理中です。';
+
+  @override
+  String get deviceReadyToUse => '使用準備完了';
 }

@@ -15744,4 +15744,7 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get stillWorkingOnIt => 'Vis dar dirbama.';
+
+  @override
+  String get deviceReadyToUse => 'Paruošta naudoti';
 }

@@ -4735,5 +4735,6 @@
     "conversationLiveNoEdits": "Изчакайте да приключи, за да го промените.",
     "finishedSummaryReady": "Обобщението е готово",
     "writingSummaryStatus": "Пише се обобщение…",
-    "stillWorkingOnIt": "Все още работим по него."
+    "stillWorkingOnIt": "Все още работим по него.",
+    "deviceReadyToUse": "Готово за използване"
 }

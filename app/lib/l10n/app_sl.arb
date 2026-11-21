@@ -12292,5 +12292,6 @@
     "conversationLiveNoEdits": "Počakajte, da se konča, nato ga spremenite.",
     "finishedSummaryReady": "Povzetek je pripravljen",
     "writingSummaryStatus": "Povzetek se zapisuje…",
-    "stillWorkingOnIt": "Še vedno poteka obdelava."
+    "stillWorkingOnIt": "Še vedno poteka obdelava.",
+    "deviceReadyToUse": "Pripravljen za uporabo"
 }

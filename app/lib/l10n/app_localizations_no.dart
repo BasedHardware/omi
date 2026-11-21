@@ -15724,4 +15724,7 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get stillWorkingOnIt => 'Jobber fortsatt med det.';
+
+  @override
+  String get deviceReadyToUse => 'Klar til bruk';
 }

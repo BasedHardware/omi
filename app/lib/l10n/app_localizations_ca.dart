@@ -15798,4 +15798,7 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get stillWorkingOnIt => 'Encara hi estem treballant.';
+
+  @override
+  String get deviceReadyToUse => 'Llest per utilitzar';
 }

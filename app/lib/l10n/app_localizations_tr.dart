@@ -15730,4 +15730,7 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get stillWorkingOnIt => 'Hâlâ üzerinde çalışılıyor.';
+
+  @override
+  String get deviceReadyToUse => 'Kullanıma hazır';
 }

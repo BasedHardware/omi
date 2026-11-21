@@ -15468,4 +15468,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get stillWorkingOnIt => '仍在处理中。';
+
+  @override
+  String get deviceReadyToUse => '可正常使用';
 }

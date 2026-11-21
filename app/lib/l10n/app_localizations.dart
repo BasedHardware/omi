@@ -27602,6 +27602,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Still working on it.'**
   String get stillWorkingOnIt;
+
+  /// Status under the device name after successful Omi pairing. Refers to connection readiness, not to battery level.
+  ///
+  /// In en, this message translates to:
+  /// **'Ready to use'**
+  String get deviceReadyToUse;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

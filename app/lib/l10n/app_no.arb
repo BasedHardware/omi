@@ -4735,5 +4735,6 @@
     "conversationLiveNoEdits": "Vent til den er avsluttet før du endrer den.",
     "finishedSummaryReady": "Oppsummeringen er klar",
     "writingSummaryStatus": "Skriver oppsummering…",
-    "stillWorkingOnIt": "Jobber fortsatt med det."
+    "stillWorkingOnIt": "Jobber fortsatt med det.",
+    "deviceReadyToUse": "Klar til bruk"
 }

@@ -15702,4 +15702,7 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get stillWorkingOnIt => 'अभी भी इस पर काम चल रहा है।';
+
+  @override
+  String get deviceReadyToUse => 'उपयोग के लिए तैयार';
 }

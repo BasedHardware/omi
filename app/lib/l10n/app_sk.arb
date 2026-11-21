@@ -4735,5 +4735,6 @@
     "conversationLiveNoEdits": "Počkajte, kým skončí, potom ju môžete zmeniť.",
     "finishedSummaryReady": "Zhrnutie je pripravené",
     "writingSummaryStatus": "Zhrnutie sa píše…",
-    "stillWorkingOnIt": "Ešte sa na tom pracuje."
+    "stillWorkingOnIt": "Ešte sa na tom pracuje.",
+    "deviceReadyToUse": "Pripravené na použitie"
 }

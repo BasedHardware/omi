@@ -15844,4 +15844,7 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get stillWorkingOnIt => 'Pinagtatrabahuhan pa rin ito.';
+
+  @override
+  String get deviceReadyToUse => 'Handa nang gamitin';
 }

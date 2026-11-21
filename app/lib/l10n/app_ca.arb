@@ -4735,5 +4735,6 @@
     "conversationLiveNoEdits": "Espera que acabi per modificar-la.",
     "finishedSummaryReady": "Resum preparat",
     "writingSummaryStatus": "Escrivint el resum…",
-    "stillWorkingOnIt": "Encara hi estem treballant."
+    "stillWorkingOnIt": "Encara hi estem treballant.",
+    "deviceReadyToUse": "Llest per utilitzar"
 }

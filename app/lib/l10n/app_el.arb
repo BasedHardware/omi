@@ -4735,5 +4735,6 @@
     "conversationLiveNoEdits": "Περιμένετε να τελειώσει για να την αλλάξετε.",
     "finishedSummaryReady": "Η σύνοψη είναι έτοιμη",
     "writingSummaryStatus": "Γράφεται η σύνοψη…",
-    "stillWorkingOnIt": "Εξακολουθούμε να δουλεύουμε πάνω σε αυτό."
+    "stillWorkingOnIt": "Εξακολουθούμε να δουλεύουμε πάνω σε αυτό.",
+    "deviceReadyToUse": "Έτοιμο για χρήση"
 }

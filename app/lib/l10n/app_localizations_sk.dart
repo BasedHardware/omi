@@ -15715,4 +15715,7 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get stillWorkingOnIt => 'Ešte sa na tom pracuje.';
+
+  @override
+  String get deviceReadyToUse => 'Pripravené na použitie';
 }

@@ -15721,4 +15721,7 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get stillWorkingOnIt => 'Vẫn đang xử lý.';
+
+  @override
+  String get deviceReadyToUse => 'Sẵn sàng để sử dụng';
 }

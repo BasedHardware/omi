@@ -15645,4 +15645,7 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get stillWorkingOnIt => 'ยังดำเนินการอยู่';
+
+  @override
+  String get deviceReadyToUse => 'พร้อมใช้งาน';
 }

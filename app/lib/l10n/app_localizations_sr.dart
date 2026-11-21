@@ -15727,4 +15727,7 @@ class AppLocalizationsSr extends AppLocalizations {
 
   @override
   String get stillWorkingOnIt => 'Још увек радимо на томе.';
+
+  @override
+  String get deviceReadyToUse => 'Спремно за употребу';
 }

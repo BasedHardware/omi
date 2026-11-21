@@ -15748,4 +15748,7 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get stillWorkingOnIt => 'Še vedno poteka obdelava.';
+
+  @override
+  String get deviceReadyToUse => 'Pripravljen za uporabo';
 }

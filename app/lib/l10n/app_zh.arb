@@ -4735,5 +4735,6 @@
     "conversationLiveNoEdits": "请等它结束后再修改。",
     "finishedSummaryReady": "摘要已生成",
     "writingSummaryStatus": "正在生成摘要…",
-    "stillWorkingOnIt": "仍在处理中。"
+    "stillWorkingOnIt": "仍在处理中。",
+    "deviceReadyToUse": "可正常使用"
 }

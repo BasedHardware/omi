@@ -15835,4 +15835,7 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get stillWorkingOnIt => 'Wir arbeiten noch daran.';
+
+  @override
+  String get deviceReadyToUse => 'Einsatzbereit';
 }

@@ -15498,4 +15498,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get stillWorkingOnIt => '아직 처리 중입니다.';
+
+  @override
+  String get deviceReadyToUse => '사용 준비 완료';
 }

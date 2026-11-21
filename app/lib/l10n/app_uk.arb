@@ -4735,5 +4735,6 @@
     "conversationLiveNoEdits": "Зачекайте на завершення, щоб змінити її.",
     "finishedSummaryReady": "Підсумок готовий",
     "writingSummaryStatus": "Пишемо підсумок…",
-    "stillWorkingOnIt": "Ще працюємо над цим."
+    "stillWorkingOnIt": "Ще працюємо над цим.",
+    "deviceReadyToUse": "Готово до використання"
 }

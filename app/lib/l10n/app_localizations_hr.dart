@@ -15756,4 +15756,7 @@ class AppLocalizationsHr extends AppLocalizations {
 
   @override
   String get stillWorkingOnIt => 'I dalje radimo na tome.';
+
+  @override
+  String get deviceReadyToUse => 'Spremno za upotrebu';
 }

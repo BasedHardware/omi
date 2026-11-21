@@ -12292,5 +12292,6 @@
     "conversationLiveNoEdits": "পরিবর্তন করতে এটি শেষ হওয়া পর্যন্ত অপেক্ষা করুন।",
     "finishedSummaryReady": "সারসংক্ষেপ প্রস্তুত",
     "writingSummaryStatus": "সারসংক্ষেপ লেখা হচ্ছে…",
-    "stillWorkingOnIt": "এখনও কাজ চলছে।"
+    "stillWorkingOnIt": "এখনও কাজ চলছে।",
+    "deviceReadyToUse": "ব্যবহারের জন্য প্রস্তুত"
 }

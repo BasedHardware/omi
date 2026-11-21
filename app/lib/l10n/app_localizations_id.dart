@@ -15734,4 +15734,7 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get stillWorkingOnIt => 'Masih dikerjakan.';
+
+  @override
+  String get deviceReadyToUse => 'Siap digunakan';
 }
