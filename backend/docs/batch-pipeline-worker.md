@@ -285,13 +285,11 @@ older than 60 seconds must be absent, including a pump blocked in a long flight.
 Prewarm replicas before admission ramps: the chart records cold GPU/model startup
 exceeding 600 seconds; queue-age HPA is overflow protection, not immediate capacity.
 
-Conversation units run only on dedicated batch GPUs. Shared-live stays off;
-future admission requires explicit capture spans ≤120 seconds, fresh slack,
-empty live queue, utilization/memory headroom and one durable reservation per
-physical GPU. Expired compute leases do not release GPU ownership: only the
-hardware owner acknowledges CUDA idle. Non-preemptible work never moves onto
-live Parakeet pods merely because it is 03:00Z. The approximately 25% listen
-trough is an opportunity to measure slack, not permission to run.
+Conversation units run only on dedicated batch GPUs. The shared-live pool kind
+is retired: the scheduler never leases work onto a live GPU and the worker
+rejects any pool kind other than `dedicated_batch`. Non-preemptible work never
+moves onto live Parakeet pods merely because it is 03:00Z. The approximately 25%
+listen trough is an opportunity to measure slack, not permission to run.
 
 Export oldest pending/ready/retry age per class, freshness, admission-to-lease owner
 wait, transition rates/jobs per second, and GPU utilization/headroom. No owner
@@ -444,7 +442,7 @@ stable SHA-256 percentage; defaults are false/empty/zero. Configuration of
 providers alone cannot select real uploads. `BATCH_PIPELINE_SERVING_ENABLED`
 and B's worker switch independently default off. Enable qualified drain/worker
 infrastructure before a cohort; keep them enabled during admission rollback.
-Shared-live and VAD compaction remain off.
+VAD compaction remains off.
 
 Lead's rollout: hermetic/emulator → isolated dev synthetic identity → David
 only → 1% → 5% → all, at least 12 hours between cohorts. Require production

@@ -797,21 +797,9 @@ def test_fatal_cuda_fences_whole_worker_without_importing_models(error):
         worker.process_batch([item('other')])
 
 
-def test_pool_unit_limits_reject_conversation_on_shared_live_before_decode():
-    config = ProviderConfig(pool_kind='shared_live', max_unit_seconds=120, max_padded_seconds=120)
-    worker, _, _, decoded, _, _ = setup_worker(config=config)
-    with pytest.raises(ValueError, match='dedicated batch'):
-        worker.process_batch([item(duration=3600)])
-    assert not decoded
-    with pytest.raises(ValueError, match='yield between pulls'):
-        worker.process_batch([item('a', 100), item('b', 100)])
-    assert not decoded
-    with pytest.raises(ValueError, match='capture spans'):
-        worker.process_batch([item(duration=120)])
-    assert worker.process_batch([replace(item(duration=120), unit_kind='capture_span')])
-    over, words, _, _, _, failures = setup_worker(config=config, decode=lambda i: Samples(120 + 1 / 16000))
-    assert over.process_batch([replace(item(duration=120), unit_kind='capture_span')]) == []
-    assert not words.calls and failures == [('a', 'ValueError')]
+def test_shared_live_pool_kind_is_rejected_before_decode():
+    with pytest.raises(ValueError, match='unknown GPU pool kind'):
+        ProviderConfig(pool_kind='shared_live', max_unit_seconds=120, max_padded_seconds=120)
 
 
 def test_unit_ceiling_ignores_admission_clock_noise_below_one_frame():
@@ -825,12 +813,17 @@ def test_unit_ceiling_ignores_admission_clock_noise_below_one_frame():
 
 
 def test_pool_defaults_and_unsafe_config(monkeypatch):
-    monkeypatch.setenv('BATCH_PIPELINE_POOL_KIND', 'shared_live')
+    monkeypatch.delenv('BATCH_PIPELINE_POOL_KIND', raising=False)
     monkeypatch.delenv('BATCH_PIPELINE_UNIT_SECONDS', raising=False)
     monkeypatch.delenv('BATCH_PIPELINE_PADDED_SECONDS', raising=False)
     config = provider_config()
-    assert config.max_unit_seconds == 120 and config.max_padded_seconds == 120
-    monkeypatch.setenv('BATCH_PIPELINE_UNIT_SECONDS', '3600')
+    assert config.pool_kind == 'dedicated_batch'
+    assert config.max_unit_seconds == 7200 and config.max_padded_seconds == 272
+    monkeypatch.setenv('BATCH_PIPELINE_POOL_KIND', 'shared_live')
+    with pytest.raises(ValueError, match='unknown GPU pool kind'):
+        provider_config()
+    monkeypatch.delenv('BATCH_PIPELINE_POOL_KIND')
+    monkeypatch.setenv('BATCH_PIPELINE_UNIT_SECONDS', '7201')
     with pytest.raises(ValueError):
         provider_config()
 

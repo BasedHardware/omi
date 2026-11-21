@@ -284,7 +284,7 @@ async def run_process(store: Any, artifacts: Any, registry: CollectorRegistry, s
             oldest_min_refresh_seconds=60,
         )
         pump = Pump(
-            Scheduler(store, metrics=metrics, pool='batch'),
+            Scheduler(store, metrics=metrics),
             SynchronizedWorker(worker, on_fatal=fatal, memory_probe=ChainMemoryProbe(), timings=timings),
             metrics=metrics,
             timings=timings,

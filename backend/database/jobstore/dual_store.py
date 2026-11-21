@@ -551,7 +551,7 @@ class DualStore:
         rows.update(('queues', f'{priority}_{key}') for priority in range(3))
         owner_match = sql().SQL("(doc->>'owner_key' = %s OR doc->>'owner_id' = %s)")
         jobs = conn.execute(
-            sql().SQL("SELECT key, doc->>'shared_gpu_key' FROM jobs WHERE namespace = %s AND {}").format(owner_match),
+            sql().SQL('SELECT key FROM jobs WHERE namespace = %s AND {}').format(owner_match),
             (namespace, key, owner_id),
         ).fetchall()
         rows.update(('jobs', row[0]) for row in jobs)
@@ -565,10 +565,6 @@ class DualStore:
             (namespace, sorted(MIRRORED_TABLES - {'jobs', 'results', 'control'}), key, owner_id),
         ).fetchall()
         rows.update((row[0], row[1]) for row in found)
-        # Shared GPU reservations are keyed by GPU and name the leased segment, not the owner, and the job that
-        # linked them may already be gone from Postgres. There is one row per physical GPU, so reconcile them all.
-        found = conn.execute("SELECT key FROM docs WHERE namespace = %s AND tbl = 'gpus'", (namespace,)).fetchall()
-        rows.update(('gpus', row[0]) for row in found)
         return sorted(rows)
 
     def _reconcile_owner(self, owner_id: str) -> list[tuple[str, str]]:

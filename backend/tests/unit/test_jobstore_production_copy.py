@@ -47,9 +47,9 @@ class Conn:
         self.result = []
         # Only owner-census SQL needs results; normal copy reads/writes use
         # Shadow's document seam. Match the current SQL's owner predicates.
-        if text.startswith('SELECT key, doc->'):
+        if text.startswith('SELECT key FROM jobs'):
             self.result = [
-                (key, doc.get('shared_gpu_key'))
+                (key,)
                 for (table, key), doc in self.shadow.rows.items()
                 if table == 'jobs' and (doc.get('owner_key') == params[1] or doc.get('owner_id') == params[2])
             ]

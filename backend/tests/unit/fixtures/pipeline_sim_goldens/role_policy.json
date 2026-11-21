@@ -69,9 +69,8 @@
      "scheduler": {
       "head_priority": false,
       "max_attempts": 5,
-      "policy_id": "642c900d2fef05b74fa23660fabc64c793aeaa6bba93a053e75f71b00e9b0b56",
+      "policy_id": "ed0380fdab7dcc091391109fb5c9d24b72ce38c367256e103874dde2e65754a7",
       "schema_version": 1,
-      "shared_live": false,
       "source_role": "scheduler"
      }
     },
@@ -219,9 +218,8 @@
      "scheduler": {
       "head_priority": false,
       "max_attempts": 5,
-      "policy_id": "642c900d2fef05b74fa23660fabc64c793aeaa6bba93a053e75f71b00e9b0b56",
+      "policy_id": "ed0380fdab7dcc091391109fb5c9d24b72ce38c367256e103874dde2e65754a7",
       "schema_version": 1,
-      "shared_live": false,
       "source_role": "scheduler"
      }
     },
@@ -369,9 +367,8 @@
      "scheduler": {
       "head_priority": false,
       "max_attempts": 5,
-      "policy_id": "642c900d2fef05b74fa23660fabc64c793aeaa6bba93a053e75f71b00e9b0b56",
+      "policy_id": "ed0380fdab7dcc091391109fb5c9d24b72ce38c367256e103874dde2e65754a7",
       "schema_version": 1,
-      "shared_live": false,
       "source_role": "scheduler"
      }
     },
@@ -529,9 +526,8 @@
      "scheduler": {
       "head_priority": false,
       "max_attempts": 5,
-      "policy_id": "642c900d2fef05b74fa23660fabc64c793aeaa6bba93a053e75f71b00e9b0b56",
+      "policy_id": "ed0380fdab7dcc091391109fb5c9d24b72ce38c367256e103874dde2e65754a7",
       "schema_version": 1,
-      "shared_live": false,
       "source_role": "scheduler"
      }
     },

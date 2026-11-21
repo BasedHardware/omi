@@ -39,8 +39,8 @@ class ShadowRunner:
     async def run_once(self, pump, *, capacity):
         if not shadow_percent() or pump._gpu.locked() or pump._normal_flights or self._recovering or self._taking:
             return 0
-        slots, spare, _ = capacity.limits(time.time(), shared_live_enabled=False)
-        if capacity.shared_with_live or not slots or not spare:
+        slots, spare, _ = capacity.limits(time.time())
+        if not slots or not spare:
             await self.close()
             return 0
         self._taking = True
@@ -67,13 +67,12 @@ class ShadowRunner:
         except Exception:
             await run_blocking(db_executor, self.repository.finish, item.segment_id, 'dropped')
             return 0
-        slots, spare, max_seconds = capacity.limits(time.time(), shared_live_enabled=False)
+        slots, spare, max_seconds = capacity.limits(time.time())
         if (
             pump._gpu.locked()
             or pump._normal_flights
             or not shadow_percent()
             or busy
-            or capacity.shared_with_live
             or not slots
             or not spare
             or item.duration_seconds > max_seconds

@@ -176,14 +176,11 @@ Hour-sized conversation compute must never run on live Parakeet pods. A running
 inference cannot be preempted: the October 15 dev requalification's 3600-second
 backfill rejected every overlapping live upload and used 10.76 GiB.
 
-`shared_live` requires units <=120 seconds, a total pull <=120 audio seconds,
-a padded model batch <=120 seconds, and one in-flight batch per GPU. The local
-multi-model factory refuses shared-live placement: future co-location must use
-the existing live model's priority/admission arbiter, yield between bounded
-pulls and pass joint latency/memory qualification. Merely choosing a pool config
-must not launch a second chain on a live GPU. A's scheduler pool capacity gate
-and these worker limits both apply; durable conversation identity need not
-change when an integration layer introduces bounded compute pieces.
+`shared_live` is retired: the scheduler no longer leases work onto a live GPU,
+and the worker rejects any pool kind other than `dedicated_batch`. Hour-sized
+conversation compute must never run on live Parakeet pods. A running inference
+cannot be preempted: the October 15 dev requalification's 3600-second backfill
+rejected every overlapping live upload and used 10.76 GiB.
 
 `TRANSCRIPTION_FINAL_PASS_VAD_COMPACTION_ENABLED=false` preserves the existing
 stored-audio path. When explicitly enabled, local Silero speech regions retain

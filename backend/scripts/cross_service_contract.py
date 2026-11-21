@@ -190,7 +190,6 @@ TASK_EDGES: tuple[TaskEdge, ...] = (
 # per-host behavior.
 COUPLED_FLAGS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ('BATCH_PIPELINE_HEAD_PRIORITY_ENABLED', ('gke/backend-listen', 'helm/batch-pipeline-worker')),
-    ('BATCH_PIPELINE_SHARED_LIVE_ENABLED', ('gke/backend-listen', 'helm/batch-pipeline-worker')),
     ('BATCH_PIPELINE_UNIT_SECONDS', ('cloud_run/backend-sync', 'gke/backend-listen', 'helm/batch-pipeline-worker')),
 )
 

@@ -97,7 +97,7 @@ backend's expected worker service-account email and Cloud Run invoker access.
 B's GPU chart uses its independent default-off worker switch, dedicated GPU pool,
 matching namespace/bucket/secret, and fresh per-pull capacity. Intake packs at
 most one hour; keep dedicated worker `BATCH_PIPELINE_UNIT_SECONDS` compatible
-with admitted units. Shared-live remains disabled and is not this deployment.
+with admitted units. The shared-live pool kind is retired and is not this deployment.
 
 Retire every pre-protocol intake revision and its outstanding requests before
 enabling a cohort; those revisions cannot recognize a durable batch route.
@@ -154,7 +154,7 @@ service endpoints, never Firebase-user endpoints. All POSTs include explicit
 `stage: prod|dev`; mismatches reject before claims. Admission flags are not worker
 RPC gates, so already accepted work drains after rollback.
 
-- `POST /pull`: `{stage, limit:1..32, pool:batch|live, capacity:PoolCapacity}`;
+- `POST /pull`: `{stage, limit:1..32, capacity:PoolCapacity}`;
   returns `{leases:[LeasedWork]}` using dataclass field names from contracts.
 - `POST /heartbeat`: `{stage, leases:[{segment_id,token}]}` (maximum32);
   returns `{accepted:[segment_id]}`. Renew every 20s; any lost/ambiguous token
@@ -169,8 +169,6 @@ RPC gates, so already accepted work drains after rollback.
 - `POST /redrive-dead`: `{stage,segment_id}`; redrives historical pending dead
   heads without skipping an ordered gap; returns `{accepted:bool}`.
 - `POST /fail`: `{stage,segment_id,token}`; returns `{accepted:bool}`.
-- `POST /gpu-idle`: `{stage,gpu_id,token}`; hardware owner only, after CUDA
-  quiescence. Expiry/completion never proves a shared GPU idle.
 - `POST /reconcile`: `{stage}`; bounded recovery/merge/projection/metrics.
 - `GET /metrics`: authenticated Prometheus export and bounded reconciliation.
 
@@ -227,7 +225,7 @@ platform suspends background work between requests.
 Before the first cohort, verify pending-age/owner-wait/jobs-per-second plus GPU
 utilization, actual full-chain latency/memory, correct client conversations and
 playback, content accounting/limits, lineage, deletion and restart/replay. Keep
-VAD compaction and shared-live off until their independent quality gates pass.
+VAD compaction stays off until its independent quality gate passes.
 
 
 ## All-vendor route selection (dormant)
@@ -344,7 +342,7 @@ Merging config is not a deployment or a successful production E2E receipt.
 | `pusher.main` | No batch upload admission, serving-loop or dedicated-worker consumer; no pusher flag change |
 
 Intake and worker ceilings both stay at 3600 seconds, ASR/segmentation/VAD model
-batch stays 8, and shared-live stays off. All CPU admission/projection hosts use
+batch stays 8. All CPU admission/projection hosts use
 `based-hardware-batch-pipeline-staging` and the existing shared encryption-secret
 binding. The worker chart uses the same bucket and explicit customer data plane.
 The prod values intentionally leave `image.digest` empty: `gcp_diarizer.yml`

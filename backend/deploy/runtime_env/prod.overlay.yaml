@@ -972,9 +972,6 @@ overlay:
           BATCH_PIPELINE_SERVING_ENABLED:
             value: 'false'
             category: rollout
-          BATCH_PIPELINE_SHARED_LIVE_ENABLED:
-            value: 'false'
-            category: rollout
           BATCH_PIPELINE_SPEECH_EMPTY_MULTILINGUAL_ENABLED:
             value: 'true'
             category: rollout
@@ -1350,9 +1347,6 @@ overlay:
             value: 'false'
             category: rollout
           BATCH_PIPELINE_SERVING_ENABLED:
-            value: 'false'
-            category: rollout
-          BATCH_PIPELINE_SHARED_LIVE_ENABLED:
             value: 'false'
             category: rollout
           BATCH_PIPELINE_SPEECH_EMPTY_MULTILINGUAL_ENABLED:
@@ -1743,9 +1737,6 @@ overlay:
           BATCH_PIPELINE_SERVING_ENABLED:
             value: 'false'
             category: rollout
-          BATCH_PIPELINE_SHARED_LIVE_ENABLED:
-            value: 'false'
-            category: rollout
           BATCH_PIPELINE_SPEECH_EMPTY_MULTILINGUAL_ENABLED:
             value: 'true'
             category: rollout
@@ -2130,9 +2121,6 @@ overlay:
             category: rollout
           BATCH_PIPELINE_REQUIRE_LIVE_TARGET_ENABLED:
             value: 'true'
-            category: rollout
-          BATCH_PIPELINE_SHARED_LIVE_ENABLED:
-            value: 'false'
             category: rollout
           BATCH_PIPELINE_SPEECH_EMPTY_MULTILINGUAL_ENABLED:
             value: 'true'

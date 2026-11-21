@@ -770,34 +770,6 @@ def test_capacity_reserves_fresh_slots_and_rejects_stale_slack():
     assert queue.pull(31, capacity=PoolCapacity(31, 1))[0].item.segment_id == 'deep'
 
 
-def test_shared_live_requires_short_exclusive_slack_and_default_off_gate(monkeypatch):
-    from utils.batch_pipeline.capacity import PoolCapacity
-
-    queue = Scheduler(MemoryStore(), pool='live')
-    queue.enqueue(item('long', duration=3600), 0)
-    queue.enqueue(item('over-boundary', owner='over-boundary', duration=120.001, unit_kind='capture_span'), 0)
-    queue.enqueue(item('short', owner='short', duration=120, unit_kind='capture_span'), 0)
-    capacity = PoolCapacity(10, 1, shared_with_live=True, memory_headroom_bytes=8 * 1024**3, gpu_id='gpu-test')
-    monkeypatch.delenv('BATCH_PIPELINE_SHARED_LIVE_ENABLED', raising=False)
-    assert queue.pull(10, capacity=capacity) == []
-    monkeypatch.setenv('BATCH_PIPELINE_SHARED_LIVE_ENABLED', 'true')
-    assert queue.pull(10, capacity=capacity) == []  # admitted policy remains off
-    queue = Scheduler(MemoryStore(), pool='live')
-    queue.enqueue(item('short', owner='short', duration=120, unit_kind='capture_span'), 0)
-    assert [v.item.segment_id for v in queue.pull(10, 32, capacity=capacity)] == ['short']
-    assert queue.pull(10, capacity=capacity) == []
-    from dataclasses import replace
-
-    for unsafe in (
-        replace(capacity, live_queue_age_seconds=1),
-        replace(capacity, gpu_utilization=0.5),
-        replace(capacity, memory_headroom_bytes=0),
-        replace(capacity, available_slots=2),
-        replace(capacity, gpu_id=None),
-    ):
-        assert queue.pull(10, capacity=unsafe) == []
-
-
 def test_capacity_never_spends_reserved_fresh_slots_on_multiple_backfill_items():
     from utils.batch_pipeline.contracts import PoolCapacity
 
@@ -860,51 +832,6 @@ def test_parked_heads_are_counted_by_bounded_reason(monkeypatch):
     sample = 'omi_batch_pipeline_head_parked_total'
     assert registry.get_sample_value(sample, {**scope, 'reason': 'pool_duration'}) == 1
     assert registry.get_sample_value(sample, {**scope, 'reason': 'privacy'}) == 1
-
-
-def test_shared_gpu_exclusivity_survives_completion_and_lease_expiry(monkeypatch):
-    from utils.batch_pipeline.contracts import PoolCapacity
-
-    monkeypatch.setenv('BATCH_PIPELINE_SHARED_LIVE_ENABLED', 'true')
-    store = MemoryStore()
-    first, second = Scheduler(store, pool='live'), Scheduler(store, pool='live')
-    for name in ('a', 'b', 'c'):
-        first.enqueue(item(name, owner=name, unit_kind='capture_span'), 0)
-
-    def capacity(now):
-        return PoolCapacity(now, 1, shared_with_live=True, memory_headroom_bytes=8 * 1024**3, gpu_id='same-gpu')
-
-    lease = first.pull(1, capacity=capacity(1))[0]
-    assert second.pull(1, capacity=capacity(1)) == []
-    name = lease.item.segment_id
-    assert first.heartbeat(name, lease.token, 60)
-    assert first.complete(WorkResult(name, f'gs://results/{name}'), lease.token, 61)
-    # Result completion alone cannot attest that asynchronous CUDA is idle.
-    assert second.pull(61, capacity=capacity(61)) == []
-    assert not first.acknowledge_gpu_idle('same-gpu', 'stale-token')
-    assert first.acknowledge_gpu_idle('same-gpu', lease.token)
-    assert first.acknowledge_gpu_idle('same-gpu', lease.token)
-    next_lease = second.pull(61, capacity=capacity(61))[0]
-    assert not first.acknowledge_gpu_idle('same-gpu', lease.token)
-    assert first.recover(182) == 1
-    # Expiry fences the old job, but never preempts/re-admits the physical GPU.
-    assert first.pull(182, capacity=capacity(182)) == []
-    assert second.acknowledge_gpu_idle('same-gpu', next_lease.token)
-    assert first.pull(182, capacity=capacity(182))[0].item.segment_id not in {name, next_lease.item.segment_id}
-
-
-def test_conversation_kind_never_runs_on_live_pool_even_when_short(monkeypatch):
-    from utils.batch_pipeline.contracts import PoolCapacity
-
-    monkeypatch.setenv('BATCH_PIPELINE_SHARED_LIVE_ENABLED', 'true')
-    queue = Scheduler(MemoryStore(), pool='live')
-    queue.enqueue(item('short-conversation', duration=30), 0)
-    capacity = PoolCapacity(1, 1, shared_with_live=True, memory_headroom_bytes=8 * 1024**3, gpu_id='gpu-kind')
-    assert queue.pull(1, capacity=capacity) == []
-    assert queue.pull(1) == []
-    assert queue.pull(1, capacity=PoolCapacity(1, 1)) == []
-    assert Scheduler(queue.store).pull(1, capacity=capacity) == []
-    assert Scheduler(queue.store).pull(1)[0].item.unit_kind == 'conversation'
 
 
 @pytest.mark.parametrize('multi_lease', [False, True])
@@ -1081,28 +1008,17 @@ def test_head_lookup_budget_is_shared_by_all_visited_owners(monkeypatch):
     assert len(calls) == 1
 
 
-@pytest.mark.parametrize(
-    'pool,kind,duration', [('batch', 'capture_span', 121), ('live', 'capture_span', 121), ('live', 'conversation', 10)]
-)
-def test_unleasable_merge_head_never_splices_ahead_of_eligible_fifo(monkeypatch, pool, kind, duration):
+def test_unleasable_merge_head_never_splices_ahead_of_eligible_fifo(monkeypatch):
     from dataclasses import replace
     from utils.batch_pipeline.contracts import PoolCapacity
 
     monkeypatch.setenv('BATCH_PIPELINE_HEAD_PRIORITY_ENABLED', 'true')
-    monkeypatch.setenv('BATCH_PIPELINE_SHARED_LIVE_ENABLED', 'true')
     store = MemoryStore()
-    queue = Scheduler(store, pool=pool)
+    queue = Scheduler(store)
     queue.enqueue(replace(item('fifo', capture=20, duration=10), unit_kind='capture_span'), 0)
-    queue.enqueue(replace(item('head', capture=10, duration=duration), unit_kind=kind), 0)
+    queue.enqueue(replace(item('head', capture=10, duration=121), unit_kind='capture_span'), 0)
     queue.enqueue(replace(item('tail', capture=30, duration=10), unit_kind='capture_span'), 0)
-    capacity = PoolCapacity(
-        1,
-        1,
-        max_item_seconds=120,
-        shared_with_live=pool == 'live',
-        memory_headroom_bytes=8 * 1024**3,
-        gpu_id='head-priority-gpu',
-    )
+    capacity = PoolCapacity(1, 1, max_item_seconds=120)
     lease = queue.pull(1, capacity=capacity)[0]
     assert lease.item.segment_id == 'fifo'
     key = f'{int(Priority.DEEP)}_{owner_key("heavy")}'

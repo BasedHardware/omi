@@ -246,7 +246,7 @@ def test_busy_shard_is_read_only_and_falls_back_to_another_shard(lane):
     shard = scheduler_control_key(owner_key(owners[0]))
     stores[0].run(lambda tx: tx.put('pull_claims', shard, {'token': 'other-holder', 'expires_at': 100}))
     before = stores[0].run(lambda tx: tx.get('control', shard))
-    assert queue._pull_shard(1, shard, Priority.FRESH, 7200, None) == (None, 'busy')
+    assert queue._pull_shard(1, shard, Priority.FRESH, 7200) == (None, 'busy')
     assert stores[0].run(lambda tx: tx.get('control', shard)) == before
     assert {lease.item.owner_id for lease in queue.pull(1, 3)} == set(owners[1:])
     assert stores[0].run(lambda tx: tx.get('jobs', owners[0]))['state'] == 'ready'
@@ -285,7 +285,7 @@ def test_invalidated_pull_holder_cannot_write(lane, monkeypatch, invalidation):
     monkeypatch.setattr(stores[0], 'run', run)
     before = original_run(lambda tx: tx.get('control', shard))
     job_before = original_run(lambda tx: tx.get('jobs', 'head'))
-    assert queue._pull_shard(1, shard, Priority.FRESH, 7200, None) == (None, 'busy')
+    assert queue._pull_shard(1, shard, Priority.FRESH, 7200) == (None, 'busy')
     assert original_run(lambda tx: tx.get('control', shard)) == before
     assert original_run(lambda tx: tx.get('jobs', 'head')) == job_before
     assert original_run(lambda tx: tx.get('pull_claims', shard)) == invalidated_claim

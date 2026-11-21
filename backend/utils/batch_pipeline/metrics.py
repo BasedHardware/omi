@@ -109,7 +109,7 @@ VENDOR_HELD_REFRESH_SECONDS = 300.0
 
 LABELS = {Priority.FRESH: 'fresh', Priority.RECENT: 'recent', Priority.DEEP: 'deep'}
 AGE_TARGETS = {Priority.FRESH: 30, Priority.RECENT: 300, Priority.DEEP: 3600}
-PARK_REASONS = frozenset({'privacy', 'pool_duration', 'pool_unit_kind', 'shared_live_policy'})
+PARK_REASONS = frozenset({'privacy', 'pool_duration'})
 
 
 def age_seconds(started: float | None, now: float) -> float:

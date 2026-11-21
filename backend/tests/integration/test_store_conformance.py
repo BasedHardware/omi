@@ -1198,7 +1198,6 @@ def test_head_priority_never_promotes_past_a_terminal_or_unknown_predecessor(h, 
             observations,
             now=10,
             max_seconds=60,
-            shared_gpu=False,
         )
 
     assert h.store.run(pick)['segment_id'] == 'selected'

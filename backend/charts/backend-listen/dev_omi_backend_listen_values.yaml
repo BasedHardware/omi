@@ -255,8 +255,6 @@ env:
     value: ""
   - name: BATCH_PIPELINE_UNIT_SECONDS
     value: "3600"
-  - name: BATCH_PIPELINE_SHARED_LIVE_ENABLED
-    value: "false"
   - name: PLAYBACK_ON_DEMAND_ENABLED
     value: "true"
   - name: STALE_IN_PROGRESS_RECOVERY_ENABLED
