@@ -87,10 +87,17 @@ def claim_gap_fill_marker(record_key: str, wal_key: str, ttl: int) -> bool:
         return True
 
 
-def cached_coverage_wait(key: str) -> bool:
-    """A negative coverage result only; Redis expiry is the validity boundary."""
+def cached_coverage_wait(key: str) -> str | None:
+    """The memoized negative's cause, or None; Redis expiry is the validity boundary.
+
+    Values are the static coverage cause. A ``1`` from an earlier revision is a
+    negative with an unknown cause; any other or missing value is a miss.
+    """
     try:
-        return _marker_client().get(f'sync:record_coverage_wait:v1:{key}') in (b'1', '1')
+        value = _marker_client().get(f'sync:record_coverage_wait:v1:{key}')
+        if isinstance(value, bytes):
+            value = value.decode('ascii', 'replace')
+        return value if isinstance(value, str) and value and value.replace('_', '').isalnum() else None
     except Exception:
         record_fallback(
             component='sync_dispatch',
@@ -99,13 +106,17 @@ def cached_coverage_wait(key: str) -> bool:
             reason='unavailable',
             outcome='degraded',
         )
-        return False
+        return None
 
 
-def remember_coverage_wait(key: str) -> None:
-    """Write at most once per TTL, including concurrent checks; never slide expiry."""
+def remember_coverage_wait(key: str, cause: str = '1') -> None:
+    """Write at most once per TTL, including concurrent checks; never slide expiry.
+
+    The value is the static coverage cause, so a memo hit can still tell a WAL
+    the server already holds from one carrying audio the record lacks.
+    """
     try:
-        _marker_client().set(f'sync:record_coverage_wait:v1:{key}', '1', ex=COVERAGE_WAIT_CACHE_SECONDS, nx=True)
+        _marker_client().set(f'sync:record_coverage_wait:v1:{key}', cause, ex=COVERAGE_WAIT_CACHE_SECONDS, nx=True)
     except Exception:
         record_fallback(
             component='sync_dispatch',

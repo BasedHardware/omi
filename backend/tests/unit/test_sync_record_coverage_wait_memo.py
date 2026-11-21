@@ -203,6 +203,15 @@ def test_concurrent_negative_writes_keep_first_expiry(world):
     assert not cache.cached_coverage_wait('synthetic-key')
 
 
+def test_negative_memo_carries_its_static_cause(world):
+    cache.remember_coverage_wait('synthetic-key', 'wal_audio_past_record')
+    assert cache.cached_coverage_wait('synthetic-key') == 'wal_audio_past_record'
+    # A marker written by an earlier revision is still a negative, cause unknown.
+    world.redis.rows['sync:record_coverage_wait:v1:legacy-key'] = (b'1', 300)
+    assert cache.cached_coverage_wait('legacy-key') == '1'
+    assert cache.cached_coverage_wait('missing-key') is None
+
+
 async def test_cache_outage_falls_through_to_original_response(world, monkeypatch):
     def fail(*_args, **_kwargs):
         raise RuntimeError('synthetic Redis outage')

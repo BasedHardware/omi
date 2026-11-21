@@ -160,6 +160,8 @@ env:
     value: "true"
   - name: SYNC_RECORD_DECODE_FAILURE_MEMO
     value: "true"
+  - name: SYNC_RECORD_COVERAGE_TERMINAL
+    value: "true"
   - name: CONVERSATIONS_V3_STAGE
     valueFrom:
       configMapKeyRef: {name: prod-omi-backend-config, key: CONVERSATIONS_V3_STAGE}
