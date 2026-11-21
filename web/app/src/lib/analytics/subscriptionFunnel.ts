@@ -69,11 +69,13 @@ export function trackUpgradePlanSelected(
   plan: string,
   billingInterval: string,
   source: string,
+  launchResult?: 'opened' | 'blocked',
 ): void {
   PostHogManager.track('Upgrade Plan Selected', {
     plan: subscriptionPlanWire(plan),
     billing_interval: subscriptionIntervalWire(billingInterval),
     source: subscriptionSourceWire(source),
+    ...(launchResult ? { launch_result: launchResult } : {}),
   });
 }
 

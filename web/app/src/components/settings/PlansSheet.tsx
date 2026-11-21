@@ -1,5 +1,7 @@
 'use client';
 
+import { CHECKOUT_POPUP_BLOCKED, openCheckoutWindow } from '@/lib/checkoutWindow';
+
 import * as Dialog from '@radix-ui/react-dialog';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Check, Crown, CreditCard, Loader2, AlertCircle } from 'lucide-react';
@@ -175,11 +177,11 @@ export function PlansSheet({
 
       const tier = option?.plan_id ?? 'unknown';
       const interval = option?.interval ?? option?.title ?? 'unknown';
-      trackUpgradePlanSelected(tier, interval, 'web_plans');
 
       // If already subscribed and selecting a different plan, use upgrade endpoint
       if (isPaid && !isCanceling_ && !isCurrentPlan) {
         purchaseRoute = 'upgrade';
+        trackUpgradePlanSelected(tier, interval, 'web_plans');
         const result = await upgradeSubscription(priceId);
         if (result?.status === 'success' || result?.scheduled_start) {
           trackUpgradeSucceeded(tier, interval);
@@ -196,7 +198,16 @@ export function PlansSheet({
           // Stripe Checkout opens in a new tab. The parent page never sees the
           // cancel URL Stripe returns to, so Upgrade Cancelled is not emitted
           // here. trackUpgradeCancelled exists for a client that can observe it.
-          window.open(result.url, '_blank');
+          if (
+            !openCheckoutWindow(result.url, {
+              plan: tier,
+              billingInterval: interval,
+              source: 'web_plans',
+            })
+          ) {
+            setError(CHECKOUT_POPUP_BLOCKED);
+            return;
+          }
           onOpenChange(false);
           // Listen for window focus to refresh subscription
           const handleFocus = () => {
@@ -205,6 +216,7 @@ export function PlansSheet({
           };
           window.addEventListener('focus', handleFocus);
         } else if (result?.status === 'reactivated') {
+          trackUpgradePlanSelected(tier, interval, 'web_plans');
           const seconds = renewalDateSeconds(
             result.next_billing_date,
             subscription?.current_period_end,
@@ -292,6 +304,9 @@ export function PlansSheet({
                   initial={{ opacity: 0, scale: 0.95, y: 10 }}
                   animate={{ opacity: 1, scale: 1, y: 0 }}
                   exit={{ opacity: 0, scale: 0.95, y: 10 }}
+                  transformTemplate={(_, transform) =>
+                    `translate(-50%, -50%) ${transform}`
+                  }
                   transition={{ duration: 0.15, ease: 'easeOut' }}
                   className={cn(
                     'fixed left-1/2 top-1/2 z-[101] -translate-x-1/2 -translate-y-1/2',
