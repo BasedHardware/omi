@@ -126,8 +126,11 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   int _lastNotifiedBatteryLevel = -1;
   DateTime? _lastBatteryNotifyTime;
   bool _hasLowBatteryAlerted = false;
+  @visibleForTesting
+  bool get hasLowBatteryAlertedForTesting => _hasLowBatteryAlerted;
   static const _firstChargeSettleTime = Duration(seconds: 12);
   static const _batteryRefreshTimeout = Duration(seconds: 3);
+  String? _firstPairingCandidateId;
   String? _firstChargeDeviceId;
   Timer? _firstChargeCheck;
   bool _chargingStatusReady = false;
@@ -276,6 +279,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   void clearUserData() {
     ServiceManager.instance().device.savedReconnect.stop();
     _sessionGeneration++;
+    _firstPairingCandidateId = null;
     _resetBatteryState();
     _admittedLink = null;
     _readoptExpectedPair = null;
@@ -385,6 +389,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     if (isNewConnection || device == null) _resetBatteryState();
     connectedDevice = device;
     pairedDevice = device;
+    _beginFirstChargeCheck();
     if (isNewConnection) {
       if (_firmwareUpdateDeviceId != null && _firmwareUpdateDeviceId != device.id) {
         _firmwareUpdatePromptCoordinator.clearAvailableVersion(invalidateDeferral: true);
@@ -689,12 +694,26 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     ));
   }
 
-  /// Only the first pairing starts a settle window. An observed charge can
-  /// extend it until the charge signal falls, without holding up onboarding.
-  void beginFirstChargeCheck() {
+  /// Mark a first pairing before BLE connects so an early sample uses the same
+  /// settle window. The pairing caller retires this marker when the attempt ends.
+  VoidCallback prepareFirstChargeCheck(String deviceId) {
+    _firstPairingCandidateId = deviceId;
+    _beginFirstChargeCheck();
+    return () {
+      if (_firstPairingCandidateId == deviceId) _firstPairingCandidateId = null;
+    };
+  }
+
+  void _beginFirstChargeCheck() {
     final device = connectedDevice;
-    if (device == null || device.type != DeviceType.omi || _firstChargeDeviceId == device.id) return;
+    if (device == null ||
+        device.id != _firstPairingCandidateId ||
+        device.type != DeviceType.omi ||
+        _firstChargeDeviceId == device.id) {
+      return;
+    }
     _firstChargeDeviceId = device.id;
+    _firstPairingCandidateId = null;
     if (_chargingStatusReady) _updateFirstChargeCheck(isCharging);
   }
 
@@ -707,13 +726,10 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     } else {
       _firstChargeCheck ??= Timer(_firstChargeSettleTime, () async {
         final check = _firstChargeCheck;
-        final sampleRevision = _batterySampleRevision;
-        final refreshed = await refreshBatteryLevel();
+        await refreshBatteryLevel();
         if (_firstChargeCheck != check) return;
         _clearFirstChargeCheck();
-        if ((refreshed || _batterySampleRevision != sampleRevision) && batteryLevel >= 0) {
-          _noteLowBattery(batteryLevel);
-        }
+        if (batteryLevel >= 0) _noteLowBattery(batteryLevel);
       });
     }
   }

@@ -122,7 +122,7 @@ void main() {
     provider.connectedDevice = _device();
     provider.setIsConnected(true);
     provider.batteryLevel = 3;
-    provider.beginFirstChargeCheck();
+    provider.prepareFirstChargeCheck(_device().id);
     final listening = provider.initiateChargingStatusListener();
     await tester.pump(const Duration(seconds: 15));
     expect(transport.batteryReads, 0);
@@ -160,7 +160,7 @@ void main() {
     addTearDown(provider.dispose);
     provider.connectedDevice = _device();
     provider.setIsConnected(true);
-    provider.beginFirstChargeCheck();
+    provider.prepareFirstChargeCheck(_device().id);
     await provider.initiateChargingStatusListener();
     await tester.pump(const Duration(seconds: 12));
     expect(transport.batteryReads, 1);
@@ -169,6 +169,27 @@ void main() {
     pending.complete([91]);
     await tester.pump();
     expect(provider.batteryLevel, -1);
+  });
+
+  testWidgets('an early low reading alerts after the first pairing recheck fails', (tester) async {
+    final transport = _ChargingTransport()..value = [0];
+    final provider = _provider(transport, []);
+    addTearDown(transport.notifications.close);
+    addTearDown(provider.dispose);
+    final device = _device();
+    final finish = provider.prepareFirstChargeCheck(device.id);
+    await provider.setConnectedDevice(device);
+    provider.setIsConnected(true);
+    await provider.initiateChargingStatusListener();
+    expect(await provider.refreshBatteryLevel(), isTrue);
+    expect(provider.batteryLevel, 3);
+    expect(provider.hasLowBatteryAlertedForTesting, isFalse);
+    finish();
+    transport.battery = [];
+    await tester.pump(const Duration(seconds: 12));
+    expect(transport.batteryReads, 2);
+    expect(provider.batteryLevel, 3);
+    expect(provider.hasLowBatteryAlertedForTesting, isTrue);
   });
 
   test('late charging read from a disconnected session cannot restore charging', () async {
