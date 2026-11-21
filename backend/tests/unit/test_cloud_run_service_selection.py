@@ -219,9 +219,17 @@ def test_step_census_refuses_an_unclassified_new_step():
     # 2026-11-20 `Resolve live integration maxScale`: read-only (services list and
     # revisions describe), integration-scoped with the integration deploy's exact `if`;
     # its shell is exercised in test_cloud_run_live_caps.py.
+    # `Resolve production backend memory` reads local ops config and writes only
+    # step outputs. It runs for the production backend/sync deploy paths.
+    memory = step('Resolve production backend memory')
+    assert memory['if'] == (
+        "${{ inputs.runtime_env == 'prod' && inputs.integration_only != 'true' && "
+        "(inputs.cloud_run_service == 'all' || inputs.cloud_run_service == 'backend' || "
+        "inputs.cloud_run_service == 'backend-sync') }}"
+    )
     assert (
         hashlib.sha256(json.dumps([s['name'] for s in STEPS]).encode()).hexdigest()
-        == "87184a7a11dadd01fa57f86f22b4599fe0847073239510fa80703d0bbd5f2970"
+        == "36ae1be07abee676dfe48c15a93fe687f228fbb9d14c90f4804cfa187878f34a"
     )
 
 
