@@ -58,10 +58,10 @@ class BlockingTranslationStore(DictTranslationStore):
 
 def test_duplicate_sentences_are_sent_to_provider_once_and_reassembled():
     provider = FakeProvider(
-        TranslationProvider.google,
+        TranslationProvider.luna,
         responses=[translations(('Bonjour.', 'en'), ('Partagé.', 'en'), ('Au revoir.', 'en'))],
     )
-    service, _cache = build_service({TranslationProvider.google: provider})
+    service, _cache = build_service({TranslationProvider.luna: provider})
 
     results = service.translate_outcomes(
         'fr',
@@ -74,10 +74,10 @@ def test_duplicate_sentences_are_sent_to_provider_once_and_reassembled():
 
 def test_duplicate_unit_ids_preserve_order_and_identity():
     provider = FakeProvider(
-        TranslationProvider.google,
+        TranslationProvider.luna,
         responses=[translations(('Uno.', 'en'), ('Dos.', 'en'))],
     )
-    service, _cache = build_service({TranslationProvider.google: provider})
+    service, _cache = build_service({TranslationProvider.luna: provider})
 
     results = service.translate_outcomes('es', [('same-id', 'One.'), ('same-id', 'Two.')])
 
@@ -88,8 +88,8 @@ def test_duplicate_unit_ids_preserve_order_and_identity():
 
 
 def test_output_cardinality_always_equals_input_cardinality_including_empty_text():
-    provider = FakeProvider(TranslationProvider.google, responses=[translations(('Hola', 'en'))])
-    service, _cache = build_service({TranslationProvider.google: provider})
+    provider = FakeProvider(TranslationProvider.luna, responses=[translations(('Hola', 'en'))])
+    service, _cache = build_service({TranslationProvider.luna: provider})
 
     results = service.translate_outcomes('es', [('empty', ''), ('full', 'Hello')])
 
@@ -100,8 +100,8 @@ def test_output_cardinality_always_equals_input_cardinality_including_empty_text
 
 
 def test_source_language_reaches_the_provider():
-    provider = FakeProvider(TranslationProvider.google, responses=[translations(('Hola', 'en'))])
-    service, _cache = build_service({TranslationProvider.google: provider})
+    provider = FakeProvider(TranslationProvider.luna, responses=[translations(('Hola', 'en'))])
+    service, _cache = build_service({TranslationProvider.luna: provider})
 
     service.translate_units_batch('es', [('segment', 'Hello')], source_language='en')
 
@@ -110,7 +110,7 @@ def test_source_language_reaches_the_provider():
 
 def test_max_batch_size_chunks_provider_calls_without_changing_output_order():
     provider = FakeProvider(
-        TranslationProvider.google,
+        TranslationProvider.luna,
         responses=[
             translations(('Uno.', 'en'), ('Dos.', 'en')),
             translations(('Tres.', 'en'), ('Cuatro.', 'en')),
@@ -118,7 +118,7 @@ def test_max_batch_size_chunks_provider_calls_without_changing_output_order():
         ],
     )
     service, _cache = build_service(
-        {TranslationProvider.google: provider},
+        {TranslationProvider.luna: provider},
         selected_profile=profile(max_batch_size=2),
     )
 
@@ -134,10 +134,10 @@ def test_max_batch_size_chunks_provider_calls_without_changing_output_order():
 
 def test_dominant_detected_language_is_reconstructed_from_sentence_results():
     provider = FakeProvider(
-        TranslationProvider.google,
+        TranslationProvider.luna,
         responses=[translations(('Un.', 'en'), ('Deux.', 'fr'), ('Trois.', 'en'))],
     )
-    service, _cache = build_service({TranslationProvider.google: provider})
+    service, _cache = build_service({TranslationProvider.luna: provider})
 
     outcome = service.translate_outcomes('fr', [('unit', 'One. Two. Three.')])[0]
 
@@ -147,8 +147,8 @@ def test_dominant_detected_language_is_reconstructed_from_sentence_results():
 
 def test_full_text_cache_hit_skips_provider_even_with_duplicate_unit_ids():
     store = DictTranslationStore()
-    provider = FakeProvider(TranslationProvider.google, responses=[translations(('Deux.', 'en'))])
-    service, cache = build_service({TranslationProvider.google: provider}, store=store)
+    provider = FakeProvider(TranslationProvider.luna, responses=[translations(('Deux.', 'en'))])
+    service, cache = build_service({TranslationProvider.luna: provider}, store=store)
     cache.put(fingerprint_text('One.'), 'fr', CachedTranslation('Un.', 'en'), profile())
 
     outcomes = service.translate_outcomes('fr', [('same', 'One.'), ('same', 'Two.')])
@@ -160,8 +160,8 @@ def test_full_text_cache_hit_skips_provider_even_with_duplicate_unit_ids():
 def test_negative_sentence_cache_and_provider_result_reconstruct_one_complete_unit():
     store = DictTranslationStore()
     store.negative.add((fingerprint_text('Already.'), 'en'))
-    provider = FakeProvider(TranslationProvider.google, responses=[translations(('Hello.', 'es'))])
-    service, _cache = build_service({TranslationProvider.google: provider}, store=store)
+    provider = FakeProvider(TranslationProvider.luna, responses=[translations(('Hello.', 'es'))])
+    service, _cache = build_service({TranslationProvider.luna: provider}, store=store)
 
     outcome = service.translate_outcomes('en', [('unit', 'Already. Hola.')])[0]
 
@@ -254,8 +254,8 @@ def test_observe_target_language_skips_share_one_negative_cache_lifecycle(
     metric_name,
 ):
     store = DictTranslationStore()
-    provider = FakeProvider(TranslationProvider.google, responses=[])
-    service, _cache = build_service({TranslationProvider.google: provider}, store=store)
+    provider = FakeProvider(TranslationProvider.luna, responses=[])
+    service, _cache = build_service({TranslationProvider.luna: provider}, store=store)
     language_state = ConversationLanguageState('en')
     monkeypatch.setattr(language_state, 'observe', lambda *_args, **_kwargs: monolingual_skip)
     monkeypatch.setattr(language_state, 'should_probe', lambda: False)
@@ -281,8 +281,8 @@ def test_observe_target_language_skips_share_one_negative_cache_lifecycle(
 
 def test_observe_cached_noop_prefix_invalidates_pending_work_once_per_lifecycle():
     store = DictTranslationStore()
-    provider = FakeProvider(TranslationProvider.google, responses=[])
-    service, cache = build_service({TranslationProvider.google: provider}, store=store)
+    provider = FakeProvider(TranslationProvider.luna, responses=[])
+    service, cache = build_service({TranslationProvider.luna: provider}, store=store)
     cache.put(
         fingerprint_text('Merged.'),
         'en',
@@ -322,8 +322,8 @@ def test_observe_cached_noop_prefix_invalidates_pending_work_once_per_lifecycle(
 def test_stale_cached_prefix_does_not_invalidate_newer_work_queued_during_cache_io():
     store = BlockingTranslationStore()
     store.values[(fingerprint_text('Merged.'), 'en')] = CachedTranslation('Merged.', 'en')
-    provider = FakeProvider(TranslationProvider.google, responses=[])
-    service, _cache = build_service({TranslationProvider.google: provider}, store=store)
+    provider = FakeProvider(TranslationProvider.luna, responses=[])
+    service, _cache = build_service({TranslationProvider.luna: provider}, store=store)
 
     async def on_ready(_segment_id: str, _text: str, _detected: str, _conversation_id: str) -> None:
         raise AssertionError('cached no-op must not notify')
@@ -358,8 +358,8 @@ def test_stale_cached_prefix_does_not_invalidate_newer_work_queued_during_cache_
 
 def test_observe_cached_translation_adopts_prefix_and_notifies_without_requeueing():
     store = DictTranslationStore()
-    provider = FakeProvider(TranslationProvider.google, responses=[])
-    service, cache = build_service({TranslationProvider.google: provider}, store=store)
+    provider = FakeProvider(TranslationProvider.luna, responses=[])
+    service, cache = build_service({TranslationProvider.luna: provider}, store=store)
     cache.put(
         fingerprint_text('Hello.'),
         'fr',
@@ -387,8 +387,8 @@ def test_observe_cached_translation_adopts_prefix_and_notifies_without_requeuein
 
 
 def test_observe_restarts_one_batch_timer_while_preserving_queued_units(monkeypatch):
-    provider = FakeProvider(TranslationProvider.google, responses=[])
-    service, _cache = build_service({TranslationProvider.google: provider})
+    provider = FakeProvider(TranslationProvider.luna, responses=[])
+    service, _cache = build_service({TranslationProvider.luna: provider})
     language_state = ConversationLanguageState('fr')
     monkeypatch.setattr(language_state, 'observe', lambda *_args, **_kwargs: False)
     monkeypatch.setattr(
@@ -422,8 +422,8 @@ def test_observe_restarts_one_batch_timer_while_preserving_queued_units(monkeypa
 
 
 def test_coordinator_consumes_typed_success_through_production_path():
-    provider = FakeProvider(TranslationProvider.google, responses=[translations(('Bonjour.', 'en'))])
-    service, _cache = build_service({TranslationProvider.google: provider})
+    provider = FakeProvider(TranslationProvider.luna, responses=[translations(('Bonjour.', 'en'))])
+    service, _cache = build_service({TranslationProvider.luna: provider})
     callbacks: list[tuple[str, str, str, str]] = []
 
     async def on_ready(segment_id: str, text: str, detected: str, conversation_id: str) -> None:
@@ -444,10 +444,10 @@ def test_coordinator_consumes_typed_success_through_production_path():
 
 def test_coordinator_keeps_failed_input_retryable():
     provider = FakeProvider(
-        TranslationProvider.google,
-        responses=[provider_error(TranslationProvider.google)],
+        TranslationProvider.luna,
+        responses=[provider_error(TranslationProvider.luna)],
     )
-    service, _cache = build_service({TranslationProvider.google: provider})
+    service, _cache = build_service({TranslationProvider.luna: provider})
     callbacks: list[tuple[str, str, str, str]] = []
 
     async def on_ready(segment_id: str, text: str, detected: str, conversation_id: str) -> None:
@@ -467,8 +467,8 @@ def test_coordinator_keeps_failed_input_retryable():
 
 
 def test_coordinator_rejects_stale_work_before_calling_provider():
-    provider = FakeProvider(TranslationProvider.google, responses=[])
-    service, _cache = build_service({TranslationProvider.google: provider})
+    provider = FakeProvider(TranslationProvider.luna, responses=[])
+    service, _cache = build_service({TranslationProvider.luna: provider})
 
     async def on_ready(_segment_id: str, _text: str, _detected: str, _conversation_id: str) -> None:
         raise AssertionError('stale work must not notify')
@@ -486,8 +486,8 @@ def test_coordinator_rejects_stale_work_before_calling_provider():
 
 def test_coordinator_does_not_negative_cache_short_noop_from_echoed_target():
     store = DictTranslationStore()
-    provider = FakeProvider(TranslationProvider.google, responses=[translations(('Hello.', 'en'))])
-    service, _cache = build_service({TranslationProvider.google: provider}, store=store)
+    provider = FakeProvider(TranslationProvider.luna, responses=[translations(('Hello.', 'en'))])
+    service, _cache = build_service({TranslationProvider.luna: provider}, store=store)
     callbacks: list[tuple[str, str, str, str]] = []
 
     async def on_ready(segment_id: str, text: str, detected: str, conversation_id: str) -> None:
@@ -508,8 +508,8 @@ def test_coordinator_does_not_negative_cache_short_noop_from_echoed_target():
 
 def test_coordinator_does_not_negative_cache_unchanged_foreign_text():
     store = DictTranslationStore()
-    provider = FakeProvider(TranslationProvider.google, responses=[translations(('Hola.', 'es'))])
-    service, _cache = build_service({TranslationProvider.google: provider}, store=store)
+    provider = FakeProvider(TranslationProvider.luna, responses=[translations(('Hola.', 'es'))])
+    service, _cache = build_service({TranslationProvider.luna: provider}, store=store)
     callbacks: list[tuple[str, str, str, str]] = []
 
     async def on_ready(segment_id: str, text: str, detected: str, conversation_id: str) -> None:

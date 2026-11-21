@@ -219,7 +219,10 @@ def find_neighbor(
     best: Optional[Neighbor] = None
     for row in rows:
         other_id = row.get('id')
-        other_start, other_end = row.get('started_at'), row.get('finished_at')
+        from utils.conversations.recorded_time import conversation_span
+
+        span = conversation_span(row)
+        other_start, other_end = (span.recorded_start, span.recorded_end) if span else (None, None)
         if not other_id or other_id == conversation_id or row.get('discarded') or row.get('deleted'):
             continue
         if not isinstance(other_start, datetime) or not isinstance(other_end, datetime):
@@ -235,6 +238,20 @@ def find_neighbor(
     return best
 
 
+# Rule ids proving the text holds nothing worth keeping. These outrank occasion
+# retention and the short-clip floor. An empty transcript is excluded: it says
+# nothing about the speech, and its retention and calendar rules stand unchanged.
+_CONTENT_FREE_RULES = frozenset({'filler_only', 'mic_check', 'no_content_words'})
+
+
+def content_free_rule(texts: Sequence[str], *, has_photos: bool, trusted_wake_word: bool) -> Optional[str]:
+    """The rule id that proves ``texts`` carry no content, or None."""
+    if has_photos or trusted_wake_word:
+        return None
+    verdict, rule = deterministic_relevance(texts, None)
+    return rule if verdict == 'discard' and rule in _CONTENT_FREE_RULES else None
+
+
 def decide_relevance(
     *,
     trigger: ProcessingTrigger,
@@ -247,6 +264,7 @@ def decide_relevance(
     model_discards: Optional[Callable[[Callable[[Exception], None], Optional[Neighbor]], bool]],
     calendar_retains: Callable[[], bool],
     neighbor: Callable[[], Optional[Neighbor]] = lambda: None,
+    occasion_retains: Callable[[], Optional[str]] = lambda: None,
     jev_discard_probability: Optional[Callable[[], Optional[float]]] = None,
     arm: RelevanceArm = 'nano',
     record_arm: bool = False,
@@ -314,6 +332,24 @@ def decide_relevance(
         return keep('policy', 'exempt')
     if user_kept:
         return keep('user', 'restored')
+
+    # Text the rules prove content-free has nothing to transfer to a survivor, so
+    # it never stands as its own row, whatever occasion it was captured during.
+    rule_without_content = content_free_rule(texts, has_photos=has_photos, trusted_wake_word=trusted_wake_word)
+    if rule_without_content:
+        return discard_unless_calendar('rule', rule_without_content)
+
+    # A member is evidence of the whole occasion. A continuation can only be
+    # hidden after transactional absorption proves its content reached a survivor.
+    from config.occasion_relevance import enabled as occasion_relevance_enabled
+
+    if occasion_relevance_enabled():
+        occasion_reason = occasion_retains()
+        if occasion_reason:
+            return keep('policy', occasion_reason)
+        adjacent = neighbor()
+        if adjacent is not None:
+            return replace(keep('policy', 'occasion_neighbor'), neighbor_id=adjacent.conversation_id)
 
     # Photos carry content the transcript rules cannot see, and a trusted wake
     # word is judged by the model's wake-word rules (an invocation the

@@ -14,6 +14,40 @@ from tests.unit.test_soniox_batch import FILE, TRANSCRIPTION, TRANSCRIPT
 def configured(monkeypatch):
     monkeypatch.setenv('SONIOX_API_KEY', 'synthetic-only-key')
     monkeypatch.setenv('BATCH_PIPELINE_INDEPENDENT_LANGUAGE_RECOVERY_ENABLED', 'true')
+    module._DEFERRED_CLEANUP.clear()
+    yield
+    module._DEFERRED_CLEANUP.clear()
+
+
+@pytest.mark.asyncio
+async def test_transcription_still_processing_at_deadline_is_deleted_by_a_later_call():
+    now, calls, processing = [0.0], [], [True]
+
+    async def handler(request):
+        calls.append((request.method, request.url.path))
+        if request.method == 'DELETE':
+            if request.url.path.startswith('/v1/transcriptions/') and processing[0]:
+                return httpx.Response(409)
+            return httpx.Response(204)
+        if request.url.path == '/v1/files':
+            return httpx.Response(201, json={'id': FILE})
+        status = 'processing' if processing[0] else 'completed'
+        if request.url.path.endswith('/transcript'):
+            return httpx.Response(200, json=TRANSCRIPT)
+        return httpx.Response(201 if request.method == 'POST' else 200, json={'id': TRANSCRIPTION, 'status': status})
+
+    async def sleep(seconds):
+        now[0] += seconds
+        await asyncio.sleep(0)
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        with pytest.raises(module.SonioxBatchError):
+            await module.transcribe_async(b'synthetic', 5, client=client, clock=lambda: now[0], sleep=sleep)
+        assert list(module._DEFERRED_CLEANUP) == [f'/transcriptions/{TRANSCRIPTION}']
+        processing[0], calls[:] = False, []
+        await module.transcribe_async(b'synthetic', 5, client=client, clock=lambda: now[0], sleep=sleep)
+    assert calls.count(('DELETE', f'/v1/transcriptions/{TRANSCRIPTION}')) == 2
+    assert not module._DEFERRED_CLEANUP
 
 
 @pytest.mark.asyncio
@@ -112,8 +146,8 @@ async def test_http_queue_wait_counts_against_deadline(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_default_off_prevents_even_an_upload(monkeypatch):
-    monkeypatch.delenv('BATCH_PIPELINE_INDEPENDENT_LANGUAGE_RECOVERY_ENABLED')
+async def test_kill_switch_off_prevents_even_an_upload(monkeypatch):
+    monkeypatch.setenv('BATCH_PIPELINE_INDEPENDENT_LANGUAGE_RECOVERY_ENABLED', 'false')
     client = AsyncMock()
     with pytest.raises(module.SonioxBatchError):
         await module.transcribe_async(b'synthetic', 5, client=client)
@@ -122,7 +156,7 @@ async def test_default_off_prevents_even_an_upload(monkeypatch):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('stage', ['upload', 'create', 'poll', 'transcript'])
-async def test_async_http_error_never_becomes_empty_or_retried(stage, caplog):
+async def test_async_http_error_retries_are_bounded_and_never_become_empty(stage, caplog):
     calls = []
 
     async def handler(request):
@@ -150,5 +184,8 @@ async def test_async_http_error_never_becomes_empty_or_retried(stage, caplog):
     async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
         with pytest.raises(module.SonioxBatchError):
             await module.transcribe_async(b'synthetic', 5, client=client, sleep=sleep)
-    assert sum(method == 'POST' for method, _ in calls) <= 2
+    assert sum(method == 'POST' and path == '/v1/transcriptions' for method, path in calls) == (
+        0 if stage == 'upload' else 1
+    )
+    assert sum(method == 'POST' and path == '/v1/files' for method, path in calls) == (3 if stage == 'upload' else 1)
     assert 'PRIVATE_SENTINEL' not in caplog.text

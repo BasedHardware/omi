@@ -1,12 +1,14 @@
 import json
 import logging
 from collections.abc import Callable, Mapping, Sequence
+from functools import lru_cache
 from typing import TYPE_CHECKING, Any, List, Optional, Protocol, cast
 
 from langchain_core.output_parsers import PydanticOutputParser
 from pydantic import BaseModel, Field
+from pydantic.json_schema import SkipJsonSchema
 
-from config.llm_spend import memory_l1_owner_neutral_prefix_enabled
+from config.llm_spend import memory_l1_prompt_schema_trim_enabled
 from database.memory_non_active_routes import (
     NonActiveRoute,
     NonActiveRouteOutcome,
@@ -164,6 +166,31 @@ class WorkingObservationBatch(BaseModel):
 L1MemoryArchiveItems = WorkingObservationBatch
 
 
+# The archive validator derives the four policy fields on every parse, and
+# _with_deterministic_archive_ids replaces archive_id before returning items.
+# Omit only these server-derived properties from the model-facing schema.
+class _L1PromptItem(WorkingObservationArchiveItem):
+    archive_id: SkipJsonSchema[str] = ""
+    allowed_use: SkipJsonSchema[Optional[str]] = None
+    normal_search_allowed: SkipJsonSchema[bool] = True
+    is_stable_profile_fact: SkipJsonSchema[bool] = False
+    search_result_label: SkipJsonSchema[str] = "archived_evidence_not_stable_memory"
+
+
+class _L1PromptBatch(BaseModel):
+    items: List[_L1PromptItem] = Field(
+        default_factory=list,
+        description=f"At most {MAX_WORKING_OBSERVATION_ITEMS} distinct, highest-value observations.",
+    )
+
+
+@lru_cache(maxsize=1)
+def _l1_format_instructions() -> str:
+    # Only generation uses the projection. Responses still use the original
+    # WorkingObservationBatch parser, including older/full-shaped responses.
+    return PydanticOutputParser(pydantic_object=_L1PromptBatch).get_format_instructions()
+
+
 def _source_type_instructions(source_type: str, user_name: str, *, owner_neutral: bool = False) -> str:
     """Return source-type-specific guidance for the L1 archive extractor.
 
@@ -280,6 +307,8 @@ def _build_l1_messages(
         f"Return at most {MAX_WORKING_OBSERVATION_ITEMS} distinct items. If the source contains more, "
         f"keep the highest-value durable facts and decisions first.\n\n"
         f"What NOT to extract:\n"
+        f"- Explicit reminder requests (\"remind me to ...\") and one-off to-dos: these belong in action items, not durable facts.\n"
+        f"- Current-session instructions to an AI assistant, unless they independently state a durable fact.\n"
         f"- AI assistant chatter, nudges, generic praise (\"great job!\", \"you can do it!\")\n"
         f"- Third-party storytelling, movie plots, game narration, article content {who}\n"
         f"  didn't engage with.\n"
@@ -435,12 +464,12 @@ def extract_l1_memory_archive_items_from_text(
 
     name = user_name or "the user"
     parser = PydanticOutputParser(pydantic_object=WorkingObservationBatch)
-    owner_neutral = memory_l1_owner_neutral_prefix_enabled()
+    owner_neutral = False
     prompt_messages = _build_l1_messages(
         name,
         source_type,
         text,
-        parser.get_format_instructions(),
+        _l1_format_instructions() if memory_l1_prompt_schema_trim_enabled() else parser.get_format_instructions(),
         language_instruction=language_instruction,
         rejected_memory_examples=rejected_memory_examples,
         owner_neutral=owner_neutral,

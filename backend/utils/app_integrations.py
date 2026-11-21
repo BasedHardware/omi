@@ -39,7 +39,6 @@ from database.webhook_health import (
     disable_app_in_firestore,
 )
 from database.chat import add_app_message, get_app_messages
-from utils.subscription import is_trial_paywalled
 from database.redis_db import (
     get_generic_cache,
     set_generic_cache,
@@ -730,14 +729,6 @@ async def _async_trigger_realtime_integrations(
     *,
     client_kind: ClientKind = 'unknown',
 ) -> dict:
-    # Paywall: skip third-party proactive notifications when this
-    # transcription session belongs to a paywalled desktop user.
-    # Reactivates automatically when the user upgrades or activates BYOK.
-    if await run_blocking(db_executor, is_trial_paywalled, uid, source):
-        return {}
-
-    # Live episode moments (utils/episodes/live.py): buffers in process and
-    # schedules its own fail-open background update; never blocks this fan-out.
     await on_realtime_segments(uid, segments, conversation_id, source)
 
     apps: List[App] = await run_blocking(db_executor, get_available_apps, uid)

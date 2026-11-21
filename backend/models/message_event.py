@@ -113,9 +113,14 @@ class MessageServiceStatusEvent(MessageEvent):
 
     # Additive capability: absent on old servers means live-only on new clients.
     mobile_standard_batch: Optional[bool] = None
+    # Explicit server custody mode; provider-less deferred streams are not batch-only.
+    server_batch_only: Optional[bool] = None
     # Mobile local-preview lane: journal ALL pendant audio for batch (visible or
     # not) and render the on-device preview. Absent means today's live transcript.
     local_preview: Optional[bool] = None
+    # Seconds without speech after which the phone may declare a silence end
+    # of the recording. Absent means the phone sends no silence end.
+    end_silence_seconds: Optional[int] = None
 
     def to_json(self):
         # The outcome fields are an additive terminal-failure contract, not

@@ -39,6 +39,7 @@ class MeetingRoster:
     # True when display_title came from a screen/window title rather than a
     # calendar record — callers may treat it as weaker identity.
     title_is_window_title: bool
+    catalog_person_ids: tuple[str, ...] = ()
 
 
 # Maintained catalog of AI notetaker/assistant identities on invites and
@@ -367,6 +368,8 @@ def _resolve_person(
     name: Optional[str],
     email: Optional[str],
     people: list[Mapping[str, Any]],
+    *,
+    exact_only: bool = False,
 ) -> Optional[Mapping[str, Any]]:
     """Resolve a participant to a people-catalog entry, precision first.
 
@@ -375,14 +378,20 @@ def _resolve_person(
     resolves when exactly one catalog entry carries that first token — two
     different-surnamed people sharing it must never be merged into one person.
     """
+    people = [p for p in people if p.get('is_dismissed') is not True]
     email_cf = (email or '').casefold()
     if email_cf:
-        for person in people:
-            if email_cf in _person_emails(person):
-                return person
+        matches = [p for p in people if email_cf in _person_emails(p)]
+        if exact_only:
+            return matches[0] if len(matches) == 1 else None
+        if matches:
+            return matches[0]
     if not name:
         return None
     name_cf = name.strip().casefold()
+    if exact_only:
+        matches = [p for p in people if name_cf in _person_names(p)]
+        return matches[0] if len(matches) == 1 else None
     exact = [person for person in people if name_cf in _person_names(person)]
     if len(exact) == 1:
         return exact[0]
@@ -461,6 +470,8 @@ def normalize_meeting_participants(
     owner_name: Optional[str],
     owner_emails: Iterable[str],
     people: Iterable[Mapping[str, Any]],
+    *,
+    exact_people_match: bool = False,
 ) -> MeetingRoster:
     """Build the factual roster the prompt and post-validator share.
 
@@ -530,7 +541,7 @@ def normalize_meeting_participants(
     ai_entries: list[RosterEntry] = []
     for item in classified:
         name, email, domain = item['name'], item['email'], item['domain']
-        person = _resolve_person(name, email, people_list)
+        person = _resolve_person(name, email, people_list, exact_only=exact_people_match)
         is_owner = False
         email_proved = False
         if owner_known:
@@ -637,7 +648,12 @@ def normalize_meeting_participants(
         )
     entries.extend(humans)
     entries.extend(ai_agents)
-    return MeetingRoster(entries=tuple(entries), display_title=display_title, title_is_window_title=screen_derived)
+    return MeetingRoster(
+        entries=tuple(entries),
+        display_title=display_title,
+        title_is_window_title=screen_derived,
+        catalog_person_ids=tuple(str(p['id']) for p in people_list if p.get('id')),
+    )
 
 
 __all__ = [

@@ -36,8 +36,8 @@ def test_hidden_observation_is_uncommitted_then_viewed_reconciles_without_new_te
     monkeypatch.setattr('utils.translation_coordinator.release_translation', lambda *args, **kwargs: True)
     now = [0.0]
     demand = TranslationDemand(lambda: now[0])
-    provider = FakeProvider(TranslationProvider.gemini, [translations(('Yến spoke with the elder about 2025.', 'vi'))])
-    service, _ = build_service({TranslationProvider.gemini: provider})
+    provider = FakeProvider(TranslationProvider.luna, [translations(('Yến spoke with the elder about 2025.', 'vi'))])
+    service, _ = build_service({TranslationProvider.luna: provider})
     received = []
 
     async def callback(*args):
@@ -79,8 +79,8 @@ def test_demand_hidden_during_reservation_blocks_dispatch(monkeypatch):
     monkeypatch.setattr('utils.translation_coordinator.release_translation', lambda *a, **k: released.append(1) or True)
     now = [0.0]
     demand = TranslationDemand(lambda: now[0])
-    provider = FakeProvider(TranslationProvider.gemini, [])
-    service, _ = build_service({TranslationProvider.gemini: provider})
+    provider = FakeProvider(TranslationProvider.luna, [])
+    service, _ = build_service({TranslationProvider.luna: provider})
     received = []
 
     async def callback(*args):
@@ -151,8 +151,8 @@ def test_failed_materialization_does_not_commit_translated_prefix(monkeypatch):
     monkeypatch.setattr('utils.translation_coordinator.release_translation', lambda *args, **kwargs: True)
     demand = TranslationDemand(lambda: 0)
     demand.observe({'foreground': True, 'transcript_visible': True, 'translation_demand_version': 1})
-    provider = FakeProvider(TranslationProvider.gemini, [translations(('Yến spoke with the elder about 2025.', 'vi'))])
-    service, _ = build_service({TranslationProvider.gemini: provider})
+    provider = FakeProvider(TranslationProvider.luna, [translations(('Yến spoke with the elder about 2025.', 'vi'))])
+    service, _ = build_service({TranslationProvider.luna: provider})
 
     async def rejected(*args):
         return False
@@ -226,8 +226,8 @@ def test_viewed_policy_serves_targets_outside_the_nllb_table(monkeypatch):
     monkeypatch.setattr('utils.translation_coordinator.release_translation', lambda *args, **kwargs: True)
     now = [0.0]
     demand = TranslationDemand(lambda: now[0])
-    provider = FakeProvider(TranslationProvider.gemini, [translations(('Hello world.', 'en'))])
-    service, _ = build_service({TranslationProvider.gemini: provider})
+    provider = FakeProvider(TranslationProvider.luna, [translations(('Hello world.', 'en'))])
+    service, _ = build_service({TranslationProvider.luna: provider})
     received = []
 
     async def callback(*args):

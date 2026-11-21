@@ -1,0 +1,64 @@
+*** Booting nRF Connect SDK v2.9.0-7787b2649840 ***
+*** Using Zephyr OS v3.7.99-1f8f3dc29142 ***
+Starting omi ...
+Reset by soft-reset
+[00:00:00.048,004] <inf> wdog_facade: Watchdog initialized (timeout: 30000 ms, channel: 0)
+[00:00:00.048,004] <inf> haptic: Haptic system initialized
+[00:00:00.048,034] <inf> main: Haptic driver initialized
+[00:00:00.048,034] <inf> haptic: Playing haptic for 100 ms
+[00:00:00.048,065] <inf> main: Initializing LEDs..
+
+[00:00:00.048,065] <inf> led: LEDs (PWM) started
+
+[00:00:00.048,095] <inf> main: Suspending unused modules..
+
+[00:00:00.048,126] <inf> spi_flash: Suspending SPI Flash device (p25q16h@1)...
+[00:00:00.048,156] <inf> spi_flash: SPI Flash device (p25q16h@1) suspended successfully.
+[00:00:00.048,187] <inf> main: Initializing settings..
+
+[00:00:00.053,222] <inf> fs_nvs: 2 Sectors of 4096 bytes
+[00:00:00.053,222] <inf> fs_nvs: alloc wra: 0, fe8
+[00:00:00.053,222] <inf> fs_nvs: data wra: 0, 0
+[00:00:00.053,283] <inf> app_settings: Settings initialized. dim_ratio=50 mic_gain=6 rtc_epoch=0 lsm6_base_epoch=0 lsm6_ba
+[00:00:00.053,283] <inf> rtc: RTC init: persisted rtc_epoch=0
+[00:00:00.053,314] <wrn> rtc: RTC not synchronized yet (no persisted epoch)
+[00:00:00.053,314] <wrn> main: UTC time not synchronized yet
+[00:00:00.069,641] <inf> main: Battery initialized
+[00:00:00.069,671] <inf> button: Button initialized with GPIO interrupt
+[00:00:00.069,671] <inf> main: Button initialized
+[00:00:00.070,861] <inf> main: Storage service initialized
+
+[00:00:00.070,892] <inf> main: Initializing transport..
+
+[00:00:00.091,888] <inf> bt_hci_core: HW Platform: Nordic Semiconductor (0x0002)
+[00:00:00.091,918] <inf> bt_hci_core: HW Variant: nRF53x (0x0003)
+[00:00:00.091,949] <inf> bt_hci_core: Firmware: Standard Bluetooth controller (0x00) Version 45.41337 Build 3074452168
+[00:00:00.128,784] <inf> bt_hci_core: Identity: <DEVICE_ADDRESS> (random)
+[00:00:00.128,814] <inf> bt_hci_core: HCI: version 6.0 (0x0e) revision 0x206b, manufacturer 0x0059
+[00:00:00.128,845] <inf> bt_hci_core: LMP: version 6.0 (0x0e) subver 0x206b
+[00:00:00.128,845] <inf> transport: Transport bluetooth initialized
+[00:00:00.128,967] <inf> transport: BLE identity[0]: <DEVICE_ADDRESS> (random)
+BLE_ADDR[0]: <DEVICE_ADDRESS> (random)
+[00:00:00.129,028] <inf> button: Button initialized with GPIO interrupt
+[00:00:00.129,119] <inf> haptic: Haptic GATT service registered
+[00:00:00.129,119] <inf> transport: Haptic service registered via transport
+[00:00:00.131,683] <inf> transport: Advertising successfully started
+[00:00:00.131,683] <inf> transport: Battery initialized
+[00:00:00.131,713] <inf> transport: Ring buffer successfully initialized
+[00:00:00.132,110] <inf> transport: Pusher successfully started
+[00:00:00.132,110] <inf> main: Initializing codec..
+
+[00:00:00.135,559] <inf> main: Initializing microphone..
+
+[00:00:00.135,589] <inf> t5838: t5838 ll init: PDM_EN driven high, THSEL out low
+[00:00:00.135,589] <inf> mic: PCM output rate: 16000, channels: 2
+[00:00:00.135,620] <inf> dmic_nrfx_pdm: PDM clock frequency: 1280000, actual PCM rate: 16000
+[00:00:00.135,620] <inf> mic: Setting mic gain to level 6 (0x3c)
+[00:00:00.135,803] <inf> mic: AAD (hardware) started: WAKE=P1.2 thr=250 hold=10000ms settle=800ms
+[00:00:00.135,833] <inf> mic: Microphone started
+[00:00:00.135,833] <inf> main: Device initialized successfull
+
+[00:00:00.148,132] <inf> haptic: Haptic turned off by work handler
+release detected
+[00:00:00.390,258] <inf> button: Button released
+[00:00:00.428,649] <inf> sd: Maximum SD clock is under 25MHz, using clock of 24000000Hz

@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-home-task-badge.png",
+      "platform": "mobile-ios",
+      "description": "iOS 26.5 simulator: production conversation rows in a synthetic QA Home host; badge membership comes from production FastAPI routes and a local Firestore emulator. Authentication is synthetic.",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "002-mobile-ios-conversations-with-tasks.png",
+      "platform": "mobile-ios",
+      "description": "iOS 26.5 simulator: production Has tasks page and API decoder show all four task-bearing conversations, including matches outside the QA Home loaded rows; synthetic account and local Firestore emulator.",
+      "captured_by": "agent",
+      "source": "screencapture"
+    }
+  ]
+}

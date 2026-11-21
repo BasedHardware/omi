@@ -8,13 +8,16 @@ presents its request-scoped keys.
 
 from __future__ import annotations
 
+from config.listen_finalization import durable_attempt_cap_enabled, replay_enabled
+from database import conversation_processing_recovery as processing_recovery
+
 import logging
 import os
 import time
 from datetime import datetime, timedelta, timezone
 from functools import partial
 from concurrent.futures import as_completed
-from typing import Any
+from typing import Any, Mapping
 
 from google.api_core.exceptions import InvalidArgument
 from prometheus_client import Counter, Gauge
@@ -29,28 +32,40 @@ from utils.cloud_tasks import (
     enqueue_listen_finalization_job,
     get_listen_finalization_tasks_max_attempts,
     is_listen_finalization_dispatch_enabled,
+    is_listen_finalization_tasks_configured,
 )
 from utils.metrics import (
     CONVERSATION_ORPHANED_UNFINALIZED,
+    FINALIZATION_DEAD_LETTER_CAUSES,
     LISTEN_FINALIZATION_BYOK_ABANDONMENTS_TOTAL,
+    LISTEN_FINALIZATION_BYOK_SESSION_ABANDONED_TOTAL,
+    LISTEN_FINALIZATION_BYOK_SESSION_ABANDONED_LAST_24H,
     LISTEN_FINALIZATION_DEAD_LETTER_TOTAL,
     LISTEN_FINALIZATION_DURABLE_JOBS,
     LISTEN_FINALIZATION_JOB_STATUS,
     LISTEN_FINALIZATION_OLDEST_NONTERMINAL_AGE_SECONDS,
     LISTEN_FINALIZATION_OLDEST_BLOCKED_BYOK_AGE_SECONDS,
+    LISTEN_FINALIZATION_OLDEST_DEAD_LETTER_AGE_SECONDS,
     LISTEN_FINALIZATION_SUMMARY_LAST_SUCCESS_TIMESTAMP_SECONDS,
     LISTEN_FINALIZATION_RETRIES_TOTAL,
     LISTEN_FINALIZATION_STALE_PROCESSING_RECONCILIATIONS_TOTAL,
+    OMI_CONVERSATION_FINALIZATION_BUDGET_REQUEUES_TOTAL,
+    OMI_CONVERSATION_FINALIZATION_DEAD_LETTER_TOTAL,
     register_listen_finalization_summary_metrics,
 )
+from database import finalization_due_marker_sweep as due_marker_sweep
 from utils.observability.fallback import record_fallback
+from utils.observability.finalization import finalization_diagnostic_id
 from utils.observability.journeys import (
     record_capture_finalization_reconciliation,
     record_capture_finalization_terminal,
     record_conversation_finalization_client_terminal,
 )
 
+from utils.lifecycle_metrics import PhaseMetrics
+
 logger = logging.getLogger(__name__)
+_byok_phase_metrics = PhaseMetrics('omi_finalization_byok', ['state'])
 
 REPLAY_OLDEST_OVERDUE_AGE = Gauge(
     'listen_finalization_replay_oldest_overdue_age_seconds',
@@ -68,7 +83,26 @@ REPLAY_OUTCOME_METRICS = {
     'retired': REPLAY_OUTCOMES.labels(outcome='retired'),
     'advanced': REPLAY_OUTCOMES.labels(outcome='advanced'),
     'error': REPLAY_OUTCOMES.labels(outcome='error'),
+    'dispatch_exhausted': REPLAY_OUTCOMES.labels(outcome='dispatch_exhausted'),
+    'terminalized': REPLAY_OUTCOMES.labels(outcome='terminalized'),
 }
+
+# The smart-merge incomplete codes, mirrored as a closed vocabulary (metrics
+# keeps its own copy): the hub folds them back onto 'processing_failed' for the
+# conversation-terminal write, while counters and logs keep the richer class.
+SMART_MERGE_INCOMPLETE_CODES = frozenset(
+    {
+        'donor_receipt_revision_changed',
+        'refresh_lease_busy',
+        'survivor_changed_before_refresh',
+        'refresh_not_persisted',
+        'survivor_vector_failed',
+        'refresh_completion_fenced',
+        'processing_checkpoint_fenced',
+        'donor_cleanup_deferred',
+        'flatten_cleanup_source_invalid',
+    }
+)
 
 
 def _skip_capture_wedge(**_: Any) -> dict[str, int]:
@@ -183,6 +217,8 @@ def reconcile_listen_finalization_jobs(
         'retired': 0,
         'advanced': 0,
         'error': 0,
+        'dispatch_exhausted': 0,
+        'terminalized': 0,
     }
     try:
         recovery = jobs_db.recover_stranded_byok_jobs(firestore_client=firestore_client)
@@ -192,9 +228,21 @@ def reconcile_listen_finalization_jobs(
             logger.error('listen BYOK ownership reclaim failed rows=%s', recovery['errors'])
     except Exception:
         logger.exception('listen BYOK ownership reclaim scan failed')
-    if not is_listen_finalization_dispatch_enabled():
+    dispatch_enabled = is_listen_finalization_dispatch_enabled()
+    if not replay_enabled() or not is_listen_finalization_tasks_configured():
         _publish_job_metrics(firestore_client=firestore_client)
         return result
+
+    # Before the candidate page is read, so a row restored to due is replayed in this pass.
+    try:
+        due_markers = due_marker_sweep.remark_missing_due_markers(firestore_client=firestore_client)
+    except Exception:
+        logger.exception('listen finalization due-marker sweep failed')
+        due_markers = {'remarked': 0, 'skipped': 0, 'error': 1}
+    for outcome, count in due_markers.items():
+        due_marker_sweep.count_sweep_outcome(outcome, count)
+    if due_markers['remarked']:
+        logger.warning('event=listen_finalization_due_marker_sweep remarked=%s', due_markers['remarked'])
 
     oldest_overdue_age = 0.0
     try:
@@ -221,9 +269,15 @@ def reconcile_listen_finalization_jobs(
         _publish_job_metrics(firestore_client=firestore_client)
         return result | {'error': 1}
 
+    # Inline listen owns only ordinary finalization replay. Quiet/merge jobs
+    # retain their existing cloud_tasks admission and scheduling ownership.
+    replay_candidates = candidates
+    if not dispatch_enabled:
+        replay_candidates = [c for c in candidates if c.get('kind') not in ('listen_quiet_check', 'conversation_merge')]
+        result['skipped'] += len(candidates) - len(replay_candidates)
     quiet_candidates = [
         candidate
-        for candidate in candidates
+        for candidate in replay_candidates
         if candidate.get('kind') == 'listen_quiet_check'
         and isinstance(candidate.get('job_id'), str)
         and candidate['job_id']
@@ -275,7 +329,7 @@ def reconcile_listen_finalization_jobs(
                 for future in as_completed(futures):
                     future.result()
 
-    for candidate in candidates:
+    for candidate in replay_candidates:
         try:
             job_id = candidate.get('job_id')
             if not isinstance(job_id, str) or not job_id:
@@ -293,15 +347,65 @@ def reconcile_listen_finalization_jobs(
                 continue
             if candidate.get('kind') == 'listen_quiet_check':
                 continue
+            # Delivery-independent terminal: a requeue-exhausted queued row
+            # closes here even if no final worker delivery ever arrives. A
+            # committed fanout is success and still converges via replay; a
+            # leased row still belongs to a live or expirable worker and is
+            # left to the claim paths.
+            if (
+                candidate.get('status') == 'queued'
+                and int(candidate.get('attempt_count') or 0) >= get_listen_finalization_tasks_max_attempts()
+                and int(candidate.get('budget_requeue_count') or 0) >= 1
+                and candidate.get('fanout_status') != 'completed'
+            ):
+                try:
+                    terminal = jobs_db.terminalize_exhausted_requeued_job(
+                        job_id,
+                        expected_status=str(candidate.get('status') or ''),
+                        expected_dispatch_generation=int(candidate.get('dispatch_generation') or 1),
+                        expected_lease_epoch=int(candidate.get('lease_epoch') or 0),
+                        failure_code=_terminal_failure_row_code(
+                            str(candidate.get('last_failure_code') or 'final_attempt_failed')
+                        ),
+                        firestore_client=firestore_client,
+                    )
+                except Exception:
+                    logger.exception('listen finalization exhausted-requeue terminalize failed job=%s', job_id)
+                    result['skipped'] += 1
+                else:
+                    if terminal:
+                        result['terminalized'] += 1
+                        _record_dead_letter(job_id, firestore_client=firestore_client)
+                        _emit_dead_letter_observability(
+                            job_id,
+                            candidate,
+                            cause=str(candidate.get('last_failure_code') or 'final_attempt_failed'),
+                            budget_requeues=int(candidate.get('budget_requeue_count') or 0),
+                            dispatch_generation=candidate.get('dispatch_generation'),
+                            source='reconciler',
+                        )
+                continue
             try:
                 claimed = jobs_db.claim_finalization_replay(
                     job_id,
                     stale_after=stale_after,
                     firestore_client=firestore_client,
+                    max_attempts=(
+                        get_listen_finalization_tasks_max_attempts_for_worker()
+                        if durable_attempt_cap_enabled()
+                        else None
+                    ),
                 )
             except Exception:
                 logger.exception('listen finalization reconciliation claim failed job=%s', job_id)
                 result['skipped'] += 1
+                continue
+            if claimed.get('replay_dispatch_exhausted') is True:
+                result['dispatch_exhausted'] += 1
+                continue
+            if claimed.get('created') and claimed['status'] == 'dead_letter':
+                _record_dead_letter(job_id, firestore_client=firestore_client)
+                result['retired'] += 1
                 continue
             if not claimed.get('created') or claimed['status'] != 'queued' or claimed['dispatch_generation'] is None:
                 result['skipped'] += 1
@@ -345,12 +449,14 @@ def reconcile_listen_finalization_jobs(
 
 
 def reconcile_stale_processing_conversations(limit: int = 100, *, firestore_client: Any = None) -> dict[str, int]:
-    """Close bare-`processing` conversations stranded by a synchronous-route crash.
+    """Close processing conversations stranded without an active durable owner.
 
     The durable replay sweep (``reconcile_listen_finalization_jobs``) only covers
-    rows with a finalization job. A bare-`processing` row admitted by the
+    nonterminal finalization jobs. A bare-`processing` row admitted by the
     synchronous legacy route (or a server/merge create) and then lost to a hard
     crash has no job, so it is never replayed and the recording never resolves.
+    Rows bound to a terminal job are also orphans: the sweep checks that job
+    again inside the completion transaction before ending the lifecycle.
 
     Eligibility is bounded by the authoritative, server-owned admission fence
     ``processing_admitted_at`` (never caller-controlled ``created_at``), so a live
@@ -359,7 +465,7 @@ def reconcile_stale_processing_conversations(limit: int = 100, *, firestore_clie
     stamping the fence and deferred to a later sweep rather than completed on
     sight. Each aged orphan is driven through the truthful terminal ownership CAS
     (``complete_orphan_conversation``): a row already completed, discarded,
-    superseded by a newer generation, or since bound to a durable job is fenced
+    superseded by a newer generation, or since bound to an active durable job is fenced
     out, so the orphan reaches exactly one terminal and its recording stays
     retrievable. Re-enrichment is a separate follow-up; this safety net only ends
     the stuck lifecycle. It needs no durable dispatch, so it runs in every
@@ -415,7 +521,7 @@ def reconcile_stale_processing_conversations(limit: int = 100, *, firestore_clie
                 # ``migrated``; a CAS loss (already stamped / status changed /
                 # absent) is an expected ``skipped`` fencing, never a migration.
                 try:
-                    stamped = jobs_db.stamp_processing_admission_if_absent(
+                    stamped = processing_recovery.stamp_processing_admission_if_absent(
                         uid, conversation_id, firestore_client=firestore_client
                     )
                 except InvalidArgument as error:
@@ -435,7 +541,7 @@ def reconcile_stale_processing_conversations(limit: int = 100, *, firestore_clie
                         outcome='degraded',
                         log=logger,
                     )
-                    if jobs_db.complete_unstampable_orphan_conversation(
+                    if processing_recovery.complete_unstampable_orphan_conversation(
                         uid, conversation_id, stale_after=stale_after, firestore_client=firestore_client
                     ):
                         result['completed'] += 1
@@ -451,7 +557,7 @@ def reconcile_stale_processing_conversations(limit: int = 100, *, firestore_clie
                     result['skipped'] += 1
                     LISTEN_FINALIZATION_STALE_PROCESSING_RECONCILIATIONS_TOTAL.labels(outcome='skipped').inc()
                 continue
-            completed = jobs_db.complete_orphan_conversation(
+            completed = processing_recovery.complete_orphan_conversation(
                 uid,
                 conversation_id,
                 expected_admitted_at=candidate.get('processing_admitted_at'),
@@ -588,6 +694,7 @@ def reconcile_abandoned_byok_finalization_jobs(limit: int = 100, *, firestore_cl
             result['skipped'] += 1
             LISTEN_FINALIZATION_BYOK_ABANDONMENTS_TOTAL.labels(outcome='skipped').inc()
             continue
+        LISTEN_FINALIZATION_BYOK_SESSION_ABANDONED_TOTAL.inc()
         result['abandoned'] += 1
         if disposition['conversation_outcome'] == 'closed':
             result['conversations_closed'] += 1
@@ -601,6 +708,56 @@ def reconcile_abandoned_byok_finalization_jobs(limit: int = 100, *, firestore_cl
     return result
 
 
+def _normalize_dead_letter_cause(cause: str) -> str:
+    """Map any live failure code onto the closed counter/log cause vocabulary."""
+    if cause in {'deterministic_processing_failed', 'transient_processing_failed'}:
+        return 'processing_failed'
+    return cause if cause in FINALIZATION_DEAD_LETTER_CAUSES else 'unknown'
+
+
+def _terminal_failure_row_code(failure_code: str) -> str:
+    """Preserve the conversation retry vocabulary for every terminal owner."""
+    if failure_code in SMART_MERGE_INCOMPLETE_CODES or failure_code in {
+        'deterministic_processing_failed',
+        'transient_processing_failed',
+    }:
+        return 'processing_failed'
+    if failure_code in {'invalid_job', 'worker_failed'}:
+        return 'final_attempt_failed'
+    return failure_code
+
+
+def _emit_dead_letter_observability(
+    job_id: str,
+    job: Mapping[str, Any] | None,
+    *,
+    cause: str,
+    budget_requeues: int,
+    dispatch_generation: int | None,
+    source: str,
+) -> None:
+    """One log line and one bounded counter child per terminal dead-letter.
+
+    Cause values come only from the closed set (no ids, no exception text);
+    a non-member live code maps to ``'unknown'``. Runs solely after a terminal
+    transaction committed, so the line and the counter fire once per job.
+    """
+    normalized = _normalize_dead_letter_cause(cause)
+    OMI_CONVERSATION_FINALIZATION_DEAD_LETTER_TOTAL.labels(cause=normalized).inc()
+    log = logger.warning if (job or {}).get('requires_byok') else logger.error
+    log(
+        'listen finalization dead_letter terminal=%s job_hash=%s cause=%s budget_requeues=%s '
+        'attempt_count=%s dispatch_generation=%s source=%s',
+        True,
+        finalization_diagnostic_id(job_id),
+        normalized,
+        budget_requeues,
+        (job or {}).get('attempt_count'),
+        dispatch_generation,
+        source,
+    )
+
+
 def final_attempt_failed(
     job_id: str,
     dispatch_generation: int,
@@ -609,10 +766,32 @@ def final_attempt_failed(
     *,
     failure_code: str = 'final_attempt_failed',
     firestore_client: Any = None,
-) -> bool:
+) -> str:
+    """Requeue-or-dead-letter one attempt-budget exhaustion.
+
+    Returns ``'requeued'`` (the job's single delayed budget requeue was
+    granted; the row is parked, not enqueued), ``'dead_letter'`` (terminal
+    committed), or ``'conflict'`` (this caller lost the fence; the durable
+    owner converges). The conversation-row code vocabulary is preserved
+    exactly: smart-merge incompletes fold back onto ``processing_failed`` and
+    the coarse ``invalid_job``/``worker_failed`` causes keep the
+    ``final_attempt_failed`` they effectively write today.
+    """
+    grant = jobs_db.grant_finalization_budget_requeue(job_id, dispatch_generation, lease_epoch, failure_code)
+    if grant == 'requeued':
+        cause = _normalize_dead_letter_cause(failure_code)
+        logger.info(
+            'listen finalization budget exhausted; one delayed requeue scheduled job_hash=%s cause=%s delay_seconds=%s',
+            finalization_diagnostic_id(job_id),
+            cause,
+            int(jobs_db.get_finalization_budget_requeue_delay().total_seconds()),
+        )
+        OMI_CONVERSATION_FINALIZATION_BUDGET_REQUEUES_TOTAL.labels(cause=cause).inc()
+        return 'requeued'
+    row_code = _terminal_failure_row_code(failure_code)
     dead_letter_kwargs = {'firestore_client': firestore_client}
-    if failure_code != 'final_attempt_failed':
-        dead_letter_kwargs['failure_code'] = failure_code
+    if row_code != 'final_attempt_failed':
+        dead_letter_kwargs['failure_code'] = row_code
     marked = jobs_db.mark_finalization_dead_letter(
         job_id,
         dispatch_generation,
@@ -620,33 +799,59 @@ def final_attempt_failed(
         retry_count,
         **dead_letter_kwargs,
     )
-    if marked:
-        LISTEN_FINALIZATION_DEAD_LETTER_TOTAL.inc()
-        try:
-            job = jobs_db.get_finalization_job(job_id, firestore_client=firestore_client)
-            accepted_at = job.get('created_at') if job else None
-            record_capture_finalization_terminal('failure', accepted_at)
-            if job is not None:
-                record_conversation_finalization_client_terminal('failure', job, issue_class='unknown')
-        except Exception:
-            # Dead-lettering is authoritative; a best-effort metric lookup must
-            # never change its terminal outcome.
-            logger.exception('listen finalization terminal metric lookup failed job=%s', job_id)
-        # Dead-lettering closes the bound conversation inside its own
-        # transaction, bypassing the update hooks; converge the search
-        # projection. Fail-open: never change the terminal outcome.
-        try:
-            job = jobs_db.get_finalization_job(job_id, firestore_client=firestore_client)
-            if job:
-                uid = job.get('uid')
-                conversation_id = job.get('conversation_id')
-                if isinstance(uid, str) and uid and isinstance(conversation_id, str) and conversation_id:
-                    from utils.conversations.typesense_index import sync_conversation_index_after_write
+    if not marked:
+        return 'conflict'
+    job: dict[str, Any] | None = None
+    try:
+        job = jobs_db.get_finalization_job(job_id, firestore_client=firestore_client)
+    except Exception:
+        # Dead-lettering is authoritative; a best-effort metric must never
+        # change its terminal outcome.
+        logger.exception('listen finalization terminal metric lookup failed job=%s', job_id)
+    _record_dead_letter(job_id, firestore_client=firestore_client, job=job)
+    _emit_dead_letter_observability(
+        job_id,
+        job,
+        cause=failure_code,
+        budget_requeues=int((job or {}).get('budget_requeue_count') or 0),
+        dispatch_generation=dispatch_generation,
+        source='worker',
+    )
+    return 'dead_letter'
 
-                    sync_conversation_index_after_write(uid, conversation_id)
-        except Exception:
-            logger.warning('listen finalization dead-letter index sync failed job=%s', job_id)
-    return marked
+
+def _record_dead_letter(job_id: str, *, firestore_client: Any = None, job: dict[str, Any] | None = None) -> None:
+    """Post-commit effects shared by worker failures and exhausted replays.
+
+    ``job`` carries a caller's lookup when one already ran, so a single fetch
+    serves the terminal metrics, the observability line and the index sync.
+    """
+    LISTEN_FINALIZATION_DEAD_LETTER_TOTAL.inc()
+    try:
+        if job is None:
+            job = jobs_db.get_finalization_job(job_id, firestore_client=firestore_client)
+        accepted_at = job.get('created_at') if job else None
+        record_capture_finalization_terminal('failure', accepted_at)
+        if job is not None:
+            record_conversation_finalization_client_terminal('failure', job, issue_class='unknown')
+    except Exception:
+        # Dead-lettering is authoritative; a best-effort metric lookup must
+        # never change its terminal outcome.
+        logger.exception('listen finalization terminal metric lookup failed')
+    # Dead-lettering closes the bound conversation inside its own
+    # transaction, bypassing the update hooks; converge the search
+    # projection. Fail-open: never change the terminal outcome.
+    try:
+        job = jobs_db.get_finalization_job(job_id, firestore_client=firestore_client)
+        if job:
+            uid = job.get('uid')
+            conversation_id = job.get('conversation_id')
+            if isinstance(uid, str) and uid and isinstance(conversation_id, str) and conversation_id:
+                from utils.conversations.typesense_index import sync_conversation_index_after_write
+
+                sync_conversation_index_after_write(uid, conversation_id)
+    except Exception:
+        logger.warning('listen finalization dead-letter index sync failed')
 
 
 def get_listen_finalization_tasks_max_attempts_for_worker() -> int:
@@ -654,6 +859,15 @@ def get_listen_finalization_tasks_max_attempts_for_worker() -> int:
 
 
 def _publish_job_metrics(*, firestore_client: Any = None) -> None:
+    from database._client import get_firestore_client
+    from database.lifecycle_metrics_queries import blocked_byok
+    from utils.lifecycle_pair_census import observe
+
+    now = time.time()
+    observe(client=firestore_client, now=now)
+    _byok_phase_metrics.refresh(
+        now, lambda: blocked_byok(firestore_client if firestore_client is not None else get_firestore_client(), now)
+    )
     try:
         summary = jobs_db.get_finalization_job_summary(firestore_client=firestore_client)
     except Exception:
@@ -661,6 +875,8 @@ def _publish_job_metrics(*, firestore_client: Any = None) -> None:
         return
     LISTEN_FINALIZATION_OLDEST_NONTERMINAL_AGE_SECONDS.set(float(summary['oldest_nonterminal_age_seconds']))
     LISTEN_FINALIZATION_OLDEST_BLOCKED_BYOK_AGE_SECONDS.set(float(summary['oldest_blocked_byok_age_seconds']))
+    LISTEN_FINALIZATION_OLDEST_DEAD_LETTER_AGE_SECONDS.set(float(summary['oldest_dead_letter_age_seconds']))
+    LISTEN_FINALIZATION_BYOK_SESSION_ABANDONED_LAST_24H.set(float(summary['byok_abandoned_last_24h']))
     for state in ('accepted', 'success', 'failure', 'stale', 'nonterminal', 'blocked_byok', 'terminal_unknown'):
         LISTEN_FINALIZATION_DURABLE_JOBS.labels(state=state).set(float(summary[state]))
     for status in ('queued', 'leased', 'blocked_byok', 'dead_letter'):

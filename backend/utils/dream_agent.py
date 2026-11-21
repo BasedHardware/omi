@@ -4,7 +4,6 @@ from utils.generated_compute import generated_compute_allowed, generated_compute
 from config.vertex_reservations import PROBE_SECONDS, PROBE_TIMEOUT_SECONDS
 
 import asyncio
-import json
 import time
 import logging
 import uuid
@@ -22,7 +21,6 @@ from config.dream_agent import (
     concurrency,
     enabled,
     may_be_eligible,
-    number,
     on_demand_enabled,
     PASS_TIMEOUT_SECONDS,
     DRAIN_TIMEOUT_SECONDS,
@@ -39,13 +37,15 @@ from database.legal_holds import DestructiveOperationInProgress, LegalHoldActive
 from models.agent_tools import HarnessQuestion
 from models.agent_edit import HarnessEdit
 from utils.agent_capabilities import tools as dream_tools
+from utils.agent_capabilities import change_view as dream_change_view
 from utils.agent_capabilities import verifiers
-from utils import dream_review_policy, dream_capacity, dream_harness_transport, dream_seed, dream_verify
-from utils import dream_required_intake
+from utils import dream_review_policy, dream_capacity, dream_harness_transport, dream_seed, dream_prescan, dream_verify
+from utils import dream_judge, dream_required_intake
 from utils.dream_cost import (
     conservative_attempt_micro,
     minute_burndown_tokens,
     price_weighted_tokens,
+    verification_hold_tokens,
     verification_reserve_tokens,
 )
 from utils.agent_capabilities.search import OwnerSearch
@@ -61,36 +61,28 @@ from utils.memory.required_intake import retry_sweep
 from utils.memory.canonical_consolidation import complete_receipted_required_intake
 
 TAIL_BUDGET_NOTICE_THRESHOLD = 0.20
+# Verifier allowance after an overshoot, in multiples of the staged items' two-call reserve.
+VERIFY_ALLOWANCE_FACTOR = 2
 logger = logging.getLogger(__name__)
 
-# Lever B3 (no-progress stop): this many consecutive tool batches without a new
-# staged proposal, after the pass spent this share of its token budget.
-NO_PROGRESS_BATCHES_DEFAULT = 8
-NO_PROGRESS_MIN_TOKEN_SHARE_DEFAULT = 0.25
 # Lever B4 (history compaction): once the main prompt reaches this size, older
 # large tool results are replaced by a stub. Only tool results are elided; the
 # system prompt, seed, assistant tool calls and the latest results stay intact.
-COMPACT_TRIGGER_PROMPT_TOKENS_DEFAULT = 64000
-COMPACT_KEEP_RECENT_TOOL_RESULTS_DEFAULT = 6
-COMPACT_MIN_CHARS = 2000
-ELIDED_TOOL_RESULT = 'UNTRUSTED TOOL DATA\n' + json.dumps(
-    {
-        'status': 'elided',
-        'note': 'Older tool result removed to save budget. Records already read stay available to '
-        'propose_edit and the verifiers; read a ref again if you need its details.',
-    }
-)
 # Lever B5 (material budget): new-material thresholds for the medium and heavy token ceilings.
 MATERIAL_MEDIUM = 5
 MATERIAL_HEAVY = 16
 
 
-def _tunable(key, default):
-    # A malformed tuning value keeps the default; tuning never fails a pass.
-    try:
-        return number(key, default)
-    except (TypeError, ValueError):
-        return default
+def cap_tail(staged, capped, outcomes):
+    """B5 shadow: work staged after the pass crossed the would-be cap, and how much of it applied."""
+    late = set() if capped is None else {key for key in staged if key not in capped}
+    return {
+        'crossed': capped is not None,
+        'staged_after_cap': len(late),
+        'applied_after_cap': sum(
+            1 for row in outcomes if isinstance(row, dict) and row.get('key') in late and row.get('status') == 'applied'
+        ),
+    }
 
 
 def material_tokens(material, current):
@@ -225,6 +217,8 @@ async def run_session(
     timeout_seconds=PASS_TIMEOUT_SECONDS,
     bootstrap_tools=None,
     arms=None,
+    budget_probe=None,
+    judge=False,
 ):
     caps = caps or Caps.from_env()
     arms = arms or {}
@@ -251,7 +245,7 @@ async def run_session(
         'completion_tokens': 0,
         'token_limit': limits.tokens,
     }
-    timing = {'wait_ms': 0, 'waits': 0, 'model_ms': 0, 'verify_ms': 0}
+    timing = {'wait_ms': 0, 'waits': 0, 'wait_gateway_ms': 0, 'wait_headroom_ms': 0, 'model_ms': 0, 'verify_ms': 0}
     levers: dict[str, dict[str, Any]] = {}
     session = Session(
         uid,
@@ -327,36 +321,19 @@ async def run_session(
     except Exception:
         pass
 
-    stop_arm = arms.get('no_progress_stop', 'off')
-    stop_batches = int(_tunable('DREAM_NO_PROGRESS_BATCHES', NO_PROGRESS_BATCHES_DEFAULT))
-    stop_share = _tunable('DREAM_NO_PROGRESS_MIN_TOKEN_SHARE', NO_PROGRESS_MIN_TOKEN_SHARE_DEFAULT)
-    progress: dict[str, Any] = {'batches': 0, 'idle': 0, 'staged': 0, 'fired': None}
+    progress: dict[str, Any] = {'capped': None}
 
     async def after_execute(current):
         try:
-            progress['batches'] += 1
-            staged_now = len(current.staged)
-            if staged_now > progress['staged']:
-                progress['staged'] = staged_now
-                progress['idle'] = 0
-            else:
-                progress['idle'] += 1
-            if (
-                progress['fired'] is None
-                and progress['idle'] >= stop_batches
-                and report['price_weighted_tokens'] >= limits.tokens * stop_share
-            ):
-                progress['fired'] = {
-                    'batch': progress['batches'],
-                    'keys': set(current.staged),
-                    'tokens': report['price_weighted_tokens'],
-                }
-                return stop_arm == 'serve'
+            # B5 shadow: staged keys when the pass crossed the material cap, so the
+            # report can count the edits a served cap would have cut.
+            if budget_probe and progress['capped'] is None and report['price_weighted_tokens'] >= budget_probe:
+                progress['capped'] = set(current.staged)
         except Exception as error:
-            logger.warning('event=dream_lever_error lever=no_progress_stop exc=%s', type(error).__name__)
+            logger.warning('event=dream_lever_error lever=material_budget exc=%s', type(error).__name__)
         return False
 
-    if stop_arm != 'off':
+    if budget_probe:
         session.after_execute = after_execute
 
     async def usage(result):
@@ -412,6 +389,11 @@ async def run_session(
 
     main_history = {'prompt_tokens': None, 'messages': 0, 'cached_tokens': None}
     budget_notice_sent = False
+    # Extra tokens the value judge may spend after effects, outside the pass budget;
+    # it runs on reserved capacity only.
+    judge_allowance = 0
+    # Verifier tokens a served hold still owes after a main turn overshot its estimate.
+    verify_allowance = 0
 
     def remember_main(result, messages):
         main_history['prompt_tokens'] = result.prompt_tokens
@@ -419,46 +401,57 @@ async def run_session(
         report.setdefault('first_prompt_tokens', result.prompt_tokens)
         report['last_prompt_tokens'] = result.prompt_tokens
 
-    compact_arm = arms.get('history_compact', 'off')
-    compact_trigger = _tunable('DREAM_HISTORY_COMPACT_TRIGGER_TOKENS', COMPACT_TRIGGER_PROMPT_TOKENS_DEFAULT)
-    compact_keep = int(_tunable('DREAM_HISTORY_COMPACT_KEEP_RESULTS', COMPACT_KEEP_RECENT_TOOL_RESULTS_DEFAULT))
-    compaction = {'arm': compact_arm, 'fired': False, 'compactions': 0, 'elided_chars': 0, 'would_elide_chars': 0}
+    hold_arm = arms.get('verify_hold', 'off')
+    hold_row = {'arm': hold_arm, 'held': 0}
+    if hold_arm != 'off':
+        levers['verify_hold'] = hold_row
+    # Scheduled owner passes only; never canary, dry-run or manual runs.
+    judge_mode = dream_judge.mode() if judge else 'off'
+    judging = False
 
-    def compact(messages):
-        # Fail open: compaction trouble leaves the conversation exactly as it was.
+    async def _judge_applied(staged_items, pass_report):
+        nonlocal judge_allowance, judging
+        applied = {
+            row.get('key')
+            for row in pass_report['outcomes']
+            if isinstance(row, dict) and row.get('status') == 'applied'
+        }
+        rows, kinds = [], {}
+        for item in staged_items:
+            if item.key not in applied or not isinstance(item.operation, HarnessEdit):
+                continue
+            label = dream_judge.stratum(str(item.kind), str(item.key))
+            if label is None:
+                continue
+            try:
+                view = dream_change_view.edit_change(uid, item.operation, item.records, item.key)
+            except Exception:
+                continue
+            rows.append((item.id, dream_judge.projection(view)))
+            kinds[item.id] = (item.kind, label)
+        if not rows or not dream_judge.take_call(dream_telemetry.SWEEP_ID.get()):
+            return
+        judge_allowance = dream_judge.token_allowance()
+        judging = True
         try:
-            prior = main_history['prompt_tokens']
-            if not prior or prior < compact_trigger:
-                return
-            tools = [
-                index
-                for index, message in enumerate(messages)
-                if isinstance(message, dict) and message.get('role') == 'tool'
-            ]
-            older = tools[: max(0, len(tools) - max(1, compact_keep))]
-            elide = [
-                index
-                for index in older
-                if isinstance(messages[index].get('content'), str)
-                and len(messages[index]['content']) >= COMPACT_MIN_CHARS
-                and messages[index]['content'] != ELIDED_TOOL_RESULT
-            ]
-            chars = sum(len(messages[index]['content']) for index in elide)
-            if not elide:
-                return
-            compaction['fired'] = True
-            compaction['would_elide_chars'] = max(compaction['would_elide_chars'], chars)
-            if compact_arm != 'serve':
-                return
-            for index in elide:
-                messages[index] = {**messages[index], 'content': ELIDED_TOOL_RESULT}
-            compaction['compactions'] += 1
-            compaction['elided_chars'] += chars
-            # The next size estimate must be recomputed from the shortened history.
-            main_history.update(prompt_tokens=None, messages=0, cached_tokens=None)
-        except Exception as error:
-            compaction['errors'] = compaction.get('errors', 0) + 1
-            logger.warning('event=dream_lever_error lever=history_compact exc=%s', type(error).__name__)
+            judged = await dream_judge.judge(
+                rows,
+                partial(invoke, dream_harness_transport.VERIFY_LANE),
+                tokens=judge_allowance,
+                deadline_seconds=max(0, deadline - asyncio.get_running_loop().time() - 30),
+            )
+        finally:
+            judge_allowance = 0
+            judging = False
+        for id_, _row in rows[: dream_judge.MAX_ITEMS]:
+            kind, label = kinds[id_]
+            dream_judge.record(kind, label, judged.get(id_))
+        levers['value_judge'] = {
+            'arm': judge_mode,
+            'sent': min(len(rows), dream_judge.MAX_ITEMS),
+            'judged': len(judged),
+            'harmful': sum(1 for judgment in judged.values() if judgment.verdict == 'harmful'),
+        }
 
     async def invoke(lane, mount, messages):
         for attempt in range(CAPACITY_CALL_RETRIES + 1):
@@ -478,8 +471,10 @@ async def run_session(
                         owner_allowlisted=allowlisted,
                     )
                 finally:
+                    waited = int(1000 * (asyncio.get_running_loop().time() - waited_from))
                     timing['waits'] += 1
-                    timing['wait_ms'] += int(1000 * (asyncio.get_running_loop().time() - waited_from))
+                    timing['wait_ms'] += waited
+                    timing['wait_gateway_ms'] += waited
                 if not admitted:
                     raise
                 logger.info('Dream capacity retry lane=%s attempt=%d', lane, attempt + 1)
@@ -489,12 +484,27 @@ async def run_session(
     async def invoke_once(lane, mount, messages):
         nonlocal budget_notice_sent, stage
         await active()
-        if lane == dream_harness_transport.MAIN_LANE and compact_arm != 'off':
-            compact(messages)
         stage = 'request_sizing'
         remaining = (
-            limits.tokens - report['price_weighted_tokens'] - session.counters['search_embedding_token_upper_bound']
+            limits.tokens
+            + judge_allowance
+            + (verify_allowance if lane == dream_harness_transport.VERIFY_LANE else 0)
+            - report['price_weighted_tokens']
+            - session.counters['search_embedding_token_upper_bound']
         )
+        if lane == dream_harness_transport.MAIN_LANE and hold_arm != 'off':
+            # Keep the staged work's two verifier calls paid for; an unverified item is dropped.
+            try:
+                held = verification_hold_tokens(
+                    list(session.staged.values()),
+                    completion_tokens=limits.verifier_completion_tokens,
+                    pass_tokens=limits.tokens,
+                )
+                hold_row['held'] = max(hold_row['held'], held)
+                if hold_arm == 'serve':
+                    remaining -= held
+            except Exception as error:
+                logger.warning('event=dream_lever_error lever=verify_hold exc=%s', type(error).__name__)
         if (
             lane == dream_harness_transport.MAIN_LANE
             and not budget_notice_sent
@@ -522,9 +532,10 @@ async def run_session(
             if lane == dream_harness_transport.VERIFY_LANE
             else limits.completion_tokens
         )
-        prior = main_history['prompt_tokens'] if lane == dream_harness_transport.MAIN_LANE else None
-        prior_count = main_history['messages'] if lane == dream_harness_transport.MAIN_LANE else 0
-        cached_estimate = main_history['cached_tokens'] if lane == dream_harness_transport.MAIN_LANE else None
+        loop_history = lane == dream_harness_transport.MAIN_LANE
+        prior = main_history['prompt_tokens'] if loop_history else None
+        prior_count = main_history['messages'] if loop_history else 0
+        cached_estimate = main_history['cached_tokens'] if loop_history else None
         if type(prior_count) is not int:
             prior_count = 0
         estimate, completion_room = dream_harness_transport.attempt_room(
@@ -576,6 +587,7 @@ async def run_session(
                         raise
                     timing['waits'] += 1
                     timing['wait_ms'] += 1000 * pause
+                    timing['wait_headroom_ms'] += 1000 * pause
                     await asyncio.sleep(pause)
                     await active()
         stage = 'model_turn'
@@ -611,6 +623,7 @@ async def run_session(
                 prior_prompt_tokens=prior,
                 prior_message_count=prior_count,
                 cached_tokens_estimate=cached_estimate,
+                reserved_only=judging,
             )
             report['model_lanes'].append(lane)
             counted = True
@@ -736,28 +749,52 @@ async def run_session(
             # that ceiling and drop evidence. Keep the ceiling open; the reserve
             # is still what the two calls need, and it is not held in the main loop.
             verify_need = max(
-                verification_reserve_tokens(staged, completion_tokens=limits.verifier_completion_tokens),
+                verification_reserve_tokens(staged, completion_tokens=limits.verifier_completion_tokens)
+                * (VERIFY_ALLOWANCE_FACTOR if hold_arm == 'serve' else 1),
                 8 * 24000,
             )
-            verify_budget = min(verify_need, max(0, limits.tokens - report['price_weighted_tokens']))
+            # Negative after an overshoot; invoke_once sizes calls from the same difference.
+            pass_left = (
+                limits.tokens - report['price_weighted_tokens'] - session.counters['search_embedding_token_upper_bound']
+            )
+            if hold_arm == 'serve' and staged:
+                # A main turn can cost more than its pre-call estimate (a cache miss on a
+                # long history) and eat the hold. Still pay for the staged items' two calls.
+                # A first call can also spend past its estimate and starve the second, so the
+                # allowance pays the reserve twice; only what the calls spend is charged.
+                try:
+                    owed = verification_reserve_tokens(staged, completion_tokens=limits.verifier_completion_tokens)
+                    verify_allowance = max(0, VERIFY_ALLOWANCE_FACTOR * owed - pass_left)
+                    hold_row['allowance'] = verify_allowance
+                    hold_row['owed'] = owed
+                except Exception as error:
+                    logger.warning('event=dream_lever_error lever=verify_hold exc=%s', type(error).__name__)
+            # Same effective budget invoke_once enforces, so batch sizing matches what calls can afford.
+            verify_budget = min(verify_need, max(0, pass_left + verify_allowance))
             if budget_stop_without_staged_work:
                 support, calls = {}, 0
             else:
                 stage = 'verify'
                 verify_started = asyncio.get_running_loop().time()
-                support, calls = await dream_verify.verify(
-                    staged,
-                    partial(invoke, dream_harness_transport.VERIFY_LANE),
-                    tokens=verify_budget,
-                    deadline_seconds=max(
-                        0, deadline - asyncio.get_running_loop().time() - min(60, timeout_seconds / 10)
-                    ),
-                    verifier_seconds=limits.verifier_seconds,
-                    completion_tokens=limits.verifier_completion_tokens,
-                    telemetry=verification_telemetry,
-                    cheap_turn=_cheap_turn(staged, invoke),
-                )
+                try:
+                    support, calls = await dream_verify.verify(
+                        staged,
+                        partial(invoke, dream_harness_transport.VERIFY_LANE),
+                        tokens=verify_budget,
+                        deadline_seconds=max(
+                            0, deadline - asyncio.get_running_loop().time() - min(60, timeout_seconds / 10)
+                        ),
+                        verifier_seconds=limits.verifier_seconds,
+                        completion_tokens=limits.verifier_completion_tokens,
+                        telemetry=verification_telemetry,
+                        cheap_turn=_cheap_turn(staged, invoke),
+                    )
+                finally:
+                    # The judge shares the verify lane; the allowance is this call's only.
+                    verify_allowance = 0
                 timing['verify_ms'] += int(1000 * (asyncio.get_running_loop().time() - verify_started))
+            if hold_arm != 'off':
+                hold_row['verify_used'] = verification_telemetry.get('used_tokens', 0)
             report['verifier_calls'] = calls
             report['verifier_transport_responses'] = max(
                 report.get('verifier_transport_responses', 0), verification_telemetry.get('transport_responses', 0)
@@ -765,7 +802,10 @@ async def run_session(
             report['verifier_valid_responses'] = sum(
                 isinstance(vote, bool) for votes in support.values() for vote in votes
             )
+            unverified_reasons = verification_telemetry.get('unverified_reasons') or {}
+            report['verify_reasons'] = dict(Counter(unverified_reasons.values()))
             decisions = Counter()
+            by_kind: dict[str, Counter] = {}
             stage = 'demotion_check'
             demoted = await run_blocking(db_executor, dream_store.demoted_types, uid, caps)
             automatic = auto_apply_kinds(uid) - demoted
@@ -783,6 +823,7 @@ async def run_session(
                         and dream_tools.target_authority_protected(item.operation, item.records)
                     )
                     decisions[decision] += 1
+                    by_kind.setdefault(item.kind, Counter())[decision] += 1
                     category = (
                         'questions'
                         if isinstance(item.operation, HarnessQuestion)
@@ -869,9 +910,14 @@ async def run_session(
                 dream_writing.reset(token)
                 ACTIVE_RUN.reset(effect_scope)
             report['verifier_outcomes'] = dict(decisions)
+            report['verifier_by_kind'] = {kind: dict(row) for kind, row in by_kind.items()}
+            if judge_mode != 'off' and not dry_run:
+                stage = 'value_judge'
+                await _judge_applied(staged, report)
             report.update(
                 status='complete',
                 notes=session.finish.notes if session.finish else '',
+                notes_voice_free=True,
                 summary=session.finish.summary if session.finish else '',
             )
     except Exception as exc:
@@ -882,27 +928,18 @@ async def run_session(
         if code == 'dream_gate_contention':
             report['stop_reason'] = code
         if isinstance(exc, dream_harness_transport.CapacityWait) or str(exc) == 'dream_minute_headroom':
-            report.update(status='waiting', reason='reserved_capacity')
+            report.update(
+                status='waiting',
+                reason='reserved_capacity',
+                wait_cause='minute_headroom' if str(exc) == 'dream_minute_headroom' else 'gateway',
+            )
         else:
             _log_pass_failure(exc, stage=stage)
     report['accounted_tokens'] += session.counters['search_embedding_token_upper_bound']
     report['price_weighted_tokens'] += session.counters['search_embedding_token_upper_bound']
     try:
-        if stop_arm != 'off':
-            fired = progress['fired']
-            levers['no_progress_stop'] = {'arm': stop_arm, 'fired': fired is not None}
-            if fired is not None:
-                late = {key for key in session.staged if key not in fired['keys']}
-                levers['no_progress_stop'].update(
-                    batch=fired['batch'],
-                    staged_after=len(late),
-                    applied_after=sum(
-                        1 for row in report['outcomes'] if row.get('key') in late and row.get('status') == 'applied'
-                    ),
-                    tokens_after=max(0, report['price_weighted_tokens'] - fired['tokens']),
-                )
-        if compact_arm != 'off':
-            levers['history_compact'] = dict(compaction)
+        if budget_probe:
+            levers['material_budget'] = cap_tail(session.staged, progress['capped'], report['outcomes'])
     except Exception as error:
         logger.warning('event=dream_lever_error lever=report exc=%s', type(error).__name__)
     report.update(timing=timing, levers=levers, defect_reports=dict(defects))
@@ -931,6 +968,7 @@ async def run_pass(
     progress=None,
     dry_run=False,
     bootstrap_tools=None,
+    judge=None,
 ):
     if await run_blocking(db_executor, account_deletion_blocks_user_work, uid):
         report = {'status': 'not_admitted', 'reason': 'account_pending_deletion'}
@@ -1007,7 +1045,7 @@ async def run_pass(
         else None
     )
     if not dry_run and slot is None:
-        report = {'status': 'waiting', 'reason': 'reserved_capacity'}
+        report = {'status': 'waiting', 'reason': 'reserved_capacity', 'wait_cause': 'gateway'}
         record_pass(report)
         return report
     lease = None
@@ -1051,6 +1089,13 @@ async def run_pass(
                     'arm': idle_arm,
                     'would_skip': bool(lease.get('hunt')) and trigger == 'schedule' and not backlog,
                 }
+            backoff_arm = arms.get('hunt_backoff', 'off')
+            if backoff_arm != 'off' and lease.get('hunt'):
+                pass_levers['hunt_backoff'] = {
+                    'arm': backoff_arm,
+                    'dry_hunts': int(lease.get('dry_hunts', 0) or 0),
+                    'would_defer': bool(lease.get('backoff_would_defer')) and trigger == 'schedule',
+                }
         if not dry_run and not canary:
             assert lease is not None
             intake_scope = ACTIVE_RUN.set((uid, lease['run_id']))
@@ -1059,7 +1104,25 @@ async def run_pass(
             finally:
                 ACTIVE_RUN.reset(intake_scope)
         material = len(dirty) + len(seed.get('required_intake_candidates') or [])
+        prescan_arm = arms.get('prescan', 'off')
+        prescan = None
+        if prescan_arm != 'off' and trigger == 'schedule' and lease is not None:
+            # Pre-scan after admission only: bounded projected reads hand hunts
+            # concrete targets. Any failure leaves the pass exactly as today.
+            try:
+                prescan = await asyncio.wait_for(run_blocking(db_executor, dream_prescan.scan, uid), timeout=5.0)
+                pass_levers['prescan'] = {'arm': prescan_arm, 'targets': len(prescan['refs']), **prescan['counts']}
+                # Serve only hunts: a pass admitted for dirty work keeps its targets first, and an
+                # owner parked as an empty-bucket idle pass is never woken into a model session.
+                served = 0
+                if prescan_arm == 'serve' and lease.get('hunt') and limits.bucket != 'empty':
+                    served = dream_prescan.serve_targets(seed, prescan['refs'], limits)
+                pass_levers['prescan']['served'] = served
+            except Exception as error:
+                logger.warning('event=dream_lever_error lever=prescan exc=%s', type(error).__name__)
+                prescan = None
         budget_arm = arms.get('material_budget', 'off')
+        budget_probe = None
         if budget_arm != 'off':
             try:
                 sized = material_tokens(material, limits.tokens)
@@ -1068,6 +1131,8 @@ async def run_pass(
                     'tokens_before': limits.tokens,
                     'tokens_after': sized,
                 }
+                if budget_arm == 'shadow' and sized < limits.tokens:
+                    budget_probe = sized
                 if budget_arm == 'serve' and sized < limits.tokens:
                     limits = replace(limits, tokens=sized)
                     caps = replace(caps, tokens=limits.tokens)
@@ -1109,8 +1174,28 @@ async def run_pass(
                 timeout_seconds=timeout_seconds,
                 bootstrap_tools=bootstrap_tools,
                 arms=arms,
+                budget_probe=budget_probe,
+                # Scheduled sweep passes only; operator CLIs pass judge=False.
+                judge=(trigger == 'schedule' if judge is None else judge) and not canary and not dry_run,
             )
-        report['levers'] = {**pass_levers, **(report.get('levers') or {})}
+        if 'prescan' in pass_levers:
+            # Recall of the finalized report, merged into the admission-time row
+            # like the material-budget tail merge.
+            try:
+                pass_levers['prescan']['hits'] = dream_prescan.applied_hits(report, (prescan or {}).get('refs'))
+            except Exception as error:
+                logger.warning('event=dream_lever_error lever=prescan exc=%s', type(error).__name__)
+        session_levers = report.get('levers') or {}
+        report['levers'] = {
+            **pass_levers,
+            **session_levers,
+            # Merge the session's B5 tail counts into the admission-time sizing row.
+            **(
+                {'material_budget': {**pass_levers['material_budget'], **session_levers['material_budget']}}
+                if 'material_budget' in pass_levers and 'material_budget' in session_levers
+                else {}
+            ),
+        }
         report['material'] = material
         report.setdefault('timing', {})['seed_ms'] = seed_ms
         if progress is not None:
@@ -1163,7 +1248,9 @@ RESERVED_RECHECKS = (PROBE_SECONDS + PROBE_TIMEOUT_SECONDS) // RESERVED_RECHECK_
 # A pass starting late in the drain gets only the drain's remaining budget, so
 # it ends through its own deadline (and finish) instead of being cancelled by the
 # drain's outer timeout; below this floor the owner waits for the next sweep.
-MIN_PASS_SECONDS = 300
+# 10-29: passes started with under 5 minutes left made 20 edits in 116 passes (most of
+# that window is gateway wait), so an owner waits for the next half-hour sweep instead.
+MIN_PASS_SECONDS = 600
 
 
 async def drain(*, limit=5000, sweep=None):

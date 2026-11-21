@@ -21,7 +21,6 @@ import database.redis_db as redis_db
 from utils.other import endpoints as auth
 from utils.log_sanitizer import sanitize
 from utils.llm.gateway_error_contract import BYOK_RATE_LIMIT_ERROR_DETAIL, is_byok_rate_limit_gateway_error
-from utils.subscription import is_trial_paywalled
 from utils.executors import run_blocking, db_executor, llm_executor
 from utils.integrations_registry import oauth_authorization_query, resolve_integration_provider
 from utils.retrieval.tools.google_utils import (
@@ -197,6 +196,9 @@ class IntegrationResponse(BaseModel):
 
     connected: bool = Field(description="Whether the integration is connected")
     app_key: str = Field(description="Integration app key")
+    read_selection_configured: Optional[bool] = Field(
+        default=None, description="Google Calendar has an explicit saved read scope, even if its grant is disconnected"
+    )
 
 
 class IntegrationMutationResponse(BaseModel):
@@ -264,8 +266,6 @@ async def synthesize_connector_data(
         await run_blocking(db_executor, require_generated_compute, uid, 'memories')
     from utils.llm import connector_synthesis
 
-    if await run_blocking(db_executor, is_trial_paywalled, uid, 'desktop'):
-        raise HTTPException(status_code=402, detail='trial_expired')
     try:
         synthesis = await run_blocking(
             llm_executor,
@@ -293,7 +293,12 @@ async def synthesize_connector_data(
     )
 
 
-@router.get("/v1/integrations/{app_key}", response_model=IntegrationResponse, tags=['integrations'])
+@router.get(
+    "/v1/integrations/{app_key}",
+    response_model=IntegrationResponse,
+    response_model_exclude_none=True,
+    tags=['integrations'],
+)
 def get_integration(app_key: str, uid: str = Depends(auth.get_current_user_uid)):
     """Get integration connection status for the current user.
 
@@ -307,6 +312,17 @@ def get_integration(app_key: str, uid: str = Depends(auth.get_current_user_uid))
         return IntegrationResponse(connected=connected, app_key=app_key)
 
     integration = users_db.get_integration(uid, app_key)
+
+    if app_key == 'google_calendar':
+        from database.google_calendar_preferences import get_selections
+
+        # A disconnected grant must not make native readers forget an explicit
+        # read scope and silently fall through to another browser account.
+        return IntegrationResponse(
+            connected=bool(integration and integration.get('connected')),
+            app_key=app_key,
+            read_selection_configured=bool(get_selections(uid)),
+        )
 
     if integration and integration.get('connected'):
         return IntegrationResponse(connected=True, app_key=app_key)

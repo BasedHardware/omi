@@ -39,7 +39,37 @@ BATCH_PIPELINE_CAPACITY_RULE: dict[str, Any] = {
     },
     'metricsQuery': 'sum by (namespace, worker_release) (\n  max by (namespace, worker_release, priority) (\n    omi_batch_pipeline_admissible_ready_units{<<.LabelMatchers>>}\n    and on (namespace, worker_release, pod)\n    (time() - omi_batch_pipeline_capacity_refreshed_at_seconds < 60)\n  )\n)\nand on (namespace, worker_release) (\n  count by (namespace, worker_release) (\n    max by (namespace, worker_release, priority) (\n      omi_batch_pipeline_admissible_ready_units{<<.LabelMatchers>>}\n      and on (namespace, worker_release, pod)\n      (time() - omi_batch_pipeline_capacity_refreshed_at_seconds < 60)\n    )\n  ) == 3\n)',
 }
+BATCH_PIPELINE_CHAIN_RULE: dict[str, Any] = {
+    'seriesQuery': 'omi_batch_pipeline_stage_seconds_sum{namespace!="",stage="worker_flight"}',
+    'resources': {'overrides': {'namespace': {'resource': 'namespace'}}},
+    'name': {
+        'matches': '^omi_batch_pipeline_stage_seconds_sum$',
+        'as': 'omi_batch_pipeline_gpu_chain_busy_seconds',
+    },
+    'metricsQuery': (
+        'sum by (namespace) (\n'
+        '  max by (namespace, pod) (\n'
+        '    rate(omi_batch_pipeline_stage_seconds_sum{<<.LabelMatchers>>,stage="worker_flight"}[10m])\n'
+        '  )\n'
+        '  and on (namespace, pod)\n'
+        '  (\n'
+        '    (time() - omi_batch_pipeline_sampler_observed_at_seconds{<<.LabelMatchers>>} < 60)\n'
+        '    or\n'
+        '    (time() - omi_batch_pipeline_metrics_refreshed_at_seconds{<<.LabelMatchers>>} < 60)\n'
+        '  )\n'
+        ')'
+    ),
+}
 API_SERVICES = {'v1beta1.custom.metrics.k8s.io', 'v1beta1.external.metrics.k8s.io'}
+RECORD_SEAL_RULE: dict[str, Any] = {
+    'seriesQuery': 'omi_record_seal_backlog{namespace!="",worker_release!=""}',
+    'resources': {'overrides': {'namespace': {'resource': 'namespace'}}},
+    'name': {'matches': '^omi_record_seal_backlog$', 'as': 'omi_record_seal_backlog'},
+    'metricsQuery': 'max by (namespace, worker_release) (\n'
+    '  omi_record_seal_backlog{<<.LabelMatchers>>}\n'
+    '  and on (namespace, worker_release, pod)\n'
+    '  (time() - omi_record_seal_refreshed_at_seconds < 60)\n)',
+}
 PARAKEET_QUEUE_RULES = [
     {
         'seriesQuery': f'parakeet_batch_lane_oldest_pending_seconds{{namespace!="",pod!="",lane="{lane}"}}',
@@ -64,6 +94,11 @@ def normalized_config(config):
 
 def expected_config(live):
     expected = copy.deepcopy(live)
+    seals = [rule for rule in expected['externalRules'] if rule['name']['as'] == RECORD_SEAL_RULE['name']['as']]
+    if seals and seals != [RECORD_SEAL_RULE]:
+        raise ValueError('Unexpected live record seal rule: reconcile and review first')
+    if not seals:
+        expected['externalRules'].append(copy.deepcopy(RECORD_SEAL_RULE))
     rule = next(
         rule
         for rule in expected['externalRules']
@@ -118,6 +153,13 @@ def expected_config(live):
         raise ValueError('Unexpected live batch pipeline capacity rule: reconcile and review first')
     if not capacity:
         expected['externalRules'].append(copy.deepcopy(BATCH_PIPELINE_CAPACITY_RULE))
+    chain = [
+        rule for rule in expected['externalRules'] if rule['name']['as'] == BATCH_PIPELINE_CHAIN_RULE['name']['as']
+    ]
+    if chain and chain != [BATCH_PIPELINE_CHAIN_RULE]:
+        raise ValueError('Unexpected live batch pipeline chain rule: reconcile and review first')
+    if not chain:
+        expected['externalRules'].append(copy.deepcopy(BATCH_PIPELINE_CHAIN_RULE))
     batch = [rule for rule in expected['rules'] if rule['name']['as'] == DIARIZER_BATCH_RULE['name']['as']]
     if batch and batch != [DIARIZER_BATCH_RULE]:
         raise ValueError('Unexpected live batch queue rule: reconcile and review first')

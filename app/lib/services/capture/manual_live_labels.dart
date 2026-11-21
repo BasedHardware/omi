@@ -4,7 +4,7 @@ import 'package:omi/backend/schema/transcript_segment.dart';
 void retainManualLiveLabels(
   List<TranscriptSegment> existing,
   List<TranscriptSegment> incoming,
-  Map<int, String> speakerDefaults,
+  Map<Object, String> speakerDefaults,
 ) {
   final manualById = {
     for (final line in existing)
@@ -15,8 +15,8 @@ void retainManualLiveLabels(
     // another client. Only stale automatic/unlabeled projections need repair.
     if (line.speakerLabelSource == 'manual') continue;
     final previous = manualById[line.id];
-    final assigned = speakerDefaults[line.speakerId];
-    if (previous != null) {
+    final assigned = speakerDefaults[line.recordingVoice ?? line.speakerId];
+    if (previous != null && previous.sameRecordingVoice(line)) {
       line.isUser = previous.isUser;
       line.personId = previous.personId;
       line.speakerLabelSource = 'manual';

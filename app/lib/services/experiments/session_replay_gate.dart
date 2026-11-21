@@ -3,7 +3,7 @@ import 'package:flutter/foundation.dart';
 /// Who may be recorded by mobile session replay (`SessionReplay` in
 /// `lib/utils/analytics/session_replay.dart` acts on it). Lifecycle: rollout; owner: nik; default off.
 abstract final class SessionReplayGate {
-  /// PostHog flag key (project 302298). Registered in `config/feature-flags.yaml`.
+  /// Omi store boolean: proposed 5% plus approved internal UIDs; no client-side targeting.
   static const enabledFlag = 'mobile-session-replay';
 
   /// Debug builds only: `--dart-define=OMI_SESSION_REPLAY=1` reads the flag as on. A dart-define

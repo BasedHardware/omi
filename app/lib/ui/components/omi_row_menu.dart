@@ -8,12 +8,14 @@ import 'package:omi/ui/omi_tokens.dart';
 @immutable
 class OmiMenuAction {
   const OmiMenuAction({
+    this.key,
     required this.icon,
     required this.label,
     required this.onSelected,
     this.isDestructive = false,
   });
 
+  final Key? key;
   final IconData icon;
 
   /// Title Case verb: "Open", "Edit", "Select", "Delete".
@@ -51,7 +53,8 @@ Future<void> showOmiRowMenu(
     builder: (sheetContext) => Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        for (final action in actions) _OmiMenuRow(action: action, onTap: () => Navigator.of(sheetContext).pop(action)),
+        for (final action in actions)
+          _OmiMenuRow(key: action.key, action: action, onTap: () => Navigator.of(sheetContext).pop(action)),
       ],
     ),
   );
@@ -59,7 +62,7 @@ Future<void> showOmiRowMenu(
 }
 
 class _OmiMenuRow extends StatelessWidget {
-  const _OmiMenuRow({required this.action, required this.onTap});
+  const _OmiMenuRow({super.key, required this.action, required this.onTap});
 
   final OmiMenuAction action;
   final VoidCallback onTap;

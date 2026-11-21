@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/services/audio_sources/audio_source.dart';
 import 'package:omi/services/live_preview/live_preview_controller.dart';
+import 'package:omi/services/live_preview/live_preview_engine.dart';
+import 'package:omi/services/wals/mobile_standard_batch.dart';
 import 'package:omi/utils/logger.dart';
 
 /// Extra listeners on a capture audio tap. The capture's single nullable slot
@@ -187,6 +189,41 @@ class LocalPreviewAdmission {
   LivePreviewController? preview;
   bool admitted = false;
 
+  /// One-way for this capture. Reconnects must not ask for another engine.
+  bool _engineUnavailableForCapture = false;
+  bool get engineUnavailableForCapture => _engineUnavailableForCapture;
+
+  void refuseEngineForCapture({
+    required void Function() sendControl,
+    required void Function(HeldPendantFrame frame) send,
+  }) {
+    if (engineUnavailableForCapture) return;
+    _engineUnavailableForCapture = true;
+    // Same socket: control must precede every flushed binary frame.
+    sendControl();
+    refuseForSocket(send: send);
+  }
+
+  /// Capture's engine verdict: use the same refusal/custody path as a gate flip.
+  void refuseUnavailableEngine({
+    required void Function(LivePreviewReason reason) sendControl,
+    required void Function(HeldPendantFrame frame) send,
+    required void Function() dropLocalPreview,
+  }) {
+    if (!admitted || preview?.phase != LivePreviewPhase.unavailable) return;
+    refuseEngineForCapture(sendControl: () => sendControl(preview!.selected!.reason), send: send);
+    dropLocalPreview();
+  }
+
+  /// Account cleanup must preserve suppressed, not-yet-durable frames for the old owner.
+  bool preserveForAccountChange(List<HeldPendantFrame> frames, MobileStandardBatch? lane, String? recordingSessionId) =>
+      lane?.preserveForOwner(
+        [for (final frame in frames) (frame.payload, frame.capturedAt ?? now())],
+        codec: pendantCodec,
+        recordingSessionId: recordingSessionId,
+      ) ??
+      false;
+
   /// This socket is settled as refused (hold timed out or overflowed and its
   /// frames already streamed, or a client gate flipped mid-session): a later
   /// grant on the same socket never admits it.
@@ -284,7 +321,8 @@ class LocalPreviewAdmission {
     // A verdict that arrives after the deadline is the timeout's refusal.
     if (_deadlinePassed()) _latchTimeout(null);
     _cancelDeadline();
-    final effective = granted && socketDeclared && preview != null && !_refusedForSocket;
+    final effective =
+        granted && socketDeclared && preview != null && !_refusedForSocket && !engineUnavailableForCapture;
     _report(effective ? LocalPreviewVerdictOutcome.granted : LocalPreviewVerdictOutcome.refused);
     _verdictPendingSince = null;
     if (effective) {
@@ -354,6 +392,7 @@ class LocalPreviewAdmission {
       }
     }
     admitted = false;
+    _engineUnavailableForCapture = false;
     _verdictPendingSince = null;
     _held.clear();
     preview?.endCapture();

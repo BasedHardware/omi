@@ -31,6 +31,22 @@ export const HARD_DELEGATION_MAX_DEPTH = 5;
 export const DEFAULT_DELEGATION_MAX_BUDGET_USD = 5;
 export const HARD_DELEGATION_MAX_BUDGET_USD = 10;
 
+/**
+ * Default wall-clock deadline for a single run. Generous enough for long
+ * research turns, but bounded so a stalled provider or silent subprocess
+ * cannot pin a worker forever. Override with `OMI_AGENT_RUN_TIMEOUT_MS`
+ * (`0` disables) or per run with `ExecuteAgentRunInput.timeoutMs`.
+ */
+export const DEFAULT_RUN_TIMEOUT_MS = 30 * 60_000;
+
+export function configuredRunTimeoutMs(env: NodeJS.ProcessEnv = process.env): number {
+  const raw = env.OMI_AGENT_RUN_TIMEOUT_MS;
+  if (raw === undefined || raw.trim() === "") return DEFAULT_RUN_TIMEOUT_MS;
+  const parsed = Number.parseInt(raw, 10);
+  if (!Number.isFinite(parsed) || parsed < 0) return DEFAULT_RUN_TIMEOUT_MS;
+  return parsed;
+}
+
 export function requiresVerifiedContextDispatch(snippet: DesktopContextSnippetInput): boolean {
   const tier = snippet.sensitivityTier.toLowerCase();
   if (snippet.sourceKind === "screenshot_image") return true;

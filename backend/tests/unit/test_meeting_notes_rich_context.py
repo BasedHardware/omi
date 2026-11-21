@@ -921,3 +921,9 @@ def test_rich_prompt_composes_named_blocks_and_keeps_general_rules():
     text = rich.rich_static_instructions('FORMAT', _conversation_notes_static_instructions)
     assert rich._RICH_NOTE_BODY_OPENING in text and general.NOTE_BODY_OPENING not in text
     assert rich._RICH_SELECT_THREADS in text and general.SELECT_THREADS not in text
+
+
+@pytest.fixture(autouse=True)
+def _isolated_relevance_policy(monkeypatch):
+    # This legacy model/input fixture has no episode or neighbor database.
+    monkeypatch.setenv('CONVERSATION_OCCASION_RELEVANCE_ENABLED', 'false')

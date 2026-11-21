@@ -5,6 +5,8 @@ from copy import deepcopy
 
 import pytest
 
+from config import dream_levers
+
 from config.dream_session import SessionLimits
 from llm_gateway.gateway.vertex_wire import _vertex_request
 from tests.unit.test_dream_cleanup_edits import records, UID
@@ -17,6 +19,8 @@ from utils.llm.shaped_agent import Turn
 
 
 def test_notice_is_appended_once_when_a_main_turn_starts_at_threshold(runtime, monkeypatch):
+    # Notice arithmetic only; the verify hold would move the threshold by its reserve.
+    monkeypatch.setenv(dream_levers.VERIFY_HOLD_MODE_ENV, 'off')
     limits = SessionLimits(bucket='light', turns=16, tools=16, read_bytes=64000, read_call_bytes=64000, tokens=112500)
     owner_records = EvidenceRecords(records(runtime))
     monkeypatch.setattr(

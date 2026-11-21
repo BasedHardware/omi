@@ -136,6 +136,16 @@ describe('responseErrorHandler — 401 handling', () => {
     expect(calls).toHaveLength(0)
   })
 
+  it('an expired operation does not refresh or sign out the replacement owner', async () => {
+    const { client, calls } = fakeClient()
+    await expect(
+      responseErrorHandler(client, err401({ __canSend: () => false }))
+    ).rejects.toBeDefined()
+    expect(h.refreshIdToken).not.toHaveBeenCalled()
+    expect(h.forceReauth).not.toHaveBeenCalled()
+    expect(calls).toHaveLength(0)
+  })
+
   it('does not sign out a new session when the old refresh finishes as dead', async () => {
     const { client, calls } = fakeClient()
     h.refreshIdToken.mockImplementationOnce(async () => {
@@ -145,6 +155,20 @@ describe('responseErrorHandler — 401 handling', () => {
     await expect(responseErrorHandler(client, err401({ __authGeneration: 0 }))).rejects.toThrow(
       'sign-in changed'
     )
+    expect(h.forceReauth).not.toHaveBeenCalled()
+    expect(calls).toHaveLength(0)
+  })
+
+  it('an owner change during refresh cannot reauthenticate the replacement owner', async () => {
+    let current = true
+    h.refreshIdToken.mockImplementation(async () => {
+      current = false
+      return { status: 'dead' }
+    })
+    const { client, calls } = fakeClient()
+    await expect(
+      responseErrorHandler(client, err401({ __canSend: () => current }))
+    ).rejects.toBeDefined()
     expect(h.forceReauth).not.toHaveBeenCalled()
     expect(calls).toHaveLength(0)
   })

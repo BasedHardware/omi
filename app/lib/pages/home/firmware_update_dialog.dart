@@ -62,7 +62,7 @@ class _FirmwareUpdateSheetState extends State<FirmwareUpdateSheet> {
         icon: FontAwesomeIcons.plug,
       ),
       'battery': FirmwareUpdateStep(
-        title: context.l10n.firmwareBatteryAbove15,
+        title: context.l10n.firmwareBatteryRequirement,
         description: context.l10n.firmwareEnsureBattery,
         icon: FontAwesomeIcons.batteryHalf,
       ),

@@ -4,11 +4,15 @@ from datetime import datetime, timedelta, timezone
 from math import isfinite
 from typing import Any, Mapping
 
-from config.server_batch import language_compatible, owned
+from config.server_batch import language_compatible, owned, has_audio
+from config import listen_reconnect
 
-DEFAULT_GAP_SECONDS = 120
-MAX_CONVERSATION_TIMEOUT_SECONDS = 4 * 60 * 60
-MEETING_END_GRACE_SECONDS = 120
+from config.recorded_time_tolerances import (
+    CONTINUE_GAP_SECONDS as DEFAULT_GAP_SECONDS,
+    MAX_EPISODE_SECONDS as MAX_CONVERSATION_TIMEOUT_SECONDS,
+)
+
+MEETING_END_GRACE_SECONDS = DEFAULT_GAP_SECONDS
 
 
 def gap_splits(seconds: float, timeout: float = DEFAULT_GAP_SECONDS) -> bool:
@@ -88,7 +92,9 @@ def continuation_timeout(row: Mapping[str, Any], timeout: float = DEFAULT_GAP_SE
         return timeout
 
     window = calendar_continuity_window(context)
-    finish = _utc_datetime(row.get('finished_at'))
+    from utils.conversations.recorded_time import recorded_end
+
+    finish = recorded_end(row)
     if window is None or finish is None:
         return timeout
     start, end = window
@@ -103,13 +109,20 @@ def resumable_continuation(
     *,
     source: str,
     device_id: str | None,
-    now: datetime,
+    arrival_at: datetime,
     timeout: int,
     language: str | None = None,
     allow_server_batch: bool = True,
 ) -> bool:
     """Unknown device is a partition, not permission to join another device."""
-    finish = row.get('finished_at')
+    from utils.conversations.recorded_time import recorded_end
+
+    finish = recorded_end(row)
+    if owned(row) and has_audio(row):
+        # A committed original-audio bound proves activity even before batch STT
+        # has produced any placed segments. Arrival alone never grants continuity.
+        audio_end = datetime.fromtimestamp(row['server_batch_audio_end'], timezone.utc)
+        finish = max(finish, audio_end) if finish is not None else audio_end
     if not allow_server_batch:
         if owned(row):
             return False
@@ -118,9 +131,12 @@ def resumable_continuation(
             return False
     return (
         row.get('status') == 'in_progress'
+        and not (owned(row) and row.get('server_batch_audio_closed'))
+        and not listen_reconnect.grace_expired(row, arrival_at)
+        and listen_reconnect.producer(row).get('phase') != 'ended'
         and not any(row.get(key) for key in ('deleted', 'discarded', 'is_locked'))
         and row.get('source') == source
         and row.get('client_device_id') == device_id
         and isinstance(finish, datetime)
-        and not gap_splits((now - finish).total_seconds(), continuation_timeout(row, timeout))
+        and not gap_splits((arrival_at - finish).total_seconds(), continuation_timeout(row, timeout))
     )

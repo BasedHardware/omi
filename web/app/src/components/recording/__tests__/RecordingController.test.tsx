@@ -1,5 +1,6 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { LiveTranscript, LiveTranscriptCompact } from '../LiveTranscript';
 import { RecordingController } from '@/components/recording/RecordingController';
 import {
   RecordingProvider,
@@ -7,6 +8,11 @@ import {
 } from '@/components/recording/RecordingContext';
 
 const doubles = vi.hoisted(() => ({
+  channel: {
+    onmessage: null as null | ((event: MessageEvent) => void),
+    postMessage: vi.fn(),
+    close: vi.fn(),
+  },
   capture: {
     start: vi.fn().mockResolvedValue(undefined),
     stop: vi.fn(),
@@ -22,6 +28,8 @@ const doubles = vi.hoisted(() => ({
     onAudioData: (data: Int16Array) => void;
   },
   socketOptions: null as null | {
+    onServerBatch: (isBatch: boolean) => void;
+    onConversationSession: (id: string) => void;
     onSegment: (segment: {
       id: string;
       text: string;
@@ -31,6 +39,11 @@ const doubles = vi.hoisted(() => ({
     }) => void;
   },
   finalizeConversationById: vi.fn().mockResolvedValue(undefined),
+}));
+
+vi.mock('@/lib/recordingBroadcast', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/recordingBroadcast')>()),
+  createRecordingChannel: () => doubles.channel,
 }));
 
 vi.mock('@/lib/audioCapture', () => ({
@@ -55,11 +68,15 @@ vi.mock('@/lib/api', () => ({
 }));
 
 function RecordingHarness() {
-  const { state, segments, startRecording, stopRecording } = useRecordingContext();
+  const { state, segments, isBatchSession, startRecording, stopRecording } =
+    useRecordingContext();
 
   return (
     <>
       <p>{state}</p>
+      <p>{isBatchSession ? 'batch' : 'live'}</p>
+      <LiveTranscript segments={[]} isBatchSession={isBatchSession} />
+      <LiveTranscriptCompact segments={[]} isBatchSession={isBatchSession} />
       {segments.map((segment) => (
         <p key={segment.id}>{segment.text}</p>
       ))}
@@ -118,5 +135,59 @@ describe('RecordingController realtime flow', () => {
     expect(doubles.capture.stop).toHaveBeenCalledOnce();
     expect(doubles.socket.disconnect).toHaveBeenCalledOnce();
     expect(doubles.finalizeConversationById).toHaveBeenCalledOnce();
+  });
+});
+
+describe('RecordingController server batch flow', () => {
+  it('shows processing copy, keeps forwarding audio, finalizes by id, and rejects stale mode callbacks', async () => {
+    render(
+      <RecordingProvider>
+        <RecordingController />
+        <RecordingHarness />
+      </RecordingProvider>,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Start' }));
+    await waitFor(() => expect(screen.getByText('recording')).toBeInTheDocument());
+    expect(screen.getByText('live')).toBeInTheDocument();
+    const oldOptions = doubles.socketOptions;
+    act(() => {
+      oldOptions?.onServerBatch(true);
+      oldOptions?.onConversationSession('server-web-conversation');
+    });
+    expect(screen.getByText('batch')).toBeInTheDocument();
+    // A pop-out opened after ready must receive the current mode on request.
+    doubles.channel.postMessage.mockClear();
+    act(() =>
+      doubles.channel.onmessage?.({ data: { type: 'request-state' } } as MessageEvent),
+    );
+    expect(doubles.channel.postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'state-update', isBatchSession: true }),
+    );
+    expect(screen.getAllByRole('status')).toHaveLength(2);
+    expect(
+      screen.getAllByText('Recording — transcript processes after you stop.'),
+    ).toHaveLength(2);
+    expect(screen.queryByText('Waiting for speech...')).not.toBeInTheDocument();
+    const audio = new Int16Array([4, 5]);
+    act(() => doubles.captureOptions?.onAudioData(audio));
+    expect(doubles.socket.sendAudio).toHaveBeenLastCalledWith(audio);
+    // A new live ready (e.g. reconnect) restores the legacy transcript surface.
+    act(() => oldOptions?.onServerBatch(false));
+    expect(screen.getByText('Waiting for speech...')).toBeInTheDocument();
+    act(() => oldOptions?.onServerBatch(true));
+    fireEvent.click(screen.getByRole('button', { name: 'Stop' }));
+    await waitFor(() => expect(screen.getByText('idle')).toBeInTheDocument());
+    expect(screen.getByText('live')).toBeInTheDocument();
+    expect(doubles.finalizeConversationById).toHaveBeenLastCalledWith(
+      'server-web-conversation',
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Start' }));
+    await waitFor(() => expect(screen.getByText('recording')).toBeInTheDocument());
+    act(() => oldOptions?.onServerBatch(true));
+    expect(screen.getByText('live')).toBeInTheDocument();
+    act(() => doubles.socketOptions?.onServerBatch(true));
+    fireEvent(window, new Event('pagehide'));
+    expect(screen.getByText('live')).toBeInTheDocument();
+    expect(screen.getByText('idle')).toBeInTheDocument();
   });
 });

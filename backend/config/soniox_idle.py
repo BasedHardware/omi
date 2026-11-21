@@ -15,6 +15,12 @@ knobs: in-cohort sessions read the ``SONIOX_IDLE_COHORT_*`` overrides when set
 (each falls back to the global knob when unset) and every other session keeps
 today's values. ``SONIOX_IDLE_COHORT_PERCENT=0`` is the cohort kill switch;
 ``SONIOX_IDLE_CLOSE_SECONDS=0`` remains the fleet-wide kill switch either way.
+
+The cohort is also the speech gate: its overrides may go below the global
+floors (close down to just past the VAD hangover, re-arm down to 1 s, cap up to
+240 closes per hour), so the treatment arm connects Soniox only around speech
+and the A/B metrics price that against today's policy before any global move.
+Global knobs keep their floors because they reach every session without an arm.
 """
 
 import logging
@@ -25,7 +31,10 @@ from functools import lru_cache
 
 DEFAULT_IDLE_CLOSE_SECONDS = 45.0
 MIN_IDLE_CLOSE_SECONDS = 20.0
-DEFAULT_NO_FRAMES_CLOSE_SECONDS = 60.0
+# A client that sends no frames at all is backgrounded or disconnected; every
+# keepalive second until the close is billed. The next frame reopens through
+# the onset path, so a shorter wait costs no audio.
+DEFAULT_NO_FRAMES_CLOSE_SECONDS = 20.0
 MIN_NO_FRAMES_CLOSE_SECONDS = 10.0
 # Mirrors utils.stt.vad_gate.VAD_GATE_HANGOVER_MS (pinned by a unit test). A
 # no-frames close never finalizes inside this tail after the last speech frame.
@@ -33,6 +42,14 @@ VAD_HANGOVER_SECONDS = 4.0
 DEFAULT_REARM_SECONDS = 60.0
 MIN_REARM_SECONDS = 5.0
 DEFAULT_MAX_CLOSES_PER_HOUR = 12
+# Speech-gate floors, cohort overrides only. The close threshold counts from the
+# first silent frame and fires only after the hangover released the word
+# boundary, so one second past the hangover is the shortest meaningful wait.
+# Reopens dial in ~0.16 s p50 while the onset PCM is held, and the cap still
+# bounds dials for a session whose VAD flaps.
+MIN_COHORT_CLOSE_SECONDS = VAD_HANGOVER_SECONDS + 1.0
+MIN_COHORT_REARM_SECONDS = 1.0
+MAX_COHORT_CLOSES_PER_HOUR = 240
 _OFF_VALUES = frozenset({'off', 'false', 'no', 'disabled'})
 COHORT_SALT = 'soniox-idle-close'
 logger = logging.getLogger(__name__)
@@ -131,7 +148,7 @@ def _cohort_override(name: str, floor: float | None) -> float | None:
 
 
 def _cohort_cap_override() -> int | None:
-    """``SONIOX_IDLE_COHORT_MAX_CLOSES_PER_HOUR``: unset/invalid/<=0 -> None."""
+    """``SONIOX_IDLE_COHORT_MAX_CLOSES_PER_HOUR``: unset/invalid/<=0 -> None; capped at the flap bound."""
     raw = os.getenv('SONIOX_IDLE_COHORT_MAX_CLOSES_PER_HOUR', '').strip()
     if not raw:
         return None
@@ -140,7 +157,7 @@ def _cohort_cap_override() -> int | None:
     except ValueError:
         _warn_invalid('SONIOX_IDLE_COHORT_MAX_CLOSES_PER_HOUR')
         return None
-    return cap if cap > 0 else None
+    return min(cap, MAX_COHORT_CLOSES_PER_HOUR) if cap > 0 else None
 
 
 def cohort_armed() -> bool:
@@ -153,8 +170,8 @@ def cohort_armed() -> bool:
     if cohort_percent() <= 0:
         return False
     return (
-        _cohort_override('SONIOX_IDLE_COHORT_CLOSE_SECONDS', MIN_IDLE_CLOSE_SECONDS) is not None
-        or _cohort_override('SONIOX_IDLE_COHORT_REARM_SECONDS', MIN_REARM_SECONDS) is not None
+        _cohort_override('SONIOX_IDLE_COHORT_CLOSE_SECONDS', MIN_COHORT_CLOSE_SECONDS) is not None
+        or _cohort_override('SONIOX_IDLE_COHORT_REARM_SECONDS', MIN_COHORT_REARM_SECONDS) is not None
         or _cohort_cap_override() is not None
     )
 
@@ -179,8 +196,8 @@ def idle_settings_for(uid: str | None) -> IdleCohortSettings:
     when the global close knob is 0 the idle wrapper is disabled for everyone.
     """
     global_close = idle_close_seconds()
-    close_override = _cohort_override('SONIOX_IDLE_COHORT_CLOSE_SECONDS', MIN_IDLE_CLOSE_SECONDS)
-    rearm_override = _cohort_override('SONIOX_IDLE_COHORT_REARM_SECONDS', MIN_REARM_SECONDS)
+    close_override = _cohort_override('SONIOX_IDLE_COHORT_CLOSE_SECONDS', MIN_COHORT_CLOSE_SECONDS)
+    rearm_override = _cohort_override('SONIOX_IDLE_COHORT_REARM_SECONDS', MIN_COHORT_REARM_SECONDS)
     cap_override = _cohort_cap_override()
     percent = cohort_percent()
     in_cohort = False

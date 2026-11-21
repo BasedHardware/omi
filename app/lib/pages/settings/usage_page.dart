@@ -729,7 +729,7 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin, Wi
                 ],
               ],
               if (stats != null) ..._buildAllowanceMeters(provider.subscription),
-              const HeldAudioUsageSection(),
+              const SaveLiveHoursRow(),
               if (stats != null && provider.chatQuotaUnit != null && period == 'monthly') ...[
                 const SizedBox(height: OmiSpacing.sm),
                 _buildChatQuotaLine(context, provider),

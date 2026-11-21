@@ -31,10 +31,23 @@ def captured_legacy():
     return legacy_snapshot()
 
 
-def test_all_main_legacy_price_entitlements_are_byte_identical(captured_legacy):
-    captured = captured_legacy
-    assert json.dumps(captured, sort_keys=True, separators=(',', ':')) + '\n' == GOLDEN.read_text()
+def test_all_main_legacy_price_entitlements_are_byte_identical_except_approved_rename(captured_legacy):
     expected = json.loads(GOLDEN.read_text())
+    # #24367 renamed unlimited_v2 to Omi Pro without changing its entitlements.
+    # Keep the historical fixture intact and allow only that exact display rename;
+    # every other definition field and runtime entitlement remains byte-pinned.
+    for snapshot in expected.values():
+        # Removed internal trial eligibility was never a served entitlement.
+        for desktop in snapshot['desktop_cases']:
+            desktop.pop('paywall_eligible')
+        definition = snapshot['definition']
+        if definition['id'] == 'unlimited_v2':
+            assert definition['display_name'] == 'Unlimited'
+            definition['display_name'] = 'Omi Pro'
+    assert (
+        json.dumps(captured_legacy, sort_keys=True, separators=(',', ':')) + '\n'
+        == json.dumps(expected, sort_keys=True, separators=(',', ':')) + '\n'
+    )
     assert set(expected) == set(RECOGNIZED_STRIPE_PRICE_PLAN_TYPES)
     for price, snapshot in expected.items():
         resolved = resolve_price_entitlements(price, {})

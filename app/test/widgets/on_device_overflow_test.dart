@@ -235,9 +235,8 @@ void main() {
       expect(await chip(tester, _controller(settings: const OnDeviceSettings())), isNull);
     });
 
-    testWidgets('names what the recording waits for', (tester) async {
-      final charging = await chip(tester, _controller());
-      expect((charging! as OnDeviceStatusChip).label, l10n.onDeviceWaitingForCharger);
+    testWidgets('names what the recording waits for, but a charger wait is Offline Sync\'s line', (tester) async {
+      expect(await chip(tester, _controller()), isNull);
       final hours = await chip(tester,
           _controller(settings: const OnDeviceSettings(enabled: true, schedule: OnDeviceSchedule.everyFewHours)));
       expect((hours! as OnDeviceStatusChip).label, l10n.onDeviceWaitingToTranscribe);
@@ -271,6 +270,9 @@ void main() {
 
       expect(find.text(l10n.onDeviceTranscribedSummarizedOnIphone), findsOneWidget);
       expect(find.text(l10n.onDeviceSummarizedByCloud), findsNothing);
+      expect(find.text(l10n.onDeviceWhyPhoneTitle), findsNothing, reason: 'why is collapsed by default');
+      await tester.tap(find.byKey(const Key('on_device_why_toggle')));
+      await tester.pump();
       expect(find.text(l10n.onDeviceWhyPhoneTitle), findsOneWidget);
       expect(find.text('${l10n.onDeviceWhyLiveHoursUsed} ${l10n.onDeviceWhySummaryOnPhone}'), findsOneWidget);
       await tester.tap(find.byKey(const Key('on_device_redo_with_cloud')));
@@ -287,6 +289,8 @@ void main() {
 
       expect(find.text(l10n.onDeviceTranscribedOnPhone), findsOneWidget);
       expect(find.text(l10n.onDeviceSummarizedByCloud), findsOneWidget);
+      await tester.tap(find.byKey(const Key('on_device_why_toggle')));
+      await tester.pump();
       expect(find.text(l10n.onDeviceWhyCloudPhone), findsOneWidget);
       expect(find.byKey(const Key('on_device_redo_with_cloud')), findsNothing);
       await tester.tap(find.text(l10n.onDeviceKeepEverything));

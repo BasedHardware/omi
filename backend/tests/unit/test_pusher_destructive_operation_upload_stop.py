@@ -35,6 +35,8 @@ import pytest
 from starlette.websockets import WebSocketState
 
 import routers.pusher as pusher
+from utils import pusher_audio_projection
+from database import record_audio as record_audio_db
 from database.legal_holds import DestructiveOperationInProgress
 
 
@@ -72,6 +74,9 @@ def runtime(monkeypatch):
     monkeypatch.setattr(pusher, 'is_audio_bytes_app_enabled', lambda uid: False)
     monkeypatch.setattr(pusher.users_db, 'get_user_private_cloud_sync_enabled', lambda uid: True)
     monkeypatch.setattr(pusher.users_db, 'get_data_protection_level', lambda uid: 'standard')
+    monkeypatch.setattr(record_audio_db, 'set_record_upload_pending', MagicMock(return_value=True))
+    monkeypatch.setattr(record_audio_db, 'mark_record_upload_failed', MagicMock(return_value=True))
+    monkeypatch.setattr(record_audio_db, 'seal_record_audio', MagicMock(return_value='not_batch_owner'))
     monkeypatch.setattr(pusher, 'PUSHER_ACTIVE_WS_CONNECTIONS', MagicMock())
     monkeypatch.setattr(pusher_protocol_metric(), 'PUSHER_QUEUE_DROPS', MagicMock())
     monkeypatch.setattr(pusher_protocol_metric(), 'PUSHER_QUEUE_DROPPED_BYTES', MagicMock())
@@ -250,7 +255,7 @@ async def test_unfenced_session_still_uploads_every_batch(runtime, journey, monk
     succeed keeps its full upload path end to end."""
     upload = MagicMock(return_value=['chunks/uid/conversation/x.batch.bin'])
     monkeypatch.setattr(pusher, 'upload_audio_chunks_batch', upload)
-    monkeypatch.setattr(pusher.conversations_db, 'create_audio_files_from_chunks', lambda *a, **k: [])
+    monkeypatch.setattr(pusher_audio_projection.conversations_db, 'create_audio_files_from_chunks', lambda *a, **k: [])
     frames = [
         _audio_frame(),
         struct.pack('<I', 101) + struct.pack('d', 1.0) + b'\\x00\\x00',

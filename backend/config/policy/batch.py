@@ -178,6 +178,15 @@ def parse_percent(raw: str) -> float:
         return 0.0
 
 
+def rollout_env_percents(env: Mapping[str, str] | None = None) -> dict[str, float]:
+    """Shared fallback parsing for immutable admission and runtime telemetry."""
+    env = policy_environment() if env is None else env
+    return {
+        'batch-pipeline': parse_percent(env.get('BATCH_PIPELINE_PERCENT', '0')),
+        'batch-live-stt-retire': parse_percent(env.get('BATCH_LIVE_STT_RETIRE_PERCENT', '0')),
+    }
+
+
 def resolve_batch_policy(
     uid: str, *, flags: Mapping[str, str] | None = None, now=None, source='admission'
 ) -> BatchUnitPolicy:
@@ -196,7 +205,8 @@ def resolve_batch_policy(
         return boolean(env, key, default, strip=strip, uid=uid)
 
     percent_raw = env.get('BATCH_PIPELINE_PERCENT', '0')
-    percent = parse_percent(percent_raw)
+    defaults = rollout_env_percents(env)
+    percent = defaults['batch-pipeline']
     try:
         valid_percent = math.isfinite(float(percent_raw)) and 0 <= float(percent_raw) <= 100
     except ValueError:
@@ -212,12 +222,12 @@ def resolve_batch_policy(
     allowlisted = eligible and cohort('batch-pipeline', 'BATCH_PIPELINE_UID_ALLOWLIST')
     batch = eligible and (allowlisted or cohort_bucket(uid, COHORT_SALTS['batch-pipeline']) < percent)
     live_admission = enabled('BATCH_PIPELINE_LIVE_ADMISSION_ENABLED', strip=False)
-    retire_raw = env.get('BATCH_LIVE_STT_RETIRE_PERCENT', '0')
+    retire = defaults['batch-live-stt-retire']
     if flags is None:
         ramped_retire = runtime_percent('batch-live-stt-retire', env_default=math.nan)
         if math.isfinite(ramped_retire):
-            retire_raw = str(ramped_retire)
-    retire = min(parse_percent(retire_raw), percent)
+            retire = parse_percent(str(ramped_retire))
+    retire = min(retire, percent)
     final_pass = False
     if env.get('TRANSCRIPTION_FINAL_PASS_DIARIZER', 'legacy') == 'pyannote_shadow':
         final_percent = max(0.0, min(100.0, float(env.get('TRANSCRIPTION_FINAL_PASS_PERCENT', '0'))))

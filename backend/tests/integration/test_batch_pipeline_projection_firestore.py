@@ -1345,9 +1345,21 @@ def test_global_recovery_sweep_advances_past_held_pages_without_extra_query(lane
     monkeypatch.setenv('BATCH_PIPELINE_RECOVERY_ALL_ADMITTED', 'true')
     for index in range(12):
         lane.projector.store.ref('jobs', f'held-{index:02d}').set(
-            {'owner_id': 'synthetic-first' if index < 10 else 'synthetic-other', 'recovery_state': 'prepared'}
+            {
+                'owner_id': 'synthetic-first' if index < 10 else 'synthetic-other',
+                'state': 'quarantined',
+                'recovery_state': 'prepared',
+            }
         )
+    # A committed job marked held by a quarantine-held projection is never a candidate.
+    lane.projector.store.ref('jobs', 'held-05a').set(
+        {'owner_id': 'synthetic-first', 'state': 'committed', 'recovery_state': 'held'}
+    )
     recovery = QuarantineRecovery(lane.store, Mock())
+    # These deliberately sparse records model discovery only. Real policy
+    # loading correctly refuses them before dispatch; isolate that separate
+    # authority boundary instead of accidentally relying on its held fallback.
+    monkeypatch.setattr(module, 'load_stage_policy', lambda *a, **kw: ({}, None))
     recovery.recover = Mock(return_value='held')
     original = module.recovery_candidates
     query = Mock(wraps=original)
@@ -1357,9 +1369,10 @@ def test_global_recovery_sweep_advances_past_held_pages_without_extra_query(lane
     assert query.call_count == 2
     assert query.call_args.kwargs['after_id'] == 'held-09'
     assert recovery.recover.call_args.args == ('held-11', 'synthetic-other')
-    assert recovery.sweep() == {}  # Empty tail resets cursor, without an extra query.
-    assert query.call_count == 3
+    # A short second page already proves end-of-scan. The next scan must
+    # restart immediately, rather than spending an empty-tail query first.
     assert recovery.sweep() == {'held': 10}
+    assert query.call_count == 3
     assert query.call_args.kwargs['after_id'] is None
 
 
@@ -1431,11 +1444,14 @@ def test_three_instance_sweeps_coalesce_owner_and_complete_once(lane, monkeypatc
     assert len(active_rows(lane)) == 1 and active_rows(lane)[0]['sync_content_revision'] == 1
 
 
-def test_concurrent_empty_receipt_replay_resumes_durable_completion(lane, monkeypatch):
+@pytest.mark.parametrize('skip_silence_reads', ['false', 'true'])
+def test_concurrent_empty_receipt_replay_resumes_durable_completion(lane, monkeypatch, skip_silence_reads):
     from database import batch_pipeline_projection_claim as claims
+    from database.batch_pipeline_projection_session import ProjectionSession
     from unittest.mock import Mock
 
     monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED', 'true')
+    monkeypatch.setenv('BATCH_PIPELINE_SILENCE_READ_SKIP_ENABLED', skip_silence_reads)
     # Advisory coalescing can be unavailable/expired. Durable replay must remain
     # safe without it; all Firestore transaction races below are real.
     redis = Mock()
@@ -1444,19 +1460,19 @@ def test_concurrent_empty_receipt_replay_resumes_durable_completion(lane, monkey
     batch = lane.seed()
     lane.finish(batch, outcome='silence')
     barrier = threading.Barrier(3)
-    check = lane.projector.store.check
+    prepare = ProjectionSession.prepare
     seen = set()
     lock = threading.Lock()
 
-    def synchronized_check(session):
-        check(session)
+    def synchronized_prepare(session, transaction, **kwargs):
+        prepare(session, transaction, **kwargs)
         with lock:
             first_check = threading.get_ident() not in seen
             seen.add(threading.get_ident())
         if first_check:
             barrier.wait(timeout=20)
 
-    monkeypatch.setattr(lane.projector.store, 'check', synchronized_check)
+    monkeypatch.setattr(ProjectionSession, 'prepare', synchronized_prepare)
     with ThreadPoolExecutor(max_workers=3) as pool:
         results = list(pool.map(lane.projector.project, [batch.ids[0]] * 3))
     assert all(result['outcome'] == 'expected_silence' for result in results)
@@ -1717,7 +1733,7 @@ def test_superseded_settlement_rechecks_fences_after_failed_assignment(lane, mon
                 )
             elif kind == 'generation':
                 lane.client.collection('batch_pipeline_privacy').document(privacy_owner_key(lane.uid)).set(
-                    {'generation': 1}
+                    {'generation': 1, 'blocked': False, 'purging': False}
                 )
             else:
                 batch.ledger.update({'job_id': 'other-job'})
@@ -1978,3 +1994,61 @@ def test_local_repair_cli_refuses_invalid_namespace_non_loopback_and_prod_overri
     refusals(['--stage', 'local'], dict(base, FIRESTORE_EMULATOR_HOST='10.9.8.7:8080'), 'loopback emulator')
     refusals(['--stage', 'local'], base, 'loopback emulator')
     refusals(['--stage', 'prod'], base, 'wrong identity')
+
+
+@pytest.mark.parametrize('enabled', [True, False])
+def test_assignment_hold_stamps_deadline_on_result_and_receipt(lane, monkeypatch, enabled):
+    from config.batch_pipeline import HELD_DEAD_LETTER_SECONDS
+
+    monkeypatch.setenv('BATCH_HELD_DEAD_LETTER_ENABLED', str(enabled).lower())
+    batch = multipart(lane, 3)
+    ambiguous_manifest(lane, batch, monkeypatch, ambiguous_index=0)
+    # A pre-change release preserves additive markers; a fresh hold must renew them.
+    lane.projector.store.ref('results', batch.ids[0]).update(
+        {'held_expired_at': 1, 'held_expired_reason': 'held_expired'}
+    )
+    lane.projector.project(batch.ids[0])
+    row = lane.projector.store.ref('results', batch.ids[0]).get().to_dict()
+    assert row['projection_state'] == 'quarantine_held'
+    if enabled:
+        assert row['held_expired_at'] is None and row['held_expired_reason'] is None
+        assert row['held_deadline_at'] == lane.clock() + HELD_DEAD_LETTER_SECONDS
+        assert row['projection_parts']['0']['held_deadline_at'] == row['held_deadline_at']
+    else:
+        assert row['held_expired_at'] == 1 and row['held_expired_reason'] == 'held_expired'
+        assert 'held_deadline_at' not in row
+        assert 'held_deadline_at' not in row['projection_parts']['0']
+
+
+@pytest.mark.parametrize('enabled', ['false', 'true'])
+def test_silence_read_skip_keeps_retention_and_recovers_lost_publication(lane, monkeypatch, enabled):
+    from datetime import datetime, timezone
+    from utils.batch_pipeline.retention import ARTIFACT_RETENTION
+
+    monkeypatch.setenv('BATCH_PIPELINE_SILENCE_READ_SKIP_ENABLED', enabled)
+    batch = lane.seed(('silent-a', 'silent-b'))
+    for i, sid in enumerate(batch.ids):
+        artifact = lane.client.collection(f'{lane.store.namespace}_artifacts').document(sid)
+        artifact.set({'segment_id': sid, 'owner_id': lane.uid, 'kind': 'audio', 'uri': batch.items[i].audio_uri})
+        lane.finish(batch, i, outcome='silence')
+    assert lane.projector.project(batch.ids[0]) is None
+    monkeypatch.setattr(lane.projector, 'publish', lambda *_: (_ for _ in ()).throw(ConnectionError('reply lost')))
+    with pytest.raises(ConnectionError, match='reply lost'):
+        lane.projector.project(batch.ids[1])
+    assert batch.ledger.get().to_dict()['status'] == 'completed'
+    for sid in batch.ids:
+        artifact = lane.client.collection(f'{lane.store.namespace}_artifacts').document(sid).get().to_dict()
+        assert 'cleanup_after' not in artifact
+    monkeypatch.setattr(lane.projector, 'publish', lambda b, r: lane.published.append(r))
+    result = lane.projector.project(batch.ids[1])
+    assert result['outcome'] == 'expected_silence'
+    assert batch.ledger.get().to_dict()['processed_segment_ids'] == list(batch.ids)
+    assert batch.ledger.get().to_dict()['usage_committed_seconds'] == 0
+    for i, sid in enumerate(batch.ids):
+        job = lane.projector.store.ref('jobs', sid).get().to_dict()
+        entry = lane.projector.store.ref('results', sid).get().to_dict()
+        artifact = lane.client.collection(f'{lane.store.namespace}_artifacts').document(sid).get().to_dict()
+        assert artifact['uri'] == job['audio_uri'] == batch.items[i].audio_uri
+        assert artifact['cleanup_after'] == datetime.fromtimestamp(lane.clock(), timezone.utc) + ARTIFACT_RETENTION
+        assert entry['projection_state'] == 'completed'
+    assert not lane.loads and not lane.tasks and not active_rows(lane)

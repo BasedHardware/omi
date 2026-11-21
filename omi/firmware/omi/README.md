@@ -2,6 +2,8 @@
 
 The firmware for the OMI consumer version.
 
+New here? Read [How the Omi pendant works](https://docs.omi.me/doc/hardware/how-the-pendant-works) first. It explains where audio goes, the device states and the main failure modes.
+
 ## Install
 
 Use https://docs.omi.me/doc/developer/firmware/Compile_firmware as the reference with these specifications.
@@ -68,3 +70,19 @@ Note: Open "firmware" folder in your code editor. Don't open the root omi folder
     - [x] Percentage feedbacks via BLE
     - [ ] Fix in-accurated battery level, especially on charging
   - [x] Charger
+
+### Persistent device name
+
+The settings characteristic `19B10014-E8F2-537E-4F6C-D104768A1214` reads/writes
+up to 25 name bytes; an empty write resets the advertised name to the firmware
+default. Feature bit 9 advertises support. Writes acknowledge only a successful
+NVS save. Invalid or incomplete NVS records leave the current name unchanged.
+Advertising uses a worker-local snapshot, so BLE writes cannot modify in-flight
+HCI arguments. With one connection, rename takes effect after disconnect and
+advertising resume. The complete name moves from the advertising packet to the
+scan response, alongside the DIS UUID. An update rejected while advertising is
+off remains pending; disconnect schedules another attempt outside Bluetooth RX.
+Each write/disconnect allows at most five delayed retries, 100 ms apart, before
+logging a warning and retaining the saved name for the next boot.
+Run `python3 tests/test_device_name.py` from this directory for
+host NVS fault and advertising scheduling regressions.

@@ -1,21 +1,33 @@
 import 'dart:async';
 
+import 'package:connectivity_plus/connectivity_plus.dart';
+
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
 import 'package:uuid/uuid.dart';
 
 import 'package:omi/backend/http/api/payment.dart';
+import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/http/api/users.dart';
-import 'package:omi/models/custom_stt_config.dart';
 import 'package:omi/models/subscription.dart';
 import 'package:omi/models/user_usage.dart';
+import 'package:omi/models/transcription_allowance.dart';
+import 'package:omi/services/capture/free_tier_on_device_stt_flag.dart';
+import 'package:omi/services/capture/on_device_stt_preparer.dart';
+import 'package:omi/services/capture/phone_transcription_choice.dart';
 import 'package:omi/services/capture/transcription_allowance_cache.dart';
+import 'package:omi/services/freemium_transcription_service.dart';
 import 'package:omi/utils/logger.dart';
+
+typedef SubscriptionCodeRequest = Future<ApiResult<bool>> Function(String code, {bool Function()? canSend});
 
 typedef UsageRequest = Future<UserUsageResponse?> Function({required String period, required String? timeZone});
 
 typedef ProcessingBacklogRequest = Future<ProcessingBacklog?> Function({required String idempotencyKey});
+
+/// What Restore Purchases found: a paid plan, the free plan, or no answer.
+enum RestoreOutcome { paid, free, failed }
 
 class UsageProvider with ChangeNotifier {
   UsageProvider({
@@ -23,16 +35,19 @@ class UsageProvider with ChangeNotifier {
     UsageRequest? usageRequest,
     Future<UserSubscriptionResponse?> Function()? subscriptionRequest,
     ProcessingBacklogRequest? processBacklogRequest,
+    SubscriptionCodeRequest? redeemCodeRequest,
     DateTime Function()? now,
   })  : _deviceTimeZone = deviceTimeZone ?? getUsageDeviceTimeZone,
         _usageRequest = usageRequest ?? getUserUsage,
         _subscriptionRequest = subscriptionRequest ?? getUserSubscription,
         _processBacklogRequest = processBacklogRequest ?? processProcessingBacklog,
+        _redeemCodeRequest = redeemCodeRequest ?? redeemSubscriptionCode,
         _now = now ?? DateTime.now;
 
   final Future<String?> Function() _deviceTimeZone;
   final UsageRequest _usageRequest;
   final Future<UserSubscriptionResponse?> Function() _subscriptionRequest;
+  final SubscriptionCodeRequest _redeemCodeRequest;
   final DateTime Function() _now;
   final ProcessingBacklogRequest _processBacklogRequest;
   String? _backlogIdempotencyKey;
@@ -50,6 +65,8 @@ class UsageProvider with ChangeNotifier {
   @override
   void dispose() {
     _backlogRefreshTimer?.cancel();
+    unawaited(_wifiWait?.cancel());
+    _wifiWait = null;
     _sessionGeneration++;
     super.dispose();
   }
@@ -143,8 +160,6 @@ class UsageProvider with ChangeNotifier {
   String? _error;
   String? get error => _error;
 
-  bool _forceOutOfCredits = false;
-
   /// Bumped on [clearUserData] so responses from a previous session's
   /// in-flight fetches are discarded instead of repopulating cleared state.
   int _sessionGeneration = 0;
@@ -155,20 +170,18 @@ class UsageProvider with ChangeNotifier {
   double get chatQuotaPercent => _subscription?.chatQuotaPercent ?? 0.0;
   bool get chatQuotaAllowed => _subscription?.chatQuotaAllowed ?? true;
 
-  // Phone call feature — derived from subscription response. Only consult
-  // the server-driven quota when the user is on the free tier or the
-  // subscription UI is hidden; paid users with the paywall visible skip
-  // straight to the existing unlimited behavior.
+  // Older servers omit the quota; preserve their paid-plan admission rule.
   PhoneCallQuota? get phoneCallQuota => _subscription?.phoneCallQuota;
 
   bool get _isPaidPlan => _subscription?.subscription.plan.isPaid ?? false;
 
-  bool get canAccessPhoneCalls {
-    if (_isPaidPlan) return true;
-    final quota = phoneCallQuota;
-    if (quota == null) return false;
-    return quota.hasAccess;
-  }
+  /// Called when the persisted phone choice changed outside Settings (a paid plan or sign-out
+  /// released it, or "On Wi-Fi later" finished), so capture reconnects with the new source. Wired
+  /// by the home page to the capture provider.
+  VoidCallback? _onPhoneChoiceChanged;
+  set onPhoneChoiceChanged(VoidCallback? callback) => _onPhoneChoiceChanged = callback;
+
+  bool get canAccessPhoneCalls => phoneCallQuota?.hasAccess ?? _isPaidPlan;
 
   bool get shouldShowPhoneCallsEntry {
     if (_isPaidPlan) return true;
@@ -187,18 +200,79 @@ class UsageProvider with ChangeNotifier {
   bool get isLoadingPlans => _isLoadingPlans;
 
   bool get isOutOfCredits {
-    if (_forceOutOfCredits) return true;
-    if (_subscription == null) return false;
-    if (_subscription!.transcriptionAllowance?.reason == 'usage_budget_exhausted') return true;
-    final plan = _subscription!.subscription.plan;
-    // Plus is paid but metered, so it falls through to the usage check below.
-    if (plan.hasUnlimitedTranscription) return false;
-    // For metered plans, check if used is >= limit and limit is not 0 (unlimited).
-    if (_subscription!.transcriptionSecondsLimit > 0 &&
-        _subscription!.transcriptionSecondsUsed >= _subscription!.transcriptionSecondsLimit) {
-      return true;
+    final allowance = _subscription?.transcriptionAllowance;
+    if (allowance == null) {
+      // Older servers only send plan limits and usage counters.
+      final subscription = _subscription;
+      if (subscription == null || subscription.subscription.plan.hasUnlimitedTranscription) return false;
+      return subscription.transcriptionSecondsLimit > 0 &&
+          subscription.transcriptionSecondsUsed >= subscription.transcriptionSecondsLimit;
     }
-    return false;
+    if (allowance.isBlocked) return true;
+    if (!allowance.isOnDevice) return false;
+    // These reasons refuse a billed socket temporarily; they do not mean the
+    // user spent their credits and must not present an upgrade as the remedy.
+    if (allowance.reason == 'allowance_unavailable' || allowance.reason == 'usage_invalid') return false;
+    return true;
+  }
+
+  /// Gets the on-device speech model ready before the cloud minutes run out (S17 flag on only),
+  /// and finishes an Android "On Wi-Fi later" choice once its model lands.
+  Future<void> _prepareOnDeviceNearCap(TranscriptionAllowanceSnapshot? allowance) async {
+    final prefs = SharedPreferencesUtil();
+    if (prefs.phoneModelOnWifiPending.isNotEmpty) return _finishPhoneOnWifi(prefs);
+    if (!OnDeviceSttPreparer.shouldPrepareFor(allowance)) return;
+    if (!FreeTierOnDeviceSttFlag.isEnabled() || await FreeTierOnDeviceSttFlag.killed()) return;
+    if (prefs.customSttConfig.isEnabled) return;
+    OnDeviceSttPreparer.prepare();
+  }
+
+  StreamSubscription<List<ConnectivityResult>>? _wifiWait;
+
+  /// Android "On Wi-Fi later": downloads the model on Wi-Fi, then persists the phone choice. It
+  /// never overrides a source chosen since, and decides pinning by the plan when it finishes.
+  Future<void> _finishPhoneOnWifi(SharedPreferencesUtil prefs) async {
+    final pending = prefs.phoneModelOnWifiPending;
+    // The reader picked another Custom STT since: that choice stands.
+    bool superseded() => prefs.customSttConfig.isEnabled && !PhoneTranscriptionChoice.isPinned(prefs);
+    if (superseded()) {
+      prefs.phoneModelOnWifiPending = '';
+      return;
+    }
+    if (pending == 'pin' && await FreeTierOnDeviceSttFlag.killed()) return;
+    await OnDeviceSttPreparer.prepareAndWait();
+    if (prefs.phoneModelOnWifiPending != pending) return;
+    final freemium = FreemiumTranscriptionService();
+    final config = freemium.readiness == FreemiumReadiness.ready ? freemium.getFreemiumConfig() : null;
+    if (config == null) return _retryOnWifi();
+    if (superseded()) {
+      prefs.phoneModelOnWifiPending = '';
+      return;
+    }
+    prefs.phoneModelOnWifiPending = '';
+    final onPhone = config.copyWith(sendRawAudioToOmi: false);
+    // Upgraded while the model downloaded: a paid plan with cloud minutes keeps the choice unpinned.
+    final allowance = _subscription?.transcriptionAllowance;
+    final paidManaged = _isPaidPlan && (allowance == null || allowance.isManaged);
+    if (pending == 'pin' && !paidManaged) {
+      await PhoneTranscriptionChoice.adopt(onPhone, prefs);
+    } else {
+      await prefs.saveCustomSttConfig(onPhone);
+    }
+    _onPhoneChoiceChanged?.call();
+  }
+
+  /// The preparer only checks Wi-Fi once; a pending choice listens for the next Wi-Fi itself.
+  void _retryOnWifi() {
+    if (_wifiWait != null) return;
+    _wifiWait = Connectivity().onConnectivityChanged.listen((networks) {
+      if (!networks.contains(ConnectivityResult.wifi)) return;
+      unawaited(_wifiWait?.cancel());
+      _wifiWait = null;
+      if (SharedPreferencesUtil().phoneModelOnWifiPending.isNotEmpty) {
+        unawaited(_finishPhoneOnWifi(SharedPreferencesUtil()));
+      }
+    });
   }
 
   @visibleForTesting
@@ -239,6 +313,11 @@ class UsageProvider with ChangeNotifier {
   /// Wipes user-scoped state on logout so the next account doesn't inherit
   /// the previous account's subscription/usage (e.g. a stale Pro badge).
   void clearUserData() {
+    // The phone choice belongs to the account that made it; the next account starts on Omi.
+    unawaited(PhoneTranscriptionChoice.release(SharedPreferencesUtil()));
+    SharedPreferencesUtil().phoneModelOnWifiPending = '';
+    unawaited(_wifiWait?.cancel());
+    _wifiWait = null;
     _backlogIdempotencyKey = null;
     _backlogRefreshTimer?.cancel();
     _backlogRefreshTimer = null;
@@ -263,7 +342,6 @@ class UsageProvider with ChangeNotifier {
     _timeZoneLookupInFlight = null;
     _usageFetchInFlight = null;
     _availablePlans = null;
-    _forceOutOfCredits = false;
     _error = null;
     _sessionGeneration++;
     _isSubscriptionLoading = false;
@@ -274,11 +352,9 @@ class UsageProvider with ChangeNotifier {
   }
 
   Future<void> markAsOutOfCreditsAndRefresh() async {
-    if (!_forceOutOfCredits) {
-      _forceOutOfCredits = true;
-      notifyListeners(); // Immediate UI update
-    }
-    await fetchSubscription(); // Sync with backend
+    // The socket's existing invalidation signal requests a fresh server answer.
+    // Keep the last answer while it loads, including when the request fails.
+    await fetchSubscription();
   }
 
   Future<void>? _subscriptionFetch;
@@ -296,6 +372,15 @@ class UsageProvider with ChangeNotifier {
       completer.complete();
     });
     return completer.future;
+  }
+
+  /// Restore Purchases: read the plan again. A read that failed is [RestoreOutcome.failed], never
+  /// "Free plan" (ux-contract §17.2): a paying reader must not be told they are free.
+  Future<RestoreOutcome> restorePurchases() async {
+    await fetchSubscription();
+    final plan = _subscription?.subscription.plan;
+    if (_error != null || plan == null) return RestoreOutcome.failed;
+    return plan.isPaid ? RestoreOutcome.paid : RestoreOutcome.free;
   }
 
   Future<void> _fetchSubscription() async {
@@ -316,7 +401,7 @@ class UsageProvider with ChangeNotifier {
       }
       _subscription = subscription;
       TranscriptionAllowanceCache.replace(subscription.transcriptionAllowance);
-      await _releasePaywallOnDevicePin(subscription.subscription.plan);
+      unawaited(_prepareOnDeviceNearCap(subscription.transcriptionAllowance));
       PlatformManager.instance.analytics.setSubscriptionTier(subscription.subscription.plan.name);
     } catch (e) {
       if (generation != _sessionGeneration) return;
@@ -324,25 +409,31 @@ class UsageProvider with ChangeNotifier {
       Logger.debug('Failed to fetch subscription: $e');
     } finally {
       if (generation == _sessionGeneration) {
-        _isSubscriptionLoading = false;
-        _scheduleBacklogRefresh();
-        _forceOutOfCredits = false; // Reset optimistic flag
-        notifyListeners();
+        try {
+          await _releasePaywallOnDevicePin();
+        } catch (e) {
+          Logger.debug('Failed to release paywall STT pin: $e');
+        }
+        if (generation == _sessionGeneration) {
+          _isSubscriptionLoading = false;
+          _scheduleBacklogRefresh();
+          notifyListeners();
+        }
       }
     }
   }
 
-  /// The paywall's "switch to free" persists on-device STT with raw audio off, and a persisted
-  /// Custom STT outranks the plan. Once the user pays, release that pin so capture returns to Omi
-  /// (and audio reaches Omi again, e.g. for audio-bytes webhooks) instead of staying on-device.
-  Future<void> _releasePaywallOnDevicePin(PlanType plan) async {
+  /// The free plan's phone choice ([PhoneTranscriptionChoice]: the cap switch, the at-cap sheet,
+  /// Settings, or the paywall's "switch to free") is permanent: the monthly reset keeps it, and the
+  /// reader switches back in Settings. Only a paid plan releases it, so capture returns to Omi (and
+  /// audio reaches Omi again, e.g. for audio-bytes webhooks) without the reader asking.
+  Future<void> _releasePaywallOnDevicePin() async {
     final prefs = SharedPreferencesUtil();
-    final pinned = prefs.paywallOnDeviceSttConfigId;
-    if (!plan.isPaid || pinned.isEmpty) return;
-    if (prefs.customSttConfig.sttConfigId == pinned) {
-      await prefs.saveCustomSttConfig(CustomSttConfig.defaultConfig);
-    }
-    prefs.paywallOnDeviceSttConfigId = '';
+    // A paid plan that is itself out of cloud minutes (a finite plan at its cap) stays on the phone.
+    final allowance = _subscription?.transcriptionAllowance;
+    final canUseManaged = _isPaidPlan && (allowance == null || allowance.isManaged);
+    if (!canUseManaged || prefs.paywallOnDeviceSttConfigId.isEmpty) return;
+    if (await PhoneTranscriptionChoice.release(prefs)) _onPhoneChoiceChanged?.call();
   }
 
   /// Alias for fetchSubscription - refreshes subscription data from backend
@@ -483,6 +574,53 @@ class UsageProvider with ChangeNotifier {
     } finally {
       if (generation == _sessionGeneration) {
         _isUsageLoading = false;
+        notifyListeners();
+      }
+    }
+  }
+
+  /// The backend maps both Stripe active and trialing to active. Stripe itself
+  /// rechecks eligibility on redemption; this snapshot never grants a benefit.
+  bool get canRedeemSubscriptionCode {
+    final sub = _subscription?.subscription;
+    return showSubscriptionUI &&
+        sub != null &&
+        sub.plan.isPaid &&
+        sub.status == SubscriptionStatus.active &&
+        !sub.cancelAtPeriodEnd &&
+        sub.stripeSubscriptionId?.isNotEmpty == true;
+  }
+
+  Future<ApiResult<bool>> redeemUserSubscriptionCode(String code) async {
+    if (_isPaymentLoading || !canRedeemSubscriptionCode) {
+      return const ApiFailure(ApiProblem(ApiProblemKind.rejected, statusCode: 400));
+    }
+    final generation = _sessionGeneration;
+    _isPaymentLoading = true;
+    notifyListeners();
+    try {
+      final result = await _redeemCodeRequest(code, canSend: () => generation == _sessionGeneration);
+      if (generation != _sessionGeneration) {
+        return const ApiFailure(ApiProblem(ApiProblemKind.authTerminal));
+      }
+      if (result is ApiSuccess<bool> && result.data) {
+        // Finish any pre-application read before requesting post-application truth.
+        final pending = _subscriptionFetch;
+        if (pending != null) {
+          await pending;
+        }
+        if (generation != _sessionGeneration) {
+          return const ApiFailure(ApiProblem(ApiProblemKind.authTerminal));
+        }
+        await fetchSubscription(); // also replaces authoritative allowance cache
+        if (generation != _sessionGeneration) {
+          return const ApiFailure(ApiProblem(ApiProblemKind.authTerminal));
+        }
+      }
+      return result;
+    } finally {
+      if (generation == _sessionGeneration) {
+        _isPaymentLoading = false;
         notifyListeners();
       }
     }

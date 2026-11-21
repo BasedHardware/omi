@@ -1,6 +1,7 @@
 """Replay gate must detect regressions and never export unapproved metadata."""
 
 from copy import deepcopy
+from dataclasses import replace
 import hashlib
 import hmac
 import json
@@ -12,6 +13,7 @@ import pytest
 from testing.batch_replay.capture import JOB_FIELDS, RESULT_FIELDS, ReadOnlyFirestore, sanitize
 from testing.batch_replay.gate import compare, count_synthetic_failures
 from testing.batch_replay.runner import geometry_boundaries, replay
+from testing.batch_replay import runner as replay_runner
 
 
 def test_capture_constructs_allowlist_and_hashes_related_identities():
@@ -61,6 +63,12 @@ def test_capture_constructs_allowlist_and_hashes_related_identities():
     assert unit['projection_state'] == 'other' and unit['retry_present'] is True
     assert unit['lane'] == 'backfill'
     assert unit['references'] is None and unit['spans'] is None
+    # A late provider upload stamped fresh for the merge keeps the backfill conflict lane.
+    late = sanitize(
+        {'owner_id': 'o', 'duration_seconds': 1, 'fresh_capture': True, 'late_upload': True}, entry, {}, {}, digest
+    )
+    on_time = sanitize({'owner_id': 'o', 'duration_seconds': 1, 'fresh_capture': True}, entry, {}, {}, digest)
+    assert late['lane'] == 'backfill' and on_time['lane'] == 'fresh'
 
 
 def test_rpc_masks_never_request_arrays_with_nested_text_or_paths():
@@ -172,6 +180,61 @@ def test_current_incident_shapes_clear(backend_tree):
     assert not healthy['exceptions'] and not healthy['chain_blocks']
     assert healthy['coverage']['followup_exercised'] == len(corpus['units'])
     assert healthy['coverage']['source_validated'] == len(corpus['units'])
+    assert healthy['worker_results']['word-clock-eof'] == {
+        'outcome': 'success',
+        'persisted': True,
+        'word_timestamps': [[0.1, 0.5]],
+    }
+
+
+def test_worker_clock_failure_is_recorded_and_blocks_projection(backend_tree):
+    corpus = json.loads((backend_tree / 'testing/batch_replay/regressions.json').read_text())
+    corpus['units'] = [unit for unit in corpus['units'] if 'worker_words' in unit]
+    corpus['units'][0]['worker_words'][0]['timestamp'] = [0.6, 0.7]
+    result = replay(corpus, backend_tree)
+    assert result['persisted'] == 0
+    assert result['worker_results']['word-clock-eof'] == {
+        'persisted': False,
+        'stage': 'word_clocks',
+        'reason': 'word_clock',
+    }
+    assert result['unit_issues']['word-clock-eof'] == ['word_clocks:ValidationFailureWork:word_clock']
+    assert result['chain_blocks'][0]['blocked_units'] == 1
+
+
+@pytest.mark.parametrize('mutation', ['clock', 'outcome'])
+def test_worker_oracle_rejects_valid_but_wrong_persisted_result(backend_tree, monkeypatch, mutation):
+    original = replay_runner.replay_worker_words
+
+    def wrong_result(item, words):
+        results, saved = original(item, words)
+        if mutation == 'clock':
+            saved[0]['words'][0]['timestamp'][1] = 0.49
+        else:
+            results[0] = replace(results[0], outcome='silence')
+        return results, saved
+
+    monkeypatch.setattr(replay_runner, 'replay_worker_words', wrong_result)
+    corpus = json.loads((backend_tree / 'testing/batch_replay/regressions.json').read_text())
+    corpus['units'] = [unit for unit in corpus['units'] if 'worker_words' in unit]
+    result = replay(corpus, backend_tree)
+    assert result['persisted'] == 0
+    assert result['exceptions'] == {'worker_oracle:WorkerResultMismatch:expected_outcome_and_clocks': 1}
+    assert result['chain_blocks'][0]['blocked_units'] == 1
+    assert count_synthetic_failures(result, result) > 0
+
+
+def test_selected_snapshot_cannot_replace_replay_transaction_rules(backend_tree, monkeypatch):
+    from tests.unit.fixtures import strict_firestore_transaction as selected_fixture
+
+    def refuse_selected_fixture(*args, **kwargs):
+        raise AssertionError('selected product snapshot must not supply replay transaction rules')
+
+    monkeypatch.setattr(selected_fixture, 'StrictFirestore', refuse_selected_fixture)
+    corpus = json.loads((backend_tree / 'testing/batch_replay/regressions.json').read_text())
+    result = replay(corpus, backend_tree)
+    assert result['persisted'] == len(corpus['units'])
+    assert not result['exceptions'] and not result['chain_blocks']
 
 
 def test_invalid_source_slice_is_detected(backend_tree):
@@ -179,16 +242,35 @@ def test_invalid_source_slice_is_detected(backend_tree):
     corpus['units'] = [corpus['units'][0]]
     corpus['units'][0]['references'][0]['offset_frame'] = 1
     broken = replay(corpus, backend_tree)
-    assert broken['exceptions']['source_audio:ValueError:utils.batch_pipeline.source_audio.materialize'] == 1
+    assert (
+        broken['exceptions']['source_audio:InvalidRetainedManifest:utils.batch_pipeline.source_audio.materialize'] == 1
+    )
     assert compare(broken, {'exceptions': {}, 'unit_issues': {}, 'chain_blocks': []})['regression']
 
 
-def test_recorded_silence_runs_the_empty_projection_branch(backend_tree):
+@pytest.mark.parametrize('enabled', ['true', 'false'])
+@pytest.mark.parametrize('record_origin', [False, True])
+def test_recorded_silence_runs_the_empty_projection_branch(backend_tree, monkeypatch, enabled, record_origin):
+    from utils.batch_pipeline.projection import Projector
+
+    monkeypatch.setenv('BATCH_PIPELINE_SILENCE_READ_SKIP_ENABLED', enabled)
+    expected = 'ready' if enabled == 'true' and not record_origin else 'persisted'
+    original = Projector._assign
+    states = []
+
+    def assign(self, sid, *args, **kwargs):
+        result = original(self, sid, *args, **kwargs)
+        row = self.store.results[sid]
+        states.append((row['projection']['state'], row['projection_state']))
+        return result
+
+    monkeypatch.setattr(Projector, '_assign', assign)
     corpus = json.loads((backend_tree / 'testing/batch_replay/regressions.json').read_text())
     corpus['units'] = [corpus['units'][-1]]
-    corpus['units'][0].update(outcome='silence', spans=[], speech_seconds=0.0)
+    corpus['units'][0].update(outcome='silence', spans=[], speech_seconds=0.0, record_origin=record_origin)
     result = replay(corpus, backend_tree)
     assert result['persisted'] == 1 and result['coverage']['followup_exercised'] == 1
+    assert states and all(receipt == expected and summary == expected for receipt, summary in states)
     assert not result['exceptions'] and not result['chain_blocks']
 
 

@@ -400,7 +400,8 @@ def search_conversations(
             client.collections['conversations'].documents.search(search_parameters),
         )  # type: ignore[reportUnknownMemberType]  # typesense client untyped
         memories: List[Dict[str, Any]] = []
-        for item in results.get('hits', []):
+        hits = results.get('hits', [])
+        for item in hits:
             doc: Dict[str, Any] = item.get('document', {})
             # Exclude locked conversations entirely to prevent inference leaks
             if doc.get('is_locked', False) and not include_locked:
@@ -421,9 +422,10 @@ def search_conversations(
             doc['started_at'] = started_at
             doc['finished_at'] = finished_at
             memories.append(doc)
-        # Derive total_pages only from visible (unlocked) items to prevent inference leaks.
-        # is_locked is not a Typesense filter field, so exact global count is unavailable.
-        has_more = len(memories) >= per_page
+        # Internal discovery advances over raw hits, even if hydration or a
+        # malformed index record removes every candidate. Public metadata uses
+        # only visible results.
+        has_more = len(hits if include_locked else memories) >= per_page
         return {
             'items': memories,
             'total_pages': page + 1 if has_more else page,

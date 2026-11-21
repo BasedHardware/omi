@@ -24,10 +24,21 @@ def validate_parakeet_admission_contract(env: str, env_config: ConfigDict) -> li
     scope = f'{env}/gke/parakeet'
     gke = _as_config_dict(env_config.get('gke')) or {}
     parakeet = _as_config_dict(gke.get('parakeet'))
+    lid = _as_config_dict(gke.get('parakeet-lid'))
+    lid_errors: list[ValidationError] = []
+    if lid is not None:
+        lid_env = _as_config_dict(lid.get('env')) or {}
+        for name, expected in (
+            ('PARAKEET_DEVICE', 'cpu'),
+            ('PARAKEET_LID_ONLY', 'true'),
+            ('PARAKEET_LID_MODEL', 'whisper-base'),
+        ):
+            if _literal_env_value(lid_env, name) != expected:
+                lid_errors.append(ValidationError(f'{env}/gke/parakeet-lid', f'{name} must be {expected}'))
     if parakeet is None:
-        return [ValidationError(scope, 'missing Parakeet deploy contract')]
+        return lid_errors + [ValidationError(scope, 'missing Parakeet deploy contract')]
     env_map = _as_config_dict(parakeet.get('env')) or {}
-    errors: list[ValidationError] = []
+    errors: list[ValidationError] = lid_errors
 
     capacity_raw = _literal_env_value(env_map, 'PARAKEET_STREAM_CAPACITY')
     try:

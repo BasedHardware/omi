@@ -9,6 +9,7 @@ class PostHogManager {
   static let shared = PostHogManager()
 
   private var isInitialized = false
+  private var flagOwnerID: String?
 
   // PostHog configuration
   private let apiKey = "phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y"
@@ -30,7 +31,8 @@ class PostHogManager {
     // lifecycle event (App Launched / First Launch) manually via AnalyticsManager.shared.
     config.captureApplicationLifecycleEvents = false
     config.captureScreenViews = true
-    config.preloadFeatureFlags = true
+    config.preloadFeatureFlags = false
+    config.urlSessionConfiguration = PostHogFlagRequestBlocker.sessionConfiguration()
 
     PostHogSDK.shared.setup(config)
 
@@ -98,8 +100,13 @@ class PostHogManager {
       properties["name"] = name
     }
 
+    if flagOwnerID != uid {
+      OmiFlagStore.shared.reset()
+      flagOwnerID = uid
+    }
     PostHogSDK.shared.identify(uid, userProperties: properties)
     log("PostHog: Identified user \(uid)")
+    OmiFlagStore.shared.refresh()
   }
 
   /// Set person properties in one identify call.
@@ -195,33 +202,34 @@ class PostHogManager {
   func reset() {
     guard isInitialized else { return }
     PostHogSDK.shared.reset()
+    OmiFlagStore.shared.reset()
+    flagOwnerID = nil
     log("PostHog: Reset user")
   }
 
   // MARK: - Feature Flags
+  // Omi is the only flag authority; missing keys use the caller's default.
 
   /// Check if a feature flag is enabled
   func isFeatureEnabled(_ flag: String) -> Bool {
     guard isInitialized else { return false }
-    return PostHogSDK.shared.isFeatureEnabled(flag)
+    return OmiFlagStore.shared.flag(flag)?.enabled ?? false
   }
 
   /// Get feature flag value
   func getFeatureFlag(_ flag: String) -> Any? {
     guard isInitialized else { return nil }
-    return PostHogSDK.shared.getFeatureFlag(flag)
+    return OmiFlagStore.shared.value(flag)
   }
 
   /// Get the JSON payload configured on a feature flag
   func getFeatureFlagPayload(_ flag: String) -> Any? {
     guard isInitialized else { return nil }
-    return PostHogSDK.shared.getFeatureFlagResult(flag)?.payload
+    return OmiFlagStore.shared.payload(flag)
   }
 
-  /// The SDK's own flag-delivery signal (posted on the main queue after the
-  /// initial preload and after every reload) — re-exported so observers get a
-  /// compile-checked symbol instead of a raw notification-name string.
-  static var featureFlagsDidLoad: Notification.Name { PostHogSDK.didReceiveFeatureFlags }
+  /// Posted by OmiFlagStore when its resolved snapshot changes.
+  static let featureFlagsDidLoad = Notification.Name("OmiFeatureFlagsDidLoad")
 
   func screenTaskFrameTerminal(ownerID: String?, properties: [String: Any]) {
     guard isInitialized else { return }
@@ -242,7 +250,7 @@ class PostHogManager {
   /// Reload feature flags
   func reloadFeatureFlags() {
     guard isInitialized else { return }
-    PostHogSDK.shared.reloadFeatureFlags()
+    OmiFlagStore.shared.refresh()
   }
 }
 

@@ -139,3 +139,11 @@ def test_server_backoff_http_wire_and_open_surface(poll_client, monkeypatch):
     assert response.json()['poll_after_ms'] == 20000
     monkeypatch.setattr(sync_router, 'get_durable_job_status', lambda *_: {'job_id': 'j', 'status': 'completed'})
     assert poll_client.get('/v2/sync-local-files/j').json()['poll_after_ms'] == 0
+
+
+@pytest.mark.parametrize('surface_open', [False, True])
+@pytest.mark.parametrize('backoff', ['true', 'false'])
+def test_held_custody_poll_is_paced_even_with_open_surface_or_generic_backoff_off(monkeypatch, surface_open, backoff):
+    monkeypatch.setenv('SYNC_POLL_BACKOFF_ENABLED', backoff)
+    status = {'status': 'processing', 'reason_code': 'batch_unit_held', 'poll_after_ms': 300000}
+    assert poll_limit.with_poll_hint(status, surface_open=surface_open)['poll_after_ms'] == 300000

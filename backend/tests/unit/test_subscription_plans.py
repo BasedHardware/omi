@@ -326,7 +326,6 @@ def test_reconcile_basic_subscription_without_stored_stripe_id(monkeypatch, subs
 
 
 def test_unlimited_transcription_plan_skips_monthly_usage_scan(monkeypatch, subscription_module):
-    monkeypatch.setattr(subscription_module, 'is_trial_paywalled', lambda uid, source=None, **kw: False)
     monkeypatch.setattr(subscription_module.users_db, 'is_byok_active', lambda uid: False, raising=False)
     monkeypatch.setattr(subscription_module, 'get_byok_key', lambda provider: None)
     monkeypatch.setattr(
@@ -343,7 +342,6 @@ def test_unlimited_transcription_plan_skips_monthly_usage_scan(monkeypatch, subs
 
 
 def test_bounded_transcription_plan_reads_monthly_usage_and_enforces_cap(monkeypatch, subscription_module):
-    monkeypatch.setattr(subscription_module, 'is_trial_paywalled', lambda uid, source=None, **kw: False)
     monkeypatch.setattr(subscription_module.users_db, 'is_byok_active', lambda uid: False, raising=False)
     monkeypatch.setattr(subscription_module, 'get_byok_key', lambda provider: None)
     monkeypatch.setattr(
@@ -385,7 +383,6 @@ def test_malformed_transcription_allowance_fails_loudly(monkeypatch, subscriptio
 
 
 def _stub_remaining_deps(monkeypatch, subscription_module, plan, used_seconds):
-    monkeypatch.setattr(subscription_module, 'is_trial_paywalled', lambda uid, source=None, **kw: False)
     monkeypatch.setattr(subscription_module.users_db, 'is_byok_active', lambda uid: False, raising=False)
     monkeypatch.setattr(subscription_module, 'get_byok_key', lambda provider: None)
     monkeypatch.setattr(

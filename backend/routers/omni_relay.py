@@ -40,7 +40,7 @@ import database.user_usage as user_usage_db
 import database.users as users_db
 from config.plan_catalog import plan_uses_overage
 from database._client import get_customer_firestore_client
-from utils.subscription import get_chat_quota_snapshot, is_trial_paywalled
+from utils.subscription import get_chat_quota_snapshot
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -260,18 +260,11 @@ async def omni_relay(websocket: WebSocket):
         await websocket.close(code=1011, reason=f"unsupported provider: {provider}"[:120])
         return
 
-    # Same desktop gate as /v4/listen: Operator/Architect + BYOK pass; un-entitled
-    # desktop users past their trial are paywalled.
-    if await run_blocking(db_executor, is_trial_paywalled, uid, "desktop", required_byok_provider=provider):
-        logger.info(f"omni relay paywalled uid={uid}")
-        await websocket.close(code=1008, reason="trial_expired")
-        return
-
     await _relay_entitled(websocket, uid, provider, validated_byok)
 
 
 async def _relay_entitled(websocket: WebSocket, uid: str, provider: str, validated_byok: dict[str, str]) -> None:
-    """The relay past auth and the paywall: quota admission, then the pumps."""
+    """The relay past auth: quota admission, then the pumps."""
 
     # Monthly free-tier chat quota: realtime turns count as questions, so they
     # must also be blocked past the cap. Exempt only when THIS session will

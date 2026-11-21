@@ -1,3 +1,13 @@
+"""Live STT provider sockets: fallback connection chains, per-language/surface
+provider selection, and the process-local health circuit.
+
+The chain must advance to the next configured provider when a primary cannot
+open a socket -- one dead provider otherwise took entire deployments' live
+transcription down (#11695, #11752). The full incident narratives and routing
+rationale live in backend/utils/stt/ARCHITECTURE.md so this file stays under
+the product-file line ratchet.
+"""
+
 from utils.stt_cap_dispatch import live_provider
 import asyncio
 import inspect
@@ -20,7 +30,6 @@ from deepgram.clients.live.v1 import LiveOptions
 from config.stt_provider_policy import (
     DEEPGRAM_PROVIDERS,
     MODULATE_PROVIDER,
-    PARAKEET_PROVIDER,
     SONIOX_PROVIDER,
     STTServingSurface,
     deepgram_provider_for_runtime,
@@ -30,10 +39,17 @@ from config.stt_provider_policy import (
     parakeet_supports_language,
     provider_for_model_token,
     provider_is_enabled,
+    model_is_enabled,
     supports_live_multilingual_mode,
 )
 from config.policy.listen import service_models, account_circuit_cooldown
-from utils.stt.live_rollout import configured_chain_enabled, window_allocation, window_language_supported
+from utils.stt.live_rollout import (
+    configured_chain_enabled,
+    window_allocation,
+    window_language,
+    window_language_supported,
+)
+from config.parakeet_ja import window_endpoint
 from utils.stt.live_health import health
 from utils.stt.language_policy import LiveLanguageProfile, prefer_hintable_soniox
 from utils.async_tasks import create_named_task
@@ -64,7 +80,7 @@ from utils.stt.live_reason import (
     LOCAL_DELIVERY_REPLAY_SEND_STALLED,
     LOCAL_DELIVERY_SEND_QUEUE_FULL,
 )
-from utils.stt.replay_delivery import AudioDeliveryExpired, RecoveryWriterPace, clock
+from utils.stt.replay_delivery import AudioDeliveryExpired, RecoveryWriteStalled, RecoveryWriterPace, paced_send
 from utils.stt.send_queue import AudioSendQueue
 from utils.observability.demand_cohort import MeteredSyncTransport, create_wire_meter, telemetry_call
 from utils.stt.soniox import SafeSonioxSocket, process_audio_soniox  # fmt: skip  # pyright: ignore[reportUnusedImport]  # noqa: F401 — re-exported for backward compat
@@ -304,7 +320,7 @@ def _primary_streaming_service() -> Optional[STTService]:
             return STTService.deepgram
         if provider == MODULATE_PROVIDER:
             return STTService.modulate
-        if provider == PARAKEET_PROVIDER:
+        if provider == STTService.parakeet.value:
             return STTService.parakeet
         if provider == SONIOX_PROVIDER:
             return STTService.soniox
@@ -849,9 +865,11 @@ def validate_streaming_stt_env(env: Any = None) -> None:
     a next hop in the documented chain. Do not print secret values.
     """
     source = os.environ if env is None else env
+    from config.live_stt_gpu_fleet import gpu_fleet_off
+
     models = source.get('STT_SERVICE_MODELS', ','.join(DEFAULT_STT_SERVICE_MODELS))
     listed = [model.strip() for model in models.split(',') if model.strip()]
-    if 'soniox' in listed and not (source.get('SONIOX_API_KEY') or '').strip():
+    if ('soniox' in listed or gpu_fleet_off(source)) and not (source.get('SONIOX_API_KEY') or '').strip():
         raise RuntimeError(
             'STT_SERVICE_MODELS lists soniox but SONIOX_API_KEY is empty; '
             'remove soniox from the serving chain or set the key'
@@ -900,10 +918,10 @@ def deepgram_fallback_model(language: Optional[str]) -> Optional[str]:
 
 
 def parakeet_is_configured_fallback(language: Optional[str]) -> bool:
-    """RNNT fallback eligibility; see ARCHITECTURE.md (incident history)."""
+    """RNNT fallback eligibility, including the operator-restored model slot."""
     return (
         STTService.parakeet.value in (model.strip() for model in service_models(stt_service_models))
-        and provider_is_enabled(PARAKEET_PROVIDER, STTServingSurface.STREAMING)
+        and model_is_enabled('parakeet', STTServingSurface.STREAMING)
         and bool(os.getenv('HOSTED_PARAKEET_API_URL'))
         and parakeet_supports_language(STTServingSurface.STREAMING, language or 'en')
     )
@@ -963,7 +981,7 @@ def get_stt_service_for_language(
     )
     if surface == STTServingSurface.STREAMING and prefer_hintable_soniox(
         language_profile,
-        service_models(stt_service_models),
+        service_models(stt_service_models, surface=surface),
         exclude,
         lambda: _circuit_for_primary(STTService.soniox).cooldown_elapsed()
         and _circuit_for_primary(STTService.soniox).account_cooldown_elapsed(),
@@ -992,17 +1010,21 @@ def get_stt_service_for_language(
                 if language in deepgram_nova3_languages:
                     return (STTService.deepgram, language, dg_model), parakeet_fallback_reason
                 continue
-            if model == 'parakeet-window' and surface == STTServingSurface.STREAMING:
+            if (
+                model == 'parakeet-window'
+                and surface == STTServingSurface.STREAMING
+                and model_is_enabled(model, surface)
+            ):
                 if not window_allocation(window_uid):
                     parakeet_fallback_reason = 'allocation_rejected'
-                elif not window_language_supported(language, requested_language):
+                elif not window_language_supported(language, requested_language, window_uid):
                     parakeet_fallback_reason = 'capability_mismatch'
-                elif os.getenv('HOSTED_PARAKEET_API_URL'):
+                elif window_endpoint(window_language(language, requested_language)):
                     return (STTService.parakeet, requested_language, model), parakeet_fallback_reason
                 else:
                     parakeet_fallback_reason = 'config_incomplete'
             if model == 'parakeet':
-                if provider_is_enabled(PARAKEET_PROVIDER, surface) and os.getenv('HOSTED_PARAKEET_API_URL'):
+                if model_is_enabled(model, surface) and os.getenv('HOSTED_PARAKEET_API_URL'):
                     if parakeet_supports_language(surface, requested_language):
                         return (STTService.parakeet, requested_language, 'parakeet'), parakeet_fallback_reason
                     else:
@@ -1046,7 +1068,7 @@ def get_stt_service_for_language(
                 outcome='degraded',
             )
 
-    models = service_models(stt_service_models)
+    models = service_models(stt_service_models, surface=surface)
     if configured_chain_enabled() and window_uid is None:
         models = [model for model in models if model.strip() != 'parakeet-window']
     selected, parakeet_fallback_reason = select(models)
@@ -1864,8 +1886,7 @@ class SafeModulateSocket(STTSocket):
                     # Docs: send empty text frame ("") to signal end of audio stream
                     pace = self._writer_pace
                     if pace is not None:
-                        async with asyncio.timeout(pace.write_bound()):
-                            await self._ws.send('')
+                        await paced_send(lambda: self._ws.send(''), pace)
                     else:
                         await self._ws.send('')
                     break
@@ -1877,13 +1898,7 @@ class SafeModulateSocket(STTSocket):
                         await pace.throttle(len(data), deadline=deadline)
                         pace.note_write(len(data))
                     if pace is not None:
-                        try:
-                            async with asyncio.timeout(pace.write_bound(deadline)):
-                                await self._ws.send(data)
-                        except TimeoutError:
-                            if deadline is not None and deadline <= clock():
-                                raise AudioDeliveryExpired('live audio delivery expired')
-                            raise
+                        await paced_send(lambda: self._ws.send(data), pace, deadline)
                     else:
                         await self._ws.send(data)
                     self._note_wire_audio(data)
@@ -1896,6 +1911,8 @@ class SafeModulateSocket(STTSocket):
                         self._send_queue.discard(data)
         except AudioDeliveryExpired:
             self._mark_dead('live audio delivery expired', typed_reason=LOCAL_DELIVERY_EXPIRED)
+        except RecoveryWriteStalled:
+            self._mark_dead('recovery write stalled', typed_reason=LOCAL_DELIVERY_REPLAY_SEND_STALLED)
         except websockets.exceptions.ConnectionClosed as e:
             self._mark_dead(f'ws send closed: {e}', cause=connection_loss_cause(e))
             self.stream_end.record(self._ws, error=e)

@@ -75,7 +75,18 @@ def read_cohort_members(name: str, *, firestore_client: Any | None = None) -> tu
 RAMP_DOC_ID = '_ramp'
 RAMP_HISTORY_COLLECTION = 'history'
 RAMP_SCHEMA_VERSION = 1
-RAMP_NAMES = ('batch-pipeline', 'first-summary', 'batch-live-stt-retire')
+# A reader older than a name rejects the whole document (it serves last-known-good), so a new
+# name is written only after every `_ramp` reader runs a build that knows it.
+RAMP_NAMES = (
+    'batch-pipeline',
+    'first-summary',
+    'batch-live-stt-retire',
+    'legacy-sync',
+    'batch-vendor-routing',
+    'new-owner-cell1',
+)
+# Names whose percent is a subset of the batch-pipeline bucket (same empty salt).
+BATCH_NESTED_RAMP_NAMES = ('batch-live-stt-retire', 'batch-vendor-routing')
 LEGACY_SYNC_MODES = ('on', 'draining', 'dark')
 # Serving reads stay within the runtime's cold-start budget. Operator tools (ramp_set, ramp_controller) build a
 # fresh client per process, and a cold channel plus token fetch from an operator host takes over 1s.
@@ -118,6 +129,19 @@ def _optional_str(value: Any, field: str, limit: int = 128) -> str | None:
     return value
 
 
+def _audit_reason_base(reason: object) -> str:
+    # Full override evidence belongs to history. Keep the serving reason token
+    # readable by already deployed readers with the original 40-character schema.
+    if not isinstance(reason, str):
+        raise RampDocumentError('ramp reason malformed')
+    base_reason, sep, override = reason.partition(' accept_not_live:')
+    if not _is_token(base_reason, _TOKEN_RE) or (
+        sep and (len(override.strip()) < 15 or any(ord(c) < 32 for c in override))
+    ):
+        raise RampDocumentError('ramp reason malformed')
+    return base_reason
+
+
 def normalize_ramp_env(raw: Any) -> dict[str, Any]:
     """Validate one `envs.<env>` object. Nesting violations are left to callers (reader clamps, writer refuses)."""
     if not isinstance(raw, dict):
@@ -155,11 +179,12 @@ def normalize_ramp_document(raw: Any) -> dict[str, Any]:
 
 
 def check_ramp_nesting(env_doc: dict[str, Any]) -> None:
-    """Writer rule: batch-live-stt-retire never exceeds batch-pipeline (E decision 2)."""
+    """Writer rule: a batch-nested name never exceeds batch-pipeline (E decision 2)."""
     percents = env_doc['percents']
-    retire = percents.get('batch-live-stt-retire')
-    if retire is not None and retire > percents.get('batch-pipeline', 0.0):
-        raise RampDocumentError('batch-live-stt-retire exceeds batch-pipeline')
+    for name in BATCH_NESTED_RAMP_NAMES:
+        nested = percents.get(name)
+        if nested is not None and nested > percents.get('batch-pipeline', 0.0):
+            raise RampDocumentError(f'{name} exceeds batch-pipeline')
 
 
 def empty_ramp_env() -> dict[str, Any]:
@@ -196,6 +221,8 @@ def apply_ramp_change(before: dict[str, Any], change: Mapping[str, Any]) -> dict
             raise RampDocumentError('ramp percents change malformed')
         for name, value in percents.items():
             after['percents'][name] = _percent_value(value)
+        if 'legacy-sync' in percents and after['percents']['legacy-sync'] > after['percents'].get('batch-pipeline', 0):
+            raise RampDocumentError('legacy-sync exceeds batch-pipeline')
     if 'legacy_sync' in change:
         if change['legacy_sync'] not in LEGACY_SYNC_MODES:
             raise RampDocumentError('ramp legacy_sync change malformed')
@@ -251,8 +278,7 @@ def write_ramp(
         raise RampDocumentError('ramp env unsupported')
     if not _is_token(actor, _ACTOR_RE):
         raise RampDocumentError('ramp actor malformed')
-    if not _is_token(reason, _TOKEN_RE):
-        raise RampDocumentError('ramp reason malformed')
+    base_reason = _audit_reason_base(reason)
     if not _is_revision(expected_revision):
         raise RampDocumentError('ramp expected_revision malformed')
     client = firestore_client or get_data_plane_firestore_client()
@@ -270,7 +296,7 @@ def write_ramp(
             raise RampRevisionConflict(expected_revision, current_revision)
         before: dict[str, Any] = current_envs.get(env) or empty_ramp_env()
         after = apply_ramp_change(before, change)
-        after.update(updated_at=at, updated_by=actor, reason=reason)
+        after.update(updated_at=at, updated_by=actor, reason=base_reason)
         revision = expected_revision + 1
         envs = {**current_envs, env: after}
         transaction.set(ref, {'schema_version': RAMP_SCHEMA_VERSION, 'revision': revision, 'envs': envs})

@@ -5,6 +5,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
+import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/backend/schema/structured.dart';
+import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/services/capture/capture_composition.dart';
 import 'package:omi/services/capture/capture_seams.dart';
@@ -45,6 +48,7 @@ CaptureDependencies _deps({
   SharedPreferencesUtil? preferences,
   CaptureConnectivityBoundary? connectivity,
   CaptureScheduling? scheduling,
+  Future<bool> Function(String, List<String>)? excludeSpeaker,
 }) {
   final clock = VirtualClock(DateTime.utc(2026));
   return CaptureDependencies(
@@ -92,6 +96,7 @@ CaptureDependencies _deps({
     microphonePermission: () async => true,
     refreshConversation: () async {},
     telemetry: RecordingLifecycleTelemetry(emitter: (_, __) {}, idFactory: () => 'synthetic', clock: clock.now),
+    excludeSpeaker: excludeSpeaker ?? (_, __) async => false,
   );
 }
 
@@ -122,6 +127,7 @@ void main() {
     expect(body, contains('openConversationSocket ??'));
     expect(body, contains('dependencies.openSocket('));
     expect(body, contains('sessionOwner: dependencies.owner'));
+    expect(body, contains('excludeSpeaker: dependencies.excludeSpeaker'));
     final providerSource = File('lib/providers/capture_provider.dart').readAsStringSync();
     expect(providerSource, contains('super.walService'));
     expect(providerSource, contains('super.phoneMicRecorder'));
@@ -134,6 +140,7 @@ void main() {
     expect(providerSource, contains('super.bleListeners'));
     expect(providerSource, contains('super.openSocket'));
     expect(providerSource, contains('super.sessionOwner'));
+    expect(providerSource, contains('super.excludeSpeaker'));
   });
 
   test('composeCaptureProvider uses injected connectivity, not ConnectivityService', () {
@@ -147,6 +154,46 @@ void main() {
     expect(provider.isConnected, isFalse);
     expect(provider.isPaused, isTrue);
     provider.dispose();
+  });
+
+  test('composed provider routes not-a-person exclusion through the injected seam', () async {
+    final calls = <(String, List<String>)>[];
+    var succeeds = false;
+    final provider = composeCaptureProvider(_deps(excludeSpeaker: (id, ids) async {
+      calls.add((id, ids));
+      return succeeds;
+    }));
+    addTearDown(provider.dispose);
+    provider.applyInProgressConversation(
+      ServerConversation(
+        id: 'c',
+        createdAt: DateTime(2026),
+        structured: Structured('TV', 'TV'),
+        transcriptSegments: [
+          TranscriptSegment(
+              id: 's1',
+              text: 'TV',
+              speaker: 'SPEAKER_04',
+              isUser: true,
+              personId: null,
+              start: 0,
+              end: 2,
+              translations: []),
+        ],
+      ),
+    );
+    // A dropped seam would fall through to the global HTTP path, so a failing
+    // fake must report failure without clearing the cluster hermetically.
+    expect(await provider.assignSpeakerToConversation(4, '', '', ['s1'], notAPerson: true), isFalse);
+    expect(provider.segments.single.isUser, isTrue);
+    succeeds = true;
+    expect(await provider.assignSpeakerToConversation(4, '', '', ['s1'], notAPerson: true), isTrue);
+    // Both attempts hit the seam; only the successful one clears the cluster.
+    expect(calls.length, 2);
+    expect(calls.map((c) => c.$1), everyElement('c'));
+    expect(calls.map((c) => c.$2), everyElement(['s1']));
+    expect(provider.segments.single.isUser, isFalse);
+    expect(provider.segments.single.personId, isNull);
   });
 
   test('injected preferences remain authoritative after construction', () {

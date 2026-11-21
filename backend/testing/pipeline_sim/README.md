@@ -75,6 +75,22 @@ fixture is absent here, so this is a minimal virtual-time equivalent.
 | `stale_finalize_targets` | Merged targets complete, deleted targets are excluded, and no paid call lands after the fence; duplicates never double-spend |
 | `privacy_blocked_users` | 409 at admission or purge mid-flight; no paid calls after the fence; reported under `sim.upload_status`/`excluded_uploads` |
 | `summary_behind_transcription` | Shared `sync_executor` breaches the first-summary deadline; an isolated summary pool passes |
+| `backlog_flood_fresh_latency` | A 22x-hourly settled flood leaves held fresh p50/p90 within 10% of baseline; unmetered FIFO release delays p90 by more than 2x |
+
+`backlog_flood.py` owns the flood fixture and its named projection model. Sixty steady owners
+produce 360 fresh units/hour; thirty owners inject 7,920 old, already-transcribed units at the same
+virtual instant (22x steady hourly volume). Ten flooded owners also upload fresh work. The stored
+classes include 396 Parakeet and 7,524 provider catch-up rows. Admission is real; the backlog's
+post-STT result rows are installed directly and make no paid calls. Fresh rows use the real provider
+stage and its owner-local merge wake. The scenario compares each arm with the same seed and scheduler
+without a flood, and its verdict replaces the whole-fleet gate because held provider rows deliberately
+remain incomplete. It reports fresh capture-to-projection p50/p90, baseline ratios, backlog rows/min,
+and the peak fresh share unprojected in the real closed 10–20-minute commit window (sampled each
+virtual minute). The named `release='gated'` input is
+reserved for step 4; it must not be implemented by relabeling the unmetered rollback. Run the two
+projection queue shapes with `owner_drain_first_turn_seconds=15` and `0`. The deterministic fixture is
+`tests/unit/fixtures/pipeline_sim_goldens/backlog_flood/fresh_latency.json`; update it through
+`PIPELINE_GOLDEN_UPDATE=1 python -m pytest tests/unit/test_pipeline_sim_backlog_flood.py`.
 
 ## Limits
 
@@ -188,14 +204,55 @@ calls after the privacy fence. Golden trace normalization and golden scenario
 configurations are unchanged. These are scheduling observations of the existing main change,
 not a change to transcript, payment or privacy expectations.
 
-The exhaustion scenario also keeps its shipping-default baseline: dispatch batch
-16 reduces quarantine-to-projection p95 to 89.7 seconds for seed 1, versus 1512.5
-seconds in the explicitly labeled former-rate counterfactual. Both spend 132
-modeled paid calls (at most one per segment), recover 131 pieces and retain one
-`failed_held` piece. The shipping baseline therefore still reports
-`GATE_FAIL unrecovered_quarantine`; clearing the scheduling tail does not turn
-unrecovered audio into a successful gate. No shipping flag is pinned to the old
-rate to preserve a stale expectation.
+The exhaustion and stale-target scenarios use one explicit, late, unfenced
+near-silence capture. Its first ASR, padded retry and paid recovery return empty;
+other paid recoveries succeed. These are scripted provider inputs, not a claim
+about vendor accuracy. The real worker, quarantine recovery, store and scorer
+still determine the durable disposition. The assertions still require p95 below
+300 seconds at dispatch batch 16, above 300 at the former rate, equal paid-call
+counts, and `GATE_FAIL unrecovered_quarantine` with one retained `failed_held`.
+Both negative cases are checked with idle ceilings of ten and two seconds.
+The separate no-purge/head-wait counterfactuals omit this provider input to
+isolate fenced heads.
+
+This fixes a confounded latency comparison: provider latency and outcomes share
+RNGs, so changing polling order can select different failed recoveries. Five
+failed units left twelve censored upload projections in the old exhaustion
+sample, inflating p95 to the horizon; those were unrecovered provider inputs,
+not work awaiting a scheduler candidate. Candidate fanout 16 versus 64 did not
+change them. The scorer and original latency/retention assertions are unchanged.
+
+The stale-target run also exposed a separate store-model bug. `SimStore.purge`
+used stale job snapshots after repairing their predecessor links, unlike
+Firestore's transactional reread in `_delete_job`. Deleting adjacent jobs in
+reverse lexical order could restore a deleted queue link and crash the next
+admission. The model now rereads each row before unlinking. Conformance checks
+the same purge followed by admission/pull against both sim and Firestore.
+Simulation background failures now propagate, and drained detection requires
+all planned arrivals; a partial workload can no longer report a clean gate.
+
+### Worker idle cadence golden review (#24478)
+
+The 15 characterization goldens now record the shipping idle ceiling of ten
+seconds and independent pump maintenance. Every changed path falls into these
+groups; trace normalization and golden configurations are unchanged:
+
+- All cases: `job_transitions` timing buckets reflect later leases/retries;
+  `result_transitions` timing changes also occur in `empty_asr_padded_retry`,
+  `deleted_merged_targets` and the two non-BYOK provider-STT cases.
+- `privacy_fence_midflight` and `role_policy`: `final_result.log_sequence`,
+  `previous_segment_id` and `late_capture` follow the new result-arrival order.
+- `deleted_merged_targets`: segments 16/17 are purged before result creation,
+  rather than producing then erasing results. Their `final_result` becomes null
+  and `result_transitions` empty; their job histories end in the same purge.
+- `privacy_fence_midflight`: segment 13's request answers `held` before purge
+  instead of remaining unfinished at the horizon. `recovery_held` rises 2→3;
+  request-scoped completed/stopped-at-horizon counts move 9/3→10/2.
+
+Across all 15, paid-call counts/outcomes, final job/recovery states, policy
+data and result artifact contents/digests are identical. Privacy-fence purges
+and payments remain 8 and 7. These are scheduling observations, with no
+change to transcript, payment or privacy expectations.
 
 ### Generated policy sweep (E3)
 

@@ -1,4 +1,4 @@
-"""Small label alphabet used only by utils.speakers.display.display_participants.
+"""Small label alphabet for participant displays and stretch outline prompts.
 
 Originally introduced by the live-speaker-names lane. Renderers must use the
 participants authority so identity evidence and count sanity cannot be bypassed.
@@ -6,7 +6,7 @@ participants authority so identity evidence and count sanity cannot be bypassed.
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from typing import Any, Hashable, Optional
 
 
@@ -27,13 +27,14 @@ def voice_key(segment: Any) -> tuple[Optional[Any], Optional[Any]]:
 class SpeakerLabeler:
     """Assigns dense "Speaker A/B/..." labels to unnamed voice keys, first appearance order."""
 
-    def __init__(self) -> None:
+    def __init__(self, render: Callable[[int], str] | None = None) -> None:
+        self._render = render or (lambda index: f'Speaker {_column(index)}')
         self._labels: dict[Hashable, str] = {}
 
     def label(self, key: Hashable) -> str:
         label = self._labels.get(key)
         if label is None:
-            label = f'Speaker {_column(len(self._labels))}'
+            label = self._render(len(self._labels))
             self._labels[key] = label
         return label
 

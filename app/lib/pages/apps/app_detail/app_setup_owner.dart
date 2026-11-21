@@ -15,6 +15,10 @@ mixin _AppSetupOwner on State<AppDetailPage>, WidgetsBindingObserver {
   Future<ConnectionProbe>? _setupRead;
   ConnectionRead<ApiResult<AppSetupStatus>>? _ownedRead;
   bool _setupFailed = false;
+
+  /// The wait for setup ran out (the reader has not finished it in the browser), which is not a
+  /// connection failure (A4).
+  bool _setupTimedOut = false;
   bool _setupWaiting = false;
   bool _autoInstallAfterSetup = false;
   int _setupCheckGeneration = 0;
@@ -111,6 +115,7 @@ mixin _AppSetupOwner on State<AppDetailPage>, WidgetsBindingObserver {
           setupCompleted = completed;
         }
         _setupFailed = result is ApiFailure;
+        _setupTimedOut = false;
       });
       if (result is ApiFailure || (result is ApiSuccess<AppSetupStatus> && result.data == AppSetupStatus.notRequired)) {
         return ConnectionProbe.failed;
@@ -162,6 +167,7 @@ mixin _AppSetupOwner on State<AppDetailPage>, WidgetsBindingObserver {
       setState(() {
         _setupWaiting = false;
         _setupFailed = outcome == ConnectionWaitOutcome.failed || outcome == ConnectionWaitOutcome.timedOut;
+        _setupTimedOut = outcome == ConnectionWaitOutcome.timedOut;
       });
       if (outcome == ConnectionWaitOutcome.connected && _autoInstallAfterSetup && !app.enabled) {
         _autoInstallAfterSetup = false;

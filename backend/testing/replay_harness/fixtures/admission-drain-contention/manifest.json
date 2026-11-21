@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "id": "admission-drain-contention",
+  "tier": "S",
+  "scrub": "synthetic-structure-only",
+  "seed_blob_sha256": [],
+  "created": "2026-11-04T00:00:00Z",
+  "prod_evidence": {},
+  "stages": {
+    "admission": {
+      "expect_stop_stage": "admission",
+      "expect_reason": "admission:admit:FirestoreContentionExhausted:.*:transaction=database\\.batch_pipeline_intake\\.admit\\.commit$"
+    }
+  },
+  "notes": "Synthetic 16-row / 8-drainer same-owner stress shape, not captured production inputs or an estimate of production contention frequency. Each real drain uses the supported RECORD_DRAIN_CONCURRENCY=1 setting so it visits the due page sequentially instead of skipping its locally busy owner. Native emulator transactions and unchanged retry limits must exhaust specifically in the admission intake commit; no exception or latency injection."
+}

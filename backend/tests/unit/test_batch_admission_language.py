@@ -1,40 +1,81 @@
 """New-custody language exclusion; existing receipts and the kill path stay intact."""
 
 from copy import deepcopy
+import hashlib
+import io
+import os
+from types import SimpleNamespace
+import wave
 from unittest.mock import Mock
 
 import pytest
 
-from config.batch_pipeline_language import admission_language_exclusion_enabled, batch_admission_language
+from config.batch_pipeline_language import (
+    admission_language_exclusion_enabled,
+    admission_language_sample_enabled,
+    batch_admission_language,
+)
 from config.policy import BatchUnitPolicy
 from database.batch_pipeline_intake import admit
 from tests.unit.test_batch_language_eligibility import admitted, upload
 from tests.unit.test_batch_pipeline_scheduler import MemoryStore
+from utils import funded_processing, stt_cap_dispatch
 from utils.batch_pipeline import intake
+from utils.batch_pipeline.audio import audio_unit
+from utils.batch_pipeline.intake_outcome import IntakeRouteEvidence
+from utils.batch_pipeline.repair_lineage import LANGUAGE_KEYS, LINEAGE_KEYS, recorded_lineage
 from utils.sync import final_pass_rehome
 
 
 @pytest.fixture(autouse=True)
 def defaults(monkeypatch):
     monkeypatch.delenv('BATCH_ADMISSION_LANGUAGE_EXCLUSION_ENABLED', raising=False)
+    monkeypatch.delenv('BATCH_ADMISSION_LANGUAGE_SAMPLE_ENABLED', raising=False)
     monkeypatch.delenv('BATCH_PIPELINE_LANGUAGE_ELIGIBILITY_ENABLED', raising=False)
     monkeypatch.delenv('STT_PRERECORDED_LANGUAGE_GUARD_ENABLED', raising=False)
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('mode', ['on', 'draining', 'dark'])
 @pytest.mark.parametrize('language', [None, '', 'multi', 'auto', 'und', 'unknown', 'xx', 'ja', 'vi'])
 @pytest.mark.parametrize('user_language', ['multi', 'auto', 'en'])
 async def test_multilingual_unknown_or_unsupported_conversation_never_enters_custody(
-    monkeypatch, mode, language, user_language
+    monkeypatch, language, user_language
 ):
+    # Sampling off is the full exclusion; sampled admission is covered below.
+    monkeypatch.setenv('BATCH_ADMISSION_LANGUAGE_SAMPLE_ENABLED', 'false')
     writer = Mock(side_effect=AssertionError('excluded upload wrote batch custody'))
     monkeypatch.setattr(intake, 'admit', writer)
     response, staged, probe = await upload(
-        monkeypatch, user_language=user_language, conversation_language=language, mode=mode
+        monkeypatch, user_language=user_language, conversation_language=language, mode='on'
     )
     assert response is None and not staged and not probe.called
     writer.assert_not_called()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('mode', ['draining', 'dark'])
+@pytest.mark.parametrize(
+    'user,conversation,single',
+    [
+        ('multi', None, False),
+        ('multi', 'und', False),
+        ('auto', 'xx', False),
+        ('en', 'ja', False),
+        ('multi', 'vi', False),
+        ('ja', None, False),
+        ('en', 'vi', True),
+        ('multi', 'ko-KR', True),
+    ],
+)
+async def test_excluded_languages_enter_batch_once_owner_legacy_is_retired(
+    monkeypatch, mode, user, conversation, single
+):
+    # Legacy no longer takes new work for this owner, so exclusion would leave the upload with
+    # neither lane; it enters batch custody instead (C8's provider route serves it).
+    response, staged, _ = await upload(
+        monkeypatch, user_language=user, conversation_language=conversation, single=single, mode=mode
+    )
+    assert admitted(response, staged)
 
 
 @pytest.mark.asyncio
@@ -85,17 +126,16 @@ async def test_single_supported_language_is_unchanged(monkeypatch, mode):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('mode', ['on', 'draining', 'dark'])
 @pytest.mark.parametrize('single', [False, True])
 @pytest.mark.parametrize('user,conversation', [('ja', None), ('en', 'vi'), ('multi', 'ko-KR')])
 @pytest.mark.parametrize('inherit', ['true', 'false'])
 async def test_effective_unsupported_code_excluded_even_when_old_eligibility_is_off(
-    monkeypatch, mode, single, user, conversation, inherit
+    monkeypatch, single, user, conversation, inherit
 ):
     monkeypatch.setenv('BATCH_PIPELINE_LANGUAGE_INHERITANCE_ENABLED', inherit)
     monkeypatch.setenv('BATCH_PIPELINE_LANGUAGE_ELIGIBILITY_ENABLED', 'false')
     response, staged, probe = await upload(
-        monkeypatch, user_language=user, conversation_language=conversation, single=single, mode=mode
+        monkeypatch, user_language=user, conversation_language=conversation, single=single, mode='on'
     )
     assert response is None and not staged and not probe.called
 
@@ -108,6 +148,406 @@ async def test_supported_conversation_overrides_unsupported_user_preference(monk
     )
     assert admitted(response, staged)
     assert probe.call_args.args[0] == 'en'
+
+
+def decision(language, safe, confidence=0.99, evidence='audio_lid'):
+    return SimpleNamespace(
+        language=language, parakeet_safe=safe, evidence=evidence, confidence=confidence, probe_seconds=6.0
+    )
+
+
+SPEECH = b'synthetic-speech-probe-wav'
+
+
+def speaking(monkeypatch, *results):
+    """Strict-VAD speech windows per unit, in order (default: every unit has one speech window).
+
+    A bytes result is a unit whose speech fits the vendor sample; pass a list for further windows.
+    """
+    windows = [[result] if isinstance(result, bytes) else result for result in results]
+    probe = Mock(side_effect=windows) if results else Mock(return_value=[SPEECH])
+    monkeypatch.setattr(intake, '_speech_windows', probe)
+    return probe
+
+
+def pcm_wav(seconds):
+    body = io.BytesIO()
+    with wave.open(body, 'wb') as target:
+        target.setparams((1, 2, 16000, 0, 'NONE', 'not compressed'))
+        target.writeframes(b'\x01\x00' * int(16000 * seconds))
+    return body.getvalue()
+
+
+def self_lid(monkeypatch, *languages):
+    """The hosted self gate's top-1 per further window, in order; None is an unavailable gate."""
+    from utils.stt import language_gate
+
+    answers = iter(languages)
+
+    def detect(probe, *, surface):
+        assert surface == 'batch'
+        language = next(answers)
+        with wave.open(io.BytesIO(probe), 'rb') as source:
+            seconds = source.getnframes() / 16000
+        # A low P(supported) is the strict floor's refusal; the continuity check reads the top-1 only.
+        return None if language is None else language_gate.SelfVerdict(language, 0.9, 0.4, seconds)
+
+    gate = Mock(side_effect=detect)
+    monkeypatch.setattr(language_gate, 'self_detect', gate)
+    return gate
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('inherit', ['true', 'false'])
+@pytest.mark.parametrize('user_language,conversation', [('en', None), ('multi', None), ('es', 'und'), ('en', '')])
+async def test_unknown_multilingual_upload_admits_after_a_parakeet_safe_sample(
+    monkeypatch, inherit, user_language, conversation
+):
+    monkeypatch.setenv('BATCH_PIPELINE_LANGUAGE_INHERITANCE_ENABLED', inherit)
+    speaking(monkeypatch)
+    excluded = Mock()
+    monkeypatch.setattr(intake, 'record_admission_exclusion', excluded)
+    evidence = IntakeRouteEvidence()
+    response, staged, probe = await upload(
+        monkeypatch, user_language=user_language, conversation_language=conversation, mode='on', evidence=evidence
+    )
+    assert admitted(response, staged) and not evidence.language_excluded
+    # The declared user language is never pinned: the unit's speech itself is classified, once.
+    assert probe.call_count == 1 and probe.call_args.args[:2] == ('multi', SPEECH)
+    assert probe.staged_context['stt_language'] == 'en'
+    excluded.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_silent_leading_unit_waits_unstaged_and_replays_first_after_a_speech_sample(monkeypatch):
+    vad = speaking(monkeypatch, None, SPEECH)
+    response, staged, probe = await upload(monkeypatch, user_language='en', mode='on', unit_count=2)
+    assert admitted(response, staged) and vad.call_count == 2
+    # The whole upload was classified first (the speech unit's probe); the silent unit was then
+    # staged first, under its own index and its own per-unit LID, never the speech unit's language.
+    assert probe.call_args_list[1].args[1] == SPEECH and probe.call_count == 2
+    assert probe.call_args_list[0].args[1] != SPEECH
+    assert staged[0].segment_id == hashlib.sha256(b'new:0').hexdigest()
+
+
+async def _upload_all_units(monkeypatch, **kwargs):
+    """Stage every unit (admission itself then fails closed); returns staged contexts in order."""
+    contexts = []
+    original = intake.with_context
+
+    def capture(wav, context):
+        contexts.append(context)
+        return original(wav, context)
+
+    monkeypatch.setattr(intake, 'with_context', capture)
+    monkeypatch.setattr(intake, 'admit', Mock(side_effect=RuntimeError('stop before admission')))
+    response, staged, probe = await upload(monkeypatch, mode='on', stop_after_staging=False, **kwargs)
+    return response, staged, probe, contexts
+
+
+@pytest.mark.asyncio
+async def test_an_unsafe_later_unit_keeps_the_whole_upload_on_legacy_before_staging(monkeypatch):
+    speaking(monkeypatch, SPEECH, SPEECH)
+    answers = iter([decision('en', True), decision('ja', False)])
+    response, staged, probe, contexts = await _upload_all_units(
+        monkeypatch, user_language='en', unit_count=2, decision=lambda *a, **k: next(answers)
+    )
+    assert response is None and staged == [] and contexts == [] and probe.call_count == 2
+
+
+@pytest.mark.asyncio
+async def test_a_refused_silent_unit_probe_aborts_before_any_unit_is_staged(monkeypatch):
+    # Consent resets between the speech unit's probe and the silent unit's own probe: the refusal
+    # (retry, audio retained) surfaces in the pre-pass, before the approved speech unit is staged.
+    monkeypatch.setattr(stt_cap_dispatch, 'sync_allowed', lambda *a, **k: True)
+    consent = iter([True, False])
+    monkeypatch.setattr(funded_processing, 'consent_allows', lambda *_: next(consent, False))
+    speaking(monkeypatch, SPEECH, None)
+
+    def classify(*args, **kwargs):
+        allowed = kwargs['before_probe']()
+        return decision('en', True) if allowed else decision('und', False, 0.0)
+
+    response, staged, probe, contexts = await _upload_all_units(
+        monkeypatch, user_language='en', unit_count=2, decision=classify
+    )
+    assert response.status_code == 503 and staged == [] and contexts == [] and probe.call_count == 2
+
+
+@pytest.mark.asyncio
+async def test_each_speech_unit_keeps_its_own_language_and_a_silent_unit_never_inherits_one(monkeypatch):
+    speaking(monkeypatch, SPEECH, None, SPEECH)
+    # Every unit is probed in order in the pre-pass; the silent unit on its own audio.
+    answers = iter([decision('en', True), decision('und', False, 0.0), decision('es', True)])
+    response, staged, probe, contexts = await _upload_all_units(
+        monkeypatch, user_language='en', unit_count=3, decision=lambda *a, **k: next(answers)
+    )
+    assert response.status_code == 503 and len(staged) == 3 and probe.call_count == 3
+    # The silent unit keeps the unknown-language barrier for any speech the worker VAD finds.
+    assert [context['stt_language'] for context in contexts] == ['en', 'und', 'es']
+
+
+@pytest.mark.asyncio
+async def test_admission_records_the_frozen_lineage_and_each_units_frozen_language(monkeypatch):
+    # A later missing-input repair replays exactly these; it never re-derives them (lead 6d0246).
+    speaking(monkeypatch, SPEECH, None)
+    answers = iter([decision('en', True), decision('und', False, 0.0)])
+    store = MemoryStore()
+    store.namespace = 'batch_pipeline_test'
+    _, staged, _, contexts = await _upload_all_units(
+        monkeypatch, user_language='en', unit_count=2, decision=lambda *a, **k: next(answers), store=store
+    )
+    record = intake.admit.call_args.kwargs['intake']
+    for context in contexts:  # exactly what admission froze into each staged unit
+        assert recorded_lineage(record['repair_lineage']) == {key: context.get(key) for key in LINEAGE_KEYS}
+    assert record['repair_languages'] == {
+        work.segment_id: {key: context[key] for key in LANGUAGE_KEYS} for work, context in zip(staged, contexts)
+    }
+    assert [proof['stt_language'] for proof in record['repair_languages'].values()] == ['en', 'und']
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('single,expected', [(False, intake.SAMPLE_SCAN_SECONDS), (True, 7200.0)])
+async def test_sampled_upload_decodes_units_no_longer_than_the_hold_bound(monkeypatch, single, expected):
+    speaking(monkeypatch)
+    bounds = []
+
+    def decode_for_intake(paths, max_seconds, *args, **kwargs):
+        bounds.append(max_seconds)
+        yield audio_unit(100, b'\x01\x00' * 16000)
+
+    monkeypatch.setattr(intake, 'decode_for_intake', decode_for_intake)
+    monkeypatch.setattr(
+        intake, 'provider_config', lambda: SimpleNamespace(pool_kind='dedicated_batch', max_unit_seconds=7200.0)
+    )
+    response, staged, _ = await upload(monkeypatch, user_language='en', single=single, mode='on')
+    assert admitted(response, staged) and bounds == [expected]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('vad', [[None], [RuntimeError('vad')], [None, None, None]])
+async def test_silent_unclassifiable_or_over_bound_upload_keeps_legacy_without_a_probe(monkeypatch, vad):
+    monkeypatch.setattr(intake, 'SAMPLE_SCAN_SECONDS', 2)
+    speaking(monkeypatch, *vad)
+    evidence = IntakeRouteEvidence()
+    response, staged, probe = await upload(
+        monkeypatch, user_language='en', mode='on', unit_count=len(vad), evidence=evidence
+    )
+    assert response is None and staged == [] and not probe.called and evidence.language_excluded
+
+
+@pytest.mark.asyncio
+async def test_sample_probe_is_authorized_as_the_unit_it_replays_as(monkeypatch):
+    # No conversation id on the upload: the unit's derived chunk conversation must be the one
+    # the sample's privacy guard checks, before any audio reaches the vendor.
+    speaking(monkeypatch, None, SPEECH)
+    guarded = []
+
+    def classify(*args, **kwargs):
+        guarded.append(kwargs['before_probe'].item)
+        return decision('en', True)
+
+    response, staged, _ = await upload(monkeypatch, user_language='en', mode='on', unit_count=2, decision=classify)
+    assert admitted(response, staged)
+    sampled_item = guarded[1]  # guarded[0] is the silent unit's own probe
+    assert sampled_item.segment_id == hashlib.sha256(b'new:1').hexdigest()
+    assert sampled_item.conversation_id and sampled_item.unit_kind == 'capture_span'
+    replayed_speech_unit = intake.chunk_identity('synthetic-owner', 'omi', None, False, sampled_item.capture_at)
+    assert sampled_item.conversation_id == replayed_speech_unit
+    assert sampled_item.capture_at != staged[0].capture_at  # unit 1, not the held unit 0
+
+
+@pytest.mark.asyncio
+async def test_self_lid_sample_does_not_admit(monkeypatch):
+    # Worker self-LID evidence is bound to the unit's first 30 s, which a speech sample is not.
+    speaking(monkeypatch)
+    response, staged, _ = await upload(
+        monkeypatch, user_language='en', mode='on', decision=decision('en', True, evidence='self_lid')
+    )
+    assert response is None and staged == []
+
+
+def test_speech_windows_cover_every_strict_speech_second_in_full_thirty_second_windows(monkeypatch):
+    from utils.stt import local_vad
+
+    # 70 s of speech: the vendor sample, then [30, 60) and a last full window over [40, 70).
+    pcm = b''.join(second.to_bytes(2, 'little') * 16000 for second in range(90))
+    body = io.BytesIO()
+    with wave.open(body, 'wb') as target:
+        target.setparams((1, 2, 16000, 0, 'NONE', 'not compressed'))
+        target.writeframes(pcm)
+    spans = [{'start': 1.0, 'end': 21.0}, {'start': 30.0, 'end': 80.0}]
+    monkeypatch.setattr(local_vad, 'offline_pcm_speech_segments', lambda pcm: spans)
+    speech = pcm[1 * 32000 : 21 * 32000] + pcm[30 * 32000 : 80 * 32000]
+    frames = []
+    for window in intake._speech_windows(body.getvalue()):
+        with wave.open(io.BytesIO(window), 'rb') as source:
+            frames.append(source.readframes(source.getnframes()))
+    assert frames == [speech[: 30 * 32000], speech[30 * 32000 : 60 * 32000], speech[40 * 32000 :]]
+    monkeypatch.setattr(local_vad, 'offline_pcm_speech_segments', lambda pcm: [{'start': 1.0, 'end': 26.0}])
+    assert len(intake._speech_windows(body.getvalue())) == 1  # speech that fits the sample has no further window
+    monkeypatch.setattr(local_vad, 'offline_pcm_speech_segments', lambda pcm: [])
+    assert intake._speech_windows(body.getvalue()) is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('later', [['ja'], ['en', 'zh'], [None], ['und']])
+async def test_unsupported_speech_after_the_vendor_sample_keeps_the_whole_upload_on_legacy(monkeypatch, later):
+    # English in the unit's first 30 s of speech, then a language Parakeet cannot serve (or no
+    # verdict): the unit would be frozen English and its later speech windows sent to Parakeet.
+    speaking(monkeypatch, [SPEECH, *(pcm_wav(30) for _ in later)])
+    gate = self_lid(monkeypatch, *later)
+    evidence = IntakeRouteEvidence()
+    response, staged, probe, contexts = await _upload_all_units(monkeypatch, user_language='en', evidence=evidence)
+    assert response is None and staged == [] and contexts == [] and probe.call_count == 1
+    assert gate.call_count == len(later) and evidence.language_excluded
+
+
+@pytest.mark.asyncio
+async def test_parakeet_languages_after_the_vendor_sample_admit_under_each_windows_own_authority(monkeypatch):
+    speaking(monkeypatch, [SPEECH, pcm_wav(30), pcm_wav(30)], SPEECH)
+    gate = self_lid(monkeypatch, 'en', 'es')
+    monkeypatch.setattr(stt_cap_dispatch, 'sync_allowed', lambda *a, **k: True)
+    consent = Mock(return_value=True)
+    monkeypatch.setattr(funded_processing, 'consent_allows', consent)
+    response, staged, probe = await upload(monkeypatch, user_language='en', mode='on', unit_count=2)
+    assert admitted(response, staged) and probe.call_count == 2 and gate.call_count == 2
+    # The mocked vendor probes never ask the guard; each further window asks it once.
+    assert consent.call_count == 2
+
+
+@pytest.mark.asyncio
+async def test_a_refused_further_window_keeps_the_refusal_before_anything_is_staged(monkeypatch):
+    # Consent resets between the vendor sample and the self gate's further window: the client
+    # keeps its audio and retries; the window never leaves the process.
+    monkeypatch.setattr(stt_cap_dispatch, 'sync_allowed', lambda *a, **k: True)
+    consent = iter([True, False])
+    monkeypatch.setattr(funded_processing, 'consent_allows', lambda *_: next(consent, False))
+    speaking(monkeypatch, [SPEECH, pcm_wav(30)])
+    gate = self_lid(monkeypatch, 'en')
+
+    def classify(*args, **kwargs):
+        assert kwargs['before_probe']()
+        return decision('en', True)
+
+    response, staged, probe, contexts = await _upload_all_units(monkeypatch, user_language='en', decision=classify)
+    assert response.status_code == 503 and staged == [] and contexts == [] and not gate.called
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    'sample', [decision('ja', False), decision('en', False, 0.4), decision('und', False, 0.0), decision('zh', False)]
+)
+async def test_unsafe_or_unavailable_sample_keeps_the_upload_on_legacy(monkeypatch, sample):
+    speaking(monkeypatch)
+    writer = Mock(side_effect=AssertionError('unsafe sample wrote batch custody'))
+    excluded = Mock()
+    monkeypatch.setattr(intake, 'admit', writer)
+    monkeypatch.setattr(intake, 'record_admission_exclusion', excluded)
+    evidence = IntakeRouteEvidence()
+    response, staged, probe = await upload(
+        monkeypatch, user_language='en', mode='on', decision=sample, evidence=evidence
+    )
+    assert response is None and staged == [] and probe.call_count == 1
+    writer.assert_not_called()
+    assert excluded.call_args.args[1] == 'unknown_multilingual_conversation'
+    # The intake outcome counter (#24283) attributes the legacy landing to the language gate.
+    assert evidence.language_excluded and not evidence.heavy_owner_excluded
+
+
+@pytest.mark.asyncio
+async def test_refused_sample_probe_keeps_the_refusal_instead_of_legacy(monkeypatch):
+    # Consent revoked during the first unit's LID: the guard's refusal wins over the
+    # unsafe-sample legacy route, so the client keeps its audio and retries.
+    monkeypatch.setattr(funded_processing, 'consent_allows', lambda *_: False)
+    monkeypatch.setattr(stt_cap_dispatch, 'sync_allowed', lambda *a, **k: True)
+    speaking(monkeypatch)
+    unsafe = decision('und', False, 0.0)
+
+    def refused(*args, **kwargs):
+        assert kwargs['before_probe']() is False
+        return unsafe
+
+    excluded = Mock()
+    monkeypatch.setattr(intake, 'record_admission_exclusion', excluded)
+    response, staged, _ = await upload(monkeypatch, user_language='en', mode='on', decision=unsafe)
+    assert response is None and excluded.call_count == 1  # control: unrefused unsafe sample → legacy
+    excluded.reset_mock()
+    response, staged, probe = await upload(monkeypatch, user_language='en', mode='on', decision=refused)
+    assert probe.call_count == 1
+    assert response is not None and response.status_code == 503 and staged == []
+    excluded.assert_not_called()
+
+
+def destructive_decode(monkeypatch):
+    """WAL decode deletes every input it reads (utils.sync.files.decode_files_to_wav)."""
+    seen = []
+
+    def decode_for_intake(paths, max_seconds, *args, **kwargs):
+        seen.extend(paths)
+        for path in paths:
+            os.remove(path)
+        yield audio_unit(100, b'\x01\x00' * 16000)
+
+    monkeypatch.setattr(intake, 'decode_for_intake', decode_for_intake)
+    return seen
+
+
+def wal_upload(tmp_path):
+    path = tmp_path / 'audio_omi_pcm16_16000_1_fs160_1761955200.bin'
+    path.write_bytes(b'synthetic-wal')
+    return path
+
+
+@pytest.mark.asyncio
+async def test_refused_sample_leaves_the_upload_for_legacy_staging(monkeypatch, tmp_path):
+    speaking(monkeypatch)
+    seen = destructive_decode(monkeypatch)
+    wal = wal_upload(tmp_path)
+    response, staged, _ = await upload(
+        monkeypatch, user_language='en', mode='on', decision=decision('ja', False), paths=[str(wal)]
+    )
+    assert response is None and staged == []
+    # Legacy stages these exact bytes next; a consumed file answered 503 sync_dispatch_unavailable on every retry.
+    assert wal.read_bytes() == b'synthetic-wal'
+    assert seen != [str(wal)] and [os.path.basename(path) for path in seen] == [wal.name]
+    assert not os.path.exists(os.path.dirname(seen[0]))
+
+
+@pytest.mark.asyncio
+async def test_repeated_upload_name_is_never_acknowledged(monkeypatch, tmp_path):
+    # Two bodies under one name share one router file: the first is already overwritten.
+    speaking(monkeypatch)
+    seen = destructive_decode(monkeypatch)
+    wal = wal_upload(tmp_path)
+    response, staged, probe = await upload(monkeypatch, user_language='en', mode='on', paths=[str(wal), str(wal)])
+    assert response is not None and response.status_code == 503 and staged == [] and seen == []
+    assert not probe.called and wal.read_bytes() == b'synthetic-wal'
+
+
+@pytest.mark.asyncio
+async def test_admitted_sample_leaves_no_private_link_behind(monkeypatch, tmp_path):
+    speaking(monkeypatch)
+    seen = destructive_decode(monkeypatch)
+    wal = wal_upload(tmp_path)
+    response, staged, _ = await upload(monkeypatch, user_language='en', mode='on', paths=[str(wal)])
+    assert admitted(response, staged)
+    # The router's own finally still removes the caller's file; the private link is intake's.
+    assert wal.exists() and not os.path.exists(os.path.dirname(seen[0]))
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('user,conversation', [('ja', None), ('en', 'vi'), ('multi', 'ko-KR')])
+async def test_known_unsupported_language_is_never_sampled(monkeypatch, user, conversation):
+    response, staged, probe = await upload(monkeypatch, user_language=user, conversation_language=conversation)
+    assert response is None and not staged and not probe.called
+
+
+@pytest.mark.parametrize('raw,expected', [(None, True), ('true', True), ('garbage', True), ('false', False)])
+def test_sample_switch_is_default_on(monkeypatch, raw, expected):
+    if raw is not None:
+        monkeypatch.setenv('BATCH_ADMISSION_LANGUAGE_SAMPLE_ENABLED', raw)
+    assert admission_language_sample_enabled() is expected
 
 
 @pytest.mark.parametrize('raw', [None, '', 'true', 'TRUE', 'garbage'])
@@ -188,8 +628,9 @@ async def test_durable_batch_conversation_owner_keeps_its_route(monkeypatch):
 async def test_exclusion_precedes_legacy_owner_rehome(monkeypatch):
     rehome = Mock(side_effect=AssertionError('excluded upload changed a durable route'))
     monkeypatch.setattr(final_pass_rehome, 'upload_rehome', rehome)
+    # Exclusion applies only while the owner still has legacy (dark admits it: see the retired-owner test).
     response, staged, probe = await upload(
-        monkeypatch, user_language='multi', conversation_language='ja', owner='legacy_final_pass_v1', mode='dark'
+        monkeypatch, user_language='multi', conversation_language='ja', owner='legacy_final_pass_v1', mode='on'
     )
     assert response is None and not staged and not probe.called
     rehome.assert_not_called()

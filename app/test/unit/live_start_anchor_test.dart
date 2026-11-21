@@ -15,6 +15,43 @@ Episode _episode(DateTime startedAt, {String id = 'ep1'}) => Episode(
 
 void main() {
   group('LiveStartAnchor', () {
+    test('server timer start replaces yesterday restart and follows same-id corrections', () {
+      final anchor = LiveStartAnchor();
+      final previousEnd = DateTime.utc(2026, 10, 28, 18, 32);
+      final started = DateTime.utc(2026, 10, 29, 5, 46);
+      final now = DateTime.utc(2026, 10, 29, 7, 11);
+      anchor.restart(previousEnd);
+      Episode current(DateTime at) =>
+          Episode(id: 'current', live: true, startedAt: at, timerStartedAt: at, lastActivityAt: now);
+      final start = anchor.resolve(episode: current(started), captureStart: previousEnd, streaming: true, now: now);
+      expect(start, started);
+      expect(now.difference(start!), const Duration(hours: 1, minutes: 25));
+      final corrected = started.subtract(const Duration(minutes: 2));
+      expect(
+          anchor.resolve(episode: current(corrected), captureStart: previousEnd, streaming: true, now: now), corrected);
+    });
+
+    test('late uploaded capture time cannot rewind the current episode or a polling gap', () {
+      final anchor = LiveStartAnchor();
+      final recorded = DateTime.utc(2026, 10, 29, 1, 4);
+      final currentStart = DateTime.utc(2026, 10, 29, 5, 46);
+      final now = DateTime.utc(2026, 10, 29, 7, 11);
+      final current = Episode(
+        id: 'current',
+        live: true,
+        startedAt: currentStart,
+        timerStartedAt: currentStart,
+        lastActivityAt: now,
+      );
+      expect(anchor.resolve(episode: current, captureStart: recorded, streaming: true, now: now), currentStart);
+      // A delayed capture timestamp during a short server polling gap cannot
+      // replace the authoritative floor established by the current episode.
+      expect(anchor.resolve(episode: null, captureStart: recorded, streaming: true, now: now), currentStart);
+      expect(anchor.resolve(episode: null, captureStart: recorded, streaming: true, now: now), currentStart);
+      expect(anchor.resolve(episode: current, captureStart: recorded, streaming: true, now: now), currentStart);
+      expect(now.difference(currentStart), const Duration(hours: 1, minutes: 25));
+    });
+
     test('a pendant lease lapsing for a tick keeps the running start', () {
       final anchor = LiveStartAnchor();
       DateTime? at(int s, DateTime? capture) =>
@@ -96,7 +133,7 @@ void main() {
         oldStart,
       );
 
-      final capStart = _t0.add(const Duration(hours: 3));
+      final capStart = _t0.add(const Duration(hours: 4));
       expect(
         anchor.resolve(
           episode: _episode(capStart, id: 'ep2'),

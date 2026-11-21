@@ -22,6 +22,8 @@ const MAX_RETRIES = 5
 // background poller sets it so a dead-session 401 rejects as unauthorized WITHOUT
 // kicking the user to the sign-in screen (it still gets the refresh+retry).
 type RetryConfig = InternalAxiosRequestConfig & {
+  /** Optional operation-owner fence, rechecked after auth waits and every retry. */
+  __canSend?: () => boolean
   __retryCount?: number
   __noRetry?: boolean
   __reauthTried?: boolean
@@ -51,6 +53,7 @@ export async function responseErrorHandler(
   const config = error.config
   const status = error.response?.status
   assertRequestSession(config)
+  if (config?.__canSend && !config.__canSend()) return Promise.reject(error)
 
   // 401: the backend rejected our Firebase token. Force-refresh once and retry.
   // Mirrors macOS refresh→retry→classify: a DEFINITIVE death (no user, permanent
@@ -64,6 +67,7 @@ export async function responseErrorHandler(
     if (!config.__reauthTried) {
       const outcome = await refreshIdToken()
       assertRequestSession(config)
+      if (config.__canSend && !config.__canSend()) return Promise.reject(error)
       if (outcome.status === 'ok') {
         config.__reauthTried = true // consumed our one retry
         config.headers.Authorization = `Bearer ${outcome.token}`
@@ -94,6 +98,7 @@ export async function responseErrorHandler(
       : Math.min(1000 * 2 ** (config.__retryCount - 1), 16_000) + Math.random() * 400
   await new Promise((resolve) => setTimeout(resolve, waitMs))
   assertRequestSession(config)
+  if (config.__canSend && !config.__canSend()) return Promise.reject(error)
   return client(config)
 }
 
@@ -142,6 +147,8 @@ function makeClient(baseURL: string): AxiosInstance {
     const scoped = config as RetryConfig
     scoped.__authGeneration ??= getAuthSessionGeneration()
     assertRequestSession(scoped)
+    const canSend = scoped.__canSend
+    if (canSend && !canSend()) throw new Error('Request owner changed')
     // Platform + version tag on every request — same convention as the macOS/
     // Flutter clients (their shared header builders), so the backend can give
     // Windows-appropriate answers, version-gate features, and attribute quota.
@@ -150,6 +157,7 @@ function makeClient(baseURL: string): AxiosInstance {
     if (user) {
       const token = await user.getIdToken()
       assertRequestSession(scoped)
+      if (canSend && !canSend()) throw new Error('Request owner changed')
       config.headers.Authorization = `Bearer ${token}`
     }
     // BYOK: when the user has a full key set, attach X-BYOK-* (all-or-none) so
@@ -161,6 +169,7 @@ function makeClient(baseURL: string): AxiosInstance {
     config.headers['X-App-Platform'] = 'windows'
     config.headers['X-Device-Id-Hash'] = await getWindowsDeviceIdHash()
     assertRequestSession(scoped)
+    if (canSend && !canSend()) throw new Error('Request owner changed')
     return config
   })
 

@@ -427,6 +427,7 @@ def test_chat_completions_forwards_action_item_extraction_strict_schema(monkeypa
     action_item_schema = forwarded_schema['$defs']['ExtractedActionItem']
     assert action_item_schema['additionalProperties'] is False
     assert action_item_schema['required'] == [
+        'reminder_intent',
         'description',
         'due_at',
         'capture_kind',
@@ -441,6 +442,7 @@ def test_chat_completions_forwards_action_item_extraction_strict_schema(monkeypa
         'target_task_id',
         'source_segment_ids',
     ]
+    assert {'type': 'null'} in action_item_schema['properties']['reminder_intent']['anyOf']
     assert 'default' not in action_item_schema['properties']['due_at']
 
 

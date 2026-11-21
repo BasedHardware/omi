@@ -1,7 +1,7 @@
-import 'package:characters/characters.dart';
 import 'package:flutter/material.dart';
 
 /// One run of [StartTrimmedText]: its words and, optionally, its own style.
+/// Shared by the newest-word subtitle so clipping preserves complete graphemes.
 typedef TrimmedRun = ({String text, TextStyle? style});
 
 /// Running text that keeps its newest words visible: when the runs do not fit

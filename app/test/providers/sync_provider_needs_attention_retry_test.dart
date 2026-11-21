@@ -256,6 +256,7 @@ void main() {
   test('deterministic refusals aggregate without requesting user attention', () async {
     // 413 is deterministic: the same bytes are the same size, so the card's
     // retry-all must skip it and leave it to the row's Delete.
+    // Invalid dates can recover on the persisted daily/weekly schedule, never an immediate attention retry.
     final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
     final tooLarge = (await diskWal('audio_too_large.bin', timerStart: now - 600))
       ..markUploadRejected(reasonCode: WalUploadRejection.tooLarge);
@@ -270,9 +271,12 @@ void main() {
     expect(syncProvider.refusalSummary.count, 2);
     expect(syncProvider.retryableAttentionWals, isEmpty);
 
+    expect(invalidDate.refusalRetryDue(now), isFalse);
+    await syncProvider.drainForTesting();
     await syncProvider.retryNeedsAttentionWals();
 
     expect(uploads, isEmpty);
+    expect(invalidDate.status, WalStatus.uploadRejected);
     expect(tooLarge.status, WalStatus.uploadRejected, reason: 'a retry cannot change the bytes');
   });
   test('daily eligible refusal is picked up by the provider drain with no other work', () async {
@@ -284,5 +288,38 @@ void main() {
       ['daily.bin']
     ]);
     expect(refused.status, WalStatus.uploaded);
+  });
+
+  test('a cold start re-arms recordings whose transient retry budget was spent', () async {
+    final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    final spent = (await diskWal('audio_cold_start.bin', timerStart: now - 600))
+      ..retryCount = walMaxAutoRetries
+      ..lastRetryAt = now - 60;
+    // A durable HTTP refusal keeps its clock across restarts; only the
+    // transient miss class is re-armed.
+    final refused = (await diskWal('audio_refused_restart.bin', timerStart: now - 700))
+      ..markUploadRejected(nowSeconds: now - 60);
+
+    localSync.start();
+    await localSync.walReady;
+    localSync.testWals = [spent, refused];
+    addTearDown(() async => localSync.stop());
+    // Keep the coordinator from draining anything in the background: this test
+    // measures the startup re-arm itself, not a racing upload.
+    SharedPreferencesUtil().autoSyncOfflineRecordings = false;
+    final syncProvider = SyncProvider(
+      walService: _WalService(_LocalSyncs(localSync)),
+      uploadGate: gate,
+      startBackgroundSync: true,
+      startRecovery: () async {},
+    );
+    provider = syncProvider;
+    await syncProvider.initialized;
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+
+    expect(spent.retryCount, 0, reason: 'startup grants the same fresh budget a connectivity restore does');
+    expect(spent.lastRetryAt, 0);
+    expect(spent.syncDisplayState, WalSyncDisplayState.waiting);
+    expect(refused.status, WalStatus.uploadRejected, reason: 'refused rows keep their persisted refusal clock');
   });
 }

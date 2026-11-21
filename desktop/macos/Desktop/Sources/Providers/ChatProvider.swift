@@ -1,3 +1,10 @@
+// The single shared chat provider: the one message timeline that Main Chat,
+// Home chat, and the floating/notch chat all render.
+//
+// Kernel main_chat turns are the durable source of truth and journal acceptance
+// publishes the pending projection -- UI never appends a pre-journal turn, and
+// every other surface holds a viewport cursor over these messages rather than a
+// second transcript (product/invariants/chat-continuity.md).
 import Combine
 import CoreGraphics
 import CryptoKit
@@ -1376,7 +1383,6 @@ class ChatProvider: ObservableObject {
   private var cachedTasks: [TaskActionItem] = []
   private var tasksLoaded = false
   private var cachedAIProfile: String = ""
-  private var aiProfileLoaded = false
   private var cachedDatabaseSchema: String = ""
   private var schemaLoaded = false
 
@@ -1801,7 +1807,6 @@ class ChatProvider: ObservableObject {
     cachedTasks = []
     tasksLoaded = false
     cachedAIProfile = ""
-    aiProfileLoaded = false
     cachedDatabaseSchema = ""
     schemaLoaded = false
   }
@@ -2668,15 +2673,10 @@ class ChatProvider: ObservableObject {
 
   // MARK: - Load AI User Profile
 
-  /// Fetches the latest AI-generated user profile from local database
+  /// Reads the backend-owned AI user profile from the service's in-memory cache, so an
+  /// edit or a backend refresh reaches the next turn without a network read per prompt.
   private func loadAIProfileIfNeeded() async {
-    guard !aiProfileLoaded else { return }
-
-    if let profile = await AIUserProfileService.shared.getLatestProfile() {
-      cachedAIProfile = profile.profileText
-      log("ChatProvider loaded AI profile (generated \(profile.generatedAt))")
-    }
-    aiProfileLoaded = true
+    cachedAIProfile = await AIUserProfileService.shared.getLatestProfile()?.profileText ?? ""
   }
 
   /// Formats AI profile into a prompt section

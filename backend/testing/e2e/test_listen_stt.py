@@ -6,6 +6,7 @@ import uuid
 
 import pytest
 
+from tests.unit.fixtures.live_stt_registry import enabled_live_targets
 from fakes.firestore import get_mock_firestore, read_conversation
 from fakes.stt import fake_suggested_transcript_event, install_streaming_stt_fake
 from listen_test_helpers import (
@@ -430,6 +431,7 @@ def test_web_listen_streaming_stt_send_failure_fails_over_and_the_session_surviv
     replacement socket in the same flush, a transcript flows from it, and the
     client socket never sees ``stt_failed``.
     """
+    enabled_live_targets(monkeypatch)
     from utils.stt.streaming import STTService
     from utils.stt import streaming as st
     from utils.stt.provider_resilience import ProviderCircuitBreaker

@@ -19,7 +19,7 @@ LAST_RISK = Gauge(
 # verify failure) where retrying replays the same collision; 'transient' is any
 # other failure after its bounded retry budget; 'other' is the unlabeled
 # default for existing call sites.
-CUSTODY_FAILURE_REASONS = frozenset({'other', 'conflict', 'transient'})
+CUSTODY_FAILURE_REASONS = frozenset({'other', 'conflict', 'transient', 'invalid_argument'})
 
 
 def bounded_custody_failure_reason(reason: str) -> str:
@@ -43,6 +43,7 @@ for _stage in ('commit', 'raw_commit', 'projection', 'window_tail'):
     CUSTODY_FAILURES.labels(stage=_stage, reason='other').inc(0)
     CUSTODY_FAILURES.labels(stage=_stage, reason='conflict').inc(0)
     CUSTODY_FAILURES.labels(stage=_stage, reason='transient').inc(0)
+    CUSTODY_FAILURES.labels(stage=_stage, reason='invalid_argument').inc(0)
 for _stage in (
     'pusher_queue',
     'pusher_budget',

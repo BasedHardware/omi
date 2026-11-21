@@ -211,7 +211,7 @@ class TestV2ConversationAudioMergeTombstoneGuard:
         ), patch.object(routers_sync, 'should_skip_background_account_mutation', return_value=False), patch.object(
             routers_sync.conversations_db, 'get_conversation', return_value=active_conv
         ), patch.object(
-            routers_sync, 'compute_audio_files_fingerprint', return_value='fp-active'
+            routers_sync.sync_playback, 'conversation_merge_fingerprint', return_value='fp-active'
         ), patch.object(
             routers_sync, 'get_conversation_playback_signed_url', return_value=None
         ), patch.object(
@@ -253,7 +253,7 @@ class TestV2ConversationAudioMergeTombstoneGuard:
         ), patch.object(routers_sync, 'should_skip_background_account_mutation', return_value=False), patch.object(
             routers_sync.conversations_db, 'get_conversation', return_value=active_conv
         ), patch.object(
-            routers_sync, 'compute_audio_files_fingerprint', return_value='fp-active'
+            routers_sync.sync_playback, 'conversation_merge_fingerprint', return_value='fp-active'
         ), patch.object(
             routers_sync, 'get_conversation_playback_signed_url', return_value=None
         ), patch.object(
@@ -293,7 +293,7 @@ class TestV2ConversationAudioMergeTombstoneGuard:
         ), patch.object(routers_sync, 'should_skip_background_account_mutation', return_value=False), patch.object(
             routers_sync.conversations_db, 'get_conversation', return_value=active_conv
         ), patch.object(
-            routers_sync, 'compute_audio_files_fingerprint', return_value='fp-active'
+            routers_sync.sync_playback, 'conversation_merge_fingerprint', return_value='fp-active'
         ), patch.object(
             routers_sync.playback_build,
             'build_conversation_playback_artifact',

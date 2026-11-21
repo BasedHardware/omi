@@ -75,6 +75,23 @@ class CaptureHarness:
 
     async def call(self, fn: Any, *args: Any, **kwargs: Any) -> Any:
         name = fn.__name__
+        if fn.__module__ == 'database.listen_batch_reconnect':
+            uid, cid, sid = args[:3]
+            self.store.rows[('users', uid)] = {'private_cloud_sync_enabled': True, 'time_zone': 'UTC'}
+            self.store.rows[('users', uid, 'conversations', cid)] = deepcopy(self.rows[cid])
+            self.store.rows.setdefault(
+                ('users', uid, 'recording_sessions', sid),
+                {
+                    'uid': uid,
+                    'conversation_id': cid,
+                    'recording_session_id': sid,
+                    'lifecycle_phase': 'in_progress',
+                    'lease_expires_at': self.now + timedelta(minutes=5),
+                },
+            )
+            result = fn(*args, firestore_client=self.store, **kwargs)
+            self.rows[cid] = deepcopy(self.store.rows[('users', uid, 'conversations', cid)])
+            return result
         if fn.__module__ in {'utils.episodes.boundaries', 'utils.episodes.boundary_runtime'}:
             return fn(*args, firestore_client=self.store, **kwargs)
         if name == 'arm':
@@ -426,7 +443,7 @@ def test_meeting_continuation_keeps_device_and_empty_generation_fences(empty, de
         transcript_segments=[] if empty else [{'text': 'kept'}],
     )
     assert resumable_continuation(
-        row, source='omi', device_id=device, now=now + timedelta(minutes=10), timeout=120
+        row, source='omi', device_id=device, arrival_at=now + timedelta(minutes=10), timeout=120
     ) is (not empty and device == 'phone')
 
 
@@ -481,9 +498,11 @@ def test_missing_or_invalid_calendar_context_keeps_120_second_boundary(context):
         external_data={'calendar_meeting_context': context},
         has_content=True,
     )
-    assert resumable_continuation(row, source='omi', device_id='phone', now=now + timedelta(seconds=119), timeout=120)
+    assert resumable_continuation(
+        row, source='omi', device_id='phone', arrival_at=now + timedelta(seconds=119), timeout=120
+    )
     assert not resumable_continuation(
-        row, source='omi', device_id='phone', now=now + timedelta(seconds=120), timeout=120
+        row, source='omi', device_id='phone', arrival_at=now + timedelta(seconds=120), timeout=120
     )
 
 
@@ -575,7 +594,7 @@ def test_calendar_id_fallback_does_not_join_a_different_event(record):
     resolved = listen_continuations.calendar_continuity_row('u', row, firestore_client=store)
     assert resolved is row
     assert not resumable_continuation(
-        resolved, source='omi', device_id='phone', now=now + timedelta(seconds=120), timeout=120
+        resolved, source='omi', device_id='phone', arrival_at=now + timedelta(seconds=120), timeout=120
     )
 
 
@@ -682,7 +701,15 @@ async def test_meeting_that_runs_over_its_scheduled_end_keeps_the_silence_bounda
     assert row['external_data']['calendar_meeting_context']['end_time'] == end
     # The meeting runs over: its latest speech lands 110 seconds after the scheduled end.
     last_speech = end + timedelta(seconds=110)
-    row.update(has_content=True, transcript_segments=[{'text': 'kept'}], finished_at=last_speech)
+    row.update(
+        has_content=True,
+        transcript_segments=[{'text': 'kept'}],
+        finished_at=last_speech,
+        last_speech_at=last_speech,
+        recorded_start=row['started_at'],
+        recorded_end=last_speech,
+        clock='live_capture',
+    )
     controller.process_conversation = AsyncMock(return_value=True)
     harness.now = last_speech + timedelta(seconds=15)
     controller.host.wait = AsyncMock(side_effect=[False, True])

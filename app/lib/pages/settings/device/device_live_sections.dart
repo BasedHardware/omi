@@ -1,10 +1,7 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
-import 'package:omi/gen/pigeon_communicator.g.dart';
 import 'package:omi/pages/episodes/live_episode_clock.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
@@ -78,20 +75,16 @@ class DeviceStatsRow extends StatelessWidget {
               phoneQueueSeconds > 0 ? l10n.deviceOnPhoneQueue(OmiDuration.compact(phoneQueueSeconds, l10n)) : null,
         ),
     ];
-    // One row height for every tile: the tallest tile's captions (usually On
-    // Device's phone-queue line) raise the whole row, so a captioned tile never
-    // towers over its neighbours. IntrinsicHeight + stretch sizes the row to
-    // its own content only — never to whatever height the viewport has left.
-    return IntrinsicHeight(
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          for (var i = 0; i < tiles.length; i++) ...[
-            if (i > 0) const SizedBox(width: OmiSpacing.xs),
-            Expanded(child: tiles[i]),
-          ],
+    // One plain line, battery · on device: no boxes, so the numbers read as text.
+    return Wrap(
+      spacing: OmiSpacing.xs,
+      runSpacing: OmiSpacing.xxs,
+      children: [
+        for (var i = 0; i < tiles.length; i++) ...[
+          if (i > 0) Text('·', style: OmiType.subhead.copyWith(color: OmiColors.textTertiary)),
+          tiles[i],
         ],
-      ),
+      ],
     );
   }
 
@@ -105,65 +98,37 @@ class _StatTile extends StatelessWidget {
   final String value;
   final String? caption;
 
-  /// A second line under the caption, in the same style.
+  /// A second caption after the first, in the same style.
   final String? secondCaption;
 
-  /// A tappable tile ends its caption with a chevron; the whole tile is the target.
+  /// A tappable tile ends its caption with a chevron; the whole line is the target.
   final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
-    final captionStyle = OmiType.footnote.copyWith(color: OmiColors.textSecondary);
-    final content = Container(
-      constraints: const BoxConstraints(minHeight: 84),
-      padding: const EdgeInsets.all(OmiSpacing.sm),
-      // Min, not max: the tile floors at 84 and otherwise sizes to its own
-      // lines — the row's IntrinsicHeight shares the tallest tile's height,
-      // never whatever height the viewport has left over.
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        mainAxisAlignment: MainAxisAlignment.start,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(label, style: OmiType.footnote.copyWith(color: OmiColors.textTertiary)),
-          const SizedBox(height: OmiSpacing.xxs),
-          Text(value, style: OmiType.title3, maxLines: 1, overflow: TextOverflow.ellipsis),
-          if (caption != null || onTap != null) ...[
-            const SizedBox(height: 2),
-            Text.rich(
-              TextSpan(children: [
-                if (caption != null) TextSpan(text: caption),
-                if (onTap != null)
-                  WidgetSpan(
-                    alignment: PlaceholderAlignment.middle,
-                    // Mirrors itself in right-to-left locales; scales with the caption.
-                    child: Icon(
-                      Icons.chevron_right,
-                      size: MediaQuery.textScalerOf(context).scale(captionStyle.fontSize!),
-                      color: OmiColors.textTertiary,
-                    ),
-                  ),
-              ]),
-              style: captionStyle,
-            ),
-          ],
-          if (secondCaption != null) ...[
-            const SizedBox(height: 2),
-            Text(secondCaption!, style: captionStyle),
-          ],
-        ],
-      ),
+    final captionStyle = OmiType.subhead.copyWith(color: OmiColors.textSecondary);
+    // Wraps rather than overflows when a caption is long or the text size is large.
+    final content = Wrap(
+      crossAxisAlignment: WrapCrossAlignment.center,
+      spacing: OmiSpacing.xxs,
+      children: [
+        Text(label, style: captionStyle),
+        Text(value, style: OmiType.subhead.copyWith(fontWeight: FontWeight.w600)),
+        if (caption != null) Text(caption!, style: captionStyle),
+        if (secondCaption != null) Text(secondCaption!, style: captionStyle),
+        if (onTap != null)
+          Icon(
+            Icons.chevron_right,
+            size: MediaQuery.textScalerOf(context).scale(captionStyle.fontSize!),
+            color: OmiColors.textTertiary,
+          ),
+      ],
     );
     return Semantics(
       label: [label, value, if (caption != null) caption!, if (secondCaption != null) secondCaption!].join(', '),
       button: onTap != null,
       excludeSemantics: true,
-      child: Material(
-        color: OmiColors.surface1,
-        borderRadius: OmiRadius.lgAll,
-        clipBehavior: Clip.antiAlias,
-        child: onTap == null ? content : InkWell(onTap: onTap, child: content),
-      ),
+      child: onTap == null ? content : InkWell(onTap: onTap, child: content),
     );
   }
 }
@@ -235,72 +200,6 @@ class DeviceRightNowGroup extends StatelessWidget {
                           builder: (context, now) => _liveRow(l10n.deviceLiveEpisode(liveLengthNow!(now))),
                         ),
       ],
-    );
-  }
-}
-
-/// Recently: when this device dropped and for how long, from the phone's own connection history.
-class DeviceRecentlyGroup extends StatefulWidget {
-  const DeviceRecentlyGroup({super.key, required this.load, this.now});
-
-  /// The device's native disconnect history (newest last).
-  final Future<List<BleDisconnectEvent>> Function() load;
-  final DateTime Function()? now;
-
-  @override
-  State<DeviceRecentlyGroup> createState() => _DeviceRecentlyGroupState();
-}
-
-class _DeviceRecentlyGroupState extends State<DeviceRecentlyGroup> {
-  List<BleDisconnectEvent> _events = const [];
-
-  static const _window = Duration(hours: 24);
-  static const _limit = 4;
-
-  @override
-  void initState() {
-    super.initState();
-    unawaited(_load());
-  }
-
-  Future<void> _load() async {
-    try {
-      final history = await widget.load();
-      final now = (widget.now ?? DateTime.now)();
-      final recent = [
-        for (final event in history.reversed)
-          if (event.eventType != 'fail_to_connect' &&
-              !event.isManual &&
-              event.timeToReconnectMs > 0 &&
-              now.difference(DateTime.fromMillisecondsSinceEpoch(event.timestamp)) <= _window)
-            event
-      ].take(_limit).toList();
-      if (mounted) setState(() => _events = recent);
-    } catch (_) {
-      // Diagnostics are best-effort: no history, no section.
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    if (_events.isEmpty) return const SizedBox.shrink();
-    final l10n = context.l10n;
-    final dates = OmiDateFormat.of(context);
-    return Padding(
-      padding: const EdgeInsets.only(bottom: OmiSpacing.xxl),
-      child: OmiSettingsGroup(
-        key: const Key('device_recently'),
-        header: l10n.deviceRecently,
-        children: [
-          for (final event in _events)
-            OmiSettingsRow(
-              leading: Icon(Icons.bluetooth_disabled_rounded, color: OmiColors.warning),
-              title: l10n.deviceDisconnectedFor(OmiDuration.compact((event.timeToReconnectMs / 1000).round(), l10n)),
-              value: dates.time(DateTime.fromMillisecondsSinceEpoch(event.timestamp)),
-              showChevron: false,
-            ),
-        ],
-      ),
     );
   }
 }

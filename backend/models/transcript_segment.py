@@ -116,13 +116,15 @@ class TranscriptSegment(BaseModel):
     translations: Optional[List[Translation]] = Field(default_factory=list)
     speech_profile_processed: bool = True
     stt_provider: Optional[str] = None
+    speaker_word_seconds: SkipJsonSchema[Optional[float]] = Field(default=None, exclude=True)
     # Persisted for backend identity consumers. SkipJsonSchema keeps these out of
     # the generated OpenAPI/Dart/Swift client schema while validation and
     # model_dump (Firestore persistence, and the pusher transcript frames that
     # document them) stay intact.
     # Cleared atomically on the first manual review; never authorizes teaching.
     speaker_match_source: SkipJsonSchema[Optional[str]] = None
-    speaker_id_scope: SkipJsonSchema[Optional[str]] = None
+    # Opaque voice scope travels to clients for exact recording rename proofs.
+    speaker_id_scope: Optional[str] = None
     speaker_identity_status: SkipJsonSchema[str] = SpeakerIdentityStatus.unknown
     # Only present for v2 text whose provider position could not be proven.
     # Absence keeps every v1 serialized segment byte-identical.
@@ -133,8 +135,10 @@ class TranscriptSegment(BaseModel):
     audio_capture_start: SkipJsonSchema[Optional[float]] = Field(default=None, exclude=True)
     audio_capture_end: SkipJsonSchema[Optional[float]] = Field(default=None, exclude=True)
     audio_source: SkipJsonSchema[Optional[Dict[str, Any]]] = Field(default=None, exclude=True)
-    # Pinned-speaker prior only (flag PINNED_SPEAKER_PRIOR_ENABLED): people an unlabeled
-    # voice resembles, [{person_id, level, suggest?}], for the suggestion card. Never a label.
+    # Revocable profile pointer; readers require current profile and retention consent.
+    recurring_voice_id: SkipJsonSchema[Optional[str]] = Field(default=None, exclude=True)
+    # Pinned-speaker priors and recurring-match near-misses: [{person_id, level, suggest?}].
+    # Suggestion-card evidence only; never a person label.
     voice_candidates: SkipJsonSchema[Optional[List[Dict[str, Any]]]] = Field(default=None, exclude=True)
     # Transported only in Python-mode internal dumps; the DB folds this into
     # the bounded conversation blob and removes it from stored segments.
@@ -178,7 +182,7 @@ class TranscriptSegment(BaseModel):
         if self.original_text is None:
             data.pop('original_text', None)
         data['speaker_label_source'] = project_source(data)
-        for key in ('audio_alignment', 'audio_capture_run', 'voice_candidates'):
+        for key in ('audio_alignment', 'audio_capture_run', 'voice_candidates', 'recurring_voice_id'):
             value = getattr(self, key)
             if value is not None:
                 data[key] = value
@@ -194,6 +198,7 @@ class TranscriptSegment(BaseModel):
             'audio_capture_end',
             'audio_source',
             'speaker_match_scores',
+            'speaker_word_seconds',
             'provider_speaker',
             'speaker_grouping_shadow',
             'speaker_grouping_shadow_expires_at',

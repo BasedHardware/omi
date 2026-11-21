@@ -244,16 +244,15 @@ class TestExtractionSeamFanOut:
         structured = conversation.structured
 
         with (
-            patch.object(pc, "is_trial_paywalled", return_value=False),
-            patch.object(pc, "should_skip_omi_paid_postprocessing", return_value=False),
-            patch.object(pc.redis_db, "get_conversation_meeting_id", return_value=None),
-            patch.object(pc, "_get_structured", return_value=(structured, False)),
-            patch.object(pc, "_get_conversation_obj", return_value=conversation),
-            patch.object(pc, "trigger_conversation_apps"),
-            patch.object(pc, "_extract_memories", extract_memories),
-            patch.object(pc, "_save_action_items", save_action_items),
-            patch.object(pc.conversations_db, "upsert_conversation"),
-            patch.object(pc, "submit_with_context", side_effect=_capture_submit),
+            patch.object(pc, 'should_skip_omi_paid_postprocessing', return_value=False),
+            patch.object(pc.redis_db, 'get_conversation_meeting_id', return_value=None),
+            patch.object(pc, '_get_structured', return_value=(structured, False)),
+            patch.object(pc, '_get_conversation_obj', return_value=conversation),
+            patch.object(pc, 'trigger_conversation_apps'),
+            patch.object(pc, '_extract_memories', extract_memories),
+            patch.object(pc, '_save_action_items', save_action_items),
+            patch.object(pc.conversations_db, 'upsert_conversation'),
+            patch.object(pc, 'submit_with_context', side_effect=_capture_submit),
         ):
             pc.process_conversation("uid-boundary", "en", conversation, trigger=pc.ProcessingTrigger.USER_REPROCESS)
 
@@ -345,7 +344,10 @@ class TestNoConversationAsMemory:
         assert "structured" not in row
         assert row.get("id") != conversation.id
 
-    def test_extract_memories_inner_external_integration_uses_text_not_conversation(self):
+    def test_extract_memories_inner_external_integration_uses_text_not_conversation(self, monkeypatch):
+        # This asserts the eager extraction seam; the dedupe-on external path
+        # (prompt-memories resolution + l1 fingerprint) is covered separately.
+        monkeypatch.setenv('CONVERSATION_LLM_INPUT_DEDUPE_ENABLED', 'false')
         pc = _ensure_process_conversation_importable()
 
         from models.conversation import Conversation

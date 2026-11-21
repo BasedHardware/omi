@@ -6,10 +6,8 @@ import json
 import os
 from typing import Any, Callable, Literal
 
-from config import ladder_v1 as ladder_policy
 from models.storefront import (
     StorefrontCapChoice,
-    ChatAtCap,
     StorefrontCurrent,
     StorefrontPrice,
     StorefrontResponse,
@@ -19,7 +17,6 @@ from models.storefront import (
 from models.users import Subscription
 from utils.storefront_copy import (
     copy_for,
-    chat_at_cap,
     format_date,
     format_money,
     blocked_line,
@@ -492,22 +489,6 @@ def build_storefront(
     )
     at_cap = None
     chat_pause = None
-    if (
-        ladder_policy.enabled('LADDER_V1_BUDGET_ENFORCEMENT_ENABLED')
-        and not legacy
-        and usage.kind == 'usage_budget'
-        and usage.percent is not None
-        and usage.percent >= 100
-        and usage.period_id is not None
-    ):
-        from datetime import datetime, timezone
-
-        # usage period_id is the charged calendar month; reset is its next month.
-        year, month = map(int, usage.period_id.split('-'))
-        reset_at = int(datetime(year + (month == 12), month % 12 + 1, 1, tzinfo=timezone.utc).timestamp())
-        chat_pause = ChatAtCap(**chat_at_cap(current_plan, reset_at, locale))
-        at_cap = dict(copy_for(locale)['at_cap'])
-        at_cap['body'] = at_cap['body'].format(date=format_date(reset_at, locale))
     return StorefrontResponse(
         chat_at_cap=chat_pause,
         at_cap=StorefrontCapChoice(**at_cap) if at_cap is not None else None,

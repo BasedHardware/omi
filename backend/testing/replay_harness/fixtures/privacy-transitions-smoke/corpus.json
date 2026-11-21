@@ -1,0 +1,607 @@
+{
+  "privacy_cache": {
+    "seed": 20261104,
+    "transitions": [
+      {
+        "family": "subscription",
+        "kind": "byok_enable",
+        "fault": "concurrent"
+      },
+      {
+        "family": "tombstone",
+        "kind": "create",
+        "fault": "none"
+      },
+      {
+        "family": "subscription",
+        "kind": "byok_enable",
+        "fault": "reader_during_writer"
+      },
+      {
+        "family": "tombstone",
+        "kind": "retry_after_purge",
+        "fault": "none"
+      },
+      {
+        "family": "legal_hold",
+        "kind": "place",
+        "fault": "reader_during_writer"
+      },
+      {
+        "family": "tombstone",
+        "kind": "create",
+        "fault": "drop_invalidation"
+      },
+      {
+        "family": "tombstone",
+        "kind": "create",
+        "fault": "reader_during_writer"
+      },
+      {
+        "family": "batch_privacy",
+        "kind": "block",
+        "fault": "none"
+      },
+      {
+        "family": "subscription",
+        "kind": "byok_enable",
+        "fault": "request_memo"
+      },
+      {
+        "family": "batch_privacy",
+        "kind": "advance",
+        "fault": "reader_during_writer"
+      },
+      {
+        "family": "deletion_marker",
+        "kind": "restore",
+        "fault": "none"
+      },
+      {
+        "family": "deletion_marker",
+        "kind": "wipe_started",
+        "fault": "none"
+      },
+      {
+        "family": "deletion_marker",
+        "kind": "wipe_completed",
+        "fault": "none"
+      },
+      {
+        "family": "deletion_marker",
+        "kind": "wipe_failed",
+        "fault": "none"
+      },
+      {
+        "family": "subscription",
+        "kind": "byok_enable",
+        "fault": "none"
+      },
+      {
+        "family": "batch_privacy",
+        "kind": "advance",
+        "fault": "none"
+      },
+      {
+        "family": "subscription",
+        "kind": "byok_enable",
+        "fault": "begin_loss"
+      },
+      {
+        "family": "legal_hold",
+        "kind": "finish",
+        "fault": "none"
+      },
+      {
+        "family": "legal_hold",
+        "kind": "takeover",
+        "fault": "none"
+      },
+      {
+        "family": "deletion_marker",
+        "kind": "grace_intent",
+        "fault": "reader_during_writer"
+      },
+      {
+        "family": "legal_hold",
+        "kind": "place",
+        "fault": "concurrent"
+      },
+      {
+        "family": "deletion_marker",
+        "kind": "wipe_running",
+        "fault": "none"
+      },
+      {
+        "family": "data_protection",
+        "kind": "enhanced_to_e2ee",
+        "fault": "none"
+      },
+      {
+        "family": "subscription",
+        "kind": "byok_disable",
+        "fault": "none"
+      },
+      {
+        "family": "deletion_marker",
+        "kind": "billing_failed",
+        "fault": "none"
+      },
+      {
+        "family": "tombstone",
+        "kind": "create",
+        "fault": "begin_loss"
+      },
+      {
+        "family": "deletion_marker",
+        "kind": "promote",
+        "fault": "none"
+      },
+      {
+        "family": "data_protection",
+        "kind": "finalize_migration",
+        "fault": "none"
+      },
+      {
+        "family": "data_protection",
+        "kind": "enhanced_to_e2ee",
+        "fault": "concurrent"
+      },
+      {
+        "family": "deletion_marker",
+        "kind": "grace_intent",
+        "fault": "request_memo"
+      },
+      {
+        "family": "data_protection",
+        "kind": "e2ee_to_enhanced",
+        "fault": "none"
+      },
+      {
+        "family": "legal_hold",
+        "kind": "acquire",
+        "fault": "none"
+      },
+      {
+        "family": "deletion_marker",
+        "kind": "grace_intent",
+        "fault": "begin_loss"
+      },
+      {
+        "family": "deletion_marker",
+        "kind": "cancel",
+        "fault": "none"
+      },
+      {
+        "family": "deletion_marker",
+        "kind": "grace_intent",
+        "fault": "redis_down"
+      },
+      {
+        "family": "subscription",
+        "kind": "byok_enable",
+        "fault": "redis_down"
+      },
+      {
+        "family": "batch_privacy",
+        "kind": "advance",
+        "fault": "concurrent"
+      },
+      {
+        "family": "deletion_marker",
+        "kind": "grace_intent",
+        "fault": "drop_invalidation"
+      },
+      {
+        "family": "deletion_marker",
+        "kind": "wipe_intent",
+        "fault": "none"
+      },
+      {
+        "family": "legal_hold",
+        "kind": "place",
+        "fault": "redis_down"
+      },
+      {
+        "family": "data_protection",
+        "kind": "enhanced_to_e2ee",
+        "fault": "reader_during_writer"
+      },
+      {
+        "family": "tombstone",
+        "kind": "create",
+        "fault": "redis_down"
+      },
+      {
+        "family": "legal_hold",
+        "kind": "place",
+        "fault": "begin_loss"
+      },
+      {
+        "family": "deletion_marker",
+        "kind": "grace_intent",
+        "fault": "none"
+      },
+      {
+        "family": "subscription",
+        "kind": "downgrade",
+        "fault": "none"
+      },
+      {
+        "family": "legal_hold",
+        "kind": "release",
+        "fault": "none"
+      },
+      {
+        "family": "deletion_marker",
+        "kind": "grace_actions_complete",
+        "fault": "none"
+      },
+      {
+        "family": "tombstone",
+        "kind": "create",
+        "fault": "concurrent"
+      },
+      {
+        "family": "deletion_marker",
+        "kind": "grace_intent",
+        "fault": "concurrent"
+      },
+      {
+        "family": "subscription",
+        "kind": "upgrade",
+        "fault": "none"
+      },
+      {
+        "family": "batch_privacy",
+        "kind": "finish",
+        "fault": "none"
+      },
+      {
+        "family": "legal_hold",
+        "kind": "place",
+        "fault": "none"
+      },
+      {
+        "family": "legal_hold",
+        "kind": "place",
+        "fault": "drop_invalidation"
+      },
+      {
+        "family": "subscription",
+        "kind": "byok_enable",
+        "fault": "drop_invalidation"
+      },
+      {
+        "family": "batch_privacy",
+        "kind": "finish",
+        "fault": "concurrent"
+      },
+      {
+        "family": "legal_hold",
+        "kind": "finish",
+        "fault": "redis_down"
+      },
+      {
+        "family": "tombstone",
+        "kind": "create",
+        "fault": "concurrent"
+      },
+      {
+        "family": "subscription",
+        "kind": "byok_disable",
+        "fault": "concurrent"
+      },
+      {
+        "family": "tombstone",
+        "kind": "retry_after_purge",
+        "fault": "reader_during_writer"
+      },
+      {
+        "family": "deletion_marker",
+        "kind": "wipe_failed",
+        "fault": "none"
+      },
+      {
+        "family": "legal_hold",
+        "kind": "finish",
+        "fault": "redis_down"
+      },
+      {
+        "family": "subscription",
+        "kind": "byok_enable",
+        "fault": "reader_during_writer"
+      },
+      {
+        "family": "data_protection",
+        "kind": "e2ee_to_enhanced",
+        "fault": "reader_during_writer"
+      },
+      {
+        "family": "data_protection",
+        "kind": "enhanced_to_e2ee",
+        "fault": "none"
+      },
+      {
+        "family": "deletion_marker",
+        "kind": "wipe_started",
+        "fault": "drop_invalidation"
+      },
+      {
+        "family": "batch_privacy",
+        "kind": "block",
+        "fault": "none"
+      },
+      {
+        "family": "subscription",
+        "kind": "byok_disable",
+        "fault": "redis_down"
+      },
+      {
+        "family": "deletion_marker",
+        "kind": "cancel",
+        "fault": "reader_during_writer"
+      },
+      {
+        "family": "subscription",
+        "kind": "downgrade",
+        "fault": "none"
+      },
+      {
+        "family": "subscription",
+        "kind": "byok_enable",
+        "fault": "request_memo"
+      },
+      {
+        "family": "batch_privacy",
+        "kind": "block",
+        "fault": "none"
+      },
+      {
+        "family": "batch_privacy",
+        "kind": "finish",
+        "fault": "reader_during_writer"
+      },
+      {
+        "family": "batch_privacy",
+        "kind": "advance",
+        "fault": "concurrent"
+      },
+      {
+        "family": "subscription",
+        "kind": "upgrade",
+        "fault": "concurrent"
+      },
+      {
+        "family": "subscription",
+        "kind": "byok_disable",
+        "fault": "drop_invalidation"
+      },
+      {
+        "family": "batch_privacy",
+        "kind": "advance",
+        "fault": "reader_during_writer"
+      },
+      {
+        "family": "tombstone",
+        "kind": "retry_after_purge",
+        "fault": "concurrent"
+      },
+      {
+        "family": "batch_privacy",
+        "kind": "finish",
+        "fault": "none"
+      },
+      {
+        "family": "subscription",
+        "kind": "byok_enable",
+        "fault": "concurrent"
+      },
+      {
+        "family": "tombstone",
+        "kind": "retry_after_purge",
+        "fault": "redis_down"
+      },
+      {
+        "family": "deletion_marker",
+        "kind": "wipe_intent",
+        "fault": "request_memo"
+      },
+      {
+        "family": "tombstone",
+        "kind": "create",
+        "fault": "redis_down"
+      },
+      {
+        "family": "tombstone",
+        "kind": "create",
+        "fault": "none"
+      },
+      {
+        "family": "tombstone",
+        "kind": "retry_after_purge",
+        "fault": "begin_loss"
+      },
+      {
+        "family": "data_protection",
+        "kind": "e2ee_to_enhanced",
+        "fault": "none"
+      },
+      {
+        "family": "subscription",
+        "kind": "downgrade",
+        "fault": "begin_loss"
+      },
+      {
+        "family": "data_protection",
+        "kind": "enhanced_to_e2ee",
+        "fault": "concurrent"
+      },
+      {
+        "family": "data_protection",
+        "kind": "e2ee_to_enhanced",
+        "fault": "none"
+      },
+      {
+        "family": "subscription",
+        "kind": "byok_enable",
+        "fault": "drop_invalidation"
+      },
+      {
+        "family": "tombstone",
+        "kind": "create",
+        "fault": "drop_invalidation"
+      },
+      {
+        "family": "subscription",
+        "kind": "downgrade",
+        "fault": "drop_invalidation"
+      },
+      {
+        "family": "subscription",
+        "kind": "byok_disable",
+        "fault": "none"
+      },
+      {
+        "family": "deletion_marker",
+        "kind": "wipe_started",
+        "fault": "drop_invalidation"
+      },
+      {
+        "family": "subscription",
+        "kind": "byok_disable",
+        "fault": "redis_down"
+      },
+      {
+        "family": "deletion_marker",
+        "kind": "wipe_started",
+        "fault": "drop_invalidation"
+      },
+      {
+        "family": "legal_hold",
+        "kind": "takeover",
+        "fault": "reader_during_writer"
+      },
+      {
+        "family": "tombstone",
+        "kind": "create",
+        "fault": "begin_loss"
+      },
+      {
+        "family": "tombstone",
+        "kind": "retry_after_purge",
+        "fault": "begin_loss"
+      },
+      {
+        "family": "batch_privacy",
+        "kind": "finish",
+        "fault": "reader_during_writer"
+      },
+      {
+        "family": "data_protection",
+        "kind": "enhanced_to_e2ee",
+        "fault": "concurrent"
+      },
+      {
+        "family": "tombstone",
+        "kind": "create",
+        "fault": "redis_down"
+      },
+      {
+        "family": "batch_privacy",
+        "kind": "finish",
+        "fault": "reader_during_writer"
+      },
+      {
+        "family": "tombstone",
+        "kind": "create",
+        "fault": "begin_loss"
+      },
+      {
+        "family": "data_protection",
+        "kind": "enhanced_to_e2ee",
+        "fault": "none"
+      },
+      {
+        "family": "subscription",
+        "kind": "byok_enable",
+        "fault": "redis_down"
+      },
+      {
+        "family": "tombstone",
+        "kind": "retry_after_purge",
+        "fault": "reader_during_writer"
+      },
+      {
+        "family": "subscription",
+        "kind": "downgrade",
+        "fault": "reader_during_writer"
+      },
+      {
+        "family": "data_protection",
+        "kind": "e2ee_to_enhanced",
+        "fault": "none"
+      },
+      {
+        "family": "data_protection",
+        "kind": "enhanced_to_e2ee",
+        "fault": "reader_during_writer"
+      },
+      {
+        "family": "data_protection",
+        "kind": "finalize_migration",
+        "fault": "none"
+      },
+      {
+        "family": "deletion_marker",
+        "kind": "wipe_started",
+        "fault": "concurrent"
+      },
+      {
+        "family": "tombstone",
+        "kind": "create",
+        "fault": "none"
+      },
+      {
+        "family": "deletion_marker",
+        "kind": "restore",
+        "fault": "begin_loss"
+      },
+      {
+        "family": "batch_privacy",
+        "kind": "finish",
+        "fault": "concurrent"
+      },
+      {
+        "family": "data_protection",
+        "kind": "enhanced_to_e2ee",
+        "fault": "none"
+      },
+      {
+        "family": "tombstone",
+        "kind": "retry_after_purge",
+        "fault": "redis_down"
+      },
+      {
+        "family": "tombstone",
+        "kind": "retry_after_purge",
+        "fault": "none"
+      },
+      {
+        "family": "batch_privacy",
+        "kind": "block",
+        "fault": "concurrent"
+      },
+      {
+        "family": "tombstone",
+        "kind": "retry_after_purge",
+        "fault": "reader_during_writer"
+      },
+      {
+        "family": "legal_hold",
+        "kind": "finish",
+        "fault": "none"
+      }
+    ]
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "id": "titling-recovery-undecoded",
+  "tier": "S",
+  "scrub": "synthetic-structure-only",
+  "seed_blob_sha256": [
+    "673ad6e5f2cf44f171dffafdd7c6bbfb04015dfe0b2a24b0dcd622e44f83684f",
+    "a16e7a0a44f4ee954a4f23c74bd326662e901d894b7e15c61bb3aa79bbf35e0e"
+  ],
+  "created": "2026-11-04T00:00:00Z",
+  "prod_evidence": {},
+  "notes": "Synthetic mechanism; baseline measured against WP1 product source.",
+  "stages": {
+    "titling": {
+      "expect_stop_stage": "titling",
+      "expect_reason": "titling:precondition_skipped:recovery_undecoded"
+    }
+  }
+}

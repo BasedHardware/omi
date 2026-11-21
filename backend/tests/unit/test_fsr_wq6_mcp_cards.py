@@ -187,7 +187,11 @@ def test_visibility_filters_curated_rows_and_encryption_unchanged(monkeypatch, k
     # Exercise the existing decryption decorator, without external key material.
     from database import conversations
 
-    monkeypatch.setattr(conversations, '_decrypt_conversation_data', lambda data, uid: {**data, 'decrypted': uid})
+    monkeypatch.setattr(
+        conversations,
+        '_decrypt_conversation_data',
+        lambda data, uid, *, firestore_client=None: {**data, 'decrypted': uid},
+    )
     results = []
     for on in (False, True):
         enable(monkeypatch, on)

@@ -2,6 +2,7 @@
 
 import asyncio
 import contextvars
+import importlib
 import logging
 import threading
 import time
@@ -25,6 +26,16 @@ from utils.executors import (
 
 _test_executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="test")
 _test_ctxvar = contextvars.ContextVar("test_key", default=None)
+
+
+@pytest.fixture(scope='module', autouse=True)
+def exception_reporting_dependencies():
+    # These tests time task execution and exception logging, not cold imports.
+    # Both dependencies are deliberately lazy in production. Initialize them
+    # during setup, retaining the existing two-second Future deadlines and all
+    # real classification/logging assertions below.
+    importlib.import_module('utils.llm.gateway_error_contract')
+    _openrouter_credit_exhausted_error()
 
 
 @pytest.mark.asyncio
@@ -211,17 +222,24 @@ def test_get_executor_metrics_returns_all_pools():
         'quiet_replay',
         'critical',
         'db',
+        'free_allowance',
+        'read_cache_shadow',
+        'record_barrier',
         'llm',
         'stripe',
+        'admission',
         'sync',
+        'record_language',
         'postprocess',
         'cleanup',
+        'erasure',
         'storage',
         'speaker_tag_verify',
         'cimd',
         'open_loops',
     }
-    assert names == expected
+    assert expected <= names
+    assert names == {executor.name for executor in _ALL_EXECUTORS}
 
 
 def test_get_executor_metrics_fields():
@@ -330,6 +348,53 @@ def test_submit_with_context_still_logs_unexpected_background_failures(caplog):
         time.sleep(0.05)
 
     assert any(record.levelno >= logging.ERROR and 'bg-boom' in record.message for record in caplog.records)
+
+
+def _openrouter_credit_exhausted_error():
+    # Direct BYOK OpenRouter lane's live 402 spelling (see
+    # test_conversation_structure_byok_quota.py for the prod signature).
+    import httpx
+    import openai
+
+    body = {
+        'error': {
+            'message': 'This request requires more credits, or fewer max_tokens. To increase, visit '
+            'https://openrouter.ai/settings/credits and upgrade to a paid account',
+            'code': 402,
+            'metadata': {'limit_source': 'openrouter_credits'},
+        }
+    }
+    request = httpx.Request('POST', 'https://openrouter.ai/api/v1/chat/completions')
+    response = httpx.Response(402, request=request, json=body)
+    return openai.APIStatusError(f'Error code: 402 - {body}', response=response, body=body)
+
+
+def test_submit_with_context_logs_byok_quota_halt_without_traceback(caplog):
+    """A spent BYOK provider account halts the task; that is not a background crash."""
+    from utils.byok import set_byok_uid, set_validated_byok_keys
+
+    # Direct-lane provider errors only classify on the user's validated key;
+    # submit_with_context propagates that BYOK context into the task.
+    set_validated_byok_keys({'openrouter': 'sk-or-byok-unit'}, 'uid_byok_executors')
+    try:
+
+        def spent():
+            raise _openrouter_credit_exhausted_error()
+
+        with caplog.at_level(logging.INFO, logger='utils.executors'):
+            future = submit_with_context(_test_executor, spent)
+            with pytest.raises(Exception, match='requires more credits'):
+                future.result(timeout=2)
+            time.sleep(0.05)
+    finally:
+        set_validated_byok_keys({}, 'uid_byok_executors')
+        set_byok_uid(None)
+
+    assert any('halted reason=byok_quota' in record.message for record in caplog.records)
+    assert not any(record.levelno >= logging.ERROR for record in caplog.records)
+    # The provider's error body and the SDK traceback must not reach the log.
+    assert not any(record.exc_info not in (None, (None, None, None)) for record in caplog.records)
+    assert not any('openrouter.ai/settings/credits' in record.message for record in caplog.records)
 
 
 @pytest.mark.asyncio
@@ -614,3 +679,45 @@ def test_shutdown_cancels_deferred_payloads_without_retrying_on_a_closed_pool():
     finally:
         release.set()
         pool.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_tracked_storage_queue_survives_caller_cancellation_until_settlement():
+    """Abandon proof includes queued shared-storage work, not just running leaves."""
+    from utils.executors import ExecutorFutureTracker
+
+    entered = asyncio.Event()
+    release = threading.Event()
+    loop = asyncio.get_running_loop()
+    writes = []
+
+    def held_write():
+        loop.call_soon_threadsafe(entered.set)
+        assert release.wait(10)
+        writes.append('running')
+
+    with ThreadPoolExecutor(max_workers=1, thread_name_prefix='storage-test') as pool:
+        tracker = ExecutorFutureTracker(pool)
+        with tracker.scope():
+            running = asyncio.create_task(run_blocking(pool, held_write))
+            queued = asyncio.create_task(run_blocking(pool, lambda: writes.append('queued')))
+        waiter = None
+        try:
+            await asyncio.wait_for(entered.wait(), 5)
+            await asyncio.sleep(0)
+            assert len(tracker.pending) == 2
+            running.cancel()
+            queued.cancel()
+            await asyncio.gather(running, queued, return_exceptions=True)
+            waiter = asyncio.create_task(tracker.wait())
+            await asyncio.sleep(0)
+            assert not waiter.done() and writes == []
+            release.set()
+            await asyncio.wait_for(waiter, 5)
+            assert writes == ['running', 'queued']
+            assert not tracker.pending
+        finally:
+            release.set()
+            await asyncio.gather(running, queued, return_exceptions=True)
+            if waiter is not None:
+                await asyncio.wait_for(waiter, 5)

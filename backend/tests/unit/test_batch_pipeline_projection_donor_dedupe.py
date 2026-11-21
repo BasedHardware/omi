@@ -2,6 +2,7 @@
 
 from copy import deepcopy
 from dataclasses import asdict
+from dataclasses import replace
 from datetime import timedelta
 import logging
 import threading
@@ -151,6 +152,30 @@ def batch_projection(monkeypatch):
     return SimpleNamespace(**locals())
 
 
+@pytest.mark.parametrize('provider', [False, True], ids=['gpu', 'provider-no-manifest'])
+def test_untrusted_receipt_clock_projects_without_temporal_binding(batch_projection, monkeypatch, provider):
+    lane = batch_projection
+    binding = replace(lane.binding, target_conversation_id=None)
+    lane.context['conversation_id'] = None
+    work = replace(lane.work, capture_time_trust='untrusted', requires_compute_admission=not provider)
+    job = lane.client.rows[(f'{lane.namespace}_jobs', work.segment_id)]
+    job.update(work.to_dict(), projection_binding=asdict(binding))
+    before_live = deepcopy(lane.client.rows[('users', 'u', 'conversations', 'live')])
+    before_donor = deepcopy(lane.client.rows[('users', 'u', 'conversations', 'donor')])
+    closest = Mock(side_effect=AssertionError('receipt-clock time is not a binding proof'))
+    monkeypatch.setattr(db, 'get_closest_conversation_to_timestamps', closest)
+    if provider:
+        monkeypatch.setattr(lane.projector, 'fetch_audio', Mock(side_effect=AssertionError('no provider manifest')))
+    lane.projector.project('segment')
+    closest.assert_not_called()
+    lane.planned.assert_not_called()
+    assert lane.client.rows[('users', 'u', 'conversations', 'live')] == before_live
+    assert lane.client.rows[('users', 'u', 'conversations', 'donor')] == before_donor
+    entry = lane.client.rows[(f'{lane.namespace}_results', 'segment')]
+    stored = lane.client.rows[('users', 'u', 'conversations', entry['projection']['conversation_id'])]
+    assert stored['capture_time_trust'] == 'untrusted'
+
+
 @pytest.mark.parametrize('gate', ['on', 'no_s1', 'dedupe_off', 'lineage_off', 'not_allowlisted'])
 def test_batch_entrypoint_dedupes_donor_and_observes_committed_transfer(batch_projection, monkeypatch, caplog, gate):
     lane = batch_projection
@@ -222,7 +247,11 @@ def test_batch_admission_switches_still_bound_projection_cohort(monkeypatch, gat
         assert not store.rows
     else:
         assert admit(store, works, binding, 0, namespace='batch_pipeline_test_donor')['outcome'] == 'batch'
-        assert store.rows['jobs', 'segment']['projection_binding'] == asdict(binding)
+        stored = store.rows['jobs', 'segment']['projection_binding']
+        # Ordinary wire bindings omit the new partial-only default so old
+        # projection hosts can still construct them during the rollout.
+        assert 'partial_record' not in stored
+        assert ProjectionBinding(**stored) == binding
 
 
 def test_record_projection_replacement_rolls_over_before_staging_oversized_live_write(batch_projection, monkeypatch):

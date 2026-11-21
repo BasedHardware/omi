@@ -4,18 +4,19 @@
 
 ### A 2nd brain you trust more than your 1st
 
-Omi captures your screen and conversations, transcribes in real-time, generates summaries and action items, and gives you an AI chat that remembers everything you've seen and heard. Works on desktop, phone and wearables. Fully open source.
-
-Trusted by 300,000+ professionals.
-
+Omi captures your screen and conversations, transcribes in real-time, generates summaries and action items, and gives you an AI chat that remembers everything you've seen and heard. Works on desktop, phone and wearables.
 
 [![Discord](https://img.shields.io/discord/1192313062041067520?label=Discord&logo=discord&logoColor=white&style=for-the-badge)](http://discord.omi.me)&ensp;
 [![GitHub Repo stars](https://img.shields.io/github/stars/BasedHardware/Omi?style=for-the-badge)](https://github.com/BasedHardware/Omi)&ensp;
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](https://opensource.org/licenses/MIT)
 
-[Website](https://omi.me/) · [Docs](https://docs.omi.me/) · [Discord](http://discord.omi.me) · [Twitter](https://x.com/kodjima33) · [DeepWiki](https://deepwiki.com/BasedHardware/omi)
+[Website](https://omi.me/) · [Developer Docs](https://docs.omi.me/) · [Help Center](https://help.omi.me) · [Discord](http://discord.omi.me)
 
 </div>
+
+## What is Omi?
+
+Omi is an open-source AI wearable platform: a necklace that captures conversations, apps for phone and desktop, and a backend that turns what you say into memory you can search and chat with. The mobile apps, desktop apps, backend, firmware, and hardware designs are all open source in this repository (MIT); the hosted Omi Cloud service and paid plans are described at [omi.me](https://www.omi.me/).
 
 ## Quick Start
 
@@ -43,17 +44,15 @@ Starts the Windows desktop app from source using the public config in `.env.exam
 
 > **Requirements:** [Node.js](https://nodejs.org/)
 
-For development worktrees, run the baseline local setup once. It installs the Git hooks and syncs the pinned backend Python environment used by selected pre-push checks; mobile and desktop runtime environments remain opt-in.
+In a development worktree, run `make setup` once. It installs the Git hooks and syncs the pinned backend Python environment that some pre-push checks use. Mobile and desktop environments stay opt-in.
 
 ```bash
 make setup
 ```
 
-The pre-push hook first runs `scripts/worktree_env_doctor.py`, which fails in seconds when a phase the push selects needs local state this worktree lacks (app dependencies, `backend/.venv`, a stale SwiftPM `.build`) and prints the one command that fixes it. Run `python3 scripts/worktree_env_doctor.py --all --fix` to bring a new worktree's app, backend, and desktop state up front.
-
 <details>
-  <summary>Full Installation</summary>
-  
+<summary>Full Installation</summary>
+
 For local development with the full backend stack:
 
 1. Install prerequisites
@@ -68,7 +67,7 @@ uv --version
 ```bash
 git clone https://github.com/BasedHardware/omi.git
 cd omi/desktop/macos
-cp ../../backend/.env.example ../../backend/.env
+cp ../../backend/.env.template ../../backend/.env
 ```
 
 3. Build and run
@@ -78,7 +77,6 @@ cp ../../backend/.env.example ../../backend/.env
 ```
 
 See [desktop/macos/README.md](desktop/macos/README.md) for environment variables and credential setup.
-
 
 ### Mobile App
 
@@ -99,7 +97,7 @@ cd app && bash setup.sh ios    # or: bash setup.sh android
 </p>
 
 <details>
-  <summary>How it works</summary>
+<summary>How it works</summary>
 
 
 ```
@@ -121,10 +119,9 @@ cd app && bash setup.sh ios    # or: bash setup.sh android
 │  │ Listen  │  │ Pusher   │  │ VAD     │  │ Diarizer │  │
 │  │ (REST)  │  │ (WS)     │  │ (GPU)   │  │ (GPU)    │  │
 │  └─────────┘  └──────────┘  └─────────┘  └──────────┘  │
-│                                                         │
 │  ┌─────────┐  ┌──────────┐  ┌─────────┐  ┌──────────┐  │
-│  │ Soniox  │  │ Firestore│  │ Redis   │  │ LLMs     │  │
-│  │ (STT)   │  │ (DB)     │  │ (Cache) │  │ (AI)     │  │
+│  │ STT     │  │ Firestore│  │ Redis   │  │ LLMs     │  │
+│  │         │  │ (DB)     │  │ (Cache) │  │ (AI)     │  │
 │  └─────────┘  └──────────┘  └─────────┘  └──────────┘  │
 └─────────────────────────────────────────────────────────┘
 ```
@@ -143,55 +140,35 @@ cd app && bash setup.sh ios    # or: bash setup.sh android
 
 ## Documentation
 
-### Getting Started
-- [Introduction](https://docs.omi.me/)
-- [Quick Start Guide](https://docs.omi.me/quickstart)
-- [macOS App Development](desktop/macos/README.md)
-- [Mobile App Setup](https://docs.omi.me/doc/developer/AppSetup)
-- [Backend Setup](https://docs.omi.me/doc/developer/backend/Backend_Setup)
-- [Contributing](https://docs.omi.me/doc/developer/Contribution) — also [`CONTRIBUTING.md`](CONTRIBUTING.md) and [`PRODUCT.md`](PRODUCT.md)
+Everything for builders lives at **[docs.omi.me](https://docs.omi.me)**: apps and webhooks, the Developer API, the MCP server, the CLI, SDKs, hardware, and how Omi works. End-user guides live in the [help center](https://help.omi.me).
 
-### Building Apps
-- [App Development Guide](https://docs.omi.me/doc/developer/apps/Introduction)
-- [Example Apps](https://docs.omi.me/doc/developer/apps/examples/Github) — GitHub, Slack, OmiMentor
-- [Audio Streaming Apps](https://docs.omi.me/doc/developer/apps/AudioStreaming)
-- [Custom Chat Tools](https://docs.omi.me/doc/developer/apps/ChatTools)
-- [Submit to App Store](https://docs.omi.me/doc/developer/apps/Submitting)
-
-### API & SDKs
-- [API Reference](https://docs.omi.me/api-reference/introduction) — REST endpoints for memories, conversations, action items
-- [Device multi-lang protocol SDKs](sdks/device/) — shared BLE UUIDs/packet framing for TS/Go/Rust/C++/Dart
-- [Python device SDK](sdks/python/) — full BLE + Opus + Deepgram
-- [Swift device SDK](sdks/swift/)
-- [React Native device SDK](sdks/react-native/)
-- [MCP Server](mcp/) — Model Context Protocol integration
-
-### Architecture
-- [Backend Deep Dive](https://docs.omi.me/doc/developer/backend/backend_deepdive)
-- [Transcription Pipeline](https://docs.omi.me/doc/developer/backend/transcription)
-- [Chat System](https://docs.omi.me/doc/developer/backend/chat_system)
-- [Audio Streaming Pipeline](https://docs.omi.me/doc/developer/backend/backend_deepdive)
-- [BLE Protocol](https://docs.omi.me/doc/developer/Protocol)
+- [What is Omi](https://docs.omi.me/doc/get_started/what-is-omi) · [Choose your path](https://docs.omi.me/doc/get_started/choose-your-path)
+- [Developer API](https://docs.omi.me/doc/developer/api/overview) · [API reference](https://docs.omi.me/api-reference/introduction)
+- [Build apps](https://docs.omi.me/doc/developer/apps/Introduction) · [MCP server](https://docs.omi.me/doc/developer/mcp/introduction) · [CLI](https://docs.omi.me/doc/developer/cli/introduction) · [SDKs](https://docs.omi.me/doc/developer/sdk/sdk)
+- [Hardware & firmware](https://docs.omi.me/doc/hardware/OmiConsumer) · [Open hardware files](https://docs.omi.me/doc/hardware/consumer/index)
+- [Developer changelog](https://docs.omi.me/doc/reference/changelog)
 
 ## Omi Hardware
+
 ![Omi](https://github.com/user-attachments/assets/7a658366-9e02-4057-bde5-a510e1f0217a)
 
-Open-source AI wearables that pair with the mobile app for 24h+ continuous capture.
+Open-source AI wearables that pair with the mobile app for continuous capture.
 
 <p align="center">
   <img src="https://github.com/user-attachments/assets/834d3fdb-31b5-4f22-ae35-da3d2b9a8f59" alt="Omi Wearable" width="49%" />
   <img src="https://github.com/user-attachments/assets/fdad4226-e5ce-4c55-b547-9101edfa3203" alt="Omi Glass" width="49%" />
 </p>
 
-- [Buy Omi](https://www.omi.me/pages/product)
-- [Buy Omi Glass Dev Kit](https://www.omi.me/glass) — ESP32-S3, camera + audio
-- [Open Source Hardware Designs](https://docs.omi.me/doc/hardware/consumer/electronics)
-- [Buying Guide](https://docs.omi.me/doc/assembly/Buying_Guide)
-- [Build the Device](https://docs.omi.me/doc/assembly/Build_the_device)
-- [Flash Firmware](https://docs.omi.me/doc/get_started/Flash_device)
-- [Integrate Your Wearable](https://docs.omi.me/doc/integrations)
-- [Hardware Specs](https://docs.omi.me/doc/hardware/DevKit2)
+- [Buy Omi](https://www.omi.me/pages/product) · [Buy Omi Glass Dev Kit](https://www.omi.me/glass)
+- [Hardware docs](https://docs.omi.me/doc/hardware/OmiConsumer) · [Open hardware files](https://docs.omi.me/doc/hardware/consumer/index)
+- [Flash firmware](https://docs.omi.me/doc/get_started/Flash_device) · [Integrate your own wearable](https://docs.omi.me/doc/integrations)
+
+## Contributing
+
+Contributions are welcome: bug reports with reproductions, apps and integrations built on the platform, community ports, and core PRs. Read the [contribution guide](https://docs.omi.me/doc/developer/Contribution) and [`CONTRIBUTING.md`](CONTRIBUTING.md) first; [`PRODUCT.md`](PRODUCT.md) describes the product direction and invariants. Paid, team-posted [bounties](https://docs.omi.me/doc/contribute/bounties) appear on issues labeled "Paid Bounty 💰".
+
+Community: [Discord](http://discord.omi.me) · [Code of Conduct](CODE_OF_CONDUCT.md). User support: [help.omi.me](https://help.omi.me). Business and legal: [team@basedhardware.com](mailto:team@basedhardware.com).
 
 ## License
 
-MIT — see [LICENSE](LICENSE)
+MIT. See [LICENSE](LICENSE).

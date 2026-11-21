@@ -12,6 +12,10 @@ import 'package:just_audio/just_audio.dart';
 import 'package:omi/backend/http/api/audio.dart';
 import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/backend/schema/conversation_v3.dart';
+import 'package:omi/pages/conversations/widgets/live_conversation_end_button.dart';
+import 'package:omi/providers/conversations_v3_provider.dart';
+import 'package:provider/provider.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/utils/analytics/analytics_manager.dart';
@@ -63,6 +67,7 @@ class ConversationBottomBar extends StatefulWidget {
   final ConversationTab selectedTab;
   final Function(ConversationTab) onTabSelected;
   final VoidCallback onStopPressed;
+  final ValueChanged<bool>? onLiveEndSuppressionChanged;
   final bool hasSegments;
   final ServerConversation? conversation;
   final Function(Future<void> Function(double start, double end))? onSeekFunctionReady;
@@ -84,6 +89,7 @@ class ConversationBottomBar extends StatefulWidget {
     required this.selectedTab,
     required this.onTabSelected,
     required this.onStopPressed,
+    this.onLiveEndSuppressionChanged,
     this.hasSegments = true,
     this.conversation,
     this.onSeekFunctionReady,
@@ -914,10 +920,31 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
 
   /// The detail page's one bar (v3): on Transcript the recording's waveform player with a round Ask
   /// button beside it; on Summary, or a conversation without audio, the Ask Omi bar alone. The
-  /// summarizing app is picked from the ⋯ menu.
+  /// summarizing app is picked from the ⋯ menu. A conversation still in progress that this phone is
+  /// capturing has End Conversation beside Ask Omi, the pendant double-tap's action.
   Widget _buildDetailBar(BuildContext context) {
     final hasAudio = widget.conversation?.hasAudio() ?? false;
     final showPlayer = widget.selectedTab == ConversationTab.transcript && hasAudio;
+    // Gated on the account's v3 answer like every other tile-state reader, so a stale live document
+    // after a rollback does not grow an End button.
+    final live = context.select<ConversationsV3Provider?, bool>((p) => p?.v3 ?? false) &&
+        widget.conversation?.v3?.tileState == ConversationTileState.live;
+    if (live) {
+      // End is on both tabs: beside Ask Omi, or beside the player's round Ask button.
+      return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md),
+        child: Row(children: [
+          if (showPlayer) ...[
+            Expanded(child: KeyedSubtree(key: const ValueKey('detail_audio_player'), child: _buildPlayer())),
+            const SizedBox(width: 10),
+            _buildAskButton(context),
+          ] else
+            Expanded(child: _buildAskBar(context)),
+          LiveConversationEndButton(
+              conversation: widget.conversation!, onEndSuppressionChanged: widget.onLiveEndSuppressionChanged),
+        ]),
+      );
+    }
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md),
       child: showPlayer

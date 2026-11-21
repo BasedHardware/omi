@@ -1,7 +1,7 @@
 """Dark, batch-hash live vendor retirement; final transcript ownership is durable."""
 
 from config.batch_pipeline import record_capture_eligible
-from config.server_batch import MARKER
+from config.server_batch import MARKER, PREVIEW_CUSTODY_MARKER
 from config.stt_provider_policy import PARAKEET_SUPPORTED_LANGUAGES_BY_MODEL, normalized_stt_language
 
 
@@ -66,6 +66,8 @@ def capture_snapshot(capture: dict) -> dict:
     }
     if (capture.get('external_data') or {}).get(MARKER) is True:
         snapshot[MARKER] = True
+    if (capture.get('external_data') or {}).get(PREVIEW_CUSTODY_MARKER) is True:
+        snapshot[PREVIEW_CUSTODY_MARKER] = True
     return snapshot
 
 

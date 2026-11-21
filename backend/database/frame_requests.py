@@ -15,7 +15,11 @@ from typing import Any, Callable
 from google.cloud import firestore
 
 from database._client import get_data_plane_firestore_client
-from database.conversations import conversations_collection, prepare_photo_for_write
+from database.conversations import (
+    conversations_collection,
+    is_soft_deleted,
+    prepare_photo_for_write,
+)
 from database.durable_queue import ProcessOutcome, drain_isolated
 from database.firestore_index_registry import (
     FRAME_REQUEST_METADATA_EXPIRY_QUERY,
@@ -46,6 +50,10 @@ FRAME_REQUESTS_COLLECTION = "frame_requests"
 FRAME_UPLOAD_ORPHANS_COLLECTION = "frame_upload_orphans"
 FRAME_DELETION_OUTBOX_COLLECTION = "frame_deletion_outbox"
 FRAME_VISION_RECEIPTS_COLLECTION = "frame_vision_receipts"
+
+
+class FrameRequestQuotaExceeded(ValueError):
+    """Enqueue refused because the device's pending work is at quota."""
 
 
 @dataclass(frozen=True)
@@ -288,7 +296,8 @@ def attach_frame_request_to_conversation(
             raise ValueError("only uploaded frame requests may be promoted")
 
         conversation_snapshot = conversation_ref.get(transaction=transaction)
-        if not conversation_snapshot.exists:
+        conversation_data = conversation_snapshot.to_dict() if conversation_snapshot.exists else None
+        if not conversation_snapshot.exists or is_soft_deleted(conversation_data):
             raise KeyError("conversation not found")
 
         # Firestore reads in this transaction establish a contention fence for
@@ -316,7 +325,7 @@ def attach_frame_request_to_conversation(
             if existing_storage_id != permanent_storage_id:
                 raise ValueError("conversation photo id is already used")
         else:
-            level = (conversation_snapshot.to_dict() or {}).get("data_protection_level", "standard")
+            level = (conversation_data or {}).get("data_protection_level", "standard")
             photo_data = prepare_photo_for_write(
                 {
                     "id": request.request_id,
@@ -553,7 +562,7 @@ def enqueue_frame_request(
         ]
         quota = check_device_quota(existing_rows, uid=owner_uid, device_id=owner_device, now=created)
         if not quota.allowed:
-            raise ValueError(f"frame request quota exceeded: {quota.reason}")
+            raise FrameRequestQuotaExceeded(f"frame request quota exceeded: {quota.reason}")
         transaction.create(collection.document(request_id), _request_data(request))
         return _request_data(request), False
 
@@ -620,11 +629,17 @@ def list_recoverable_frame_requests(
     limit: int = FRAME_REQUEST_MAX_BATCH,
     firestore_client: Any | None = None,
 ) -> list[FrameRequest]:
-    """Return requested/claimed/uploaded rows for in-flight device recovery."""
+    """Prune expired work and return live rows for in-flight device recovery."""
 
     if not 1 <= limit <= FRAME_REQUEST_MAX_BATCH:
         raise ValueError("limit is outside the bounded frame-request window")
     current = _utc(now or datetime.now(timezone.utc))
+    prune_expired_frame_requests(
+        uid,
+        account_generation=account_generation,
+        now=current,
+        firestore_client=firestore_client,
+    )
     query = (
         _collection(uid, firestore_client=firestore_client)
         .where(filter=firestore.FieldFilter("device_id", "==", device_id))
@@ -927,6 +942,7 @@ def prune_expired_frame_requests(
     query = (
         _collection(uid, firestore_client=client)
         .where(filter=firestore.FieldFilter("state", "in", ["requested", "claimed", "uploaded"]))
+        .where(filter=firestore.FieldFilter("expires_at", "<=", current))
         .order_by("expires_at", direction=firestore.Query.ASCENDING)
     )
     if account_generation is not None:

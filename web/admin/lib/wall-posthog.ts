@@ -442,6 +442,44 @@ export const CAPTURE_SEGMENTS = [
   "No capture",
 ] as const;
 
+/** One matured weekly new-user cohort split by platform and by "device": paired
+ * Omi hardware within 48 hours of first seen. Mobile and macOS both send
+ * `device_vendor` 'omi' for Omi and Omi Glass; `type` covers older mobile
+ * builds. Other vendors (Apple Watch, Limitless, …) also send Device Paired and
+ * stay organic. A buyer who never paired counts as organic, so the split is a
+ * proxy. Kept (activated, then active in days 7–35) needs the
+ * scan to run 28 days past `end`, so it is complete only once `end` is at least
+ * 28 days old; later scan days that have not happened yet read nothing.
+ * Columns: entry, device, people, onboarded, conv1, conv7, activated, kept.
+ */
+export function deviceFunnelQuery(end: Date) {
+  const cohortEnd = shiftDay(end, -7);
+  const start = shiftDay(cohortEnd, -7);
+  return `WITH ${raw(
+    shiftDay(start, -180),
+    shiftDay(end, 28),
+    `AND person.created_at >= ${sqlTime(
+      start
+    )} AND person.created_at < ${sqlTime(cohortEnd)}`
+  )},
+    people AS (SELECT actor,min(anchor) a,
+      coalesce(nullIf(argMinIf(p,tuple(timestamp,${PLATFORM_RANK_SQL}),p!='unknown'),''),'unknown') entry,
+      min(timestamp) first_event,
+      countIf(event='Device Paired' AND (properties.device_vendor='omi' OR properties.type IN ('omi','openglass'))
+        AND timestamp < anchor + interval 2 day) > 0 device,
+      countIf(event='Onboarding Completed' AND timestamp < anchor + interval 7 day) > 0 onboarded,
+      countIf(cap AND qt >= anchor AND qt < anchor + interval 1 day) > 0 conv1,
+      countIf(cap AND qt >= anchor AND qt < anchor + interval 7 day) > 0 conv7,
+      uniqExactIf(${UTC_DAY(
+        "qt"
+      )},(fg OR cap) AND qt >= anchor AND qt < anchor + interval 7 day) days7,
+      countIf((fg OR cap) AND qt >= anchor + interval 7 day AND qt < anchor + interval 35 day) > 0 later
+      FROM qualified GROUP BY actor)
+    SELECT entry,device,count(),countIf(onboarded),countIf(conv1),countIf(conv7),
+      countIf(days7>=2),countIf(days7>=2 AND later)
+    FROM people WHERE first_event >= a GROUP BY entry,device LIMIT 100`;
+}
+
 /** Week-one activation by first-week capture source for the latest matured
  * weekly cohort: the snapshot cohort (same anchor, 180-day history check and
  * ≥2 qualified days), so segment people sum to the activation denominator.

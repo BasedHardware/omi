@@ -83,10 +83,9 @@ submission after build 1504): `mobile_store_promote.py`'s
 `changesNotSentForReview=true`, the train parks the ladder, and the brake
 joins the held queue) and both Play publishing blocks in `codemagic.yaml`
 set `changes_not_sent_for_review: true`. `ANDROID_HELD_CHANGES_MODE` in
-`.github/scripts/mobile_distribution.py` was not flipped back with them and
-is still `False` — the dispatcher prints no
-`android_distribution=held-changes-mode` line until it is. While the mode is
-on, the consequences below apply:
+`.github/scripts/mobile_distribution.py` is `True` with them (it lagged as
+`False` until 2026-11-01; `test_play_held_changes_flags_agree` now pins all
+four together). While the mode is on, the consequences below apply:
 
 - Distribution evidence: a settled Codemagic publishing action only proves
   the edit committed — testers cannot install a held change. The internal
@@ -95,8 +94,7 @@ on, the consequences below apply:
   the same source would not unhold it — it would drift back to a build per
   scheduled run); while `ANDROID_HELD_CHANGES_MODE` is set, every scheduled
   dispatcher run also prints an `android_distribution=held-changes-mode`
-  line so a held distribution cannot stall silently (that flag is currently
-  `False`, so the line is absent even though held mode is on). The press
+  line so a held distribution cannot stall silently. The press
   itself is operator
   evidence: the release gate treats Android internal distribution as done
   only after it.
@@ -131,14 +129,19 @@ on, the consequences below apply:
   set pin that mismatches the store refuses like every other pin check. On
   2026-10-28 this wedge held production on 1.0.578/1522 while the fixed
   1.0.579/1527 sat on internal, and the operator had to rebuild the release
-  by hand in Play Console. For a halted (not held) release the operator
+  by hand in Play Console. A hand-built release carries no gate receipt, so
+  the train parks on it from then on: building it by hand is only half the
+  fix, and the Send for review press must follow in the same sitting
+  (2026-10-30 -> 11-01 the hand-built 1.0.579/1527 @1% sat held and unsent,
+  and every daily train parked behind it while 1.0.583/1546 waited on
+  internal). For a halted (not held) release the operator
   tool is still the path: `BRAKE_ACTION=stage` in
   `app/scripts/mobile_rollout_brake.md`.
 
 To flip held mode back off when Play again accepts automated review
 submission (one line plus its pinned tests): set `mobile_store_promote.py`'s
 `CHANGES_NOT_SENT_FOR_REVIEW = False`, set `ANDROID_HELD_CHANGES_MODE = False`
-in `.github/scripts/mobile_distribution.py` (it is already `False`), drop
+in `.github/scripts/mobile_distribution.py`, drop
 `changes_not_sent_for_review` from both Play publishing blocks in
 `codemagic.yaml` (and regenerate the workflow-contract fixture digests), and
 update the tests that pin the mode (`test_check_release_process_guards.py`,
@@ -174,7 +177,13 @@ Manual promotion: the `mobile-store-promote` Codemagic lane runs only on an
 explicit trigger, requires `CONFIRM=submit-for-review`, selects an
 already-uploaded build, and attaches the derived notes as the store "What's
 New" text. Deriving notes never submits anything; a missing or invalid release
-file fails the promotion closed.
+file fails the promotion closed. With held-changes mode enabled, an Android
+production release is written as `draft` and committed with
+`changesNotSentForReview=true`; it stays hidden until Play reports the release
+as completed. A successful manual submission and the daily train both emit an
+app-review receipt. If a receipt is missing, the lifecycle sweep creates a
+bounded hide on first sight of a non-completed production release; an expired
+tombstone prevents later sweeps from re-arming that version.
 
 ## Daily store train
 
@@ -243,6 +252,53 @@ making pins mandatory belongs to the gate, which lives outside this repo.
 Gate receipts: see "Intraday exposure ladder" above — every advancing Android
 action stamps a minute-precision receipt into the Play release name so a
 retry inside an observation window cannot hop twice.
+
+### Ladder liveness
+
+`mobile_rollout_watch.yml` only advances exposure while a `mobile_daily_train`
+run on `main` succeeded within `GATE_RECEIPT_MAX_AGE` (26h). A red or silent
+gate therefore freezes every ladder hop on both platforms, and nothing else
+in the pipeline notices. On 2026-11-14 → 11-16 that happened for real: the
+external dispatcher was paused, no train ran, every watch run printed
+`LADDER FROZEN`, and Android sat at 10% on 1.0.587 for two days while each
+scheduled run reported success.
+
+Two properties now keep that from being invisible:
+
+- **A frozen ladder fails the scheduled run.** The dispatcher exits non-zero
+  and emits a `::error::` annotation, so a stalled pipeline is a red run
+  instead of a green no-op. The step summary keeps the reason either way.
+- **The freeze says which failure it is.** The message names the last
+  *successful* run and the newest run with its conclusion, so "no dispatcher
+  at all" (`latest run: none`), "the train is failing" (`latest run: failure
+  at …`) and "the train is fine but stale" are distinguishable without reading
+  the workflow list by hand.
+
+Recovery, in order of preference:
+
+1. Get a green daily train dispatched (that is the normal path; the ladder
+   unfreezes as soon as the run succeeds and the next watch run hops).
+2. If the dispatcher is deliberately paused and the release owner has decided
+   the already-released rollouts should still move, dispatch the watch
+   manually with `gate_freeze_override=<reason>`. The reason is printed,
+   summarized, and emitted as a warning; the default stays frozen.
+
+Held-changes mode is the other half of the same problem. While
+`CHANGES_NOT_SENT_FOR_REVIEW` is on, `mobile_daily_train.py` parks the Android
+ladder instead of hopping: a held hop is invisible to the Play API, so hopping
+blind would stack held steps and one Send-for-review press would then release
+full exposure with no observation window. In that mode Android exposure only
+advances when an operator presses Send for review and moves the fraction in
+Play Console, so Android *cannot* track the iOS schedule automatically — iOS
+submits and ramps with no human step. Restoring platform parity therefore
+requires Play to accept automated review submission again; the flip procedure
+is in "Store and distribution behavior" above.
+
+Exposure parity is pinned by a test:
+`test_android_reaches_full_exposure_on_the_ios_clock` asserts that the Android
+ladder (`len(STAGED_ROLLOUT_LADDER) - 1` hops of `ROLLOUT_HOP_MIN_HOURS`)
+covers exactly `IOS_PHASED_JUMP_HOURS`. Editing either clock without the other
+fails the suite rather than silently desynchronising the platforms.
 
 ### One iOS version with Apple at a time
 
@@ -364,4 +420,11 @@ on 2026-10-14 is the queue point: after approval, releases proceed without a
 further human console press (previously: manual developer release on iOS and
 a Play production draft). The Play Publishing overview → Send for review
 press required 2026-10-26 → 2026-10-27 and again since 2026-10-28 is part of
-Play's held-changes mode (see "Store and distribution behavior").
+Play's held-changes mode (see "Store and distribution behavior"). The app-review
+lease begins when the successful held submission is recorded, or when the
+sweep first observes its non-completed production release if the receipt is
+missing. It does not begin when an operator later presses Send for review;
+time spent waiting in Publishing overview therefore uses part of the 14-day
+protection window. A held production draft also blocks the rollout brake's
+stage path by design; use Play Console to resolve that state during an
+incident.

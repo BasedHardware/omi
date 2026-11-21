@@ -1,3 +1,9 @@
+// The floating/notch control bar window: NSPanel lifecycle, screen attachment,
+// animation, and the window-level behaviors the bar's views rely on.
+//
+// The window is presentation chrome over FloatingControlBarState -- it must not
+// own chat state or a second transcript, because every surface is a viewport
+// over the one shared ChatProvider (FloatingControlBar/ARCHITECTURE.md).
 import Cocoa
 import Combine
 @preconcurrency import ObjectiveC
@@ -3251,7 +3257,7 @@ class FloatingControlBarManager {
     snoozeTimer?.invalidate()
     snoozeTimer = nil
     if isEnabled {
-      window?.makeKeyAndOrderFront(nil)
+      window?.orderFrontRegardless()
     }
   }
 
@@ -3729,7 +3735,7 @@ class FloatingControlBarManager {
     }
     log("FloatingControlBarManager: showTemporarily() — showing bar above Chrome")
     window?.normalizeForTemporaryShow()
-    window?.makeKeyAndOrderFront(nil)
+    window?.orderFrontRegardless()
   }
 
   /// A feedback task may outlive the card that launched it. Callers use this
@@ -4161,7 +4167,7 @@ class FloatingControlBarManager {
       if window.state.showingAIConversation {
         window.closeAIConversation(intent: .voiceHandoff)
       } else if !window.isVisible {
-        window.makeKeyAndOrderFront(nil)
+        window.orderFrontRegardless()
       }
       Task { @MainActor in
         guard VoiceTurnCoordinator.shared.requireCurrentOwner(for: voiceTurnID) != nil else {
@@ -4205,7 +4211,7 @@ class FloatingControlBarManager {
     if !window.isVisible {
       // Show window without persisting enabled state — if the user has the bar
       // disabled, it will hide again when the AI conversation closes.
-      window.makeKeyAndOrderFront(nil)
+      window.orderFrontRegardless()
     }
 
     // Cancel any in-flight windowDidResignKey dismiss animation before saving the
@@ -4759,15 +4765,12 @@ class FloatingControlBarManager {
       window.dismissNotification(animated: false, resize: false)
     }
 
-    // The flag must survive the whole notification chain: when a queued
-    // notification is presented the window is already visible from the
-    // temp-show, so resetting it here would skip the re-hide in
-    // dismissNotificationAndAdvanceQueue and leave the bar on screen
-    // forever with "Show floating bar" off (#6972). The bar can also be
-    // visible while disabled (e.g. a notification flushed right as an AI
-    // conversation closes), so any presentation with the bar disabled
-    // must arm the re-hide; dismissNotificationAndAdvanceQueue owns the reset.
-    if !window.isVisible || !isEnabled {
+    // The flag must survive the whole notification chain (#6972), and any
+    // presentation while the bar is disabled or snoozed (e.g. flushed as an AI
+    // conversation closes) must also arm the re-hide; dismissNotificationAndAdvanceQueue owns the reset.
+    if FloatingBarDurableVisibilityPolicy.shouldArmTemporaryNotificationShow(
+      isWindowVisible: window.isVisible, isEnabled: isEnabled, isSnoozed: isSnoozed
+    ) {
       notificationWasTemporarilyShown = true
       if !window.isVisible {
         window.orderFrontRegardless()

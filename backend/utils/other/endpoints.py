@@ -11,6 +11,8 @@ from firebase_admin import auth
 from firebase_admin.auth import CertificateFetchError, ExpiredIdTokenError, InvalidIdTokenError, RevokedIdTokenError
 import logging
 
+from database.directory import router as directory_router
+from config import directory_routing
 from config.rollout_cohorts import load_rollout_cohorts
 import redis as redis_pkg
 
@@ -23,6 +25,7 @@ from utils.account_cutover.access import (
     cutover_enforcement_enabled,
     enforce_account_cutover_http_access,
     enforce_account_cutover_ws_access,
+    is_cutover_control_path,
 )
 from utils.api_key_families import FIREBASE_FAMILY, wrong_key_family_detail
 from utils.client_device import resolve_client_device
@@ -42,6 +45,26 @@ WS_AUTH_CODE_TOKEN_REFRESH = 4001
 WS_AUTH_CODE_RELOGIN_REQUIRED = 4004
 WS_AUTH_CODE_ACCOUNT_DELETION = 4005
 WS_AUTH_CODE_ACCOUNT_CUTOVER = 4006
+
+
+def _resolve_request_plane_or_503(uid, *, request=None, signup_platform=None, signup_os=None) -> None:
+    if is_cutover_control_path(getattr(getattr(request, 'url', None), 'path', '')):
+        return
+    try:
+        if not directory_router.routing_active():
+            return
+        directory_router.resolve(uid, signup_platform=signup_platform, signup_os=signup_os)
+    except (directory_router.DirectoryRoutingUnavailable, ValueError) as exc:
+        raise HTTPException(
+            status_code=503, detail={'code': 'directory_routing_unavailable', 'retryable': True}
+        ) from exc
+
+
+def _resolve_request_plane_ws(uid: str) -> None:
+    try:
+        _resolve_request_plane_or_503(uid)
+    except HTTPException as exc:
+        raise WebSocketException(code=1013, reason='directory_routing_unavailable') from exc
 
 
 def _executor_saturated_http_exception(error: ExecutorSaturatedError) -> HTTPException:
@@ -231,6 +254,20 @@ def _recover_locked_content_if_request(uid: str, request: Request | None) -> Non
         recover_locked_content(uid)
 
 
+def get_current_user_uid_readonly(
+    authorization: str = Header(None),
+    request: Request = None,  # pyright: ignore[reportArgumentType]  # FastAPI injects Request
+    _read_scope: Any = Depends(request_read_scope),
+) -> str:
+    """Verify owner and security fences without device/platform/recovery writes."""
+    uid = get_current_user_uid_for_deletion_status(authorization=authorization, _read_scope=_read_scope)
+    enforce_account_deletion_http_access(uid)
+    _enforce_cutover_http_if_request(uid, request)
+    _resolve_request_plane_or_503(uid, request=request)
+    validate_byok_request(uid)
+    return uid
+
+
 def get_current_user_uid(
     authorization: str = Header(None),
     x_app_platform: str = Header(None, alias='X-App-Platform'),
@@ -257,6 +294,7 @@ def get_current_user_uid(
         raise HTTPException(status_code=401, detail="Invalid authorization token")
     enforce_account_deletion_http_access(uid)
     _enforce_cutover_http_if_request(uid, request)
+    _resolve_request_plane_or_503(uid, request=request, signup_platform=x_app_platform)
 
     # Content-free telemetry and surface intent avoid customer-store
     # registration/recovery writes; security fences above and BYOK still apply.
@@ -324,6 +362,7 @@ def get_current_user_uid_no_byok_validation(
         raise HTTPException(status_code=401, detail="Invalid authorization token")
     enforce_account_deletion_http_access(uid)
     _enforce_cutover_http_if_request(uid, request)
+    _resolve_request_plane_or_503(uid, request=request, signup_platform=x_app_platform)
 
     try:
         record_user_platform(uid, x_app_platform)
@@ -456,6 +495,9 @@ async def get_current_user_uid_ws_listen(
             headers=websocket.headers,
         )
 
+    if not directory_routing.routing_off():
+        await run_blocking(db_executor, _resolve_request_plane_ws, uid)
+
     # Extract BYOK headers from the WS upgrade request and validate.
     if websocket is not None:  # pyright: ignore[reportUnnecessaryComparison]  # websocket is None outside WS context
         validated_byok_keys, error = await run_critical_ws(
@@ -484,6 +526,8 @@ def get_current_user_uid_ws(
             path=websocket.url.path,
             headers=websocket.headers,
         )
+
+    _resolve_request_plane_ws(uid)
 
     # Fail-open on Redis errors to avoid reintroducing handshake crashes
     try:
@@ -556,6 +600,8 @@ async def get_current_user_uid_from_ws_message(
             path=websocket.url.path,
             headers=websocket.headers,
         )
+    if not directory_routing.routing_off():
+        await run_blocking(db_executor, _resolve_request_plane_ws, uid)
     return uid
 
 

@@ -6,14 +6,13 @@ import os
 import time
 from typing import Any, TypedDict
 
-from database import cap_hold_redrive as store, users as users_db
+from database import cap_hold_redrive as store
 from database.account_deletion_marker import account_deletion_blocks_user_work
 from utils.executors import db_executor, run_blocking, start_background_task, storage_executor
 from utils import funded_processing, processing_backlog_worker
 from config.stt_cap_dispatch import execution_admission_configured, recovery_cohort_admits
-from config.plan_catalog import PAID_PLAN_TYPES
 from utils.observability.held_content import publish_fleet
-from utils.sync import live_cap_staging
+from utils.sync import cap_hold_recovery, live_cap_staging
 
 logger = logging.getLogger(__name__)
 
@@ -100,12 +99,12 @@ def owner(snap: Any, collection: str) -> str | None:
     return parts[1]
 
 
-async def _paid_first(choices: list[Any]) -> list[Any]:
-    """Order this bounded page by the current valid subscription, without writes.
+async def _paid_only(choices: list[Any]) -> list[Any]:
+    """Keep this bounded page's choices whose owner is on an active paid plan, without writes.
 
-    The collection-group cursor still advances fairly across pages. Each page
-    starts funded paid owners first; basic, missing and temporarily unreadable
-    subscriptions remain eligible only through the worker's normal gates.
+    The collection-group cursor still advances fairly across pages. Free,
+    missing and unreadable subscriptions are dropped (fail closed); the worker
+    rereads the entitlement before it spends anything.
     """
 
     async def is_paid(snap: Any) -> bool:
@@ -117,22 +116,10 @@ async def _paid_first(choices: list[Any]) -> list[Any]:
             or not funded_processing.enabled(uid)
         ):
             return False
-        try:
-            subscription = await run_blocking(db_executor, users_db.get_user_valid_subscription, uid, provision=False)
-        except Exception as error:
-            logger.warning(
-                'event=cap_hold_redrive outcome=subscription_priority_deferred uid=%s exception_type=%s',
-                uid,
-                type(error).__name__,
-                exc_info=True,
-            )
-            return False
-        return subscription is not None and subscription.plan in PAID_PLAN_TYPES
+        return await run_blocking(db_executor, funded_processing.paid_owner, uid)
 
     priorities = await asyncio.gather(*(is_paid(snap) for snap in choices))
-    return [snap for snap, paid in zip(choices, priorities) if paid] + [
-        snap for snap, paid in zip(choices, priorities) if not paid
-    ]
+    return [snap for snap, paid in zip(choices, priorities) if paid]
 
 
 async def _run_fleet_snapshot() -> None:
@@ -200,6 +187,18 @@ async def sweep() -> dict:
             await run_blocking(storage_executor, live_cap_staging.cleanup, uid, snap.reference)
         except Exception as error:
             logger.warning('event=cap_hold_redrive outcome=cleanup_deferred exception_type=%s', type(error).__name__)
+    handoffs = await run_blocking(db_executor, store.discover, 'handoff', limit=store.HANDOFF_PAGE)
+    for snap in handoffs:
+        uid = owner(snap, 'stt_cap_holds')
+        if uid is None:
+            continue
+        try:
+            if await run_blocking(db_executor, account_deletion_blocks_user_work, uid):
+                continue
+            if await cap_hold_recovery.finish_handoff(uid, snap):
+                counts['handoffs_erased'] = counts.get('handoffs_erased', 0) + 1
+        except Exception as error:
+            logger.warning('event=cap_hold_redrive outcome=handoff_deferred exception_type=%s', type(error).__name__)
     if not execution_admission_configured():
         await _settle_fleet_snapshot(snapshot_task)
         logger.info(
@@ -243,7 +242,7 @@ async def sweep() -> dict:
             return None
 
     choices = await run_blocking(db_executor, store.discover, 'choices', limit=choices_page())
-    choices = await _paid_first(choices)
+    choices = await _paid_only(choices)
     for turn in range(100):
         if not choices or time.monotonic() - started >= 900:
             break

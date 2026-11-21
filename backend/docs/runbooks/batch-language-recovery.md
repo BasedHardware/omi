@@ -49,6 +49,20 @@ unknown or larger prior value into zero. Contradictory saved results stay held.
 Legacy no-provider/terminal tools refuse language-guarded units; use the explicit
 independent epoch-3 plan. Completed historical receipts remain unchanged.
 
+Ordinary automatic recovery can resolve strict-VAD silence locally before STT.
+For that branch, the start transaction records
+`recovery.no_vendor_call={version: 1, reason: strict_vad_silence, vad_speech_seconds: 0}`
+under the running recovery token and privacy/ownership fences. It proves this
+recovery intent selected the local zero-VAD branch and bypassed vendor dispatch;
+it is not a vendor receipt or a claim about earlier intake/worker calls. The
+existing `recovery.provider` still names the selected route, including Modulate,
+and alone never proves a call. The record survives a lost result-storage reply
+and reconciliation; a running record alone does not prove completed settlement.
+Guarded zero-VAD silence instead retains its actual Modulate and Soniox empty
+receipts and receives no `no_vendor_call` record. Existing historical jobs are
+not backfilled. Observer proof rules and rollout thresholds are unchanged;
+accepting this new record as route proof requires a separate ruling.
+
 Threshold evidence: local Silero evaluates 512 samples at 16 kHz, one 32 ms frame
 (`utils/stt/local_vad.py`). Only the clipped final frame can be shorter. Synthetic
 tests cover 0/16/32/64/320/4384 ms, the 511/512-sample boundary, and floating-point
@@ -60,10 +74,14 @@ batch re-ramp will clear.
 
 ## Spend and rollback
 
-`BATCH_PIPELINE_INDEPENDENT_LANGUAGE_RECOVERY_ENABLED` defaults **off** in code per lead
-ruling 404ca5. Prod declares it `true` on backend-integration only (activated
-2026-10-27 02:07Z per lead 5da7dc/ebc45a); dev and the GPU worker stay off.
-Explicit `true` enables the capped path; `false` stops new Soniox attempts. It never falls back to another Modulate call. Rollback:
+`BATCH_PIPELINE_INDEPENDENT_LANGUAGE_RECOVERY_ENABLED` defaults **on** in code.
+Explicit deployment overrides still apply; dev and the GPU worker stay pinned off.
+Unsupported-language provider jobs whose final attempt is validated empty enter
+`held` for the existing Modulate-then-one-Soniox recovery. The route's
+`provider_reason=unsupported_language` and the worker failure reason both identify
+guarded jobs. Other worker failures remain terminal `failed_held`.
+Explicit `false` restores immediate worker `failed_held` and stops new Soniox
+attempts. It never falls back to another Modulate call. Rollback:
 set it false on the recovery role/operator, retaining all held obligations.
 
 `BATCH_PIPELINE_INDEPENDENT_RECOVERY_MAX_SECONDS` defaults to **60** and can only
@@ -71,8 +89,61 @@ lower the hard 60-second per-unit ceiling. Invalid/nonfinite values refuse spend
 Each unit gets at most one independent submission across automatic and explicit
 recovery. Company-funded Soniox rechecks the batch allowance even for units
 originally admitted with customer-funded credentials. Guarded Modulate dispatch
-also rechecks company funding. Larger units stay held
-for a separately reviewed recovery plan. Polling has a 120 s budget and 60-GET
+also rechecks company funding. With the feature enabled, a positive input-bound
+worker VAD receipt permits that existing Modulate attempt when CPU VAD has no
+spans, including captures above 60 seconds. That existing worker-proof path
+is unchanged.
+
+`BATCH_PIPELINE_GUARDED_LONG_RECOVERY_MAX_SECONDS` remains **0** in prod, dev
+and code defaults: the long-recovery extension is in its kill state. The code
+path is retained, but newly admitted units have neither strict CPU VAD spans
+nor a valid input-bound worker speech receipt. Their Modulate words therefore
+raise `WordsWithoutVad` and remain `failed_held`; enabling this extension now
+would add paid calls without a recoverable new population. The planscost lead
+keeps it off following Luna's P1 review.
+
+Before this cap is ever raised, recovery must be able to **accept words with
+independent acoustic evidence for that newly admitted population**: obtain and
+validate input-bound speech evidence independent of transcript word clocks,
+then use it in ordinary accepted settlement with measured speech accounting.
+Regression tests must prove the new success path, privacy/funding/one-attempt
+fences and unchanged false-silence protections, followed by lead review of the
+activation and spend plan. Existing worker-receipt successes are not evidence
+that this new population can recover; they already pass the existing gate.
+
+The dormant extension still refuses invalid/nonfinite caps, clamps any future
+cap at 7200 s, requires the master recovery flag and rechecks company funding.
+It never widens Soniox's 60-second ceiling or relaxes acoustic validation:
+Modulate empty retains Modulate `empty` and Soniox `refused` receipts above
+60 seconds; words without VAD retain their positive word-count receipt and
+stay held. Neither case fabricates silence or reopens an already `failed_held`
+intent. Keeping the cap at `0` and redeploying backend-integration preserves
+this kill state; existing held backlog remains operator-owned.
+
+The global backfill daily-hours deployment setting is **1665** (3x the prior
+555), but binds only if `SYNC_BACKFILL_ADMISSION_LIMITS=true`; that separate
+control remains off. Cloud Tasks `sync-backfill-fresh` concurrency remains the
+production pacer. Its reviewed in-tree source is
+`backend/deploy/ops/prod.yaml` (`cloud_tasks.sync-backfill-fresh`: 90 concurrent
+dispatches / 15 dispatches per second). The lead separately sizes that config
+and uses `backend/scripts/ops_train.py` / `.github/workflows/config_train.yml`
+to plan, apply and verify it; these declarations are not live-state evidence.
+The warning rule `omi-sync-backfill-queue-wait-high` watches
+p95 `omi_sync_queue_wait_seconds{lane="backfill"}` above 1800 seconds for 30
+minutes. The existing buckets jump from 900 to 3600 s (no 1800 s boundary),
+so the quantile threshold is interpolated. This histogram samples tasks at execution, so it cannot detect a
+fully stalled queue with no dispatches; keep backlog/oldest-ready monitoring.
+The lead checks live rule state/history and sizes dispatch capacity separately.
+Rollback reverts the hours values and pauses the warning rule.
+
+When worker silence disposition is rolled back, sampled record units that reach
+empty ASR additionally emit `strict_silent_asr_empty` from the strict-VAD shadow
+counter if strict VAD confirms silence. This observation never changes the
+EMPTY_ASR quarantine, payload or accounting. With worker silence disposition on,
+this extra inspection does not run. `BATCH_PIPELINE_STRICT_VAD_SHADOW_PERCENT=0`
+disables the observation; deploying worker source makes it available for future
+rollback qualification.
+Polling has a 120 s budget and 60-GET
 ceiling; individual requests have at most a 20 s I/O timeout. Cleanup uses two
 bounded requests. Recovery never automatically resubmits a timed-out job.
 

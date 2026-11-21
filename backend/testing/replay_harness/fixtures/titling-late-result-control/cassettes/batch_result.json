@@ -1,0 +1,281 @@
+{
+  "words": [
+    {
+      "word": "We",
+      "timestamp": [
+        0.0,
+        2.0
+      ]
+    },
+    {
+      "word": "reviewed",
+      "timestamp": [
+        3.0,
+        5.0
+      ]
+    },
+    {
+      "word": "the",
+      "timestamp": [
+        6.0,
+        8.0
+      ]
+    },
+    {
+      "word": "replay",
+      "timestamp": [
+        9.0,
+        11.0
+      ]
+    },
+    {
+      "word": "harness",
+      "timestamp": [
+        12.0,
+        14.0
+      ]
+    },
+    {
+      "word": "and",
+      "timestamp": [
+        15.0,
+        17.0
+      ]
+    },
+    {
+      "word": "agreed",
+      "timestamp": [
+        18.0,
+        20.0
+      ]
+    },
+    {
+      "word": "to",
+      "timestamp": [
+        21.0,
+        23.0
+      ]
+    },
+    {
+      "word": "add",
+      "timestamp": [
+        24.0,
+        26.0
+      ]
+    },
+    {
+      "word": "capture",
+      "timestamp": [
+        27.0,
+        29.0
+      ]
+    },
+    {
+      "word": "checks",
+      "timestamp": [
+        30.0,
+        32.0
+      ]
+    },
+    {
+      "word": "before",
+      "timestamp": [
+        33.0,
+        35.0
+      ]
+    },
+    {
+      "word": "admission.",
+      "timestamp": [
+        36.0,
+        38.0
+      ]
+    },
+    {
+      "word": "The",
+      "timestamp": [
+        39.0,
+        41.0
+      ]
+    },
+    {
+      "word": "team",
+      "timestamp": [
+        42.0,
+        44.0
+      ]
+    },
+    {
+      "word": "will",
+      "timestamp": [
+        45.0,
+        47.0
+      ]
+    },
+    {
+      "word": "validate",
+      "timestamp": [
+        48.0,
+        50.0
+      ]
+    },
+    {
+      "word": "upload",
+      "timestamp": [
+        51.0,
+        53.0
+      ]
+    },
+    {
+      "word": "custody",
+      "timestamp": [
+        54.0,
+        56.0
+      ]
+    },
+    {
+      "word": "and",
+      "timestamp": [
+        57.0,
+        59.0
+      ]
+    },
+    {
+      "word": "finalization",
+      "timestamp": [
+        60.0,
+        62.0
+      ]
+    },
+    {
+      "word": "with",
+      "timestamp": [
+        63.0,
+        65.0
+      ]
+    },
+    {
+      "word": "synthetic",
+      "timestamp": [
+        66.0,
+        68.0
+      ]
+    },
+    {
+      "word": "examples",
+      "timestamp": [
+        69.0,
+        71.0
+      ]
+    },
+    {
+      "word": "tomorrow.",
+      "timestamp": [
+        72.0,
+        74.0
+      ]
+    },
+    {
+      "word": "This",
+      "timestamp": [
+        75.0,
+        77.0
+      ]
+    },
+    {
+      "word": "should",
+      "timestamp": [
+        78.0,
+        80.0
+      ]
+    },
+    {
+      "word": "help",
+      "timestamp": [
+        81.0,
+        83.0
+      ]
+    },
+    {
+      "word": "us",
+      "timestamp": [
+        84.0,
+        86.0
+      ]
+    },
+    {
+      "word": "diagnose",
+      "timestamp": [
+        87.0,
+        89.0
+      ]
+    },
+    {
+      "word": "missing",
+      "timestamp": [
+        90.0,
+        92.0
+      ]
+    },
+    {
+      "word": "titles",
+      "timestamp": [
+        93.0,
+        95.0
+      ]
+    },
+    {
+      "word": "without",
+      "timestamp": [
+        96.0,
+        98.0
+      ]
+    },
+    {
+      "word": "contacting",
+      "timestamp": [
+        99.0,
+        101.0
+      ]
+    },
+    {
+      "word": "any",
+      "timestamp": [
+        102.0,
+        104.0
+      ]
+    },
+    {
+      "word": "external",
+      "timestamp": [
+        105.0,
+        107.0
+      ]
+    },
+    {
+      "word": "service.",
+      "timestamp": [
+        108.0,
+        110.0
+      ]
+    }
+  ],
+  "diarization": {
+    "turns": [
+      {
+        "start": 0,
+        "end": 180,
+        "speaker": "SPEAKER_00"
+      }
+    ]
+  },
+  "audio_seconds": 180,
+  "speech_seconds": 180,
+  "speech_spans": [
+    {
+      "start": 0,
+      "end": 180
+    }
+  ],
+  "words_provider": "parakeet"
+}

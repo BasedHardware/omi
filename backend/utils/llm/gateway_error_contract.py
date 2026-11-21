@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import os
 from collections.abc import Mapping
 from enum import Enum
 from typing import NamedTuple
@@ -10,6 +11,8 @@ from typing import NamedTuple
 from fastapi import HTTPException
 
 from utils.byok import get_byok_key, has_validated_byok_keys
+from utils.conversations.processing_metrics import record_retryable_processing_response
+from utils.conversations.processing_retry import retryable_provider_failure_class
 
 BYOK_RATE_LIMIT_FAILURE_CLASS = 'byok_rate_limit'
 BYOK_QUOTA_FAILURE_CLASS = 'byok_quota'
@@ -56,7 +59,31 @@ _INVALID_KEY_MARKERS = (
 # ``openrouter_credits`` is quota (never retried into success), the rest are the
 # account's own rate limits.
 _OPENROUTER_RATE_LIMIT_SOURCES = frozenset({'requester_rates', 'free-tier_rates', 'provider_rates'})
+# Google AI Studio's stable wording for depleted prepaid credits on the Gemini
+# OpenAI-compatible endpoint (2026-10: Google moved this account state from 429
+# to a plain 402, and the wording is the only classifier — no machine-readable
+# metadata like OpenRouter's ``limit_source``).
+_GEMINI_PREPAYMENT_DEPLETED_MARKER = 'prepayment credits are depleted'
+_BYOK_ACCOUNT_STATE_FAILURE_CLASSES = frozenset(
+    {BYOK_RATE_LIMIT_FAILURE_CLASS, BYOK_QUOTA_FAILURE_CLASS, BYOK_INVALID_KEY_FAILURE_CLASS}
+)
 GENERIC_CONVERSATION_PROCESSING_ERROR_DETAIL = 'Error processing conversation, please try again later'
+# A provider/transport fault another attempt can clear is not a server fault and
+# not a terminal answer: the conversation is preserved and the caller can retry.
+# Answering the explicit retryable contract (503 + Retry-After) instead of the
+# generic 500 lets the mobile caller make one delayed same-request retry and
+# stops provider timeouts from counting as user-visible processing 500s.
+RETRYABLE_CONVERSATION_PROCESSING_ERROR_CODE = 'conversation_processing_retryable'
+RETRYABLE_CONVERSATION_PROCESSING_ERROR_DETAIL = {
+    'code': RETRYABLE_CONVERSATION_PROCESSING_ERROR_CODE,
+    'message': 'Conversation processing is temporarily unavailable. Please retry.',
+}
+RETRYABLE_CONVERSATION_PROCESSING_RETRY_AFTER_SECONDS = '2'
+# Kill switch (default on). Off restores the generic 500 for transient
+# provider/transport failures while keeping the conversation recoverable: the
+# admission guard rolls the row back to ``in_progress``. No schema or migration.
+RETRYABLE_PROVIDER_FAILURE_SWITCH = 'CONVERSATION_PROCESSING_RETRYABLE_PROVIDER_FAILURE_ENABLED'
+
 
 logger = logging.getLogger(__name__)
 
@@ -199,6 +226,14 @@ def classify_byok_provider_failure(error: BaseException) -> ByokProviderFailure 
             if any(marker in _lowered_error_text(error) for marker in _OPENROUTER_CREDIT_EXHAUSTED_MARKERS):
                 return ByokProviderFailure(BYOK_QUOTA_FAILURE_CLASS, 'openrouter')
             return None
+        if status_code == 402 and _byok_key_in_use('gemini'):
+            # Gemini's OpenAI-compatible endpoint has no machine-readable
+            # metadata for the depleted-prepayment state; the wording is the
+            # only classifier (2026-10: the account state moved from 429 to a
+            # plain 402).
+            if _GEMINI_PREPAYMENT_DEPLETED_MARKER in _lowered_error_text(error):
+                return ByokProviderFailure(BYOK_QUOTA_FAILURE_CLASS, 'gemini')
+            return None
         if status_code == 429:
             text = _lowered_error_text(error)
             if _byok_key_in_use('openai') and any(marker in text for marker in _OPENAI_QUOTA_EXHAUSTED_MARKERS):
@@ -231,7 +266,9 @@ def is_byok_quota_error(error: BaseException) -> bool:
     failure class (HTTP 429, in ``_THROTTLED_FAILURE_CLASSES``), while direct
     Anthropic BYOK raises the SDK's ``BadRequestError`` for an exhausted
     prepaid balance or usage limit and direct OpenRouter/OpenAI BYOK answers
-    402/429 when the account's credits cannot cover the request. All are
+    402/429 when the account's credits cannot cover the request, and direct
+    Gemini BYOK (AI Studio's OpenAI-compatible endpoint) answers 402 when the
+    account's prepayment credits are depleted. All are
     account state only the user can fix on their own key; every other request
     shape keeps the generic response.
     """
@@ -276,6 +313,57 @@ def _log_byok_provider_failure(failure: ByokProviderFailure, route: str) -> None
     )
 
 
+def is_byok_account_state_http_exception(error: BaseException) -> bool:
+    """Return whether ``error`` is the typed BYOK account-state response that
+    ``conversation_processing_http_exception`` raises for a rate-limited or
+    spent provider account, or a rejected provider key.
+
+    Lifecycle owners wrapping the composition boundary use it to log the halt
+    by its bounded class: the boundary already logged it, and a traceback there
+    would re-emit the chained provider error body for account state only the
+    user can fix.
+    """
+    if not isinstance(error, HTTPException) or error.status_code != 429:
+        return False
+    detail = error.detail
+    if not isinstance(detail, Mapping):
+        return False
+    return _string_value(detail.get('code')) in _BYOK_ACCOUNT_STATE_FAILURE_CLASSES
+
+
+def is_retryable_processing_http_exception(error: BaseException) -> bool:
+    """Return whether ``error`` is the typed retryable response this boundary raises.
+
+    Lifecycle owners wrapping the composition boundary use it to log a transient
+    provider halt by its bounded class: the boundary already logged it, and a
+    traceback there would re-emit the chained provider error body.
+    """
+    if not isinstance(error, HTTPException) or error.status_code != 503:
+        return False
+    detail = error.detail
+    if not isinstance(detail, Mapping):
+        return False
+    return _string_value(detail.get('code')) == RETRYABLE_CONVERSATION_PROCESSING_ERROR_CODE
+
+
+def is_retryable_provider_failure(error: BaseException) -> bool:
+    """Whether a provider/transport failure can use the synchronous retry contract."""
+    return retryable_provider_failure_class(error) is not None
+
+
+def retryable_provider_failure_answer_enabled() -> bool:
+    """Kill switch for the retryable provider-failure answer. Default on.
+
+    Unset, blank and unknown values keep the reviewed behavior; only an explicit
+    false token restores the previous generic 500. The conversation stays
+    recoverable either way — the admission guard owns the rollback.
+    """
+    raw = os.getenv(RETRYABLE_PROVIDER_FAILURE_SWITCH)
+    if raw is None:
+        return True
+    return raw.strip().lower() not in {'0', 'false', 'no', 'off'}
+
+
 def conversation_processing_http_exception(
     error: BaseException, *, route: str = 'conversation_processing'
 ) -> HTTPException:
@@ -285,6 +373,10 @@ def conversation_processing_http_exception(
     provider failure on the user's own key answers the typed detail (429 for
     quota/rate-limit/invalid-key account states) and logs one structured
     WARNING line, so severity>=ERROR keeps counting only Omi-side faults.
+    A transient provider/transport fault (timeout, dropped connection, 429/5xx)
+    answers the explicit retryable contract (503 + Retry-After) and logs one
+    bounded WARNING: the conversation is preserved and the caller retries, so
+    the timeout class never surfaces as an unhandled processing 500.
     Every other exception retains the existing generic response and a
     privacy-safe log entry.
     """
@@ -296,5 +388,22 @@ def conversation_processing_http_exception(
         if failure.failure_class == BYOK_INVALID_KEY_FAILURE_CLASS:
             return HTTPException(status_code=429, detail=BYOK_INVALID_KEY_ERROR_DETAIL)
         return HTTPException(status_code=429, detail=BYOK_QUOTA_ERROR_DETAIL)
+    failure_class = retryable_provider_failure_class(error)
+    if failure_class is not None and retryable_provider_failure_answer_enabled():
+        record_retryable_processing_response(failure_class, route)
+        # Class name only: never the provider message, which can carry request
+        # content. WARNING, not ERROR, because this is a retryable provider
+        # fault, not an Omi-side processing bug.
+        logger.warning(
+            'conversation processing hit a transient provider failure; answering retryable: '
+            'failure_class=%s route=%s',
+            failure_class,
+            route,
+        )
+        return HTTPException(
+            status_code=503,
+            detail=RETRYABLE_CONVERSATION_PROCESSING_ERROR_DETAIL,
+            headers={'Retry-After': RETRYABLE_CONVERSATION_PROCESSING_RETRY_AFTER_SECONDS},
+        )
     logger.error('Conversation processing failed: %s', type(error).__name__)
     return HTTPException(status_code=500, detail=GENERIC_CONVERSATION_PROCESSING_ERROR_DETAIL)

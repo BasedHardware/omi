@@ -11,8 +11,24 @@ import 'package:omi/pages/settings/widgets/plans/contextual_plans.dart';
 import 'package:omi/pages/settings/widgets/live_activity_settings.dart';
 import 'package:omi/pages/conversations/widgets/daily_recap_recovery_action.dart';
 
+/// The server reads and writes behind the page; tests replace them.
+class NotificationSettingsApi {
+  const NotificationSettingsApi();
+
+  Future<DailySummarySettings?> dailySummary() => getDailySummarySettings();
+  Future<MentorNotificationSettings?> mentor() => getMentorNotificationSettings();
+  Future<bool> setDailySummary({bool? enabled, int? hour}) => setDailySummarySettings(enabled: enabled, hour: hour);
+  Future<bool> setMentorFrequency(int frequency) => setMentorNotificationSettings(frequency);
+}
+
 class NotificationsSettingsPage extends StatefulWidget {
-  const NotificationsSettingsPage({super.key});
+  const NotificationsSettingsPage(
+      {super.key, this.api = const NotificationSettingsApi(), this.showLiveActivity = true});
+
+  final NotificationSettingsApi api;
+
+  /// The Live Activity row is a platform surface; tests leave it out.
+  final bool showLiveActivity;
 
   @override
   State<NotificationsSettingsPage> createState() => _NotificationsSettingsPageState();
@@ -81,18 +97,34 @@ class _NotificationsSettingsPageState extends State<NotificationsSettingsPage> {
     PlatformManager.instance.analytics.dailySummarySettingsOpened();
   }
 
-  Future<void> _loadSettings() async {
-    // Load Daily Summary settings from API
-    final settings = await getDailySummarySettings();
+  /// The server's settings could not be read: the page says so with Try Again instead of showing
+  /// defaults as if they were the reader's choices (P4), and no change can overwrite them blind.
+  bool _loadFailed = false;
 
-    // Load Mentor Notification settings from API
-    final mentorSettings = await getMentorNotificationSettings();
+  Future<void> _loadSettings() async {
+    if (mounted && _loadFailed) {
+      setState(() {
+        _loadFailed = false;
+        _isLoading = true;
+      });
+    }
+    Future<T?> read<T>(Future<T?> Function() load) async {
+      try {
+        return await load();
+      } catch (_) {
+        return null;
+      }
+    }
+
+    final settings = await read(widget.api.dailySummary);
+    final mentorSettings = await read(widget.api.mentor);
 
     // Load settings from local prefs
     final localFrequency = SharedPreferencesUtil().notificationFrequency;
 
     if (mounted) {
       setState(() {
+        _loadFailed = settings == null || mentorSettings == null;
         if (settings != null) {
           _dailySummaryEnabled = settings.enabled;
           _dailySummaryHour = settings.hour;
@@ -124,15 +156,18 @@ class _NotificationsSettingsPageState extends State<NotificationsSettingsPage> {
       oldFrequency: _notificationFrequency,
       newFrequency: value,
     );
-    setState(() => _notificationFrequency = value);
-    SharedPreferencesUtil().notificationFrequency = value;
-    final saved = await setMentorNotificationSettings(value);
-    if (saved) {
-      _savedNotificationFrequency = value;
-    } else if (mounted && _notificationFrequency == value) {
-      setState(() => _notificationFrequency = _savedNotificationFrequency);
-      SharedPreferencesUtil().notificationFrequency = _savedNotificationFrequency;
-    }
+    final saved = await applyOmiSetting<int>(
+      context,
+      setting: 'mentor_frequency',
+      previous: _savedNotificationFrequency,
+      next: value,
+      show: (frequency) {
+        if (mounted) setState(() => _notificationFrequency = frequency);
+        SharedPreferencesUtil().notificationFrequency = frequency;
+      },
+      save: widget.api.setMentorFrequency,
+    );
+    if (saved) _savedNotificationFrequency = value;
   }
 
   String _getFrequencyLabel(BuildContext context, int value) {
@@ -178,23 +213,31 @@ class _NotificationsSettingsPageState extends State<NotificationsSettingsPage> {
       OmiDateFormat.of(context).time(DateTime(2000, 1, 1, hour));
 
   Future<void> _updateDailySummaryEnabled(bool value) async {
-    final previous = _dailySummaryEnabled;
-    setState(() => _dailySummaryEnabled = value);
-    if (!await setDailySummarySettings(enabled: value)) {
-      if (mounted) setState(() => _dailySummaryEnabled = previous);
-      return;
-    }
-    PlatformManager.instance.analytics.dailySummaryToggled(enabled: value);
+    final saved = await applyOmiSetting<bool>(
+      context,
+      setting: 'daily_summary_enabled',
+      previous: _dailySummaryEnabled,
+      next: value,
+      show: (enabled) {
+        if (mounted) setState(() => _dailySummaryEnabled = enabled);
+      },
+      save: (enabled) => widget.api.setDailySummary(enabled: enabled),
+    );
+    if (saved) PlatformManager.instance.analytics.dailySummaryToggled(enabled: value);
   }
 
   Future<void> _updateDailySummaryHour(int hour) async {
-    final previous = _dailySummaryHour;
-    setState(() => _dailySummaryHour = hour);
-    if (!await setDailySummarySettings(hour: hour)) {
-      if (mounted) setState(() => _dailySummaryHour = previous);
-      return;
-    }
-    PlatformManager.instance.analytics.dailySummaryTimeChanged(hour: hour);
+    final saved = await applyOmiSetting<int>(
+      context,
+      setting: 'daily_summary_hour',
+      previous: _dailySummaryHour,
+      next: hour,
+      show: (value) {
+        if (mounted) setState(() => _dailySummaryHour = value);
+      },
+      save: (value) => widget.api.setDailySummary(hour: value),
+    );
+    if (saved) PlatformManager.instance.analytics.dailySummaryTimeChanged(hour: hour);
   }
 
   Future<void> _showHourPicker() async {
@@ -238,22 +281,28 @@ class _NotificationsSettingsPageState extends State<NotificationsSettingsPage> {
       appBar: AppBar(leading: const OmiBackButton(), title: Text(context.l10n.notifications)),
       body: Column(
         children: [
-          const LiveActivitySettings(),
+          if (widget.showLiveActivity) const LiveActivitySettings(),
           Expanded(
             child: _isLoading
                 ? const NotificationsSettingsLoadingShimmer()
-                : ListView(
-                    padding: const EdgeInsets.all(OmiSpacing.md),
-                    children: [
-                      OmiSectionHeader(
-                        context.l10n.notificationFrequency,
-                        subtitle: context.l10n.notificationFrequencyDescription,
+                : _loadFailed
+                    ? OmiErrorState(
+                        key: const Key('notification_settings_load_failed'),
+                        message: context.l10n.couldNotLoadNotificationSettings,
+                        onRetry: _loadSettings,
+                      )
+                    : ListView(
+                        padding: const EdgeInsets.all(OmiSpacing.md),
+                        children: [
+                          OmiSectionHeader(
+                            context.l10n.notificationFrequency,
+                            subtitle: context.l10n.notificationFrequencyDescription,
+                          ),
+                          _buildFrequencyCard(),
+                          const SizedBox(height: OmiSpacing.xxl),
+                          _buildDailySummaryGroup(),
+                        ],
                       ),
-                      _buildFrequencyCard(),
-                      const SizedBox(height: OmiSpacing.xxl),
-                      _buildDailySummaryGroup(),
-                    ],
-                  ),
           ),
         ],
       ),

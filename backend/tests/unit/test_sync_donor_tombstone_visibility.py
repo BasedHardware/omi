@@ -69,6 +69,10 @@ class _ListingQuery:
     def start_after(self, snapshot: _ListingDoc) -> '_ListingQuery':
         return self._copy(start_after_id=snapshot.id)
 
+    def select(self, _field_paths: Any) -> '_ListingQuery':
+        # A field projection only narrows what Firestore returns; full rows answer the same predicates.
+        return self._copy()
+
     def count(self) -> SimpleNamespace:
         n = len(self._matching())
         return SimpleNamespace(get=lambda: [[SimpleNamespace(value=n)]])
@@ -147,13 +151,17 @@ class _ListingDb:
 def _matches(data: dict[str, Any], field: str | None, op: str, value: Any) -> bool:
     if not field:
         return True
-    if field not in data:
-        return False
-    actual = data[field]
+    actual = data
+    for part in field.split('.'):
+        if not isinstance(actual, dict) or part not in actual:
+            return False
+        actual = actual[part]
     if op == '==':
         return actual == value
     if op == 'in':
         return actual in value
+    if op == '>':
+        return actual > value
     if op == '>=':
         return actual >= value
     if op == '<=':

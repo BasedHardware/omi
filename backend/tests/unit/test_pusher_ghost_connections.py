@@ -692,13 +692,13 @@ class TestListenRuntimeSupervisor:
             )
 
 
-def _parse_handler_ast():
-    """Parse _websocket_util_trigger and return key AST info about the try/finally structure."""
+def _parse_handler_ast(name='_websocket_util_trigger'):
+    """Select the socket accounting entry or its supervised core explicitly."""
     tree = ast.parse(_read_source(PUSHER_SRC))
     for node in ast.walk(tree):
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == '_websocket_util_trigger':
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == name:
             return node
-    raise ValueError('_websocket_util_trigger not found in pusher.py')
+    raise ValueError(f'{name} not found in pusher.py')
 
 
 def _find_try_blocks(func_node):
@@ -762,10 +762,26 @@ class TestProductionFlowStructure:
         handler = _parse_handler_ast()
         assert handler.name == '_websocket_util_trigger'
 
+    def test_entry_delegates_to_supervised_core_and_closes_accounting_synchronously(self):
+        handler = _parse_handler_ast()
+        wrappers = [node for node in handler.body if isinstance(node, ast.Try)]
+        assert len(wrappers) == 1
+        assert '_run_websocket_util_trigger' in _find_calls_in_body(wrappers[0].body)
+        finalizer = ast.Module(body=wrappers[0].finalbody, type_ignores=[])
+        assert not any(isinstance(node, ast.Await) for node in ast.walk(finalizer))
+        assert any(
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and isinstance(node.func.value, ast.Name)
+            and node.func.value.id == 'observation'
+            and node.func.attr == 'close'
+            for node in ast.walk(finalizer)
+        )
+
     def test_gauge_inc_in_try_dec_in_finally(self):
         """PUSHER_ACTIVE_WS_CONNECTIONS.inc() must be in try body,
         .dec() must be in finally — this is the core gauge-leak prevention."""
-        handler = _parse_handler_ast()
+        handler = _parse_handler_ast('_run_websocket_util_trigger')
         try_blocks = _find_try_blocks(handler)
 
         found_inc_in_try = False
@@ -785,16 +801,23 @@ class TestProductionFlowStructure:
 
     def test_supervisor_before_bg_drain(self):
         """supervise_tasks() must appear before drain_tasks() — supervisor-then-drain ordering."""
-        src = _read_source(PUSHER_SRC)
-        supervise_pos = src.find('supervise_tasks(')
-        drain_pos = src.find('drain_tasks(')
-
-        assert supervise_pos != -1, "'supervise_tasks(' not found in source"
-        assert drain_pos != -1, "'drain_tasks(' not found in source"
-        assert supervise_pos < drain_pos, (
-            f"'supervise_tasks(' (pos {supervise_pos}) must appear before "
-            f"'drain_tasks(' (pos {drain_pos}) — supervisor-then-drain ordering"
-        )
+        handler = _parse_handler_ast('_run_websocket_util_trigger')
+        # Helper definitions precede supervision in source but do not execute
+        # there. Verify call order in the actual supervising try body instead.
+        for block in [node for node in handler.body if isinstance(node, ast.Try)]:
+            calls = [_find_calls_in_body([statement]) for statement in block.body]
+            supervised = [index for index, names in enumerate(calls) if 'supervise_tasks' in names]
+            drained = [index for index, names in enumerate(calls) if 'drain_socket_tasks' in names]
+            if supervised and drained:
+                assert min(supervised) < min(drained)
+                helper = next(
+                    node
+                    for node in handler.body
+                    if isinstance(node, ast.AsyncFunctionDef) and node.name == 'drain_socket_tasks'
+                )
+                assert 'drain_tasks' in _find_calls_in_body(helper.body)
+                return
+        pytest.fail('supervised core must call supervision before its background drain')
 
     def test_receive_task_not_in_gather_with_bg_tasks(self):
         """receive_task must NOT appear in the same gather() as bg_main_tasks.
@@ -817,7 +840,7 @@ class TestProductionFlowStructure:
 
     def test_finally_drains_remaining_tasks(self):
         """The finally block must drain any remaining un-done tasks via drain_tasks()."""
-        handler = _parse_handler_ast()
+        handler = _parse_handler_ast('_run_websocket_util_trigger')
         try_blocks = _find_try_blocks(handler)
 
         found_drain_in_finally = False

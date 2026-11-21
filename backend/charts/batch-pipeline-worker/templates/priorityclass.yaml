@@ -1,0 +1,15 @@
+{{- if and .Values.enabled .Values.borrowedNodePools.enabled }}
+{{- $priority := int .Values.borrowedNodePools.priority }}
+{{- if or (ge $priority 0) (lt $priority -10) }}
+{{- fail "borrowedNodePools.priority must be in [-10, 0): below default pods, not autoscaler-expendable" }}
+{{- end }}
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: {{ printf "%s-borrower" .Release.Name }}
+value: {{ $priority }}
+# Borrowers never evict anything; the owning pool's default-priority pods evict them.
+preemptionPolicy: Never
+globalDefault: false
+description: Batch workers on borrowed L4 nodes yield to the owning workload.
+{{- end }}

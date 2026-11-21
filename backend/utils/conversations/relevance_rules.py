@@ -19,7 +19,8 @@ Design constraints, in priority order:
    practice (pre-roll offsets, 10 s quantised sync segments, single segments
    spanning several minutes for one sentence, overlapping dual-channel
    segments), and short speech can matter ("call mom before five").
-3. Pure function of the text; stdlib only; no I/O; microseconds per call.
+3. Bounded text rules; no external I/O; microseconds per call. The calendar
+   request keep guard has one default-on runtime rollback switch.
    Several test harnesses load this module with a stubbed ``utils`` package.
 
 Measured 2026-09-23 against 286 hand-labelled conversations from one account
@@ -33,10 +34,12 @@ import re
 import unicodedata
 from typing import FrozenSet, List, Literal, Optional, Sequence, Tuple
 
+from config.refactor_modes import default_on
+
 Verdict = Literal['keep', 'discard']
 
 # Bumped whenever a rule changes, so stored decisions stay attributable.
-RULES_VERSION = 1
+RULES_VERSION = 5
 
 # ---------------------------------------------------------------------------
 # Lexicons. All entries are casefolded; apostrophes are normalised to "'".
@@ -113,10 +116,45 @@ EXPLICIT_REMINDER_RE = re.compile(
     re.IGNORECASE,
 )
 
+EXPLICIT_CALENDAR_REQUEST_KEEP_ENV = 'EXPLICIT_CALENDAR_REQUEST_KEEP'
+# A direct instruction (optionally polite), not a prediction, quotation or
+# future-tense commitment. Match one existing segment; never fuse speakers.
+_CALENDAR_REQUEST_RE = re.compile(
+    r"(?:please[ ,\t]+|(?:can|could|would)[ \t]+you[ \t]+(?:please[ \t]+)?)?"
+    r"(?:put[ \t]+\w[^\r\n.!?;]{0,159}?[ \t]+on|add[ \t]+\w[^\r\n.!?;]{0,159}?[ \t]+to)"
+    r"[ \t]+(?:my|the)[ \t]+calendar(?:[ \t]+[^\r\n.!?;]{1,80})?[.!?]?",
+    re.IGNORECASE,
+)
+# Only scan after the bounded candidate matches. Ambiguous negation/cancellation
+# keeps the prior policy; word boundaries preserve Notion/notebook/notifications.
+_CALENDAR_REQUEST_NEGATION_RE = re.compile(
+    r"\b(?:not|never|no|cannot|without|except|excluding|avoid(?:ing)?|omit(?:ting)?|"
+    r"instead[ \t-]+of|rather[ \t-]+than|[a-z]{1,12}n't|cancel(?:s|ed|led|ing|ling|lation|lations)?)\b",
+    re.IGNORECASE,
+)
+
+
+def has_explicit_keep_instruction(text: str) -> bool:
+    """Retain input for normal adjudication; never authorize an action/event.
+
+    Existing reminder matching remains unchanged when the calendar guard is off.
+    Call per segment for new calendar forms, without coalescing speakers/turns.
+    """
+    if EXPLICIT_REMINDER_RE.search(text):
+        return True
+    if not default_on(EXPLICIT_CALENDAR_REQUEST_KEEP_ENV):
+        return False
+    candidate = normalize_relevance_text(text).strip()
+    return (
+        _CALENDAR_REQUEST_RE.fullmatch(candidate) is not None
+        and _CALENDAR_REQUEST_NEGATION_RE.search(candidate) is None
+    )
+
+
 # Code points of CJK acknowledgement particles. A CJK transcript whose Han/kana
 # characters are all in this set is a backchannel ("嗯嗯", "好的", "对对对").
 CJK_FILLER_CHARS: FrozenSet[str] = frozenset(
-    '嗯啊哦噢喔呃额恩唉哎诶欸嘿喂哈呵呀吧嘛呢啦了的对好是行' 'はいええうんあそうね'
+    '嗯啊哦噢喔呃额恩唉哎诶欸嘿喂哈呵呀吧嘛呢啦了的对好是行' 'はいええうんあそうね' 'ハイ'
 )
 
 # Capitalised forms that are names or months but collide with FUNCTION_WORDS.
@@ -158,7 +196,7 @@ def _is_cjk(ch: str) -> bool:
     )
 
 
-def _normalise(text: str) -> str:
+def normalize_relevance_text(text: str) -> str:
     text = unicodedata.normalize('NFKC', text)
     return text.replace('’', "'").replace('‘', "'").replace('`', "'")
 
@@ -196,12 +234,37 @@ def _tokenise(texts: Sequence[str]) -> Tuple[List[str], List[str], List[str]]:
     foreign: List[str] = []
     cjk: List[str] = []
     for raw in texts:
-        text = _normalise(raw)
+        text = normalize_relevance_text(raw)
         cjk.extend(ch for ch in text if _is_cjk(ch))
         stripped = ''.join(' ' if _is_cjk(ch) else ch for ch in text).casefold()
         for token in _TOKEN_RE.findall(stripped):
             (latin if token.isascii() else foreign).append(token)
     return latin, foreign, cjk
+
+
+# Only all-noise runs of repeated, exact outro phrases qualify. A single
+# sign-off, quoted phrase, mixed real speech, or unfamiliar language abstains.
+_ASR_OUTROS = frozenset(
+    {
+        'thank you for watching',
+        'thanks for watching',
+        'terima kasih telah menonton',
+    }
+)
+
+
+def repeated_asr_outros(texts: Sequence[str]) -> bool:
+    # A quotation is evidence of discussion, not a bare ASR outro. Do not
+    # erase that distinction while normalizing punctuation for matching.
+    if any(
+        mark in text
+        for text in texts
+        for mark in ('"', "'", '`', '“', '”', '‘', '’', '«', '»', '‹', '›', '「', '」', '『', '』')
+    ):
+        return False
+    utterances = [re.sub(r'[^\w\s]', '', unicodedata.normalize('NFKC', text).casefold()).strip() for text in texts]
+    utterances = [' '.join(text.split()) for text in utterances if text]
+    return len(utterances) >= 3 and all(text in _ASR_OUTROS for text in utterances)
 
 
 def deterministic_relevance(texts: Sequence[str], speech_seconds: Optional[float]) -> Tuple[Optional[Verdict], str]:
@@ -212,6 +275,9 @@ def deterministic_relevance(texts: Sequence[str], speech_seconds: Optional[float
     """
     del speech_seconds  # Intentionally unused; see module docstring.
 
+    if repeated_asr_outros(texts):
+        return 'discard', 'repeated_asr_outro'
+
     latin, foreign, cjk = _tokenise(texts)
     if not latin and not foreign and not cjk:
         return 'discard', 'empty_transcript'
@@ -219,12 +285,12 @@ def deterministic_relevance(texts: Sequence[str], speech_seconds: Optional[float
     cjk_content = [ch for ch in cjk if ch not in CJK_FILLER_CHARS]
     word_equivalents = len(latin) + len(foreign) + len(cjk) / CJK_CHARS_PER_WORD
 
-    joined = ' '.join(_normalise(t) for t in texts)
+    joined = ' '.join(normalize_relevance_text(t) for t in texts)
     has_digit = any(ch.isdigit() for ch in joined)
     unreadable = bool(cjk_content) or any(not _is_filler(t) for t in foreign)
 
     # 1. Explicit reminder phrasing is always worth keeping, whatever else is said.
-    if EXPLICIT_REMINDER_RE.search(joined):
+    if EXPLICIT_REMINDER_RE.search(joined) or any(has_explicit_keep_instruction(t) for t in texts):
         return 'keep', 'explicit_reminder'
 
     # 2. Content-free at any length: checked before the length fast path so a long
@@ -290,7 +356,7 @@ def deterministic_tiebreak(texts: Sequence[str]) -> Verdict:
     if verdict is not None:
         return verdict
     latin, foreign, cjk = _tokenise(texts)
-    joined = ' '.join(_normalise(t) for t in texts)
+    joined = ' '.join(normalize_relevance_text(t) for t in texts)
     if (not latin) or foreign or cjk or any(ch.isdigit() for ch in joined) or _has_mid_sentence_capital(texts):
         return 'keep'
     filler_ratio = sum(_is_filler(t) for t in latin) / len(latin)

@@ -1,0 +1,222 @@
+"""Presentation-only replacement of transcript-echo minimum titles."""
+
+import re
+from datetime import datetime
+from collections.abc import Mapping
+from typing import Any, Callable, Optional
+
+from config.episodes import home_neutral_minimum_titles_enabled
+from config.historical_tier import STAND_IN_TITLE_PROVENANCES, TITLE_PROVENANCE
+
+from utils.conversations.deterministic_minimum import fallback_title, first_sentence, truncate_on_word_boundary
+from utils.conversations.summary_delivery import field, present
+from utils.summary_quality import safe_body, valid_title
+
+
+def apply_user_title(row: dict[str, Any], user_title: str | None) -> None:
+    """Apply the repository-resolved durable user override to its read copy."""
+    if user_title is not None:
+        structured = row.get('structured')
+        if not isinstance(structured, dict):
+            structured = {}
+            row['structured'] = structured
+        structured['title'] = user_title
+
+
+# Loaded beside list rows so an owed summary is visible without transcripts. The
+# row-level provenance is the only stand-in marker a batch projection stamps.
+SUMMARY_DEBT_FIELDS = ('summary_due_at', 'summary_completed_at', 'summary_output_present', 'summary_title_provenance')
+
+
+def summary_owed(row: Mapping[str, Any]) -> bool:
+    """The pipeline still owes this row a summary, so its stored title is provisional."""
+    return (
+        row.get('summary_due_at') is not None
+        and not row.get('summary_completed_at')
+        and not row.get('summary_output_present')
+    )
+
+
+# The two labels ``summary_quality.title_or_fallback`` produces. Kept here, not in
+# the note policy module, because that file's source is part of the notes prompt
+# fingerprint and these readers are not prompt policy.
+_FALLBACK_TITLE = re.compile(r'^discussion (?:notes|\d+)$', re.I)
+
+
+# Passed through the note policy in place of a missing title so sanitizing a row
+# with no notes does not count as a generated-title fallback. Never stored.
+PENDING_TITLE_STAND_IN = 'Pending capture'
+
+
+def is_fallback_title(value: Any) -> bool:
+    """Exactly the deterministic fallback labels, never another placeholder."""
+    return isinstance(value, str) and bool(_FALLBACK_TITLE.fullmatch(re.sub(r'\s+', ' ', value).strip()))
+
+
+def notes_pending(structured: Any) -> bool:
+    """True when no notes exist yet: no usable title, note body, task or event.
+
+    A capture stub and a raw-capture completion carry an empty structure. The
+    deterministic fallback title belongs to generated notes whose headline is
+    unusable; on a row with no notes it reads as a finished conversation, so
+    Home stops presenting the wait and the batch projection stops registering
+    the first-summary obligation (2026-11-16 incident).
+    """
+    if not isinstance(structured, Mapping):
+        return True
+    if valid_title(structured.get('title')):
+        return False
+    if any(safe_body(structured.get(key)).strip() for key in ('overview', 'gist')):
+        return False
+    sections = structured.get('sections')
+    if any(
+        isinstance(section, Mapping) and safe_body(section.get('body_markdown')).strip()
+        for section in (sections if isinstance(sections, list) else [])
+    ):
+        return False
+    return not any(structured.get(key) for key in ('action_items', 'events'))
+
+
+def untitled_pending(structured: Any) -> bool:
+    """No title, or only a placeholder on a row with no notes.
+
+    A placeholder beside real note content is generated notes with an unusable
+    headline: that row is finished and must keep its notes visible.
+    """
+    title = structured.get('title') if isinstance(structured, Mapping) else None
+    return not str(title or '').strip() or notes_pending(structured)
+
+
+def display_title(title: Any, preview: Any, *, label_recording: bool = False) -> Any:
+    """Replace a bare fallback with a neutral label only for eligible Home cards."""
+    if is_fallback_title(title) and not (isinstance(preview, str) and preview.strip()):
+        return fallback_title(None) if label_recording else ''
+    return title
+
+
+def placeholder_title_wire(row: dict[str, Any], *, label_recording: bool = False) -> dict[str, Any]:
+    """Hide a bare fallback label and keep ready recordings identifiable.
+
+    The legacy Home list first applies home_step.project. Other readers
+    that do not project a step still serve a bare fallback as untitled.
+    """
+    structured = row.get('structured')
+    if not isinstance(structured, Mapping):
+        return row
+    if (
+        not is_fallback_title(structured.get('title'))
+        or str(row.get('user_title') or '').strip()
+        or not notes_pending(structured)
+    ):
+        return row
+    title = display_title(
+        structured.get('title'),
+        '',
+        label_recording=bool(label_recording and row.get('record_projection_revision') and not row.get('is_locked')),
+    )
+    return {**row, 'structured': {**structured, 'title': title}}
+
+
+def is_deferred_preview_title(row: Any) -> bool:
+    """Recognize legacy, unmarked first-eight-word placeholders without a read/write."""
+    structured = field(row, 'structured')
+    first = next(
+        (
+            str(field(segment, 'text') or '').strip()
+            for segment in field(row, 'transcript_segments') or []
+            if str(field(segment, 'text') or '').strip()
+        ),
+        '',
+    )
+    return (
+        not field(structured, 'title_provenance')
+        and not present(structured)
+        and len(first.split()) >= 8
+        and field(structured, 'title') == ' '.join(first.split()[:8])
+    )
+
+
+def title_for_stability(row: Any) -> str:
+    """A deterministic/preview title is provisional until real enrichment lands."""
+    structured = field(row, 'structured')
+    if field(structured, 'title_provenance') in STAND_IN_TITLE_PROVENANCES or is_deferred_preview_title(row):
+        return ''
+    return field(structured, 'title') or ''
+
+
+def neutralize_minimum_title(
+    row: dict[str, Any], *, tz_name_provider: Optional[Callable[[], Optional[str]]] = None
+) -> dict[str, Any]:
+    """Replace transcript-echo titles that are not the row's real title yet.
+
+    Short, below-floor and summary-owed rows keep a neutral ``Recording · time``
+    title until a real one lands. ``tz_name_provider`` is called only when a
+    title is replaced; without a zone the time renders in UTC.
+    """
+    if not home_neutral_minimum_titles_enabled():
+        return row
+    structured = row.get('structured') or {}
+    if (
+        row.get('finalization_status') == 'dead_letter'
+        or row.get('summary_retryable')
+        or str(row.get('user_title') or '').strip()
+    ):
+        return row
+    provenance = structured.get('title_provenance')
+    text_parts = [str(s.get('text') or '').strip() for s in row.get('transcript_segments') or [] if isinstance(s, dict)]
+    text = ' '.join(part for part in text_parts if part)
+    start, end = row.get('started_at'), row.get('finished_at')
+    short = isinstance(start, datetime) and isinstance(end, datetime) and 0 <= (end - start).total_seconds() <= 60
+    decision = row.get('relevance_decision') or {}
+    floor = (
+        row.get('summary_blocked_reason') == 'content_below_floor' or decision.get('reason') == 'content_below_floor'
+    )
+    title = structured.get('title')
+    lazy = is_deferred_preview_title(row)
+    minimum = (short or floor or summary_owed(row)) and (
+        provenance in STAND_IN_TITLE_PROVENANCES
+        or (not provenance and text and title == truncate_on_word_boundary(first_sentence(text)))
+    )
+    if not minimum and not lazy:
+        return row
+    result = dict(row)
+    result['structured'] = {
+        **structured,
+        'title': fallback_title(row.get('started_at') or row.get('created_at'), tz_name=_zone(tz_name_provider)),
+        # A historical stand-in stays historical: it owes no automatic summary, so Home must not read it as one.
+        'title_provenance': provenance if provenance == TITLE_PROVENANCE else 'server_minimum',
+    }
+    return result
+
+
+def _zone(provider: Optional[Callable[[], Optional[str]]]) -> Optional[str]:
+    if provider is None:
+        return None
+    try:
+        return provider()
+    except Exception:
+        # A title label must never fail a read; UTC is the documented fallback.
+        return None
+
+
+def user_zone_provider(uid: str) -> Callable[[], Optional[str]]:
+    """Lazy, process-cached lookup of the user's stored zone for neutral titles."""
+
+    def provider() -> Optional[str]:
+        from database.notifications import get_cached_user_time_zone
+
+        return get_cached_user_time_zone(uid)
+
+    return provider
+
+
+def project_home(uid: str, row: dict[str, Any], *, firestore_client=None, read_budget=None):
+    """Neutral Home titles precede the shared transcript-capability projection."""
+    from utils.agent_capabilities.transcripts import project
+
+    return project(
+        uid,
+        neutralize_minimum_title(row, tz_name_provider=user_zone_provider(uid)),
+        firestore_client=firestore_client,
+        read_budget=read_budget,
+    )

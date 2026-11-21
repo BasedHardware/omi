@@ -7,6 +7,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from database import conversations as db
+from utils.observability import speaker_identification
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestoreCollection
 from tests.unit.test_manual_speaker_assignments import world, read
 
@@ -68,6 +69,7 @@ def test_migration_reencodes_receipt_and_transcript_from_current_transaction(
         StrictFirestoreCollection, 'select', lambda self, fields: SimpleNamespace(stream=lambda: []), raising=False
     )
     monkeypatch.setattr(db, 'db', store)
+    monkeypatch.setattr(db.conversations_v3_backfill_runs, '_live_run_ids', lambda *a, **kw: [])
     db.migrate_conversations_level_batch('u', ['c'], target)
     saved = read(world)
     assert saved['transcript_segments'] == expected['transcript_segments']
@@ -89,7 +91,7 @@ def test_migration_reencodes_receipt_and_transcript_from_current_transaction(
     monkeypatch.setattr(
         store,
         'get_all',
-        lambda refs, field_paths: [SimpleNamespace(exists=True, id='c', reference=ref) for ref in refs],
+        lambda refs, field_paths: [SimpleNamespace(exists=True, id='c', reference=ref, to_dict=dict) for ref in refs],
     )
     db.migrate_conversations_level_batch('u', ['c'], target)
     assert store.rows[path] == before
@@ -109,7 +111,7 @@ def test_automatic_review_is_emitted_after_commit_and_not_on_retry(world, monkey
         assert saved['person_id'] == 'new' and saved['speaker_match_source'] is None
         observed.append(before[0].get('speaker_match_source'))
 
-    monkeypatch.setattr(db, 'record_speaker_review', observe)
+    monkeypatch.setattr(speaker_identification, 'record_speaker_review', observe)
     db.assign_conversation_speaker('u', 'c', person_id='new', segment_ids=['s1'])
     db.assign_conversation_speaker('u', 'c', person_id='new', segment_ids=['s1'])
     assert observed == ['sync_embedding', None]
@@ -120,7 +122,7 @@ def test_blocked_manual_write_never_emits_review(world, monkeypatch, field, erro
     store, path, _ = world
     store.rows[path][field] = True
     observed = []
-    monkeypatch.setattr(db, 'record_speaker_review', lambda *args: observed.append(args))
+    monkeypatch.setattr(speaker_identification, 'record_speaker_review', lambda *args: observed.append(args))
     with pytest.raises(error):
         db.assign_conversation_speaker('u', 'c', person_id='new', segment_ids=['s1'])
     assert observed == []

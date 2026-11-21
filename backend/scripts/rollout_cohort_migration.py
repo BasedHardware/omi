@@ -8,21 +8,23 @@ from dataclasses import dataclass
 
 from google.cloud.firestore_v1.base_query import FieldFilter
 
-from config.rollout_cohorts import COLLECTION, COHORT_ENVS, valid_uid
+from config.rollout_cohorts import COLLECTION, COHORT_ENVS, parse_cohort, valid_uid
+from database.rollout_cohorts import (
+    HELD_CONTENT_DOCUMENT,
+    RAMP_DOC_ID,
+    STT_CAP_DOCUMENT,
+    normalize_ramp_document,
+)
 
 KEYS = {
     'batch-pipeline': 'BATCH_PIPELINE_UID_ALLOWLIST',
     'batch-pipeline-recovery': 'BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST',
-    'first-summary': 'FIRST_SUMMARY_UID_ALLOWLIST',
-    'audio-archive': 'AUDIO_ARCHIVE_UID_ALLOWLIST',
     'dream-agent': 'DREAM_AGENT_UID_ALLOWLIST',
     'speaker-grouping-shadow': 'SPEAKER_GROUPING_SHADOW_UID_ALLOWLIST',
     'stt-live-demand': 'STT_LIVE_DEMAND_UID_ALLOWLIST',
-    'sync-legacy-fresh': 'SYNC_LEGACY_FRESH_UID_ALLOWLIST',
     'sync-lineage-resolve': 'SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST',
     'transcription-final-pass': 'TRANSCRIPTION_FINAL_PASS_UID_ALLOWLIST',
     'transcription-shadow': 'TRANSCRIPTION_SHADOW_UID_ALLOWLIST',
-    'mobile-standard-batch': 'MOBILE_STANDARD_BATCH_UIDS',
 }
 CLOUD_RUN_HOSTS = ('backend', 'backend-sync', 'backend-sync-backfill', 'backend-integration')
 # A missing key on a participating host is a real empty cohort (lineage is
@@ -30,10 +32,9 @@ CLOUD_RUN_HOSTS = ('backend', 'backend-sync', 'backend-sync-backfill', 'backend-
 ALL_HOSTS = frozenset('cloud-run/' + name for name in CLOUD_RUN_HOSTS) | {'helm/backend-listen', 'helm/pusher'}
 HOSTS = {
     'stt-live-demand': {'helm/backend-listen'},
-    'mobile-standard-batch': {'helm/backend-listen'},
     'sync-lineage-resolve': ALL_HOSTS - {'helm/pusher'},
-    'sync-legacy-fresh': {'cloud-run/backend-sync', 'cloud-run/backend-sync-backfill'},
 }
+MIGRATABLE = frozenset(KEYS) | {'batch-pipeline-shadow', 'messaging-telegram', 'messaging-imessage'}
 LIMIT = 450  # A single bounded atomic seed; refuse to truncate a larger live cohort.
 
 
@@ -68,6 +69,16 @@ def _json_command(argv):
     return json.loads(result.stdout)
 
 
+def _serving_container(containers):
+    """The Cloud Run ingress container: the only one, or the only one that declares ports (sidecars do not)."""
+    if len(containers) == 1:
+        return containers[0]
+    ingress = [container for container in containers if container.get('ports')]
+    if len(ingress) != 1:
+        raise ValueError('ambiguous serving container')
+    return ingress[0]
+
+
 def read_live(environment, kube_context, *, command=_json_command):
     """Read the actually serving Cloud Run revision and installed Helm release values."""
     project = 'based-hardware' if environment == 'prod' else 'based-hardware-dev'
@@ -79,10 +90,7 @@ def read_live(environment, kube_context, *, command=_json_command):
         if len(traffic) != 1 or traffic[0]['percent'] != 100:
             raise ValueError('split Cloud Run traffic requires a separate migration')
         revision = command(['gcloud', 'run', 'revisions', 'describe', traffic[0]['revisionName'], *base])
-        containers = revision['spec']['containers']
-        if len(containers) != 1:
-            raise ValueError('ambiguous serving container')
-        sources['cloud-run/' + host] = _env(containers[0].get('env', []))
+        sources['cloud-run/' + host] = _env(_serving_container(revision['spec']['containers']).get('env', []))
     for host in ('backend-listen', 'pusher'):
         release = f'{environment}-omi-{host}'
         values = command(
@@ -140,7 +148,7 @@ def cohort_sources(sources, name):
 
 def inventory(sources):
     desired, conflicts = {}, {}
-    for name in COHORT_ENVS:
+    for name in MIGRATABLE:
         rows = cohort_sources(sources, name)
         desired[name] = rows[0]
         if any(row != rows[0] for row in rows[1:]):
@@ -148,14 +156,37 @@ def inventory(sources):
     return desired, conflicts
 
 
-def validate_stored_documents(client):
+def _validate_stored_cohort_control_document(data, environment):
+    tokens = data.get('tokens') if isinstance(data, dict) else None
+    if (
+        not isinstance(data, dict)
+        or data.get('environment') != environment
+        or not isinstance(tokens, str)
+        or (bool(tokens.strip()) and parse_cohort(tokens) is None)
+    ):
+        raise ValueError('malformed stored cohort control document')
+
+
+def validate_stored_documents(client, environment):
+    if environment not in {'prod', 'dev'}:
+        raise ValueError('unsupported migration environment')
     # Verify the same whole-document shape the serving adapter requires. A
     # malformed unrelated field can deny every cohort, including legacy all.
-    rows = list(client.collection(COLLECTION).limit(LIMIT + 1).stream(timeout=10.0, retry=None))
-    if len(rows) > LIMIT:
-        raise ValueError('stored cohort inventory exceeds migration bound')
+    # Control documents share the collection but are never member records.
+    # Reserve their slots plus one overflow row so validation preserves LIMIT.
+    rows = list(client.collection(COLLECTION).limit(LIMIT + 4).stream(timeout=10.0, retry=None))
+    member_count = 0
     for row in rows:
         data = row.to_dict()
+        if row.id == RAMP_DOC_ID:
+            normalize_ramp_document(data)
+            continue
+        if row.id in {STT_CAP_DOCUMENT, HELD_CONTENT_DOCUMENT}:
+            _validate_stored_cohort_control_document(data, environment)
+            continue
+        member_count += 1
+        if member_count > LIMIT:
+            raise ValueError('stored cohort inventory exceeds migration bound')
         cohorts = data.get('cohorts') if isinstance(data, dict) else None
         if not isinstance(cohorts, dict) or any(
             not isinstance(flags, dict) or any(type(value) is not bool for value in flags.values())
@@ -181,7 +212,7 @@ def migrate(args, *, client_factory, live_reader=read_live):
     sources = live_reader(args.environment, args.kube_context)
     desired, conflicts = inventory(sources)
     if conflicts:
-        for name in sorted(COHORT_ENVS):
+        for name in sorted(MIGRATABLE):
             rows = cohort_sources(sources, name)
             print(
                 f'{name}: sources={len(rows)} min_members={min(len(r.members) for r in rows)} '
@@ -194,7 +225,7 @@ def migrate(args, *, client_factory, live_reader=read_live):
             print(f'{name}: live_members={len(row.members)} legacy_all={int(row.all_users)} writes=0')
         return 0
     client = client_factory(project=args.project)
-    validate_stored_documents(client)
+    validate_stored_documents(client, args.environment)
     stored = {
         name: (read_stored(client, args.environment, name, True), read_stored(client, args.environment, name, False))
         for name in desired

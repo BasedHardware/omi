@@ -15,7 +15,6 @@ import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/episode.dart';
 import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
-import 'package:omi/gen/pigeon_communicator.g.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/conversations/widgets/conversation_list_item.dart';
 import 'package:omi/pages/episodes/episode_moments_section.dart';
@@ -101,6 +100,11 @@ class _LiveCapture extends CaptureProvider {
         );
 
   String source = 'omi';
+
+  DateTime? transcriptOrigin;
+
+  @override
+  DateTime? get liveTranscriptStartedAt => transcriptOrigin ?? super.liveTranscriptStartedAt;
 
   LivePreviewController? preview;
   bool previewAdmitted = false;
@@ -565,7 +569,7 @@ void main() {
       await tester.pump(const Duration(seconds: 2));
       expect(tester.takeException(), isNull);
     });
-    testWidgets('with episodes on it shows the running notes, captured tasks, moments and Wrap Up Now', (tester) async {
+    testWidgets('with episodes on it shows the running notes, captured tasks and Wrap Up Now', (tester) async {
       final capture = _LiveCapture();
       addTearDown(capture.dispose);
       capture.segments = [
@@ -583,8 +587,7 @@ void main() {
       expect(find.byKey(const Key('live_episode_so_far')), findsOneWidget);
       expect(find.textContaining('Picking a place near the office'), findsOneWidget);
       expect(find.textContaining('Book a table for Friday'), findsOneWidget);
-      expect(find.text('Where to eat'), findsOneWidget);
-      expect(find.text('Booking'), findsOneWidget);
+      expect(find.text('Where to eat'), findsNothing);
       expect(find.byKey(const Key('episode_wrap_up_button')), findsOneWidget);
       expect(find.text('Omi wraps this up when you move on'), findsOneWidget);
       expect(find.byKey(const Key('process_now_button')), findsNothing);
@@ -786,6 +789,25 @@ void main() {
       await _unmount(tester);
     });
 
+    testWidgets('a cloud live row shows new transcript words before the clock ticks', (tester) async {
+      final capture = _LiveCapture()..segments = [_segment('cloud', 'First live words', 0)];
+      addTearDown(capture.dispose);
+      final episodes = _episodes(live: _liveEpisode());
+      addTearDown(episodes.dispose);
+      await _pump(tester, const Scaffold(body: LiveEpisodeRow()), capture: capture, episodes: episodes);
+      String subtitle() => tester
+          .widget<Text>(
+              find.descendant(of: find.byKey(const Key('home_live_episode_preview')), matching: find.byType(Text)))
+          .textSpan!
+          .toPlainText();
+      expect(subtitle(), 'First live words');
+      capture.onSegmentReceived([_segment('cloud', 'These are the latest live words', 0)]);
+      await tester.pump();
+      expect(subtitle(), 'These are the latest live words');
+      expect(_rowLabel(tester), contains('These are the latest live words'));
+      await _unmount(tester);
+    });
+
     testWidgets('a local-preview row reads its newest preview line in the subtitle', (tester) async {
       final engine = FakeLivePreviewEngine();
       final preview = LivePreviewController(
@@ -870,10 +892,43 @@ void main() {
       final updated = tester.widget<Text>(
           find.descendant(of: find.byKey(const Key('home_live_episode_preview')), matching: find.byType(Text)));
       expect(updated.textSpan!.toPlainText(), endsWith('we can ship'));
+      expect(_rowLabel(tester), contains('we can ship'), reason: 'visible and spoken snippets update together');
       await tester.runAsync(() async {
         preview.dispose();
         disposed = true;
       });
+      await _unmount(tester);
+    });
+
+    testWidgets('a covered local preview keeps the final transcript snippet on Home', (tester) async {
+      final engine = FakeLivePreviewEngine();
+      final preview = LivePreviewController(
+        engine: engine,
+        telemetry: LivePreviewTelemetry(emit: (_) {}),
+        platform: LivePreviewPlatform.ios,
+        osMajor: 26,
+      );
+      preview.admit(language: 'en');
+      final origin = DateTime(2026, 10, 20, 12);
+      await tester.runAsync(() async {
+        await pumpEventQueue();
+        engine.emit('covered', 'Provisional words', true,
+            startedAt: origin, endedAt: origin.add(const Duration(seconds: 5)));
+        await pumpEventQueue();
+      });
+      final capture = _LiveCapture()
+        ..preview = preview
+        ..previewAdmitted = true
+        ..transcriptOrigin = origin
+        ..segments = [_segment('final', 'The finished words stay live', 0)];
+      addTearDown(capture.dispose);
+      final episodes = _episodes(live: null);
+      addTearDown(episodes.dispose);
+      await _pump(tester, const Scaffold(body: LiveEpisodeRow()), capture: capture, episodes: episodes);
+      final line = tester.widget<Text>(
+          find.descendant(of: find.byKey(const Key('home_live_episode_preview')), matching: find.byType(Text)));
+      expect(line.textSpan!.toPlainText(), 'The finished words stay live');
+      await tester.runAsync(() async => preview.dispose());
       await _unmount(tester);
     });
 
@@ -1219,50 +1274,6 @@ void main() {
       expect(find.byKey(const Key('device_right_now_live')), findsNothing, reason: 'the failure replaces the live row');
       await tester.tap(find.byKey(const Key('device_right_now_no_audio')));
       expect(reconnected, 1);
-    });
-
-    testWidgets('recently lists only real drops from the last day', (tester) async {
-      BleDisconnectEvent event(
-        DateTime at, {
-        int reconnectMs = 90000,
-        bool manual = false,
-        String type = 'disconnect',
-      }) =>
-          BleDisconnectEvent(
-            timestamp: at.millisecondsSinceEpoch,
-            reason: 'link_lost',
-            reasonCode: 8,
-            eventType: type,
-            isManual: manual,
-            lastRssi: -70,
-            connectionDurationMs: 600000,
-            appState: 'foreground',
-            timeToReconnectMs: reconnectMs,
-            rssiTrend: 'stable',
-          );
-      await tester.pumpWidget(
-        wrap(
-          DeviceRecentlyGroup(
-            now: () => _now,
-            load: () async => [
-              event(_now.subtract(const Duration(hours: 30))),
-              event(_now.subtract(const Duration(hours: 2)), manual: true),
-              event(_now.subtract(const Duration(hours: 1)), type: 'fail_to_connect'),
-              event(_now.subtract(const Duration(minutes: 40)), reconnectMs: 0),
-              event(_now.subtract(const Duration(minutes: 20))),
-            ],
-          ),
-        ),
-      );
-      await tester.pump();
-      expect(find.byKey(const Key('device_recently')), findsOneWidget);
-      expect(find.textContaining('Disconnected for'), findsOneWidget);
-    });
-
-    testWidgets('recently is absent with no history', (tester) async {
-      await tester.pumpWidget(wrap(DeviceRecentlyGroup(load: () async => const [])));
-      await tester.pump();
-      expect(find.byKey(const Key('device_recently')), findsNothing);
     });
   });
 

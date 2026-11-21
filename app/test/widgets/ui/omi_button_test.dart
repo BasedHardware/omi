@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:omi/ui/ui.dart';
@@ -9,6 +10,39 @@ import 'ui_test_app.dart';
 
 void main() {
   Finder spinner() => find.byType(CircularProgressIndicator);
+
+  testWidgets('an unlimited label wraps at narrow widths without losing words', (tester) async {
+    const label = 'Seleccionar · Transcripción';
+    var calls = 0;
+    await pumpUi(
+      tester,
+      Scaffold(
+        body: Center(
+          child: SizedBox(
+            width: 240,
+            child: MediaQuery(
+              data: const MediaQueryData(textScaler: TextScaler.linear(2)),
+              child: OmiButton(
+                label: label,
+                onPressed: () => calls++,
+                variant: OmiButtonVariant.tertiary,
+                size: OmiButtonSize.compact,
+                icon: Icons.checklist,
+                maxLines: null,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    final paragraph = tester.renderObject<RenderParagraph>(find.text(label));
+    expect(paragraph.didExceedMaxLines, isFalse);
+    expect(tester.getSize(find.byType(OmiButton)).width, lessThanOrEqualTo(240));
+    expect(tester.getSize(find.byType(OmiButton)).height, greaterThan(48));
+    await tester.tap(find.text(label));
+    expect(calls, 1);
+    expect(tester.takeException(), isNull);
+  });
 
   testWidgets('shows a spinner while onPressed runs and clears it when it completes', (tester) async {
     final gate = Completer<void>();

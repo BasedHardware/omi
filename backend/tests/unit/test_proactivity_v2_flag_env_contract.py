@@ -25,6 +25,16 @@ SURFACES = (
     ('cloud_run', 'services', 'backend-sync-backfill'),
     ('cloud_run', 'services', 'backend-integration'),
 )
+FROZEN_PROD_SOURCES = (
+    (('gke', 'pusher'), 'dual'),
+    (('gke', 'backend-listen'), 'dual'),
+    (('llm_gateway',), 'omi'),
+    (('desktop_backend',), 'dual'),
+    (('cloud_run', 'services', 'backend'), 'dual'),
+    (('cloud_run', 'services', 'backend-sync'), 'dual'),
+    (('cloud_run', 'services', 'backend-sync-backfill'), 'dual'),
+    (('cloud_run', 'services', 'backend-integration'), 'dual'),
+)
 
 
 @pytest.fixture(scope='module')
@@ -38,6 +48,25 @@ def surface(config, path):
     return config
 
 
+@pytest.mark.parametrize('artifact', ['overlay', 'manifest'])
+@pytest.mark.parametrize('path,expected', FROZEN_PROD_SOURCES)
+def test_prod_sources_remain_frozen_per_lead2_95e1f1(artifact, path, expected, deployment_manifest):
+    # Integration/backfill had no env (effective posthog); dual fills the
+    # provisioning gap to the authorized frozen target, still serving PostHog.
+    assert {path for path, _ in FROZEN_PROD_SOURCES} == set(SURFACES)
+    config = (
+        yaml.safe_load((ROOT / 'backend/deploy/runtime_env/prod.overlay.yaml').read_text())['overlay']
+        if artifact == 'overlay'
+        else deployment_manifest['environments']['prod']
+    )
+    assert surface(config, path)['env']['OMI_FLAGS_SOURCE'] == {'value': expected, 'category': 'rollout'}
+
+
+def serves_from_store(host):
+    # Hosts on OMI_FLAGS_SOURCE=omi read proactivity_v2 from the Omi flag store and carry no PostHog token.
+    return (host['env'].get('OMI_FLAGS_SOURCE') or {}).get('value') == 'omi'
+
+
 def public_token():
     swift = (ROOT / 'desktop/macos/Desktop/Sources/PostHogManager.swift').read_text()
     return re.search(r'apiKey = "(phc_[^"]+)"', swift)[1]
@@ -46,17 +75,27 @@ def public_token():
 @pytest.mark.parametrize('stage', ['dev', 'prod'])
 def test_every_host_binds_same_public_token_and_chart_values(stage, deployment_manifest):
     config = deployment_manifest['environments'][stage]
+    from_store = set()
     for path in SURFACES:
         host = surface(config, path)
+        assert TOKEN not in host.get('secrets', {})
+        if serves_from_store(host):
+            from_store.add(path)
+            assert TOKEN not in host['env'] and HOST not in host['env']
+            continue
         assert host['env'][TOKEN] == {'value': public_token(), 'category': 'rollout'}
         assert host['env'][HOST] == {'value': 'https://us.posthog.com', 'category': 'rollout'}
-        assert TOKEN not in host.get('secrets', {})
     assert _validate_proactivity_v2_flag_hosts(stage, config) == []
-    for chart in ('pusher', 'backend-listen', 'llm-gateway'):
-        path = ROOT / f'backend/charts/{chart}/{stage}_omi_{chart.replace("-", "_")}_values.yaml'
-        values = yaml.safe_load(path.read_text())
+    for chart, path in (
+        ('pusher', ('gke', 'pusher')),
+        ('backend-listen', ('gke', 'backend-listen')),
+        ('llm-gateway', ('llm_gateway',)),
+    ):
+        values_path = ROOT / f'backend/charts/{chart}/{stage}_omi_{chart.replace("-", "_")}_values.yaml'
+        values = yaml.safe_load(values_path.read_text())
         for name, value in ((TOKEN, public_token()), (HOST, 'https://us.posthog.com')):
-            assert [entry for entry in values['env'] if entry['name'] == name] == [{'name': name, 'value': value}]
+            expected = [] if path in from_store else [{'name': name, 'value': value}]
+            assert [entry for entry in values['env'] if entry['name'] == name] == expected
 
 
 @pytest.mark.parametrize('stage', ['dev', 'prod'])
@@ -64,13 +103,17 @@ def test_every_host_binds_same_public_token_and_chart_values(stage, deployment_m
 @pytest.mark.parametrize('entry', [None, {'value': 'disabled'}, {'value': 'not-public'}, {'secret': {'key': TOKEN}}])
 def test_manifest_rejects_missing_or_invalid_binding_on_each_host(stage, path, entry, deployment_manifest):
     config = copy.deepcopy(deployment_manifest['environments'][stage])
-    env = surface(config, path)['env']
+    host = surface(config, path)
+    env = host['env']
+    scope = '/'.join(name for name in path if name != 'services')
     if entry is None:
-        del env[TOKEN]
+        env.pop(TOKEN, None)
     else:
         env[TOKEN] = entry
     errors = _validate_proactivity_v2_flag_hosts(stage, config)
-    scope = '/'.join(name for name in path if name != 'services')
+    if entry is None and serves_from_store(host):
+        assert not any(scope in error.scope for error in errors)
+        return
     assert any(TOKEN in error.message and scope in error.scope for error in errors)
 
 

@@ -23,8 +23,12 @@ def find_sync_live_overlap_candidates(user_ref, incoming: dict, *, diagnostics: 
         diagnostics.pop('incomplete_reason', None)
     fields = [
         'id',
+        'v3_derived',
         'started_at',
         'finished_at',
+        'recorded_start',
+        'recorded_end',
+        'clock',
         'source',
         'client_device_id',
         'capture_evidence',

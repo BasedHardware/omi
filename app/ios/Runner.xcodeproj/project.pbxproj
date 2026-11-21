@@ -7,6 +7,8 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+        F1A6C0700000000000000001 /* OmiPostHogSetup.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1A6C0700000000000000003 /* OmiPostHogSetup.swift */; };
+        F1A6C0700000000000000002 /* OmiPostHogSetup.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1A6C0700000000000000003 /* OmiPostHogSetup.swift */; };
 		A2047914A2047914A2047914 /* SafeFoundationSinks.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5F00001A5F00001A5F00001 /* SafeFoundationSinks.swift */; };
 		A2047913A2047913A2047913 /* WatchRecordingStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2047910A2047910A2047910 /* WatchRecordingStore.swift */; };
 		A2047912A2047912A2047912 /* WatchRecordingStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2047910A2047910A2047910 /* WatchRecordingStore.swift */; };
@@ -293,6 +295,7 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+        F1A6C0700000000000000003 /* OmiPostHogSetup.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OmiPostHogSetup.swift; sourceTree = "<group>"; };
 		A2047910A2047910A2047910 /* WatchRecordingStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchRecordingStore.swift; sourceTree = "<group>"; };
 		037C2E4049E0EF06EF66231A /* SiriSession.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SiriSession.swift; sourceTree = "<group>"; };
 		03BA73541F37D6361DCF18DC /* Pods-Runner.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Runner.release.xcconfig"; path = "Target Support Files/Pods-Runner/Pods-Runner.release.xcconfig"; sourceTree = "<group>"; };
@@ -700,6 +703,7 @@
 				7AA100000000000000000004 /* TtsMp3Decoder.h */,
 				7AA100000000000000000005 /* minimp3.h */,
 				7AA100000000000000000008 /* TtsPcmPlayer.swift */,
+                F1A6C0700000000000000003 /* OmiPostHogSetup.swift */,
 				E1293503E1293503E1293503 /* SpeechDeadline.swift */,
 				F0E325766888761A213589D3 /* LivePreviewSelection.swift */,
 				9E9FCBF3791B725CA1BEA76C /* LivePreviewPlugin.swift */,
@@ -1231,6 +1235,7 @@
 				51794E0351794E0351794E03 /* SyncTransferBackgroundLease.swift in Sources */,
 				7AA100000000000000000001 /* TtsMp3Decoder.c in Sources */,
 				7AA100000000000000000006 /* TtsPcmPlayer.swift in Sources */,
+                F1A6C0700000000000000001 /* OmiPostHogSetup.swift in Sources */,
 				E1293501E1293501E1293501 /* SpeechDeadline.swift in Sources */,
 				908FD40D876E8C8344452BC0 /* LivePreviewSelection.swift in Sources */,
 				E5ECD5F893BE640A2A446738 /* LivePreviewPlugin.swift in Sources */,
@@ -1309,6 +1314,7 @@
 				51794E0451794E0451794E04 /* SyncTransferBackgroundLease.swift in Sources */,
 				7AA100000000000000000002 /* TtsMp3Decoder.c in Sources */,
 				7AA100000000000000000007 /* TtsPcmPlayer.swift in Sources */,
+                F1A6C0700000000000000002 /* OmiPostHogSetup.swift in Sources */,
 				E1293502E1293502E1293502 /* SpeechDeadline.swift in Sources */,
 				E2656CA5F9118C50722F0764 /* LivePreviewSelection.swift in Sources */,
 				B9C64E7F6FA52D7B7B3F1403 /* LivePreviewPlugin.swift in Sources */,

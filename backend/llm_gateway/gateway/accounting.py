@@ -127,6 +127,7 @@ class AttemptTrace:
     """Ordered attempt trace for one logical gateway invocation."""
 
     attempts: list[ProviderAttempt] = field(default_factory=list)
+    keyed: bool = False
 
     def record(
         self,
@@ -194,6 +195,8 @@ class AccountingContext:
     app_platform: str | None = None
     product_lane: str | None = None
     client_platform: str | None = None
+    idempotency_scope: str | None = None
+    idempotency_environment: str | None = None
 
     @classmethod
     def create(
@@ -368,8 +371,16 @@ class AccountingEvent:
     cache_field_reported: bool = False
     cache_storage_token_seconds: int = 0
 
+    # Observation-only validity retained from raw provider metadata. Deliberately
+    # not added to as_dict(): existing ledger pricing/persistence is unchanged.
+    billable_usage_complete: bool = False
+    idempotency_scope: str | None = None
+    idempotency_environment: str | None = None
+
     def as_dict(self) -> dict[str, Any]:
         return {
+            **({'idempotency_scope': self.idempotency_scope} if self.idempotency_scope else {}),
+            **({'idempotency_environment': self.idempotency_environment} if self.idempotency_environment else {}),
             'attempt_id': self.attempt_id,
             'invocation_id': self.invocation_id,
             'occurred_at': self.occurred_at,
@@ -594,6 +605,13 @@ def anthropic_usage_from_response(
                 cache_field_reported='cache_read_input_tokens' in raw,
             ),
         ),
+        token_usage_complete=(
+            all(type(raw.get(field)) is int and raw[field] >= 0 for field in ('input_tokens', 'output_tokens'))
+            and all(
+                type(raw.get(field, 0)) is int and raw.get(field, 0) >= 0
+                for field in ('cache_read_input_tokens', 'cache_creation_input_tokens')
+            )
+        ),
         provider_response_id=_string_or_none(response.get('id')),
         actual_model_version=_string_or_none(response.get('model')),
     )
@@ -686,6 +704,8 @@ def build_accounting_event(
         cost_basis = priced.cost_basis
     return AccountingEvent(
         attempt_id=f'{context.invocation_id}:{attempt.ordinal}',
+        idempotency_scope=context.idempotency_scope,
+        idempotency_environment=context.idempotency_environment,
         invocation_id=context.invocation_id,
         occurred_at=now.isoformat(),
         date=now.date().isoformat(),
@@ -725,6 +745,7 @@ def build_accounting_event(
         cacheable_prefix_tokens=attempt.cacheable_prefix_tokens,
         cache_field_reported=usage.cache_status not in {CacheStatus.NOT_REPORTED, CacheStatus.NOT_APPLICABLE},
         cache_storage_token_seconds=usage.cache_storage_token_seconds,
+        billable_usage_complete=attempt.billable_usage_complete and usage.cache_operation_usage_complete,
         unit_type=usage.unit_type,
         image_count=usage.image_count,
         image_size=usage.image_size,
@@ -784,6 +805,13 @@ def complete_openai_billable_usage(raw: Mapping[str, Any]) -> bool:
     if any(type(value) is not int or value < 0 for value in (cached, written, reasoning)):
         return False
     return cached + written <= input_count and reasoning <= output_count
+
+
+def complete_openai_embedding_usage(raw: Mapping[str, Any]) -> bool:
+    """Embedding receipts have input units only; absence is not a reported zero."""
+    prompt = raw.get('prompt_tokens')
+    total = raw.get('total_tokens', prompt)
+    return type(prompt) is int and prompt >= 0 and type(total) is int and total == prompt
 
 
 def _openai_usage(raw: Mapping[str, Any], *, cache_requested: bool) -> ProviderUsage:

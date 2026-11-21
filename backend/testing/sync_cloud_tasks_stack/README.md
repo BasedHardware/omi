@@ -114,7 +114,8 @@ one paid recovery despite duplicate/late deliveries (the status route reports
 `processing` with a nonzero `poll_after_ms` while recovery is held, prepared or
 running, with zero projected completion and no result/error even after a killed
 paid call whose outcome is unknown, then `completed`); a failing paid recovery settles `failed_held` and
-polls `failed` with `poll_after_ms: 0` without re-paying; worker SIGTERM drain;
+polls `processing/batch_unit_held` with `poll_after_ms: 300000` without re-paying
+or acknowledging phone custody; worker SIGTERM drain;
 worker SIGTERM + SIGKILL after grace → lease expiry → replacement completes;
 serving SIGTERM during the paid call → graceful settle → replacement never
 re-pays; serving SIGKILL during the paid call → intent stays `running`, never

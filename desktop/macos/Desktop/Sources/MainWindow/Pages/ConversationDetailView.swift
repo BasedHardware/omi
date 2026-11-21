@@ -1,3 +1,9 @@
+// The conversation detail page: summary/transcript panes over one conversation
+// with speaker labels, action items, and citations.
+//
+// Loads are generation-fenced (ConversationDetailRequestGate) so a response for
+// an older request can never overwrite the visible conversation after a fast
+// switch between items.
 import OmiSupport
 import OmiTheme
 import SwiftUI
@@ -156,6 +162,7 @@ struct ConversationDetailView: View {
   @State private var followUpDraftText = ""
   @State private var editedTitle = ""
   @State private var isUpdatingTitle = false
+  @StateObject private var deleteFeedback = ConversationDeleteFeedback()
   @State private var isDeleting = false
 
   // Capture deep-link focus state. A successful acknowledgement is terminal;
@@ -305,6 +312,7 @@ struct ConversationDetailView: View {
     ) {
       Task { await deleteConversation() }
     }
+    .conversationDeleteFeedback(deleteFeedback) { Task { await deleteConversation() } }
     .dismissableSheet(isPresented: $showEditDialog) {
       TextPromptSheet(
         title: "Rename Conversation",
@@ -400,7 +408,7 @@ struct ConversationDetailView: View {
 
       // All detail reads go through the repository. It can paint a complete
       // cached detail immediately, but always revalidates server-owned fields.
-      if requestedConversation.deferred || requestedConversation.status == .processing {
+      if requestedConversation.needsProcessingDetailRefresh {
         isEnrichingDeferred = true
         // Keep following the row for as long as it is open. A bounded loop
         // that silently stops leaves the banner promising a summary that no
@@ -414,7 +422,7 @@ struct ConversationDetailView: View {
           }
           guard isCurrentDetailRequest(requestGeneration) else { return }
           applyLoadedConversation(fetched)
-          if fetched.status != .processing { break }
+          if fetched.homeStep == "failed" || fetched.status != .processing { break }
           let delay = ProcessingConversationWatcher.pollDelay(attempt: attempts)
           attempts += 1
           try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
@@ -787,7 +795,10 @@ struct ConversationDetailView: View {
     defer { isDeleting = false }
 
     let conversationId = conversation.id
-    if await AppState.current?.deleteConversation(conversationId) == true {
+    let outcome =
+      await AppState.current?.deleteConversation(conversationId)
+      ?? .failed(message: "Couldn't delete the conversation. Please try again.")
+    if deleteFeedback.present(outcome) {
       await MainActor.run {
         onDelete?()
         onBack()
@@ -799,7 +810,9 @@ struct ConversationDetailView: View {
 
   private var summaryPane: some View {
     ScrollView {
-      ConversationDetailProcessingLayout(isProcessing: isEnrichingDeferred) {
+      ConversationDetailProcessingLayout(
+        isProcessing: isEnrichingDeferred && displayConversation.showsSummaryProcessing
+      ) {
         deferredProcessingSection
       } content: {
         // Spacing 0: each section carries its own top inset, so one that renders nothing (or only

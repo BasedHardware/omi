@@ -253,7 +253,7 @@ def record_llm_usage(
         if feature == 'chat_agent':
             update_data[f'{prefix}.cache_read_tokens'] = firestore.Increment(cache_read_tokens)
             update_data[f'{prefix}.cache_write_tokens'] = firestore.Increment(cache_write_tokens)
-    if feature == 'chat_agent' and surface in {'app', 'telegram', 'imessage', 'other'}:
+    if feature == 'chat_agent' and surface in {'app', 'telegram', 'imessage', 'whatsapp', 'other'}:
         counters = {
             'input_tokens': input_tokens,
             'output_tokens': output_tokens,

@@ -45,6 +45,8 @@ _CANDIDATE_DEDUP_SECONDS = 0.001
 class AudioPlacement:
     window: Optional[Tuple[float, float]]
     reason: str
+    # Set when the window is proven on one store only; readers must not cut from another.
+    store: Optional[str] = None
 
 
 def _seconds(value: Any) -> Optional[float]:

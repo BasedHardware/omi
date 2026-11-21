@@ -9,11 +9,13 @@ from typing import Any, Mapping
 from config.occasion_conversations import EPISODE_BOUNDARIES_MODE_ENV
 from config.refactor_modes import serving_for, shadow_or_serve
 from models.boundary_evidence import BoundaryParticipant, BoundarySignal
-from utils.conversations.lifecycle_clocks import utc, speech_clock
+from utils.conversations.lifecycle_clocks import utc
+from utils.conversations.recorded_time import conversation_span
+from config.recorded_time_tolerances import CLOSE_GAP_SECONDS
 from utils.conversations.lifecycle_metrics import observe
 from utils.episodes import boundary_store
 
-QUIET_SECONDS = 15 * 60
+QUIET_SECONDS = CLOSE_GAP_SECONDS
 
 
 def _safe(default):
@@ -91,22 +93,25 @@ def crossed(windows: Mapping[str, Mapping], start: datetime, end: datetime) -> b
 
 
 @_safe('legacy')
-def conversation_decision(uid: str, row: Mapping[str, Any], now: datetime, *, firestore_client: Any = None) -> str:
+def conversation_decision(
+    uid: str, row: Mapping[str, Any], arrival_at: datetime, *, firestore_client: Any = None
+) -> str:
     """close on an edge, hold within a meeting, legacy outside; shadow never serves."""
     if not shadow_or_serve(EPISODE_BOUNDARIES_MODE_ENV):
         return 'legacy'
     context = (row.get('external_data') or {}).get('calendar_meeting_context')
     ingest_context(uid, context, firestore_client=firestore_client)
     known = boundary_store.windows(uid, firestore_client=firestore_client)
-    start = utc(row.get('started_at'))
-    if start is None:
+    span = conversation_span(row)
+    start = span.recorded_start if span else None
+    if start is None or span is None:
         return 'legacy'
-    speech = speech_clock(uid, row) or start
+    speech = span.recorded_end
     decision = 'legacy'
-    if crossed(known, start, now):
+    if crossed(known, start, speech):
         decision = 'close'
     elif meeting_keys := active(known, start):
-        quiet = (now - speech).total_seconds() >= QUIET_SECONDS
+        quiet = (arrival_at - speech).total_seconds() >= QUIET_SECONDS
         decision = 'close' if quiet else 'hold'
         if quiet and serving_for(EPISODE_BOUNDARIES_MODE_ENV, uid):
             boundary_store.end_at(
@@ -120,7 +125,8 @@ def conversation_decision(uid: str, row: Mapping[str, Any], now: datetime, *, fi
 def merge_allowed(uid: str, left: Mapping[str, Any], right: Mapping[str, Any], *, firestore_client: Any = None) -> bool:
     if not shadow_or_serve(EPISODE_BOUNDARIES_MODE_ENV):
         return True
-    a, b = utc(left.get('started_at')), utc(right.get('started_at'))
+    left_span, right_span = conversation_span(left), conversation_span(right)
+    a, b = left_span.recorded_start if left_span else None, right_span.recorded_start if right_span else None
     if a is None or b is None:
         return True
     known = boundary_store.windows(uid, firestore_client=firestore_client)
@@ -142,8 +148,8 @@ def boundary_roster(
     row = conversation
     if not row:
         return []
-    start = utc(row.get('started_at'))
-    end = speech_clock(uid, row) or utc(row.get('finished_at'))
+    span = conversation_span(row)
+    start, end = (span.recorded_start, span.recorded_end) if span else (None, None)
     if start is None or end is None:
         return []
     known = boundary_store.windows(uid)

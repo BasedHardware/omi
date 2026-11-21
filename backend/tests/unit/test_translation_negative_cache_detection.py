@@ -22,7 +22,7 @@ from utils.translation_core.planner import TranslationMode, TranslationUnit, bui
 from utils.translation_core.providers import ProviderBatch, ProviderTranslation, TranslationProvider
 
 _PROFILE = TranslationProfile(
-    providers=(TranslationProvider.google,),
+    providers=(TranslationProvider.luna,),
     nllb_url='',
     nllb_timeout_seconds=1.0,
     cache_ttl_seconds=60,
@@ -59,7 +59,7 @@ class _FakeProviders:
     def translate(self, contents, target_language, source_language, profile, mode):
         self.requested.append(list(contents))
         return ProviderBatch(
-            provider=TranslationProvider.google,
+            provider=TranslationProvider.luna,
             translations=tuple(
                 ProviderTranslation(text=f'translated:{content}', detected_language=self._detected_language)
                 for content in contents

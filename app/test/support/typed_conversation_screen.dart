@@ -12,6 +12,7 @@ import 'package:omi/pages/conversations/conversations_page.dart';
 import 'package:omi/pages/home/widgets/home_daily_recaps.dart' show RecentRecapsLoader;
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/episode_provider.dart';
+import 'package:omi/providers/home_feed_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/folder_provider.dart';
@@ -110,9 +111,11 @@ Future<Widget> buildTypedConversationScreen(
   SyncProvider? sync,
   CaptureProvider? captureProvider,
   EpisodeProvider? episodes,
+  HomeFeedProvider? feed,
   LocalRecordingsProvider? recordingsProvider,
   ThemeData? theme,
   bool initializePreferences = true,
+  bool requestInitialLoad = false,
   RecentRecapsLoader loadRecaps = _noRecaps,
   PendingWorkStore? pendingWork,
 }) async {
@@ -152,12 +155,13 @@ Future<Widget> buildTypedConversationScreen(
         ChangeNotifierProvider<PhoneCallProvider>.value(value: phone),
         ChangeNotifierProvider<CaptureProvider>.value(value: capture),
         if (episodes != null) ChangeNotifierProvider<EpisodeProvider>.value(value: episodes),
+        if (feed != null) ChangeNotifierProvider<HomeFeedProvider>.value(value: feed),
         ChangeNotifierProvider<SpeakerTagPromptsProvider>.value(value: speakerTagPrompts),
         ChangeNotifierProvider<SyncProvider>.value(value: sync ?? _InertSyncProvider()),
       ],
       child: Scaffold(
           body: ConversationsPage(
-        requestInitialLoad: false,
+        requestInitialLoad: requestInitialLoad,
         loadRecaps: loadRecaps,
         pendingWork: pendingWork ?? inertPendingWorkStore(),
       )),

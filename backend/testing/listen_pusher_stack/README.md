@@ -7,11 +7,41 @@ Run this explicit, local-only gauntlet when changing the listen WebSocket,
 backend/testing/listen_pusher_stack/run.sh --keep
 ```
 
+On a loaded development host, `--startup-timeout 120` gives each owned process
+up to 120 seconds to bind its loopback port. This bounded option accepts 20–300
+seconds and leaves the normal 20-second floor (45 seconds for backend/worker)
+unchanged. It does not alter scenario assertions or production settings.
+The live-client restart scenario waits for its owned pusher in a worker thread
+so a slow import cannot block the harness WebSocket's ping/pong processing.
+
 Prerequisites are the backend virtual environment (`backend/scripts/sync-python-deps.sh`),
 the root Node dependencies (`npm ci`), Redis, and Java 21+. The runner discovers
 Homebrew's `openjdk@21` automatically when `java` is not already on `PATH` and
 chooses a per-run Firestore emulator port, so it does not conflict with shared
 developer services.
+
+The Firebase session is owned by `emulator_supervisor.py`, not by a bare
+`firebase emulators:exec`. Firebase can only bind the chosen port after the probe
+that picked it has been closed, so the port can be taken in that window; a
+Firestore client that lands on an HTTP/1.1 responder reports
+`Trying to connect an http1.x server (HTTP status 400)`, and the client's default
+retry turns that into a 60-second `RetryError`. Firestore also answers plain HTTP
+on its gRPC port before the gRPC surface is ready, so an open port proves
+nothing. Each attempt therefore:
+
+* chooses a fresh port and prints it;
+* proves the emulator answers a real Firestore RPC (`emulator_readiness.py`)
+  before any scenario starts;
+* retries only emulator/connection/protocol startup failures, capped at three
+  attempts and `OMI_STACK_EMULATOR_MAX_TOTAL_SECONDS` (default 900s); the budget
+  is enforced *inside* an attempt too, so a hung Firebase startup is killed at
+  the deadline instead of running until the CI job ceiling cancels the job;
+* gives every attempt its own `<state-dir>/attempt-<n>` scenario state, so a
+  retry never inherits a half-run ledger, cursor or evidence set;
+* never retries a scenario assertion, a pytest failure, or any other non-zero
+  exit from the gauntlet itself, so a real regression stays red;
+* prints the emulator log tail and the loopback listeners in use when every
+  attempt fails.
 
 It starts an isolated Redis and local ASGI processes while Firebase's command
 owns a fresh Firestore emulator. The inline scenarios use the real backend,
@@ -30,6 +60,8 @@ The child-process environment is allowlisted: it has a private empty
 `HOME`/cloud config directory and receives no provider credentials, developer
 proxies, ADC configuration, or production project settings. The harness also
 rejects a non-loopback Firestore endpoint.
+Numerical library pools are limited to one thread in each owned child,
+including pusher restarts.
 
 The test deliberately exercises the production listen runtime (`main:app`),
 real pusher router, binary frames 101/102/103/104/201, Firestore finalization
@@ -95,9 +127,13 @@ Scenarios:
 7. a session closes during the deferred pending-finalization window; the real
    recovery path from #9960 enqueues one opaque Cloud Tasks task, then a real
    worker retry preserves `processing` until it completes the same job;
-8. a worker exhausting its two-attempt test budget atomically dead-letters the
-   job with `terminal_outcome=failure` and marks the still-current conversation
-   `failed`/`discarded`, while a later duplicate delivery is fenced;
+8. a worker exhausting its two-attempt test budget is granted exactly one
+   delayed requeue (the row parks with a reset budget, `budget_requeue_count=1`,
+   and no early task); once the park is due, the reconciler dispatches the
+   requeued generation, and that life's exhaustion atomically dead-letters the
+   job with `terminal_outcome=failure`, `budget_requeue_count=1`, and the
+   still-current conversation closed with `finalization_status=dead_letter`,
+   while later duplicate deliveries of both generations are fenced;
 9. an integration failure after processing retries only durable fanout, never
    re-runs completed conversation processing.
 10. in `RECORDING_SESSION_MODE=enforce`, one operation-scoped `completed`

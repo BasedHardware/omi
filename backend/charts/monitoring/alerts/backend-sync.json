@@ -1508,5 +1508,266 @@
       "repeat_interval": "4h"
     },
     "record": null
+  },
+  {
+    "uid": "omi-sync-backfill-queue-wait-high",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Backend-sync",
+    "title": "Sync backfill - p95 dispatched queue wait exceeds 30 minutes",
+    "condition": "D",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 1800,
+          "to": 0
+        },
+        "datasourceUid": "gmp-cloud-run",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "gmp-cloud-run"
+          },
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(omi_sync_queue_wait_seconds_bucket{project_id=\"based-hardware\",cluster=\"__run__\",job=\"omi-cloud-run-application-metrics\",namespace=~\"backend-sync|backend-sync-backfill\",lane=\"backfill\"}[30m])))",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "$A > 1800",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "math"
+        }
+      },
+      {
+        "refId": "D",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "D"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "C",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "D",
+          "type": "reduce"
+        }
+      }
+    ],
+    "updated": "2026-11-02T00:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "KeepLast",
+    "for": "30m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "summary": "Historical sync audio is waiting over 30 minutes before processing starts",
+      "threshold": "p95 dispatched backfill queue wait > 1800 seconds over a 30-minute rate window, sustained for 30 minutes; quantile interpolates between the existing 900 and 3600 second buckets",
+      "user_impact": "People uploading historical recordings wait longer for transcripts and conversation notes.",
+      "scope": "Production Cloud Run backend-sync and backend-sync-backfill, lane=backfill; observed only when a task begins execution.",
+      "verification": "Static contract pins the histogram, lane, threshold and dwell. Live history and delivery must be checked by the rollout lead; no live backtest was run.",
+      "safe_next_action": "Inspect sync-backfill-fresh backlog, dispatch concurrency and provider capacity. Queue sizing belongs to the rollout lead; do not enable admission limits in response to this alert.",
+      "runbook": "backend/docs/runbooks/batch-language-recovery.md",
+      "dashboard_url": "https://monitor.omi.me/d/6d3d0897-c5a8-4f7b-b034-a3718c52a63b"
+    },
+    "labels": {
+      "component": "sync",
+      "impact": "user-experience",
+      "severity": "warning",
+      "instatus_component": "api",
+      "alert_identity": "omi-sync-backfill-queue-wait-high",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "planscost"
+    },
+    "isPaused": false,
+    "record": null,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
+    }
+  },
+  {
+    "uid": "omi-batch-vendor-overflow-spend",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Backend-sync",
+    "title": "Batch Modulate overflow - spend over $50/day",
+    "condition": "D",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 900,
+          "to": 0
+        },
+        "datasourceUid": "gmp-cloud-run",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "gmp-cloud-run"
+          },
+          "expr": "(sum(increase(omi_batch_pipeline_vendor_overflow_audio_seconds_total{project_id=\"based-hardware\",cluster=\"__run__\",job=\"omi-cloud-run-application-metrics\",namespace=~\"backend-sync|backend-sync-backfill|backend-integration\",route=\"modulate\"}[24h])) / 3600 * 0.06) or vector(0)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "$A > 50",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "math"
+        }
+      },
+      {
+        "refId": "D",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "D"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "C",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "D",
+          "type": "reduce"
+        }
+      }
+    ],
+    "updated": "2026-11-04T00:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "KeepLast",
+    "for": "5m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "summary": "Batch GPU overflow has sent more than $50 of fresh audio to Modulate in the last 24 hours",
+      "threshold": "sum(increase(omi_batch_pipeline_vendor_overflow_audio_seconds_total{route=modulate}[24h])) / 3600 * $0.06 > 50, for 5m",
+      "user_impact": "None directly: overflow keeps fresh transcripts moving while the GPU ring is saturated. This bounds the spend of that failover path (David's $50 episode bound).",
+      "scope": "gmp-cloud-run omi_batch_pipeline_vendor_overflow_audio_seconds_total{route=modulate} on the three sync services: billed vendor audio (provider-stt stage, settled attempts) for units whose route chose a vendor over a capable GPU (provider_reason none), which under the ordered GPU-first table is GPU-saturation overflow, priced at the $0.06/audio-h list rate. Excludes gpu_unsupported traffic (unsupported_language) and BYOK. Silent until the counter ships to Cloud Run (#24637).",
+      "verification": "No history: the counter is new in #24637. Hermetic drill (test_batch_vendor_outage_drills): with zero GPU workers the counter grows by exactly the overflowed English units' audio and never by Japanese Modulate traffic; the kill switch keeps it flat. The Modulate daily cap (3000 audio-h) is the hard bound; this alert fires long before it (~833 overflow audio-h/day).",
+      "evaluated_bad": "Saturated GPU ring for hours with the batch-vendor-routing cohort armed (e.g. a long L4 stockout)",
+      "evaluated_good": "0 overflow audio (ring under its SLO, or cohort at 0)",
+      "safe_next_action": "Decide whether to keep paying for overflow. To stop it, set the batch-vendor-routing ramp to 0 or BATCH_VENDOR_OVERFLOW_ENABLED=false on the sync services; fresh English then waits on the GPU ring with its audio. Fix the GPU shortage (L4 capacity, worker health) to end overflow on its own.",
+      "dashboard_url": "https://monitor.omi.me/d/6d3d0897-c5a8-4f7b-b034-a3718c52a63b",
+      "runbook": "backend/docs/runbooks/batch-vendor-routing-capacity.md"
+    },
+    "labels": {
+      "component": "sync",
+      "impact": "infrastructure",
+      "severity": "warning",
+      "instatus_component": "api",
+      "alert_identity": "omi-batch-vendor-overflow-spend",
+      "tier": "page",
+      "audience": "human",
+      "owner": "two-lane-lead"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h"
+    },
+    "record": null
   }
 ]

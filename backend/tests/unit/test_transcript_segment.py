@@ -400,7 +400,7 @@ def test_explicit_scoped_speaker_ids_keep_padded_provider_labels_distinct():
     assert deepgram.speaker_id != modulate.speaker_id
 
 
-def test_internal_speaker_identity_fields_persist_without_widening_client_schema():
+def test_recording_voice_scope_is_public_but_identification_status_stays_internal():
     segment = TranscriptSegment(
         text="Owner statement",
         speaker="SPEAKER_00",
@@ -417,7 +417,8 @@ def test_internal_speaker_identity_fields_persist_without_widening_client_schema
 
     assert payload['speaker_id_scope'] == "connection-a:0"
     assert payload['speaker_identity_status'] == "no_match"
-    assert 'speaker_id_scope' not in properties
+    assert 'speaker_id_scope' in properties
+    assert 'speaker_id_scope' not in TranscriptSegment.model_json_schema().get('required', [])
     assert 'speaker_identity_status' not in properties
 
 

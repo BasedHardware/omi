@@ -186,7 +186,11 @@ class FakeSTT:
         mean = profile.base_latency_seconds + profile.seconds_per_audio_second * audio_seconds
         return mean * math.exp(self.rng.gauss(0, profile.latency_sigma) - profile.latency_sigma**2 / 2)
 
-    async def request(self, kind: str, audio_seconds: float, *, purpose: str = 'batch') -> str:
+    async def request(
+        self, kind: str, audio_seconds: float, *, purpose: str = 'batch', forced_outcome: str | None = None
+    ) -> str:
+        if forced_outcome not in {None, EMPTY}:
+            raise ValueError('only an explicit empty-ASR fixture is supported')
         stats = self.stats
         stats.requests += 1
         stats.by_purpose[purpose] += 1
@@ -207,7 +211,7 @@ class FakeSTT:
         finally:
             self.slots.release()
         window = self._window()
-        if window is not None and window.mode == EMPTY:
+        if forced_outcome == EMPTY or (window is not None and window.mode == EMPTY):
             stats.empty += 1
             return EMPTY
         draw = self.rng.random()
@@ -348,6 +352,8 @@ class FakeModulate:
             self.outcomes['provider_failed'] += 1
             raise ProviderUnavailable('synthetic paid provider failure')
         rate = self.profile.near_silence_recover_rate if kind == NEAR_SILENCE else self.profile.speech_recover_rate
+        if self.truth[item.segment_id].get('unrecoverable'):
+            rate = 0.0
         if kind == SILENCE or self.rng.random() >= rate:
             self.outcomes['empty'] += 1
             raise MultilingualEmpty(duration, spans)

@@ -4,6 +4,7 @@ The local kernel owns its journal. This route validates capability and
 canonical references only; it never creates, updates, or syncs a chat row.
 """
 
+from utils.conversations.layer import read_product as read_product_conversation
 from typing import Annotated, Any
 
 from datetime import datetime, timezone
@@ -76,25 +77,33 @@ def _require_materialization_capability(uid: str, *, owner_fence: str, control_g
 def _entity_available(uid: str, block: ChatFirstJournalBlockSpec) -> bool:
     if isinstance(block, TaskCardSpec):
         task = action_items_db.get_action_item(uid, block.task_id)
-        return bool(task and not task.get('is_locked', False))
+        return bool(task and not task.get('is_locked', False) and not task.get('deleted', False))
     if isinstance(block, GoalLinkSpec):
         return goals_db.get_goal_by_id(uid, block.goal_id) is not None
     if isinstance(block, CaptureLinkSpec):
-        capture = conversations_db.get_conversation(
-            uid, block.conversation_id, read_site=FirestoreReadSite.CHAT_FIRST_BLOCK_VALIDATION
+        capture = read_product_conversation(
+            conversations_db.get_conversation,
+            uid,
+            block.conversation_id,
+            read_site=FirestoreReadSite.CHAT_FIRST_BLOCK_VALIDATION,
         )
         return bool(
             capture
+            and not conversations_db.is_soft_deleted(capture)
             and capture.get('source') == 'omi'
             and not capture.get('discarded', False)
             and not capture.get('is_locked', False)
         )
     if isinstance(block, ConversationLinkSpec):
-        conversation = conversations_db.get_conversation(
-            uid, block.conversation_id, read_site=FirestoreReadSite.CHAT_FIRST_BLOCK_VALIDATION
+        conversation = read_product_conversation(
+            conversations_db.get_conversation,
+            uid,
+            block.conversation_id,
+            read_site=FirestoreReadSite.CHAT_FIRST_BLOCK_VALIDATION,
         )
         return bool(
             conversation
+            and not conversations_db.is_soft_deleted(conversation)
             and conversation.get('source') == 'desktop'
             and (conversation.get('external_data') or {}).get('conversation_role') == 'meeting'
             and not conversation.get('discarded', False)
@@ -121,14 +130,15 @@ def _entity_available(uid: str, block: ChatFirstJournalBlockSpec) -> bool:
         return False
     if subject.kind == 'task':
         task = action_items_db.get_action_item(uid, subject.id)
-        return bool(task and not task.get('is_locked', False))
+        return bool(task and not task.get('is_locked', False) and not task.get('deleted', False))
     if subject.kind == 'goal':
         return goals_db.get_goal_by_id(uid, subject.id) is not None
-    capture = conversations_db.get_conversation(
-        uid, subject.id, read_site=FirestoreReadSite.CHAT_FIRST_BLOCK_VALIDATION
+    capture = read_product_conversation(
+        conversations_db.get_conversation, uid, subject.id, read_site=FirestoreReadSite.CHAT_FIRST_BLOCK_VALIDATION
     )
     return bool(
         capture
+        and not conversations_db.is_soft_deleted(capture)
         and capture.get('source') == 'omi'
         and not capture.get('discarded', False)
         and not capture.get('is_locked', False)

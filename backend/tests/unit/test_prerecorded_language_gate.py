@@ -86,12 +86,16 @@ class Wire:
 @pytest.fixture(autouse=True)
 def defaults(monkeypatch):
     for name in (
+        'HOSTED_LID_API_URL',
+        'STT_GPU_FLEET_OFF',
         'STT_PRERECORDED_LANGUAGE_GUARD_ENABLED',
         'STT_PRERECORDED_SHORT_LID_GUARD_ENABLED',
         'STT_PRERECORDED_LANGUAGE_GATE_SHADOW',
         'STT_PRERECORDED_LANGUAGE_GATE_PERCENT',
+        'STT_PRERECORDED_LANGUAGE_GATE_CONFIDENT_SKIP',
     ):
         monkeypatch.delenv(name, raising=False)
+    monkeypatch.setattr(lid, 'CONFIDENT_SKIP_AUDIT_PERCENT', 0, raising=False)
     monkeypatch.setenv('STT_PRERECORDED_MODEL', 'parakeet,modulate-velma-2')
     monkeypatch.setenv('MODULATE_API_KEY', 'synthetic-not-a-key')
     monkeypatch.setenv('HOSTED_PARAKEET_API_URL', PARAKEET_URL + '/')
@@ -111,8 +115,9 @@ def shadow_count(**labels):
     return gate.SHADOW.labels(**base)._value.get()
 
 
-def test_shadow_is_default_and_never_changes_the_vendor_route(monkeypatch):
+def test_shadow_never_changes_the_vendor_route_with_confident_skip_off(monkeypatch):
     # Self gate says Arabic; the vendor route still decides while shadowing.
+    monkeypatch.setenv('STT_PRERECORDED_LANGUAGE_GATE_CONFIDENT_SKIP', 'off')
     wire = Wire(monkeypatch, vendor=('en', 0.99), self_gate=gate_body('ar', 0.0003))
     before = shadow_count(self_route='multilingual', self_bucket='ar')
     decision = lid.resolve_language('multi', wav())
@@ -135,6 +140,7 @@ def test_declared_language_calls_neither_detector(monkeypatch):
 
 
 def test_dangerous_shadow_disagreement_is_logged_without_content(monkeypatch, caplog):
+    monkeypatch.setenv('STT_PRERECORDED_LANGUAGE_GATE_CONFIDENT_SKIP', 'off')
     Wire(monkeypatch, vendor=('ja', 0.97), self_gate=gate_body('en', 0.995))
     before = shadow_count(vendor_route='multilingual', vendor_bucket='ja')
     with caplog.at_level(logging.WARNING):
@@ -364,3 +370,162 @@ def test_no_parakeet_url_is_unavailable_not_a_verdict(monkeypatch):
 @pytest.mark.parametrize('seconds', [None, True, float('nan'), 0.5])
 def test_unmeasured_or_tiny_self_probe_has_no_floor(seconds):
     assert self_lid_confidence_floor(seconds) is None
+
+
+def skip_count(route, surface='prerecorded'):
+    return gate.CONFIDENT_SKIPS.labels(surface, route)._value.get()
+
+
+def test_confident_supported_shadow_verdict_skips_the_vendor_probe_by_default(monkeypatch):
+    wire = Wire(monkeypatch, vendor=('ja', 0.99), self_gate=gate_body('en', 0.996))
+    before = skip_count('parakeet')
+    decision = lid.resolve_language('multi', wav(), confident_skip=True)
+    assert decision.evidence == 'self_lid' and decision.language == 'en' and decision.parakeet_safe
+    assert wire.vendor_calls == [] and len(wire.gate_calls) == 1
+    assert skip_count('parakeet') == before + 1
+
+
+def test_unsupported_top_language_skips_the_vendor_probe_onto_the_multilingual_route(monkeypatch, tmp_path):
+    wire = Wire(monkeypatch, vendor=('en', 0.99), self_gate=gate_body('ja', 0.01, 6.0, 0.97))
+    before = skip_count('multilingual')
+    path = tmp_path / 'ja.wav'
+    path.write_bytes(wav())
+    assert lid.resolve_file('multi', path, selector=stt.get_prerecorded_service, cohort_key='uid-1')[0] == 'modulate'
+    assert wire.vendor_calls == []
+    assert skip_count('multilingual') == before + 1
+
+
+@pytest.mark.parametrize(
+    'self_gate',
+    [
+        gate_body('en', 0.95),  # supported top-1 under the floor: the vendor decides
+        gate_body('en', 0.999, 0.9),  # too short for any self floor
+        gate_body('und', 0.0),  # no language: the vendor decides
+    ],
+)
+def test_ambiguous_shadow_verdict_keeps_the_vendor_probe(monkeypatch, self_gate):
+    wire = Wire(monkeypatch, vendor=('ja', 0.99), self_gate=self_gate)
+    seconds = self_gate['audio_seconds']
+    decision = lid.resolve_language('multi', wav(seconds), confident_skip=True)
+    assert decision.evidence == 'audio_lid' and decision.language == 'ja'
+    assert len(wire.vendor_calls) == 1
+
+
+def test_unavailable_self_gate_keeps_the_vendor_probe(monkeypatch):
+    wire = Wire(monkeypatch, vendor=('ja', 0.99), self_status=503)
+    assert lid.resolve_language('multi', wav(), confident_skip=True).evidence == 'audio_lid'
+    assert len(wire.vendor_calls) == 1
+
+
+def test_unsupported_mode_skips_only_toward_the_multilingual_route(monkeypatch):
+    monkeypatch.setenv('STT_PRERECORDED_LANGUAGE_GATE_CONFIDENT_SKIP', 'unsupported')
+    wire = Wire(monkeypatch, vendor=('ja', 0.99), self_gate=gate_body('en', 0.996))
+    assert lid.resolve_language('multi', wav(), confident_skip=True).evidence == 'audio_lid'
+    assert len(wire.vendor_calls) == 1
+    wire = Wire(monkeypatch, vendor=('en', 0.99), self_gate=gate_body('ko', 0.02))
+    decision = lid.resolve_language('multi', wav(), confident_skip=True)
+    assert decision.evidence == 'self_lid' and not decision.parakeet_safe
+    assert wire.vendor_calls == []
+
+
+@pytest.mark.parametrize('raw', ['off', 'false', '0', 'no', ' OFF '])
+def test_kill_switch_restores_the_vendor_probe(monkeypatch, raw):
+    monkeypatch.setenv('STT_PRERECORDED_LANGUAGE_GATE_CONFIDENT_SKIP', raw)
+    for self_gate in (gate_body('en', 0.996), gate_body('ja', 0.01)):
+        wire = Wire(monkeypatch, vendor=('ja', 0.99), self_gate=self_gate)
+        assert lid.resolve_language('multi', wav(), confident_skip=True).evidence == 'audio_lid'
+        assert len(wire.vendor_calls) == 1
+
+
+@pytest.mark.parametrize(
+    'raw,mode',
+    [(None, 'both'), ('', 'both'), ('on', 'both'), ('true', 'both'), ('both', 'both'), ('off', 'off'),
+     ('false', 'off'), ('unsupported', 'unsupported'), ('typo', 'unsupported'), ('100', 'unsupported')],
+)  # fmt: skip
+def test_malformed_skip_mode_keeps_only_the_safe_direction(monkeypatch, raw, mode):
+    from config.prerecorded_language import language_gate_confident_skip
+
+    if raw is not None:
+        monkeypatch.setenv('STT_PRERECORDED_LANGUAGE_GATE_CONFIDENT_SKIP', raw)
+    assert language_gate_confident_skip() == mode
+
+
+def test_batch_surface_never_skips_the_vendor_probe(monkeypatch):
+    # Sampled batch admission accepts only vendor audio_lid evidence; a skip there would refuse the upload.
+    wire = Wire(monkeypatch, vendor=('en', 0.99), self_gate=gate_body('en', 0.996))
+    assert lid.resolve_language('multi', wav(), surface='batch', confident_skip=True).evidence == 'audio_lid'
+    assert len(wire.vendor_calls) == 1
+
+
+@pytest.mark.parametrize('self_gate', [gate_body('en', 0.996), gate_body('ja', 0.01)])
+def test_only_legacy_sync_files_skip_not_chat_voice_or_recovery_bytes(monkeypatch, self_gate):
+    # The disagreement rate behind the skip was measured on legacy sync segments only.
+    wire = Wire(monkeypatch, vendor=('ja', 0.99), self_gate=self_gate)
+    before = skip_count('parakeet') + skip_count('multilingual') + skip_count('audit')
+    assert lid.resolve_language('multi', wav()).evidence == 'audio_lid'
+    monkeypatch.setattr(stt, 'ModulatePrerecordedProvider', Mock())
+    monkeypatch.setattr(stt, 'ParakeetPrerecordedProvider', Mock(side_effect=AssertionError('vendor said ja')))
+    stt.prerecorded_from_bytes(wav(), language='multi')
+    assert len(wire.vendor_calls) == 2
+    assert skip_count('parakeet') + skip_count('multilingual') + skip_count('audit') == before
+
+
+def test_audit_sample_still_pays_the_vendor_probe_and_records_the_shadow_pair(monkeypatch):
+    monkeypatch.setattr(lid, 'CONFIDENT_SKIP_AUDIT_PERCENT', 100)
+    wire = Wire(monkeypatch, vendor=('ja', 0.97), self_gate=gate_body('en', 0.995))
+    before_audit = skip_count('audit')
+    before_pair = shadow_count(vendor_route='multilingual', vendor_bucket='ja')
+    decision = lid.resolve_language('multi', wav(), confident_skip=True)
+    assert decision.evidence == 'audio_lid' and decision.language == 'ja'
+    assert len(wire.vendor_calls) == 1
+    assert skip_count('audit') == before_audit + 1
+    assert shadow_count(vendor_route='multilingual', vendor_bucket='ja') == before_pair + 1
+
+
+def test_audit_sample_is_a_stable_share_of_audio(monkeypatch):
+    monkeypatch.setattr(lid, 'CONFIDENT_SKIP_AUDIT_PERCENT', 5)
+    picks = [lid._confident_skip_audited(f'audio-{i}'.encode()) for i in range(4000)]
+    assert 0.035 < sum(picks) / len(picks) < 0.065
+    assert picks == [lid._confident_skip_audited(f'audio-{i}'.encode()) for i in range(4000)]
+
+
+def test_enforced_cohort_is_unchanged_by_the_skip(monkeypatch):
+    monkeypatch.setenv('STT_PRERECORDED_LANGUAGE_GATE_PERCENT', '100')
+    wire = Wire(monkeypatch, vendor=('ja', 0.99), self_gate=gate_body('en', 0.996))
+    before = skip_count('parakeet')
+    assert lid.resolve_language('multi', wav(), confident_skip=True).evidence == 'self_lid'
+    assert wire.vendor_calls == [] and skip_count('parakeet') == before
+
+
+@pytest.mark.parametrize('fleet_off', ['true', 'false'])
+def test_dedicated_cpu_url_takes_precedence_even_with_fleet_off(monkeypatch, fleet_off):
+    monkeypatch.setenv('HOSTED_LID_API_URL', ' http://cpu-lid.test/lid/ ')
+    monkeypatch.setenv('STT_GPU_FLEET_OFF', fleet_off)
+    calls = []
+    transport = httpx.MockTransport(lambda req: (calls.append(str(req.url)) or httpx.Response(200, json=gate_body())))
+    real_client = httpx.Client
+    monkeypatch.setattr(httpx, 'Client', lambda **kw: real_client(transport=transport, **kw))
+    assert gate.self_detect(wav(), surface='prerecorded').parakeet
+    assert calls == ['http://cpu-lid.test/lid/v2/language']
+
+
+@pytest.mark.parametrize('url', ['', '   '])
+@pytest.mark.parametrize('fleet_off', ['true', 'false'])
+def test_unset_dedicated_url_preserves_shared_fleet_behavior(monkeypatch, url, fleet_off):
+    monkeypatch.setenv('HOSTED_LID_API_URL', url)
+    monkeypatch.setenv('STT_GPU_FLEET_OFF', fleet_off)
+    wire = Wire(monkeypatch)
+    verdict = gate.self_detect(wav(), surface='batch')
+    assert bool(verdict) == (fleet_off == 'false')
+    assert wire.calls == ([] if fleet_off == 'true' else [GATE_URL])
+
+
+def test_cpu_failure_keeps_vendor_fallback_without_dialing_gpu(monkeypatch):
+    monkeypatch.setenv('HOSTED_LID_API_URL', 'http://cpu-lid.test')
+    monkeypatch.setenv('STT_GPU_FLEET_OFF', 'true')
+    calls = []
+    transport = httpx.MockTransport(lambda req: (calls.append(str(req.url)) or httpx.Response(503)))
+    real_client = httpx.Client
+    monkeypatch.setattr(httpx, 'Client', lambda **kw: real_client(transport=transport, **kw))
+    assert gate.self_detect(wav(), surface='batch') is None
+    assert calls == ['http://cpu-lid.test/v2/language']

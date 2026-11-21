@@ -34,6 +34,7 @@ no_data_semantics:
   traffic_gated_journey: NoData
   live_transcription_journey: OK
   scrape_health: Alerting
+  scrape_health_presence_gated: OK
   # Page-class finalization queue series (oldest-nonterminal age, dead-letter
   # counter): unlabeled and zero-initialized on every backend-listen replica,
   # so absence during real traffic means the emitter or its scrape is gone.
@@ -48,66 +49,105 @@ managed_gke_exclusions:
 scrape_jobs:
   # Opt-in batch release. No target exists until installed; HPA/flag gates
   # require a fresh per-pod queue sample rather than treating absence as zero.
+  # Presence-gated: absence is legitimate, the rule alerts only on down/empty
+  # while targets exist.
   - name: diarizer-batch-metrics
     mechanism: additionalScrapeConfigs
     auth: null
     namespace: prod-omi-backend
-    coverage_alert: null
-    coverage_status: declared
+    coverage_alert: omi-scrape-diarizer-batch-metrics
+    coverage_status: enforced
+    coverage_modes: [down, empty]
+
+  # GPU batch-pipeline workers (HPA external-metric path, #23891). Targets
+  # exist only while the release runs; the adapter requires a fresh per-pod
+  # three-priority sample, so absence makes the HPA read unavailable, never a
+  # fabricated zero.
+  # Presence-gated: absence is legitimate, the rule alerts only on down/empty
+  # while targets exist.
+  - name: batch-pipeline-worker-metrics
+    mechanism: additionalScrapeConfigs
+    auth: null
+    namespace: prod-omi-backend
+    coverage_alert: omi-scrape-batch-pipeline-worker-metrics
+    coverage_status: enforced
+    coverage_modes: [down, empty]
+
+  # Opt-in record-seal release. Presence-gated: absence is legitimate, the rule
+  # alerts only on down/empty while targets exist.
+  - name: record-seal-worker-metrics
+    mechanism: additionalScrapeConfigs
+    auth: null
+    namespace: prod-omi-backend
+    coverage_alert: omi-scrape-record-seal-worker-metrics
+    coverage_status: enforced
+    coverage_modes: [down, empty]
 
   - name: backend-listen-metrics
     mechanism: additionalScrapeConfigs
     auth: metrics-scrape-token
-    coverage_alert: omi-journey-scrape-missing
+    coverage_alert: omi-scrape-backend-listen-metrics
     coverage_status: enforced
+    coverage_modes: [down, absent, empty]
 
   - name: pusher-metrics
     mechanism: additionalScrapeConfigs
     auth: metrics-scrape-token
-    coverage_alert: omi-journey-scrape-missing
+    coverage_alert: omi-scrape-pusher-metrics
     coverage_status: enforced
+    coverage_modes: [down, absent, empty]
 
   - name: llm-gateway-metrics
     mechanism: additionalScrapeConfigs
     auth: metrics-scrape-token
-    coverage_alert: null
-    coverage_status: declared
+    coverage_alert: omi-scrape-llm-gateway-metrics
+    coverage_status: enforced
+    coverage_modes: [down, absent, empty]
 
   - name: dg_engine_metrics
     mechanism: additionalScrapeConfigs
     auth: null
-    coverage_alert: null
-    coverage_status: declared
+    coverage_alert: omi-scrape-dg_engine_metrics
+    coverage_status: enforced
+    coverage_modes: [down, absent, empty]
 
   - name: prometheus-stackdriver-metrics
     mechanism: additionalScrapeConfigs
     auth: null
-    coverage_alert: null
-    coverage_status: declared
+    coverage_alert: omi-scrape-stackdriver-metrics
+    coverage_status: enforced
+    coverage_modes: [down, absent, empty]
 
   - name: cloud-run-application-metrics
     mechanism: additionalScrapeConfigs
     source: prometheus.googleapis.com/omi_
     auth: null
-    coverage_alert: null
-    coverage_status: declared
+    coverage_alert: omi-scrape-cloud-run-application-metrics
+    coverage_status: enforced
+    coverage_modes: [down, absent, empty]
 
   - name: gpu-metrics
     mechanism: additionalScrapeConfigs
     auth: null
     namespace: gke-managed-system
-    coverage_alert: null
-    coverage_status: declared
+    coverage_alert: omi-scrape-gpu-metrics
+    coverage_status: enforced
+    coverage_modes: [down, absent, empty]
 
   - name: kube-state-metrics
     mechanism: kube-prometheus-stack
     auth: null
-    coverage_alert: null
-    coverage_status: declared
+    coverage_alert: omi-scrape-kube-state-metrics
+    coverage_status: enforced
+    coverage_modes: [down, absent]
+    empty_scrape_alert: omi-kube-state-metrics-empty
+    job_matcher: 'job="kube-state-metrics"'
 
   - name: parakeet
     mechanism: serviceMonitor
     chart: backend/charts/parakeet
     auth: null
-    coverage_alert: null
-    coverage_status: declared
+    coverage_alert: omi-scrape-parakeet
+    coverage_status: enforced
+    coverage_modes: [down, absent, empty]
+    job_matcher: 'job=~"(dev-omi-|prod-omi-)?parakeet(-.*)?"'

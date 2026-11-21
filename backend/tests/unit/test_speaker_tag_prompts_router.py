@@ -207,7 +207,7 @@ def test_answer_does_not_reflect_stored_transcript_decode_error(monkeypatch, cap
     client = _client(monkeypatch)
 
     def corrupt_transcript(*args, **kwargs):
-        router_module.conversations_db._decode_transcript_segments_blob('u', 12345, False)
+        router_module.conversations_db.decode_transcript_segments_blob('u', 12345, False)
 
     monkeypatch.setattr(router_module.service, 'apply_answer', corrupt_transcript)
     with caplog.at_level('WARNING', logger=router_module.logger.name):

@@ -105,7 +105,8 @@ def parse_sync_filename_timestamp(path: str, *, enforce_window: bool = True) -> 
     timestamp is UTC seconds and is safe to pass to fromtimestamp(...,
     tz=timezone.utc). Capture times may sit ahead of the server clock within
     the shared future-skew tolerance (utils.sync.capture_clock); beyond it or
-    before 2024-01-01 the timestamp is implausible and rejected.
+    malformed values are rejected. Pre-2024 values keep their raw identity;
+    storage normalizes them to receipt time unless the early-clamp switch is off.
 
     ``enforce_window=False`` skips the plausibility window for internal
     WAL/VAD clock reads: segment names are derived as source capture time plus

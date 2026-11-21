@@ -102,6 +102,21 @@ def hint(db, uid='u1', **kwargs):
     return people.list_people(db, uid, memoize=True, **kwargs)
 
 
+@pytest.fixture
+def user_reads(db):
+    # Dependencies load in setup; the call-time guard measures reader behavior.
+    from database import users
+
+    return users
+
+
+@pytest.fixture
+def sync_identity(db):
+    from utils.sync import speaker_identity
+
+    return speaker_identity
+
+
 @pytest.mark.parametrize('enabled,expected', [(False, 2), (True, 1)])
 def test_two_identical_calls_two_streams_off_one_on(db, monkeypatch, enabled, expected):
     if not enabled:
@@ -449,3 +464,113 @@ def test_billed_document_read_reduction_includes_generation_lookups(db, monkeypa
     # 10 x 100 off; 100 people + 10 generation lookups on (includes the fill).
     assert db.document_reads + len(db.generation_reads) == expected_reads
     assert len(db.generation_reads) == (10 if enabled else 0)
+
+
+def test_name_miss_fallback_repeats_are_reused_and_external_writer_invalidates(db, monkeypatch):
+    monkeypatch.setattr(
+        Query, 'where', lambda self, *args, **kwargs: SimpleNamespace(stream=lambda: iter(())), raising=False
+    )
+    with people.people_scan_attempt():
+        for _ in range(5):
+            assert people.find_person_by_name(db, 'u1', 'aLiCe')['id'] == 'p1'
+        assert len(db.scans) == 1  # Synthetic repeat rate 4/5, not production savings.
+        db.rows['u1']['p1']['name'] = 'Renamed'
+        db.rows['u1']['p1']['aliases'] = []
+        db.generations['u1'] += 1
+        assert people.find_person_by_name(db, 'u1', 'aLiCe') is None
+    assert len(db.scans) == 2
+
+
+def test_sync_raw_reuse_always_reprojects_learning(db, monkeypatch, user_reads):
+    users = user_reads
+
+    monkeypatch.setattr(users, 'db', db)
+    projections = []
+
+    def project(uid, person, **kwargs):
+        projections.append(person['id'])
+        return dict(person, current_learning=len(projections))
+
+    monkeypatch.setattr(users, 'project_person_learning', project)
+    with people.people_scan_attempt():
+        assert users.get_people('u1', memoize=True)[0]['current_learning'] == 1
+        assert users.get_people('u1', memoize=True)[0]['current_learning'] == 2
+    assert len(db.scans) == 1 and len(projections) == 2
+
+
+def test_actual_sync_context_caller_rechecks_entitlement_and_learning_on_reuse(
+    db, monkeypatch, user_reads, sync_identity
+):
+    users = user_reads
+    speaker_identity = sync_identity
+
+    monkeypatch.setattr(users, 'db', db)
+    entitlement_reads, projections = [], []
+    monkeypatch.setattr(
+        speaker_identity, 'named_speaker_prompts_allowed', lambda uid: entitlement_reads.append(uid) is None
+    )
+    monkeypatch.setattr(speaker_identity, 'load_owner_embedding', lambda *args, **kwargs: None)
+
+    def project(uid, person, **kwargs):
+        projections.append(person['id'])
+        return person
+
+    monkeypatch.setattr(users, 'project_person_learning', project)
+    dependencies = speaker_identity.SpeakerIdentityDependencies(
+        users_db=users, usable_person_voiceprint=lambda *args, **kwargs: None
+    )
+    with people.people_scan_attempt():
+        for _ in range(5):
+            speaker_identity.build_person_embeddings_cache('u1', dependencies=dependencies)
+    assert len(db.scans) == 1 and len(projections) == len(entitlement_reads) == 5
+
+
+@pytest.mark.parametrize('missing', [True, False])
+def test_unavailable_head_uses_live_rows_without_repeated_paid_probes(db, missing):
+    if missing:
+        del db.generations['u1']
+    else:
+        db.generation_failure = RuntimeError('unavailable')
+    with people.people_scan_attempt():
+        assert hint(db)[0]['name'] == 'Alice'
+        db.generations['u1'] = 2
+        db.generation_failure = None
+        db.rows['u1']['p1']['name'] = 'Changed'
+        assert hint(db)[0]['name'] == 'Changed'
+        assert hint(db)[0]['name'] == 'Changed'
+        assert not people._people_scan_memo.get().entries
+    assert len(db.scans) == 3 and len(db.generation_reads) == 1
+    with people.people_scan_attempt():
+        assert hint(db) == hint(db)
+    assert len(db.scans) == 4 and len(db.generation_reads) == 3
+
+
+def test_flag_off_retires_previously_admitted_snapshot(db, monkeypatch):
+    with people.people_scan_attempt():
+        hint(db)
+        monkeypatch.setenv('FIRESTORE_READ_LEVERS', '{"people_scan_dedupe":0}')
+        db.rows['u1']['p1']['name'] = 'Fresh while disabled'
+        assert hint(db)[0]['name'] == 'Fresh while disabled'
+        monkeypatch.setenv('FIRESTORE_READ_LEVERS', '{"people_scan_dedupe":100}')
+        assert hint(db)[0]['name'] == 'Fresh while disabled'
+    assert len(db.scans) == 3
+
+
+def test_dark_repeat_telemetry_has_no_identity_labels_or_generation_reads(db, monkeypatch):
+    monkeypatch.setenv('FIRESTORE_READ_LEVERS', '{"people_scan_dedupe":0}')
+    calls = []
+    monkeypatch.setattr(
+        people,
+        'PEOPLE_SCAN_TOTAL',
+        SimpleNamespace(labels=lambda **labels: SimpleNamespace(inc=lambda: calls.append(labels))),
+    )
+    with people.people_scan_attempt():
+        hint(db, memo_site='name_fallback')
+        hint(db, memo_site='name_fallback')
+        hint(db, memo_site='person@example.invalid/' + 'X' * 28)
+    assert calls == [
+        dict(site='name_fallback', outcome='first'),
+        dict(site='name_fallback', outcome='repeat'),
+        dict(site='other', outcome='repeat'),
+    ]
+    assert not db.generation_reads

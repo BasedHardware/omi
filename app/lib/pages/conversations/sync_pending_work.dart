@@ -51,14 +51,14 @@ abstract final class SyncPendingWork {
       s == WalSyncDisplayState.waiting || s == WalSyncDisplayState.retrying || s == WalSyncDisplayState.syncing;
 
   /// Allocation-free on purpose: every SyncProvider notify rebuilds the row.
-  static bool hasUploadedJobs(SyncProvider p) => p.uploadedWals.isNotEmpty;
+  static bool hasUploadedJobs(SyncProvider p) => p.derivedWals.pendingWork.any((w) => w.status == WalStatus.uploaded);
 
   static bool hasServerJobs(SyncProvider p) => hasUploadedJobs(p) || p.syncState.isProcessing;
 
   static bool isPendingWal(Wal w) =>
       w.status == WalStatus.miss && !w.onDeviceOnly && isForwardMoving(w.syncDisplayState);
 
-  static bool shouldShow(SyncProvider p) => hasServerJobs(p) || p.derivedWals.hasForwardMoving;
+  static bool shouldShow(SyncProvider p) => hasServerJobs(p) || p.derivedWals.pendingWork.isNotEmpty;
 
   /// Ids of device recordings whose phone copy already moved on: lagging
   /// bookkeeping, not audio still on the device.
@@ -68,10 +68,12 @@ abstract final class SyncPendingWork {
       .toSet();
 
   /// Recordings uploaded and being transcribed on the server.
-  static List<Wal> uploaded(SyncProvider p) => p.uploadedWals;
+  static List<Wal> uploaded(SyncProvider p) =>
+      p.derivedWals.pendingWork.where((w) => w.status == WalStatus.uploaded).toList(growable: false);
 
   /// Recordings still on the device or the phone, waiting for or in a sync.
-  static List<Wal> syncing(SyncProvider p) => p.pendingSyncWals;
+  static List<Wal> syncing(SyncProvider p) =>
+      p.derivedWals.pendingWork.where((w) => w.status == WalStatus.miss).toList(growable: false);
 
   /// The rows [syncing] lists, from any ordering of the inventory: the device
   /// card reads the unsorted index and must show exactly what On the Way shows.
@@ -106,7 +108,8 @@ abstract final class SyncPendingWork {
     // Device downloads run through an upload cooldown (pulling audio uses no upload quota), so a
     // download in progress is reported as itself, not as the cooldown.
     if (active && s.phase == SyncPhase.downloadingFromDevice) return l.syncCardDownloadingTitle;
-    if (rateLimited) return syncCooldownTitle(rateLimitReason, l);
+    // An edge throttle clears by itself and needs nothing from the user, so it is not named (David, 11-02).
+    if (rateLimited && rateLimitReason != RateLimitReason.edgeThrottle) return syncCooldownTitle(rateLimitReason, l);
     if (active) {
       switch (s.phase) {
         case SyncPhase.downloadingFromDevice:

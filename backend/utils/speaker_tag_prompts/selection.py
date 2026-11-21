@@ -21,6 +21,7 @@ from models.speaker_tag_prompts import (
 )
 from models.transcript_segment import legacy_conversation_segment_id
 from utils.manual_speaker_assignments import manual_rejected_speakers
+from utils.speaker_tag_prompts.recurring import recurring_run, mentioned_people
 from utils.speaker_tag_prompts.coverage import prompt_window_covered
 from utils.speaker_tag_prompts.keys import ignored_voice_key
 from utils.speaker_tag_prompts.owner_confirmation import (
@@ -297,6 +298,9 @@ def select_prompts(
     named_allowed: bool,
     answered: set,
     people: Mapping[str, str],
+    recurring_uid: Optional[str] = None,
+    recurring_profile_ids: Optional[AbstractSet[str]] = None,
+    stored_people: Sequence[Mapping[str, Any]] = (),
     limit: int = DEFAULT_LIMIT,
     pinned: AbstractSet[str] = frozenset(),
     ignored: AbstractSet[str] = frozenset(),
@@ -418,11 +422,12 @@ def select_prompts(
                     )
 
         for run in unnamed:
-            voice = run_voice_candidates(segments, run.segment_ids) if prior_enabled else {}
+            recurring = recurring_run(recurring_uid, conversation, run.segment_ids, recurring_profile_ids)
+            voice = run_voice_candidates(segments, run.segment_ids) if prior_enabled or recurring else {}
             near = next(
                 (pid for pid, entry in voice.items() if entry['suggest'] and pid in pinned and pid in people), None
             )
-            if named_allowed and near is not None and near not in labeled_here:
+            if named_allowed and not recurring and near is not None and near not in labeled_here:
                 add(
                     run,
                     SpeakerTagPromptKind.confirm_person,
@@ -432,7 +437,8 @@ def select_prompts(
                     suggested_person_name=people[near],
                 )
             elif named_allowed:
-                offered = ranked_candidates(voice, recent_people, people=people, pinned=pinned, exclude=labeled_here)
+                recent = mentioned_people(conversation, stored_people) if recurring else recent_people
+                offered = ranked_candidates(voice, recent, people=people, pinned=pinned, exclude=labeled_here)
                 add(
                     run,
                     SpeakerTagPromptKind.identify,

@@ -161,6 +161,125 @@ def test_storage_never_falls_back_to_plaintext_or_blocks_transcript(monkeypatch,
     assert not set(GROUPING_INTERNAL_FIELDS) & set(restored)
 
 
+@pytest.mark.parametrize('fault', ['wrong_owner', 'binding', 'plaintext', 'encryption', 'unknown_store', 'oversized'])
+def test_timing_capacity_exception_still_fails_closed(monkeypatch, fault):
+    rows = [
+        {
+            'id': str(i),
+            'provider_speaker': {'id': 0, 'scope': 'final:batch:unit', 'provider': 'parakeet', 'timing_store': 'batch'},
+        }
+        for i in range(storage.MAX_SEGMENTS + 1)
+    ]
+    if fault == 'encryption':
+        monkeypatch.setattr(encryption, 'encrypt', lambda payload, uid: payload)
+    elif fault == 'unknown_store':
+        for row in rows:
+            row['provider_speaker']['timing_store'] = 'unknown'
+    elif fault == 'oversized':
+        for row in rows:
+            row['provider_speaker']['scope'] += 'x' * storage.MAX_TIMING_BYTES
+    storage.protect_segments(rows, 'owner')
+    if fault == 'binding':
+        for row in rows:
+            row['id'] = 'different-' + row['id']
+    elif fault == 'plaintext':
+        for row in rows:
+            if storage.FIELD in row:
+                row[storage.FIELD] = encryption.decrypt(row[storage.FIELD], 'owner')
+    storage.reveal_segments(rows, 'different-owner' if fault == 'wrong_owner' else 'owner')
+    assert all(not set(GROUPING_INTERNAL_FIELDS) & set(row) for row in rows)
+
+
+def _timing_rows(units):
+    return [
+        {
+            'id': str(i),
+            'text': 'retained transcript',
+            'provider_speaker': {
+                'id': i % 2,
+                'scope': f'final:batch:unit{unit}',
+                'provider': 'parakeet',
+                'timing_store': 'batch',
+            },
+        }
+        for i, unit in enumerate(units)
+    ]
+
+
+def test_timing_markers_are_deduplicated_and_totally_bounded():
+    count = storage.MAX_TIMING_UNITS
+    rows = _timing_rows([0] * 10 + list(range(1, count + 2)))
+    expected = {row['id']: dict(row['provider_speaker']) for row in rows[:-2]}
+    storage.protect_segments(rows, 'owner')
+    markers = [row[storage.FIELD] for row in rows if storage.FIELD in row]
+    assert len(markers) == count
+    assert sum(len(value) for value in markers) <= storage.MAX_TIMING_TOTAL_ENCODED_BYTES
+    assert sum(len(encryption.decrypt(value, 'owner').encode()) for value in markers) <= storage.MAX_TIMING_TOTAL_BYTES
+    assert all('provider_speaker' not in row and row['text'] == 'retained transcript' for row in rows)
+    # An opaque rewrite and a decoded rewrite must retain exactly the admitted units.
+    for _ in range(2):
+        storage.protect_segments(rows, 'owner')
+        assert sum(storage.FIELD in row for row in rows) == count
+        storage.reveal_segments(rows, 'owner')
+        assert {row['id']: row['provider_speaker'] for row in rows if 'provider_speaker' in row} == expected
+    assert all('provider_speaker' not in row for row in rows[-2:])
+
+
+@pytest.mark.parametrize('budget', ['MAX_TIMING_TOTAL_BYTES', 'MAX_TIMING_TOTAL_ENCODED_BYTES'])
+def test_timing_marker_aggregate_byte_overflow_drops_evidence_without_failing_write(monkeypatch, budget):
+    rows = _timing_rows(range(storage.MAX_SEGMENTS + 1))
+    monkeypatch.setattr(storage, budget, 1024)
+    storage.protect_segments(rows, 'owner')
+    markers = [row[storage.FIELD] for row in rows if storage.FIELD in row]
+    assert 0 < len(markers) < len(rows)
+    if budget == 'MAX_TIMING_TOTAL_BYTES':
+        assert sum(len(encryption.decrypt(value, 'owner').encode()) for value in markers) <= 1024
+    else:
+        assert sum(len(value) for value in markers) <= 1024
+    storage.reveal_segments(rows, 'owner')
+    assert sum('provider_speaker' in row for row in rows) == len(markers)
+    assert all(row['text'] == 'retained transcript' for row in rows)
+
+
+@pytest.mark.parametrize('budget', ['MAX_TIMING_UNITS', 'MAX_TIMING_TOTAL_BYTES', 'MAX_TIMING_TOTAL_ENCODED_BYTES'])
+def test_timing_read_path_enforces_aggregate_limits_and_ignores_duplicate_units(monkeypatch, budget):
+    rows = _timing_rows(range(storage.MAX_SEGMENTS + 1))
+    # Build authenticated markers independently of the writer to test read admission.
+    for row in rows:
+        provider = row.pop('provider_speaker')
+        envelope = {
+            'id': row['id'],
+            'timing_unit': {
+                'scope': provider['scope'],
+                'timing_store': provider['timing_store'],
+                'segments': {row['id']: {'id': provider['id'], 'provider': provider['provider']}},
+            },
+        }
+        row[storage.FIELD] = encryption.encrypt(json.dumps(envelope), 'owner')
+    first = rows[0][storage.FIELD]
+    # Authenticated duplicate scope with another anchor cannot consume a second unit slot.
+    duplicate = json.loads(encryption.decrypt(first, 'owner'))
+    duplicate['id'] = 'duplicate'
+    duplicate['timing_unit']['segments'] = {'duplicate': {'id': 0, 'provider': 'parakeet'}}
+    rows.insert(1, {'id': 'duplicate', storage.FIELD: encryption.encrypt(json.dumps(duplicate), 'owner')})
+    limit = 2 if budget == 'MAX_TIMING_UNITS' else 1024
+    monkeypatch.setattr(storage, budget, limit)
+    storage.reveal_segments(rows, 'owner')
+    assert 'provider_speaker' in rows[0]
+    assert 'provider_speaker' not in rows[1]
+    restored = [row for row in rows if 'provider_speaker' in row]
+    assert 0 < len(restored) < len(rows) - 1
+    if budget == 'MAX_TIMING_UNITS':
+        assert len(restored) == limit
+
+
+def test_conflicting_timing_stamps_within_a_unit_drop_the_entire_unit():
+    rows = _timing_rows([0] * (storage.MAX_SEGMENTS + 1))
+    rows[-1]['provider_speaker']['timing_store'] = 'sync'
+    storage.protect_segments(rows, 'owner')
+    assert all(storage.FIELD not in row and row['text'] == 'retained transcript' for row in rows)
+
+
 @pytest.mark.parametrize('level', ['standard', 'enhanced'])
 def test_public_raw_dictionary_projections_remove_all_internal_fields(level):
     c = internal_conversation(level)
@@ -218,7 +337,6 @@ async def test_actual_app_and_developer_webhook_payloads_are_public(monkeypatch,
     monkeypatch.setattr(webhooks, 'get_webhook_circuit_breaker', lambda _: cb)
     monkeypatch.setattr(webhooks, '_post_dev_webhook', post)
     await webhooks.conversation_created_webhook('owner', c)
-    monkeypatch.setattr(apps, 'is_trial_paywalled', lambda *a: False)
     monkeypatch.setenv('MENTOR_PIPELINE', 'off')
     raw_segments = [s.model_dump() for s in c.transcript_segments]
     raw_segments[0][storage.FIELD] = 'encrypted-internal-sidecar'

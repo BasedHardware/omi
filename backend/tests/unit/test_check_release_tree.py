@@ -13,6 +13,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'scripts'))
 
 import check_release_tree as crt  # noqa: E402
 
+pytestmark = pytest.mark.usefixtures('isolated_git_env')
+
 
 def _git(repo: Path, *args: str) -> str:
     return subprocess.run(['git', '-C', str(repo), *args], check=True, capture_output=True, text=True).stdout.strip()
@@ -130,7 +132,9 @@ def test_diarizer_workflow_promotes_worker_digests_through_the_tree_check():
     on = workflow.get(True) or workflow['on']
     assert on['workflow_dispatch']['inputs']['image_digest']['default'] == ''
     steps = {step.get('name'): step for step in workflow['jobs']['deploy']['steps']}
-    assert steps['Build and Push Docker image']['if'] == "github.event.inputs.image_digest == ''"
+    assert steps['Build and Push Docker image']['if'] == (
+        "github.event.inputs.image_digest == '' && inputs.worker_dry_run != true"
+    )
     assert 'omi.release.tree=' in steps['Build and Push Docker image']['run']
     promote = steps['Verify promoted worker digest']
     assert promote['if'] == "github.event.inputs.image_digest != ''"

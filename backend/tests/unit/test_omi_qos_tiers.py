@@ -368,6 +368,7 @@ class TestModelQosProfiles:
             'translation',
             'screen_frame_judge',
             'wrapped_analysis',
+            'episode_composer',
         }
         nano_features = {
             'conv_app_select',

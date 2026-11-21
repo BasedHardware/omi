@@ -1,6 +1,14 @@
 name: Deploy public build
 description: Build, validate, and promote one browser application through a Cloud Run candidate; existing services use no-traffic and first creates receive initial traffic.
 inputs:
+  product_source:
+    description: App-only immutable product commit; carrier identity is recorded separately.
+    required: false
+    default: ${{ github.sha }}
+  product_context:
+    description: App-only exact source archive used as Docker context.
+    required: false
+    default: ''
   target:
     description: Canonical public-build target name declared in config/public-build-contract.json.
     required: true
@@ -58,7 +66,7 @@ outputs:
     value: ${{ steps.candidate.outputs.revision }}
   image:
     description: Immutable image reference promoted by this action.
-    value: ${{ steps.candidate.outputs.image }}
+    value: ${{ steps.app-image.outputs.reference || steps.candidate.outputs.image }}
 runs:
   using: composite
   steps:
@@ -116,6 +124,7 @@ runs:
       with:
         target: ${{ inputs.target }}
         environment: ${{ inputs.environment }}
+        source_ref: ${{ inputs.target == 'app' && inputs.product_source || github.sha }}
 
     - name: Validate deploy authentication inputs
       shell: bash
@@ -186,13 +195,20 @@ runs:
     - name: Compute immutable candidate identity
       id: candidate
       shell: bash
+      env:
+        APP_PRODUCT_SOURCE: ${{ inputs.product_source }}
       run: |
         set -euo pipefail
-        short_sha="${GITHUB_SHA::7}"
+        source_sha="$GITHUB_SHA"
+        if [[ '${{ inputs.target }}' == app ]]; then
+          source_sha="$APP_PRODUCT_SOURCE"
+          [[ "$source_sha" =~ ^[a-f0-9]{40}$ ]]
+        fi
+        short_sha="${source_sha::7}"
         revision_suffix="${short_sha}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
         service='${{ steps.contract.outputs.service }}'
         {
-          echo "sha=${GITHUB_SHA}"
+          echo "sha=${source_sha}"
           echo "short_sha=${short_sha}"
           echo "revision_suffix=${revision_suffix}"
           echo "revision=${service}-${revision_suffix}"
@@ -205,23 +221,47 @@ runs:
       run: gcloud auth configure-docker --quiet
 
     - name: Build and push immutable Docker image
+      id: image-build
       uses: docker/build-push-action@v7
       with:
-        context: ${{ steps.contract.outputs.build_context }}
-        file: ${{ steps.contract.outputs.dockerfile }}
+        context: ${{ inputs.target == 'app' && inputs.product_context || steps.contract.outputs.build_context }}
+        file: ${{ inputs.target == 'app' && format('{0}/{1}', inputs.product_context, steps.contract.outputs.dockerfile) || steps.contract.outputs.dockerfile }}
         push: true
         platforms: ${{ steps.contract.outputs.platforms }}
         tags: ${{ steps.candidate.outputs.image }}
+        labels: |
+          ${{ inputs.target == 'app' && format('org.opencontainers.image.revision={0}', steps.candidate.outputs.sha) || '' }}
+          ${{ inputs.target == 'app' && format('me.omi.carrier-source={0}', github.sha) || '' }}
         build-args: |
           ${{ steps.public-build.outputs.build_args }}
           NEXT_PUBLIC_OMI_BUILD_SHA=${{ steps.candidate.outputs.sha }}
+
+    - name: Pin app registry digest
+      if: inputs.target == 'app'
+      id: app-image
+      shell: bash
+      env:
+        APP_IMAGE: ${{ steps.candidate.outputs.image }}
+        APP_DIGEST: ${{ steps.image-build.outputs.digest }}
+      run: |
+        set -euo pipefail
+        [[ "$APP_DIGEST" =~ ^sha256:[a-f0-9]{64}$ ]]
+        echo "reference=${APP_IMAGE%:*}@$APP_DIGEST" >> "$GITHUB_OUTPUT"
+
+    - name: Save app rollback traffic baseline
+      if: inputs.target == 'app'
+      shell: bash
+      run: |
+        python3 .github/scripts/app_candidate_probe.py baseline \
+          --project '${{ inputs.project_id }}' --region '${{ steps.contract.outputs.region }}' \
+          --service '${{ steps.contract.outputs.service }}' --baseline "$RUNNER_TEMP/app-baseline.json"
 
     - name: Deploy candidate revision
       uses: google-github-actions/deploy-cloudrun@v3
       with:
         service: ${{ steps.contract.outputs.service }}
         region: ${{ steps.contract.outputs.region }}
-        image: ${{ steps.candidate.outputs.image }}
+        image: ${{ inputs.target == 'app' && steps.app-image.outputs.reference || steps.candidate.outputs.image }}
         # Cloud Run rejects --no-traffic when it creates a service. Development
         # first creates therefore receive the platform's initial traffic; every
         # existing service remains an isolated no-traffic candidate.
@@ -246,6 +286,36 @@ runs:
           ${{ steps.runtime-preflight.outputs.fallback_runtime_secrets }}
         secrets_update_strategy: merge
 
+    - name: Verify exact Linux app candidate before promotion
+      if: inputs.target == 'app'
+      shell: bash
+      env:
+        APP_IMAGE: ${{ steps.app-image.outputs.reference }}
+        APP_PRODUCT_CONTEXT: ${{ inputs.product_context }}
+        APP_ENV: ${{ inputs.environment }}
+      run: |
+        set -euo pipefail
+        hosting="$(python3 -c 'import json,os; print(json.load(open(os.path.join(os.environ["APP_PRODUCT_CONTEXT"],"config/public-build-values.json")))["environments"][os.environ["APP_ENV"]]["values"]["NEXT_PUBLIC_FIREBASE_PROJECT_ID"]+".firebaseapp.com")')"
+        python3 backend/scripts/wait_cloud_run_candidate_readiness.py \
+          --project '${{ inputs.project_id }}' --region '${{ steps.contract.outputs.region }}' \
+          --service '${{ steps.contract.outputs.service }}' --revision '${{ steps.candidate.outputs.revision }}' \
+          --timeout-seconds=150 --poll-interval-seconds=5
+        python3 .github/scripts/app_candidate_probe.py probe \
+          --project '${{ inputs.project_id }}' --region '${{ steps.contract.outputs.region }}' \
+          --service '${{ steps.contract.outputs.service }}' --revision '${{ steps.candidate.outputs.revision }}' \
+          --image "$APP_IMAGE" --source '${{ steps.candidate.outputs.sha }}' --carrier "$GITHUB_SHA" \
+          --tag '${{ steps.candidate.outputs.tag }}' --hosting "$hosting" \
+          --baseline "$RUNNER_TEMP/app-baseline.json" --receipt "$RUNNER_TEMP/app-probe.json"
+
+    - name: Record app candidate probe receipt
+      if: inputs.target == 'app' && success()
+      uses: actions/upload-artifact@v7
+      with:
+        name: app-candidate-probe-${{ github.run_id }}
+        path: |
+          ${{ runner.temp }}/app-baseline.json
+          ${{ runner.temp }}/app-probe.json
+
     - name: Promote browser-accepted candidate
       uses: ./.github/actions/public-build-candidate-promotion
       with:
@@ -257,3 +327,5 @@ runs:
         revision: ${{ steps.candidate.outputs.revision }}
         tag: ${{ steps.candidate.outputs.tag }}
         sha: ${{ steps.candidate.outputs.sha }}
+        app_probe_image: ${{ steps.app-image.outputs.reference }}
+        app_probe_carrier: ${{ github.sha }}

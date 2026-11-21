@@ -5,6 +5,7 @@ No recognizer text participates in the decision. Errors/uncertainty stay multili
 """
 
 from dataclasses import dataclass, replace
+import hashlib
 from io import BytesIO
 import math
 import os
@@ -17,6 +18,7 @@ from config.prerecorded_language import (
     MIN_AUDIO_LID_CONFIDENCE,
     audio_lid_confidence_floor,
     language_class,
+    language_gate_confident_skip,
     language_gate_shadow_enabled,
     language_guard_enabled,
     self_lid_confidence_floor,
@@ -32,6 +34,7 @@ from utils.stt.vendor_guard import (
     record_breaker_quota_error,
     record_breaker_success,
     record_vendor_burn,
+    record_vendor_payload,
 )
 
 MAX_PROBE_SECONDS = 30
@@ -116,8 +119,31 @@ def _probe_failure_outcome(exc: BaseException) -> str:
     return 'error'
 
 
-def detect(audio: bytes, *, before_probe=None, **audio_options) -> LanguageDecision:
-    """One cheap classification request; no client retries or content logging."""
+# Probe outcomes that mean the vendor itself was unusable (breaker, credits, transport, 5xx,
+# 4xx such as 429, malformed answers), as opposed to our own refusal or missing configuration.
+VENDOR_OUTAGE_OUTCOMES = frozenset(
+    {'breaker_open', 'quota', 'timeout', 'transport', 'http_5xx', 'http_4xx', 'invalid_response', 'error'}
+)
+OUTAGE_FALLBACKS = Counter(
+    'omi_batch_pipeline_language_outage_fallback_total',
+    'Vendor LID unusable: self-LID verdict used, or none safe (stays und)',
+    ['outcome'],
+)
+
+
+def detect(audio: bytes, *, before_probe=None, outcome_sink: list | None = None, **audio_options) -> LanguageDecision:
+    """One cheap classification request; no client retries or content logging.
+
+    ``outcome_sink`` receives the closed probe outcome, so a caller can tell a vendor outage
+    from an uncertain answer without a second request.
+    """
+    decision, outcome = _detect(audio, before_probe=before_probe, **audio_options)
+    if outcome_sink is not None:
+        outcome_sink.append(outcome)
+    return decision
+
+
+def _detect(audio: bytes, *, before_probe=None, **audio_options) -> tuple[LanguageDecision, str]:
     outcome, seconds, sent = 'error', 0.0, False
     decision = LanguageDecision('und', 0.0, 'unavailable')
     try:
@@ -125,19 +151,20 @@ def detect(audio: bytes, *, before_probe=None, **audio_options) -> LanguageDecis
             body, seconds = probe_wav(audio, **audio_options)
         except ValueError:
             outcome = 'unsupported_format'
-            return decision
+            return decision, outcome
         key = os.getenv('MODULATE_API_KEY', '')
         if not key:
             outcome = 'no_key'
-            return decision
+            return decision, outcome
         if before_probe is not None and not before_probe():
             outcome = 'skipped'
-            return decision
+            return decision, outcome
         if not breaker_allows(ENDPOINT_LID):
             outcome = 'breaker_open'
-            return decision
+            return decision, outcome
         with httpx.Client(timeout=httpx.Timeout(8, connect=2)) as client:
             sent = True
+            record_vendor_payload('modulate', 'lid', len(body))
             response = client.post(
                 LID_URL, headers={'X-API-Key': key}, files={'upload_file': ('language.wav', body, 'audio/wav')}
             )
@@ -157,9 +184,9 @@ def detect(audio: bytes, *, before_probe=None, **audio_options) -> LanguageDecis
         ):
             outcome = 'invalid_response'
             note_provider_failure('modulate', PROVIDER_ERROR)
-            return decision
+            return decision, outcome
         decision = LanguageDecision(code.lower(), float(confidence), 'audio_lid', seconds)
-        return decision
+        return decision, outcome
     except Exception as e:
         outcome = _probe_failure_outcome(e)
         if outcome == 'quota':
@@ -169,7 +196,7 @@ def detect(audio: bytes, *, before_probe=None, **audio_options) -> LanguageDecis
         # Observability only; the routing decision above is unchanged. A failed
         # probe is the degradation the sync empty-success guard needs to see.
         note_provider_failure('modulate', CREDIT_AUTH if outcome == 'quota' else PROVIDER_ERROR)
-        return decision
+        return decision, outcome
     finally:
         try:
             PROBE_OUTCOMES.labels(outcome).inc()
@@ -183,7 +210,9 @@ def detect(audio: bytes, *, before_probe=None, **audio_options) -> LanguageDecis
             record_vendor_burn(ENDPOINT_LID, 'ok' if outcome == 'accepted' else 'error', seconds)
 
 
-def _self_gate(audio: bytes, surface: str, cohort_key, audio_options) -> tuple[bool, language_gate.SelfVerdict | None]:
+def _self_gate(
+    audio: bytes, surface: str, cohort_key, audio_options, *, before_probe=None
+) -> tuple[bool, language_gate.SelfVerdict | None]:
     """(enforced, verdict), using the shared percentage cohort on every intake surface."""
     try:
         probe, probe_seconds = probe_wav(audio, **audio_options)
@@ -192,6 +221,13 @@ def _self_gate(audio: bytes, surface: str, cohort_key, audio_options) -> tuple[b
     enforced = language_gate.enforced_for(cohort_key, probe)
     if not enforced and not language_gate_shadow_enabled():
         return False, None
+    return enforced, _self_verdict(probe, probe_seconds, surface, before_probe=before_probe)
+
+
+def _self_verdict(probe: bytes, probe_seconds: float, surface: str, *, before_probe=None):
+    """One self-hosted classification of already-bounded probe audio, or None."""
+    if before_probe is not None and not before_probe():
+        return None
     verdict = language_gate.self_detect(probe, surface=surface)
     if verdict is not None:
         reported_seconds = verdict.audio_seconds
@@ -201,7 +237,50 @@ def _self_gate(audio: bytes, surface: str, cohort_key, audio_options) -> tuple[b
             verdict = None
         else:
             verdict = replace(verdict, audio_seconds=probe_seconds)
-    return enforced, verdict
+    return verdict
+
+
+def self_language_class(audio: bytes, *, before_probe=None) -> str:
+    """The self gate's top-1 capability for one bounded window of speech, or 'unavailable'.
+
+    A continuity check on speech after a vendor-admitted sample, never admission by itself. On
+    prerecorded shadow (24 h, probes >= 10 s), the P(supported) floor refused 62% of probes the
+    vendor called Parakeet-safe; the top-1 named an unsupported language on 3.6% of those and on
+    ~85% of probes the vendor called an unsupported language.
+    """
+    try:
+        probe, seconds = probe_wav(audio)
+    except Exception:
+        return 'unavailable'
+    verdict = _self_verdict(probe, seconds, 'batch', before_probe=before_probe)
+    return 'unavailable' if verdict is None else language_class(verdict.language)
+
+
+def _outage_fallback(audio, surface, audio_options, verdict, *, before_probe=None) -> LanguageDecision | None:
+    """The vendor probe is down: use the self-hosted gate's verdict under its own confidence floor.
+
+    The smallest proven route (vroute-d, David 11-01: LID must survive a Modulate outage): the same
+    model, floor and evidence an enforced gate cohort uses, consulted only when the vendor answer
+    is unusable. An unsafe or missing verdict keeps today's 'und' (held for recovery, never a guess).
+    ``BATCH_VENDOR_FAILOVER_ENABLED=false`` restores vendor-only LID.
+    """
+    from config.batch_pipeline_vendor_failover import failover_enabled
+
+    if not failover_enabled():
+        return None
+    if verdict is None:
+        try:
+            probe, probe_seconds = probe_wav(audio, **audio_options)
+            verdict = _self_verdict(probe, probe_seconds, surface, before_probe=before_probe)
+        except Exception:
+            verdict = None
+    decision = _self_decision(verdict) if verdict is not None else None
+    safe = decision is not None and decision.parakeet_safe
+    try:
+        OUTAGE_FALLBACKS.labels('self_lid' if safe else 'unresolved').inc()
+    except Exception:
+        pass
+    return decision if safe else None
 
 
 def _self_decision(verdict: language_gate.SelfVerdict) -> LanguageDecision:
@@ -230,22 +309,75 @@ def compare_shadow_pair(audio: bytes, *, before_call, surface='batch_shadow') ->
     return verdict is not None and vendor.evidence == 'audio_lid' and vendor.confidence >= 0.9
 
 
+# Share of skippable probes that still pay the vendor, so the shadow agreement series
+# (omi_stt_language_gate_shadow_total) keeps measuring what the skip decides.
+CONFIDENT_SKIP_AUDIT_PERCENT = 5
+
+
+def _confident_skip_audited(audio: bytes) -> bool:
+    digest = hashlib.sha256(audio).digest()
+    return int.from_bytes(digest[:8], 'big') % 100 < CONFIDENT_SKIP_AUDIT_PERCENT
+
+
+def _confident_skip_route(verdict: language_gate.SelfVerdict | None) -> str | None:
+    """The route a confident shadow verdict decides on its own, or None to ask the vendor.
+
+    Legacy sync segments only (resolve_file): the disagreement rate below was measured there, and
+    sampled batch admission requires vendor audio_lid evidence. A self-parakeet verdict clears the
+    enforced gate's floor (prod shadow 24 h to 11-02 04:55Z: the vendor called 0.07% of them an
+    unsupported language at >= 0.9). An unsupported top-1 can only move speech to the multilingual
+    route. Anything in between keeps the vendor probe.
+    """
+    if verdict is None:
+        return None
+    mode = language_gate_confident_skip()
+    if mode == 'off':
+        return None
+    if verdict.parakeet:
+        return 'parakeet' if mode == 'both' else None
+    return 'multilingual' if language_class(verdict.language) == 'unsupported' else None
+
+
 def resolve_language(
-    language, audio: bytes, *, before_probe=None, surface='prerecorded', cohort_key=None, **audio_options
+    language,
+    audio: bytes,
+    *,
+    before_probe=None,
+    before_self_probe=None,
+    surface='prerecorded',
+    cohort_key=None,
+    confident_skip=False,
+    **audio_options,
 ) -> LanguageDecision:
     code = normalized_stt_language(language.strip() if isinstance(language, str) else None)
     if not language_guard_enabled() or language_class(language) != 'unknown':
         return LanguageDecision(code, 1.0, 'declared')
-    enforced, verdict = _self_gate(audio, surface, cohort_key, audio_options)
+    enforced, verdict = (
+        _self_gate(audio, surface, cohort_key, audio_options)
+        if before_self_probe is None
+        else _self_gate(audio, surface, cohort_key, audio_options, before_probe=before_self_probe)
+    )
     if enforced:
         language_gate.record_enforced(surface, verdict)
+    skip = _confident_skip_route(verdict) if confident_skip and surface == 'prerecorded' and not enforced else None
+    if skip is not None and _confident_skip_audited(audio):
+        language_gate.record_confident_skip(surface, 'audit')
+        skip = None
     if enforced and verdict is not None:
+        decision = _self_decision(verdict)
+    elif skip is not None and verdict is not None:
+        language_gate.record_confident_skip(surface, skip)
         decision = _self_decision(verdict)
     else:
         # Gate unavailable in an enforced cohort falls back to today's vendor path.
-        decision = detect(audio, before_probe=before_probe, **audio_options)
+        outcomes: list[str] = []
+        decision = detect(audio, before_probe=before_probe, outcome_sink=outcomes, **audio_options)
         if not enforced:
             language_gate.record_shadow(surface, verdict, decision)
+        # An enforced cohort already asked the self gate (it was unavailable); never ask it twice.
+        if not enforced and decision.evidence == 'unavailable' and bool(set(outcomes) & VENDOR_OUTAGE_OUTCOMES):
+            fallback = _outage_fallback(audio, surface, audio_options, verdict, before_probe=before_self_probe)
+            decision = fallback or decision
     bounded = decision.language if decision.language in MODULATE_SUPPORTED_LANGUAGES else 'other'
     if decision.language == 'und':
         bounded = 'und'
@@ -278,7 +410,9 @@ def resolve_file(language, path, *, selector, before_probe=None, cohort_key=None
     try:
         with wave.open(str(path), 'rb') as source:
             body, _ = probe_wav_from_reader(source)
-        decision = resolve_language(language, body, before_probe=before_probe, cohort_key=cohort_key)
+        decision = resolve_language(
+            language, body, before_probe=before_probe, cohort_key=cohort_key, confident_skip=True
+        )
     except Exception:
         decision = LanguageDecision('und', 0.0, 'unavailable')
     return select_decision(language, decision, selector)

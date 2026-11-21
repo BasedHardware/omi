@@ -77,8 +77,8 @@ def test_runtime_bound_is_unchanged_and_cannot_be_raised(monkeypatch):
     assert not independent_allowed(75.0)
 
 
-def duration_limited_unit(setup, monkeypatch, legacy_dependencies):
-    """The post-#23795 shape: the runtime refusal-settled >60s prepared guarded unit."""
+def duration_limited_unit(setup, monkeypatch, legacy_dependencies, *, historical=True):
+    """A historical #23795 refusal, or a current refusal without bound proof."""
     client, store, binding, artifacts, legacy, alternate, soniox = prepared_setup(
         setup, monkeypatch, legacy_dependencies, speech=30.0
     )
@@ -86,7 +86,20 @@ def duration_limited_unit(setup, monkeypatch, legacy_dependencies):
     monkeypatch.setenv('BATCH_PIPELINE_INDEPENDENT_RECOVERY_MAX_SECONDS', '190')
     recovery = setup[-1]
     recovery.stt = transcribe
-    assert recovery.recover('bad', binding.owner_id) == 'failed_held'
+    if historical:
+        # The old guard ran before worker-VAD lookup. Recreate that durable
+        # receipt directly: current bound proof correctly permits Modulate.
+        job = row(client)
+        assert RecoveryStore(store).hold_duration_limit(
+            'bad',
+            job['recovery']['token'],
+            100,
+            audio_uri=job['audio_uri'],
+            audio_seconds=job['duration_seconds'],
+        )
+    else:
+        row(client).pop('worker_vad_receipt', None)
+        assert recovery.recover('bad', binding.owner_id) == 'failed_held'
     job = row(client)
     assert job['recovery_state'] == 'failed_held' and not job.get('result')
     assert not job['recovery'].get('recognizers') and not job['recovery'].get('started_at')
@@ -98,8 +111,8 @@ def duration_limited_unit(setup, monkeypatch, legacy_dependencies):
 
 
 def test_runtime_duration_limit_still_settles_without_a_provider_call(setup, monkeypatch, legacy_dependencies):
-    """#23795 identity: an impossible >60s unit terminally holds with a refusal, even with the flag on and env 190."""
-    duration_limited_unit(setup, monkeypatch, legacy_dependencies)
+    """Without bound worker proof, >60s still refuses despite the flag and env190."""
+    duration_limited_unit(setup, monkeypatch, legacy_dependencies, historical=False)
 
 
 def test_duration_limited_refusal_reopens_through_the_takeover(setup, monkeypatch, legacy_dependencies):
@@ -216,6 +229,79 @@ def test_takeover_provider_error_settles_failed_held(setup, monkeypatch, legacy_
     assert job['recovery']['failure'] == {'stage': 'provider', 'reason': 'provider_failed'}
     assert job['recovery']['recognizers']['soniox']['outcome'] == 'error'
     assert not job.get('result')
+
+
+class _SonioxTransport:
+    """HTTP-only fake behind the real soniox_batch.transcribe, so its authorization gate runs."""
+
+    def __init__(self, *args, **kwargs):
+        self.calls = []
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+    def request(self, method, url, **kwargs):
+        self.calls.append(method)
+        if method == 'DELETE':
+            body = {}
+        elif url.endswith('/files'):
+            body = {'id': '00000000-0000-4000-8000-000000000001'}
+        elif url.endswith('/transcriptions'):
+            body = {'id': '00000000-0000-4000-8000-000000000002', 'status': 'completed'}
+        else:
+            body = {
+                'text': 'Synthetic.',
+                'tokens': [{'text': 'Synthetic.', 'start_ms': 1000, 'end_ms': 2000, 'speaker': '1'}],
+            }
+        return Mock(status_code=200, json=Mock(return_value=body))
+
+
+def test_takeover_above_runtime_bound_passes_the_real_soniox_authorization(setup, monkeypatch, legacy_dependencies):
+    """11-02 prod: every take-over unit settled provider_failed with zero vendor calls, because the
+    Soniox client re-applied the runtime 60s bound. The scoped plan bound must reach authorization."""
+    from functools import partial
+    from utils.stt import soniox_batch
+
+    client, store, binding, artifacts, _, alternate, _ = prepared_setup(
+        setup, monkeypatch, legacy_dependencies, speech=30.0
+    )
+    transports = []
+
+    def factory(*args, **kwargs):
+        transports.append(_SonioxTransport())
+        return transports[-1]
+
+    real = importlib.reload(soniox_batch).transcribe
+    monkeypatch.setattr(soniox_batch, 'transcribe', partial(real, client_factory=factory, sleep=lambda _: None))
+    assert (
+        prepared_independent_one(
+            store, artifacts, 'bad', binding.owner_id, 190.0, server_flags=SERVING_ENV, clock=lambda: 100
+        )
+        == 'recovered'
+    )
+    assert transports and transports[0].calls[:2] == ['POST', 'POST']
+    assert row(client)['recovery']['recognizers']['soniox']['outcome'] == 'words'
+    alternate.assert_not_called()
+
+
+def test_takeover_refused_by_soniox_policy_never_spends_the_intent(setup, monkeypatch, legacy_dependencies):
+    from utils.stt import soniox_batch
+
+    client, store, binding, artifacts, _, alternate, soniox = prepared_setup(setup, monkeypatch, legacy_dependencies)
+    monkeypatch.setattr(soniox_batch, 'provider_is_enabled', lambda *args: False)
+    assert (
+        prepared_independent_one(
+            store, artifacts, 'bad', binding.owner_id, 190.0, server_flags=SERVING_ENV, clock=lambda: 100
+        )
+        == 'independent_budget_held'
+    )
+    job = row(client)
+    assert job['recovery_state'] == 'prepared' and not job['recovery'].get('started_at')
+    assert not job['recovery'].get('recognizers')
+    soniox.assert_not_called()
 
 
 def test_takeover_only_admits_the_scoped_bound(setup, monkeypatch, legacy_dependencies):

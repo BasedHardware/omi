@@ -55,6 +55,11 @@ on:
         required: false
         default: false
         type: boolean
+      skip_backend_secrets:
+        description: 'Skip reapplying shared <env>-omi-backend-secrets; the read-only gateway credential check still runs'
+        required: false
+        default: false
+        type: boolean
 
 # LLM Gateway deployment reapplies shared backend-secrets, so it joins the
 # full backend mutation domain for the selected environment.
@@ -190,7 +195,8 @@ jobs:
         with:
           source_sha: ${{ env.CHECKED_OUT_SHA }}
           project_id: ${{ vars.RUNTIME_GCP_PROJECT_ID }}
-          credentials_json: ${{ secrets.GCP_FIRESTORE_READONLY_CREDENTIALS }}
+          workload_identity_provider: ${{ github.event.inputs.environment == 'prod' && 'projects/208440318997/locations/global/workloadIdentityPools/omi-gha-deploy-prod/providers/github' || 'projects/1031333818730/locations/global/workloadIdentityPools/omi-gha-deploy-dev/providers/github' }}
+          service_account: omi-ci-index-check@based-hardware.iam.gserviceaccount.com
 
       # Prod: GitHub WIF as omi-ci-deployer-prod@ (credential-hygiene WS-C, plan v2 Phase E).
       # Development keeps its JSON lane.
@@ -286,6 +292,8 @@ jobs:
           # deploy-llm-gateway.sh on the image.tag it built above.
           IMAGE_REPOSITORY: ${{ env.ROLE_IMAGE_REPOSITORY }}
           IMAGE_DIGEST: ${{ env.ROLE_IMAGE_DIGEST }}
+          # Scopes a gateway-only release: the shared secret reapply is skipped, the presence check is not.
+          SKIP_BACKEND_SECRETS: ${{ github.event.inputs.skip_backend_secrets == 'true' && 'true' || 'false' }}
         run: |
           IMAGE_TAG="${IMAGE_TAG}" backend/scripts/deploy-llm-gateway.sh
           if [[ -n "$IMAGE_DIGEST" ]]; then

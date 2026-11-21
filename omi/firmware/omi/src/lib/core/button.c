@@ -84,17 +84,9 @@ K_WORK_DELAYABLE_DEFINE(button_work, check_button_level);
 
 // 4 is button down, 5 is button up
 static FSM_STATE_T current_button_state = IDLE;
-static uint32_t inc_count_1 = 0;
-static uint32_t inc_count_0 = 0;
 
 static int final_button_state[2] = {0, 0};
-const static int threshold = 10;
 
-static void reset_count()
-{
-    inc_count_0 = 0;
-    inc_count_1 = 0;
-}
 static inline void notify_press()
 {
     final_button_state[0] = BUTTON_PRESS;
@@ -151,6 +143,8 @@ static inline void notify_long_tap()
 #define TAP_THRESHOLD 300     // 300 ms for single tap
 #define DOUBLE_TAP_WINDOW 600 // 600 ms maximum for double-tap
 #define LONG_PRESS_TIME 3000  // 3000 ms for long press (power off)
+#define POWEROFF_RELEASE_WAIT_MS 60000
+#define POWEROFF_RELEASE_POLL_MS 50
 
 typedef enum {
     BUTTON_EVENT_NONE,
@@ -226,6 +220,8 @@ void check_button_level(struct k_work *work_item)
     if (event == BUTTON_EVENT_DOUBLE_TAP) {
         LOG_INF("double tap detected\n");
         btn_last_event = event;
+        /* Notify only (3.0.21 behaviour). 3.0.23's offline local mute toggle
+         * ignored the app's configured action and had no feedback (3.0.24). */
         notify_double_tap();
     }
 
@@ -253,7 +249,6 @@ void check_button_level(struct k_work *work_item)
     }
 
     k_work_reschedule(&button_work, K_MSEC(BUTTON_CHECK_INTERVAL));
-    return 0;
 }
 
 static ssize_t button_data_read_characteristic(struct bt_conn *conn,
@@ -362,13 +357,12 @@ void turnoff_all()
     // Delays for stability
     k_msleep(1000);
 
+    // Always turn off microphone
+    mic_off();
+
     // // Enter the low power mode
     transport_off();
     k_msleep(300);
-
-    // Always turn off microphone
-    mic_off();
-    k_msleep(100);
 
     // Turn off speaker if enabled
 #ifdef CONFIG_OMI_ENABLE_SPEAKER
@@ -382,6 +376,9 @@ void turnoff_all()
     k_msleep(100);
 #endif
 
+    /* Close the mount gate first: a failing card is off between backoff
+     * retries, so is_sd_on() alone would let a retry power it back on. */
+    sd_begin_shutdown();
     if (is_sd_on()) {
         app_sd_off();
     }
@@ -408,21 +405,47 @@ void turnoff_all()
         return;
     }
 
-    rc = gpio_pin_interrupt_configure_dt(&usr_btn, GPIO_INT_LEVEL_LOW);
-    if (rc < 0) {
-        LOG_ERR("Could not configure usr_btn GPIO interrupt (%d)", rc);
-        return;
+    /* Wait for release before arming the level wake. Armed while the button is
+     * still held, System OFF wakes at once, and that wake begins with a held
+     * button (committee item 5). A stuck button gives up after a bounded wait
+     * and then wakes on release instead, so a jammed button can never start a
+     * boot with the button held (on a charger that would be the manual SAFE
+     * gesture). */
+    for (int waited = 0; gpio_pin_get_dt(&usr_btn) > 0 && waited < POWEROFF_RELEASE_WAIT_MS;
+         waited += POWEROFF_RELEASE_POLL_MS) {
+        watchdog_feed();
+        k_msleep(POWEROFF_RELEASE_POLL_MS);
     }
+
     rc = watchdog_deinit();
     if (rc < 0) {
-        LOG_ERR("Failed to deinitialize watchdog (%d)", rc);
-        return;
+        LOG_WRN("Watchdog cannot stop (%d); proceeding to System OFF", rc);
     }
 
     /* Persist an IMU timestamp base so we can estimate time across system_off. */
     lsm6dsl_time_prepare_for_system_off();
     k_msleep(1000);
+
+    /* Arm the wake as the very last step. A level interrupt keeps firing while
+     * its level holds; armed before the sleep above (3.0.23), a press in that
+     * window re-ran the runtime callback continuously, starving this thread so
+     * System OFF never came and the unstoppable watchdog reset the pendant.
+     * The runtime callback is removed, then the level is sampled and the wake
+     * armed with interrupts masked; sys_poweroff() keeps them masked. */
+    bool still_held = gpio_pin_get_dt(&usr_btn) > 0;
+    if (still_held) {
+        LOG_WRN("usr_btn still held at power-off: waking on release instead");
+    }
     LOG_INF("Entering system off; press usr_btn to restart");
+    (void) gpio_remove_callback(usr_btn.port, &button_cb_data);
+    unsigned int key = irq_lock();
+    still_held = gpio_pin_get_dt(&usr_btn) > 0;
+    rc = gpio_pin_interrupt_configure_dt(&usr_btn, still_held ? GPIO_INT_LEVEL_HIGH : GPIO_INT_LEVEL_LOW);
+    if (rc < 0) {
+        irq_unlock(key);
+        LOG_ERR("Could not configure usr_btn GPIO interrupt (%d)", rc);
+        return;
+    }
 
     // Power off the system using sys_poweroff
     sys_poweroff();

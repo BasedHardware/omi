@@ -16,6 +16,9 @@ typedef enum {
     OMI_FEATURE_OFFLINE_STORAGE = (1 << 6),
     OMI_FEATURE_LED_DIMMING = (1 << 7),
     OMI_FEATURE_MIC_GAIN = (1 << 8),
+    OMI_FEATURE_DEVICE_NAME = (1 << 9),
+    OMI_FEATURE_CAPTURE_MUTE = (1 << 10),
+    OMI_FEATURE_POWER_CONTROL = (1 << 11),
 } omi_feature_t;
 
 #endif // FEATURES_H

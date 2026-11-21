@@ -10,6 +10,7 @@ from utils.notifications import send_apple_reminders_sync_push_async
 from utils.observability.fallback import record_fallback
 from utils.task_integrations_ops import create_task_internal
 import logging
+from utils.observability.delivery import observe_action_export
 
 logger = logging.getLogger(__name__)
 
@@ -94,6 +95,7 @@ async def auto_sync_action_item(
     return result
 
 
+@observe_action_export
 async def auto_sync_action_item_with_outcome(
     uid: str,
     action_item: Dict[str, Any],
@@ -218,6 +220,7 @@ async def _sync_to_apple_reminders(uid: str, action_items: List[Dict[str, Any]])
     return {"synced": success, "platform": "apple_reminders", "pending_device": True}
 
 
+@observe_action_export
 async def auto_sync_action_items_batch(uid: str, action_items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """
     Batch sync multiple action items. For Apple Reminders, sends a single

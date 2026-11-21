@@ -178,57 +178,6 @@ def cap_presentation():
     return sheet_for, ladder_catalog
 
 
-def test_at_cap_backend_owned_copy_golden(monkeypatch, cap_presentation):
-    sheet_for, ladder_catalog = cap_presentation
-
-    monkeypatch.setenv('LADDER_V1_BUDGET_ENFORCEMENT_ENABLED', 'true')
-    rows, recognized = ladder_catalog()
-    response = sheet_for(
-        'plus',
-        price_id='price_plus_month',
-        rows=rows,
-        recognized=recognized,
-        bindings=list(rows),
-        percent=100,
-        trigger='usage_budget',
-    )
-    at_cap = response.model_dump(mode='json')['at_cap']
-    expected = json.loads((Path(__file__).parents[1] / 'fixtures/ladder_v1_at_cap.json').read_text())
-    assert at_cap == expected
-    assert at_cap['on_device_upgrade_line'] == 'Upgrade to Pro for speaker separation and higher accuracy'
-
-
-def test_at_cap_body_preserves_recordings_without_automatic_reset_promise(monkeypatch, cap_presentation):
-    sheet_for, ladder_catalog = cap_presentation
-
-    monkeypatch.setenv('LADDER_V1_BUDGET_ENFORCEMENT_ENABLED', 'true')
-    rows, recognized = ladder_catalog()
-
-    def body(locale):
-        response = sheet_for(
-            'plus',
-            price_id='price_plus_month',
-            rows=rows,
-            recognized=recognized,
-            bindings=list(rows),
-            percent=100,
-            trigger='usage_budget',
-            locale=locale,
-        )
-        return response.at_cap.body
-
-    assert (
-        body(None)
-        == 'Your recordings and transcripts are saved. Waiting recordings stay waiting until you choose to process them.'
-    )
-    assert (
-        body('es')
-        == 'Tus grabaciones y transcripciones están guardadas. Las grabaciones pendientes esperarán hasta que decidas procesarlas.'
-    )
-    assert body('ja') == '録音と文字起こしは保存されています。処理を選択するまで、待機中の録音はそのまま保持されます。'
-    assert body('ar') == 'تم حفظ تسجيلاتك ونصوصك. ستبقى التسجيلات قيد الانتظار حتى تختار معالجتها.'
-
-
 def test_atomic_daily_reservations_boundary_and_reset():
     from database.ladder_v1 import daily_cap_reached, reserve_daily_request
 
@@ -277,39 +226,6 @@ def test_daily_cap_redis_outage_stays_retryable(monkeypatch):
     assert error.value.status_code == 503
     assert error.value.detail == 'usage_unavailable'
     assert error.value.headers['Retry-After'] == '30'
-
-
-def test_api_enforcement_keeps_the_daily_cap_and_skips_the_budget(monkeypatch):
-    import asyncio
-
-    from fastapi import Response
-
-    import dependencies
-
-    monkeypatch.setenv('LADDER_V1_BUDGET_ENFORCEMENT_ENABLED', 'true')
-    monkeypatch.setenv('LADDER_V1_MCP_DAILY_CAPS_ENABLED', 'true')
-    calls = []
-    assert 'enforce_budget' not in inspect.getsource(dependencies._enforce_ladder_api)
-    assert 'enforce_budget' not in inspect.getsource(mcp_transport._handle_tool_call)
-    monkeypatch.setattr(
-        dependencies,
-        'enforce_daily_cap',
-        lambda uid: calls.append('daily') or {'state': 'nudge', 'reset_at': 4102444800},
-    )
-    response = Response()
-    asyncio.run(dependencies._enforce_ladder_api('u', response))
-    assert calls == ['daily']
-    assert response.headers['X-Omi-Usage-State'] == 'nudge'
-    assert response.headers['X-Omi-Usage-Reset-At'] == '4102444800'
-    assert response.headers['X-Omi-Storefront-Trigger'] == 'mcp_daily_cap'
-
-    calls.clear()
-    monkeypatch.delenv('LADDER_V1_BUDGET_ENFORCEMENT_ENABLED', raising=False)
-    monkeypatch.delenv('LADDER_V1_MCP_DAILY_CAPS_ENABLED', raising=False)
-    quiet = Response()
-    asyncio.run(dependencies._enforce_ladder_api('u', quiet))
-    assert calls == []
-    assert 'X-Omi-Usage-State' not in quiet.headers
 
 
 @pytest.mark.parametrize(
@@ -390,29 +306,6 @@ def test_actual_choice_http_holds_then_persists_once(choice_http):
     replay = client.get('/v1/users/budget-choice', headers=headers)
     assert replay.json()['state'] == 'on_device' and replay.json()['ask'] is False
     assert client.get('/v1/users/budget-choice').status_code == 404
-
-
-def test_ladder_quotas_do_not_use_legacy_chat_cap_or_overage(monkeypatch):
-    from utils import subscription as sub, overage
-    from models.users import Subscription, PlanType
-
-    monkeypatch.setattr(sub, 'is_trial_paywalled', lambda *a, **k: False)
-    monkeypatch.setattr(
-        sub.users_db, 'get_user_valid_subscription', lambda *a, **k: Subscription(plan=PlanType.operator)
-    )
-    monkeypatch.setattr(
-        sub.user_usage_db,
-        'get_monthly_chat_usage',
-        lambda *a, **k: {'questions': 100000, 'cost_usd': 1000, 'reset_at': 4102444800},
-    )
-    monkeypatch.setattr(
-        sub.ladder_v1, 'budget_snapshot', lambda *a, **k: {'budget_percent': 80, 'reset_at': 4102444800}
-    )
-    snapshot = sub.get_chat_quota_snapshot('u')
-    assert snapshot['allowed'] is True and snapshot['is_overage_plan'] is False
-    monkeypatch.setattr(overage, 'budget_enforcement_enabled', lambda: True)
-    monkeypatch.setattr(overage, 'account', lambda uid: {'plan_id': 'operator'})
-    assert overage.get_user_overage('u', PlanType.operator)['overage_usd'] == 0
 
 
 @pytest.fixture
@@ -509,104 +402,6 @@ def test_flag_off_cold_import_never_resolves_database(monkeypatch):
         assert cold.enforce_daily_cap('u') is None
 
 
-@pytest.mark.parametrize(
-    'plan,key,upgrade',
-    [
-        ('basic', None, 'unlimited_v2'),
-        ('plus', 'ladder_v1_plus_month', 'unlimited_v2'),
-        ('operator', 'ladder_v1_pro_month', 'unlimited_v2'),
-        ('architect', 'ladder_v1_architect_month', None),
-    ],
-)
-def test_chat_stops_at_shared_budget_and_reset_unblocks(monkeypatch, bindings, plan, key, upgrade):
-    monkeypatch.setenv('LADDER_V1_BUDGET_ENFORCEMENT_ENABLED', 'true')
-    sub = subscription(plan, 'price_' + key if key else None)
-    monkeypatch.setattr(ladder, 'account', lambda *a, **k: policy.entitlements(sub))
-    from database import usage_units
-
-    now = datetime(2026, 10, 31, 23, 59, tzinfo=timezone.utc)
-
-    class Clock:
-        @staticmethod
-        def now(tz):
-            return now
-
-        def __new__(cls, *args, **kwargs):
-            return datetime(*args, **kwargs)
-
-    monkeypatch.setattr(ladder, 'datetime', Clock)
-    monkeypatch.setattr(
-        usage_units,
-        'get_usage_units',
-        lambda uid, date, **kw: {
-            'budget_units': 100,
-            'used_units': 100 if date.month == 10 else 0,
-        },
-    )
-    with pytest.raises(HTTPException) as error:
-        ladder.enforce_chat_budget('u')
-    assert error.value.status_code == 402
-    pause = error.value.detail['chat_at_cap']
-    assert pause['state'] == 'paused'
-    assert pause['title'] == 'Chat is paused'
-    assert pause['trigger'] == 'usage_budget'
-    assert pause['upgrade_plan'] == upgrade
-    assert pause['reset_line'] == 'Chat is back on Nov 1.'
-    now = datetime(2026, 11, 1, tzinfo=timezone.utc)
-    assert ladder.enforce_chat_budget('u') is True
-
-
-def test_chat_dark_path_and_legacy_do_not_read_ledger(monkeypatch):
-    def forbidden(*a, **k):
-        pytest.fail('dark or legacy path read ledger')
-
-    monkeypatch.delenv('LADDER_V1_BUDGET_ENFORCEMENT_ENABLED', raising=False)
-    monkeypatch.setattr(ladder, 'usage_snapshot', forbidden)
-    assert ladder.enforce_chat_budget('u') is False
-    monkeypatch.undo()
-    monkeypatch.setenv('LADDER_V1_BUDGET_ENFORCEMENT_ENABLED', 'true')
-    price = next(p for p, plan in catalog.RECOGNIZED_STRIPE_PRICE_PLAN_TYPES.items() if plan.value == 'plus')
-    monkeypatch.setattr(ladder, 'account', lambda *a, **k: policy.entitlements(subscription('plus', price)))
-    from database import usage_units
-
-    monkeypatch.setattr(usage_units, 'get_usage_units', forbidden)
-    assert ladder.enforce_chat_budget('u') is False
-
-
-@pytest.mark.parametrize(
-    'plan,upgrade',
-    [('basic', 'unlimited_v2'), ('plus', 'unlimited_v2'), ('operator', 'unlimited_v2'), ('architect', None)],
-)
-def test_chat_pause_payload_is_only_flagged_exhausted_ladder(monkeypatch, cap_presentation, plan, upgrade):
-    sheet_for, ladder_catalog = cap_presentation
-    rows, recognized = ladder_catalog()
-    kwargs = dict(
-        price_id=None if plan == 'basic' else 'price_' + plan + '_month',
-        rows=rows,
-        recognized=recognized,
-        bindings=list(rows),
-        trigger='usage_budget',
-    )
-    monkeypatch.delenv('LADDER_V1_BUDGET_ENFORCEMENT_ENABLED', raising=False)
-    assert 'chat_at_cap' not in sheet_for(plan, percent=100, **kwargs).model_dump(mode='json')
-    monkeypatch.setenv('LADDER_V1_BUDGET_ENFORCEMENT_ENABLED', 'true')
-    assert sheet_for(plan, percent=99.99, **kwargs).chat_at_cap is None
-    payload = sheet_for(plan, percent=100, **kwargs).model_dump(mode='json')
-    assert payload['chat_at_cap']['upgrade_plan'] == upgrade
-    import os
-
-    if os.environ.get('UPDATE_CHAT_CAP_GOLDENS') == '1':
-        Path(__file__).parents[1].joinpath('fixtures', f'chat_at_cap_{plan}.json').write_text(
-            json.dumps(payload['chat_at_cap'], ensure_ascii=False, indent=2) + '\n'
-        )
-    expected = json.loads(Path(__file__).parents[1].joinpath('fixtures', f'chat_at_cap_{plan}.json').read_text())
-    assert payload['chat_at_cap'] == expected
-    legacy = sheet_for(
-        'plus', price_id='price_legacy_plus', percent=100, rows=rows, recognized=recognized, bindings=list(rows)
-    )
-    assert legacy.chat_at_cap is None
-
-
 @pytest.mark.parametrize('percent', [0, 80, 99.99])
 def test_chat_below_shared_budget_still_allowed(monkeypatch, percent):
     monkeypatch.setattr(
@@ -615,73 +410,3 @@ def test_chat_below_shared_budget_still_allowed(monkeypatch, percent):
         lambda *a, **k: {'budget_percent': percent, 'budget_units': 100, 'used_units': percent},
     )
     assert ladder.enforce_chat_budget('u') is True
-
-
-def test_unprojected_usage_exhausts_budget_and_emits_coverage(monkeypatch):
-    from database import usage_units
-    from tests.unit.fixtures.shadow_usage_firestore import Store
-    from utils.observability import ladder_v1 as metrics
-    from unittest.mock import Mock
-
-    monkeypatch.setenv('LADDER_V1_BUDGET_ENFORCEMENT_ENABLED', 'true')
-    monkeypatch.setattr(
-        ladder,
-        'account',
-        lambda *a, **k: {
-            'plan_id': 'plus',
-            'entitlement_version': 'ladder_v1',
-            'budget': {'kind': 'units', 'value': 1},
-        },
-    )
-    now = datetime.now(timezone.utc)
-    store = Store(
-        {
-            'users/u/hourly_usage/current': {
-                'year': now.year,
-                'month': now.month,
-                'transcription_seconds': 3600,
-            }
-        }
-    )
-    seconds, attempts = Mock(), Mock()
-    monkeypatch.setattr(metrics.UNPROJECTED_SECONDS, 'observe', seconds)
-    monkeypatch.setattr(metrics.UNPROJECTED_ATTEMPTS, 'observe', attempts)
-    snapshot = ladder.budget_snapshot('u', firestore_client=store)
-    assert snapshot['used_units'] > snapshot['budget_units']
-    seconds.assert_called_once_with(3600)
-    attempts.assert_called_once_with(0)
-    with pytest.raises(HTTPException) as error:
-        ladder.enforce_budget('u', firestore_client=store)
-    assert error.value.status_code == 402
-    assert store.writes == 0
-
-
-def test_coverage_metrics_survive_isolated_auth_reimports():
-    from testing.import_isolation import load_module_fresh
-    from utils.observability import ladder_v1 as metrics
-
-    path = str(Path(__file__).parents[2] / 'utils/observability/ladder_v1.py')
-    for _ in range(3):
-        reloaded = load_module_fresh('utils.observability.ladder_v1', path)
-        assert reloaded.UNPROJECTED_SECONDS is metrics.UNPROJECTED_SECONDS
-        assert reloaded.UNPROJECTED_ATTEMPTS is metrics.UNPROJECTED_ATTEMPTS
-
-
-@pytest.mark.parametrize('key', ['ambiguous_priced_transcription_seconds', 'ambiguous_priced_gateway_attempts'])
-@pytest.mark.parametrize('dispatch', [False, True])
-def test_historical_mixed_coverage_admits_on_snapshot(monkeypatch, key, dispatch):
-    from types import SimpleNamespace
-    from utils import stt_cap_dispatch, subscription
-
-    monkeypatch.setenv('LADDER_V1_BUDGET_ENFORCEMENT_ENABLED', 'true')
-    monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', str(dispatch).lower())
-    snapshot = {'budget_percent': 0, 'used_units': 0, 'budget_units': 100, 'completeness': {key: 1}}
-    monkeypatch.setattr(ladder, 'usage_snapshot', lambda *a, **k: snapshot)
-    monkeypatch.setattr(subscription, 'is_marketplace_reviewer', lambda _: False)
-    monkeypatch.setattr(subscription, 'is_trial_paywalled', lambda *a, **k: False)
-    monkeypatch.setattr(
-        subscription.users_db, 'get_user_valid_subscription', lambda *a, **k: SimpleNamespace(plan='plus')
-    )
-    assert ladder.budget_snapshot('u') is snapshot
-    assert stt_cap_dispatch.sync_allowed('u')
-    assert stt_cap_dispatch.funded_allowance('u').reason == 'usage_budget_available'

@@ -1,0 +1,3 @@
+{
+  "change": "Deleting all completed tasks at once no longer fails partway and brings some of them back."
+}

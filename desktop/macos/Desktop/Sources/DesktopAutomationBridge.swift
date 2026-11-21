@@ -1,3 +1,10 @@
+// The local automation bridge: the HTTP surface (omi-ctl state/navigate/actions)
+// that calls the app's real code in-process for agent and e2e verification.
+//
+// It never synthesizes mouse events, auto-enables only on non-production
+// bundles, and every registered action must declare its effects so read-only
+// verification cannot mutate app state
+// (.github/agent-docs/desktop-automation-effects.md).
 import AppKit
 import CryptoKit
 import Foundation
@@ -2658,11 +2665,13 @@ final class DesktopAutomationActionRegistry {
         return ["error": "missing 'id'"]
       }
       if let appState = await MainActor.run(body: { AppState.current }) {
-        guard await appState.deleteConversation(id) else {
-          throw APIError.invalidResponse
+        let outcome = await appState.deleteConversation(id)
+        guard outcome.succeeded else {
+          return ["error": outcome.message]
         }
       } else {
-        try await APIClient.shared.deleteConversation(id: id)
+        let outcome = try await APIClient.shared.deleteConversation(id: id)
+        guard outcome.succeeded else { return ["error": outcome.message] }
         NotificationCenter.default.post(
           name: .conversationDeleted,
           object: nil,
@@ -3090,7 +3099,7 @@ final class DesktopAutomationActionRegistry {
         switch error {
         case .noBrowserFound:
           classification = "no_browser"
-        case .notSignedIn:
+        case .notSignedIn, .savedSelectionNeedsGrant:
           classification = "not_signed_in"
         case .sessionExpired:
           classification = "session_expired"

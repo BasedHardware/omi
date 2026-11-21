@@ -1,3 +1,13 @@
+"""Desktop chat completions (/v2/chat/completions): SSE proxy translating
+OpenAI-style desktop requests onto the managed gateway lane or direct Anthropic
+and repairing provider history shape on the way through.
+
+This router ships in the separate desktop-backend Cloud Run release (backend-wide
+rollouts do not reach it, and an unset feature mode routes direct), and the
+translation layer enforces provider conversation shape because malformed history
+silently corrupts replies (backend/docs/runbooks/llm-gateway-fallback.md).
+"""
+
 from __future__ import annotations
 
 import asyncio

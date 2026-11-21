@@ -221,7 +221,15 @@ def _duration_seen_by_the_discard_gate(conversation):
 
 class TestDiscardGateDuration:
     def test_the_gate_receives_the_transcript_span_not_the_session_wall_window(self):
-        conversation = _conversation([_segment('how much does astra cost', 0.0, TRANSCRIPT_SPAN_SECONDS)])
+        conversation = _conversation(
+            [
+                _segment(
+                    'how much does astra cost for the complete firmware development and testing plan',
+                    0.0,
+                    TRANSCRIPT_SPAN_SECONDS,
+                )
+            ]
+        )
 
         duration = _duration_seen_by_the_discard_gate(conversation)
 
@@ -245,3 +253,9 @@ class TestDiscardGateDuration:
         duration = _duration_seen_by_the_discard_gate(_conversation([], photos=[photo]))
 
         assert duration == WALL_WINDOW_SECONDS
+
+
+@pytest.fixture(autouse=True)
+def _isolated_relevance_policy(monkeypatch):
+    # This legacy model/input fixture has no episode or neighbor database.
+    monkeypatch.setenv('CONVERSATION_OCCASION_RELEVANCE_ENABLED', 'false')

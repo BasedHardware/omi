@@ -5,6 +5,7 @@ import json
 import math
 from pathlib import Path
 import re
+from unittest.mock import Mock
 
 import pytest
 
@@ -379,6 +380,7 @@ class Rig:
 
     def effects(self):
         return rc.Effects(
+            live_preflight=lambda name, percent: (True, 'pass', {}),
             read_document=self.document,
             read_history=self.history,
             write=self.write,
@@ -574,6 +576,23 @@ def test_leaving_on_requires_every_draining_precondition():
     # Returning to on, and draining -> dark, are never gated (rollback and progression after the gate passed).
     assert ramp_set.plan_change(parse(['--env', 'prod', '--legacy-sync', 'on']), {**on, 'legacy_sync': 'dark'})[0]
     assert ramp_set.plan_change(parse(['--env', 'prod', '--legacy-sync', 'dark']), {**on, 'legacy_sync': 'draining'})[0]
+
+
+def test_legacy_percent_and_mode_are_atomic_and_widening_rechecks_holds():
+    parse = ramp_set.build_parser().parse_args
+    before = {'percents': {'legacy-sync': 25}, 'locked_by': None, 'legacy_sync': 'draining'}
+    args = ['--env', 'prod', '--legacy-sync', 'dark', '--legacy-percent', '50']
+    assert ramp_set.plan_change(parse(args), before).startswith('draining_precondition_unmet:')
+    confirmed = [arg for pid in sorted(rc.DRAINING_PRECONDITIONS) for arg in ('--precondition-met', pid)]
+    assert ramp_set.plan_change(parse(args + confirmed), before)[0] == {
+        'legacy_sync': 'dark',
+        'percents': {'legacy-sync': 50},
+    }
+    assert ramp_set.plan_change(parse(['--env', 'prod', '--legacy-sync', 'on']), before)[0] == {'legacy_sync': 'on'}
+    assert (
+        ramp_set.plan_change(parse(['--env', 'prod', '--percent', 'legacy-sync=50']), before)
+        == 'legacy_percent_requires_mode'
+    )
 
 
 class _TimeoutRecordingClient:
@@ -806,3 +825,241 @@ def test_loop_pages_when_terminated_and_restores_the_handler(tmp_path, monkeypat
     assert code == 128 + signal.SIGTERM
     assert 'stopped (signal_SIGTERM)' in notes[-1]
     assert signal.getsignal(signal.SIGTERM) is before
+
+
+@pytest.mark.parametrize('target,gated', [(25, True), (5, False), (0, False)])
+def test_ramp_set_raise_only_preflight(monkeypatch, target, gated):
+    db = StrictFirestore()
+    entry = {**store.empty_ramp_env(), 'locked_by': 'lead', 'percents': {'batch-pipeline': 10}}
+    document = {'schema_version': 1, 'revision': 1, 'envs': {'prod': entry}}
+    db.rows[('rollout_cohorts', '_ramp')] = document
+    monkeypatch.setattr(store, 'read_ramp', lambda **kw: document)
+    monkeypatch.setenv('GCP_AGENT_TIER', 'prod-operator')
+    check = Mock(side_effect=SystemExit(4))
+    monkeypatch.setattr(ramp_set.live_preflight, 'require', check)
+    args = [
+        '--env',
+        'prod',
+        '--percent',
+        f'batch-pipeline={target}',
+        '--expected-revision',
+        '1',
+        '--actor',
+        'lead',
+        '--reason',
+        'gate_pass',
+        '--apply',
+    ]
+    if gated:
+        with pytest.raises(SystemExit) as error:
+            ramp_set.main(args, client_factory=lambda **kw: db)
+        assert error.value.code == 4
+        assert db.rows[('rollout_cohorts', '_ramp')]['revision'] == 1
+    else:
+        assert ramp_set.main(args, client_factory=lambda **kw: db) == 0
+        check.assert_not_called()
+        assert db.rows[('rollout_cohorts', '_ramp')]['envs']['prod']['percents']['batch-pipeline'] == target
+
+
+def test_ramp_override_history_reason_and_existing_reader_schema(monkeypatch):
+    db = StrictFirestore()
+    document = {'schema_version': 1, 'revision': 1, 'envs': {}}
+    db.rows[('rollout_cohorts', '_ramp')] = document
+    monkeypatch.setattr(store, 'read_ramp', lambda **kw: document)
+    monkeypatch.setenv('GCP_AGENT_TIER', 'prod-operator')
+    check = Mock()
+    monkeypatch.setattr(ramp_set.live_preflight, 'require', check)
+    reason = 'Approved deliberate exception'
+    assert (
+        ramp_set.main(
+            [
+                '--env',
+                'prod',
+                '--percent',
+                'batch-pipeline=5',
+                '--expected-revision',
+                '1',
+                '--actor',
+                'lead',
+                '--reason',
+                'gate_pass',
+                '--apply',
+                '--accept-not-live',
+                reason,
+            ],
+            client_factory=lambda **kw: db,
+        )
+        == 0
+    )
+    check.assert_called_once_with('batch-pipeline', 5, reason)
+    assert db.rows[('rollout_cohorts', '_ramp', 'history', '0000000002')]['reason'] == (
+        'gate_pass accept_not_live:' + reason
+    )
+    assert store.normalize_ramp_document(db.rows[('rollout_cohorts', '_ramp')])['envs']['prod']['reason'] == 'gate_pass'
+
+
+def test_controller_refuses_live_preflight_and_bypasses_it_on_rollback(monkeypatch):
+    rig = Rig(env='prod')
+    rig.lead({'percents': {'batch-pipeline': 5, 'first-summary': 100}}, 'gate_pass')
+    effects = rig.effects()
+    check = Mock(return_value=(False, 'not_live', {'key': 'batch-pipeline'}))
+    effects.live_preflight = check
+    rig.now += 86400
+    result = rc.tick('prod', effects, require_parity=False)
+    assert not result.wrote
+    assert any(d.detail == 'preflight:not_live' for d in result.decisions)
+    check.assert_called()
+    check.reset_mock(side_effect=True)
+    check.side_effect = AssertionError('prod read during rollback')
+    effects.accept_not_live = 'Approved deliberate exception'
+    effects.gate = lambda *a: rc.GateVerdict('FAIL', 'parity_row_7', rig.now, 3600, 5, {})
+    result = rc.tick('prod', effects, require_parity=False)
+    assert result.wrote
+    check.assert_not_called()
+    assert rig.history([result.revision])[0]['reason'] == 'privacy'
+
+
+def test_controller_override_written_to_history():
+    rig = Rig(env='prod')
+    rig.lead({'percents': {'batch-pipeline': 5, 'first-summary': 100}}, 'gate_pass')
+    effects = rig.effects()
+    effects.live_preflight = lambda *a: (False, 'unread', {'what': 'gcloud', 'reason': 'command_failed'})
+    effects.accept_not_live = 'Approved deliberate exception'
+    rig.now += 86400
+    result = rc.tick('prod', effects, require_parity=False)
+    assert result.wrote
+    row = rig.history([result.revision])[0]
+    assert row['reason'] == 'gate_pass accept_not_live:Approved deliberate exception'
+
+
+@pytest.mark.parametrize('decrease', ['batch-live-stt-retire', 'first-summary'])
+@pytest.mark.parametrize('env', ['prod', 'staging'])
+@pytest.mark.parametrize('apply', [False, True])
+@pytest.mark.parametrize('override', [False, True])
+def test_mixed_ramp_write_refuses_before_preflight_or_fetch(monkeypatch, capsys, env, apply, override, decrease):
+    entry = {
+        **store.empty_ramp_env(),
+        'locked_by': 'lead',
+        'percents': {'batch-pipeline': 20, 'batch-live-stt-retire': 10, 'first-summary': 100},
+    }
+    document = {'schema_version': 1, 'revision': 1, 'envs': {env: entry}}
+    monkeypatch.setattr(store, 'read_ramp', lambda **kw: document)
+    monkeypatch.setenv('GCP_AGENT_TIER', ramp_set.EXPECTED_TIER[env])
+    guards = [Mock(side_effect=AssertionError('mixed write must not perform IO')) for _ in range(4)]
+    for name, guard in zip(['require', 'run', 'read_json'], guards[:3]):
+        monkeypatch.setattr(ramp_set.live_preflight, name, guard)
+    monkeypatch.setattr(ramp_set, 'write_ramp', guards[3])
+    args = [
+        '--env',
+        env,
+        '--percent',
+        'batch-pipeline=25',
+        '--percent',
+        f'{decrease}=5',
+        '--actor',
+        'lead',
+        '--expected-revision',
+        '1',
+        '--reason',
+        'gate_pass',
+    ]
+    if apply:
+        args.append('--apply')
+    if override:
+        args += ['--accept-not-live', 'Approved deliberate exception']
+    assert ramp_set.main(args, client_factory=lambda **kw: object()) == 2
+    assert 'RAMP_PREFLIGHT REFUSE mixed_write' in capsys.readouterr().err
+    for guard in guards:
+        guard.assert_not_called()
+
+
+def test_narrowing_alone_commits_before_raise_fetch_failure(monkeypatch, capsys):
+    db = StrictFirestore()
+    entry = {
+        **store.empty_ramp_env(),
+        'locked_by': 'lead',
+        'percents': {'batch-pipeline': 20, 'batch-live-stt-retire': 10},
+    }
+    db.rows[('rollout_cohorts', '_ramp')] = {'schema_version': 1, 'revision': 1, 'envs': {'prod': entry}}
+    monkeypatch.setattr(store, 'read_ramp', lambda **kw: db.rows[('rollout_cohorts', '_ramp')])
+    monkeypatch.setenv('GCP_AGENT_TIER', 'prod-operator')
+    # Exercise require -> preflight -> bounded git fetch, with a failed fetch.
+    failed_fetch = Mock(side_effect=OSError('fixture fetch unavailable'))
+    original = ramp_set.live_preflight.preflight
+    monkeypatch.setattr(
+        ramp_set.live_preflight, 'preflight', lambda *args, **kw: original(*args, runner=failed_fetch, **kw)
+    )
+
+    def argv(revision, *changes):
+        result = [
+            '--env',
+            'prod',
+            '--expected-revision',
+            str(revision),
+            '--actor',
+            'lead',
+            '--reason',
+            'gate_pass',
+            '--apply',
+        ]
+        for change in changes:
+            result += ['--percent', change]
+        return result
+
+    assert ramp_set.main(argv(1, 'batch-pipeline=25', 'batch-live-stt-retire=5'), client_factory=lambda **kw: db) == 2
+    failed_fetch.assert_not_called()
+    assert db.rows[('rollout_cohorts', '_ramp')]['revision'] == 1
+    assert ramp_set.main(argv(1, 'batch-live-stt-retire=5'), client_factory=lambda **kw: db) == 0
+    failed_fetch.assert_not_called()
+    with pytest.raises(SystemExit) as error:
+        ramp_set.main(argv(2, 'batch-pipeline=25'), client_factory=lambda **kw: db)
+    assert error.value.code == 4
+    failed_fetch.assert_called_once()
+    assert failed_fetch.call_args.args[0][-4:] == ['fetch', '--quiet', 'origin', 'main']
+    assert 'RAMP_PREFLIGHT UNREAD origin reason=fetch_failed' in capsys.readouterr().out
+    saved = db.rows[('rollout_cohorts', '_ramp')]
+    assert saved['revision'] == 2
+    assert saved['envs']['prod']['percents'] == {'batch-pipeline': 20, 'batch-live-stt-retire': 5}
+
+
+@pytest.mark.parametrize('loop', [False, True])
+def test_controller_uses_shared_predicate_before_either_preflight(monkeypatch, capsys, tmp_path, loop):
+    rig = Rig(env='prod')
+    rig.lead({'percents': {'batch-pipeline': 10, 'batch-live-stt-retire': 10}}, 'gate_pass')
+    effects = rig.effects()
+    effects.preflight = Mock(side_effect=AssertionError('mixed evidence gate'))
+    effects.live_preflight = Mock(side_effect=AssertionError('mixed live gate'))
+    effects.write = Mock(side_effect=AssertionError('mixed write'))
+    effects.accept_not_live = 'Approved deliberate exception'
+    decisions = [
+        rc.Decision(rc.Action.ADVANCE, 'batch-pipeline', 10, 25, rc.RampReason.GATE_PASS),
+        rc.Decision(rc.Action.ROLLBACK_ONE, 'batch-live-stt-retire', 10, 5, rc.RampReason.GATE_FAIL),
+    ]
+    monkeypatch.setattr(rc, 'decide_all', lambda *a, **kw: decisions)
+    monkeypatch.setattr(rc, '_tick_once', lambda *a: rc.tick('prod', effects, require_parity=False))
+    monkeypatch.setenv('GCP_AGENT_TIER', 'prod-operator')
+    args = [
+        '--env',
+        'prod',
+        '--apply',
+        '--gate-cmd',
+        'true',
+        '--train-lock-cmd',
+        'true',
+        '--parity-cmd',
+        'true',
+        '--preflight-cmd',
+        'true',
+        '--no-anx',
+        '--state-file',
+        str(tmp_path / 'STATE.md'),
+        '--accept-not-live',
+        'Approved deliberate exception',
+    ]
+    if loop:
+        args.append('--loop')
+    assert rc.main(args, client_factory=lambda **kw: object()) == 2
+    assert 'RAMP_PREFLIGHT REFUSE mixed_write' in capsys.readouterr().err
+    effects.preflight.assert_not_called()
+    effects.live_preflight.assert_not_called()
+    effects.write.assert_not_called()

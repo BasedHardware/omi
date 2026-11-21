@@ -1,0 +1,29 @@
+{
+  "schema": "record-trace/1",
+  "name": "audio_and_finalize_same_session",
+  "source": "baseline: one session uploads audio then finalizes",
+  "row": {
+    "record_lane_owner": "batch_live_v1"
+  },
+  "durable": [
+    false
+  ],
+  "sessions": [
+    {
+      "frames": [
+        "conversation",
+        {
+          "audio_seconds": 2
+        },
+        "finalize"
+      ],
+      "upload": "ok"
+    }
+  ],
+  "expect": {
+    "sealed": true,
+    "upload_failed": false,
+    "open_tokens": 0,
+    "admissible": true
+  }
+}

@@ -19,7 +19,7 @@ struct LiveAssistantSettingsRemote: AssistantSettingsRemote {
 }
 
 /// Manages bidirectional sync of assistant settings between local UserDefaults and the backend.
-/// Server is source of truth — server values override local when present.
+/// Server values hydrate local settings, except this Mac's explicit screen-capture off.
 @MainActor
 class SettingsSyncManager {
   static let shared = SettingsSyncManager()
@@ -116,6 +116,35 @@ class SettingsSyncManager {
       shared: SharedAssistantSettingsResponse(screenAnalysisEnabled: enabled))
   }
 
+  /// Records a user toggle on this Mac and pushes that one field.
+  /// A local off stays off across later account syncs until the user turns capture back on.
+  func setUserScreenAnalysisEnabled(_ enabled: Bool, push: Bool = true) {
+    UserDefaults.standard.set(!enabled, forKey: .screenAnalysisHeldOffByUser)
+    AssistantSettings.shared.screenAnalysisEnabled = enabled
+    guard push, !shouldKeepLocalScreenAnalysisDefault else { return }
+    pushPartialUpdate(Self.screenAnalysisEnabledUpdate(enabled))
+  }
+
+  /// Older builds stored only the effective Bool. Treat a persisted off as an
+  /// intentional off once, before any remote hydration or default migration.
+  /// We cannot distinguish an old remote off from a user off; preserving privacy
+  /// is safer than starting capture. An explicit local on releases the hold.
+  var isScreenAnalysisHeldOffByUser: Bool {
+    let defaults = UserDefaults.standard
+    if defaults.object(forKey: .screenAnalysisHeldOffByUser) == nil {
+      defaults.set(!AssistantSettings.shared.screenAnalysisEnabled, forKey: .screenAnalysisHeldOffByUser)
+    }
+    return defaults.bool(forKey: .screenAnalysisHeldOffByUser)
+  }
+
+  /// Startup repairs may restore a default, but cannot undo a user choice.
+  @discardableResult
+  func restoreScreenAnalysisDefaultForMigration() -> Bool {
+    let enabled = !isScreenAnalysisHeldOffByUser
+    AssistantSettings.shared.screenAnalysisEnabled = enabled
+    return enabled
+  }
+
   // MARK: - Apply Remote → Local
 
   /// Applies a server-authoritative snapshot, then notifies runtime owners to
@@ -130,7 +159,7 @@ class SettingsSyncManager {
       // importing another bundle's remote value. Capture defaults to enabled;
       // the runtime checks TCC without prompting when permission is absent.
       if let v = shared.screenAnalysisEnabled, !shouldKeepLocalScreenAnalysisDefault {
-        AssistantSettings.shared.screenAnalysisEnabled = v
+        AssistantSettings.shared.screenAnalysisEnabled = isScreenAnalysisHeldOffByUser ? false : v
       }
     }
 

@@ -1,0 +1,20 @@
+id: safe/crash-loop-soft-reset-stays-safe
+summary: >
+  A software reset (e.g. an SMP reset command without a completed upload)
+  inside an automatic SAFE keeps SAFE, so a phone cannot bounce the pendant
+  straight back into the crash loop.
+committee: [1]
+tags: [guard]
+build: wdt-starve
+timeline:
+  - {t: 200000, power: soft_reset}
+end: 230000
+expect:
+  boot_count: 5
+  final: running
+  boots:
+    - {exit: watchdog}
+    - {exit: watchdog}
+    - {exit: watchdog}
+    - {exit: stop, safe: true, latch_reason: 1}
+    - {reset: software, warm: true, exit: stop, safe: true, latch_reason: 1}

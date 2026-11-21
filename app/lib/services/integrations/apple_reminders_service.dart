@@ -1,6 +1,7 @@
 import 'package:flutter/services.dart';
 
 import 'package:omi/backend/http/api/action_items.dart';
+import 'package:omi/backend/schema/action_item.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 
@@ -74,7 +75,13 @@ class AppleRemindersService {
 
   /// Add a task to Apple Reminders.
   /// Returns the calendarItemIdentifier on success, null on failure.
-  Future<String?> addReminder({required String title, String? notes, DateTime? dueDate, String? listName}) async {
+  Future<String?> addReminder({
+    required String title,
+    String? notes,
+    DateTime? dueDate,
+    String? listName,
+    bool completed = false,
+  }) async {
     if (!isAvailable) {
       throw UnsupportedError('Apple Reminders is only available on iOS and macOS');
     }
@@ -84,6 +91,7 @@ class AppleRemindersService {
         'title': title,
         'notes': notes,
         'dueDate': dueDate?.millisecondsSinceEpoch,
+        'completed': completed,
       };
       if (listName != null) args['listName'] = listName;
       final result = await _channel.invokeMethod('addReminder', args);
@@ -97,6 +105,24 @@ class AppleRemindersService {
       return null;
     } catch (e) {
       Logger.debug('Unexpected error adding reminder: $e');
+      return null;
+    }
+  }
+
+  /// Task-aware exports share a native identity across automatic and manual retries.
+  Future<String?> exportTaskReminder(ActionItemWithMetadata item, {required String ownerUid}) async {
+    if (!isAvailable) return null;
+    try {
+      return await _channel.invokeMethod<String>('exportTaskReminder', {
+        'ownerUid': ownerUid,
+        'actionItemId': item.id,
+        'title': item.description,
+        'notes': 'From Omi',
+        'dueDate': item.dueAt?.millisecondsSinceEpoch,
+        'completed': item.completed,
+      });
+    } catch (error) {
+      Logger.debug('Task reminder export deferred: ${error.runtimeType}');
       return null;
     }
   }

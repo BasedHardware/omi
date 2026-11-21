@@ -12,11 +12,13 @@ def _desc(path: str) -> FirestoreIndexField:
 
 
 MCP_CONVERSATION_CARD_FIELD_PATHS = (
+    'recording',
     'id',
     'status',
     'discarded',
     'deleted',
     'dream_duplicate_of',
+    'sync_bridge_pending',
     'relevance_decision',
     'sync_relevance_user_kept',
     'has_photos',
@@ -40,6 +42,10 @@ MCP_CONVERSATION_CARD_FIELD_PATHS = (
     'structured.overview',
     'structured.category',
     'structured.emoji',
+    # Optional conversation-state fields (conversations v3); absent on older documents.
+    'kind',
+    'home_hidden',
+    'summary_covers_through',
 )
 MCP_CONVERSATION_TRANSCRIPT_FIELD_PATHS = MCP_CONVERSATION_CARD_FIELD_PATHS + (
     'transcript_segments',

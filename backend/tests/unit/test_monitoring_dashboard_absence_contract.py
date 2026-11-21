@@ -107,7 +107,7 @@ def test_guard_accepts_a_fallback_anchored_to_a_live_series():
 
 
 def test_guard_accepts_a_constant_fallback_that_is_not_healthy_coloured():
-    """'Journeys reporting (of 3)': absence falls to 0, which is red, not green."""
+    """'Journeys (of 3)': absence falls to 0, which is red, not green."""
 
     steps = [{"color": "red", "value": None}, {"color": "orange", "value": 2}, {"color": "green", "value": 3}]
     assert threshold_color_for(steps, 0) == "red"

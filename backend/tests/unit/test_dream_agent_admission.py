@@ -146,7 +146,7 @@ async def test_cold_and_expired_cohort_is_loaded_before_dream_capacity(admission
                 release.set()
                 await pulse
             expected = (
-                {'status': 'waiting', 'reason': 'reserved_capacity'}
+                {'status': 'waiting', 'reason': 'reserved_capacity', 'wait_cause': 'gateway'}
                 if membership is True
                 else (
                     {'status': 'waiting', 'reason': 'eligibility_unavailable'}

@@ -1,5 +1,6 @@
 """Invisible work on the current settled row; never regenerates visible notes."""
 
+from utils.conversations.layer import read_product as read_product_conversation
 import hashlib
 import json
 import time
@@ -23,7 +24,7 @@ def fingerprint(conversation) -> str:
 def enrich_settled(uid: str, conversation_id: str, language: str) -> None:
     from utils.conversations.process_conversation import apply_settled_enrichment
 
-    row = conversations_db.get_conversation(uid, conversation_id)
+    row = read_product_conversation(conversations_db.get_conversation, uid, conversation_id)
     if not row or row.get('deleted') or row.get('discarded') or is_silent_redrive(row):
         return
     # Active capture and a smart-merge donor never own final enrichment.

@@ -93,6 +93,9 @@ async def _drain(*tasks: asyncio.Task) -> bool:
     # cleanup task that still cancels/retrieves every child.
     with anyio.CancelScope(shield=True):
         return await asyncio.shield(cleanup)
+    # CancelScope.__exit__ is typed as possibly suppressing, but a shielded scope
+    # with no deadline is never cancelled itself, so it never swallows an exit.
+    raise AssertionError('shielded cleanup scope suppressed an exception')
 
 
 async def cancel_on_disconnect(request: Request, awaitable: Awaitable[T]) -> T:

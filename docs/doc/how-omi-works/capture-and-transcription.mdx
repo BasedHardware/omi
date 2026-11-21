@@ -1,0 +1,41 @@
+---
+title: "Capture & transcription"
+icon: "microphone"
+description: "How audio gets from a device to transcript segments, and how Omi tells speakers apart."
+---
+
+## Where audio comes from
+
+Omi captures audio from a wearable, the phone's microphone, or the Mac app. A wearable streams audio to the phone over Bluetooth ([BLE protocol](/doc/developer/Protocol)). Devices with onboard storage can also record without a phone and sync the audio later.
+
+## Live transcription
+
+While you talk, the app streams audio to the backend over a WebSocket. The backend decodes it, sends it to a speech-to-text provider, and streams transcript segments back to the app, so text appears as you speak.
+
+When nobody has spoken for a while, the backend closes the conversation and hands it to [processing](/doc/how-omi-works/conversations-and-memories). Audio recorded offline or saved with **Transcribe Later** goes through the same pipeline when it is uploaded.
+
+## Transcript segments
+
+A transcript is a list of segments. Each segment carries:
+
+| Field | Meaning |
+|-------|---------|
+| `text` | What was said |
+| `start`, `end` | Seconds from the start of the conversation |
+| `speaker_id` | A per-conversation speaker key, stable for corrections |
+| `is_user` | Whether the device owner said it |
+| `person_id` | The recognized person, if matched |
+
+`speaker_id` is a storage key, not a name or a head count. Resolve display names from the whole conversation: the owner first, then named people, then neutral labels for unnamed voices.
+
+## Who is speaking
+
+Speaker diarization splits audio into voices within one conversation. To recognize *you*, Omi compares each new voice against your enrolled speech profile. When you name another speaker in the app, Omi stores that voice under your people, so it can recognize them in later conversations.
+
+## Bring your own transcription
+
+The phone app can send audio to a transcription provider you choose, a server you run, or a model on the phone itself. See [Your own keys & custom transcription](/doc/get_started/byok_and_custom_transcription), and [Custom STT service](/doc/developer/custom-stt) for the protocol your own server must speak.
+
+<Note>
+Provider choices, rollout settings, and serving details change often, so they live next to the code in [`backend/docs/transcription.md`](https://github.com/BasedHardware/omi/blob/main/backend/docs/transcription.md).
+</Note>

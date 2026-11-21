@@ -24,7 +24,7 @@ void main() {
     }
   });
   for (final scale in [1.0, 2.0]) {
-    testWidgets('applied spelling shows before → after, speech in the sheet; Undo and Redo at $scale scale',
+    testWidgets('applied spelling shows its title with Undo and Redo, speech in the sheet at $scale scale',
         (tester) async {
       debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
       addTearDown(() => debugDefaultTargetPlatformOverride = null);
@@ -51,12 +51,10 @@ void main() {
         ),
       ));
       await tester.pumpAndSettle();
-      // A row without a server diff still shows the change itself, its source, and no raw id.
-      expect(find.text('NAMES AND TERMS'), findsOneWidget);
-      expect(find.text('UL'), findsOneWidget);
-      expect(find.text('URL'), findsOneWidget);
+      // The row shows the change's title only, with no raw id and no diff.
+      expect(find.text('Spelling'), findsOneWidget);
+      expect(find.text('UL'), findsNothing);
       expect(find.textContaining('synthetic-launch'), findsNothing);
-      expect(find.text('Spelling'), findsNothing);
       expect(tester.takeException(), isNull);
       final toggle = find.byKey(const ValueKey('recent_change_toggle_synthetic-spelling-change'));
       expect(toggle, findsOneWidget);

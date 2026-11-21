@@ -166,7 +166,7 @@ def lifetime_app(monkeypatch):
     async def identity():
         return 'synthetic-test-user'
 
-    app.dependency_overrides[desktop_proxy._authorized_desktop_user] = identity
+    app.dependency_overrides[desktop_proxy.get_current_user_uid] = identity
     monkeypatch.setattr(desktop_proxy, '_enforce_managed_plan_gate', AsyncMock())
     monkeypatch.setattr(desktop_proxy, 'should_refuse', AsyncMock(return_value=False))
 
@@ -253,13 +253,11 @@ async def test_deadline_includes_pre_provider_work(lifetime_app, monkeypatch, ca
             cancelled.set()
 
     if phase == 'authorization':
-        lifetime_app.dependency_overrides[desktop_proxy._authorized_desktop_user] = stalled
-
         # FastAPI inspects dependency signatures, so use a zero-argument seam.
         async def auth():
             return await stalled()
 
-        lifetime_app.dependency_overrides[desktop_proxy._authorized_desktop_user] = auth
+        lifetime_app.dependency_overrides[desktop_proxy.get_current_user_uid] = auth
     else:
         monkeypatch.setattr(
             desktop_proxy, 'should_refuse' if phase == 'reservation' else '_meter_server_request', stalled

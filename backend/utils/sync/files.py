@@ -39,6 +39,12 @@ def _get_opus_decoder_class() -> Any:
     return Decoder
 
 
+def _opus_raw_frame_writes_enabled() -> bool:
+    # Kill switch (synceff, 2026-11-04): '0' restores per-frame writeframes(). The WAV bytes
+    # are identical either way; only the per-frame header rewrites (about 55% of decode CPU) differ.
+    return os.getenv('SYNC_OPUS_RAW_FRAME_WRITES', '1').strip() != '0'
+
+
 def decode_opus_file_to_wav(
     opus_file_path: str,
     wav_file_path: str,
@@ -58,12 +64,16 @@ def decode_opus_file_to_wav(
     decoder = _get_opus_decoder_class()(sample_rate, channels)
     frame_count = 0
     corrupt_stream = False
+    raw_frame_writes = _opus_raw_frame_writes_enabled()
 
     try:
         with open(opus_file_path, 'rb') as f, wave.open(wav_file_path, 'wb') as wav_file:
             wav_file.setnchannels(channels)
             wav_file.setsampwidth(2)
             wav_file.setframerate(sample_rate)
+            # writeframes() re-patches the RIFF header after every 10 ms frame (seek, write,
+            # seek back); writeframesraw() leaves that to close(), which writes the same header.
+            write_frame = wav_file.writeframesraw if raw_frame_writes else wav_file.writeframes
 
             while True:
                 length_bytes = f.read(4)
@@ -86,7 +96,7 @@ def decode_opus_file_to_wav(
                     break
                 try:
                     pcm_frame = decoder.decode(opus_data, frame_size=frame_size)
-                    wav_file.writeframes(pcm_frame)
+                    write_frame(pcm_frame)
                     if decoded_frame_samples is not None:
                         decoded_frame_samples.append(len(pcm_frame) // (2 * channels))
                     frame_count += 1
@@ -161,7 +171,9 @@ def retrieve_file_paths(files: List[UploadFile], uid: str) -> List[str]:
         # at capture-time offset 0, so an admitted future stamp would store and
         # compare ahead of the server clock. V2 staging owns skew admission.
         if (
-            capture_time_rejection(datetime.fromtimestamp(timestamp, tz=timezone.utc), future_skew_seconds=0)
+            capture_time_rejection(
+                datetime.fromtimestamp(timestamp, tz=timezone.utc), future_skew_seconds=0, allow_early_clamp=False
+            )
             is not None
         ):
             raise HTTPException(status_code=400, detail=f"Invalid file format {filename}, invalid timestamp")

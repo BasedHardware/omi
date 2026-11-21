@@ -15,7 +15,7 @@ from __future__ import annotations
 import time
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import Callable, ClassVar, Protocol
+from typing import Awaitable, Callable, ClassVar, Protocol
 
 from fastapi.responses import JSONResponse
 from prometheus_client import Counter
@@ -35,6 +35,7 @@ __all__ = [
     'http_response',
     'run_pull',
     'run_push',
+    'run_push_async',
 ]
 
 CONSUMER_UNEXPECTED_TOTAL = Counter(
@@ -62,6 +63,7 @@ class Result:
     reason: ConsumerReason | RetryReason  # RETRY requires a RetryReason; every other outcome a ConsumerReason
     available_at: float | None = None  # required for RETRY and for DEFERRED returned by process(); None when
     # claim_key answered DEFERRED (the outbox already re-armed the row and created its wake)
+    defer_cause: str | None = None  # DEFERRED only: the domain cause the outbox records instead of ``reason``
 
     def __post_init__(self) -> None:
         outcome = Outcome(self.outcome)
@@ -96,8 +98,9 @@ def _settle(consumer: QueueConsumer, outbox: Outbox, claim: Claim, result: Resul
     elif result.outcome is Outcome.DEFERRED:
         if result.available_at is None:
             raise ValueError('a consumer that defers must return available_at')
-        # The outbox re-arms the row and creates the new wake itself (contract (b)).
-        settled = outbox.defer(claim, result.available_at, reason, now=now) is not None
+        # The outbox re-arms the row and creates the new wake itself (contract (b)). A domain cause
+        # (enrichment custody) is what the row records, so the outbox can bound long-stuck episodes.
+        settled = outbox.defer(claim, result.available_at, result.defer_cause or reason, now=now) is not None
     elif result.outcome is Outcome.RETRY:
         settled = outbox.release(claim, reason, now=now)
     else:  # STALE / BUSY: the consumer found it no longer owns the work; nothing to write
@@ -129,21 +132,50 @@ def _count(consumer: QueueConsumer, result: Result) -> Result:
     return result
 
 
+def _unclaimed(consumer: QueueConsumer, claimed: object) -> Result:
+    outcome = Outcome(claimed)
+    if outcome is Outcome.BUSY:
+        return _count(consumer, Result(Outcome.BUSY, ConsumerReason.LEASE_HELD))
+    if outcome is Outcome.STALE:
+        return _count(consumer, Result(Outcome.STALE, ConsumerReason.STALE_TOKEN))
+    if outcome is Outcome.DEFERRED:  # not due: the outbox re-armed the row and created its wake
+        return _count(consumer, Result(Outcome.DEFERRED, ConsumerReason.NOT_DUE))
+    if outcome is Outcome.DISCARDED:
+        return _count(consumer, Result(Outcome.DISCARDED, ConsumerReason.SUPERSEDED))
+    raise ValueError(f'claim_key returned unsupported outcome {outcome.value!r}')
+
+
 def run_push(consumer: QueueConsumer, outbox: Outbox, row_id: str, wake_token: str, *, now: float) -> Result:
     """Handle one Cloud Tasks wake: claim by key, process, settle the row."""
     claimed = outbox.claim_key(row_id, wake_token, consumer.lease_seconds, now=now)
     if not isinstance(claimed, Claim):
-        outcome = Outcome(claimed)
-        if outcome is Outcome.BUSY:
-            return _count(consumer, Result(Outcome.BUSY, ConsumerReason.LEASE_HELD))
-        if outcome is Outcome.STALE:
-            return _count(consumer, Result(Outcome.STALE, ConsumerReason.STALE_TOKEN))
-        if outcome is Outcome.DEFERRED:  # not due: the outbox re-armed the row and created its wake
-            return _count(consumer, Result(Outcome.DEFERRED, ConsumerReason.NOT_DUE))
-        if outcome is Outcome.DISCARDED:
-            return _count(consumer, Result(Outcome.DISCARDED, ConsumerReason.SUPERSEDED))
-        raise ValueError(f'claim_key returned unsupported outcome {outcome.value!r}')
+        return _unclaimed(consumer, claimed)
     return _count(consumer, _process(consumer, outbox, claimed, now))
+
+
+async def run_push_async(
+    consumer, outbox: Outbox, row_id: str, wake_token: str, *, now: float, run_sync: Callable[..., Awaitable]
+) -> Result:
+    """``run_push`` for a consumer with ``process_async``: identical claim, settle and counting.
+
+    Store work goes through ``run_sync`` (an executor); the consumer awaits its own IO on the loop,
+    so a long vendor answer holds no executor thread.
+    """
+    claimed = await run_sync(outbox.claim_key, row_id, wake_token, consumer.lease_seconds, now=now)
+    if not isinstance(claimed, Claim):
+        return await run_sync(_unclaimed, consumer, claimed)
+    latest = [now]
+
+    def heartbeat() -> bool:
+        latest[0] = max(latest[0], time.time())
+        return outbox.heartbeat(claimed, consumer.lease_seconds, now=latest[0])
+
+    try:
+        result = await consumer.process_async(claimed, heartbeat, run_sync)
+    except Exception:
+        CONSUMER_UNEXPECTED_TOTAL.labels(kind=consumer.kind.value).inc()
+        raise
+    return _count(consumer, await run_sync(_settle, consumer, outbox, claimed, result, latest[0]))
 
 
 def run_pull(consumer: QueueConsumer, outbox: Outbox, *, limit: int, now: float) -> list[Result]:

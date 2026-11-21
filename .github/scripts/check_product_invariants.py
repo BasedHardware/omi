@@ -18,6 +18,30 @@ import sys
 from pathlib import Path
 
 INVARIANT_DIR = Path("product/invariants")
+
+_HEAD_TREE_CACHE: dict[Path, frozenset[str] | None] = {}
+
+
+def tracked_at_head(root: Path) -> frozenset[str] | None:
+    """Repo paths tracked at HEAD, or None outside a usable git repo.
+
+    Cone-mode sparse checkouts do not materialise out-of-cone paths, and this
+    check names guards across every surface, so existence is judged against
+    the working tree OR the HEAD tree; a guard in neither still fails.
+    """
+    key = root.resolve()
+    if key not in _HEAD_TREE_CACHE:
+        try:
+            out = subprocess.run(
+                ["git", "-C", str(key), "ls-tree", "-r", "--name-only", "-z", "HEAD"],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.DEVNULL,
+                check=True,
+            ).stdout
+            _HEAD_TREE_CACHE[key] = frozenset(p.decode("utf-8") for p in out.split(b"\0") if p)
+        except (OSError, subprocess.CalledProcessError):
+            _HEAD_TREE_CACHE[key] = None
+    return _HEAD_TREE_CACHE[key]
 ID_RE = re.compile(r"^#\s+(INV-[A-Z0-9]+(?:-\*|(?:-\d+)+))", re.MULTILINE)
 STATUS_RE = re.compile(r"^\*\*Status:\*\*\s*(\w+)", re.MULTILINE | re.IGNORECASE)
 # A glob may carry a trailing note, e.g. ``path/**`` (retired: ...).
@@ -341,7 +365,11 @@ def audit_registry(root: Path) -> list[str]:
             # A guard may be named as a pytest node id (file.py::TestCase).
             guard_file = guard.split("::", 1)[0]
             if not (root / guard_file).exists():
-                problems.append(f"{name}: {inv['id']} is locked but names a guard that does not exist: {guard_file}")
+                tracked = tracked_at_head(root)
+                if tracked is None or guard_file not in tracked:
+                    problems.append(
+                        f"{name}: {inv['id']} is locked but names a guard that does not exist: {guard_file}"
+                    )
             elif CHECK_SCRIPT_RE.match(guard_file) and guard_file not in scripts:
                 problems.append(
                     f"{name}: {inv['id']} names guard script {guard_file}, which no checks-manifest entry runs"

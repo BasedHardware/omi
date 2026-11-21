@@ -6,7 +6,7 @@ from utils.external_list_reads import ExternalListCacheRoute, cached_external_li
 from utils.other.list_budget import finish_list_budget, list_read_budget_for_request
 from utils.executors import postprocess_executor
 
-from fastapi import APIRouter, HTTPException, Depends, Request, Response
+from fastapi import APIRouter, HTTPException, Depends, Query, Request, Response
 from pydantic import BaseModel, Field, ValidationError
 
 import database.users as users_db
@@ -15,6 +15,8 @@ import database.phone_calls as phone_calls_db
 from firebase_admin import auth as firebase_auth
 
 # from database.vector_db import query_vectors_by_metadata
+from config.mcp_scopes import CONNECTOR_ACCESS_REGISTRY
+from models.connector_access import ConnectorAccess, connector_access
 from models.memories import Memory, MemoryCategory
 from models.conversation_enums import CategoryEnum
 from models.conversation import AppResult
@@ -56,6 +58,8 @@ from utils.mcp_server.handlers import action_items as mcp_action_item_handlers
 from utils.mcp_server.handlers import conversations as mcp_conversation_handlers
 from utils.mcp_server.handlers import memories as mcp_memory_handlers
 from utils.mcp_server.handlers import other as mcp_other_handlers
+from utils.mcp_server.handlers import sync as mcp_sync_handlers
+from utils.conversations import transcribing_hold
 from utils.mcp_server.helpers import bounded_transcript_segments, conversation_card, public_transcript_timing
 from utils.mcp_server.registry import TOOL_REQUIRED_SCOPE, spec_for_tool
 import logging
@@ -115,7 +119,7 @@ MCP_REST_SCOPE_EXEMPTIONS = {
 
 # REST detail/list reads project one extra card field beyond the hosted tool
 # reads: the released desktop client consumes apps_results off the card.
-_REST_CONVERSATION_EXTRA_FIELD_PATHS = ["apps_results"]
+_REST_CONVERSATION_EXTRA_FIELD_PATHS = ["apps_results", *transcribing_hold.READ_FIELDS]
 
 # Detail additionally fetches the manual speaker-assignment receipt so the
 # shared prepare-for-read seam can decode it exactly like the legacy full-doc
@@ -196,6 +200,7 @@ class McpStatusResponse(BaseModel):
 
 class McpOauthGrantsResponse(BaseModel):
     grants: List[Dict[str, Any]] = []
+    connector_access: Dict[str, ConnectorAccess] = {}
 
 
 class McpScreenActivityRow(BaseModel):
@@ -221,7 +226,10 @@ class McpScreenActivitySummaryResponse(BaseModel):
 
 @router.get("/v1/mcp/oauth/grants", tags=["mcp"], response_model=McpOauthGrantsResponse)
 def get_oauth_grants(uid: str = Depends(get_current_user_id)):
-    return {"grants": mcp_oauth_db.list_user_grants(uid)}
+    return {
+        "grants": mcp_oauth_db.list_user_grants(uid),
+        "connector_access": {name: connector_access(name) for name in CONNECTOR_ACCESS_REGISTRY},
+    }
 
 
 @router.delete("/v1/mcp/oauth/grants/{grant_id}", status_code=204, tags=["mcp"])
@@ -361,6 +369,8 @@ def get_user_profile(uid: str = Depends(get_uid_with_mcp_memories_read)):
 
 
 class CleanerMemory(BaseModel):
+    source_at: Optional[datetime] = None
+    extracted_at: Optional[datetime] = None
     id: str
     content: str
     category: MemoryCategory
@@ -566,7 +576,8 @@ def get_conversations(
         # capability gap, not a transient outage.
         _incremental_sync_unsupported(
             "conversations",
-            "page this endpoint with the opaque X-Next-Cursor cursor (created_at DESC, id keyset)",
+            "page this endpoint with the opaque X-Next-Cursor cursor (created_at DESC, id keyset); "
+            "deletions are served by GET /v1/mcp/conversations/deleted?deleted_since=",
         )
     # Clamp pagination so a negative value cannot reach Firestore .limit()/.offset() (which
     # raises -> HTTP 500) and an oversized value cannot stream/skip the whole collection.
@@ -602,7 +613,7 @@ def get_conversations(
     # no longer in CategoryEnum) cannot 500 the whole page via response_model coercion.
     valid_conversations = []
     for conv in page:
-        card = conversation_card(conv)
+        card = conversation_card(transcribing_hold.project(conv))
         card["apps_results"] = conv.get("apps_results") or []
         try:
             valid_conversations.append(SimpleConversation.model_validate(card))
@@ -611,6 +622,39 @@ def get_conversations(
     return [
         SimpleConversation.model_validate(localize_timestamps(conv.model_dump(), zone)) for conv in valid_conversations
     ]
+
+
+class DeletedConversation(BaseModel):
+    id: str
+    deleted_at: datetime
+
+
+# Declared before /v1/mcp/conversations/{conversation_id} so "deleted" is never read as an id.
+@router.get("/v1/mcp/conversations/deleted", response_model=List[DeletedConversation], tags=["mcp"])
+def get_deleted_conversations(
+    response: Response,
+    deleted_since: Optional[str] = None,
+    limit: int = Query(100, ge=1, le=500),
+    cursor: Optional[str] = None,
+    uid: str = Depends(get_uid_with_mcp_conversations_read),
+):
+    """Deletion feed for clients that keep copies: ``(deleted_at ASC, id ASC)``, ``X-Next-Cursor`` paging."""
+    try:
+        since = parse_sync_timestamp(deleted_since, "deleted_since")
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    try:
+        rows, next_cursor = mcp_sync_handlers.deleted_conversations_page_core(
+            uid,
+            deleted_since=since,
+            limit=limit,
+            cursor_token=cursor,
+            cursor_kind="rest_get_deleted_conversations",
+        )
+    except ToolExecutionError as e:
+        raise _http_error_from_tool_error(e)
+    _next_cursor_header(response, next_cursor)
+    return [DeletedConversation(**row) for row in rows]
 
 
 @router.get("/v1/mcp/conversations/search", response_model=List[SimpleConversation], tags=["mcp"])
@@ -647,7 +691,7 @@ def search_conversations(
 
     # conversation_card() applies redact_conversation_for_list in place, so a
     # locked row reaches the snippet attacher already stripped of transcript.
-    cards = [conversation_card(conv) for conv in conversations]
+    cards = [conversation_card(transcribing_hold.project(conv)) for conv in conversations]
     # Snippets after redaction so locked list rows never leak transcript evidence (#6621).
     conversations = attach_match_snippets_to_conversations(conversations, query)
     for conv, card in zip(conversations, cards):
@@ -695,7 +739,7 @@ def get_conversation_by_id(
         max_chars=MCP_REST_CONVERSATION_MAX_CHARS,
         extra_keys=("speaker_name",),
     )
-    payload = conversation_card(conversation)
+    payload = conversation_card(transcribing_hold.project(conversation))
     payload["apps_results"] = conversation.get("apps_results") or []
     payload["transcript_segments"] = transcript_segments
     payload["truncated"] = truncated

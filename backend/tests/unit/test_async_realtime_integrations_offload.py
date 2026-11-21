@@ -222,7 +222,6 @@ sys.modules["utils.llm.clients"].generate_embedding = MagicMock(return_value=[0]
 sys.modules["utils.llm.clients"].get_llm = MagicMock()
 sys.modules["utils.log_sanitizer"].sanitize = MagicMock(side_effect=lambda x: x)
 sys.modules["utils.log_sanitizer"].sanitize_pii = MagicMock(side_effect=lambda x: x)
-sys.modules["utils.subscription"].is_trial_paywalled = MagicMock(return_value=False)
 
 # Stub proactive_notification named imports
 _proactive_mod = sys.modules["utils.llm.proactive_notification"]

@@ -272,6 +272,7 @@ class _Home {
   final sync = _StubSyncProvider();
   late final _LiveCapture capture = _LiveCapture();
   late final EpisodeProvider episodes = EpisodeProvider(
+    fetchPage: (from, to, {cursor}) async => const ApiSuccess(EpisodePageRead(enabled: true)),
     fetchLive: () async => ApiSuccess(EpisodeRead(enabled: true, episode: _liveEpisode())),
     lookup: (_) async => const ApiSuccess(EpisodeRead.disabled),
     wrapUp: (id, {conversationId}) async => const ApiFailure(ApiProblem(ApiProblemKind.transport)),

@@ -7,13 +7,14 @@ BACKEND_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 cd "$BACKEND_DIR"
 
 usage() {
-  echo "usage: $0 [--all | --changed-files <repo-relative-path-list>] [--shard <total>/<index>]" >&2
+  echo "usage: $0 [--all | --changed-files <repo-relative-path-list> [--rotation <k>/<n>]] [--shard <total>/<index>]" >&2
   exit 2
 }
 
 mode=""
 changed_files_arg=""
 shard_spec=""
+rotation_spec=""
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --all)
@@ -31,6 +32,11 @@ while [ "$#" -gt 0 ]; do
       shard_spec="$2"
       shift
       ;;
+    --rotation)
+      [ "$#" -ge 2 ] && [[ "$2" =~ ^[0-9]+/[0-9]+$ ]] || usage
+      rotation_spec="$2"
+      shift
+      ;;
     *)
       usage
       ;;
@@ -38,6 +44,8 @@ while [ "$#" -gt 0 ]; do
   shift
 done
 [ -n "$mode" ] || usage
+# A rotating full-suite slice only widens a changed-files selection.
+[ -z "$rotation_spec" ] || [ "$mode" = "--changed-files" ] || usage
 
 # Sharding: the suite's cost is per-file pytest process startup (measured
 # 2026-09-10, run 34430370667: 1126 files, one session each, 19m18s of a
@@ -87,6 +95,9 @@ if [ "$mode" = "--all" ]; then
   selector_args+=(--all)
 else
   selector_args+=(--changed-files "$changed_files_arg")
+  if [ -n "$rotation_spec" ]; then
+    selector_args+=(--rotation "$rotation_spec")
+  fi
 fi
 "$PYTHON_BIN" scripts/select_backend_unit_tests.py "${selector_args[@]}"
 
@@ -96,7 +107,7 @@ shard_note=""
 # changed-files run whose paths do not affect the typed boundary typechecks
 # nowhere and must not hand shard 1's capacity to its siblings).
 will_typecheck=1
-if [ "$mode" != "--all" ] && ! "$SCRIPT_DIR/needs-typecheck.sh" "$changed_files_arg"; then
+if [ "$mode" != "--all" ] && [ "${BACKEND_UNIT_FORCE_TYPECHECK:-0}" != "1" ] && ! "$SCRIPT_DIR/needs-typecheck.sh" "$changed_files_arg"; then
   will_typecheck=0
 fi
 if [ "$shard_total" -ge 2 ]; then
@@ -108,8 +119,8 @@ if [ "$shard_total" -ge 2 ]; then
 import os
 import sys
 
-DEFAULT_WEIGHT = 1.66  # mean measured wall seconds of the files below the table's 2s floor
-# (p90-wall table, 20 main runs to 2026-10-27; the old 1.1 priced pytest time
+DEFAULT_WEIGHT = 1.70  # mean measured wall seconds of the files below the table's 2s floor
+# (p90-wall table, 20 main runs to 2026-11-02; the old 1.1 priced pytest time
 # only and undercharged per-file import/collection startup)
 selection, total, shard, table, will_typecheck = sys.argv[1], int(sys.argv[2]), int(sys.argv[3]), sys.argv[4], sys.argv[5] == '1'
 with open(selection, encoding='utf-8') as handle:
@@ -123,11 +134,13 @@ if os.path.isfile(table):
                 measured[path] = float(seconds)
 weight = {path: measured.get(path, DEFAULT_WEIGHT) for path in paths}
 load, count, assigned = [0.0] * total, [0] * total, {}
-# Only shard 1 runs the type check when CI fans out (see below): its ~90s of
+# Only shard 1 runs the type check when CI fans out (see below): its ~100s of
 # fixed pre-test wall is charged to shard 1's load here (x4 because a shard's
-# wall is its load spread over 4 worker lanes) so every shard finishes level.
+# wall is its load spread over 4 worker lanes) so every shard finishes level
+# (2026-11-02 remeasure over 16 main runs: median 96s, p75 100s, max 113s; the
+# previous 90s reservation let shard 1 run ~730s against the 720s budget).
 if total >= 2 and will_typecheck:
-    load[0] += 360.0
+    load[0] += 400.0
 # deal order is also the slice order: test.sh launches files in list order
 # into its worker slots, so heaviest-first turns that scheduler into LPT and
 # keeps one heavy file from serializing a shard's tail (the alphabetical
@@ -181,6 +194,6 @@ BACKEND_FAST_UNIT_FAIL_SECONDS="1.0" \
 BACKEND_PYTEST_FILE_ISOLATION="1" \
 BACKEND_PYTEST_MARK_EXPR="not integration and not slow" \
 BACKEND_PYTEST_XDIST="auto" \
-BACKEND_PYTEST_WORKERS="auto" \
+BACKEND_PYTEST_WORKERS="${BACKEND_PYTEST_WORKERS:-auto}" \
 PYTHON="$PYTHON_BIN" \
 bash test.sh

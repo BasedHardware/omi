@@ -14,6 +14,7 @@ import copy
 import json
 import math
 import stat
+import sys
 import time
 import urllib.error
 import urllib.parse
@@ -21,6 +22,21 @@ import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+
+if __package__ in (None, ""):
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from scripts.provision_monitoring_alerts import comparable, load_rules  # noqa: E402
+from scripts.redis_pager_route import (  # noqa: E402
+    CONTACT_POINTS_PATH,
+    POLICIES_PATH,
+    REDIS_PAGER_UID,
+    TELEGRAM_RECEIVER,
+    redis_contact_error,
+    redis_receiver_scope_error,
+    rule_route_error,
+    validate_publisher_url,
+)
 
 ROOT = Path(__file__).resolve().parents[2]
 RULES = ROOT / "backend/charts/monitoring/alerts/resilience.json"
@@ -72,13 +88,42 @@ LIVE_STT_IMPORT_UIDS = (
     "omi-stt-pressure-sampler-stuck",
 )
 DATASOURCE_CANARY_UIDS = ("omi-datasource-prometheus", "omi-datasource-cloud-monitoring")
-REDIS_CACHE_IMPORT_UIDS = ("omi-redis-cache-conn-warn", "omi-redis-cache-conn-page")
-TELEGRAM_RECEIVER = "Omi - Services Alerting (Telegram)"
+# These native Cloud Monitoring queries explicitly select the production
+# project and datasource. The automatic development import must not install
+# production pages there or assume an equivalent native datasource exists.
+# omi-firestore-unattributed-reads reads the gmp-cloud-run shadow datasource,
+# which only the production overlay creates; development has no equivalent.
+PRODUCTION_ONLY_IMPORT_UIDS = (
+    "omi-enrichment-queue-depth-page",
+    "omi-incluster-guard-unsafe-page",
+    "omi-firestore-unattributed-reads",
+    "omi-firestore-unattributed-reads-blind",
+    "omi-firestore-batch-reads-audio-hour",
+    "omi-firestore-batch-reads-no-output",
+    "omi-firestore-billed-reads-step",
+)
+REDIS_CACHE_IMPORT_UIDS = ("omi-redis-cache-conn-warn",)
 REQUIRED_METRICS = {
     "omi_capture_finalization_failures_total",
     "omi_journey_accepted_total",
     "omi_journey_terminal_total",
 }
+PUSHER_RECEIVE_METRICS = {
+    'omi_pusher_record_close_abandoned_outstanding',
+    'omi_pusher_record_close_outstanding_refusals_total',
+    'pusher_socket_frames_total',
+    'pusher_receive_work_stalls_total',
+    'pusher_receive_work_stalled_handlers',
+    'pusher_receive_work_duration_seconds_count',
+    'pusher_socket_closed_total',
+}
+METRIC_COVERAGE_QUERY = (
+    'count({__name__=~"'
+    + '|'.join(sorted(REQUIRED_METRICS))
+    + '",job=~"pusher-metrics|backend-listen-metrics"} or {__name__=~"'
+    + '|'.join(sorted(PUSHER_RECEIVE_METRICS))
+    + '",job="pusher-metrics"}) by (__name__,job)'
+)
 REQUIRED_JOBS = {"pusher-metrics", "backend-listen-metrics"}
 # Per-target `up` series. Pusher and backend-listen additionalScrapeConfigs both
 # relabel namespace and pod. min(up) is applied in process to the series that
@@ -358,6 +403,11 @@ def load_live_stt_import_rules(*, production: bool = True) -> dict[str, dict[str
         raise AlertRouteError("committed live-STT rules do not match the import allowlist")
     rules = {uid: by_uid[uid] for uid in LIVE_STT_IMPORT_UIDS}
     committed = load_all_committed_rules()
+    pilot = committed.get(REDIS_PAGER_UID)
+    if pilot is None:
+        raise AlertRouteError("committed Redis pilot rule is missing")
+    if error := rule_route_error(REDIS_PAGER_UID, pilot):
+        raise AlertRouteError(error)
     canary_uids = DATASOURCE_CANARY_UIDS if production else ()
     for uid in (*canary_uids, *REDIS_CACHE_IMPORT_UIDS):
         if uid not in committed:
@@ -366,7 +416,9 @@ def load_live_stt_import_rules(*, production: bool = True) -> dict[str, dict[str
     # Gate-file UIDs, including the resilience finalization set, share this
     # import. Canaries stay first so their read-back still precedes KeepLast.
     for uid in load_gated_uids(committed):
-        if uid not in rules:
+        # The dedicated production contact must never be installed by an
+        # ordinary metrics-egress run in either environment.
+        if uid != REDIS_PAGER_UID and uid not in rules:
             rules[uid] = committed[uid]
     if not production:
         rules = _development_rules(rules)
@@ -379,11 +431,8 @@ def load_live_stt_import_rules(*, production: bool = True) -> dict[str, dict[str
         ):
             raise AlertRouteError(f"datasource canary {uid} must be active and page on errors and no data")
     for uid, rule in rules.items():
-        labels = rule.get("labels")
-        if not isinstance(labels, dict) or labels.get("alert_identity") != uid:
-            raise AlertRouteError(f"live-STT alert {uid} has an invalid alert_identity label")
-        if _receiver(rule) != TELEGRAM_RECEIVER:
-            raise AlertRouteError(f"live-STT alert {uid} does not route to the verified Telegram receiver")
+        if error := rule_route_error(uid, rule):
+            raise AlertRouteError(error)
     return rules
 
 
@@ -404,7 +453,7 @@ def _run_live_stt_import(grafana_url: str, token: str) -> list[str]:
         _request_json(grafana_url, ALERT_RULE_LIST_PATH, token, size_limit=FLEET_LIST_SIZE_LIMIT),
         path=ALERT_RULE_LIST_PATH,
     )
-    contacts = _request_json(grafana_url, "/api/v1/provisioning/contact-points", token)
+    contacts = _request_json(grafana_url, CONTACT_POINTS_PATH, token)
     if not _has_telegram_receiver(contacts, TELEGRAM_RECEIVER):
         return ["verified Telegram alert receiver is missing or resolve notifications are disabled"]
     _ensure_mute_timings(grafana_url, rules, token)
@@ -430,10 +479,33 @@ def _run_live_stt_import(grafana_url: str, token: str) -> list[str]:
     return []
 
 
+def _run_redis_pilot_readback(
+    grafana_url: str, token: str, publisher_url: str, alias_hosts: tuple[str, ...] = ()
+) -> list[str]:
+    if grafana_url != "https://monitor.omi.me":
+        raise AlertRouteError("Redis pilot requires the production Grafana origin")
+    validate_publisher_url(publisher_url)
+    expected = load_rules(ALERT_SOURCES.parent / "alert-rules.json")[REDIS_PAGER_UID]
+    contacts = _request_json(grafana_url, CONTACT_POINTS_PATH, token)
+    if error := redis_contact_error(contacts, publisher_url, alias_hosts):
+        return [error]
+    live = index_live_rules(
+        _request_json(grafana_url, ALERT_RULE_LIST_PATH, token, size_limit=FLEET_LIST_SIZE_LIMIT),
+        path=ALERT_RULE_LIST_PATH,
+    )
+    if error := redis_receiver_scope_error(live, _request_json(grafana_url, POLICIES_PATH, token)):
+        return [error]
+    if comparable(live.get(REDIS_PAGER_UID, {})) != comparable(expected):
+        return [f"live Redis pilot rule {REDIS_PAGER_UID} differs from the committed definition"]
+    return []
+
+
 def _development_rules(rules: dict[str, dict[str, Any]]) -> dict[str, dict[str, Any]]:
     # No verified development sentinel exists. Development keeps error pages
     # instead of KeepLast, on a detached copy so canonical rules never change.
     rules = copy.deepcopy(rules)
+    for uid in PRODUCTION_ONLY_IMPORT_UIDS:
+        rules.pop(uid, None)
     for rule in rules.values():
         if rule.get("execErrState") == "KeepLast":
             rule["execErrState"] = "Error"
@@ -554,6 +626,10 @@ def mismatched_definition_keys(live: dict[str, Any], expected: dict[str, Any]) -
             continue
         if live.get(key) != expected.get(key):
             keys.append(key)
+    # Only an explicit source pause authorizes a live pause. Compare booleans
+    # strictly so missing/malformed live state cannot satisfy either contract.
+    if live.get("isPaused") is not (expected.get("isPaused") is True):
+        keys.append("isPaused")
     receiver = _receiver(expected)
     if not isinstance(receiver, str) or _receiver(live) != receiver:
         keys.append("receiver")
@@ -563,8 +639,6 @@ def mismatched_definition_keys(live: dict[str, Any], expected: dict[str, Any]) -
 def rule_definition_errors(uid: str, live: dict[str, Any], expected: dict[str, Any]) -> list[str]:
     keys = mismatched_definition_keys(live, expected)
     errors = [f"live alert rule {uid} {key} does not match the committed rule" for key in keys if key != "receiver"]
-    if live.get("isPaused") is not False:
-        errors.append(f"live alert rule {uid} must be unpaused")
     if "receiver" in keys:
         errors.append(f"live alert rule {uid} receiver does not match the committed route")
     return errors
@@ -588,7 +662,7 @@ def classify_fleet_coverage(
             present_but_paused.append(uid)
         if keys:
             present_but_divergent.append(f"{uid} ({','.join(keys)})")
-        if not paused and not keys:
+        if not keys:
             live_and_matching.append(uid)
     live_but_uncommitted = tuple(sorted(uid for uid in live_by_uid if uid not in committed))
     return FleetCoverage(
@@ -643,10 +717,9 @@ def fleet_gate_failures(coverage: FleetCoverage, gated_uids: tuple[str, ...], fa
     if fail_on == "none":
         return []
     absent = set(coverage.committed_but_absent)
-    paused = set(coverage.present_but_paused)
     divergent = {_divergent_uid(entry): entry for entry in coverage.present_but_divergent}
     uncommitted = set(coverage.live_but_uncommitted)
-    uids = gated_uids if fail_on == "gated" else tuple(sorted(absent | paused | set(divergent) | uncommitted))
+    uids = gated_uids if fail_on == "gated" else tuple(sorted(absent | set(divergent) | uncommitted))
     failures: list[str] = []
     for uid in uids:
         if uid in uncommitted:
@@ -654,8 +727,6 @@ def fleet_gate_failures(coverage: FleetCoverage, gated_uids: tuple[str, ...], fa
             continue
         if uid in absent:
             failures.append(f"live alert rule {uid} is absent from Grafana")
-        if uid in paused:
-            failures.append(f"live alert rule {uid} must be unpaused")
         if uid in divergent:
             failures.append(f"live alert rule {divergent[uid]} does not match the committed rule")
     return failures
@@ -826,8 +897,13 @@ def validate_live_route(
         if isinstance(item, dict) and isinstance(item.get("metric"), dict)
     }
     required_metric_jobs = {(metric, job) for metric in REQUIRED_METRICS for job in REQUIRED_JOBS}
-    if phase == "postrollout" and observed_metrics != required_metric_jobs:
+    if phase == "postrollout" and not required_metric_jobs <= observed_metrics:
         errors.append("live Prometheus finalization telemetry sources are missing or incomplete")
+    if (
+        phase == 'postrollout'
+        and not {(metric, 'pusher-metrics') for metric in PUSHER_RECEIVE_METRICS} <= observed_metrics
+    ):
+        errors.append('live Prometheus pusher receive-work telemetry sources are missing or incomplete')
     points = contact_points if isinstance(contact_points, list) else []
     for receiver in receivers:
         if not any(
@@ -870,9 +946,7 @@ def _prometheus_instant_query_or_error(base_url: str, token: str, query: str) ->
 
 def _run_pusher_gate(grafana_url: str, token: str, phase: str, attempts: int) -> list[str]:
     metric_query_path = "/api/datasources/proxy/uid/prometheus/api/v1/query?" + urllib.parse.urlencode(
-        {
-            "query": 'count({__name__=~"omi_capture_finalization_failures_total|omi_journey_accepted_total|omi_journey_terminal_total",job=~"pusher-metrics|backend-listen-metrics"}) by (__name__,job)'
-        }
+        {"query": METRIC_COVERAGE_QUERY}
     )
     up_query = PREPUBLISH_UP_QUERY if phase == "prepublish" else SERVING_UP_QUERY
     failures: list[str] = []
@@ -943,7 +1017,7 @@ def main() -> int:
     parser.add_argument("--grafana-url", required=True)
     parser.add_argument("--token-file", type=Path, required=True)
     parser.add_argument("--phase", choices=("prepublish", "postrollout"))
-    parser.add_argument("--mode", choices=("pusher", "fleet", "import"), default="pusher")
+    parser.add_argument("--mode", choices=("pusher", "fleet", "import", "redis-pilot"), default="pusher")
     parser.add_argument("--alert-set", choices=("all", "live-stt"), default="all")
     parser.add_argument("--fail-on", choices=("none", "gated", "all"))
     parser.add_argument(
@@ -952,6 +1026,8 @@ def main() -> int:
         default=None,
         help=f"default {PREPUBLISH_DEFAULT_ATTEMPTS} for --phase prepublish, otherwise 1",
     )
+    parser.add_argument("--redis-pilot-url", help="reviewed relay publisher URL for read-only pilot verification")
+    parser.add_argument("--redis-pilot-alias-host", action="append", default=[], help="reviewed relay ingress alias")
     args = parser.parse_args()
     if not _approved_grafana_url(args.grafana_url):
         print("FAIL: Grafana URL must be an approved HTTPS monitoring origin")
@@ -965,7 +1041,13 @@ def main() -> int:
     if args.mode != "fleet" and args.alert_set != "all":
         print("FAIL: --alert-set is only valid with --mode fleet")
         return 1
-    if args.mode == "import" and args.fail_on is not None:
+    if (args.mode == "redis-pilot") != (args.redis_pilot_url is not None):
+        print("FAIL: --mode redis-pilot requires --redis-pilot-url, and the URL is only valid in that mode")
+        return 1
+    if args.redis_pilot_alias_host and args.mode != "redis-pilot":
+        print("FAIL: --redis-pilot-alias-host is only valid with --mode redis-pilot")
+        return 1
+    if args.mode in ("import", "redis-pilot") and args.fail_on is not None:
         print("FAIL: --fail-on is only valid with --mode fleet")
         return 1
     fail_on = "none" if args.mode == "fleet" and args.fail_on is None else args.fail_on
@@ -982,13 +1064,17 @@ def main() -> int:
             failures = _run_pusher_gate(args.grafana_url, token, phase, attempts)
         elif args.mode == "import":
             failures = _run_live_stt_import(args.grafana_url, token)
+        elif args.mode == "redis-pilot":
+            failures = _run_redis_pilot_readback(
+                args.grafana_url, token, args.redis_pilot_url, tuple(args.redis_pilot_alias_host)
+            )
         else:
             if fail_on is None:
                 raise AlertRouteError("fleet mode requires --fail-on none, gated, or all")
             failures, report_lines = _run_fleet_coverage(
                 args.grafana_url, token, attempts, fail_on, alert_set=args.alert_set
             )
-    except (AlertRouteError, OSError, json.JSONDecodeError) as exc:
+    except (ValueError, OSError) as exc:
         failures = [str(exc)]
     for line in report_lines:
         print(line)
@@ -1002,6 +1088,8 @@ def main() -> int:
         )
     elif args.mode == "import":
         print("OK: allowlisted live-STT alert rules were upserted and Telegram routing was verified.")
+    elif args.mode == "redis-pilot":
+        print("OK: live Redis pilot rule and dedicated webhook match the contract.")
     else:
         print("OK: fleet Grafana coverage report completed.")
     return 0

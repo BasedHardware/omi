@@ -45,7 +45,8 @@ import type {
   VoiceHubSeedContextArgs,
   VoiceToolExecuteArgs,
   VoiceTurnOutboxInput,
-  AiUserProfileRecord,
+  AiProfileResult,
+  AiUserProfile,
   AssistantSettingsView,
   ActionItemRecord,
   TaskCreateFields,
@@ -215,13 +216,13 @@ const omi: OmiBridgeApi = {
   aiProfileSetSession: (
     session: { apiBase: string; desktopApiBase: string; token: string } | null
   ) => ipcRenderer.invoke('aiProfile:setSession', session),
-  aiProfileGenerateNow: (session?: { apiBase: string; desktopApiBase: string; token: string }) =>
-    ipcRenderer.invoke('aiProfile:generateNow', session) as Promise<AiUserProfileRecord>,
-  aiProfileGetLatest: () =>
-    ipcRenderer.invoke('aiProfile:getLatest') as Promise<AiUserProfileRecord | null>,
-  aiProfileEdit: (id: number, text: string) => ipcRenderer.invoke('aiProfile:edit', id, text),
-  aiProfileDelete: (id: number) => ipcRenderer.invoke('aiProfile:delete', id),
-  aiProfileDeleteAll: () => ipcRenderer.invoke('aiProfile:deleteAll'),
+  aiProfileGet: () =>
+    ipcRenderer.invoke('aiProfile:get') as Promise<AiProfileResult<AiUserProfile | null>>,
+  aiProfileRefresh: () =>
+    ipcRenderer.invoke('aiProfile:refresh') as Promise<AiProfileResult<AiUserProfile>>,
+  aiProfileEdit: (text: string) =>
+    ipcRenderer.invoke('aiProfile:edit', text) as Promise<AiProfileResult<AiUserProfile>>,
+  aiProfileDelete: () => ipcRenderer.invoke('aiProfile:delete') as Promise<AiProfileResult<null>>,
   // --- Main-process token PULL (session freshness) ---
   onSessionTokenRequest: (cb: (requestId: number) => void) => {
     const listener = (_e: Electron.IpcRendererEvent, requestId: number): void => cb(requestId)

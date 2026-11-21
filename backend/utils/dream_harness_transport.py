@@ -224,6 +224,7 @@ async def model_turn(
     prior_prompt_tokens=None,
     prior_message_count=0,
     cached_tokens_estimate=None,
+    reserved_only=False,
 ):
     if generated_compute_configured() and not await run_blocking(
         db_executor, generated_compute_allowed, uid, 'dream', allow_byok=False
@@ -242,6 +243,9 @@ async def model_turn(
     ceiling = _estimate + completion
     await warm_rollout_cohorts(uid)
     mode, allowlisted = admission_for(uid)
+    if reserved_only:
+        # Measurement calls (the value judge) never use on-demand capacity.
+        mode = 'reserved'
     model = await dream_capacity.available_model(mode=mode, owner_allowlisted=allowlisted)
     if model is None:
         # No dispatch: release the caller's minute hold before it pauses/re-reserves.

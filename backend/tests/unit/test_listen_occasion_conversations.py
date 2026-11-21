@@ -96,6 +96,7 @@ async def test_the_span_cap_stops_joining_and_rolls_the_occasion_over(monkeypatc
     cid = first.host.state.current_conversation_id
     row = harness.rows[cid]
     row['started_at'] = harness.now - timedelta(seconds=config.OCCASION_MAX_SPAN_SECONDS)
+    row.update(recorded_start=row['started_at'], recorded_end=harness.now)
     assert first._occasion_span_exceeded(row) is True
     harness.now += timedelta(minutes=1)
     later = await _open(harness, 'rec-b')
@@ -111,6 +112,7 @@ async def test_the_lifecycle_loop_rolls_a_capped_occasion_over_even_while_it_is_
     cid = controller.host.state.current_conversation_id
     # Still talking (finished_at is now), but the occasion is three hours old.
     harness.rows[cid]['started_at'] = harness.now - timedelta(seconds=config.OCCASION_MAX_SPAN_SECONDS)
+    harness.rows[cid].update(recorded_start=harness.rows[cid]['started_at'], recorded_end=harness.now)
     controller.host.wait = AsyncMock(side_effect=[False, True])
     await controller.lifecycle_loop()
     assert controller.host.state.current_conversation_id != cid
@@ -187,5 +189,24 @@ async def test_span_cap_accepts_all_persisted_timestamp_formats(monkeypatch, enc
         if encoding == 'numeric'
         else (start.isoformat() if encoding == 'iso' else start.replace(tzinfo=None))
     )
-    assert controller._occasion_span_exceeded({'started_at': value})
+    assert controller._occasion_span_exceeded(
+        {'started_at': value, 'recorded_start': value, 'recorded_end': harness.now}
+    )
     assert not controller._occasion_span_exceeded({'started_at': 'invalid'})
+
+
+@pytest.mark.anyio
+async def test_occasion_cap_uses_recorded_extent_without_consulting_arrival(monkeypatch):
+    harness = CaptureHarness(monkeypatch)
+    controller = await _open(harness, 'rec-a')
+    start = harness.now - timedelta(days=2)
+    controller.clock = lambda: (_ for _ in ()).throw(AssertionError('arrival clock used for cap'))
+    row = {
+        'started_at': start,
+        'finished_at': harness.now,
+        'status': 'in_progress',
+        'transcript_segments': [{'start': 0, 'end': 60}],
+    }
+    assert not controller._occasion_span_exceeded(row)
+    row['transcript_segments'][0]['end'] = config.OCCASION_MAX_SPAN_SECONDS
+    assert controller._occasion_span_exceeded(row)

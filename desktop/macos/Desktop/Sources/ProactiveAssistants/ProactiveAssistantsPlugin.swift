@@ -1,3 +1,10 @@
+// The proactive-assistants plugin: scheduled screen-capture ticks, plugin
+// lifecycle, and the capture/resume gating policy.
+//
+// ProactiveCapturePolicy is a pure enum so the precondition -- a tick may run
+// only while monitoring and neither recovering nor background-polling -- stays
+// unit-testable; if stopMonitoring fails to clear its flags, every later tick
+// is gated off, and only a test can pin that contract.
 import Cocoa
 import CoreGraphics
 @preconcurrency import UserNotifications

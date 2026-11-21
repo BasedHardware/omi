@@ -68,9 +68,11 @@ def provenance_unit(unit, runs):
 
 
 def decode_for_intake(paths, max_seconds, uid, context, *, decoder):
+    receipt = (context or {}).get('capture_received_at')
+    clock_kwargs = {'received_at': receipt} if receipt is not None else {}
     if not context or not context.get('capture_evidence_claims') or not refactor_modes.shadow_or_serve(coverage.FLAG):
-        return decoder(paths, max_seconds=max_seconds)
-    return decoder(paths, max_seconds=max_seconds, coverage_context={**context, 'uid': uid})
+        return decoder(paths, max_seconds=max_seconds, **clock_kwargs)
+    return decoder(paths, max_seconds=max_seconds, coverage_context={**context, 'uid': uid}, **clock_kwargs)
 
 
 def covered_response():

@@ -1,0 +1,35 @@
+{
+  "schema": "record-trace/1",
+  "name": "reconnect_finalize_without_audio",
+  "source": "unsealed-rca 2026-10-30 path 1: the final session after a reconnect carries 103/104 but flushes no new audio",
+  "row": {
+    "record_lane_owner": "batch_live_v1"
+  },
+  "durable": [
+    false
+  ],
+  "sessions": [
+    {
+      "frames": [
+        "conversation",
+        {
+          "audio_seconds": 1
+        }
+      ],
+      "upload": "ok"
+    },
+    {
+      "frames": [
+        "conversation",
+        "finalize"
+      ],
+      "upload": "ok"
+    }
+  ],
+  "expect": {
+    "sealed": true,
+    "upload_failed": false,
+    "open_tokens": 0,
+    "admissible": true
+  }
+}

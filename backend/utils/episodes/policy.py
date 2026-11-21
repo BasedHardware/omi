@@ -19,7 +19,6 @@ from config.episodes import (
     CONTINUE_GAP_SECONDS,
     FALLBACK_CLOSE_GAP_SECONDS,
     MAX_EPISODE_SECONDS,
-    MAX_MOMENTS,
     MOVED_ON_THRESHOLD,
     PROVISIONAL_MATCH_THRESHOLD,
     episode_hard_cap_across_conversations_enabled,
@@ -33,6 +32,14 @@ CLOSE_REASONS: frozenset[str] = frozenset(
 CONTINUE = 'continue'
 ASK = 'ask'
 NEW = 'new'
+
+
+def owned_member_ids(episode: Mapping[str, Any] | None) -> list[str]:
+    """Stored member ids count only as a list of strings. Any other shape owns nothing (fail open)."""
+    members = (episode or {}).get('conversation_ids')
+    if not isinstance(members, list):
+        return []
+    return [cid for cid in members if isinstance(cid, str)]
 
 
 def utc(value: Any) -> Optional[datetime]:
@@ -81,7 +88,7 @@ def idle_close_due(episode: Optional[Mapping[str, Any]], now: datetime) -> bool:
 
 def hard_cap_due(episode: Optional[Mapping[str, Any]], at: datetime) -> bool:
     """The hard span cap belongs to the whole episode, including every member conversation."""
-    if episode is None or not is_live(episode):
+    if not episode_hard_cap_across_conversations_enabled() or episode is None or not is_live(episode):
         return False
     started = utc(episode.get('started_at'))
     point = utc(at)
@@ -135,8 +142,6 @@ def boundary(episode: Optional[Mapping[str, Any]], moment: MomentFacts) -> Bound
             return Boundary('close', 'hard_cap')
     elif (moment.ended_at - started).total_seconds() > MAX_EPISODE_SECONDS:
         # The kill switch restores the pre-rotation moment-end check.
-        return Boundary('close', 'hard_cap')
-    if len(episode.get('moments') or []) >= MAX_MOMENTS:
         return Boundary('close', 'hard_cap')
     conversation_ids = set(episode.get('conversation_ids') or [])
     if moment.conversation_id in conversation_ids:

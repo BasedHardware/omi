@@ -17,7 +17,7 @@ from utils.executors import db_executor, run_blocking
 from utils.other.endpoints import get_current_user_uid, with_rate_limit
 from utils.observability.fallback import record_fallback
 from utils.retrieval.frame_request_authority import resolve_frame_request_authority
-from utils.subscription import grants_cloud_screen_vectors, is_desktop_trial_paywalled
+from utils.subscription import grants_cloud_screen_vectors
 from utils.screen_vector_entitlements import ScreenVectorAuthorityUnavailable
 from services.conversation_keyframes import reconcile_conversation_keyframe_jobs
 
@@ -96,8 +96,6 @@ class ScreenActivitySyncResponse(BaseModel):
 async def _authorized_desktop_user(
     uid: str = Depends(with_rate_limit(get_current_user_uid, "screen_activity:sync")),
 ) -> str:
-    if await run_blocking(db_executor, is_desktop_trial_paywalled, uid, "desktop"):
-        raise HTTPException(status_code=402, detail="trial_expired")
     return uid
 
 

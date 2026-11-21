@@ -37,6 +37,8 @@ import type {
   ActionItemsResponse,
   FairUseStatusResponse,
   StoreRecordingPermissionResponse,
+  ClientFlagsResponse,
+  ConnectorAccess,
 } from './omiApi.generated';
 import {
   normalizeKnowledgeLedgerMemories,
@@ -70,7 +72,11 @@ const API_BASE_URL = '/api/proxy';
 
 /** Retain the status for safe endpoint-specific recovery messages. */
 export class ApiHttpError extends Error {
-  constructor(public readonly status: number, message: string) {
+  constructor(
+    public readonly status: number,
+    message: string,
+    public readonly state?: string,
+  ) {
     super(message);
     this.name = 'ApiHttpError';
   }
@@ -134,9 +140,18 @@ async function fetchWithAuthResponse<T>(
       if (response.status === 401) {
         throw new ApiHttpError(401, 'Unauthorized - please sign in again');
       }
+      let state: string | undefined;
+      try {
+        const body = JSON.parse(errorText);
+        const value = body?.state ?? body?.detail?.state;
+        if (typeof value === 'string') state = value;
+      } catch {
+        /* Non-JSON errors retain their HTTP status. */
+      }
       throw new ApiHttpError(
         response.status,
         `API error: ${response.status} ${response.statusText}`,
+        state,
       );
     }
 
@@ -174,6 +189,36 @@ export interface GetConversationsParams {
   endDate?: Date;
   folderId?: string;
   starred?: boolean;
+}
+
+/** Flags owned by Omi's flag store for this account; unlisted keys keep reading PostHog. */
+/** Missing/error confirmation keeps the previous Home failure rows. */
+export async function getHomeFailurePlacement(): Promise<boolean> {
+  const snapshot = await fetchWithAuth<import('./omiApi.generated').PendingWorkSnapshot>(
+    '/v1/pending-work',
+  );
+  return snapshot.enabled === true && snapshot.home_processing_today === true;
+}
+
+export async function getAttentionItems(): Promise<{
+  enabled?: boolean;
+  items: import('./attentionItems').AttentionItem[];
+}> {
+  return fetchWithAuth('/v1/attention-items');
+}
+
+export async function retryAttentionItem(
+  id: string,
+  key: string,
+): Promise<{ operation_id: string; state: string }> {
+  return fetchWithAuth(`/v1/attention-items/${encodeURIComponent(id)}/retry`, {
+    method: 'POST',
+    headers: { 'Idempotency-Key': key },
+  });
+}
+
+export async function getClientFlags(): Promise<ClientFlagsResponse> {
+  return fetchWithAuth<ClientFlagsResponse>('/v1/flags?surface=web-app');
 }
 
 export async function getConversations(
@@ -489,10 +534,11 @@ export async function toggleActionItemCompleted(
 export async function updateActionItemDueDate(
   id: string,
   due_at: string | null,
+  due?: ActionItem['due'],
 ): Promise<void> {
   await fetchWithAuth(`/v1/action-items/${id}`, {
     method: 'PATCH',
-    body: JSON.stringify({ due_at }),
+    body: JSON.stringify({ due_at, ...(due === undefined ? {} : { due }) }),
   });
 }
 
@@ -2282,7 +2328,7 @@ export async function getMcpApiKeys(
   }
 }
 
-/** Default read-only scopes for newly minted MCP API keys. */
+/** Offline fallback for older/unavailable scope-contract endpoints. */
 export const MCP_READ_ONLY_SCOPES = [
   'memories.read',
   'conversations.read',
@@ -2290,14 +2336,38 @@ export const MCP_READ_ONLY_SCOPES = [
   'goals.read',
 ] as const;
 
+async function getMcpDefaultScopes(): Promise<readonly string[]> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 5000);
+  try {
+    const contract = await fetchWithAuth<ConnectorAccess>('/v1/mcp/keys/scopes', {
+      signal: controller.signal,
+    });
+    if (
+      Array.isArray(contract.default_scopes) &&
+      contract.default_scopes.length > 0 &&
+      contract.default_scopes.every((scope) => typeof scope === 'string')
+    ) {
+      return contract.default_scopes;
+    }
+  } catch {
+    // Older/offline backends keep the existing explicit read-only request.
+  } finally {
+    clearTimeout(timeout);
+  }
+  console.warn('MCP scope contract unavailable; using read-only fallback');
+  return MCP_READ_ONLY_SCOPES;
+}
+
 /** Create a new MCP API key */
 export async function createMcpApiKey(
   name: string,
-  scopes: readonly string[] = MCP_READ_ONLY_SCOPES,
+  scopes?: readonly string[],
 ): Promise<McpApiKey> {
+  const requestedScopes = scopes ?? (await getMcpDefaultScopes());
   return fetchWithAuth<McpApiKey>('/v1/mcp/keys', {
     method: 'POST',
-    body: JSON.stringify({ name, scopes }),
+    body: JSON.stringify({ name, scopes: requestedScopes }),
   });
 }
 

@@ -501,6 +501,9 @@ def test_is_user_false_from_assign_routes_records_not_me(world, monkeypatch):
 
 
 def test_identify_someone_else_writes_a_plain_anonymous_decision(world, monkeypatch):
+    monkeypatch.setattr(
+        service.conversations_db, 'get_conversation', lambda uid, cid: deepcopy(world.store.rows[world.path])
+    )
     captured = []
     monkeypatch.setattr(
         service.conversations_db,
@@ -529,6 +532,9 @@ def test_identify_someone_else_writes_a_plain_anonymous_decision(world, monkeypa
 
 
 def test_confirm_person_someone_else_requires_a_known_suggestion(world, monkeypatch):
+    monkeypatch.setattr(
+        service.conversations_db, 'get_conversation', lambda uid, cid: deepcopy(world.store.rows[world.path])
+    )
     captured = []
     monkeypatch.setattr(
         service.conversations_db,

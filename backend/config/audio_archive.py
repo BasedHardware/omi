@@ -1,8 +1,9 @@
 """As-captured audio archive phases.
 
 LIVE and READ are the fleet as-captured dual-write (David's 2026-10-22 ruling):
-on by default, flag-only, no percent cohort. The remaining phases stay staged
-dark rollouts behind their flag plus a percent cohort.
+on by default, flag-only, no percent cohort. COALESCE is permanently admitted
+for every owner. The remaining phases stay staged dark rollouts behind their
+flag plus a percent cohort.
 """
 
 from config.refactor_switches import default_off as rollout_default_off, default_on as rollout_default_on
@@ -46,9 +47,7 @@ def _phase_enabled(phase: str) -> bool:
             os.getenv('AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED', 'false').lower() == 'true',
         )
     if phase == 'COALESCE':
-        return rollout_default_off(
-            'AUDIO_ARCHIVE_COALESCE_ENABLED', os.getenv('AUDIO_ARCHIVE_COALESCE_ENABLED', 'false').lower() == 'true'
-        )
+        return True
     if phase == 'SEPARATE_MERGE':
         return rollout_default_off(
             'AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED',
@@ -59,9 +58,9 @@ def _phase_enabled(phase: str) -> bool:
 
 def _cohort_percent(phase: str) -> float | None:
     # STOP_PCM and REGIONAL_CACHE ramp against their own percent:
-    # AUDIO_ARCHIVE_PERCENT is pinned at 100 fleet-wide for COALESCE, so a
-    # shared knob could not hold either phase back without breaking merge
-    # coalescing — and for REGIONAL_CACHE it would make the enable flag an
+    # COALESCE is unconditional after graduation, so a
+    # shared knob would couple unrelated phases, and for REGIONAL_CACHE
+    # it would make the enable flag an
     # instant 100% cutover with no ramp.
     if phase == 'STOP_PCM':
         raw = os.getenv('AUDIO_ARCHIVE_STOP_PCM_PERCENT', '0')
@@ -79,8 +78,8 @@ def _cohort_percent(phase: str) -> float | None:
 def admitted(uid: str, phase: str) -> bool:
     if not _phase_enabled(phase) or not uid:
         return False
-    if phase in ('LIVE', 'READ'):
-        # Fleet phases: the flag alone admits; a percent cohort here would
+    if phase in ('LIVE', 'READ', 'COALESCE'):
+        # Fleet phases admit directly; a percent cohort here would
         # silently keep LIVE dark wherever AUDIO_ARCHIVE_PERCENT is unset.
         return True
     percent = _cohort_percent(phase)
@@ -90,11 +89,40 @@ def admitted(uid: str, phase: str) -> bool:
     return in_rollout_cohort(uid, 'audio-archive') or bucket < percent
 
 
+def derived_audio_bucket() -> str:
+    """Configured rendition storage resource, shared by writers and readers."""
+    return os.getenv('BUCKET_AUDIO_DERIVED', '').strip()
+
+
 def regional_bucket(uid: str, legacy: str | None) -> str | None:
     if admitted(uid, 'REGIONAL_CACHE'):
-        configured = os.getenv('BUCKET_AUDIO_DERIVED', '').strip()
+        configured = derived_audio_bucket()
         if not configured:
             logger.warning('regional audio cache missing BUCKET_AUDIO_DERIVED; retaining legacy bucket')
             return legacy
         return configured
     return legacy
+
+
+def _regional_chunks_percent() -> float:
+    try:
+        percent = float(os.getenv('AUDIO_ARCHIVE_REGIONAL_CHUNKS_PERCENT', '0'))
+    except ValueError:
+        return 0.0
+    return percent if 0 <= percent <= 100 else 0.0
+
+
+def regional_chunk_bucket(uid: str, legacy: str) -> str:
+    """Bucket for new pusher PCM chunk batches.
+
+    A second ramp behind the REGIONAL_CACHE enable with its own percent: live
+    PCM chunks are a rendition of the canonical raw-live packs, which stay in
+    the multi-region bucket. Chunk readers list and resolve both buckets.
+    Percent only (no allowlist admission), so percent 0 is a complete rollback.
+    """
+    if not uid or not _phase_enabled('REGIONAL_CACHE'):
+        return legacy
+    configured = derived_audio_bucket()
+    if not configured:
+        return legacy
+    return configured if cohort_bucket(uid, 'audio-archive', bits=64) < _regional_chunks_percent() else legacy

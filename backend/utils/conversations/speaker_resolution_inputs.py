@@ -5,7 +5,7 @@ import logging
 from datetime import timezone
 from typing import Any, Dict, Mapping, Sequence, Optional
 
-from config.batch_conversation_speakers import BATCH_CONVERSATION_SCOPE
+from config.batch_conversation_speakers import BATCH_CONVERSATION_SCOPE, vendor_evidence_refused
 from models.transcript_segment import TranscriptSegment
 from models.conversation import Conversation
 from utils.speakers.provider_partition import provider_key
@@ -116,6 +116,8 @@ def batch_provider_keys(segments: list[TranscriptSegment]) -> dict[str, tuple[st
         )
     keys = {}
     for segment in segments:
+        if vendor_evidence_refused(segment):
+            continue  # Killed vendor turns: abstain instead of must-linking vendor labels.
         key = provider_key(segment)
         if segment.speaker_id_scope in snapshots:
             # Explicitly contradicted/redistributed text must still abstain.
@@ -132,3 +134,21 @@ def batch_provider_keys(segments: list[TranscriptSegment]) -> dict[str, tuple[st
         elif segment.id and key is not None:
             keys[segment.id] = key
     return keys
+
+
+def transcript_membership(segments) -> str:
+    """Identity-independent completion key: appends, merges and text edits revoke it."""
+    import hashlib
+    import json
+
+    def field(segment, name):
+        return segment.get(name) if isinstance(segment, Mapping) else getattr(segment, name, None)
+
+    rows = [
+        {
+            name: field(segment, name)
+            for name in ('id', 'text', 'start', 'end', 'audio_capture_start', 'audio_capture_end', 'audio_capture_run')
+        }
+        for segment in segments
+    ]
+    return hashlib.sha256(json.dumps(rows, sort_keys=True, separators=(',', ':'), default=str).encode()).hexdigest()

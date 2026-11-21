@@ -24,6 +24,8 @@ def _field(item: Any, name: str) -> Any:
 
 
 def filter_extracted_items(uid: str, items: Sequence[Any], *, conversation: Any = None) -> list[Any]:
+    reminders = [item for item in items if _field(item, 'reminder_intent') is not None]
+    items = [item for item in items if _field(item, 'reminder_intent') is None]
     named = any(normalized_name(_field(item, 'owner_name')) not in UNKNOWN_OWNERS | OWNER_ALIASES for item in items)
     profile_name = get_user_full_name(uid) if named else None
     # refactor: superseded by utils.llm.action_item_v2 when ACTION_ITEMS_V2_MODE=serve
@@ -43,7 +45,9 @@ def filter_extracted_items(uid: str, items: Sequence[Any], *, conversation: Any 
     from utils.llm.action_item_v2 import select_items
 
     segments = getattr(conversation, 'transcript_segments', ()) or ()
-    return select_valid_items(uid, select_items(uid, items, kept, profile_name), transcript_segments=segments)
+    return reminders + select_valid_items(
+        uid, select_items(uid, items, kept, profile_name), transcript_segments=segments
+    )
 
 
 def action_items_for_write(
@@ -69,4 +73,5 @@ def action_items_for_write(
             'conversation_id': conversation.id,
         }
         for action_item in filter_extracted_items(uid, conversation.structured.action_items, conversation=conversation)
+        if _field(action_item, 'reminder_intent') is None
     ]

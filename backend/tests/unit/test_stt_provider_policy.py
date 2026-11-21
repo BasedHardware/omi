@@ -8,6 +8,7 @@ import yaml
 from config.stt_provider_policy import (
     DEEPGRAM_CLOUD_PROVIDER,
     DEEPGRAM_SELF_HOSTED_PROVIDER,
+    HELD_RECOVERY_SECOND_PROVIDER,
     MODULATE_PROVIDER,
     PARAKEET_MODEL_BY_SURFACE,
     PARAKEET_PROVIDER,
@@ -50,15 +51,29 @@ def test_deepgram_is_retired_on_every_surface():
     assert not provider_is_enabled(DEEPGRAM_CLOUD_PROVIDER, STTServingSurface.HELD_RECOVERY)
 
 
-def test_soniox_async_is_limited_to_held_recovery():
+def test_soniox_async_is_limited_to_held_recovery_and_batch_failover():
+    from config.prerecorded_stt import (
+        DEFAULT_STT_PRERECORDED_MODELS,
+        provider_for_model_token as prerecorded_provider_for_model_token,
+        providers_for_model_config,
+    )
+
+    assert HELD_RECOVERY_SECOND_PROVIDER == 'soniox'
     assert provider_is_enabled('soniox', STTServingSurface.HELD_RECOVERY)
-    assert not provider_is_enabled('soniox', STTServingSurface.PRERECORDED)
+    # Admitted on prerecorded only so the batch route table may name it as failover capacity.
+    assert provider_is_enabled('soniox', STTServingSurface.PRERECORDED)
     assert not provider_is_enabled('soniox', STTServingSurface.PTT)
+    # General prerecorded selection can still never reach it, even when a deployment lists it.
+    assert 'soniox' not in DEFAULT_STT_PRERECORDED_MODELS
+    assert 'soniox' not in providers_for_model_config('soniox,parakeet,modulate-velma-2')
+    # Deployment validation maps no prerecorded token to Soniox; get_prerecorded_service
+    # matches only the parakeet and modulate-velma-2 tokens.
+    assert prerecorded_provider_for_model_token('soniox') is None
 
 
 def test_policy_owns_the_safe_model_order_for_every_serving_surface():
     expected = {
-        STTServingSurface.STREAMING: 'modulate-velma-2,soniox,parakeet',
+        STTServingSurface.STREAMING: 'modulate-velma-2,soniox',
         STTServingSurface.PRERECORDED: 'parakeet,modulate-velma-2',
         STTServingSurface.PTT: 'modulate-velma-2,parakeet',
     }
@@ -134,3 +149,16 @@ def test_live_policy_admits_languages_beyond_the_retired_deepgram_list(language)
 @pytest.mark.parametrize('language', ['my', 'am', 'lo'])
 def test_live_policy_rejects_languages_outside_modulate_auto_detection(language):
     assert supports_live_multilingual_mode(language) is False
+
+
+def test_plain_streaming_slot_is_removed_but_window_and_ptt_remain(monkeypatch):
+    monkeypatch.delenv('STT_STREAMING_PARAKEET_SLOT_ENABLED', raising=False)
+    assert not model_is_enabled('parakeet', STTServingSurface.STREAMING)
+    assert model_is_enabled('parakeet-window', STTServingSurface.STREAMING)
+    assert model_is_enabled('parakeet', STTServingSurface.PTT)
+    monkeypatch.setenv('STT_STREAMING_PARAKEET_SLOT_ENABLED', 'true')
+    assert model_is_enabled('parakeet', STTServingSurface.STREAMING)
+    assert canonical_model_config(STTServingSurface.STREAMING) == 'modulate-velma-2,soniox,parakeet'
+    monkeypatch.setenv('STT_GPU_FLEET_OFF', 'true')
+    assert not model_is_enabled('parakeet', STTServingSurface.STREAMING)
+    assert canonical_model_config(STTServingSurface.STREAMING) == 'modulate-velma-2,soniox'

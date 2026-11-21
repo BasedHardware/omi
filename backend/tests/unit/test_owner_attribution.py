@@ -184,6 +184,10 @@ def test_capture_telemetry_emits_owner_trust_without_text(caplog):
 
 @pytest.mark.parametrize('owners', [(True, True), (False, False), (True, False)])
 def test_canonical_capture_owner_gate_and_shared_prefix(monkeypatch, pc, owners):
+    # This asserts prompt-prefix construction, not the dedupe fingerprint path;
+    # the captured-prefix harness returns an opaque object the fingerprint
+    # canonicalizer rejects by design.
+    monkeypatch.setenv('CONVERSATION_LLM_INPUT_DEDUPE_ENABLED', 'false')
     service = MagicMock()
     captured = {}
     segments = _segments(owners)

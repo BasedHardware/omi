@@ -75,6 +75,7 @@
    },
    "final_result": {
     "conversation_id": "conv-1",
+    "fresh_capture": false,
     "late_capture": false,
     "log_sequence": 1,
     "owner_id": "owner-1",
@@ -174,6 +175,7 @@
    },
    "final_result": {
     "conversation_id": "conv-2",
+    "fresh_capture": true,
     "late_capture": false,
     "log_sequence": 2,
     "owner_id": "owner-1",
@@ -283,6 +285,7 @@
    },
    "final_result": {
     "conversation_id": "conv-3",
+    "fresh_capture": true,
     "late_capture": false,
     "log_sequence": 1,
     "owner_id": "owner-2",
@@ -300,7 +303,7 @@
    },
    "job_transitions": [
     "<1s ready",
-    "<1s leased",
+    "<5s leased",
     "<30s result_ready",
     "<30s committed",
     "<30s committed client:completed"
@@ -382,6 +385,7 @@
    },
    "final_result": {
     "conversation_id": "conv-4",
+    "fresh_capture": true,
     "late_capture": false,
     "log_sequence": 2,
     "owner_id": "owner-2",
@@ -399,7 +403,7 @@
    },
    "job_transitions": [
     "<1s ready",
-    "<1s leased",
+    "<5s leased",
     "<30s result_ready",
     "<30s committed",
     "<30s committed client:completed"
@@ -491,6 +495,7 @@
    },
    "final_result": {
     "conversation_id": "conv-5",
+    "fresh_capture": true,
     "late_capture": false,
     "log_sequence": 1,
     "owner_id": "owner-3",
@@ -508,7 +513,7 @@
    },
    "job_transitions": [
     "<1s ready",
-    "<5s leased",
+    "<30s leased",
     "<30s result_ready",
     "<30s committed",
     "<30s committed client:completed"
@@ -590,6 +595,7 @@
    },
    "final_result": {
     "conversation_id": "conv-6",
+    "fresh_capture": true,
     "late_capture": false,
     "log_sequence": 2,
     "owner_id": "owner-3",
@@ -607,7 +613,7 @@
    },
    "job_transitions": [
     "<1s ready",
-    "<5s leased",
+    "<30s leased",
     "<30s result_ready",
     "<30s committed",
     "<30s committed client:completed"
@@ -689,6 +695,7 @@
    },
    "final_result": {
     "conversation_id": "conv-7",
+    "fresh_capture": true,
     "late_capture": false,
     "log_sequence": 3,
     "owner_id": "owner-3",
@@ -706,7 +713,7 @@
    },
    "job_transitions": [
     "<1s ready",
-    "<5s leased",
+    "<30s leased",
     "<30s result_ready",
     "<30s committed",
     "<30s committed client:completed"

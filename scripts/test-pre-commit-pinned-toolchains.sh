@@ -3,7 +3,13 @@ set -euo pipefail
 
 # Git hooks export their own repository environment. This fixture creates a
 # separate temporary repository, so it must not inherit that hook context.
-unset GIT_DIR GIT_WORK_TREE GIT_COMMON_DIR GIT_INDEX_FILE GIT_OBJECT_DIRECTORY GIT_ALTERNATE_OBJECT_DIRECTORIES
+# Do not pass a caller's repository selection to nested fixture Git commands.
+# GIT_NAMESPACE is repository-scoped but absent from Git's local-env-vars list.
+GIT_LOCAL_ENV_VARS="$(git rev-parse --local-env-vars)"
+for git_env_var in $GIT_LOCAL_ENV_VARS GIT_NAMESPACE; do
+  unset "$git_env_var"
+done
+unset GIT_LOCAL_ENV_VARS git_env_var
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 HOOK="$ROOT/scripts/pre-commit"
@@ -140,6 +146,43 @@ STUB
   chmod +x "$STUBS/flutter" "$STUBS/dart"
 }
 
+make_clang_format_stub() {
+  cat >"$STUBS/clang-format" <<STUB
+#!/bin/sh
+if [ "\$1" = "--version" ]; then
+  echo "$1"
+  exit 0
+fi
+for arg in "\$@"; do
+  case "\$arg" in
+    *.c|*.cpp|*.cc|*.cxx|*.h|*.hpp) printf 'CLANG_FORMATTED\n' >"\$arg" ;;
+  esac
+done
+STUB
+  chmod +x "$STUBS/clang-format"
+}
+
+# PATH without the host's clang-format, so the missing-formatter case stays
+# deterministic even where a real clang-format is installed (stubs shadow it
+# elsewhere; here nothing may fall through to the host toolchain). Resolve
+# tools outside PATH-manager wrappers: the managed git shim needs realpath and
+# dirname on PATH, so prefer the system toolchain like CI's runner has.
+minimal_tool() {
+  for candidate in "/usr/bin/$1" "/bin/$1" "$(command -v "$1" 2>/dev/null)"; do
+    if [ -n "$candidate" ] && [ -x "$candidate" ]; then
+      printf '%s\n' "$candidate"
+      return
+    fi
+  done
+  echo "cannot resolve $1 for the minimal PATH fixture" >&2
+  exit 1
+}
+MINIMAL_BIN="$TMPDIR/minimal-bin"
+mkdir -p "$MINIMAL_BIN"
+for hook_tool in sh git python3 sed grep head xargs cat; do
+  ln -s "$(minimal_tool "$hook_tool")" "$MINIMAL_BIN/$hook_tool"
+done
+
 make_black_stub() {
   cat >"$STUBS/black" <<'STUB'
 #!/bin/sh
@@ -270,6 +313,9 @@ mv "$TMPDIR/package_config.json" "$REPO/app/.dart_tool/package_config.json"
 # alone (no reformat, no toolchain refusal); a resolved file is still formatted ---
 git -C "$REPO" reset -q --hard
 git -C "$REPO" checkout -q -b incoming
+mkdir -p "$REPO/desktop/macos/Desktop" "$REPO/desktop/macos/scripts"
+printf 'let incoming = 1\n' >"$REPO/desktop/macos/Desktop/Incoming.swift"
+printf 'let resolved = 1\n' >"$REPO/desktop/macos/Desktop/Resolved.swift"
 printf 'void incoming() {  }\n' >"$REPO/app/lib/incoming.dart"
 printf 'void resolved() {  }\n' >"$REPO/app/lib/resolved.dart"
 printf 'const incoming = {x:1}\n' >"$REPO/web/frontend/src/incoming.ts"
@@ -283,7 +329,22 @@ git -C "$REPO" merge -q --no-commit --no-ff incoming >/dev/null 2>&1
 printf 'void resolved() {   }\n' >"$REPO/app/lib/resolved.dart"
 git -C "$REPO" add app/lib/resolved.dart
 rm -rf "$REPO/web/frontend/node_modules"
+# Unchanged incoming Swift must not require the unavailable macOS toolchain.
 run_hook >/dev/null
+test "$(cat "$REPO/desktop/macos/Desktop/Incoming.swift")" = "let incoming = 1"
+printf 'let resolved = 2\n' >"$REPO/desktop/macos/Desktop/Resolved.swift"
+git -C "$REPO" add desktop/macos/Desktop/Resolved.swift
+printf '#!/bin/sh\nexit 0\n' >"$STUBS/xcrun"
+cat >"$REPO/desktop/macos/scripts/swift-format-wrapper.sh" <<'STUB'
+#!/bin/sh
+for f in "$@"; do
+  case "$f" in *.swift) printf 'SWIFT_FORMATTED\n' >"$f" ;; esac
+done
+STUB
+chmod +x "$STUBS/xcrun" "$REPO/desktop/macos/scripts/swift-format-wrapper.sh"
+run_hook >/dev/null
+test "$(cat "$REPO/desktop/macos/Desktop/Incoming.swift")" = "let incoming = 1"
+test "$(git -C "$REPO" show :desktop/macos/Desktop/Resolved.swift)" = "SWIFT_FORMATTED"
 test "$(cat "$REPO/app/lib/incoming.dart")" = "void incoming() {  }"
 test "$(cat "$REPO/web/frontend/src/incoming.ts")" = "const incoming = {x:1}"
 grep -q 'DART_FORMATTED' "$REPO/app/lib/resolved.dart"
@@ -384,5 +445,36 @@ run_hook >/dev/null
 test "$(cat "$REPO/backend/example.py")" = "PYTHON_FORMATTED"
 git -C "$REPO" diff --exit-code -- backend/example.py >/dev/null
 git -C "$REPO" diff --cached -- backend/example.py | grep -q 'PYTHON_FORMATTED'
+
+# --- Firmware C: CI's Formatting check uses clang-format 18, so a missing
+# formatter or any other major must refuse and leave the staged bytes
+# untouched; 18 formats and re-stages (the safe_mode.c churn hazard) ---
+git -C "$REPO" reset -q --hard
+mkdir -p "$REPO/omi/firmware/omi/src"
+printf 'void boot(void) { fail = (struct boot_info){0}; }\n' >"$REPO/omi/firmware/omi/src/safe_mode.c"
+git -C "$REPO" add omi/firmware/omi/src/safe_mode.c
+rm -f "$STUBS/clang-format"
+expect_refusal "no clang-format on PATH" PATH="$MINIMAL_BIN"
+test "$(cat "$REPO/omi/firmware/omi/src/safe_mode.c")" = "void boot(void) { fail = (struct boot_info){0}; }"
+make_clang_format_stub "Homebrew clang-format version 23.1.1"
+expect_refusal "clang-format major mismatch"
+test "$(cat "$REPO/omi/firmware/omi/src/safe_mode.c")" = "void boot(void) { fail = (struct boot_info){0}; }"
+make_clang_format_stub "clang-format version 18.1.8"
+run_hook >/dev/null
+grep -q 'CLANG_FORMATTED' "$REPO/omi/firmware/omi/src/safe_mode.c"
+git -C "$REPO" diff --cached -- omi/firmware/omi/src/safe_mode.c | grep -q 'CLANG_FORMATTED'
+git -C "$REPO" reset -q --hard
+rm -f "$STUBS/clang-format"
+
+# Ordinary Swift edits still require the macOS toolchain.
+mkdir -p "$REPO/desktop/macos/Desktop"
+printf 'let edited = 1\n' >"$REPO/desktop/macos/Desktop/Edited.swift"
+git -C "$REPO" add desktop/macos/Desktop/Edited.swift
+if run_hook PATH="$MINIMAL_BIN" >"$TMPDIR/swift-out.txt" 2>&1; then
+  echo "FAIL: Swift edit accepted without xcrun" >&2
+  exit 1
+fi
+grep -q 'xcrun not found' "$TMPDIR/swift-out.txt"
+test "$(git -C "$REPO" show :desktop/macos/Desktop/Edited.swift)" = "let edited = 1"
 
 echo "pre-commit pinned-toolchain refusal tests passed"

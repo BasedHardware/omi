@@ -215,9 +215,7 @@ final class ContextBucketSchemaTests: XCTestCase {
     XCTAssertNotNil(defaults.data(forKey: ContextBucketSchema.legacyDefaultsKey(ownerID: ownerID)))
   }
 
-  func testDerivedDataEgressIsDefaultDenyAndContextTablesStayOutOfAgentSync() throws {
-    XCTAssertTrue(ContextBucketSchema.tableNames.isDisjoint(with: AgentSyncService.syncedTableNames))
-
+  func testDerivedDataEgressIsDefaultDeny() throws {
     XCTAssertEqual(DerivedDataEgressPolicy.declarations.count, DerivedDataClass.allCases.count)
     XCTAssertEqual(
       DerivedDataClass.allCases.filter {

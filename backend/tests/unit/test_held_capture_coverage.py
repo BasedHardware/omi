@@ -137,14 +137,23 @@ def test_batch_held_custom_decode_full_proof_only(ledger, identity, monkeypatch,
         assert units == list(adapter.wav_units(path, 1760000000, 3600))
 
 
-def test_partial_batch_decode_preserves_gap_clock_and_provenance(ledger, identity, tmp_path):
+@pytest.mark.parametrize('capture_at', [1760000000, 788918400])
+def test_partial_batch_decode_preserves_gap_clock_and_provenance(ledger, identity, tmp_path, monkeypatch, capture_at):
     uid, key = identity
     path = wav(tmp_path)
     coverage.record(uid, key, rec('committed', 'live', (3, 7)))
-    decoder = HeldDecoder(uid, path, 1760000000, meta_for(key), legacy=adapter.wav_units)
+    meta = {**meta_for(key), 'timestamp': capture_at}
+    if capture_at < 1704067200:
+        meta['early_capture_offset'] = capture_at - (1800000000 - 0.2)
+    monkeypatch.setenv('SYNC_EARLY_CAPTURE_CLAMP_ENABLED', 'false')
+    decoder = HeldDecoder(uid, path, capture_at, meta, legacy=adapter.wav_units)
     units = list(decoder(3600))
     assert [round(u.duration_seconds, 2) for u in units] == [0.06, 0.06]
-    assert [u.capture_at for u in units] == [1760000000, 1760000000.14]
+    assert [u.capture_at for u in units] == [capture_at, capture_at + 0.14]
+    if capture_at < 1704067200:
+        assert [u.stored_capture_at for u in units] == pytest.approx([1799999999.8, 1799999999.94], rel=0, abs=1e-6)
+    else:
+        assert all(u.stored_capture_at is None for u in units)
     assert [(u.coverage_runs[0]['start'], u.coverage_runs[0]['end']) for u in units] == [(0, 3), (7, 10)]
     assert not decoder.all_covered
 
@@ -202,7 +211,7 @@ async def test_batch_admission_only_trusts_its_decoder_full_proof(ledger, identi
 
 
 async def test_fully_covered_batch_hold_settles_without_new_reservation(hook, monkeypatch):
-    monkeypatch.setattr(adapter, 'enabled_for', lambda *a: True)
+    monkeypatch.setattr(adapter, 'enabled_for', lambda *a, **k: True)
     monkeypatch.setattr(adapter, 'admit_held', AsyncMock(return_value=adapter.HeldAdmission('covered')))
     reserve = Mock(side_effect=AssertionError('covered audio must not reserve batch spend'))
     monkeypatch.setattr(recovery.cap_hold_reservations, 'reserve', reserve)
@@ -479,11 +488,13 @@ async def test_delegation_checkpoint_atomically_carries_children_or_writes_nothi
 
 
 @pytest.mark.parametrize('rate', [8000, 24000, 48000])
+@pytest.mark.parametrize('capture_at', [1760000000, 788918400])
 def test_native_rate_batch_trim_precedes_resampling_without_invented_provenance(
     ledger,
     identity,
     tmp_path,
     rate,
+    capture_at,
 ):
     from pathlib import Path
 
@@ -499,10 +510,17 @@ def test_native_rate_batch_trim_precedes_resampling_without_invented_provenance(
     frame_map['claim']['rate_hz'] = rate
     frame_map['offsets'] = [i * rate for i in range(4)]
     coverage.record(uid, key, rec('committed', 'live', (1, 2)))
-    decoder = HeldDecoder(uid, path, 1760000000, {'source_frame_map': frame_map}, legacy=adapter.wav_units)
+    meta = {'source_frame_map': frame_map, 'timestamp': capture_at}
+    if capture_at < 1704067200:
+        meta['early_capture_offset'] = capture_at - (1800000000 - 3)
+    decoder = HeldDecoder(uid, path, capture_at, meta, legacy=adapter.wav_units)
     units = list(decoder(3600))
     assert len(units) == 2 and not decoder.all_covered
-    assert [unit.capture_at for unit in units] == [1760000000, 1760000002]
+    assert [unit.capture_at for unit in units] == [capture_at, capture_at + 2]
+    if capture_at < 1704067200:
+        assert [unit.stored_capture_at for unit in units] == [1800000000 - 3, 1800000000 - 1]
+    else:
+        assert all(unit.stored_capture_at is None for unit in units)
     assert all(not unit.coverage_runs for unit in units)
     import io
 

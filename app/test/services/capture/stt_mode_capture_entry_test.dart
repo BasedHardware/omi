@@ -66,24 +66,35 @@ void main() {
 
     expect(capture.openCalls, 1);
     expect(capture.lastConfig, isNotNull);
-    expect(capture.lastConfig!.sttConfigId, SttModeResolver.freemiumOnDeviceId);
+    expect(capture.lastConfig!.provider, SttProvider.onDeviceWhisper);
     expect(capture.lastConfig!.isEnabled, isTrue);
+    // The switch at the cap is the permanent phone choice: persisted and pinned before the socket opens.
+    expect(SharedPreferencesUtil().customSttConfig.sttConfigId, capture.lastConfig!.sttConfigId);
+    expect(SharedPreferencesUtil().paywallOnDeviceSttConfigId, capture.lastConfig!.sttConfigId);
+    expect(capture.lastConfig!.sendRawAudioToOmi, isFalse);
   });
 
-  test('entry: Android not-ready basic never reaches openConversationSocket', () async {
+  var prepared = 0;
+  setUp(() => prepared = 0);
+
+  test('entry: not-ready basic keeps today\'s Omi socket (server holds the audio) and prepares the model', () async {
     SttModeResolver.instance = SttModeResolver(
       flagReader: () => true,
       allowanceReader: () => const TranscriptionAllowanceSnapshot(mode: 'on_device', reason: 'subscription_inactive'),
       readinessReader: ({String? language}) async => FreemiumReadiness.requiresSetup,
       onDeviceConfigBuilder: () => const CustomSttConfig(provider: SttProvider.onDeviceWhisper),
+      killSwitchReader: () async => false,
+      prepareOnDevice: ({String? language}) => prepared++,
     );
     final capture = _RecordingSocketCapture();
     await start(capture);
 
-    expect(capture.openCalls, 0, reason: 'managed socket must be unreachable for Android-not-ready basic');
+    expect(capture.openCalls, 1);
+    expect(capture.lastConfig, isNull, reason: 'not ready falls back to the Omi default socket, as with the flag off');
+    expect(prepared, 1);
   });
 
-  test('entry: unsupported codec + on_device never falls back to Omi', () async {
+  test('entry: unsupported codec + on_device keeps today\'s Omi socket', () async {
     SttModeResolver.instance = SttModeResolver(
       flagReader: () => true,
       allowanceReader: () =>
@@ -95,7 +106,8 @@ void main() {
     final capture = _RecordingSocketCapture();
     await start(capture, codec: BleAudioCodec.aac);
 
-    expect(capture.openCalls, 0);
+    expect(capture.openCalls, 1);
+    expect(capture.lastConfig, isNull);
   });
 
   test('entry: flag off still opens today\'s managed socket for basic', () async {

@@ -31,7 +31,7 @@ def runtime_mode(monkeypatch):
     """Drive the (f) reader; lane 6 implements it behind the same name."""
     state = {'value': 'on'}
 
-    def legacy_sync_mode():
+    def legacy_sync_mode(uid=None):
         value = state['value']
         if isinstance(value, BaseException):
             raise value
@@ -85,6 +85,33 @@ def test_mode_gauge_marks_one_mode(runtime_mode):
     legacy_dark.current_mode()
     values = {m.value: legacy_dark.OMI_LEGACY_SYNC_MODE.labels(mode=m.value)._value.get() for m in LegacySyncMode}
     assert values == {'on': 0, 'draining': 0, 'dark': 1}
+
+
+def test_partial_dark_checks_the_owner_before_any_sequencer_claim(monkeypatch):
+    from unittest.mock import Mock
+    from utils.sync import uid_sequencer
+
+    seen = []
+
+    def mode(uid=None):
+        seen.append(uid)
+        return DARK if uid == 'test-uid' else ON
+
+    monkeypatch.setattr(legacy_dark, 'current_mode', mode)
+    monkeypatch.setattr(uid_sequencer.registry, 'production_stage', lambda: True)
+    sample = Mock(side_effect=RuntimeError('outside cohort reached existing sequencer'))
+    monkeypatch.setattr(uid_sequencer.registry, 'waiting_sample', sample)
+    deferred = Mock()
+    monkeypatch.setattr(uid_sequencer.registry, 'defer_owner', deferred)
+    assert not legacy_dark.sequencer_registration_allowed(uid='test-uid')
+    assert legacy_dark.sequencer_dispatch_allowed()  # the partial sweep must still run
+    assert uid_sequencer.kick('test-uid') is False
+    assert uid_sequencer.reconcile_uid('test-uid', {}) == 'legacy_dark'
+    deferred.assert_called_once()
+    sample.assert_not_called()
+    with pytest.raises(RuntimeError, match='outside cohort'):
+        uid_sequencer.reconcile_uid('synthetic-owner', {})
+    assert seen[-1] == 'synthetic-owner'
 
 
 @pytest.mark.parametrize(
@@ -230,6 +257,21 @@ def test_informational_ledger_counts_never_gate():
     assert dark_entry_verdict(census(0, ledger_processing_legacy=None), census(600, ledger_retryable_legacy=5)).ready
 
 
+def test_retained_cap_holds_never_gate_dark():
+    # Held audio waiting on credits never drains to zero (5.3M rows in prod); dark does not strand it.
+    assert 'cap_holds_awaiting_legacy' not in legacy_dark.CENSUS_FIELDS
+    first, second = census(0, cap_holds_awaiting_legacy=5_304_010), census(600, cap_holds_awaiting_legacy=None)
+    assert dark_entry_verdict(first, second).ready
+    assert first.nonzero() == {}
+
+
+def test_census_counts_the_cap_hold_redrive_pending_states():
+    from database.cap_hold_redrive import PENDING_STATES
+    from scripts.legacy_dark import drain_census
+
+    assert drain_census.CAP_HOLD_PENDING_STATES == PENDING_STATES
+
+
 def test_queue_spec_round_trips_to_gcloud_flags():
     from scripts.legacy_dark import legacy_queues
 
@@ -265,7 +307,7 @@ def test_sequencer_kick_and_sweep_are_inert_in_dark(monkeypatch):
     claim = MagicMock()
     monkeypatch.setattr(uid_sequencer, '_claim_next', claim)
     monkeypatch.setattr(uid_sequencer.registry, 'due_owners', claim)
-    monkeypatch.setattr(legacy_dark, 'current_mode', lambda: DARK)
+    monkeypatch.setattr(legacy_dark, 'current_mode', lambda uid=None: DARK)
     assert uid_sequencer.kick('test-uid') is False
     assert uid_sequencer.sweep() == {'legacy_dark': 1}
     claim.assert_not_called()

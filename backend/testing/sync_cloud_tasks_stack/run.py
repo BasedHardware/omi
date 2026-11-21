@@ -288,6 +288,11 @@ class Stack:
                 # Pin the policy exercised by this fixture rather than inherit
                 # a developer kill switch or depend on a changing default.
                 'SYNC_PROCESSING_HOLD_ENABLED': str(self.processing_hold_enabled).lower(),
+                # The emulator makes the code defaults resolve these on (prod
+                # serving truth since 2026-11-01); this harness asserts the eager
+                # inline reprocess path, so pin the pre-default state here.
+                'SYNC_REPROCESS_COALESCE_ENABLED': 'false',
+                'CONVERSATION_LLM_INPUT_DEDUPE_ENABLED': 'false',
                 'SYNC_TASKS_PROJECT': PROJECT,
                 'SYNC_TASKS_LOCATION': 'local',
                 'SYNC_TASKS_QUEUE': SYNC_QUEUE,

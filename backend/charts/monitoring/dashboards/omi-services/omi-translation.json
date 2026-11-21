@@ -27,7 +27,7 @@
       }
     ]
   },
-  "description": "Omi Translation Pipeline — NLLB self-hosted service + backend TranslationService metrics (google or nllb provider)",
+  "description": "Omi Translation Pipeline — NLLB self-hosted service (dev only; retired in prod) + backend TranslationService metrics (luna or nllb provider)",
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 1,
@@ -537,11 +537,11 @@
           ]
         }
       },
-      "title": "NLLB → Google Fallback Rate",
+      "title": "NLLB → Luna Fallback Rate",
       "type": "stat",
       "targets": [
         {
-          "expr": "(sum(rate(omi_translation_requests_total{provider=\"google\"}[$__rate_interval])) / (sum(rate(omi_translation_requests_total[$__rate_interval])) > 0)) * 100",
+          "expr": "(sum(rate(omi_fallback_total{from_mode=\"nllb\",to_mode=\"luna\"}[$__rate_interval])) / (sum(rate(omi_translation_requests_total[$__rate_interval])) > 0)) * 100",
           "legendFormat": "fallback %"
         }
       ]

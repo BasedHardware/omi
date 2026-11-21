@@ -229,7 +229,12 @@ def test_canary_uses_scheduler_oidc_and_long_declared_deadline():
     prod = config['environments']['prod']['jobs']
     canary = next(row for row in prod if row['name'] == 'dream-agent-canary-half-hourly')
     sweep = next(row for row in prod if row['name'] == 'dream-agent-sweep-hourly')
-    assert canary['target']['oidc'] == sweep['target']['oidc']
+    assert canary['target']['oidc']['service_account'] == sweep['target']['oidc']['service_account']
+    for job, endpoint in ((canary, 'canary'), (sweep, 'sweep')):
+        origin = job['target']['uri'].removesuffix('/v2/dream-agent/' + endpoint)
+        assert job['target']['oidc']['audience'] == origin + '/v2/sync-jobs/run'
+    assert 'backend-sync-backfill-' not in canary['target']['uri']
+    assert 'backend-sync-backfill-' in sweep['target']['uri']
     assert int(canary['attempt_deadline'][:-1]) > dream_canary.DEADLINE_SECONDS
 
 

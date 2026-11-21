@@ -5,14 +5,26 @@
  * control commands back to the main window.
  */
 
-import type { RecordingState, AudioMode, TranscriptSegment } from '@/components/recording/RecordingContext';
+import type {
+  RecordingState,
+  AudioMode,
+  TranscriptSegment,
+} from '@/components/recording/RecordingContext';
 
 // Channel name for recording state sync
 const CHANNEL_NAME = 'omi-recording-channel';
 
 // Message types
 export type RecordingBroadcastMessage =
-  | { type: 'state-update'; state: RecordingState; audioMode: AudioMode; duration: number; micLevel: number; systemLevel: number }
+  | {
+      type: 'state-update';
+      state: RecordingState;
+      audioMode: AudioMode;
+      duration: number;
+      micLevel: number;
+      systemLevel: number;
+      isBatchSession?: boolean;
+    }
   | { type: 'segments-update'; segments: TranscriptSegment[] }
   | { type: 'command'; command: 'pause' | 'resume' | 'stop' }
   | { type: 'request-state' };
@@ -37,7 +49,8 @@ export function broadcastStateUpdate(
   audioMode: AudioMode,
   duration: number,
   micLevel: number,
-  systemLevel: number
+  systemLevel: number,
+  isBatchSession: boolean,
 ): void {
   const message: RecordingBroadcastMessage = {
     type: 'state-update',
@@ -46,6 +59,7 @@ export function broadcastStateUpdate(
     duration,
     micLevel,
     systemLevel,
+    isBatchSession,
   };
   channel.postMessage(message);
 }
@@ -55,7 +69,7 @@ export function broadcastStateUpdate(
  */
 export function broadcastSegmentsUpdate(
   channel: BroadcastChannel,
-  segments: TranscriptSegment[]
+  segments: TranscriptSegment[],
 ): void {
   const message: RecordingBroadcastMessage = {
     type: 'segments-update',
@@ -69,7 +83,7 @@ export function broadcastSegmentsUpdate(
  */
 export function sendRecordingCommand(
   channel: BroadcastChannel,
-  command: 'pause' | 'resume' | 'stop'
+  command: 'pause' | 'resume' | 'stop',
 ): void {
   const message: RecordingBroadcastMessage = {
     type: 'command',

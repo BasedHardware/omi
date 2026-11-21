@@ -145,7 +145,7 @@ def _people_spellings(uid: str):
     cache = _run_people.get()
     if cache is not None and uid in cache:
         return cache[uid]
-    people = list_people(get_firestore_client(), uid, limit=MAX_PEOPLE_READ, memoize=True)
+    people = list_people(get_firestore_client(), uid, limit=MAX_PEOPLE_READ, memoize=True, memo_site='known_spellings')
     spellings = _trusted_people_spellings(people)
     if cache is not None:
         cache[uid] = spellings

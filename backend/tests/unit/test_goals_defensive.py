@@ -72,13 +72,19 @@ def _setup_stub_goals(monkeypatch, goals, llm_reply="Keep taking consistent acti
     monkeypatch.setattr(
         llm_goals,
         "_get_goal_context",
-        lambda *_a: {"conversation_context": "Discussion on goals", "chat_context": "Planning", "memory_context": "User notes"},
+        lambda *_a: {
+            "conversation_context": "Discussion on goals",
+            "chat_context": "Planning",
+            "memory_context": "User notes",
+        },
     )
     monkeypatch.setattr(llm_goals, "track_usage", lambda *_a, **_k: nullcontext())
     monkeypatch.setattr(
         llm_goals,
         "get_llm",
-        lambda _name: SimpleNamespace(invoke=lambda prompt: prompts.append(prompt) or SimpleNamespace(content=llm_reply)),
+        lambda _name: SimpleNamespace(
+            invoke=lambda prompt: prompts.append(prompt) or SimpleNamespace(content=llm_reply)
+        ),
     )
     return prompts
 
@@ -97,7 +103,9 @@ class TestGoalAdviceNullSafety:
             "current_value": None,
             "target_value": None,
         }
-        prompts = _setup_stub_goals(monkeypatch, {"goal_qual_1": goal_data}, llm_reply="Meditate for 5 minutes each morning.")
+        prompts = _setup_stub_goals(
+            monkeypatch, {"goal_qual_1": goal_data}, llm_reply="Meditate for 5 minutes each morning."
+        )
 
         advice = llm_goals.get_goal_advice("u1", "goal_qual_1")
 
@@ -219,7 +227,10 @@ class TestGoalSuggestionNullSafety:
             "get_llm",
             lambda _name: SimpleNamespace(invoke=lambda _p: SimpleNamespace(content=llm_json)),
         )
-        with patch("utils.memory.memory_service.MemoryService.read", return_value=[SimpleNamespace(dict=lambda: {"content": "water"})]):
+        with patch(
+            "utils.memory.memory_service.MemoryService.read",
+            return_value=[SimpleNamespace(dict=lambda: {"content": "water"})],
+        ):
             res = llm_goals.suggest_goal("u1")
 
         assert res["suggested_title"] == "Drink more water"
@@ -254,7 +265,10 @@ class TestGoalSuggestionNullSafety:
             "get_llm",
             lambda _name: SimpleNamespace(invoke=lambda _p: SimpleNamespace(content=llm_json)),
         )
-        with patch("utils.memory.memory_service.MemoryService.read", return_value=[SimpleNamespace(dict=lambda: {"content": "sleep"})]):
+        with patch(
+            "utils.memory.memory_service.MemoryService.read",
+            return_value=[SimpleNamespace(dict=lambda: {"content": "sleep"})],
+        ):
             res = llm_goals.suggest_goal("u1")
 
         assert res["suggested_min"] <= res["suggested_max"]
@@ -280,7 +294,10 @@ class TestGoalSuggestionNullSafety:
             "get_llm",
             lambda _name: SimpleNamespace(invoke=lambda _p: SimpleNamespace(content=llm_json)),
         )
-        with patch("utils.memory.memory_service.MemoryService.read", return_value=[SimpleNamespace(dict=lambda: {"content": "running"})]):
+        with patch(
+            "utils.memory.memory_service.MemoryService.read",
+            return_value=[SimpleNamespace(dict=lambda: {"content": "running"})],
+        ):
             res = llm_goals.suggest_goal("u1")
 
         assert res["suggested_target"] == 10.0
@@ -306,7 +323,10 @@ class TestGoalSuggestionNullSafety:
             "get_llm",
             lambda _name: SimpleNamespace(invoke=lambda _p: SimpleNamespace(content="I suggest you run daily!")),
         )
-        with patch("utils.memory.memory_service.MemoryService.read", return_value=[SimpleNamespace(dict=lambda: {"content": "run"})]):
+        with patch(
+            "utils.memory.memory_service.MemoryService.read",
+            return_value=[SimpleNamespace(dict=lambda: {"content": "run"})],
+        ):
             res = llm_goals.suggest_goal("u1")
 
         validated = GoalSuggestionResponse(**res)
@@ -405,7 +425,10 @@ class TestBooleanTrapDefensive:
             "get_llm",
             lambda _name: SimpleNamespace(invoke=lambda _p: SimpleNamespace(content=llm_json)),
         )
-        with patch("utils.memory.memory_service.MemoryService.read", return_value=[SimpleNamespace(dict=lambda: {"content": "water"})]):
+        with patch(
+            "utils.memory.memory_service.MemoryService.read",
+            return_value=[SimpleNamespace(dict=lambda: {"content": "water"})],
+        ):
             res = llm_goals.suggest_goal("u1")
 
         assert res["suggested_target"] == 10.0

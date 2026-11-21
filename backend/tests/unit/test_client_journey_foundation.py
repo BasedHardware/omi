@@ -4,6 +4,7 @@ from unittest.mock import MagicMock
 
 import pytest
 from starlette.requests import ClientDisconnect
+from prometheus_client import CollectorRegistry, Counter
 
 from utils import metrics
 from utils.journey_metrics_contract import (
@@ -74,7 +75,38 @@ def test_client_journey_attempt_exports_only_constant_app_build(monkeypatch):
         client_kind='desktop_macos',
         app_build='unknown',
         outcome='success',
+        reason='none',
     )
+
+
+def test_terminal_reason_exports_only_closed_issue_classes(monkeypatch):
+    _install_client_journey_metrics(monkeypatch)
+    terminal = Counter(
+        'test_client_terminal',
+        'Isolated terminal label contract',
+        metrics.OMI_CLIENT_JOURNEY_TERMINAL_TOTAL._labelnames,
+        registry=CollectorRegistry(),
+    )
+    monkeypatch.setattr(journeys, 'OMI_CLIENT_JOURNEY_TERMINAL_TOTAL', terminal)
+    private_inputs = (
+        'a' * 28,
+        'person@example.test',
+        'conversations/private-job-id/audio.wav',
+        'RuntimeError: arbitrary provider response',
+        None,
+    )
+    for outcome in CLIENT_JOURNEY_OUTCOMES:
+        for reason in (*CLIENT_JOURNEY_ISSUE_CLASSES, *private_inputs):
+            journeys.record_client_journey_terminal('desktop_chat', 'desktop_macos', outcome, 1, issue_class=reason)
+    labels = _sample_label_sets(terminal, 'test_client_terminal_total')
+    assert {dict(sample)['reason'] for sample in labels} == set(CLIENT_JOURNEY_ISSUE_CLASSES) | {'none'}
+    for sample in labels:
+        values = dict(sample)
+        if values['outcome'] in {'success', 'cancelled'}:
+            assert values['reason'] == 'none'
+        else:
+            assert values['reason'] in CLIENT_JOURNEY_ISSUE_CLASSES
+    assert len(labels) == 3 * len(CLIENT_JOURNEY_ISSUE_CLASSES) + 2
 
 
 @pytest.mark.parametrize(
@@ -194,6 +226,7 @@ def test_streaming_attempt_records_failure_when_stream_breaks_after_success_cand
         client_kind='desktop_macos',
         app_build='unknown',
         outcome='failure',
+        reason='provider_error',
     )
     issues.labels.assert_called_once_with(
         journey='desktop_chat',
@@ -232,6 +265,7 @@ def test_streaming_attempt_records_success_only_after_clean_exhaustion(monkeypat
         client_kind='desktop_windows',
         app_build='unknown',
         outcome='success',
+        reason='none',
     )
     issues.labels.assert_not_called()
 
@@ -275,6 +309,7 @@ def test_streaming_attempt_error_frame_wins_over_later_done(monkeypatch):
         client_kind='pi_mono_unknown_os',
         app_build='unknown',
         outcome='failure',
+        reason='upstream_rejected',
     )
     issues.labels.assert_called_once_with(
         journey='desktop_chat',

@@ -25,8 +25,20 @@ LEASE = 120.0
 
 
 @pytest.fixture
-def ob(outbox_backend):  # noqa: F811
+def ob(outbox_backend, request):  # noqa: F811
     outbox_backend.store_harness.seed_user('o')
+    if outbox_backend.name == 'emulator' and request.node.originalname in {
+        'test_pl002_live_lease_prefix_cannot_hide_runnable_work',
+        'test_pl002_retired_privacy_prefix_cannot_consume_the_claim_budget',
+        'test_pl003_explicit_backlog_budget_is_not_silently_capped_at_100',
+    }:
+        request.node.add_marker(
+            pytest.mark.xfail(
+                reason='https://github.com/BasedHardware/omi/issues/23558 — Firestore pull discovery/budget defect',
+                strict=True,
+                raises=AssertionError,
+            )
+        )
     return outbox_backend
 
 
@@ -336,3 +348,73 @@ def test_deleted_conversation_in_the_payload_discards_the_row(ob):
     put(ob, 'gone')
     put(ob, 'live')
     assert [c.payload['conversation_id'] for c in ob.outbox.claim(5, LEASE, now=T0)] == ['live']
+
+
+# Daily parity ledger PL-002/003/004: lifecycle lesson section 1, contract (b).
+# The assertions are identical on old Firestore, Postgres and the simulator.
+def parity_enqueue(ob, label, *, due=T0, tx=None):
+    owner = ob.store_harness.uid('o')
+    return ob.outbox.enqueue(ob.key(owner, label), owner, ob.payload(label), due, tx=tx, now=T0)
+
+
+def test_pl002_live_lease_prefix_cannot_hide_runnable_work(ob):
+    for i in range(101):
+        queued = parity_enqueue(ob, f'leased-{i}', due=T0 - 200 + i)
+        assert isinstance(ob.outbox.claim_key(queued.row_id, queued.wake_token, LEASE, now=T0), Claim)
+    valid = parity_enqueue(ob, 'runnable')
+
+    claims = ob.outbox.claim(1, LEASE, now=T0 + 1)
+    assert [claim.row_id for claim in claims] == [valid.row_id]
+    assert ob.outbox.ack(claims[0], 'done', now=T0 + 2)
+    assert ob.outbox.claim(1, LEASE, now=T0 + 3) == []
+
+
+def test_pl002_retired_privacy_prefix_cannot_consume_the_claim_budget(ob):
+    owner = ob.store_harness.uid('o')
+    for i in range(101):
+        label = f'deleted-{i}'
+        parity_enqueue(ob, label, due=T0 - 200 + i)
+        ob.store_harness.customer.delete_conversation(owner, label)
+    valid = parity_enqueue(ob, 'runnable')
+
+    claims = ob.outbox.claim(1, LEASE, now=T0)
+    assert [claim.row_id for claim in claims] == [valid.row_id]
+    assert ob.outbox.ack(claims[0], 'done', now=T0 + 1)
+    assert ob.outbox.claim(1, LEASE, now=T0 + 2) == []
+
+
+def test_pl003_explicit_backlog_budget_is_not_silently_capped_at_100(ob):
+    expected = {parity_enqueue(ob, f'due-{i:03}', due=T0 - 200 + i).row_id for i in range(125)}
+    future = parity_enqueue(ob, 'future', due=T0 + 500)
+
+    claims = ob.outbox.claim(125, LEASE, now=T0)
+    assert len(claims) == 125
+    assert {claim.row_id for claim in claims} == expected
+    assert all(claim.attempt == 1 for claim in claims)
+    assert ob.outbox.claim(125, LEASE, now=T0 + 1) == []
+    # A larger budget neither duplicates leased work nor admits future work.
+    for claim in claims:
+        assert ob.outbox.ack(claim, 'done', now=T0 + 2)
+    assert ob.outbox.claim(125, LEASE, now=T0 + 499) == []
+    assert [claim.row_id for claim in ob.outbox.claim(125, LEASE, now=T0 + 500)] == [future.row_id]
+
+
+def test_pl004_failed_wakes_are_errors_until_a_repair_actually_succeeds(ob):
+    # Model a crash between the caller's transactional enqueue and wake. This
+    # isolates sweep accounting from backend-specific enqueue error handling.
+    queued = {ob.run_tx(lambda tx, i=i: parity_enqueue(ob, f'pending-{i}', tx=tx)).row_id for i in range(3)}
+    ob.fail_wakes[0] = True
+    assert ob.wakes == []
+
+    failed = ob.outbox.sweep(now=T0 + 1, limit=3)
+    assert (failed.rewoken, failed.expired_leases, failed.discarded, failed.errors) == (0, 0, 0, 3)
+    assert ob.wakes == []
+
+    ob.fail_wakes[0] = False
+    repaired = ob.outbox.sweep(now=T0 + 2, limit=3)
+    assert (repaired.rewoken, repaired.expired_leases, repaired.discarded, repaired.errors) == (3, 0, 0, 0)
+    assert {row_id for row_id, _, _ in ob.wakes} == queued
+    ob.wakes.clear()
+    settled = ob.outbox.sweep(now=T0 + 3, limit=3)
+    assert (settled.rewoken, settled.expired_leases, settled.discarded, settled.errors) == (0, 0, 0, 0)
+    assert ob.wakes == []

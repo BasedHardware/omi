@@ -11,8 +11,13 @@ import importlib.util
 import sys
 from pathlib import Path
 
+import pytest
+
 REPO = Path(__file__).resolve().parents[3]
 SCRIPT = REPO / "backend/scripts/verify_pusher_source_closure.py"
+
+
+pytestmark = pytest.mark.usefixtures('isolated_git_env')
 
 
 def _load_module():

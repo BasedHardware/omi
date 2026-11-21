@@ -7,15 +7,59 @@ from concurrent.futures import ThreadPoolExecutor
 from contextlib import ExitStack
 from contextvars import copy_context
 from copy import deepcopy
-from dataclasses import asdict
 from datetime import datetime, timezone
+from functools import lru_cache
 import hashlib
+import importlib.util
 import json
 import logging
 import os
 from pathlib import Path
 import sys
 from unittest.mock import patch
+
+TRANSACTION_FIXTURE = Path(__file__).resolve().parents[2] / 'tests/unit/fixtures/strict_firestore_transaction.py'
+
+
+@lru_cache(maxsize=1)
+def fixed_transaction_fixture():
+    """Load fixed-tool bytes, never the selected product snapshot's fixture."""
+    spec = importlib.util.spec_from_file_location('_fixed_batch_replay_transaction', TRANSACTION_FIXTURE)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+class ResultTransactionLog:
+    """Single-attempt, single-threaded result transactions for offline replay.
+
+    Keep this facade in the fixed runner so its implementation is covered by
+    adapter_sha256 and exists even when the product snapshot predates it.
+    Retry/contention are not simulated.
+    """
+
+    def run(self, operation):
+        if getattr(self, '_result_transaction', None) is not None:
+            raise RuntimeError('nested replay result transaction is unsupported')
+        database = fixed_transaction_fixture().StrictFirestore(
+            {('results', key): row for key, row in self.results.items()}
+        )
+        self._result_transaction = database
+        try:
+            result = operation(database.transaction())
+        finally:
+            self._result_transaction = None
+        # Failed callbacks cannot publish their private partial mutations.
+        self.results.update({key: deepcopy(row) for (table, key), row in database.rows.items() if table == 'results'})
+        return result
+
+    def ref(self, table, sid):
+        database = getattr(self, '_result_transaction', None)
+        if database is not None:
+            if table != 'results':
+                raise NotImplementedError('replay transactions support only result metadata')
+            return database.collection('results').document(sid)
+        return super().ref(table, sid)
 
 
 def geometry_boundaries(units, validate_spans, source_audio, item_type, priority):
@@ -117,6 +161,43 @@ def geometry_boundaries(units, validate_spans, source_audio, item_type, priority
     }
 
 
+def replay_worker_words(item, words):
+    """Synthetic provider clocks through the selected product's real worker."""
+    import numpy as np
+    from config.batch_pipeline_providers import ProviderConfig
+    from diarizer.batch_pipeline import PipelineWorker
+
+    class Provider:
+        def transcribe_batch(self, samples):
+            return [deepcopy(words) for _ in samples]
+
+    saved = []
+
+    def persist(work, payload):
+        saved.append(payload)
+        return 'synthetic:worker-result'
+
+    worker = PipelineWorker(
+        config=ProviderConfig(context_seconds=0),
+        language_of=lambda _: 'en',
+        decode=lambda _: np.ones(round(item.duration_seconds * 16000), dtype=np.float32),
+        vad=lambda samples: [(0.0, len(samples) / 16000)],
+        words_providers={'parakeet': Provider()},
+        diarizers={'pyannote': lambda _: {'turns': []}},
+        persist=persist,
+    )
+    with patch.dict(
+        os.environ,
+        {
+            'STT_CAP_OFFLINE_ENFORCEMENT': 'false',
+            'BATCH_PIPELINE_EMPTY_ASR_SAFETY_NET_ENABLED': 'false',
+            'BATCH_PIPELINE_DIARIZE_SPEECH_ONLY_ENABLED': 'false',
+        },
+    ):
+        results = worker.process_batch([item])
+    return results, saved
+
+
 def replay(corpus, backend):
     # This adapter is fixed across REF and BASE; only product code changes.
     sys.path.insert(0, str(backend))
@@ -150,11 +231,19 @@ def _replay(corpus):
     from testing.pipeline_sim.clock import VirtualClock
     from testing.pipeline_sim.projection_drain import ChainLog, Lanes
     from utils.batch_pipeline import projection, projection_followup, source_audio
-    from utils.batch_pipeline.contracts import Priority, ProjectionBinding, WorkItem, projection_speech_spans
+    from utils.batch_pipeline.contracts import (
+        Priority,
+        ProjectionBinding,
+        WorkItem,
+        WorkResult,
+        ValidationFailureWork,
+        projection_speech_spans,
+    )
     from utils.batch_pipeline.scheduler import owner_key
     from utils.sync import bridge
     from utils.sync.assignment import assign_in_transaction
-    from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
+
+    StrictFirestore = fixed_transaction_fixture().StrictFirestore
 
     exceptions = Counter()
     issues = defaultdict(set)
@@ -183,7 +272,7 @@ def _replay(corpus):
             if error is not None and ('outcome=error' in event.msg or 'outcome=retry' in event.msg):
                 record(error, 'followup' if event.name.endswith('projection_followup') else 'walk')
 
-    class ReplayLog(ChainLog):
+    class ReplayLog(ResultTransactionLog, ChainLog):
         namespace = 'batch_pipeline_test_replay'
 
         def policy(self, sid):
@@ -224,7 +313,11 @@ def _replay(corpus):
                     self.prepare(transaction)
                     assigned = planned[0] if planned else {}
                     receipt = {
-                        'state': 'quarantined' if options.get('quarantined') else 'persisted',
+                        'state': (
+                            'quarantined'
+                            if options.get('quarantined')
+                            else 'ready' if options.get('silence') else 'persisted'
+                        ),
                         'conversation_id': assigned.get('id'),
                         'audio_required': False,
                         'enrichment_required': False,
@@ -237,8 +330,14 @@ def _replay(corpus):
                     held = options.get('quarantined') or any(
                         part['state'] == 'quarantined' for part in (row.get('projection_parts') or {}).values()
                     )
-                    summary = {**receipt, 'state': 'quarantined' if held else 'persisted'}
-                    row.update(projection=summary, projection_state='quarantine_held' if held else 'persisted')
+                    parts = list((row.get('projection_parts') or {}).values()) or [receipt]
+                    state = (
+                        'quarantined'
+                        if held
+                        else 'ready' if all(part['state'] == 'ready' for part in parts) else 'persisted'
+                    )
+                    summary = {**receipt, 'state': state}
+                    row.update(projection=summary, projection_state='quarantine_held' if held else state)
                     if options.get('quarantined'):
                         log.jobs[sid]['recovery_state'] = 'held'
                     log.owners.setdefault(row['owner_key'], {})['projection_watermark'] = sid
@@ -271,6 +370,7 @@ def _replay(corpus):
     if not units:
         coverage['invalid_empty_corpus'] = 1
     payloads = {}
+    worker_results = {}
     untestable = set()
     for ordinal, unit in enumerate(units):
         sid, owner = unit['unit'], unit['owner']
@@ -298,7 +398,7 @@ def _replay(corpus):
             continue
         lane = unit.get('lane')
         log.jobs[sid] = {
-            **asdict(item),
+            **item.to_dict(),
             'policy_parts': log.policy_parts,
             **({'fresh_capture': lane == 'fresh'} if lane in {'fresh', 'backfill'} else {}),
         }
@@ -331,6 +431,42 @@ def _replay(corpus):
             untestable.add(sid)
         if sid in untestable:
             continue
+        if 'worker_words' in unit:
+            if not corpus.get('source', '').startswith('synthetic-'):
+                raise ValueError('worker hypotheses require an explicitly synthetic corpus')
+            expected = unit.get('expected_worker_result')
+            if not isinstance(expected, dict):
+                raise ValueError('synthetic worker hypotheses require an expected result')
+            results, saved = replay_worker_words(item, unit['worker_words'])
+            coverage['worker_exercised'] += 1
+            if len(results) == 1 and isinstance(results[0], WorkResult) and len(saved) == 1:
+                worker_results[sid] = {
+                    'outcome': results[0].outcome,
+                    'persisted': True,
+                    'word_timestamps': [word['timestamp'] for word in saved[0]['words']],
+                }
+                if worker_results[sid] != expected:
+                    key = 'worker_oracle:WorkerResultMismatch:expected_outcome_and_clocks'
+                    exceptions[key] += 1
+                    issues[sid].add(key)
+                    unit_counts[sid][key] += 1
+                    untestable.add(sid)
+                    continue
+                # The worker result, not the fixture's projection outcome,
+                # determines the branch exercised after worker persistence.
+                outcome = results[0].outcome
+                log.results[sid]['result']['outcome'] = outcome
+            else:
+                failure = results[0] if len(results) == 1 else None
+                stage = failure.stage if isinstance(failure, ValidationFailureWork) else 'worker'
+                reason = failure.reason if isinstance(failure, ValidationFailureWork) else 'missing_result'
+                key = f'{stage}:ValidationFailureWork:{reason}'
+                exceptions[key] += 1
+                issues[sid].add(key)
+                unit_counts[sid][key] += 1
+                worker_results[sid] = {'persisted': False, 'stage': stage, 'reason': reason}
+                untestable.add(sid)
+                continue
         spans = unit.get('spans')
         if spans is None and outcome != 'silence':
             coverage['missing_vad_spans'] += 1
@@ -360,6 +496,8 @@ def _replay(corpus):
             'words': [{'word': 'synthetic.', 'timestamp': [s['start'], s['end']]} for s in synthetic_spans],
             'diarization': {'turns': [{**s, 'speaker': 'a'} for s in synthetic_spans]},
         }
+        if 'worker_words' in unit:
+            payloads[sid] = saved[0]
         if outcome == 'silence':
             payloads[sid].update(speech_seconds=0.0, speech_spans=[], words=[], diarization={'turns': []})
         if unit.get('spans') is not None and outcome == 'success':
@@ -532,6 +670,7 @@ def _replay(corpus):
         'unit_exception_counts': {unit: dict(sorted(counts.items())) for unit, counts in sorted(unit_counts.items())},
         'chain_blocks': blocks,
         'persisted': len(log.persist_order),
+        'worker_results': worker_results,
         'coverage': dict(sorted(coverage.items())),
         'boundaries': boundaries,
     }

@@ -4,6 +4,7 @@ import logging
 
 from database.batch_pipeline_projection_protocol import ProjectionReplay
 from utils.observability.fallback import record_fallback
+from utils.batch_pipeline.projection_hold_observability import HoldReason, log_projection_hold
 
 logger = logging.getLogger(__name__)
 
@@ -19,7 +20,9 @@ def mirror_assignment(store, session):
         logger.warning('event=jobstore_shadow op=refresh outcome=hook_error site=projection_assignment')
 
 
-def persist_disposition(session, *, quarantined=False, privacy_deleted=False):
+def persist_disposition(
+    session, *, quarantined=False, privacy_deleted=False, hold_reason: HoldReason = 'ambiguous_generation'
+):
     # Recheck binding, ledger ownership, predecessor and privacy after planning.
     # A competing assignment receipt wins; never replace it with a no-op.
     try:
@@ -29,11 +32,14 @@ def persist_disposition(session, *, quarantined=False, privacy_deleted=False):
             receipt = session.persist_empty(quarantined=True) if quarantined else session.persist_empty(superseded=True)
     except ProjectionReplay as replay:
         return replay.receipt
-    if privacy_deleted:
+    if privacy_deleted and receipt.get('disposition') == 'source_deleted':
+        logger.info('event=batch_projection action=assignment outcome=source_deleted')
+    elif privacy_deleted:
         logger.info(
             'event=batch_projection action=assignment outcome=privacy_terminal fence_reason=conversation_deleted'
         )
     elif quarantined:
+        log_projection_hold(hold_reason)
         logger.warning('event=batch_projection action=assignment outcome=ambiguous_generation_quarantined')
         record_fallback(component='sync_dispatch', from_mode='none', to_mode='none', reason='other', outcome='degraded')
     else:

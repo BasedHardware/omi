@@ -3,7 +3,7 @@
 One runtime switch, ``rollout_cohorts/_ramp.envs.<env>.legacy_sync``, moves the
 legacy sync lane through ``on`` -> ``draining`` -> ``dark`` without a deploy.
 The value is read through ``utils.rollout.runtime_percent.legacy_sync_mode``
-(contract (f): 30s TTL, last-known-good on read errors). This module owns what
+(contract (f): 30s TTL, legacy mode fails safe to on on read errors). This module owns what
 the legacy call sites do with it:
 
 * ``on``: today's behaviour, byte for byte.
@@ -154,7 +154,7 @@ def _fallback(source: str) -> LegacySyncMode:
     return LegacySyncMode.ON
 
 
-def current_mode() -> LegacySyncMode:
+def current_mode(uid: str | None = None) -> LegacySyncMode:
     """The served mode. Never raises; every failure serves ``on``."""
     try:
         # Imported per call (a cached module lookup): router test harnesses replace
@@ -163,7 +163,7 @@ def current_mode() -> LegacySyncMode:
     except Exception:  # ImportError, or a harness's stub package without __spec__
         return _fallback('absent')
     try:
-        raw: object = runtime_percent.legacy_sync_mode()
+        raw: object = runtime_percent.legacy_sync_mode(uid)
     except NotImplementedError:
         # The (f) stub before lane 6's implementation: the switch does not exist yet.
         return _fallback('absent')
@@ -179,9 +179,9 @@ def current_mode() -> LegacySyncMode:
     return mode
 
 
-def legacy_admission_allowed(mode: Optional[LegacySyncMode] = None) -> bool:
+def legacy_admission_allowed(mode: Optional[LegacySyncMode] = None, *, uid: str | None = None) -> bool:
     """Whether a new legacy job may be created (admission, legacy-fresh, intake fallback)."""
-    return (mode or current_mode()) is LegacySyncMode.ON
+    return (mode or current_mode(uid)) is LegacySyncMode.ON
 
 
 def mode_age_seconds(now: Optional[datetime] = None) -> Optional[float]:
@@ -208,14 +208,14 @@ def mode_age_seconds(now: Optional[datetime] = None) -> Optional[float]:
     return ((now or datetime.now(timezone.utc)) - parsed).total_seconds()
 
 
-def sequencer_registration_allowed(mode: Optional[LegacySyncMode] = None) -> bool:
+def sequencer_registration_allowed(mode: Optional[LegacySyncMode] = None, *, uid: str | None = None) -> bool:
     """New sequencer owners and the pre-sequencer migration branch exist only in ``on``."""
-    return (mode or current_mode()) is LegacySyncMode.ON
+    return (mode or current_mode(uid)) is LegacySyncMode.ON
 
 
-def sequencer_dispatch_allowed(mode: Optional[LegacySyncMode] = None) -> bool:
+def sequencer_dispatch_allowed(mode: Optional[LegacySyncMode] = None, *, uid: str | None = None) -> bool:
     """``draining`` still dispatches accepted ``sync_backfill_pending`` entries; ``dark`` does not."""
-    return (mode or current_mode()) is not LegacySyncMode.DARK
+    return (mode or current_mode(uid)) is not LegacySyncMode.DARK
 
 
 def record_legacy_admission(reason: LegacyAdmissionReason | str, mode: Optional[LegacySyncMode] = None) -> None:
@@ -472,7 +472,6 @@ CENSUS_FIELDS = (
     'sync_backfill_pending',
     'sequencer_active_owners',
     'redrive_required',
-    'cap_holds_awaiting_legacy',
     'queue_depth_sync_jobs',
     'queue_depth_sync_jobs_fresh',
     'queue_depth_sync_backfill',
@@ -485,21 +484,27 @@ CENSUS_FIELDS = (
 class DrainCensus:
     """Aggregate counts only. ``None`` means the read was unavailable (fails closed).
 
-    ``cap_holds_awaiting_legacy`` is an upper bound (every ``stt_cap_holds``
-    row); the ledger status counts need a collection-group index prod does not
-    have, so they are informational and never gate.
+    ``cap_holds_awaiting_legacy`` counts pending ``stt_cap_holds`` rows and is
+    informational: it never gates ``dark``. Held rows are retained audio waiting
+    on the owner's credits (5.3M in prod on 2026-11-01), so they never drain to
+    zero, and ``dark`` does not strand them: ``cap_hold_recovery`` admits every
+    eligible hold to batch once legacy is draining/dark, and a hold whose legacy
+    spend already started finishes on the shared segment core, not on legacy
+    jobs, queues or the sequencer. Soak gate 4c (cap-hold redrives served by
+    batch) carries that assurance. The ledger status counts need a
+    collection-group index prod does not have, so they are informational too.
     """
 
     observed_at: float
     sync_backfill_pending: Optional[int]
     sequencer_active_owners: Optional[int]
     redrive_required: Optional[int]
-    cap_holds_awaiting_legacy: Optional[int]
     queue_depth_sync_jobs: Optional[int]
     queue_depth_sync_jobs_fresh: Optional[int]
     queue_depth_sync_backfill: Optional[int]
     queue_depth_sync_backfill_fresh: Optional[int]
     legacy_admissions_window: Optional[int]
+    cap_holds_awaiting_legacy: Optional[int] = None
     ledger_processing_legacy: Optional[int] = None
     ledger_retryable_legacy: Optional[int] = None
 

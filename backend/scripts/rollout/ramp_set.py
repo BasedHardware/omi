@@ -26,6 +26,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from database import rollout_cohorts as store  # noqa: E402
 from scripts.rollout.ramp_controller import DRAINING_PRECONDITIONS, QUALITY_FLOOR  # noqa: E402
 from utils.rollout.runtime_percent import write_ramp  # noqa: E402
+from scripts.rollout import live_preflight  # noqa: E402
 
 EXPECTED_TIER = {'prod': 'prod-operator', 'staging': 'dev-operator'}
 DEFAULT_TARGET = {'prod': ('based-hardware', '(default)'), 'staging': ('based-hardware-dev', 'staging')}
@@ -51,6 +52,9 @@ def build_parser() -> argparse.ArgumentParser:
     op.add_argument('--show', action='store_true', help='Print the env entry and document revision (read-only)')
     op.add_argument('--percent', type=parse_percent, action='append', help='NAME=VALUE (repeatable)')
     op.add_argument('--legacy-sync', choices=store.LEGACY_SYNC_MODES)
+    parser.add_argument(
+        '--legacy-percent', type=float, help='Stable legacy retirement cohort (0..100); requires --legacy-sync'
+    )
     op.add_argument('--lock', metavar='WHO', help='Set locked_by (the controller refuses while set)')
     op.add_argument('--clear-lock', action='store_true', help='Set locked_by=null (acknowledges a controller stop)')
     parser.add_argument('--expected-revision', type=int)
@@ -68,16 +72,22 @@ def build_parser() -> argparse.ArgumentParser:
         action='store_true',
         help='Permit writing a quality-floor percent (' + ', '.join(sorted(QUALITY_FLOOR)) + ') below its floor',
     )
+    parser.add_argument('--accept-not-live')
     parser.add_argument('--apply', action='store_true', help='Perform the write (default is a dry run)')
     return parser
 
 
 def plan_change(args: argparse.Namespace, entry: dict[str, Any] | None) -> tuple[dict[str, Any], str] | str:
     """Return (change, reason) or a refusal code. Pure."""
+    if args.legacy_percent is not None and not args.legacy_sync:
+        return 'legacy_percent_requires_mode'
     if args.percent:
+        if any(name == 'legacy-sync' for name, _ in args.percent):
+            return 'legacy_percent_requires_mode'
         if entry is not None and entry['locked_by'] is None and entry['percents']:
             return 'percent_write_requires_operator_lock'
         percents = dict(args.percent)
+        live_preflight.widens_exposure(entry, {'percents': percents})
         # A seed equal to the batch percent would cut prod's live first-summary guarantee (100) to the cohort.
         lowered = sorted(n for n, floor in QUALITY_FLOOR.items() if n in percents and percents[n] < floor)
         if lowered and not args.allow_quality_decrease:
@@ -85,10 +95,18 @@ def plan_change(args: argparse.Namespace, entry: dict[str, Any] | None) -> tuple
         return {'percents': percents}, args.reason or 'unknown'
     if args.legacy_sync:
         leaving_on = args.legacy_sync != 'on' and (entry is None or entry['legacy_sync'] == 'on')
+        widening = (
+            args.legacy_sync != 'on'
+            and args.legacy_percent is not None
+            and (entry is None or args.legacy_percent > entry['percents'].get('legacy-sync', 0))
+        )
         missing = sorted(set(DRAINING_PRECONDITIONS) - set(args.precondition_met or ()))
-        if leaving_on and missing:
+        if (leaving_on or widening) and missing:
             return 'draining_precondition_unmet:' + ','.join(missing)
-        return {'legacy_sync': args.legacy_sync}, args.reason or 'unknown'
+        change: dict[str, Any] = {'legacy_sync': args.legacy_sync}
+        if args.legacy_percent is not None:
+            change['percents'] = {'legacy-sync': args.legacy_percent}
+        return change, args.reason or 'unknown'
     if args.lock:
         return {'locked_by': args.lock}, args.reason or 'locked_by_operator'
     if args.clear_lock:
@@ -114,17 +132,40 @@ def main(argv: Sequence[str] | None = None, *, client_factory: Callable[..., Any
     if args.actor is None or args.actor == CONTROLLER_ACTOR or args.expected_revision is None:
         print('writes need --actor (not ramp-controller) and --expected-revision', file=sys.stderr)
         return 2
-    planned = plan_change(args, entry)
-    if isinstance(planned, str):
-        print('ramp_set refused: ' + planned, file=sys.stderr)
+    try:
+        planned = plan_change(args, entry)
+        if isinstance(planned, str):
+            print('ramp_set refused: ' + planned, file=sys.stderr)
+            return 2
+        change, reason = planned
+        widening = live_preflight.widens_exposure(entry, change)
+    except live_preflight.MixedWrite as error:
+        print(str(error), file=sys.stderr)
         return 2
-    change, reason = planned
     if not args.apply:
         print('dry run: ' + json.dumps({'env': args.env, 'change': change, 'reason': reason, 'revision': revision}))
         return 0
     if os.getenv('GCP_AGENT_TIER') != EXPECTED_TIER[args.env]:
         print('select the matching GCP operator tier before applying', file=sys.stderr)
         return 2
+    raises = (
+        {
+            name: pct
+            for name, pct in change.get('percents', {}).items()
+            if live_preflight.widens_exposure(entry, {'percents': {name: pct}})
+        }
+        if widening
+        else {}
+    )
+    try:
+        live_preflight.override_reason('', args.accept_not_live)
+        reason = live_preflight.override_reason(reason, args.accept_not_live if raises else None)
+    except ValueError as error:
+        print(str(error), file=sys.stderr)
+        return 2
+    if args.env == 'prod':
+        for name, percent in raises.items():
+            live_preflight.require(name, percent, args.accept_not_live)
     try:
         new_revision = write_ramp(
             args.env,

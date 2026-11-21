@@ -18,6 +18,8 @@ final class RayBanMetaAudioCapture {
     private let engine = AVAudioEngine()
     private var converter: AVAudioConverter?
     private var isRunning = false
+    private var tappedInput: AVAudioInputNode?
+    private var sessionActivationAttempted = false
     private var targetInputUid: String?
 
     /// PCM16 little-endian mono frames at targetSampleRate.
@@ -76,6 +78,11 @@ final class RayBanMetaAudioCapture {
 
     func start(targetUid: String?) throws {
         guard !isRunning else { return }
+        // Setup can fail after acquiring the session or installing the tap.
+        // Release those resources before returning the original error to Dart.
+        defer {
+            if !isRunning { stop() }
+        }
 
         let session = AVAudioSession.sharedInstance()
         try session.setCategory(.playAndRecord, mode: .default, options: [.allowBluetoothHFP])
@@ -101,6 +108,7 @@ final class RayBanMetaAudioCapture {
         }
         targetInputUid = targetUid
 
+        sessionActivationAttempted = true
         try session.setActive(true, options: .notifyOthersOnDeactivation)
 
         let input = engine.inputNode
@@ -131,6 +139,7 @@ final class RayBanMetaAudioCapture {
         input.installTap(onBus: 0, bufferSize: 4096, format: inputFormat) { [weak self] buffer, _ in
             self?.convertAndEmit(buffer: buffer, outputFormat: outputFormat)
         }
+        tappedInput = input
 
         engine.prepare()
         try engine.start()
@@ -145,17 +154,23 @@ final class RayBanMetaAudioCapture {
     }
 
     func stop() {
-        guard isRunning else { return }
-        engine.inputNode.removeTap(onBus: 0)
+        guard isRunning || tappedInput != nil || sessionActivationAttempted else { return }
+        if let input = tappedInput {
+            tappedInput = nil
+            input.removeTap(onBus: 0)
+        }
         engine.stop()
         converter = nil
         isRunning = false
         targetInputUid = nil
 
-        do {
-            try AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
-        } catch {
-            // Deactivation failure is non-fatal; another component may hold the session.
+        if sessionActivationAttempted {
+            sessionActivationAttempted = false
+            do {
+                try AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+            } catch {
+                // Deactivation failure is non-fatal; another component may hold the session.
+            }
         }
     }
 

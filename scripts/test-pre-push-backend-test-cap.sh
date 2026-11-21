@@ -7,7 +7,13 @@ set -euo pipefail
 # is pushing.
 unset PRE_PUSH_SKIP_BACKEND_UNIT_TESTS PRE_PUSH_SKIP_BACKEND_TYPECHECK PRE_PUSH_SKIP_BACKEND_RUNTIME_ENV
 
-unset GIT_DIR GIT_WORK_TREE GIT_COMMON_DIR GIT_INDEX_FILE GIT_OBJECT_DIRECTORY GIT_ALTERNATE_OBJECT_DIRECTORIES
+# Do not pass a caller's repository selection to nested fixture Git commands.
+# GIT_NAMESPACE is repository-scoped but absent from Git's local-env-vars list.
+GIT_LOCAL_ENV_VARS="$(git rev-parse --local-env-vars)"
+for git_env_var in $GIT_LOCAL_ENV_VARS GIT_NAMESPACE; do
+  unset "$git_env_var"
+done
+unset GIT_LOCAL_ENV_VARS git_env_var
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 HOOK="$ROOT/scripts/pre-push"
@@ -29,11 +35,14 @@ cat > "$WORK/fake-python" <<'STUB'
 set -euo pipefail
 output=""
 reason_output=""
+focused_output=""
+changed_files=""
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --output) output="$2"; shift 2 ;;
     --reason-output) reason_output="$2"; shift 2 ;;
-    --changed-files) shift 2 ;;
+    --changed-files) changed_files="$2"; shift 2 ;;
+    --focused-output) focused_output="$2"; shift 2 ;;
     *) shift ;;
   esac
 done
@@ -44,6 +53,23 @@ while [ "$i" -lt "${STUB_SELECTED_COUNT:-0}" ]; do
   i=$((i + 1))
 done
 printf '%s\n' "${STUB_REASON:-broad selector fallout}" > "$reason_output"
+# Model the selector's contract-first artifact. The Python regression suite
+# exercises its actual path matching; this fixture verifies hook consumption.
+: > "$focused_output"
+i=0
+while [ "$i" -lt "${STUB_CONTRACT_COUNT:-0}" ]; do
+  printf 'tests/unit/test_contract_%03d.py\n' "$i" >> "$focused_output"
+  i=$((i + 1))
+done
+while IFS= read -r file; do
+  case "$file" in
+    backend/tests/*.py)
+      case "${file##*/}" in test_*.py|*_test.py) ;; *) continue ;; esac
+      [ ! -f "$file" ] || printf '%s\n' "${file#backend/}"
+      ;;
+  esac
+done < "$changed_files" | sort -u >> "$focused_output"
+
 STUB
 chmod +x "$WORK/fake-python"
 
@@ -60,9 +86,9 @@ wc -l < "$BACKEND_UNIT_TEST_FILE_LIST" | tr -d ' ' > "$RAN_COUNT_FILE"
 cp "$BACKEND_UNIT_TEST_FILE_LIST" "$RAN_LIST_FILE"
 STUB
 
-# $1 = number of changed backend test files in the diff, $2 = cap
+# $1 = changed suffix-style tests, $2 = cap, $3 = include helpers and a nested test
 run_case() {
-  local changed_test_files="$1" cap="$2" i
+  local changed_test_files="$1" cap="$2" include_helpers="${3:-0}" i
   rm -f "$WORK/ran_count" "$WORK/ran_list"
   rm -f "$WORK/repo/backend/tests/"*.py
   local -a changed=()
@@ -71,6 +97,18 @@ run_case() {
     touch "$WORK/repo/$name"
     changed+=("$name")
   done
+  if [ "$include_helpers" = 1 ]; then
+    mkdir -p "$WORK/repo/backend/tests/support" "$WORK/repo/backend/tests/unit"
+    for name in backend/tests/support/lifecycle_state_table.py backend/tests/support/__init__.py backend/tests/unit/conftest.py; do
+      touch "$WORK/repo/$name"
+      changed+=("$name")
+    done
+    if [ "$changed_test_files" -gt 0 ]; then
+      name=backend/tests/unit/test_nested.py
+      touch "$WORK/repo/$name"
+      changed+=("$name")
+    fi
+  fi
 
   (
     cd "$WORK/repo"
@@ -107,17 +145,8 @@ if [ "$ran" -gt "$CAP" ]; then
   echo "$output" >&2
   exit 1
 fi
-case "$output" in
-  *"cap is $CAP"*)
-    echo "FAIL: message advertises a cap the run may exceed instead of reporting the truncation" >&2
-    echo "$output" >&2
-    exit 1
-    ;;
-esac
-grep -q "25 backend test file(s), also over the cap of $CAP" <<<"$output" || {
-  echo "FAIL: message does not report requested vs actual counts" >&2; echo "$output" >&2; exit 1; }
-grep -q "Running the first $ran in sorted order" <<<"$output" || {
-  echo "FAIL: message does not report what actually ran" >&2; echo "$output" >&2; exit 1; }
+grep -q "running $CAP of 25 affected contracts/changed tests (cap $CAP)" <<<"$output"
+grep -q "15 focused file(s) also deferred" <<<"$output"
 
 # Truncation is deterministic: the same diff selects the same files every push.
 first_list="$(cat "$WORK/ran_list")"
@@ -130,7 +159,7 @@ test "$first_list" = "$(sort "$WORK/ran_list")" || {
 # Under the cap the existing fallback behavior is unchanged.
 output="$(run_case 4 "$CAP")"
 test "$(cat "$WORK/ran_count")" = "4"
-grep -q "running 4 changed backend test file(s) instead; cap is $CAP" <<<"$output" || {
+grep -q "running 4 of 4 affected contracts/changed tests (cap $CAP)" <<<"$output" || {
   echo "FAIL: under-cap fallback message regressed" >&2; echo "$output" >&2; exit 1; }
 
 # No changed backend test files still skips the broad suite entirely.
@@ -138,5 +167,38 @@ output="$(run_case 0 "$CAP")"
 test ! -f "$WORK/ran_count"
 grep -q "Skipping broad backend unit suite in pre-push" <<<"$output" || {
   echo "FAIL: empty fallback no longer skips" >&2; echo "$output" >&2; exit 1; }
+
+# A helper edit still requires CI's broad selector, but is not itself a test file.
+# Both standard pytest filename forms must survive while support/conftest do not.
+output="$(run_case 3 "$CAP" 1)"
+test "$(cat "$WORK/ran_count")" = 4
+grep -qx 'tests/unit/test_nested.py' "$WORK/ran_list"
+grep -qx 'tests/changed_002_test.py' "$WORK/ran_list"
+if grep -Eq '(^|/)(conftest|__init__|lifecycle_state_table)\.py$' "$WORK/ran_list"; then
+  echo "FAIL: fallback selected a helper as a standalone pytest file" >&2
+  exit 1
+fi
+output="$(run_case 0 "$CAP" 1)"
+test ! -f "$WORK/ran_count"
+grep -q "Skipping broad backend unit suite in pre-push" <<<"$output"
+
+# Source-only changes retain affected contracts despite broad selection.
+export STUB_CONTRACT_COUNT=3
+output="$(run_case 0 "$CAP")"
+test "$(cat "$WORK/ran_count")" = 3
+grep -qx 'tests/unit/test_contract_002.py' "$WORK/ran_list"
+
+# Contracts have priority over a large changed-test set; the cap stays hard.
+output="$(run_case 25 "$CAP")"
+test "$(cat "$WORK/ran_count")" = "$CAP"
+grep -qx 'tests/unit/test_contract_002.py' "$WORK/ran_list"
+grep -q "18 focused file(s) also deferred" <<<"$output"
+
+# Even affected contracts can exceed the budget: report that omission honestly.
+export STUB_CONTRACT_COUNT=15
+output="$(run_case 0 "$CAP")"
+test "$(cat "$WORK/ran_count")" = "$CAP"
+grep -q "5 focused file(s) also deferred" <<<"$output"
+unset STUB_CONTRACT_COUNT
 
 echo "pre-push backend unit test cap tests passed"

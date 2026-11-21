@@ -1,8 +1,11 @@
-"""Counts exclude privacy tombstones and reversible duplicate-capture links."""
+"""Counts exclude tombstones, duplicate-capture links and unexpired live-bridge holds."""
 
 from typing import Any, Mapping, Optional, List
 from datetime import datetime
 from google.cloud.firestore_v1 import FieldFilter
+from fastapi import HTTPException
+
+from utils.sync import bridge_pending
 
 
 def matches_list_predicates(
@@ -51,21 +54,83 @@ def count_hidden(
     categories: Optional[List[str]] = None,
     folder_id: Optional[str] = None,
     starred: Optional[bool] = None,
+    hide_home: bool = False,
+    include_recordings: bool = False,
 ) -> int:
-    """Count `deleted==True` rows that would have matched the list query.
+    """Count hidden rows that would otherwise match the list query.
 
     Equality on `deleted` only matches documents that have the field, so
     pre-#15193 conversations (no `deleted` field) are not subtracted. Tombstones
-    per user are few; this avoids a composite index on every list-filter combo.
+    per user are few. Pending holds use a single-field deadline range and are
+    deduplicated against tombstones/duplicate links, without a new composite index.
     """
     matching = 0
-    queries = (collection.where(filter=FieldFilter('deleted', '==', True)),)
+    now = bridge_pending.current_time()
+
+    def count_layer(*fields):
+        query = collection
+        for field in fields:
+            query = query.where(filter=FieldFilter(field, '==', True))
+        if not include_discarded:
+            query = query.where(filter=FieldFilter('discarded', '==', False))
+        filtered = bool(
+            statuses or sources or categories or start_date or end_date or folder_id is not None or starred is not None
+        )
+        if filtered:
+            # Rare filtered counts inspect at most 10k matching-layer metadata rows.
+            # No optional-predicate composite indexes, no transcript decoding.
+            snapshots = list(
+                query.select(
+                    ['discarded', 'status', 'source', 'structured.category', 'folder_id', 'starred', 'created_at']
+                )
+                .limit(10001)
+                .stream()
+            )
+            if len(snapshots) > 10000:
+                raise HTTPException(503, 'Filtered conversation count exceeds scan budget')
+            return sum(
+                (starred is None or (doc.to_dict() or {}).get('starred') is starred)
+                and matches_list_predicates(
+                    doc.to_dict() or {},
+                    include_discarded=include_discarded,
+                    statuses=statuses,
+                    sources=sources,
+                    start_date=start_date,
+                    end_date=end_date,
+                    categories=categories,
+                    folder_id=folder_id,
+                    starred=starred,
+                )
+                for doc in snapshots
+            )
+        return int(query.count().get()[0][0].value)
+
+    if not include_recordings:
+        matching += count_layer('recording')
+    if hide_home:
+        matching += count_layer('home_hidden')
+        if not include_recordings:
+            matching -= count_layer('recording', 'home_hidden')
+    queries = [(collection.where(filter=FieldFilter('deleted', '==', True)), False)]
     if not include_discarded:
-        queries += (collection.where(filter=FieldFilter('dream_duplicate_of', '>', '')),)
-    for index, query in enumerate(queries):
+        queries.append((collection.where(filter=FieldFilter('dream_duplicate_of', '>', '')), False))
+    # Most users have no active bridge holds. Pay one bounded probe
+    # rather than opening a second full document stream on every count call.
+    if not include_discarded:
+        pending = collection.where(filter=FieldFilter('sync_bridge_pending.expires_at', '>', now))
+        if next(iter(pending.limit(1).stream()), None) is not None:
+            queries.append((pending, True))
+    seen = set()
+    for query, pending_only in queries:
         for doc in query.stream():
             data = doc.to_dict() or {}
-            if index == 1 and data.get('deleted'):
+            identity = doc.id
+            if identity in seen:
+                continue
+            if pending_only and not bridge_pending.hidden(data, now=now):
+                continue
+            seen.add(identity)
+            if (not include_recordings and data.get('recording')) or (hide_home and data.get('home_hidden')):
                 continue
             if matches_list_predicates(
                 data,

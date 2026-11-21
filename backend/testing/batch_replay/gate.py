@@ -7,8 +7,21 @@ import os
 from pathlib import Path
 import subprocess
 import sys
-import tarfile
-import tempfile
+
+if __name__ == '__main__':
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+from testing.replay_snapshot import backend_snapshot, resolve_refs
+
+
+def adapter_digest(gate_path, runner_path, incident_path, transaction_fixture_path):
+    """Every fixed transaction capability is part of the comparison identity."""
+    return hashlib.sha256(
+        gate_path.read_bytes()
+        + runner_path.read_bytes()
+        + incident_path.read_bytes()
+        + transaction_fixture_path.read_bytes()
+        + (Path(__file__).resolve().parents[1] / 'replay_snapshot.py').read_bytes()
+    ).hexdigest()
 
 
 def compare(candidate, baseline):
@@ -90,24 +103,14 @@ GEOMETRY_LIMITS = frozenset(
 
 def gate(repo, corpus, ref, base, output, allow_incomplete=False, require_captured_geometry=False):
     runner = Path(__file__).with_name('runner.py')
-    resolved = {
-        label: subprocess.check_output(
-            ['git', '-C', str(repo), 'rev-parse', '--verify', f'{value}^{{commit}}'], text=True
-        ).strip()
-        for label, value in (('candidate', ref), ('baseline', base))
-    }
+    transaction_fixture = Path(__file__).resolve().parents[2] / 'tests/unit/fixtures/strict_firestore_transaction.py'
+    resolved = resolve_refs(repo, ref, base)
     output.mkdir(parents=True, exist_ok=True, mode=0o700)
     reports = {}
     incidents = {}
     fixture = runner.with_name('regressions.json')
     for label, sha in resolved.items():
-        with tempfile.TemporaryDirectory(prefix=f'batch-replay-{label}-', dir=output) as directory:
-            snapshot = Path(directory)
-            archive = snapshot / 'source.tar'
-            with archive.open('wb') as stream:
-                subprocess.run(['git', '-C', str(repo), 'archive', sha, 'backend'], stdout=stream, check=True)
-            with tarfile.open(archive) as bundle:
-                bundle.extractall(snapshot, filter='data')
+        with backend_snapshot(repo, sha, output, label) as backend:
             report = output / f'{label}.json'
             environment = {
                 key: value
@@ -126,7 +129,7 @@ def gate(repo, corpus, ref, base, output, allow_incomplete=False, require_captur
                         '-I',
                         str(runner),
                         '--backend',
-                        str(snapshot / 'backend'),
+                        str(backend),
                         '--corpus',
                         str(corpus.resolve()),
                         '--output',
@@ -150,7 +153,7 @@ def gate(repo, corpus, ref, base, output, allow_incomplete=False, require_captur
                             '-I',
                             str(runner),
                             '--backend',
-                            str(snapshot / 'backend'),
+                            str(backend),
                             '--corpus',
                             str(fixture),
                             '--output',
@@ -179,11 +182,11 @@ def gate(repo, corpus, ref, base, output, allow_incomplete=False, require_captur
         'schema': 1,
         'refs': resolved,
         'corpus_sha256': hashlib.sha256(corpus.read_bytes()).hexdigest(),
-        'adapter_sha256': hashlib.sha256(
-            Path(__file__).read_bytes() + runner.read_bytes() + fixture.read_bytes()
-        ).hexdigest(),
+        'adapter_sha256': adapter_digest(Path(__file__), runner, fixture, transaction_fixture),
+        'transaction_fixture_sha256': hashlib.sha256(transaction_fixture.read_bytes()).hexdigest(),
         **diff,
         'synthetic_comparison': incident_diff,
+        'synthetic_worker_results': {label: report.get('worker_results', {}) for label, report in incidents.items()},
         'synthetic_failures': synthetic_failures,
         'coverage_scope': 'firestore-structure+synthetic-boundaries',
         'coverage_ruling': 'lead:a76a1a',

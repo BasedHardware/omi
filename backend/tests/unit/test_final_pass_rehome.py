@@ -16,6 +16,7 @@ import pytest
 
 from database import conversations as conversations_db
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore, StrictFirestoreSnapshot
+from tests.unit.test_batch_pipeline_scheduler import MemoryStore
 from utils.batch_pipeline import live_upload
 from utils.batch_pipeline.live_upload import RecordUploadRoute
 from utils.conversations import transcription_shadow as shadow
@@ -31,6 +32,12 @@ R2 = datetime(2026, 1, 2, tzinfo=timezone.utc)
 
 def forbidden(*args, **kwargs):
     raise AssertionError('this path must not run')
+
+
+def record_store(client):
+    store = MemoryStore()
+    store.client = client
+    return store
 
 
 @pytest.fixture(autouse=True)
@@ -235,7 +242,7 @@ async def test_dark_upload_for_a_stranded_final_pass_owner_no_longer_loops(monke
     monkeypatch.setattr(conversations_db, 'claim_record_lane_owner', claim)
     monkeypatch.setattr(final_pass_rehome, 'live_legacy_jobs', lambda uid: 0)
     monkeypatch.setattr(legacy_dark, 'mode_age_seconds', lambda now=None: final_pass_rehome.FLIP_GRACE_SECONDS)
-    monkeypatch.setattr(live_upload, 'FirestoreStore', lambda *_: SimpleNamespace(client=client))
+    monkeypatch.setattr(live_upload, 'FirestoreStore', lambda *_: record_store(client))
     assert await _route(None, legacy_mode=mode) is RecordUploadRoute.BATCH
     assert client.rows[PATH]['record_lane_owner'] == 'batch_sync_v1'
     assert await _route(None, legacy_mode=mode) is RecordUploadRoute.BATCH
@@ -261,7 +268,7 @@ async def test_the_route_is_unchanged_at_legacy_sync_on(monkeypatch):
 async def test_the_route_reads_the_mode_off_the_loop_when_the_caller_has_none(monkeypatch):
     """Batch intake's record_router call passes no mode: read it as the router does."""
     monkeypatch.setattr(live_upload, 'FirestoreStore', lambda *_: SimpleNamespace(client=object()))
-    monkeypatch.setattr(legacy_dark, 'current_mode', lambda: LegacySyncMode.DARK)
+    monkeypatch.setattr(legacy_dark, 'current_mode', lambda uid=None: LegacySyncMode.DARK)
     seen = []
     monkeypatch.setattr(
         final_pass_rehome, 'upload_rehome', lambda mode, *a, **k: seen.append(mode) or RehomeOutcome.REHOMED
@@ -292,7 +299,7 @@ async def test_an_ownerless_upload_for_a_narrowed_uid_takes_batch_outside_on(mon
     monkeypatch.setattr(
         live_upload, 'claim_record_lane_owner', lambda uid, cid, owner, expected, **kw: claimed.append(owner) or R2
     )
-    monkeypatch.setattr(live_upload, 'FirestoreStore', lambda *_: SimpleNamespace(client=client))
+    monkeypatch.setattr(live_upload, 'FirestoreStore', lambda *_: record_store(client))
     monkeypatch.setattr(live_upload, 'record_capture_eligible', lambda *a, **k: False)
     assert await _route(None, legacy_mode=mode, policy=_narrowed_policy()) is RecordUploadRoute.BATCH
     assert claimed == ['batch_sync_v1']
@@ -304,7 +311,7 @@ async def test_an_ownerless_upload_for_a_narrowed_uid_still_takes_legacy_at_on(m
     monkeypatch.setattr(
         live_upload, 'claim_record_lane_owner', lambda uid, cid, owner, expected, **kw: claimed.append(owner) or R2
     )
-    monkeypatch.setattr(live_upload, 'FirestoreStore', lambda *_: SimpleNamespace(client=client))
+    monkeypatch.setattr(live_upload, 'FirestoreStore', lambda *_: record_store(client))
     monkeypatch.setattr(live_upload, 'record_capture_eligible', lambda *a, **k: False)
     monkeypatch.setattr(legacy_dark, 'current_mode', forbidden)  # the caller's mode is used, never a read
     assert await _route(None, legacy_mode=LegacySyncMode.ON, policy=_narrowed_policy()) is RecordUploadRoute.LEGACY
@@ -318,7 +325,7 @@ def test_the_shadow_final_pass_takes_no_new_owner_outside_on(monkeypatch, mode, 
     mode. Outside ``on`` an unowned conversation gets no claim and no pass (it stays unowned for
     batch admission); an owner that already exists keeps its pass until the next upload re-homes it."""
     monkeypatch.setenv('BATCH_PIPELINE_LIVE_ADMISSION_ENABLED', live_admission)
-    monkeypatch.setattr(legacy_dark, 'current_mode', lambda: mode)
+    monkeypatch.setattr(legacy_dark, 'current_mode', lambda uid=None: mode)
     monkeypatch.setattr(shadow.conversations_db, 'claim_record_lane_owner', forbidden)
     monkeypatch.setattr(shadow.conversations_db, 'get_conversation', forbidden)
     assert shadow._claim_shadow_owner(UID, CID, {'id': CID, 'updated_at': 1}) is None
@@ -328,7 +335,7 @@ def test_the_shadow_final_pass_takes_no_new_owner_outside_on(monkeypatch, mode, 
 
 def test_the_shadow_final_pass_claims_as_before_at_on(monkeypatch):
     monkeypatch.setenv('BATCH_PIPELINE_LIVE_ADMISSION_ENABLED', 'true')
-    monkeypatch.setattr(legacy_dark, 'current_mode', lambda: LegacySyncMode.ON)
+    monkeypatch.setattr(legacy_dark, 'current_mode', lambda uid=None: LegacySyncMode.ON)
     claim = Mock(return_value=2)
     monkeypatch.setattr(shadow.conversations_db, 'claim_record_lane_owner', claim)
     result = shadow._claim_shadow_owner(UID, CID, {'id': CID, 'updated_at': 1})
@@ -515,9 +522,24 @@ def test_served_ramp_reads_the_env_entry_and_its_age(monkeypatch):
     from scripts.legacy_dark import final_pass_rehome as sweep_module
 
     now = datetime(2026, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
-    document = {'envs': {'prod': {'legacy_sync': 'draining', 'updated_at': '2026-01-01T11:55:00Z'}}}
+    document = {
+        'envs': {
+            'prod': {
+                'legacy_sync': 'draining',
+                'percents': {'legacy-sync': 100, 'batch-pipeline': 100},
+                'updated_at': '2026-01-01T11:55:00Z',
+            }
+        }
+    }
     monkeypatch.setattr(store, 'read_ramp', lambda **kwargs: document)
     assert sweep_module.served_ramp(object(), 'prod', now=now) == ('draining', 300.0)
+    # A batch-only rollback narrows retirement at read time; the bulk sweep must not move the uncovered owners.
+    document['envs']['prod']['percents']['batch-pipeline'] = 50
+    assert sweep_module.served_ramp(object(), 'prod', now=now) == ('on', None)
+    document['envs']['prod']['percents'].pop('batch-pipeline')
+    assert sweep_module.served_ramp(object(), 'prod', now=now) == ('on', None)
+    document['envs']['prod']['percents'].update({'legacy-sync': 25, 'batch-pipeline': 100})
+    assert sweep_module.served_ramp(object(), 'prod', now=now) == ('on', None)
     assert sweep_module.served_ramp(object(), 'staging', now=now) == (None, None)
     monkeypatch.setattr(store, 'read_ramp', lambda **kwargs: None)
     assert sweep_module.served_ramp(object(), 'prod', now=now) == (None, None)
@@ -567,7 +589,7 @@ async def _claim_owner(monkeypatch, language, mode):
     monkeypatch.setattr(
         live_upload, 'claim_record_lane_owner', lambda uid, cid, owner, expected, **kw: claimed.append(owner) or R2
     )
-    monkeypatch.setattr(live_upload, 'FirestoreStore', lambda *_: SimpleNamespace(client=client))
+    monkeypatch.setattr(live_upload, 'FirestoreStore', lambda *_: record_store(client))
     monkeypatch.setattr(live_upload, 'record_capture_eligible', lambda *a, **k: False)
     route = await _route(None, legacy_mode=mode, policy=_batch_policy())
     return route, claimed

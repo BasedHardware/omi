@@ -18,6 +18,7 @@ from fastapi.routing import APIRoute
 from pydantic import ValidationError
 
 from database import redis_db, action_item_versions
+from utils import external_polling_cache as polling_cache
 from utils.encryption import derive_key
 from utils.executors import db_executor, submit_with_context
 from utils.mcp_server.cursors import decode_cursor
@@ -40,6 +41,7 @@ _flights: dict[str, tuple[float, Future]] = {}
 _flight_lock = Lock()
 _HEADERS = frozenset(
     {
+        'x-omi-list-cache',
         'x-omi-effective-limit',
         'x-omi-has-more',
         'x-omi-next-offset',
@@ -234,6 +236,10 @@ def cached_list_response(
             EXTERNAL_LIST_CACHE_TOTAL.labels(route=route, outcome='version_bypass').inc()
             return None  # Busy or unavailable: origin only, never a short-cache fallback.
         ttl = VERSIONED_TTL_SECONDS
+    elif response is not None and route in {'/v1/dev/user/conversations', '/v1/dev/user/memories'}:
+        ttl = polling_cache.adaptive_ttl(_redis(), request, uid, context, query)
+        if ttl > TTL_SECONDS:
+            response.headers['X-Omi-List-Cache'] = f'fast-poller; max-age={ttl}'
     identity = {
         'collection_version': version,
         'uid': uid,
@@ -246,6 +252,8 @@ def cached_list_response(
         'mcp_budget': lever_enabled('OMI_MCP_MEMORY_LIST_BUDGET_ENABLED'),
         'conversation_budget': lever_enabled('OMI_DEV_CONVERSATION_LIST_BUDGET_ENABLED'),
     }
+    if ttl > TTL_SECONDS and version is None:
+        identity['poll_ttl'] = ttl  # Normal callers cannot reach extended entries.
     key = (
         'external-list:v2:'
         + hashlib.sha256(json.dumps(identity, sort_keys=True, separators=(',', ':'), default=str).encode()).hexdigest()

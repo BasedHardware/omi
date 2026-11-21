@@ -455,6 +455,79 @@ class ProcessingBacklog {
       };
 }
 
+/// A declined renewal the user can still pay (backend `payment_issue`). Present only while the
+/// plan's Stripe subscription is past_due or unpaid with an open invoice; the entitlement itself
+/// already reads as Free.
+class PaymentIssue {
+  final String status;
+  final PlanType plan;
+
+  /// A declined yearly renewal can move to the same plan's monthly price instead. Null when not offered
+  /// (and always from servers that predate it).
+  final MonthlySwitchOffer? monthlySwitch;
+
+  const PaymentIssue({required this.status, required this.plan, this.monthlySwitch});
+
+  factory PaymentIssue.fromGenerated(wire.GeneratedPaymentIssue generated) => PaymentIssue(
+        status: generated.status,
+        plan: PlanType.fromWire(generated.plan),
+        monthlySwitch:
+            generated.monthlySwitch == null ? null : MonthlySwitchOffer.fromGenerated(generated.monthlySwitch!),
+      );
+
+  wire.GeneratedPaymentIssue toGenerated() =>
+      wire.GeneratedPaymentIssue(status: status, plan: plan.wireName, monthlySwitch: monthlySwitch?.toGenerated());
+
+  @override
+  bool operator ==(Object other) =>
+      other is PaymentIssue && other.status == status && other.plan == plan && other.monthlySwitch == monthlySwitch;
+
+  @override
+  int get hashCode => Object.hash(status, plan, monthlySwitch);
+}
+
+/// The plan's catalog monthly price, charged today if the reader switches (backend
+/// `payment_issue.monthly_switch`). Amounts are minor units of [currency]; [yearlyAmount] is the
+/// unpaid yearly charge the switch cancels.
+class MonthlySwitchOffer {
+  final String priceId;
+  final int amount;
+  final String currency;
+  final int yearlyAmount;
+
+  const MonthlySwitchOffer({
+    required this.priceId,
+    required this.amount,
+    required this.currency,
+    required this.yearlyAmount,
+  });
+
+  factory MonthlySwitchOffer.fromGenerated(wire.GeneratedPaymentIssueMonthlySwitch generated) => MonthlySwitchOffer(
+        priceId: generated.priceId,
+        amount: generated.amount,
+        currency: generated.currency,
+        yearlyAmount: generated.yearlyAmount,
+      );
+
+  wire.GeneratedPaymentIssueMonthlySwitch toGenerated() => wire.GeneratedPaymentIssueMonthlySwitch(
+        priceId: priceId,
+        amount: amount,
+        currency: currency,
+        yearlyAmount: yearlyAmount,
+      );
+
+  @override
+  bool operator ==(Object other) =>
+      other is MonthlySwitchOffer &&
+      other.priceId == priceId &&
+      other.amount == amount &&
+      other.currency == currency &&
+      other.yearlyAmount == yearlyAmount;
+
+  @override
+  int get hashCode => Object.hash(priceId, amount, currency, yearlyAmount);
+}
+
 class UserSubscriptionResponse {
   final Subscription subscription;
   final int transcriptionSecondsUsed;
@@ -478,6 +551,7 @@ class UserSubscriptionResponse {
   final TranscriptionAllowanceSnapshot? transcriptionAllowance;
   final HeldAudioSummary? heldAudio;
   final ProcessingBacklog? processingBacklog;
+  final PaymentIssue? paymentIssue;
 
   UserSubscriptionResponse({
     required this.subscription,
@@ -499,6 +573,7 @@ class UserSubscriptionResponse {
     this.transcriptionAllowance,
     this.heldAudio,
     this.processingBacklog,
+    this.paymentIssue,
   });
 
   factory UserSubscriptionResponse.fromJson(Map<String, dynamic> json) =>
@@ -528,6 +603,7 @@ class UserSubscriptionResponse {
           ? null
           : TranscriptionAllowanceSnapshot.fromGenerated(generated.transcriptionAllowance!),
       heldAudio: generated.heldAudio == null ? null : HeldAudioSummary.fromGenerated(generated.heldAudio!),
+      paymentIssue: generated.paymentIssue == null ? null : PaymentIssue.fromGenerated(generated.paymentIssue!),
     );
   }
 
@@ -550,6 +626,7 @@ class UserSubscriptionResponse {
       chatQuotaResetAt: chatQuotaResetAt,
       phoneCallQuota: phoneCallQuota?.toGenerated(),
       transcriptionAllowance: transcriptionAllowance?.toGenerated(),
+      paymentIssue: paymentIssue?.toGenerated(),
       heldAudio: heldAudio == null
           ? null
           : wire.GeneratedHeldAudioSummary(

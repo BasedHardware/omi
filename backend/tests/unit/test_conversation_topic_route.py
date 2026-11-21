@@ -11,14 +11,6 @@ from utils.llm.conversation_topic import ConversationTopic
 UID = 'uid-conversation-topic'
 
 
-@pytest.fixture(autouse=True)
-def _entitled(monkeypatch):
-    """Default to an entitled account; the paywall gate has its own test."""
-    import utils.subscription as subscription
-
-    monkeypatch.setattr(subscription, 'is_trial_paywalled', lambda uid, platform: False)
-
-
 async def test_generate_topic_returns_without_persisting(monkeypatch):
     calls: dict[str, object] = {}
 
@@ -55,16 +47,3 @@ async def test_generate_topic_fails_closed_when_generation_returns_none(monkeypa
             uid=UID,
         )
     assert exc.value.status_code == 502
-
-
-async def test_generate_conversation_topic_endpoint_blocks_a_trial_expired_account(monkeypatch):
-    import utils.subscription as subscription
-
-    monkeypatch.setattr(subscription, 'is_trial_paywalled', lambda uid, platform: True)
-
-    with pytest.raises(HTTPException) as exc:
-        await conversations_router.generate_conversation_topic_endpoint(
-            conversations_router.ConversationTopicRequest(transcript='anything'),
-            uid=UID,
-        )
-    assert exc.value.status_code == 402

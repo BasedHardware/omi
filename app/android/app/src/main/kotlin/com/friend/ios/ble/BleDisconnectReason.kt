@@ -3,7 +3,8 @@ package com.friend.ios.ble
 /** Maps native HCI statuses to the existing diagnostics/analytics reason vocabulary. */
 internal object BleDisconnectReason {
     /** Error delivered to Flutter when a disconnect interrupts device readiness. */
-    fun connectionErrorFromStatus(status: Int, retrying: Boolean = true): String? = when {
+    fun connectionErrorFromStatus(status: Int, retrying: Boolean = true, isManual: Boolean = false): String? = when {
+        isManual -> "manual"
         status == OmiBleManager.CCCD_TIMEOUT_STATUS && !retrying -> "cccd_timeout_exhausted"
         status == OmiBleManager.CCCD_TIMEOUT_STATUS -> "cccd_timeout"
         status == 137 -> "pairing_lost"

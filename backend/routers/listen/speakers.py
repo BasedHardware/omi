@@ -29,7 +29,7 @@ from utils.other.storage import get_profile_audio_if_exists
 from utils.speaker_permissions import named_speaker_prompts_allowed
 from utils.speaker_sample import download_sample_audio
 from utils.speaker_sample_migration import maybe_migrate_person_samples
-from utils.manual_speaker_assignments import manual_owner_reserved, manual_rejected_speakers
+from utils.manual_speaker_assignments import manual_owner_reserved, manual_rejected_speakers, manual_voice_decision
 from utils.stt.owner_profile import load_owner_embedding, validated_embedding
 from utils.stt.voiceprints import usable_person_voiceprint
 from utils.speakers import auto_enroll
@@ -55,6 +55,7 @@ from utils.observability.owner_recognition import (
     record_live_speaker_rollover,
     record_owner_reconnect,
 )
+from utils.observability.soniox_idle_arm import note_speaker_decision
 from utils.observability.speaker_embedding_budget import (
     BUDGET_EXITS,
     BUDGET_VOICES,
@@ -1027,26 +1028,24 @@ class SpeakerMatcher:
             if stale:
                 self.host.emit_speaker_suggestion(voice, '', '', segment_id, retracted=True)
 
+    def retire_excluded_voice(self, voice: int) -> None:
+        """Retire the full matcher state for a receipt-excluded voice.
+
+        Socket receipt handling (ListenReceiver._handle_speaker_assigned) calls
+        this when a winning whole-voice rejection (e.g. ``not_a_person``)
+        supersedes prior inference: popping ``speaker_to_person`` alone would
+        leave ``_mapping_origin`` 'manual' behind, blocking future automatic
+        matches for a restored voice until the matcher resets at a
+        conversation boundary.
+        """
+        self._retract_rejected_voice(voice, None)
+
     def _manual_voice_decision(
         self, receipt: Mapping, speaker_id: int, *, scope: Optional[str] = None
     ) -> Optional[Mapping]:
-        """The newest positive receipt decision naming this voice, if scope-bound ones match."""
-        covering = (receipt.get('speakers') or {}).get(str(speaker_id))
-        candidates = [covering] if isinstance(covering, Mapping) else []
-        candidates += [
-            entry
-            for entry in (receipt.get('segments') or {}).values()
-            if isinstance(entry, Mapping) and not entry.get('segment_only') and entry.get('speaker_id') == speaker_id
-        ]
-        positive = [entry for entry in candidates if not entry.get('rejection')]
-        if not positive:
-            return None
-        decision = max(positive, key=lambda entry: entry.get('generation', 0))
-        decision_scope = decision.get('speaker_id_scope')
-        voice_scope = self._voice_scopes.get(speaker_id) if scope is None else scope
-        if decision.get('source') == 'carried' and decision_scope is not None and decision_scope != voice_scope:
-            return None
-        return decision
+        return manual_voice_decision(
+            receipt, speaker_id, self._voice_scopes.get(speaker_id) if scope is None else scope
+        )
 
     async def _match_unmapped(
         self, speaker_id: int, segment: dict[str, Any], generation: int, conversation_id: Optional[str]
@@ -1147,10 +1146,9 @@ class SpeakerMatcher:
                 # evidence and reaches a decision, so it logs (below) but is not
                 # an exit reason.
                 self.diagnostics.observe('evidence_pending', segment.get('speaker_id_scope') or '')
-                record_live_speaker_decision(
-                    pending_decision_target(owner_enrolled=USER_SELF_PERSON_ID in self.person_embeddings),
-                    'pending',
-                )
+                pending_target = pending_decision_target(owner_enrolled=USER_SELF_PERSON_ID in self.person_embeddings)
+                record_live_speaker_decision(pending_target, 'pending')
+                note_speaker_decision(self.host, pending_target, 'pending')
                 logger.info(
                     'speaker_id_evidence surface=live speaker=%s clips=%d evidence_seconds=%.1f decision=pending session=%s',
                     speaker_id,
@@ -1214,9 +1212,9 @@ class SpeakerMatcher:
             if manual is not None:
                 person_id = USER_SELF_PERSON_ID if manual.get('is_user') else manual.get('person_id')
                 known = self.person_embeddings.get(person_id) if person_id else None
-                voice_wide = manual.get('source') == 'carried' or manual is (receipt.get('speakers') or {}).get(
-                    str(speaker_id)
-                )
+                voice_wide = manual.get('source') in {'carried', 'recording'} or manual is (
+                    receipt.get('speakers') or {}
+                ).get(str(speaker_id))
                 if person_id and voice_wide:
                     # A manual label is authoritative without a loaded profile: on a
                     # free plan non-owner profiles stay unloaded, so resolve the name
@@ -1289,6 +1287,7 @@ class SpeakerMatcher:
                 if owner_near_miss(decision):
                     decision_kind = 'pending'
                 record_live_speaker_decision(decision_target, decision_kind)
+                note_speaker_decision(self.host, decision_target, decision_kind)
             logger.info(
                 'speaker_id_decision surface=live speaker=%s clips=%d evidence_seconds=%.1f '
                 'best=%s best_distance=%.3f runner_up_distance=%.3f accepted=%s owner_contended=%s decision=%s '
@@ -1442,33 +1441,28 @@ class SpeakerMatcher:
         scope: Optional[str] = None,
     ) -> None:
         try:
-            if match_scores.enabled():
-                row = match_scores.summarize(
-                    voice,
-                    self._voice_distances[voice] if distances is None else distances,
-                    decision,
-                    sum(seconds for _, seconds in self.speaker_evidence[voice]),
-                    'capture',
-                    threshold=match_policy.SPEAKER_MATCH_THRESHOLD,
-                    margin_threshold=match_policy.SPEAKER_MATCH_MARGIN,
-                    scope=self._voice_scopes.get(voice, '') if scope is None else scope,
-                    outcome=outcome,
-                )
-                if outcome is None and owner_near_miss(decision):
-                    row['status'] = 'unknown'
-                    row['decision'] = 'pending'
-                if outcome == 'manual_rejected':
-                    row['accepted_person_id'] = None
-                    row['status'] = 'no_match'
-                if manual is not None:
-                    row['accepted_person_id'] = (
-                        USER_SELF_PERSON_ID if manual.get('is_user') else manual.get('person_id')
-                    )
-                    row['status'] = 'user' if manual.get('is_user') else 'not_user'
-                self.match_scores = match_scores.merge(self.match_scores, [row])
-                self.diagnostics.observe('scores_generated', self._voice_scopes.get(voice, ''))
-            else:
-                self.diagnostics.observe('scores_disabled')
+            row = match_scores.summarize(
+                voice,
+                self._voice_distances[voice] if distances is None else distances,
+                decision,
+                sum(seconds for _, seconds in self.speaker_evidence[voice]),
+                'capture',
+                threshold=match_policy.SPEAKER_MATCH_THRESHOLD,
+                margin_threshold=match_policy.SPEAKER_MATCH_MARGIN,
+                scope=self._voice_scopes.get(voice, '') if scope is None else scope,
+                outcome=outcome,
+            )
+            if outcome is None and owner_near_miss(decision):
+                row['status'] = 'unknown'
+                row['decision'] = 'pending'
+            if outcome == 'manual_rejected':
+                row['accepted_person_id'] = None
+                row['status'] = 'no_match'
+            if manual is not None:
+                row['accepted_person_id'] = USER_SELF_PERSON_ID if manual.get('is_user') else manual.get('person_id')
+                row['status'] = 'user' if manual.get('is_user') else 'not_user'
+            self.match_scores = match_scores.merge(self.match_scores, [row])
+            self.diagnostics.observe('scores_generated', self._voice_scopes.get(voice, ''))
         except Exception:
             self.diagnostics.observe('scores_failed')
             match_scores.record_failure(logger)

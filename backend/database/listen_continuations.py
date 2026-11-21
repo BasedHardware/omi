@@ -4,11 +4,12 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime
-from typing import Any, Mapping
+from typing import Any, Iterable, Mapping
 
 from google.cloud import firestore
 
 from database._client import get_firestore_client
+from utils.conversations.recorded_time import recorded_end
 from database.document_ids import calendar_meeting_doc_id
 from utils.observability.fallback import record_fallback
 from models.conversation_continuity import (
@@ -146,13 +147,13 @@ def resolve_live_continuation(
                     row,
                     source=source,
                     device_id=device_id,
-                    now=now,
+                    arrival_at=now,
                     timeout=timeout,
                     language=language,
                     allow_server_batch=allow_server_batch,
                 ):
                     return {'conversation_id': cid, 'recording_session_id': sid}, None
-                finish = row.get('finished_at')
+                finish = recorded_end(row)
                 if (
                     row.get('source') == source
                     and row.get('client_device_id') == device_id
@@ -175,7 +176,7 @@ def resolve_live_continuation(
                 candidate,
                 source=source,
                 device_id=device_id,
-                now=now,
+                arrival_at=now,
                 timeout=timeout,
                 language=language,
                 allow_server_batch=allow_server_batch,
@@ -192,3 +193,35 @@ def resolve_live_continuation(
                 transaction.update(ref, {'external_data': external})
 
     return resolve(client.transaction())
+
+
+def supersede_live_continuation(
+    uid: str,
+    origin_id: str,
+    *,
+    previous_id: str,
+    proposed: Mapping[str, str],
+    own_ids: Iterable[str] = (),
+    firestore_client: Any = None,
+) -> str:
+    """Move an origin's continuation from a rotated recording to its persisted successor.
+
+    Only a pointer that names the retired recording, one of this socket's own recordings, or
+    nothing moves, so a reconnect resumes the successor. Returns moved, absent or other_owner.
+    """
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    root = client.collection('users').document(uid).collection('recording_sessions').document(origin_id)
+    owned = set(own_ids)
+
+    @firestore.transactional
+    def supersede(transaction: Any) -> str:
+        original = root.get(transaction=transaction).to_dict() or {}
+        if original.get('uid') != uid or original.get('recording_session_id') != origin_id:
+            return 'absent'
+        current = (original.get('live_continuation') or {}).get('conversation_id')
+        if current is not None and current != previous_id and current not in owned:
+            return 'other_owner'
+        transaction.update(root, {'live_continuation': dict(proposed)})
+        return 'moved'
+
+    return supersede(client.transaction())
