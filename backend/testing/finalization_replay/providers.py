@@ -61,7 +61,7 @@ def provider_server():
                 state.webhook(path.removeprefix('/receive/'), key, body)
                 return {}
             if path == '/v1/embeddings':
-                state.provider_calls.append(body['model'].removeprefix('omi:auto:'))
+                state.record_embedding_request(body.get('input', []))
                 return {
                     'object': 'list',
                     'data': [
@@ -75,7 +75,8 @@ def provider_server():
             fixture = response(state, feature)
             if fixture is None:
                 raise ValueError('missing replay response')
-            state.provider_calls.append(feature)
+            completion = fixture if isinstance(fixture, str) else json.dumps(fixture, ensure_ascii=False)
+            prompt_tokens, completion_tokens = state.record_provider_call(feature, body.get('messages', []), completion)
             return {
                 'id': 'replay-response',
                 'object': 'chat.completion',
@@ -91,7 +92,11 @@ def provider_server():
                         },
                     }
                 ],
-                'usage': {'prompt_tokens': 1, 'completion_tokens': 1, 'total_tokens': 2},
+                'usage': {
+                    'prompt_tokens': prompt_tokens,
+                    'completion_tokens': completion_tokens,
+                    'total_tokens': prompt_tokens + completion_tokens,
+                },
             }
 
         server.dispatch = dispatch

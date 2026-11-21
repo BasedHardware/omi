@@ -29,6 +29,40 @@ type observation struct {
 	Document         any            `json:"conversation"`
 	Derived          map[string]any `json:"derived_documents"`
 	Webhooks         []any          `json:"webhooks"`
+	Cost             replayCost     `json:"cost"`
+	GoEvidence       map[string]any `json:"go_evidence,omitempty"`
+}
+
+type tokenUsage struct {
+	Prompt     int64 `json:"prompt"`
+	Completion int64 `json:"completion"`
+	Total      int64 `json:"total"`
+}
+
+type firestoreOperations struct {
+	RPCCalls       int64 `json:"rpc_calls"`
+	DocumentReads  int64 `json:"document_reads"`
+	QueryDocuments int64 `json:"query_documents"`
+	QueryRequests  int64 `json:"query_requests"`
+	Writes         int64 `json:"writes"`
+	Deletes        int64 `json:"deletes"`
+}
+
+func (f firestoreOperations) Total() int64 {
+	return f.DocumentReads + f.QueryDocuments + f.Writes + f.Deletes
+}
+
+type replayCost struct {
+	Measured        bool                `json:"measured"`
+	TokenBasis      string              `json:"token_basis"`
+	LLMTokens       tokenUsage          `json:"llm_tokens"`
+	EmbeddingTokens int64               `json:"embedding_tokens"`
+	Firestore       firestoreOperations `json:"firestore_operations"`
+}
+
+type costPair struct {
+	Python replayCost `json:"python"`
+	Go     replayCost `json:"go"`
 }
 
 type replayCase struct {
@@ -46,22 +80,32 @@ type difference struct {
 
 type caseReport struct {
 	replayCase
-	PythonStatus string       `json:"python_status,omitempty"`
-	GoStatus     string       `json:"go_status,omitempty"`
-	Differences  []difference `json:"differences"`
+	PythonStatus string         `json:"python_status,omitempty"`
+	GoStatus     string         `json:"go_status,omitempty"`
+	Differences  []difference   `json:"differences"`
+	Cost         costPair       `json:"cost"`
+	GoEvidence   map[string]any `json:"go_evidence,omitempty"`
 }
 
 type report struct {
 	Version     int          `json:"version"`
+	CommitSHA   string       `json:"commit_sha,omitempty"`
 	Cases       []caseReport `json:"cases"`
 	Matched     int          `json:"matched_cases"`
 	Unexplained int          `json:"unexplained_differences"`
 	Expected    int          `json:"expected_differences"`
 	Failed      int          `json:"failed_cases"`
+	CostRows    []costRow    `json:"cost_table"`
+}
+
+type costRow struct {
+	Case   string     `json:"case"`
+	Python replayCost `json:"python"`
+	Go     replayCost `json:"go"`
 }
 
 func compare(cases []replayCase) (report, error) {
-	out := report{Version: 1, Cases: make([]caseReport, 0, len(cases))}
+	out := report{Version: 1, Cases: make([]caseReport, 0, len(cases)), CostRows: make([]costRow, 0, len(cases))}
 	seen := make(map[string]bool)
 	for _, c := range cases {
 		if c.Name == "" || seen[c.Name] {
@@ -71,10 +115,14 @@ func compare(cases []replayCase) (report, error) {
 		entry := caseReport{replayCase: c, Differences: []difference{}}
 		if c.Python != nil {
 			entry.PythonStatus = c.Python.Status
+			entry.Cost.Python = c.Python.Cost
 		}
 		if c.Go != nil {
 			entry.GoStatus = c.Go.Status
+			entry.Cost.Go = c.Go.Cost
+			entry.GoEvidence = c.Go.GoEvidence
 		}
+		out.CostRows = append(out.CostRows, costRow{Case: c.Name, Python: entry.Cost.Python, Go: entry.Cost.Go})
 		switch {
 		case len(c.Errors) > 0:
 			out.Failed++
