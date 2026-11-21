@@ -143,7 +143,7 @@ def park_for_ownership(row: Row, now: float) -> Row:
 
 
 def _ownership_released(row: Row, client: Any) -> bool:
-    """Probe only parked debt, including redirected and pending bridge targets."""
+    """Probe parked debt on the same conversation path as its callback."""
     from database import conversations as conversations_db
     from utils.sync.bridge_pending import FIELD as bridge_field
 
@@ -162,6 +162,8 @@ def _ownership_released(row: Row, client: Any) -> bool:
             return True  # Let normal custody settle a disappeared target.
         if not python_owns_finalization(current):
             return False
+        if row.get('effects_only'):
+            return True  # Lazy enrichment acts on this conversation only.
         bridge = current.get(bridge_field)
         cid = current.get('sync_merged_into') or (bridge.get('target_id') if isinstance(bridge, dict) else None)
     return True

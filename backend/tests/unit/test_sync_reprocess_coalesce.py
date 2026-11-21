@@ -328,7 +328,7 @@ def sweep_query(state, monkeypatch):
 def test_ownership_park_releases_only_after_python_decision(state, sweep_query, monkeypatch, runner, effects_only):
     from database import conversations
     from database.outbox_firestore import ENRICHMENT_OUTBOX
-    from utils.conversations import lazy_enrichment
+    from utils.conversations import lazy_enrichment, process_conversation
     from utils.enrichment import custody
     from utils.enrichment.consumer import EnrichmentConsumer
     from utils.sync import processing_hold
@@ -350,12 +350,20 @@ def test_ownership_park_releases_only_after_python_decision(state, sweep_query, 
     monkeypatch.setattr(custody, 'discard_blocked', lambda _: False)
     wake = tasks[-1]['task_token']
     worlds = {
-        'c': {'sync_bridge_pending': {'target_id': 'target'}} if not effects_only else {},
+        'c': {'status': 'completed', 'sync_bridge_pending': {'target_id': 'target'}},
         'target': {'finalization_engine': 'go', 'finalization_owner_epoch': 1},
     }
+    apply_effects = Mock()
+    checkpoint = Mock()
     if effects_only:
-        worlds['c'] = worlds['target']
-    monkeypatch.setattr(conversations, 'get_conversation_raw_snapshot', lambda uid, cid, **_: worlds[cid])
+        worlds['c'].update(finalization_engine='go', finalization_owner_epoch=1)
+        monkeypatch.setattr(conversations, 'get_conversation', lambda uid, cid: worlds[cid])
+        monkeypatch.setattr(conversations, 'record_demand_enrichment_checkpoint', checkpoint)
+        monkeypatch.setattr(lazy_enrichment, 'deserialize_conversation', lambda row: SimpleNamespace(id='c'))
+        monkeypatch.setattr(lazy_enrichment, 'fingerprint', lambda _: 'effects-input')
+        monkeypatch.setattr(process_conversation, 'apply_settled_enrichment', apply_effects)
+    probe = Mock(side_effect=lambda uid, cid, **_: worlds[cid])
+    monkeypatch.setattr(conversations, 'get_conversation_raw_snapshot', probe)
     monkeypatch.setattr(sweep_query, 'stream', lambda: [SimpleNamespace(id=key, to_dict=lambda: deepcopy(rows[key]))])
     calls = []
 
@@ -365,7 +373,6 @@ def test_ownership_park_releases_only_after_python_decision(state, sweep_query, 
             raise processing_hold.finalization_owner_deferral()
         return SimpleNamespace(structured={'title': 'done', 'overview': 'finished'})
 
-    monkeypatch.setattr(lazy_enrichment, 'enrich_settled', process)
     consumer = EnrichmentConsumer(ENRICHMENT_OUTBOX, process)
 
     def deliver(token, now):
@@ -381,8 +388,11 @@ def test_ownership_park_releases_only_after_python_decision(state, sweep_query, 
     for _ in range(3):
         assert reprocess.sweep(now=now)['repaired'] == 0
         assert reprocess.ownership_parked(rows[key])
-        assert len(tasks) == 1 and calls == ['process']
+        assert len(tasks) == 1
         now = rows[key]['due_at']
+    assert calls == ([] if effects_only else ['process'])
+    apply_effects.assert_not_called()
+    checkpoint.assert_not_called()
 
     original = deepcopy(rows[key])
     new, (reported, coalesced) = reprocess.mark_update(
@@ -397,12 +407,20 @@ def test_ownership_park_releases_only_after_python_decision(state, sweep_query, 
         rows[key]['deferred_reason'] = None
         assert reprocess.ownership_parked(rows[key])
 
-    worlds['target'].update(finalization_engine='python', finalization_owner_epoch=2)
+    handed_back = worlds['c' if effects_only else 'target']
+    handed_back.update(finalization_engine='python', finalization_owner_epoch=2)
     assert reprocess.sweep(now=now)['repaired'] == 1
     assert not rows[key]['dormant']
     assert len(tasks) == 2 and tasks[-1]['task_token'] != wake
     assert deliver(tasks[-1]['task_token'], now) in ('done', 'processed')
-    assert calls == ['process', 'process']
+    if effects_only:
+        assert worlds['target']['finalization_engine'] == 'go'
+        assert [call.args for call in probe.call_args_list] == [('u', 'c')] * 4
+        assert deliver(tasks[-1]['task_token'], now + 1) == 'stale'
+        apply_effects.assert_called_once_with('u', SimpleNamespace(id='c'))
+        checkpoint.assert_called_once_with('u', 'c', 'effects-input')
+    else:
+        assert calls == ['process', 'process']
 
 
 @pytest.mark.parametrize('field', ['queue', 'handler', 'audience', 'invoker_sa'])
