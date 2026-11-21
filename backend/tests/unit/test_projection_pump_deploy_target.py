@@ -52,6 +52,8 @@ DARK_OVERRIDES = {
     'FIRESTORE_READ_LEDGER_SERVICE': 'backend-projection-pump',
     'OMI_PROCESS_ROLE': 'projection_pump',
 }
+# SCA-3318 step 2: the manifest activates the pump selector; live dark fixtures keep DARK_OVERRIDES.
+ACTIVE_OVERRIDES = {**DARK_OVERRIDES, 'BATCH_PIPELINE_PROJECTION_PUMP_ENABLED': 'true'}
 
 
 def _prod_services():
@@ -216,11 +218,16 @@ def test_prod_pump_is_integration_plus_the_dark_overrides():
     assert pump['forbidden_env'] == integration['forbidden_env']
     assert pump['service_account'] == integration['service_account']
     train_pins = {'BATCH_ACCOUNT_PRIVACY_WRITER_ENABLED', 'BATCH_PROJECTION_OUTBOX'}
-    overridden = set(DARK_OVERRIDES) | {'BATCH_PIPELINE_INDEPENDENT_LANGUAGE_RECOVERY_ENABLED'} | train_pins
+    # The one-key activation keeps the dark successor's silence-skip value (SCA-3318).
+    overridden = (
+        set(ACTIVE_OVERRIDES)
+        | {'BATCH_PIPELINE_INDEPENDENT_LANGUAGE_RECOVERY_ENABLED', 'BATCH_PIPELINE_SILENCE_READ_SKIP_ENABLED'}
+        | train_pins
+    )
     assert set(pump['env']) - set(integration['env']) <= overridden
     for name in set(integration['env']) - overridden:
         assert pump['env'][name] == integration['env'][name], name
-    for name, value in DARK_OVERRIDES.items():
+    for name, value in ACTIVE_OVERRIDES.items():
         assert pump['env'][name]['value'] == value, name
     for name in train_pins:
         assert integration['env'][name]['value'] == 'false', name
@@ -299,10 +306,10 @@ def test_rendered_pump_env_is_dark_and_keeps_only_the_required_secrets(prod_stat
     state = prod_state
     pump = state['services'][PROJECTION_PUMP]
     rendered = {entry['name']: entry.get('value') for entry in pump['env'] if 'value' in entry}
-    for name, value in DARK_OVERRIDES.items():
+    for name, value in ACTIVE_OVERRIDES.items():
         assert rendered[name] == value, name
     assert shape.expected_env(state) == {
-        'BATCH_PIPELINE_PROJECTION_PUMP_ENABLED': 'false',
+        'BATCH_PIPELINE_PROJECTION_PUMP_ENABLED': 'true',
         'FIRESTORE_READ_LEDGER_SERVICE': PROJECTION_PUMP,
         'OMI_PROCESS_ROLE': 'projection_pump',
     }
@@ -688,7 +695,10 @@ def test_shape_readback_cli_exit_codes(tmp_path, prod_state):
     state = prod_state
     (tmp_path / 'state.json').write_text(json.dumps(state))
     (tmp_path / 'iam.json').write_text(json.dumps(PRIVATE))
-    (tmp_path / 'service.json').write_text(json.dumps(_live()))
+    # The rendered manifest activates the pump, so the matching live candidate is the activated one.
+    (tmp_path / 'service.json').write_text(
+        json.dumps(_live(m=_set_env('BATCH_PIPELINE_PROJECTION_PUMP_ENABLED', 'true')))
+    )
     argv = [
         '--service',
         str(tmp_path / 'service.json'),
@@ -1121,6 +1131,21 @@ def test_claimed_sibling_skip_ships_dark_on_integration_until_activation():
     # SCA-3555: backend and backend-sync too, since main reads an absent key as on.
     for name in ('backend', 'backend-sync', 'backend-integration', PROJECTION_PUMP):
         assert services[name]['env']['BATCH_PIPELINE_FOLLOWUP_CLAIMED_SIBLING_SKIP_ENABLED']['value'] == 'false', name
+
+
+def test_pump_one_key_activation_keeps_dark_successor_values():
+    """SCA-3318 step 2: only the pump selector turns on; silence skip stays at the dark successor's false."""
+    services = _prod_services()
+    pump = services[PROJECTION_PUMP]['env']
+    assert pump['BATCH_PIPELINE_PROJECTION_PUMP_ENABLED'] == {'value': 'true', 'category': 'rollout'}
+    assert pump['BATCH_PIPELINE_SILENCE_READ_SKIP_ENABLED'] == {'value': 'false', 'category': 'ops_kill'}
+    assert pump['BATCH_PIPELINE_SERVING_ENABLED'] == {'value': 'false', 'category': 'rollout'}
+    for key in ('BATCH_ACCOUNT_PRIVACY_WRITER_ENABLED', 'BATCH_PROJECTION_OUTBOX'):
+        assert pump[key]['value'] == 'false', key
+    # The selector is service-wide: integration never enables the pump.
+    assert (
+        services['backend-integration']['env'].get('BATCH_PIPELINE_PROJECTION_PUMP_ENABLED', {}).get('value') != 'true'
+    )
 
 
 def test_existing_latest_routed_pump_is_pinned_inside_the_locked_deploy():
