@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "id": "FC-ios-bgtask-handler-registration-not-once-at-launch",
+  "family": "vendor-platform-behavior",
+  "violated_contract": "Every BGTaskScheduler launch handler must be registered exactly once per process and before application(_:didFinishLaunchingWithOptions:) returns. With UIScene, plugin instances are created after launch (storyboard engine) and Flutter's scene fallback can deliver didFinishLaunching to plugins a second time on a launch with options (URL, notification, quick action); a registration in a plugin init or an unguarded plugin didFinishLaunching raises NSInternalInconsistencyException at launch.",
+  "canonical_prevention": "Register app-owned identifiers from AppDelegate didFinishLaunching and hand tasks to the plugin once it exists; guard any plugin-owned registration with a once-per-process check at its single call site.",
+  "canonical_prevention_artifact": [
+    "app/ios/test/bgtask_launch_registration_test.rb"
+  ],
+  "evidence_prs": [],
+  "scope_hints": ["app/ios/Runner/", "app/packages/flutter_background_service_ios/"],
+  "status": "open"
+}

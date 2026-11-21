@@ -76,6 +76,10 @@ def entries():
             domains={'rederive': [False, True]},
         ),
         DriverEntry(
+            'database.conversations_v3_rederive.load_live_rederive',
+            base={'uid': SHAPE_UID, 'since': FROZEN_NOW, 'until': FROZEN_LATER, 'run_id': 'shape-run'},
+        ),
+        DriverEntry(
             'database.conversations_v3.backfill_window_metadata',
             base={'uid': SHAPE_UID, 'since': FROZEN_NOW, 'until': FROZEN_LATER},
         ),
@@ -95,9 +99,23 @@ def entries():
             base={'uid': SHAPE_UID, 'donor_ids': ['donor-one', 'donor-two']},
             domains={'transaction': [None, ref_transaction()]},
         ),
-        DriverEntry('database.conversations_v3.pending_backfill_processing', base={'uid': SHAPE_UID}),
+        DriverEntry(
+            'database.conversations_v3.pending_backfill_processing',
+            base={'uid': SHAPE_UID},
+            domains={'after': [None, 'last-foreign']},
+            neutrals={'deadline': (float('inf'), 'RPC deadline only; an expired budget issues no query')},
+        ),
         DriverEntry('database.conversations_v3.backfill_run_documents', base={'uid': SHAPE_UID, 'run_id': 'shape-run'}),
         DriverEntry('database.conversations_v3_backfill_runs.list_runs', base={'uid': SHAPE_UID}),
+        DriverEntry(
+            'database.conversations_v3_backfill_runs.list_priors', base={'uid': SHAPE_UID, 'run_id': 'shape-run'}
+        ),
+        DriverEntry('database.conversations_v3_backfill_runs._live_run_ids', base={'uid': SHAPE_UID}),
+        DriverEntry(
+            'database.conversations_v3_backfill_runs.purge_conversation_priors',
+            base={'uid': SHAPE_UID, 'conversation_ids': ['shape-conversation'], 'reason': 'deleted'},
+            neutrals={'keep_level': (None, 'only filters which existing prior documents are stubbed; no query shape')},
+        ),
         DriverEntry('database.conversations_v3_backfill_runs.pending_starts', base={'limit': 20}),
         DriverEntry('database.conversations_v3_processing.pending_created', base={'uid': SHAPE_UID}),
         DriverEntry(

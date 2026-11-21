@@ -52,6 +52,36 @@ def test_runtime_env_composer_rejects_duplicate_mapping_keys(tmp_path, mapping):
         composer['_load_yaml'](source)
 
 
+@pytest.mark.parametrize('prod_enabled', [None, False, True])
+def test_go_queue_erase_setting_is_shared_by_deletion_runtimes(tmp_path, prod_enabled):
+    runtime_env = ROOT / 'backend/deploy/runtime_env'
+    for name in ('dev', 'prod', 'staging'):
+        overlay = yaml.load((runtime_env / f'{name}.overlay.yaml').read_text(), Loader=SAFE_LOADER)
+        if name == 'prod' and prod_enabled is not None:
+            overlay['overlay']['go_queue_erase_required'] = prod_enabled
+        (tmp_path / f'{name}.overlay.yaml').write_text(yaml.safe_dump(overlay, sort_keys=False))
+
+    environments = COMPOSER['compose_manifest'](runtime_env_dir=tmp_path)['environments']
+    environments['staging'] = COMPOSER['compose_staging'](
+        runtime_env_dir=tmp_path, inputs={'STAGING_REDIS_HOST': '10.0.0.7'}
+    )
+    for name, env in environments.items():
+        expected = str(prod_enabled).lower() if name == 'prod' and prod_enabled is not None else None
+        assert all(
+            service['env'].get('GO_QUEUE_ERASE_REQUIRED', {}).get('value') == expected
+            for service in env['cloud_run']['services'].values()
+        )
+        if name != 'staging':
+            entry = env['gke']['config_map']['entries'].get('GO_QUEUE_ERASE_REQUIRED', {})
+            assert entry.get('value') == expected
+
+
+def test_go_queue_erase_setting_rejects_service_override():
+    env = {'cloud_run': {'services': {'backend': {'env': {'GO_QUEUE_ERASE_REQUIRED': {'value': 'true'}}}}}}
+    with pytest.raises(ValueError, match='at environment scope'):
+        COMPOSER['_apply_go_queue_erase_setting'](env)
+
+
 def test_conversations_v3_stage_is_shared_across_creator_finalizer_readers():
     manifest = COMPOSER['compose_manifest']()
     for env in manifest['environments'].values():

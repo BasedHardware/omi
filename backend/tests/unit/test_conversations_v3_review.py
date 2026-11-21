@@ -9,6 +9,7 @@ from unittest.mock import AsyncMock
 import pytest
 
 from database import conversations_v3 as store
+from database import conversations_v3_backfill_runs as runs
 from utils.conversations.v3 import service
 from utils.conversations import process_conversation as process_pipeline
 from utils.conversations import merge_conversations as merger
@@ -516,8 +517,21 @@ async def test_uncertain_visibility_counter_counts_committed_first_exposure(buil
     meter.inc.assert_called_once()
 
 
-@pytest.mark.parametrize('backfilled', [False, True])
-def test_manual_end_processes_its_own_short_window(monkeypatch, backfilled):
+@pytest.mark.parametrize(
+    'text,manual,backfilled,expect_notes,expected_floor',
+    [
+        ('speech ' * 40, True, False, True, None),
+        ('speech ' * 40, True, True, True, None),
+        ('界' * 19, False, False, False, (True, True)),
+        ('界' * 20, False, False, True, (True, False)),
+        ('あ' * 19, False, False, False, (True, True)),
+        ('あ' * 20, False, False, True, (True, False)),
+        ('界' * 20, False, True, True, None),
+    ],
+)
+def test_process_applies_word_floor_to_automatic_windows(
+    monkeypatch, text, manual, backfilled, expect_notes, expected_floor
+):
     from utils.conversations import process_conversation as process, lifecycle
     from types import SimpleNamespace
     from database import conversations_v3_processing as writers
@@ -526,28 +540,29 @@ def test_manual_end_processes_its_own_short_window(monkeypatch, backfilled):
         'id': 'window',
         'v3_derived': True,
         'backfilled': backfilled,
-        'manual_end': True,
+        'manual_end': manual,
         'kind': 'conversation',
         'created_at': AT,
         'started_at': AT,
         'finished_at': AT,
         'structured': {},
-        'transcript_segments': [{'text': 'speech ' * 40, 'start': 0, 'end': 10, 'is_user': False}],
+        'transcript_segments': [{'text': text, 'start': 0, 'end': 10, 'is_user': False}],
     }
-    called = []
+    called, completed, settlements = [], [], []
     monkeypatch.setattr(writers, 'begin_processing', lambda *a, **kw: True)
-    monkeypatch.setattr(writers, 'settle_processing', lambda *a, **kw: None)
-    monkeypatch.setattr(lifecycle, 'complete', lambda *a: pytest.fail('manual end skipped notes'))
+    monkeypatch.setattr(writers, 'settle_processing', lambda *a, **kw: settlements.append(kw))
+    monkeypatch.setattr(lifecycle, 'complete', lambda _uid, cid: completed.append(cid))
 
     def full(uid, language, conversation, **kw):
-        called.append(conversation)
+        called.append((conversation.id, conversation.manual_end, conversation.transcript_segments[0].text))
         kw['persistence_observer'](True)
         return SimpleNamespace(status='completed')
 
     monkeypatch.setattr(process, 'process_conversation', full)
     service._process('u', row, 'token')
-    assert called[0].id == 'window' and called[0].manual_end
-    assert len(called[0].transcript_segments[0].text.split()) == 40
+    assert called == ([('window', manual, text)] if expect_notes else [])
+    assert completed == ([] if expect_notes else ['window'])
+    assert settlements[0]['word_floor_outcomes'] == expected_floor
 
 
 @pytest.mark.asyncio
@@ -1168,7 +1183,32 @@ def test_merge_donor_task_guard_is_scoped_and_bounded():
     client = MemoryQuery(rows)
     assert store.merge_donors_have_tasks('synthetic', ['other', 'donor'], firestore_client=client)
     assert not store.merge_donors_have_tasks('synthetic', ['other'], firestore_client=client)
+    assert store.merge_donors_have_tasks(
+        'synthetic', [f'd{i:02}' for i in range(31)] + ['donor'], firestore_client=client
+    )
+    assert len(client.calls) == 4
     assert all(limit == 1 for _filters, limit, _after in client.calls)
+
+
+def test_prior_purge_inventory_skips_other_modes_and_stays_owner_scoped(monkeypatch):
+    monkeypatch.setattr(runs, 'PRIORS_READ_PAGE', 2)
+    prefix = f'/users/u/{runs.COLLECTION}/'
+    client = MemoryQuery(
+        {
+            prefix + 'a': {'mode': 'derive'},
+            prefix + 'b': {'mode': runs.LIVE_MODE},
+            prefix + 'c': {'mode': 'rederive'},
+            prefix + 'd': {'mode': runs.LIVE_MODE},
+            prefix + 'e': {'mode': runs.LIVE_MODE},
+            f'/users/other/{runs.COLLECTION}/f': {'mode': runs.LIVE_MODE},
+        }
+    )
+    assert runs._live_run_ids('u', firestore_client=client) == ['b', 'd', 'e']
+    assert len(client.calls) == 2
+    assert all(filters == (('mode', '==', runs.LIVE_MODE),) and cap == 2 for filters, cap, _ in client.calls)
+    client.calls.clear()
+    assert runs.purge_conversation_priors('no-history', ['c0'], 'deleted', firestore_client=client) == 0
+    assert len(client.calls) == 1
 
 
 def test_builder_followup_distinguishes_deferred_preview_from_new_work(monkeypatch):

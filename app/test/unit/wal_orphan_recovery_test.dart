@@ -89,6 +89,24 @@ void main() {
     await dir.delete(recursive: true);
   });
 
+  test('the census backs off to every two hours while live audio streams, and still runs', () {
+    final t0 = DateTime.utc(2026, 11, 21, 5);
+    expect(orphanRecoveryDue(now: t0), isTrue, reason: 'never run: due');
+    final idleLater = t0.add(const Duration(minutes: 15));
+    expect(orphanRecoveryDue(now: idleLater, lastRun: t0), isTrue, reason: 'idle: every 15 minutes');
+    expect(
+        orphanRecoveryDue(now: idleLater, lastRun: t0, lastLiveFrame: idleLater.subtract(const Duration(seconds: 5))),
+        isFalse,
+        reason: 'streaming: not each quarter hour');
+    expect(
+        orphanRecoveryDue(now: idleLater, lastRun: t0, lastLiveFrame: idleLater.subtract(const Duration(minutes: 2))),
+        isTrue,
+        reason: 'a capture that stopped a while ago is idle');
+    final twoHours = t0.add(orphanRecoveryStreamingInterval);
+    expect(orphanRecoveryDue(now: twoHours, lastRun: t0, lastLiveFrame: twoHours), isTrue,
+        reason: 'it still runs while streaming, every two hours');
+  });
+
   test('classifies every class, strict frames and the inclusive recovery-window boundary without writes', () async {
     final files = [
       name(now - orphanRecoveryWindowSeconds),

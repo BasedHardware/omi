@@ -143,6 +143,16 @@ pump no longer competes for any of them.
 | 5. Right-size CPU, memory and N | SCA-3120 owner reads back | As step 3 | Revert the size change |
 
 Rollback order at any step: serving sweep back on first, then the pump flag off, then delete the service.
+Deleting the service also needs `backend-projection-pump` removed from the read reconcile's required
+set first (`firestore_read_reconcile.py`), or every later day scores incomplete. A first create stays
+dark by policy (the first-create gate refuses an activated manifest): recreate from a manifest with
+the pump flag `false`, read back the dark base, then activate as step 2.
+
+After step 2 the routed pump revision is the activated one. The pre-mutation inverse check
+(`verify_projection_pump_inverse.py --disposition`) accepts a pinned routed revision whose
+`BATCH_PIPELINE_PROJECTION_PUMP_ENABLED` is the literal `'true'`, and otherwise the dark values. A
+base before its first pin and a new create must still be dark. The fastest pump rollback is a
+traffic restore to the recorded dark revision; a flag-false redeploy is the second option.
 
 ## Dark dispatch and interrupted first-create recovery
 
@@ -186,8 +196,9 @@ resuming with that revision and identity, using the actual inputs in the workflo
 pre-approval summary. Use `repository@sha256:digest` for the image.
 Use the serving revision's own admitted source and digest from Release evidence, which may
 predate the new candidate. The workflow binds the dispatch input to live data and stops before
-mutation unless requested and serving traffic agree on exactly that Ready dark revision.
-Record the run ID and independent serving and dark baseline readback in the Release order.
+mutation unless requested and serving traffic agree on exactly the Ready revision the disposition
+names (dark, or the activated pump after step 2). Record the run ID and independent serving and
+baseline readback in the Release order.
 
 ## Hazards
 
@@ -210,7 +221,8 @@ Record the run ID and independent serving and dark baseline readback in the Rele
   requires snapshots only from the four shipped services, so a silent pump ledger would still
   read as complete. Adding the pump to `SHIPPED_SERVICES` before the service exists would make
   every reconcile incomplete, so it lands as its own change after the dark deploy is read back
-  and before the pump flag is enabled. Owner: SCA-3120.
+  and before the pump flag is enabled. Owner: SCA-3120. Done in the step-2 activation PR (#25966):
+  the pump is in `SHIPPED_SERVICES` and `HOT_SERVICES`; the dark successor already emits snapshots.
 - **Inherited invoker grants.** The pre-traffic check reads the service's own IAM policy and
   permits direct bindings only for private Cloud Run viewers. It does not read project or folder policy: a
   principal granted `roles/run.invoker` at the project can invoke every Cloud Run service in

@@ -190,15 +190,16 @@ def test_early_placement_and_coverage_implementations_are_main_bytes():
                 actual = actual.replace(fragment, '')
         baseline = main_source(path)
         if path.endswith(('/pipeline.py', '/wal_audio_coverage.py')):
-            # Only the staging seam gains an opt-in provenance probe. Compare
-            # every other byte, then execute the default seam below as well.
-            def without_staging(text):
-                # pipeline.py also exempts process_segment: the backfill day cap moved
-                # out of it to upload admission (#25677); no early-placement code there.
+            # Compare the early-placement implementation byte for byte. The
+            # default staging seam is also exercised directly below.
+            def without_unrelated_functions(text):
+                # process_segment lost the backfill day cap (#25677).
+                # The legacy reprocess callback runs after placement and has
+                # its own body parity check in test_enrichment_callback_parity.
                 names = (
                     {'apply_wal_audio_coverage'}
                     if path.endswith('/wal_audio_coverage.py')
-                    else {'_retrieve_file_paths_v2', 'process_segment'}
+                    else {'_retrieve_file_paths_v2', 'process_segment', '_reprocess_conversation_after_update'}
                 )
                 lines = text.splitlines(keepends=True)
                 for node in sorted(
@@ -221,7 +222,7 @@ def test_early_placement_and_coverage_implementations_are_main_bytes():
                     'parse_sync_filename_timestamp(wav_path)',
                 )
             else:
-                actual, baseline = without_staging(actual), without_staging(baseline)
+                actual, baseline = without_unrelated_functions(actual), without_unrelated_functions(baseline)
         assert actual == baseline, path
 
 

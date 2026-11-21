@@ -26,6 +26,7 @@ def _delete_with_tasks(monkeypatch, tasks, vector_batch_fn=None, source_lookup=N
     monkeypatch.setattr(conversations_router, 'MemoryService', lambda db_client=None: object())
     monkeypatch.setattr(conversations_router, 'retraction_can_be_skipped', lambda *a, **k: True)
     monkeypatch.setattr(conversations_router, 'destructive_operation_gate', lambda *a, **k: nullcontext())
+    monkeypatch.setattr(conversations_router, '_legal_hold_defers_delete', lambda uid: False)
     monkeypatch.setattr(conversations_router, 'delete_conversation_screen_frames', lambda *a, **k: None)
     monkeypatch.setattr(conversations_router, 'delete_conversation_and_frame_evidence', lambda *a, **k: None)
     monkeypatch.setattr(conversations_router, 'delete_vector', lambda *a, **k: None)

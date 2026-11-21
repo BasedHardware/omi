@@ -157,3 +157,18 @@ def test_semantic_duplicate_hint_does_not_claim_content_was_already_merged():
         {'id': 'b', 'status': 'completed'},
     ]
     assert merge.validate_merge_compatibility(rows)[0] is True
+
+
+def test_merge_defers_foreign_source_before_building_target(monkeypatch):
+    fail, create = _install(
+        monkeypatch,
+        {
+            'c1': {'id': 'c1', 'status': 'completed', 'finalization_engine': 'go', 'finalization_owner_epoch': 1},
+            'c2': {'id': 'c2', 'status': 'completed'},
+        },
+    )
+
+    merge.perform_merge_async('u1', ['c1', 'c2'])
+
+    fail.assert_called_once_with('u1', ['c1', 'c2'])
+    create.assert_not_called()

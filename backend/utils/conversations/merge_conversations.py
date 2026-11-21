@@ -24,13 +24,14 @@ from typing import Any, Callable, Dict, List, Optional, Set, Tuple
 from google.api_core import exceptions as google_exceptions
 
 import database.conversations as conversations_db
-from database import conversation_tombstones
+from database import conversation_tombstones, conversations_v3_backfill_runs
 from database.conversation_merge_policy import source_has_merge_receipt
 from database._client import db as firestore_db
 from database.vector_db import delete_action_item_vectors_batch, delete_vector
 from models.audio_file import AudioFile
 from models.conversation import Conversation
 from models.conversation_enums import ConversationStatus
+from models.finalization_owner import FinalizationOwnedElsewhere, python_owns_finalization
 from models.structured import Structured
 from utils.memory.memory_service import MemoryService
 from utils.metrics import OMI_SYNC_BRIDGE_AUDIO_COPY_TOTAL
@@ -255,6 +256,8 @@ def perform_merge_async(
         for conv_id in conversation_ids:
             conv = read_product_conversation(conversations_db.get_conversation, uid, conv_id)
             if conv:
+                if not python_owns_finalization(conv):
+                    raise FinalizationOwnedElsewhere()
                 conversations.append(conv)
 
         if len(conversations) < 2:
@@ -451,6 +454,8 @@ def perform_merge_async(
                         trigger=ProcessingTrigger.MERGE,
                         created_webhook_observer=created_webhook_sends.append,
                     )
+            except FinalizationOwnedElsewhere:
+                raise
             except Exception as e:
                 logger.error(f"Error processing merged conversation: {e}")
                 # Even if processing fails, continue with cleanup
@@ -520,6 +525,12 @@ def perform_merge_async(
 
         return True if merge_job_id else None
 
+    except FinalizationOwnedElsewhere:
+        logger.info('event=conversation_merge outcome=deferred reason=finalization_owned_elsewhere')
+        if merge_job_id is not None:
+            return False  # Durable recovery owns release of the source claims.
+        _handle_merge_failure(uid, conversation_ids)
+        return None
     except Exception as e:
         if merge_job_id is not None:
             # Recovery alone owns rollback of durable claims. A stale worker
@@ -968,6 +979,10 @@ def copy_sync_bridge_audio(uid: str, source_id: str, target_id: str) -> None:
     _copy_audio_chunks_for_merge(uid, [{'id': source_id}], target_id, strict=True, skip_existing=True)
 
 
+def _purge_rederive_priors(uid: str, conversation_ids: list) -> None:
+    conversations_v3_backfill_runs.purge_conversation_priors(uid, conversation_ids, 'deleted')
+
+
 def delete_conversation_with_sync_sources(
     uid: str,
     conversation_id: str,
@@ -983,6 +998,9 @@ def delete_conversation_with_sync_sources(
         if conversation_row is not None
         else read_product_conversation(conversations_db.get_conversation, uid, conversation_id) or {}
     )
+    # A stopped attempt can have a prior before the row is stamped. Use the requested ID even
+    # on a retry without row metadata, and purge the known lineage before deleting its rows.
+    _purge_rederive_priors(uid, [conversation_id, *(row.get('sync_merged_from') or [])])
     for source_id in row.get('sync_merged_from', []):
         if source_id != conversation_id:
             # The source row is destroyed below; without intent its from-segments

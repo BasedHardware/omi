@@ -402,3 +402,11 @@ def test_full_deploy_preserves_restored_integration_cadence(composer, environmen
         actual = {key: entry['value'] for key, entry in spec['env'].items() if key in expected}
         # SCA-3120: the prod-only projection pump derives from integration; serving is off there.
         assert actual == (expected if service in ('backend-integration', 'backend-projection-pump') else {}), service
+
+
+def test_staging_integration_keeps_the_serving_sweep_without_a_pump(composer):
+    """#25989 panel F1: prod hands the sweep to the projection pump; staging has no pump."""
+    services = composer.compose_staging(inputs=INPUTS)['cloud_run']['services']
+    assert 'backend-projection-pump' not in services
+    env = services['backend-integration']['env']
+    assert env['BATCH_PIPELINE_SERVING_PROJECTION_SWEEP'] == {'value': 'true', 'category': 'ops_kill'}

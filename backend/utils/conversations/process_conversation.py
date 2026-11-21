@@ -69,6 +69,7 @@ from models.workstream_association import AssociationEvidence
 from models.product_memory import MemoryTier
 from models.calendar_context import CalendarMeetingContext
 from models.client_processing import ClientProcessing
+from models.finalization_owner import FinalizationOwnedElsewhere
 from models.conversation import (
     AppResult,
     Conversation,
@@ -307,8 +308,8 @@ from utils.other.storage import (
     precache_conversation_audio,
 )
 
-from utils.conversations.v3 import policy as v3_policy
-from utils.conversations.v3 import service as v3_service
+from utils.conversations.v3 import policy as v3_policy, service as v3_service
+from utils.conversations.v3.word_floor import MIN_HOME_WORDS, MIN_TASK_WORDS, text_word_count
 
 logger = logging.getLogger(__name__)
 
@@ -454,10 +455,10 @@ def _get_structured(
                 recovery_minimum_fallback_observer()
             return minimum, decision.discard
         if v3_policy.flag(conversation, 'v3_derived'):
-            words = sum(len(s.text.split()) for s in conversation.transcript_segments)
-            if not full_v3_notes and (conversation.kind in {'media', 'background'} or words < 20):
+            words = sum(text_word_count(s.text) for s in conversation.transcript_segments)
+            if not full_v3_notes and (conversation.kind in {'media', 'background'} or words < MIN_TASK_WORDS):
                 return conversation.structured, True
-            if words < 300 and not full_v3_notes:
+            if words < MIN_HOME_WORDS and not full_v3_notes:
                 return v3_service.models.short_tasks(uid, conversation), False
             covers = getattr(conversation, 'summary_covers_through', None)
             if (
@@ -854,16 +855,25 @@ def _get_conversation_obj(
         return result
     elif isinstance(conversation, ExternalIntegrationCreateConversation):
         create_conversation = conversation
+        # Carried as a field on the create model; the persisted Conversation
+        # carries it in external_data, the shape every reader already uses.
+        calendar_context = getattr(conversation, 'calendar_meeting_context', None)
+        conversation_dict = conversation.dict()
+        conversation_dict.pop('calendar_meeting_context', None)
         # Use started_at as created_at for external integrations to preserve original timestamp
         created_at = conversation.started_at if conversation.started_at else datetime.now(timezone.utc)
         result = Conversation(
             id=conversation_id or str(uuid.uuid4()),
-            **conversation.dict(),
+            **conversation_dict,
             created_at=created_at,
             structured=structured,
             discarded=discarded,
         )
-        result.external_data = create_conversation.dict()
+        result.external_data = conversation_dict
+        if calendar_context is not None:
+            # The model's hand-built storage shape, not a dump: a storage write
+            # for meeting metadata must not sweep up fields added later.
+            result.external_data['calendar_meeting_context'] = calendar_context.to_storage_dict()
         result.app_id = create_conversation.app_id
         return result
     else:
@@ -2711,6 +2721,8 @@ def process_conversation(
     ``first_party_only`` requests Omi notes; the derived-effects digest identifies
     the transcript last used for memories, tasks and goal progress.
     """
+    if isinstance(conversation, Conversation) and not conversation.python_finalization_owned:
+        raise FinalizationOwnedElsewhere()
     member_notes.before_notes(uid, conversation, trigger, finalization_fence=finalization_fence)
     generated_conversation_id = str(uuid.uuid4()) if _is_ingress_create(conversation) else None
     bind_generation(uid, generated_conversation_id)
@@ -3110,14 +3122,6 @@ def process_conversation(
         if derived_effects_disposition_observer is not None:
             derived_effects_disposition_observer(DerivedEffectsDisposition.TERMINAL_NO_DERIVED_EFFECTS)
         if historical_tier:
-            if explicit_app is not None:
-                # An explicitly chosen template is the summary the owner asked for.
-                trigger_conversation_apps(
-                    uid, conversation, True, app_id, explicit_app, app_usage_attribution, language_code, people
-                )
-                conversations_db.update_conversation(
-                    uid, conversation.id, {'apps_results': [r.dict() for r in conversation.apps_results]}
-                )
             complete_explicit(uid, conversation, trigger)
         return conversation
 

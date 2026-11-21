@@ -7,7 +7,8 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
-from fastapi import HTTPException
+from fastapi import FastAPI, HTTPException
+from fastapi.testclient import TestClient
 
 import routers.conversations as conv_router
 from config import historical_tier
@@ -416,6 +417,31 @@ def test_reprocess_of_a_historical_row_takes_the_open_admission(monkeypatch):
     assert ('u1:c1', hs.ATTEMPTS_POLICY) in gates.reserved and ('u1', hs.DAILY_POLICY) in gates.reserved
 
 
+def test_historical_reprocess_rejects_app_selection_before_admission(monkeypatch):
+    gates = Gates(monkeypatch, _row())
+    executed = _reprocess(monkeypatch, gates)
+    validate = MagicMock(side_effect=HTTPException(status_code=404, detail='App not found'))
+    monkeypatch.setattr(conv_router, '_validate_reprocess_app_selection', validate)
+    app = FastAPI()
+    app.include_router(conv_router.router)
+    route = next(
+        route for route in app.routes if getattr(route, 'endpoint', None) is conv_router.reprocess_conversation
+    )
+    auth_dependency = next(dependency.call for dependency in route.dependant.dependencies if dependency.name == 'uid')
+    app.dependency_overrides[auth_dependency] = lambda: 'u1'
+
+    with TestClient(app) as client:
+        response = client.post('/v1/conversations/c1/reprocess', params={'app_id': 'summary-app'})
+
+    assert response.status_code == 400
+    assert response.json()['detail'] == 'Historical conversations can only be reprocessed with Omi notes'
+    validate.assert_not_called()
+    assert not gates.reserved
+    gates.compute.assert_not_called()
+    gates.claim.assert_not_called()
+    executed.assert_not_called()
+
+
 @pytest.mark.parametrize('gate', ['disabled', 'attempts', 'global', 'byok'])
 def test_reprocess_of_a_historical_row_honours_every_open_gate(monkeypatch, gate):
     gates = Gates(monkeypatch, _row())
@@ -450,3 +476,12 @@ def test_reprocess_of_a_normal_row_takes_no_historical_gate(monkeypatch):
     assert conv_router.reprocess_conversation('c1', uid='u1') is gates.processed
     executed.assert_called_once()
     gates.compute.assert_not_called()
+
+
+def test_foreign_historical_row_defers_without_claiming_a_slot(monkeypatch):
+    gates = Gates(monkeypatch, _row(finalization_engine='go', finalization_owner_epoch=1))
+    error = _refusal()
+    assert error.status_code == 503 and error.detail['code'] == 'historical_summary_retry'
+    assert not gates.reserved
+    gates.claim.assert_not_called()
+    gates.process.assert_not_called()

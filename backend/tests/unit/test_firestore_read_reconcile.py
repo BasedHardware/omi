@@ -258,3 +258,43 @@ def test_reconcile_reduces_to_tier_shares_for_the_cut_list():
     result = reconcile_module.reconcile(DAY, 100, records)
     assert result["reads_by_tier"] == {"basic": 5, "unattributed": 90, "unlimited": 2}
     assert sum(result["reads_by_tier"].values()) == result["instrumented"]
+
+
+def test_missing_projection_pump_snapshot_makes_the_day_incomplete():
+    """SCA-3120: the pump is a required ledger service before its flag turns on."""
+    assert "backend-projection-pump" in reconcile_module.REQUIRED_SERVICES
+    assert "backend-projection-pump" in reconcile_module.HOT_SERVICES
+    day = "2026-11-23"  # after REQUIRED_FROM; earlier days do not require the pump
+
+    def on_day(rows, stale_pump=False):
+        for row in rows:
+            row["day"] = day
+            late = row["service"] == "backend-projection-pump" and stale_pump
+            row["emitted_at"] = "2026-11-23T20:00:00+00:00" if late else "2026-11-23T23:58:00+00:00"
+        return rows
+
+    missing = on_day(
+        _records(instrumented=99, services=reconcile_module.REQUIRED_SERVICES - {"backend-projection-pump"})
+    )
+    assert reconcile_module.reconcile(day, 100, missing)["outcome"] == "incomplete"
+    # A pump that stopped reporting early in the day leaves later reads unaccounted.
+    stale = on_day(_records(instrumented=99), stale_pump=True)
+    assert reconcile_module.reconcile(day, 100, stale)["outcome"] == "incomplete"
+    assert reconcile_module.reconcile(day, 100, on_day(_records(instrumented=99)))["outcome"] == "healthy"
+
+
+def test_projection_pump_is_required_only_from_its_first_full_ledger_day():
+    """#25966 panel F2: the D-2 cron must not score pre-pump days red."""
+    assert reconcile_module.REQUIRED_FROM == {"backend-projection-pump": "2026-11-22"}
+    before = "2026-11-20"
+    others = reconcile_module.REQUIRED_SERVICES - {"backend-projection-pump"}
+    rows = _records(instrumented=99, services=others)
+    for row in rows:
+        row["day"] = before
+        row["emitted_at"] = "2026-11-20T23:59:00+00:00"
+    assert reconcile_module.reconcile(before, 100, rows)["outcome"] == "healthy"
+    after = "2026-11-22"
+    for row in rows:
+        row["day"] = after
+        row["emitted_at"] = "2026-11-22T23:59:00+00:00"
+    assert reconcile_module.reconcile(after, 100, rows)["outcome"] == "incomplete"

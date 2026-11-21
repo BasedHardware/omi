@@ -8,7 +8,6 @@ from typing import Any, Callable, Mapping
 from config.live_demand import language_qualified, resolve_live_demand
 from config.rollout_cohorts import warm_rollout_cohorts
 from utils.observability.fallback import record_fallback
-from utils.observability.soniox_idle_arm import IdleArmLedger
 from utils.observability.demand_cohort import (
     DemandTelemetry,
     attach_demand_telemetry,
@@ -304,10 +303,4 @@ def capture_demand_admission(host) -> DemandTelemetry | None:
     )
     cohort = ('admitted' if config.admits(host.request.uid) else 'eligible_control') if eligible else 'ineligible'
     host._demand_cohort = cohort
-    telemetry = attach_demand_telemetry(host, cohort, None if eligible else ineligible_reason(host))
-    if telemetry is not None:
-        try:
-            telemetry.idle_arm = IdleArmLedger(host.request.uid)
-        except Exception:
-            pass
-    return telemetry
+    return attach_demand_telemetry(host, cohort, None if eligible else ineligible_reason(host))

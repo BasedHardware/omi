@@ -14,6 +14,7 @@ import 'package:path/path.dart' as path;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:omi/services/experiments/orphan_audio_recovery.dart';
 import 'package:omi/services/experiments/orphan_audio_reclaim.dart';
+import 'package:omi/utils/analytics/lag_work_registry.dart';
 import 'package:omi/utils/analytics/registry/events.g.dart';
 // TypedEvents must resolve through its registry library, not the legacy re-export.
 // ignore: unnecessary_import
@@ -64,7 +65,6 @@ import 'package:omi/services/on_device/on_device_transcription_controller.dart';
 import 'package:omi/services/on_device/on_device_overflow_intake.dart';
 import 'package:omi/services/wals/sync_upload_gate.dart';
 import 'package:omi/backend/http/api/sync_upload_refusal.dart';
-import 'package:omi/services/wals/recording_wait_deferrals.dart';
 import 'package:omi/services/wals/wal_evidence_runs.dart';
 import 'package:omi/utils/debug_log_manager.dart';
 import 'package:omi/utils/logger.dart';
@@ -154,6 +154,17 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
   Timer? _flushingTimer;
   Timer? _pendantTimer;
   DateTime? _lastOrphanRecoveryWake;
+
+  /// When the last live audio frame was buffered; the orphan census backs off while audio streams.
+  DateTime? _lastLiveFrameAt;
+
+  @visibleForTesting
+  set testLastOrphanRecoveryWake(DateTime? value) => _lastOrphanRecoveryWake = value;
+
+  /// Whether the foreground orphan census may start now, from this sync's own clocks.
+  @visibleForTesting
+  bool get orphanRecoveryDueNow =>
+      orphanRecoveryDue(now: _now(), lastRun: _lastOrphanRecoveryWake, lastLiveFrame: _lastLiveFrameAt);
   Future<void>? _orphanRecoveryInFlight;
   Future<void>? _orphanReclaimInFlight;
   final Future<bool> Function()? _orphanReclaimOffOverride;
@@ -373,7 +384,10 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
   final Future<DeviceConnection?> Function(String deviceId)? _connectionResolver;
 
   DateTime _now() => _nowOverride?.call() ?? DateTime.now();
-  late final RecordingWaitDeferrals _recordingWaits = RecordingWaitDeferrals(_now);
+  bool _isRecordingWaiting(Wal wal) => _uploadGate.isRecordingWaiting(
+        recordingGroup: recordingWaitGroupKey(wal),
+        filePath: wal.filePath,
+      );
 
   Future<void> _sleep(Duration duration) => (_sleepOverride ?? Future<void>.delayed)(duration);
 
@@ -2133,6 +2147,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     _frames.add(positioned);
     _frameSynced.add(false);
     _lastFrameAccepted = true;
+    _lastLiveFrameAt = _now();
     if (_isPendantFrame(frame) && _deviceId != null) {
       RingCustodyDiagnostics.shared.route(_deviceId!, RingCaptureRoute.ordinaryWal);
     }
@@ -2279,7 +2294,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
               isAutoUploadEligible(wal, nowSeconds: batchNowSeconds) &&
               !_isDiscardedRecording(wal) &&
               !attemptedWalIds.contains(walAttemptKey(wal)) &&
-              !_recordingWaits.isWaiting(wal.conversationId) &&
+              !_isRecordingWaiting(wal) &&
               (wal.status != WalStatus.uploadRejected || refusalRetries < walMaxRefusalRetriesPerDrain))
           .toList();
       final pending = eligible.where((wal) => !liveCaptureOnly || isLiveCaptureWal(wal, batchNowSeconds)).toList();
@@ -2446,6 +2461,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
           conversationId: batchWals.first.conversationId,
           captureEvidence: captureEvidenceUploadHeader(batchWals, files),
           recordingSessionId: batchWals.first.recordingSessionId,
+          recordingGroup: recordingWaitGroupKey(batchWals.first),
           audioStartSeconds: audioBounds.start,
           audioEndSeconds: audioBounds.end,
           claimLiveCapture: claimLiveCapture,
@@ -2566,7 +2582,9 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
           );
           continue;
         }
-        if (!definitive) batchesFailed++;
+        final scopedWait = isRecordingScopedSyncWaitReasonCode(e.reasonCode);
+        if (e is SyncRecordingWaitException) clockRecoveryAttempted = false;
+        if (!definitive && !scopedWait) batchesFailed++;
         final authenticationFailed = e.statusCode == 401 || e.statusCode == 403;
         if (definitive) {
           await applyUploadRefusals(batchWals, generation, e);
@@ -2589,10 +2607,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
           'statusCode': e.statusCode,
           'terminal': definitive,
         });
-        final scopedWait = isRecordingScopedSyncWaitReasonCode(e.reasonCode);
-        final recordingWait =
-            scopedWait && _recordingWaits.defer(batchConversationId, e.recordingWaitSeconds ?? e.retryAfterSeconds);
-        if (e.statusCode >= 500 && !recordingWait && (scopedWait || (e.retryAfterSeconds ?? 0) <= 0)) {
+        if (e.statusCode >= 500 && !scopedWait && (e.retryAfterSeconds ?? 0) <= 0) {
           // Unscoped 5xx (e.g. platform shedding under load): the server gave
           // no pacing, so the drain pauses briefly and grows the pause with
           // each consecutive refusal instead of immediately re-uploading the
@@ -2698,6 +2713,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
       return null;
     }
     final walToSync = matches.first;
+    if (_isRecordingWaiting(walToSync)) throw const SyncRecordingWaitException();
     // A deliberate single-recording retry is a fresh start, so it restores the
     // auto-upload budget a previous failure spent. It costs at most one extra
     // upload for a permanently refused recording: the reconciler spends the
@@ -2774,6 +2790,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
         conversationId: walToSync.conversationId,
         captureEvidence: captureEvidenceUploadHeader([walToSync], [walFile]),
         recordingSessionId: walToSync.recordingSessionId,
+        recordingGroup: recordingWaitGroupKey(walToSync),
         audioStartSeconds: audioBounds.start,
         audioEndSeconds: audioBounds.end,
         claimLiveCapture: claimLiveCapture,

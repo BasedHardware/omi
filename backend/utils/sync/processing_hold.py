@@ -11,10 +11,12 @@ from functools import cache
 import hashlib
 import json
 import os
+import time
 from typing import Any
 
 from prometheus_client import Counter, Histogram, REGISTRY
 from config.merge_before_processing import enabled as merge_before_processing_enabled
+from models.finalization_owner import REFUSAL as FINALIZATION_OWNER_REFUSAL
 from utils.observability.reasons import ReasonFamily, SyncProcessingHoldOutcome, reason_label
 
 QUIET_SECONDS = 600
@@ -27,10 +29,16 @@ FIELD = 'sync_processing_hold'
 class ProcessingDeferred(RuntimeError):
     """Keep durable custody while a processing prerequisite is unavailable."""
 
-    def __init__(self, reason: str, available_at: float):
+    def __init__(self, reason: str, available_at: float, *, ownership_target_id: str | None = None):
         super().__init__(reason)
         self.reason = reason
         self.available_at = available_at
+        self.ownership_target_id = ownership_target_id
+
+
+def finalization_owner_deferral(*, target_id: str | None = None) -> ProcessingDeferred:
+    """Retry durable enrichment later, including after a Python handback."""
+    return ProcessingDeferred(FINALIZATION_OWNER_REFUSAL, time.time() + 120, ownership_target_id=target_id)
 
 
 @cache
