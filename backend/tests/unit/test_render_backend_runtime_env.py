@@ -1712,12 +1712,13 @@ def test_record_close_notify_renders_on_every_cloud_run_listener(environment, se
         assert [(name, value) for name, value in rendered if name == key] == [(key, expected)]
 
 
-def test_prod_silence_read_skip_is_held_off_on_projection_hosts():
+def test_prod_silence_read_skip_is_on_for_every_serving_role():
     key = 'BATCH_PIPELINE_SILENCE_READ_SKIP_ENABLED'
     prod = _MANIFEST['environments']['prod']
-    for name in ('backend', 'backend-sync', 'backend-sync-backfill', 'backend-integration'):
-        assert prod['cloud_run']['services'][name]['env'][key] == {'value': 'false', 'category': 'ops_kill'}
-    assert prod['gke']['backend-listen']['env'][key] == {'value': 'false', 'category': 'ops_kill'}
+    # backend-projection-pump derives from backend-integration and runs the same projection path.
+    for name in ('backend', 'backend-sync', 'backend-sync-backfill', 'backend-integration', 'backend-projection-pump'):
+        assert prod['cloud_run']['services'][name]['env'][key] == {'value': 'true', 'category': 'ops_kill'}
+    assert prod['gke']['backend-listen']['env'][key] == {'value': 'true', 'category': 'ops_kill'}
     chart = Path(__file__).resolve().parents[2] / 'charts/backend-listen/prod_omi_backend_listen_values.yaml'
     values = yaml.safe_load(chart.read_text())
-    assert [entry['value'] for entry in values['env'] if entry['name'] == key] == ['false']
+    assert [entry['value'] for entry in values['env'] if entry['name'] == key] == ['true']
