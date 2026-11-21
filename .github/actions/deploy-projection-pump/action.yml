@@ -185,7 +185,9 @@ runs:
 
     # A listing distinguishes a first create from a describe/API failure. For an
     # existing service, verify what is serving before any deploy or probe mutation.
-    - name: Verify existing projection pump before any mutation
+    # The one write allowed here pins an existing LATEST route to the disposition's
+    # verified base by name: the same revision keeps serving (SCA-3318).
+    - name: Verify existing projection pump, pinning a LATEST-routed base, before deploy mutations
       id: pump-service
       shell: bash
       env:
@@ -700,6 +702,7 @@ runs:
         path: |
           artifacts/projection-pump-deploy-control.txt
           artifacts/projection-pump-existing-dark-readback.txt
+          artifacts/projection-pump-existing-latest-readback.txt
           artifacts/projection-pump-first-dark-readback.txt
           artifacts/projection-pump-inverse-readback.txt
           artifacts/projection-pump-candidate-release-vector.json

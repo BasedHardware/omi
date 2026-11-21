@@ -79,7 +79,7 @@ def verify(
         status.get('latestReadyRevisionName') != expected.revision
         or status.get('latestCreatedRevisionName') != expected.revision
     ):
-        raise ValueError('LATEST does not resolve to the newly created base')
+        raise ValueError('LATEST does not resolve to the expected base revision')
 
     metadata = revision.get('metadata', {})
     if (
