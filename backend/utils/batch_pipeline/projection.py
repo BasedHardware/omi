@@ -1292,6 +1292,7 @@ class Projector:
                         binding.owner_id,
                         receipt['conversation_id'],
                         silent=receipt.get('silent_redrive') is True,
+                        require_python_owner=True,
                     )
                 )
             outputs = receipt.get('size_rollover_outputs') or [{'conversation_id': canonical}]

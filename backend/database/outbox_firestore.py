@@ -174,9 +174,10 @@ class FirestoreEnrichmentOutbox:
 
             return discard_blocked(row_id)
         probe = self._privacy_blocked
+        outbox = _outbox()
 
         def discard(old):
-            if not old or old.get('dormant') or not old.get('uid'):
+            if not old or (old.get('dormant') and not outbox.ownership_parked(old)) or not old.get('uid'):
                 return old, False
             if not probe(old['uid'], {'conversation_id': old.get('conversation_id')}):
                 return old, False
@@ -242,12 +243,13 @@ class FirestoreEnrichmentOutbox:
             producer = payload.get('record_notes_producer') if record_notes_eager_enabled() else None
             if producer:
                 # Sidecar metadata stays on the durable row, outside the <=4 KiB claim payload.
-                producers = {} if old and old.get('dormant') else dict(new.get('record_notes_producers') or {})
+                reopening = old and old.get('dormant') and not outbox.ownership_parked(old)
+                producers = {} if reopening else dict(new.get('record_notes_producers') or {})
                 producers = record_notes_hold.merge_producers(
                     producers, {producer['conversation_id']: producer.get('revision')}
                 )
                 new['record_notes_producers'] = producers
-            elif old and old.get('dormant'):
+            elif old and old.get('dormant') and not outbox.ownership_parked(old):
                 new.pop('record_notes_producers', None)
             provenance = payload.get('record_notes_processing_hold') if record_notes_eager_enabled() else None
             if isinstance(provenance, dict):
@@ -492,6 +494,9 @@ class FirestoreEnrichmentOutbox:
         def rearm(old):
             if not _holds(old, claim):
                 return old, None
+            if reason == outbox.FINALIZATION_OWNER_REFUSAL:
+                parked = outbox.park_for_ownership(old, now)
+                return parked, parked
             pending = dict(old)
             pending.pop('summary_seen_by', None)
             if reason == outbox.V3_CUSTODY_DEFER_REASON:
@@ -517,7 +522,8 @@ class FirestoreEnrichmentOutbox:
             return None
         if reason == outbox.V3_CUSTODY_DEFER_REASON:
             logger.info('event=enrichment_outbox outcome=deferred reason=%s', reason)
-        self._rearmed(pending)
+        if not outbox.ownership_parked(pending):
+            self._rearmed(pending)
         return pending['task_token']
 
     def repair(self, claim: Claim, retry_revision: int, *, now: float) -> str | None:

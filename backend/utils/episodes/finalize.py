@@ -24,6 +24,7 @@ from typing import Any, Mapping
 from config.episodes import episodes_enabled_for
 from config.episode_attach import noop_schedule_enabled
 from config.recorded_time import recorded_episodes_enabled
+from models.finalization_owner import python_owns_finalization
 from utils.conversations.fragment_visibility import is_relevance_discarded
 from utils.conversations.processing_trigger import ProcessingTrigger
 from utils.episodes import client_gate, intake_worker
@@ -181,5 +182,5 @@ def _after_finalization(uid: str, conversation_id: str, trigger: ProcessingTrigg
     from utils.episodes.service import on_conversation_finalized
 
     row = conversations_db.get_conversation(uid, conversation_id)
-    if row:
+    if row and python_owns_finalization(row):
         on_conversation_finalized(uid, conversation_id, row, trigger=trigger.value)

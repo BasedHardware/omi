@@ -691,3 +691,20 @@ def test_flags_off_preserve_standalone_intake_and_skip_target_recovery(monkeypat
     monkeypatch.setattr(bridge, '_finish_pending_live_bridge', recover)
     assert bridge.finish_sync_bridges('u', 'wal') == 'wal'
     recover.assert_not_called()
+
+
+def test_pending_enrichment_bridge_yields_before_assigning_a_foreign_target(monkeypatch):
+    from unittest.mock import call
+
+    source = {'id': 'wal', bridge_pending.FIELD: {'target_id': 'live'}}
+    target = {'id': 'live', 'status': 'completed', 'finalization_engine': 'go', 'finalization_owner_epoch': 1}
+    snapshot = MagicMock(side_effect=[source, target])
+    assign = MagicMock()
+    monkeypatch.setattr(bridge.conversations_db, 'get_conversation', snapshot)
+    monkeypatch.setattr(bridge.conversations_db, 'assign_sync_conversation', assign)
+
+    with pytest.raises(bridge.processing_hold.ProcessingDeferred, match='finalization_owned_elsewhere'):
+        bridge._finish_pending_live_bridge('u', 'wal', require_python_owner=True)
+
+    assert snapshot.call_args_list == [call('u', 'wal'), call('u', 'live')]
+    assign.assert_not_called()

@@ -704,3 +704,52 @@ def test_scoped_preview_commit_sets_wake_without_delaying_pending_speech(strict,
 
     assert strict.rows[R]['v3_pending'] is True
     assert strict.rows[R]['v3_pending_since'] == (AT if already_pending else due)
+
+
+@pytest.mark.parametrize('engine', ['pending', 'go'])
+def test_processing_writers_refuse_foreign_snapshot(strict, monkeypatch, engine):
+    uid, cid = 'synthetic', 'c'
+    path = ('users', uid, 'conversations', cid)
+    prior = {'id': cid, 'status': 'processing', 'sync_content_revision': 1, 'v3_process_pending': True}
+    stored = {
+        **prior,
+        'finalization_engine': engine,
+        'finalization_owner_epoch': 1,
+        'v3_backfill_process_pending': True,
+    }
+    strict.rows[path] = stored.copy()
+    token = leases.acquire(uid, 'summary-c', firestore_client=strict)
+    monkeypatch.setattr(store.conversations, 'db', strict)
+
+    assert not writers.begin_processing(uid, prior, token, firestore_client=strict)
+    assert not writers.fail_processing(uid, cid, token, 1, firestore_client=strict)
+    assert not writers.settle_processing(uid, cid, token, 1, AT, notes=True, firestore_client=strict)
+    assert (
+        writers.settle_backfill_processing(uid, cid, failed=True, max_attempts=1, firestore_client=strict) == 'absent'
+    )
+    with pytest.raises(service.Conflict, match='summary_source_changed'):
+        writers.store_summary(uid, cid, token, 1, {'title': 'Synthetic'}, AT, firestore_client=strict)
+    assert not lifecycle.complete(uid, cid)
+    assert strict.rows[path] == stored
+
+
+def test_queued_processing_skips_foreign_candidate_before_lease(monkeypatch):
+    import asyncio
+    from unittest.mock import Mock
+
+    from utils.conversations.v3 import created
+
+    monkeypatch.setattr(
+        service,
+        'pending_processing',
+        lambda _: [{'id': 'c', 'finalization_engine': 'go', 'finalization_owner_epoch': 1}],
+    )
+    acquire = Mock()
+    monkeypatch.setattr(leases, 'acquire', acquire)
+
+    async def deliver(_):
+        return None
+
+    monkeypatch.setattr(created, 'deliver', deliver)
+    asyncio.run(service.drain_processing('synthetic'))
+    acquire.assert_not_called()

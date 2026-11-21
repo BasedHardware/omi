@@ -27,6 +27,7 @@ from database import redis_db
 from database import users as users_db
 from database.firestore_read_metrics import FirestoreReadSite
 from utils.conversations import transcribing_hold
+from models.finalization_owner import FinalizationOwnedElsewhere, python_owns_finalization
 from utils.conversations.factory import deserialize_conversation
 from utils.conversations.process_conversation import process_conversation, save_structured_vector
 from utils.conversations.processing_trigger import ProcessingTrigger
@@ -261,6 +262,8 @@ def open_summary(uid: str, conversation_id: str) -> tuple[Any, str]:
     if present(row.get('structured')):
         _count(Outcome.EXISTING)
         return transcribing_hold.project(row), Outcome.EXISTING.value
+    if not python_owns_finalization(row):
+        raise _retry(outcome=Outcome.FENCED)
     slots = admit(uid, conversation_id)
     operation = _claim(uid, conversation_id, row, slots)
     current = _reread(uid, conversation_id, operation, slots)
@@ -270,7 +273,13 @@ def open_summary(uid: str, conversation_id: str) -> tuple[Any, str]:
         return transcribing_hold.project(current), Outcome.EXISTING.value
     started = time.monotonic()
     try:
+        if not python_owns_finalization(current):
+            raise FinalizationOwnedElsewhere()
         processed, persisted = _generate(uid, current)
+    except FinalizationOwnedElsewhere as error:
+        attention_db.finish(uid, operation, 'failed')
+        release(slots)
+        raise _retry(outcome=Outcome.FENCED) from error
     except HTTPException:
         attention_db.finish(uid, operation, 'failed')
         _count(Outcome.TRANSIENT)

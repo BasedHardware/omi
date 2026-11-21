@@ -245,7 +245,7 @@ BODY_DIGEST = {
     'database.action_items._probe_legacy_completion_rows': '57a375ed6e56cdd9c6156ef4cee5944dbfb089a2477844c5b9c52de9a3214a30',
     # Re-reviewed: quiet admission uses the shared speech clock; query/read shapes are unchanged.
     # Re-reviewed 2026-11-04: atomic blocked_byok_at metadata only; query ownership is unchanged.
-    'database.conversation_finalization_jobs._create_or_get_finalization_intent_txn': 'aa91a14822a421ef8f0e8b11961ae5cda837676259c25665f9d14edcdfe0750a',
+    'database.conversation_finalization_jobs._create_or_get_finalization_intent_txn': 'f20f3b16e0e8d9421b86c675510cbb0fc9a4d09b3e71f70c68c3254b8209542c',
     'database.durable_queue_age._publish_queue_ages': '58e66cfc32f39bdc2e9b1e6c805d18599c1ff14be8dbcff68eadc23506656d9b',
     'database.firestore_query_types.FirestoreQuerySpec.build': '2c26a157a8e87be2bcfef668e3bd5cdc0a9c0d96e0b56bada98c30741c8be01a',
     # Re-reviewed: positional .where converted to filter=FieldFilter — same field/op/value shape.
@@ -262,7 +262,7 @@ BODY_DIGEST = {
     # discarded-barrier scan is still covered by the same two driven callees.
     # Recorded-span recomputation is pure; barrier queries still run under the covered callees.
     # Re-reviewed 2026-11-06: C2 preload runner and deleted-blob refusals; serving query shapes unchanged.
-    'database.smart_merge.absorb_conversation': 'aa05dfd87a7da325ac985d4f3d00d3ff5117baac8dbf7858d1d961fb4653b93d',
+    'database.smart_merge.absorb_conversation': 'f2e9751cdc2cdaef0b9c662d96188a14bcd17e6aefdb324e6d65f4f65f260968',
     'database.omi_flags.read_all': '58b65fc434cd3253a55aa54c6defc2a4cfc40dc33b565326b6c688eb8ed374d3',
     'database.omi_flags.read_audit': '12ee243338e5fc080b8e2f81223586837bb454f8d8e14d711f3805c74e258cfa',
     'database.client_telemetry.recent_owner_ids': '65fe8200d7ad9418b793ccb0fa53a172b2576a80bba644caa3b36cdb53b74510',

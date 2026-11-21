@@ -4294,3 +4294,41 @@ def test_read_lever_parity_rejects_worker_inheriting_api_privacy_scope(read_leve
     assert changed[worker][lever] != expected[integration][lever]
     changed[worker][lever] = expected[integration][lever]
     assert any(worker in error for error in read_lever_manifest.parity_errors(changed, expected, policy))
+
+
+def _listen_drift_manifest(validator, monkeypatch):
+    manifest = copy.deepcopy(validator._load_yaml(validator.DEFAULT_MANIFEST))
+    listen_env = manifest['environments']['prod']['gke']['backend-listen']['env']
+    key = next(k for k, v in listen_env.items() if isinstance(v, dict) and v.get('value') in ('true', 'false'))
+    listen_env[key] = {**listen_env[key], 'value': 'drifted'}
+    monkeypatch.setattr(
+        manifest_validation,
+        '_load_yaml',
+        lambda path: manifest if path == validator.DEFAULT_MANIFEST else validator._load_yaml(path),
+    )
+    return validator._get_env_config(manifest, 'prod')
+
+
+def test_pump_only_run_skips_listen_drift_but_checks_pump_drift(tmp_path, monkeypatch):
+    """SCA-3318: a pump-only selector scopes drift to the pump; 'all' still checks listen."""
+    validator = load_validator()
+    config = _listen_drift_manifest(validator, monkeypatch)
+    state = render_cloud_run_state(config, monkeypatch)
+    path = tmp_path / 'state.json'
+    path.write_text(json.dumps(state))
+
+    def errors(service):
+        return validator.validate_runtime_env(env='prod', cloud_run_state_path=path, cloud_run_service=service)
+
+    pump_only = errors('backend-projection-pump')
+    assert pump_only == [], [(e.scope, e.message) for e in pump_only]
+    assert any(e.scope == 'gke/backend-listen' for e in errors('all'))
+    assert any(e.scope == 'gke/backend-listen' for e in errors('backend-integration'))
+
+    pump_env = state['services']['backend-projection-pump']['env']
+    entry = next(e for e in pump_env if e.get('value') in ('true', 'false'))
+    entry['value'] = 'drifted'
+    path.write_text(json.dumps(state))
+    drifted = errors('backend-projection-pump')
+    assert drifted and all('gke/' not in e.scope for e in drifted), [(e.scope, e.message) for e in drifted]
+    assert any('backend-projection-pump' in e.scope for e in drifted), [(e.scope, e.message) for e in drifted]

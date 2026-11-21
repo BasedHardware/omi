@@ -4,6 +4,7 @@ import asyncio
 from typing import Any
 
 from database import conversation_merge_jobs as store
+from models.finalization_owner import python_owns_finalization
 from utils.executors import db_executor, lifecycle_executor, run_blocking, start_background_task
 from utils.observability.fallback import record_fallback
 
@@ -91,7 +92,12 @@ def reconcile(job_id: str, *, firestore_client: Any = None) -> str:
     target = (
         client.collection('users').document(job['uid']).collection('conversations').document(job['merge_target_id'])
     )
-    if target.get().exists and not cleanup_failed_merge_target(job['uid'], job['merge_target_id']):
+    snapshot = target.get()
+    if (
+        snapshot.exists
+        and python_owns_finalization(snapshot.to_dict() or {})
+        and not cleanup_failed_merge_target(job['uid'], job['merge_target_id'])
+    ):
         return 'cleanup_pending'
     return (
         'rolled_back'

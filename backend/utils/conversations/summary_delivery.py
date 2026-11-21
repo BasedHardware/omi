@@ -18,6 +18,7 @@ from utils.conversations import phase_shadow
 from utils.observability.delivery import record_delivery
 
 from prometheus_client import Counter, Gauge, Histogram
+from models.finalization_owner import python_owns_finalization
 from config.refactor_modes import default_on
 from config.summary_guarantee import deadline_seconds
 from config.policy import FirstSummaryPolicy
@@ -331,15 +332,18 @@ def projection_owns_finalization(row: Row) -> bool:
 def retryable_finalization_owns(row: Row) -> bool:
     """A finalization job owns this row's summary debt and the repair pass refuses it.
 
-    ``_refusal`` returns ``generation_owned`` for a row with a finalization job
-    and no verified batch-projection handoff, so repair discovery and redrive
-    both skip it. Only the job's own retry can still deliver a summary, which is
-    why an empty attempt must keep raising instead of committing.
+    Repair discovery and redrive skip foreign ownership markers and job rows
+    without a verified batch-projection handoff. An empty attempt must leave
+    delivery with that owner.
     """
-    return bool(row.get('finalization_job_id')) and not projection_owns_finalization(row)
+    return not python_owns_finalization(row) or (
+        bool(row.get('finalization_job_id')) and not projection_owns_finalization(row)
+    )
 
 
 def _refusal(row: Row) -> str | None:
+    if not python_owns_finalization(row):
+        return 'generation_owned'
     if row.get('status') != 'completed' or row.get('deleted') or row.get('discarded'):
         return 'lifecycle'
     if row.get('deferred') or row.get('is_locked') or row.get('processing_state') == 'local_pending':
