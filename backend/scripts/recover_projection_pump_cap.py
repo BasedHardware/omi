@@ -205,6 +205,35 @@ def snapshot(api, read, cap):
     return start, revision, policy
 
 
+SETTLE_SECONDS = 120
+
+
+def settled_snapshot(api, read, cap):
+    """Wait (read-only, bounded) for Cloud Run to finish reconciling, then snapshot once.
+
+    A done operation can precede `reconciling: false` and `observedGeneration == generation`
+    by a few seconds (run 44900134239 refused 5 s after a write that had landed). Only that
+    settling state is waited out; any other mismatch still refuses at once in snapshot().
+    """
+    deadline = time.monotonic() + SETTLE_SECONDS
+    attempt = 0
+    while True:
+        attempt += 1
+        service = api.service()
+        settled = (
+            service.get('reconciling', False) is False
+            and service.get('observedGeneration') == service.get('generation')
+            and service.get('terminalCondition', {}).get('state') == 'CONDITION_SUCCEEDED'
+        )
+        if settled:
+            print(f'PUMP_CAP_SETTLED attempts={attempt}', flush=True)
+            return snapshot(api, read, cap)
+        if time.monotonic() >= deadline:
+            raise ValueError('Cloud Run service did not finish reconciling within the read budget')
+        print(f'PUMP_CAP_SETTLING attempt={attempt}', flush=True)
+        time.sleep(5)
+
+
 def stable_shape(snapshot_value):
     service, revision, policy = snapshot_value
     config = copy.deepcopy({key: value for key, value in service.items() if key not in SERVER_FIELDS})
@@ -230,7 +259,7 @@ def recover(api, read, approved_etag):
     )
     try:
         api.complete(api.patch(version, AFTER, validate_only=False), AFTER, submitted=True)
-        after = snapshot(api, read, AFTER)
+        after = settled_snapshot(api, read, AFTER)
         if after[0]['etag'] == version or stable_shape(after) != stable_shape(before):
             raise ValueError('post-write version or preserved shape mismatch')
         api.complete(api.patch(after[0]['etag'], BEFORE, validate_only=True), BEFORE, submitted=False)

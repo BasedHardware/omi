@@ -1103,3 +1103,49 @@ def test_claimed_sibling_skip_ships_dark_on_integration_until_activation():
     services = _prod_services()
     for name in ('backend-integration', PROJECTION_PUMP):
         assert services[name]['env']['BATCH_PIPELINE_FOLLOWUP_CLAIMED_SIBLING_SKIP_ENABLED']['value'] == 'false', name
+
+
+def test_cap_recovery_waits_for_post_write_reconciliation(inverse_readback, monkeypatch):
+    """Run 44900134239: the write landed, but the first post-write read was still reconciling."""
+    api = _recovery_fixture(inverse_readback)
+    original_patch, reads = api.patch, {'n': 0}
+
+    def patch(etag, cap, *, validate_only):
+        result = original_patch(etag, cap, validate_only=validate_only)
+        if not validate_only:
+            api.state['reconciling'] = True
+        return result
+
+    original_service = api.service
+
+    def service():
+        if api.state.get('reconciling'):
+            reads['n'] += 1
+            if reads['n'] >= 3:
+                api.state['reconciling'] = False
+        return original_service()
+
+    api.patch, api.service = patch, service
+    monkeypatch.setattr(recovery.time, 'sleep', lambda _s: None)
+    recovery.recover(api, api.read, 'approved-version')
+    assert [item for item in api.cap_requests if not item[2]] == [('approved-version', 4, False)]
+    assert reads['n'] >= 3
+
+
+def test_cap_recovery_settle_wait_is_bounded(inverse_readback, monkeypatch):
+    api = _recovery_fixture(inverse_readback)
+    original_patch = api.patch
+
+    def patch(etag, cap, *, validate_only):
+        result = original_patch(etag, cap, validate_only=validate_only)
+        if not validate_only:
+            api.state['reconciling'] = True  # never settles
+        return result
+
+    api.patch = patch
+    now = {'t': 0.0}
+    monkeypatch.setattr(recovery.time, 'sleep', lambda s: now.__setitem__('t', now['t'] + s))
+    monkeypatch.setattr(recovery.time, 'monotonic', lambda: now['t'])
+    with pytest.raises(ValueError, match='independent Release reconciliation'):
+        recovery.recover(api, api.read, 'approved-version')
+    assert [item for item in api.cap_requests if not item[2]] == [('approved-version', 4, False)]
