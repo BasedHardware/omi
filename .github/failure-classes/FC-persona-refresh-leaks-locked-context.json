@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "id": "FC-persona-refresh-leaks-locked-context",
+  "violated_contract": "Persona prompt refresh must not leak paywall-locked memories or locked conversation context into model prompts or stored persona definitions.",
+  "canonical_prevention": "Filter memories with 'not getattr(memory, 'is_locked', False)' and filter conversations with 'not c.get('is_locked')' before condensation in update_persona_prompt, and cover with hermetic import-isolated regression tests.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_apps_persona_refresh_locked_content.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/utils/apps.py",
+    "backend/tests/unit/test_apps_persona_refresh_locked_content.py"
+  ],
+  "status": "open"
+}
