@@ -1279,9 +1279,14 @@ class _ConversationsPageState extends State<ConversationsPage>
               ),
               // With no list rows to sit in (still loading, or nothing listed yet), the live placeholder
               // opens Today itself, the same Today header and slot it takes in the list.
+              // The list below renders only when there is something to list; otherwise an empty, hero or
+              // status branch takes its place (held recordings alone do not keep the list up).
               if (livePlaceholder &&
                   (_isBootstrapping ||
                       _initialOverlayPending ||
+                      (conversationsByDate.values.every((list) => list.isEmpty) &&
+                          !hasRecordings &&
+                          !hasProcessingConversations) ||
                       !conversationRows.any((r) => r.kind == _ConversationListRowKind.v3LivePlaceholder)))
                 SliverToBoxAdapter(
                   child: Padding(

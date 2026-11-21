@@ -41,6 +41,7 @@ import 'package:omi/pages/conversations/conversations_page.dart';
 import 'package:omi/pages/conversations/widgets/conversation_list_item.dart';
 import 'package:omi/pages/conversations/widgets/processing_capture.dart';
 import 'package:omi/pages/conversation_detail/widgets.dart' show ConversationTitleField;
+import 'package:omi/pages/conversations/widgets/date_list_item.dart';
 import 'package:omi/pages/conversations/widgets/v3_live_placeholder_row.dart';
 import 'package:omi/pages/conversations/widgets/conversation_state_tile.dart';
 import 'package:omi/pages/conversations/widgets/day_summary_link.dart';
@@ -579,6 +580,25 @@ void main() {
       // Home stays uncluttered: End lives on the live conversation's detail page, not on its row.
       expect(find.byKey(const Key('live_conversation_end')), findsNothing);
       expect(find.byType(V3LivePlaceholderRow), findsNothing);
+      await _dispose(tester, home);
+    });
+  });
+
+  testWidgets('v3: with nothing listed, the streaming placeholder still opens Today', (tester) async {
+    await withClock(Clock.fixed(_now), () async {
+      final home = await _pumpHome(tester, v3: true);
+      home.conversations
+        ..conversations = []
+        ..groupConversationsByDate();
+      home.liveOpen = false;
+      await home.conversationsV3.refresh();
+      await tester.pump();
+      await tester.pump();
+      expect(find.byType(V3LivePlaceholderRow), findsOneWidget);
+      final headers = tester.widgetList<DateListItem>(find.byType(DateListItem)).toList();
+      expect(headers.map((h) => h.date), [DateTime(_now.year, _now.month, _now.day)], reason: 'one header: Today');
+      final today = tester.getRect(find.byType(DateListItem));
+      expect(tester.getRect(find.byType(V3LivePlaceholderRow)).top, greaterThanOrEqualTo(today.bottom));
       await _dispose(tester, home);
     });
   });
