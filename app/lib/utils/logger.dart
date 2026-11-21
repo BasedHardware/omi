@@ -1,3 +1,4 @@
+import 'package:omi/ui/components/logger_feedback_sheet.dart';
 import 'package:omi/env/physical_qualification.dart';
 import 'package:flutter/material.dart';
 
@@ -14,13 +15,21 @@ class CrashlyticsTalkerObserver extends TalkerObserver {
   @override
   void onError(err) {
     if (PhysicalQualification.enabled) return;
-    FirebaseCrashlytics.instance.recordError(err.error, err.stackTrace, reason: err.message);
+    FirebaseCrashlytics.instance.recordError(
+      err.error,
+      err.stackTrace,
+      reason: err.message,
+    );
   }
 
   @override
   void onException(err) {
     if (PhysicalQualification.enabled) return;
-    FirebaseCrashlytics.instance.recordError(err.exception, err.stackTrace, reason: err.message);
+    FirebaseCrashlytics.instance.recordError(
+      err.exception,
+      err.stackTrace,
+      reason: err.message,
+    );
   }
 }
 
@@ -56,8 +65,16 @@ class Logger {
     instance.talker.debug(message);
   }
 
-  static void handle(dynamic exception, StackTrace? stackTrace, {String? message}) {
-    instance.talker.handle(exception, stackTrace, message ?? 'An error occurred. Please try again later.');
+  static void handle(
+    dynamic exception,
+    StackTrace? stackTrace, {
+    String? message,
+  }) {
+    instance.talker.handle(
+      exception,
+      stackTrace,
+      message ?? 'An error occurred. Please try again later.',
+    );
     DebugLogManager.logError(exception, stackTrace, message);
   }
 }
@@ -66,7 +83,8 @@ class LoggerSnackbar extends StatelessWidget {
   final TalkerError? error;
   final TalkerException? exception;
 
-  const LoggerSnackbar({super.key, this.error, this.exception}) : assert(error != null || exception != null);
+  const LoggerSnackbar({super.key, this.error, this.exception})
+    : assert(error != null || exception != null);
 
   @override
   Widget build(BuildContext context) {
@@ -74,19 +92,27 @@ class LoggerSnackbar extends StatelessWidget {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(color: Colors.red, borderRadius: BorderRadius.circular(10)),
+      decoration: BoxDecoration(
+        color: Colors.red,
+        borderRadius: BorderRadius.circular(10),
+      ),
       child: ListTile(
         contentPadding: const EdgeInsets.all(0),
         leading: const Icon(Icons.error_outline, color: Colors.white),
         title: Text(
           data.message ?? context.l10n.somethingWentWrongTryAgain,
-          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+          style: const TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.bold,
+          ),
         ),
         trailing: IconButton(
           icon: const Icon(Icons.share, color: Colors.white),
-          onPressed: () async {
-            // TODO: Have a custom form which can be prefilled with the error stack trace instead of opening the Gleap Homepage
-            await Intercom.instance.displayMessenger();
+          onPressed: () {
+            showLoggerFeedbackSheet(
+              context,
+              stackTrace: data.stackTrace?.toString() ?? '',
+            );
           },
         ),
       ),
