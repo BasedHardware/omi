@@ -186,6 +186,53 @@ def test_failed_stripe_update_gives_the_code_back():
     env.release.assert_called_once_with('promo_1')
 
 
+def test_failed_promo_deactivation_releases_claim_without_reactivating_code():
+    with _Env() as env:
+        env.promo_modify.side_effect = redemption.stripe.error.APIConnectionError('stripe timeout')
+        with pytest.raises(RedemptionError) as excinfo:
+            redeem_promotion_code('uid_1', 'OMI-AAAA-BBBB')
+    assert excinfo.value.status_code == 400
+    assert env.promo_modify.call_count == 1
+    assert env.promo_modify.call_args.kwargs['active'] is False
+    env.sub_modify.assert_not_called()
+    env.release.assert_called_once_with('promo_1')
+
+
+def test_failed_reactivation_still_releases_claim():
+    with _Env() as env:
+        env.sub_modify.side_effect = redemption.stripe.error.InvalidRequestError('sub modify failed', None)
+        env.promo_modify.side_effect = [
+            _obj(_promo(active=False)),
+            redemption.stripe.error.APIConnectionError('reactivate timeout'),
+        ]
+        with pytest.raises(RedemptionError) as excinfo:
+            redeem_promotion_code('uid_1', 'OMI-AAAA-BBBB')
+    assert excinfo.value.status_code == 400
+    assert env.promo_modify.call_count == 2
+    assert env.promo_modify.call_args_list[0].kwargs['active'] is False
+    assert env.promo_modify.call_args_list[1].kwargs == {'active': True}
+    env.release.assert_called_once_with('promo_1')
+
+
+def test_active_subscription_applies_at_handles_missing_period_end_and_empty_items():
+    active_sub = _subscription(status='active')
+    with _Env(subscription=active_sub) as env:
+        env.sub_modify.side_effect = lambda sub_id, **kw: _obj({**active_sub, 'items': {'data': []}, **kw})
+        result = redeem_promotion_code('uid_1', 'OMI-AAAA-BBBB')
+    assert result['status'] == 'applied'
+    assert result['applies_at'] is None
+
+
+def test_subscription_with_missing_or_empty_items_is_refused():
+    with _Env(subscription=_subscription(items={'data': []})) as env:
+        with pytest.raises(RedemptionError) as excinfo:
+            redeem_promotion_code('uid_1', 'OMI-AAAA-BBBB')
+    assert excinfo.value.status_code == 400
+    assert excinfo.value.detail == 'This code cannot be applied to your plan.'
+    env.claim.assert_not_called()
+    env.sub_modify.assert_not_called()
+
+
 def test_redemption_retains_issuance_provenance_without_coupling_it_to_code_benefit():
     subscription = _subscription(metadata={'uid': 'uid_1', 'sub_type': 'unlimited', 'unrelated': 'kept'})
     with _Env(subscription=subscription, promos=[_promo(metadata=ISSUANCE)]) as env:
