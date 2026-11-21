@@ -2,30 +2,22 @@
 Tools for managing user notification settings.
 """
 
-from typing import Any, Dict, Optional, cast
-import contextvars
+import logging
+from typing import Any, Optional, cast
 
-from langchain_core.tools import tool  # type: ignore[reportUnknownVariableType]  # langchain @tool decorator partially typed
 from langchain_core.runnables import RunnableConfig
+from langchain_core.tools import tool  # type: ignore[reportUnknownVariableType]  # langchain @tool decorator partially typed
 
 import database.notifications as notification_db
-import logging
+from utils.retrieval.tools.integration_base import resolve_config_uid
 
 logger = logging.getLogger(__name__)
 
-# Import agent_config_context for fallback config access
-try:
-    from utils.retrieval.agentic import agent_config_context
-except ImportError:
-    agent_config_context = contextvars.ContextVar('agent_config', default=None)
 
-
-def _agent_config() -> Optional[Dict[str, Any]]:
-    """Retrieve the agent config dict from the context var, or None if unset."""
-    try:
-        return agent_config_context.get()
-    except LookupError:
-        return None
+def _resolve_uid(config: Optional[Any] = None) -> Optional[str]:
+    """Extract uid from config via shared resolve_config_uid."""
+    uid, _ = resolve_config_uid(config)
+    return uid
 
 
 def _format_hour(hour: int) -> str:
@@ -78,48 +70,46 @@ def manage_daily_summary_tool(
     """
     logger.info(f"🔧 manage_daily_summary_tool called - action: {action}, hour: {hour}")
 
-    # config may be None when called directly (not via langchain injection)
-    cfg: Optional[Dict[str, Any]] = cast(Optional[Dict[str, Any]], config)
+    cfg = cast(Optional[RunnableConfig], config)
     if cfg is None:
-        cfg = _agent_config()
-    if cfg is None:
-        return "Error: Configuration not available"
+        uid = _resolve_uid(None)
+        if not uid:
+            return "Error: Configuration not available"
+    else:
+        uid = _resolve_uid(cfg)
+        if not uid:
+            return "Error: User ID not found"
+    assert uid is not None
 
-    try:
-        raw_configurable = cfg.get('configurable')
-        if isinstance(raw_configurable, dict):
-            configurable: Dict[str, Any] = cast(Dict[str, Any], raw_configurable)
-            uid = configurable.get('user_id')
-        else:
-            uid = None
-    except (KeyError, TypeError):
-        return "Error: Configuration not available"
+    action_str = str(action or "").lower().strip()
 
-    if not uid:
-        return "Error: User ID not found"
-
-    action = action.lower().strip()
-
-    if action == "enable":
+    if action_str == "enable":
         notification_db.set_daily_summary_enabled(uid, True)
         _hour = notification_db.get_daily_summary_hour_local(uid)
         current_hour = 22 if _hour is None else _hour
         hour_str = _format_hour(current_hour)
         return f"Daily summary notifications enabled. You'll receive them at {hour_str}."
 
-    elif action == "disable":
+    elif action_str == "disable":
         notification_db.set_daily_summary_enabled(uid, False)
         return "Daily summary notifications disabled."
 
-    elif action == "set_time":
-        if hour is None:
+    elif action_str == "set_time":
+        if hour is None or (isinstance(hour, str) and not hour.strip()):
             return "Error: Please specify the hour (0-23). Example: 22 for 10 PM, 9 for 9 AM."
 
-        if not (0 <= hour <= 23):
+        try:
+            if isinstance(hour, bool):
+                raise ValueError("Boolean is not a valid hour")
+            parsed_hour = int(float(hour))
+        except (TypeError, ValueError):
             return f"Error: Hour must be between 0 and 23. You provided {hour}."
 
-        notification_db.set_daily_summary_hour_local(uid, hour)
-        hour_str = _format_hour(hour)
+        if not (0 <= parsed_hour <= 23):
+            return f"Error: Hour must be between 0 and 23. You provided {parsed_hour}."
+
+        notification_db.set_daily_summary_hour_local(uid, parsed_hour)
+        hour_str = _format_hour(parsed_hour)
 
         # Also enable if currently disabled
         if not notification_db.get_daily_summary_enabled(uid):
@@ -128,7 +118,7 @@ def manage_daily_summary_tool(
 
         return f"Daily summary time changed to {hour_str}."
 
-    elif action == "get_settings":
+    elif action_str == "get_settings":
         enabled = notification_db.get_daily_summary_enabled(uid)
         _hour = notification_db.get_daily_summary_hour_local(uid)
         current_hour = 22 if _hour is None else _hour
