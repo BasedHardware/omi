@@ -124,8 +124,10 @@ class ConversationDetailHeader extends StatelessWidget {
           displayText: (stored) => waiting && stored.trim() == TranscriptionPendingConversations.serverHoldTitle
               ? ''
               : presentableConversationTitle(conversation, title: stored),
-          hintText: transcriptFallbackTitle(conversation) ??
-              recordingFallbackTitle(conversation, context.l10n, dates: OmiDateFormat.of(context)),
+          hintText: awaitsLiveTitle(conversation)
+              ? context.l10n.listening
+              : transcriptFallbackTitle(conversation) ??
+                  recordingFallbackTitle(conversation, context.l10n, dates: OmiDateFormat.of(context)),
         );
       },
     );

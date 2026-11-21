@@ -1,6 +1,7 @@
 import 'package:flutter/widgets.dart';
 
 import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/backend/schema/conversation_v3.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/ui/format/omi_date_format.dart';
 import 'package:omi/utils/analytics/registry/events.g.dart';
@@ -44,6 +45,13 @@ String? transcriptFallbackTitle(ServerConversation conversation) {
 /// so missing server titles remain observable. [title] overrides the raw structured title
 /// when a surface already normalized it. Citation debris (`[s01234]`, `Speaker_00`) is
 /// repaired for display; edit fields keep the stored title.
+/// A v3 conversation still in progress with no real title yet: its rows and its detail page read
+/// "Listening", the same title as Home's live placeholder, never a transcript snippet or a recording
+/// date, until the server names it.
+bool awaitsLiveTitle(ServerConversation conversation, {String? title}) =>
+    conversation.v3?.tileState == ConversationTileState.live &&
+    presentableConversationTitle(conversation, title: title).isEmpty;
+
 String conversationDisplayTitle(
   ServerConversation conversation,
   AppLocalizations l10n, {

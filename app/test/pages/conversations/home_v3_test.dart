@@ -40,6 +40,7 @@ import 'package:omi/pages/conversation_detail/widgets/summary_tab.dart';
 import 'package:omi/pages/conversations/conversations_page.dart';
 import 'package:omi/pages/conversations/widgets/conversation_list_item.dart';
 import 'package:omi/pages/conversations/widgets/processing_capture.dart';
+import 'package:omi/pages/conversation_detail/widgets.dart' show ConversationTitleField;
 import 'package:omi/pages/conversations/widgets/v3_live_placeholder_row.dart';
 import 'package:omi/pages/conversations/widgets/conversation_state_tile.dart';
 import 'package:omi/pages/conversations/widgets/day_summary_link.dart';
@@ -326,7 +327,7 @@ class _Home {
     detailReads++;
     await detailBarrier?.future;
     if (id != 'live-1' || detailFails) return null;
-    return _conversation('live-1', _now.subtract(const Duration(minutes: 20)), 'Launch checklist',
+    return _conversation('live-1', _now.subtract(const Duration(minutes: 20)), liveTitle,
         lastSpeech: _now.subtract(const Duration(minutes: 9)),
         segments: detailSegments,
         v3: ConversationV3Fields(kind: 'conversation', tileState: detailState, homeHidden: detailHidden));
@@ -334,6 +335,9 @@ class _Home {
 
   /// False once the conversation in progress has closed.
   bool liveOpen = true;
+
+  /// The server's title for the conversation in progress; empty until the server names it.
+  String liveTitle = 'Launch checklist';
   final sync = _StubSyncProvider();
   late final _LiveCapture capture = _LiveCapture()
     ..segments = [
@@ -390,7 +394,7 @@ class _Home {
       return ApiSuccess(ConversationsLiveRead(
         v3: v3,
         conversation: v3 && liveOpen
-            ? _conversation('live-1', _now.subtract(const Duration(minutes: 20)), 'Launch checklist',
+            ? _conversation('live-1', _now.subtract(const Duration(minutes: 20)), liveTitle,
                 // The server's finished_at for an open window is its last speech: 11 minutes in.
                 lastSpeech: _now.subtract(const Duration(minutes: 9)),
                 segments: _liveSoFar,
@@ -599,14 +603,23 @@ void main() {
       expect(find.byType(V3LivePlaceholderRow), findsOneWidget);
       expect(find.descendant(of: find.byType(ConversationCaptureWidget), matching: find.byType(GestureDetector)),
           findsNothing);
+      // It sits under Today, first in the day, never above the day list (David, 2026-11-21).
+      final today =
+          tester.getRect(find.byKey(ValueKey('date_${DateTime(_now.year, _now.month, _now.day).toIso8601String()}')));
+      final placeholder = tester.getRect(find.byType(V3LivePlaceholderRow));
+      expect(placeholder.top, greaterThanOrEqualTo(today.bottom), reason: 'the placeholder is inside Today');
+      expect(placeholder.top, lessThan(tester.getRect(find.byKey(const ValueKey('c-call'))).top),
+          reason: 'and leads it');
 
-      // The next window opens: its row replaces the placeholder.
+      // The next window opens: its row replaces the placeholder in the same slot, so nothing jumps.
       home.liveOpen = true;
       await home.conversationsV3.refresh();
       await tester.pump();
       await tester.pump();
       expect(find.byType(V3LivePlaceholderRow), findsNothing);
       expect(_rowIds(tester).first, 'live-1');
+      expect(tester.getRect(find.byKey(const ValueKey('live-1'))).top, placeholder.top,
+          reason: 'the live row takes the placeholder\'s slot');
       await _dispose(tester, home);
     });
   });
@@ -1069,6 +1082,39 @@ void main() {
       await tester.pump(const Duration(seconds: 15));
       await tester.pump();
       expect(home.detailReads, atOpen + 4);
+      await _dispose(tester, home);
+    });
+  });
+
+  testWidgets('an untitled live conversation reads Listening, and its open page takes the title when it lands',
+      (tester) async {
+    await withClock(Clock.fixed(_now), () async {
+      final home = await _pumpHome(tester, v3: true);
+      home.liveTitle = '';
+      await home.conversationsV3.refresh();
+      await tester.pump();
+      await tester.pump();
+
+      // The row reads like the placeholder: "Listening" over "Live · 11m", never a date or a snippet.
+      final live = find.byKey(const ValueKey('live-1'));
+      expect(find.descendant(of: live, matching: find.text('Listening')), findsOneWidget);
+      expect(tester.widget<Text>(find.byKey(const Key('conversation_row_live_length'))).data, 'Live · 11m');
+      expect(find.descendant(of: live, matching: find.textContaining('2026')), findsNothing);
+      expect(find.descendant(of: live, matching: find.textContaining('Doors')), findsNothing);
+
+      await tester.tap(live);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+      await tester.pump(const Duration(milliseconds: 500));
+      final field = find.byType(ConversationTitleField);
+      expect(tester.widget<ConversationTitleField>(field).hintText, 'Listening');
+
+      // The server names it; the page's 15 s re-read brings the title into the open page.
+      home.liveTitle = 'Launch checklist';
+      await tester.pump(const Duration(seconds: 15));
+      await tester.pump();
+      await tester.pump();
+      expect(tester.widget<ConversationTitleField>(field).controller!.text, 'Launch checklist');
       await _dispose(tester, home);
     });
   });

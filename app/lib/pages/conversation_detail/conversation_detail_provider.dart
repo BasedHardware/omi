@@ -1353,6 +1353,7 @@ class ConversationDetailProvider extends ChangeNotifier
         // A transcript in the detail copy proves transcription finished; a missing Home step proves nothing.
         TranscriptionPendingConversations.observe(updatedConversation);
         conversationProvider?.updateConversation(updatedConversation);
+        _followServerTitle(_cachedConversation?.structured.title, updatedConversation);
         _cachedConversation = updatedConversation;
         _hydratedDetail = (owner: ownerUid, row: conversationOrNull ?? updatedConversation);
         clearSettledSummaryFailure(updatedConversation);
@@ -1389,7 +1390,19 @@ class ConversationDetailProvider extends ChangeNotifier
       if (ids.remove(donorId)) ids.add(survivorId);
     }
     conversationProvider?.replaceBridgedConversation(donorId, survivor);
+    _followServerTitle(_cachedConversation?.structured.title, survivor);
     _cachedConversation = survivor;
+  }
+
+  /// A re-read (a live conversation's 15 s refresh, or its bridge survivor) that brings a new server
+  /// title updates the title field, which [initConversation] filled once. Left alone while the owner
+  /// is editing it or has typed something other than the title the page last showed.
+  void _followServerTitle(String? shown, ServerConversation next) {
+    final controller = titleController;
+    if (controller == null || shown == null || titleFocusNode?.hasFocus == true) return;
+    final title = next.structured.title;
+    if (title == shown || controller.text != shown) return;
+    controller.text = title;
   }
 
   void updateFolderIdLocally(String? newFolderId) {
