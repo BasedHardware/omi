@@ -24,6 +24,26 @@
 {{- if or (lt (int .Values.worker.unitSeconds) 1) (gt (int .Values.worker.unitSeconds) 7200) }}
 {{- fail "dedicated batch units must be in [1,7200] seconds" }}
 {{- end }}
+{{- $current := dict }}
+{{- if or .Values.worker.preserveLiveUidAllowlist .Values.autoscaling.enabled (hasKey .instance "fixedReplicas") }}
+{{- $current = lookup "apps/v1" "Deployment" .Release.Namespace .instance.name }}
+{{- end }}
+{{- $uidAllowlist := merge (dict "name" "BATCH_PIPELINE_UID_ALLOWLIST") .Values.worker.uidAllowlist }}
+{{- if and .Values.worker.preserveLiveUidAllowlist $current }}
+{{- $uidAllowlist = dict }}
+{{- range $container := $current.spec.template.spec.containers }}
+{{- if eq $container.name "worker" }}
+{{- range $env := $container.env }}
+{{- if eq $env.name "BATCH_PIPELINE_UID_ALLOWLIST" }}
+{{- $uidAllowlist = $env }}
+{{- end }}
+{{- end }}
+{{- end }}
+{{- end }}
+{{- if and (eq .instance.name .Release.Name) (not (or $uidAllowlist.value $uidAllowlist.valueFrom)) }}
+{{- fail "the live production worker must have a nonempty BATCH_PIPELINE_UID_ALLOWLIST binding" }}
+{{- end }}
+{{- end }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -42,16 +62,10 @@ spec:
   {{- $replicas := .instance.baselineReplicas | default .Values.replicaCount }}
   {{- if hasKey .instance "fixedReplicas" }}
   {{- $replicas = .instance.fixedReplicas }}
+  {{- end }}
   {{- /* Operators scale the fallback with kubectl; upgrades keep the live count. */}}
-  {{- $current := lookup "apps/v1" "Deployment" .Release.Namespace .instance.name }}
-  {{- if $current }}
+  {{- if and $current (or .Values.autoscaling.enabled (hasKey .instance "fixedReplicas")) }}
   {{- $replicas = dig "spec" "replicas" $replicas $current }}
-  {{- end }}
-  {{- else if .Values.autoscaling.enabled }}
-  {{- $current := lookup "apps/v1" "Deployment" .Release.Namespace .instance.name }}
-  {{- if $current }}
-  {{- $replicas = dig "spec" "replicas" $replicas $current }}
-  {{- end }}
   {{- end }}
   # Keep the live count in Helm's manifest while HPA controls the scale subresource.
   # Omitting replicas defaults the Deployment to one before HPA reconciliation;
@@ -133,13 +147,17 @@ spec:
             {{- if hasKey .Values.worker "heldPollSkipEnabled" }}
             - {name: BATCH_HELD_POLL_SKIP_ENABLED, value: {{ .Values.worker.heldPollSkipEnabled | quote }}}
             {{- end }}
-            - {name: RECORD_FRESH_MERGE_ENABLED, value: {{ .Values.worker.RECORD_FRESH_MERGE_ENABLED | default false | quote }}}
+            {{- if hasKey .Values.worker "RECORD_FRESH_MERGE_ENABLED" }}
+            - {name: RECORD_FRESH_MERGE_ENABLED, value: {{ .Values.worker.RECORD_FRESH_MERGE_ENABLED | quote }}}
+            {{- end }}
             {{- if hasKey .Values.worker "mergeStaleHeadUidAllowlist" }}
             - {name: BATCH_PIPELINE_MERGE_STALE_HEAD_UID_ALLOWLIST, value: {{ .Values.worker.mergeStaleHeadUidAllowlist | quote }}}
             {{- end }}
             - {name: BATCH_SHARD_SPREAD_ENABLED, value: {{ .Values.worker.shardSpreadEnabled | quote }}}
             - {name: BATCH_PULL_MULTI_LEASE_ENABLED, value: {{ .Values.worker.pullMultiLeaseEnabled | quote }}}
+            {{- if hasKey .Values.worker "packingSampleRate" }}
             - {name: BATCH_PIPELINE_PACKING_SAMPLE_RATE, value: {{ .Values.worker.packingSampleRate | quote }}}
+            {{- end }}
             - {name: BATCH_PULL_BUSY_BORROW_ENABLED, value: {{ .Values.worker.pullBusyBorrowEnabled | quote }}}
             - {name: BATCH_PIPELINE_CONTENTION_RETRY_ENABLED, value: {{ .Values.worker.contentionRetryEnabled | quote }}}
             {{- if ne .Values.worker.stageProfilingEnabled nil }}
@@ -160,7 +178,9 @@ spec:
             - {name: BATCH_PIPELINE_WORKER_VALIDATION_DISPOSITION_ENABLED, value: {{ .Values.worker.workerValidationDispositionEnabled | quote }}}
             - {name: BATCH_PIPELINE_DIARIZE_SPEECH_ONLY_ENABLED, value: {{ .Values.worker.diarizeSpeechOnlyEnabled | quote }}}
             - {name: BATCH_HELD_DEAD_LETTER_ENABLED, value: {{ .Values.worker.heldDeadLetterEnabled | quote }}}
+            {{- if not .Values.worker.omitRecordSealRepairFreshEnabled }}
             - {name: RECORD_SEAL_REPAIR_FRESH_ENABLED, value: {{ if hasKey .Values.recordSealRepair "freshEnabled" }}{{ .Values.recordSealRepair.freshEnabled | quote }}{{ else }}"true"{{ end }}}
+            {{- end }}
             - {name: BATCH_INPUT_EXPIRING_ENABLED, value: {{ .Values.worker.inputExpiringEnabled | quote }}}
             - {name: BATCH_PIPELINE_EMPTY_ASR_DISPOSITION_ENABLED, value: {{ .Values.worker.emptyAsrDispositionEnabled | quote }}}
             - {name: BATCH_PIPELINE_EMPTY_ASR_SAFETY_NET_ENABLED, value: {{ .Values.worker.emptyAsrSafetyNetEnabled | quote }}}
@@ -179,7 +199,9 @@ spec:
             # Prepare the budgeted flight prefix before the GPU lock; "false" is the kill switch.
             - {name: BATCH_PIPELINE_PREPARE_FLIGHT_ENABLED, value: {{ .Values.worker.prepareFlightEnabled | quote }}}
             - {name: BATCH_PIPELINE_WORKER_ENABLED, value: "true"}
+            {{- if hasKey .Values.worker "projectionOutbox" }}
             - {name: BATCH_PROJECTION_OUTBOX, value: {{ .Values.worker.projectionOutbox | quote }}}
+            {{- end }}
             - {name: BATCH_PIPELINE_ENABLED, value: "false"}
             - {name: BATCH_PIPELINE_PERCENT, value: "0"}
             - {name: BATCH_PIPELINE_SHADOW_PERCENT, value: {{ .Values.worker.shadowPercent | quote }}}
@@ -189,7 +211,12 @@ spec:
             # No `default` here: Helm's default treats 0 as empty, which would
             # silently turn the documented 0-disable into 10.
             - {name: BATCH_PIPELINE_STRICT_VAD_SHADOW_PERCENT, value: {{ .Values.worker.strictVadShadowPercent | quote }}}
-            - {name: BATCH_PIPELINE_UID_ALLOWLIST, value: ""}
+            {{- if hasKey .Values.worker "shadowLanguageOnly" }}
+            - {name: BATCH_PIPELINE_SHADOW_LANGUAGE_ONLY, value: {{ .Values.worker.shadowLanguageOnly | quote }}}
+            {{- end }}
+            {{- with $uidAllowlist }}
+            - {{ toYaml . | nindent 14 | trim }}
+            {{- end }}
             - {name: BATCH_PIPELINE_SHARED_LIVE_ENABLED, value: "false"}
             - {name: BATCH_PIPELINE_POOL_KIND, value: dedicated_batch}
             - {name: BATCH_PIPELINE_WORDS_PROVIDER, value: parakeet}
@@ -199,7 +226,7 @@ spec:
             - {name: BATCH_PIPELINE_NAMESPACE, value: {{ .Values.namespace | quote }}}
             - {name: BUCKET_BATCH_PIPELINE, value: {{ required "dedicated staging bucket required" .Values.bucket | quote }}}
             # Retained-audio references may name the regional chunk bucket; empty admits only the private bucket.
-            - {name: BUCKET_AUDIO_DERIVED, value: {{ .Values.audioDerivedBucket | default "" | quote }}}
+            - {name: BUCKET_AUDIO_DERIVED, value: {{ .Values.audioDerivedBucket | quote }}}
             # Shared by Parakeet windows and pyannote segmentation, embedding and VAD inference.
             - {name: BATCH_PIPELINE_MODEL_BATCH_SIZE, value: {{ .Values.worker.batchSize | quote }}}
             - {name: BATCH_PIPELINE_UNIT_SECONDS, value: {{ .Values.worker.unitSeconds | quote }}}
