@@ -26,16 +26,14 @@ BUILD_TAG_RE = re.compile(
     r"^v(?P<version>(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*))"
     r"\+(?P<build>[1-9][0-9]{0,9})-(?:mobile|android)-cm$"
 )
-# Codemagic android-internal-auto runs on 2026-10-28 at 03:18Z, 05:55Z and
-# 06:24Z uploaded their bundles, then failed at Publishing with "Setting
-# release for Google Play track internal failed. Changes cannot be sent for
-# review automatically. Please set the query parameter changesNotSentForReview
-# to true." Hold every Play commit for the Play Console -> Publishing overview
-# -> Send changes for review press. The daily train reads this flag to park the
-# exposure ladder because held hops are invisible to the Play API. Play's
-# 2026-10-27 error said this parameter must not be set; keep this switch aligned
+# Play's review-submission mode, mirrored. True holds every Play commit
+# (changesNotSentForReview=true) for the Play Console -> Publishing overview ->
+# Send for review press, and the daily train parks the exposure ladder because
+# held hops are invisible to the Play API. Play has flipped it both ways
+# (held 2026-10-26 -> 10-27 and 2026-10-28 -> 11-21) and rejects the parameter
+# whenever it is not required ("must not be set", 2026-11-21). Keep it aligned
 # with the current Play response and both Codemagic publishing blocks.
-CHANGES_NOT_SENT_FOR_REVIEW = True
+CHANGES_NOT_SENT_FOR_REVIEW = False
 PLAY_EDIT_CREATE_ATTEMPTS = 5
 
 
@@ -724,9 +722,8 @@ def main() -> int:
             build_id = require_build_id(args.build_id)
             client, edit_id = play_edit()
             promote_internal_android_to_alpha(client, edit_id, args.version, build_number, build_tag, build_id)
-            print(
-                f"Promoted Android {args.version} ({build_number}) from internal to alpha; held for review submission"
-            )
+            held = "; held for review submission" if CHANGES_NOT_SENT_FOR_REVIEW else ""
+            print(f"Promoted Android {args.version} ({build_number}) from internal to alpha{held}")
             return 0
         if args.confirm != "submit-for-review":
             raise PromotionError("CONFIRM must be exactly submit-for-review")
