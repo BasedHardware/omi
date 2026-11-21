@@ -2623,6 +2623,52 @@ def _parked_at(task) -> str:
     return ' <- '.join(chain)
 
 
+def _supervised_children(handler) -> str:
+    # Read the actual supervisor frame before cancellation destroys its waits.
+    awaited = handler.get_coro()
+    for _ in range(12):
+        frame = getattr(awaited, 'cr_frame', None)
+        if frame is None:
+            break
+        if frame.f_code is pusher.supervise_tasks.__code__:
+            tasks = [frame.f_locals['receive_task'], *frame.f_locals['bg_tasks']]
+            return '\n'.join(
+                f'{task.get_name()}: done={task.done()} cancelled={task.cancelled()} {_parked_at(task)}'
+                for task in tasks
+            )
+        awaited = getattr(awaited, 'cr_await', None)
+    return 'supervisor frame unavailable'
+
+
+@pytest.mark.asyncio
+async def test_teardown_diagnostic_names_the_blocked_supervised_children():
+    receive_gate = asyncio.Event()
+    queue = asyncio.Queue()
+
+    async def receive():
+        await receive_gate.wait()
+
+    async def upload():
+        await queue.get()
+
+    receive_task = asyncio.create_task(receive(), name='diagnostic:receive')
+    upload_task = asyncio.create_task(upload(), name='diagnostic:private_cloud')
+    handler = asyncio.create_task(
+        pusher.supervise_tasks(receive_task=receive_task, bg_tasks=[upload_task], label='diagnostic')
+    )
+    try:
+        await asyncio.sleep(0)  # Park the real supervisor and both child waits.
+        snapshot = _supervised_children(handler)
+        assert 'diagnostic:receive: done=False cancelled=False receive:' in snapshot
+        assert 'diagnostic:private_cloud: done=False cancelled=False upload:' in snapshot
+        assert 'wait:' in snapshot and 'get:' in snapshot
+        assert 'supervise_tasks:' in _parked_at(handler)
+    finally:
+        for task in (handler, receive_task, upload_task):
+            task.cancel()
+        await asyncio.gather(handler, receive_task, upload_task, return_exceptions=True)
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize('close_path', ['staged_v3', 'finalization', 'rollover'])
 async def test_slow_playback_discovery_does_not_hold_ended_record_on_open_stream(
@@ -2713,6 +2759,7 @@ async def test_slow_playback_discovery_does_not_hold_ended_record_on_open_stream
         except asyncio.TimeoutError:
             # Name the await the handler is parked on instead of a bare timeout.
             parked = _parked_at(handler)
+            children = _supervised_children(handler)
             handler.cancel()
             await asyncio.gather(handler, return_exceptions=True)
-            pytest.fail(f'pusher handler still running 5 s after release; parked at: {parked}')
+            pytest.fail(f'pusher handler still running 5 s after release; parked at: {parked}\n{children}')
