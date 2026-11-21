@@ -29,10 +29,13 @@ typedef Reason = DeviceConnectFailureShownFailureReason;
 class DiscoveryDeviceProvider extends AuditDeviceProvider {
   DiscoveryDeviceProvider({super.device, super.connected, super.battery});
 
-  bool chargingNow = false;
+  bool? chargingNow;
 
   @override
-  bool get isCharging => chargingNow;
+  bool get isCharging => chargingNow ?? false;
+
+  @override
+  bool? get observedChargingStatus => chargingNow;
 
   void updateCharging(bool value) {
     chargingNow = value;
@@ -111,7 +114,7 @@ void main() {
 
   testWidgets('Omi pairing shows one live status and skips the stale percentage', (tester) async {
     final device = BtDevice(id: 'omi-first-charge', name: 'Omi', type: DeviceType.omi, rssi: -50);
-    final live = DiscoveryDeviceProvider(device: device, connected: true, battery: 3)..updateCharging(true);
+    final live = DiscoveryDeviceProvider(device: device, connected: true, battery: 3);
     addTearDown(live.dispose);
     final render = Platform.environment['FIRST_CHARGE_RENDER'] == '1';
     if (render) await tester.runAsync(polish.loadFonts);
@@ -155,6 +158,10 @@ void main() {
       });
     }
 
+    expect(find.text(l10n.connected), findsOneWidget);
+    expect(find.text(l10n.deviceReadyToUse), findsNothing);
+    live.updateCharging(true);
+    await tester.pump();
     expect(find.text(l10n.charging), findsOneWidget);
     expect(find.text(l10n.pairingSuccessful), findsNothing);
     expect(find.text('3%'), findsNothing);

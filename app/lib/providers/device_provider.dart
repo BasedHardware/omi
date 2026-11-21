@@ -118,6 +118,8 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   StreamSubscription? _bleChargingStatusListener;
   int batteryLevel = -1;
   bool isCharging = false;
+  bool? _observedChargingStatus;
+  bool? get observedChargingStatus => _observedChargingStatus;
   int _batterySession = 0;
   final _chargeStarts = ChargeStartTracker();
   late final FullyChargedAlertGate _fullyChargedAlert;
@@ -769,10 +771,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
       // An initial read made by a sync wake is observation, not a charge-start event.
       if (chargeStarted && allowInitialResume) captureProvider?.onChargingStarted();
       final wasCharging = isCharging;
-      if (isCharging != currentStatus) {
-        isCharging = currentStatus;
-        notifyListeners();
-      }
+      _publishChargingStatus(currentStatus);
       BatteryWidgetService().updateChargingState(currentStatus);
       _noteChargingForFullyChargedAlert(currentStatus, wasCharging: wasCharging);
     }
@@ -790,10 +789,9 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
         final chargeStarted = _chargeStarts.observe(connectedDevice!.id, charging);
         if (chargeStarted && allowResume) captureProvider?.onChargingStarted();
         final wasCharging = isCharging;
-        if (isCharging != charging) {
-          isCharging = charging;
+        _publishChargingStatus(charging);
+        if (wasCharging != charging) {
           BatteryWidgetService().updateChargingState(charging);
-          notifyListeners();
         }
         _noteChargingForFullyChargedAlert(charging, wasCharging: wasCharging);
       },
@@ -806,6 +804,13 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     // If the initial read was unavailable, begin a bounded check once setup has
     // finished. Until then the default false value does not imply an unplug.
     _updateFirstChargeCheck(isCharging);
+  }
+
+  void _publishChargingStatus(bool charging) {
+    final changed = _observedChargingStatus != charging;
+    _observedChargingStatus = charging;
+    isCharging = charging;
+    if (changed) notifyListeners();
   }
 
   Future<void> _presentFullyChargedNotification(String deviceId) async {
@@ -868,6 +873,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     _chargingStatusReady = false;
     batteryLevel = -1;
     isCharging = false;
+    _observedChargingStatus = null;
     _lastNotifiedBatteryLevel = -1;
     _lastBatteryNotifyTime = null;
     unawaited(_bleBatteryLevelListener?.cancel());

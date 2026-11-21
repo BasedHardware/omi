@@ -313,8 +313,12 @@ class _FoundDevicesState extends State<FoundDevices> with WidgetsBindingObserver
 
   @override
   Widget build(BuildContext context) {
-    final (liveDeviceId, liveConnected, charging) = context.select<DeviceProvider, (String?, bool, bool)>(
-      (device) => (device.connectedDevice?.id, device.isConnected, device.isCharging),
+    final (liveDeviceId, liveConnected, charging) = context.select<DeviceProvider, (String?, bool, bool?)>(
+      (device) => (
+        device.connectedDevice?.id,
+        device.isConnected,
+        device.isConnected && device.connectedDevice?.type == DeviceType.omi ? device.observedChargingStatus : null,
+      ),
     );
     return Consumer<OnboardingProvider>(
       builder: (context, provider, child) {
@@ -383,7 +387,11 @@ class _FoundDevicesState extends State<FoundDevices> with WidgetsBindingObserver
                 Semantics(
                   liveRegion: true,
                   child: Text(
-                    charging ? context.l10n.charging : context.l10n.deviceReadyToUse,
+                    switch (charging) {
+                      true => context.l10n.charging,
+                      false => context.l10n.deviceReadyToUse,
+                      null => context.l10n.connected,
+                    },
                     textAlign: TextAlign.center,
                     style: OmiType.footnote.copyWith(color: OmiColors.textSecondary),
                   ),

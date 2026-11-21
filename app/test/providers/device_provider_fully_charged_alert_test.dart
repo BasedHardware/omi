@@ -126,12 +126,15 @@ void main() {
     final listening = provider.initiateChargingStatusListener();
     await tester.pump(const Duration(seconds: 15));
     expect(transport.batteryReads, 0);
+    expect(provider.observedChargingStatus, isNull);
     pendingStatus.complete([1]);
     await listening;
+    expect(provider.observedChargingStatus, isTrue);
     await tester.pump(const Duration(seconds: 30));
     expect(transport.batteryReads, 0);
 
     transport.notifications.add([0]);
+    expect(provider.observedChargingStatus, isFalse);
     await tester.pump(const Duration(seconds: 11));
     expect(transport.batteryReads, 0);
     transport.battery = [91];
@@ -162,6 +165,7 @@ void main() {
     await tester.pump(const Duration(seconds: 12));
     expect(transport.batteryReads, 1);
     provider.setIsConnected(false);
+    expect(provider.observedChargingStatus, isNull);
     pending.complete([91]);
     await tester.pump();
     expect(provider.batteryLevel, -1);

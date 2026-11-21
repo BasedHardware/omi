@@ -71,6 +71,7 @@ class DeviceStatsRow extends StatelessWidget {
           value: seconds > 0 ? OmiDuration.compact(_minutes(seconds), l10n) : '—',
           caption: catchUpCaption,
           onTap: onOpenCatchUp,
+          opensDestination: true,
         )
       else
         _StatTile(
@@ -100,7 +101,15 @@ class DeviceStatsRow extends StatelessWidget {
 }
 
 class _StatTile extends StatelessWidget {
-  const _StatTile({super.key, required this.label, required this.value, this.caption, this.secondCaption, this.onTap});
+  const _StatTile({
+    super.key,
+    required this.label,
+    required this.value,
+    this.caption,
+    this.secondCaption,
+    this.onTap,
+    this.opensDestination = false,
+  });
 
   final String label;
   final String value;
@@ -111,6 +120,7 @@ class _StatTile extends StatelessWidget {
 
   /// A tappable tile ends its caption with a chevron; the whole line is the target.
   final VoidCallback? onTap;
+  final bool opensDestination;
 
   @override
   Widget build(BuildContext context) {
@@ -124,7 +134,7 @@ class _StatTile extends StatelessWidget {
         Text(value, style: OmiType.subhead.copyWith(fontWeight: FontWeight.w600)),
         if (caption != null) Text(caption!, style: captionStyle),
         if (secondCaption != null) Text(secondCaption!, style: captionStyle),
-        if (onTap != null)
+        if (opensDestination && onTap != null)
           Icon(
             Icons.chevron_right,
             size: MediaQuery.textScalerOf(context).scale(captionStyle.fontSize!),

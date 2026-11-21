@@ -1243,6 +1243,7 @@ void main() {
       final battery = find.byKey(const Key('device_stat_battery'));
       expect(tester.getSize(battery).height, greaterThanOrEqualTo(44));
       expect(tester.getSemantics(battery).getSemanticsData().hasAction(SemanticsAction.tap), isTrue);
+      expect(find.descendant(of: battery, matching: find.byIcon(Icons.chevron_right)), findsNothing);
       await tester.tap(find.text('Try Again'));
       expect(checks, 1);
       semantics.dispose();
