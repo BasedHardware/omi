@@ -1,0 +1,13 @@
+{
+  "name": "local-calls",
+  "version": "1.0.0",
+  "description": "Android incoming call detection and answering",
+  "main": "index.ts",
+  "private": true,
+  "sideEffects": false,
+  "peerDependencies": {
+    "expo": "*",
+    "react": "*",
+    "react-native": "*"
+  }
+}

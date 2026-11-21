@@ -1,0 +1,92 @@
+# Reduce EAS upload archive size. Exclude dependencies/caches/build outputs,
+# but keep native project sources needed for builds.
+
+# Dependencies and package manager caches
+node_modules
+.pnpm-store
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Git and editor
+.git
+.vscode
+.idea
+*.iml
+.DS_Store
+
+# Expo/JS build outputs
+.expo
+.expo-shared
+dist
+web-build
+build
+
+# Android build artifacts and local machine files (keep android source/config)
+android/build
+android/.gradle
+android/.cxx
+android/app/build
+android/app/.cxx
+android/**/build
+android/**/.cxx
+android/local.properties
+**/*.apk
+**/*.aab
+
+# Gradle caches sometimes present in project
+.gradle
+
+# iOS build artifacts (keep sources if present)
+ios/build
+ios/Pods
+ios/Podfile.lock
+
+# Tests/coverage/misc caches
+coverage
+.tmp
+*.tsbuildinfo
+
+# Local credentials (do not upload)
+credentials.json
+android/keystores
+
+# Large local-brain model asset (86MB). Excluded to keep EAS upload small for
+# preview APKs; on-device local-brain features depending on this bundled model
+# will be unavailable unless the model is provided another way.
+modules/local-brain/android/src/main/assets/minilm.tflite
+modules/**/src/main/assets/minilm.tflite
+modules/**/src/main/assets/*.tflite
+modules/**/src/main/assets/*.onnx
+modules/**/src/main/assets/*.bin
+modules/**/src/main/assets/*.task
+
+# Dev/docs artifacts not needed in app build archive
+docs
+TESTING.md
+PLAN.md
+README.md
+**/__tests__/**
+**/*.test.ts
+**/*.test.tsx
+**/*.test.js
+**/*.test.jsx
+**/*.spec.ts
+**/*.spec.tsx
+scripts/reset-project.js
+scripts/fetch_router_model.sh
+scripts/devkit-mic-ws.mjs
+scripts/opus-tap.mjs
+scripts/ws-audio-source.mjs
+scripts/ws_tap.py
+.vscode
+.claude
+AGENTS.md
+CLAUDE.md
+LICENSE
+.eslintrc*
+eslint.config.js
+jest.config.js
+jest.setup.js
+pnpm-workspace.yaml

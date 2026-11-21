@@ -31,6 +31,7 @@ BUDGETS: dict[str, tuple[int, int]] = {
     "AGENTS.md": (60, 4_000),
     ".github/AGENTS.md": (45, 4_500),
     "app/AGENTS.md": (164, 11_411),
+    "app/react-native/AGENTS.md": (35, 1_854),
     "backend/AGENTS.md": (350, 39_000),
     # Set to its size at creation. backend-go/tools/archcheck also caps it at 60 lines.
     "backend-go/AGENTS.md": (54, 3_689),

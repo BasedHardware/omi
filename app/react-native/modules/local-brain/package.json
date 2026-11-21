@@ -1,0 +1,13 @@
+{
+  "name": "local-brain",
+  "version": "1.0.0",
+  "description": "On-device embedding router for the local agent",
+  "main": "index.ts",
+  "private": true,
+  "sideEffects": false,
+  "peerDependencies": {
+    "expo": "*",
+    "react": "*",
+    "react-native": "*"
+  }
+}
