@@ -23,8 +23,8 @@ class LiveWalReceipt {
   static const directoryName = '.wal-live-receipts';
   static const writeEnabled = !bool.fromEnvironment('OMI_LIVE_WAL_RECEIPT_OFF');
   static const _pending = '.json';
-  static const _retired = '.retired';
-  static const _temporary = '.json.tmp';
+  static const _stagingDirectory = 'staging';
+  static const _retiredDirectory = 'retired';
   static const _maxEntries = 128;
   static const _maxReceiptBytes = 16 * 1024;
   static const _maxReplayBytes = 32 * 1024 * 1024;
@@ -41,15 +41,12 @@ class LiveWalReceipt {
   /// inference, even if the directory or both indexes disappear.
   static bool isManagedBasename(String name) => _managedNamePattern.hasMatch(name);
 
-  /// Identify pending and retired receipts without trusting their payload.
+  /// Staging files and retired receipts never count toward replay work.
   static String? _receiptBasename(String entryPath) {
     final entryName = path.basename(entryPath);
-    for (final suffix in [_temporary, _pending, _retired]) {
-      if (!entryName.endsWith(suffix)) continue;
-      final name = entryName.substring(0, entryName.length - suffix.length);
-      if (_safeName(name) && isManagedBasename(name)) return name;
-    }
-    return null;
+    if (!entryName.endsWith(_pending)) return null;
+    final name = entryName.substring(0, entryName.length - _pending.length);
+    return _safeName(name) && isManagedBasename(name) ? name : null;
   }
 
   static String newId() => const Uuid().v4().replaceAll('-', '');
@@ -61,19 +58,24 @@ class LiveWalReceipt {
     return '${basename.substring(0, timestamp)}_wr$id${basename.substring(timestamp)}';
   }
 
-  static File _receipt(Directory documents, String name, [String suffix = _pending]) =>
-      File(path.join(directory(documents).path, name + suffix));
+  static File _receipt(Directory documents, String name) => File(path.join(directory(documents).path, name + _pending));
+
+  static Future<Directory> _checkedDirectory(Directory directory) async {
+    await directory.create(recursive: true);
+    if (await FileSystemEntity.type(directory.path, followLinks: false) != FileSystemEntityType.directory) {
+      throw const FileSystemException('invalid live WAL receipt directory');
+    }
+    return directory;
+  }
 
   static Future<String> prepare(File audio, Wal wal, String id, List<int> bytes) async {
     final name = path.basename(audio.path);
     final digest = await offUiIsolate(() => sha256.convert(bytes).toString(),
         size: bytes.length, threshold: 64 * 1024, debugName: 'live_wal_receipt_digest');
     final pending = _receipt(audio.parent, name);
-    await pending.parent.create(recursive: true);
-    if (await FileSystemEntity.type(pending.parent.path, followLinks: false) != FileSystemEntityType.directory) {
-      throw const FileSystemException('invalid live WAL receipt directory');
-    }
-    final temporary = _receipt(audio.parent, name, _temporary);
+    await _checkedDirectory(pending.parent);
+    final staging = await _checkedDirectory(Directory(path.join(pending.parent.path, _stagingDirectory)));
+    final temporary = File(path.join(staging.path, name + _pending));
     // Freeze the policy after the digest finishes. Any pending live file is
     // replayed held because later policy tightening may have been interrupted.
     final fields = wal.toJson()
@@ -169,13 +171,14 @@ class LiveWalReceipt {
     if (type == FileSystemEntityType.notFound) return (rows: rows, withheld: withheld, budgetExhausted: exhausted);
     if (type != FileSystemEntityType.directory) throw const FileSystemException('invalid live WAL receipt directory');
     await for (final entry in pending.list(followLinks: false)) {
+      final name = _receiptBasename(entry.path);
+      if (entry is! File || name == null || knownBasenames.contains(name.toLowerCase())) continue;
+      // A later startup can progress past rows that an earlier batch indexed,
+      // even if the backup still needs to catch up before retiring receipts.
       if (++visited > _maxEntries) {
         exhausted = true;
         break;
       }
-      final name = _receiptBasename(entry.path);
-      if (entry is! File || !entry.path.endsWith(_pending) || name == null) continue;
-      if (knownBasenames.contains(name.toLowerCase())) continue;
       try {
         final record = await _read(entry, name);
         if (record == null) {
@@ -243,11 +246,11 @@ class LiveWalReceipt {
       var visited = 0;
       var backupFlushed = false;
       await for (final entry in pending.list(followLinks: false)) {
-        if (++visited > _maxEntries) break;
         final name = _receiptBasename(entry.path);
-        if (entry is! File || !entry.path.endsWith(_pending) || name == null) continue;
+        if (entry is! File || name == null) continue;
         final primary = main[name], previous = backup[name];
         if (primary == null || previous == null || primary.binding != previous.binding) continue;
+        if (++visited > _maxEntries) break;
         try {
           decodeWalIndexRow(primary.row);
           decodeWalIndexRow(previous.row);
@@ -272,7 +275,8 @@ class LiveWalReceipt {
     if (wal.liveFileWriteId == null || !await pending.exists()) return true;
     final expected = _binding(name, wal.toJson());
     if (expected == null || (await _read(pending, name))?.binding != expected) return false;
-    await pending.rename(_receipt(audio.parent, name, _retired).path);
+    final retired = await _checkedDirectory(Directory(path.join(pending.parent.path, _retiredDirectory)));
+    await pending.rename(path.join(retired.path, name + _pending));
     return true;
   }
 

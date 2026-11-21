@@ -635,6 +635,55 @@ void main() {
     expect((await census()).orphans.where((entry) => entry.filePath == file.path), isEmpty);
   });
 
+  test('staging residue does not consume the pending replay budget', () async {
+    final directory = await LiveWalReceipt.directory(dir).create();
+    final staging = await Directory('${directory.path}/staging').create();
+    for (var i = 0; i < 130; i++) {
+      final tempName = LiveWalReceipt.uniqueName(name(now - 100 - i), LiveWalReceipt.newId());
+      await File('${staging.path}/$tempName.json').writeAsString('{');
+    }
+    final writer = await ledger(realCensus: true);
+    await captureReceiptAudio(writer);
+    await writer.finalizeCurrentSession();
+    final written = writer.testWals.singleWhere((w) => w.liveFileWriteId != null);
+    await json('wals.json', {'wals': []});
+
+    final restarted = await ledger(realCensus: true);
+    final replayed = restarted.testWals.singleWhere((w) => w.filePath == written.filePath);
+    expect(replayed.liveFileWriteId, written.liveFileWriteId);
+    expect(replayed.ownerUid, 'owner-a');
+  });
+
+  test('later startup replays past receipts the previous batch indexed', () async {
+    final bytes = encodeWalFrames(receiptFrames);
+    for (var i = 0; i < 129; i++) {
+      final id = LiveWalReceipt.newId();
+      final timestamp = now - i;
+      final filename = LiveWalReceipt.uniqueName(name(timestamp), id);
+      final file = File('${dir.path}/$filename');
+      final captured = Wal(
+        codec: BleAudioCodec.opusFS320,
+        timerStart: timestamp,
+        seconds: 1,
+        totalFrames: receiptFrames.length,
+        storage: WalStorage.mem,
+        status: WalStatus.miss,
+        ownerUid: 'owner-a',
+        device: 'pendant',
+      );
+      await LiveWalReceipt.prepare(file, captured, id, bytes);
+      await file.writeAsBytes(bytes, flush: true);
+    }
+
+    final first = await ledger(realCensus: true);
+    expect(first.testWals.where((w) => w.liveFileWriteId != null), hasLength(128));
+
+    final next = await ledger(realCensus: true);
+    final replayed = next.testWals.where((w) => w.liveFileWriteId != null);
+    expect(replayed.map((w) => w.liveFileWriteId).toSet(), hasLength(129));
+    expect(replayed, hasLength(129));
+  });
+
   test('unreadable and budget-deferred receipts reserve their audio basenames', () async {
     final directory = await LiveWalReceipt.directory(dir).create();
     final base = LiveWalReceipt.uniqueName(name(now - 2), LiveWalReceipt.newId());
