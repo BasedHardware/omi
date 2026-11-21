@@ -488,13 +488,56 @@ def test_exhausted_retry_budget_is_failed_and_retryable(strict):
     token = leases.acquire('synthetic', 'summary-c', firestore_client=strict)
     for _ in range(2):
         assert writers.begin_processing('synthetic', row, token, firestore_client=strict)
-    assert not writers.begin_processing('synthetic', row, token, firestore_client=strict)
+    outcome = writers.begin_processing('synthetic', row, token, firestore_client=strict)
+    assert outcome is writers.TERMINAL and not outcome
     failed = strict.rows[path]
     assert failed['tile_state'] == 'failed' and failed['status'] == 'completed'
     assert failed['summary_retryable'] and failed['v3_process_failed']
     assert writers.begin_processing('synthetic', row, token, force=True, firestore_client=strict)
     assert strict.rows[path]['tile_state'] == 'writing'
     assert strict.rows[path]['v3_process_attempts'] == 1
+
+
+def test_successful_pass_resets_the_attempt_budget(strict):
+    path = ('users', 'synthetic', 'conversations', 'c')
+    row = {'id': 'c', 'v3_derived': True, 'transcript_segments': [{'text': 'unchanged speech'}]}
+    strict.rows[path] = dict(row)
+    token = leases.acquire('synthetic', 'summary-c', firestore_client=strict)
+    for _ in range(3):
+        assert writers.begin_processing('synthetic', row, token, firestore_client=strict)
+        writers.settle_processing('synthetic', 'c', token, None, AT, notes=True, firestore_client=strict)
+    settled = strict.rows[path]
+    assert settled['tile_state'] == 'done' and not settled['v3_process_failed']
+    assert settled['v3_process_attempts'] == 0
+
+
+def test_attempt_budget_counts_consecutive_failures_not_total_attempts(strict):
+    path = ('users', 'synthetic', 'conversations', 'c')
+    row = {'id': 'c', 'v3_derived': True, 'transcript_segments': [{'text': 'unchanged speech'}]}
+    strict.rows[path] = dict(row)
+    token = leases.acquire('synthetic', 'summary-c', firestore_client=strict)
+    for outcome in ('failed', 'settled', 'failed', 'settled'):
+        assert writers.begin_processing('synthetic', row, token, firestore_client=strict)
+        if outcome == 'failed':
+            writers.fail_processing('synthetic', 'c', token, None, firestore_client=strict)
+        else:
+            writers.settle_processing('synthetic', 'c', token, None, AT, notes=True, firestore_client=strict)
+    assert strict.rows[path]['tile_state'] == 'done' and not strict.rows[path]['v3_process_failed']
+
+
+def test_two_consecutive_failures_still_reach_the_terminal_outcome(strict):
+    path = ('users', 'synthetic', 'conversations', 'c')
+    row = {'id': 'c', 'v3_derived': True, 'transcript_segments': [{'text': 'real speech'}]}
+    strict.rows[path] = dict(row)
+    token = leases.acquire('synthetic', 'summary-c', firestore_client=strict)
+    for _ in range(2):
+        assert writers.begin_processing('synthetic', row, token, firestore_client=strict)
+        writers.fail_processing('synthetic', 'c', token, None, firestore_client=strict)
+    assert writers.begin_processing('synthetic', row, token, firestore_client=strict) is writers.TERMINAL
+    failed = strict.rows[path]
+    assert failed['tile_state'] == 'failed' and failed['status'] == 'completed'
+    assert failed['summary_retryable'] and failed['v3_process_failed']
+    assert failed['v3_process_failure_reason'] == 'attempts_exhausted'
 
 
 def test_failure_never_replaces_a_locked_presentation(strict):

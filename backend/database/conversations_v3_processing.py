@@ -218,7 +218,10 @@ def settle_processing(
 ):
     """Settle one processing attempt; `notes` marks a completed notes write (arms the created delivery).
 
-    Returns True when this settle armed the conversation-created delivery obligation.
+    A settle is not a failure, so it clears the content-scoped attempt budget: the budget counts
+    consecutive failures, and a later pass on unchanged content must start from zero instead of
+    inheriting attempts that already succeeded. Returns True when this settle armed the
+    conversation-created delivery obligation.
     """
     client = firestore_client or store.get_firestore_client()
     ref = store.user_conversations(client, uid).document(cid)
@@ -245,6 +248,7 @@ def settle_processing(
             ref,
             {
                 'v3_process_pending': False,
+                'v3_process_attempts': 0,
                 'tile_state': 'done',
                 'v3_process_failed': False,
                 'v3_process_failure_reason': None,
@@ -368,7 +372,27 @@ def processing_hash(row):
     ).hexdigest()
 
 
+class _Terminal:
+    """Falsy outcome: the row's processing obligation is already terminally failed.
+
+    Falsy so a caller that only asks "did this pass begin?" still stops, while the push path can
+    tell a settled terminal row from an unavailable one and acknowledge it instead of raising.
+    """
+
+    def __bool__(self):
+        return False
+
+
+TERMINAL = _Terminal()
+
+
 def begin_processing(uid, row, token, *, force=False, firestore_client=None):
+    """Claim one processing pass: True when it began, TERMINAL when the row is already exhausted.
+
+    False means the row cannot be processed right now (missing, deleted or locked). The budget
+    counts consecutive attempts on one content fingerprint: `settle_processing` clears it on
+    success, so only a run of failures can reach the terminal outcome.
+    """
     client = firestore_client or store.get_firestore_client()
     ref = store.user_conversations(client, uid).document(row['id'])
     held = leases.lease_ref(client, uid, 'summary-' + row['id'])
@@ -391,7 +415,7 @@ def begin_processing(uid, row, token, *, force=False, firestore_client=None):
         )
         if attempts >= 2:
             tx.update(ref, failure_patch(retryable=bool(row.get('transcript_segments')), reason='attempts_exhausted'))
-            return 'failed' if not current.get('v3_process_failed') else False
+            return 'failed' if not current.get('v3_process_failed') else 'terminal'
         tx.update(
             ref,
             {
@@ -410,6 +434,8 @@ def begin_processing(uid, row, token, *, force=False, firestore_client=None):
     result = begin(client.transaction())
     if result == 'failed':
         metrics.terminal_failure('attempts_exhausted')
+    if result in ('failed', 'terminal'):
+        return TERMINAL
     return result is True
 
 
