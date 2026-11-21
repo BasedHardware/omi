@@ -269,6 +269,8 @@ env:
     value: "300"
   - name: SYNC_POLL_BACKOFF_ENABLED
     value: "false"
+  - name: SYNC_POLL_BACKOFF_PERCENT
+    value: "0"
   - name: BATCH_PIPELINE_AUTHORITATIVE_LABELS_ENABLED
     value: "false"
   - name: BATCH_PIPELINE_LIVE_ADMISSION_ENABLED

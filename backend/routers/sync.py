@@ -1930,7 +1930,7 @@ def get_sync_job_status(
     except BatchPrivacyBlocked:
         return privacy_blocked_response()
     if durable is not None:
-        return with_poll_hint(durable, surface_open=surface_open)
+        return with_poll_hint(durable, uid=uid, surface_open=surface_open)
     job = get_sync_job(job_id)
     if job and job['uid'] != uid:
         raise HTTPException(status_code=403, detail="Not authorized to view this sync job")
@@ -1950,11 +1950,11 @@ def get_sync_job_status(
             reason='unavailable',
             outcome='recovered',
         )
-        return with_poll_hint(completed, surface_open=surface_open)
+        return with_poll_hint(completed, uid=uid, surface_open=surface_open)
     if not job:
         retired = acknowledge_retired_handle(job_id, uid)  # custody-held expiry-retired handles
         if retired is not None:
-            return with_poll_hint(retired, surface_open=surface_open)
+            return with_poll_hint(retired, uid=uid, surface_open=surface_open)
         raise HTTPException(status_code=404, detail="Sync job not found or expired")
 
     # A stale state can only be finalized by the holder of the same run lease
@@ -2102,7 +2102,7 @@ def get_sync_job_status(
         if job.get('error'):
             resp['error'] = job['error']
 
-    return with_poll_hint(resp, surface_open=surface_open)
+    return with_poll_hint(resp, uid=uid, surface_open=surface_open)
 
 
 async def _maintain_uid_sequencer_lease(

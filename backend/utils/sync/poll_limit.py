@@ -29,7 +29,7 @@ def admit_sync_job_poll(uid: str) -> bool:
         return True
 
 
-def with_poll_hint(status: dict, *, surface_open: bool = False) -> dict:
+def with_poll_hint(status: dict, *, uid: str | None = None, surface_open: bool = False) -> dict:
     """Use already loaded state only; never query all of an owner's work.
 
     Unknown/active jobs remain quick. A terminal job has no remaining work;
@@ -45,7 +45,7 @@ def with_poll_hint(status: dict, *, surface_open: bool = False) -> dict:
         'source_alignment_pending',
     }:
         return {**status, 'poll_after_ms': 300000}
-    if not poll_backoff():
+    if not poll_backoff(uid):
         return status
     result = dict(status)
     state = status.get('status')
