@@ -53,6 +53,7 @@ commit=$(git -C "$go_root/.." rev-parse HEAD)
             echo "Active replay failed to produce a classifiable report (exit $drift_status)" >&2
             exit 1
         fi
+        # The verifier checks departures before exporting the value-free task reports.
         "$python_bin" -O "$repo_go/tools/replay/verify.py" --task-output "$REPLAY_TASK_OUTPUT_DIR" "$scratch/parity.json" "$scratch/gaps.json"
     else
         if [[ $drift_status != 1 ]]; then

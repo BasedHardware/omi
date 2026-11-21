@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from contextlib import contextmanager
 from functools import lru_cache
+import json
 from threading import Lock
 
 _ACTIVE_STATE = None
@@ -33,6 +34,27 @@ def _content(value):
 def token_estimate(value) -> int:
     """Count content tokens with the pinned local encoding, excluding API framing."""
     return len(_encoding().encode('\n'.join(_content(value))))
+
+
+def prompt_content(value):
+    """Extract prompt text from Python messages or the jobd replay input envelope."""
+    if not isinstance(value, str):
+        return _content(value)
+    try:
+        request = json.loads(value)
+    except (TypeError, ValueError):
+        return [value]
+    if not isinstance(request, dict) or not isinstance(request.get('prompt'), str):
+        return [value]
+    transcript = request.get('transcript')
+    if not isinstance(transcript, list) or not all(isinstance(item, str) for item in transcript):
+        return [value]
+    return [request['prompt'], *transcript]
+
+
+def prompt_token_estimate(value) -> int:
+    """Count content text on the shared Python messages/jobd input basis."""
+    return len(_encoding().encode('\n'.join(prompt_content(value))))
 
 
 def embedding_token_estimate(value) -> int:

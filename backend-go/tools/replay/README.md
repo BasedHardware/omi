@@ -137,6 +137,8 @@ The m5 hostname and CI checks are operational guards against accidental use, not
 boundary. A process with access to the host and files can bypass them; the hook validates each
 enhanced transcript envelope with the external replay test key before opening the oracle.
 
+CI fixture content is read and then checked against its reviewed digest before it is parsed or used.
+
 ```sh
 work=$(mktemp -d)
 go build -o "$work/jobd" ./cmd/jobd

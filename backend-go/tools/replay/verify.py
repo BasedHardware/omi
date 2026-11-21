@@ -284,6 +284,7 @@ def write_value_free_report(report, path):
     for case in report['cases']:
         case.pop('python', None)
         case.pop('go', None)
+        case.pop('go_evidence', None)
     encoded = json.dumps(report, ensure_ascii=True, allow_nan=False, indent=2) + '\n'
     flags = os.O_WRONLY | os.O_CREAT | os.O_TRUNC
     descriptor = os.open(path, flags, 0o600)

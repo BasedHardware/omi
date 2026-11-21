@@ -66,9 +66,9 @@ class CaseState:
         self.started_at = None
 
     def record_provider_call(self, feature, prompt, completion):
-        from testing.finalization_replay.metrics import token_estimate
+        from testing.finalization_replay.metrics import prompt_token_estimate, token_estimate
 
-        prompt_tokens = token_estimate(prompt)
+        prompt_tokens = prompt_token_estimate(prompt)
         completion_tokens = token_estimate(completion)
         with self._metrics_lock:
             self.provider_calls.append(feature)

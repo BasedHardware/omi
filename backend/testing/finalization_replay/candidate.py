@@ -173,7 +173,7 @@ class _Handler(BaseHTTPRequestHandler):
                         result = {field: fixture[field] for field in ('title', 'overview')}
                     else:
                         result = {'contents': [item['text'] for item in fixture['items']]}
-                    state.record_provider_call(feature, request.get('messages', []), result)
+                    state.record_provider_call(feature, request.get('input', ''), result)
                     return 200, result
             case 'PUT', ['vectors', uid, cid] if (uid, cid) == (state.uid, state.cid):
                 body = self._body()

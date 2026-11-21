@@ -2,15 +2,17 @@
 
 from datetime import datetime, timezone
 import importlib.util
+import json
 import os
 from pathlib import Path
+import tempfile
 from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
 from testing.finalization_replay.candidate import _Handler, replay_database
 from testing.finalization_replay.driver import _observe
-from testing.finalization_replay.metrics import _delete_write, _invoke_rpc, _wrap_stream
+from testing.finalization_replay.metrics import _delete_write, _invoke_rpc, _wrap_stream, prompt_token_estimate
 from testing.finalization_replay.state import CaseState
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -119,33 +121,84 @@ class ReplayContractTests(unittest.TestCase):
                 with self.assertRaises(SystemExit):
                     verify.verify_cost(report)
 
-    def test_candidate_cost_meter_uses_the_same_messages_as_python(self):
-        recorded = {}
-        state = SimpleNamespace(
-            uid='replay-cost',
-            cid='case-cost',
-            notes={'title': 'n', 'overview': 'o'},
-            case={},
-            memories=[],
-        )
-        state.record_provider_call = lambda feature, prompt, _completion: recorded.update(
-            feature=feature, prompt=prompt
-        )
+    def test_jobd_wire_input_uses_nonzero_shared_prompt_token_basis(self):
+        from threading import Lock
+
+        state = CaseState.__new__(CaseState)
+        state.uid = 'replay-cost'
+        state.cid = 'case-cost'
+        state.notes = {'title': 'n', 'overview': 'o'}
+        state.case = {}
+        state.memories = []
+        state._metrics_lock = Lock()
+        state.provider_calls = []
+        state.llm_tokens = {'prompt': 0, 'completion': 0}
         handler = object.__new__(_Handler)
         handler.path = '/llm/notes'
         handler.command = 'POST'
         handler.server = SimpleNamespace(state=state)
-        messages = [{'role': 'user', 'content': 'Count this shared message basis.'}]
+        prompt = 'Summarize this synthetic conversation.'
+        transcript = ['The real jobd wire carries prompt input here.']
+        input_payload = {
+            'feature': 'conv-structure',
+            'prompt': prompt,
+            'transcript': transcript,
+            'app_platform': '',
+            'trigger': 'sync',
+        }
+        input_text = json.dumps(input_payload)
+        expected_messages = [
+            {'role': 'system', 'content': prompt},
+            {'role': 'user', 'content': '\n'.join(transcript)},
+        ]
         handler._body = lambda: {
             'uid': state.uid,
             'subject_id': state.cid,
-            'input': 'This legacy field must not be counted.',
-            'messages': messages,
+            'job_id': 'job-cost',
+            'request_id': 'request-cost',
+            'input': input_text,
+            'input_hash': 'synthetic-hash',
+            'implementation_version': 'jobd-go-v1',
         }
 
         status, _result = handler._route()
         self.assertEqual(status, 200)
-        self.assertEqual(recorded['prompt'], messages)
+        self.assertGreater(state.llm_tokens['prompt'], 0)
+        self.assertEqual(state.llm_tokens['prompt'], prompt_token_estimate(expected_messages))
+
+    def test_task_exported_json_drops_go_evidence_after_departure_checks(self):
+        private_case = {
+            'name': 'synthetic',
+            'python': {'conversation': {'private': 'value'}},
+            'go': {'conversation': {'private': 'value'}},
+            'go_evidence': {'job': {'metadata': 'private queue metadata'}},
+            'errors': {},
+            'differences': [],
+        }
+        report = {'cases': [private_case], 'failed_cases': 0, 'unexplained_differences': 0}
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            parity_path = Path(temp_dir) / 'parity-input.json'
+            gaps_path = Path(temp_dir) / 'gaps-input.json'
+            parity_path.write_text(json.dumps(report))
+            gaps_path.write_text(json.dumps(report))
+            output_dir = Path(temp_dir) / 'exported'
+
+            def assert_departure_checks_see_evidence(gaps):
+                self.assertEqual(gaps['cases'][0]['go_evidence']['job']['metadata'], 'private queue metadata')
+
+            with (
+                patch.object(verify, 'verify_corpus_map'),
+                patch.object(verify, 'verify_unexplained_count'),
+                patch.object(verify, 'verify_departures', side_effect=assert_departure_checks_see_evidence),
+            ):
+                verify.verify_task_reports(str(output_dir), str(parity_path), str(gaps_path))
+
+            for name in ('parity.json', 'gaps.json'):
+                exported = json.loads((output_dir / name).read_text())
+                self.assertNotIn('go_evidence', exported['cases'][0])
+                self.assertNotIn('python', exported['cases'][0])
+                self.assertNotIn('go', exported['cases'][0])
 
     def test_error_observation_packs_effects(self):
         from threading import Lock
