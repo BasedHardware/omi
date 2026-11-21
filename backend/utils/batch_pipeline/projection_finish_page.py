@@ -1,16 +1,9 @@
-"""Finish-page selection gated by a shared, versioned backfill marker.
-
-Before maintenance completes, use the legacy page without stamp transactions.
-Once complete, every process (including a newly scaled replica) filters at once.
-Clock writes on state transitions are unconditional, so rollback/re-enable does
-not invalidate the pass. Negative marker reads are throttled to once a minute.
-"""
+"""Finish-page discovery and classification for the async skip policy."""
 
 import time
 import threading
 
 from config.batch_pipeline import (
-    projection_finish_backoff_enabled,
     projection_finish_async_skip_enabled,
     projection_finish_classify_page_limit,
 )
@@ -23,7 +16,7 @@ from utils.batch_pipeline.metrics import PROJECTION_FINISH_CLASSIFIED, PROJECTIO
 CLASSIFY_COOLDOWN_SECONDS = 20.0
 
 
-class FinishBackoff:
+class FinishPage:
     def __init__(self, projector):
         self.projector = projector
         self.complete = False
@@ -41,24 +34,20 @@ class FinishBackoff:
         # separate while sharing one process-wide migration budget.
         self.classify_page.limit = projection_finish_classify_page_limit()
         self.classify_page.remaining = self.classify_page.limit
-        backoff = projection_finish_backoff_enabled()
-        skip_async = projection_finish_async_skip_enabled()
-        if not backoff and not skip_async:
+        if not projection_finish_async_skip_enabled():
             return discovery.next(limit=size)
         if not self.complete and self.monotonic() >= self.check_after:
             self.check_after = self.monotonic() + 60.0
             self.complete = discovery.store.projection_finish_backfill_complete()
         if not self.complete:
             return discovery.next(limit=size)
-        if skip_async:
-            # Independent of the sync cursor. Only classified async receipts
-            # wake discovery here; legacy async rows wake it when read below.
-            rows, _ = discovery.store.projection_page(
-                limit=1, states=PROJECTION_FINISH_STATES, due_before=PROJECTION_FINISH_ASYNC_CLOCK
-            )
-            self.projector.has_async_followups |= bool(rows)
-        ceiling = self.projector.clock() if backoff else float('inf')
-        return discovery.next(limit=size, due_before=ceiling, exclude_async=skip_async)
+        # Independent of the sync cursor. Only classified async receipts wake
+        # discovery here; legacy async rows wake it when read below.
+        rows, _ = discovery.store.projection_page(
+            limit=1, states=PROJECTION_FINISH_STATES, due_before=PROJECTION_FINISH_ASYNC_CLOCK
+        )
+        self.projector.has_async_followups |= bool(rows)
+        return discovery.next(limit=size, due_before=float('inf'), exclude_async=True)
 
     def observed_async(self, segment_id: str, entry: dict) -> None:
         self.projector.has_async_followups = True
@@ -92,14 +81,3 @@ class FinishBackoff:
                     self.classify_after = max(self.classify_after, self.monotonic() + CLASSIFY_COOLDOWN_SECONDS)
             if classified:
                 PROJECTION_FINISH_CLASSIFIED.inc()
-
-    def settled(self, segment_id: str, entry: dict | None, result) -> None:
-        """Defer only after a no-change walk using the clock-filtered page.
-
-        A failed deferral leaves the existing clock due, so discovery retries it.
-        The store fences on current state before changing the clock.
-        """
-        if not projection_finish_backoff_enabled() or not self.complete or result is not None:
-            return
-        state = entry.get('projection_state') if entry else None
-        self.projector.store.defer_finish(segment_id, state, self.projector.clock())
