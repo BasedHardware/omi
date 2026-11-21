@@ -57,15 +57,41 @@ but a controlled requirement could not be read), `3` invalid manifest or state.
   else its commit tag. `OMI_BACKEND_RELEASE_SHA` is recorded as `release_env` only: env merges never remove
   a value, so it can name a release the revision does not serve.
 - GKE: the Deployment selector and the specs and image digests of its Running pods. Pods with the same
-  image and environment evidence share a serving unit. ConfigMap-backed and `envFrom` keys report
-  unknown because their startup values are unavailable from the pod spec. Required Secret bindings are
-  recorded as references. Optional ones report unknown.
+  image and environment evidence share a serving unit. Explicit literal `env` entries take precedence
+  over `envFrom`. Required values supplied only by ConfigMaps or `envFrom` report unknown because their
+  startup values are unavailable from the pod spec. Required Secret bindings are recorded as references.
+  Optional ones report unknown.
 - Gateway lanes: declared at the gateway's serving commit (`llm_gateway/config/lanes.yaml` plus the
   feature lanes of `generated_route_overrides.yaml`), read from local git.
 - Cloud Tasks queues and Cloud Scheduler jobs: one `list` per location. Absent from a successful list is
   `missing`; a failed list (the read-only bot lacks `cloudtasks.queues.get`, and PERMISSION_DENIED also says
   "may not exist") is `unknown`.
 - Every failed read becomes `unknown` in the checker, never `satisfied`.
+
+## Release coordination for conversations-v3 on GKE
+
+Production pusher and backend-listen need a configuration-only rollout before their serving pods can
+provide complete startup evidence. Both charts accept a `conversationsV3StartupEnv` Helm values map
+with exactly these string keys:
+
+- `SYNC_TASKS_PROJECT`, `SYNC_TASKS_LOCATION`, `SYNC_TASKS_INVOKER_SA`
+- `SYNC_TASKS_HANDLER_URL` and `CONVERSATIONS_V3_TASKS_URL`
+- `CONVERSATIONS_V3_STAGE` and `CONVERSATIONS_V3`
+
+Set both task URL keys explicitly. Use an empty string for an unused URL. The v3-specific URL takes
+precedence when set. The charts place those values directly in each container's pod template, so the
+release versions the actual bindings and the ReplicaSet retains them for that generation. The
+collector can verify them using its existing pod read. The shared ConfigMap continues to serve
+other keys. The values map takes only non-secret inputs.
+
+Release must derive the values from the approved runtime configuration and existing task-target
+deployment inputs, preserving the current effective stage, kill switch and task routing on the initial
+migration. Record the reviewed values with the release and wire that values layer into the normal
+production Helm paths for pusher and backend-listen so subsequent deploys and rollbacks retain the
+correct version. Charts render the legacy bindings when the values layer is absent. Schedule the two
+workload rollouts in the manifest's order. Before a lever move, rerun the read-only check after the
+rollouts converge. Pods still using legacy ConfigMap references can keep the check UNKNOWN during
+the rollout. A rollback to a legacy revision also restores that UNKNOWN behavior.
 
 ## Adding a manifest
 

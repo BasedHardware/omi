@@ -5,6 +5,8 @@ from __future__ import annotations
 import copy
 import json
 from pathlib import Path
+import shutil
+import subprocess
 
 import pytest
 
@@ -246,7 +248,9 @@ def test_v3_manifest_env_is_declared_in_the_prod_runtime_source(manifest):
     """Each required key reaches each runtime in the composed prod runtime env (direct, ConfigMap or envFrom)."""
     import yaml
 
-    prod = yaml.safe_load((BACKEND / 'deploy/runtime_env.yaml').read_text())['environments']['prod']
+    # The composed manifest is large enough to exceed the unit CPU budget with the pure Python parser.
+    loader = getattr(yaml, 'CSafeLoader', yaml.SafeLoader)
+    prod = yaml.load((BACKEND / 'deploy/runtime_env.yaml').read_text(), Loader=loader)['environments']['prod']
     shared_config_map = set((prod['gke'].get('config_map') or {}).get('entries', {}))
 
     def declared(runtime):
@@ -397,12 +401,12 @@ def test_collector_reads_traffic_not_spec_and_never_secrets(manifest):
     assert not any('secrets' in argv for argv in calls)
 
 
-def _pusher_pod(app, digest, phase='Running'):
+def _gke_pod(app, digest, phase='Running'):
     return {
         'spec': {'containers': [app]},
         'status': {
             'phase': phase,
-            'containerStatuses': [{'name': 'pusher', 'imageID': 'gcr.io/prod/pusher@' + digest}],
+            'containerStatuses': [{'name': app['name'], 'imageID': app['image'].split('@')[0] + '@' + digest}],
         },
     }
 
@@ -429,10 +433,10 @@ def test_collector_gke_counts_pods_and_resolves_promoted_digests():
             ('get', 'deployment', 'prod-omi-pusher'): deployment,
             ('get', 'pods'): {
                 'items': [
-                    _pusher_pod(app, DIG_NEW),
-                    _pusher_pod(app, DIG_NEW),
-                    _pusher_pod(app, DIG_OLD),
-                    _pusher_pod(app, DIG_OLD, 'Pending'),
+                    _gke_pod(app, DIG_NEW),
+                    _gke_pod(app, DIG_NEW),
+                    _gke_pod(app, DIG_OLD),
+                    _gke_pod(app, DIG_OLD, 'Pending'),
                 ]
             },
         }
@@ -499,8 +503,8 @@ def test_gke_mixed_generation_same_digest_cannot_pass_stage_parity(
     }
     old_app = {**new_app, 'env': [entry for entry in new_app['env'] if entry['name'] != stage]}
     old_app['env'].append({'name': stage, **old_binding})
-    new_pod = _pusher_pod(new_app, DIG_NEW)
-    old_pod = _pusher_pod(old_app, DIG_NEW)
+    new_pod = _gke_pod(new_app, DIG_NEW)
+    old_pod = _gke_pod(old_app, DIG_NEW)
     deployment = {
         'spec': {'selector': {'matchLabels': {'app': 'pusher'}}, 'template': {'spec': new_pod['spec']}},
     }
@@ -527,6 +531,110 @@ def test_gke_mixed_generation_same_digest_cannot_pass_stage_parity(
     verdict = check.evaluate(manifest, state)
     assert verdict.verdict == expected_verdict
     assert f'env-equal:v3-stage:{stage}' in _by_status(verdict, expected_parity)
+
+
+def _render_prod_gke_deployment(helm, runtime, *values):
+    chart = BACKEND / 'charts' / runtime
+    return subprocess.run(
+        [
+            helm,
+            'template',
+            f'prod-omi-{runtime}',
+            str(chart),
+            '-f',
+            str(chart / f"prod_omi_{runtime.replace('-', '_')}_values.yaml"),
+            '--set-string',
+            'image.tag=activation-test',
+            '--show-only',
+            'templates/deployment.yaml',
+            *values,
+        ],
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+
+
+@pytest.fixture(scope='module')
+def helm():
+    executable = shutil.which('helm')
+    if executable is None:
+        pytest.skip('Helm is required to verify the rendered pod spec')
+    return executable
+
+
+@pytest.fixture
+def startup_values():
+    env = _state('state-ready.json')['services']['pusher']['serving'][0]['env']
+    return {
+        **{key: entry['value'] for key, entry in env.items() if key != 'OMI_LLM_GATEWAY_URL'},
+        'CONVERSATIONS_V3_TASKS_URL': '',
+    }
+
+
+@pytest.mark.parametrize('runtime', ['pusher', 'backend-listen'])
+def test_release_pins_each_startup_value_in_the_pod_spec(manifest, helm, startup_values, runtime):
+    import yaml
+
+    baseline = _render_prod_gke_deployment(helm, runtime)
+    pinned = _render_prod_gke_deployment(
+        helm, runtime, '--set-json', f'conversationsV3StartupEnv={json.dumps(startup_values)}'
+    )
+    assert baseline.returncode == 0, baseline.stderr
+    assert pinned.returncode == 0, pinned.stderr
+    old_deployment = yaml.safe_load(baseline.stdout)
+    deployment = yaml.safe_load(pinned.stdout)
+    old_app = old_deployment['spec']['template']['spec']['containers'][0]
+    app = deployment['spec']['template']['spec']['containers'][0]
+    assert app['envFrom'] == old_app['envFrom']
+    assert [entry for entry in app['env'] if entry['name'] not in startup_values] == [
+        entry for entry in old_app['env'] if entry['name'] not in startup_values
+    ]
+    assert [entry for entry in app['env'] if entry['name'] in startup_values] == [
+        {'name': key, 'value': value} for key, value in sorted(startup_values.items())
+    ]
+
+    repository = app['image'].rpartition(':')[0]
+    state = _state('state-ready.json')
+    sha = state['services'][runtime]['serving'][0]['source_sha']
+    pods = {'items': [_gke_pod(app, DIG_NEW)]}
+    runner, calls = _fake_runner({('get', 'deployment', runtime): deployment, ('get', 'pods'): pods})
+    collector = collect.Collector(
+        'proj', 'us-central1', FakeGit({sha: set()}), runner, registry=FakeRegistry({(repository, DIG_NEW): sha})
+    )
+    wanted = collect.manifest_env_keys(manifest)[runtime]
+    state['services'][runtime] = collector.gke('ns', runtime, wanted)
+    assert check.evaluate(manifest, state).verdict == check.READY
+
+    # A same-image rollout cannot borrow the new spec's values for a legacy pod.
+    pods['items'].append(_gke_pod(old_app, DIG_NEW))
+    state['services'][runtime] = collector.gke('ns', runtime, wanted)
+    verdict = check.evaluate(manifest, state)
+    assert verdict.verdict == check.UNDETERMINED
+    assert f'env:v3-stage:{runtime}:CONVERSATIONS_V3_STAGE' in _by_status(verdict, check.UNKNOWN)
+    assert [argv[3:5] for argv in calls] == [['get', 'deployment'], ['get', 'pods']] * 2
+
+
+@pytest.mark.parametrize('runtime', ['pusher', 'backend-listen'])
+def test_chart_rejects_unapproved_startup_env_key(helm, startup_values, runtime):
+    result = _render_prod_gke_deployment(
+        helm, runtime, '--set-json', f'conversationsV3StartupEnv={json.dumps({**startup_values, "API_KEY": "test"})}'
+    )
+    assert result.returncode != 0
+    assert 'accepts only the seven conversations-v3 startup keys' in result.stderr
+
+
+def test_listen_chart_rejects_private_override_of_pinned_startup_env(helm, startup_values):
+    result = _render_prod_gke_deployment(
+        helm,
+        'backend-listen',
+        '--set-json',
+        f'conversationsV3StartupEnv={json.dumps(startup_values)}',
+        '--set-string',
+        'privateEnv.CONVERSATIONS_V3_STAGE=off',
+    )
+    assert result.returncode != 0
+    assert 'privateEnv cannot override a conversationsV3StartupEnv key' in result.stderr
 
 
 def test_collect_end_to_end_marks_failures_unknown(manifest):
