@@ -63,7 +63,16 @@ def source(rid, start, seconds=60, words=10, **extra):
         'transcript_segments': [
             {'id': rid + '-s', 'text': ' '.join(['word'] * words), 'start': 0.0, 'end': float(seconds), 'is_user': True}
         ],
-        'audio_files': [{'id': 'f-' + rid, 'duration': float(seconds), 'started_at': start}],
+        'audio_files': [
+            {
+                'id': 'f-' + rid,
+                'uid': UID,
+                'conversation_id': rid,
+                'chunk_timestamps': [start.timestamp()],
+                'duration': float(seconds),
+                'started_at': start,
+            }
+        ],
         'claims': [],
         **extra,
     }
@@ -1340,7 +1349,16 @@ def test_refinement_preflight_reserves_marker_write(commit_refinement, strict, m
 def test_refinement_batch_reserves_marker_with_donor(commit_refinement, strict, monkeypatch):
     cap = 6
     monkeypatch.setattr(store, 'BATCH_MAX_WRITES', cap)
-    commit_refinement({'id': 'unrelated', 'status': 'completed', 'started_at': AT, 'finished_at': AT})
+    commit_refinement(
+        {
+            'id': 'unrelated',
+            'status': 'completed',
+            'created_at': AT,
+            'started_at': AT,
+            'finished_at': AT,
+            'structured': {},
+        }
+    )
 
     batches = [tx for tx in strict.transactions if any('claims' in patch for _, patch in tx.updates)]
     assert len(batches) == 2
