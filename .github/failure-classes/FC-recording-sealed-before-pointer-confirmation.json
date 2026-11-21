@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "id": "FC-recording-sealed-before-pointer-confirmation",
+  "family": "destroy-after-quiescence",
+  "violated_contract": "A v3 recording remains the resumable owner until its origin's durable continuation pointer is confirmed to name the prepared successor. A failed or ambiguous pointer write must not be treated as a local switch that permits sealing the previous row.",
+  "canonical_prevention": "Persist the successor pointer before switching the live conversation id. Retry the idempotent pointer transaction and read it back after ambiguous failures. Seal the previous row only after the exact successor pointer is confirmed; otherwise keep the previous recording active and retry. Exercise both a definite pointer outage and a committed write with a lost response through the real rotation path.",
+  "canonical_prevention_artifact": [
+    "backend/routers/listen/conversations.py",
+    "backend/tests/unit/test_listen_v3_rotation_continuation.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/routers/listen/conversations.py",
+    "backend/tests/unit/test_listen_v3_rotation_continuation.py"
+  ],
+  "status": "open"
+}
