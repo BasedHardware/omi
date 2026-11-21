@@ -49,14 +49,21 @@ func newServer(port int, handler http.Handler) *http.Server {
 }
 
 // serve owns the workers and their store after startup.
-func serve(ctx context.Context, cfg config, store *queue.Store, workers *queue.Workers, registry *prometheus.Registry) error {
+func serve(ctx context.Context, cfg config, store *queue.Store, workers *queue.Workers, registry *prometheus.Registry, extra ...*http.Server) error {
 	lifetime, cancel := context.WithCancel(ctx)
 	defer cancel()
 	health := newServer(cfg.healthPort, healthHandler(lifetime.Done(), store.Ready))
 	metrics := newServer(cfg.metricsPort, metricsHandler(registry))
-	ended := make(chan error, 2)
+	ended := make(chan error, 2+len(extra))
 	go listen(health, "health", ended)
 	go listen(metrics, "metrics", ended)
+	servers := []*http.Server{health, metrics}
+	for _, server := range extra {
+		if server != nil {
+			servers = append(servers, server)
+			go listenErase(server, cfg.erase, ended)
+		}
+	}
 
 	var serveErr error
 	select {
@@ -75,17 +82,19 @@ func serve(ctx context.Context, cfg config, store *queue.Store, workers *queue.W
 	}()
 	shutdown, end := context.WithTimeout(context.WithoutCancel(ctx), cfg.stopTimeout)
 	defer end()
-	return errors.Join(serveErr, stopServers(shutdown, stopped, health, metrics))
+	return errors.Join(serveErr, stopServers(shutdown, stopped, servers...))
 }
 
-func stopServers(ctx context.Context, stopped <-chan struct{}, health, metrics *http.Server) error {
-	healthErr := health.Shutdown(ctx)
-	metricsErr := metrics.Shutdown(ctx)
+func stopServers(ctx context.Context, stopped <-chan struct{}, servers ...*http.Server) error {
+	var shutdownErr error
+	for _, server := range servers {
+		shutdownErr = errors.Join(shutdownErr, server.Shutdown(ctx))
+	}
 	select {
 	case <-stopped:
-		return errors.Join(healthErr, metricsErr)
+		return shutdownErr
 	case <-ctx.Done():
-		return errors.Join(healthErr, metricsErr, errors.New("worker shutdown deadline elapsed"))
+		return errors.Join(shutdownErr, errors.New("worker shutdown deadline elapsed"))
 	}
 }
 
@@ -96,4 +105,13 @@ func listen(server *http.Server, name string, ended chan<- error) {
 		return
 	}
 	ended <- fmt.Errorf("%s listener failed: %w", name, err)
+}
+
+func listenErase(server *http.Server, cfg eraseConfig, ended chan<- error) {
+	err := server.ListenAndServeTLS(cfg.cert, cfg.key)
+	if errors.Is(err, http.ErrServerClosed) {
+		ended <- nil
+		return
+	}
+	ended <- fmt.Errorf("queue erase TLS listener failed: %w", err)
 }

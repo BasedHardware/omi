@@ -13,6 +13,10 @@ class ActionItemTransactionLimitError(ValueError):
     """An atomic task operation would exceed the adapter's transaction budget."""
 
 
+class TaskSourceValidationError(ValueError):
+    """A supplied source is unavailable to this account, including deleted rows."""
+
+
 class TaskRelationshipConflictError(ValueError):
     pass
 

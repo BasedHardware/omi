@@ -1001,6 +1001,20 @@ class ExternalIntegrationCreateConversation(BaseModel):
     source: ConversationSource = ConversationSource.workflow
     language: Optional[str] = None
 
+    # Server-resolved meeting identity for this capture, carried as a field the
+    # same way `CreateConversation` carries it. The pre-summarization resolver
+    # attaches it here; `_get_conversation_obj` moves it into
+    # `external_data['calendar_meeting_context']` on the persisted Conversation,
+    # which is the shape every reader already understands. Client input is
+    # discarded: only the server resolver may attach a context, so this cannot
+    # change which conversations get one.
+    calendar_meeting_context: SkipJsonSchema[Optional[CalendarMeetingContext]] = None
+
+    @field_validator('calendar_meeting_context', mode='before')
+    @classmethod
+    def ignore_client_meeting_context(cls, value):
+        return None
+
     app_id: Optional[str] = None
 
     client_device_id: Optional[str] = None

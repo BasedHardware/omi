@@ -1266,7 +1266,8 @@
     },
     "LISTEN_BATCH_RECONNECT_ENABLED": {
       "owner": "capture-quality / Release",
-      "review_by": "2026-11-20"
+      "review_by": "2026-11-23",
+      "reason": "Aligned 2026-11-21 to the registry extension (until 2026-11-23, David's 2026-11-17 bulk ruling: extend); ramp not expanded by 2026-11-20 and the lapsed date turned main's unit tests red"
     },
     "LISTEN_BATCH_RECONNECT_GRACE_SECONDS": {
       "owner": "capture-quality / Release",

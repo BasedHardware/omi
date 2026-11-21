@@ -7,6 +7,7 @@ the boundary shell with fixture inputs. Nothing here calls a cloud API.
 from __future__ import annotations
 
 import copy
+import io
 import json
 import os
 import re
@@ -14,6 +15,8 @@ import runpy
 import subprocess
 import sys
 from pathlib import Path
+from urllib.error import HTTPError
+from urllib.parse import parse_qs, urlsplit
 
 import pytest
 import yaml
@@ -25,6 +28,13 @@ from scripts.cloud_run_scope import PROJECTION_PUMP, SELECTABLE, SERVICES, selec
 
 ROOT = Path(__file__).resolve().parents[3]
 BACKEND = ROOT / 'backend'
+# Match direct execution of the workflow script without changing pytest's search path.
+sys.path.insert(0, str(BACKEND / 'scripts'))
+try:
+    import recover_projection_pump_cap as recovery
+finally:
+    sys.path.pop(0)
+
 WORKFLOW = yaml.safe_load((ROOT / '.github/workflows/gcp_backend.yml').read_text())
 PUMP_ACTION = yaml.safe_load((ROOT / '.github/actions/deploy-projection-pump/action.yml').read_text())
 STACK_ACTION_TEXT = (ROOT / '.github/actions/deploy-backend-stack/action.yml').read_text()
@@ -205,12 +215,17 @@ def test_prod_pump_is_integration_plus_the_dark_overrides():
     assert pump['flags'] == integration['flags']
     assert pump['forbidden_env'] == integration['forbidden_env']
     assert pump['service_account'] == integration['service_account']
-    overridden = set(DARK_OVERRIDES) | {'BATCH_PIPELINE_INDEPENDENT_LANGUAGE_RECOVERY_ENABLED'}
+    train_pins = {'BATCH_ACCOUNT_PRIVACY_WRITER_ENABLED', 'BATCH_PROJECTION_OUTBOX'}
+    overridden = set(DARK_OVERRIDES) | {'BATCH_PIPELINE_INDEPENDENT_LANGUAGE_RECOVERY_ENABLED'} | train_pins
     assert set(pump['env']) - set(integration['env']) <= overridden
     for name in set(integration['env']) - overridden:
         assert pump['env'][name] == integration['env'][name], name
     for name, value in DARK_OVERRIDES.items():
         assert pump['env'][name]['value'] == value, name
+    for name in train_pins:
+        assert integration['env'][name]['value'] == 'false', name
+        assert services['backend-sync-backfill']['env'][name]['value'] == 'false', name
+        assert pump['env'][name]['value'] == 'true', name
     assert pump['env']['BATCH_PIPELINE_INDEPENDENT_LANGUAGE_RECOVERY_ENABLED']['value'] == 'false'
 
 
@@ -693,3 +708,391 @@ def test_deploy_pin_and_sidecar_steps_name_the_same_base_revision():
     assert f'--base-revision="{BASE_REVISION}"' in attach['run']
     text = (ROOT / '.github/actions/deploy-projection-pump/action.yml').read_text()
     assert set(re.findall(r'backend-projection-pump-\$\{\{[^}]*\}\}-base', text)) == {BASE_REVISION}
+
+
+# SCA-3318 recovery uses the interrupted base, with one service-cap mismatch.
+def _recovery_fixture(inverse_readback, etag='approved-version'):
+    service, revision, policy = inverse_readback
+    before = {
+        'name': recovery.RESOURCE,
+        'uid': 'pump-uid',
+        'generation': '7',
+        'observedGeneration': '7',
+        'etag': etag,
+        'terminalCondition': {'state': 'CONDITION_SUCCEEDED'},
+        'scaling': {'maxInstanceCount': 20},
+        'template': copy.deepcopy(revision['spec']),
+        'traffic': [{'type': 'TRAFFIC_TARGET_ALLOCATION_TYPE_LATEST', 'percent': 100}],
+    }
+    service['metadata']['uid'] = before['uid']
+    policy['etag'] = 'policy-version'
+    for section in ('spec', 'status'):
+        service[section]['traffic'][0].update(latestRevision=True, revisionName=recovery.BASE.revision)
+    service['status'].update(
+        latestReadyRevisionName=recovery.BASE.revision, latestCreatedRevisionName=recovery.BASE.revision
+    )
+    revision['metadata']['name'] = recovery.BASE.revision
+    revision['status']['imageDigest'] = recovery.BASE.image
+    app = revision['spec']['containers'][0]
+    app['image'] = recovery.BASE.image
+    app['env'][-1]['value'] = recovery.BASE.source
+
+    class FakeRun:
+        def __init__(self):
+            self.state = before
+            self.cap_requests = []
+            self.validation_error = None
+            self.interrupted = False
+            self.drift_after_validation = False
+            self.drift_after_write = False
+            self.permission_denied = False
+
+        def permission_check(self):
+            if self.permission_denied:
+                raise ValueError('missing permission')
+
+        def service(self):
+            return copy.deepcopy(self.state)
+
+        def read(self, noun, verb, _name):
+            if noun == 'revisions':
+                return copy.deepcopy(revision)
+            if verb == 'get-iam-policy':
+                return copy.deepcopy(policy)
+            document = copy.deepcopy(service)
+            document['metadata']['annotations'][recovery.CAP_ANNOTATION] = str(
+                self.state['scaling']['maxInstanceCount']
+            )
+            return document
+
+        def patch(self, etag, cap, *, validate_only):
+            self.cap_requests.append((etag, cap, validate_only))
+            assert etag == self.state['etag']
+            if validate_only:
+                if len(self.cap_requests) == self.validation_error:
+                    raise ValueError('validation rejected')
+                if len(self.cap_requests) == 2 and self.drift_after_validation:
+                    self.state['etag'] = 'drifted'
+                return {}
+            self.state.update(etag='new-version', generation='8', observedGeneration='8')
+            self.state['scaling']['maxInstanceCount'] = cap
+            if self.drift_after_write:
+                self.state['template'] = {}
+            if self.interrupted:
+                raise TimeoutError('simulated lost response after submit')
+            return {}
+
+        def complete(self, _operation, _cap, *, submitted):
+            pass
+
+    return FakeRun()
+
+
+def test_cap_recovery_writes_once_and_validates_the_post_write_inverse(inverse_readback):
+    api = _recovery_fixture(inverse_readback)
+    recovery.recover(api, api.read, 'approved-version')
+    assert api.cap_requests == [
+        ('approved-version', 4, True),
+        ('approved-version', 20, True),
+        ('approved-version', 4, False),
+        ('new-version', 20, True),
+    ]
+
+
+@pytest.mark.parametrize('failure', ['permission', 'etag', 'drift', 'forward', 'inverse', 'shape'])
+def test_cap_recovery_refuses_before_submit(inverse_readback, failure):
+    api = _recovery_fixture(inverse_readback)
+    etag = 'approved-version'
+    if failure == 'permission':
+        api.permission_denied = True
+    elif failure == 'etag':
+        etag = 'wrong-version'
+    elif failure == 'drift':
+        api.drift_after_validation = True
+    elif failure in ('forward', 'inverse'):
+        api.validation_error = 1 if failure == 'forward' else 2
+    else:
+        inverse_readback[1]['status']['conditions'][0]['status'] = 'False'
+    with pytest.raises(ValueError):
+        recovery.recover(api, api.read, etag)
+    assert all(validate for _, _, validate in api.cap_requests)
+
+
+@pytest.mark.parametrize('failure', ['interruption', 'post_write_shape', 'post_write_inverse'])
+def test_cap_recovery_requires_reconciliation_after_any_ambiguous_write(inverse_readback, failure):
+    api = _recovery_fixture(inverse_readback)
+    api.interrupted = failure == 'interruption'
+    api.drift_after_write = failure == 'post_write_shape'
+    api.validation_error = 4 if failure == 'post_write_inverse' else None
+    with pytest.raises(ValueError, match='independent Release reconciliation'):
+        recovery.recover(api, api.read, 'approved-version')
+    with pytest.raises(ValueError):
+        recovery.recover(api, api.read, 'approved-version')
+    assert [item for item in api.cap_requests if not item[2]] == [('approved-version', 4, False)]
+
+
+def test_cap_recovery_requests_only_the_one_field(monkeypatch):
+    api = recovery.RunAPI('fixture-token')
+    requests = []
+    monkeypatch.setattr(api, 'request', lambda *args: requests.append(args))
+    api.patch('fixture-etag', 4, validate_only=False)
+    assert requests == [
+        (
+            'PATCH',
+            recovery.RESOURCE + '?updateMask=scaling.maxInstanceCount&validateOnly=false',
+            {'name': recovery.RESOURCE, 'etag': 'fixture-etag', 'scaling': {'maxInstanceCount': 4}},
+        )
+    ]
+
+
+@pytest.mark.parametrize(
+    'operation',
+    [
+        {},
+        {'name': 'projects/other/locations/us-central1/operations/abc'},
+        {'done': True, 'error': {'code': 10}},
+        {'done': True, 'response': {'name': 'wrong-service'}},
+    ],
+)
+def test_cap_recovery_refuses_bad_operation(operation):
+    operation.setdefault('name', recovery.OPERATIONS + 'operation')
+    api = recovery.RunAPI('fixture-token')
+    if not operation.get('done') and operation['name'].startswith(recovery.OPERATIONS):
+        api.request = lambda *_args: {'name': recovery.OPERATIONS + 'wrong-operation'}
+    with pytest.raises(ValueError):
+        api.complete(operation, 4, submitted=True, sleep=lambda _: None)
+
+
+def test_cap_recovery_checks_server_response_cap():
+    api = recovery.RunAPI('fixture-token')
+    response = {
+        '@type': 'type.googleapis.com/google.cloud.run.v2.Service',
+        'name': recovery.RESOURCE,
+        'scaling': {'maxInstanceCount': 4},
+    }
+    operation = {'done': True, 'response': response}
+    api.complete(operation, 4, submitted=False)
+    with pytest.raises(ValueError, match='exact pump service and cap'):
+        api.complete(operation, 20, submitted=False)
+
+
+def test_cap_validation_accepts_only_completed_typed_empty_response():
+    api = recovery.RunAPI('fixture-token')
+    operation = {'done': True, 'response': {'@type': recovery.SERVICE_TYPE}}
+    api.complete(operation, 4, submitted=False)
+    with pytest.raises(ValueError):
+        api.complete({'done': True}, 4, submitted=False)
+
+
+def test_cap_recovery_polls_numeric_project_operation(monkeypatch):
+    api = recovery.RunAPI('fixture-token')
+    name = recovery.OPERATIONS.replace(recovery.PROJECT, recovery.PROJECT_NUMBER) + 'operation'
+    resource = recovery.RESOURCE.replace(recovery.PROJECT, recovery.PROJECT_NUMBER)
+
+    def complete(method, path):
+        assert (method, path) == ('GET', name)
+        return {
+            'name': name,
+            'done': True,
+            'response': {'@type': recovery.SERVICE_TYPE, 'name': resource, 'scaling': {'maxInstanceCount': 4}},
+        }
+
+    monkeypatch.setattr(api, 'request', complete)
+    api.complete({'name': name}, 4, submitted=True, sleep=lambda _: None)
+
+
+def test_cap_validation_never_polls_an_unpersisted_operation(monkeypatch, capsys):
+    """Run 44862200539: a validate-only operation name is not readable (404); never GET it."""
+    api = recovery.RunAPI('fixture-token')
+
+    def missing(*_args, **_kwargs):
+        raise AssertionError('validate-only operations must not be polled')
+
+    monkeypatch.setattr(api.opener, 'open', missing)
+    # Without an exact Service preview it is still not validation success.
+    with pytest.raises(ValueError, match='no exact pump service preview'):
+        api.complete({'name': recovery.OPERATIONS + 'operation'}, 4, submitted=False, sleep=lambda _: None)
+    out = capsys.readouterr().out
+    assert 'PUMP_CAP_VALIDATE_SHAPE keys=name done=False metadata_type=absent' in out
+    assert recovery.OPERATIONS not in out  # key names only, never values
+
+
+@pytest.mark.parametrize(
+    'metadata',
+    [
+        {'@type': recovery.SERVICE_TYPE, 'name': recovery.RESOURCE, 'scaling': {'maxInstanceCount': 20}},
+        {'@type': 'type.googleapis.com/other', 'name': recovery.RESOURCE, 'scaling': {'maxInstanceCount': 4}},
+        {'@type': recovery.SERVICE_TYPE, 'name': recovery.RESOURCE + '-x', 'scaling': {'maxInstanceCount': 4}},
+        'not-a-dict',
+        {'@type': recovery.SERVICE_TYPE, 'name': recovery.RESOURCE, 'scaling': None},
+    ],
+)
+def test_cap_validation_preview_must_name_the_exact_service_and_cap(monkeypatch, metadata):
+    api = recovery.RunAPI('fixture-token')
+    monkeypatch.setattr(api.opener, 'open', lambda *_a, **_k: pytest.fail('must not poll'))
+    with pytest.raises(ValueError):
+        api.complete({'name': recovery.OPERATIONS + 'op', 'metadata': metadata}, 4, submitted=False)
+
+
+@pytest.mark.parametrize('resource', sorted(recovery.RESOURCE_NAMES))
+def test_cap_validation_accepts_the_exact_unfinished_preview(monkeypatch, resource):
+    api = recovery.RunAPI('fixture-token')
+    monkeypatch.setattr(api.opener, 'open', lambda *_a, **_k: pytest.fail('must not poll'))
+    metadata = {'@type': recovery.SERVICE_TYPE, 'name': resource, 'scaling': {'maxInstanceCount': 4}}
+    api.complete({'name': recovery.OPERATIONS + 'op', 'metadata': metadata}, 4, submitted=False)
+
+
+def test_cap_validation_error_is_still_a_failure(monkeypatch):
+    api = recovery.RunAPI('fixture-token')
+    metadata = {'@type': recovery.SERVICE_TYPE, 'name': recovery.RESOURCE, 'scaling': {'maxInstanceCount': 4}}
+    with pytest.raises(ValueError, match='reported failure'):
+        api.complete(
+            {'name': recovery.OPERATIONS + 'op', 'metadata': metadata, 'error': {'code': 3}}, 4, submitted=False
+        )
+
+
+def test_submitted_operation_404_is_still_a_refusal(monkeypatch, capsys):
+    api = recovery.RunAPI('fixture-token')
+
+    def missing(*_args, **_kwargs):
+        raise HTTPError('private', 404, 'private', None, None)
+
+    monkeypatch.setattr(api.opener, 'open', missing)
+    with pytest.raises(ValueError):
+        api.complete({'name': recovery.OPERATIONS + 'operation'}, 4, submitted=True, sleep=lambda _: None)
+    assert capsys.readouterr().err == 'PUMP_CAP_API_ERROR stage=operation-read status=404\n'
+
+
+def test_cap_recovery_uses_existing_approval_and_lock():
+    job = WORKFLOW['jobs']['recover-projection-pump-cap']
+    assert job['environment'] == 'prod'
+    assert job['needs'] == 'validate-production-boundary'
+    assert job['permissions'] == {'contents': 'read', 'id-token': 'write'}
+    assert "inputs.mode == 'recover-pump-cap'" in job['if']
+    assert "!inputs.break_glass_lock" in job['if']
+    assert "refs/heads/main" in job['if']
+    assert job['steps'][0]['with']['ref'] == '${{ github.workflow_sha }}'
+    assert 'prod-train' in WORKFLOW['concurrency']['group']
+    assert WORKFLOW['concurrency']['cancel-in-progress'] is False
+
+
+def _cap_recovery_preapproval(tmp_path, override):
+    step = WORKFLOW['jobs']['validate-production-boundary']['steps'][1]
+    event = tmp_path / 'event.json'
+    summary = tmp_path / 'summary'
+    inputs = {
+        'break_glass_lock': 'false',
+        'skip_eligibility_proof': 'false',
+        'deploy_gateway': 'false',
+        'requested_by': 'release-owner',
+        'pump_recovery_etag': 'AQ==',
+    }
+    env = {
+        **os.environ,
+        'GITHUB_EVENT_NAME': 'workflow_dispatch',
+        'GITHUB_REF': 'refs/heads/main',
+        'GITHUB_REPOSITORY': 'BasedHardware/omi',
+        'GITHUB_RUN_ATTEMPT': '1',
+        'DEPLOY_ENVIRONMENT': 'prod',
+        'DEPLOY_TARGETS': 'cloud-run-only',
+        'CLOUD_RUN_SERVICE': 'backend-projection-pump',
+        'CONTROL_SHA': 'a' * 40,
+        'WORKFLOW_CONTROL_SHA': 'a' * 40,
+        'GITHUB_SHA': 'a' * 40,
+        'RELEASE_SHA': 'f7060aa1a0c9e3481790d497140096ae99f9b062',
+        'GITHUB_EVENT_PATH': str(event),
+        'GITHUB_STEP_SUMMARY': str(summary),
+    }
+    for key, value in override.items():
+        (inputs if key in inputs else env)[key] = value
+    event.write_text(json.dumps({'inputs': inputs}))
+    dispatch_inputs = json.loads(event.read_text())['inputs']
+    assert step['env']['APPROVED_ETAG'] == '${{ inputs.pump_recovery_etag }}'
+    env['APPROVED_ETAG'] = dispatch_inputs['pump_recovery_etag']
+    run = subprocess.run(['bash', '-c', step['run']], env=env, capture_output=True, text=True, timeout=10)
+    return run, summary, dispatch_inputs
+
+
+@pytest.mark.parametrize(
+    'override',
+    [
+        {},
+        {'GITHUB_RUN_ATTEMPT': '2'},
+        {'GITHUB_REF': 'refs/heads/topic'},
+        {'CONTROL_SHA': 'b' * 40},
+        {'pump_recovery_etag': ''},
+        {'pump_recovery_etag': '""'},
+        {'pump_recovery_etag': '"AQ=='},
+        {'pump_recovery_etag': 'AQ=="'},
+        {'pump_recovery_etag': '"AQ="="'},
+        {'pump_recovery_etag': '"AQ=="\n'},
+        {'pump_recovery_etag': '"' + 'A' * 201 + '"'},
+        {'CLOUD_RUN_SERVICE': 'backend-sync'},
+        {'break_glass_lock': 'true'},
+        {'skip_eligibility_proof': 'true'},
+        {'deploy_gateway': 'true'},
+    ],
+)
+def test_cap_recovery_preapproval_boundary(tmp_path, override):
+    run, summary, inputs = _cap_recovery_preapproval(tmp_path, override)
+    assert (run.returncode == 0) is (not override), run.stderr
+    assert summary.exists() is (not override)
+    if not override:
+        assert json.loads(summary.read_text())['etag'] == inputs['pump_recovery_etag']
+
+
+@pytest.mark.parametrize('dispatch_etag', ['"A+B/c_d-e=="', '"stale-version"', 'A+B/c_d-e=='])
+def test_cap_recovery_quoted_etag_round_trip(tmp_path, monkeypatch, inverse_readback, dispatch_etag):
+    live_etag = '"A+B/c_d-e=="'
+    run, summary, inputs = _cap_recovery_preapproval(tmp_path, {'pump_recovery_etag': dispatch_etag})
+    assert run.returncode == 0, run.stderr
+    assert json.loads(summary.read_text())['etag'] == dispatch_etag
+
+    step = WORKFLOW['jobs']['recover-projection-pump-cap']['steps'][-1]
+    assert step['env']['APPROVED_ETAG'] == '${{ inputs.pump_recovery_etag }}'
+    # Capture the workflow shell's argv with a stand-in for the Python executable.
+    command_output = subprocess.check_output(
+        ['bash', '-c', 'python3() { printf "%s\\0" "$@"; }\n' + step['run']],
+        env={**os.environ, 'APPROVED_ETAG': inputs['pump_recovery_etag']},
+        timeout=10,
+    )
+    argv = command_output.decode().split('\0')[:-1]
+    assert argv[0] == 'backend/scripts/recover_projection_pump_cap.py'
+    monkeypatch.setattr(sys, 'argv', argv)
+
+    fixture = _recovery_fixture(inverse_readback, etag=live_etag)
+    api = recovery.RunAPI('fixture-token')
+    monkeypatch.setattr(api, 'permission_check', fixture.permission_check)
+    monkeypatch.setattr(api, 'service', fixture.service)
+    monkeypatch.setattr(api, 'complete', fixture.complete)
+
+    def open_patch(request, *, timeout):
+        assert request.method == 'PATCH'
+        url = urlsplit(request.full_url)
+        assert url.path == '/v2/' + recovery.RESOURCE
+        query = parse_qs(url.query)
+        assert query['updateMask'] == ['scaling.maxInstanceCount']
+        body = json.loads(request.data)
+        assert body['name'] == recovery.RESOURCE
+        result = fixture.patch(
+            body['etag'], body['scaling']['maxInstanceCount'], validate_only=query['validateOnly'] == ['true']
+        )
+        return io.BytesIO(json.dumps(result).encode())
+
+    monkeypatch.setattr(api.opener, 'open', open_patch)
+    monkeypatch.setattr(recovery, 'RunAPI', lambda _token: api)
+    monkeypatch.setattr(recovery, '_read', lambda _project, _region, *args: fixture.read(*args))
+    monkeypatch.setattr(
+        recovery.subprocess, 'run', lambda *args, **kwargs: subprocess.CompletedProcess(args, 0, 'token')
+    )
+    if dispatch_etag == live_etag:
+        assert recovery.main() == 0
+        assert fixture.cap_requests == [
+            (live_etag, 4, True),
+            (live_etag, 20, True),
+            (live_etag, 4, False),
+            ('new-version', 20, True),
+        ]
+    else:
+        assert recovery.main() == 1
+        assert fixture.cap_requests == []

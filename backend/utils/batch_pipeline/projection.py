@@ -17,7 +17,8 @@ import threading
 import time
 import math
 import logging
-from typing import TYPE_CHECKING, Callable, NamedTuple, cast
+import json
+from typing import TYPE_CHECKING, Callable, NamedTuple
 
 from config.batch_pipeline import (
     owner_drain_enabled,
@@ -50,6 +51,7 @@ from utils.batch_pipeline.projection_privacy import PRIVACY_HELD, settle_refusal
 from database.batch_pipeline_privacy import BatchPrivacyBlocked, BatchPrivacyReason
 from utils.batch_pipeline.projection_index import ProjectionIndex
 from database import conversations as conversations_db
+from utils.batch_pipeline.projection_block_reasons import projection_block_reason, sweep_block_group, sweep_block_reason
 from utils.batch_pipeline.projection_walk_stop import walk_block_stop, walk_head_stop
 from utils.batch_pipeline import projection_drain_diagnostics as drain_diagnostics
 from utils.batch_pipeline.contracts import ProjectionBinding, WorkItem, projection_speech_spans
@@ -86,18 +88,6 @@ OWNER_DRAIN_STEP_ROWS = 128
 CANDIDATE_WAIT_SECONDS = 10.0
 # Held units read per partial-completion scan.
 HELD_PARTIAL_PAGE = 32
-BATCH_PROJECTION_BLOCK_REASONS = frozenset(
-    {
-        'intake_binding_mismatch',
-        'invalid_recording_clock',
-        'invalid_recording_identity',
-        'invalid_recording_interval',
-        'invalid_upload_filenames',
-        'lineage_identity_missing',
-        'lineage_ambiguous',
-        'other',
-    }
-)
 
 
 @dataclass(frozen=True)
@@ -163,18 +153,6 @@ def fence_reason_field(error: BaseException) -> str:
     if isinstance(error, BatchPrivacyBlocked):
         return f' fence_reason={error.reason.value}'
     return ''
-
-
-def projection_block_reason(error: BaseException) -> str:
-    """Return only the closed, log-safe projection block reason token."""
-    try:
-        attributes = cast(object, error.__dict__)
-        reason = attributes.get('block_reason') if isinstance(attributes, dict) else None
-    except Exception:
-        reason = None
-    if type(reason) is str and reason in BATCH_PROJECTION_BLOCK_REASONS:
-        return reason
-    return 'other'
 
 
 # Bounded retry for a failing owner-chain head. Infrastructure contention and
@@ -1726,6 +1704,7 @@ class Projector:
         from database.batch_pipeline_privacy import BatchPrivacyBlocked
 
         counts = {'completed': 0, 'waiting': 0, 'blocked': 0, 'error': 0}
+        blocked: Counter[tuple[str, str]] = Counter()
         contention = False
         self.has_async_followups = False
         page_rows = serving_sweep_page_rows()
@@ -1773,7 +1752,7 @@ class Projector:
                 counts['completed' if result is not None else 'waiting'] += 1
                 touched.add(segment_id)
             except ProjectionPredecessorPending:
-                counts['blocked'] += 1
+                blocked[sweep_block_group(entry, 'predecessor_pending')] += 1
                 # Discovery may have paged past the unprojected head. Rebuild it
                 # from the watermark rather than waiting for the cursor to wrap.
                 # The walk still runs every transactional assignment fence.
@@ -1805,8 +1784,8 @@ class Projector:
                                 error_type(error),
                             )
                 continue
-            except (ProjectionBlocked, BatchPrivacyBlocked):
-                counts['blocked'] += 1
+            except (ProjectionBlocked, BatchPrivacyBlocked) as error:
+                blocked[sweep_block_group(entry, sweep_block_reason(error))] += 1
                 continue
             except Exception as error:
                 counts['error'] += 1
@@ -1820,7 +1799,7 @@ class Projector:
                     # whose step fails terminally holds instead of re-erroring
                     # on every pass.
                     if self.resolve_failing_head(segment_id, job, entry, binding, error):
-                        counts['blocked'] += 1
+                        blocked[sweep_block_group(entry, 'failing_head_held')] += 1
                 continue
             if chain and entry.get('projection_state') == 'pending':
                 # This row was assignable and passed every fence: keep walking
@@ -1862,14 +1841,22 @@ class Projector:
                             error_type(error),
                         )
         if pending_page:
-            contention = self._sweep_finish(size, counts, touched | chained) or contention
-        if contention:
+            contention = self._sweep_finish(size, counts, blocked, touched | chained) or contention
+        counts['blocked'] = sum(blocked.values())
+        # A read can be fenced before its policy is available. Include those
+        # attempts without changing the historical contention-summary denominator.
+        if contention or blocked:
             logger.info(
-                'event=batch_projection action=sweep outcome=summary completed=%d waiting=%d blocked=%d error=%d',
+                'event=batch_projection action=%s outcome=summary completed=%d waiting=%d blocked=%d error=%d '
+                'blocked_groups=%s',
+                'sweep' if contention else 'sweep_blocked',
                 counts['completed'],
                 counts['waiting'],
                 counts['blocked'],
                 counts['error'],
+                json.dumps(
+                    [[reason, digest, n] for (reason, digest), n in sorted(blocked.items())], separators=(',', ':')
+                ),
             )
         if chain and walked:
             logger.info(
@@ -1879,7 +1866,9 @@ class Projector:
             )
         return counts
 
-    def _sweep_finish(self, size: int, counts: dict[str, int], touched: set[str]) -> bool:
+    def _sweep_finish(
+        self, size: int, counts: dict[str, int], blocked: Counter[tuple[str, str]], touched: set[str]
+    ) -> bool:
         """Advance persisted/ready rows that the pending-only assignment page skips.
 
         Async rows belong to the follow-up drain; seeing one keeps it scheduled.
@@ -1910,8 +1899,8 @@ class Projector:
                 counts['completed' if result is not None else 'waiting'] += 1
                 if result is not None:
                     PROJECTION_FINISH_COMPLETED.inc()
-            except (ProjectionBlocked, BatchPrivacyBlocked):
-                counts['blocked'] += 1
+            except (ProjectionBlocked, BatchPrivacyBlocked) as error:
+                blocked[sweep_block_group(entry, sweep_block_reason(error))] += 1
             except Exception as error:
                 counts['error'] += 1
                 logger.error(

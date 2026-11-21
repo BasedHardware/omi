@@ -127,11 +127,11 @@ def test_owner_triggers_generate_a_summary_with_no_derived_effects(monkeypatch, 
     explicit.assert_called_once_with('uid', completed, trigger)
 
 
-def test_an_explicit_template_on_a_historical_row_writes_only_that_result(monkeypatch, pc):
+def test_an_explicit_app_cannot_run_on_a_historical_row(monkeypatch, pc):
     monkeypatch.setattr(pc.funded_processing, 'enabled', lambda *_: False)
     spies = _spy_managed_effects(monkeypatch, pc)
     spies['get_structured'].return_value = (Structured(title='Real title', overview='A real summary'), False)
-    completed = _stub_completed_for_normal_path(monkeypatch, pc)
+    _stub_completed_for_normal_path(monkeypatch, pc)
     _capture_all_persists(monkeypatch, pc)
     monkeypatch.setattr(pc, 'submit_with_context', MagicMock(side_effect=AssertionError('no derived work')))
     monkeypatch.setattr(pc, 'complete_explicit', MagicMock())
@@ -143,9 +143,9 @@ def test_an_explicit_template_on_a_historical_row_writes_only_that_result(monkey
         'uid', 'en', _historical(), trigger=ProcessingTrigger.USER_REPROCESS, app_id='template', explicit_app=app
     )
 
-    spies['trigger_apps'].assert_called_once()
-    assert spies['trigger_apps'].call_args.args[3:5] == ('template', app)
-    update.assert_called_once_with('uid', completed.id, {'apps_results': []})
+    spies['get_structured'].assert_called_once()
+    spies['trigger_apps'].assert_not_called()
+    update.assert_not_called()
     for key in ('extract_memories', 'extract_memories_inner', 'assign_folder'):
         spies[key].assert_not_called()
 
