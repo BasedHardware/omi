@@ -122,6 +122,8 @@ class ProjectionFollowups:
         self.completion_attempts: set[tuple[int, ProjectionBinding]] = set()
         # (page, binding) -> ready siblings that skipped behind the first claimant (SCA-3508).
         self.sibling_claims: dict[tuple[int, ProjectionBinding], list[str]] = {}
+        # Skipped siblings still finishing when their claimant gave up: re-queue on finish.
+        self.sibling_requeue: set[str] = set()
         self.completed_probes: dict[int, dict[ProjectionBinding, FollowupPrivacyProof]] = {}
         self.backoff_ceiling = projection_followup_backoff_seconds()
         # Desync needs the keyset cursor: with pagination off every page is the
@@ -377,6 +379,9 @@ class ProjectionFollowups:
     def finished(self, segment, task, *, targeted=False):
         self.tasks.pop(segment, None)
         self.forget_page(segment)
+        if segment in self.sibling_requeue:
+            self.sibling_requeue.discard(segment)
+            self.requeue_sibling(segment)
         if task.cancelled():
             # Global background-task shutdown must not replenish a cancelled
             # worker with another task after the shutdown snapshot was taken.
@@ -388,6 +393,7 @@ class ProjectionFollowups:
             self.completion_attempts.clear()
             self.completed_probes.clear()
             self.sibling_claims.clear()
+            self.sibling_requeue.clear()
         if targeted:
             self.launch_targeted()
         else:
@@ -428,10 +434,18 @@ class ProjectionFollowups:
         if not waiting or key in self.completion_attempts or self.closed:
             return
         for sibling in waiting:
-            if sibling not in self.tasks and sibling not in self.pending:
-                self.pending.appendleft(sibling)
-                self.prioritized.add(sibling)
-        OUTCOMES.labels('claimed_sibling_requeued').inc(len(waiting))
+            if sibling in self.tasks:
+                # Its skip is still unwinding; finished() re-queues it.
+                self.sibling_requeue.add(sibling)
+            else:
+                self.requeue_sibling(sibling)
+
+    def requeue_sibling(self, sibling):
+        if self.closed or sibling in self.pending:
+            return
+        self.pending.appendleft(sibling)
+        self.prioritized.add(sibling)
+        OUTCOMES.labels('claimed_sibling_requeued').inc()
 
     def read_persisted(self, segment, *, prior=None, hints=None):
         store = self.projector.store

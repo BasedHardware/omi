@@ -1215,6 +1215,8 @@ async def test_ready_siblings_skip_the_session_check_once_completion_is_claimed(
     f.projector.store.mark_enrichment.assert_not_called()
     f.projector.store.ready.assert_not_called()
     assert not f.runner.sibling_claims
+    # The claimant reuses its hint read: exactly one store.read per run.
+    assert f.projector.store.read.call_count == len(segments)
 
 
 @pytest.mark.asyncio
@@ -1222,24 +1224,55 @@ async def test_siblings_skipped_behind_a_failed_claimant_run_again_on_the_ordina
     f = followup
     monkeypatch.setenv('BATCH_PIPELINE_FOLLOWUP_CLAIMED_SIBLING_SKIP_ENABLED', 'true')
     segments, binding = _ready_page(f, monkeypatch, count=3)
+    skipped = asyncio.Event()
     calls = []
+    original = projection_followup.OUTCOMES.labels
+
+    def labels(outcome):
+        counter = original(outcome)
+        if outcome == 'claimed_sibling_skipped':
+            skipped.set()
+        return counter
+
+    monkeypatch.setattr(projection_followup.OUTCOMES, 'labels', labels)
+    loop = asyncio.get_running_loop()
 
     def complete(segment, _binding, *, silence):
         calls.append(segment)
         if len(calls) == 1:
+            # Hold the claimant inside its completion attempt until a sibling has
+            # skipped behind it, then fail so the key is discarded.
+            asyncio.run_coroutine_threadsafe(asyncio.wait_for(skipped.wait(), 5), loop).result()
             raise RuntimeError('synthetic first completion failure')
 
     f.projector.complete_content.side_effect = complete
-    requeued = projection_followup.OUTCOMES.labels('claimed_sibling_requeued')._value.get()
+    requeued = original('claimed_sibling_requeued')._value.get()
 
     await f.runner.schedule()
     await _drain(f)
 
-    # The claimant failed inside its completion attempt (key discarded), so the
-    # siblings that skipped behind it were re-queued and one of them completed.
-    assert len(calls) >= 2
-    assert projection_followup.OUTCOMES.labels('claimed_sibling_requeued')._value.get() > requeued
-    assert not f.runner.sibling_claims
+    assert skipped.is_set()
+    assert len(calls) >= 2  # a re-queued sibling reached its own completion attempt
+    assert original('claimed_sibling_requeued')._value.get() > requeued
+    assert not f.runner.sibling_claims and not f.runner.sibling_requeue
+
+
+@pytest.mark.asyncio
+async def test_still_running_skipped_sibling_is_requeued_when_it_finishes(followup):
+    f = followup
+    f.runner.tasks['synthetic-sibling'] = object()
+    f.runner.sibling_claims[(1, f.binding)] = ['synthetic-sibling']
+    before = projection_followup.OUTCOMES.labels('claimed_sibling_requeued')._value.get()
+
+    f.runner.release_sibling_claim((1, f.binding))
+    assert 'synthetic-sibling' not in f.runner.pending  # still unwinding
+    assert projection_followup.OUTCOMES.labels('claimed_sibling_requeued')._value.get() == before
+
+    f.runner.launch = lambda: None
+    f.runner.finished('synthetic-sibling', SimpleNamespace(cancelled=lambda: False))
+    assert f.runner.pending[0] == 'synthetic-sibling'
+    assert 'synthetic-sibling' in f.runner.prioritized
+    assert projection_followup.OUTCOMES.labels('claimed_sibling_requeued')._value.get() == before + 1
 
 
 @pytest.mark.asyncio
