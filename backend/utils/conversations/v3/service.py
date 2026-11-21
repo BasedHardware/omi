@@ -185,6 +185,18 @@ def _match(window, existing, used, *, preferred=None):
     return min(candidates, key=lambda r: (r['id'] != preferred, r['started_at'])) if candidates else None
 
 
+def _revoked_native_window(row, recordings):
+    binding = row.get(policy.NATIVE_MANUAL_BINDING)
+    source = recordings.get(binding.get('recording_id')) if isinstance(binding, dict) else None
+    return bool(
+        source
+        and row.get('v3_process_pending')
+        and not row.get('v3_notes_written')
+        and not row.get(policy.NATIVE_MANUAL_NOTES_VISIBILITY)
+        and policy.native_manual_binding(source) != binding
+    )
+
+
 def _backfill_runs(window, recordings):
     """The backfill runs whose donors contributed this window (live builder passes included), in line order."""
     found = []
@@ -438,9 +450,11 @@ async def reconcile(
         }
 
         async def plan():
+            revoked_native_ids = {cid for cid, row in existing.items() if _revoked_native_window(row, recordings)}
+            immutable = {cid: row for cid, row in existing.items() if cid not in revoked_native_ids}
             # One ownership index per plan (adoption can add rows before a replan), shared by the
             # two-hour cap and both projections below.
-            ownership = planner.Ownership(existing, recordings)
+            ownership = planner.Ownership(immutable, recordings)
             proposed = planner.windows(
                 groups,
                 outlines,
@@ -449,7 +463,7 @@ async def reconcile(
                 defer_topic_lock=custom_timing,
                 ownership=ownership,
             )
-            merge = refinement.candidate(proposed, existing, recordings) if refine_locked else None
+            merge = refinement.candidate(proposed, immutable, recordings) if refine_locked else None
             if merge and await run_blocking(db_executor, store.merge_donors_have_tasks, uid, merge[1]['_v3_absorbed']):
                 merge = None
             reserved = set()
@@ -459,13 +473,13 @@ async def reconcile(
                 reserved = {merged['id'], *merged['_v3_absorbed']}
                 candidates = proposed[:index] + proposed[index + 1 :]
             windows = planner.preserve_finished_windows(
-                candidates, existing, recordings, protect_provisional=custom_timing, ownership=ownership
+                candidates, immutable, recordings, protect_provisional=custom_timing, ownership=ownership
             )
             if reserved.intersection(window.get('existing_id') for window in windows):
                 merge = None
                 reserved.clear()
                 windows = planner.preserve_finished_windows(
-                    proposed, existing, recordings, protect_provisional=custom_timing, ownership=ownership
+                    proposed, immutable, recordings, protect_provisional=custom_timing, ownership=ownership
                 )
             # A retained finished conversation owns its id by claim evidence; a fresh window that sorts
             # before it (late speech overlapping its start) must not time-match the same id. Two planned
@@ -484,7 +498,7 @@ async def reconcile(
                 {row['id'] for row in existing.values() if not planner.is_unlocked(row) and not row.get('deleted')}
                 if custom_timing
                 else set()
-            )
+            ) - revoked_native_ids
             taken = set()
             allocated = {}
             await run_blocking(db_executor, visibility.hydrate_recognition, uid, recordings, windows)
@@ -516,7 +530,10 @@ async def reconcile(
                     deferred_lock = False
                 if deferred_lock:
                     window['_title_preview'] = True
-                row = planner.build(uid, window, recordings, prior, allocated=allocated)
+                revoked_native = bool(prior and prior['id'] in revoked_native_ids)
+                # A manual window that never produced notes may still be open by the natural clock.
+                current_window = {**prior, 'status': 'in_progress'} if prior and revoked_native else prior
+                row = planner.build(uid, window, recordings, current_window, allocated=allocated)
                 if opening and prior and planner.is_unlocked(prior):
                     row['v3_open_locked'] = True
                 row.pop('v3_unlocked', None)
@@ -556,13 +573,33 @@ async def reconcile(
                 before = sum(len(s.get('text', '').split()) for s in (prior or {}).get('transcript_segments') or [])
                 new_words = max(0, sum(len(s.get('text', '').split()) for s in row['transcript_segments']) - before)
                 ended = window['finished'] and not deferred_lock
-                was_ended = prior and not planner.is_unlocked(prior)
+                if revoked_native:
+                    # The natural window, not the stale summary attempt, now owns scheduling.
+                    row['v3_process_pending'] = False
+                was_ended = prior and not planner.is_unlocked(prior) and not revoked_native
+                visibility_receipt = row.get(policy.NATIVE_MANUAL_NOTES_VISIBILITY)
+                recovered_native_notes = bool(
+                    visibility_receipt
+                    and prior
+                    and prior.get('v3_process_pending')
+                    and not prior.get('v3_notes_written')
+                    and not row.get(policy.NATIVE_MANUAL_BINDING)
+                )
+                if recovered_native_notes:
+                    # The output committed while the proof was valid. Releasing its stale work
+                    # must not trigger a second model call because settlement was interrupted.
+                    row.update(
+                        v3_notes_written=True,
+                        v3_process_pending=False,
+                        summary_covers_through=visibility_receipt['finished_at'],
+                    )
                 promoted = bool(
                     prior
                     and not row.get('home_hidden')
                     and (
                         row.get('manual_end')
                         and not prior.get('manual_end')
+                        and not (window.get('native_manual_end') and prior.get('v3_notes_written'))
                         or prior.get('kind') == 'background'
                         and row['kind'] == 'conversation'
                     )
@@ -591,11 +628,11 @@ async def reconcile(
                     row['summary_covers_through'] = None
                 if prior is not None and was_ended and not rewrite and not promoted:
                     row['status'] = prior['status']
-                    row['tile_state'] = prior.get('tile_state', 'done')
+                    row['tile_state'] = 'done' if recovered_native_notes else prior.get('tile_state', 'done')
                 waiting = not transcription_failed and any(
                     policy.transcription_pending(recordings[l['conversation_id']]) for l in window['lines']
                 )
-                if ended and waiting:
+                if ended and waiting and (not recovered_native_notes or rewrite):
                     row['tile_state'] = 'transcribing'
                     row['v3_process_pending'] = False
                     if not derive:
@@ -608,13 +645,12 @@ async def reconcile(
                     row['v3_process_pending'] = True
                     row['v3_rewrites'] = int((prior or {}).get('v3_rewrites') or 0) + int(rewrite)
                 if (
-                    prior
-                    and prior.get('home_hidden')
+                    (recovered_native_notes or (prior and prior.get('home_hidden')))
                     and not row.get('v3_process_pending')
                     and policy.created_eligible(row)
                 ):
-                    # Notes written while hidden; the window now shows on Home without a re-note,
-                    # so this is its first visible completed moment and it owes the created fanout.
+                    # Recovered settlement and first visibility of already-written notes both
+                    # owe created fanout without another model call.
                     row['v3_created_pending'] = True
                 if ended and (
                     not was_ended or rewrite or promoted or (prior or {}).get('tile_state') == 'transcribing'
@@ -1104,7 +1140,10 @@ def _process(uid, row, token):
     else:
         notes = True
         persisted = []
-        with fence.writer(uid, row['id'], token), models.notes_mode(uid):
+        with (
+            fence.writer(uid, row['id'], token, native_binding=row.get(policy.NATIVE_MANUAL_BINDING)),
+            models.notes_mode(uid),
+        ):
             result = process_conversation(
                 uid,
                 row.get('language') or 'en',

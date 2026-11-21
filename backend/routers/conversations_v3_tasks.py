@@ -14,11 +14,15 @@ router = APIRouter()
 
 class ReconcileRequest(BaseModel):
     uid: str = Field(min_length=1, max_length=128, pattern=r'^[^/]+$')
+    trigger: Literal['native_manual_ready'] | None = None
 
 
 @router.post('/v1/conversations-v3/reconcile', include_in_schema=False)
 async def reconcile(body: ReconcileRequest, _retry: int = Depends(verify_cloud_tasks_oidc)):
-    return {'outcome': await service.reconcile(body.uid)}
+    outcome = await service.reconcile(body.uid)
+    if body.trigger == 'native_manual_ready' and outcome == 'busy':
+        raise HTTPException(503, 'Owner busy; retry')
+    return {'outcome': outcome}
 
 
 @router.post('/v1/conversations-v3/sweep', include_in_schema=False)

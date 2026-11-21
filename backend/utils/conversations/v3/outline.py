@@ -9,6 +9,7 @@ from datetime import datetime, timedelta, timezone
 from difflib import SequenceMatcher
 
 from utils.speakers.display import outline_speaker_labels
+from utils.conversations.v3 import policy
 
 
 def utc(value):
@@ -133,7 +134,25 @@ def stretches(members, now, *, silence_gap=SILENCE, lock_delay=SILENCE, settle_o
             )
     lines.sort(key=lambda line: (line['start'], line['conversation_id']))
     groups = []
-    cuts = iter(sorted(utc(r['finished_at']) for r in members if r.get('v3_manual_end') and r.get('finished_at')))
+    native_cuts = {
+        row['id']: cut
+        for row in members
+        if (binding := policy.native_manual_binding(row)) and isinstance(cut := utc(binding['finished_at']), datetime)
+    }
+    recording_starts = {row['id']: utc(row.get('started_at')) for row in members} if native_cuts else {}
+    native_tails = {line['conversation_id']: line for line in lines if line['conversation_id'] in native_cuts}
+    cuts = iter(
+        sorted(
+            [
+                utc(row['finished_at'])
+                for row in members
+                if row.get('v3_manual_end')
+                and row.get('finished_at')
+                and policy.NATIVE_MANUAL_READY not in row
+                and policy.NATIVE_MANUAL_STOP not in row
+            ]
+        )
+    )
     cut = next(cuts, None)
     for line in lines:
         previous = groups[-1] if groups else None
@@ -143,7 +162,18 @@ def stretches(members, now, *, silence_gap=SILENCE, lock_delay=SILENCE, settle_o
                 previous['manual_end'] = True
             cut = next(cuts, None)
         silence = previous is None or line['start'] - previous['end'] >= silence_gap
-        if silence or (previous and previous['manual_end']):
+        prior_line = previous['lines'][-1] if previous else None
+        next_start = recording_starts.get(line['conversation_id'])
+        native_cut = bool(
+            previous is not None
+            and prior_line is not None
+            and prior_line is native_tails.get(prior_line['conversation_id'])
+            and line['conversation_id'] != prior_line['conversation_id']
+            and isinstance(next_start, datetime)
+            and next_start >= native_cuts[prior_line['conversation_id']]
+            and previous['end'] <= line['start']
+        )
+        if native_cut or silence or (previous and previous['manual_end']):
             key = hashlib.sha256(f"{line['conversation_id']}:{line['start'].isoformat()}".encode()).hexdigest()[:24]
             groups.append(
                 {
@@ -151,7 +181,7 @@ def stretches(members, now, *, silence_gap=SILENCE, lock_delay=SILENCE, settle_o
                     'end': line['end'],
                     'lines': [],
                     'manual_end': False,
-                    'after_manual_end': bool(previous and previous['manual_end'] and not silence),
+                    'after_manual_end': bool(not silence and previous and (native_cut or previous['manual_end'])),
                 }
             )
         group = groups[-1]
@@ -160,6 +190,18 @@ def stretches(members, now, *, silence_gap=SILENCE, lock_delay=SILENCE, settle_o
     if groups and cut is not None and cut <= now:
         groups[-1]['manual_end'] = True
     for index, group in enumerate(groups):
+        tail = group['lines'][-1]
+        native_source = tail['conversation_id']
+        native_manual_end = (
+            tail is native_tails.get(native_source)
+            and native_cuts[native_source] <= now
+            and group['end'] <= max(tail['end'], native_cuts[native_source])
+        )
+        group['native_manual_end'] = native_manual_end
+        if native_manual_end:
+            group['native_manual_source'] = native_source
+        group['legacy_manual_end'] = group['manual_end']
+        group['manual_end'] = native_manual_end or group['legacy_manual_end']
         # A later stretch begins only after recorded silence or a manual cut, so only the last one can
         # still be open. Page continuation and future-dated speech must not also hold an earlier one
         # open: two open stretches never commit (multiple_open_conversations parks the owner).

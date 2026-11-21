@@ -278,6 +278,7 @@ FIELD_SITES = {
                 'v3_rederive_live_run',
             ),
         ),
+        ('reconcile.plan', 'status', "'in_progress'", ('status',)),
         ('reconcile.plan', 'status', "prior['status']", ('status',)),
         ('recording_short_path.guarded', 'status', 'ConversationStatus.completed', ('status',)),
     ],

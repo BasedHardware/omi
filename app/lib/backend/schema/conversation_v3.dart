@@ -76,6 +76,7 @@ class ConversationV3Fields {
     this.summaryCoversThrough,
     this.liveSummary,
     this.recording = false,
+    this.completedDerived = false,
   });
 
   /// `conversation`, `voice_work`, `media` or `background`.
@@ -100,6 +101,10 @@ class ConversationV3Fields {
   /// delivers them by recording id for released builds; a v3 Home never shows one as a row.
   final bool recording;
 
+  /// A derived row explicitly completed on the wire. Preserve this proof in
+  /// the cache because unknown conversation statuses default to completed.
+  final bool completedDerived;
+
   static const _keys = [
     'kind',
     'home_hidden',
@@ -110,6 +115,7 @@ class ConversationV3Fields {
     'summary_covers_through',
     'live_summary',
     'recording',
+    'v3_derived',
   ];
 
   /// Null when the JSON carries none of the v3 fields.
@@ -131,6 +137,7 @@ class ConversationV3Fields {
       summaryCoversThrough: covers is String ? DateTime.tryParse(covers) : null,
       liveSummary: _readLiveSummary(json['live_summary']),
       recording: json['recording'] == true,
+      completedDerived: json['v3_derived'] == true && json['status'] == 'completed',
     );
   }
 
@@ -157,5 +164,6 @@ class ConversationV3Fields {
         if (recordingIds.isNotEmpty) 'v3_recording_ids': recordingIds,
         if (summaryCoversThrough != null) 'summary_covers_through': summaryCoversThrough!.toUtc().toIso8601String(),
         if (recording) 'recording': true,
+        if (completedDerived) 'v3_derived': true,
       };
 }

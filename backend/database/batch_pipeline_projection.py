@@ -49,6 +49,13 @@ from utils.batch_pipeline.projection_hold_observability import log_projection_ho
 from utils.batch_pipeline.scheduler import owner_key
 from utils.sync.processing_hold import MAX_HOLD_SECONDS
 from utils.sync import capture_end, processing_hold
+from utils.conversations.v3.policy import (
+    NATIVE_MANUAL_INPUT_REVISION,
+    NATIVE_MANUAL_PROOF,
+    NATIVE_MANUAL_READY,
+    NATIVE_MANUAL_STOP,
+    native_manual_binding,
+)
 from database.batch_pipeline_projection_protocol import (
     PROJECTION_HEAD_BLOCK_TYPE,
     PROJECTION_HEAD_BLOCKED_SINCE,
@@ -77,6 +84,72 @@ def usage_stamp(now: datetime, usage_period: Any) -> datetime:
     start = datetime(int(match.group(1)), int(match.group(2)), 1, tzinfo=timezone.utc)
     end = (start + timedelta(days=32)).replace(day=1)
     return end - timedelta(seconds=1) if now >= end else now
+
+
+def _native_manual_upload_revision(job) -> int | None:
+    legacy = job.get('record_input_upload_revision')
+    explicit = job.get(NATIVE_MANUAL_INPUT_REVISION)
+    if type(explicit) is not int or explicit < 1:
+        return None
+    if legacy is not None and (type(legacy) is not int or explicit != legacy):
+        return None
+    return explicit
+
+
+def _native_manual_unit_matches(job, entry, binding, sibling, upload_revision, sealed_at):
+    parts = entry.get('projection_parts')
+    count = entry.get('projection_part_count')
+    return (
+        _native_manual_upload_revision(job) == upload_revision
+        and job.get('record_sealed_at') == sealed_at
+        and job.get('owner_id') == binding.owner_id
+        and job.get('privacy_generation') == binding.privacy_generation
+        and job.get('result') is not None
+        and job.get('result') == entry.get('result')
+        and entry.get('owner_key') == owner_key(binding.owner_id)
+        and entry.get('segment_id') == sibling
+        and entry.get('capture_at') == job.get('capture_at')
+        and entry.get('projection_state') in {'ready', 'completed'}
+        and not entry.get('projection_redriven_at')
+        and (
+            not parts
+            and count is None
+            or type(count) is int
+            and count > 0
+            and count == len(parts or {})
+            and set(parts or {}) == {str(index) for index in range(count)}
+        )
+    )
+
+
+def _native_manual_receipts_match(target, receipts):
+    # Match original destinations, before _visible follows donor redirects and deduplicates.
+    return bool(
+        receipts
+        and all(
+            receipt.get('state') == 'ready'
+            and receipt.get('conversation_id') == target
+            and not any(receipt.get(key) for key in ('disposition', 'privacy_reason', 'size_rollover_outputs'))
+            for receipt in receipts
+        )
+    )
+
+
+def _native_manual_ready_patch(row, upload_revision, sealed_at, now):
+    if (
+        row.get(NATIVE_MANUAL_READY) is not None
+        or row.get('v3_manual_end')
+        or capture_end.seal_barrier(row) is not None
+    ):
+        return None
+    patch = {
+        'v3_manual_end': True,
+        NATIVE_MANUAL_READY: upload_revision,
+        NATIVE_MANUAL_PROOF: {'seal': sealed_at, 'intent': row.get(NATIVE_MANUAL_STOP)},
+        'v3_pending': True,
+        'v3_pending_since': row.get('v3_pending_since') or datetime.fromtimestamp(now, timezone.utc),
+    }
+    return patch if native_manual_binding({**row, **patch}) else None
 
 
 class ProjectionStore:
@@ -796,6 +869,7 @@ class ProjectionStore:
         coalescing_receipts: list[tuple[str, str]] = []
         notes_wakes = []
         sealed_proofs: list[str] = []
+        native_manual_wakes: list[tuple[str, int]] = []
 
         @firestore.transactional
         def commit(transaction):
@@ -804,6 +878,7 @@ class ProjectionStore:
             zero_speech = accounting is None
             notes_wakes.clear()
             sealed_proofs.clear()
+            native_manual_wakes.clear()
             session = self.session(segment_id, binding, now, policy=policy)
             session.prepare(transaction, replay=False)
             if zero_speech and (
@@ -841,6 +916,18 @@ class ProjectionStore:
             erased_count = 0
             captured_seconds = 0.0
             terminal_empty_count = 0
+            target = binding.target_conversation_id
+            upload_revision = _native_manual_upload_revision(session.job)
+            sealed_at = session.job.get('record_sealed_at')
+            native_manual_candidate = bool(
+                target
+                and binding.native_record
+                and binding.record_origin
+                and not binding.partial_record
+                and upload_revision is not None
+                and sealed_at
+                and session.ledger.get('status') != BATCH_PARTIAL_STATUS
+            )
             for sibling in binding.segment_ids:
                 if zero_speech and sibling == segment_id:
                     job, entry = session.job, session.entry
@@ -882,6 +969,10 @@ class ProjectionStore:
                     receipts.append({'state': 'ready', 'conversation_id': None, 'created': False})
                     erased_count += 1
                     continue
+                if native_manual_candidate:
+                    native_manual_candidate = _native_manual_unit_matches(
+                        job, entry, binding, sibling, upload_revision, sealed_at
+                    )
                 if entry.get('result', {}).get('outcome') == 'no_recoverable_speech':
                     terminal_empty_count += 1
                 live_siblings.append(sibling)
@@ -899,6 +990,11 @@ class ProjectionStore:
             # This is a job-wide decision after collecting every sibling/part.
             # A no-text receipt must suppress IDs from parts assigned earlier.
             source_deleted = any(receipt.get('disposition') == 'source_deleted' for receipt in receipts)
+            native_manual_candidate = (
+                native_manual_candidate
+                and not (source_deleted or erased_count or terminal_empty_count)
+                and _native_manual_receipts_match(target, receipts)
+            )
             conversation_rows = {}
             new, updated = (
                 ([], []) if zero_speech else self._visible(transaction, binding, receipts, rows_out=conversation_rows)
@@ -1106,6 +1202,25 @@ class ProjectionStore:
                             notes_wakes.append((outbox, row_id, token))
                 for ref, data in writes:
                     transaction.set(ref, data)
+            if (
+                native_manual_candidate
+                and target
+                and upload_revision is not None
+                and set(new + updated) == {target}
+                and seconds > 0
+            ):
+                ready_patch = _native_manual_ready_patch(
+                    conversation_rows.get(target) or {}, upload_revision, sealed_at, now
+                )
+                if ready_patch:
+                    recording_ref = (
+                        self.client.collection('users')
+                        .document(binding.owner_id)
+                        .collection('conversations')
+                        .document(target)
+                    )
+                    transaction.update(recording_ref, ready_patch)
+                    native_manual_wakes.append((target, upload_revision))
             if not source_deleted:
                 self._commit_usage(
                     transaction, session.ledger_ref, session.ledger, binding, completion_accounting, seconds, now
@@ -1148,6 +1263,11 @@ class ProjectionStore:
         if changed:
             # Before any notes wake: the woken callback's seal proof reads this stage.
             self._observe_transcription(binding, now, completion_accounting, result)
+        if changed and native_manual_wakes:
+            from utils.conversations.v3.triggers import wake_native_manual_ready
+
+            for cid, revision in native_manual_wakes:
+                wake_native_manual_ready(binding.owner_id, cid, revision)
         for _ in sealed_proofs:
             capture_end.record_proof('sealed')  # Once per committed proof, never per retry.
         for outbox, row_id, token in notes_wakes:
