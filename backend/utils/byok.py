@@ -236,6 +236,25 @@ class BYOKMiddleware(BaseHTTPMiddleware):
 # ---------------------------------------------------------------------------
 
 
+def _coerce_utc_datetime(value: Any) -> datetime | None:
+    """Coerce a datetime or ISO timestamp string to a timezone-aware UTC datetime."""
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        parsed = value
+    elif isinstance(value, str):
+        try:
+            parsed = datetime.fromisoformat(value.replace('Z', '+00:00'))
+        except ValueError:
+            return None
+    else:
+        return None
+
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
 def _validated_byok_keys(uid: str, request_keys: Dict[str, str]) -> tuple[Dict[str, str], Optional[str]]:
     """Core validation: Firestore BYOK state is source of truth.
 
@@ -257,14 +276,14 @@ def _validated_byok_keys(uid: str, request_keys: Dict[str, str]) -> tuple[Dict[s
 
     import database.users as users_db
 
-    state = get_cached_byok_state(uid)
+    raw_state: Any = get_cached_byok_state(uid)
 
     # Replicate is_byok_active logic on the already-fetched state to avoid a
     # second Firestore read.
     is_active = False
-    if state.get('active'):
-        last_seen = state.get('last_seen_at')
-        if isinstance(last_seen, datetime):
+    if isinstance(raw_state, dict) and raw_state.get('active'):
+        last_seen = _coerce_utc_datetime(raw_state.get('last_seen_at'))
+        if last_seen:
             age = (datetime.now(timezone.utc) - last_seen).total_seconds()
             is_active = age <= users_db.BYOK_HEARTBEAT_TTL_SECONDS
 
@@ -275,10 +294,17 @@ def _validated_byok_keys(uid: str, request_keys: Dict[str, str]) -> tuple[Dict[s
 
     # BYOK-active user with headers present — validate every enrolled
     # provider fingerprint.
-    stored_fingerprints = state.get('fingerprints', {})
+    stored_fingerprints = raw_state.get('fingerprints') if isinstance(raw_state, dict) else {}
+    if not isinstance(stored_fingerprints, dict):
+        stored_fingerprints = {}
 
     validated: Dict[str, str] = {}
     for provider, stored_fp in stored_fingerprints.items():
+        if not isinstance(stored_fp, str):
+            logger.warning(
+                f"Skipping corrupt non-string BYOK fingerprint for user {uid}, provider {provider}: {type(stored_fp)}"
+            )
+            continue
         raw_key = request_keys.get(provider)
         if not raw_key:
             return {}, f"BYOK key header missing for enrolled provider: {provider}"
