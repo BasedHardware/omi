@@ -144,6 +144,12 @@ pump no longer competes for any of them.
 
 Rollback order at any step: serving sweep back on first, then the pump flag off, then delete the service.
 
+After step 2 the routed pump revision is the activated one. The pre-mutation inverse check
+(`verify_projection_pump_inverse.py --disposition`) accepts a pinned routed revision whose
+`BATCH_PIPELINE_PROJECTION_PUMP_ENABLED` is the literal `'true'`, and otherwise the dark values. A
+base before its first pin and a new create must still be dark. The fastest pump rollback is a
+traffic restore to the recorded dark revision; a flag-false redeploy is the second option.
+
 ## Dark dispatch and interrupted first-create recovery
 
 Release records the full admitted runtime SHA and the full dispatch control SHA in SCA-3318.
