@@ -103,8 +103,13 @@ func (c *config) readFinalizationAdapters(lookup lookupEnv) error {
 		}
 		c.quietRecovery = enabled
 	}
-	value, set := lookup("CONVERSATION_LLM_INPUT_DEDUPE_ENABLED")
-	c.notesDedupe = !set || strings.EqualFold(strings.TrimSpace(value), "true")
+	value, _ := lookup("CONVERSATION_LLM_INPUT_DEDUPE_ENABLED")
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "0", "false", "off", "no":
+		c.notesDedupe = false
+	default:
+		c.notesDedupe = true
+	}
 	private, _ := lookup("BUCKET_PRIVATE_CLOUD_SYNC")
 	derived, _ := lookup("BUCKET_AUDIO_DERIVED")
 	c.privateArchive, c.derivedArchive = strings.TrimSpace(private), strings.TrimSpace(derived)

@@ -66,3 +66,32 @@ func TestQuietRecoveryRequiresCompleteRuntime(t *testing.T) {
 		t.Fatal("quiet recovery accepted an incomplete handler")
 	}
 }
+
+func TestNotesDedupeMatchesPythonKillSwitch(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		value *string
+		want  bool
+	}{
+		{nil, true},
+		{new(""), true},
+		{new("true"), true},
+		{new("on"), true},
+		{new("yes"), true},
+		{new("1"), true},
+		{new("unknown"), true},
+		{new(" 0 "), false},
+		{new(" FALSE "), false},
+		{new("Off"), false},
+		{new(" no "), false},
+	} {
+		env := fixtureEnv()
+		if tc.value != nil {
+			env["CONVERSATION_LLM_INPUT_DEDUPE_ENABLED"] = *tc.value
+		}
+		cfg, err := readConfig(envLookup(env), false)
+		if err != nil || cfg.notesDedupe != tc.want {
+			t.Errorf("notes dedupe for %q = %t, want %t: %v", env["CONVERSATION_LLM_INPUT_DEDUPE_ENABLED"], cfg.notesDedupe, tc.want, err)
+		}
+	}
+}
