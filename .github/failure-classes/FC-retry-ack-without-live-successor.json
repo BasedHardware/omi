@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "id": "FC-retry-ack-without-live-successor",
+  "family": "work-bounded-resumable",
+  "violated_contract": "A retrying delivery must retain custody until its work is durably settled or a live successor owns the remaining work. Cloud Tasks can reject a task name after the task itself no longer exists.",
+  "canonical_prevention": "Require a confirmed future task before acknowledging a retry handoff. Treat a retained name or an inconclusive lookup as an unconfirmed handoff. A successor reloads persisted work under its own lease and preserves the original pending age.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_sync_enrichment_task_probe.py",
+    "backend/tests/unit/test_conversations_v3_commit_conflicts.py",
+    "backend/tests/unit/test_conversations_v3_transactions.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/utils/cloud_tasks.py",
+    "backend/utils/conversations/v3/"
+  ],
+  "status": "open"
+}
