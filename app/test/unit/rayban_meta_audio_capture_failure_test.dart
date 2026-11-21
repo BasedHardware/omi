@@ -35,7 +35,7 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   group('RayBanMetaDeviceConnection audio capture start failure', () {
-    test('cancels subscription and rethrows when startAudioCapture fails', () async {
+    test('cancels subscription and returns null when startAudioCapture fails', () async {
       final audioController = StreamController<List<int>>.broadcast();
       addTearDown(audioController.close);
 
@@ -51,12 +51,10 @@ void main() {
 
       expect(audioController.hasListener, isFalse);
 
-      await expectLater(
-        connection.performGetBleAudioBytesListener(onAudioBytesReceived: (_) {}),
-        throwsA(isA<StateError>().having((e) => e.message, 'message', contains('Audio capture start failed'))),
-      );
+      final subscription = await connection.performGetBleAudioBytesListener(onAudioBytesReceived: (_) {});
+      expect(subscription, isNull);
 
-      // Subscription should be cancelled after rethrow
+      // Subscription should be cancelled after failure
       expect(audioController.hasListener, isFalse);
       expect(transport.startAudioCaptureCalled, isTrue);
     });
