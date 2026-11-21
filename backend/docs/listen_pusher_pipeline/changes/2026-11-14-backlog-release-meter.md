@@ -226,6 +226,11 @@ below may be used only after that separate decision approves its values.
    same provider backlog, at the same shared 60/hour budget (the rate is one
    gate-wide token budget, not per owner). The expected list size is now **7**.
 
+   **Ship closed (2026-11-20, SCA-2283 / SCA-2015).** The train omits the six
+   heartbeat bindings. The writer defaults to disabled, the gate state defaults
+   to closed, and the legacy provider switch stays off. A future activation
+   requires a separate scoped order and verification of every committer.
+
 5. **Verify delivery, not just grants.** Take the aggregate readbacks below
    before and after. Verify the one owner's `result_ready` count falls and its
    projection completion count rises using count-only queries, without printing
