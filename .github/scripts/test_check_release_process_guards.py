@@ -346,11 +346,7 @@ def _module_bool_constant(path: Path, name: str) -> bool:
 def test_play_held_changes_flags_agree():
     # 2026-10-28 -> 11-01: the Play commit flag and both Codemagic blocks were
     # held, but the dispatcher's ANDROID_HELD_CHANGES_MODE stayed False, so the
-    # held Android distribution stalled with no reminder. The dispatcher moves
-    # with the android-internal-auto block it reports on; the scripts' commit
-    # flag moves with the tag lane, whose alpha promotion commits through it.
-    # Since 2026-11-21 internal publishing is unheld while the production
-    # scripts stay held until that flip is reviewed separately.
+    # held Android distribution stalled with no reminder. All four move together.
     promote = _module_bool_constant(REPO_ROOT / "app/scripts/mobile_store_promote.py", "CHANGES_NOT_SENT_FOR_REVIEW")
     dispatcher = _module_bool_constant(
         REPO_ROOT / ".github/scripts/mobile_distribution.py", "ANDROID_HELD_CHANGES_MODE"
@@ -360,11 +356,11 @@ def test_play_held_changes_flags_agree():
         name: bool(workflows[name]["publishing"]["google_play"].get("changes_not_sent_for_review", False))
         for name in ("android-internal-auto", "android-prod-internal")
     }
-    assert dispatcher == codemagic["android-internal-auto"], (dispatcher, codemagic)
-    assert codemagic["android-prod-internal"] == promote, (codemagic, promote)
+    assert dispatcher == promote, (dispatcher, promote)
+    assert set(codemagic.values()) == {promote}, (codemagic, promote)
 
 
-def test_android_internal_publishers_hold_changes_for_console_review():
+def test_android_internal_publishers_follow_play_review_mode():
     document = yaml.safe_load((REPO_ROOT / "codemagic.yaml").read_text(encoding="utf-8"))
     auto_publisher = document["workflows"]["android-internal-auto"]["publishing"]["google_play"]
     workflow = document["workflows"]["android-prod-internal"]
@@ -374,7 +370,7 @@ def test_android_internal_publishers_hold_changes_for_console_review():
     # on internal publishing (6b0160b66230fe1ed3aee673, 6b018d6dd4b9891201ed4caa).
     assert "changes_not_sent_for_review" not in auto_publisher
     assert publisher["google_play"]["track"] == "internal"
-    assert publisher["google_play"]["changes_not_sent_for_review"] is True
+    assert "changes_not_sent_for_review" not in publisher["google_play"]
     assert publisher["google_play"]["release_name"] == "$CM_TAG [$CM_BUILD_ID]"
     assert "release_promotion" not in publisher["google_play"]
 

@@ -30,9 +30,10 @@ SCHEMA = "omi-mobile-distribution/v1"
 # (changesNotSentForReview) 2026-10-26 -> 10-27 and 2026-10-28 -> 11-21. While
 # the mode is on, a settled Android publishing action proves the edit
 # committed, not that testers received it; the baseline still advances on it,
-# but dispatchers must say so every run. Flip together with the
-# android-internal-auto changes_not_sent_for_review flag in codemagic.yaml;
-# test_check_release_process_guards pins that they agree.
+# but dispatchers must say so every run. Flip together with
+# mobile_store_promote.CHANGES_NOT_SENT_FOR_REVIEW and both codemagic.yaml
+# changes_not_sent_for_review flags; test_check_release_process_guards pins
+# that they agree.
 ANDROID_HELD_CHANGES_MODE = False
 PLATFORMS = frozenset({"ios", "android"})
 SUCCESS_STATUSES = frozenset({"finished", "success", "succeeded"})

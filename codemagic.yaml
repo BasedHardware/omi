@@ -964,10 +964,7 @@ workflows:
         # These built-in values bind the release to its tag and Codemagic run.
         release_name: "$CM_TAG [$CM_BUILD_ID]"
         submit_as_draft: false
-        # Keep tag releases held too: on 2026-10-28 Play said "Changes cannot
-        # be sent for review automatically" and required
-        # changesNotSentForReview=true. Submit these changes from Play Console.
-        changes_not_sent_for_review: true
+        # No changes_not_sent_for_review: Play rejects it since 2026-11-21.
       scripts:
         - name: Promote the exact internal build to alpha
           script: |

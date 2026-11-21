@@ -57,8 +57,9 @@ def _fake_play_sdk_modules():
 
 
 class InputTests(unittest.TestCase):
-    def test_play_commits_are_held_for_console_review_by_default(self):
-        self.assertTrue(promote.CHANGES_NOT_SENT_FOR_REVIEW)
+    def test_play_commits_are_sent_for_review_automatically_by_default(self):
+        # Play rejects changesNotSentForReview since 2026-11-21.
+        self.assertFalse(promote.CHANGES_NOT_SENT_FOR_REVIEW)
 
     def test_play_edit_retries_concurrent_edit_conflicts_and_reports_persistent_failure(self):
         class Conflict(Exception):
@@ -422,7 +423,7 @@ class AndroidChecks(unittest.TestCase):
             promote.submit_android(client, "edit-id", "1.2.3", "23", "New line")
         client.edits().delete.assert_called_once_with(packageName="com.friend.ios", editId="edit-id")
 
-    def test_internal_to_alpha_promotes_only_exact_completed_build_and_holds_commit(self):
+    def test_internal_to_alpha_promotes_only_exact_completed_build(self):
         client = Mock()
         internal_release = {
             "name": f"{BUILD_TAG} [{BUILD_ID}]",
@@ -456,9 +457,7 @@ class AndroidChecks(unittest.TestCase):
             track="alpha",
             body={"track": "alpha", "releases": [*existing_alpha, internal_release]},
         )
-        client.edits().commit.assert_called_once_with(
-            packageName="com.friend.ios", editId="edit-id", changesNotSentForReview=True
-        )
+        client.edits().commit.assert_called_once_with(packageName="com.friend.ios", editId="edit-id")
         client.edits().delete.assert_not_called()
 
     def test_held_mode_still_holds_the_internal_to_alpha_commit(self):
@@ -565,7 +564,8 @@ class AndroidChecks(unittest.TestCase):
 
     def test_held_manual_promotion_writes_draft_and_holds_commit(self):
         client = Mock()
-        promote.submit_android(client, "edit-id", "1.2.3", "23", "New line")
+        with patch.object(promote, "CHANGES_NOT_SENT_FOR_REVIEW", True):
+            promote.submit_android(client, "edit-id", "1.2.3", "23", "New line")
         client.edits().tracks().update.assert_called_once_with(
             packageName="com.friend.ios",
             editId="edit-id",
