@@ -1432,7 +1432,6 @@ FIELD_SITES = {
                 'updated_at',
             ),
         ),
-        # The conversation and the job each have a read-only refusal response.
         ('_record_meeting_receipt_txn', 'status', "'fenced'", ('status',)),
         ('_record_meeting_receipt_txn', 'status', "'fenced'", ('status',)),
         ('_record_meeting_receipt_txn', 'status', "'identity_mismatch'", ('status',)),
@@ -1657,7 +1656,6 @@ FIELD_SITES = {
         # Dark quiet-check retirement names the orphan-repair exit; it does
         # not terminalize the capture or create another arm site.
         ('_evaluate_quiet_check.evaluate', 'status', "'done'", ('exit', 'reason', 'status')),
-        # Foreign ownership retires the quiet-check job without changing the conversation.
         ('_evaluate_quiet_check.evaluate', 'status', "'done'", ('reason', 'status')),
         ('_evaluate_quiet_check.evaluate', 'status', "'done'", ('reason', 'status')),
         ('_evaluate_quiet_check.evaluate', 'status', "'done'", ('reason', 'status')),

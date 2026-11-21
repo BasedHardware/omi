@@ -299,7 +299,16 @@ def assert_patch_contract(entry, deadline):
 
 def assert_clause(row, clause):
     if row.derived:
-        if row.machine == 'record_token':
+        if row.machine == 'finalization_receipt':
+            assert row.terminal and row.fields == ('status',) and row.exit.kind == 'return'
+            assert len(row.entered_by) == 1
+            (writer,) = row.entered_by
+            assert row.owner == writer.module
+            assert row.exit.cite == f'{writer.module}:{writer.function}'
+            assert function_source(row.exit.cite)
+            assert not row.deadline_field and not row.deadline_entries and not row.deadline_stamped_at_entry
+            assert not row.dwell_metric and not row.alert_required and row.alert.uid is None
+        elif row.machine == 'record_token':
             # Per-token views derive from nested clocks, not a persisted phase.
             # Their process-local stock and custody-invariant page do not claim
             # an independent persisted-state deadline or backlog dwell alarm.
