@@ -1,8 +1,13 @@
 # Batch worker HPA retune frontier (2026-11-03)
 
+This is the historical search at min 4/max 16. Production moved to min 6/max 16
+in #25842 for L4 stockout protection. The 3h fixture at 6/16 has mean/max 6.0/6
+and zero hot minutes. The search gates below are calibrated for the historical
+floor.
+
 The 40/0.6 retune in #24481 was reverted by #24493 before cluster apply: it
 starved 35 minutes in the existing 24h max-of-two replay. This replacement uses
-**41 ready units / 0.56 chain wall seconds per second**, preserving min 4/max 16,
+**41 ready units / 0.56 chain wall seconds per second**, using the then-live min 4/max 16,
 1800s scale-down stabilization and one pod per 600s. Existing replay files and
 assertions remain unchanged. Chart tests retain exact target assertions, updated
 to 41/0.56 and the latent balanced-mode doubles 82/1.12.
@@ -31,11 +36,11 @@ production 8.1-pod daily average will become 4.34.
 
 ## Bounded search and frontier
 
-Reproduce from the repository root (offline numerical model evaluation):
+Reproduce the historical search from the repository root (offline numerical model evaluation):
 
 ```bash
 backend/.venv/bin/python backend/scripts/batch_pipeline_hpa_frontier.py \
-  --grid all --output /Volumes/Ephemeral/scratch/hpa-retune-v2-frontier.json
+  --grid all --min-replicas 4 --output /tmp/hpa-retune-v2-frontier.json
 ```
 
 The coarse grid has ready targets 16..64 by 4, chain targets
@@ -98,7 +103,7 @@ The lead applies at current volume only. First confirm pending timeliness
 rules and both composite indexes are active/READY per
 [the projection runbook](../charts/monitoring/batch-projection/README.md).
 Capture private live values/manifest/image; reconcile any min6/max12 overrides
-against the ruling min4/max16. Render the merged chart with production values,
+against the production min 6/max 16. Render the merged chart with production values,
 keep the worker image, runtime bindings, profiling-on and 1500s drain intact,
 and inspect the two targets, min/max, OD placement and downscale behavior before
 Helm upgrade. The adapter is unchanged; compare privately captured live rules
@@ -116,7 +121,7 @@ speech loss and treats wedges/latency as alert-only; the lead must confirm the
 separate observer and response authority, not assume automatic hard-3 rollback.
 
 Roll back on timeliness/throughput/T3 regression to targets 32/0.5, keeping
-min4/max16, window1800 and 1/600s, e.g. on the same reviewed Helm upgrade command:
+min 6/max 16, window1800 and 1/600s, e.g. on the same reviewed Helm upgrade command:
 `--set autoscaling.targetQueuedUnitsPerWorker=32 --set-string autoscaling.targetChainBusyPerWorker=0.5`.
 Alternatively restore the captured known-good release after inspecting its
 values/image. The adapter need not change. Before streaming retirement doubles
