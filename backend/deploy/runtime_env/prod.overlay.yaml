@@ -1870,6 +1870,9 @@ overlay:
           # SCA-2283: retain the behavior of the serving pre-flag image until custody admission.
           BATCH_ACCOUNT_PRIVACY_WRITER_ENABLED: {value: 'false', category: ops_kill}
           BATCH_PROJECTION_OUTBOX: {value: 'false', category: ops_kill}
+          # SCA-3544: #25920's claimed-sibling skip ships dark until David's activation on SCA-3508.
+          # Activation sets this value to 'true' (Cloud Run merges env, so deleting the key would leave false).
+          BATCH_PIPELINE_FOLLOWUP_CLAIMED_SIBLING_SKIP_ENABLED: {value: 'false', category: ops_kill}
           # BATCH_PIPELINE_MERGE_STALE_HEAD_UID_ALLOWLIST (#25673 canary) is a private uid binding:
           # it is omitted here so deploys keep the live value; set it on the service at deploy time.
           # Hold silent read skipping until the release-owner canary (review F1).
