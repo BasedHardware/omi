@@ -130,8 +130,8 @@ run_proof "privacy cache replay (120-transition smoke and catch proofs)" \
 
 # Job-store conformance (legacy-retire lane 12): sim + Firestore emulator legs here; the Postgres leg
 # skips in CI (no Postgres service, decision S6) and is proven locally/staging.
-# Includes PL-141/142/143 scheduler pull ownership, expiry and abort/restart recovery.
-run_proof "job-store conformance (sim + emulator, including fenced scheduler pulls)" \
+# Covers fenced scheduler pulls (PL-141/142/143) and committed projection debt (PL-665/666/667).
+run_proof "job-store conformance (sim + emulator, fenced pulls and projection obligations)" \
   env "OMI_REQUIRE_STORE_BACKENDS=${OMI_REQUIRE_STORE_BACKENDS:-sim,emulator}" \
   "$PYTHON" -m pytest -q -p no:cacheprovider tests/integration/test_store_conformance.py \
   tests/integration/test_recovery_custody_conformance.py
