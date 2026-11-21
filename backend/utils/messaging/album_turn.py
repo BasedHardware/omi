@@ -4,12 +4,13 @@ Keep media/decoder imports on the channel worker path; storage admission imports
 only the pure album merge rules, including on services without channel adapters.
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from dataclasses import replace
 
 from utils.executors import db_executor, run_blocking
 from utils.messaging.contracts import Artifact, ChannelMessage, InboundAttachment
 from utils.messaging.adapters.media import MediaPreparationError
+from utils.messaging.identity import coerce_utc_datetime
 from utils.messaging.metrics import FAILURES
 from utils.observability.fallback import record_fallback
 
@@ -18,9 +19,14 @@ VOICE_DISABLED_REPLY = 'Voice notes are turned off for this chat. Send a text me
 
 def inbox_message(payload):
     payload = dict(payload)
-    payload['received_at'] = datetime.fromisoformat(payload['received_at'])
-    payload['media'] = tuple(Artifact(**a) for a in payload.get('media', ()))
-    payload['attachments'] = tuple(InboundAttachment(**a) for a in payload.get('attachments', ()))
+    received_at = coerce_utc_datetime(payload.get('received_at'))
+    payload['received_at'] = received_at if received_at is not None else datetime.now(timezone.utc)
+    payload['media'] = tuple(
+        a if isinstance(a, Artifact) else Artifact(**a) for a in (payload.get('media') or ())
+    )
+    payload['attachments'] = tuple(
+        a if isinstance(a, InboundAttachment) else InboundAttachment(**a) for a in (payload.get('attachments') or ())
+    )
     return ChannelMessage(**payload)
 
 
