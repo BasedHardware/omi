@@ -100,8 +100,9 @@ kubectl --context "$PROD_GKE_CONTEXT" -n "$namespace" rollout status \
 ```
 
 On migration failure, inspect the Job logs and reconcile migration state before retrying.
-Kubernetes garbage-collects the Job after its TTL. Verify both replicas run the pinned
-digest. Port-forward the Deployment on 8080 and 9090 and check `/health`, `/ready`
+Kubernetes garbage-collects the Job after its 600-second TTL. Delete a completed Job
+before rerunning the migration if the TTL has yet to expire. Verify both replicas run
+the pinned digest. Port-forward the Deployment on 8080 and 9090 and check `/health`, `/ready`
 and `/metrics`. Verify that the `PodMonitoring` targets are healthy and both
 `omi_queue_stranded_jobs` and `omi_queue_stranded_oldest_due_seconds` are scraped.
 
