@@ -2968,7 +2968,7 @@ environments:
             value: 'on'
             category: ops_kill
           BATCH_ACCOUNT_PRIVACY_WRITER_ENABLED:
-            value: 'true'
+            value: 'false'
             category: ops_kill
           CONVERSATIONS_V3_RECORDING_ROTATION: {value: 'off', category: rollout}
           CONVERSATIONS_V3_ROTATION_MIN_SECONDS: {value: '180', category: rollout}
@@ -2985,7 +2985,7 @@ environments:
             category: ops_kill
           STALE_IN_PROGRESS_RECOVERY_ENABLED: {value: 'true', category: rollout}
           STT_CAP_DISPATCH_LANES: {value: live, category: rollout}
-          UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED: {value: 'true', category: rollout}
+          UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED: {value: 'false', category: rollout}
           UNLIMITED_V2_BACKFILL_HOURS_CAP_HOURS: {value: '24', category: rollout}
           PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
           SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
@@ -3024,7 +3024,7 @@ environments:
             value: g1
             category: config
           BATCH_PIPELINE_PACKING_SAMPLE_RATE:
-            value: '0.001'
+            value: '0'
             category: ops_kill
           BATCH_PIPELINE_ENABLED: {value: 'true', category: rollout}
           FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED: {value: 'false', category: rollout}

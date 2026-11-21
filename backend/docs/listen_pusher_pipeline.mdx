@@ -803,7 +803,7 @@ local-send phase/exception attribution and the listen-train acceptance checks.
 ### unlimited_v2 backfill/import daily transcribed-hours cap
 
 `UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED` (default `false`) and
-`UNLIMITED_V2_BACKFILL_HOURS_CAP_HOURS` (default `24`; prod on at 24 since 2026-11-18) are a separate
+`UNLIMITED_V2_BACKFILL_HOURS_CAP_HOURS` (default `24`; prod Cloud Run on at 24 since 2026-11-18; prod backend-listen pinned off until the follow-up after the SCA-3516 listen roll) are a separate
 admission cap for the `unlimited_v2` plan. It counts the `transcription_seconds`
 already recorded on `users/{uid}/hourly_usage` for the current UTC user-day — the
 same basis `unit_cost_user_day.tx_sec` uses — and defers sync **backfill** uploads once that day reached the cap level. It is

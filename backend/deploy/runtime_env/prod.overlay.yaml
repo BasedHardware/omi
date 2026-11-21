@@ -48,10 +48,18 @@ overlay:
       values_file: backend/charts/parakeet/prod_omi_parakeet_lid_values.yaml
     backend-listen:
       env:
-        # Unlimited backfill day cap, enforced only at sync upload (retryable 503 backfill_capacity until the
-        # next UTC day). Rollback: 'false' in one config train (David 2026-11-18, support-packet decision 13).
-        UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED: {value: 'true', category: rollout}
+        # Unlimited backfill day cap (retryable 503 backfill_capacity until the next UTC day; David 2026-11-18,
+        # support-packet decision 13). Listen also admits sync backfill uploads (/v2/sync-local-files), so this
+        # pin leaves listen admission uncapped exactly as it is today: serving image 44d0a4f runs it 'false'.
+        # Listen roll SCA-3516 preserves live behaviour (Shipping ruling 2026-11-21 13:25Z); turning it on for
+        # listen is the follow-up config change after that roll. Rollback of this pin: set 'true'.
+        UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED: {value: 'false', category: rollout}
         UNLIMITED_V2_BACKFILL_HOURS_CAP_HOURS: {value: '24', category: rollout}
+        # Pinned off for the listen roll (SCA-3516): image 44d0a4f has neither the account privacy
+        # writer nor packing observation, so off reproduces today's behaviour. A first activation of
+        # the privacy writer on listen is a custody decision (David). Rollback: revert the pinning PR.
+        BATCH_ACCOUNT_PRIVACY_WRITER_ENABLED: {value: 'false', category: ops_kill}
+        BATCH_PIPELINE_PACKING_SAMPLE_RATE: {value: '0', category: ops_kill}
         # Mirrors the listen chart (2026-11-18 fold of live values).
         # Private: names only; values are the Secret Manager document LISTEN_PRIVATE_ENV
         # synced by the backend-secrets chart (listen chart privateSecretEnv). Enforcement

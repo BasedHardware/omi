@@ -179,7 +179,7 @@ env:
     valueFrom:
       configMapKeyRef: {name: prod-omi-backend-config, key: RECORD_TOKEN_LEASE_DEPLOYED_AT}
   - name: BATCH_ACCOUNT_PRIVACY_WRITER_ENABLED
-    value: "true"
+    value: "false"
   - name: CONVERSATION_TERMINAL_FAMILY_MODE
     value: "on"
   - name: HOME_TRANSCRIPTION_PRESENTATION_GATE
@@ -213,7 +213,7 @@ env:
   - name: MEDIA_NOISE_MODE_SERVE_PERCENT
     value: "0"
   - name: UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED
-    value: "true"
+    value: "false"
   - name: UNLIMITED_V2_BACKFILL_HOURS_CAP_HOURS
     value: "24"
   - name: DEMAND_PROCESSING_ENABLED
@@ -251,7 +251,7 @@ env:
   - name: BATCH_PIPELINE_ENABLED
     value: "true"
   - name: BATCH_PIPELINE_PACKING_SAMPLE_RATE
-    value: "0.001"
+    value: "0"
   - name: FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED
     value: "false"
   - name: BATCH_LIVE_STT_RETIRE_PERCENT

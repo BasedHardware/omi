@@ -3792,9 +3792,29 @@ def test_prod_sync_backfill_lookback_is_sixty_days_and_no_release_reach_undercut
         assert reach == 0 or reach >= lookback
 
 
-def test_prod_unlimited_backfill_day_cap_is_on_at_24_hours_on_every_declaring_surface():
+def test_prod_unlimited_backfill_day_cap_is_on_at_24_hours_on_every_declaring_surface_except_prod_listen():
     # Enforced only at sync upload (retryable 503 backfill_capacity); dev keeps it off.
+    # Exception: prod backend-listen pins it 'false' so the listen roll (SCA-3516) preserves the serving
+    # image's behaviour (44d0a4f runs it 'false', and listen also admits sync backfill uploads, so listen
+    # admission stays uncapped as it is today). Turning listen on is its own config
+    # change after that roll (Shipping ruling 2026-11-21 13:25Z). Remove this exception then.
     manifest = yaml.safe_load((ROOT / 'deploy/runtime_env.yaml').read_text())
+    listen = manifest['environments']['prod']['gke']['backend-listen']['env']
+    assert listen['UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED']['value'] == 'false'
+    assert listen['UNLIMITED_V2_BACKFILL_HOURS_CAP_HOURS']['value'] == '24'
+    # Same roll: no privacy writer and no packing sampling on prod listen until separately approved.
+    assert listen['BATCH_ACCOUNT_PRIVACY_WRITER_ENABLED']['value'] == 'false'
+    assert listen['BATCH_PIPELINE_PACKING_SAMPLE_RATE']['value'] == '0'
+    chart = {
+        item['name']: item.get('value')
+        for item in yaml.safe_load((ROOT / 'charts/backend-listen/prod_omi_backend_listen_values.yaml').read_text())[
+            'env'
+        ]
+    }
+    assert chart['UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED'] == 'false'
+    assert chart['BATCH_ACCOUNT_PRIVACY_WRITER_ENABLED'] == 'false'
+    assert chart['BATCH_PIPELINE_PACKING_SAMPLE_RATE'] == '0'
+    manifest['environments']['prod']['gke'].pop('backend-listen')
     for stage, expected in (('prod', 'true'), ('dev', 'false')):
         environment = manifest['environments'][stage]
         enabled = list(_settings_named(environment, 'UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED'))
