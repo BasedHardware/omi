@@ -263,7 +263,10 @@ def test_reconcile_reduces_to_tier_shares_for_the_cut_list():
 def test_missing_projection_pump_snapshot_makes_the_day_incomplete():
     """SCA-3120: the pump is a required ledger service before its flag turns on."""
     assert "backend-projection-pump" in reconcile_module.REQUIRED_SERVICES
-    assert "backend-projection-pump" not in reconcile_module.HOT_SERVICES
+    assert "backend-projection-pump" in reconcile_module.HOT_SERVICES
     missing = _records(instrumented=99, services=reconcile_module.REQUIRED_SERVICES - {"backend-projection-pump"})
     assert reconcile_module.reconcile(DAY, 100, missing)["outcome"] == "incomplete"
+    # A pump that stopped reporting early in the day leaves later reads unaccounted.
+    stale = _records(instrumented=99, timestamps={"backend-projection-pump": "2026-10-02T20:00:00+00:00"})
+    assert reconcile_module.reconcile(DAY, 100, stale)["outcome"] == "incomplete"
     assert reconcile_module.reconcile(DAY, 100, _records(instrumented=99))["outcome"] == "healthy"

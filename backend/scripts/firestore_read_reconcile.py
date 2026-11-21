@@ -46,13 +46,15 @@ REQUIRED_SERVICES = SHIPPED_SERVICES - COMPLETENESS_EXCLUDED
 # Always-on services that receive traffic through the end of a UTC day.
 # Idle or cron processes flush their own final snapshot and are not required
 # to emit again in the last minutes of the day.
-HOT_SERVICES = frozenset({"backend", "backend-listen", "pusher"}) - COMPLETENESS_EXCLUDED
+# The projection pump runs at fixed min instances and sweeps every tick, so a stale pump snapshot
+# means unaccounted reads (SCA-3120).
+HOT_SERVICES = frozenset({"backend", "backend-listen", "backend-projection-pump", "pusher"}) - COMPLETENESS_EXCLUDED
 HOT_TAIL = dt.timedelta(minutes=15)
 COUNTERS = ("lookup", "not_found", "query")
 ERROR_BAR = {
     "sampling": "0 (p=1)",
     "tail": (
-        "bounded for backend and backend-listen when a snapshot exists in the last 15 minutes of the UTC day; "
+        "bounded for backend, backend-listen and backend-projection-pump when a snapshot exists in the last 15 minutes of the UTC day; "
         "pusher is a recorded completeness exclusion until a normal promotion serves a ledger SHA; otherwise unknown"
     ),
     "bias": "index-entry and other billing-model bias is not quantified; ±2% is an operational allowance, not proof bias is under 2%",
