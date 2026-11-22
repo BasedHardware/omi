@@ -69,7 +69,7 @@
       "key": "no-uid-literals|prod|gke/pusher/TRANSCRIPTION_SHADOW_UID_ALLOWLIST|uids=1",
       "why": "Cohort UIDs predate this suite; moving cohorts to Firestore is in flight (#22075). Ratchet: no new keys."
     },
-    {"key": "reader-split|prod|helm/batch-pipeline-worker/BATCH_PIPELINE_FOLLOWUP_CLAIMED_SIBLING_SKIP_ENABLED", "why": "Reviewed 2026-11-21 (SCA-3544): only ProjectionFollowups reads it, constructed by Projector.start_followups and ProjectionOutbox on the Cloud Run serving/pump loops; diarizer/ never constructs a Projector or outbox, so the worker never executes it. Cloud Run pins false until David activates #25920."},
+    {"key": "reader-split|prod|helm/batch-pipeline-worker/BATCH_PIPELINE_FOLLOWUP_CLAIMED_SIBLING_SKIP_ENABLED", "why": "Reviewed 2026-11-21 (SCA-3544): only ProjectionFollowups reads it, constructed by Projector.start_followups and ProjectionOutbox on the Cloud Run serving/pump loops; diarizer/ never constructs a Projector or outbox, so the worker never executes it. Activated 'true' on every Cloud Run role on 2026-11-22 (David, SCA-3544); rollback is an explicit 'false'."},
     {"key": "reader-split|prod|helm/batch-pipeline-worker/BATCH_PIPELINE_SERVING_PROJECTION_SWEEP", "why": "Reviewed 2026-11-21 (SCA-3318 step 3): only Serving.reconcile (utils/batch_pipeline/serving.py) and projection_drain in 'serving' mode read it; diarizer/ never constructs Serving or registers a serving recurring sweep, so the GPU worker never executes it. Integration sets 'off' because the projection pump owns the sweep; the pump runs in 'pump' mode, which ignores it."},
     {
       "key": "reader-split|prod|helm/batch-pipeline-worker/BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED",
