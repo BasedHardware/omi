@@ -12292,5 +12292,7 @@
     "conversationLiveNoEdits": "Hintaying matapos muna bago ito baguhin.",
     "finishedSummaryReady": "Handa na ang buod",
     "writingSummaryStatus": "Isinusulat ang buod…",
-    "stillWorkingOnIt": "Pinagtatrabahuhan pa rin ito."
+    "stillWorkingOnIt": "Pinagtatrabahuhan pa rin ito.",
+    "firmwareUpdateFirmwareTooOld": "Napakaluma na ng firmware ng iyong device para sa update na ito. Makipag-ugnayan sa support para sa tulong sa pag-update ng iyong device.",
+    "firmwareUpdateAppRequired": "Kailangan ng firmware update na ito ng mas bagong Omi app. I-update ang app mula sa iyong app store, pagkatapos ay tingnan muli."
 }

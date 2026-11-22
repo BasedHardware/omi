@@ -15645,4 +15645,12 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get stillWorkingOnIt => 'ยังดำเนินการอยู่';
+
+  @override
+  String get firmwareUpdateFirmwareTooOld =>
+      'เฟิร์มแวร์ของอุปกรณ์คุณเก่าเกินไปสำหรับการอัปเดตนี้ ติดต่อฝ่ายสนับสนุนเพื่อขอความช่วยเหลือในการอัปเดตอุปกรณ์';
+
+  @override
+  String get firmwareUpdateAppRequired =>
+      'การอัปเดตเฟิร์มแวร์นี้ต้องใช้แอป Omi เวอร์ชันใหม่กว่า อัปเดตแอปจากร้านค้าแอปของคุณ แล้วตรวจสอบอีกครั้ง';
 }

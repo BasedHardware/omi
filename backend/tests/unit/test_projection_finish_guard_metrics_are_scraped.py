@@ -101,6 +101,7 @@ def test_regression_surfaces_select_this_guard(tmp_path, source):
         check=True,
         capture_output=True,
         text=True,
-        timeout=30,
+        # Cold CI checkouts can slow selector discovery. Three calls get 225s of the 300s file budget.
+        timeout=75,
     )
     assert 'tests/unit/test_projection_finish_guard_metrics_are_scraped.py' in result.stdout.splitlines()

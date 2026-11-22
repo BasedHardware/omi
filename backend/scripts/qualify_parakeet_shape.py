@@ -138,7 +138,7 @@ async def window_probe(base, fixture):
             post_seconds.append(elapsed)
             return response
 
-    socket = MeasuredSocket(receive, base, 16000, lambda: None)
+    socket = MeasuredSocket(receive, base, 16000, lambda: None, qualification_diarization=True)
     # The standalone harness sends only fixture audio directly. Disable the
     # live experiment lease/replica recovery so the two URLs remain exact.
     socket._shape_route.initialized = True
@@ -261,8 +261,8 @@ async def run(args):
     ):
         raise ValueError('verified identity and watcher identity receipt required')
     require_watcher(args.watcher_status, receipt['identities']['watcher_identity'])
-    if not os.getenv('HOSTED_SPEAKER_EMBEDDING_API_URL') or os.getenv('PARAKEET_WINDOW_DIARIZATION') != 'true':
-        raise ValueError('same served speaker embedding path and window diarization required')
+    if not os.getenv('HOSTED_SPEAKER_EMBEDDING_API_URL'):
+        raise ValueError('hosted speaker embedding service required')
     async with httpx.AsyncClient(timeout=30, trust_env=False) as client:
         for concurrency, seconds in [
             (1, args.step_seconds),

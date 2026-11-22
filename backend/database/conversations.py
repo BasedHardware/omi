@@ -631,7 +631,7 @@ def _decode_public_transcript_segments_bounded(
         raise invalid() from exc
 
 
-def raw_conversation_has_content(uid: str, conversation: Dict[str, Any]) -> bool:
+def raw_conversation_has_content(uid: str, conversation: Dict[str, Any], *, log_decode_failure: bool = True) -> bool:
     """Decide whether an un-decoded Firestore snapshot holds user content.
 
     ``transcript_segments`` is written compressed (and encrypted for enhanced
@@ -654,7 +654,8 @@ def raw_conversation_has_content(uid: str, conversation: Dict[str, Any]) -> bool
         # content marker still forbid empty-recording deletion.
         return other_content
     except (json.JSONDecodeError, TypeError, zlib.error, ValueError) as e:
-        logger.error(f'raw_conversation_has_content: undecodable segments, assuming content. {uid} {e}')
+        if log_decode_failure:
+            logger.error(f'raw_conversation_has_content: undecodable segments, assuming content. {uid} {e}')
         return True
     return bool(segments) or other_content
 

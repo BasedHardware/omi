@@ -15725,4 +15725,12 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get stillWorkingOnIt => 'Yhä työn alla.';
+
+  @override
+  String get firmwareUpdateFirmwareTooOld =>
+      'Laitteesi laiteohjelmisto on liian vanha tätä päivitystä varten. Ota yhteyttä tukeen saadaksesi apua laitteen päivittämiseen.';
+
+  @override
+  String get firmwareUpdateAppRequired =>
+      'Tämä laiteohjelmistopäivitys tarvitsee Omi-sovelluksen uudemman version. Päivitä sovellus sovelluskaupastasi ja tarkista sitten uudelleen.';
 }

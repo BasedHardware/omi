@@ -956,7 +956,7 @@ def play_live_version(production: object) -> str | None:
         if release.get("status") not in ACTIVE_PLAY_STATUSES:
             continue
         name = release.get("name")
-        version = promote.production_release_version(name) if isinstance(name, str) else None
+        version = promote.production_release_version(name, release.get("versionCodes")) if isinstance(name, str) else None
         if version:
             versions.append(version)
     return newest_version(versions)
@@ -971,7 +971,7 @@ def pick_play_candidate(sources: dict[str, object], production: object) -> PlayC
             if release.get("status") not in ACTIVE_PLAY_STATUSES:
                 continue
             name = release.get("name")
-            version = promote.production_release_version(name) if isinstance(name, str) else None
+            version = promote.production_release_version(name, release.get("versionCodes")) if isinstance(name, str) else None
             if version is None:
                 continue
             if live is not None and promote.version_parts(version) <= promote.version_parts(live):
@@ -1125,7 +1125,11 @@ def run_android(*, dry_run: bool, release_date: str, advance_only: bool = False)
         # hop the ladder one step per gate-green day, and never fall through
         # to the candidate path while the track is mid-rollout.
         staged_name = staged.get("name")
-        staged_version = promote.production_release_version(staged_name) if isinstance(staged_name, str) else None
+        staged_version = (
+            promote.production_release_version(staged_name, staged.get("versionCodes"))
+            if isinstance(staged_name, str)
+            else None
+        )
         codes = [str(code) for code in staged.get("versionCodes", [])]
         current = staged.get("userFraction")
         current = float(current) if isinstance(current, (int, float)) else None

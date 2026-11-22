@@ -15468,4 +15468,10 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get stillWorkingOnIt => '仍在处理中。';
+
+  @override
+  String get firmwareUpdateFirmwareTooOld => '你的设备固件版本太旧，无法安装此更新。请联系支持团队，获取设备更新方面的帮助。';
+
+  @override
+  String get firmwareUpdateAppRequired => '此固件更新需要更新版本的 Omi 应用。请前往应用商店更新应用，然后重新检查。';
 }
