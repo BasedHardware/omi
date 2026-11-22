@@ -149,8 +149,8 @@ def segments_from_16khz_samples(samples: np.ndarray[Any, Any], *, threshold: flo
 def offline_pcm_speech_segments(pcm: bytes) -> List[Dict[str, Any]]:
     """Strict, local-only VAD for canonical stored 16kHz mono PCM16.
 
-    Include the final partial window; VAD failure propagates to the compaction
-    caller, which retains uncompressed behavior. No hosted request or cache.
+    Include the final partial window; VAD failure propagates to the caller.
+    No hosted request or cache.
     """
     if not pcm or len(pcm) % 2 or len(pcm) > 7200 * 32000:
         raise VADAudioDecodeError('invalid stored PCM shape')

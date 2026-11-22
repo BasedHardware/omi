@@ -353,7 +353,6 @@ and an explicit empty literal renders as `''`.
 | `TRANSCRIPTION_FINAL_PASS_PERCENT` | Shared diarization cohort percentage | backend | env | closed | — | — | 5 (cloud_run/backend, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/pusher, pusher (chart)) | — | kill | off | 2026-11-18 | auditfix |
 | `TRANSCRIPTION_FINAL_PASS_SYNC_ENABLED` | Shared diarization and centroid naming for sync and safety WAL | backend | env | closed | — | — | true (cloud_run/backend, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/pusher, pusher (chart)) | — | kill | off | 2026-11-18 | auditfix |
 | `TRANSCRIPTION_FINAL_PASS_UID_ALLOWLIST` | Explicit UID cohort for final-pass diarization; empty by default | backend | env | closed | — | — | vi7SA9ckQCe4ccobWNxlbdcNdC23 (gke/pusher, pusher (chart)) | — | kill | off | 2026-11-18 | auditfix |
-| `TRANSCRIPTION_FINAL_PASS_VAD_COMPACTION_ENABLED` | Default-off local speech VAD compaction for stored-audio ASR and pyannote final passes; sample-exact original clocks; failures retain original audio | backend | env | closed | — | — | — | — | kill | off | 2026-11-18 | auditfix |
 | `TRANSCRIPTION_SHADOW_ENABLED` | Run the stored-audio Parakeet final pass in shadow | backend | env | closed | — | false (backend-listen (chart), cloud_run/backend-sync, gke/backend-listen); true (gke/pusher, pusher (chart)) | true (cloud_run/backend, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/pusher, pusher (chart)) | — | kill | off | 2026-11-18 | auditfix |
 | `TRANSCRIPTION_SHADOW_PERCENT` | Allocate UIDs to the Parakeet final-pass shadow | backend | env | closed | — | 0 (backend-listen (chart), cloud_run/backend-sync, gke/backend-listen, gke/pusher, pusher (chart)) | 5 (cloud_run/backend, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/pusher, pusher (chart)) | — | kill | off | 2026-11-18 | auditfix |
 | `TRANSCRIPTION_SHADOW_UID_ALLOWLIST` | Explicit UIDs admitted to the Parakeet final-pass shadow; empty by default | backend | env | closed | — | '' (backend-listen (chart), gke/backend-listen); omi-release-probe (gke/pusher, pusher (chart)) | vi7SA9ckQCe4ccobWNxlbdcNdC23 (gke/pusher, pusher (chart)) | — | kill | off | 2026-11-18 | auditfix |
@@ -1593,7 +1592,6 @@ their code default (`fail` tells you which way a missing value resolves).
 - `SYNC_REPROCESS_COALESCE_ENABLED` — Coalesce sync append enrichment after a durable quiet window; default follows the outbox runtime (on for prod/emulator hosts, dev stays eager) since 2026-11-01; explicit false is the kill switch (fail: open)
 - `SYNC_RETIRED_HANDLE_ACK_ENABLED` — Default on; legacy sync polling acknowledges Oct 15-17 expiry-retired handles held in custody as completed (empty, reason sync_retired_preserved) for owners admitted in sync_retired_handle_owners (fail: closed)
 - `SYNC_UPLOAD_WATERMARK_ENABLED` — Default on: accept the phone end-of-recording marker and skip the sync quiet wait when it proves the recording has fully landed (fail: open)
-- `TRANSCRIPTION_FINAL_PASS_VAD_COMPACTION_ENABLED` — Default-off local speech VAD compaction for stored-audio ASR and pyannote final passes; sample-exact original clocks; failures retain original audio (fail: closed)
 - `TYPESENSE_CONVERSATION_INDEX_WRITES` — Write conversations to Typesense index (fail: closed)
 - `VERTEX_EMBEDDING_DEDUPE_ENABLED` — Default on; same-owner exact-input Vertex vector reuse, keyed by complete text, task, title and endpoint. Successful vectors only, 600s TTL, 512 entries and 262144 scalar values per process. False bypasses batch and cross-request reuse and clears cache. (fail: open)
 
@@ -1675,6 +1673,7 @@ admission.
 
 | Key | Retired | Reason |
 | --- | --- | --- |
+| `TRANSCRIPTION_FINAL_PASS_VAD_COMPACTION_ENABLED` | 2026-11-22 | SCA-3682 pipeline docket 2026-11-22: kill at its kill value; prod unset (off) on every reader since 2026-10-15 creation |
 | `AUDIO_ARCHIVE_UID_ALLOWLIST` | 2026-11-09 | David flag docket 2026-11-09 (ruling 2): retire ; prod nonempty one-member allowlist (moved to injected cohort) on every reader at 2026-11-09 03:20Z |
 | `AUDIO_CANONICAL_PACKING_ENABLED` | 2026-11-09 | David flag docket 2026-11-09 (ruling 2): retire ; prod unset (code default) on every reader at 2026-11-09 03:20Z |
 | `BATCH_PIPELINE_SHADOW_LANGUAGE_ONLY` | 2026-11-09 | David flag docket 2026-11-09 (ruling 2): retire ; prod false on every reader at 2026-11-09 03:20Z |
