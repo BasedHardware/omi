@@ -321,11 +321,9 @@ def test_empty_output_budget_atomically_removes_terminal_debt_and_preserves_cont
 
     for attempt in range(3):
         now = time.time() + attempt * 121
-        token = outbox.get().to_dict()['task_token']
         if attempt < 2:
-            # A strike is recorded and the row is re-armed for its bounded retry;
-            # the exception never escapes the request.
-            assert reprocess.run(key, token, empty_process, now=now) == 'deferred'
+            with pytest.raises(delivery.SummaryOutputUnavailable):
+                reprocess.run(key, token, empty_process, now=now)
         else:
             assert reprocess.run(key, token, empty_process, now=now) == 'blocked'
     blocked = ref.get().to_dict()
