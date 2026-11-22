@@ -41,6 +41,7 @@ class GcpBackendProductionBoundaryTests(unittest.TestCase):
             "persistent_transport": (1, 2),
             "hard_failure": (1, 1),
             "body_timeout": (1, 1),
+            "reservation_rejected": (1, 0),
             "deadline": (1, 0),
             "cancel_during_delay": (143, 1),
         }
@@ -48,7 +49,11 @@ class GcpBackendProductionBoundaryTests(unittest.TestCase):
             with self.subTest(scenario=scenario), tempfile.TemporaryDirectory() as directory:
                 root = Path(directory)
                 curl = root / "curl"
-                curl.write_text("#!/bin/sh\nprintf 401\n", encoding="utf-8")
+                curl.write_text(
+                    '#!/bin/sh\ncase " $* " in *" --connect-timeout 5 --max-time 10 "*) ;; *) exit 2 ;; esac\n'
+                    'if [ "$SCENARIO" = reservation_rejected ]; then printf 403; else printf 401; fi\n',
+                    encoding="utf-8",
+                )
                 curl.chmod(0o700)
                 (root / "firebase_release_probe_token.py").write_text(
                     "import sys\nfrom pathlib import Path\nPath(sys.argv[-1]).touch()\n",
@@ -112,7 +117,9 @@ class GcpBackendProductionBoundaryTests(unittest.TestCase):
                     output = result.stdout
                 reports = [json.loads(line) for line in output.splitlines() if line.startswith("{")]
                 self.assertEqual([report["attempt"] for report in reports], list(range(1, attempts + 1)))
-                self.assertEqual(len((root / "calls").read_text().splitlines()), attempts or 1)
+                calls = root / "calls"
+                expected_calls = 1 if scenario == "deadline" else attempts
+                self.assertEqual(len(calls.read_text().splitlines()) if calls.exists() else 0, expected_calls)
                 self.assertFalse((root / "firebase-production-serving-token").exists())
 
         rollback = composite.split("    - name: Restore Cloud Run traffic snapshot after failed promotion")[-1]

@@ -1,4 +1,5 @@
 import hashlib
+import http.client
 import importlib.util
 import io
 import json
@@ -6,6 +7,8 @@ import sys
 from email.message import Message
 from pathlib import Path
 from urllib.response import addinfourl
+
+import pytest
 
 
 def _load_module():
@@ -201,12 +204,16 @@ def test_auth_failure_from_candidate_is_redacted_and_fails_closed(monkeypatch, t
     assert 'never expose this' not in json.dumps(report)
 
 
-def test_network_error_after_http_headers_preserves_status(monkeypatch, tmp_path):
+@pytest.mark.parametrize(
+    ('failure', 'error_kind'),
+    [(TimeoutError(), 'network_error'), (http.client.IncompleteRead(b''), 'invalid_response')],
+)
+def test_failure_after_http_headers_preserves_status(monkeypatch, tmp_path, failure, error_kind):
     module = _load_module()
 
     class InterruptedResponse(_Response):
         def read(self, _size=-1):
-            raise TimeoutError()
+            raise failure
 
     fake_urlopen, _ = _urlopen_responses(InterruptedResponse(200, b''))
     monkeypatch.setattr(module.urllib.request, 'urlopen', fake_urlopen)
@@ -214,7 +221,7 @@ def test_network_error_after_http_headers_preserves_status(monkeypatch, tmp_path
     report = module.build_report(_config(module, tmp_path))
 
     assert report['status'] == 'FAIL'
-    assert report['checks'][0]['details']['error_kind'] == 'network_error'
+    assert report['checks'][0]['details']['error_kind'] == error_kind
     assert report['checks'][0]['details']['http_status'] == 200
 
 

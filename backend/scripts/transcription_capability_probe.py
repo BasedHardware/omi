@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import http.client
 import json
 import os
 import re
@@ -149,7 +150,7 @@ def request_bytes(
         return HttpResult(status_code=error.code, body=b'', error_kind='http_error')
     except (urllib.error.URLError, OSError, TimeoutError):
         return HttpResult(status_code=status_code, body=b'', error_kind='network_error')
-    except ValueError:
+    except (http.client.IncompleteRead, ValueError):
         return HttpResult(status_code=status_code, body=b'', error_kind='invalid_response')
 
 
