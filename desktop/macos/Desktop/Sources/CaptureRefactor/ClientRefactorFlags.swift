@@ -5,10 +5,8 @@ import Foundation
 enum ClientRefactorFlags {
   static let clientsFlag = "clients_refactor"
   static let chunksFlag = "clients_from_segments_chunks"
-  static let boundaryFlag = "clients_boundary_evidence"
   @MainActor static var serving: Bool { enabled(clientsFlag) }
   @MainActor static var chunks: Bool { enabled(chunksFlag) }
-  @MainActor static var boundaryEvidence: Bool { enabled(boundaryFlag) }
   @MainActor static func enabled(_ key: String) -> Bool {
     PostHogManager.shared.getFeatureFlag(key) as? Bool == true
   }

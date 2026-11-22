@@ -531,7 +531,7 @@ class AppState: ObservableObject {
         && (isLiveCapturing || meetingDetector?.resumeOffAt != nil))
   }
   var meetingDetectorMode: AssistantSettings.AudioRecordingMode?
-  var (meetingBoundaryInProgress, meetingBoundaryEvidence) = (false, MeetingBoundaryEvidence())
+  var meetingBoundaryInProgress = false
   var pendingMeetingState: Bool?
   var pendingMeetingEndedAt: Date?
   var meetingRelaunchChecked = false
@@ -720,7 +720,7 @@ class AppState: ObservableObject {
   /// switch posts only .runtimeOwnerDidChange, so without this the previous
   /// account's folders, filters, counts, and people kept rendering.
   func resetOwnerScopedContent() {
-    (ownerScopeGeneration, meetingBoundaryEvidence) = (ownerScopeGeneration &+ 1, MeetingBoundaryEvidence())
+    ownerScopeGeneration &+= 1
     folders = []
     selectedFolderId = nil
     selectedDateFilter = nil

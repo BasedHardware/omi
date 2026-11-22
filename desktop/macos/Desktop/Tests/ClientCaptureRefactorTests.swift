@@ -72,27 +72,6 @@ final class ClientCaptureRefactorTests: XCTestCase {
     }
   }
 
-  func testBoundaryEvidenceHasStableIdentityOnEndAndNewIdentityForBackToBackCalls() throws {
-    var evidence = MeetingBoundaryEvidence()
-    let now = Date(timeIntervalSince1970: 100)
-    let first = evidence.observe(active: true, callChanged: false, now: now, makeID: { "first" })
-    XCTAssertEqual(first.count, 1)
-    XCTAssertTrue(evidence.observe(active: true, callChanged: false, now: now).isEmpty)
-    let changed = evidence.observe(
-      active: true, callChanged: true, now: now.addingTimeInterval(60), makeID: { "second" })
-    XCTAssertEqual(changed.map(\.externalID), ["first", "second"])
-    XCTAssertEqual(changed.first?.endedAt, now.addingTimeInterval(60))
-    let ended = evidence.observe(active: false, callChanged: false, now: now.addingTimeInterval(120))
-    XCTAssertEqual(ended.first?.externalID, "second")
-    XCTAssertNil(evidence.active)
-    let wire = try JSONSerialization.jsonObject(with: JSONEncoder().encode(ended)) as? [[String: Any]]
-    XCTAssertEqual(wire?.first?["kind"] as? String, "desktop_meeting")
-    XCTAssertNotNil(wire?.first?["ended_at"])
-    // Evidence has no dependency on the local boundary decision.
-    XCTAssertEqual(
-      MeetingConversationBoundaryPolicy.transition(previousRole: .ambient, meetingActive: true)?.nextRole, .meeting)
-  }
-
   func testContinuationMissingFinishUsesLastSegmentEndAndPreservesExplicitFinish() {
     let start = Date(timeIntervalSince1970: 100)
     XCTAssertEqual(
