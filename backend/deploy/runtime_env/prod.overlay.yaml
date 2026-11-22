@@ -586,6 +586,8 @@ overlay:
         - BATCH_HELD_POLL_SKIP_ENABLED
         - BATCH_PROJECTION_FINISH_BACKOFF_ENABLED
         - DREAM_AGENT_PAID_PERCENT
+        # SCA-3555 preserves the serving revision, where poll backoff has no percent key.
+        - SYNC_POLL_BACKOFF_PERCENT
         - DEEPGRAM_SELF_HOSTED_ENABLED
         - DEEPGRAM_SELF_HOSTED_URL
         - DEEPGRAM_API_KEY
@@ -640,10 +642,10 @@ overlay:
           UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED: {value: 'true', category: rollout}
           UNLIMITED_V2_BACKFILL_HOURS_CAP_HOURS: {value: '24', category: rollout}
           # Silent read skipping on (SCA-1824 canary READBACK -13.5% reads); kill switch: set false.
-          BATCH_PIPELINE_SILENCE_READ_SKIP_ENABLED: {value: 'true', category: ops_kill}
+          BATCH_PIPELINE_SILENCE_READ_SKIP_ENABLED: {value: 'false', category: ops_kill}
           # SCA-3555: main reads an absent claimed-sibling skip as ON; the key stays explicit on every role.
           # Activated by David 2026-11-22 on every role (SCA-3544); rollback is 'false'.
-          BATCH_PIPELINE_FOLLOWUP_CLAIMED_SIBLING_SKIP_ENABLED: {value: 'true', category: ops_kill}
+          BATCH_PIPELINE_FOLLOWUP_CLAIMED_SIBLING_SKIP_ENABLED: {value: 'false', category: ops_kill}
           PUSHER_RECORD_CLOSE_NOTIFY_ENABLED: {value: 'false', category: rollout}
           PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_PERCENT: {value: '100', category: rollout}
           PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_UID_SHA256S: {value: '', category: rollout}
@@ -673,7 +675,7 @@ overlay:
           HOME_TRANSCRIPTION_PRESENTATION_GATE: {value: 'true', category: ops_kill}
           HOME_TRANSCRIPTION_DEADLINE_SECONDS: {value: '7200', category: config}
           HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED: {value: 'true', category: ops_kill}
-          SYNC_FUTURE_CAPTURE_CLAMP_ENABLED: {value: 'true', category: rollout}
+          SYNC_FUTURE_CAPTURE_CLAMP_ENABLED: {value: 'false', category: rollout}
           RECORD_SEAL_REPAIR_FRESH_ENABLED: {value: 'true', category: ops_kill}
           RECORD_INTAKE_AGE_PRIORITY_ENABLED: {value: 'true', category: ops_kill}
           HOME_TRANSCRIPTION_MAX_AGE_SECONDS: {value: '86400', category: config}
@@ -694,8 +696,7 @@ overlay:
           # Graduation of the David-approved on-demand playback (DEC-BTR-004): build playback
           # artifacts on open/play/download only. Kill switch: set false.
           PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
-          SYNC_POLL_BACKOFF_ENABLED: {value: 'true', category: rollout}
-          SYNC_POLL_BACKOFF_PERCENT: {value: '5', category: rollout}
+          SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
           # Read-only referral campaign preview for Nik's three accounts (#24560). Claims, attribution and
           # grants stay off until OMI_REFERRAL_CAMPAIGN_ENABLED. Rollback: drop this key.
           OMI_REFERRAL_CAMPAIGN_PREVIEW_UIDS:
