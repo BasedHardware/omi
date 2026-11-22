@@ -397,24 +397,26 @@ def _enrich_deferred_conversation(uid: str, conversation: dict, *, include_disca
                 )
 
     recovery_lock = Lock()
-    cancellation_recovery_attempted = False
+    recovery_attempted = False
 
-    def _rearm_cancelled_enrichment() -> None:
-        nonlocal cancellation_recovery_attempted
+    def _recover_unstarted_enrichment(reason: str) -> None:
+        nonlocal recovery_attempted
         with recovery_lock:
-            if cancellation_recovery_attempted:
+            if recovery_attempted:
                 return
-            cancellation_recovery_attempted = True
+            recovery_attempted = True
             try:
                 lifecycle_service.recover_deferred_processing_failure(
                     uid, conversation_id, expected_admitted_at=admitted_at
                 )
             except Exception as error:
-                logger.error('cancelled lazy enrich recovery failed error_type=%s', type(error).__name__)
+                logger.error(
+                    'unstarted lazy enrich recovery failed reason=%s error_type=%s', reason, type(error).__name__
+                )
 
     def _on_enrichment_done(work: Future[None]) -> None:
         if work.cancelled():
-            _rearm_cancelled_enrichment()
+            _recover_unstarted_enrichment('cancelled')
 
     try:
         work = submit_with_context(postprocess_executor, _run_enrichment)
@@ -423,13 +425,13 @@ def _enrich_deferred_conversation(uid: str, conversation: dict, *, include_disca
         # rejected callback must never enrich after this claim is released.
         submission_accepted.set_result(False)
         logger.error('lazy enrich submission failed error_type=%s', type(error).__name__)
-        lifecycle_service.recover_deferred_processing_failure(uid, conversation_id, expected_admitted_at=admitted_at)
+        _recover_unstarted_enrichment('rejected')
         return _current_detail()
     work.add_done_callback(_on_enrichment_done)
     if work.cancelled():
         submission_accepted.set_result(False)
         # Cancellation becomes visible before the executor runs its callbacks.
-        _rearm_cancelled_enrichment()
+        _recover_unstarted_enrichment('cancelled')
         return _current_detail()
     # The claim may have reopened a completed/deferred row. Return the admitted
     # processing state so the client follows it through enrichment or retry.

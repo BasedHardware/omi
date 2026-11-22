@@ -584,3 +584,27 @@ def test_cancellation_visible_before_its_callback_rearms_before_readback(monkeyp
     read.assert_called_once_with('uid1', parked['id'], follow_sync_bridge=True)
     assert _lazy_metric('enrich_started') == started_before
     process.assert_not_called()
+
+
+def test_deferred_rejected_submission_reads_current_detail_when_recovery_raises(monkeypatch):
+    parked = {'id': 'deferred-rejected', 'status': 'completed', 'deferred': True}
+    current = dict(parked, status='processing', deferred=False)
+    acquire = MagicMock(return_value=True)
+    recover = MagicMock(side_effect=RuntimeError('store unavailable'))
+    read = MagicMock(return_value=current)
+    process = MagicMock()
+    monkeypatch.setattr(lifecycle_service, 'reacquire_deferred_processing', acquire)
+    monkeypatch.setattr(lifecycle_service, 'recover_deferred_processing_failure', recover)
+    monkeypatch.setattr(conversations_router, '_get_valid_conversation_by_id', read)
+    monkeypatch.setattr(conversations_router, 'process_conversation', process)
+    monkeypatch.setattr(
+        conversations_router, 'submit_with_context', MagicMock(side_effect=RuntimeError('pool shut down'))
+    )
+    started_before = _lazy_metric('enrich_started')
+
+    assert conversations_router._enrich_deferred_conversation('uid1', parked) == current
+
+    recover.assert_called_once_with('uid1', parked['id'], expected_admitted_at=acquire.call_args.args[2])
+    read.assert_called_once_with('uid1', parked['id'], follow_sync_bridge=True)
+    assert _lazy_metric('enrich_started') == started_before
+    process.assert_not_called()

@@ -32,7 +32,10 @@ status-only readback before running `apply --accept-canary` with that same apply
 checkpoint. Each canary or apply call visits at most 2,000 rows. Clean stops can
 resume on the same UTC day. A resumed canary counts all its prior writes toward
 the 50-write limit. If the canary exhausts the range with zero writes, record
-that outcome and close the pass. An uncertain write or incomplete readback
+that outcome and close the pass. If the canary reaches the scan or read cap
+before it qualifies, record its confirmed writes and stopped range on SCA-3590
+and get the next range and daily slot approved before another pass. The capped
+checkpoint stays ineligible for apply. An uncertain write or incomplete readback
 blocks the checkpoint until the operator reconciles the affected range. Disable
 the writer switch and stop invocation of the runner to halt the rollout.
 
