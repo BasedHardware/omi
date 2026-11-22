@@ -3,6 +3,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
+import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/home_feed.dart';
@@ -229,10 +230,11 @@ void main() {
     await tester.pump();
     expect(requests, 0);
     expect(find.text('show more ↓'), findsOneWidget);
+    expect(find.byKey(const Key('conversations_show_more')), findsOneWidget);
     expect(find.byType(OmiButton), findsOneWidget);
     expect(tester.getSize(find.byType(OmiButton)).height, greaterThanOrEqualTo(48));
 
-    await tester.tap(find.text('show more ↓'));
+    await tester.tap(find.byKey(const Key('conversations_show_more')));
     await tester.pump();
     await tester.pump();
     expect(requests, 1);
@@ -344,12 +346,72 @@ void main() {
     expect(find.text('new'), findsNothing);
     expect(find.text('old'), findsOneWidget);
     expect(find.text('show more ↓'), findsOneWidget);
+    expect(find.byKey(const Key('conversations_show_more_cards')), findsOneWidget);
 
-    await tester.tap(find.text('show more ↓'));
+    await tester.tap(find.byKey(const Key('conversations_show_more_cards')));
     await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
     await tester.pump();
     expect(cursors, [null, 'next']);
     expect(find.text('show more ↓'), findsNothing);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('a failed search page leaves Show more retryable', (tester) async {
+    tester.view.physicalSize = const Size(800, 1600);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final today = DateUtils.dateOnly(DateTime.now());
+    ServerConversation conversation(String id) => ServerConversation(
+          id: id,
+          createdAt: today,
+          structured: Structured(id, 'Overview', emoji: '💬', category: 'work'),
+          status: ConversationStatus.completed,
+        );
+    final pages = <int?>[];
+    final provider = ConversationProvider(
+      conversationSearchResultFetcher: (query,
+          {page, limit, required includeDiscarded, startDate, endDate, speakerId}) async {
+        pages.add(page);
+        if (page == null) {
+          return ConversationSearchResult(
+            items: [conversation('first')],
+            currentPage: 1,
+            totalPages: 2,
+            outcome: ConversationSearchResultOutcome.success,
+          );
+        }
+        // The first attempt at page 2 fails; the retry succeeds.
+        if (pages.length == 2) return const ConversationSearchResult.failure(statusCode: 503);
+        return ConversationSearchResult(
+          items: [conversation('second')],
+          currentPage: 2,
+          totalPages: 2,
+          outcome: ConversationSearchResultOutcome.success,
+        );
+      },
+      isSignedIn: () => true,
+    );
+    addTearDown(provider.dispose);
+    final screen = await buildTypedConversationScreen(provider);
+    await tester.pumpWidget(screen);
+    await tester.runAsync(() => provider.searchConversations('query'));
+    await tester.pump();
+
+    // The short list prefetches page 2 on its own and that attempt fails; collapsing then makes Show more manual.
+    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
+    await tester.pump();
+    expect(pages, [null, 2]);
+    expect(provider.currentSearchPage, 1);
+
+    await tester.tap(find.byKey(ValueKey('collapse_day_${today.toIso8601String()}')));
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('conversations_show_more')));
+    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
+    await tester.pump();
+    expect(pages, [null, 2, 2]);
+    expect(provider.currentSearchPage, 2);
     await tester.pumpWidget(const SizedBox.shrink());
   });
 }

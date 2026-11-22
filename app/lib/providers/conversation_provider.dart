@@ -543,10 +543,11 @@ class ConversationProvider extends ChangeNotifier {
     await searchConversations(previousQuery, showShimmer: true);
   }
 
-  Future<void> searchMoreConversations() async {
-    if (!_isSignedIn()) return;
+  /// Whether the next search page was appended; callers release their request latch on false.
+  Future<bool> searchMoreConversations() async {
+    if (!_isSignedIn()) return false;
     if (totalSearchPages < currentSearchPage + 1) {
-      return;
+      return false;
     }
     final generation = _sessionGeneration;
     final requestGeneration = _searchRequestGeneration;
@@ -565,14 +566,14 @@ class ConversationProvider extends ChangeNotifier {
       if (generation == _sessionGeneration && requestGeneration == _searchRequestGeneration && _isSignedIn()) {
         _setLoadingConversationSearch(false);
       }
-      return;
+      return false;
     }
     if (generation != _sessionGeneration || requestGeneration != _searchRequestGeneration || !_isSignedIn()) {
-      return;
+      return false;
     }
     if (!result.isSuccess) {
       _setLoadingConversationSearch(false);
-      return;
+      return false;
     }
     searchedConversations.addAll(_filterPendingDeletes(result.items).map(_retainingHomeStep));
     totalSearchPages = result.totalPages;
@@ -580,6 +581,7 @@ class ConversationProvider extends ChangeNotifier {
     groupSearchConvosByDate();
     _setLoadingConversationSearch(false);
     notifyListeners();
+    return true;
   }
 
   int groupedSearchConvoIndex(ServerConversation convo) {

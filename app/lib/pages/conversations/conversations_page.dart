@@ -739,24 +739,21 @@ class _ConversationsPageState extends State<ConversationsPage>
     if (_lastLoadMoreRequestKey == requestKey) return false;
     _lastLoadMoreRequestKey = requestKey;
 
-    if (isSearch) {
-      unawaited(provider.searchMoreConversations());
-    } else {
-      unawaited(
-        provider.getMoreConversationsFromServer().then((succeeded) {
-          if (mounted &&
-              shouldReleaseConversationLoadMoreLatch(
-                currentRequestKey: _lastLoadMoreRequestKey,
-                requestKey: requestKey,
-                succeeded: succeeded,
-              )) {
-            // A failed page fetch leaves the server cursor unchanged; release
-            // the latch so the next scroll can retry the same offset.
-            _lastLoadMoreRequestKey = null;
-          }
-        }),
-      );
-    }
+    final request = isSearch ? provider.searchMoreConversations() : provider.getMoreConversationsFromServer();
+    unawaited(
+      request.then((succeeded) {
+        if (mounted &&
+            shouldReleaseConversationLoadMoreLatch(
+              currentRequestKey: _lastLoadMoreRequestKey,
+              requestKey: requestKey,
+              succeeded: succeeded,
+            )) {
+          // A failed page fetch leaves the cursor/page unchanged; release the
+          // latch so the next scroll or Show more tap can retry the same page.
+          _lastLoadMoreRequestKey = null;
+        }
+      }),
+    );
     return true;
   }
 
@@ -1446,6 +1443,7 @@ class _ConversationsPageState extends State<ConversationsPage>
                         if (hasCollapsedDays && feed.hasMore && feed.problem == null) {
                           return Center(
                             child: OmiButton.tertiary(
+                              key: const Key('conversations_show_more_cards'),
                               label: context.l10n.showMore,
                               onPressed: () => unawaited(feed.loadMore()),
                             ),
@@ -1473,6 +1471,7 @@ class _ConversationsPageState extends State<ConversationsPage>
                         if (!canLoadMore) return const SizedBox(height: 20);
                         return Center(
                           child: OmiButton.tertiary(
+                            key: const Key('conversations_show_more'),
                             label: context.l10n.showMore,
                             onPressed: () => _requestMoreIfNeeded(context.read<ConversationProvider>()),
                           ),
