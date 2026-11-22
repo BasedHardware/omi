@@ -235,7 +235,7 @@ def test_detail_poll_does_not_claim_rearmed_enrichment(monkeypatch, polling):
     admitted = {**parked, 'status': 'processing', 'deferred': False}
     monkeypatch.setattr(conv_router, '_get_valid_conversation_by_id', lambda *a, **k: dict(parked))
     monkeypatch.setattr(conv_router, 'live_recap_enabled', lambda *_args: False)
-    headers = {'X-Omi-Conversation-Poll': '1'} if polling else {}
+    query_params = {'status_poll': '1'} if polling else {}
 
     with patch.object(conv_router, '_enrich_deferred_conversation', return_value=admitted) as enrich:
         result = conv_router.get_conversation_by_id(
@@ -244,7 +244,7 @@ def test_detail_poll_does_not_claim_rearmed_enrichment(monkeypatch, polling):
             include_discarded=None,
             uid='u1',
             include_translations=False,
-            request=SimpleNamespace(headers=headers),
+            request=SimpleNamespace(headers={}, query_params=query_params),
         )
 
     assert result['status'] == ('completed' if polling else 'processing')
