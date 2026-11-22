@@ -17,6 +17,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from config import audio_archive
+
 # routers.sync (imported at module scope below) constructs Typesense / OpenAI
 # clients at import; provide hermetic dummy config so the import succeeds without
 # network. Matches the OPENAI_API_KEY default that conftest already sets.
@@ -177,6 +179,35 @@ class TestEnqueueAudioMergeJob:
             assert ct.verify_audio_merge_cloud_tasks_oidc(_request_with({'authorization': 'Bearer t'})) == 0
         assert verify.call_args.kwargs['audience'] == merge_url
         assert verify.call_args.kwargs['audience'] != BACKFILL_CLONE_ENV['SYNC_TASKS_OIDC_AUDIENCE']
+
+    def test_retired_separate_merge_worker_env_is_inert(self):
+        """The separate merge worker phase was retired on 2026-11-22 (SCA-3691).
+
+        A leftover or reintroduced worker URL and enable flag must change
+        neither the dispatch target, the minted audience, nor the accepted
+        audience: widening any of them would send paid merge work to an
+        unprovisioned service.
+        """
+        ct = _load_cloud_tasks()
+        merge_url = AUDIO_ENV['AUDIO_MERGE_HANDLER_URL']
+        retired_env = {
+            **AUDIO_ENV,
+            'AUDIO_MERGE_WORKER_URL': 'https://retired-merge-worker.example.com/v2/audio-merge-jobs/run',
+            'AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED': 'true',
+            'AUDIO_ARCHIVE_PERCENT': '100',
+        }
+        claims = {'email': AUDIO_ENV['SYNC_TASKS_INVOKER_SA'], 'email_verified': True}
+        with patch.dict(os.environ, retired_env), patch.object(ct, 'enqueue_named_task') as enqueue, patch.object(
+            ct.id_token, 'verify_oauth2_token', return_value=claims
+        ) as verify:
+            assert audio_archive.admitted('owner', 'SEPARATE_MERGE') is False
+            assert ct._audio_merge_handler_url() == merge_url
+            ct.enqueue_audio_merge_job({'conversation_id': 'conv1', 'audio_file_id': 'file1', 'uid': 'owner'})
+            assert enqueue.call_args.args[1] == merge_url
+            assert enqueue.call_args.kwargs['audience'] == merge_url
+            assert ct.verify_audio_merge_cloud_tasks_oidc(_request_with({'authorization': 'Bearer t'})) == 0
+            assert verify.call_args.kwargs['audience'] == merge_url
+            assert not isinstance(verify.call_args.kwargs['audience'], list)
 
 
 class TestPlaybackReadPathsStructure:

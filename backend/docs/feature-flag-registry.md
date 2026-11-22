@@ -1671,6 +1671,8 @@ admission.
 
 | Key | Retired | Reason |
 | --- | --- | --- |
+| `AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED` | 2026-11-22 | David 2026-11-17 quality-ladder flag docket: retire the never-provisioned separate merge phase (SCA-3691); false on every committed serving surface (composed prod/dev manifest, listen and pusher charts) and no separate merge worker exists |
+| `AUDIO_MERGE_WORKER_URL` | 2026-11-22 | David 2026-11-17 quality-ladder flag docket: retire with AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED (SCA-3691); empty on every committed serving surface and AUDIO_MERGE_HANDLER_URL already covers dispatch |
 | `TRANSCRIPTION_FINAL_PASS_VAD_COMPACTION_ENABLED` | 2026-11-22 | SCA-3682 pipeline docket 2026-11-22: kill at its kill value; prod unset (off) on every reader since 2026-10-15 creation |
 | `AUDIO_ARCHIVE_UID_ALLOWLIST` | 2026-11-09 | David flag docket 2026-11-09 (ruling 2): retire ; prod nonempty one-member allowlist (moved to injected cohort) on every reader at 2026-11-09 03:20Z |
 | `AUDIO_CANONICAL_PACKING_ENABLED` | 2026-11-09 | David flag docket 2026-11-09 (ruling 2): retire ; prod unset (code default) on every reader at 2026-11-09 03:20Z |

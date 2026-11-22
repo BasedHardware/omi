@@ -103,7 +103,6 @@ Do not multiply the sampled 90% merge HTTP-time share by the full bill.
 | --- | --- |
 | 8→6 GiB | About **$13/day** net at unchanged billed seconds; unqualified at batch peaks. |
 | Rebuild coalescing | `$173.12 × duplicate billable fraction removed`; fraction unmeasured, conservative booked value **$0/day**. Counter measures calls, not billed seconds. |
-| Separate merge job class/worker | Direct separation alone **$0/day**; ideal combined CPU packing to 60% models **$38–58/day** across this and coalescing, not additive per-lever savings. |
 | GPU callbacks | **$0/day implemented/credited**. Current Parakeet `/v1/transcribe` and `/v2/transcribe` return inline results and have no durable submission/result callback contract. Async HTTP alone still bills Cloud Run waits. A durable idempotent GPU job/result store and authenticated callback are prerequisite; do not acknowledge sync completion before that result is checkpointed. |
 
 GCS measured baseline: replication **$54.89/day**, Class A **$65.82/day**
@@ -133,7 +132,7 @@ same 7-day baseline. These counters are operation evidence, not billing dollars.
 
 Conversation deletion also purges linked originals (including a shared multi-conversation upload),
 raw-live packs, chunks, merged and playback objects in both buckets and all generations.
-Missing regional/worker destinations log and retain the existing bucket/handler.
+Missing regional destinations log and retain the existing bucket/handler.
 Consent-off mobile uploads are accepted without cloud archival.
 
 ## Coexistence with verified owner packs (#21544)
