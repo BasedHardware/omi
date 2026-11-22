@@ -301,7 +301,17 @@ def _emit_speaker_identity_confirmed(
     )
 
 
-def _enrich_deferred_conversation(uid: str, conversation: dict) -> dict:
+def _assert_detail_visible(conversation: dict, include_discarded: bool | None) -> None:
+    # Omitted keeps the historical detail default (show a stored discard).
+    # Noise and pending live bridges require explicit archive opt-in.
+    show_discarded = True if include_discarded is None else include_discarded
+    if hidden_from_default_detail(conversation) and include_discarded is not True:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    if not conversations_db.is_visible_conversation(conversation, include_discarded=show_discarded, presentation=True):
+        raise HTTPException(status_code=404, detail="Conversation not found")
+
+
+def _enrich_deferred_conversation(uid: str, conversation: dict, *, include_discarded: bool | None = None) -> dict:
     """First open of a lazily-deferred desktop conversation. The LLM enrichment (summary, action
     items, memories, embeddings, app results) takes ~10s, so we run it in the BACKGROUND and return
     the conversation immediately: the client gets an instant open (transcript already present) and
@@ -320,10 +330,12 @@ def _enrich_deferred_conversation(uid: str, conversation: dict) -> dict:
         record_lazy_desktop_deferral(event='enrich_reacquire_error')
         return conversation
     if not reacquired:
-        # The row was terminalized or discarded before reacquisition. A stale
-        # processor must not persist derived side effects after ownership loss.
+        # Another opener can already be enriching this row. Read its state
+        # before replying so a stale completed snapshot cannot stop polling.
         record_lazy_desktop_deferral(event='enrich_lost_ownership')
-        return conversation
+        current = _get_valid_conversation_by_id(uid, conversation_id)
+        _assert_detail_visible(current, include_discarded)
+        return current
 
     def _run_enrichment():
         # Counted here, not before the submit: a rejected submit (shut-down
@@ -1362,21 +1374,14 @@ def get_conversation_by_id(
             )
         if conversation.get('source') != 'omi':
             raise HTTPException(status_code=404, detail="Conversation not found")
-    # Omitted keeps the historical detail default (show a stored discard).
-    # Noise and pending live bridges stay out of the default detail response;
-    # the web permalink omits this flag, while explicit archive reads opt in.
-    show_discarded = True if include_discarded is None else include_discarded
-    if hidden_from_default_detail(conversation) and include_discarded is not True:
-        raise HTTPException(status_code=404, detail="Conversation not found")
-    if not conversations_db.is_visible_conversation(conversation, include_discarded=show_discarded, presentation=True):
-        raise HTTPException(status_code=404, detail="Conversation not found")
+    _assert_detail_visible(conversation, include_discarded)
     # Home lifecycle probes also read details; only a detail-page open escalates notes.
     if request is not None and request.headers.get('X-Omi-Recording-Detail') == '1':
         open_recording(uid, conversation)
     # A desktop conversation stored raw (deferred) for a freemium/Neo user is
     # enriched on first open. Other conversations are returned unchanged.
     if conversation.get('deferred') and not conversation.get('processing_deferred'):
-        conversation = _enrich_deferred_conversation(uid, conversation)
+        conversation = _enrich_deferred_conversation(uid, conversation, include_discarded=include_discarded)
     if include_translations is True:
         try:
             conversation, translation_status, next_cursor = translate_open_page(uid, conversation, translation_cursor)

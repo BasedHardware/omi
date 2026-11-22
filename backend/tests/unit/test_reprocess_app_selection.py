@@ -195,6 +195,34 @@ def test_lazy_enrichment_uses_non_user_usage_attribution(monkeypatch):
     assert process.call_args.kwargs['app_usage_attribution'] is AppUsageAttribution.NON_USER_REPROCESS
 
 
+@pytest.mark.parametrize(('status', 'deferred'), [('processing', False), ('completed', True)])
+def test_losing_first_open_returns_authoritative_status_without_enqueuing(monkeypatch, status, deferred):
+    stale = {'id': 'c1', 'status': 'completed', 'deferred': True}
+    current = {'id': 'c1', 'status': status, 'deferred': deferred}
+    monkeypatch.setattr(conv_router.lifecycle_service, 'reacquire_deferred_processing', lambda *_args: False)
+    with (
+        patch.object(conv_router, '_get_valid_conversation_by_id', return_value=current) as reread,
+        patch.object(conv_router, 'submit_with_context') as submit,
+    ):
+        result = conv_router._enrich_deferred_conversation('u1', stale)
+
+    assert result is current
+    reread.assert_called_once_with('u1', 'c1')
+    submit.assert_not_called()
+
+
+def test_losing_first_open_reapplies_discard_visibility(monkeypatch):
+    stale = {'id': 'c1', 'status': 'completed', 'deferred': True}
+    current = {**stale, 'discarded': True}
+    monkeypatch.setattr(conv_router.lifecycle_service, 'reacquire_deferred_processing', lambda *_args: False)
+    monkeypatch.setattr(conv_router, '_get_valid_conversation_by_id', lambda *_args: current)
+
+    with pytest.raises(HTTPException) as error:
+        conv_router._enrich_deferred_conversation('u1', stale, include_discarded=False)
+
+    assert error.value.status_code == 404
+
+
 def test_successful_reprocess_schedules_durable_learning():
     model, p1, p2, p3, p4, p5, p6, process_patch = _route_context(
         raw_app=None,
