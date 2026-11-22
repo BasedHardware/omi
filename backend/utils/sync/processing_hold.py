@@ -5,7 +5,7 @@ Lifecycle: ops kill switch, default on; owner rollout-meetings; review 2026-11-2
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from datetime import datetime
 from functools import cache
 import hashlib
@@ -13,11 +13,12 @@ import json
 import os
 from typing import Any
 
-from prometheus_client import Counter, REGISTRY
+from prometheus_client import Counter, Histogram, REGISTRY
 from config.merge_before_processing import enabled as merge_before_processing_enabled
 from utils.observability.reasons import ReasonFamily, SyncProcessingHoldOutcome, reason_label
 
 QUIET_SECONDS = 600
+MIN_QUIET_SECONDS = 120
 MAX_HOLD_SECONDS = 3600
 MAX_LATE_RUNS = 1
 FIELD = 'sync_processing_hold'
@@ -42,6 +43,19 @@ def _outcomes() -> Counter:
         return REGISTRY._names_to_collectors['omi_sync_processing_hold_total']  # type: ignore[attr-defined]
 
 
+@cache
+def _arrival_gap() -> Histogram:
+    name = 'omi_sync_content_arrival_gap_seconds'
+    try:
+        return Histogram(
+            name,
+            'Seconds between consecutive content arrivals on one held sync conversation',
+            buckets=(5, 15, 30, 60, 120, 180, 240, 300, 450, 600, 900, 1800, 3600),
+        )
+    except ValueError:
+        return REGISTRY._names_to_collectors[name]  # type: ignore[attr-defined]
+
+
 def record(outcome: str) -> None:
     _outcomes().labels(
         outcome=reason_label(ReasonFamily.SYNC_PROCESSING_HOLD, outcome, SyncProcessingHoldOutcome)
@@ -50,6 +64,22 @@ def record(outcome: str) -> None:
 
 def enabled() -> bool:
     return os.getenv('SYNC_PROCESSING_HOLD_ENABLED', 'true').strip().lower() not in {'false', '0', 'off', 'no'}
+
+
+def quiet_seconds() -> int:
+    """Arrival-quiet window before full processing, read per call.
+
+    Clients that send no end-of-recording proof wait this long after the last
+    content arrival. ``SYNC_PROCESSING_QUIET_SECONDS`` tunes it without a
+    release; a missing or malformed value keeps the 600 s default, and the
+    value is clamped to [120, 600] so a typo can neither remove the debounce
+    nor lengthen the wait.
+    """
+    try:
+        value = int(os.getenv('SYNC_PROCESSING_QUIET_SECONDS', str(QUIET_SECONDS)))
+    except (TypeError, ValueError):
+        return QUIET_SECONDS
+    return max(MIN_QUIET_SECONDS, min(QUIET_SECONDS, value))
 
 
 def enabled_for(row: Mapping[str, Any]) -> bool:
@@ -101,34 +131,78 @@ def content_snapshot(row: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
-def activity_patch(row: Mapping[str, Any], now: float) -> dict[str, Any]:
+CLOCK_OFFSET_FIELD = 'content_clock_offset'
+CLOCK_END_FIELD = 'content_clock_end'
+
+
+def activity_patch(
+    row: Mapping[str, Any], now: float, *, clock_offset: float = 0.0, owns_end: bool = False
+) -> dict[str, Any]:
+    """The hold state after one content arrival.
+
+    Uploaded audio from a phone whose clock runs ahead is stored shifted onto
+    the server clock by a per-request offset (``capture_clock_offset``). When
+    this arrival sets the row's end (``owns_end``), that offset is kept beside
+    the end it applies to, so the end-of-recording proof can compare the row
+    with the phone's own clock. An unshifted arrival that sets the end clears
+    it; an arrival that does not set the end leaves it alone. Nothing is
+    written for a row that was never shifted.
+    """
     state = dict(row.get(FIELD) or {})
+    if owns_end:
+        if clock_offset > 0:
+            state[CLOCK_OFFSET_FIELD] = float(clock_offset)
+            state[CLOCK_END_FIELD] = timestamp(row.get('finished_at'))
+        else:
+            state.pop(CLOCK_OFFSET_FIELD, None)
+            state.pop(CLOCK_END_FIELD, None)
     # A successful full run ends an epoch. The next append starts a bounded new one.
     if not state.get('pending_since'):
         state['pending_since'] = now
+    elif timestamp(state.get('last_content_at')):
+        # The share of gaps longer than a candidate quiet window is the late
+        # re-run rate that window would buy. Content-free; a retried assignment
+        # transaction may observe one gap twice, which a distribution tolerates.
+        try:
+            _arrival_gap().observe(max(0.0, now - timestamp(state.get('last_content_at'))))
+        except Exception:  # Metrics must never break assignment.
+            pass
     state['held'] = True
     state['last_content_at'] = max(timestamp(state.get('last_content_at')), now)
     return state
 
 
-def admission(row: Mapping[str, Any], obligation: Mapping[str, Any], *, now: float) -> tuple[str, float | None]:
+def admission(
+    row: Mapping[str, Any],
+    obligation: Mapping[str, Any],
+    *,
+    now: float,
+    end_proven: Callable[[], bool] | None = None,
+) -> tuple[str, float | None]:
     """A missing watermark is unknown, never inferred from one uploaded file.
 
-    No existing WAL producer supplies a contiguous device upload watermark. If
-    one is attached to this row in future, it must be past finished_at + quiet.
+    ``end_proven`` is asked only when this call would otherwise wait. A true
+    answer means the phone has proven the recording ended and its speech has
+    landed (``utils.sync.capture_end.proof``), so the wait is skipped and the
+    outcome is ``end_proof``. The unchanged, immaterial and late-cap rules still
+    apply. No answer, or a false one, leaves the quiet rule exactly as it was.
     """
     state = row.get(FIELD) or {}
     first = timestamp(state.get('pending_since')) or float(obligation['first_pending_at'])
     last = max(timestamp(state.get('last_content_at')), timestamp((row.get('smart_merge') or {}).get('last_merged_at')))
     last = last or first
-    due = min(last + QUIET_SECONDS, first + MAX_HOLD_SECONDS)
+    quiet = quiet_seconds()
+    due = min(last + quiet, first + MAX_HOLD_SECONDS)
     watermark = state.get('upload_watermark_at')
-    gap = timestamp(row.get('finished_at')) + QUIET_SECONDS
+    gap = timestamp(row.get('finished_at')) + quiet
+    waiting: tuple[str, float | None] | None = None
     if now < first + MAX_HOLD_SECONDS:
         if now < due:
-            return 'quiet_wait', due
-        if watermark is not None and timestamp(watermark) < gap:
-            return 'watermark_wait', min(now + QUIET_SECONDS, first + MAX_HOLD_SECONDS)
+            waiting = ('quiet_wait', due)
+        elif watermark is not None and timestamp(watermark) < gap:
+            waiting = ('watermark_wait', min(now + quiet, first + MAX_HOLD_SECONDS))
+    if waiting is not None and not (end_proven is not None and end_proven()):
+        return waiting
     previous = state.get('full_snapshot')
     if previous:
         current = content_snapshot(row)
@@ -143,6 +217,8 @@ def admission(row: Mapping[str, Any], obligation: Mapping[str, Any], *, now: flo
             and current['words'] - int(previous.get('words') or 0) < 80
         ):
             return 'immaterial', None
+    if waiting is not None:
+        return 'end_proof', None
     return ('max_hold' if now >= first + MAX_HOLD_SECONDS else 'ready'), None
 
 

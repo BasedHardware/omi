@@ -2,6 +2,7 @@
 
 import hashlib
 import json
+from database.action_item_fence import fenced_action_item_commit
 from dataclasses import dataclass
 from database.dream_dirty import after_write
 from database.s5_candidates_cache import invalidate_after_write
@@ -919,6 +920,7 @@ def resolve_task_candidate(
 
     @firestore.transactional
     def apply(write_transaction):
+        tasks = action_items_db.FirestoreActionItems(uid, firestore_client=db, transaction=write_transaction)
         control_snapshot = _task_control_ref(uid).get(transaction=write_transaction)
         _validate_write_control(control_snapshot, uid=uid, account_generation=account_generation)
         snapshot = candidate_ref.get(transaction=write_transaction)
@@ -949,15 +951,16 @@ def resolve_task_candidate(
                 raise CandidateConflictError('Summary action item is linked to another task')
         if candidate.status == CandidateStatus.accepted:
             if summary_row is not None:
-                task_snapshot = _task_ref(uid, cast(str, candidate.result_task_id)).get(transaction=write_transaction)
+                task_snapshot = tasks.read_snapshot(cast(str, candidate.result_task_id))
                 if not task_snapshot.exists:
                     raise CandidateNotFoundError('Linked task not found')
                 existing_task = _snapshot_dict(task_snapshot)
                 if existing_task.get('account_generation', 0) not in {0, account_generation}:
                     raise CandidateGenerationMismatchError('task account generation mismatch')
                 if not existing_task.get('conversation_id'):
-                    write_transaction.update(
-                        _task_ref(uid, cast(str, candidate.result_task_id)),
+                    tasks.stage_write(
+                        'update',
+                        cast(str, candidate.result_task_id),
                         {
                             'conversation_id': summary_row.conversation_id,
                             'updated_at': now or datetime.now(timezone.utc),
@@ -995,7 +998,7 @@ def resolve_task_candidate(
         if candidate.proposed_action == CandidateAction.create:
             task_id = task_id_for_candidate(uid, account_generation, candidate_id)
             task_ref = _task_ref(uid, task_id)
-            task_snapshot = task_ref.get(transaction=write_transaction)
+            task_snapshot = tasks.read_snapshot(task_ref.id)
             task_data = _task_create_storage(candidate, task_id=task_id, now=resolved_at)
             if summary_row is not None:
                 task_data['conversation_id'] = summary_row.conversation_id
@@ -1015,11 +1018,11 @@ def resolve_task_candidate(
                 if existing_task.get('candidate_id') != candidate_id:
                     raise CandidateConflictError('deterministic task id collision')
             else:
-                write_transaction.set(task_ref, task_data)
+                tasks.stage_write('set', task_ref.id, task_data)
         else:
             task_id = cast(str, candidate.task_id)
             task_ref = _task_ref(uid, task_id)
-            task_snapshot = task_ref.get(transaction=write_transaction)
+            task_snapshot = tasks.read_snapshot(task_ref.id)
             if not task_snapshot.exists:
                 raise CandidateNotFoundError(f'task:{task_id}')
             current_task = _snapshot_dict(task_snapshot)
@@ -1047,7 +1050,7 @@ def resolve_task_candidate(
                 )
             except action_items_db.TaskRelationshipConflictError as exc:
                 raise CandidateConflictError(str(exc)) from exc
-            write_transaction.update(task_ref, task_patch)
+            tasks.stage_write('update', task_ref.id, task_patch)
 
         if summary_row is not None:
             write_transaction.update(summary_row.reference, summary_row.linked_patch(task_id))
@@ -1068,7 +1071,7 @@ def resolve_task_candidate(
                 'idempotency_key': candidate.idempotency_key,
                 'history_coverage': 'reminder_creation_only',
             }
-            write_transaction.update(task_ref, {'creation_receipt': creation_receipt})
+            tasks.stage_write('update', task_ref.id, {'creation_receipt': creation_receipt})
         candidate_patch: dict[str, Any] = {
             'status': CandidateStatus.accepted.value,
             'resolution_reason': 'accepted',
@@ -1107,7 +1110,8 @@ def resolve_task_candidate(
             resolved_at=resolved_at,
         )
 
-    receipt = run_with_transaction_contention_retry(db.transaction, apply, operation_name='candidate_accept')
+    with fenced_action_item_commit(uid):
+        receipt = run_with_transaction_contention_retry(db.transaction, apply, operation_name='candidate_accept')
     # Accepting creates or updates the task directly (not through database.action_items),
     # so invalidate the cached GET /v1/action-items pages here too.
     bump_action_items_list_version(uid)

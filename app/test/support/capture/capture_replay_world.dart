@@ -98,6 +98,9 @@ class ScriptedPureSocket implements IPureSocket {
   final List<List<int>> sentBinary = <List<int>>[];
   final List<String> sentText = <String>[];
 
+  /// Every send and local close in order: the text itself, `<binary>` or `<close>`.
+  final List<String> wire = <String>[];
+
   @override
   PureSocketStatus get status => _status;
 
@@ -128,6 +131,7 @@ class ScriptedPureSocket implements IPureSocket {
   @override
   Future stop() async {
     closeCalls++;
+    wire.add('<close>');
     _status = PureSocketStatus.notConnected;
     return;
   }
@@ -136,8 +140,10 @@ class ScriptedPureSocket implements IPureSocket {
   void send(dynamic message) {
     if (message is List<int>) {
       sentBinary.add(message);
+      wire.add('<binary>');
     } else {
       sentText.add(message.toString());
+      wire.add(message.toString());
     }
   }
 
@@ -282,9 +288,11 @@ class CaptureReplayWorld {
   late RecordingTransferCoordinator coordinator;
   ScriptedPureSocket? socket;
   int socketCreates = 0;
+  bool autoUploadAllowed = true;
 
   /// The local_preview declaration of each socket the controller opened.
   final List<bool> localPreviewRequests = [];
+  final List<String?> socketRecordingIds = [];
 
   /// Every transcription socket the controller opened, in order, with the source it declared.
   final List<({String? source, ScriptedPureSocket transport})> sockets = [];
@@ -306,6 +314,12 @@ class CaptureReplayWorld {
 
   /// When set, Process Now returns this outcome instead of a transport miss.
   Future<InProgressProcessOutcome> Function()? processOutcome;
+
+  /// Server deletes of discarded recordings, by recording id, in order.
+  final List<String> discardDeletes = [];
+
+  /// The answer to each discard delete; null answers deleted.
+  bool Function(String id)? deleteDiscardedResult;
   int tokenRefreshCalls = 0;
   final List<String> timeline = [];
 
@@ -320,7 +334,10 @@ class CaptureReplayWorld {
 
   CaptureReplayWorld({required this.tempDir, required this.clock, required this.uploads, required this.pendantCodec});
 
+  Future<BleAudioCodec> Function(String)? audioCodecLoader;
   CalendarCaptureGapMonitor? calendarGapMonitor;
+  Future<void> Function(String, bool)? deviceMuteWriter;
+  Future<bool?> Function(String)? deviceMuteReader;
   CaptureWedgeMonitor? captureWedgeMonitor;
 
   bool _disposed = false;
@@ -335,6 +352,8 @@ class CaptureReplayWorld {
     bool supportsBatch = true,
     BleAudioCodec pendantCodec = BleAudioCodec.pcm16,
     CalendarCaptureGapMonitor? calendarGapMonitor,
+    Future<void> Function(String, bool)? deviceMuteWriter,
+    Future<bool?> Function(String)? deviceMuteReader,
     CaptureWedgeMonitor? captureWedgeMonitor,
   }) async {
     TestWidgetsFlutterBinding.ensureInitialized();
@@ -346,6 +365,8 @@ class CaptureReplayWorld {
       pendantCodec: pendantCodec,
     );
     world.calendarGapMonitor = calendarGapMonitor;
+    world.deviceMuteWriter = deviceMuteWriter;
+    world.deviceMuteReader = deviceMuteReader;
     world.captureWedgeMonitor = captureWedgeMonitor;
     world.connected = initiallyConnected;
     await world._bootGeneration(supportsBatch: supportsBatch, initialPrefs: initialPrefs, firstBoot: true);
@@ -432,7 +453,14 @@ class CaptureReplayWorld {
       scheduling: scheduler,
       inProgressConversationLoader: () async {},
       deviceConnectionLoader: (deviceId) async => deviceConnection,
+      deviceMuteWriter: deviceMuteWriter,
+      deviceMuteReader: deviceMuteReader,
       omiCallState: omiCall,
+      deleteDiscardedConversation: (id) async {
+        discardDeletes.add(id);
+        return deleteDiscardedResult?.call(id) ?? true;
+      },
+      discardDeleteRetryDelays: const [Duration.zero, Duration.zero, Duration.zero],
       processInProgressOutcome: () async {
         processCalls++;
         onProcessInProgress?.call();
@@ -440,7 +468,7 @@ class CaptureReplayWorld {
         if (custom != null) return custom();
         return const InProgressProcessOutcome(absence: ProcessAbsence.transport);
       },
-      audioCodecLoader: (deviceId) async => pendantCodec,
+      audioCodecLoader: (deviceId) => audioCodecLoader?.call(deviceId) ?? Future.value(pendantCodec),
       microphonePermissionRequester: () async => allowMic,
       conversationLocationCapture: ConversationLocationCapture(
         isLocationServiceEnabled: () async => false,
@@ -465,7 +493,7 @@ class CaptureReplayWorld {
           needsReconciliation: needsReconciliation,
         );
       },
-      autoUploadEnabled: () => true,
+      autoUploadEnabled: () => autoUploadAllowed,
       connectivityChanges: connectivityStream.stream,
       networkChanges: networkChangeStream.stream,
       initiallyConnected: connected,
@@ -640,8 +668,12 @@ class _ReplayCaptureController extends CaptureController {
     super.conversationLocationCapture,
     super.deviceConnectionLoader,
     super.processInProgressOutcome,
+    super.deleteDiscardedConversation,
+    super.discardDeleteRetryDelays,
     super.omiCallState,
     super.calendarGapMonitor,
+    super.deviceMuteWriter,
+    super.deviceMuteReader,
     super.captureWedgeMonitor,
   });
 
@@ -659,6 +691,7 @@ class _ReplayCaptureController extends CaptureController {
   }) async {
     final transport = ScriptedPureSocket();
     world.localPreviewRequests.add(localPreview);
+    world.socketRecordingIds.add(clientConversationId);
     transport.connectAllowed = () => world.connected;
     if (world.nextConnectFailsOnce) {
       transport.nextConnectFails = true;
@@ -674,6 +707,7 @@ class _ReplayCaptureController extends CaptureController {
       transport,
       source: source,
       clientConversationId: clientConversationId,
+      customSttMode: customSttConfig?.isEnabled ?? false,
       localPreview: localPreview,
     );
     await service.start();

@@ -34,12 +34,16 @@ TRANSCRIPT_EXCERPT = "he said the quiet part out loud"
 def finalizer_that_fails_on_geolocation(monkeypatch):
     """Let the finalizer reach its try block, then fail inside it with a telltale message."""
     monkeypatch.setenv("BATCH_PIPELINE_LIVE_ADMISSION_ENABLED", "false")
+    # This fixture has no live owner; retain the enabled scheduling prelude.
+    monkeypatch.setattr(finalizer.member_notes, 'waits', lambda *args: False)
 
     async def fake_run_blocking(_executor, function, *args, **kwargs):
         if function is finalizer.conversations_db.get_conversation:
             return {"id": "conversation-1"}
         if function is finalizer.reserve_recording:
             # Run the actual default-off gate so the dark path remains I/O-free.
+            return function(*args, **kwargs)
+        if function is finalizer.member_notes.waits:
             return function(*args, **kwargs)
         if function is finalizer.get_cached_user_geolocation:
             raise LookupError(TRANSCRIPT_EXCERPT)
@@ -89,3 +93,29 @@ async def test_dead_letter_log_still_withholds_the_exception_message(finalizer_t
     assert TRANSCRIPT_EXCERPT not in "\n".join(record.getMessage() for record in caplog.records)
     assert 'user-1' not in "\n".join(record.getMessage() for record in caplog.records)
     assert 'conversation-1' not in "\n".join(record.getMessage() for record in caplog.records)
+
+
+@pytest.mark.asyncio
+async def test_late_live_member_wait_does_not_spend_provider_attempt(finalizer_that_fails_on_geolocation, monkeypatch):
+    from unittest.mock import Mock
+
+    original = finalizer.run_blocking
+    yielded = Mock(return_value=True)
+    monkeypatch.setattr(finalizer.finalization_jobs_db, 'mark_finalization_retryable', yielded)
+
+    async def run(executor, function, *args, **kwargs):
+        if function is finalizer.get_cached_user_geolocation:
+            raise finalizer.member_notes.LiveMemberNotesDeferred('live_episode_notes', 123)
+        if function is yielded:
+            return function(*args, **kwargs)
+        return await original(executor, function, *args, **kwargs)
+
+    monkeypatch.setattr(finalizer, 'run_blocking', run)
+    failed = Mock()
+    monkeypatch.setattr(finalizer, 'record_finalization_failure', failed)
+    result = await finalizer.finalize_persisted_conversation(
+        'user-1', 'conversation-1', finalization_job_id='job-1', dispatch_generation=1, lease_epoch=1
+    )
+    assert result is finalizer.ConversationFinalizationDisposition.deferred
+    assert yielded.call_args.kwargs == {'count_attempt': False}
+    failed.assert_not_called()

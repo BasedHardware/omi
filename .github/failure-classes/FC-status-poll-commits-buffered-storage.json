@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "id": "FC-status-poll-commits-buffered-storage",
+  "violated_contract": "A periodic status read reports state; it does not perform the durable write it is observing. On CV1 firmware 3.0.24 the storage worker refreshed the status characteristic every 250 ms through sd_ring_get_info(), which commits the buffered SD batch before answering. Once live persist kept a batch buffered for the whole connection, every poll rewrote a 16 KiB batch plus a metadata sector with two media syncs, about four card writes a second. The one pendant on 3.0.24 drained roughly 2.5 times faster than on 3.0.21; how much of that these writes account for was not measured.",
+  "canonical_prevention": "Give status readers an entry point that answers from memory, separate from the one that commits, and keep the committing one for callers that are about to read or reclaim. Guard it with a host test that runs many status ticks against a dirty buffer and asserts zero device writes.",
+  "canonical_prevention_artifact": [
+    "omi/firmware/omi/tests/test_storage.c",
+    "omi/firmware/omi/tests/test_sd_card.c"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "omi/firmware/omi/src/lib/core/storage.c",
+    "omi/firmware/omi/src/sd_card.c"
+  ],
+  "status": "open"
+}

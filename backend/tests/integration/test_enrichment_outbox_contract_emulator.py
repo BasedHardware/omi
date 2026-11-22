@@ -98,8 +98,6 @@ def outbox(store, monkeypatch):  # noqa: F811
 
 @pytest.fixture
 def first_summary(monkeypatch):
-    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'true')
-    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_PERCENT', '100')
     monkeypatch.setenv('FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED', 'true')
 
 
@@ -244,8 +242,6 @@ def test_crashed_worker_lease_blocks_until_expiry_then_sweep_rewakes(
 ):
     client, uid, tasks = outbox
     if summary_policy:
-        monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'true')
-        monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_PERCENT', '100')
         monkeypatch.setenv('FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED', 'true')
     reprocess.mark(uid, 'c', 'en', now=0)
     key = reprocess.key(uid, 'c')

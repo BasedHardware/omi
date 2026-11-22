@@ -336,11 +336,19 @@ def test_true_daily_count_is_an_aggregation_without_list_limit(monkeypatch):
     query = MagicMock()
     query.where.return_value = query
     query.count.return_value.get.return_value = [[SimpleNamespace(value=137)]]
+    # Hidden recordings are their own aggregation and are subtracted, never listed.
+    recordings = MagicMock()
+    recordings.count.return_value.get.return_value = [[SimpleNamespace(value=7)]]
+    query.where.side_effect = lambda *a, filter=None, **kw: (
+        recordings if getattr(filter, 'field_path', None) == 'recording' else query
+    )
     client = MagicMock()
     client.collection.return_value.document.return_value.collection.return_value = query
-    assert summary_db.get_day_recording_count(OWNER, NOW, NOW + timedelta(days=1), firestore_client=client) == 137
+    assert summary_db.get_day_recording_count(OWNER, NOW, NOW + timedelta(days=1), firestore_client=client) == 130
     query.limit.assert_not_called()
+    recordings.limit.assert_not_called()
     query.count.assert_called_once()
+    recordings.count.assert_called_once()
 
 
 def test_missing_days_have_stubs_and_day_based_continuation(monkeypatch):

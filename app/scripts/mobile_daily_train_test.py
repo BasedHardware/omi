@@ -806,6 +806,33 @@ class ReleaseNotesTests(unittest.TestCase):
         fake.collect.assert_not_called()
 
 
+class ExposureParityTests(unittest.TestCase):
+    """Android and iOS must reach full exposure on the same clock.
+
+    The two platforms ramp differently — Apple's phased release jumps once at
+    IOS_PHASED_JUMP_HOURS, Play takes a hop per ROLLOUT_HOP_MIN_HOURS — so the
+    parity is a numeric identity that nothing else in the train enforces. A
+    future edit to either constant would silently put Android on a different
+    schedule than iOS, which is exactly the drift an operator would only
+    notice days later in the store consoles.
+    """
+
+    def test_the_ladder_starts_at_the_staging_fraction_and_only_widens(self):
+        ladder = train.STAGED_ROLLOUT_LADDER
+        self.assertEqual(ladder[0], train.STAGED_ROLLOUT_FRACTION)
+        self.assertEqual(ladder[-1], 1.0)
+        self.assertEqual(list(ladder), sorted(ladder))
+        self.assertEqual(len(set(ladder)), len(ladder))
+
+    def test_android_reaches_full_exposure_on_the_ios_clock(self):
+        hops = len(train.STAGED_ROLLOUT_LADDER) - 1
+        self.assertEqual(
+            hops * train.ROLLOUT_HOP_MIN_HOURS,
+            train.IOS_PHASED_JUMP_HOURS,
+            "the Android ladder and the iOS phased jump must cover the same exposure window",
+        )
+
+
 class AndroidTests(unittest.TestCase):
     def setUp(self):
         # Ladder-mechanics tests pin held-changes mode off so they exercise

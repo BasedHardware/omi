@@ -66,11 +66,6 @@ def entries():
         ),
         DriverEntry('utils.dream_prescan.scan_people', base={'uid': UID}),
         DriverEntry('utils.dream_prescan._scan_tasks', base={'uid': UID}),
-        DriverEntry('utils.dream_state_pass.tasks_page', base={'uid': UID}),
-        DriverEntry(
-            'utils.dream_state_pass.conversation_index',
-            base={'uid': UID, 'now': datetime(2026, 10, 12, tzinfo=timezone.utc)},
-        ),
         DriverEntry(
             'database.dream_history.history_page',
             base={'uid': UID},

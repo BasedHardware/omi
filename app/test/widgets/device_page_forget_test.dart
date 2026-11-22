@@ -56,7 +56,7 @@ class _StubDeviceProvider extends ChangeNotifier implements DeviceProvider {
   String get latestStableFirmwareVersion => '';
 
   @override
-  Future<void> getDeviceInfo() async {}
+  Future<void> getDeviceInfo({bool forceRefresh = false}) async {}
 
   @override
   void setIsConnected(bool value) => setIsConnectedCalls++;

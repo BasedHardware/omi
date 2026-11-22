@@ -3,9 +3,40 @@ import 'dart:async';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:omi/services/wals/recording_transfer_coordinator.dart';
 import 'package:omi/services/wals/sync_wake_scope.dart';
+import 'package:omi/services/wals/pendant_ring_custody.dart' show ringDrainRecoveryEnabled;
 
 void main() {
   group('RecordingTransferCoordinator', () {
+    test('continuing device DATA renews ordinary pass deadline; silence still times out', () async {
+      final work = Completer<void>();
+      final deadlines = <void Function()>[];
+      final timedOut = <WakeTrigger>[];
+      final coordinator = RecordingTransferCoordinator(
+        reconcile: () => work.future,
+        discover: () async {},
+        refreshPending: () async {},
+        drain: () async => const RecordingTransferDrainResult.skipped(),
+        autoUploadEnabled: () => true,
+        scheduleTimeout: (_, callback) => deadlines.add(callback),
+        onPassTimedOut: (trigger, _) => timedOut.add(trigger),
+        scheduleCooldown: (_, callback) {},
+      );
+      addTearDown(coordinator.dispose);
+      final pass = coordinator.wake(WakeTrigger.startup);
+      await _settle();
+      for (var i = 0; i < 3; i++) {
+        coordinator.noteDeviceProgress();
+        deadlines[i]();
+        await _settle();
+        expect(timedOut, isEmpty);
+      }
+      expect(deadlines, hasLength(4), reason: 'three hours with DATA have no total pass cap');
+      deadlines.last();
+      await pass;
+      expect(timedOut, [WakeTrigger.startup]);
+      work.complete();
+      await _settle();
+    }, skip: !ringDrainRecoveryEnabled);
     test('connectivity restoration drains without a Bluetooth event (#7373)', () async {
       final harness = _TransferHarness();
       addTearDown(harness.dispose);

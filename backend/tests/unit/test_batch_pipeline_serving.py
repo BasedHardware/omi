@@ -7,7 +7,7 @@ from dataclasses import asdict
 import json
 import logging
 import threading
-from unittest.mock import Mock
+from unittest.mock import AsyncMock, Mock
 
 from prometheus_client import CollectorRegistry
 import time
@@ -86,10 +86,13 @@ def test_flag_off_drains_pull_heartbeat_and_idempotent_complete(api):
     assert not client.post('/v2/batch-pipeline/complete', json=body).json()['accepted']
 
 
-def test_default_off_serving_startup_does_not_construct_store_or_task(monkeypatch):
+@pytest.mark.parametrize('outbox_enabled', ['off', 'on'])
+def test_non_serving_process_does_not_construct_store_or_task(monkeypatch, outbox_enabled):
     from utils.batch_pipeline import serving
 
     monkeypatch.delenv('BATCH_PIPELINE_SERVING_ENABLED', raising=False)
+    monkeypatch.delenv('BATCH_PIPELINE_PROJECTION_PUMP_ENABLED', raising=False)
+    monkeypatch.setenv('BATCH_PROJECTION_OUTBOX', outbox_enabled)
 
     def forbidden(*args, **kwargs):
         raise AssertionError('disabled serving touched runtime')
@@ -97,6 +100,40 @@ def test_default_off_serving_startup_does_not_construct_store_or_task(monkeypatc
     monkeypatch.setattr(serving, 'serving_for_stage', forbidden)
     monkeypatch.setattr(serving, 'start_background_task', forbidden)
     assert serving.start_serving_from_env() is None
+
+
+@pytest.mark.asyncio
+async def test_serving_outbox_recovers_without_legacy_projection_discovery(monkeypatch):
+    from utils.batch_pipeline import serving
+    from utils.batch_pipeline.projection_drain import recurring_sweep_active
+
+    monkeypatch.setenv('BATCH_PIPELINE_SERVING_ENABLED', 'true')
+    monkeypatch.setenv('BATCH_PIPELINE_SERVING_PROJECTION_SWEEP', 'off')
+    monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_PUMP_ENABLED', 'false')
+    monkeypatch.setenv('BATCH_PROJECTION_OUTBOX', 'on')
+    monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
+    started = asyncio.Event()
+    reconciled = asyncio.Event()
+
+    async def run_outbox(stop):
+        assert not recurring_sweep_active()
+        started.set()
+        await stop.wait()
+
+    reconcile = AsyncMock(side_effect=lambda **_: reconciled.set())
+    service = SimpleNamespace(store=MemoryStore(), outbox=SimpleNamespace(run=run_outbox), reconcile_async=reconcile)
+    monkeypatch.setattr(serving, 'serving_for_stage', lambda _: service)
+    monkeypatch.setattr(serving, 'drain_recordings', AsyncMock(return_value=False))
+    monkeypatch.setattr(serving, 'recovery_dispatch_interval_seconds', lambda: 0)
+    monkeypatch.setattr(serving, '_supervise_fresh_guard', AsyncMock())
+    monkeypatch.setattr(serving, '_supervise_backlog_heartbeat', AsyncMock())
+    runtime = serving.start_serving_from_env()
+    try:
+        await asyncio.wait_for(started.wait(), timeout=5)
+        await asyncio.wait_for(reconciled.wait(), timeout=5)
+    finally:
+        await serving.stop_serving(runtime)
+    reconcile.assert_awaited_once()
 
 
 def test_rollback_reconcile_runs_cleanup_and_projection_without_cohort_check(monkeypatch):
@@ -245,18 +282,14 @@ async def test_dev_reprocess_is_foreign_runtime_for_any_namespace(monkeypatch, n
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('status,code', [('busy', 200), ('completed', 200)])
-@pytest.mark.parametrize('deadline', ['false', 'true'])
-async def test_landed_reprocess_response_preserves_status_and_logs_busy_without_ids(
-    monkeypatch, caplog, status, code, deadline
-):
+async def test_landed_reprocess_response_preserves_status_and_logs_busy_without_ids(monkeypatch, caplog, status, code):
     from unittest.mock import Mock
     from utils.sync import reprocess
 
     monkeypatch.setattr(reprocess, 'owns_runtime', lambda: True)
-    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', deadline)
 
     async def run(executor, func, *args):
-        assert executor is (module.postprocess_executor if deadline == 'true' else module.sync_executor)
+        assert executor is module.postprocess_executor
         return func(*args)
 
     monkeypatch.setattr(module, 'run_blocking', run)
@@ -274,7 +307,6 @@ async def test_landed_reprocess_response_preserves_status_and_logs_busy_without_
 async def test_summary_runs_while_transcription_executor_is_full(monkeypatch):
     from utils.sync import reprocess
 
-    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'true')
     monkeypatch.setattr(reprocess, 'owns_runtime', lambda: True)
     monkeypatch.setattr(module, 'run_enrichment', lambda *_: 'processed')
     release = threading.Event()
@@ -391,7 +423,8 @@ def test_held_partial_governor_charges_the_sweeps_exact_reads(monkeypatch):
     assert service.held_partial_reads == [(20_000.0, 500)]
 
 
-def test_held_partial_read_governor_defers_the_sweep_until_the_window_refills(monkeypatch):
+@pytest.mark.parametrize('one_page_left', [False, True])
+def test_held_partial_read_governor_defers_the_sweep_until_the_window_refills(monkeypatch, one_page_left):
     from utils.batch_pipeline import serving as serving_module
 
     clock = {'monotonic': 50_000.0}
@@ -401,10 +434,12 @@ def test_held_partial_read_governor_defers_the_sweep_until_the_window_refills(mo
     projector = Mock()
     projector.sweep_held = Mock(return_value={'partial': 0, 'waiting': 0, 'error': 0, 'units': 0, 'more': 0})
     service = Serving(MemoryStore(), projector=projector)
-    service.held_partial_reads = [(clock['monotonic'], serving_module.HELD_PARTIAL_READS_PER_HOUR)]
+    page_reads = serving_module.HELD_PARTIAL_PAGE * serving_module.HELD_PARTIAL_READS_PER_UNIT
+    spent = serving_module.HELD_PARTIAL_READS_PER_HOUR - (page_reads if one_page_left else 0)
+    service.held_partial_reads = [(clock['monotonic'], spent)]
     service.reconcile()
     service.reconcile()
-    # The hourly window is spent: no sweep, and the gate retries for free.
+    # Admission reserves room for the checkpoint reads before starting a page.
     assert projector.sweep_held.call_count == 0 and service.held_partial_due == clock['monotonic']
     clock['monotonic'] += serving_module.HELD_PARTIAL_WINDOW_SECONDS
     service.reconcile()
@@ -458,6 +493,18 @@ def test_held_partial_segment_lines_sum_into_one_pass_line_on_wrap(monkeypatch, 
         'event=batch_held_partial action=pass outcome=completed segments=2 pages=5 units=133 partial=3 waiting=129 '
         'error=1 reads=670 pass_seconds=11.0',
     ]
+
+
+def test_held_partial_logs_unconfirmed_wrap_separately(monkeypatch, caplog):
+    serving_module, _ = _held_partial_clock(monkeypatch)
+    projector = Mock()
+    projector.sweep_held.return_value = {'pages': 1, 'more': 0, 'wrap_unconfirmed': 1}
+    service = Serving(MemoryStore(), projector=projector)
+    caplog.set_level(logging.INFO, logger=serving_module.__name__)
+
+    service.reconcile()
+
+    assert _held_partial_lines(caplog)[-1].startswith('event=batch_held_partial action=pass outcome=cursor_unconfirmed')
 
 
 def test_held_partial_governor_deferred_tick_logs_nothing_and_keeps_the_pass(monkeypatch, caplog):
@@ -890,7 +937,7 @@ async def test_serving_runtime_dispatches_recovery_beside_the_serving_pass(monke
     async def reconcile_async(**kwargs):
         passes.set()
 
-    service = SimpleNamespace(store=Mock(), reconcile_async=reconcile_async, dispatch_recovery=Mock())
+    service = SimpleNamespace(store=Mock(), metrics=None, reconcile_async=reconcile_async, dispatch_recovery=Mock())
 
     async def drain_recordings(store, **kwargs):
         return None
@@ -957,9 +1004,10 @@ async def test_record_drain_is_independent_contained_and_stopped(monkeypatch, bl
     async def drain_recordings(store, **kwargs):
         assert callable(kwargs['provider_outbox_factory'])
         assert store is service.store
+        assert kwargs['metrics'] is service.metrics
         await tick('drain')
 
-    service = SimpleNamespace(store=object(), reconcile_async=reconcile_async, dispatch_recovery=Mock())
+    service = SimpleNamespace(store=object(), metrics=Mock(), reconcile_async=reconcile_async, dispatch_recovery=Mock())
 
     def resolve(selected):
         stages.append(selected)
@@ -1026,7 +1074,7 @@ async def test_full_record_pass_repeats_after_yield_without_idle_wait(monkeypatc
     async def reconcile_async(**kwargs):
         return None
 
-    service = SimpleNamespace(store=object(), reconcile_async=reconcile_async)
+    service = SimpleNamespace(store=object(), metrics=None, reconcile_async=reconcile_async)
     monkeypatch.setattr(serving, 'run_blocking', _inline_serving_call)
     monkeypatch.setattr(serving, 'current_stage', lambda: 'dev')
     monkeypatch.setattr(serving, 'serving_for_stage', lambda stage: service)
@@ -1041,3 +1089,43 @@ async def test_full_record_pass_repeats_after_yield_without_idle_wait(monkeypatc
     assert calls == [1, 1]
     assert waits == ([2] if first_full else [1, 2])
     assert yields == ([(1, 0)] if first_full else [])
+
+
+def test_stage_serving_initializes_once_and_keeps_independent_metrics_lease(monkeypatch):
+    from utils.batch_pipeline import serving
+    from utils.batch_pipeline.leader import QUEUE_METRICS, SERVING_MAINTENANCE
+
+    store = MemoryStore()
+    metrics = QueueMetrics(CollectorRegistry(), min_refresh_seconds=30)
+    cold_callers = threading.Barrier(2)
+
+    def load_serving():
+        cold_callers.wait(5)
+        return serving.serving_for_stage('dev')
+
+    def build_store(_namespace):
+        time.sleep(0.03)  # Let both callers enter the cold-cache path.
+        return store
+
+    build = Mock(side_effect=build_store)
+    monkeypatch.setattr(serving, 'current_stage', lambda: 'dev')
+    monkeypatch.setattr(serving, 'FirestoreStore', build)
+    monkeypatch.setattr(serving, 'shadow_from_env', lambda value: value)
+    monkeypatch.setattr(serving, 'artifacts_for', lambda _: Mock())
+    monkeypatch.setattr(serving, 'Projector', Mock())
+    monkeypatch.setattr(serving, '_metrics', lambda: metrics)
+    serving._serving_for_stage.cache_clear()
+    try:
+        with ThreadPoolExecutor(max_workers=2) as workers:
+            first, second = (workers.submit(load_serving) for _ in range(2))
+            service = first.result(10)
+            assert second.result(10) is service
+        build.assert_called_once()
+        assert service.metrics is metrics
+        assert metrics.oldest_leader.store is store
+        assert metrics.oldest_leader.role == QUEUE_METRICS
+        assert metrics.oldest_leader.ttl_seconds == 20
+        assert service.leader.role == SERVING_MAINTENANCE
+        assert service.leader.ttl_seconds == 60
+    finally:
+        serving._serving_for_stage.cache_clear()

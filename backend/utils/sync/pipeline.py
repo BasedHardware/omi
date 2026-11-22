@@ -7,6 +7,7 @@ Extracted from routers/sync.py so the router stays thin and utils never imports 
 
 from __future__ import annotations
 
+from utils.stt.allowance_session import operation as allowance_operation, current as current_allowance_operation
 from utils.enrichment.admission import SyncConversationPersistenceFenced
 from utils.enrichment.admission import require_current_persistence as _require_current_conversation_persistence
 from utils.enrichment.admission import run_created_webhook as _run_conversation_created_webhook
@@ -56,6 +57,7 @@ from utils.sync.staging_custody import add_staging_derivatives, cleanup_sync_sta
 from utils.sync import conversation_turn as conversation_turn_lease
 
 from database import conversations as conversations_db
+from database import capture_end as capture_end_db
 from database.summary_processing import claim_from_snapshot
 from utils.conversations.summary_delivery import (
     repair_fenced,
@@ -179,7 +181,7 @@ from utils.stt.pre_recorded import (
     postprocess_words,
     prerecorded,
 )
-from utils.sync import empty_recovery, empty_success_guard, minimal_redrive
+from utils.sync import empty_success_guard, minimal_redrive
 from utils.sync.empty_recovery_intent import dispatch_once as dispatch_empty_recovery_once
 from utils.stt.outcomes import (
     TranscriptionFailure,
@@ -1064,7 +1066,7 @@ def retrieve_vad_segments(
 
 
 @observe_sync_failures
-def _reprocess_conversation_after_update(uid: str, conversation_id: str, language: str):
+def _reprocess_conversation_after_update(uid: str, conversation_id: str, language: str, *, user_selected: bool = False):
     """Reassess relevance and regenerate notes after sync appends."""
     conversation_data = conversations_db.get_conversation(uid, conversation_id)
     context = PROCESS_CONTEXT.get()
@@ -1123,7 +1125,12 @@ def _reprocess_conversation_after_update(uid: str, conversation_id: str, languag
         # Rollback bypasses admission, but still settles stored hold metadata
         # after success so lazy effects do not remain fenced indefinitely.
         outcome, due = (
-            processing_hold.admission(conversation_data, context, now=time.time())
+            processing_hold.admission(
+                conversation_data,
+                context,
+                now=time.time(),
+                end_proven=lambda: capture_end_db.proven(uid, conversation_data),
+            )
             if processing_hold.enabled_for(context)
             else ('ready', None)
         )
@@ -1224,9 +1231,10 @@ def _reprocess_conversation_after_update(uid: str, conversation_id: str, languag
     # process_conversation persists relevance_decision.trigger == 'sync_update'.
     # Intake only writes 'sync_intake' (or nothing). A later WAL segment re-enters
     # this function; that stored trigger is the already-processed signal.
-    already_sync_processed = (
-        isinstance(prior_decision, dict) and prior_decision.get('trigger') == ProcessingTrigger.SYNC_UPDATE.value
-    )
+    already_sync_processed = isinstance(prior_decision, dict) and prior_decision.get('trigger') in {
+        ProcessingTrigger.SYNC_UPDATE.value,
+        ProcessingTrigger.BACKLOG_CHOICE.value,
+    }
     # Visible rows must not accept again. A prior discard is not a visible
     # finalization, so discarded -> visible still accepts once.
     already_visible_finalized = already_sync_processed and not was_discarded
@@ -1236,7 +1244,7 @@ def _reprocess_conversation_after_update(uid: str, conversation_id: str, languag
             uid=uid,
             language_code=language or 'en',
             conversation=conversation,
-            trigger=ProcessingTrigger.SYNC_UPDATE,
+            trigger=ProcessingTrigger.BACKLOG_CHOICE if user_selected else ProcessingTrigger.SYNC_UPDATE,
             defer_derived_effects=silent_redrive,
             user_kept=is_user_curated(conversation_data) or REPAIR_CONTEXT.get() is not None,
             persistence_observer=_require_current_conversation_persistence,
@@ -1282,18 +1290,13 @@ def _reprocess_conversation_after_update(uid: str, conversation_id: str, languag
         record_client_journey_accepted('conversation_finalization', client_kind)
         record_client_journey_terminal('conversation_finalization', client_kind, 'success', elapsed)
 
-    # Limitless uploads commonly begin as a short discarded fragment and only
-    # become a real conversation after later WAL segments are merged. The
-    # initial discarded pass is not a useful creation event, while the generic
-    # reprocess path deliberately suppresses webhooks. Emit exactly at the
-    # discarded -> visible transition so pendant conversations reach developer
-    # integrations without duplicating events on ordinary later reprocessing.
-    if (
-        not silent_redrive
-        and conversation.source == ConversationSource.limitless
-        and was_discarded
-        and not processed_conversation.discarded
-    ):
+    # Conversations (such as Limitless or Omi pendants with custom STT / WAL uploads)
+    # commonly begin as a short discarded fragment and only become a real conversation
+    # after later segments are merged. The initial discarded pass is not a useful creation
+    # event, while the generic reprocess path deliberately suppresses webhooks. Emit exactly
+    # at the discarded -> visible transition so conversations reach developer integrations
+    # without duplicating events on ordinary later reprocessing.
+    if not silent_redrive and was_discarded and not processed_conversation.discarded:
         submit_with_context(postprocess_executor, _run_conversation_created_webhook, uid, processed_conversation)
 
     # Episodes: the WAL row joins the live episode covering it, so Home folds it under the
@@ -1406,92 +1409,6 @@ class _OrderedTurnstile:
             self._cond.notify_all()
 
 
-def _recover_empty_segment(
-    path: str,
-    uid: str,
-    provider: str,
-    lane: str,
-    job_id: str | None,
-    attempt_ref: str | None,
-    cap_dispatch_lane: str = 'sync',
-) -> tuple[list[TranscriptSegment], str, float] | None:
-    def observe_inspection(duration: float | None, spans: list[dict] | None):
-        logger.info(
-            'event=sync_empty_strict_vad outcome=%s lane=%s provider=%s segment_ref=%s '
-            'duration_seconds=%.3f vad_spans=%d speech_seconds=%.3f',
-            'inspection_error' if spans is None else ('speech' if spans else 'silence'),
-            _bounded_sync_lane(lane),
-            bounded_provider(provider),
-            compute_sync_segment_id(uid, path),
-            duration or 0,
-            len(spans or []),
-            sum(span['end'] - span['start'] for span in spans or []),
-        )
-
-    def authorize_recovery():
-        if provider != 'parakeet':
-            # Positive VAD after multilingual double-empty is unresolved;
-            # buying the same call again is not independent recovery.
-            raise TranscriptionFailure(TranscriptionOutcome.EMPTY_UNEXPECTED, provider=provider)
-        if cap_enabled(uid, cap_dispatch_lane) and not sync_allowed(
-            uid, provider='modulate', lane=cap_dispatch_lane, path=DispatchPath.MULTILINGUAL
-        ):
-            raise CapAllowanceDenied()
-
-    def multilingual_once(audio: bytes, **kwargs: Any):
-        def dispatch():
-            response = modulate_prerecorded_from_bytes(audio, **kwargs)
-            if cap_enabled(uid, cap_dispatch_lane):
-                allowance = funded_allowance(uid, lane=cap_dispatch_lane)
-                record_cap_audio(
-                    'sync',
-                    'accepted',
-                    'modulate',
-                    (len(audio) - 44) / 32000,
-                    allowance.reason == 'plan_allowance_exhausted',
-                )
-            return response
-
-        try:
-            return dispatch_empty_recovery_once(uid, compute_sync_segment_id(uid, path), dispatch)
-        except (ValueError, TypeError):
-            raise TranscriptionFailure(TranscriptionOutcome.UPSTREAM_ERROR, provider='modulate') from None
-        except Exception as error:
-            raise failure_from_exception(error, provider='modulate') from None
-
-    words, recovered_language, duration, spans = empty_recovery.recover(
-        path, transcribe=multilingual_once, authorize=authorize_recovery, observe=observe_inspection
-    )
-    logger.info(
-        'event=sync_empty_recovery outcome=%s lane=%s duration_seconds=%.3f '
-        'vad_spans=%d speech_seconds=%.3f job_ref=%s attempt_ref=%s',
-        'speech' if spans else 'silence',
-        _bounded_sync_lane(lane),
-        duration,
-        len(spans),
-        sum(span['end'] - span['start'] for span in spans),
-        _bounded_correlation_ref(job_id),
-        _bounded_correlation_ref(attempt_ref),
-    )
-    if not spans:
-        return None
-    transcript_segments = postprocess_words(words, 0)
-    if not transcript_segments:
-        raise TranscriptionFailure(TranscriptionOutcome.EMPTY_UNEXPECTED, provider='modulate')
-    if sync_safety_wal_enabled():
-        for segment in transcript_segments:
-            segment.stt_provider = 'velma-2'
-    record_fallback(
-        component='sync_dispatch',
-        from_mode=provider,
-        to_mode='modulate',
-        reason='empty_streak',
-        outcome='recovered',
-        log=logger,
-    )
-    return transcript_segments, recovered_language, first_word_offset(words)
-
-
 def _assign_segment_speakers(
     uid: str,
     audio_bytes: bytes | None,
@@ -1598,6 +1515,9 @@ def process_segment(  # pyright: ignore[reportGeneralTypeIssues] — segment pip
     def cap_enforced() -> bool:
         return (recovery_admission_enabled if cap_recovery else cap_enabled)(uid, cap_dispatch_lane)
 
+    # The unlimited_v2 backfill day cap is enforced only at upload admission
+    # (routers/sync.py), never here: a segment-time refusal would park admitted
+    # audio in a hold that no prod recovery path releases.
     if cap_recovery and not cap_enforced():
         return False
     cap_context = {
@@ -1676,7 +1596,12 @@ def process_segment(  # pyright: ignore[reportGeneralTypeIssues] — segment pip
                     path,
                     selector=get_prerecorded_service,
                     before_probe=lambda: not cap_enforced()
-                    or sync_allowed(uid, provider='modulate', lane=cap_dispatch_lane, path=DispatchPath.LANGUAGE_PROBE),
+                    or sync_allowed(
+                        uid,
+                        provider='modulate',
+                        lane=cap_dispatch_lane,
+                        path=DispatchPath.LANGUAGE_PROBE,
+                    ),
                     cohort_key=uid,
                 ),
             )
@@ -1714,6 +1639,10 @@ def process_segment(  # pyright: ignore[reportGeneralTypeIssues] — segment pip
                 _bounded_correlation_ref(attempt_ref),
             )
 
+        def _note_served_provider(served_provider: str, served_model: str) -> None:
+            nonlocal provider, model
+            provider, model = served_provider, served_model
+
         empty_retried = False
         recovered_via_retry = False
         transcript_segments: List[TranscriptSegment] = []
@@ -1746,6 +1675,7 @@ def process_segment(  # pyright: ignore[reportGeneralTypeIssues] — segment pip
                 return_language=True,
                 language=req_language,
                 keywords=vocabulary if vocabulary else None,
+                on_provider_served=_note_served_provider,
                 **recovery_dispatch,
             )
             if cap_enforced():
@@ -1773,17 +1703,6 @@ def process_segment(  # pyright: ignore[reportGeneralTypeIssues] — segment pip
                 return False
             if empty_retried:
                 _log_empty_retry('still_empty', words=len(words or []), raw_empty=not words)
-                if minimal_redrive.paid_recovery_enabled(redrive_mode):
-                    phase = 'provider_call'
-                    recovered = _recover_empty_segment(
-                        path, uid, provider, sync_lane, job_id, attempt_ref, cap_dispatch_lane
-                    )
-                    if recovered is not None:
-                        transcript_segments, recovered_language, speech_offset = recovered
-                        provider, model = 'modulate', 'velma-2'
-                        language = user_language if (single_language_mode and user_language) else recovered_language
-                        recovered_via_retry = True
-                        break
                 held, _guard_reason = empty_success_guard.settle(path, provider=provider, job_id=job_id)
                 if held:
                     # Speech-positive audio that a degraded provider chain returned
@@ -1949,6 +1868,10 @@ def process_segment(  # pyright: ignore[reportGeneralTypeIssues] — segment pip
             incoming[SYNC_CLOCK_RUN_FIELD] = clock_run
         apply_capture_evidence_dark_write(incoming, source_position_map, transcript_segments)
         annotate_identity(incoming, client_device_id, recording_session_id)
+        if capture_time_offset > 0:
+            # The stored times above are shifted by this much; the end-of-recording
+            # proof needs it to compare the row with the phone's own clock.
+            incoming['_sync_capture_clock_offset'] = capture_time_offset
         if lineage_binding is not None and target_conversation_id:
             incoming['_sync_lineage_binding'] = lineage_binding
         if lineage_eligible:
@@ -2193,12 +2116,22 @@ def _reprocess_merged_conversations(
 
                 mark(uid, conversation_id, language, sync_hold=hold)
             else:
-                processed = _reprocess_conversation_after_update(uid, conversation_id, language)
+                processed = (
+                    _reprocess_conversation_after_update(uid, conversation_id, language, user_selected=True)
+                    if user_selected
+                    else _reprocess_conversation_after_update(uid, conversation_id, language)
+                )
                 if user_selected:
                     complete_explicit(uid, processed, ProcessingTrigger.BACKLOG_CHOICE)
                     from utils.conversations.demand_processing import promote_conversation_effects
 
                     promote_conversation_effects(uid, conversation_id)
+        except processing_hold.ProcessingDeferred:
+            if user_selected:
+                raise
+            # The live-member notes gate enrolled durable enrichment before
+            # yielding this legacy direct path. Audio/transcript intake succeeded.
+            logger.info('event=sync_conversation_reprocess outcome=deferred')
         except SyncConversationPersistenceFenced:
             fenced_ids.add(conversation_id)
             response.setdefault(_RESPONSE_FENCED_CONVERSATION_IDS, set()).add(conversation_id)
@@ -2376,7 +2309,7 @@ def _record_capture_time_admission(outcome: SyncCaptureTimeReason, ahead_seconds
         record_fallback(component='sync_dispatch', from_mode='none', to_mode='none', reason='other', outcome='degraded')
 
 
-def _retrieve_file_paths_v2(files: List[UploadFile], uid: str, job_id: str):
+def _retrieve_file_paths_v2(files: List[UploadFile], uid: str, job_id: str, *, probe_future: bool = False):
     """Like retrieve_file_paths but uses a job-specific directory to avoid concurrency conflicts."""
     names = [file.filename for file in files if file.filename]
     if len(set(names)) != len(names):
@@ -2408,18 +2341,23 @@ def _retrieve_file_paths_v2(files: List[UploadFile], uid: str, job_id: str):
         now = datetime.now(timezone.utc)
         ahead_seconds = (time_val - now).total_seconds()
         rejection = capture_time_rejection(time_val, now=now)
-        if rejection is not None:
+        if rejection is not None and not (probe_future and rejection is SyncCaptureTimeReason.REJECTED_FUTURE):
             # Defense in depth: the shared parser already enforces this window.
             _record_capture_time_admission(rejection, ahead_seconds=ahead_seconds)
             raise SyncCaptureTimeRejected()
-        _record_capture_time_admission(
-            (
-                SyncCaptureTimeReason.ACCEPTED_EARLY_CLAMPED
-                if is_early_capture_time(timestamp)
-                else SyncCaptureTimeReason.ACCEPTED_FUTURE_SKEW if ahead_seconds > 0 else SyncCaptureTimeReason.ACCEPTED
-            ),
-            ahead_seconds=max(0.0, ahead_seconds),
-        )
+        if rejection is None:
+            _record_capture_time_admission(
+                (
+                    SyncCaptureTimeReason.ACCEPTED_EARLY_CLAMPED
+                    if is_early_capture_time(timestamp)
+                    else (
+                        SyncCaptureTimeReason.ACCEPTED_FUTURE_SKEW
+                        if ahead_seconds > 0
+                        else SyncCaptureTimeReason.ACCEPTED
+                    )
+                ),
+                ahead_seconds=max(0.0, ahead_seconds),
+            )
 
         path = f"{directory}{filename}"
         try:
@@ -2649,6 +2587,7 @@ async def _resolve_safety_wal_target(
 @sync_attempt
 @sync_snapshot_resolve_job
 @with_batch_privacy_attempt
+@allowance_operation('sync', live=False)
 async def run_full_pipeline_background_async(  # pyright: ignore[reportGeneralTypeIssues] — legacy coordinator exceeds Pyright's analyzer complexity ceiling
     job_id: str,
     uid: str,
@@ -3117,6 +3056,9 @@ async def run_full_pipeline_background_async(  # pyright: ignore[reportGeneralTy
             total_speech_seconds = await run_blocking(
                 sync_executor, lambda: sum(get_wav_duration(p) for p in segmented_paths)
             )
+            allowance_scope = current_allowance_operation.get()
+            if allowance_scope is not None:
+                allowance_scope.seconds = int(total_speech_seconds)
             total_speech_ms = int(total_speech_seconds * 1000)
             total_segments = len(segmented_paths)
 

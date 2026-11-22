@@ -194,6 +194,65 @@ def test_v2_messages_normal_answer_still_emits_single_done_frame(chat_environmen
         _cleanup(saved)
 
 
+def test_rejected_chat_session_releases_turn_for_next_client(chat_environment, monkeypatch):
+    leases = {}
+
+    def acquire(uid, surface):
+        key = (uid, surface)
+        if key in leases:
+            return None
+        leases[key] = 'test-turn'
+        return leases[key]
+
+    def release(uid, surface, token):
+        assert leases[(uid, surface)] == token
+        del leases[(uid, surface)]
+
+    _exercise_chat_preparation_recovery(
+        chat_environment, monkeypatch, SimpleNamespace(acquire=acquire, release=release)
+    )
+
+
+def _exercise_chat_preparation_recovery(chat_environment, monkeypatch, store):
+    client, _, _, chat_db, _ = chat_environment
+    turn = sys.modules['utils.chat_turn']
+
+    def acquire(uid):
+        token = store.acquire(uid, 'app')
+        if token is None:
+            raise RuntimeError('App surface already has an active turn')
+        return store, token
+
+    async def answer(*args, **kwargs):
+        kwargs['callback_data']['answer'] = 'Recovered reply'
+        yield None
+
+    monkeypatch.setattr(turn, 'cohort_enabled', lambda uid: True)
+    monkeypatch.setattr(turn.app_awareness, 'acquire', acquire, raising=False)
+    monkeypatch.setattr(turn, 'execute_chat_stream', answer)
+
+    rejected = client.post(
+        '/v2/messages',
+        params={'chat_session_id': 'missing'},
+        json={'text': 'Rejected question'},
+        headers={'X-App-Platform': 'web'},
+    )
+    assert rejected.status_code == 404
+    assert rejected.json()['detail'] == 'Chat session not found'
+    chat_db.add_message.assert_not_called()
+
+    retry = client.post('/v2/messages', json={'text': 'Retry question'}, headers={'X-App-Platform': 'android'})
+    assert retry.status_code == 200
+    reply = _decode_done_frame(retry.text)
+    assert reply['text'] == 'Recovered reply'
+    ai_writes = [call.args[1] for call in chat_db.add_message.call_args_list if call.args[1]['sender'] == 'ai']
+    assert [message['id'] for message in ai_writes] == [reply['id']]
+    uid = chat_db.add_message.call_args.args[0]
+    next_token = store.acquire(uid, 'app')
+    assert next_token
+    store.release(uid, 'app', next_token)
+
+
 def _collect_voice_frames(chat_utils):
     async def collect():
         return [

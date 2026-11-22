@@ -35,6 +35,20 @@ class AccountCutoverState(str, Enum):
     legacy = 'legacy'
     migrating = 'migrating'
     new = 'new'
+    migrated = 'migrated'
+    rolled_back_stranded = 'rolled_back_stranded'
+
+
+class AccountCutoverClientState(str, Enum):
+    """Cutover state as released clients decode it.
+
+    ``migrated`` (a cell cutover) is server-internal: routing is invisible to
+    clients, so the control projection reports it as ``legacy``.
+    """
+
+    legacy = 'legacy'
+    migrating = 'migrating'
+    new = 'new'
     rolled_back_stranded = 'rolled_back_stranded'
 
 
@@ -100,6 +114,7 @@ class AccountCutoverRecord(BaseModel):
 
     schema_version: Literal[1] = 1
     uid: str = Field(min_length=1)
+    data_plane: Optional[Literal['legacy', 'cell']] = None
     state: AccountCutoverState = AccountCutoverState.legacy
     account_generation: int = Field(default=0, ge=0)
     ui_generation: int = Field(default=0, ge=0)
@@ -116,6 +131,7 @@ class AccountCutoverRecord(BaseModel):
             'schema_version': ACCOUNT_CUTOVER_SCHEMA_VERSION,
             'uid': self.uid,
             'state': self.state.value,
+            'data_plane': self.data_plane,
             'account_generation': self.account_generation,
             'ui_generation': self.ui_generation,
             'api_generation': self.api_generation,
@@ -134,7 +150,7 @@ class AccountCutoverControl(BaseModel):
     model_config = ConfigDict(extra='forbid', frozen=True)
 
     schema_version: Literal[1] = 1
-    state: AccountCutoverState = AccountCutoverState.legacy
+    state: AccountCutoverClientState = AccountCutoverClientState.legacy
     account_generation: int = Field(default=0, ge=0)
     ui_generation: int = Field(default=0, ge=0)
     api_generation: int = Field(default=0, ge=0)
@@ -153,6 +169,7 @@ class AccountCutoverTransitionRequest(BaseModel):
 
     model_config = ConfigDict(extra='forbid', frozen=True)
 
+    data_plane: Optional[Literal['legacy', 'cell']] = None
     target_state: AccountCutoverState
     expected_account_generation: int = Field(ge=0)
     next_account_generation: Optional[int] = Field(default=None, ge=0)

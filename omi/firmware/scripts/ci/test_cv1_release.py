@@ -17,16 +17,57 @@ import unittest
 from unittest.mock import patch
 import zipfile
 
+import cv1_bootloader as boot
 import cv1_release as release
+from cv1_bootloader import write_hex, read_hex, inspect_hex, POLICY
+
+REAL_SIM_CATALOG = release.sim_catalog
+
+
+CATALOG = {f'suite/scenario-{i}' for i in range(release.SIM_MIN_SCENARIOS)}
+
+
+def sim_report(sha, ver, **overrides):
+    rows = [{'id': name, 'verdict': 'pass'} for name in sorted(CATALOG)]
+    report = {
+        'kind': 'omi-cv1-sim-report',
+        'schema_version': 1,
+        'verdict': 'pass',
+        'mode': 'current',
+        'source_sha': sha,
+        'firmware_version': ver,
+        'selection': ['*'],
+        'counts': {'scenarios': len(rows), 'passed': len(rows), 'failed': 0},
+        'failed': [],
+        'scenarios': rows,
+        'fuzz': {'verdict': 'pass', 'seeds': release.SIM_MIN_FUZZ_SEEDS},
+    }
+    report.update(overrides)
+    return report
 
 
 class ReleaseTests(unittest.TestCase):
     def setUp(self):
+        catalog = patch.object(release, 'sim_catalog', return_value=set(CATALOG))
+        catalog.start()
+        self.addCleanup(catalog.stop)
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name)
         self.build = self.root / 'build'
         self.build.mkdir()
+        self.boot_memory = {0: 0x42, 8: 0x11}
+        self.boot_image = boot.boot_bytes(self.boot_memory)
+        policy = self.root / 'boot-policy.json'
+        fixture_hash = hashlib.sha256(self.boot_image).hexdigest()
+        policy.write_text(json.dumps({'build_boot_sha256': fixture_hash,
+                                     'approved_boot_sha256': [fixture_hash, 'c80cf2fd68b67328c9c7692391a21f87630b266698c2ae9e251967f3e43da086']}))
+        policy_patch = patch.object(boot, 'POLICY', policy)
+        policy_patch.start()
+        self.addCleanup(policy_patch.stop)
+        boot_path = self.build / 'mcuboot/zephyr/zephyr.hex'
+        boot_path.parent.mkdir(parents=True)
+        write_hex(boot_path, self.boot_memory)
         header = bytearray(32)
         struct.pack_into('<I', header, 0, 0x96F3B83D)
         struct.pack_into('<BBH', header, 20, 3, 0, 21)
@@ -52,8 +93,8 @@ class ReleaseTests(unittest.TestCase):
             archive.writestr('manifest.json', json.dumps(self.manifest))
             archive.writestr('omi.signed.bin', self.payload)
             archive.writestr('ipc_radio.bin', b'radio')
-        (self.build / 'merged.hex').write_bytes(b'factory app hex')
-        (self.build / 'merged_CPUNET.hex').write_bytes(b'factory net hex')
+        write_hex(self.build / 'merged.hex', {0: 0x42, 0x10000: 0x3d, 0x10200: 0x11})
+        write_hex(self.build / 'merged_CPUNET.hex', {0x1000000: 0x33})
         self.run = {
             'id': 123,
             'run_attempt': 1,
@@ -73,7 +114,140 @@ class ReleaseTests(unittest.TestCase):
             'repository': 'BasedHardware/omi',
         }
         self.assets = self.root / 'qa'
-        release.stage(self.build, self.assets, '3.0.21', False, self.context)
+        self.sim = self.root / 'sim-report.json'
+        self.sim.write_text(json.dumps(sim_report('a' * 40, '3.0.21')))
+        release.stage(self.build, self.assets, '3.0.21', False, self.context, self.sim)
+
+    def test_promotion_rejects_boot_bytes_even_with_updated_checksums(self):
+        name = release.asset_names('3.0.21')[1]
+        write_hex(self.assets / name, {0: 0x43, 0x10000: 0x3d})
+        provenance = json.loads((self.assets / 'qa-provenance.json').read_text())
+        provenance['sha256'][name] = release.digest(self.assets / name)
+        (self.assets / 'qa-provenance.json').write_text(json.dumps(provenance))
+        with self.assertRaisesRegex(ValueError, 'unapproved CV1 boot region'):
+            release.validate_assets(self.assets, self.run, '3.0.21', False, self.signed_sha256)
+
+    def test_promotion_rejects_different_wire_app_even_with_updated_checksum(self):
+        name = release.asset_names('3.0.21')[1]
+        write_hex(self.assets / name, {**dict(enumerate(self.boot_image)), 0x10000: 0x3d, 0x10001: 0})
+        provenance = json.loads((self.assets / 'qa-provenance.json').read_text())
+        provenance['sha256'][name] = release.digest(self.assets / name)
+        (self.assets / 'qa-provenance.json').write_text(json.dumps(provenance))
+        with self.assertRaisesRegex(ValueError, 'exactly the pinned bootloader and tested OTA signed bytes'):
+            release.validate_assets(self.assets, self.run, '3.0.21', False, self.signed_sha256)
+
+    def test_stage_reparses_and_rejects_corrupted_writer_output(self):
+        def corrupt_writer(path, memory):
+            write_hex(path, {**memory, 0xf6000: 1})
+        with patch.object(release, 'write_hex', side_effect=corrupt_writer):
+            with self.assertRaisesRegex(ValueError, 'exactly the pinned bootloader'):
+                release.stage(self.build, self.root / 'bad-write', '3.0.21', False, self.context, self.sim)
+
+    def test_stage_rejects_boot_bytes_in_network_hex(self):
+        write_hex(self.build / 'merged_CPUNET.hex', {0: 0x42, 0x1000000: 0x33})
+        with self.assertRaisesRegex(ValueError, 'unapproved CV1 boot region'):
+            release.stage(self.build, self.root / 'bad-net', '3.0.21', False, self.context, self.sim)
+
+    def test_stage_rejects_even_approved_boot_bytes_in_network_hex(self):
+        write_hex(self.build / 'merged_CPUNET.hex', {**self.boot_memory, 0x1000000: 0x33})
+        with self.assertRaisesRegex(ValueError, 'CPUNET HEX must not contain'):
+            release.stage(self.build, self.root / 'approved-boot-in-net', '3.0.21', False, self.context, self.sim)
+
+    def test_other_allowlisted_boot_or_outside_app_bytes_cannot_enter_release_hex(self):
+        name = release.asset_names('3.0.21')[1]
+        original = boot.wire_memory(self.payload, self.boot_image)
+        factory = read_hex(POLICY.parents[1] / 'FLASH_3.0.8/MAC/merged.hex')
+        factory_boot = {address: byte for address, byte in factory.items() if address < 0x10000}
+        for extra in (factory_boot, {0xf6000: 1}, {0xff8000: 1}, {0x1000000: 1}):
+            write_hex(self.assets / name, {**original, **extra})
+            provenance = json.loads((self.assets / 'qa-provenance.json').read_text())
+            provenance['sha256'][name] = release.digest(self.assets / name)
+            provenance['boot_regions'][name] = inspect_hex(self.assets / name)
+            (self.assets / 'qa-provenance.json').write_text(json.dumps(provenance))
+            with self.subTest(extra=min(extra)), self.assertRaisesRegex(ValueError, 'pinned build bootloader|exactly the pinned bootloader'):
+                release.validate_assets(self.assets, self.run, '3.0.21', False, self.signed_sha256)
+
+    def test_stage_requires_the_exact_build_loader_and_reservation(self):
+        path = self.build / 'mcuboot/zephyr/zephyr.hex'
+        for index, memory in enumerate(({0: 0x43}, {**self.boot_memory, 0x10000: 1})):
+            write_hex(path, memory)
+            with self.subTest(memory=memory), self.assertRaisesRegex(ValueError, 'pinned build bootloader|reservation|inside'):
+                release.stage(self.build, self.root / f'bad-boot-{index}', '3.0.21', False, self.context, self.sim)
+
+    def test_promotion_rejects_app_only_replacement_even_with_receipts_updated(self):
+        name = release.asset_names('3.0.21')[1]
+        write_hex(self.assets / name, dict(enumerate(self.payload, 0x10000)))
+        provenance = json.loads((self.assets / 'qa-provenance.json').read_text())
+        provenance['sha256'][name] = release.digest(self.assets / name)
+        provenance['boot_regions'][name] = inspect_hex(self.assets / name)
+        (self.assets / 'qa-provenance.json').write_text(json.dumps(provenance))
+        with self.assertRaisesRegex(ValueError, 'initialized bytes'):
+            release.validate_assets(self.assets, self.run, '3.0.21', False, self.signed_sha256)
+
+    def test_stage_requires_a_passing_full_simulator_report(self):
+        bad_rows = [{'id': 'x', 'verdict': 'pass'}] * release.SIM_MIN_SCENARIOS
+        failing = [dict(r, verdict='fail') for r in sim_report('a' * 40, '3.0.21')['scenarios']]
+        for name, report in {
+            'missing': None,
+            'verdict': sim_report('a' * 40, '3.0.21', verdict='fail'),
+            'baseline-mode': sim_report('a' * 40, '3.0.21', mode='baseline'),
+            'other-sha': sim_report('b' * 40, '3.0.21'),
+            'dirty-sha': sim_report('a' * 40 + '-dirty', '3.0.21'),
+            'other-version': sim_report('a' * 40, '3.0.22'),
+            'partial-selection': sim_report('a' * 40, '3.0.21', selection=['safe/*']),
+            'too-few': sim_report('a' * 40, '3.0.21', scenarios=[{'id': 'a', 'verdict': 'pass'}]),
+            'duplicate-ids': sim_report('a' * 40, '3.0.21', scenarios=bad_rows),
+            'scenario-failed': sim_report('a' * 40, '3.0.21', scenarios=failing),
+            'counts': sim_report('a' * 40, '3.0.21', counts={'scenarios': 1, 'passed': 0, 'failed': 1}),
+            'no-fuzz': sim_report('a' * 40, '3.0.21', fuzz=None),
+            'fuzz-failed': sim_report('a' * 40, '3.0.21', fuzz={'verdict': 'fail', 'seeds': 50}),
+            'fuzz-small': sim_report('a' * 40, '3.0.21', fuzz={'verdict': 'pass', 'seeds': 1}),
+            'wrong-kind': sim_report('a' * 40, '3.0.21', kind='other'),
+            # Review finding: counts alone could be satisfied by invented rows.
+            'invented-ids': sim_report('a' * 40, '3.0.21', scenarios=[
+                {'id': f'made-up/{i}', 'verdict': 'pass'} for i in range(release.SIM_MIN_SCENARIOS)]),
+            'missing-scenario': sim_report('a' * 40, '3.0.21', scenarios=[
+                {'id': name, 'verdict': 'pass'} for name in sorted(CATALOG)[1:]] + [
+                {'id': 'extra/one', 'verdict': 'pass'}]),
+        }.items():
+            out = self.root / f'qa-{name}'
+            path = self.root / f'sim-{name}.json'
+            if report is not None:
+                path.write_text(json.dumps(report))
+            with self.subTest(name=name), self.assertRaises(ValueError):
+                release.stage(self.build, out, '3.0.21', False, self.context, path if report else None)
+            self.assertFalse(out.exists(), name)
+
+    def test_simulator_report_travels_with_the_tested_attempt(self):
+        provenance = json.loads((self.assets / 'qa-provenance.json').read_text())
+        self.assertEqual(provenance['sim_report_sha256'], release.digest(self.assets / release.SIM_REPORT))
+        report_path = self.assets / release.SIM_REPORT
+        original = report_path.read_text()
+        # Tampering with the report breaks the provenance checksum.
+        report_path.write_text(json.dumps(sim_report('a' * 40, '3.0.21', verdict='fail')))
+        with self.assertRaisesRegex(ValueError, 'Simulator report checksum'):
+            release.validate_assets(self.assets, self.run, '3.0.21', False, self.signed_sha256)
+        # A consistent but failing report (checksum updated too) still fails closed.
+        path = self.assets / 'qa-provenance.json'
+        path.write_text(json.dumps(dict(provenance, sim_report_sha256=release.digest(report_path))))
+        with self.assertRaisesRegex(ValueError, 'Simulator'):
+            release.validate_assets(self.assets, self.run, '3.0.21', False, self.signed_sha256)
+        # An artifact without the report (an old QA run) cannot be promoted.
+        report_path.unlink()
+        path.write_text(json.dumps(provenance))
+        with self.assertRaisesRegex(ValueError, 'Unexpected QA assets'):
+            release.validate_assets(self.assets, self.run, '3.0.21', False, self.signed_sha256)
+        report_path.write_text(original)
+        release.validate_assets(self.assets, self.run, '3.0.21', False, self.signed_sha256)
+        # A report from a different source SHA cannot ride along with these bytes.
+        with self.assertRaisesRegex(ValueError, 'source SHA'):
+            release.validate_sim_report(json.loads(original), 'b' * 40, '3.0.21')
+
+    def test_real_scenario_catalog_is_read_from_the_checkout(self):
+        root = Path(__file__).resolve().parents[2] / 'omi' / 'sim' / 'scenarios'
+        ids = REAL_SIM_CATALOG(root)
+        self.assertGreaterEqual(len(ids), release.SIM_MIN_SCENARIOS)
+        self.assertIn('safe/poweron-hold-then-cold-boot', ids)
 
     def test_repackage_only_app_preserves_bytes_and_metadata(self):
         with zipfile.ZipFile(self.assets / release.asset_names('3.0.21')[0]) as archive:
@@ -82,8 +256,9 @@ class ReleaseTests(unittest.TestCase):
             manifest = release.ota_manifest(archive)
             self.assertEqual(manifest['files'], self.manifest['files'][:1])
             self.assertEqual(manifest['time'], 123)
-        for original, name in zip(('merged.hex', 'merged_CPUNET.hex'), release.asset_names('3.0.21')[1:]):
-            self.assertEqual((self.build / original).read_bytes(), (self.assets / name).read_bytes())
+        app_hex, net_hex = release.asset_names('3.0.21')[1:]
+        self.assertEqual(read_hex(self.assets / app_hex), boot.wire_memory(self.payload, self.boot_image))
+        self.assertEqual((self.build / 'merged_CPUNET.hex').read_bytes(), (self.assets / net_hex).read_bytes())
 
     def test_network_requires_explicit_opt_in(self):
         target = self.root / 'paired.zip'
@@ -353,7 +528,7 @@ class ReleaseTests(unittest.TestCase):
 
     def publish_responses(self):
         tag_ref = json.dumps({'object': {'type': 'commit', 'sha': 'a' * 40}})
-        return ['', tag_ref, '', json.dumps({'draft': True, 'tag_name': 'Omi_CV1_v3.0.21'}), tag_ref, '']
+        return ['', tag_ref, '', json.dumps({'isDraft': True, 'tagName': 'Omi_CV1_v3.0.21'}), tag_ref, '']
 
     def publish_env(self):
         (self.root / 'cv1-validated-run.json').write_text(json.dumps({'run': self.run, 'workflow_id': 42}))
@@ -383,9 +558,15 @@ class ReleaseTests(unittest.TestCase):
             self.assertEqual(args[:3], ('release', 'create', 'Omi_CV1_v3.0.21'))
             self.assertEqual(list(args[-3:]), [str(self.assets / n) for n in release.asset_names('3.0.21')])
             self.assertNotIn('qa-provenance.json', ' '.join(args))
+            self.assertNotIn(release.SIM_REPORT, ' '.join(args))
             self.assertNotIn('.elf', ' '.join(args))
             self.assertIn('--draft', args)
             self.assertIn('--verify-tag', args)
+            # The draft lookup must not use GET releases/tags/{tag}, which 404s on drafts.
+            self.assertEqual(
+                gh.call_args_list[3].args,
+                ('release', 'view', 'Omi_CV1_v3.0.21', '--repo', 'BasedHardware/omi', '--json', 'isDraft,tagName'),
+            )
             self.assertEqual(
                 gh.call_args_list[0].args,
                 (
@@ -412,7 +593,7 @@ class ReleaseTests(unittest.TestCase):
             if failure == 'existing':
                 responses[0] = subprocess.CalledProcessError(1, ['gh'], stderr='Reference already exists')
             elif failure == 'release-tag':
-                responses[3] = json.dumps({'draft': True, 'tag_name': 'other-tag'})
+                responses[3] = json.dumps({'isDraft': True, 'tagName': 'other-tag'})
             else:
                 responses[1 if failure == 'before-create' else 4] = json.dumps(
                     {'object': {'type': 'commit', 'sha': 'b' * 40}}

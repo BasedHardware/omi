@@ -404,6 +404,16 @@ async def run(
                 continuation = await work(min(PAGE, max_items - offset))
                 if not continuation or cap_work_budget.exhausted():
                     break
+    except cap_hold_reservations.ReservationBoundExceeded as exc:
+        # A ledger full of live reservations is backpressure, not a worker failure: the hold waits for a
+        # projection to release a slot. Logged without a traceback so the deadlock class stays countable.
+        logger.warning(
+            'event=processing_backlog outcome=reservation_full uid=%s live=%d settled=%d',
+            uid,
+            exc.live,
+            exc.settled,
+        )
+        continuation = await finish()
     except Exception as exc:
         # The traceback names the failing call and, for a rejected query, the
         # server's reason; the type alone could not type the InvalidArgument

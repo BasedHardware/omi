@@ -459,7 +459,7 @@ void main() {
       protocol: 'mcumgr',
     );
 
-    attempt.completed(toVersion: '3.2.0');
+    attempt.completed(observedVersion: '3.2.0');
     attempt.failed(failureClass: 'late_error');
     await AnalyticsManager.flushPending(force: true);
 

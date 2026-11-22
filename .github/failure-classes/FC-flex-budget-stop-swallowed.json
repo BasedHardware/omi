@@ -1,6 +1,7 @@
 {
   "schema_version": 1,
   "id": "FC-flex-budget-stop-swallowed",
+  "family": "work-bounded-resumable",
   "violated_contract": "When Flex can no longer fit a reservation in the one-hour memory-maintenance budget, the current UID must stop after the deferred batch is recorded and the cron page must leave the durable registry cursor on that unfinished UID. Swallowing PromotionFlexDeferred as a per-item continue lets the job scan the rest of the 400-user page until Cloud Run kills it at 3600s (Completed=False, exit 0).",
   "canonical_prevention": "Re-raise PromotionFlexDeferred after recording the deferred batch and releasing leases without spending the quality-retry budget. Keep the cron's existing page-stop and cursor contract. Prove a later consolidation batch on the same UID is not entered.",
   "canonical_prevention_artifact": [

@@ -52,6 +52,10 @@ FRAME_DELETION_OUTBOX_COLLECTION = "frame_deletion_outbox"
 FRAME_VISION_RECEIPTS_COLLECTION = "frame_vision_receipts"
 
 
+class FrameRequestQuotaExceeded(ValueError):
+    """Enqueue refused because the device's pending work is at quota."""
+
+
 @dataclass(frozen=True)
 class FrameCleanupPage:
     processed: int
@@ -558,7 +562,7 @@ def enqueue_frame_request(
         ]
         quota = check_device_quota(existing_rows, uid=owner_uid, device_id=owner_device, now=created)
         if not quota.allowed:
-            raise ValueError(f"frame request quota exceeded: {quota.reason}")
+            raise FrameRequestQuotaExceeded(f"frame request quota exceeded: {quota.reason}")
         transaction.create(collection.document(request_id), _request_data(request))
         return _request_data(request), False
 
@@ -625,11 +629,17 @@ def list_recoverable_frame_requests(
     limit: int = FRAME_REQUEST_MAX_BATCH,
     firestore_client: Any | None = None,
 ) -> list[FrameRequest]:
-    """Return requested/claimed/uploaded rows for in-flight device recovery."""
+    """Prune expired work and return live rows for in-flight device recovery."""
 
     if not 1 <= limit <= FRAME_REQUEST_MAX_BATCH:
         raise ValueError("limit is outside the bounded frame-request window")
     current = _utc(now or datetime.now(timezone.utc))
+    prune_expired_frame_requests(
+        uid,
+        account_generation=account_generation,
+        now=current,
+        firestore_client=firestore_client,
+    )
     query = (
         _collection(uid, firestore_client=firestore_client)
         .where(filter=firestore.FieldFilter("device_id", "==", device_id))
@@ -932,6 +942,7 @@ def prune_expired_frame_requests(
     query = (
         _collection(uid, firestore_client=client)
         .where(filter=firestore.FieldFilter("state", "in", ["requested", "claimed", "uploaded"]))
+        .where(filter=firestore.FieldFilter("expires_at", "<=", current))
         .order_by("expires_at", direction=firestore.Query.ASCENDING)
     )
     if account_generation is not None:

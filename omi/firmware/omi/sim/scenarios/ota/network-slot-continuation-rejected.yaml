@@ -1,0 +1,20 @@
+id: ota/network-slot-continuation-rejected
+summary: >
+  A continuation chunk can omit the image number (so it reads as image 0)
+  while still targeting the network-core slot; SAFE must judge the inspected
+  flash area and reject it, even after an accepted image-0 chunk.
+tags: [guard]
+initial: {charging: true}
+timeline:
+  - {t: 0, hold: 10600}
+  - {t: 15000, dfu: chunk}
+  - {t: 16000, dfu: chunk-net}
+  - {t: 17000, dfu: pending}
+  - {t: 20000, power: soft_reset}
+end: 30000
+expect:
+  boot_count: 2
+  boots:
+    - {safe: true, latched: true, log: ["SIM: dfu chunk image 0 -> accepted", "SIM: dfu chunk net area -> rejected (rc=3)"],
+       not_log: ["omi/bootstate=TRIAL"]}
+    - {reset: software, safe: true}

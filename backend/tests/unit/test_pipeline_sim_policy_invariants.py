@@ -132,9 +132,10 @@ def test_policy_window_recorded_policy_id_replays_the_golden_decision():
 
     replayed = replace(
         config,
-        flags={**config.flags, 'FIRST_SUMMARY_DEADLINE_PERCENT': '100'},
+        flags={**config.flags, 'FIRST_SUMMARY_DEADLINE_SECONDS': '60'},
         policy_parts={'first_summary': recorded.to_dict()},
     )
     actual = trace(replayed)
     assert actual == expected
-    assert actual['first_summary_policy']['recorded_enabled'] == [False]
+    assert recorded.first_summary_enabled
+    assert 'first_summary_policy' not in actual

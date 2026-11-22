@@ -986,7 +986,7 @@ async def test_real_dials_each_get_the_full_per_dial_budget(monkeypatch, virtual
 
 @pytest.mark.asyncio
 async def test_wall_dial_cap_cancels_hung_connect_and_walks(monkeypatch, virtual_clock):
-    """A connect that never answers is cancelled at the real dial budget and
+    """Expire the real timeout context once the hung connect is ready;
     the next capable target still serves — two reservations, no exhaustion."""
 
     monkeypatch.setattr(live_router, '_target_circuits', {})
@@ -996,7 +996,6 @@ async def test_wall_dial_cap_cancels_hung_connect_and_walks(monkeypatch, virtual
     monkeypatch.setattr(live_session, 'health', pod)
     for family in ('parakeet', 'modulate', 'soniox', 'deepgram'):
         monkeypatch.setattr(st, f'_{family}_circuit', ProviderCircuitBreaker(failure_threshold=3, cooldown_seconds=30))
-    monkeypatch.setattr(recovery_state, 'RECOVERY_DIAL_SECONDS', 0.001)
     monkeypatch.setenv('STT_ROUTING_MODE', 'on')
     monkeypatch.setenv('STT_ROUTING_ON_PERCENT', '100')
     monkeypatch.setenv(
@@ -1010,6 +1009,21 @@ async def test_wall_dial_cap_cancels_hung_connect_and_walks(monkeypatch, virtual
         ),
     )
     actual, base, previous, legs, capture = await setup_chain(monkeypatch)
+    dial_caps = []
+
+    class DialAsyncio:
+        def __getattr__(self, name):
+            return getattr(asyncio, name)
+
+        def timeout(self, seconds):
+            # Only the chain's dial timer is controlled. Transport/cleanup
+            # tasks retain their own clocks. Expiry is triggered by the hung
+            # connector, so host scheduling cannot consume a healthy dial.
+            cap = asyncio.timeout(None)
+            dial_caps.append((seconds, cap))
+            return cap
+
+    monkeypatch.setattr(live_chain, 'asyncio', DialAsyncio())
     selected = []
     cancelled = []
     dialed = []
@@ -1023,6 +1037,7 @@ async def test_wall_dial_cap_cancels_hung_connect_and_walks(monkeypatch, virtual
             raw = SafeModulateSocket(transport, callback, asyncio.get_running_loop())
             dialed.append(raw)
             try:
+                dial_caps[-1][1].reschedule(asyncio.get_running_loop().time())
                 await asyncio.Event().wait()
             except asyncio.CancelledError:
                 cancelled.append(target.id)
@@ -1039,6 +1054,11 @@ async def test_wall_dial_cap_cancels_hung_connect_and_walks(monkeypatch, virtual
         assert await actual._failover_stt_socket()
         assert cancelled == ['modulate-a']
         assert selected == ['modulate-a', 'modulate-b']
+        assert [seconds for seconds, _ in dial_caps] == [recovery_state.RECOVERY_DIAL_SECONDS] * 2
+        assert dial_caps[0][1].expired() and not dial_caps[1][1].expired()
+        # The ledger also retains the original cheap-source reservation.
+        assert actual.recovery.attempted_targets == {'parakeet-window', 'modulate-a', 'modulate-b'}
+        assert actual.recovery.dial_attempts == 3
         assert not actual.recovery.exhausted
         assert not actual.stt_socket.is_connection_dead
         assert dialed[0]._ws.closed

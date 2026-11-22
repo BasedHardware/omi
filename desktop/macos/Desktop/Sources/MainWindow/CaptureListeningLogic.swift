@@ -170,7 +170,7 @@ enum CaptureListeningLogic {
     }
 
     screenAnalysisEnabled.wrappedValue = enabled
-    AssistantSettings.shared.screenAnalysisEnabled = enabled
+    SettingsSyncManager.shared.setUserScreenAnalysisEnabled(enabled)
     AnalyticsManager.shared.settingToggled(setting: "monitoring", enabled: enabled)
 
     if enabled {

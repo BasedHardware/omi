@@ -1,6 +1,7 @@
 import copy
 import hashlib
 import json
+import logging
 from datetime import datetime, timezone
 from functools import wraps
 from typing import Any, Callable, Dict, List, Optional, TypeVar, cast
@@ -25,6 +26,8 @@ from models.memory_state_head import (
 )
 
 db = getattr(_client_mod, 'data_plane_db', _client_mod.db)
+
+logger = logging.getLogger(__name__)
 
 T = TypeVar("T")
 
@@ -230,7 +233,12 @@ def add_fact(fact: Dict[str, Any]) -> Dict[str, Any]:
 
 def normalize_fact_for_ledger(fact: Dict[str, Any]) -> Dict[str, Any]:
     normalized = copy.deepcopy(fact)
-    qualifiers = normalized.setdefault('qualifiers', {})
+    raw_qualifiers = normalized.get('qualifiers')
+    if not isinstance(raw_qualifiers, dict):
+        qualifiers: Dict[str, Any] = {}
+        normalized['qualifiers'] = qualifiers
+    else:
+        qualifiers = raw_qualifiers
     if normalized.get('valid_at') is not None and qualifiers.get('valid_from') is None:
         qualifiers['valid_from'] = normalized.get('valid_at')
     if normalized.get('invalid_at') is not None and qualifiers.get('valid_to') is None:
@@ -851,11 +859,45 @@ def read_head(uid: str) -> Optional[str]:
     return state.get('current_head_commit_id')
 
 
+_UTC_MIN = datetime.min.replace(tzinfo=timezone.utc)
+
+
+def _coerce_utc_datetime(value: Any) -> Optional[datetime]:
+    if isinstance(value, datetime):
+        return value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value.astimezone(timezone.utc)
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        try:
+            return datetime.fromtimestamp(float(value), tz=timezone.utc)
+        except (OverflowError, OSError, ValueError):
+            return None
+    if isinstance(value, str):
+        raw = value.strip()
+        if not raw:
+            return None
+        normalized = raw[:-1] + '+00:00' if raw.endswith('Z') else raw
+        try:
+            parsed = datetime.fromisoformat(normalized)
+        except ValueError:
+            return None
+        return parsed.replace(tzinfo=timezone.utc) if parsed.tzinfo is None else parsed.astimezone(timezone.utc)
+    return None
+
+
+def _commit_sort_key(commit: Dict[str, Any]) -> datetime:
+    coerced = _coerce_utc_datetime(commit.get('commit_time'))
+    if coerced is None:
+        logger.warning(
+            'memory ledger commit %s has unusable commit_time %r; treating as the earliest commit',
+            commit.get('commit_id'),
+            commit.get('commit_time'),
+        )
+        return _UTC_MIN
+    return coerced
+
+
 def fold_commits(commits: List[Dict[str, Any]], valid_time: Optional[datetime] = None) -> Dict[str, Dict[str, Any]]:
     facts: Dict[str, Dict[str, Any]] = {}
-    for commit in sorted(
-        commits, key=lambda item: item.get('commit_time') or datetime.min.replace(tzinfo=timezone.utc)
-    ):
+    for commit in sorted(commits, key=_commit_sort_key):
         mutations: List[Dict[str, Any]] = cast(List[Dict[str, Any]], commit.get('mutations') or [])
         for item in mutations:
             _apply_mutation(facts, item, commit.get('commit_time'))
@@ -888,7 +930,11 @@ def _apply_mutation(facts: Dict[str, Dict[str, Any]], item: Dict[str, Any], comm
         valid_interval: Dict[str, Any] = cast(Dict[str, Any], item.get('valid_interval') or {})
         invalid_at: Any = valid_interval.get('valid_to') or commit_time
         facts[fact_id]['invalid_at'] = invalid_at
-        facts[fact_id].setdefault('qualifiers', {})['valid_to'] = invalid_at
+        raw_qualifiers = facts[fact_id].get('qualifiers')
+        if not isinstance(raw_qualifiers, dict):
+            raw_qualifiers = {}
+            facts[fact_id]['qualifiers'] = raw_qualifiers
+        raw_qualifiers['valid_to'] = invalid_at
         return
 
     if mutation_type == 'retract_fact':
@@ -959,12 +1005,16 @@ def _apply_arg_changes(fact: Dict[str, Any], arg_changes: Dict[str, Any]) -> Non
 
 
 def _fact_valid_at(fact: Dict[str, Any], valid_time: datetime) -> bool:
-    qualifiers: Dict[str, Any] = cast(Dict[str, Any], fact.get('qualifiers') or {})
-    valid_from: Any = qualifiers.get('valid_from') or fact.get('valid_at')
-    valid_to: Any = qualifiers.get('valid_to') or fact.get('invalid_at')
-    if isinstance(valid_from, datetime) and valid_time < valid_from:
+    target_time = _coerce_utc_datetime(valid_time)
+    if target_time is None:
+        return True
+    raw_qualifiers = fact.get('qualifiers')
+    qualifiers: Dict[str, Any] = cast(Dict[str, Any], raw_qualifiers) if isinstance(raw_qualifiers, dict) else {}
+    valid_from = _coerce_utc_datetime(qualifiers.get('valid_from') or fact.get('valid_at'))
+    valid_to = _coerce_utc_datetime(qualifiers.get('valid_to') or fact.get('invalid_at'))
+    if valid_from is not None and target_time < valid_from:
         return False
-    if isinstance(valid_to, datetime) and valid_time > valid_to:
+    if valid_to is not None and target_time > valid_to:
         return False
     return True
 
@@ -974,12 +1024,21 @@ def replay_to(
     commit_time: Optional[datetime] = None,
     valid_time: Optional[datetime] = None,
 ) -> Dict[str, Dict[str, Any]]:
+    """Replay the ledger as of ``commit_time``.
+
+    Commits whose ``commit_time`` cannot be coerced are kept, matching
+    ``fold_commits``, which orders them as the earliest commits. A cutoff that
+    itself cannot be coerced disables cutoff filtering instead of dropping the
+    whole ledger.
+    """
     commits_ref = db.collection(users_collection).document(uid).collection(memory_commits_collection)
     commits: List[Dict[str, Any]] = []
+    cutoff = _coerce_utc_datetime(commit_time) if commit_time is not None else None
+    if commit_time is not None and cutoff is None:
+        logger.warning('memory ledger replay cutoff %r is not a usable timestamp; replaying every commit', commit_time)
     for doc in commits_ref.order_by('commit_time').stream():
         commit: Dict[str, Any] = _typed_doc(doc)
-        commit_time_value: Any = commit.get('commit_time')
-        if commit_time is None or commit_time_value <= commit_time:
+        if cutoff is None or _commit_sort_key(commit) <= cutoff:
             commits.append(commit)
     return fold_commits(commits, valid_time=valid_time)
 

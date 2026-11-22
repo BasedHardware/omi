@@ -33,7 +33,7 @@ over-30-minute observation in another priority still reports TRIP, with
 `metrics_blind=true`; incomplete coverage never erases positively measured late work.
 The page-tier
 `omi-batch-queue-safety-blind` rule alerts after five minutes of scan blindness
-or absent observations, or after queue freshness is stale for two minutes
+or absent observations, or after queue freshness is stale for fifteen minutes
 plus five minutes pending. Capacity and timeliness sampling continue independently.
 
 ## Triage without weakening custody
@@ -73,8 +73,62 @@ live alert UID, page tier, receiver and absence of the agent mute interval.
 Do not test notification delivery by notifying users.
 
 Rollback: restore the prior worker image and guard chart and restore the Grafana
-rule backup through the documented importer. Preserve the audited worker HPA
-min 6 / max 12 and baseline 6; do not restore the stale 4/16 chart values.
+rule backup through the documented importer. Preserve the approved worker HPA
+min 4 / max 8 and baseline 4 (2026-11-06, David D4 / bc18db). Restore baseline/min
+6 and max 12 if GPU queue depth or ready_units climbs back past 50k.
 Disposition/redrive cannot be undone by
 resetting a paid token; stop further apply, preserve durable receipts, and
 replan after an uncertain result.
+
+## Fleet queue sample ownership
+
+`FIRESTORE_READ_LEVERS` includes `batch_metrics_oldest_leader` (default 100).
+Serving instances elect one queue sampler per store namespace using the existing
+`LeaderLease` implementation and a `queue_metrics` role (20-second TTL), separate
+from maintenance ownership. Followers query neither `oldest`, `oldest_retry` nor
+`ready_for_capacity`, and export no queue age/count/freshness samples. Lease errors
+retain the existing advisory fail-open behavior. At default settings, the serving
+30-second reservation plus 20-second ticks produces a sample every 40 seconds;
+a lost holder hands over within 60 seconds, excluding IO/runtime delays. A metrics
+scrape can refresh earlier. Longer configured tick/reservation values can exceed
+that target; keep their combined effective cadence within 60 seconds.
+
+GPU workers retain per-pod sampling because the adapter gates each pod's
+GPU busy-time metric on sampler freshness. Electing a single worker would remove
+other healthy pods from that signal. Only process index 0 samples; its independent
+15-second loop now runs fleet queue queries every 60 seconds, including capacity
+counts. Timeliness, projection, lifecycle and local event gauges keep their prior
+schedules. Queue ages/counts stop exporting after 60 seconds without a successful
+sample, even when the refresh task stops; capacity retains its independent success
+clock. Failed and never-observed samples cannot become fresh zeroes. The adapter's
+existing `< 60` freshness filter still rejects cached stale scrapes; a delayed
+GPU query can briefly make its queue demand signal unavailable, retaining capacity.
+GPU busy-time instead uses the independent per-instance sampler heartbeat, still
+updated by the 15-second loop (plus IO); the adapter accepts the old queue clock
+as well for mixed-version fleets and rollback. Both clocks retain a 60s bound.
+
+The queue-age and over-SLA Grafana rules (`alerts/batch-timeliness.json`,
+`alerts/batch-queue-safety.json`) use `max`/any-instance semantics, as do the
+ready-age/capacity adapter rules. No average or pinned-instance consumer was
+found in the repository. The 2h timeliness sampler is unchanged. Its observed-at
+staleness rules remain independent of this queue sampler.
+
+Rollback: set `"batch_metrics_oldest_leader": 0` in the existing
+`FIRESTORE_READ_LEVERS` JSON map, preserving other entries. This bypasses election,
+GPU throttling and export expiry, restoring the prior per-instance behavior and
+existing adapter freshness checks. There is no new environment variable.
+
+## 2026-11-08 production import preparation
+
+`omi-batch-queue-safety-blind` uses a 900s staleness budget, then 5m pending.
+The aggregate dry-run at 2026-11-08T14:05–14:59Z measured the worker-plane sample
+cadence at approximately 514s; the prior 120s arm was a false positive. This
+alert-only budget does not alter producer cadence or adapter freshness. Other
+query arms remain unchanged. Read back the 900s expression after import.
+
+`omi-batch-unit-unpublished-2h` lands paused for the known backlog. Its threshold
+and source freshness gates are unchanged. Unpause only after #24731/#24893
+drain work ships and both fresh sources stay below 7200s for 24h with no blind
+scan, via a separate owner-approved change. Missing/stale samples cannot prove
+recovery. Full import disposition and the five paused UIDs are in
+[the pipeline alert runbook](../../charts/monitoring/batch-projection/pipeline-alerts.md#production-import-disposition-lead2-ruling-699300-2026-11-08t1513z).

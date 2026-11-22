@@ -72,6 +72,7 @@ from prometheus_client import Counter
 
 from database.firestore_tier_context import current_tier
 from database.firestore_read_origin import current_read_origin
+from database.plane_leak_probe import record_plane_leak
 from database.privacy_check_metrics import current_read_caller as current_privacy_read_caller
 from utils.observability.firestore_request_reads import trace_request_reads
 
@@ -578,6 +579,7 @@ def _record(
     sdk_object: Any = None,
 ) -> None:
     """Count billed reads on every counter. Never raises."""
+    record_plane_leak(path_parts, 'read', amount)
     if outcome is None:
         outcome = 'hit' if exists else 'miss'
     if kind is None:

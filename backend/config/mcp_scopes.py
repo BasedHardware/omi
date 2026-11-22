@@ -28,13 +28,31 @@ MCP_OPT_IN_SCOPES = ["people.cleanup"]
 # Everything a caller may legitimately ask for.
 MCP_SUPPORTED_SCOPES = MCP_DEFAULT_API_KEY_SCOPES + MCP_OPT_IN_SCOPES
 
+# Connector product contract. OAuth required scopes are implied only by the
+# authorization server's existing first-party ChatGPT policy. API-key defaults
+# describe client minting, not the legacy key-repair/full-access policy above.
+_CONNECTOR_READ_SCOPES = ("memories.read", "conversations.read", "action_items.read", "goals.read")
+
+CONNECTOR_ACCESS_REGISTRY = {
+    "chatgpt": {
+        "client_ids": ("omi-chatgpt-prod", "omi-chatgpt-dev"),
+        "required_scopes": _CONNECTOR_READ_SCOPES,
+        "default_scopes": _CONNECTOR_READ_SCOPES,
+    },
+    "mcp_api_key": {
+        "client_ids": (),
+        "required_scopes": (),
+        "default_scopes": _CONNECTOR_READ_SCOPES,
+    },
+    "claude": {
+        "client_ids": ("omi-claude-prod", "omi-claude-dev"),
+        "required_scopes": (),
+        "default_scopes": (),
+    },
+}
+
 # Read-only scope set requested by Connect an Agent / Settings key minting.
-MCP_READ_ONLY_API_KEY_SCOPES = [
-    "memories.read",
-    "conversations.read",
-    "action_items.read",
-    "goals.read",
-]
+MCP_READ_ONLY_API_KEY_SCOPES = list(CONNECTOR_ACCESS_REGISTRY["mcp_api_key"]["default_scopes"])
 
 # Backward-compatible export. "Full access" historically meant the automatically
 # granted key capabilities, so it stays aliased to the default grant -- risky new

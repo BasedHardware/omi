@@ -1,6 +1,7 @@
 {
   "schema_version": 1,
   "id": "FC-ingest-recreates-retired-identity",
+  "family": "destroy-after-quiescence",
   "violated_contract": "An idempotent ingest identity retired by explicit user deletion must remain retired after the content row is removed. Treating absence as a new create allows a delayed local outbox retry to recreate deleted content and rerun its derived-data pipeline.",
   "canonical_prevention": "Persist content-free deletion intent before destructive cleanup, point-read that intent before admitting a client-bound create, acknowledge retired identities without processing, and resolve the producing local outbox row on that acknowledgement.",
   "canonical_prevention_artifact": [

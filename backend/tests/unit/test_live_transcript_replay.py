@@ -459,7 +459,10 @@ def test_long_session_receipt_stays_bounded(world, labeled, level):
     batches = []
     clock = 0.2
     index = 0
-    for tick in range(5000):
+    # Exercise repeated eviction well past the complete bounded receipt window.
+    # The adjacent tests cover full batch/total limits; thousands more identical
+    # rotations add CPU without another state transition.
+    for tick in range(8 * RECEIPT_COMMIT_LIMIT):
         fresh = []
         for _ in range(1 + tick % 3):
             index += 1
@@ -738,7 +741,7 @@ def test_transaction_attempt_retry_replans_from_committed_receipt(world, monkeyp
         call(client.transaction())
         return call(client.transaction())
 
-    monkeypatch.setattr(db, 'run_transactional', twice)
+    monkeypatch.setattr(db, 'run_preloaded_transactional', twice)
     db.update_conversation_segments('u', 'c', [], live_segments=fresh)
     stored = read(world)['transcript_segments']
     assert ' '.join(s['text'] for s in stored) == 'I have to', stored

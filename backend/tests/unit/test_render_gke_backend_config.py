@@ -62,6 +62,7 @@ def test_config_map_entries_falls_back_to_legacy_manifest_shape(
         'RAPID_API_HOST',
         'REDIS_DB_HOST',
         'STT_PRERECORDED_MODEL',
+        'PRERECORDED_SONIOX_FAILOVER_ENABLED',
         'STT_SERVICE_MODELS',
         'TYPESENSE_HOST',
         'TWILIO_ACCOUNT_SID',

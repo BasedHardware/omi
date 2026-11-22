@@ -122,7 +122,7 @@ void main() {
           )));
       await tester.pump();
       expect(tester.takeException(), isNull);
-      expect(find.text(before ? a.structured.title : 'Finishing up…'), findsOneWidget);
+      expect(find.text('Processing…'), findsOneWidget, reason: 'Processing rows never echo a member title');
       if (_output.isNotEmpty) {
         await tester.runAsync(() async {
           final render = boundary.currentContext!.findRenderObject()! as RenderRepaintBoundary;

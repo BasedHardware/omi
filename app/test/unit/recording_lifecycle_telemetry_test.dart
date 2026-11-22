@@ -30,6 +30,24 @@ class _TestEnvFields implements EnvFields {
 }
 
 void main() {
+  test('reconnect outcomes observe identity continuity without another start or gap recovery claim', () {
+    final events = <({String name, Map<String, dynamic> properties})>[];
+    final telemetry = RecordingLifecycleTelemetry(
+        emitter: (name, properties) => events.add((name: name, properties: properties)), idFactory: () => 'retained');
+    telemetry.prepare(source: 'pendant_live');
+    telemetry.markStarted();
+    telemetry.reconnectOutcome('reconnect_resumed');
+    expect(telemetry.recordingId, 'retained');
+    telemetry.markStarted();
+    telemetry.reconnectOutcome('reconnect_grace_expired_fresh');
+    telemetry.complete(reason: 'device_disconnected');
+    expect(events.where((e) => e.name == RecordingLifecycleTelemetry.startedEvent), hasLength(1));
+    expect(events.where((e) => e.name == 'Recording Observation').map((e) => e.properties['stage']),
+        ['reconnect_resumed', 'reconnect_grace_expired_fresh']);
+    expect(
+        events.where((e) => e.name == 'Recording Observation').every((e) => e.properties['recording_id'] == 'retained'),
+        isTrue);
+  });
   TestWidgetsFlutterBinding.ensureInitialized();
 
   setUpAll(() async {
@@ -216,6 +234,25 @@ void main() {
       RecordingLifecycleTelemetry.startFailedEvent,
     ]);
     expect(events.last.properties['failure_class'], 'pipeline_closed');
+  });
+
+  test('Undo reports a discard whether or not the mic had started', () {
+    final events = <({String name, Map<String, dynamic> properties})>[];
+    final telemetry = RecordingLifecycleTelemetry(
+      emitter: (name, properties) => events.add((name: name, properties: properties)),
+      idFactory: () => 'recording-discarded',
+    );
+
+    telemetry.prepare(source: 'phone_mic');
+    telemetry.complete(reason: 'user_discarded');
+    expect(events.last.name, RecordingLifecycleTelemetry.startFailedEvent);
+    expect(events.last.properties['failure_class'], 'user_discarded', reason: 'not a broken pipeline');
+
+    telemetry.prepare(source: 'phone_mic');
+    telemetry.markStarted();
+    telemetry.complete(reason: 'user_discarded');
+    expect(events.last.name, RecordingLifecycleTelemetry.completedEvent);
+    expect(events.last.properties['reason'], 'user_discarded');
   });
 
   test('silent capture remains an attempted recording and repeated prepare is idempotent', () {

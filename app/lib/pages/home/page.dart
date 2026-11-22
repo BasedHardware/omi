@@ -28,6 +28,7 @@ import 'package:omi/pages/activity/activity_bell_button.dart';
 import 'package:omi/services/onboarding_sync_runtime.dart';
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/providers/home_feed_provider.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/geolocation.dart';
 import 'package:omi/gen/pigeon_communicator.g.dart';
@@ -85,6 +86,7 @@ import 'home_deep_links.dart';
 import 'home_navigation.dart';
 import 'home_prompt_gate.dart';
 import 'widgets/battery_info_widget.dart';
+import 'widgets/home_recording_bar.dart';
 
 class HomePageWrapper extends StatefulWidget {
   final String? navigateToRoute;
@@ -223,6 +225,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
   CaptureProvider? _captureProvider;
   DeviceProvider? _deviceProviderForQuickActions;
   CaptureProvider? _captureProviderForQuickActions;
+  late final VoidCallback _releaseFeedbackClearance;
   Timer? _announcementTimer;
   Timer? _homeWidgetFreshnessTimer;
 
@@ -499,6 +502,14 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
         await ForegroundUtil.stopForegroundTask();
       }
       if (mounted) {
+        final owner = SharedPreferencesUtil().uid;
+        final localRecordings = context.read<LocalRecordingsProvider>();
+        final syncProvider = context.read<SyncProvider>();
+        unawaited(localRecordings.refresh().then((_) async {
+          if (mounted && SharedPreferencesUtil().uid == owner) await syncProvider.refreshWals();
+        }).catchError((Object error) {
+          Logger.debug('Home: pending recordings refresh deferred: $error');
+        }));
         await Provider.of<HomeProvider>(context, listen: false).setUserPeople();
       }
       if (mounted && WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed) {
@@ -523,11 +534,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
     _initQuickActions();
     _startHomeWidgets();
     // Toasts float above the chat bar on Home while this shell is the visible route.
-    OmiFeedback.bottomClearance = (ctx) {
+    _releaseFeedbackClearance = OmiFeedback.claimBottomClearance((ctx) {
       final onHome = ctx.read<HomeProvider>().selectedIndex == HomeProvider.homeTab;
       final clearance = onHome ? homeChatBarClearance(ctx) : homeBottomClearance(ctx);
       return clearance - homeBottomInset(ctx);
-    };
+    });
     super.initState();
 
     // After init
@@ -770,6 +781,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
 
       updateEntitlement();
       _overflowUsage = usage;
+      final capture = _captureProvider!;
+      usage.onPhoneChoiceChanged = () => unawaited(capture.onTranscriptionSettingsChanged());
       _overflowEntitlementListener = () {
         updateEntitlement();
         if (mounted) _freemiumHandler.checkAndShowPaywall(context, _captureProvider!);
@@ -840,7 +853,16 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                   final convoProvider = ctx.read<ConversationProvider>();
                   final messageProvider = ctx.read<MessageProvider>();
 
-                  if (convoProvider.conversations.isEmpty) {
+                  final feed = context.read<HomeFeedProvider?>();
+                  if (feed != null &&
+                      !feed.unsupported &&
+                      !convoProvider.hasActiveSearch &&
+                      convoProvider.selectedFolderId == null &&
+                      !convoProvider.showStarredOnly &&
+                      !convoProvider.showDiscardedConversations &&
+                      !convoProvider.showShortConversations) {
+                    await feed.refresh();
+                  } else if (convoProvider.conversations.isEmpty) {
                     await convoProvider.getInitialConversations();
                   } else {
                     // Force refresh when internet connection is restored
@@ -938,12 +960,18 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                 left: 16,
                                 right: 16,
                                 bottom: homeChatBarOffset(context),
-                                child: Row(
-                                  children: [
-                                    Expanded(child: _buildChatBar(context)),
-                                    const SizedBox(width: 10),
-                                    const HomeRecordButton(),
-                                  ],
+                                // While this phone records, the row is the recording bar: the
+                                // confirmation, Undo for the first seconds, then Wrap Up.
+                                child: Builder(
+                                  builder: (context) => context.select<CaptureProvider, bool>(HomeRecordingBar.showsFor)
+                                      ? const HomeRecordingBar()
+                                      : Row(
+                                          children: [
+                                            Expanded(child: _buildChatBar(context)),
+                                            const SizedBox(width: 10),
+                                            const HomeRecordButton(),
+                                          ],
+                                        ),
                                 ),
                               ),
                             ],
@@ -1102,7 +1130,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
     for (final id in const ['home-announcements', 'device-tutorial', 'firmware-announcements']) {
       PromptQueue.instance.remove(id);
     }
-    OmiFeedback.bottomClearance = null;
+    _releaseFeedbackClearance();
     _announcementTimer?.cancel();
     _announcementTimer = null;
     _homeWidgetFreshnessTimer?.cancel();
@@ -1130,6 +1158,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
     _homeWidgets?.dispose();
     // Clean up freemium handler
     if (_overflowEntitlementListener != null) _overflowUsage?.removeListener(_overflowEntitlementListener!);
+    _overflowUsage?.onPhoneChoiceChanged = null;
     _onDeviceRunner?.dispose();
     _freemiumHandler.dispose();
     // Remove foreground task callback to prevent memory leak

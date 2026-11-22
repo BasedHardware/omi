@@ -243,6 +243,115 @@ def assert_account_deletion_queue_exists(client: Any = None) -> None:
         logger.warning('account-deletion queue existence probe inconclusive: %s', sanitize(str(exc)))
 
 
+CONVERSATION_BATCH_PURGE_PATH = '/v1/conversations/deletion-batch-purges/run'
+
+
+def _conversation_batch_purge_handler_url() -> str:
+    """Same backend-sync host as the account-deletion handler, different path."""
+    deletion_url = os.getenv('ACCOUNT_DELETION_HANDLER_URL', '').strip()
+    if not deletion_url:
+        return ''
+    parts = urlsplit(deletion_url)
+    if not parts.scheme or not parts.netloc:
+        return ''
+    return f'{parts.scheme}://{parts.netloc}{CONVERSATION_BATCH_PURGE_PATH}'
+
+
+def conversation_erasure_queues() -> tuple[str, ...]:
+    """Queues that may hold a batch-purge or erasure task, dispatch target first.
+
+    These units run on their own queue (``CONVERSATION_ERASURE_TASKS_QUEUE``) so a
+    cleanup burst cannot queue in front of account wipes. Unset, they stay on
+    ``ACCOUNT_DELETION_TASKS_QUEUE``, where revisions predating the split also
+    sent them; those tasks run there, so that queue is always the second place to look.
+    """
+    dedicated = os.getenv('CONVERSATION_ERASURE_TASKS_QUEUE', '').strip()
+    shared = os.getenv('ACCOUNT_DELETION_TASKS_QUEUE', '').strip()
+    return tuple(dict.fromkeys(queue for queue in (dedicated, shared) if queue))
+
+
+def is_conversation_batch_purge_dispatch_configured() -> bool:
+    """Conversation batch purges use the account-deletion handler host and invoker identity."""
+    return bool(
+        is_account_deletion_dispatch_enabled()
+        and conversation_erasure_queues()
+        and _conversation_batch_purge_handler_url()
+        and _invoker_sa()
+    )
+
+
+def conversation_batch_purge_task_id(job_id: str, generation: int) -> str:
+    # One name per dispatch generation: a completed, deleted or still-reserved
+    # name (Cloud Tasks keeps them for up to 24 h) never swallows a redrive.
+    return f'conversation-batch-purge-{job_id}-g{int(generation)}'
+
+
+def conversation_erasure_task_id(job_id: str, generation: int) -> str:
+    return f'conversation-erasure-{job_id}-g{int(generation)}'
+
+
+def _conversation_batch_purge_task_name(job_id: str, generation: int, erasure: bool) -> str:
+    return (conversation_erasure_task_id if erasure else conversation_batch_purge_task_id)(job_id, generation)
+
+
+def enqueue_conversation_batch_purge(
+    job_id: str, generation: int, *, erasure: bool = False, queue: Optional[str] = None
+) -> None:
+    """Dispatch one generation of a durable purge (or accepted-delete erasure) obligation to backend-sync.
+
+    The payload stays opaque. An erasure carries ``kind``; a consumer that predates
+    it looks the id up among purge obligations, answers ``missing``, and the
+    erasure is redriven. ``queue`` defaults to the first of ``conversation_erasure_queues``.
+    """
+    payload: dict = {'job_id': job_id, 'generation': int(generation)}
+    if erasure:
+        payload['kind'] = 'erasure'
+    enqueue_named_task(
+        queue or next(iter(conversation_erasure_queues()), ''),
+        _conversation_batch_purge_handler_url(),
+        _conversation_batch_purge_task_name(job_id, generation, erasure),
+        payload,
+        audience=_conversation_batch_purge_handler_url(),
+        invoker_sa=_invoker_sa(),
+    )
+
+
+def conversation_batch_purge_task_pending(job_id: str, generation: int, *, erasure: bool = False) -> bool:
+    """Whether this generation's task is still in a queue (waiting, delivering, or between retries).
+
+    Only an authoritative NotFound in every queue that may hold it proves it gone;
+    any other probe failure raises.
+    """
+    name = _conversation_batch_purge_task_name(job_id, generation, erasure)
+    return any(named_task_exists(queue, name) for queue in conversation_erasure_queues())
+
+
+def conversation_batch_purge_consumer_ready() -> Optional[bool]:
+    """Probe the live handler URL without credentials: does the serving consumer have the route?
+
+    The new handler rejects the unauthenticated probe with its own 403
+    ("Missing bearer token"); a revision without the route answers 404/405.
+    None means the probe itself failed (network), which proves nothing.
+    """
+    url = _conversation_batch_purge_handler_url()
+    if not url:
+        return False
+    try:
+        response = _get_auth_request()(
+            url, method='POST', body=b'{}', headers={'Content-Type': 'application/json'}, timeout=5
+        )
+    except Exception as exc:  # noqa: BLE001 - an unreachable probe is an unanswered question
+        logger.warning('conversation batch purge consumer probe failed: %s', type(exc).__name__)
+        return None
+    if response.status in (404, 405):
+        return False
+    try:
+        detail = json.loads(response.data or b'{}').get('detail')
+    except Exception:  # noqa: BLE001
+        detail = None
+    return response.status == 403 and detail == 'Missing bearer token'
+
+
 def is_listen_finalization_dispatch_enabled() -> bool:
     """Whether platform-key listen finalization uses its durable worker."""
     return os.getenv('LISTEN_FINALIZATION_DISPATCH_MODE', 'inline') == 'cloud_tasks'
@@ -453,8 +562,14 @@ def enqueue_sync_uid_wake(uid: str, uid_hash: str, deadline: int) -> None:
     if not handler.endswith('/v2/sync-jobs/run'):
         raise RuntimeError('sync task handler URL is not the expected v2 route')
     wake_url = handler.removesuffix('/v2/sync-jobs/run') + '/v2/sync-backfill-sequencer/wake'
+    # A backfill wake must not spend the fresh queue's dispatch budget new recordings need
+    # (2026-11-16 fresh-vs-backlog audit). Same handler; only the delivering queue moves.
+    queue = os.getenv('SYNC_TASKS_QUEUE', '')
+    backfill_queue = os.getenv('SYNC_BACKFILL_TASKS_QUEUE', '').strip()
+    if backfill_queue and is_sync_backfill_routing_enabled():
+        queue = backfill_queue
     enqueue_named_task(
-        os.getenv('SYNC_TASKS_QUEUE', ''),
+        queue,
         wake_url,
         f'sbu-{uid_hash}-{deadline}',
         {'uid': uid},
@@ -648,6 +763,13 @@ def verify_account_deletion_cloud_tasks_oidc(request: Request) -> AccountDeletio
         log_failure=False,
     )
     return AccountDeletionTaskAuthentication(retry_count=retry_count)
+
+
+def verify_conversation_batch_purge_cloud_tasks_oidc(request: Request) -> int:
+    """Audience is this handler's own URL, minted from the same env as the task URL."""
+    return verify_configured_cloud_tasks_oidc(
+        request, audience=_conversation_batch_purge_handler_url(), invoker_sa=_invoker_sa()
+    )
 
 
 def verify_listen_finalization_cloud_tasks_oidc(request: Request) -> int:

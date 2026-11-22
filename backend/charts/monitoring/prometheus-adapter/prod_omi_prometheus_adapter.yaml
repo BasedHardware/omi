@@ -202,7 +202,11 @@ rules:
             rate(omi_batch_pipeline_stage_seconds_sum{<<.LabelMatchers>>,stage="worker_flight"}[10m])
           )
           and on (namespace, pod)
-          (time() - omi_batch_pipeline_metrics_refreshed_at_seconds{<<.LabelMatchers>>} < 60)
+          (
+            (time() - omi_batch_pipeline_sampler_observed_at_seconds{<<.LabelMatchers>>} < 60)
+            or
+            (time() - omi_batch_pipeline_metrics_refreshed_at_seconds{<<.LabelMatchers>>} < 60)
+          )
         )
   custom:
     # Queue ages are refreshed by the GPU owner, independent of pressure polls.

@@ -192,7 +192,6 @@ def replay_worker_words(item, words):
             'STT_CAP_OFFLINE_ENFORCEMENT': 'false',
             'BATCH_PIPELINE_EMPTY_ASR_SAFETY_NET_ENABLED': 'false',
             'BATCH_PIPELINE_DIARIZE_SPEECH_ONLY_ENABLED': 'false',
-            'BATCH_PIPELINE_SHORT_SPEECH_SINGLE_ENABLED': 'false',
         },
     ):
         results = worker.process_batch([item])
@@ -314,7 +313,11 @@ def _replay(corpus):
                     self.prepare(transaction)
                     assigned = planned[0] if planned else {}
                     receipt = {
-                        'state': 'quarantined' if options.get('quarantined') else 'persisted',
+                        'state': (
+                            'quarantined'
+                            if options.get('quarantined')
+                            else 'ready' if options.get('silence') else 'persisted'
+                        ),
                         'conversation_id': assigned.get('id'),
                         'audio_required': False,
                         'enrichment_required': False,
@@ -327,8 +330,14 @@ def _replay(corpus):
                     held = options.get('quarantined') or any(
                         part['state'] == 'quarantined' for part in (row.get('projection_parts') or {}).values()
                     )
-                    summary = {**receipt, 'state': 'quarantined' if held else 'persisted'}
-                    row.update(projection=summary, projection_state='quarantine_held' if held else 'persisted')
+                    parts = list((row.get('projection_parts') or {}).values()) or [receipt]
+                    state = (
+                        'quarantined'
+                        if held
+                        else 'ready' if all(part['state'] == 'ready' for part in parts) else 'persisted'
+                    )
+                    summary = {**receipt, 'state': state}
+                    row.update(projection=summary, projection_state='quarantine_held' if held else state)
                     if options.get('quarantined'):
                         log.jobs[sid]['recovery_state'] = 'held'
                     log.owners.setdefault(row['owner_key'], {})['projection_watermark'] = sid

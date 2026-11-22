@@ -443,6 +443,11 @@ class TestSanitizeProviderError:
         assert (
             sanitize_provider_error(OSError('private')) == 'code=unknown diagnostic=[redacted] exception_type=OSError'
         )
+        GoogleAPIError = type('GoogleAPIError', (Exception,), {'status_code': 400})
+        assert (
+            sanitize_provider_error(GoogleAPIError('Bearer private'))
+            == 'code=400 diagnostic=[redacted] exception_type=GoogleAPIError'
+        )
 
     def test_unknown_exception_type_maps_other(self):
         VictimError = type('VictimPrivateError', (Exception,), {})

@@ -53,6 +53,7 @@ from utils.metrics import (
     OMI_CONVERSATION_FINALIZATION_DEAD_LETTER_TOTAL,
     register_listen_finalization_summary_metrics,
 )
+from database import finalization_due_marker_sweep as due_marker_sweep
 from utils.observability.fallback import record_fallback
 from utils.observability.finalization import finalization_diagnostic_id
 from utils.observability.journeys import (
@@ -231,6 +232,17 @@ def reconcile_listen_finalization_jobs(
     if not replay_enabled() or not is_listen_finalization_tasks_configured():
         _publish_job_metrics(firestore_client=firestore_client)
         return result
+
+    # Before the candidate page is read, so a row restored to due is replayed in this pass.
+    try:
+        due_markers = due_marker_sweep.remark_missing_due_markers(firestore_client=firestore_client)
+    except Exception:
+        logger.exception('listen finalization due-marker sweep failed')
+        due_markers = {'remarked': 0, 'skipped': 0, 'error': 1}
+    for outcome, count in due_markers.items():
+        due_marker_sweep.count_sweep_outcome(outcome, count)
+    if due_markers['remarked']:
+        logger.warning('event=listen_finalization_due_marker_sweep remarked=%s', due_markers['remarked'])
 
     oldest_overdue_age = 0.0
     try:
@@ -698,12 +710,17 @@ def reconcile_abandoned_byok_finalization_jobs(limit: int = 100, *, firestore_cl
 
 def _normalize_dead_letter_cause(cause: str) -> str:
     """Map any live failure code onto the closed counter/log cause vocabulary."""
+    if cause in {'deterministic_processing_failed', 'transient_processing_failed'}:
+        return 'processing_failed'
     return cause if cause in FINALIZATION_DEAD_LETTER_CAUSES else 'unknown'
 
 
 def _terminal_failure_row_code(failure_code: str) -> str:
     """Preserve the conversation retry vocabulary for every terminal owner."""
-    if failure_code in SMART_MERGE_INCOMPLETE_CODES:
+    if failure_code in SMART_MERGE_INCOMPLETE_CODES or failure_code in {
+        'deterministic_processing_failed',
+        'transient_processing_failed',
+    }:
         return 'processing_failed'
     if failure_code in {'invalid_job', 'worker_failed'}:
         return 'final_attempt_failed'

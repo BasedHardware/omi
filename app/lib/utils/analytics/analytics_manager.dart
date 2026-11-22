@@ -38,7 +38,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 import 'package:omi/utils/debugging/crashlytics_manager.dart';
 import 'package:omi/services/telemetry/client_telemetry.dart';
-import 'package:omi/services/telemetry/client_telemetry_flags.dart';
 import 'package:omi/utils/analytics/background_checkpoint_store.dart';
 
 part 'analytics_flag_reader.dart';
@@ -830,14 +829,8 @@ class AnalyticsManager {
     const TypedEvents().emit(SignInStarted(provider: value));
   }
 
-  void signInFailed(String provider, {Object? error, bool cancelled = false}) {
-    final value = signInFailedProvider(provider);
-    if (value == null) return;
-    const TypedEvents().emit(SignInFailed(
-      provider: value,
-      errorClass: cancelled || error == null ? SignInFailedErrorClass.cancelled : classifySignInFailure(error),
-    ));
-  }
+  void signInFailed(String provider, {Object? error, bool cancelled = false}) =>
+      signInFailureEvents(provider, error: error, cancelled: cancelled).forEach(const TypedEvents().emit);
 
   void onboardingPermissionResult({
     required OnboardingPermissionResultPermission permission,
@@ -1229,7 +1222,8 @@ class AnalyticsManager {
   }
 
   void deviceSessionEnded({required BtDevice device, required Duration duration, String? reason, int? hciReasonCode}) {
-    if (ClientTelemetryFlags.posthogRetirementEnabled) return;
+    // The migrated device_session family has no firmware/model dimensions.
+    // Retain this event until it can preserve fleet adoption measurements.
     final properties = <String, Object>{
       'duration_seconds': duration.inMilliseconds / Duration.millisecondsPerSecond,
       'reason': _knownDeviceValue(reason ?? ''),
@@ -1251,6 +1245,8 @@ class AnalyticsManager {
   /// the analytics channel; hashed identity is the join key.
   static Map<String, Object> _deviceConnectionEventProperties(BtDevice device) => {
         'type': device.type.name,
+        'firmware_revision': _knownDeviceValue(device.firmwareRevision),
+        'model': _knownDeviceValue(device.modelNumber),
         'device_vendor': device.type.analyticsVendor,
         'hardware_family': DeviceUtils.analyticsHardwareFamily(device),
         ..._deviceIdentityProperties(device),

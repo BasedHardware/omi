@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 import 'package:share_plus/share_plus.dart';
 
 import 'package:omi/backend/http/api/referrals.dart';
@@ -8,7 +9,6 @@ import 'package:omi/pages/apps/widgets/omi_external_browser_page.dart';
 import 'package:omi/services/auth_service.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
-import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 
 /// A request owns its authenticated session until the link is used, not just
@@ -180,54 +180,113 @@ class _ReferralPageState extends State<ReferralPage> with WidgetsBindingObserver
     }
   }
 
-  Widget _rewardRow({required int start, required int need, required String title, required String detail}) {
+  Widget _milestone({required int start, required int need, required String title, required String detail}) {
     final campaign = _campaign!;
     final count = (campaign.milestoneProgress - start).clamp(0, need);
     final cumulative = start == 0 ? 2 : 5;
     final earned = count >= need || campaign.claimedMonths >= cumulative;
+    final last = start != 0;
     // One claim takes every claimable month, so the pill sits on the first unclaimed earned row.
     final claimable = campaign.enabled &&
         campaign.claimableMonths > 0 &&
         earned &&
         campaign.claimedMonths < cumulative &&
         (start == 0 || campaign.claimedMonths >= 2);
-    return Padding(
-      padding: const EdgeInsets.all(OmiSpacing.md),
-      child: Row(children: [
-        Container(
-          key: Key('referral-reward-${start + need}${earned ? '-earned' : ''}'),
-          width: 24,
-          height: 24,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: earned ? OmiColors.accent : null,
-            border: Border.all(color: earned ? OmiColors.accent : OmiColors.surface3, width: 2),
-          ),
-          child: earned ? Icon(Icons.check, size: 14, color: OmiColors.onAccent) : null,
-        ),
-        const SizedBox(width: OmiSpacing.sm),
-        Expanded(
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(title, style: OmiType.callout.copyWith(fontWeight: FontWeight.w600)),
+    // At large text a pill beside the copy leaves too narrow a column and breaks words, so it moves under the detail.
+    final bodySize = OmiType.body.fontSize!;
+    final stackClaim = MediaQuery.textScalerOf(context).scale(bodySize) > bodySize * 1.3;
+    final claim = OmiButton(
+        key: const Key('referral-claim'),
+        label: context.l10n.referralClaimShort,
+        size: OmiButtonSize.compact,
+        isLoading: _busy,
+        onPressed: _busy ? null : _claim);
+    return IntrinsicHeight(
+      child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        SizedBox(
+          width: 26,
+          child: Column(children: [
             const SizedBox(height: 2),
-            Text(detail, style: OmiType.subhead.copyWith(color: OmiColors.textTertiary)),
+            Container(
+              key: Key('referral-reward-${start + need}${earned ? '-earned' : ''}'),
+              width: 26,
+              height: 26,
+              decoration: earned ? BoxDecoration(shape: BoxShape.circle, color: OmiColors.accent) : null,
+              child: earned
+                  ? Icon(Icons.check, size: 15, color: OmiColors.onAccent)
+                  : CustomPaint(painter: _DashedCircle(OmiColors.surface3)),
+            ),
+            if (!last) Expanded(child: Center(child: Container(width: 2, color: OmiColors.surface3))),
           ]),
         ),
-        const SizedBox(width: OmiSpacing.xs),
-        if (claimable)
-          OmiButton(
-              key: const Key('referral-claim'),
-              label: context.l10n.referralClaimShort,
-              size: OmiButtonSize.compact,
-              isLoading: _busy,
-              onPressed: _busy ? null : _claim)
-        else
-          Text('$count/$need',
-              style: OmiType.subhead
-                  .copyWith(color: OmiColors.textTertiary, fontFeatures: const [FontFeature.tabularFigures()])),
+        const SizedBox(width: OmiSpacing.md),
+        Expanded(
+          child: Padding(
+            padding: EdgeInsets.only(bottom: last ? 0 : OmiSpacing.xl),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(title, style: OmiType.body),
+              const SizedBox(height: 2),
+              Text(detail, style: OmiType.body.copyWith(color: OmiColors.textTertiary)),
+              if (claimable && stackClaim) ...[const SizedBox(height: OmiSpacing.sm), claim],
+            ]),
+          ),
+        ),
+        if (claimable && !stackClaim) Align(alignment: Alignment.topCenter, child: claim),
       ]),
     );
   }
+
+  // One copy button for assistive tech: the QR and avatar are decorative, and qr_flutter's own
+  // label is hardcoded English.
+  Widget _qrCard() => Builder(builder: (anchor) {
+        final copy = _busy ? null : () => _useLink(share: false, anchor: anchor);
+        return Semantics(
+          key: const Key('referral-copy'),
+          button: true,
+          enabled: copy != null,
+          label: context.l10n.copyLink,
+          onTap: copy,
+          excludeSemantics: true,
+          child: GestureDetector(
+            onTap: copy,
+            child: Container(
+              key: const Key('referral-link'),
+              padding: const EdgeInsets.all(OmiSpacing.md),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: OmiRadius.lgAll,
+                boxShadow: [
+                  BoxShadow(color: Colors.black.withValues(alpha: 0.08), blurRadius: 24, offset: const Offset(0, 6))
+                ],
+              ),
+              child: Stack(alignment: Alignment.center, children: [
+                QrImageView(
+                  key: ValueKey('referral-qr:$_link'),
+                  data: _link!,
+                  size: 204,
+                  padding: EdgeInsets.zero,
+                  backgroundColor: Colors.white,
+                  errorCorrectionLevel: QrErrorCorrectLevel.M,
+                  eyeStyle: const QrEyeStyle(eyeShape: QrEyeShape.square, color: Colors.black),
+                  dataModuleStyle:
+                      const QrDataModuleStyle(dataModuleShape: QrDataModuleShape.circle, color: Colors.black),
+                ),
+                Container(
+                  width: 60,
+                  height: 60,
+                  padding: const EdgeInsets.all(5),
+                  decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
+                  child: Container(
+                    // The QR card stays white in dark mode, so the badge uses the light palette.
+                    decoration: BoxDecoration(color: OmiPalette.light.surface2, shape: BoxShape.circle),
+                    child: Icon(Icons.account_circle, size: 30, color: OmiPalette.light.textSecondary),
+                  ),
+                ),
+              ]),
+            ),
+          ),
+        );
+      });
 
   @override
   void dispose() {
@@ -256,90 +315,114 @@ class _ReferralPageState extends State<ReferralPage> with WidgetsBindingObserver
     }
     final campaign = _campaign!;
     return Scaffold(
-      backgroundColor: OmiColors.surface0,
-      appBar: AppBar(
-          leading: const OmiBackButton(), title: Text(l10n.referralProgram), backgroundColor: OmiColors.surface0),
-      body: SafeArea(
-        child: ListView(
-          padding: const EdgeInsets.fromLTRB(OmiSpacing.lg, OmiSpacing.xs, OmiSpacing.lg, OmiSpacing.xl),
-          children: [
-            Center(
-              child: Container(
-                width: 120,
-                height: 120,
-                decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.xlAll),
-                child: Icon(Icons.card_giftcard_outlined, size: 52, color: OmiColors.textPrimary),
-              ),
+      backgroundColor: OmiColors.surface1,
+      // Share sits in the bottom bar slot, so the Scaffold floats every toast above it at any text
+      // size (UX contract §6); a copy confirmation or error never covers it.
+      bottomNavigationBar: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(OmiSpacing.lg, OmiSpacing.xs, OmiSpacing.lg, OmiSpacing.md),
+          child: Builder(
+            builder: (anchor) => OmiButton(
+              key: const Key('referral-share'),
+              label: l10n.share,
+              icon: Icons.ios_share,
+              expand: true,
+              pill: true,
+              height: 56,
+              maxLines: null,
+              isLoading: _busy,
+              onPressed: _busy ? null : () => _useLink(share: true, anchor: anchor),
             ),
-            const SizedBox(height: OmiSpacing.lg),
-            Text(l10n.referralCampaignTitle.replaceFirst('. ', '.\n'),
-                textAlign: TextAlign.center, style: OmiType.title1.copyWith(height: 1.15)),
-            const SizedBox(height: OmiSpacing.xs),
-            Text(l10n.referralCampaignSubtitle.replaceFirst('. ', '.\n'),
-                textAlign: TextAlign.center,
-                style: OmiType.callout.copyWith(color: OmiColors.textSecondary, height: 1.4)),
-            const SizedBox(height: OmiSpacing.xl),
-            Container(
-              padding: const EdgeInsets.fromLTRB(OmiSpacing.md, OmiSpacing.xxs, OmiSpacing.xxs, OmiSpacing.xxs),
-              decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.lgAll),
-              child: Row(children: [
-                Expanded(
-                  child: Text(referralShortLink(_link!),
-                      key: const Key('referral-link'),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: OmiType.subhead.copyWith(color: OmiColors.textSecondary)),
-                ),
-                Builder(
-                    builder: (anchor) => OmiButton.secondary(
-                          key: const Key('referral-copy'),
-                          label: l10n.copy,
-                          size: OmiButtonSize.compact,
-                          onPressed: _busy ? null : () => _useLink(share: false, anchor: anchor),
-                        )),
-              ]),
-            ),
-            const SizedBox(height: OmiSpacing.sm),
-            Builder(
-                builder: (anchor) => OmiButton(
-                      key: const Key('referral-share'),
-                      label: l10n.referralShareInvite,
-                      onPressed: _busy ? null : () => _useLink(share: true, anchor: anchor),
-                      expand: true,
-                    )),
-            const SizedBox(height: OmiSpacing.xl),
-            Padding(
-              padding: const EdgeInsets.only(left: OmiSpacing.xxs, bottom: OmiSpacing.xs),
-              child: Text(l10n.referralYourRewards.toUpperCase(),
-                  style: OmiType.footnote
-                      .copyWith(color: OmiColors.textTertiary, fontWeight: FontWeight.w600, letterSpacing: 0.4)),
-            ),
-            Container(
-              decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.lgAll),
-              child: Column(children: [
-                _rewardRow(
-                    start: 0, need: 2, title: l10n.referralRewardFirstTitle, detail: l10n.referralRewardFirstDetail),
-                Divider(height: 1, thickness: 1, color: OmiColors.border),
-                _rewardRow(
-                    start: 2, need: 3, title: l10n.referralRewardSecondTitle, detail: l10n.referralRewardSecondDetail),
-              ]),
-            ),
-            if (campaign.rewardStatus == 'pending_paid_subscription') ...[
-              const SizedBox(height: OmiSpacing.xs),
-              Text(l10n.referralRewardPending, style: OmiType.footnote.copyWith(color: OmiColors.textSecondary)),
-            ],
-            const SizedBox(height: OmiSpacing.xxl),
-            Center(
-              child: TextButton(
-                key: const Key('referral-affiliate'),
-                onPressed: () => routeToPage(context, _affiliate(context)),
-                child: Text('${l10n.referralAffiliate} ›',
-                    style: OmiType.subhead.copyWith(color: OmiColors.textSecondary)),
-              ),
-            ),
-          ],
+          ),
         ),
+      ),
+      body: SafeArea(
+        bottom: false,
+        child: Column(children: [
+          Align(
+            alignment: Alignment.centerRight,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(0, OmiSpacing.xs, OmiSpacing.md, 0),
+              child: Material(
+                color: OmiColors.surface1,
+                shape: const CircleBorder(),
+                elevation: 3,
+                shadowColor: Colors.black.withValues(alpha: 0.25),
+                child: IconButton(
+                  key: const Key('referral-close'),
+                  tooltip: MaterialLocalizations.of(context).closeButtonTooltip,
+                  icon: Icon(Icons.close, color: OmiColors.textPrimary),
+                  onPressed: () => Navigator.of(context).maybePop(),
+                ),
+              ),
+            ),
+          ),
+          Expanded(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(OmiSpacing.lg, OmiSpacing.xs, OmiSpacing.lg, OmiSpacing.xl),
+              child: Column(children: [
+                Center(child: _qrCard()),
+                const SizedBox(height: OmiSpacing.xxl),
+                Text(l10n.referralCampaignTitle.replaceFirst('. ', '.\n'),
+                    textAlign: TextAlign.center,
+                    style: OmiType.largeTitle.copyWith(height: 1.12, letterSpacing: -0.6, fontWeight: FontWeight.w800)),
+                const SizedBox(height: OmiSpacing.md),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.lg),
+                  child: Text(l10n.referralCampaignSubtitle,
+                      textAlign: TextAlign.center,
+                      style: OmiType.body.copyWith(color: OmiColors.textTertiary, height: 1.45)),
+                ),
+                const SizedBox(height: OmiSpacing.xl + OmiSpacing.md),
+                Container(
+                  padding: const EdgeInsets.fromLTRB(OmiSpacing.xl, OmiSpacing.xl, OmiSpacing.lg, OmiSpacing.xl),
+                  decoration: BoxDecoration(color: OmiColors.surface0, borderRadius: OmiRadius.xlAll),
+                  child: Column(children: [
+                    _milestone(
+                        start: 0,
+                        need: 2,
+                        title: l10n.referralRewardFirstTitle,
+                        detail: l10n.referralRewardFirstDetail),
+                    _milestone(
+                        start: 2,
+                        need: 3,
+                        title: l10n.referralRewardSecondTitle,
+                        detail: l10n.referralRewardSecondDetail),
+                  ]),
+                ),
+                if (campaign.rewardStatus == 'pending_paid_subscription') ...[
+                  const SizedBox(height: OmiSpacing.sm),
+                  Text(l10n.referralRewardPending,
+                      textAlign: TextAlign.center, style: OmiType.footnote.copyWith(color: OmiColors.textSecondary)),
+                ],
+              ]),
+            ),
+          ),
+        ]),
       ),
     );
   }
+}
+
+class _DashedCircle extends CustomPainter {
+  const _DashedCircle(this.color);
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2;
+    final rect = Offset.zero & size;
+    const dashes = 12;
+    const sweep = 2 * 3.141592653589793 / dashes;
+    for (var i = 0; i < dashes; i++) {
+      canvas.drawArc(rect.deflate(1), i * sweep, sweep * 0.6, false, paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(_DashedCircle old) => old.color != color;
 }

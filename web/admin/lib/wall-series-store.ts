@@ -168,8 +168,45 @@ function storeOver(backend: Backend): SeriesStore {
 
 const COLLECTION = "admin_stats_payload_cache";
 // Same `{payload, freshAt}` shape as lib/payload-cache.ts docs.
-const decode = (data: { payload?: string } | undefined) =>
-  data?.payload ? JSON.parse(data.payload) : null;
+/** A stored leg payload that does not parse (truncated or corrupt write) is
+ * treated as absent, so the leg refills from its sources instead of throwing
+ * out of the series route. */
+export function decodeStoredPayload(data: { payload?: string } | undefined) {
+  if (!data?.payload) return null;
+  try {
+    return JSON.parse(data.payload);
+  } catch {
+    console.warn(
+      JSON.stringify({
+        event: "wall_series_store_decode",
+        outcome: "discarded",
+      })
+    );
+    return null;
+  }
+}
+/** Lease docs fail closed: an existing lease doc whose payload is missing,
+ * empty or unparseable throws, so `acquire` reports "unavailable" instead of
+ * treating corrupt lease state as free. Callers only decode existing docs.
+ * Leg docs stay recoverable through decodeStoredPayload. */
+export function decodeStoredDoc(
+  key: string,
+  data: { payload?: string } | undefined
+) {
+  if (key.startsWith(`${STORE_PREFIX}:lease:`)) {
+    if (!data?.payload)
+      throw new SyntaxError("wall-series lease doc has no payload");
+    const lease = JSON.parse(data.payload);
+    if (
+      typeof lease?.holder !== "string" ||
+      typeof lease?.token !== "string" ||
+      !Number.isFinite(lease?.until)
+    )
+      throw new SyntaxError("wall-series lease doc has an invalid shape");
+    return lease as Lease;
+  }
+  return decodeStoredPayload(data);
+}
 const encode = (value: unknown) => ({
   payload: JSON.stringify(value),
   freshAt: Date.now(),
@@ -179,7 +216,7 @@ export const firestoreSeriesStore: SeriesStore = storeOver({
   async get(key) {
     const { getDb } = await import("@/lib/firebase/admin");
     const snap = await getDb().collection(COLLECTION).doc(key).get();
-    return snap.exists ? decode(snap.data()) : null;
+    return snap.exists ? decodeStoredDoc(key, snap.data()) : null;
   },
   async transact(fn) {
     const { getDb } = await import("@/lib/firebase/admin");
@@ -189,7 +226,7 @@ export const firestoreSeriesStore: SeriesStore = storeOver({
       fn({
         get: async (key) => {
           const snap = await t.get(ref(key));
-          return snap.exists ? decode(snap.data()) : null;
+          return snap.exists ? decodeStoredDoc(key, snap.data()) : null;
         },
         set: (key, value) => void t.set(ref(key), encode(value)),
         delete: (key) => void t.delete(ref(key)),

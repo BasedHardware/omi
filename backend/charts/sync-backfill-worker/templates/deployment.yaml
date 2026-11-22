@@ -19,7 +19,12 @@ spec:
     matchLabels: {app.kubernetes.io/name: sync-backfill-worker, app.kubernetes.io/instance: {{ .Release.Name }}}
   template:
     metadata:
-      labels: {app.kubernetes.io/name: sync-backfill-worker, app.kubernetes.io/instance: {{ .Release.Name }}}
+      labels:
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+        app.kubernetes.io/name: sync-backfill-worker
+        app.kubernetes.io/instance: {{ .Release.Name }}
     spec:
       serviceAccountName: {{ .Values.serviceAccount.name }}
       terminationGracePeriodSeconds: 1500
@@ -34,6 +39,10 @@ spec:
           envFrom:
             - secretRef: {name: {{ required "complete backend-sync-backfill runtime secret required" .Values.runtimeSecret }}}
           env:
+            # Immutable rollout exporter identity, including supervised GPU children.
+            - name: ROLLOUT_POD_TEMPLATE_HASH
+              valueFrom:
+                fieldRef: {fieldPath: "metadata.labels['pod-template-hash']"}
             - name: BATCH_FINAL_PASS_ENABLED
               valueFrom:
                 configMapKeyRef:

@@ -46,8 +46,9 @@ let package = Package(
     .package(url: "https://github.com/PostHog/posthog-ios.git", from: "3.0.0"),
     .package(url: "https://github.com/groue/GRDB.swift.git", from: "6.24.0"),
     .package(url: "https://github.com/sparkle-project/Sparkle", from: "2.9.0"),
-    .package(
-      url: "https://github.com/microsoft/onnxruntime-swift-package-manager.git", from: "1.20.0"),
+    // Vendored: the upstream GitHub repo returns 404 since 2026-11-18. See
+    // ../vendor/onnxruntime-swift-package-manager/VENDORED.md.
+    .package(path: "../vendor/onnxruntime-swift-package-manager"),
     .package(
       url: "https://github.com/FluidInference/FluidAudio.git",
       revision: "19600a485baa4998812e4654b70d2bab8f2c9949"

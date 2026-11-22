@@ -90,6 +90,8 @@ void main() {
     }
     expect(rows.fold<int>(0, (n, w) => n + w.reads), 0, reason: 'progress/selectors never scan history');
     rows.last.status = WalStatus.uploaded;
+    // The upload paths stamp uploadedAt; an unstamped handle is a stale one.
+    rows.last.uploadedAt = DateTime.now().millisecondsSinceEpoch ~/ 1000;
     await p.refreshWals();
     expect(rows.take(rows.length - 1).fold<int>(0, (n, w) => n + w.reads), 0,
         reason: 'one in-place mutation never revisits the unchanged history');

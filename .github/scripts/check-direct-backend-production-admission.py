@@ -12,6 +12,10 @@ WORKFLOWS = (
     Path(".github/workflows/gcp_llm_gateway.yml"),
 )
 CHECKOUT = "ref: ${{ github.event.inputs.environment == 'prod' && 'main' || github.event.inputs.branch }}"
+PUSHER_WORKFLOW = Path(".github/workflows/gcp_backend_pusher.yml")
+PUSHER_CHECKOUT = (
+    "ref: ${{ github.event.inputs.environment == 'prod' && github.workflow_sha || github.event.inputs.branch }}"
+)
 ORIGIN_MAIN_FETCH = "git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main"
 ANCESTRY_GUARD = 'git merge-base --is-ancestor "$CHECKED_OUT_SHA" origin/main'
 HEAD_IDENTITY = "CHECKED_OUT_SHA=$(git rev-parse HEAD)"
@@ -27,6 +31,8 @@ CONTROL_CHECKOUT = (
 )
 GATEWAY_WORKFLOW = Path(".github/workflows/gcp_llm_gateway.yml")
 LISTEN_WORKFLOW = Path(".github/workflows/gcp_backend_listen_helm.yml")
+LISTEN_EVIDENCE_CHECKOUT = "ref: ${{ inputs.mode == 'evidence' && inputs.expected_sha || (github.event.inputs.environment == 'prod' && 'main' || github.event.inputs.branch) }}"
+LISTEN_EVIDENCE_CONTROL = CONTROL_CHECKOUT.replace('.github/firestore-workflow', '.github/listen-evidence-control')
 LISTEN_EXPORTER_CHECKOUT = "ref: ${{ needs.helm-upgrade.outputs.checked_out_sha }}"
 GATEWAY_RELEASE_SHA_INPUT = (
     "      release_sha:\n"
@@ -130,7 +136,8 @@ def validate(root: Path) -> list[str]:
     for relative in WORKFLOWS:
         path = root / relative
         text = path.read_text(encoding="utf-8") if path.exists() else ""
-        if CHECKOUT not in text:
+        expected_checkout = PUSHER_CHECKOUT if relative == PUSHER_WORKFLOW else LISTEN_EVIDENCE_CHECKOUT if relative == LISTEN_WORKFLOW else CHECKOUT
+        if expected_checkout not in text:
             errors.append(f"{relative} must reject caller refs for production checkout")
         if ORIGIN_MAIN_FETCH not in text or ANCESTRY_GUARD not in text:
             errors.append(f"{relative} must prove production source is on fresh origin/main")
@@ -141,6 +148,12 @@ def validate(root: Path) -> list[str]:
         if "${GITHUB_SHA::7}" in text:
             errors.append(f"{relative} must not label built source with GITHUB_SHA")
         source_checkouts = text.count("uses: actions/checkout@v7") - text.count(CONTROL_CHECKOUT)
+        if relative == LISTEN_WORKFLOW:
+            # A separate immutable control checkout is not an application source.
+            # Recognize only the exact path/ref/nonpersistent-credentials contract.
+            source_checkouts -= text.count(LISTEN_EVIDENCE_CONTROL)
+            if text.count(LISTEN_EVIDENCE_CONTROL) != 1:
+                errors.append(f"{relative} evidence controls must use immutable workflow source in their isolated path")
         expected_checkouts = 2 if relative == LISTEN_WORKFLOW else 1
         if source_checkouts != expected_checkouts:
             errors.append(f"{relative} must not check out a second source after production admission")
@@ -166,6 +179,28 @@ def validate(root: Path) -> list[str]:
         if relative == GATEWAY_WORKFLOW:
             errors.extend(validate_gateway_release_admission(text))
             errors.extend(validate_gateway_break_glass_hatch(text))
+        if relative == PUSHER_WORKFLOW:
+            for fragment in (
+                '"$GITHUB_REF" != refs/heads/main || "$GITHUB_SHA" != "$WORKFLOW_CONTROL_SHA"',
+                'BRANCH_INPUT: ${{ github.event.inputs.branch }}',
+                'if [[ "$BRANCH_INPUT" == main ]]; then',
+                'PINNED_PUSHER_RELEASE_SHA=\'\'',
+                '[[ ! "$BRANCH_INPUT" =~ ^[0-9a-f]{40}$ || "$BRANCH_INPUT" == "0000000000000000000000000000000000000000" ]]',
+                'backend/scripts/verify_pusher_promotion_evidence.py --admit-source',
+                '--release-sha "$PINNED_PUSHER_RELEASE_SHA" --workflow-sha "$WORKFLOW_CONTROL_SHA"',
+                'if [[ -n "$PINNED_PUSHER_RELEASE_SHA" ]]; then',
+                'actions/workflows/release-eligibility.yml/runs?event=push&branch=main&status=completed&head_sha=${DEPLOY_SHA}',
+                '.github/scripts/verify_backend_release_admission.py',
+                '--workflow-runs "$PROOF" --require-first-attempt',
+                'git checkout --detach "$DEPLOY_SHA"',
+                '"$CHECKED_OUT_SHA" != "$DEPLOY_SHA"',
+                'echo "PINNED_PUSHER_RELEASE_SHA=$PINNED_PUSHER_RELEASE_SHA" >> "$GITHUB_ENV"',
+                '--expected-qualification-source-sha "$PINNED_PUSHER_RELEASE_SHA"',
+            ):
+                if fragment not in text:
+                    errors.append(f"{relative} is missing trusted pinned-source admission: {fragment}")
+            if text.count('--expected-canary-workflow-sha "$GITHUB_SHA"') != 2:
+                errors.append(f"{relative} must bind canary and final run identity to trusted GITHUB_SHA")
     return errors
 
 

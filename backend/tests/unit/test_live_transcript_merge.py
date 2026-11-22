@@ -151,13 +151,13 @@ def test_retry_replans_from_new_receipt_without_mutating_input(world, monkeypatc
         db.assign_conversation_speaker('u', 'c', person_id='new', segment_ids=['a'], firestore_client=store)
         return call(client.transaction())
 
-    original_run = db.run_transactional
+    original_run = db.run_preloaded_transactional
 
     def once_then_retry(client, call):
-        monkeypatch.setattr(db, 'run_transactional', original_run)
+        monkeypatch.setattr(db, 'run_preloaded_transactional', original_run)
         return retry(client, call)
 
-    monkeypatch.setattr(db, 'run_transactional', once_then_retry)
+    monkeypatch.setattr(db, 'run_preloaded_transactional', once_then_retry)
     result = db.update_conversation_segments('u', 'c', [], live_segments=fresh)
     assert attempts[0].removed_ids == ['b']
     assert result.removed_ids == []

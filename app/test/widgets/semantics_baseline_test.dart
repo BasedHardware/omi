@@ -617,7 +617,7 @@ class _StubDeviceProvider extends ChangeNotifier implements DeviceProvider {
   BtDevice? get pairedDevice => null;
 
   @override
-  Future<void> getDeviceInfo() async {}
+  Future<void> getDeviceInfo({bool forceRefresh = false}) async {}
 
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);

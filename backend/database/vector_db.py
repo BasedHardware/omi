@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import json
+import importlib
 import logging
 import os
+import time
 from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -13,6 +15,7 @@ from pinecone import Pinecone
 
 from database import projection_repair
 from database.pinecone_partition_index import owner_index
+from database.summary_vector_transport import SummaryVectorIndex
 from database._client import data_plane_db as default_db_client
 from database.legal_holds import external_write_fence
 
@@ -28,12 +31,14 @@ except ImportError:
 
 try:
     from database.legal_holds import (
+        DestructiveGateTakeover,
         DestructiveOperationInProgress,
         LegalHoldActive,
         LegalHoldAuthorityUnavailable,
     )
 except ImportError:
     # Route tests stub legal_holds with the gate helpers and omit the exception types.
+    DestructiveGateTakeover = None
     DestructiveOperationInProgress = None
     LegalHoldActive = None
     LegalHoldAuthorityUnavailable = None
@@ -56,6 +61,13 @@ from utils.observability.fallback import record_fallback
 from utils.metrics import OMI_CONVERSATION_SUMMARY_VECTOR_UPSERTS_TOTAL
 
 logger = logging.getLogger(__name__)
+
+
+def embed_query_once(text: str, *, deadline_monotonic: float) -> List[float]:
+    """Load the optional summary provider only on its isolated request path."""
+    provider = importlib.import_module('utils.llm.summary_embeddings')
+    return provider.embed_query_once(text, deadline_monotonic=deadline_monotonic)
+
 
 R = TypeVar("R")
 
@@ -552,7 +564,14 @@ def upsert_memory_vectors_batch(uid: str, items: List[Dict[str, Any]]) -> int:
 
 
 def find_similar_memories(
-    uid: str, content: str, threshold: float = 0.85, limit: int = 5, subject_entity_id: str | None = None
+    uid: str,
+    content: str,
+    threshold: float = 0.85,
+    limit: int = 5,
+    subject_entity_id: str | None = None,
+    *,
+    timeout_seconds: Optional[float] = None,
+    owner_summary: bool = False,
 ) -> List[Dict[str, Any]]:
     """
     Find memories similar to the given content.
@@ -560,19 +579,37 @@ def find_similar_memories(
     Used for duplicate detection and semantic search.
     """
     if index is None:
+        if timeout_seconds is not None:
+            raise RuntimeError('budgeted historical vector provider unavailable')
         logger.warning('Pinecone index not initialized, skipping similarity search')
         return []
 
-    vector = embeddings.embed_query(content)
+    deadline = time.monotonic() + timeout_seconds if timeout_seconds is not None else None
+    if timeout_seconds is not None and timeout_seconds <= 0:
+        raise TimeoutError('memory query deadline')
+    if owner_summary and deadline is None:
+        raise ValueError('owner summary requires a deadline')
+    vector = (
+        embed_query_once(content, deadline_monotonic=deadline)
+        if owner_summary and deadline is not None
+        else embeddings.embed_query(content)
+    )
+    options = {}
+    if deadline is not None:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise TimeoutError('memory query deadline')
+        options.update(_request_timeout=remaining, deadline_monotonic=deadline)
     filter_data = build_legacy_memory_vector_filter(uid, subject_entity_id=subject_entity_id)
 
-    xc = owner_index(index, uid, index_name=_pinecone_index_name).query(
+    xc = owner_index(SummaryVectorIndex(index) if owner_summary else index, uid, index_name=_pinecone_index_name).query(
         caller='find_similar_memories',
         vector=vector,
         top_k=limit,
         include_metadata=True,
         filter=filter_data,
         namespace=MEMORIES_NAMESPACE,
+        **options,
     )
 
     results: List[Dict[str, Any]] = []
@@ -669,6 +706,8 @@ def _retry_stale_vector_gate_finish(uid: str, token: str, outcome: str) -> None:
 
     if finish_destructive_operation is None or not token:
         return
+    if DestructiveGateTakeover is None:
+        raise RuntimeError('destructive authority exceptions are unavailable')
     try:
         finish_destructive_operation(
             uid,
@@ -676,6 +715,9 @@ def _retry_stale_vector_gate_finish(uid: str, token: str, outcome: str) -> None:
             token=token,
             outcome=outcome,
         )
+    except DestructiveGateTakeover:
+        # A same-kind peer displaced the token; the caller must see that, not a success count.
+        raise
     except Exception:
         logger.warning('canonical memory vector delete gate finalization retry failed')
 
@@ -720,6 +762,7 @@ def delete_canonical_memory_vectors_by_ids(uid: str, observed: List[tuple]) -> i
         return 0
     if (
         destructive_operation_gate is None
+        or DestructiveGateTakeover is None
         or LegalHoldActive is None
         or LegalHoldAuthorityUnavailable is None
         or DestructiveOperationInProgress is None
@@ -734,6 +777,10 @@ def delete_canonical_memory_vectors_by_ids(uid: str, observed: List[tuple]) -> i
                 namespace=MEMORIES_NAMESPACE,
             )
             provider_deleted = True
+    except DestructiveGateTakeover:
+        # A same-kind peer displaced this token, so the finish is not retried and
+        # the caller must not see a success count for a delete it no longer owns.
+        raise
     except (LegalHoldActive, LegalHoldAuthorityUnavailable, DestructiveOperationInProgress):
         if gate_token is not None:
             _retry_stale_vector_gate_finish(
@@ -764,15 +811,41 @@ def query_memory_vector_candidates(
     mode: SearchMode = SearchMode.default,
     limit: int = 10,
     ledger_kinds: Optional[List[str]] = None,
+    timeout_seconds: Optional[float] = None,
+    owner_summary: bool = False,
 ) -> VectorCandidateQueryResult:
     """Query ns2 for canonical neutral-metadata memory vector candidates."""
     if index is None:
+        if timeout_seconds is not None:
+            raise RuntimeError('budgeted memory vector provider unavailable')
         logger.warning('Pinecone index not initialized, skipping canonical memory vector candidate search')
         return VectorCandidateQueryResult()
 
     bounded_limit = max(1, min(int(limit or 10), 60))
-    vector = embeddings.embed_query(query)
-    if ledger_kinds is not None and mode == SearchMode.default:
+    deadline = time.monotonic() + timeout_seconds if timeout_seconds is not None else None
+    if timeout_seconds is not None and timeout_seconds <= 0:
+        raise TimeoutError('memory query deadline')
+    # The production embedding proxy accepts text only. The caller deadline
+    # bounds waiting; recheck it below before issuing any vector RPC.
+    if owner_summary and deadline is None:
+        raise ValueError('owner summary requires a deadline')
+    vector = (
+        embed_query_once(query, deadline_monotonic=deadline)
+        if owner_summary and deadline is not None
+        else embeddings.embed_query(query)
+    )
+    query_options = {}
+    if deadline is not None:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise TimeoutError('memory query deadline')
+        query_options['_request_timeout'] = remaining
+        query_options['deadline_monotonic'] = deadline
+    if owner_summary:
+        # Owner ruling 2026-11-15: all tiers/subjects inside this account.
+        # Authoritative hydration still removes deleted/rejected/invalidated rows.
+        filter_data = {'$and': [{'uid': {'$eq': uid}}, {'memory_schema_version': {'$exists': True}}]}
+    elif ledger_kinds is not None and mode == SearchMode.default:
         filter_data = build_ledger_memory_vector_filter(uid, ledger_kinds)
     else:
         filter_data = (
@@ -780,7 +853,9 @@ def query_memory_vector_candidates(
             if mode == SearchMode.archive_explicit
             else build_default_memory_vector_filter(uid)
         )
-    response = owner_index(index, uid, index_name=_pinecone_index_name).query(
+    response = owner_index(
+        SummaryVectorIndex(index) if owner_summary else index, uid, index_name=_pinecone_index_name
+    ).query(
         caller='query_memory_vector_candidates',
         vector=vector,
         top_k=bounded_limit,
@@ -788,6 +863,7 @@ def query_memory_vector_candidates(
         include_values=False,
         filter=filter_data,
         namespace=MEMORIES_NAMESPACE,
+        **query_options,
     )
 
     hits: List[SearchVectorHit] = []

@@ -7,11 +7,15 @@ Contract (matches the laptop cron shim, minus laptop-only paths):
              A daily run also reloads up to GAP_FILL_CAP missing settled days in the
              trailing LOOKBACK_DAYS window, so one failed day does not stay a hole.
   * FINOPS_DATE = YYYY-MM-DD loads that settled date only (one-off backfill).
+  * FINOPS_BACKFILL_FROM = YYYY-MM-DD loads through the frontier, oldest first,
+              at most 45 dates, with the same per-date leases. Mutually exclusive
+              with FINOPS_DATE. Remove the env override after the one-off run.
   * overlap = one producer run per date, globally. A GCS lease object
               (``gs://<FINOPS_LOCK_BUCKET>/locks/unit-cost/<date>.lock``) is created
               with a generation precondition; a second concurrent run loses the race
-              and skips that date. A failed run releases its lease so a Cloud Run
-              retry can acquire it.
+              verifies completion before skipping that date. An active lease
+              without completed output returns nonzero so Cloud Run retries.
+              A failed run releases its lease so a retry can acquire it.
   * auth    = ADC of the job's runtime service account (FINOPS_AUTH=cloudrun).
   * failure = non-zero exit so Cloud Run Job reports the execution as failed.
               Child pull stderr is copied onto this process's stderr (Cloud Logging).
@@ -44,6 +48,7 @@ SETTLEMENT_LAG_DAYS = 2
 LOCK_TTL_HOURS = 6  # a crashed run's lease expires; content is just provenance metadata
 LOOKBACK_DAYS = 14
 GAP_FILL_CAP = 3
+BACKFILL_CAP = 45
 SERIES_START = dt.date(2026, 9, 1)
 
 
@@ -158,7 +163,7 @@ def gap_fill_dates(
 
 
 def load_present_days(start: str, end: str) -> set[str] | None:
-    """Days that already have a fully_loaded total. None means discovery failed."""
+    """Days with a completed unit-cost total and matching spend run. None means discovery failed."""
     try:
         from google.cloud import bigquery  # type: ignore[attr-defined]
     except ImportError:
@@ -167,11 +172,14 @@ def load_present_days(start: str, end: str) -> set[str] | None:
     try:
         client = bigquery.Client(project=cloudrun.PROJECT)
         sql = """
-          SELECT DISTINCT FORMAT_DATE('%F', date) AS day
-          FROM `based-hardware.omi_finops.unit_cost_daily`
-          WHERE date BETWEEN @start AND @end
-            AND segment_type = 'total'
-            AND component = 'fully_loaded'
+          SELECT DISTINCT FORMAT_DATE('%F', unit.date) AS day
+          FROM `based-hardware.omi_finops.unit_cost_daily` AS unit
+          JOIN `based-hardware.omi_finops.spend_daily` AS spend
+            ON spend.date = unit.date AND spend.run_id = unit.run_id
+          WHERE unit.date BETWEEN @start AND @end
+            AND spend.date BETWEEN @start AND @end
+            AND unit.segment_type = 'total' AND unit.component = 'fully_loaded'
+            AND spend.source = 'billing_export' AND spend.inputs_settled
         """
         job = client.query(
             sql,
@@ -188,7 +196,15 @@ def load_present_days(start: str, end: str) -> set[str] | None:
         return None
 
 
-def dates_for_run(today: dt.date, present: set[str] | None, explicit: str) -> list[str]:
+def dates_for_run(today: dt.date, present: set[str] | None, explicit: str, backfill_from: str = "") -> list[str]:
+    if backfill_from:
+        if explicit:
+            raise SystemExit("FINOPS_DATE and FINOPS_BACKFILL_FROM are mutually exclusive")
+        start = dt.date.fromisoformat(parse_explicit_date(backfill_from, today))
+        count = (settlement_frontier(today) - start).days + 1
+        if count > BACKFILL_CAP:
+            raise SystemExit("FINOPS_BACKFILL_FROM exceeds %d days; use bounded FINOPS_DATE runs" % BACKFILL_CAP)
+        return [(start + dt.timedelta(days=i)).isoformat() for i in range(count)]
     if explicit:
         return [parse_explicit_date(explicit, today)]
     frontier = settlement_frontier(today).isoformat()
@@ -204,20 +220,25 @@ def main() -> int:
     today = dt.datetime.now(dt.timezone.utc).date()
     identity = cloudrun.assert_runtime_identity()
     explicit = os.environ.get("FINOPS_DATE", "").strip()
+    backfill_from = os.environ.get("FINOPS_BACKFILL_FROM", "").strip()
     present = None
-    if not explicit:
+    if not explicit and not backfill_from:
         frontier = settlement_frontier(today)
         present = load_present_days(
             max(SERIES_START, today - dt.timedelta(days=LOOKBACK_DAYS)).isoformat(),
             frontier.isoformat(),
         )
-    dates = dates_for_run(today, present, explicit)
+    dates = dates_for_run(today, present, explicit, backfill_from)
     sys.stderr.write("finops cloudrun producer: dates=%s runtime_sa=%s\n" % (",".join(dates), identity))
 
     os.environ.setdefault("FINOPS_RUN_ROOT", "/tmp/finops-runs")
     os.environ["FINOPS_AUTH"] = "cloudrun"
 
-    failed = [date for date in dates if run_one(date) != 0]
+    failed = []
+    for date in dates:
+        if run_one(date) != 0:
+            failed.append(date)
+            break  # fail fast; Cloud Run retry resumes from the first unsuccessful lease
     if failed:
         sys.stderr.write("FINOPS FAILED dates: %s\n" % ",".join(failed))
         return 1
@@ -227,8 +248,12 @@ def main() -> int:
 def run_one(date: str) -> int:
     if not acquire_lease(date):
         if not takeover_if_stale(date):
-            sys.stderr.write("another run owns %s; skipping (overlap protection)\n" % date)
-            return 0
+            present = load_present_days(date, date)
+            if present is not None and date in present:
+                sys.stderr.write("already completed %s; skipping (matching settled spend run)\n" % date)
+                return 0
+            sys.stderr.write("another run owns %s; completion unverified, retry required\n" % date)
+            return 1
         sys.stderr.write("took over a stale lease for %s\n" % date)
     rc = subprocess_run(date)
     if rc != 0:
@@ -259,7 +284,7 @@ def subprocess_run(date: str) -> int:
         return p.returncode
     # Successful child warnings would otherwise disappear before Cloud Logging.
     for line in (p.stderr or "").splitlines():
-        if line.startswith("WARNING: Mercury"):
+        if line.startswith("WARNING:"):
             sys.stderr.write(line + "\n")
     if (p.stdout or "").strip():
         sys.stdout.write(p.stdout.strip() + "\n")

@@ -1,0 +1,1358 @@
+[
+  {
+    "uid": "omi-scrape-diarizer-batch-metrics",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Scrape health",
+    "title": "diarizer-batch-metrics scrape health (down/empty)",
+    "condition": "B",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 900,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "(min(up{job=\"diarizer-batch-metrics\"}) < bool 1) + (min(min_over_time(scrape_samples_scraped{job=\"diarizer-batch-metrics\"}[15m])) < bool 1)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [
+                  0
+                ],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "B"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "A",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "B",
+          "type": "reduce"
+        }
+      }
+    ],
+    "updated": "2026-07-15T00:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "KeepLast",
+    "for": "30m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "__dashboardUid__": "omi-resilience-fallbacks",
+      "__panelId__": "6",
+      "summary": "diarizer-batch-metrics scrape targets are down or repeatedly returning empty scrapes for 30m; dependent telemetry may be blind",
+      "threshold": "min up{job=\"diarizer-batch-metrics\"} < 1 or min scrape_samples_scraped{job=\"diarizer-batch-metrics\"} over 15m < 1, sustained 30m",
+      "user_impact": "diarizer-batch-metrics HPA external-metric feeds and batch alerts may go blind; this is not confirmed user impact.",
+      "scope": "Opt-in prod-omi-diarizer-batch release in prod-omi-backend; absence is legitimate and only existing targets are checked.",
+      "verification": "helm ls -n prod-omi-backend to confirm prod-omi-diarizer-batch is installed; then inspect its pods, readiness, target up and scrape sample counts.",
+      "safe_next_action": "If intentionally absent, no action is needed. If installed, verify readiness and metrics discovery before restoring the known-good release or scrape configuration through its documented Helm path."
+    },
+    "labels": {
+      "severity": "warning",
+      "instatus_component": "observability",
+      "alert_identity": "omi-scrape-diarizer-batch-metrics",
+      "component": "observability",
+      "impact": "infrastructure",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "two-lane-lead"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
+    },
+    "record": null
+  },
+  {
+    "uid": "omi-scrape-batch-pipeline-worker-metrics",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Scrape health",
+    "title": "batch-pipeline-worker-metrics scrape health (down/empty)",
+    "condition": "B",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 900,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "(min(up{job=\"batch-pipeline-worker-metrics\"}) < bool 1) + (min(min_over_time(scrape_samples_scraped{job=\"batch-pipeline-worker-metrics\"}[15m])) < bool 1)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [
+                  0
+                ],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "B"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "A",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "B",
+          "type": "reduce"
+        }
+      }
+    ],
+    "updated": "2026-07-15T00:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "KeepLast",
+    "for": "30m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "__dashboardUid__": "omi-resilience-fallbacks",
+      "__panelId__": "6",
+      "summary": "batch-pipeline-worker-metrics scrape targets are down or repeatedly returning empty scrapes for 30m; dependent telemetry may be blind",
+      "threshold": "min up{job=\"batch-pipeline-worker-metrics\"} < 1 or min scrape_samples_scraped{job=\"batch-pipeline-worker-metrics\"} over 15m < 1, sustained 30m",
+      "user_impact": "batch-pipeline-worker-metrics HPA external-metric feeds and batch alerts may go blind; this is not confirmed user impact.",
+      "scope": "Opt-in prod-omi-batch-pipeline-worker release in prod-omi-backend; absence is legitimate and only existing targets are checked.",
+      "verification": "helm ls -n prod-omi-backend to confirm prod-omi-batch-pipeline-worker is installed; then inspect its pods, readiness, target up and scrape sample counts.",
+      "safe_next_action": "If intentionally absent, no action is needed. If installed, verify readiness and metrics discovery before restoring the known-good release or scrape configuration through its documented Helm path."
+    },
+    "labels": {
+      "severity": "warning",
+      "instatus_component": "observability",
+      "alert_identity": "omi-scrape-batch-pipeline-worker-metrics",
+      "component": "observability",
+      "impact": "infrastructure",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "two-lane-lead"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
+    },
+    "record": null
+  },
+  {
+    "uid": "omi-scrape-record-seal-worker-metrics",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Scrape health",
+    "title": "record-seal-worker-metrics scrape health (down/empty)",
+    "condition": "B",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 900,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "(min(up{job=\"record-seal-worker-metrics\"}) < bool 1) + (min(min_over_time(scrape_samples_scraped{job=\"record-seal-worker-metrics\"}[15m])) < bool 1)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [
+                  0
+                ],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "B"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "A",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "B",
+          "type": "reduce"
+        }
+      }
+    ],
+    "updated": "2026-07-15T00:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "KeepLast",
+    "for": "30m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "__dashboardUid__": "omi-resilience-fallbacks",
+      "__panelId__": "6",
+      "summary": "record-seal-worker-metrics scrape targets are down or repeatedly returning empty scrapes for 30m; dependent telemetry may be blind",
+      "threshold": "min up{job=\"record-seal-worker-metrics\"} < 1 or min scrape_samples_scraped{job=\"record-seal-worker-metrics\"} over 15m < 1, sustained 30m",
+      "user_impact": "record-seal-worker-metrics HPA external-metric feeds and batch alerts may go blind; this is not confirmed user impact.",
+      "scope": "Opt-in prod-omi-record-seal-worker release in prod-omi-backend; absence is legitimate and only existing targets are checked.",
+      "verification": "helm ls -n prod-omi-backend to confirm prod-omi-record-seal-worker is installed; then inspect its pods, readiness, target up and scrape sample counts.",
+      "safe_next_action": "If intentionally absent, no action is needed. If installed, verify readiness and metrics discovery before restoring the known-good release or scrape configuration through its documented Helm path."
+    },
+    "labels": {
+      "severity": "warning",
+      "instatus_component": "observability",
+      "alert_identity": "omi-scrape-record-seal-worker-metrics",
+      "component": "observability",
+      "impact": "infrastructure",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "two-lane-lead"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
+    },
+    "record": null
+  },
+  {
+    "uid": "omi-scrape-backend-listen-metrics",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Scrape health",
+    "title": "backend-listen-metrics scrape health (down/absent/empty)",
+    "condition": "B",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 900,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "max(absent(up{job=\"backend-listen-metrics\"}) or (min(up{job=\"backend-listen-metrics\"}) < bool 1)) + ((min(min_over_time(scrape_samples_scraped{job=\"backend-listen-metrics\"}[15m])) or vector(0)) < bool 1)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [
+                  0
+                ],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "B"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "A",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "B",
+          "type": "reduce"
+        }
+      }
+    ],
+    "updated": "2026-07-15T00:00:00Z",
+    "noDataState": "Alerting",
+    "execErrState": "KeepLast",
+    "for": "30m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "__dashboardUid__": "omi-resilience-fallbacks",
+      "__panelId__": "6",
+      "summary": "backend-listen-metrics scrape targets are down, absent or repeatedly returning empty scrapes for 30m; dependent telemetry may be blind",
+      "threshold": "min up{job=\"backend-listen-metrics\"} < 1 or job absent or min scrape_samples_scraped{job=\"backend-listen-metrics\"} over 15m < 1, sustained 30m",
+      "user_impact": "Journey and live-STT alerts and the backend-listen HPA feed may go blind; this is not confirmed user impact.",
+      "scope": "HPA-scaled backend-listen pods in prod-omi-backend.",
+      "verification": "kubectl -n prod-omi-backend get pods -l app.kubernetes.io/name=backend-listen; compare readiness, target up and scrape sample counts.",
+      "safe_next_action": "Verify readiness and capacity first, then use the documented backend-listen scaling or release rollback path."
+    },
+    "labels": {
+      "severity": "warning",
+      "instatus_component": "observability",
+      "alert_identity": "omi-scrape-backend-listen-metrics",
+      "component": "observability",
+      "impact": "infrastructure",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "two-lane-lead"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
+    },
+    "record": null
+  },
+  {
+    "uid": "omi-scrape-pusher-metrics",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Scrape health",
+    "title": "pusher-metrics scrape health (down/absent/empty)",
+    "condition": "B",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 900,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "max(absent(up{job=\"pusher-metrics\"}) or (min(up{job=\"pusher-metrics\"}) < bool 1)) + ((min(min_over_time(scrape_samples_scraped{job=\"pusher-metrics\"}[15m])) or vector(0)) < bool 1)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [
+                  0
+                ],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "B"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "A",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "B",
+          "type": "reduce"
+        }
+      }
+    ],
+    "updated": "2026-07-15T00:00:00Z",
+    "noDataState": "Alerting",
+    "execErrState": "KeepLast",
+    "for": "30m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "__dashboardUid__": "omi-resilience-fallbacks",
+      "__panelId__": "6",
+      "summary": "pusher-metrics scrape targets are down, absent or repeatedly returning empty scrapes for 30m; dependent telemetry may be blind",
+      "threshold": "min up{job=\"pusher-metrics\"} < 1 or job absent or min scrape_samples_scraped{job=\"pusher-metrics\"} over 15m < 1, sustained 30m",
+      "user_impact": "Pusher executor, saturation and queue alerts may go blind; this is not confirmed user impact.",
+      "scope": "Pusher pods in prod-omi-backend.",
+      "verification": "kubectl -n prod-omi-backend get pods -l app.kubernetes.io/name=pusher; compare readiness, target up and scrape sample counts.",
+      "safe_next_action": "Check readiness and metrics-token wiring before restoring known-good scrape configuration or release through the documented rollback path."
+    },
+    "labels": {
+      "severity": "warning",
+      "instatus_component": "observability",
+      "alert_identity": "omi-scrape-pusher-metrics",
+      "component": "observability",
+      "impact": "infrastructure",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "two-lane-lead"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
+    },
+    "record": null
+  },
+  {
+    "uid": "omi-scrape-llm-gateway-metrics",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Scrape health",
+    "title": "llm-gateway-metrics scrape health (down/absent/empty)",
+    "condition": "B",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 900,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "max(absent(up{job=\"llm-gateway-metrics\"}) or (min(up{job=\"llm-gateway-metrics\"}) < bool 1)) + ((min(min_over_time(scrape_samples_scraped{job=\"llm-gateway-metrics\"}[15m])) or vector(0)) < bool 1)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [
+                  0
+                ],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "B"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "A",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "B",
+          "type": "reduce"
+        }
+      }
+    ],
+    "updated": "2026-07-15T00:00:00Z",
+    "noDataState": "Alerting",
+    "execErrState": "KeepLast",
+    "for": "30m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "__dashboardUid__": "omi-resilience-fallbacks",
+      "__panelId__": "6",
+      "summary": "llm-gateway-metrics scrape targets are down, absent or repeatedly returning empty scrapes for 30m; dependent telemetry may be blind",
+      "threshold": "min up{job=\"llm-gateway-metrics\"} < 1 or job absent or min scrape_samples_scraped{job=\"llm-gateway-metrics\"} over 15m < 1, sustained 30m",
+      "user_impact": "Gateway lane and invalid-request alerts may go blind; this is not confirmed user impact.",
+      "scope": "LLM gateway pods in prod-omi-backend.",
+      "verification": "Inspect gateway pods and metrics endpoints in prod-omi-backend; compare readiness, target up and scrape sample counts.",
+      "safe_next_action": "Verify gateway readiness and metrics authentication before restoring known-good gateway scrape configuration through the documented deployment path."
+    },
+    "labels": {
+      "severity": "warning",
+      "instatus_component": "observability",
+      "alert_identity": "omi-scrape-llm-gateway-metrics",
+      "component": "observability",
+      "impact": "infrastructure",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "two-lane-lead"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
+    },
+    "record": null
+  },
+  {
+    "uid": "omi-scrape-dg_engine_metrics",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Scrape health",
+    "title": "dg_engine_metrics scrape health (down/absent/empty)",
+    "condition": "B",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 900,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "max(absent(up{job=\"dg_engine_metrics\"}) or (min(up{job=\"dg_engine_metrics\"}) < bool 1)) + ((min(min_over_time(scrape_samples_scraped{job=\"dg_engine_metrics\"}[15m])) or vector(0)) < bool 1)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [
+                  0
+                ],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "B"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "A",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "B",
+          "type": "reduce"
+        }
+      }
+    ],
+    "updated": "2026-07-15T00:00:00Z",
+    "noDataState": "Alerting",
+    "execErrState": "KeepLast",
+    "for": "30m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "__dashboardUid__": "omi-resilience-fallbacks",
+      "__panelId__": "6",
+      "summary": "dg_engine_metrics scrape targets are down, absent or repeatedly returning empty scrapes for 30m; dependent telemetry may be blind",
+      "threshold": "min up{job=\"dg_engine_metrics\"} < 1 or job absent or min scrape_samples_scraped{job=\"dg_engine_metrics\"} over 15m < 1, sustained 30m",
+      "user_impact": "Self-hosted Deepgram engine_stream_latency alerts may go blind; this is not confirmed user impact.",
+      "scope": "Deepgram engine metrics endpoints in prod-omi-dg-self-hosted.",
+      "verification": "kubectl -n prod-omi-dg-self-hosted get pods; inspect *-metrics service endpoints and port metrics, target up and scrape sample counts.",
+      "safe_next_action": "Confirm the self-hosted engine release is expected before restoring its known-good metrics service or scrape configuration; check scheduling before adding capacity."
+    },
+    "labels": {
+      "severity": "warning",
+      "instatus_component": "observability",
+      "alert_identity": "omi-scrape-dg_engine_metrics",
+      "component": "observability",
+      "impact": "infrastructure",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "two-lane-lead"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
+    },
+    "record": null
+  },
+  {
+    "uid": "omi-scrape-stackdriver-metrics",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Scrape health",
+    "title": "prometheus-stackdriver-metrics scrape health (down/absent/empty)",
+    "condition": "B",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 900,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "max(absent(up{job=\"prometheus-stackdriver-metrics\"}) or (min(up{job=\"prometheus-stackdriver-metrics\"}) < bool 1)) + ((min(min_over_time(scrape_samples_scraped{job=\"prometheus-stackdriver-metrics\"}[15m])) or vector(0)) < bool 1)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [
+                  0
+                ],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "B"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "A",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "B",
+          "type": "reduce"
+        }
+      }
+    ],
+    "updated": "2026-07-15T00:00:00Z",
+    "noDataState": "Alerting",
+    "execErrState": "KeepLast",
+    "for": "30m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "__dashboardUid__": "omi-resilience-fallbacks",
+      "__panelId__": "6",
+      "summary": "prometheus-stackdriver-metrics scrape targets are down, absent or repeatedly returning empty scrapes for 30m; dependent telemetry may be blind",
+      "threshold": "min up{job=\"prometheus-stackdriver-metrics\"} < 1 or job absent or min scrape_samples_scraped{job=\"prometheus-stackdriver-metrics\"} over 15m < 1, sustained 30m",
+      "user_impact": "Load-balancer request-count and Firestore read_count alerts may go blind; this is not confirmed user impact.",
+      "scope": "Prometheus Stackdriver exporter in prod-omi-monitoring.",
+      "verification": "kubectl -n prod-omi-monitoring get pods -l app.kubernetes.io/name=prometheus-stackdriver-exporter; inspect exporter logs, service endpoints, target up and scrape sample counts.",
+      "safe_next_action": "Check readiness and collection errors before restoring known-good exporter filters or requests through the documented monitoring Helm path."
+    },
+    "labels": {
+      "severity": "warning",
+      "instatus_component": "observability",
+      "alert_identity": "omi-scrape-stackdriver-metrics",
+      "component": "observability",
+      "impact": "infrastructure",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "two-lane-lead"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
+    },
+    "record": null
+  },
+  {
+    "uid": "omi-scrape-cloud-run-application-metrics",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Scrape health",
+    "title": "cloud-run-application-metrics scrape health (down/absent/empty)",
+    "condition": "B",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 900,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "max(absent(up{job=\"cloud-run-application-metrics\"}) or (min(up{job=\"cloud-run-application-metrics\"}) < bool 1)) + ((min(min_over_time(scrape_samples_scraped{job=\"cloud-run-application-metrics\"}[15m])) or vector(0)) < bool 1)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [
+                  0
+                ],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "B"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "A",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "B",
+          "type": "reduce"
+        }
+      }
+    ],
+    "updated": "2026-07-15T00:00:00Z",
+    "noDataState": "Alerting",
+    "execErrState": "KeepLast",
+    "for": "30m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "__dashboardUid__": "omi-resilience-fallbacks",
+      "__panelId__": "6",
+      "summary": "cloud-run-application-metrics scrape targets are down, absent or repeatedly returning empty scrapes for 30m; dependent telemetry may be blind",
+      "threshold": "min up{job=\"cloud-run-application-metrics\"} < 1 or job absent or min scrape_samples_scraped{job=\"cloud-run-application-metrics\"} over 15m < 1, sustained 30m",
+      "user_impact": "Cloud Run omi_* journey, batch and owner-recognition alerts may go blind; this is not confirmed user impact.",
+      "scope": "prod-omi-cloud-run-metrics-exporter and prod-omi-cloud-run-sync-metrics-exporter in prod-omi-monitoring; only total release loss is detected.",
+      "verification": "Inspect both exporter releases and logs in prod-omi-monitoring. Empty scrapes with up=1 can indicate Cloud Monitoring filter rejection; check collection errors and scrape sample counts.",
+      "safe_next_action": "Confirm filter rejection or resource starvation in exporter logs before restoring known-good filters or requests through the documented monitoring Helm path."
+    },
+    "labels": {
+      "severity": "warning",
+      "instatus_component": "observability",
+      "alert_identity": "omi-scrape-cloud-run-application-metrics",
+      "component": "observability",
+      "impact": "infrastructure",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "two-lane-lead"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
+    },
+    "record": null
+  },
+  {
+    "uid": "omi-scrape-gpu-metrics",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Scrape health",
+    "title": "gpu-metrics scrape health (down/absent/empty)",
+    "condition": "B",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 900,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "max(absent(up{job=\"gpu-metrics\"}) or (min(up{job=\"gpu-metrics\"}) < bool 1)) + ((min(min_over_time(scrape_samples_scraped{job=\"gpu-metrics\"}[15m])) or vector(0)) < bool 1)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [
+                  0
+                ],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "B"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "A",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "B",
+          "type": "reduce"
+        }
+      }
+    ],
+    "updated": "2026-07-15T00:00:00Z",
+    "noDataState": "Alerting",
+    "execErrState": "KeepLast",
+    "for": "30m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "__dashboardUid__": "omi-resilience-fallbacks",
+      "__panelId__": "6",
+      "summary": "gpu-metrics scrape targets are down, absent or repeatedly returning empty scrapes for 30m; dependent telemetry may be blind",
+      "threshold": "min up{job=\"gpu-metrics\"} < 1 or job absent or min scrape_samples_scraped{job=\"gpu-metrics\"} over 15m < 1, sustained 30m",
+      "user_impact": "GPU utilization and capacity dashboards may go blind; this is not confirmed user impact.",
+      "scope": "DCGM exporter pods on GPU nodes in gke-managed-system.",
+      "verification": "Inspect DCGM pods in gke-managed-system and confirm GPU node presence; compare readiness, target up and scrape sample counts.",
+      "safe_next_action": "Confirm GPU nodes are expected before restoring known-good DCGM scrape configuration; check scheduling and readiness before adding capacity."
+    },
+    "labels": {
+      "severity": "warning",
+      "instatus_component": "observability",
+      "alert_identity": "omi-scrape-gpu-metrics",
+      "component": "observability",
+      "impact": "infrastructure",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "two-lane-lead"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
+    },
+    "record": null
+  },
+  {
+    "uid": "omi-scrape-kube-state-metrics",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Scrape health",
+    "title": "kube-state-metrics scrape health (down/absent)",
+    "condition": "B",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 900,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "(absent(up{job=\"kube-state-metrics\"}) or (min(up{job=\"kube-state-metrics\"}) < bool 1))",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [
+                  0
+                ],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "B"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "A",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "B",
+          "type": "reduce"
+        }
+      }
+    ],
+    "updated": "2026-07-15T00:00:00Z",
+    "noDataState": "Alerting",
+    "execErrState": "KeepLast",
+    "for": "30m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "__dashboardUid__": "omi-resilience-fallbacks",
+      "__panelId__": "6",
+      "summary": "kube-state-metrics scrape targets are down, absent for 30m; dependent telemetry may be blind",
+      "threshold": "min up{job=\"kube-state-metrics\"} < 1 or job absent, sustained 30m",
+      "user_impact": "No direct user impact; the backend-listen HPA custom metric, capacity and replica alerts, and the margin meter read kube_* series and go blind.",
+      "scope": "kube-state-metrics in prod-omi-monitoring (kube-prometheus-stack subchart).",
+      "verification": "kubectl -n prod-omi-monitoring get pod -l app.kubernetes.io/name=kube-state-metrics (RESTARTS) and its events (liveness timeouts); compare readiness, service discovery and up for down or absent targets.",
+      "safe_next_action": "Check the pod restart count and liveness events; if CPU-starved, raise its requests in prod_omi_monitoring_values.yaml and run the documented helm upgrade."
+    },
+    "labels": {
+      "severity": "warning",
+      "instatus_component": "observability",
+      "alert_identity": "omi-scrape-kube-state-metrics",
+      "component": "observability",
+      "impact": "infrastructure",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "two-lane-lead"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
+    },
+    "record": null
+  },
+  {
+    "uid": "omi-scrape-parakeet",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Scrape health",
+    "title": "parakeet scrape health (down/absent/empty)",
+    "condition": "B",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 900,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "max(absent(up{job=~\"(dev-omi-|prod-omi-)?parakeet(-.*)?\"}) or (min(up{job=~\"(dev-omi-|prod-omi-)?parakeet(-.*)?\"}) < bool 1)) + ((min(min_over_time(scrape_samples_scraped{job=~\"(dev-omi-|prod-omi-)?parakeet(-.*)?\"}[15m])) or vector(0)) < bool 1)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [
+                  0
+                ],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "B"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "A",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "B",
+          "type": "reduce"
+        }
+      }
+    ],
+    "updated": "2026-07-15T00:00:00Z",
+    "noDataState": "Alerting",
+    "execErrState": "KeepLast",
+    "for": "30m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "__dashboardUid__": "omi-resilience-fallbacks",
+      "__panelId__": "6",
+      "summary": "parakeet scrape targets are down, absent or repeatedly returning empty scrapes for 30m; dependent telemetry may be blind",
+      "threshold": "min up{job=~\"(dev-omi-|prod-omi-)?parakeet(-.*)?\"} < 1 or job absent or min scrape_samples_scraped{job=~\"(dev-omi-|prod-omi-)?parakeet(-.*)?\"} over 15m < 1, sustained 30m",
+      "user_impact": "Parakeet stream-capacity and fatal-CUDA alerts may go blind; this is not confirmed user impact.",
+      "scope": "Parakeet main and LID ServiceMonitor releases in prod-omi-backend, matching dev/prod service-name job labels; only total release loss is detected.",
+      "verification": "kubectl -n prod-omi-backend get pods -l app.kubernetes.io/name=parakeet; inspect main and LID services and ServiceMonitors, target up and scrape sample counts.",
+      "safe_next_action": "Check readiness, ServiceMonitor metrics ports and release labels before restoring known-good Parakeet scrape configuration through its documented Helm path."
+    },
+    "labels": {
+      "severity": "warning",
+      "instatus_component": "observability",
+      "alert_identity": "omi-scrape-parakeet",
+      "component": "observability",
+      "impact": "infrastructure",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "two-lane-lead"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
+    },
+    "record": null
+  }
+]

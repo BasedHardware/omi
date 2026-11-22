@@ -4,6 +4,7 @@ The local kernel owns its journal. This route validates capability and
 canonical references only; it never creates, updates, or syncs a chat row.
 """
 
+from utils.conversations.layer import read_product as read_product_conversation
 from typing import Annotated, Any
 
 from datetime import datetime, timezone
@@ -80,8 +81,11 @@ def _entity_available(uid: str, block: ChatFirstJournalBlockSpec) -> bool:
     if isinstance(block, GoalLinkSpec):
         return goals_db.get_goal_by_id(uid, block.goal_id) is not None
     if isinstance(block, CaptureLinkSpec):
-        capture = conversations_db.get_conversation(
-            uid, block.conversation_id, read_site=FirestoreReadSite.CHAT_FIRST_BLOCK_VALIDATION
+        capture = read_product_conversation(
+            conversations_db.get_conversation,
+            uid,
+            block.conversation_id,
+            read_site=FirestoreReadSite.CHAT_FIRST_BLOCK_VALIDATION,
         )
         return bool(
             capture
@@ -91,8 +95,11 @@ def _entity_available(uid: str, block: ChatFirstJournalBlockSpec) -> bool:
             and not capture.get('is_locked', False)
         )
     if isinstance(block, ConversationLinkSpec):
-        conversation = conversations_db.get_conversation(
-            uid, block.conversation_id, read_site=FirestoreReadSite.CHAT_FIRST_BLOCK_VALIDATION
+        conversation = read_product_conversation(
+            conversations_db.get_conversation,
+            uid,
+            block.conversation_id,
+            read_site=FirestoreReadSite.CHAT_FIRST_BLOCK_VALIDATION,
         )
         return bool(
             conversation
@@ -126,8 +133,8 @@ def _entity_available(uid: str, block: ChatFirstJournalBlockSpec) -> bool:
         return bool(task and not task.get('is_locked', False) and not task.get('deleted', False))
     if subject.kind == 'goal':
         return goals_db.get_goal_by_id(uid, subject.id) is not None
-    capture = conversations_db.get_conversation(
-        uid, subject.id, read_site=FirestoreReadSite.CHAT_FIRST_BLOCK_VALIDATION
+    capture = read_product_conversation(
+        conversations_db.get_conversation, uid, subject.id, read_site=FirestoreReadSite.CHAT_FIRST_BLOCK_VALIDATION
     )
     return bool(
         capture

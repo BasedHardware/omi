@@ -4,6 +4,7 @@ Source: events.json. Presence is not task success. Existing SDK provenance/ident
 
 | API | Wire name | Properties | Status | Consumers |
 | --- | --- | --- | --- | --- |
+| onDeviceTranscriptionUsed | On Device Transcription Used | route, audio_ms, segment_count | active | on-device-transcription-usage |
 | savedPendantReconnectObserved | Saved Pendant Reconnect | trigger, attempt, result, disconnected_ms | active | saved-pendant-reconnect |
 | onboardingCompleted | Onboarding Completed | none | active | mobile-instrumentation-presence |
 | recordingProducedNoConversation | Recording Produced No Conversation | source, duration_s, transcript_observed, reason | active | onboarding-activation-funnel |
@@ -11,10 +12,12 @@ Source: events.json. Presence is not task success. Existing SDK provenance/ident
 | onboardingGetStartedTapped | Onboarding Get Started Tapped | none | active | onboarding-activation-funnel |
 | signInStarted | Sign In Started | provider | active | onboarding-activation-funnel |
 | signInFailed | Sign In Failed | provider, error_class | active | onboarding-activation-funnel |
+| signInFailureDetail | Sign In Failure Detail | provider, error_code | active | onboarding-activation-funnel |
 | onboardingPermissionResult | Onboarding Permission Result | permission, granted, permanently_denied, services_disabled | active | onboarding-activation-funnel |
 | devicePairingBlocked | Device Pairing Blocked | reason, android_sdk, ios_version | active | onboarding-activation-funnel |
 | deviceScanEmpty | Device Scan Empty | after_seconds | active | onboarding-activation-funnel |
 | deviceConnectFailureShown | Device Connect Failure Shown | failure_reason, platform | active | onboarding-activation-funnel |
+| devicePairingSettingsOpened | Device Pairing Settings Opened | failure_reason, platform | active | onboarding-activation-funnel |
 | deviceConnectFailed | Device Connect Failed | error_class | active | onboarding-activation-funnel |
 | phoneMicRecordingStarted | Phone Mic Recording Started | none | active | mobile-instrumentation-presence |
 | phoneMicRecordingStopped | Phone Mic Recording Stopped | none | active | mobile-instrumentation-presence |
@@ -171,6 +174,7 @@ Source: events.json. Presence is not task success. Existing SDK provenance/ident
 | chatAppDisconnected | Chat App Disconnected | channel | active | chat-apps-funnel |
 | chatAppWaitlistJoined | Chat App Waitlist Joined | none | active | chat-apps-funnel |
 | paywallOpened | Paywall Opened | source, current_plan | active | subscription-funnel |
+| freeCapSheetChoice | Free Cap Sheet Choice | choice | active | subscription-funnel |
 | upgradePlanSelected | Upgrade Plan Selected | plan, billing_interval, source | active | subscription-funnel |
 | upgradeSucceededAttributed | Upgrade Succeeded Attributed | plan, billing_interval | active | subscription-funnel |
 | subscriptionPlanChanged | Subscription Plan Changed | previous_plan, new_plan, billing_interval, change_source | active | subscription-funnel |
@@ -216,6 +220,13 @@ Source: events.json. Presence is not task success. Existing SDK provenance/ident
 | subscriptionPaymentIssueShown | Subscription Payment Issue Shown | none | active | subscription-payment-recovery |
 | subscriptionPaymentIssueUpdateTapped | Subscription Payment Issue Update Tapped | none | active | subscription-payment-recovery |
 | subscriptionPaymentIssuePortalOpened | Subscription Payment Issue Portal Opened | none | active | subscription-payment-recovery |
+| subscriptionPaymentIssueMonthlyShown | Subscription Payment Issue Monthly Shown | none | active | subscription-payment-recovery |
+| subscriptionPaymentIssueMonthlyTapped | Subscription Payment Issue Monthly Tapped | none | active | subscription-payment-recovery |
+| subscriptionPaymentIssueMonthlySwitched | Subscription Payment Issue Monthly Switched | none | active | subscription-payment-recovery |
+| subscriptionPaymentIssueMonthlyFailed | Subscription Payment Issue Monthly Failed | reason | active | subscription-payment-recovery |
+| mobileDeviceHealthDailyRingRead | Mobile Device Health Daily | disconnects_during_ring_read, disconnects_with_ring_read_state, ring_read_disconnect_rssi_below_minus90, ring_read_disconnect_rssi_minus90_to_minus80, ring_read_disconnect_rssi_minus80_to_minus60, ring_read_disconnect_rssi_at_least_minus60, ring_read_disconnect_rssi_unknown | active | pendant-ring-read-disconnects |
+| orphanAudioRecovery | Orphan Audio Recovery | class_working_count, class_working_bytes, class_unparseable_count, class_unparseable_bytes, class_recoverable_count, class_recoverable_bytes, class_expired_count, class_expired_bytes, class_owner_unknown_count, class_owner_unknown_bytes, age_0_7_count, age_0_7_bytes, age_8_14_count, age_8_14_bytes, age_15_28_count, age_15_28_bytes, age_29_45_count, age_29_45_bytes, age_over_45_count, age_over_45_bytes, age_unknown_count, age_unknown_bytes, adopted, changed, referenced, passCap, dailyCap, pressureCap, result, census_complete, expired_since_census, outside_documents | active | orphan-audio-recovery |
+| orphanAudioReclaim | Orphan Audio Reclaim | deleted_files, deleted_bytes, working, unknown_capture_time, capture_too_young, mtime_too_young, outside_documents, pass_cap, sources_changed, referenced, file_changed, sidecar_type, duration_ms, result, census_complete | active | orphan-audio-reclaim |
 
 ## App Review Opportunity decisions
 

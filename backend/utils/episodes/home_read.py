@@ -3,31 +3,46 @@
 import logging
 import threading
 import time
+from collections import OrderedDict
+from concurrent.futures import Future
+from contextlib import nullcontext
+from copy import deepcopy
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any, get_args
 
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
-from utils.conversations.transcribing_hold import transcription_presentation
+from utils.conversations import transcribing_hold, legacy_empty_wire, empty_capture
+from utils.conversations import home_step as home_step_projection
 from utils.conversations import phase_shadow
 
 from config.episodes import (
     home_hide_below_floor_rows_enabled,
+    home_step_projection_enabled,
+    home_transcription_queue_hold_enabled,
     HOME_IDLE_CLOSES_PER_READ,
     COMPOSER_LOOKUP_SCHEDULES_PER_WINDOW,
     COMPOSER_MAX_SCHEDULED_PER_READ,
     COMPOSER_READ_THROTTLE_SECONDS,
     MAX_EPISODE_SECONDS,
 )
+from config.firestore_read_levers import lever_enabled
 from database import conversations, episodes
 from database._client import get_firestore_client
+from database.firestore_cache_metrics import record_request
+from database.firestore_retry import FIRESTORE_NO_RETRY
+from database.fsr_read_cache import plane_id
+from database.firestore_read_origin import read_origin
+from utils.read_cache_shadow import compare_hit
 from utils.episodes.timeline import ownership_end
 from utils.episodes.policy import utc, idle_close_due
 from models.episode import EpisodeCloseReason
 from utils.episodes import metrics as episode_metrics
 from utils.episodes import service
 from utils.conversations.fragment_visibility import SETTLING_FIELDS, is_relevance_discarded, is_completed_below_floor
+from utils.conversations.home_titles import SUMMARY_DEBT_FIELDS, user_zone_provider
 
 logger = logging.getLogger(__name__)
 
@@ -92,6 +107,8 @@ def wire_episode(episode: dict[str, Any] | None) -> dict[str, Any] | None:
 
 
 MEMBER_FIELDS = [
+    'recording',
+    'home_hidden',
     'structured',
     'user_title',
     'data_protection_level',
@@ -110,28 +127,181 @@ MEMBER_FIELDS = [
     'photos',
     'starred',
     'folder_user_set',
+    'episode_transcript_updated_at',
     'episode_transcription_pending_at',
     'episode_transcription_deadline_at',
     'server_batch_audio_start',
     'server_batch_audio_end',
+    *transcribing_hold.READ_FIELDS,
     *SETTLING_FIELDS,
+    *SUMMARY_DEBT_FIELDS,
 ]
 
 
+MEMBERS_CACHE_TTL_SECONDS = 60
+MEMBERS_CACHE_MAX_ENTRIES = 128
+MEMBERS_CACHE_MAX_IDS = 1000
+_members_cache: OrderedDict[tuple[str, tuple[str, ...]], tuple[float, dict[str, dict[str, Any]]]] = OrderedDict()
+_members_cache_lock = threading.Lock()
+
+
 def _read_members(uid: str, rows: list[dict[str, Any]], *, firestore_client: Any = None) -> dict[str, dict[str, Any]]:
+    """Read prepared members, optionally accepting a snapshot up to 60 seconds old.
+
+    With episode_members_cache on, the same uid and member set reuse the map:
+    edits, deletions and visibility changes may remain stale until expiry. Hits
+    never extend the TTL; expired entries must read again (including on errors).
+    This memo is only a read projection, never authority for a mutation.
+    Cache misses share only calls enrolled before the owner starts fetching.
+    Later arrivals read fresh; single-flight never retains completed results.
+    """
     client = firestore_client if firestore_client is not None else get_firestore_client()
-    root = client.collection('users').document(uid).collection('conversations')
     all_ids: list[str] = []
     for row in rows:
         row_ids: list[str] = row.get('conversation_ids') or []
         all_ids.extend(row_ids)
     ids = list(dict.fromkeys(all_ids))
+    cache_key = None
+    cache_deadline = 0.0
+    if lever_enabled('episode_members_cache', uid) and len(ids) <= MEMBERS_CACHE_MAX_IDS:
+        cache_key = (uid, tuple(sorted(ids)))
+        cache_deadline = time.monotonic() + MEMBERS_CACHE_TTL_SECONDS
+        with _members_cache_lock:
+            cached = _members_cache.pop(cache_key, None)
+            if cached is not None and time.monotonic() < cached[0]:
+                _members_cache[cache_key] = cached
+            else:
+                cached = None
+        if cached is not None:
+            try:
+                record_request('fsr_s4_episode_members_cache', 'hit')
+            except Exception:
+                pass
+            try:
+                compare_hit(
+                    'episode_members', cached[1], lambda timeout: _fetch_members(uid, ids, client, timeout=timeout)
+                )
+            except Exception:
+                pass  # Even broken observation must preserve the cached response.
+            return deepcopy(cached[1])
+    result = _fetch_members_coalesced(uid, ids, client)
+    if cache_key is not None:
+        with _members_cache_lock:
+            # Count read/prepare latency against the TTL, so a slow fetch never
+            # publishes a snapshot older than the promised staleness window.
+            if time.monotonic() < cache_deadline:
+                _members_cache[cache_key] = (cache_deadline, deepcopy(result))
+                _members_cache.move_to_end(cache_key)
+                while len(_members_cache) > MEMBERS_CACHE_MAX_ENTRIES:
+                    _members_cache.popitem(last=False)
+    return result
+
+
+MEMBERS_FLIGHT_MAX_ENTRIES = 128
+MEMBERS_FLIGHT_MAX_IDS = 1000
+
+
+@dataclass
+class _MembersFlight:
+    future: Future[dict[str, dict[str, Any]]]
+    accepting: bool = True
+
+
+_members_flights: dict[tuple[str, str, tuple[str, ...]], _MembersFlight] = {}
+_members_flights_lock = threading.Lock()
+_members_flight_local = threading.local()
+
+
+def _flight_event(result: str) -> None:
+    try:
+        record_request('fsr_episode_members_flight', result)
+    except Exception:
+        pass  # Observation must never change a serving read.
+
+
+def _fetch_members_coalesced(uid: str, ids: list[str], client: Any) -> dict[str, dict[str, Any]]:
+    """Enroll only before the owner fetch starts, never into an older snapshot.
+
+    Closing enrollment under the map lock before _fetch_members ensures each
+    enrolled request began before the underlying read. An unfinished read may
+    already hold a snapshot predating a later request's completed deletion/edit;
+    that later request must bypass, even while preparation is still running.
+    The closed record stays until completion for bounded capacity accounting.
+
+    The owner fetches inline: no child executor job can queue behind its own
+    waiters. Nested reads bypass *all* flights to avoid self-waits and cycles
+    between keys. Sync-route cancellation cannot cancel another caller's read;
+    BaseException completion still wakes every waiter and permits a fresh retry.
+    """
+    if not ids or not lever_enabled('episode_members_singleflight', uid):
+        return _fetch_members(uid, ids, client)
+    if len(ids) > MEMBERS_FLIGHT_MAX_IDS or getattr(_members_flight_local, 'active', False):
+        _flight_event('bypass')
+        return _fetch_members(uid, ids, client)
+    key = (plane_id(client), uid, tuple(sorted(ids)))
+    with _members_flights_lock:
+        flight = _members_flights.get(key)
+        owner = flight is None
+        if owner and len(_members_flights) < MEMBERS_FLIGHT_MAX_ENTRIES:
+            flight = _MembersFlight(Future())
+            flight.future.set_running_or_notify_cancel()  # Private; waiters cannot cancel the shared read.
+            _members_flights[key] = flight
+        elif flight is not None and not flight.accepting:
+            flight = None  # Keep the closed record; never overwrite another owner's flight.
+    if flight is None:
+        _flight_event('bypass')
+        return _fetch_members(uid, ids, client)
+    if not owner:
+        _flight_event('coalesced')
+        return deepcopy(flight.future.result())  # Owner runs inline, not queued behind its waiters.
+    _members_flight_local.active = True
+    try:
+        _flight_event('owner')
+        with _members_flights_lock:
+            flight.accepting = False
+        result = _fetch_members(uid, ids, client)
+    except BaseException as error:
+        with _members_flights_lock:
+            if _members_flights.get(key) is flight:
+                del _members_flights[key]
+        flight.future.set_exception(error)
+        _flight_event('error')
+        raise
+    else:
+        with _members_flights_lock:
+            if _members_flights.get(key) is flight:
+                del _members_flights[key]
+        flight.future.set_result(result)
+        return deepcopy(result)
+    finally:
+        _members_flight_local.active = False
+
+
+def _fetch_members(uid, ids, client, *, timeout=None):
+    root = client.collection('users').document(uid).collection('conversations')
+    deadline = time.monotonic() + timeout if timeout is not None else None
     members: dict[str, dict[str, Any]] = {}
     for offset in range(0, len(ids), episodes.MEMBERSHIP_BATCH_LIMIT):
+        options = {}
+        if deadline is not None:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise TimeoutError('shadow read deadline')
+            options = {'timeout': remaining, 'retry': FIRESTORE_NO_RETRY}
         refs = [root.document(cid) for cid in ids[offset : offset + episodes.MEMBERSHIP_BATCH_LIMIT]]
-        for snapshot in client.get_all(refs, field_paths=MEMBER_FIELDS):
-            if snapshot.exists:
-                members[snapshot.id] = dict(snapshot.to_dict() or {}, id=snapshot.id)
+        with read_origin('job:read_cache_shadow') if deadline is not None else nullcontext():
+            for snapshot in client.get_all(refs, field_paths=[] if deadline is not None else MEMBER_FIELDS, **options):
+                if snapshot.exists:
+                    members[snapshot.id] = (
+                        {} if deadline is not None else dict(snapshot.to_dict() or {}, id=snapshot.id)
+                    )
+        if deadline is not None and time.monotonic() >= deadline:
+            raise TimeoutError('shadow read deadline')
+    if deadline is not None:
+        # MEMBER_FIELDS excludes transcripts: prepare cannot drop an extant row
+        # via blob/decode/decrypt failures. Display visibility is applied later,
+        # not by this cache: even deleted rows retain their keys here.
+        return members
     return {
         cid: row
         for cid, raw in members.items()
@@ -225,7 +395,7 @@ def _live(spent: list[float], now: float) -> list[float]:
 def schedule_missed_composes(uid: str, rows: list[dict[str, Any]], wires: list[dict[str, Any]]) -> int:
     """Safety net for the composer: a closed episode that is uncomposed, drifted, or whose visible
     members changed since its compose (a direct discard or delete) gets one, at most a few per read.
-    Returns how many were queued."""
+    A deferred late episode is left alone until its grace window ends. Returns how many were queued."""
     from utils.episodes import composer
 
     queued = 0
@@ -240,7 +410,7 @@ def schedule_missed_composes(uid: str, rows: list[dict[str, Any]], wires: list[d
                 continue
             if not composer.needs_compose(row, visible_member_ids=visible.get(str(row.get('id')), [])):
                 continue
-            if composer.schedule(uid, str(row.get('id')), throttle=True):
+            if composer.schedule(uid, str(row.get('id')), throttle=True, trigger='read'):
                 queued += 1
     except Exception as error:
         logger.warning(
@@ -249,11 +419,26 @@ def schedule_missed_composes(uid: str, rows: list[dict[str, Any]], wires: list[d
     return queued
 
 
+def schedule_opened_compose(uid: str, episode: dict[str, Any] | None) -> bool:
+    """The episode page was opened: a deferred late episode composes now, at most once per window."""
+    from utils.episodes import composer
+
+    try:
+        return composer.schedule_opened(uid, episode)
+    except Exception as error:
+        logger.warning(
+            'event=episode_compose_schedule outcome=error source=open exception_type=%s', type(error).__name__
+        )
+        return False
+
+
 def _too_short_for_a_home_row(row: dict[str, Any]) -> bool:
     """A settled below-floor verdict stays off Home, regardless of age or duration.
 
     List only: search, a direct link and Show discarded still reach it, and nothing is stored.
     """
+    if empty_capture.applies(row):
+        return True
     if not home_hide_below_floor_rows_enabled():
         return False
     return is_completed_below_floor(row)
@@ -269,9 +454,24 @@ def project_episode(
     if episode is None:
         return None
     by_id = members if members is not None else _read_members(uid, [episode])
+    # Read-only evidence for legacy dangling references; never put it on the wire.
+    episode.pop('_member_absent_ids', None)
+    absent = [cid for cid in episode.get('conversation_ids') or [] if cid not in by_id]
+    if absent:
+        episode['_member_absent_ids'] = absent
+    # Private read observation only; never persisted or included in the wire projection.
+    episode.pop('_member_transcript_updated_at', None)
+    episode.pop('_member_transcript_updates', None)
+    transcript_updates = []
+    transcript_member_updates = {}
+    excluded = set(episode.get('discarded_conversation_ids') or []) | set(
+        episode.get('duplicate_conversation_ids') or []
+    )
     retained: list[dict[str, Any]] = []
+    transcription_states: list[str] = []
     hidden = 0
     now = datetime.now(timezone.utc)
+    zone = user_zone_provider(uid)
     for cid in dict.fromkeys(episode.get('conversation_ids') or []):
         row = by_id.get(cid)
         if row is None:
@@ -295,21 +495,32 @@ def project_episode(
             phase_shadow.observe('episode_member', row, False, episode=episode)
             continue
         phase_shadow.observe('episode_member', row, True, episode=episode)
+        if cid not in excluded and (updated := utc(row.get('episode_transcript_updated_at'))):
+            transcript_updates.append(updated)
+            transcript_member_updates[cid] = updated
         from utils.conversations.home_titles import neutralize_minimum_title
 
-        row = neutralize_minimum_title(row)
+        # Classify on the stored read copy, before the presentation rewrite below.
+        step = home_step_projection.classify(row)
+        empty_placeholder = empty_capture.applies(row, now=now)
+        row = neutralize_minimum_title(row, tz_name_provider=zone)
+        row = legacy_empty_wire.project(row, noise=step == home_step_projection.NOISE)
+        row = empty_capture.project(row, now=now)
         structured: dict[str, Any] = row.get('structured') or {}
         title = structured.get('title') or ''
         status = row.get('status') or 'completed'
         started = row.get('started_at') or row.get('created_at') or episode['started_at']
         finished = row.get('finished_at')
         deadline = utc(row.get('episode_transcription_deadline_at'))
-        if deadline is not None and not row.get('record_projection_revision'):
+        if deadline is not None and not row.get('record_projection_revision') and not empty_placeholder:
+            deadline = transcribing_hold.deadline(row, prefix='episode_transcription')
             overdue = now >= deadline
-            failed = (
-                row.get('finalization_status') == 'dead_letter' or status == 'failed' or row.get('record_upload_failed')
+            title, status = transcribing_hold.transcription_presentation(
+                deadline, failed=transcribing_hold.failed(row), now=now
             )
-            title, status = transcription_presentation(deadline, failed=bool(failed), now=now)
+            transcription_states.append(status)
+            if home_transcription_queue_hold_enabled() and home_step_projection_enabled():
+                step = home_step_projection.FAILED if status == 'failed' else home_step_projection.TRANSCRIBING
             # Audio bounds remain truthful even when finalization never filled its clocks.
             for key, value in (
                 ('start', row.get('server_batch_audio_start')),
@@ -327,6 +538,8 @@ def project_episode(
                 'id': cid,
                 'title': title,
                 'emoji': structured.get('emoji') or '',
+                'gist': str(structured.get('gist') or ''),
+                **({'home_step': step} if step else {}),
                 'started_at': started,
                 'finished_at': finished,
                 'status': status,
@@ -336,6 +549,10 @@ def project_episode(
         episode_metrics.record_home_members(shown=len(retained), hidden=hidden)
     if not retained:
         return None
+    if episode.get('compose_transcript_wait_members') is not None:
+        episode['_member_transcript_updates'] = transcript_member_updates
+    if transcript_updates:
+        episode['_member_transcript_updated_at'] = max(transcript_updates)
     retained.sort(key=lambda member: str(member['started_at']))
     ids = {member['id'] for member in retained}
     wire = wire_episode(episode)
@@ -356,4 +573,8 @@ def project_episode(
             if not item.get('conversation_id') or item.get('conversation_id') in ids
         ],
     )
+    if home_transcription_queue_hold_enabled() and len(transcription_states) == len(retained):
+        # An episode made entirely of pending captures shares their presentation,
+        # including its page title, without persisting an outage-era failure title.
+        wire['title'] = 'Transcribing…' if 'processing' in transcription_states else "Couldn't transcribe"
     return wire

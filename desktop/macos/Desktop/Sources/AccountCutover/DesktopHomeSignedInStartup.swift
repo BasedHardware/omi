@@ -24,19 +24,18 @@ enum DesktopHomeSignedInStartup {
     }
 
     if !UserDefaults.standard.bool(forKey: .screenAnalysisAutoStartFixedV2) {
-      UserDefaults.standard.set(true, forKey: .screenAnalysisEnabled)
-      AssistantSettings.shared.screenAnalysisEnabled = true
+      let enabled = SettingsSyncManager.shared.restoreScreenAnalysisDefaultForMigration()
       UserDefaults.standard.set(true, forKey: .screenAnalysisAutoStartFixedV2)
-      log("DesktopHomeView: Applied screenAnalysisAutoStart v2 migration — reset to enabled")
+      log("DesktopHomeView: Applied screenAnalysisAutoStart v2 migration preserving local off")
       SettingsSyncManager.shared.pushPartialUpdate(
-        SettingsSyncManager.screenAnalysisEnabledUpdate(true))
+        SettingsSyncManager.screenAnalysisEnabledUpdate(enabled))
     }
 
     if RewindCaptureState.shouldRepairQuietBundleCaptureDefault(
       usesLazyDevPermissions: AppBuild.usesLazyDevPermissions,
       migrationApplied: UserDefaults.standard.bool(forKey: .screenAnalysisAutoStartFixedV3)
     ) {
-      AssistantSettings.shared.screenAnalysisEnabled = true
+      SettingsSyncManager.shared.restoreScreenAnalysisDefaultForMigration()
       UserDefaults.standard.set(true, forKey: .screenAnalysisAutoStartFixedV3)
       log("DesktopHomeView: Restored screen capture default for quiet named bundle")
     }
@@ -60,13 +59,11 @@ enum DesktopHomeSignedInStartup {
 
   static func loadDataIfAdmitted(
     loadAllData: () async -> Void,
-    scheduleConversationWarmup: () -> Void,
-    scheduleAgentVMProvisioning: () -> Void
+    scheduleConversationWarmup: () -> Void
   ) async {
     await AccountCutoverControlManager.shared.prepareSignedInShell()
     guard AccountCutoverControlManager.shared.isProductShellAdmitted else { return }
     await loadAllData()
     scheduleConversationWarmup()
-    scheduleAgentVMProvisioning()
   }
 }

@@ -7,10 +7,12 @@ from unittest.mock import Mock
 import pytest
 
 from database import conversation_finalization_jobs as jobs
+from database import finalization_due_marker_sweep as sweep
 from services import conversation_finalization as service
 from models.account_cutover import AccountCutoverRecord, AccountCutoverState
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 from utils.conversations import lifecycle, typesense_index
+from utils.conversations.relevance_rules import RULES_VERSION
 
 NOW = datetime(2026, 10, 31, tzinfo=timezone.utc)
 JOB_PATH = (jobs.FINALIZATION_JOBS_COLLECTION, 'synthetic-job')
@@ -95,7 +97,7 @@ def test_stale_replay_terminalizes_only_exhausted_budget(store, status, attempts
             'decided_by': 'policy',
             'reason': 'dead_letter_default',
             'trigger': 'dead_letter',
-            'rules_version': 4,
+            'rules_version': RULES_VERSION,
         },
     }
     jobs.stop_quiet_checks_for_job.assert_called_once()
@@ -488,3 +490,142 @@ def test_inline_replay_unknown_kind_cannot_abort_the_page(store, inline_replay, 
     assert service.reconcile_listen_finalization_jobs(firestore_client=store)['retired'] == 1
     assert store.rows[JOB_PATH]['last_failure_code'] == 'durable_attempts_exhausted'
     inline_replay.assert_not_called()
+
+
+DUE_MARKER_SWEEP_NOW = NOW
+
+
+def _due_marker_row(**overrides):
+    row = {
+        'uid': ROW_PATH[1],
+        'conversation_id': ROW_PATH[-1],
+        'status': 'queued',
+        'kind': 'listen_finalization',
+        'dispatch_generation': 7,
+        'created_at': NOW - timedelta(hours=25),
+        'updated_at': NOW - timedelta(hours=25),
+    }
+    row.update(overrides)
+    return row
+
+
+@pytest.mark.parametrize(
+    'overrides,outcome,due_set',
+    [
+        ({'status': 'queued'}, 'remarked', True),
+        ({'status': 'leased', 'lease_expires_at': NOW - timedelta(minutes=1)}, 'remarked', True),
+        ({'reconcile_after_at': NOW + timedelta(hours=2)}, 'skipped', False),
+        ({'created_at': NOW - timedelta(hours=23)}, 'skipped', False),
+        ({'kind': 'listen_quiet_check'}, 'skipped', False),
+        ({'kind': 'conversation_merge'}, 'skipped', False),
+        ({'requires_byok': True}, 'skipped', False),
+        ({'status': 'completed'}, 'skipped', False),
+        ({'created_at': None}, 'skipped', False),
+    ],
+)
+def test_due_marker_sweep_restores_only_old_unmarked_nonterminal_jobs(store, overrides, outcome, due_set):
+    store.rows[JOB_PATH] = _due_marker_row(**overrides)
+    before = deepcopy(store.rows[JOB_PATH])
+    job_ref = store.collection(jobs.FINALIZATION_JOBS_COLLECTION).document('synthetic-job')
+
+    result = jobs.firestore.transactional(sweep._restore_missing_due_marker_txn)(
+        store.transaction(), job_ref, NOW - timedelta(hours=24), NOW
+    )
+
+    assert result == outcome
+    if due_set:
+        assert store.rows[JOB_PATH]['reconcile_after_at'] == NOW
+        assert store.rows[JOB_PATH]['updated_at'] == NOW
+    else:
+        assert store.rows[JOB_PATH] == before
+
+
+def test_due_marker_sweep_skips_a_missing_job_document(store):
+    job_ref = store.collection(jobs.FINALIZATION_JOBS_COLLECTION).document('absent-job')
+
+    result = jobs.firestore.transactional(sweep._restore_missing_due_marker_txn)(
+        store.transaction(), job_ref, NOW - timedelta(hours=24), NOW
+    )
+
+    assert result == 'skipped'
+    assert ('conversation_finalization_jobs', 'absent-job') not in store.rows
+
+
+class _SweepSnapshot:
+    def __init__(self, store, job_id, data):
+        self._data = deepcopy(data)
+        self.id = job_id
+        self.reference = store.collection(jobs.FINALIZATION_JOBS_COLLECTION).document(job_id)
+
+    def to_dict(self):
+        return deepcopy(self._data)
+
+
+class _SweepQuery:
+    def __init__(self, calls, rows):
+        self._calls = calls
+        self._rows = rows
+
+    def where(self, field, op, value):
+        self._calls.append(('where', field, op, value))
+        return self
+
+    def order_by(self, field):
+        self._calls.append(('order_by', field))
+        return self
+
+    def start_after(self, cursor):
+        self._calls.append(('start_after', cursor.id))
+        return self
+
+    def limit(self, count):
+        self._calls.append(('limit', count))
+        self._limit = count
+        return self
+
+    def stream(self):
+        return iter(self._rows[: getattr(self, '_limit', len(self._rows))])
+
+
+class _SweepIndexStub:
+    """Stands in for the status + created_at query; asserts its shape, not Firestore's ordering."""
+
+    def __init__(self, store, rows_by_status):
+        self._store = store
+        self._rows_by_status = rows_by_status
+        self.calls: list[tuple] = []
+
+    def build(self, collection, filters, *, field_filter_factory):
+        self.calls.append(('build', dict(filters)))
+        status = filters['status']
+        rows = [_SweepSnapshot(self._store, job_id, data) for job_id, data in self._rows_by_status.get(status, [])]
+        return _SweepQuery(self.calls, rows)
+
+
+def test_due_marker_sweep_pages_by_status_and_reports_each_outcome(store, monkeypatch):
+    rows = {
+        'queued': [
+            ('old-unmarked', _due_marker_row(status='queued')),
+            ('old-marked', _due_marker_row(status='queued', reconcile_after_at=NOW + timedelta(hours=1))),
+            ('recent-unmarked', _due_marker_row(status='queued', created_at=NOW - timedelta(hours=1))),
+            ('quiet-unmarked', _due_marker_row(status='queued', kind='listen_quiet_check')),
+        ],
+        'leased': [('old-leased', _due_marker_row(status='leased', lease_expires_at=NOW - timedelta(minutes=5)))],
+    }
+    for job_id, data in rows['queued'] + rows['leased']:
+        store.rows[(jobs.FINALIZATION_JOBS_COLLECTION, job_id)] = deepcopy(data)
+    index = _SweepIndexStub(store, rows)
+    monkeypatch.setattr(sweep, 'FINALIZATION_OLDEST_NONTERMINAL_QUERY', index)
+
+    result = sweep.remark_missing_due_markers(now=NOW, limit=50, firestore_client=store)
+
+    assert result == {'remarked': 2, 'skipped': 3, 'error': 0}
+    assert store.rows[(jobs.FINALIZATION_JOBS_COLLECTION, 'old-unmarked')]['reconcile_after_at'] == NOW
+    assert store.rows[(jobs.FINALIZATION_JOBS_COLLECTION, 'old-leased')]['reconcile_after_at'] == NOW
+    assert 'reconcile_after_at' not in store.rows[(jobs.FINALIZATION_JOBS_COLLECTION, 'recent-unmarked')]
+    # The age bound lives in the query, on the existing status + created_at index.
+    assert ('where', 'created_at', '<=', NOW - timedelta(hours=24)) in index.calls
+    assert ('order_by', 'created_at') in index.calls
+    cursor_state = store.rows[('conversation_recovery_state', 'due_marker_queued')]
+    assert cursor_state['generation'] == 1
+    assert cursor_state['resume_after_path'] is None

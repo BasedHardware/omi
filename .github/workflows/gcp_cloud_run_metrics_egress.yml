@@ -8,6 +8,7 @@ on:
       - 'backend/charts/monitoring/kube-prometheus-stack/*_omi_monitoring_values.yaml'
       - 'backend/charts/monitoring/alerts/live-stt.json'
       - 'backend/charts/monitoring/alerts/resilience.json'
+      - 'backend/charts/monitoring/alerts/firestore.json'
       - 'backend/charts/monitoring/live-alert-gate.json'
       - 'backend/charts/monitoring/mute-timings.json'
       - 'backend/charts/monitoring/gmp/frontend-values.prod.yaml'
@@ -23,6 +24,11 @@ on:
         options:
           - development
           - prod
+      import_grafana:
+        description: 'Import the live-STT Grafana alert rules into the selected environment. Default true keeps the existing behavior; set false to deploy the Helm and exporter changes without touching Grafana.'
+        required: false
+        default: true
+        type: boolean
 
 # Monitoring releases share one mutation domain per environment. Do not cancel
 # an in-flight Helm upgrade because --atomic rollback must be allowed to finish.
@@ -300,7 +306,9 @@ jobs:
   provision-live-alerts:
     # Grafana alert provisioning is independent of Helm deploy health: a
     # Helm failure must not suppress live-STT alert updates.
-    if: github.ref == 'refs/heads/main'
+    # Only an explicit import_grafana=false dispatch skips it; push runs and
+    # dispatches that leave the input unset keep the existing behavior.
+    if: github.ref == 'refs/heads/main' && github.event.inputs.import_grafana != 'false'
     environment: ${{ github.event.inputs.environment == 'prod' && 'prod' || 'development' }}
     concurrency:
       group: grafana-alert-provisioning-${{ github.event.inputs.environment == 'prod' && 'prod' || 'dev' }}

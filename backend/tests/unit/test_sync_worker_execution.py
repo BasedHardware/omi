@@ -457,6 +457,15 @@ async def test_worker_preflight_keeps_live_authority_and_privacy_shadow(executio
 
     redis, pipeline, cleanup = execution
     monkeypatch.setenv('FIRESTORE_READ_LEVERS', json.dumps({'privacy_checks_shadow': 100}))
+    # The owner-memo candidate must be able to serve for its hit to be counted;
+    # make the kill switch explicitly clear instead of relying on a cached
+    # clear read leaked from another test file's fixture (the unpatched switch
+    # reads fail closed in tests, which fails this test when its file runs
+    # alone — identically at the base head).
+    from database import privacy_ttl_cache as ttl_cache
+
+    monkeypatch.setattr(ttl_cache, '_read_kill_flag', lambda: False)
+    ttl_cache.reset_for_tests()
     store = StrictFirestore(
         {
             ('users', 'synthetic'): {'data_protection_level': 'standard'},
@@ -475,7 +484,7 @@ async def test_worker_preflight_keeps_live_authority_and_privacy_shadow(executio
         return snapshot
 
     monkeypatch.setattr(StrictFirestoreDocument, 'get', get)
-    live = metrics.CHECKS.labels('batch', 'live', 'account_deleted' if blocked else 'allow')
+    live = metrics.CHECKS.labels('batch', 'live', 'account_deleted' if blocked else 'allow', 'unattributed')
     shadow = metrics.SHADOW_CHECKS.labels('batch', 'match')
     mismatch = metrics.DECISION_MISMATCH.labels('batch', 'stale_allow')
     hits = metrics.MEMO_REQUESTS.labels('batch', 'hit')

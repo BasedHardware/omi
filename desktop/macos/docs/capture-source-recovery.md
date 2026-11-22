@@ -1,5 +1,32 @@
 # Desktop capture source recovery
 
+## Screen capture intent across sync
+
+`SettingsSyncManager.setUserScreenAnalysisEnabled` records this Mac's explicit
+choice before publishing the settings notification. Onboarding Skip uses the
+same owner without sending a request before onboarding completes. A local off
+survives remote on values and the startup default-repair migrations; only an
+explicit local on releases it. Existing installations without the hold marker
+conservatively preserve a stored off before their first hydration or repair.
+Old local and remote off values were indistinguishable, so both are preserved
+until a local on. Newly received remote off values do not create a local veto.
+
+Normal user toggles push only `shared.screen_analysis_enabled`. This is an
+account-wide value: another Mac without a local veto adopts it. A Mac that
+explicitly turned capture off rejects an account-wide on. Failed uploads do not
+undo local off. Named lazy-permission bundles keep their existing local-only
+sync behavior; this patch changes neither TCC nor screen-capture drivers.
+
+Verification checklist for #25132:
+- [x] Pre-upgrade off survives hydration, persisted reread and startup repair
+- [x] Onboarding Skip survives sync; a later Allow releases the hold
+- [x] Remote off/on remains authoritative without a local veto
+- [x] Settings HTTP round trip and two-client state sequence with a synthetic server
+- [ ] Current follow-up commit CI
+
+Tests use production settings owners and synthetic transport; they do not prove
+physical screen capture or two real Macs. Customer release confirmation is separate.
+
 ## Ownership and scope
 
 `AppState` owns the recording session, conversation and capture attempt. The
@@ -17,6 +44,20 @@ Explicit stack recovery and local conversation rotation retain
 `Scope.allSources`. Rotation must rebind both callbacks to its new local STT
 services. Deferred recovery carries its scope with its reason, and a queued
 full recovery cannot be downgraded by a later microphone-only request.
+
+## Sleep and DarkWake handoff
+
+`AppState` remembers capture intent when sleep stops a recording. Its delayed
+DarkWake probe retries always-on capture while the process remains scheduled.
+The probe retains that intent until a full wake consumes it, so a refused start
+or a session that fails during DarkWake can still recover on full wake. Full
+wake cancels the delayed probe and checks the current recording state to avoid
+starting a second session. Recording Off always prevents a restart.
+
+`SleepCaptureRearmPolicyTests` exercises the production AppState handoff after
+a failed start, after a successful start, and when full wake cancels a pending
+probe. Capture state is synthetic; the tests do not sleep the Mac or open a
+microphone.
 
 ## Silent input is evidence, not a hardware diagnosis
 

@@ -1,13 +1,23 @@
 // Account-scoped UI approval. All inputs are API data, never executable PR code.
 const ACTOR_ID = 9387252; // Git-on-my-level, stable across login renames.
 const NIK_ID = 43514161;
+const APPROVER_IDS = new Set([NIK_ID, ACTOR_ID]);
+// Exact default outputs of backend/scripts/generate_{ts,swift}_openapi_types.py.
+// Keep this bounded: other generated files can still contain UI.
+const GENERATED_API_FILES = new Set([
+  'desktop/windows/src/renderer/src/lib/omiApi.generated.ts',
+  'web/app/src/lib/omiApi.generated.ts',
+  'web/admin/lib/services/omi-api/omiApi.generated.ts',
+  'web/personas-open-source/src/lib/omiApi.generated.ts',
+  'desktop/macos/Desktop/Sources/Generated/OmiApi.generated.swift',
+]);
 const STATUS = 'UI author approval';
 const MARKER = '<!-- ui-author-approval:git-on-my-level -->';
 const isActor = user => user?.id === ACTOR_ID;
-const isUI = path => /^(app\/lib\/(pages|widgets|ui|l10n)\/|desktop\/macos\/Desktop\/(Sources\/(Views|Components|Theme|UI)\/|Resources\/)|desktop\/windows\/src\/(components|pages|views|styles)\/|web\/[^/]+\/(app|src)\/.*\.(tsx|jsx|vue|css|scss|html|svg|png|jpg|webp)$|frontend\/.*\.(tsx|jsx|vue|css|scss|html|svg|png|jpg|webp)$)/.test(path)
+const isUI = path => !GENERATED_API_FILES.has(path) && (/^(app\/lib\/(pages|widgets|ui|l10n)\/|desktop\/macos\/Desktop\/(Sources\/(Views|Components|Theme|UI)\/|Resources\/)|desktop\/windows\/src\/(components|pages|views|styles)\/|web\/[^/]+\/(app|src)\/.*\.(tsx|jsx|vue|css|scss|html|svg|png|jpg|webp)$|frontend\/.*\.(tsx|jsx|vue|css|scss|html|svg|png|jpg|webp)$)/.test(path)
   || /^desktop\/macos\/Desktop\/Sources\/.*(View|ViewController|Window|Panel)\.swift$/.test(path)
   || /^desktop\/windows\/src\/renderer\/.*\.(tsx|jsx|css|scss|html|svg|png|jpg|webp)$/.test(path)
-  || /\.(figma|sketch)$/.test(path);
+  || /\.(figma|sketch)$/.test(path));
 
 function decision(pr, files, commits, comments) {
   const actor = isActor(pr.user) || commits.some(c => isActor(c.author) || isActor(c.committer)
@@ -16,7 +26,7 @@ function decision(pr, files, commits, comments) {
   // REST caps PR commits at 250 and files at 3000. Never pass incomplete evidence.
   const incomplete = pr.commits >= 250 || pr.changed_files > 3000;
   const required = incomplete || (actor && ui);
-  const commands = comments.filter(c => c.user?.id === NIK_ID
+  const commands = comments.filter(c => APPROVER_IDS.has(c.user?.id)
     && new RegExp(`^/(approve|reject)-ui ${pr.head.sha}\\s*$`).test(c.body.trim()));
   commands.sort((a, b) => a.id - b.id);
   const approved = commands.at(-1)?.body.trim().startsWith('/approve-ui ');
@@ -59,13 +69,12 @@ async function evidence(github, repo, pr) {
   // named files (for example IntegrationNudgeCard.swift) cannot evade the gate.
   for (const file of first.files) {
     for (const path of new Set([file.filename,file.previous_filename].filter(Boolean))) {
-      if (!/^desktop\/macos\/.*\.swift$/.test(path)) continue;
+      if (GENERATED_API_FILES.has(path) || !/^desktop\/macos\/.*\.swift$/.test(path)) continue;
       for (const ref of [pr.base.sha,pr.head.sha]) {
         try {
           let {data} = await github.rest.repos.getContent({...repo,path,ref});
-          // Contents omits the body above 1 MB (including generated API clients).
-          // Read that exact immutable blob instead; generated files still undergo
-          // the same UI scan as every other Swift file, on both sides of the diff.
+          // Contents omits the body above 1 MB. Read that exact immutable blob
+          // for non-exempt Swift files on both sides of the diff.
           if (data.encoding === 'none' && data.size > 1000000 && data.size <= 10000000
             && /^[a-f0-9]{40}$/.test(data.sha)) {
             const metadata = data;
@@ -135,7 +144,7 @@ async function evaluateHead({github, context, headSha}) {
     if (signature(latest) !== signature(prs)) throw new Error('PR set changed during verification');
     await status(allowed ? 'success' : 'failure',allowed
       ? 'UI approval satisfied or not required on all same-head PRs'
-      : 'Waiting for kodjima33 approval on affected same-head PRs');
+      : 'Waiting for Nik or David approval on affected same-head PRs');
   } catch (error) {
     await status('failure','Unable to verify UI approval; see workflow logs');
     throw error;

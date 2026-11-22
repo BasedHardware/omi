@@ -9,8 +9,8 @@ from typing import Any
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
 
+from config.conversation_processing_retry import DETERMINISTIC_PROCESSING_FAILURE, PROCESSING_BURST_ATTEMPTS
 from config.listen_finalization import durable_attempt_cap_enabled as _durable_attempt_cap_enabled
-from config.summary_guarantee import enabled as summary_deadline_enabled
 
 from database import conversation_finalization_jobs as jobs_db
 from database.account_deletion_marker import account_deletion_blocks_user_work
@@ -24,13 +24,14 @@ from utils.account_cutover.access import should_skip_background_account_mutation
 from utils.conversations import lifecycle as lifecycle_service
 from utils.conversations import quiet_finalization
 from utils.conversations.processing_trigger import trigger_for_finalization_job
+from utils.conversations.processing_retry import processing_failure_code
 from utils.conversations.recovery import RecoveryStructureUnavailableError, recovery_minimum_terminal_enabled
 from utils.conversations.finalizer import (
     ConversationFinalizationDisposition,
     ConversationFinalizationError,
     finalize_persisted_conversation,
 )
-from utils.executors import db_executor, postprocess_executor, sync_executor, run_blocking
+from utils.executors import db_executor, postprocess_executor, run_blocking
 from utils.llm.gateway_error_contract import byok_failure_class_of
 from utils.metrics import LISTEN_FINALIZATION_RETRIES_TOTAL
 from utils.observability.journeys import (
@@ -79,7 +80,9 @@ async def _retry_or_dead_letter(
     # dispatch generation. The job's failed-processing count survives that
     # handoff and is the authoritative budget (as on the pusher path).
     this_attempt = max(task_retry_count, failed_attempts) + 1
-    if this_attempt >= max_attempts:
+    if this_attempt >= max_attempts or (
+        reason == DETERMINISTIC_PROCESSING_FAILURE and this_attempt >= PROCESSING_BURST_ATTEMPTS
+    ):
         return await run_blocking(
             db_executor,
             final_attempt_failed,
@@ -119,7 +122,7 @@ async def run_listen_finalization_job(
         if set(payload) != {'kind', 'key', 'task_token'}:
             return JSONResponse(status_code=400, content={'status': 'invalid_enrichment_task'})
         try:
-            executor = postprocess_executor if summary_deadline_enabled() else sync_executor
+            executor = postprocess_executor
             status = await run_blocking(executor, run_enrichment, payload['key'], payload['task_token'])
             if status == 'busy':
                 logger.info('event=conversation_finalization_sync_reprocess outcome=busy')
@@ -322,8 +325,9 @@ async def run_listen_finalization_job(
                 if disposition == 'requeued':
                     return JSONResponse(status_code=200, content={'status': 'delayed_requeue'})
                 return JSONResponse(status_code=409, content={'status': 'completion_conflict'})
+            failure_code = processing_failure_code(error) if error.code == 'processing_failed' else error.code
             disposition = await _retry_or_dead_letter(
-                job_id, dispatch_generation, claimed_lease_epoch, task_retry_count, failed_attempts, error.code
+                job_id, dispatch_generation, claimed_lease_epoch, task_retry_count, failed_attempts, failure_code
             )
             if disposition == 'dead_letter':
                 # A BYOK provider failure is the user's own account state even at
@@ -355,6 +359,7 @@ async def run_listen_finalization_job(
                 claimed_lease_epoch,
             )
         else:
+            # Discarded is terminal success, just like completed; do not defer or retry it.
             completed = await run_blocking(
                 db_executor,
                 jobs_db.mark_finalization_completed,

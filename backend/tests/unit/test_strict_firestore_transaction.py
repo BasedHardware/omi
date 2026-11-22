@@ -69,6 +69,21 @@ def test_named_opt_out_allows_reads_after_writes():
     assert record.get(transaction=transaction).to_dict() == {'value': 'after'}
 
 
+def test_app_review_config_merge_stores_the_updated_fields_and_preserves_other_fields():
+    path = ('app_review_config', 'ios')
+    database = StrictFirestore({path: {'hidden_versions': ['2.1.0'], 'other': 'kept'}})
+    reference = database.collection('app_review_config').document('ios')
+    transaction = database.transaction()
+
+    transaction.set(reference, {'hidden_versions': ['3.0.0'], 'reviewer_uids': ['reviewer']}, merge=True)
+
+    assert database.rows[path] == {
+        'hidden_versions': ['3.0.0'],
+        'reviewer_uids': ['reviewer'],
+        'other': 'kept',
+    }
+
+
 @pytest.mark.parametrize('write_method', ['set', 'update', 'delete'])
 def test_transaction_rejects_writes_to_a_different_store(write_method):
     database = StrictFirestore({('users', 'user-1', 'records', 'record'): {'value': 'before'}})
@@ -198,3 +213,14 @@ def test_parent_navigation_preserves_owner_store_and_read_ordering():
     assert database.rows[('users', 'user-1', 'processing_attention_items', 'item')] == {'active': True}
     with pytest.raises(ReadAfterWriteError):
         sibling.get(transaction=transaction)
+
+
+@pytest.mark.parametrize('parent', [None, 42, {}, {'kept': 'old'}])
+def test_nested_update_matches_emulator_nonmap_replacement(parent):
+    # Proven against the real emulator in the phase 2a integration proof.
+    path = ('users', 'user-1', 'records', 'record')
+    database = StrictFirestore({path: {'nested': parent}})
+    transaction = database.transaction()
+    transaction.update(_record(database), {'nested.child': 2, '`literal.dot`.value': 3})
+    nested = {'child': 2, **({'kept': 'old'} if isinstance(parent, dict) and parent else {})}
+    assert database.rows[path] == {'nested': nested, 'literal.dot': {'value': 3}}

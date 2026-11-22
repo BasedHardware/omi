@@ -57,16 +57,19 @@ class GeneratedImportJobResponse {
 class GeneratedIntegrationResponse {
   final String appKey;
   final bool connected;
+  final bool? readSelectionConfigured;
 
   const GeneratedIntegrationResponse({
     required this.appKey,
     required this.connected,
+    this.readSelectionConfigured,
   });
 
   factory GeneratedIntegrationResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedIntegrationResponse(
       appKey: _required(_readFieldValue<String>(_readField(json, const ["app_key"]), "app_key", _readString, requiredField: true, nullable: false), "app_key"),
       connected: _required(_readFieldValue<bool>(_readField(json, const ["connected"]), "connected", _readBool, requiredField: true, nullable: false), "connected"),
+      readSelectionConfigured: _readFieldValue<bool>(_readField(json, const ["read_selection_configured"]), "read_selection_configured", _readBool, requiredField: false, nullable: true),
     );
   }
 
@@ -74,6 +77,7 @@ class GeneratedIntegrationResponse {
     return {
       'app_key': appKey,
       'connected': connected,
+      'read_selection_configured': readSelectionConfigured,
     };
   }
 }
@@ -94,6 +98,94 @@ class GeneratedOAuthUrlResponse {
   Map<String, dynamic> toJson() {
     return {
       'auth_url': authUrl,
+    };
+  }
+}
+
+class GeneratedReadableCalendar {
+  final bool available;
+  final String id;
+  final String name;
+  final bool primary;
+
+  const GeneratedReadableCalendar({
+    required this.available,
+    required this.id,
+    required this.name,
+    required this.primary,
+  });
+
+  factory GeneratedReadableCalendar.fromJson(Map<String, dynamic> json) {
+    return GeneratedReadableCalendar(
+      available: _required(_readFieldValue<bool>(_readField(json, const ["available"]), "available", _readBool, requiredField: true, nullable: false), "available"),
+      id: _required(_readFieldValue<String>(_readField(json, const ["id"]), "id", _readString, requiredField: true, nullable: false), "id"),
+      name: _required(_readFieldValue<String>(_readField(json, const ["name"]), "name", _readString, requiredField: true, nullable: false), "name"),
+      primary: _required(_readFieldValue<bool>(_readField(json, const ["primary"]), "primary", _readBool, requiredField: true, nullable: false), "primary"),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'available': available,
+      'id': id,
+      'name': name,
+      'primary': primary,
+    };
+  }
+}
+
+class GeneratedCalendarSelection {
+  final String accountId;
+  final List<GeneratedReadableCalendar> calendars;
+  final List<String> selectedIds;
+  final String writeCalendarId;
+
+  const GeneratedCalendarSelection({
+    required this.accountId,
+    required this.calendars,
+    required this.selectedIds,
+    this.writeCalendarId = "primary",
+  });
+
+  factory GeneratedCalendarSelection.fromJson(Map<String, dynamic> json) {
+    return GeneratedCalendarSelection(
+      accountId: _required(_readFieldValue<String>(_readField(json, const ["account_id"]), "account_id", _readString, requiredField: true, nullable: false), "account_id"),
+      calendars: _required(_readFieldValue<List<GeneratedReadableCalendar>>(_readField(json, const ["calendars"]), "calendars", (value) => _readObjectList(value, GeneratedReadableCalendar.fromJson), requiredField: true, nullable: false), "calendars"),
+      selectedIds: _required(_readFieldValue<List<String>>(_readField(json, const ["selected_ids"]), "selected_ids", _readStringList, requiredField: true, nullable: false), "selected_ids"),
+      writeCalendarId: _required(_readFieldValue<String>(_readField(json, const ["write_calendar_id"]), "write_calendar_id", _readString, requiredField: false, nullable: false, defaultValue: "primary"), "write_calendar_id"),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'account_id': accountId,
+      'calendars': calendars.map((value) => value.toJson()).toList(),
+      'selected_ids': selectedIds,
+      'write_calendar_id': writeCalendarId,
+    };
+  }
+}
+
+class GeneratedCalendarSelectionUpdate {
+  final String accountId;
+  final List<String> selectedIds;
+
+  const GeneratedCalendarSelectionUpdate({
+    required this.accountId,
+    required this.selectedIds,
+  });
+
+  factory GeneratedCalendarSelectionUpdate.fromJson(Map<String, dynamic> json) {
+    return GeneratedCalendarSelectionUpdate(
+      accountId: _required(_readFieldValue<String>(_readField(json, const ["account_id"]), "account_id", _readString, requiredField: true, nullable: false), "account_id"),
+      selectedIds: _required(_readFieldValue<List<String>>(_readField(json, const ["selected_ids"]), "selected_ids", _readStringList, requiredField: true, nullable: false), "selected_ids"),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'account_id': accountId,
+      'selected_ids': selectedIds,
     };
   }
 }

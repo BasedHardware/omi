@@ -332,10 +332,6 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
             pace, _positive_float_env('PARAKEET_WINDOW_FIRST_POST_SECONDS', FIRST_POST_SECONDS)
         )
         self._first_text_cut_enabled = os.getenv('PARAKEET_WINDOW_FIRST_TEXT_CUT_ENABLED', 'true').lower() != 'false'
-        self._deadline_cut_enabled = os.getenv('PARAKEET_WINDOW_DEADLINE_CUT_ENABLED', 'false').lower() == 'true'
-        self._deadline_cut_post_latency = _positive_float_env(
-            'PARAKEET_WINDOW_DEADLINE_CUT_POST_LATENCY_SECONDS', DEADLINE_CUT_POST_LATENCY_SECONDS
-        )
         self._max_empty_streak = _positive_int_env('PARAKEET_WINDOW_MAX_EMPTY_STREAK', MAX_EMPTY_STREAK)
         self._empty_streak = 0
         self._first_text_timer: asyncio.TimerHandle | None = None
@@ -891,13 +887,7 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
                 segments, job.duration, self._max_context_seconds, force=job.force, pause=job.pause
             ).emit
         )
-        deadline_cut = deadline_text_cut or (
-            self._deadline_cut_enabled
-            and self._deadline_speech_at is not None
-            and (not self._first_text_recorded or self.progress_deadline_enabled)
-            and self._deadline_speech_at + self._first_text_deadline - time.monotonic()
-            <= self._deadline_cut_post_latency
-        )
+        deadline_cut = deadline_text_cut
         decision = decide_window(
             segments,
             job.duration,

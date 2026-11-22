@@ -1,0 +1,17 @@
+id: battery/unplug-while-critical-then-shuts-down
+summary: >
+  Critical while charging keeps running; once the charger is unplugged the
+  debounced shutdown proceeds.
+committee: [6]
+tags: [fix]
+initial: {charging: true}
+timeline:
+  - {t: 1000, battery_mv: 3300}
+  - {t: 45000, charger: off}
+end: 120000
+expect:
+  boot_count: 1
+  final: "off"
+  boots:
+    - {exit: poweroff, charging: false, log: ["Battery critical level reached"]}
+  invariants: [critical-battery-respects-charger]

@@ -8,7 +8,6 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/pages/capture/connect.dart';
-import 'package:omi/pages/episodes/live_episode_page.dart';
 import 'package:omi/pages/home/device.dart';
 import 'package:omi/pages/phone_calls/phone_calls_page.dart';
 import 'package:omi/providers/capture_provider.dart';
@@ -391,10 +390,9 @@ class _HomeRecordButtonState extends State<HomeRecordButton> {
       }
       return;
     }
-    if (context.mounted) {
-      routeToPage(context,
-          LiveEpisodePage(topConversationId: captureProvider.topConversationId, initialTab: LiveEpisodeTab.transcript));
-    }
+    // A live phone recording keeps the reader on Home: Home's bottom row becomes the recording
+    // bar (HomeRecordingBar), which confirms the start, offers Undo for its first seconds, and
+    // opens the live transcript when tapped. An accidental tap no longer lands on a new page.
   }
 
   @override

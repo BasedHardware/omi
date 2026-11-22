@@ -83,10 +83,12 @@ def _apply_operation(current: Dict[str, Any], operation: Dict[str, Any]) -> tupl
         structured = next_state.get('structured')
         current_structured_title = structured.get('title') if isinstance(structured, Mapping) else None
         patch = (
-            {'structured.title': title, 'user_title': title}
+            {'structured.title': title, 'user_title': title, 'summary_due_at': None}
             if current.get('user_title') != title or current_structured_title != title
             else {}
         )
+        if patch:
+            next_state['summary_due_at'] = None
         next_state['user_title'] = title
         if not isinstance(structured, dict):
             structured = {}

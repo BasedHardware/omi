@@ -32,6 +32,7 @@ tolerations:
     effect: NoSchedule
 worker:
   heldDeadLetterEnabled: true
+  inputExpiringEnabled: true
   apiUrl: https://backend-sync-staging-1031333818730.us-central1.run.app
   audience: https://backend-sync-staging-1031333818730.us-central1.run.app
   # Staging composes the prod manifest, so it inherits the shadow 25 pin; the

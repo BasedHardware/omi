@@ -13,7 +13,7 @@ from models.boundary_evidence import BoundarySignal
 from models.conversation_enums import ContentKind
 from models.speaker_evidence import OWNER, SpeakerEvidence
 from utils.capture.media import media_playback_signals, screen_time
-from utils.conversations.relevance_rules import EXPLICIT_REMINDER_RE, transcript_word_count
+from utils.conversations.relevance_rules import has_explicit_keep_instruction, transcript_word_count
 from utils.conversations.relevance_media_metrics import observe
 from utils.conversations.owner_attribution import speaker_role_map
 
@@ -124,7 +124,7 @@ def classify_content(
     words = sum(transcript_word_count(t) for t in texts)
     owner_seconds = owner_speech_seconds(evidence, segments)
     start, end = screen_time(started_at), screen_time(finished_at)
-    if protected or any(EXPLICIT_REMINDER_RE.search(t) for t in texts):
+    if protected or any(has_explicit_keep_instruction(t) for t in texts):
         return ContentDecision('conversation', 'protected', owner_seconds, words)
     if start is None or end is None or end <= start:
         return ContentDecision('conversation', 'unknown_window', owner_seconds, words)

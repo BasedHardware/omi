@@ -7,6 +7,7 @@ from-segments intake carries capture evidence lineage, so compatibility rules
 apply here that do not apply to app-facing routes.
 """
 
+from utils.conversations.layer import read_product as read_product_conversation
 from models.developer_transcript import SimpleTranscriptSegment
 from routers import developer_segments
 from routers.developer_segments_models import (
@@ -98,7 +99,7 @@ from utils.observability.external_lists import (
 from utils.observability.firestore_request_reads import ReadComponent, read_component
 from utils import external_list_reads as external_lists
 from utils import external_polling_cache as polling_cache
-from utils.developer_item_reads import read_conversation_item
+from utils.developer_item_reads import project_structured_defaults, read_conversation_item
 from utils.conversations import transcribing_hold
 from config.episodes import home_transcription_presentation_gate_enabled
 from utils.mcp_server.handlers.conversations import conversation_cards_page_core
@@ -1353,17 +1354,16 @@ def get_user_folders(uid: str = Depends(get_uid_with_conversations_read)):
     folders = folders_db.get_folders(uid)
     valid_folders = []
     for folder in folders:
-        if not folder or not folder.get('id'):
+        if not folder or not folder.id:
             logger.warning('Skipping malformed folder in Developer API folder list')
             continue
         try:
-            DeveloperFolder.model_validate(folder)
-            valid_folders.append(folder)
+            DeveloperFolder.model_validate(folder.model_dump(exclude_unset=True))
+            valid_folders.append(folder.model_dump(exclude_unset=True))
         except ValidationError as e:
             invalid_fields = [err['loc'][0] for err in e.errors() if err.get('loc')]
             logger.warning(
-                f"Skipping invalid folder doc {folder.get('id', 'unknown')} for uid {uid}: "
-                f"missing/invalid fields {invalid_fields}"
+                f"Skipping invalid folder doc {folder.id} for uid {uid}: " f"missing/invalid fields {invalid_fields}"
             )
             continue
     return valid_folders
@@ -1629,7 +1629,7 @@ def get_conversations(
                 logger.warning('Skipping malformed conversation in Developer API conversation list')
                 continue
             try:
-                valid_conversations.append(Conversation.model_validate(conv))
+                valid_conversations.append(Conversation.model_validate(project_structured_defaults(conv)))
             except ValidationError as e:
                 invalid_fields = [err['loc'][0] for err in e.errors() if err.get('loc')]
                 logger.warning(
@@ -2150,8 +2150,11 @@ def _ingest_conversation_from_segments(
                 conversation_id,
             )
             return ConversationResponse(id=conversation_id, status='deleted', discarded=True)
-        existing_conversation = conversations_db.get_conversation(
-            uid, conversation_id, read_site=FirestoreReadSite.DEVELOPER_FROM_SEGMENTS_IDEMPOTENCY
+        existing_conversation = read_product_conversation(
+            conversations_db.get_conversation,
+            uid,
+            conversation_id,
+            read_site=FirestoreReadSite.DEVELOPER_FROM_SEGMENTS_IDEMPOTENCY,
         )
         if existing_conversation:
             if _is_stale_from_segments_claim(
@@ -2254,7 +2257,7 @@ def _ingest_conversation_from_segments(
         if client_projection is not None:
             create_payload.update(client_processing_mutation(client_projection))
         if not lifecycle_service.create_processing_conversation(uid, create_payload, idempotent=True):
-            existing_conversation = conversations_db.get_conversation(uid, conversation_id)
+            existing_conversation = read_product_conversation(conversations_db.get_conversation, uid, conversation_id)
             if existing_conversation:
                 logger.info(
                     "from-segments idempotency concurrent hit for uid=%s client_session_id=%s conversation_id=%s",
@@ -2552,7 +2555,7 @@ def update_conversation_endpoint(
     - **title**: New title for the conversation (optional)
     - **discarded**: Whether the conversation is discarded (optional)
     """
-    conversation = conversations_db.get_conversation(uid, conversation_id)
+    conversation = read_product_conversation(conversations_db.get_conversation, uid, conversation_id)
     if not conversation or conversation.get('deleted', False):
         raise HTTPException(status_code=404, detail="Conversation not found")
     if conversation.get('is_locked', False):
@@ -2570,10 +2573,10 @@ def update_conversation_endpoint(
         else:
             lifecycle_service.restore_discarded(uid, conversation_id)
 
-    conversation = conversations_db.get_conversation(uid, conversation_id)
+    conversation = read_product_conversation(conversations_db.get_conversation, uid, conversation_id)
     if conversation:
         populate_folder_names(uid, [conversation])
-    return conversation
+    return project_structured_defaults(conversation) if conversation else conversation
 
 
 # ******************************************************

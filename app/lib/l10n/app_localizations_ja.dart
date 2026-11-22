@@ -1110,6 +1110,11 @@ class AppLocalizationsJa extends AppLocalizations {
   String get nameUpdatedSuccessfully => '名前が正常に更新されました！';
 
   @override
+  String calendarReadSelectionHelp(String calendar) {
+    return '選択したカレンダーを読み込みます。新しい予定には $calendar を使用します。';
+  }
+
+  @override
   String get calendarSettings => 'カレンダー設定';
 
   @override
@@ -1953,6 +1958,15 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get memoryHistory => '履歴';
+
+  @override
+  String get recordingWithYourPhone => 'スマホで録音中';
+
+  @override
+  String get wrapUp => 'まとめる';
+
+  @override
+  String get recordingDiscarded => '録音を破棄しました';
 
   @override
   String get undo => '元に戻す';
@@ -6927,6 +6941,9 @@ class AppLocalizationsJa extends AppLocalizations {
   String get authFailedToSignInWithApple => 'Appleでのサインインに失敗しました。もう一度お試しください。';
 
   @override
+  String get authAppleSignInFailedUseGoogle => 'Appleでサインインできませんでした。もう一度お試しいただくか、Googleで続行してください。';
+
+  @override
   String get authFailedToRetrieveToken => 'Firebaseトークンの取得に失敗しました。もう一度お試しください。';
 
   @override
@@ -8937,7 +8954,8 @@ class AppLocalizationsJa extends AppLocalizations {
   String get deleteWhileProcessingTitle => 'まだ処理中です';
 
   @override
-  String get deleteWhileProcessingMessage => 'この録音はアップロード済みですが、Omi はまだ会話を作成しています。今削除して処理が失敗すると復元できません。それでも削除しますか？';
+  String get deleteWhileProcessingMessage =>
+      'この録音はすでにアップロード済みで、Omi が処理中です。ここで削除するとスマートフォン上のコピーが消えます。処理に失敗した場合、Omi はこのスマートフォンから再試行できません。';
 
   @override
   String get syncCardAllBackedUp => 'すべての録音を同期済み';
@@ -9037,6 +9055,24 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get unableToDetermineFirmwareVersion => '現在のファームウェアバージョンを特定できません';
+
+  @override
+  String get applyCodeToCurrentPlan => '現在のプランに適用';
+
+  @override
+  String subscriptionCodeResult(String result) {
+    String _temp0 = intl.Intl.selectLogic(
+      result,
+      {
+        'applied': '現在のプランにコードを適用しました。',
+        'refused': 'このコードは適用できません。コードと対象プランを確認してください。',
+        'conflict': 'コードが使用済みか、プランに割引が適用されています。',
+        'rateLimited': '試行回数が多すぎます。しばらく待ってからお試しください。',
+        'other': 'コードを適用できませんでした。もう一度お試しください。',
+      },
+    );
+    return '$_temp0';
+  }
 
   @override
   String get promoCode => 'プロモコード';
@@ -12016,7 +12052,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String diagnosticsSincePairingSummary(int drops, int failed) {
-    return 'ペアリング以降: 切断 $drops 回、接続の失敗 $failed 回。';
+    return 'ペアリング以降：再接続 $drops 回、接続失敗 $failed 回。';
   }
 
   @override
@@ -13195,6 +13231,9 @@ class AppLocalizationsJa extends AppLocalizations {
   }
 
   @override
+  String get paywallTrialCodeHint => 'Omi Pro のコードをお持ちですか？次の画面で入力してください。';
+
+  @override
   String get paywallTrialCancelNote => 'いつでもキャンセル可能。手数料や違約金なし。';
 
   @override
@@ -13241,16 +13280,6 @@ class AppLocalizationsJa extends AppLocalizations {
   }
 
   @override
-  String syncCardTranscribingAmount(String amount) {
-    return '$amountを会話に変換中';
-  }
-
-  @override
-  String syncCardTranscribedOf(String done, String total) {
-    return '$done / $total 完了 · この画面を閉じても大丈夫です';
-  }
-
-  @override
   String syncCardReadyAmount(String amount) {
     return '$amountを同期できます';
   }
@@ -13274,7 +13303,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get syncDetailsWaitingOnPhone => 'このスマホで待機中';
 
   @override
-  String get syncDetailsTranscribing => 'Omiで文字起こし中';
+  String get syncDetailsTranscribing => 'アップロード済み、サーバー待ち';
 
   @override
   String get syncDetailsAudioFiles => '音声ファイル';
@@ -13460,6 +13489,9 @@ class AppLocalizationsJa extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get attentionRerunNotes => 'ノートを再生成';
 
   @override
   String get attentionSummaryFailed => 'この会話を要約できませんでした';
@@ -13722,6 +13754,12 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get summaryBusyBody => 'Omi はすでにこの会話を処理しています。完了すると、ここに要約が表示されます。';
+
+  @override
+  String get summaryTranscriptionPendingTitle => 'まだ文字起こしされていません';
+
+  @override
+  String get summaryTranscriptionPendingBody => '文字起こしが完了すると、要約が表示されます。';
 
   @override
   String get summaryCheckAgain => '再確認';
@@ -14247,14 +14285,6 @@ class AppLocalizationsJa extends AppLocalizations {
   }
 
   @override
-  String get deviceRecently => '最近';
-
-  @override
-  String deviceDisconnectedFor(String duration) {
-    return '$duration 切断';
-  }
-
-  @override
   String get deviceControls => 'コントロール';
 
   @override
@@ -14607,6 +14637,19 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get episodeWritingNotes => 'メモを作成中…';
+
+  @override
+  String get homeStepTranscribing => '文字起こし中…';
+
+  @override
+  String homeRecordingsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count件の録音',
+    );
+    return '$_temp0';
+  }
 
   @override
   String get episodeWritingNotesDetail => '先に文字起こしを仕上げています。このページを離れても大丈夫です。';
@@ -15136,7 +15179,181 @@ class AppLocalizationsJa extends AppLocalizations {
   String get paymentDeclinedTitle => 'カードが拒否されました';
 
   @override
+  String paymentDeclinedMonthlyMessage(String plan, String price) {
+    return 'カードを更新するか、$planを月額$priceで再開できます';
+  }
+
+  @override
   String paymentDeclinedMessage(Object plan) {
     return '$planを再開するにはカードを更新してください';
   }
+
+  @override
+  String get hasLinkedTasksLabel => '関連するタスクあり';
+
+  @override
+  String get hasTasksFilter => 'タスクあり';
+
+  @override
+  String firmwareUpdateNotInstalledMessage(String version) {
+    return 'The update didn\'t install. Your pendant is still on $version. Please try again.';
+  }
+
+  @override
+  String firmwareUpdateNotInstalledCv1Message(String version) {
+    return 'アップデートはインストールされませんでした。ペンダントは現在のファームウェア（$version）で引き続き使えます。アップデートを繰り返さず、サポートにお問い合わせください。';
+  }
+
+  @override
+  String get firmwareUpdateUnconfirmedMessage =>
+      'Couldn\'t confirm the update. Your pendant hasn\'t reconnected yet. Keep it nearby and check its firmware version before trying again.';
+
+  @override
+  String get firmwareUpdateUnconfirmedTitle => 'Update Not Confirmed';
+
+  @override
+  String get firmwareVerifyingInstallation => 'Confirming installation… This may take up to 3 minutes.';
+
+  @override
+  String get monthlySwitchTitle => '月払いに切り替える';
+
+  @override
+  String monthlySwitchPlanValue(String plan, String price) {
+    return '$plan、月額$price';
+  }
+
+  @override
+  String monthlySwitchNote(String yearly) {
+    return '未払いの年額$yearlyの請求に代わります。毎月更新されます。いつでも解約できます。';
+  }
+
+  @override
+  String get monthlySwitchDeclined => 'お支払いが拒否されました。プランは変更されていません。';
+
+  @override
+  String get monthlySwitchUnavailable => '現在は切り替えできません。カードを更新してください。';
+
+  @override
+  String get monthlySwitchDoneTitle => '月払いに切り替わりました';
+
+  @override
+  String monthlySwitchDoneBody(String price) {
+    return '本日$priceをお支払いいただきました。毎月更新されます。';
+  }
+
+  @override
+  String get processingDeleteScopeChanged => '処理中の一覧が変更されました。一覧を確認してもう一度お試しください。';
+
+  @override
+  String get syncTooOldExplanation =>
+      'This recording is older than Omi\'s sync window, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
+
+  @override
+  String freeCapTitle(int minutes) {
+    return '今月の$minutes分を使い切りました';
+  }
+
+  @override
+  String get freeCapBody => 'Omi は録音を続けています。文字起こしを続ける方法を選んでください。';
+
+  @override
+  String get omiProPlanName => 'Omi Pro';
+
+  @override
+  String get freeCapProUnlimited => 'クラウド文字起こしが無制限';
+
+  @override
+  String get freeCapProAccuracy => '最高の精度';
+
+  @override
+  String get freeCapProWaiting => '待機中の録音を文字起こし';
+
+  @override
+  String get freeCapPhoneSubtitle => '無料。元に戻すまでオンのままです。';
+
+  @override
+  String get transcribingOnThisPhone => 'このスマートフォンで文字起こし中';
+
+  @override
+  String get getPro => 'Pro にする';
+
+  @override
+  String get unlock => 'ロック解除';
+
+  @override
+  String get transcribeWith => '文字起こしの方法';
+
+  @override
+  String get omiCloud => 'Omi クラウド';
+
+  @override
+  String get thisPhone => 'このスマートフォン';
+
+  @override
+  String get onDeviceReady => '準備完了';
+
+  @override
+  String cloudMinutesLeft(int left, int limit, String date) {
+    return '残り $left/$limit 分 · $date にリセット';
+  }
+
+  @override
+  String cloudMinutesAvailable(int minutes) {
+    return 'クラウドの $minutes 分が利用可能';
+  }
+
+  @override
+  String get switchBack => '元に戻す';
+
+  @override
+  String get setUpThisPhone => 'このスマートフォンを設定';
+
+  @override
+  String get speechRecognition => '音声認識';
+
+  @override
+  String get audioStaysOnPhone => '音声はスマートフォン内に残ります';
+
+  @override
+  String onDeviceModelDownloadSize(int size) {
+    return '$size MB のダウンロード';
+  }
+
+  @override
+  String get downloadNow => '今すぐダウンロード';
+
+  @override
+  String get onWifiLater => '後で Wi-Fi で';
+
+  @override
+  String get conversationWritingSummary => '要約を作成しています…';
+
+  @override
+  String get onTheWayServerWork => 'サーバーが報告した処理';
+
+  @override
+  String get finishNothingToProcess => 'まだ処理するものがありません。';
+
+  @override
+  String get finishStillProcessing => 'まだ処理中です。ホームに表示されます。';
+
+  @override
+  String get finishBackToHome => 'ホームに戻る';
+
+  @override
+  String get conversationSummaryWhenItEnds => 'この会話が終わると要約が表示されます';
+
+  @override
+  String get deviceUploadsWaitingOnServer => 'サーバーで待機中のアップロード';
+
+  @override
+  String get deviceUploadsWaitingOnServerSubtitle => '音声はデバイスまたはスマートフォンに安全に保存されています';
+
+  @override
+  String conversationSummaryThrough(String time) {
+    return '$timeまでの要約';
+  }
+
+  @override
+  String get conversationRecentTranscript => '最近の文字起こし';
 }

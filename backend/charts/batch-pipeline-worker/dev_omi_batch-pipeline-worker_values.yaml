@@ -1,4 +1,6 @@
 enabled: true
+podLabels:
+  service_name: batch-pipeline-worker
 image:
   repository: gcr.io/based-hardware-dev/batch-pipeline-worker
   digest: ""
@@ -26,7 +28,10 @@ tolerations:
     value: present
     effect: NoSchedule
 worker:
+  RECORD_FRESH_MERGE_ENABLED: false
+  # Staged OFF until every merge writer runs the sibling guard.
   heldDeadLetterEnabled: true
+  inputExpiringEnabled: true
   servingMetricsMinRefreshSeconds: 30
   shadowRecoveryApiUrl: "https://backend-integration-dt5lrfkkoa-uc.a.run.app"
   headPriorityEnabled: false

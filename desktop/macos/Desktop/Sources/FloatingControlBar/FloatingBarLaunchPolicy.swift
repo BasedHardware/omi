@@ -38,6 +38,12 @@ enum FloatingBarPresentationPolicy {
       !isSnoozed
     }
   }
+
+  /// Only an explicit request may acquire keyboard focus. A text field left
+  /// open in Omi is not permission to interrupt typing in another app (#24782).
+  static func shouldMakeKeyOnPresent(request: FloatingBarPresentationRequest) -> Bool {
+    request == .explicitUserAction
+  }
 }
 
 struct FloatingBarLaunchPolicy {
@@ -77,6 +83,34 @@ enum FloatingBarDurableVisibilityPolicy {
     isSnoozed: Bool
   ) -> Bool {
     isEnabled && !isSnoozed
+  }
+
+  /// Whether presenting a notification must arm `notificationWasTemporarilyShown`
+  /// so `dismissNotificationAndAdvanceQueue` orders the bar out once the
+  /// notification chain finishes (#6972, #24782).
+  ///
+  /// Any notification presented while the window is hidden, while the bar is
+  /// disabled, or while the bar is snoozed ("Hide for 2 hours", where
+  /// `isEnabled` stays true) is a temporary reveal and must re-hide afterward.
+  static func shouldArmTemporaryNotificationShow(
+    isWindowVisible: Bool,
+    isEnabled: Bool,
+    isSnoozed: Bool
+  ) -> Bool {
+    !isWindowVisible || !isEnabled || isSnoozed
+  }
+
+  /// Whether closing the floating AI conversation should order the bar out
+  /// completely instead of collapsing back to the idle pill/notch.
+  /// Both a disabled bar and a snoozed bar ("Hide for 2 hours") must re-hide
+  /// once no notification or conversation remains on screen.
+  static func shouldOrderOutAfterConversationClose(
+    isEnabled: Bool,
+    isSnoozed: Bool,
+    hasCurrentNotification: Bool,
+    showingAIConversation: Bool
+  ) -> Bool {
+    (!isEnabled || isSnoozed) && !hasCurrentNotification && !showingAIConversation
   }
 }
 

@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "id": "FC-test-retry-count-as-ownership-proof",
+  "violated_contract": "A concurrency test must observe the ownership and committed-result contract directly. Aggregating transaction retries per shard does not measure simultaneous owners: one correctly fenced transaction can retry repeatedly against concurrent admission, while a missing fence can succeed without any retries.",
+  "canonical_prevention": "Exercise real conditional claim acquisition with competing clients and observe the production transaction's existing matching-token read before any data access or write, without adding reads or serializing the test. Retain unique durable lease assertions and failure signals. Keep retry totals diagnostic, and discriminate with a fenced pull that aborts twice plus an unclaimed pull rejected by the observer. Invalidate an acquired claim by takeover or unchanged-token expiry and require no lease or job/control/claim mutation by the rejected pull.",
+  "canonical_prevention_artifact": [
+    "backend/tests/integration/test_batch_pipeline_shard_spread_firestore.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/tests/integration/test_batch_pipeline_shard_spread_firestore.py"
+  ],
+  "status": "open"
+}

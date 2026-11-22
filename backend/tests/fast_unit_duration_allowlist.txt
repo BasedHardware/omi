@@ -317,6 +317,7 @@ tests/unit/test_replay_llm_gateway_fake_upstream_oracle.py::test_loopback_oracle
 # File-isolation amortizes the merge_conversations import (models/database graph) into the first call.
 tests/unit/test_merge_audio_chunk_copy_failure.py::test_merge_propagates_custom_stt_marker_from_any_source
 tests/unit/test_merge_photo_read_failure.py::test_photo_read_failure_keeps_the_sources
+tests/unit/test_historical_tier_merge_and_persistence.py::test_merging_a_historical_source_keeps_the_merged_row_historical
 tests/unit/test_agent_proxy_async_boundaries.py::test_persistent_lease_heartbeat_failure_fails_closed_before_ttl_expires
 # First test amortizes the file-isolated utils.llm.clients import into its call phase.
 tests/unit/test_prompt_cache_wire_payload.py::test_get_llm_forwards_explicit_cache_options_and_production_cache_key
@@ -568,3 +569,10 @@ tests/unit/test_terminal_relevance.py::test_production_terminal_assessment_call_
 tests/unit/test_terminal_relevance.py::test_real_terminal_calendar_probe_distinguishes_unavailable_evidence[no_overlap-False]
 tests/unit/test_terminal_relevance.py::test_real_terminal_calendar_probe_distinguishes_unavailable_evidence[provider_error-None]
 tests/unit/test_sync_cross_job_assignment.py::test_seventy_minutes_of_identical_narration_is_one_recording
+tests/unit/test_monitoring_telemetry_contract.py::test_held_dead_letter_producer_families_reach_the_volume_alert_through_each_cloud_run_bridge[path0]
+# Walks a 1200-segment transcript across every page; each page rebuilds speaker display over the
+# whole transcript (product behavior under test). ~0.3s CPU locally, 1.02-1.07s on CI runners (PR #25522, #25551).
+tests/unit/test_mcp_conversation_detail_paging.py::test_walk_1200_segments_once_with_one_existing_read_per_page
+# First synchronous-finalize test of its file pays the lazy finalize import chain (batch pipeline, STT,
+# scipy/onnxruntime; ~627 modules) in its call phase: 1.04-1.07s CPU on CI runners, ~0.5s locally.
+tests/unit/test_client_processing_finalize.py::test_paid_sync_finalize_projection_is_in_firestore_on_reread

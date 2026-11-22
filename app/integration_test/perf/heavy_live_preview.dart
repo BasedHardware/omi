@@ -6,7 +6,6 @@ import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/episode.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
-import 'package:omi/gen/pigeon_communicator.g.dart' show BleDisconnectEvent;
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/episode_provider.dart';
@@ -231,9 +230,7 @@ class HeavyConnectedDevice extends ChangeNotifier implements DeviceProvider {
   @override
   Map<String, dynamic> get latestOmiGlassFirmwareDetails => const {};
   @override
-  Future<void> getDeviceInfo() async {}
-  @override
-  Future<List<BleDisconnectEvent>> disconnectHistory() async => const [];
+  Future<void> getDeviceInfo({bool forceRefresh = false}) async {}
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }

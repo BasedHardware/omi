@@ -84,17 +84,57 @@ class WorkItem:
     # CPU admission provenance, never inferred from record-origin speaker scopes.
     timing_store: str | None = None
     language_receipt_enabled: bool | None = None
+    # Frozen admission provenance; a receipt-clock span cannot bind by time.
+    capture_time_trust: str | None = None
+    # Privacy-only source authority; never an assignment target or ordering hint.
+    capture_source_conversation_id: str | None = None
 
-    def to_dict(self):
-        """Serialize optional receipt state without widening legacy job documents."""
+    # Server-derived exact original-file and decoded-range proof; never client supplied.
+    source_reuse_key: str | None = None
+    source_alias_of: str | None = None
+    source_conversation_ids: tuple[str, ...] = ()
+
+    @classmethod
+    def from_dict(cls, value: dict) -> 'WorkItem':
+        """Read a stored item envelope, ignoring fields a newer writer added (reader-first rollout)."""
+        return cls(**{key: item for key, item in value.items() if key in cls.__dataclass_fields__})
+
+    def to_dict(self, *, include_nulls: bool = False):
+        """Preserve old envelope nulls on request; trust is absent unless explicitly set."""
         from dataclasses import asdict
 
         value = asdict(self)
-        if self.language_receipt_enabled is None:
+        if not include_nulls and self.language_receipt_enabled is None:
             value.pop('language_receipt_enabled')
+        if self.capture_time_trust is None:
+            value.pop('capture_time_trust')
+        if self.capture_source_conversation_id is None:
+            value.pop('capture_source_conversation_id')
+        if self.source_reuse_key is None:
+            value.pop('source_reuse_key')
+        if self.source_alias_of is None:
+            value.pop('source_alias_of')
+        if not self.source_conversation_ids:
+            value.pop('source_conversation_ids')
         return value
 
     def __post_init__(self):
+        if self.source_alias_of is not None and (
+            not self.source_reuse_key
+            or len(self.source_alias_of) != 64
+            or any(c not in '0123456789abcdef' for c in self.source_alias_of)
+        ):
+            raise ValueError('bounded source alias owner required')
+        if len(self.source_conversation_ids) > 256 or any(
+            type(cid) is not str or not cid or '/' in cid or len(cid) > 128 for cid in self.source_conversation_ids
+        ):
+            raise ValueError('bounded same-owner source dependencies required')
+        if self.source_reuse_key is not None and (
+            type(self.source_reuse_key) is not str
+            or len(self.source_reuse_key) != 64
+            or any(c not in '0123456789abcdef' for c in self.source_reuse_key)
+        ):
+            raise ValueError('bounded server source identity required')
         if self.timing_store not in {None, 'batch', 'sync'}:
             raise ValueError('invalid audio timing store')
         if not self.segment_id or len(self.segment_id) > 128 or '/' in self.segment_id:
@@ -111,6 +151,12 @@ class WorkItem:
             not self.conversation_id or len(self.conversation_id) > 128 or '/' in self.conversation_id
         ):
             raise ValueError('conversation_id must be a bounded opaque ID')
+        if self.capture_source_conversation_id is not None and (
+            not self.capture_source_conversation_id
+            or len(self.capture_source_conversation_id) > 128
+            or '/' in self.capture_source_conversation_id
+        ):
+            raise ValueError('capture source must be a bounded same-owner conversation ID')
         if self.privacy_generation is not None and (
             type(self.privacy_generation) is not int or self.privacy_generation < 0
         ):
@@ -121,6 +167,8 @@ class WorkItem:
             raise ValueError('shadow must be boolean')
         if self.language_receipt_enabled is not None and self.language_receipt_enabled is not True:
             raise ValueError('language_receipt_enabled must be true or absent')
+        if self.capture_time_trust not in (None, 'untrusted'):
+            raise ValueError('capture_time_trust must be untrusted or absent')
         Priority(self.priority)
         if self.unit_kind not in {'conversation', 'capture_span'}:
             raise ValueError('unit_kind must be conversation or capture_span')

@@ -1,0 +1,46 @@
+id: button/press-during-poweroff-window
+summary: 'Graduated from fuzz seed 35. A critical-battery power-off is under way when the button is pressed during
+  its final second. 3.0.23 armed the level wake before that second, so the press re-fired the runtime GPIO callback
+  continuously: the shutdown thread starved, System OFF never came and only the unstoppable watchdog could end it.
+  The wake is now armed as the last step.'
+tags: [fix]
+initial: {charging: false, off_retains_ram: false}
+timeline:
+- {t: 0, hold: 4271}
+- {t: 7398, battery_mv: 4150}
+- {t: 9843, power: cycle}
+- t: 13627
+  tap: [171]
+- t: 14319
+  tap: [166]
+- {t: 17987, battery_mv: 3499}
+- {t: 23717, charger: 'off'}
+- t: 24108
+  tap: [123, 100, 80]
+- t: 27999
+  tap: [58, 202, 132]
+- {t: 29779, hold: 2661}
+- {t: 42840, hold: 4693}
+- {t: 54006, app_mute: 0}
+- {t: 55144, power: soft_reset}
+- t: 56745
+  tap: [143]
+- {t: 58966, charger: 'on'}
+- t: 64742
+  tap: [273]
+- {t: 70118, battery_mv: 3450}
+- {t: 75065, connected: true}
+- t: 80714
+  tap: [69]
+- t: 87045
+  tap: [72, 204, 197]
+- t: 93198
+  tap: [159]
+- {t: 97924, connected: true}
+end: 100000
+expect:
+  boots:
+  - {}
+  - exit: poweroff
+    log: [Battery critical level reached, Entering system off]
+  invariants: [no-watchdog, poweroff-waits-release, no-stuck-safe, mute-follows-app, mute-blocks-capture]

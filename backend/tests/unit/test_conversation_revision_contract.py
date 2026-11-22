@@ -396,7 +396,7 @@ def test_title_mutation_records_a_durable_override(monkeypatch):
 
     conversations_db.update_conversation_title('user-1', 'conversation-1', 'Renamed')
 
-    assert ref.update_calls == [{'structured.title': 'Renamed', 'user_title': 'Renamed'}]
+    assert ref.update_calls == [{'structured.title': 'Renamed', 'user_title': 'Renamed', 'summary_due_at': None}]
 
 
 def test_mutation_response_contract_carries_canonical_revision_and_state():

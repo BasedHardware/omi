@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-preview-error.png",
+      "platform": "mobile-ios",
+      "description": "Synthetic recording detail error state, rendered by the Flutter widget-test engine at iPhone-sized constraints with the Omi dark palette and loaded fonts. This is not a physical-device screenshot. The same production page's four behavioral checks also passed on an iPhone 16 Pro iOS 26.5 simulator.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ]
+}

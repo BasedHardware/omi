@@ -327,6 +327,14 @@ def test_codemagic_workflow_contract_accepts_current_production_configuration():
     assert GUARDS.check_codemagic_release_publishers() == []
 
 
+def test_release_notes_require_verified_runtime_receipt():
+    document = yaml.safe_load((REPO_ROOT / "codemagic.yaml").read_text())
+    publication = next(step["script"] for step in document["workflows"]["omi-desktop-swift-release"]["scripts"] if step.get("name") == "Create GitHub release")
+    notes_command = next(line for line in publication.splitlines() if line.startswith("CHANGELOG_MD="))
+    assert '--runtime-smoke-result "$BUILD_DIR/desktop-smoke-result.json"' in notes_command
+    assert "||" not in notes_command
+
+
 def _module_bool_constant(path: Path, name: str) -> bool:
     for node in ast.parse(path.read_text(encoding="utf-8")).body:
         if isinstance(node, ast.Assign) and any(isinstance(t, ast.Name) and t.id == name for t in node.targets):
@@ -1071,7 +1079,9 @@ def test_firmware_release_metadata_reports_status_when_shell_has_no_output(tmp_p
 def test_firmware_ota_guard_follows_workflow_and_exercises_assets(tmp_path, monkeypatch, mutation):
     workflow = tmp_path / ".github/workflows/firmware_release.yml"
     helper = tmp_path / "omi/firmware/scripts/ci/cv1_release.py"
-    for target in (workflow, helper):
+    boot_helper = helper.with_name("cv1_bootloader.py")
+    policy = tmp_path / "omi/firmware/bootloader/cv1-bootloader-policy.json"
+    for target in (workflow, helper, boot_helper, policy):
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(REPO_ROOT / target.relative_to(tmp_path), target)
     if mutation.startswith("no-") and mutation != "no-helper":

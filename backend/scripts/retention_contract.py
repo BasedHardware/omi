@@ -16,6 +16,7 @@ bucket may not exceed. A ceiling whose ruling is pending reports with a
 """
 
 import json
+import math
 from pathlib import Path
 from typing import Any
 
@@ -68,9 +69,14 @@ def _reaches(rule_prefixes: list[str], prefixes: list[str]) -> bool:
 
 
 def floor_violations(
-    contract: dict[str, Any], bucket: str, lifecycle: Any, accept_pending: bool = False
+    contract: dict[str, Any],
+    bucket: str,
+    lifecycle: Any,
+    accept_pending: bool = False,
+    *,
+    input_terminal_seconds: float | None = None,
 ) -> list[dict[str, Any]]:
-    """Live-object Delete rules that can reach a protected prefix sooner than the longest hold allows."""
+    """Hold floors plus an optional strict runtime input-terminal floor, independent of hold verification."""
     need = required_days(contract, bucket, accept_pending)
     spec = contract['buckets'][bucket]
     pending = [h for h in spec['holds'] if _pending(contract['holds'][h], accept_pending)]
@@ -82,7 +88,11 @@ def floor_violations(
         if not _reaches(condition.get('matchesPrefix') or [], spec['protected_prefixes']):
             continue
         age = condition.get('age')
-        if need is None:
+        if input_terminal_seconds is not None and (
+            type(age) not in (int, float) or not math.isfinite(age) or age * 86400 <= input_terminal_seconds
+        ):
+            out.append({'age': age, 'required': input_terminal_seconds / 86400, 'strict': True, 'pending': pending})
+        elif need is None:
             out.append({'age': age, 'required': None, 'pending': pending})
         elif not isinstance(age, (int, float)) or age < need:
             out.append({'age': age, 'required': need, 'pending': []})
@@ -110,6 +120,18 @@ def ceiling_findings(contract: dict[str, Any], bucket: str, metadata: dict[str, 
         and not any(r['action'].get('type') == 'Delete' and _noncurrent_only(r.get('condition') or {}) for r in rules)
     ):
         out.append('ceiling_noncurrent_unbounded' + suffix)
+    # A retention ceiling must not invent an expiry for live voice of an active
+    # account. A lifecycle rule cannot distinguish active from deleted accounts;
+    # explicit user/account erasure is handled by the reviewed deletion path.
+    retained = ceiling.get('retain_until_user_deletes') or []
+    if retained and any(
+        r['action'].get('type') == 'Delete'
+        and not _noncurrent_only(r.get('condition') or {})
+        and _reaches((r.get('condition') or {}).get('matchesPrefix') or [], retained)
+        for r in rules
+    ):
+        # This ratified rule is independent of older pending ceilings on the bucket.
+        out.append('ceiling_user_content_expiry')
     for prefix, max_age in (ceiling.get('max_age_days') or {}).items():
         covered = any(
             r['action'].get('type') == 'Delete'

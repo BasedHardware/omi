@@ -62,17 +62,28 @@ def _field_request(*, ready: bool = True):
     return request
 
 
-def _ready_indexes():
-    return [_gcloud_live_index(index) for index in firebase_index_manifest()['indexes']]
+def _ready_indexes(declarations=None):
+    # The old and explicit-name declarations share one physical Admin API
+    # resource. Do not synthesize two resources and accidentally test ambiguity.
+    if declarations is None:
+        declarations = firebase_index_manifest()['indexes']
+    indexes = [_gcloud_live_index(index) for index in declarations]
+    return list({reconcile_firestore_indexes._index_signature(index): index for index in indexes}.values())
 
 
 def _gcloud_live_index(index, *, state='READY'):
+    fields = index['fields']
+    if (
+        reconcile_firestore_indexes._index_signature(index)
+        in reconcile_firestore_indexes.HISTORIC_IMPLICIT_DOCUMENT_ID_SIGNATURES
+    ):
+        fields = fields + [{'fieldPath': '__name__', 'order': 'ASCENDING'}]
     return {
         'name': (
             'projects/dev-project/databases/(default)/collectionGroups/' f"{index['collectionGroup']}/indexes/index-id"
         ),
         'queryScope': index['queryScope'],
-        'fields': index['fields'],
+        'fields': fields,
         'state': state,
     }
 
@@ -89,7 +100,7 @@ def test_reconcile_provisions_missing_indexes_and_waits_for_every_index():
         if command[:5] == ['gcloud', 'firestore', 'indexes', 'composite', 'create']:
             return SimpleNamespace(returncode=0, stdout='')
         list_calls += 1
-        indexes = [_gcloud_live_index(index) for index in firebase_index_manifest()['indexes']]
+        indexes = _ready_indexes()
         if list_calls == 1:
             indexes.pop()
         else:
@@ -131,7 +142,7 @@ def test_reconcile_issues_every_async_create_before_waiting_for_the_full_manifes
         live = indexes[:-2] if list_calls == 1 else indexes
         return SimpleNamespace(
             returncode=0,
-            stdout=json.dumps([_gcloud_live_index(index) for index in live]),
+            stdout=json.dumps(_ready_indexes(live)),
             stderr='',
         )
 
@@ -498,7 +509,7 @@ def test_provision_missing_uses_gcloud_with_every_manifest_field_and_waits_for_r
         if command[:5] == ['gcloud', 'firestore', 'indexes', 'composite', 'create']:
             return SimpleNamespace(returncode=0, stdout='')
         list_calls += 1
-        indexes = [_gcloud_live_index(index) for index in firebase_index_manifest()['indexes']]
+        indexes = _ready_indexes()
         if list_calls == 1:
             indexes.pop()
         else:

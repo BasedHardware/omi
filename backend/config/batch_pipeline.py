@@ -1,5 +1,6 @@
 """Default-off batch admission cohort. Existing lane classification stays upstream."""
 
+from config.policy import kill_switch
 from config.refactor_switches import default_off as rollout_default_off, default_on as rollout_default_on
 
 from enum import IntEnum
@@ -7,6 +8,7 @@ import hashlib
 import logging
 import math
 import os
+import re
 import secrets
 import threading
 
@@ -30,12 +32,25 @@ class Priority(IntEnum):
 # David's fresh bar (2026-10-20): capture lag at most 10 min at upload.
 FRESH_CAPTURE_LAG_SECONDS = 600.0
 
+# Terminal exclusion keeps future nonterminal strings visible; the census gates missing/null state.
+MERGE_POLL_TERMINAL_STATES = tuple(
+    'committed dead quarantined privacy_blocked partial_retired provider_superseded'.split()
+)
+
+
+def held_poll_skip_enabled() -> bool:
+    from config.refactor_modes import default_off
+
+    return default_off('BATCH_HELD_POLL_SKIP_ENABLED')
+
+
 # A full grace window is also given to pre-field rows on first observation.
 HELD_DEAD_LETTER_SECONDS = 7 * 86400
+RECORD_DEAD_LETTER_SECONDS = 14 * 86400
 
 
 def batch_held_dead_letter_enabled() -> bool:
-    """Ship-on held deadlines/expiry; manual requeue remains available when off."""
+    """Ship-on record/held deadlines and expiry; manual requeue remains available when off."""
     from config.policy.kill_switches import kill_switch
 
     return kill_switch('BATCH_HELD_DEAD_LETTER_ENABLED')
@@ -47,6 +62,23 @@ def projection_source_deleted_enabled() -> bool:
         'BATCH_PIPELINE_PROJECTION_SOURCE_DELETED_ENABLED',
         os.getenv('BATCH_PIPELINE_PROJECTION_SOURCE_DELETED_ENABLED', 'true').strip().lower() != 'false',
     )
+
+
+def projection_ghost_settle_enabled() -> bool:
+    """Default OFF: normalize aged ghost hints; production enable needs David."""
+    return kill_switch('BATCH_PIPELINE_PROJECTION_GHOST_SETTLE_ENABLED')
+
+
+def projection_restorable_cap_expiry_enabled() -> bool:
+    """Default OFF: allow the existing one-time expiry CAS for restorable capped holds."""
+    return kill_switch('BATCH_PIPELINE_PROJECTION_RESTORABLE_CAP_EXPIRY_ENABLED')
+
+
+def projection_ghost_settle_cohort() -> tuple[str, bool]:
+    """Inert measurement label; return whether invalid config used the fallback."""
+    label = os.getenv('BATCH_PIPELINE_PROJECTION_GHOST_SETTLE_COHORT', 'g1')
+    valid = re.fullmatch(r'[A-Za-z0-9_-]{1,16}', label) is not None
+    return (label, False) if valid else ('g1', True)
 
 
 def projection_hold_recovery_enabled() -> bool:
@@ -357,6 +389,14 @@ def worker_silence_disposition_enabled() -> bool:
     )
 
 
+def silence_read_skip_enabled() -> bool:
+    """R9: false restores the full silent-unit projection/accounting path."""
+    return rollout_default_on(
+        'BATCH_PIPELINE_SILENCE_READ_SKIP_ENABLED',
+        os.getenv('BATCH_PIPELINE_SILENCE_READ_SKIP_ENABLED', 'true').strip().lower() not in {'false', 'off', '0'},
+    )
+
+
 LONG_SPEECH_HANDOFF_SECONDS = 5.0
 
 
@@ -535,6 +575,29 @@ def projection_striping_enabled() -> bool:
     return kill_switch('BATCH_PIPELINE_PROJECTION_STRIPING_ENABLED')
 
 
+PROJECTION_FINISH_BACKOFF_SECONDS = (60.0, 300.0, 900.0)
+
+
+def projection_finish_backoff_enabled() -> bool:
+    """Default off; only ``true`` defers an unchanged persisted/ready finish walk.
+
+    Off keeps the legacy query and disables no-change deferral transactions.
+    Clock writes on state transitions are unconditional on every writer host.
+    On uses the due-clock filter only after the shared backfill marker exists;
+    until then it keeps the legacy page without per-row stamping. Rollback and
+    re-enable are safe because flag-off writers keep maintaining the clock.
+    """
+    from config.policy import kill_switch
+
+    return kill_switch('BATCH_PROJECTION_FINISH_BACKOFF_ENABLED')
+
+
+def projection_finish_backoff_delay(step: int) -> float:
+    """60 s, then 300 s, then 900 s for a repeatedly unchanged row; capped."""
+    index = max(0, min(int(step), len(PROJECTION_FINISH_BACKOFF_SECONDS) - 1))
+    return PROJECTION_FINISH_BACKOFF_SECONDS[index]
+
+
 PROJECTION_DISCOVERY_STRIPES = 4096
 _projection_discovery_stripe_value: int | None = None
 _PROJECTION_DISCOVERY_LOCK = threading.Lock()
@@ -577,6 +640,57 @@ def recovered_merge_release_enabled() -> bool:
     return kill_switch('BATCH_PIPELINE_RECOVERED_MERGE_RELEASE_ENABLED')
 
 
+def provider_backlog_release_closed() -> bool:
+    """Live close-only override for the metered gate; unset never opens a gate."""
+    return os.getenv('BATCH_PIPELINE_PROVIDER_BACKLOG_RELEASE_ENABLED', '').strip().lower() == 'false'
+
+
+def provider_backlog_release_enabled() -> bool:
+    """Opt-in: the ordered merge may commit provider-route catch-up rows.
+
+    Off (the default), a provider row that is not stamped fresh at admission stays
+    ``result_ready``: only an owner's fresh provider rows commit, through fresh-first. On
+    2026-11-13 the first hour of provider merge membership released about 230,000 already
+    transcribed backlog rows an hour; they filled the projection owner queue, which has no
+    fresh class, and 45% of every user's fresh results were still unprojected 10-20 minutes
+    after commit. The backlog is released by a metered job, not by owner wakes. ``true``
+    restores release paced only by the catch-up depth hold.
+    """
+    from config.refactor_modes import default_off
+
+    return default_off('BATCH_PIPELINE_PROVIDER_BACKLOG_RELEASE_ENABLED')
+
+
+def provider_fresh_capture_lag_seconds() -> int:
+    """Longest capture-to-admission lag at which a provider-route upload is still fresh (2026-11-13).
+
+    Default 86400. The GPU lane keeps ``FRESH_CAPTURE_LAG_SECONDS`` (600). While the provider
+    backlog is held, a provider row not stamped fresh does not commit, and it cannot commit in
+    plain order either because the owner's held rows sit in front of it. With the shared
+    10-minute bar, every provider upload that arrived late was therefore not delivered: 167 of
+    1,195 provider admissions in 36 minutes on 2026-11-13, 103 of them within a day of capture,
+    none committed. A device that was offline for a day and then syncs is normal use.
+    ``600`` restores the shared bar; values are clamped to 600-86400.
+    """
+    return _pump_bound(os.getenv('BATCH_PIPELINE_PROVIDER_FRESH_CAPTURE_LAG_SECONDS', '86400'), 86400, 86400, 600)
+
+
+def provider_merge_membership_enabled() -> bool:
+    """Kill switch: provider-route units take part in the ordered merge the way GPU units do.
+
+    Provider admission stamps ``fresh_capture``, provider settle stamps ``ready_at`` and wakes
+    one coalesced owner drain, and provider rows admitted before the stamp count as catch-up.
+    Without these, a settled provider unit was found only by the 100-row maintenance page and
+    could never use the head wait or fresh-first (2026-11-13: 1.68M transcribed provider units
+    unmerged, 97-100% of each day's settles). Off restores the earlier behaviour for new writes;
+    rows already stamped keep their fields.
+    """
+    from config.policy import kill_switch
+
+    # Read several times per merge transaction attempt: no per-read switch log.
+    return kill_switch('BATCH_PIPELINE_PROVIDER_MERGE_MEMBERSHIP_ENABLED', log=False)
+
+
 def recovery_owner_only_enabled() -> bool:
     """Kill switch: post-recovery requests drain their owner without global maintenance."""
     from config.policy import kill_switch
@@ -612,11 +726,35 @@ def projection_followup_page_enabled() -> bool:
     return kill_switch('BATCH_PIPELINE_PROJECTION_FOLLOWUP_PAGE_ENABLED')
 
 
+def projection_followup_early_coalesce_enabled() -> bool:
+    return kill_switch('BATCH_PIPELINE_FOLLOWUP_EARLY_COALESCE_ENABLED', log=False)
+
+
 def owner_drain_enabled() -> bool:
     """Kill switch: a per-process owner drain replaces the sweep-shared walk budget."""
     from config.policy import kill_switch
 
     return kill_switch('BATCH_PIPELINE_OWNER_DRAIN_ENABLED')
+
+
+def owner_drain_admission_diagnostics_enabled() -> bool:
+    """Process-local diagnostics only; 0/off/false disable without changing drains."""
+    return os.getenv('BATCH_PIPELINE_OWNER_DRAIN_ADMISSION_DIAGNOSTICS', '1').strip().lower() not in {
+        '0',
+        'off',
+        'false',
+        'no',
+    }
+
+
+def projection_overlap_diagnostics_enabled() -> bool:
+    """Default-on diagnostics; disable before startup without changing discovery."""
+    return os.getenv('BATCH_PIPELINE_PROJECTION_OVERLAP_DIAGNOSTICS', '1').strip().lower() not in {
+        '0',
+        'off',
+        'false',
+        'no',
+    }
 
 
 def serving_projection_sweep_enabled() -> bool:
@@ -626,11 +764,27 @@ def serving_projection_sweep_enabled() -> bool:
     return kill_switch('BATCH_PIPELINE_SERVING_PROJECTION_SWEEP')
 
 
+def projection_outbox_enabled() -> bool:
+    return kill_switch('BATCH_PROJECTION_OUTBOX', log=False)
+
+
 def _pump_bound(raw: str, default: int, maximum: int, minimum: int = 1) -> int:
     try:
         return max(minimum, min(int(raw), maximum))
     except ValueError:
         return default
+
+
+def ready_discovery_cursor_enabled() -> bool:
+    return kill_switch('BATCH_PIPELINE_READY_DISCOVERY_CURSOR_ENABLED', log=False)
+
+
+def ready_discovery_owners_per_tick(default: int = 20) -> int:
+    return _pump_bound(os.getenv('BATCH_PIPELINE_READY_DISCOVERY_OWNERS_PER_TICK', str(default)), 20, 100)
+
+
+def ready_discovery_tick_seconds() -> int:
+    return _pump_bound(os.getenv('BATCH_PIPELINE_READY_DISCOVERY_TICK_SECONDS', '10'), 10, 60)
 
 
 def serving_sweep_page_rows() -> int:
@@ -686,6 +840,31 @@ def max_owner_drains() -> int:
     return _pump_bound(os.getenv('BATCH_PIPELINE_MAX_OWNER_DRAINS', '8'), 8, 16)
 
 
+def projection_recent_discovery_seconds() -> int:
+    """Seconds of the newest commits that up to half of each assignment discovery page
+    reads from (2026-11-13); 0 is off.
+
+    Discovery pages the pending results oldest first, 100 rows a tick per process. With
+    154,000 pending rows a newly committed result waited about 15 minutes to be seen at
+    all, and GPU-route commits have no other wake. Each tick now also reads up to half a
+    page from a random point inside this window and offers each row there once per
+    process; the rest of the page keeps walking the whole log. 0 restores the single
+    cursor and removes the main cursor's 30-minute restart."""
+    return _pump_bound(os.getenv('BATCH_PIPELINE_PROJECTION_RECENT_DISCOVERY_SECONDS', '120'), 120, 3600, 0)
+
+
+def owner_drain_first_turn_seconds() -> int:
+    """Seconds a newly requested owner's first projection turn may run (2026-11-13); 0 is off.
+
+    A productive turn that ends with rows left makes its owner a backlog owner. Backlog
+    owners keep the full two-minute turn but wait in their own queue, behind newly
+    requested owners, and end a turn at the next step when one of those is waiting for a
+    slot. Without this a few hundred backlog owners hold every slot for two minutes each
+    and an owner with a handful of fresh rows waits behind all of them. 0 restores the
+    single FIFO queue."""
+    return _pump_bound(os.getenv('BATCH_PIPELINE_OWNER_DRAIN_FIRST_TURN_SECONDS', '15'), 15, 120, 0)
+
+
 def projection_drain_claim_aware_enabled() -> bool:
     """Default on; only off disables claim-aware owner-drain admission and backoff."""
     from config.policy import kill_switch
@@ -698,6 +877,16 @@ def projection_drain_privacy_backoff_enabled() -> bool:
     from config.policy import kill_switch
 
     return kill_switch('PROJECTION_DRAIN_PRIVACY_BACKOFF')
+
+
+def projection_drain_live_target_backoff_enabled() -> bool:
+    """Default on; only off disables bounded awaiting-live-target owner backoff."""
+    return kill_switch('PROJECTION_DRAIN_LIVE_TARGET_BACKOFF')
+
+
+def projection_privacy_refusal_resume_enabled() -> bool:
+    """Default on; only off disables recovery from a stale privacy refusal."""
+    return kill_switch('PROJECTION_PRIVACY_REFUSAL_RESUME')
 
 
 def projection_drain_privacy_backoff_seconds() -> int:
@@ -900,6 +1089,16 @@ def merge_head_wait_seconds() -> float:
     return value if value <= MERGE_HEAD_WAIT_MAX else MERGE_HEAD_WAIT_DEFAULT
 
 
+# A head still unready this long after admission is starved stock, not a unit about to finish.
+MERGE_STALE_HEAD_SECONDS = 1800.0
+
+
+def merge_stale_head_skip(owner_id: str) -> bool:
+    """Canary: listed owners skip the head wait behind a stale head. Unset or empty: nobody."""
+    raw = os.getenv('BATCH_PIPELINE_MERGE_STALE_HEAD_UID_ALLOWLIST', '')
+    return bool(owner_id) and owner_id in {uid.strip() for uid in raw.split(',') if uid.strip()}
+
+
 MERGE_CATCH_UP_DEPTH_DEFAULT = 16
 MERGE_CATCH_UP_DEPTH_MAX = 1000
 
@@ -947,3 +1146,20 @@ def recovery_wake_lease_seconds() -> int:
     if value == 0:
         return 0
     return value if 120 <= value <= RECOVERY_WAKE_LEASE_MAX else RECOVERY_WAKE_LEASE_DEFAULT
+
+
+def projection_finish_async_skip_enabled() -> bool:
+    """Ship-on: async receipts belong only to the independent follow-up drain."""
+    return kill_switch('BATCH_PROJECTION_FINISH_ASYNC_SKIP_ENABLED')
+
+
+PROJECTION_FINISH_CLASSIFY_PAGE_LIMIT_DEFAULT = 8
+
+
+def projection_finish_classify_page_limit() -> int:
+    """Bound legacy clock updates per page/process; zero pauses classification."""
+    try:
+        value = int(os.getenv('BATCH_PROJECTION_FINISH_CLASSIFY_PAGE_LIMIT', '8'))
+    except ValueError:
+        return PROJECTION_FINISH_CLASSIFY_PAGE_LIMIT_DEFAULT
+    return value if 0 <= value <= 16 else PROJECTION_FINISH_CLASSIFY_PAGE_LIMIT_DEFAULT

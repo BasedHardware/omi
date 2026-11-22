@@ -1,21 +1,14 @@
 """Process-local privacy decision reuse, bounded at 60 seconds.
 
-David's ruling (2026-11-04, ``1104-firestore-12h-rulings.md`` item 1): a cached
-privacy, deletion, tombstone or legal-hold decision may be reused for at most
-60 seconds, so a deletion, privacy change or legal hold takes effect everywhere
-within 60 seconds by construction.
+The 60s bound limits cache lifetime; it never certifies authorization. ALLOW
+callers must validate the cached durable token/server revision AND generation
+against a fresh authority read before reuse. Uncertified,
+legacy or mismatched entries fall through to live authority reads.
 
-The bound is enforced here, not by callers:
-
-- an entry expires 60 seconds after the monotonic
-  instant the authoritative read STARTED, so a slow read cannot extend it;
-- only outcomes the caller marks reusable are stored; blocked, deleted and
-  unavailable outcomes always re-read;
-- keys carry the Firestore plane, uid, family and variant, so absence for one
-  conversation never answers for another and planes never mix.
-
-Everything lives in one process. There is no cross-process invalidation and no
-Redis dependency; the time bound is the only freshness guarantee.
+- entries expire 60s after the authoritative read STARTED;
+- this generic LRU does not certify values: privacy_negative_cache and
+  batch_pipeline_privacy own per-use certification;
+- blocked, deleted and unavailable outcomes are not stored by those callers.
 
 Runtime kill switch (no deploy needed): the data-plane document
 ``ops_kill_switches/privacy_decision_cache`` with ``disabled: true`` turns every
@@ -92,7 +85,7 @@ class BoundedTTLCache:
             return len(self._entries)
 
 
-# One cache per process for advisory (nontransactional) decisions.
+# One cache per process for token-certified nontransactional decisions.
 DECISIONS = BoundedTTLCache()
 
 
@@ -117,8 +110,10 @@ def disabled() -> bool:
             return _kill_state[0][1]
     try:
         off = _read_kill_flag()
+        result = 'disabled' if off else 'clear'
     except Exception:
         off = True
+        result = 'error'
     with _kill_lock:
         _kill_state[:] = [(now + KILL_POLL_SECONDS, off)]
     if off:
@@ -127,6 +122,7 @@ def disabled() -> bool:
         from database import privacy_check_metrics as metrics
 
         metrics.ttl_kill_state(off)
+        metrics.ttl_switch_read(result)
     except Exception:
         pass
     return off

@@ -63,10 +63,12 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from main import (
     _clean_text,
+    _description_text,
     _extract_names,
     _format_book,
     _format_subject_work,
     _safe_limit,
+    _work_id,
     get_book_details,
     search_books,
     search_subject,
@@ -224,6 +226,64 @@ class TestOpenLibraryRobustnessAndNullGuards(unittest.TestCase):
             self.assertIsNone(resp.error)
             self.assertIn("Deep Learning", resp.result)
             self.assertIn("Author: unknown author", resp.result)
+
+    def test_work_id_accepts_slug_urls_and_rejects_other_keys(self):
+        self.assertEqual(_work_id("OL45883W"), "OL45883W")
+        self.assertEqual(_work_id("ol45883w"), "OL45883W")
+        self.assertEqual(_work_id("works/OL45883W"), "OL45883W")
+        self.assertEqual(_work_id("/works/OL45883W/The_Adventures_of_Tom_Sawyer"), "OL45883W")
+        self.assertEqual(
+            _work_id("https://openlibrary.org/works/OL45883W/The_Adventures_of_Tom_Sawyer"),
+            "OL45883W",
+        )
+        self.assertEqual(_work_id("https://openlibrary.org/works/OL45883W.json"), "OL45883W")
+        self.assertIsNone(_work_id("OL45883M"))
+        self.assertIsNone(_work_id("see OL45883W in the notes"))
+        self.assertIsNone(_work_id(None))
+        self.assertIsNone(_work_id(""))
+
+    def test_description_keeps_paragraphs_and_titles_stay_flat(self):
+        self.assertEqual(
+            _description_text("First paragraph.\n\nSecond paragraph."),
+            "First paragraph.\n\nSecond paragraph.",
+        )
+        self.assertEqual(
+            _description_text("<p>First paragraph.</p><p>Second paragraph.</p>"),
+            "First paragraph.\nSecond paragraph.",
+        )
+        self.assertEqual(
+            _description_text({"type": "/type/text", "value": "One.\n\nTwo."}),
+            "One.\n\nTwo.",
+        )
+        self.assertEqual(
+            _clean_text("First paragraph.\n\nSecond paragraph."),
+            "First paragraph. Second paragraph.",
+        )
+
+    def test_slug_url_fetches_the_work_and_keeps_description_lines(self):
+        with patch("main._request_json") as mock_req:
+            mock_req.return_value = {
+                "title": "The Adventures of Tom Sawyer",
+                "description": "First paragraph.\n\nSecond paragraph.",
+                "subjects": ["Fiction"],
+            }
+            resp = asyncio.run(
+                get_book_details(
+                    {"work_id": "https://openlibrary.org/works/OL45883W/The_Adventures_of_Tom_Sawyer"}
+                )
+            )
+        self.assertIsNone(resp.error)
+        self.assertIn("Open Library work: OL45883W", resp.result)
+        self.assertIn("First paragraph.\n\nSecond paragraph.", resp.result)
+        self.assertNotIn("First paragraph. Second paragraph.", resp.result)
+        mock_req.assert_awaited_once()
+        self.assertEqual(mock_req.await_args[0][0], "/works/OL45883W.json")
+
+    def test_non_work_id_does_not_call_open_library(self):
+        with patch("main._request_json") as mock_req:
+            resp = asyncio.run(get_book_details({"work_id": "OL45883M"}))
+        self.assertEqual(resp.error, "Provide a valid Open Library work_id like OL45883W or an ISBN.")
+        mock_req.assert_not_awaited()
 
 
 if __name__ == "__main__":

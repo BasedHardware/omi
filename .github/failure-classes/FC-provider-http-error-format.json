@@ -1,6 +1,7 @@
 {
   "schema_version": 1,
   "id": "FC-provider-http-error-format",
+  "family": "cross-boundary-contract",
   "violated_contract": "An Omi-owned adapter must surface provider HTTP failures with an explicit, stable HTTP status signal; dependency-specific error wording must not silently change the downstream product or qualification contract.",
   "canonical_prevention": "Normalize dependency HTTP error wording at the adapter boundary while preserving the provider detail, and drive the real terminal provider-event seam with behavioral contract coverage.",
   "canonical_prevention_artifact": [

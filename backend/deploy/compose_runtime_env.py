@@ -19,7 +19,24 @@ DEFAULT_OUTPUT = ROOT / 'backend/deploy/runtime_env.yaml'
 GENERATED_HEADER = '# generated — do not edit; run: python3 backend/deploy/compose_runtime_env.py\n'
 
 ConfigDict = dict[str, Any]
-_SafeLoader = getattr(yaml, 'CSafeLoader', yaml.SafeLoader)
+
+
+class _UniqueKeyLoader(getattr(yaml, 'CSafeLoader', yaml.SafeLoader)):
+    """Reject repeated mapping keys before YAML's last-value-wins can hide them."""
+
+
+def _construct_unique_mapping(loader, node, deep=False):
+    seen = set()
+    for key_node, _ in node.value:
+        key = '<<' if key_node.tag == 'tag:yaml.org,2002:merge' else loader.construct_object(key_node, deep=deep)
+        if key in seen:
+            raise ValueError(f'duplicate YAML mapping key {key!r} at line {key_node.start_mark.line + 1}')
+        seen.add(key)
+    return loader.construct_mapping(node, deep=deep)
+
+
+_UniqueKeyLoader.add_constructor(yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG, _construct_unique_mapping)
+
 ENVIRONMENTS = ('dev', 'prod')
 _CLOUD_RUN_SERVICE_ORDER = ('backend', 'backend-sync', 'backend-sync-backfill', 'backend-integration')
 _GKE_SERVICE_ORDER = ('backend-listen', 'parakeet', 'pusher')
@@ -27,7 +44,7 @@ _GKE_SERVICE_ORDER = ('backend-listen', 'parakeet', 'pusher')
 
 def _load_yaml(path: Path) -> ConfigDict:
     with path.open('r', encoding='utf-8') as handle:
-        loaded = yaml.load(handle, Loader=_SafeLoader)  # noqa: S506 - a SafeLoader (libyaml when available)
+        loaded = yaml.load(handle, Loader=_UniqueKeyLoader)  # noqa: S506 - a SafeLoader (libyaml when available)
     if not isinstance(loaded, dict):
         raise ValueError(f'{path} must contain a YAML mapping')
     return cast(ConfigDict, loaded)
@@ -135,6 +152,7 @@ def _compose_environment(
         raise ValueError(f'composed environment {env} must be a mapping')
 
     env_config = cast(ConfigDict, merged)
+    _apply_conversations_v3_stage(env_config)
     env_config['compute_project'] = compute_project
     env_config['data_plane_project'] = data_plane_project
     # Legacy aliases consumed by deploy scripts and validators.
@@ -191,6 +209,60 @@ def _staging_substitute(value: str, *, run_url_template: str, inputs: dict[str, 
     return _STAGING_PLACEHOLDER.sub(replace, value)
 
 
+def _apply_conversations_v3_stage(env_config: ConfigDict) -> None:
+    """One stage source moves API, capture, finalizers and jobs together (staging mirrors prod)."""
+    stage = env_config.pop('conversations_v3_stage', None)
+    # Kill switch (CONVERSATIONS_V3=off): stops new v3 admission on every writer; marked rows keep draining.
+    kill = env_config.pop('conversations_v3', None)
+    if kill is not None:
+        kill_descriptor = {'value': str(kill), 'category': 'ops_kill'}
+        cloud_run = env_config.get('cloud_run', {})
+        for group in ('services', 'jobs'):
+            for service in cloud_run.get(group, {}).values():
+                if isinstance(service, dict):
+                    service.setdefault('env', {})['CONVERSATIONS_V3'] = deepcopy(kill_descriptor)
+        config_map = env_config.get('gke', {}).get('config_map')
+        if isinstance(config_map, dict):
+            # backend-listen and pusher load the whole ConfigMap through envFrom.
+            config_map.setdefault('entries', {})['CONVERSATIONS_V3'] = {'source': 'literal', 'value': str(kill)}
+    if stage is not None:
+        descriptor = {'value': str(stage), 'category': 'rollout'}
+        first_build = env_config.pop('conversations_v3_first_app_build', '')
+        build_descriptor = {'value': str(first_build), 'category': 'config'}
+        for service in env_config.get('cloud_run', {}).get('services', {}).values():
+            service.setdefault('env', {})['CONVERSATIONS_V3_STAGE'] = deepcopy(descriptor)
+            service['env']['CONVERSATIONS_V3_FIRST_APP_BUILD'] = deepcopy(build_descriptor)
+            # Declared so the staging compose maps it to staging-conversations-v3 like every other queue.
+            service['env']['CONVERSATIONS_V3_TASKS_QUEUE'] = {'value': 'conversations-v3', 'category': 'reliability'}
+            # Operator-planned per-owner backfill steps; never the live queue.
+            service['env']['CONVERSATIONS_V3_BACKFILL_QUEUE'] = {
+                'value': 'conversations-v3-backfill',
+                'category': 'reliability',
+            }
+        # desktop-backend sets its env inline in its deploy workflow and reads the code defaults
+        # (stage beta, no first build), which matches this source while it is beta. If this source
+        # leaves beta, desktop capability/episode responses diverge; desktop creates stay one-to-one.
+        # Moving to all needs that workflow to carry CONVERSATIONS_V3_STAGE too.
+        gke = env_config.get('gke', {})
+        config_map = gke.get('config_map')
+        if isinstance(config_map, dict):
+            config_map.setdefault('entries', {}).update(
+                CONVERSATIONS_V3_STAGE={'source': 'literal', 'value': str(stage)},
+                CONVERSATIONS_V3_FIRST_APP_BUILD={'source': 'literal', 'value': str(first_build)},
+            )
+            for name, service in gke.items():
+                if name in {'backend-listen', 'pusher'} and isinstance(service, dict):
+                    for key in ('CONVERSATIONS_V3_STAGE', 'CONVERSATIONS_V3_FIRST_APP_BUILD'):
+                        service.setdefault('env', {})[key] = {
+                            'config_map': {'name': config_map['name'], 'key': key},
+                            'category': 'rollout',
+                        }
+        for service in env_config.get('cloud_run', {}).get('jobs', {}).values():
+            if isinstance(service, dict):
+                service.setdefault('env', {})['CONVERSATIONS_V3_STAGE'] = deepcopy(descriptor)
+                service['env']['CONVERSATIONS_V3_FIRST_APP_BUILD'] = deepcopy(build_descriptor)
+
+
 def compose_staging(
     *,
     base_path: Path = DEFAULT_BASE,
@@ -219,6 +291,7 @@ def compose_staging(
     merged = cast(
         ConfigDict, _deep_merge(_deep_merge(substituted, prod_doc.get('overlay', {})), staging_doc.get('overlay', {}))
     )
+    _apply_conversations_v3_stage(merged)
 
     spec = _as_config_dict(staging_doc.get('cloud_run')) or {}
     run_url_template = str(staging_doc['run_url_template'])

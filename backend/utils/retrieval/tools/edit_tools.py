@@ -1,5 +1,6 @@
 """Shared user-requested edits; domain services remain the mutation authority."""
 
+from utils.conversations.layer import read_product as read_product_conversation
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional, cast
 
@@ -66,7 +67,7 @@ def update_conversation(
         return tool_error('invalid_title', 'Title must contain 1 to 300 characters.')
     if overview is not None and (not overview.strip() or len(overview) > 20000):
         return tool_error('invalid_overview', 'Overview must contain 1 to 20000 characters.')
-    row = conversations.get_conversation(uid, conversation_id)
+    row = read_product_conversation(conversations.get_conversation, uid, conversation_id)
     if not row or row.get('deleted'):
         return tool_error('conversation_not_found', 'Conversation not found for the authenticated owner.')
     if row.get('is_locked'):
@@ -83,9 +84,11 @@ def update_conversation(
     if title is not None:
         structured['title'] = title.strip()
         patch['user_title'] = title.strip()
+        patch['summary_due_at'] = None
     if overview is not None:
         structured['overview'] = overview.strip()
         patch['user_overview'] = overview.strip()
+        patch['summary_due_at'] = None
     patch['structured'] = structured
     after = conversations.update_conversation_chat(uid, conversation_id, before, patch)
     summary = 'Title → ' + title.strip() if title is not None else 'Overview updated'

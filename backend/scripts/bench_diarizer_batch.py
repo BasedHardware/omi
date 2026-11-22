@@ -156,15 +156,23 @@ async def gpu_samples(url, node, stop, samples):
                 pass
 
 
-def request(pcm, timeout):
+def request(pcm, timeout, *, single_attempt=False):
     started = time.monotonic()
     audio = len(pcm) / BYTES_PER_SECOND
     try:
-        result = HttpDiarizer('pyannote').diarize(pcm, deadline=started + timeout)
+        attempts = 0
+
+        def reserve_attempt(_seconds):
+            nonlocal attempts
+            attempts += 1
+            return not single_attempt or attempts == 1
+
+        result = HttpDiarizer('pyannote', reserve_attempt=reserve_attempt).diarize(pcm, deadline=started + timeout)
         wall = time.monotonic() - started
         inference = getattr(result, 'inference_seconds', None)
         return dict(
             outcome='ok',
+            error=None,
             audio_seconds=audio,
             wall_seconds=wall,
             wall_rtf=wall / audio,
@@ -188,12 +196,17 @@ def request(pcm, timeout):
         )
 
 
-async def wave(pcm, concurrency, timeout, dcgm_url=None, dcgm_node=None):
+async def wave(pcm, concurrency, timeout, dcgm_url=None, dcgm_node=None, *, single_attempt=False):
     stop, samples = asyncio.Event(), []
     sampler = asyncio.create_task(gpu_samples(dcgm_url, dcgm_node, stop, samples)) if dcgm_url else None
     started = time.monotonic()
     try:
-        results = await asyncio.gather(*(asyncio.to_thread(request, pcm, timeout) for _ in range(concurrency)))
+        if single_attempt:
+            results = await asyncio.gather(
+                *(asyncio.to_thread(request, pcm, timeout, single_attempt=True) for _ in range(concurrency))
+            )
+        else:
+            results = await asyncio.gather(*(asyncio.to_thread(request, pcm, timeout) for _ in range(concurrency)))
         elapsed = time.monotonic() - started
     finally:
         stop.set()

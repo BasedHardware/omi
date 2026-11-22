@@ -23,7 +23,13 @@ from charts.monitoring.grafana.stats_proxy import (
     MAX_STALE,
     REFRESHING_TTL,
     SERIES_NAMES,
+    PROMETHEUS,
+    UPTIME_JOURNEYS,
+    UPTIME_MAX_STALE,
+    UPTIME_PATH,
+    UPTIME_TTL,
     allowed_path,
+    build_uptime,
 )
 
 
@@ -549,3 +555,98 @@ def test_a_body_already_past_its_stale_bound_is_not_served():
     assert proxy.fetch(path)[0] == 502
     assert path not in proxy.good
     assert proxy.fetch(path)[0] == 502  # shared for FAILURE_TTL, not re-forwarded
+
+
+# --- Uptime (fixed PromQL against in-cluster Prometheus) ---------------------
+
+
+def test_uptime_path_is_admitted_but_never_with_a_query_string():
+    assert allowed_path(UPTIME_PATH)
+    for bad in (UPTIME_PATH + "?query=up", UPTIME_PATH + "/", UPTIME_PATH + "#x"):
+        assert not allowed_path(bad)
+
+
+def fake_readers(counts, prior_counts, daily):
+    """counts/prior_counts: {key: (ok, settled)}; daily: {key: [(ok, settled), ...]}."""
+
+    def lookup(expr):
+        for key, _label, success, settled in UPTIME_JOURNEYS:
+            for part, selector in ((0, success), (1, settled)):
+                if f"increase({selector}[" in expr:
+                    return key, part
+        raise AssertionError(expr)
+
+    def instant(expr):
+        key, part = lookup(expr)
+        source = prior_counts if "offset 7d" in expr else counts
+        return source.get(key, (None, None))[part]
+
+    def ranged(expr):
+        key, part = lookup(expr)
+        return [(86400 * (i + 1), day[part]) for i, day in enumerate(daily.get(key, []))]
+
+    return instant, ranged
+
+
+def test_uptime_is_attempt_weighted_across_journeys_with_a_pp_strip():
+    instant, ranged = fake_readers(
+        {"capture": (990, 1000), "saved": (98, 100), "chat": (50, 50)},  # ptt: no traffic
+        {"capture": (950, 1000), "saved": (100, 100), "chat": (50, 50)},
+        {"capture": [(99, 100), (90, 100)], "chat": [(10, 10), (0, 0)]},
+    )
+    body = build_uptime(instant, ranged, datetime(2026, 11, 6, tzinfo=timezone.utc))
+    frames = body["frames"]
+    # (990 + 98 + 50) / (1000 + 100 + 50), not the mean of journey rates.
+    assert frames["headline"] == [{"value": round(100 * 1138 / 1150, 2), "prior": round(100 * 1100 / 1150, 2)}]
+    assert frames["strip"][0]["uptime"] == "▲\u00a03.3\u00a0pp\u200b"
+    rows = {r["journey"]: r for r in frames["journeys"]}
+    assert rows["Push-to-talk"]["uptime"] is None  # no settled attempts is not 0%
+    assert rows["Live capture"] == {"journey": "Live capture", "uptime": 99.0, "attempts": 1000, "failures": 10}
+    first, second = frames["daily"]
+    assert first["date"] == 0  # labelled by the UTC day the 1d increase covers
+    assert first["all"] == round(100 * 109 / 110, 2)
+    assert second["chat"] is None and second["all"] == 90.0
+
+
+class PromTransport:
+    def __init__(self):
+        self.calls, self.fail = [], False
+
+    def open(self, request, timeout):
+        self.calls.append(request)
+        assert request.full_url.startswith(PROMETHEUS + "/api/v1/")
+        assert not request.headers  # nothing from the viewer is forwarded
+        if self.fail:
+            raise OSError("down")
+        if "/query_range?" in request.full_url:
+            return io.BytesIO(b'{"status":"success","data":{"result":[{"values":[[86400,"10"]]}]}}')
+        return io.BytesIO(b'{"status":"success","data":{"result":[{"value":[0,"10"]}]}}')
+
+
+def test_uptime_queries_only_fixed_expressions_caches_and_serves_last_good():
+    now = [10 * 86400.0]
+    transport = PromTransport()
+    proxy = StatsProxy(transport, lambda: now[0])
+    code, body = proxy.fetch(UPTIME_PATH)
+    assert code == 200 and json.loads(body)["frames"]["headline"][0]["value"] == 100.0
+    expected = len(UPTIME_JOURNEYS) * 2 * 2 + len(UPTIME_JOURNEYS) * 2  # instants now/prior + daily ranges
+    assert len(transport.calls) == expected
+    allowed = {sel for _k, _l, ok, all_ in UPTIME_JOURNEYS for sel in (ok, all_)}
+    for request in transport.calls:
+        query = dict(part.split("=", 1) for part in urlsplit(request.full_url).query.split("&"))
+        from urllib.parse import unquote_plus
+
+        assert any(sel in unquote_plus(query["query"]) for sel in allowed)
+    assert proxy.fetch(UPTIME_PATH) == (200, body)  # cached
+    assert len(transport.calls) == expected
+    now[0] += UPTIME_TTL + 1
+    transport.fail = True
+    assert proxy.fetch(UPTIME_PATH) == (200, body)  # last good while Prometheus is down
+    now[0] += UPTIME_MAX_STALE
+    assert proxy.fetch(UPTIME_PATH)[0] == 502
+
+
+def test_uptime_with_no_prior_answer_fails_closed():
+    transport = PromTransport()
+    transport.fail = True
+    assert StatsProxy(transport, lambda: 10 * 86400.0).fetch(UPTIME_PATH)[0] == 502

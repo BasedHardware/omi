@@ -204,7 +204,31 @@ def test_delete_conversation_without_children_still_deletes_the_document(store):
     conversations_db.delete_conversation('uid-1', 'conv-1')
 
     assert not conversation.exists
-    assert store.deleted == ['users/uid-1/conversations/conv-1', 'users/uid-1/transcript_corrections/conv-1']
+    # The sibling lifecycle-ledger row goes with its conversation.
+    assert store.deleted == [
+        'users/uid-1/conversations/conv-1',
+        'users/uid-1/transcript_corrections/conv-1',
+        'users/uid-1/pipeline_ledger/conv-1',
+    ]
+
+
+def test_a_failed_ledger_row_delete_fails_the_conversation_delete(store, monkeypatch):
+    _seed_conversation(store)
+    original = _FakeDocumentReference.delete
+
+    def delete(self):
+        if '/pipeline_ledger/' in self.path:
+            raise RuntimeError('synthetic ledger delete failure')
+        original(self)
+
+    monkeypatch.setattr(_FakeDocumentReference, 'delete', delete)
+    with pytest.raises(RuntimeError, match='ledger delete failure'):
+        conversations_db.delete_conversation('uid-1', 'conv-1')
+    assert 'users/uid-1/pipeline_ledger/conv-1' not in store.deleted
+    # The delete is idempotent: the retry removes the row.
+    monkeypatch.setattr(_FakeDocumentReference, 'delete', original)
+    conversations_db.delete_conversation('uid-1', 'conv-1')
+    assert 'users/uid-1/pipeline_ledger/conv-1' in store.deleted
 
 
 def test_delete_conversation_purges_only_its_owner_scoped_correction_overlay(store):

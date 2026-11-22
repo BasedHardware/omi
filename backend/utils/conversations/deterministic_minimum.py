@@ -17,8 +17,6 @@ from datetime import datetime, timezone
 from datetime import tzinfo
 from typing import Any, Callable, Iterable, List, Optional, cast
 
-from config.summary_guarantee import enabled
-from config.merge_before_processing import enabled as merge_before_processing_enabled
 from models.conversation_emoji import fallback_emoji
 from models.conversation_enums import CategoryEnum
 from models.structured import Structured
@@ -145,18 +143,20 @@ def build_deterministic_minimum_structured(
     uid: Optional[str] = None,
     source_label: str = DEFAULT_SOURCE_LABEL,
     tz_name_provider: Optional[Callable[[], Optional[str]]] = None,
+    historical: bool = False,
 ) -> Structured:
     """The whole §1.7 row: deterministic title, empty overview, category ``other``,
     the category's fallback emoji, no action items, no events. Every other field
     keeps its model default.
 
-    ``uid`` is the owner. Stamp raw-title provenance for the first-summary
-    cohort or pre-processing merge admission, so a minimum never masquerades
-    as historical full processing. An unknown owner (None) gets no stamp.
+    ``uid`` is the owner. Stamp raw-title provenance for every known owner,
+    so a minimum never masquerades as historical full processing.
+    An unknown owner (None) gets no stamp. ``historical=True`` stamps the
+    historical tier's stand-in instead: no summary debt and a ready Home row,
+    but still a title the open-time summary replaces.
     """
-    in_cohort = uid is not None and enabled(uid)
-    raw_provenance = in_cohort or (uid is not None and merge_before_processing_enabled())
-    metadata: dict[str, Any] = {'title_provenance': 'server_minimum'} if raw_provenance else {}
+    provenance = 'historical_minimum' if historical else 'server_minimum'
+    metadata: dict[str, Any] = {'title_provenance': provenance} if uid is not None else {}
     return Structured(
         **metadata,
         title=deterministic_minimum_title(

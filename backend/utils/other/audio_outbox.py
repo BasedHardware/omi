@@ -11,6 +11,7 @@ import json
 from dataclasses import asdict, dataclass
 from typing import Any
 
+from utils.other.private_sync_get_metrics import Reader, object_get_reader
 from utils.other import storage
 from utils.other.raw_audio import CapturePack, decode_capture
 from utils.other.audio_outbox_metrics import CUSTODY_COMMITS, record_failure
@@ -141,7 +142,7 @@ def commit_capture(
             sample_rate=int(metadata['sample_rate']),
         )
         CUSTODY_COMMITS.inc()
-        if framed and metadata.get('conversation_id'):
+        if metadata.get('conversation_id'):
             storage.invalidate_pack_index(bucket, uid, str(metadata['conversation_id']))
         return receipt
     except Exception:
@@ -149,6 +150,7 @@ def commit_capture(
         raise
 
 
+@object_get_reader(Reader.RECEIPT_READBACK)
 def read_pcm(uid: str, receipt: AudioReceipt) -> bytes:
     """Hydrate only the pinned generation and verify actual decoded PCM bytes."""
     bucket = storage.get_private_cloud_sync_bucket()
@@ -222,7 +224,7 @@ def commit_pcm_window(
             offset += count
     else:
         pack.append(pcm, conversation_id, start, len(pcm) // 2)
-    raw, metadata = pack.encoded(preserve_pcm=True)
+    raw, metadata = pack.encoded(preserve_pcm=True, compact_custody_pcm=True)
     if framed:
         metadata.update(frame_schema=FRAME_SCHEMA, gap_count=sum(frame['gap_before'] for frame in frames))
     metadata.update(

@@ -1,0 +1,3 @@
+{
+  "change": "Updated the bundled macOS Node.js runtime to v22.23.5 to include the latest security fixes"
+}

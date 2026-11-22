@@ -88,6 +88,14 @@ final class ProcessingConversationWatcherTests: XCTestCase {
     XCTAssertEqual(ProcessingConversationWatcher.pollDelay(attempt: 50), 60)
   }
 
+  func test_failedHomeProjectionIsNotWatched() {
+    for status in [ConversationStatus.processing, .merging, .inProgress] {
+      var failed = Self.conversation(status: status)
+      failed.homeStep = "failed"
+      XCTAssertFalse(ProcessingConversationWatcher.shouldWatch(failed))
+    }
+  }
+
   func test_shouldWatch_onlyLivePipelineRows() {
     XCTAssertTrue(ProcessingConversationWatcher.shouldWatch(Self.conversation(status: .processing)))
     XCTAssertTrue(ProcessingConversationWatcher.shouldWatch(Self.conversation(status: .inProgress)))

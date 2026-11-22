@@ -42,7 +42,7 @@ export async function POST(request: NextRequest) {
   }
   try {
     return NextResponse.json(
-      { enabled: true, ...(await mintEmbed(`tv:${link.id}`)) },
+      { enabled: true, ...(await mintEmbed(`tv:${link.id}`, { rotation: true })) },
       { headers }
     );
   } catch {

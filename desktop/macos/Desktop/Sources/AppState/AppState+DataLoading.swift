@@ -225,13 +225,14 @@ extension AppState {
     conversationRepository.cancelSearch()
   }
 
-  func deleteConversation(_ conversationId: String) async -> Bool {
+  func deleteConversation(_ conversationId: String) async -> ConversationDeleteOutcome {
     do {
-      try await conversationRepository.delete(id: conversationId)
-      return true
+      let outcome = try await conversationRepository.delete(id: conversationId)
+      if outcome.succeeded { HomeFailurePlacementStore.shared.forget(conversationId) }
+      return outcome
     } catch {
       logError("Conversations: Failed to delete conversation", error: error)
-      return false
+      return .failed(message: UserFacingErrorPresentation.message(for: error, while: .conversationDeletion))
     }
   }
 

@@ -1,4 +1,5 @@
 {{- if and .Values.enabled .Values.recordSealRepair.enabled (eq .Values.stage "prod") }}
+{{- include "batch-pipeline-worker.recordTokenLeaseGuard" . }}
 {{- if ne .Release.Namespace "prod-omi-backend" }}
 {{- fail "record seal repair requires prod-omi-backend" }}
 {{- end }}
@@ -8,26 +9,44 @@
 {{- if or (lt (int .Values.recordSealRepair.workers) 1) (gt (int .Values.recordSealRepair.workers) 64) }}
 {{- fail "recordSealRepair.workers must be 1..64" }}
 {{- end }}
+{{- $shards := 1 }}
+{{- if hasKey .Values.recordSealRepair "shards" }}
+{{- $shards = int .Values.recordSealRepair.shards }}
+{{- end }}
+{{- if or (lt $shards 1) (gt $shards 8) }}
+{{- fail "recordSealRepair.shards must be 1..8" }}
+{{- end }}
 apiVersion: batch/v1
 kind: CronJob
 metadata:
   name: record-seal-repair
 spec:
   suspend: {{ .Values.recordSealRepair.suspend }}
-  schedule: "*/5 * * * *"
+  schedule: {{ .Values.recordSealRepair.schedule | default "* * * * *" | quote }}
   concurrencyPolicy: Forbid
   startingDeadlineSeconds: 60
   successfulJobsHistoryLimit: 1
   failedJobsHistoryLimit: 2
   jobTemplate:
     spec:
+      completionMode: Indexed
+      completions: {{ $shards }}
+      parallelism: {{ $shards }}
       # Discovery <=60s + repair <=1500s + startup/reaping headroom.
       activeDeadlineSeconds: 1680
+      {{- if gt $shards 1 }}
+      # A failed index must not terminate healthy siblings (Kubernetes >=1.33).
+      backoffLimit: {{ $shards }}
+      backoffLimitPerIndex: 0
+      maxFailedIndexes: {{ $shards }}
+      {{- else }}
       backoffLimit: 0
+      {{- end }}
       template:
         metadata:
           labels:
             app.kubernetes.io/name: record-seal-repair
+            service_name: record-seal-repair
         spec:
           serviceAccountName: {{ required "existing worker KSA required" .Values.serviceAccountName }}
           automountServiceAccountToken: true
@@ -40,25 +59,55 @@ spec:
             fsGroup: 65532
             seccompProfile: {type: RuntimeDefault}
           affinity:
+            {{- if gt $shards 1 }}
+            podAntiAffinity:
+              requiredDuringSchedulingIgnoredDuringExecution:
+                - labelSelector:
+                    matchLabels: {app.kubernetes.io/name: record-seal-repair}
+                  topologyKey: kubernetes.io/hostname
+            {{- end }}
             nodeAffinity:
               requiredDuringSchedulingIgnoredDuringExecution:
                 nodeSelectorTerms:
                   - matchExpressions:
+                      {{- if .Values.recordSealRepair.nodePool }}
+                      # Pin repair capacity separately from the GPU worker Deployment.
+                      - key: cloud.google.com/gke-nodepool
+                        operator: In
+                        values: [{{ .Values.recordSealRepair.nodePool }}]
+                      {{- else }}
                       - {key: cloud.google.com/gke-accelerator, operator: DoesNotExist}
                       - key: cloud.google.com/gke-nodepool
                         operator: NotIn
                         values: [batch-pipeline-pool, batch-pipeline-pool-spot, parakeet-pool]
+                      {{- end }}
+          {{- with .Values.recordSealRepair.tolerations }}
+          tolerations:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
           containers:
             - name: repair
-              image: "{{ required "image.repository required" .Values.image.repository }}@{{ required "image.digest required" .Values.image.digest }}"
+              image: "{{ .Values.recordSealRepair.imageRepository | default .Values.image.repository | required "repair image repository required" }}@{{ .Values.recordSealRepair.imageDigest | default .Values.image.digest | required "repair image digest required" }}"
+              {{- if gt $shards 1 }}
               command: [python, scripts/record_seal_repair_job.py]
+              args: ["--shards", {{ $shards | quote }}, "--shard-index-file", /etc/repair-partition/index]
+              {{- else }}
+              command: [python, scripts/record_seal_repair_job.py]
+              {{- end }}
+              ports:
+                - {name: metrics, containerPort: 9090}
               env:
                 - {name: PUSHER_PROJECTION_DEBT_DURABLE_ENABLED, value: {{ .Values.recordSealRepair.projectionDebtDurableEnabled | quote }}}
                 - {name: RECORD_SEAL_REPAIR_JOBS, value: {{ .Values.recordSealRepair.jobsDiscovery | quote }}}
+                - {name: RECORD_SEAL_REPAIR_FRESH_ENABLED, value: {{ if hasKey .Values.recordSealRepair "freshEnabled" }}{{ .Values.recordSealRepair.freshEnabled | quote }}{{ else }}"true"{{ end }}}
                 - {name: RECORD_SEAL_REPAIR_ENABLED, value: {{ .Values.recordSealRepair.runtimeEnabled | quote }}}
                 - {name: RECORD_AUDIO_PARTIAL_ENABLED, value: {{ .Values.recordSealRules.partialEnabled | quote }}}
                 - {name: RECORD_SEAL_OVERLAP_TRIM_ENABLED, value: {{ .Values.recordSealRules.overlapTrimEnabled | quote }}}
                 - {name: RECORD_SEAL_UPLOAD_FAILED_REPAIR_ENABLED, value: {{ .Values.recordSealRules.uploadFailedRepairEnabled | quote }}}
+                - {name: RECORD_TOKEN_LEASE_MODE, value: {{ .Values.recordTokenLease.mode | quote }}}
+                - {name: RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT, value: {{ .Values.recordTokenLease.servePercent | quote }}}
+                - {name: RECORD_TOKEN_LEASE_SECONDS, value: {{ .Values.recordTokenLease.seconds | quote }}}
+                - {name: RECORD_TOKEN_LEASE_DEPLOYED_AT, value: {{ .Values.recordTokenLease.deployedAt | quote }}}
                 - {name: RECORD_SEAL_REPAIR_MODE, value: {{ .Values.recordSealRepair.mode | quote }}}
                 - {name: RECORD_SEAL_REPAIR_WORKERS, value: {{ .Values.recordSealRepair.workers | quote }}}
                 - {name: RECORD_SEAL_REPAIR_ROW_SECONDS, value: {{ .Values.recordSealRepair.rowSeconds | quote }}}
@@ -69,7 +118,6 @@ spec:
                 - {name: BUCKET_BATCH_PIPELINE, value: {{ .Values.bucket | quote }}}
                 - {name: BATCH_PIPELINE_ENABLED, value: "false"}
                 - {name: BATCH_PIPELINE_WORKER_ENABLED, value: "false"}
-                - {name: PYTHONDONTWRITEBYTECODE, value: "1"}
                 - {name: HOME, value: /tmp}
                 - name: ENCRYPTION_SECRET
                   valueFrom:
@@ -81,11 +129,34 @@ spec:
                 readOnlyRootFilesystem: true
                 capabilities: {drop: [ALL]}
               resources:
-                requests: {cpu: "2", memory: 4Gi}
+                requests: {cpu: {{ .Values.recordSealRepair.cpuRequest | quote }}, memory: 4Gi}
                 limits: {cpu: "4", memory: 8Gi}
               volumeMounts:
                 - {name: tmp, mountPath: /tmp}
+                {{- if gt $shards 1 }}
+                - {name: partition, mountPath: /etc/repair-partition, readOnly: true}
+                {{- end }}
           volumes:
+            {{- if gt $shards 1 }}
+            - name: partition
+              downwardAPI:
+                defaultMode: 420
+                items:
+                  - path: index
+                    fieldRef:
+                      apiVersion: v1
+                      fieldPath: metadata.annotations['batch.kubernetes.io/job-completion-index']
+            {{- end }}
             - name: tmp
               emptyDir: {sizeLimit: 64Mi}
+---
+apiVersion: monitoring.googleapis.com/v1
+kind: PodMonitoring
+metadata:
+  name: record-seal-repair
+spec:
+  selector:
+    matchLabels: {app.kubernetes.io/name: record-seal-repair}
+  endpoints:
+    - {port: metrics, interval: 15s, path: /metrics}
 {{- end }}

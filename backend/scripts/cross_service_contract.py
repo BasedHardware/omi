@@ -642,7 +642,7 @@ def _literal_key(node: ast.AST, constants: dict[str, str]) -> str | None:
 
 
 def _is_env_call(node: ast.AST, constants: dict[str, str]) -> str | None:
-    """Env key for os.getenv(K), os.environ.get(K), os.environ[K], *env*(K) and shared default_on(K) helpers."""
+    """Env key for os.getenv(K), os.environ.get(K), os.environ[K], *env*(K) and shared boolean helpers."""
     if isinstance(node, ast.Call) and node.args:
         key = _literal_key(node.args[0], constants)
         if key is None:
@@ -656,7 +656,16 @@ def _is_env_call(node: ast.AST, constants: dict[str, str]) -> str | None:
             and func.value.attr == 'environ'
         ):
             return key
-        if 'env' in name.lower() or name in {'_default_on', 'default_on', 'modes_default_on', 'rollout_default_on'}:
+        if 'env' in name.lower() or name in {
+            '_default_on',
+            'default_on',
+            'modes_default_on',
+            'rollout_default_on',
+            '_default_off',
+            'default_off',
+            'modes_default_off',
+            'rollout_default_off',
+        }:
             return key
     if isinstance(node, ast.Subscript) and isinstance(node.value, ast.Attribute) and node.value.attr == 'environ':
         return _literal_key(node.slice, constants)

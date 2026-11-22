@@ -194,11 +194,14 @@ def registry_violations(root: Path):
         for n in switches.body
         if isinstance(n, ast.Assign) and any(isinstance(t, ast.Name) and t.id == 'KILL_SWITCHES' for t in n.targets)
     )
-    out = [
-        f'{key}: live switches require registry lifecycle ops_kill'
-        for key in keys
-        if rows.get(key, {}).get('lifecycle') != 'ops_kill'
-    ]
+    # The live-read helper also serves opt-in controls. Registry ops_kill means
+    # default on; default-off controls may instead be permanent knobs or ramps.
+    # Retain ops_kill for existing migration exceptions validated by the registry.
+    out = []
+    for key, default_on in keys.items():
+        allowed = {'ops_kill'} if default_on else {'ops_kill', 'config_switch', 'rollout'}
+        if rows.get(key, {}).get('lifecycle') not in allowed:
+            out.append(f"{key}: live switches require registry lifecycle {' or '.join(sorted(allowed))}")
     if 'nested' not in rows.get('BATCH_LIVE_STT_RETIRE_PERCENT', {}).get('notes', '').lower():
         out.append('BATCH_LIVE_STT_RETIRE_PERCENT: registry must declare the nested batch cohort')
     return out

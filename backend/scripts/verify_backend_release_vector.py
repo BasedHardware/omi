@@ -16,12 +16,17 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import subprocess
 import sys
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Mapping, Sequence
+
+if str(Path(__file__).resolve().parents[1]) not in sys.path:
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from scripts.cloud_run_scope import selected
 
 CLOUD_RUN_SERVICES = ('backend', 'backend-sync', 'backend-sync-backfill', 'backend-integration')
 LISTENER_SERVICE = 'backend-listen'
@@ -66,6 +71,8 @@ def build_expectation(
     short_sha: str | None = None,
     expected_image: str | None = None,
     service_images: Mapping[str, str] | None = None,
+    integration_only: bool = False,
+    cloud_run_service: str = 'all',
 ) -> DeploymentExpectation:
     """Derive an immutable desired release vector from deploy-run metadata.
 
@@ -79,6 +86,9 @@ def build_expectation(
     actually deployed; when omitted it falls back to the seven-character prefix
     for local/manual invocations.
     """
+    scope = selected(cloud_run_service)
+    if integration_only and cloud_run_service not in ('all', 'backend-integration'):
+        raise ValueError('integration-only selector mismatch')
     normalized_sha = commit_sha.strip().lower()
     if len(normalized_sha) < 7 or any(char not in '0123456789abcdef' for char in normalized_sha):
         raise ValueError('commit SHA must be a hexadecimal value with at least seven characters')
@@ -98,6 +108,19 @@ def build_expectation(
     if expected_image is not None and not expected_image.strip():
         raise ValueError('expected image must not be empty')
     service_images = dict(service_images or {})
+    if integration_only and (
+        environment != 'prod'
+        or len(normalized_sha) != 40
+        or project != 'based-hardware'
+        or region != 'us-central1'
+        or set(service_images) - {'backend-integration'}
+    ):
+        raise ValueError('integration-only requires the exact production source and service scope')
+    if integration_only and not re.fullmatch(
+        r'gcr\.io/based-hardware/(backend|backend-workers)@sha256:[0-9a-f]{64}',
+        service_images.get('backend-integration', expected_image or ''),
+    ):
+        raise ValueError('integration-only requires an immutable admitted image')
     unknown = sorted(set(service_images) - {*CLOUD_RUN_SERVICES, LISTENER_SERVICE})
     if unknown:
         raise ValueError(f'service images name unknown services: {unknown}')
@@ -115,7 +138,9 @@ def build_expectation(
         image=(
             expected_image.strip() if expected_image is not None else f'gcr.io/{project}/backend:{resolved_short_sha}'
         ),
-        revisions={service: f'{service}-{suffix}' for service in CLOUD_RUN_SERVICES},
+        revisions={
+            service: f'{service}-{suffix}' for service in (('backend-integration',) if integration_only else scope)
+        },
         listener_deployment=f'{environment}-omi-backend-listen',
         listener_service=f'{environment}-omi-backend-listen',
         service_images=service_images,
@@ -139,7 +164,7 @@ def build_read_only_commands(
             f'--region={expectation.region}',
             '--format=json',
         ]
-        for service in CLOUD_RUN_SERVICES
+        for service in expectation.revisions
     }
     if include_revision_documents:
         commands.update(
@@ -154,7 +179,7 @@ def build_read_only_commands(
                     f'--region={expectation.region}',
                     '--format=json',
                 ]
-                for service in CLOUD_RUN_SERVICES
+                for service in expectation.revisions
             }
         )
     if include_listener:
@@ -498,7 +523,7 @@ def evidence(
     latest_ready_poll: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     cloud_run: dict[str, dict[str, Any]] = {}
-    for service in CLOUD_RUN_SERVICES:
+    for service in expectation.revisions:
         document = documents.get(f'cloud_run/{service}', {})
         status = _mapping(document.get('status'))
         template_spec = _mapping(_mapping(_mapping(document.get('spec')).get('template')).get('spec'))
@@ -656,7 +681,7 @@ def main() -> int:
     parser.add_argument(
         '--cloud-run-only',
         action='store_true',
-        help='verify only Cloud Run; candidate mode accepts no traffic and serving mode requires 100% traffic',
+        help='verify only Cloud Run; candidate mode accepts no traffic and serving mode requires 100%% traffic',
     )
     parser.add_argument(
         '--latest-ready-wait-seconds',
@@ -664,7 +689,7 @@ def main() -> int:
         default=DEFAULT_LATEST_READY_WAIT_SECONDS,
         help=(
             'serving mode: seconds to wait for a lagging service-level latestReadyRevisionName '
-            'pointer to converge when the expected revision is Ready and serves 100% of traffic; '
+            'pointer to converge when the expected revision is Ready and serves 100%% of traffic; '
             '0 disables the wait'
         ),
     )
@@ -675,8 +700,16 @@ def main() -> int:
         help='serving mode: seconds between latestReadyRevisionName convergence polls',
     )
     parser.add_argument('--evidence-path', type=Path)
+    parser.add_argument('--integration-only', action='store_true')
+    parser.add_argument('--cloud-run-service', choices=('all', *CLOUD_RUN_SERVICES), default='all')
     args = parser.parse_args()
     try:
+        if args.cloud_run_service != 'all' and not args.cloud_run_only:
+            raise ValueError('selected-service vector requires Cloud Run-only mode')
+        if args.integration_only and (not args.cloud_run_only or args.environment != 'prod'):
+            raise ValueError('integration-only vector requires production Cloud Run-only mode')
+        if args.integration_only and any(not item.startswith('backend-integration=') for item in args.service_image):
+            raise ValueError('integration-only vector contains an unrelated image override')
         if args.latest_ready_wait_seconds < 0:
             raise ValueError('latest-ready wait must not be negative')
         if args.latest_ready_poll_interval_seconds <= 0:
@@ -691,6 +724,8 @@ def main() -> int:
             environment=args.environment,
             expected_image=args.expected_image,
             service_images=dict(item.split('=', 1) for item in args.service_image),
+            integration_only=args.integration_only,
+            cloud_run_service=args.cloud_run_service,
         )
         commands = build_read_only_commands(
             expectation,

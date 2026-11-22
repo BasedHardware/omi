@@ -65,32 +65,27 @@ cross-process cache. Background member discovery has separate query charges.
 
 A Firestore boolean in the selected environment is authoritative for its named
 cohort. `false` revokes even a retained legacy env member. An absent field falls back to the existing
-nonempty `*_UID_ALLOWLIST` / `MOBILE_STANDARD_BATCH_UIDS` env list, or to the
+nonempty `*_UID_ALLOWLIST` env list, or to the
 legacy messaging policy cohort. An unreadable/malformed document never falls
 back. Keep removal tombstones during migration; deleting one could restore an
 old env grant. Independent percentage rollouts, existing global policy (`*`),
 kill switches, eligibility checks and already-admitted durable work retain their
 contracts. Removing membership does not override a separate percentage rollout.
 
-Cloud Run manifests omit private UID entries so a merge keeps the current live
-values. **Helm listen/pusher values retain every legacy allowlist in this PR**:
-Helm replaces its env list, so deleting them here would change live membership.
-Their removal requires a separate PR after seed and verification. First-summary
-empty or absent keys deny nonmembers, preserving main #22113. Sync-lineage
-empty **and absent** keys retain their previous allow-all fallback if the
-Firestore field is missing; explicit booleans still win. Dev therefore keeps
-lineage enabled for everyone without enumerating users. Prod listen retains its
-nonempty legacy lineage list. Percentages and parent gates stay unchanged.
+Cloud Run manifests omit private UID entries so a merge keeps current live
+values. Audio archive and mobile Standard batch now use only injected Firestore
+membership, without environment fallbacks. Their retirement deploy must first
+confirm the existing production member is seeded in `audio-archive` and
+`mobile-standard-batch`. The migration tool excludes these already-migrated
+cohorts so it cannot replace stored membership with an empty env inventory.
+First-summary no longer reads a cohort: its percent/deadline admission remains.
 
-The retained keys include `STT_LIVE_DEMAND_UID_ALLOWLIST` (prod listen),
-`MOBILE_STANDARD_BATCH_UIDS` (prod listen), `DREAM_AGENT_UID_ALLOWLIST` (prod
-listen/pusher), `SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST` (prod listen),
-`SPEAKER_GROUPING_SHADOW_UID_ALLOWLIST` (prod speaker detail),
-`AUDIO_ARCHIVE_UID_ALLOWLIST` (dev listen/pusher coalesce), and
-`TRANSCRIPTION_SHADOW_UID_ALLOWLIST` (dev pusher release probe). Other legacy
-entries, including final-pass and recovery, are retained too. The prod
-`OMI_MESSAGING_CHANNEL_POLICY` is omitted entirely: Cloud Run must retain the
-live policy, including its iMessage cohort, instead of receiving an empty list.
+Other legacy allowlists remain, including live demand, Dream, sync lineage,
+speaker shadow and transcription shadow. Explicit booleans remain authoritative.
+Sync-lineage empty and absent keys retain allow-all fallback when the Firestore
+field is missing. Parent gates and independent percentages keep their contracts.
+The production messaging policy remains omitted so Cloud Run retains the live
+policy and iMessage cohort.
 
 ## Operator commands
 

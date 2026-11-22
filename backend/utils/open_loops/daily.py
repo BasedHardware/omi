@@ -1,4 +1,4 @@
-"""The open-loops daily pass: one structured call per user per local day.
+"""The open-loops daily pass: one structured result per user per local day.
 
 A sibling step of the daily recap job: when the recap cohort processes a
 user's completed local day, this pass is dispatched after the recap's own
@@ -8,8 +8,8 @@ never spend recap budget, delay the webhook or defer another user's recap.
 It renders the day with the recap's own deserializer, char budget and
 renderer — the same *view* of the day, though not a byte-identical shared
 prompt prefix (the recap's system prompt and eligibility filter differ, so
-no prompt-cache prefix is actually shared) — then makes exactly one model
-call (feature key ``open_loop_daily``, usage-tracked) that:
+no prompt-cache prefix is actually shared) — then invokes the usage-tracked
+``open_loop_daily`` model, with one retry on provider timeout, to produce a result that:
 
 1. decides statuses for carried loops, open tasks and today's extractions —
    only loops with signal come back;
@@ -34,9 +34,8 @@ Cost guards: ``OPEN_LOOPS_ENABLED`` off skips the pass and writes nothing; a
 user with no extractions and no open loops, or with no conversations and no
 due-soon loop, skips the model call; an atomic per-day claim
 (``database.open_loops.claim_daily_pass``) is taken **before** the model
-call, so retried recap ticks, abandoned threads and the locked-retry path
-never double-spend — and the per-day cards document still marks the day as
-run.
+call, so retried recap ticks and competing workers cannot repeat an active
+or completed pass. The per-day cards document still marks the day as run.
 """
 
 from __future__ import annotations
@@ -46,6 +45,8 @@ import logging
 from datetime import date, datetime, timezone
 from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence, Tuple
 from zoneinfo import ZoneInfo
+
+from openai import APITimeoutError
 
 from config.open_loops import open_loops_enabled
 import database.action_items as action_items_db
@@ -69,6 +70,9 @@ SKIPPED_DISABLED = 'skipped_disabled'
 SKIPPED_ALREADY_RAN = 'skipped_already_ran'
 SKIPPED_CLAIMED = 'skipped_claimed'
 SKIPPED_NO_SIGNAL = 'skipped_no_signal'
+
+# Leave room for two requests and non-model work in the default 45s dispatcher budget.
+_MODEL_REQUEST_TIMEOUT_SECONDS = 15.0
 
 # The model may decide exactly these statuses (the offline-validated set).
 DECIDABLE_STATUSES = frozenset({'opened', 'progressing', 'stale', 'due_soon', 'resolved'})
@@ -420,9 +424,8 @@ def run_daily_pass(
         # just to re-stale carried loops.
         return SKIPPED_NO_SIGNAL
 
-    # The spend guard: atomically claim the day before the model call, so a
-    # retried tick, an abandoned worker or the recap's locked-retry path can
-    # never double-pay for this local day.
+    # Claim the day before invoking the model. Competing ticks cannot start a
+    # second pass while this claim owns the work.
     if not open_loops_db.claim_daily_pass(uid, date_str, now=now, firestore_client=firestore_client):
         return SKIPPED_CLAIMED
 
@@ -463,7 +466,7 @@ def _run_claimed_pass(
     llm: Optional[Any],
     polisher: Optional[Callable],
 ) -> str:
-    """The claimed (already paid-for-once) pass: prompt, one model call, writes."""
+    """Build the prompt, obtain one result and persist it under this claim."""
     carried = sorted(open_loops, key=store.carried_relevance)[: store.CARRIED_LOOPS_PROMPT_CAP]
     carried_views = [store.carried_view(loop, today) for loop in carried]
     tasks = open_tasks_view(uid, today)
@@ -491,14 +494,20 @@ def _run_claimed_pass(
         default=str,
     )
 
-    model = llm if llm is not None else get_llm('open_loop_daily')
+    model = (
+        llm
+        if llm is not None
+        else get_llm('open_loop_daily', request_timeout=_MODEL_REQUEST_TIMEOUT_SECONDS, max_retries=0)
+    )
+    messages = [
+        {'role': 'system', 'content': OPEN_LOOPS_DAILY_RULES},
+        {'role': 'user', 'content': user_content},
+    ]
     with track_usage(uid, Features.OPEN_LOOP_DAILY):
-        response = model.invoke(
-            [
-                {'role': 'system', 'content': OPEN_LOOPS_DAILY_RULES},
-                {'role': 'user', 'content': user_content},
-            ]
-        )
+        try:
+            response = model.invoke(messages)
+        except APITimeoutError:
+            response = model.invoke(messages)
     parsed = parse_model_output(response) or {}
     raw_loops = parsed.get('loops')
     model_loops: List[Any] = list(raw_loops) if isinstance(raw_loops, list) else []

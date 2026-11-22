@@ -8,10 +8,10 @@ the server chose to show. The title is only ever the model-free
 ``"Recording · 3:14 PM"``. The dead-letter alone may also mark a row
 ``summary_retryable``, and only when a user reprocess can still succeed.
 
-These helpers run inside those Firestore transactions. Transcript decode is
-local CPU work (uid-keyed AES-GCM plus zlib) on the snapshot the transaction
-already holds, so the title always describes the transcript that commits. The
-one IO, the user's time zone for a transcript-free row, is a plain
+These helpers run inside Firestore transactions, including direct SDK runners.
+Inline transcript decode is local CPU work; lake references are memo-only under
+a local transaction guard. A cold pointer uses the existing conservative title
+fallback without fetching from the lake. The user's time zone is a plain
 non-transactional read that cannot fail the terminal write.
 
 A terminal must always be able to commit. The title and retry marker only ever
@@ -28,6 +28,7 @@ from types import SimpleNamespace
 from typing import Any, Callable, Mapping
 
 from database import conversations as conversations_db
+from database._client import transaction_body
 from database.conversation_terminal_effects import stage_terminal_visibility_refresh
 from utils.conversations.deterministic_minimum import deterministic_minimum_title
 from utils.firestore_document_size import FIRESTORE_MAX_DOCUMENT_BYTES, estimate_firestore_document_bytes
@@ -67,7 +68,7 @@ def transcript_texts(uid: str, conversation: Mapping[str, Any]) -> tuple[list[st
         segments = conversations_db.decode_transcript_segments_verified(
             uid, raw_segments, bool(conversation.get('transcript_segments_compressed'))
         )
-    except (TypeError, ValueError, zlib.error):
+    except (TypeError, ValueError, zlib.error, conversations_db.transcript_pointer.TranscriptPointerError):
         return [], False
     texts: list[str] = []
     for segment in segments:
@@ -131,7 +132,8 @@ def kept_row_terminal_update(
     evidence the user said nothing, so the path's policy keep applies instead
     of the deterministic rules.
     """
-    texts, _decoded = transcript_texts(uid, conversation)
+    with transaction_body():
+        texts, _decoded = transcript_texts(uid, conversation)
     if not texts and not assess_empty_transcript:
         # Crash-window rows never reached the transcriber: an absent
         # transcript is not evidence the user said nothing, so the path's
@@ -178,7 +180,8 @@ def dead_letter_conversation_updates(
     had_summary = structured_has_protected_content(
         conversation.get('structured'), conversations_db.effective_user_title(conversation.get('user_title'))
     )
-    texts, _decoded = transcript_texts(uid, conversation)
+    with transaction_body():
+        texts, _decoded = transcript_texts(uid, conversation)
     base: dict[str, Any] = {'status': 'completed', 'discarded': False, 'finalization_status': 'dead_letter'}
     if not isinstance(conversation.get('structured'), Mapping):
         # The API model needs a structured map even to return the row.

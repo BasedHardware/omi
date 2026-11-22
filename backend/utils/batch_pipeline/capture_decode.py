@@ -14,6 +14,32 @@ from utils.sync.capture_clock import is_early_capture_time
 UNIT_FRAMES = 3600 * RATE
 MAX_JOIN_GAP_FRAMES = 30 * RATE
 
+# Closed vocabulary of faults that mean these uploaded bytes cannot decode with
+# this server's decoder, however often they are retried. Membership is by exact
+# message: a config, Firestore, storage or privacy failure is never a member,
+# even though it can be raised from the same phase.
+DETERMINISTIC_DECODE_MESSAGES = frozenset(
+    {
+        'truncated sync audio frame',
+        'invalid sync audio frame',
+        'empty sync audio',
+        'unsupported sync PCM format',
+        'empty decoded sync audio',
+        'sync decode did not preserve every uploaded frame',
+        'capture bundle exceeds bounded conversation-unit limit',
+    }
+)
+# ``utils.sync.files`` answers this 400 detail for the same class of fault.
+AUDIO_DECODE_FAILED_DETAIL = 'Audio decode failed'
+
+
+def is_deterministic_decode_failure(error: BaseException) -> bool:
+    """Only a closed set of uploaded-bytes faults; never a config or IO failure."""
+    # Duck-typed so this module keeps no FastAPI import (it runs in CPU workers).
+    if getattr(error, 'status_code', None) == 400 and getattr(error, 'detail', None) == AUDIO_DECODE_FAILED_DETAIL:
+        return True
+    return isinstance(error, ValueError) and str(error) in DETERMINISTIC_DECODE_MESSAGES
+
 
 def _frame_count(path: str) -> int:
     count = 0
@@ -49,6 +75,7 @@ def _canonical(path: str) -> bytes:
 
 # Server-held WAV (the cap-hold adapter) takes the same canonicalization as uploads.
 canonical_pcm = _canonical
+validated_frame_count = _frame_count
 
 
 def decode_units(
@@ -91,12 +118,15 @@ def decode_units(
             if early and received_at is not None:
                 unit = replace(unit, stored_capture_at=received_at - (early_frames - early_committed_frames) / RATE)
                 early_committed_frames += len(pcm) // 2
+            if received_at is None:
+                unit = replace(unit, source_frames=len(pcm) // 2 - padding_frames)
             return unit
 
         pending = bytearray()
         pending_runs = []
         start = 0.0
         pending_early = False
+        padding_frames = 0
         for path in sorted(
             wavs,
             key=lambda value: (
@@ -123,11 +153,13 @@ def decode_units(
                 yield packed_unit(start, bytes(pending), pending_runs, pending_early)
                 pending.clear()
                 pending_runs = []
+                padding_frames = 0
             if not pending:
                 start = capture
                 pending_early = early
             elif gap > 0:
                 pending.extend(b'\0' * (gap * 2))
+                padding_frames += gap
             offset = 0
             while offset < len(pcm):
                 take = min(unit_frames * 2 - len(pending), len(pcm) - offset)
@@ -140,6 +172,7 @@ def decode_units(
                     yield packed_unit(start, bytes(pending), pending_runs, pending_early)
                     pending.clear()
                     pending_runs = []
+                    padding_frames = 0
                     start = capture + offset / (2 * RATE)
         if pending:
             yield packed_unit(start, bytes(pending), pending_runs, pending_early)

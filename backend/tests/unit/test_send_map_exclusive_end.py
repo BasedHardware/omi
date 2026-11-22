@@ -105,13 +105,10 @@ def test_randomized_compact_maps_preserve_every_correct_base_window(base_mapper,
                     assert candidate == oracle
                 if base != candidate:
                     counts['changed'] += 1
-                    # Only exact exclusive ends at a discontinuous compact
-                    # boundary change. Non-boundary windows retain base output.
-                    index = next(i for i, span in enumerate(sends._spans) if span[0] + span[2] == end)
-                    assert index + 1 < len(sends._spans)
-                    previous, following = sends._spans[index : index + 2]
-                    assert previous[1] + previous[2] != following[1]
                     assert base != oracle  # never alter a previously correct accepted window
+                    start_boundary = any(span[0] + span[2] == first for span in sends._spans[:-1])
+                    end_boundary = any(span[0] + span[2] == end for span in sends._spans[:-1])
+                    assert start_boundary or end_boundary
                     if candidate is None:
                         counts['refused'] += 1
                     elif base is None:
@@ -150,3 +147,13 @@ def test_existing_outer_tolerance_and_point_semantics():
     assert sends.map_interval(101, 201) == (201, 300)
     assert sends.map_interval(201, 202) is None
     assert sends.map_interval(100, 100) == (200, 200)
+
+
+def test_start_on_post_gap_send_boundary():
+    sends = SendMap(16000)
+    sends.add_accepted_spans([(0, 1000), (6000, 1000)])
+    # provider 0..1000 -> capture 0..1000, VAD skip, provider 1000..2000 -> capture 6000..7000
+    assert sends.map_interval(1001, 1500) == (6001, 6500)
+    assert sends.map_interval(1000, 1500) == (6000, 6500)
+    assert sends.map_interval(999, 1500) is None
+    assert sends.accepted_provider_samples(1000, 1500) == 500

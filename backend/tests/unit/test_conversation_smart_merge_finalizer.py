@@ -59,6 +59,9 @@ def harness(monkeypatch):
     # The live-episode hook runs after fanout completion; its own tests cover it.
     monkeypatch.setenv('EPISODES_ENABLED', 'off')
     monkeypatch.setenv('CALLS_RECAP_MODE', 'off')
+    # This row has no live episode; retain the enabled notes-scheduling prelude.
+    monkeypatch.delenv('HOME_LIVE_MEMBER_NOTES_DEFERRED_ENABLED', raising=False)
+    monkeypatch.setattr(finalizer.member_notes, 'waits', lambda *args: False)
 
     async def fake_run_blocking(_executor, function, *args, **kwargs):
         if function is finalizer.conversations_db.get_conversation:
@@ -68,6 +71,8 @@ def harness(monkeypatch):
             # Exercise the real default-off gate; it must not claim a route or touch Firestore.
             return function(*args, **kwargs)
         if function is finalizer.apply_call_metadata:
+            return function(*args, **kwargs)
+        if function is finalizer.member_notes.waits:
             return function(*args, **kwargs)
         calls.append(function)
         if function is finalizer.finalization_jobs_db.get_finalization_job:
@@ -79,6 +84,8 @@ def harness(monkeypatch):
             admitted = jobs_db._conversation_admits_fanout(row, _JOB, 'job')  # pyright: ignore[reportPrivateUsage]
             return {'status': 'claimed' if admitted else 'fenced', 'fanout_key': 'key'}
         if function is finalizer.lifecycle_service.complete_finalization_fanout:
+            return True
+        if function is finalizer.lifecycle_service.complete_discarded_server_batch_fanout:
             return True
         if function is finalizer.link_duplicate_captures:
             raise RuntimeError('reached derived work')
@@ -183,8 +190,6 @@ async def test_record_registration_precedes_terminal_fanout_even_for_silent_back
 async def test_completed_minimum_reaches_processing_under_its_existing_job(harness, monkeypatch):
     calls, row = harness
     row.update(summary_title_provenance='server_minimum', summary_output_present=False)
-    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'true')
-    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_PERCENT', '100')
     original = finalizer.run_blocking
     processed = []
 
@@ -404,3 +409,75 @@ def test_resumed_ok_line_carries_the_job_hash_only(monkeypatch, caplog):
     assert resumed == [f'event=smart_merge outcome=resumed_ok job_hash={finalization_diagnostic_id("job-1")}']
     # Closed vocabulary: the raw finalization job id never appears.
     assert 'job-1' not in resumed[0]
+
+
+@pytest.mark.asyncio
+async def test_donor_live_notes_wait_reaches_finalizer_without_retry_budget(harness, monkeypatch):
+    from unittest.mock import Mock
+    from utils.episodes import member_notes
+
+    calls, row = harness
+    row.update(_DONOR)
+    wait = member_notes.LiveMemberNotesDeferred('live_episode_notes', 123)
+    monkeypatch.setattr(smart_merge.conversations_db, 'get_conversation', lambda *a, **kw: row)
+    monkeypatch.setattr(smart_merge, '_cleanup_donor', Mock())
+    monkeypatch.setattr(smart_merge, '_cleanup_flattened_ancestors', Mock())
+    monkeypatch.setattr(smart_merge, 'refresh_survivor', Mock(side_effect=wait))
+
+    async def merge(*a, **kw):
+        smart_merge.finish_absorb('u', 'n', owner='job', resumed=True)
+
+    monkeypatch.setattr(finalizer, 'smart_merge_step', merge)
+    retry = Mock()
+    monkeypatch.setattr(finalizer.finalization_jobs_db, 'mark_finalization_retryable', retry)
+    yielded = []
+
+    async def yield_wait(*args):
+        yielded.append(args)
+        return finalizer.ConversationFinalizationDisposition.completed
+
+    monkeypatch.setattr(finalizer, '_yield_live_member_notes', yield_wait)
+    await _finalize()
+    assert yielded == [('job', 1, 1)]
+    retry.assert_not_called()
+    assert finalizer.lifecycle_service.claim_finalization_fanout not in calls
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('late', [False, True])
+@pytest.mark.parametrize('registered', [False, True])
+async def test_preview_batch_registration_precedes_every_live_notes_wait(harness, monkeypatch, late, registered):
+    from unittest.mock import Mock
+    from utils.episodes import member_notes
+
+    calls, row = harness
+    row.update(record_lane_owner='batch_live_v1', transcript_segments=[{'text': 'Preview'}])
+    monkeypatch.setattr(finalizer.member_notes, 'waits', lambda *a: not late)
+    events = []
+    original = finalizer.run_blocking
+
+    async def run(executor, function, *args, **kwargs):
+        if late and function is finalizer.process_with_episode_budget:
+            raise member_notes.LiveMemberNotesDeferred('live_episode_notes', 123)
+        if function is finalizer.register_recording:
+            events.append('register')
+            return registered
+        return await original(executor, function, *args, **kwargs)
+
+    async def yield_wait(*a):
+        events.append('yield')
+        return finalizer.ConversationFinalizationDisposition.deferred
+
+    monkeypatch.setattr(finalizer, 'run_blocking', run)
+    monkeypatch.setattr(finalizer, 'finalization_pending', lambda *a: late)
+    monkeypatch.setattr(finalizer, '_yield_live_member_notes', yield_wait)
+    notes = Mock()
+    monkeypatch.setattr(finalizer, 'process_conversation', notes)
+    if registered:
+        assert await _finalize() is finalizer.ConversationFinalizationDisposition.deferred
+        assert events == ['register', 'yield']
+    else:
+        with pytest.raises(finalizer.ConversationFinalizationError, match='record_registration_refused'):
+            await _finalize()
+        assert events == ['register']
+    notes.assert_not_called()

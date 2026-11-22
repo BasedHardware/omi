@@ -1,0 +1,21 @@
+id: mute/pre-settings-default-is-not-a-mute
+summary: >
+  Graduated from fuzz seed 28. Before app_settings_init() the RAM mute is the
+  fail-closed default (muted); a boot that dies that early, or is still inside
+  the 10 s support-gesture window, has captured nothing. The next full boot of
+  a never-muted pendant loads "unmuted" and records; the oracle only judges
+  mute after settings were applied.
+tags: [fix]
+initial: {charging: true}
+timeline:
+  - {t: 0, panic: true}
+  - {t: 15000, power: cycle}
+  - {t: 15500, hold: 13000}
+end: 22000
+expect:
+  boot_count: 3
+  boots:
+    - {exit: fatal, muted: 1, not_log: ["Settings initialized"]}
+    - {reset: software, muted: 0, should_capture: true, sd_paused: false, log: ["Settings initialized"]}
+    - {reset: power-on, safe: false, not_log: ["Settings initialized"]}
+  invariants: [mute-follows-app, mute-blocks-capture, capture-after-settings]

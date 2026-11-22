@@ -42,6 +42,8 @@ enum ConversationSearchResultFilter {
 
 struct ConversationsPage: View {
   @ObservedObject var appState: AppState
+  @ObservedObject private var failurePlacement = HomeFailurePlacementStore.shared
+  @ObservedObject private var placementAuth = AuthState.shared
   @Binding var selectedConversation: ServerConversation?
   var brainDestination: MemoryHubDestination? = nil
   var onSelectBrainDestination: ((MemoryHubDestination) -> Void)? = nil
@@ -139,6 +141,21 @@ struct ConversationsPage: View {
 
   var body: some View {
     pageSurface
+      .task(id: placementAuth.userId) {
+        let owner = placementAuth.userId
+        await failurePlacement.refresh()
+        failurePlacement.remember(appState.conversations, for: owner)
+      }
+      .onReceive(appState.$conversations) { rows in
+        failurePlacement.remember(rows, for: placementAuth.userId)
+      }
+      .onReceive(NotificationCenter.default.publisher(for: .runtimeOwnerDidChange)) { _ in
+        failurePlacement.reset()
+        Task { await failurePlacement.refresh() }
+      }
+      .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+        Task { await failurePlacement.refresh() }
+      }
       .frame(maxWidth: .infinity, maxHeight: .infinity)
       .glassContent()
       .conversationRowPrompts(rowPrompts, appState: appState)
@@ -635,9 +652,13 @@ struct ConversationsPage: View {
     }
   }
 
+  private var homeConversations: [ServerConversation] {
+    ConversationFailurePlacement.home(appState.conversations, confirmed: failurePlacement.enabled)
+  }
+
   /// Loaded rows hidden behind their capture group's representative.
   private var collapsedAwayConversationIds: Set<String> {
-    let loaded = searchQuery.isEmpty ? appState.conversations : visibleSearchResults
+    let loaded = searchQuery.isEmpty ? homeConversations : visibleSearchResults
     return Set(loaded.map(\.id)).subtracting(displayedConversationIds)
   }
 
@@ -650,20 +671,21 @@ struct ConversationsPage: View {
   /// IDs of the conversations currently shown to the user — search results while
   /// a search is active, otherwise the full list. Used to scope "Select All".
   private var displayedConversationIds: [String] {
-    CaptureGroupPresentation.collapse(searchQuery.isEmpty ? appState.conversations : visibleSearchResults).map(\.id)
+    CaptureGroupPresentation.collapse(searchQuery.isEmpty ? homeConversations : visibleSearchResults).map(\.id)
   }
 
   /// Search is text-only at the API boundary. Apply the same local refinements
   /// to the returned rows so search and list queries have identical AND
   /// semantics without inventing a second backend endpoint.
   private var visibleSearchResults: [ServerConversation] {
-    ConversationSearchResultFilter.apply(
-      searchResults,
-      starredOnly: appState.showStarredOnly,
-      date: appState.selectedDateFilter,
-      folderId: appState.selectedFolderId,
-      includeDiscarded: appState.showDiscardedConversations
-    )
+    ConversationFailurePlacement.home(
+      ConversationSearchResultFilter.apply(
+        searchResults,
+        starredOnly: appState.showStarredOnly,
+        date: appState.selectedDateFilter,
+        folderId: appState.selectedFolderId,
+        includeDiscarded: appState.showDiscardedConversations
+      ), confirmed: failurePlacement.enabled)
   }
 
   /// Entry point for the multi-select / merge feature. Without this the whole
@@ -730,13 +752,17 @@ struct ConversationsPage: View {
         // A successful filtered request with no rows is different from an
         // account with no conversations. Keep the recovery action beside the
         // state that caused the empty result instead of suggesting recording.
-        if appState.hasActiveConversationFilters && !appState.isLoadingConversations
+        if failurePlacement.enabled && !appState.conversations.isEmpty && homeConversations.isEmpty
+          && !appState.isLoadingConversations && appState.conversationsError == nil
+        {
+          HomeFailuresMovedState { onSelectBrainDestination?(.activity) }
+        } else if appState.hasActiveConversationFilters && !appState.isLoadingConversations
           && appState.conversationsError == nil && appState.conversations.isEmpty
         {
           filteredConversationsEmptyView
         } else {
           ConversationListView(
-            conversations: appState.conversations,
+            conversations: homeConversations,
             isLoading: appState.isLoadingConversations,
             error: appState.conversationsError,
             folders: appState.folders,
@@ -879,12 +905,14 @@ struct ConversationsPage: View {
     isSearching = true
     searchError = nil
     log("Search: Starting search for '\(query)'")
+    let searchOwner = AuthState.shared.userId
 
     Task {
       do {
         let result = try await appState.searchConversations(query)
         log("Search: Found \(result.count) results")
         searchResults = result
+        failurePlacement.remember(result, for: searchOwner)
         isSearching = false
         SearchAnalytics.queryEntered(surface: .conversations, query: query, resultsCount: result.count)
       } catch is CancellationError {

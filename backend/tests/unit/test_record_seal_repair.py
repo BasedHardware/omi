@@ -10,6 +10,7 @@ from unittest.mock import Mock
 import pytest
 
 from database.batch_pipeline_store import FirestoreStore
+from database.record_audio import renew_record_token_lease
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 from utils.batch_pipeline import record_seal_repair as repair
@@ -64,7 +65,8 @@ def plan(source):
     return repair.plan_seals(store, ['pending'], object(), artifacts)
 
 
-def test_dry_run_no_writes_and_apply_only_patches_seal(source):
+def test_dry_run_no_writes_and_apply_only_patches_seal(source, monkeypatch):
+    monkeypatch.setattr(repair, 'time', SimpleNamespace(time=lambda: 1000))
     store, client, _ = source
     result = plan(source)
     report = repair.plan_summary(result)
@@ -74,7 +76,18 @@ def test_dry_run_no_writes_and_apply_only_patches_seal(source):
     assert client.rows[PATH]['record_audio_closed']
     assert client.rows[PATH]['content'] == 'untouched'
     assert client.rows[JOB_PATH]['state'] == 'record_pending'
-    assert client.transactions[-1].updates == [(PATH, {'record_audio_closed': True})]
+    seal_tx = next(tx for tx in client.transactions if tx.updates)
+    assert seal_tx.updates == [
+        (
+            PATH,
+            {
+                'record_audio_closed': True,
+                'record_admitted_at': client.rows[PATH]['record_admitted_at'],
+                'record_sealed_at': 1000,
+            },
+        )
+    ]
+    assert client.rows[('users', 'synthetic', 'pipeline_ledger', 'record')]['stage'] == 'sealed'
     assert not any(value in json.dumps(report) for value in ('synthetic', 'pending', 'record_content_id'))
 
 
@@ -366,3 +379,280 @@ def test_listed_source_precondition_failure_never_seals(source, monkeypatch, cha
     )
     blob.reload.assert_not_called()
     decode.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    'mode,disposition', [('off', 'upload_pending'), ('shadow', 'upload_pending'), ('serve', 'eligible')]
+)
+def test_lease_dead_plan_and_shadow_dispositions(source, monkeypatch, mode, disposition):
+    store, client, _ = source
+    monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', mode)
+    monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT', '100')
+    monkeypatch.setattr(record_producer_proof.time, 'time', lambda: 10000)
+    client.rows[PATH]['record_upload_sessions'] = {
+        's': {
+            'pod': 'live',
+            'process_started_at': 100,
+            'last_signal_at': 100,
+            'lease_expires_at': 3700,
+            'signal_source': 'frames',
+        }
+    }
+    result = plan(source)
+    assert result['entries'][0]['disposition'] == disposition
+    assert result['entries'][0].get('lease_reason') == ('lease_would_expire' if mode == 'shadow' else None)
+    outcome = repair.apply_seals(store, result, result['plan_sha256'])
+    assert outcome == ({'sealed': 1} if mode == 'serve' else {'upload_pending': 1})
+    assert bool(client.rows[PATH].get('record_audio_closed')) is (mode == 'serve')
+
+
+def test_late_append_between_plan_and_apply_refences_and_bumps_revision(source, monkeypatch):
+
+    store, client, _ = source
+    client.rows[('users', 'synthetic')] = {'private_cloud_sync_enabled': True}
+    monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', 'serve')
+    monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT', '100')
+    monkeypatch.setattr(record_producer_proof.time, 'time', lambda: 10000)
+    client.rows[PATH]['record_upload_sessions'] = {
+        's': {
+            'pod': 'live',
+            'process_started_at': 100,
+            'last_signal_at': 100,
+            'lease_expires_at': 3700,
+            'signal_source': 'frames',
+        }
+    }
+    result = plan(source)
+    assert result['entries'][0]['disposition'] == 'eligible'
+    from database import record_custody_append
+
+    monkeypatch.setattr(record_custody_append, 'time', SimpleNamespace(time=lambda: 10000))
+    assert record_custody_append.begin('synthetic', 'record', 'custody:plan-race', firestore_client=client)
+    assert client.rows[PATH].get('record_upload_revision', 0) == 0
+    assert repair.apply_seals(store, result, result['plan_sha256']) == {'state_changed': 1}
+    assert plan(source)['entries'][0]['disposition'] == 'upload_pending'
+    # The durable file append is a throttled heartbeat, still no early bump.
+    renew_record_token_lease(
+        'synthetic', 'record', source='custody_append', session='custody:plan-race', firestore_client=client
+    )
+    assert client.rows[PATH].get('record_upload_revision', 0) == 0
+    record_custody_append.finish('synthetic', 'record', 'custody:plan-race', accepted=True, firestore_client=client)
+    assert client.rows[PATH]['record_upload_revision'] == 1
+    assert set(client.rows[PATH]['record_upload_sessions']) == {'s'}
+    # The frame token's lease lapsed, so the record is eligible again once the custody uploader ends.
+    assert plan(source)['entries'][0]['disposition'] == 'eligible'
+
+
+def test_lease_kill_switch_after_plan_and_tail_refusal(source, monkeypatch):
+    monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', 'serve')
+    monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT', '100')
+    monkeypatch.setattr(record_producer_proof.time, 'time', lambda: 10000)
+    source[1].rows[PATH]['record_upload_sessions'] = {
+        's': {
+            'pod': 'live',
+            'process_started_at': 100,
+            'last_signal_at': 100,
+            'lease_expires_at': 3700,
+            'signal_source': 'frames',
+        }
+    }
+    result = plan(source)
+    monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', 'off')
+    assert repair.apply_seals(source[0], result, result['plan_sha256']) == {'upload_pending': 1}
+    monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', 'serve')
+    source[1].rows[PATH]['finished_at'] = datetime.fromtimestamp(150, timezone.utc)
+    assert plan(source)['entries'][0]['disposition'] == 'proof_refused'
+
+
+@pytest.mark.parametrize('available_at', [9900, 200])
+def test_moving_retry_wake_cannot_extend_stock_lease_in_plan_or_apply(source, monkeypatch, available_at):
+    monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', 'serve')
+    monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT', '100')
+    monkeypatch.setenv('RECORD_TOKEN_LEASE_DEPLOYED_AT', '100')
+    monkeypatch.setattr(record_producer_proof.time, 'time', lambda: 10000)
+    source[1].rows[PATH]['record_upload_sessions'] = {'s': {'pod': 'live', 'process_started_at': 100}}
+    source[1].rows[JOB_PATH]['available_at'] = available_at
+    result = plan(source)
+    assert result['entries'][0]['disposition'] == 'eligible'
+    source[1].rows[JOB_PATH]['available_at'] = 20000
+    assert repair.apply_seals(source[0], result, result['plan_sha256']) == {'sealed': 1}
+
+
+@pytest.mark.parametrize('age,enabled,wake', [(90, True, 0), (7201, True, 1), (-1, True, 10900), (90, False, 10900)])
+def test_fresh_proven_seals_wake_ahead_of_certified_backlog_retries(source, monkeypatch, age, enabled, wake):
+    store, client, artifacts = source
+    monkeypatch.setattr(repair.time, 'time', lambda: 10000)
+    client.rows[JOB_PATH].update(enqueued_at=10000 - age, available_at=10900, record_intake_retry_at=10900)
+    approval = repair.plan_seals(store, ['pending'], object(), artifacts, wake_admission=True)
+    if not enabled:
+        monkeypatch.setenv('RECORD_SEAL_REPAIR_FRESH_ENABLED', 'false')
+    assert repair.apply_seals(store, approval, approval['plan_sha256']) == {'sealed': 1}
+    assert client.rows[PATH]['record_audio_closed']
+    assert client.rows[JOB_PATH]['available_at'] == wake
+    assert client.rows[JOB_PATH]['state'] == 'record_pending'
+
+
+@pytest.mark.parametrize('age', [90, 8000])
+@pytest.mark.parametrize('claim_between_plan_and_commit', [False, True])
+def test_seal_preserves_a_live_claim_including_claims_acquired_after_planning(
+    source, monkeypatch, claim_between_plan_and_commit, age
+):
+    store, client, artifacts = source
+    monkeypatch.setattr(repair.time, 'time', lambda: 10000)
+    client.rows[JOB_PATH].update(enqueued_at=10000 - age, available_at=10900, record_intake_retry_at=10900)
+    if not claim_between_plan_and_commit:
+        client.rows[JOB_PATH]['available_at'] = 11000
+    approval = repair.plan_seals(store, ['pending'], object(), artifacts, wake_admission=True)
+    # Claiming (including by an older binary) changes available_at but does
+    # not certify that new value as a retry. This races the planning snapshot.
+    client.rows[JOB_PATH]['available_at'] = 11000
+    assert repair.apply_seals(store, approval, approval['plan_sha256']) == {'sealed': 1}
+    assert client.rows[PATH]['record_audio_closed']
+    assert client.rows[JOB_PATH]['available_at'] == 11000
+
+
+def test_plain_deferred_retry_added_after_planning_is_still_woken(source, monkeypatch):
+    store, client, artifacts = source
+    monkeypatch.setattr(repair.time, 'time', lambda: 10000)
+    client.rows[JOB_PATH].update(enqueued_at=9900, available_at=0)
+    approval = repair.plan_seals(store, ['pending'], object(), artifacts, wake_admission=True)
+    client.rows[JOB_PATH].update(available_at=10900, record_intake_retry_at=10900)
+    assert repair.apply_seals(store, approval, approval['plan_sha256']) == {'sealed': 1}
+    assert client.rows[JOB_PATH]['available_at'] == 0
+    assert client.rows[JOB_PATH]['record_intake_retry_at'] is None
+
+
+@pytest.mark.parametrize('age', [90, 8000])
+def test_unmarked_future_wake_is_preserved_during_a_rolling_upgrade(source, monkeypatch, age):
+    store, client, artifacts = source
+    monkeypatch.setattr(repair.time, 'time', lambda: 10000)
+    client.rows[JOB_PATH].update(enqueued_at=10000 - age, available_at=10900)
+    approval = repair.plan_seals(store, ['pending'], object(), artifacts, wake_admission=True)
+    assert repair.apply_seals(store, approval, approval['plan_sha256']) == {'sealed': 1}
+    assert client.rows[JOB_PATH]['available_at'] == 10900
+
+
+def test_fresh_wake_never_runs_when_seal_privacy_recheck_refuses(source, monkeypatch):
+    store, client, artifacts = source
+    monkeypatch.setattr(repair.time, 'time', lambda: 10000)
+    client.rows[JOB_PATH].update(enqueued_at=9900, available_at=10900)
+    approval = repair.plan_seals(store, ['pending'], object(), artifacts, wake_admission=True)
+
+    def revoked(*args, **kwargs):
+        raise BatchPrivacyBlocked('account_deleted')
+
+    monkeypatch.setattr(repair, 'assert_batch_write_allowed', revoked)
+    assert repair.apply_seals(store, approval, approval['plan_sha256']) == {'privacy_refused': 1}
+    assert not client.rows[PATH].get('record_audio_closed')
+    assert client.rows[JOB_PATH]['available_at'] == 10900
+
+
+def test_repair_admission_is_once_and_ledger_failure_is_fail_open(source, monkeypatch):
+    store, client, _ = source
+    admissions = Mock()
+    monkeypatch.setattr(repair.pipeline_ledger, 'observe_admission', admissions)
+    monkeypatch.setattr(repair.pipeline_ledger, 'advance', Mock(side_effect=RuntimeError('ledger unavailable')))
+    result = plan(source)
+    assert repair.apply_seals(store, result, result['plan_sha256']) == {'sealed': 1}
+    assert client.rows[PATH]['record_audio_closed']
+    assert client.rows[PATH]['record_admitted_at'] is not None
+    client.rows[PATH]['record_audio_closed'] = False
+    result = plan(source)
+    assert repair.apply_seals(store, result, result['plan_sha256']) == {'sealed': 1}
+    assert admissions.call_count == 1
+
+
+def test_slow_post_commit_ledger_is_bounded_counted_and_still_sealed(source, monkeypatch):
+    import signal
+    import time
+
+    store, client, _ = source
+    counts = {}
+    failures = Mock()
+    fallback = Mock()
+    monkeypatch.setattr(repair.pipeline_ledger, 'record_fallback', fallback)
+    monkeypatch.setattr(repair, 'LEDGER_OBSERVATION_SECONDS', 0.02)
+    monkeypatch.setattr(repair.pipeline_ledger, '_observe_failure', failures)
+
+    def slow_ledger(*args, **kwargs):
+        assert client.rows[PATH]['record_audio_closed']  # The real commit already happened.
+        time.sleep(30)  # The real signal deadline must interrupt this IO wait.
+
+    monkeypatch.setattr(repair.pipeline_ledger, 'advance', slow_ledger)
+    result = plan(source)
+    started = time.monotonic()
+    with repair.SweepBudget(270).interrupt_io():
+        assert repair.apply_seals(store, result, result['plan_sha256'], observation_counts=counts) == {'sealed': 1}
+        assert signal.getitimer(signal.ITIMER_REAL)[0] > 269
+    assert time.monotonic() - started < 1
+    assert client.rows[PATH]['record_audio_closed']
+    assert client.rows[PATH]['record_admitted_at'] is not None
+    assert counts == {'ledger_misses': 1}
+    assert isinstance(failures.call_args.args[0], TimeoutError)
+    fallback.assert_called_once_with(
+        component='firestore_read',
+        from_mode='record_seal_ledger',
+        to_mode='sealed_without_ledger',
+        reason='timeout',
+        outcome='degraded',
+    )
+
+
+@pytest.mark.parametrize('error,reason', [('timeout', 'timeout'), ('unavailable', 'unavailable')])
+def test_source_revision_read_failure_emits_one_fallback_and_preserves_seal(source, monkeypatch, error, reason):
+    from google.api_core.exceptions import DeadlineExceeded, ServiceUnavailable
+    from tests.unit.fixtures.strict_firestore_transaction import StrictFirestoreDocument
+
+    store, client, _ = source
+    original = StrictFirestoreDocument.get
+    fallback = Mock()
+    monkeypatch.setattr(repair.pipeline_ledger, 'record_fallback', fallback)
+
+    def read(reference, *args, **kwargs):
+        if reference.path == PATH and kwargs.get('timeout') == 3:
+            raise DeadlineExceeded('synthetic') if error == 'timeout' else ServiceUnavailable('synthetic')
+        return original(reference, *args, **kwargs)
+
+    monkeypatch.setattr(StrictFirestoreDocument, 'get', read)
+    approval = plan(source)
+    counts = {}
+    assert repair.apply_seals(store, approval, approval['plan_sha256'], observation_counts=counts) == {'sealed': 1}
+    assert client.rows[PATH]['record_audio_closed']
+    assert counts == {'ledger_misses': 1}
+    fallback.assert_called_once_with(
+        component='firestore_read',
+        from_mode='record_seal_ledger',
+        to_mode='sealed_without_ledger',
+        reason=reason,
+        outcome='degraded',
+    )
+
+
+@pytest.mark.parametrize('prior_stage', ['sealed', 'failed:upload_failed'])
+def test_reseal_keeps_original_sealed_deadline_but_recovers_failed_stage(source, monkeypatch, prior_stage):
+    from copy import deepcopy
+
+    store, client, _ = source
+    client.rows[PATH]['record_admitted_at'] = 50
+    ledger_path = ('users', 'synthetic', 'pipeline_ledger', 'record')
+    client.rows[ledger_path] = {
+        'stage': prior_stage,
+        'revision': 2,
+        'entered_at': 10,
+        'deadline_at': 3610 if prior_stage == 'sealed' else None,
+        'terminal': prior_stage != 'sealed',
+    }
+    before = deepcopy(client.rows[ledger_path])
+    monkeypatch.setattr(repair.pipeline_ledger, 'source_revision', lambda _: 3)
+    admissions = Mock()
+    monkeypatch.setattr(repair.pipeline_ledger, 'observe_admission', admissions)
+    approval = plan(source)
+    assert repair.apply_seals(store, approval, approval['plan_sha256']) == {'sealed': 1}
+    assert client.rows[PATH]['record_audio_closed']
+    admissions.assert_not_called()
+    if prior_stage == 'sealed':
+        assert client.rows[ledger_path] == before  # Clock AND deadline/revision remain unchanged.
+    else:
+        after = client.rows[ledger_path]
+        assert after['stage'] == 'sealed' and after['revision'] == 3 and not after['terminal']
+        assert after['deadline_at'] == after['entered_at'] + 3600

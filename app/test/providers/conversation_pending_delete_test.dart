@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -8,6 +9,7 @@ import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/gen/siri_pigeon.g.dart';
+import 'package:omi/services/capture/optimistic_processing.dart';
 import 'package:omi/services/siri_integration.dart';
 import 'package:omi/ui/feedback/omi_feedback.dart';
 
@@ -205,6 +207,178 @@ void main() {
     expect(provider.conversations, isEmpty);
   });
 
+  test('live upserts cannot restore a row while undo or delete is pending', () async {
+    final row = _conversation('deleted');
+    final keep = _conversation('keep');
+    final provider = makeProvider([row, keep]);
+    final response = Completer<bool>();
+    provider.conversationDeleteFetcherOverride = (_) => response.future;
+
+    await provider.deleteConversationLocally(row);
+    provider.upsertConversation(row);
+    expect(provider.conversations, [keep]);
+
+    final deletion = provider.deleteConversationOnServer(row.id);
+    provider.upsertConversation(row);
+    expect(provider.conversations, [keep]);
+
+    response.complete(false);
+    await deletion;
+    expect(provider.conversations, unorderedEquals([row, keep]));
+  });
+
+  test('confirmed deletes stay removed when an empty refresh restores cached rows', () async {
+    final a = _conversation('a');
+    final b = _conversation('b');
+    final keep = _conversation('keep');
+    await SharedPreferencesUtil().cacheConversations([a, b, keep]);
+    final provider = makeProvider([a, b, keep]);
+
+    await provider.deleteConversationLocally(a);
+    await provider.deleteConversationLocally(b);
+    provider.commitPendingDelete(a.id);
+    provider.commitPendingDelete(b.id);
+    await Future<void>.delayed(Duration.zero);
+
+    final reopened = makeProvider([]);
+    await reopened.fetchConversations();
+
+    expect(reopened.conversations.map((row) => row.id), ['keep']);
+  });
+
+  test('a second provider cannot restore a confirmed deletion from an older page', () async {
+    final a = _conversation('a');
+    final keep = _conversation('keep');
+    final prefs = SharedPreferencesUtil()..uid = 'fixture-owner';
+    await prefs.cacheConversations([a, keep]);
+    final day = makeProvider([a]);
+    final pendingPage = Completer<({List<ServerConversation> items, bool ok})>();
+    final home = ConversationProvider(conversationListFetcher: () => pendingPage.future, isSignedIn: () => true);
+    addTearDown(home.dispose);
+    home.conversations = [a, keep];
+    home.groupConversationsByDate();
+    final refresh = home.fetchConversations();
+
+    await day.deleteConversationLocally(a);
+    await day.deleteConversationOnServer(a.id);
+    expect(home.conversations.map((row) => row.id), ['keep']);
+    pendingPage.complete((items: [a, keep], ok: true));
+    await refresh;
+    await Future<void>.delayed(Duration.zero);
+
+    final reopened = makeProvider([]);
+    await reopened.fetchConversations();
+    expect(reopened.conversations.map((row) => row.id), ['keep']);
+    expect(home.conversations.map((row) => row.id), ['keep']);
+    expect(home.conversationServerOffset, 1);
+    expect(prefs.getStringList('cachedConversations'), [jsonEncode(keep.toJson())]);
+
+    prefs.uid = 'other-owner';
+    await prefs.cacheConversations([a, keep]);
+    expect((await prefs.loadCachedConversations()).map((row) => row.id), ['a', 'keep']);
+  });
+
+  test('a load-more request retries at the cursor rebased by another provider', () async {
+    final items = [for (var i = 0; i < 50; i++) _conversation('initial-$i')];
+    final home = makeProvider(items);
+    await home.fetchConversations();
+    final page = Completer<({List<ServerConversation> items, bool ok, bool truncated})>();
+    final offsets = <int>[];
+    final next = _conversation('next-row');
+    home.conversationPageFetcherOverride = () {
+      offsets.add(home.conversationServerOffset);
+      if (offsets.length == 1) return page.future;
+      return Future.value((items: [next], ok: true, truncated: false));
+    };
+    final pagination = home.getMoreConversationsFromServer();
+    final day = makeProvider([items.first]);
+    await day.deleteConversationLocally(items.first);
+    await day.deleteConversationOnServer(items.first.id);
+
+    page.complete((items: [_conversation('one-too-far')], ok: true, truncated: false));
+    expect(await pagination, isTrue);
+    expect(offsets, [50, 49]);
+    expect(home.conversations.map((row) => row.id), contains(next.id));
+    expect(home.conversations.map((row) => row.id), isNot(contains('one-too-far')));
+  });
+
+  test('a confirmed delete removes matching processing cards and rejects late updates', () async {
+    final row = _conversation('deleted');
+    final processing = _conversation('deleted', status: ConversationStatus.processing);
+    final placeholder = OptimisticProcessingPlaceholder.conversation(targetConversationId: row.id);
+    final keep = _conversation('keep', status: ConversationStatus.processing);
+    final day = makeProvider([row]);
+    final home = makeProvider([]);
+    home.addProcessingConversation(placeholder);
+    home.addProcessingConversation(processing);
+    home.addProcessingConversation(keep);
+
+    await day.deleteConversationLocally(row);
+    await day.deleteConversationOnServer(row.id);
+
+    expect(home.processingConversations, [keep]);
+    home.addProcessingConversation(processing);
+    home.addProcessingConversation(placeholder);
+    home.upsertConversation(row);
+    expect(home.processingConversations, [keep]);
+    expect(home.conversations, isEmpty);
+  });
+
+  test('a delete confirmed after its route closes still clears the same account cache', () async {
+    final row = _conversation('deleted');
+    final keep = _conversation('keep');
+    final prefs = SharedPreferencesUtil()..uid = 'fixture-owner';
+    await prefs.cacheConversations([row, keep]);
+    final response = Completer<bool>();
+    final day = ConversationProvider(isSignedIn: () => true)
+      ..conversationDeleteFetcherOverride = (_) => response.future;
+    final home = makeProvider([row, keep]);
+
+    await day.deleteConversationLocally(row);
+    final deletion = day.deleteConversationOnServer(row.id);
+    day.dispose();
+    response.complete(true);
+    await deletion;
+
+    expect(home.conversations.map((row) => row.id), ['keep']);
+    expect(prefs.getStringList('cachedConversations'), [jsonEncode(keep.toJson())]);
+  });
+
+  test('a closed route cannot evict from a replacement session of the same account', () async {
+    final row = _conversation('deleted');
+    final prefs = SharedPreferencesUtil()..uid = 'fixture-owner';
+    await prefs.cacheConversations([row]);
+    final response = Completer<bool>();
+    final day = ConversationProvider(isSignedIn: () => true)
+      ..conversationDeleteFetcherOverride = (_) => response.future;
+
+    await day.deleteConversationLocally(row);
+    final deletion = day.deleteConversationOnServer(row.id);
+    day.dispose();
+    prefs.clearUserDisplayCache();
+    prefs.uid = 'fixture-owner';
+    await prefs.cacheConversations([row]);
+    response.complete(true);
+    await deletion;
+
+    expect(prefs.getStringList('cachedConversations'), [jsonEncode(row.toJson())]);
+  });
+
+  test('a refused delete still reports failure after its route closes', () async {
+    final row = _conversation('deleted');
+    final response = Completer<bool>();
+    final day = ConversationProvider(isSignedIn: () => true)
+      ..conversationDeleteFetcherOverride = (_) => response.future;
+    var failures = 0;
+    await day.deleteConversationLocally(row, onFailure: () => failures++);
+    final deletion = day.deleteConversationOnServer(row.id);
+    day.dispose();
+    response.complete(false);
+    await deletion;
+
+    expect(failures, 1);
+  });
+
   test('a regroup during the window does not bring the row back', () {
     final a = _conversation('a');
     final provider = makeProvider([a]);
@@ -217,9 +391,10 @@ void main() {
   });
 }
 
-ServerConversation _conversation(String id) => ServerConversation(
+ServerConversation _conversation(String id, {ConversationStatus status = ConversationStatus.completed}) =>
+    ServerConversation(
       id: id,
       createdAt: DateTime(2026, 9, 20, 10),
       structured: Structured('Title $id', 'Overview'),
-      status: ConversationStatus.completed,
+      status: status,
     );

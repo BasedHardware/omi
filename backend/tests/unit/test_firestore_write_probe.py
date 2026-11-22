@@ -159,7 +159,9 @@ def test_privacy_token_wrapper_preserves_writer_attribution(client, transport, m
     assert _by_caller('users/conversations', 'set', caller) == before + 1
     assert len(transport.requests) == 1
     # The attribution check exercises a real augmented Commit, including its token.
-    assert len(transport.requests[0].writes) == 2
+    assert (
+        len(transport.requests[0].writes) == 4
+    )  # source with folded version, Home dirty receipt/control, privacy token
 
 
 def test_generic_write_helper_names_its_caller(client, transport):
@@ -331,7 +333,9 @@ def test_batch_privacy_fence_preserves_writer_attribution(client, transport, mon
     assert _by_caller('users/conversations', 'set', caller) == source_before + 1
     assert _by_caller('batch_pipeline_privacy', 'merge', caller) == token_before + 1
     assert len(transport.requests) == 1
-    assert len(transport.requests[0].writes) == 2
+    assert (
+        len(transport.requests[0].writes) == 4
+    )  # source with folded version, Home dirty receipt/control, privacy token
 
 
 @pytest.mark.parametrize(

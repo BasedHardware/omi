@@ -1,4 +1,6 @@
 replicaCount: 1
+podLabels:
+  service_name: sync-backfill-worker
 image:
   repository: ""
   digest: ""

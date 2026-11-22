@@ -8,6 +8,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import 'package:omi/backend/schema/capture_group.dart';
 import 'package:omi/backend/schema/conversation_speakers.dart';
+import 'package:omi/backend/schema/conversation_v3.dart';
 import 'package:omi/backend/schema/gen/conversation_wire.g.dart' as wire;
 import 'package:omi/backend/schema/geolocation.dart';
 import 'package:omi/utils/audio/audio_timeline_mapper.dart';
@@ -425,6 +426,16 @@ class ServerConversation {
   final bool summaryRetryable;
   final bool processingDeferred;
 
+  /// Server-authored Home step for a row still being processed: 'transcribing',
+  /// 'writing_notes' or 'failed'. Null on finished rows and from older servers.
+  final String? homeStep;
+
+  /// Authoritative episode membership, including before the episode list arrives.
+  final String? episodeId;
+
+  /// Recordings-and-conversations (v3) fields; null from older servers and one-to-one conversations.
+  final ConversationV3Fields? v3;
+
   /// Coverage projected from the server capture receipt; absent on legacy rows.
   final String? captureCoverage;
 
@@ -477,6 +488,9 @@ class ServerConversation {
     this.processingDeferred = false,
     this.captureCoverage,
     this.excludedSpeakers,
+    this.homeStep,
+    this.episodeId,
+    this.v3,
   });
 
   /// List rows omit transcript_segments ("unknown/not loaded, not an empty transcript"), while the
@@ -490,7 +504,12 @@ class ServerConversation {
   }
 
   /// This conversation with [segments] as its transcript; every other field is carried over.
-  ServerConversation withTranscriptSegments(List<TranscriptSegment> segments) => ServerConversation(
+  ServerConversation withTranscriptSegments(List<TranscriptSegment> segments) => _copy(transcriptSegments: segments);
+
+  /// Carry Home's list-only presentation through a detail refresh without losing its content.
+  ServerConversation withHomeStep(String step) => _copy(homeStep: step)..transcriptCarried = transcriptCarried;
+
+  ServerConversation _copy({List<TranscriptSegment>? transcriptSegments, String? homeStep}) => ServerConversation(
         id: id,
         createdAt: createdAt,
         onDeviceProvenance: onDeviceProvenance,
@@ -498,7 +517,7 @@ class ServerConversation {
         structured: structured,
         startedAt: startedAt,
         finishedAt: finishedAt,
-        transcriptSegments: segments,
+        transcriptSegments: transcriptSegments ?? this.transcriptSegments,
         appResults: appResults,
         suggestedSummarizationApps: suggestedSummarizationApps,
         geolocation: geolocation,
@@ -525,6 +544,9 @@ class ServerConversation {
         summaryRetryable: summaryRetryable,
         processingDeferred: processingDeferred,
         captureCoverage: captureCoverage,
+        homeStep: homeStep ?? this.homeStep,
+        episodeId: episodeId,
+        v3: v3,
       )..isNew = isNew;
 
   factory ServerConversation.fromJson(Map<String, dynamic> json) {
@@ -566,9 +588,11 @@ class ServerConversation {
           (json['visibility'] == null || const ['private', 'shared', 'public'].contains(json['visibility'])),
       matchSnippets: snippets,
       processingDeferred: json['processing_deferred'] == true,
+      homeStep: json['home_step'] is String ? json['home_step'] as String : null,
       onDeviceProvenance:
           json['on_device_provenance'] is Map ? Map<String, dynamic>.from(json['on_device_provenance']) : null,
       clientProcessing: json['client_processing'] is Map ? Map<String, dynamic>.from(json['client_processing']) : null,
+      v3: ConversationV3Fields.fromJson(json),
     );
   }
 
@@ -583,6 +607,8 @@ class ServerConversation {
     List<TranscriptMatchSnippet>? matchSnippets,
     Map<String, dynamic>? onDeviceProvenance,
     Map<String, dynamic>? clientProcessing,
+    String? homeStep,
+    ConversationV3Fields? v3,
   }) {
     final snippets = matchSnippets ?? const <TranscriptMatchSnippet>[];
     return ServerConversation(
@@ -631,6 +657,9 @@ class ServerConversation {
       processingDeferred: processingDeferred ?? generated.toJson()['processing_deferred'] == true,
       captureCoverage: generated.captureCoverage,
       excludedSpeakers: generated.excludedSpeakers,
+      homeStep: homeStep,
+      episodeId: generated.episodeId,
+      v3: v3,
     );
   }
 
@@ -670,13 +699,17 @@ class ServerConversation {
       'speaker_resolution': speakerResolution?.toJson(),
       if (summaryRetryable) 'summary_retryable': true,
       if (processingDeferred) 'processing_deferred': true,
+      // home_step belongs to the fetch that produced it; never persist a stale projection.
+      if (episodeId != null) 'episode_id': episodeId,
       if (captureCoverage != null) 'capture_coverage': captureCoverage,
       if (excludedSpeakers != null) 'excluded_speakers': excludedSpeakers,
+      ...?v3?.toJson(),
     };
   }
 
   wire.GeneratedConversation toGenerated() {
     return wire.GeneratedConversation(
+      episodeId: episodeId,
       id: id,
       createdAt: createdAt,
       startedAt: startedAt,

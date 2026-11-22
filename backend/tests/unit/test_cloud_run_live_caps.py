@@ -23,7 +23,12 @@ def action(request):
     assert resolver['env']['CLOUD_RUN_REGION'] == '${{ inputs.region }}'
     assert '--max-instances=${{ steps.live-max-scale.outputs.max_scale }}' in deploy['with']['flags']
     if suffix == 'sync-backfill':
-        assert 'if' not in resolver  # Must also run when reconciling platform/dispatch.
+        # Worker/platform/dispatch retain their cap read; routing must leave
+        # the omitted backfill worker uninspected. Exercise the actual shell
+        # below under every retained mode without weakening its cap assertions.
+        assert resolver['if'] == (
+            "${{ inputs.mode == 'worker' || inputs.mode == 'platform' || inputs.mode == 'dispatch' }}"
+        )
         assert deploy['if'] == "${{ inputs.mode == 'worker' }}"
         assert '--max=${{ steps.live-max-scale.outputs.max_scale }}' in deploy['with']['flags']
     return resolver, 'custom-' + suffix, fallback

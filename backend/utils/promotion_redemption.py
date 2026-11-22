@@ -15,6 +15,7 @@ import stripe
 
 from database import promotion_redemptions as redemptions_db
 from database import users as users_db
+from utils import stripe as stripe_utils
 from utils.log_sanitizer import sanitize
 
 logger = logging.getLogger(__name__)
@@ -34,7 +35,7 @@ def _invalid() -> RedemptionError:
 
 
 def _find_promotion_code(code: str) -> dict:
-    promos = stripe.PromotionCode.list(code=code, active=True, limit=1).data
+    promos = stripe.PromotionCode.list(code=code, active=True, limit=1, expand=['data.coupon']).data
     if not promos:
         raise _invalid()
     promo = promos[0].to_dict()
@@ -104,7 +105,14 @@ def redeem_promotion_code(uid: str, code: str) -> dict:
     coupon = stripe.Coupon.retrieve(_coupon_id(promo), expand=['applies_to']).to_dict()
     _check_eligible(promo, coupon, subscription)
 
-    if not redemptions_db.claim(promo['id'], uid=uid, subscription_id=subscription_id, coupon_id=coupon['id']):
+    attribution = stripe_utils.promotion_code_attribution(promo)
+    if not redemptions_db.claim(
+        promo['id'],
+        uid=uid,
+        subscription_id=subscription_id,
+        coupon_id=coupon['id'],
+        attribution=attribution,
+    ):
         raise RedemptionError(409, 'This code has already been used.')
 
     try:
@@ -124,6 +132,17 @@ def redeem_promotion_code(uid: str, code: str) -> dict:
         if isinstance(e, stripe.StripeError):
             raise RedemptionError(400, 'Could not apply this code. Please try again.') from e
         raise
+
+    if attribution:
+        try:
+            merged = stripe_utils.merge_promotion_attribution(subscription.get('metadata') or {}, attribution)
+            attribution_metadata = {
+                key: merged[key] for key in stripe_utils.PROMOTION_ATTRIBUTION_METADATA_KEYS if key in merged
+            }
+            stripe.Subscription.modify(subscription_id, metadata=attribution_metadata)
+        except Exception:
+            # Optional provenance must never undo an already applied code benefit.
+            logger.warning('Optional promotion attribution update failed')
 
     logger.info(f"Redeemed promotion code {promo['id']} onto {subscription_id} for {uid}")
     if updated.get('status') == 'trialing':

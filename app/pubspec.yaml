@@ -139,6 +139,7 @@ dependencies:
   quick_actions: ^1.0.0
   in_app_review: ^2.0.12
   cryptography: ^2.9.0
+  qr_flutter: ^4.1.0
 
 dependency_overrides:
   js: ^0.7.1
@@ -163,6 +164,8 @@ dev_dependencies:
     sdk: flutter
   flutter_test:
     sdk: flutter
+  # Fault-inject preference writes that the legacy test API cannot model.
+  shared_preferences_platform_interface: 2.4.1
   fake_async: ^1.3.3
   # Direct dev deps for the phone-call provider test's fake WebSocketChannel:
   # the forwarding signatures need these types, which web_socket_channel
@@ -191,6 +194,7 @@ dev_dependencies:
   flutter_flavorizr: ^2.2.3
   flutter_gen_runner: 5.15.0
   pigeon: ^26.0.1
+  firebase_messaging_platform_interface: ^4.6.5
 
 flutter_launcher_icons:
   android: true

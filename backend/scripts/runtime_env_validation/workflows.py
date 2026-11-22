@@ -393,7 +393,9 @@ def _resolve_step_output_reference(raw_value: object, rendered_outputs: StringMa
         '${{ steps.backfill-runtime.outputs.secrets }}',
         rendered_outputs.get('backend_sync_backfill_secrets', ''),
     )
-    # The lifecycle emits the manifest's backfill queue, defaulting to sync-backfill when undeclared.
+    # Static shape only: routing reads the control-source ops queue at runtime.
+    # Execution/selection and differing application/control values are covered
+    # by the real lifecycle-shell regression, not this manifest placeholder.
     backfill_queue = 'sync-backfill'
     for line in rendered_outputs.get('backend_sync_backfill_env_vars', '').splitlines():
         if line.startswith('SYNC_BACKFILL_TASKS_QUEUE=') and line.split('=', 1)[1]:
@@ -404,7 +406,7 @@ def _resolve_step_output_reference(raw_value: object, rendered_outputs: StringMa
         'SYNC_BACKFILL_TASKS_OIDC_AUDIENCE=https://backend-sync-backfill.example.invalid/v2/sync-jobs/run'
     )
     resolved = resolved.replace(
-        '${{ steps.sync-backfill.outputs.sync_backfill_env_vars }}',
+        '${{ steps.sync-routing.outputs.sync_backfill_env_vars }}',
         sync_backfill_overlay,
     )
     return resolved
@@ -427,6 +429,7 @@ def _validate_cloud_run_workflows(
     manifest_path: Path,
     manifest: ConfigDict | None = None,
     workflow_root: Path | None = None,
+    integration_canary_source: str | None = None,
 ) -> list[ValidationError]:
     errors: list[ValidationError] = []
     cloud_run = _as_config_dict(env_config.get('cloud_run')) or {}
@@ -464,6 +467,11 @@ def _validate_cloud_run_workflows(
         workflow_jobs.update(extracted['jobs'])
 
     workflow_vars = _workflow_variable_map(env_config, expected_services)
+    if integration_canary_source is not None:
+        # The native caller binds this output through inputs.admitted_sha.
+        # Only the validated canary source resolves that exact provenance chain;
+        # arbitrary expressions and literal mismatches remain visible to checks.
+        workflow_vars['${{ needs.firestore_readiness.outputs.admitted_sha }}'] = integration_canary_source
     for service, service_config in expected_services.items():
         service_state = workflow_services.get(service)
         if service_state is None:

@@ -1,10 +1,12 @@
 app:
-  # Discrepancy: end_address - size = 0x10200, not the address below (0xf200).
-  # mcuboot_primary_app also starts at 0x10200; verify generated partitions.yml.
-  address: 0xf200
-  end_address: 0x100000
+  # Pinned to the generated layout every shipped build used (tools/cv1/pinned-partitions.yml).
+  # littlefs_storage and settings_storage both ask for "before: end"; the partition
+  # manager breaks that tie by Python set order (hash-seeded per run), so left dynamic
+  # they could swap between builds and an update would move settings and storage.
+  address: 0x10200
+  end_address: 0xf6000
   region: flash_primary
-  size: 0xefe00
+  size: 0xe5e00
 external_flash:
   address: 0x130000
   end_address: 0x200000
@@ -101,3 +103,29 @@ sram_primary:
   end_address: 0x20070000
   region: sram_primary
   size: 0x6e000
+littlefs_storage:
+  address: 0xf6000
+  end_address: 0xfc000
+  placement:
+    before:
+    - end
+  region: flash_primary
+  size: 0x6000
+settings_storage:
+  address: 0xfc000
+  end_address: 0xfe000
+  placement:
+    align:
+      start: 0x4000
+    before:
+    - end
+  region: flash_primary
+  size: 0x2000
+EMPTY_0:
+  address: 0xfe000
+  end_address: 0x100000
+  placement:
+    after:
+    - settings_storage
+  region: flash_primary
+  size: 0x2000

@@ -1,0 +1,3 @@
+{
+  "change": "Fixed UI freezes while saving SD card recordings and duplicate audio accounting when stopping a download"
+}

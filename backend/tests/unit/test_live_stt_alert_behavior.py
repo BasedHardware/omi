@@ -26,7 +26,7 @@ ALERT_RULES_BY_EXPORT = {
 
 
 @pytest.mark.parametrize('export', ['alerts/live-stt.json', 'alert-rules.json'])
-@pytest.mark.parametrize('duration,fires', [(285, False), (300, True), (900, True)])
+@pytest.mark.parametrize('duration,fires', [(1785, False), (1800, True), (2700, True)])
 @pytest.mark.parametrize('failure', ['zero_fresh', 'frozen_positive_gauge'])
 def test_pressure_sampler_alarm_is_per_pod_without_a_traffic_floor(export, duration, fires, failure):
     rule = ALERT_RULES_BY_EXPORT[export]['omi-stt-pressure-sampler-stuck']
@@ -51,12 +51,12 @@ def test_pressure_sampler_alarm_is_per_pod_without_a_traffic_floor(export, durat
         samples.append((t, evaluated))
     result = backtest.episodes(rule, samples, 0, duration, 15)
     assert bool(result['episodes']) is fires
-    assert rule['for'] == '5m'
+    assert rule['for'] == '30m'
     assert rule['noDataState'] == 'OK'
     assert rule['notification_settings']['group_wait'] == '30s'
-    # Recovery/missing pod before five minutes must reset the pending state.
-    interrupted = [(t, {} if t == 285 else frame) for t, frame in samples]
-    if duration == 300:
+    # Recovery/missing pod before thirty minutes must reset the pending state.
+    interrupted = [(t, {} if t == 1785 else frame) for t, frame in samples]
+    if duration == 1800:
         assert backtest.episodes(rule, interrupted, 0, duration, 15)['never_fired']
 
 

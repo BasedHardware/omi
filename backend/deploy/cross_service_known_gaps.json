@@ -34,12 +34,8 @@
       "why": "Dispatch mode is set only on the running service (gcloud keeps undeclared env across deploys); declare it in the manifest to make this hop verifiable."
     },
     {
-      "key": "no-uid-literals|dev|gke/backend-listen/AUDIO_ARCHIVE_UID_ALLOWLIST|uids=1",
-      "why": "Cohort UIDs predate this suite; moving cohorts to Firestore is in flight (#22075). Ratchet: no new keys."
-    },
-    {
-      "key": "no-uid-literals|dev|gke/pusher/AUDIO_ARCHIVE_UID_ALLOWLIST|uids=1",
-      "why": "Cohort UIDs predate this suite; moving cohorts to Firestore is in flight (#22075). Ratchet: no new keys."
+      "key": "no-uid-literals|prod|helm/batch-pipeline-worker/BATCH_PIPELINE_MERGE_STALE_HEAD_UID_ALLOWLIST|uids=1",
+      "why": "Reviewed exception, owner's order 2026-11-18: the GPU pump is the other merge writer and carries the same canary uid as backend-integration (#25673; that one is bound on the service at deploy time, not in git). Delete when the worker chart drops mergeStaleHeadUidAllowlist, the skip ramps fleet-wide, or at its 2026-12-18 review."
     },
     {
       "key": "no-uid-literals|prod|cloud_run/backend/OMI_REFERRAL_CAMPAIGN_PREVIEW_UIDS|uids=3",
@@ -47,10 +43,6 @@
     },
     {
       "key": "no-uid-literals|prod|gke/backend-listen/DREAM_AGENT_UID_ALLOWLIST|uids=1",
-      "why": "Cohort UIDs predate this suite; moving cohorts to Firestore is in flight (#22075). Ratchet: no new keys."
-    },
-    {
-      "key": "no-uid-literals|prod|gke/backend-listen/MOBILE_STANDARD_BATCH_UIDS|uids=1",
       "why": "Cohort UIDs predate this suite; moving cohorts to Firestore is in flight (#22075). Ratchet: no new keys."
     },
     {
@@ -136,6 +128,14 @@
     {
       "key": "reader-split|prod|helm/batch-pipeline-worker/BATCH_PIPELINE_RECOVERY_DISPATCH_BATCH_SIZE",
       "why": "Reviewed 2026-10-19: only QuarantineRecovery.sweep reads it, and only the integration serving loop (utils/batch_pipeline/serving.py) runs that sweep; the worker imports config transitively and never sweeps."
+    },
+    {
+      "key": "reader-split|prod|helm/batch-pipeline-worker/BATCH_PIPELINE_SERVING_SWEEP_PAGE_ROWS",
+      "why": "Margin-40 PR25539 panel F4 requires integration-only cadence, 2026-11-17: this cadence belongs only to the integration projection sweep/supervisor. The worker entrypoint runs Pump/Scheduler, not Projection.sweep or Serving.supervise; the import-closure inventory over-approximates execution. Retain the excluded worker defaults. The deploy-contract test pins this exact integration/worker distinction; no general reader-split exemption."
+    },
+    {
+      "key": "reader-split|prod|helm/batch-pipeline-worker/BATCH_PIPELINE_SERVING_TICK_SECONDS",
+      "why": "Margin-40 PR25539 panel F4 requires integration-only cadence, 2026-11-17: this cadence belongs only to the integration projection sweep/supervisor. The worker entrypoint runs Pump/Scheduler, not Projection.sweep or Serving.supervise; the import-closure inventory over-approximates execution. Retain the excluded worker defaults. The deploy-contract test pins this exact integration/worker distinction; no general reader-split exemption."
     }
   ]
 }

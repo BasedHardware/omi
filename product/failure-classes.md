@@ -10,6 +10,7 @@ covers it and runs in the `failure-class-cli-tests` manifest lane.
 | --- | --- | --- |
 | `schema_version` | yes | Always `1`. |
 | `id` | yes | `FC-<lower-kebab-slug>`; must match the filename. |
+| `family` | yes (optional only while the registry migrates in PRs under 300 files) | One key of `.github/failure-class-families.json`: the contract family the class belongs to. Unknown keys fail validation (`unknown_failure_class_family`). |
 | `violated_contract` | yes | The contract an instance of this class breaks. |
 | `canonical_prevention` | yes | Prose: the shape of the fix that removes the class. |
 | `canonical_prevention_artifact` | no | Repository-relative paths to the **reusable guard surface** — a checker, shared fixture, or behavioral contract test. Every listed path must exist; a rename that orphans one fails validation. |
@@ -17,6 +18,16 @@ covers it and runs in the `failure-class-cli-tests` manifest lane.
 | `scope_hints` | no | Advisory globs; never used to classify a change. A trailing `/` is a directory prefix (`dir/` matches `dir/**`). Every hint on a changed definition must match at least one tracked path; a zero-match hint is an error (`scope_hint_matches_nothing`), not a skip. |
 | `status` | yes | `open` or `dormant`. |
 | `dormant_since` | dormant only | ISO-8601 timestamp of the dormant transition. |
+
+## Families
+
+`.github/failure-class-families.json` is the closed set of contract families (29 today). It
+sits beside the directory, not in it, because every loader globs the directory for
+definitions. Families make a recurring contract visible when each incident received its own
+class name: of the first 648 classes, fewer than 5% were ever cited by a second PR, while most
+share a family. `explain <id>` prints the family's contract and its open members; `prepare`
+tags every candidate with its family. Reuse an existing class in the family before declaring
+`new`. Adding, renaming or removing a family is a registry-only change.
 
 `canonical_prevention` says what should stop recurrence; `canonical_prevention_artifact`
 says where that guard actually lives. A class with prose but no artifact has an intention,
@@ -37,7 +48,8 @@ Failure-Class: none
 the change's paths, which is a display narrowing and not a classification — the author
 still chooses. `--all-candidates` lists the whole registry.
 
-`Failure-Class: new` means this change adds exactly one definition file, alongside the
+`Failure-Class: new` is for a contract no class in its family already states; check the
+family with `explain` first. It means this change adds exactly one definition file, alongside the
 fix. It may not modify or remove any other definition; those transitions belong in a
 registry-only PR. A new definition's `evidence_prs` may be empty, because the PR that
 would be its evidence has no number until it is opened.

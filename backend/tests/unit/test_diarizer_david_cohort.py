@@ -97,7 +97,8 @@ def test_ramp_data_preserves_scope_and_capacity(monkeypatch, stage, percent, aut
         scale_up_step = max(
             policy['value'] for policy in diarizer_values['behavior']['scaleUp']['policies'] if policy['type'] == 'Pods'
         )
-        assert diarizer_values['maxReplicas'] == 18
+        assert diarizer_values['maxReplicas'] == 5
         assert scale_up_step == 3
         projected_peak_replicas = 5 * float(percent) / 5
-        assert projected_peak_replicas <= 18 - 3
+        # The HPA clamps the +3 scale-up step to the C031 ceiling.
+        assert projected_peak_replicas <= diarizer_values['maxReplicas']

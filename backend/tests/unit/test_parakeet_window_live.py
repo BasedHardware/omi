@@ -5106,68 +5106,6 @@ async def test_normal_paced_first_post_holds_with_deadline_cut_on_or_off(monkeyp
         await sock._run_job(job)
         assert now[0] == pytest.approx(106.8)
         assert emitted == [] and sock._anchor_bytes == 0
-        assert sock._deadline_cut_enabled == (flag == 'true')
         assert window.WINDOW_FORCED_CUTS._value.get() == forced_before
-    finally:
-        sock.finish()
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize('progress', [False, True])
-@pytest.mark.parametrize(
-    'flag,bound,rescued',
-    [
-        ('true', None, True),
-        ('true', '0.8', False),
-        ('true', '1.5', True),
-        ('true', 'nan', True),
-        ('false', None, False),
-    ],
-)
-async def test_slow_nonempty_post_near_deadline_survives_only_with_qualified_cut(
-    monkeypatch, progress, flag, bound, rescued
-):
-    # Capture takes a full pace, then a slow but responding HTTP POST leaves
-    # 1.1s before the original timer expires. Exercise the real parser/anchor.
-    monkeypatch.setenv('PARAKEET_WINDOW_DEADLINE_CUT_ENABLED', flag)
-    if bound is not None:
-        monkeypatch.setenv('PARAKEET_WINDOW_DEADLINE_CUT_POST_LATENCY_SECONDS', bound)
-    now = [100.0]
-    monkeypatch.setattr(window, 'time', SimpleNamespace(monotonic=lambda: now[0]))
-
-    class SlowClient(UnpunctuatedClient):
-        async def post(self, url, **kwargs):
-            now[0] += 4.9
-            return await super().post(url, **kwargs)
-
-    monkeypatch.setattr(window, 'get_stt_client', lambda: SlowClient())
-    monkeypatch.setattr(window.WindowedParakeetSocket, '_assign_speaker', AsyncMock(return_value=0))
-    emitted = []
-    sock = window.WindowedParakeetSocket(emitted.extend, 'http://tdt.invalid', 16000, lambda: None)
-    sock.progress_deadline_enabled = progress
-    sock._first_text_recorded = progress
-    try:
-        pcm = b'\x01\x00' * 16000 * 6
-        sock.mark_speech()
-        assert sock.send(pcm[:640])
-        now[0] += sock._pace_seconds
-        sock.mark_speech()
-        assert sock.send(pcm[640:])
-        assert sock._deadline_speech_at == 100.0
-        sock._next_post = now[0] + sock._pace_seconds
-        job = sock._next_job()
-        assert job is not None and not job.force
-        await sock._run_job(job)
-        assert now[0] == pytest.approx(110.9)
-        assert bool(emitted) == rescued
-        assert (sock._anchor_bytes > 0) == rescued
-        assert (sock._first_text_timer is None) == rescued
-        now[0] = 112.1
-        sock._expire_first_text()
-        assert sock.is_connection_dead != rescued
-        if rescued:
-            assert all(segment['text'].strip() for segment in emitted)
-        else:
-            assert sock.death_reason == 'first_text_deadline'
     finally:
         sock.finish()

@@ -22,7 +22,6 @@ PAYLOAD = {'conversation_id': 'c', 'language': 'en'}
 @pytest.fixture
 def rows(state, monkeypatch):  # noqa: F811
     monkeypatch.setenv('DEMAND_PROCESSING_ENABLED', 'false')
-    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'false')
     monkeypatch.setattr(custody, 'discard_blocked', lambda _row_id: False)
     return state
 
@@ -42,7 +41,7 @@ def test_enqueue_writes_a_mark_compatible_row_and_wakes_after_commit(rows):
     result = _enqueue(600.0, policy_id='p1')
     row = state_rows[KEY]
     assert result.row_id == KEY and not result.coalesced and result.wake_token == row['task_token']
-    assert row['due_at'] == 600.0 and row['policy_id'] == 'p1' and row['uid'] == 'u'
+    assert row['due_at'] == 120.0 and row['policy_id'] == 'p1' and row['uid'] == 'u'
     assert tasks[-1]['task_token'] == row['task_token']  # non-transactional enqueue wakes itself
     # The same row is claimable by today's run(): row compatibility (invariant 7).
     assert reprocess.run(KEY, row['task_token'], lambda *_: None, now=601) == 'processed'
@@ -52,6 +51,7 @@ def test_enqueue_writes_a_mark_compatible_row_and_wakes_after_commit(rows):
 def test_enqueue_coalesces_with_min_and_max_rules(rows):
     state_rows, _tasks = rows
     _enqueue(600.0)
+    state_rows[KEY]['summary_seen'] = True
     assert _enqueue(900.0, coalesce='max').coalesced
     assert state_rows[KEY]['due_at'] == 900.0 and state_rows[KEY]['version'] == 2
     assert _enqueue(300.0, coalesce='min').coalesced
@@ -326,3 +326,34 @@ def test_claim_stamps_a_fallback_snapshot_on_a_batch_row_without_one(rows):
     claim = _claim(rows, now=10)
     assert state_rows[KEY]['first_summary_policy_source'] == 'fallback'
     assert claim.payload['first_summary_policy'] == state_rows[KEY]['first_summary_policy']
+
+
+OPEN = {'due_at': 220.0, 'task_due_at': 220.0, 'task_token': 'old', 'lease_until': 0, 'version': 3}
+
+
+@pytest.mark.parametrize(
+    'row',
+    [
+        None,
+        {**OPEN, 'dormant': True},
+        {**OPEN, 'age_gate_parked': True},
+        {**OPEN, 'summary_blocked_reason': 'empty_output_exhausted'},
+        {**OPEN, 'lease_until': 150.0},
+        {**OPEN, 'due_at': 100.0},
+    ],
+    ids=['missing', 'dormant', 'parked', 'empty_blocked', 'leased', 'already_due'],
+)
+def test_expedite_never_creates_reopens_or_interrupts_an_obligation(row):
+    update = reprocess.expedite_update(100.0)
+    assert update(row) == (row, None)
+
+
+def test_expedite_makes_an_open_obligation_due_now_under_a_new_token():
+    new, result = reprocess.expedite_update(100.0)(dict(OPEN))
+    assert new is result
+    assert (new['due_at'], new['task_due_at'], new['version']) == (100.0, 100.0, 4)
+    assert new['task_token'] != 'old'
+    # Everything else on the obligation is untouched.
+    assert {k: v for k, v in new.items() if k not in {'due_at', 'task_due_at', 'task_token', 'version'}} == {
+        'lease_until': 0
+    }

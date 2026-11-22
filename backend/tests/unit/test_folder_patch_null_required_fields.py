@@ -12,6 +12,10 @@ are dropped before persistence, while genuinely optional fields (e.g. `descripti
 a null through to allow clearing.
 """
 
+from database.ports.folders import FolderEntity, FolderUpdate
+from database import folders as firestore_folders
+from fastapi import HTTPException
+
 from datetime import datetime, timezone
 import importlib.abc
 import importlib.machinery
@@ -104,6 +108,8 @@ finally:
     sys.meta_path.remove(_finder)
     _restore(_snap)
 
+folders_router.FolderUpdate = FolderUpdate
+
 EXISTING_FOLDER = {
     'id': 'folder-1',
     'name': 'Existing Folder',
@@ -127,14 +133,63 @@ NULLED_REQUIRED = {
 
 
 class TestFolderPatchNullRequiredFields(unittest.TestCase):
+    def test_patch_point_read_budget_through_firestore_adapter(self):
+        for payload, expected_reads in (
+            ({'name': 'Renamed'}, 2),
+            ({'description': None}, 2),
+            (NULLED_REQUIRED, 1),
+            ({}, 1),
+        ):
+            with self.subTest(payload=payload):
+                stored = {**EXISTING_FOLDER, 'revision': 4}
+                client = MagicMock()
+                ref = client.collection.return_value.document.return_value.collection.return_value.document.return_value
+                snapshot = MagicMock(exists=True)
+                snapshot.to_dict.side_effect = lambda: dict(stored)
+                ref.get.return_value = snapshot
+
+                def apply_update(data):
+                    stored.update({**data, 'revision': stored['revision'] + data['revision'].value})
+
+                ref.update.side_effect = apply_update
+
+                def get_folder(uid, folder_id):
+                    return firestore_folders.get_folder(uid, folder_id, firestore_client=client)
+
+                def update_folder(uid, folder_id, patch_data):
+                    return firestore_folders.update_folder(uid, folder_id, patch_data, firestore_client=client)
+
+                with patch.object(folders_router.folders_db, 'get_folder', side_effect=get_folder), patch.object(
+                    folders_router.folders_db, 'update_folder', side_effect=update_folder
+                ):
+                    result = folders_router.update_folder(
+                        'folder-1', UpdateFolderRequest.model_validate(payload), 'test-uid'
+                    )
+
+                self.assertEqual(ref.get.call_count, expected_reads)
+                self.assertEqual(ref.update.call_count, int(expected_reads == 2))
+                self.assertEqual(result['name'], payload.get('name') or EXISTING_FOLDER['name'])
+                if 'description' in payload:
+                    self.assertIsNone(result['description'])
+
+    def test_missing_patch_still_returns_not_found(self):
+        for payload in ({'name': 'Renamed'}, NULLED_REQUIRED, {}):
+            with self.subTest(payload=payload), patch.object(
+                folders_router.folders_db, 'get_folder', return_value=None
+            ), patch.object(folders_router.folders_db, 'update_folder', return_value=None):
+                with self.assertRaises(HTTPException) as error:
+                    folders_router.update_folder('missing', UpdateFolderRequest.model_validate(payload), 'test-uid')
+                self.assertEqual(error.exception.status_code, 404)
+
     def test_explicit_null_required_fields_are_not_written(self):
         recorded_updates = []
 
         def fake_get_folder(uid, folder_id):
-            return dict(EXISTING_FOLDER)
+            return FolderEntity.model_construct(**EXISTING_FOLDER)
 
         def fake_update_folder(uid, folder_id, data):
-            recorded_updates.append(dict(data))
+            recorded_updates.append(data.model_dump(exclude_unset=True))
+            return FolderEntity.model_construct(**EXISTING_FOLDER)
 
         with patch.object(folders_router.folders_db, 'get_folder', side_effect=fake_get_folder), patch.object(
             folders_router.folders_db, 'update_folder', side_effect=fake_update_folder
@@ -163,10 +218,11 @@ class TestFolderPatchNullRequiredFields(unittest.TestCase):
             current = dict(EXISTING_FOLDER)
             if recorded_updates:
                 current.update(recorded_updates[-1])
-            return current
+            return FolderEntity.model_construct(**current)
 
         def fake_update_folder(uid, folder_id, data):
-            recorded_updates.append(dict(data))
+            recorded_updates.append(data.model_dump(exclude_unset=True))
+            return FolderEntity.model_construct(**EXISTING_FOLDER)
 
         with patch.object(folders_router.folders_db, 'get_folder', side_effect=fake_get_folder), patch.object(
             folders_router.folders_db, 'update_folder', side_effect=fake_update_folder

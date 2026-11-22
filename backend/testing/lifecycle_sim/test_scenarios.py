@@ -24,6 +24,12 @@ from tests.integration.test_batch_held_dead_letter_firestore import (
     test_two_forced_requeues_append_once_in_real_firestore,  # noqa: F401
     test_expired_row_survives_rollback_using_only_legacy_dead_redrive,  # noqa: F401
 )
+from tests.integration.test_batch_projection_held_dead_letter_firestore import (
+    held,  # noqa: F401
+    test_expiry_content_preserved_and_nightly_flag_off_release_cas,  # noqa: F401
+    test_duplicate_nightly_release_increments_attempts_once,  # noqa: F401
+    test_pre_change_scan_and_release_recovers_expired_row_with_flag_off,  # noqa: F401
+)
 from tests.support.lifecycle_state_table import durable_titling_rearm
 from testing.listen_pusher_stack.run import Stack, _wait_for_port
 from utils.batch_pipeline import live
@@ -468,6 +474,9 @@ def test_empty_projection_retirement_rechecks_producer_fence(lifecycle_sim, monk
     if ending in {'aged_fenced', 'pressure_fenced', 'tail'}:
         row['record_upload_sessions'] = {'live': True}
     ref.set(row)
+    # Full source writes mint their own Home version. Compare subsequent
+    # housekeeping against the committed source, including that version.
+    row = ref.get().to_dict()
     # CI shares this collection with earlier stack scenarios. Include a clear
     # peer locally too, so the test cannot assume aggregate counts belong only
     # to its fenced owner. Only clear candidates may be pressure-evicted.
@@ -475,6 +484,7 @@ def test_empty_projection_retirement_rechecks_producer_fence(lifecycle_sim, monk
     peer_ref = sim.ref.parent.document(peer_cid)
     peer_row = {**row, 'id': peer_cid, 'record_upload_sessions': {}}
     peer_ref.set(peer_row)
+    peer_row = peer_ref.get().to_dict()
     peer_marker = sim.stack.firestore.collection(jobs.COLLECTION).document(jobs.marker_id(sim.uid, peer_cid))
     jobs.mark_due(sim.uid, peer_cid, firestore_client=sim.stack.firestore)
     marker = sim.stack.firestore.collection(jobs.COLLECTION).document(jobs.marker_id(sim.uid, cid))

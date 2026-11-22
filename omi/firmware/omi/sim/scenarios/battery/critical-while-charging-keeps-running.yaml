@@ -1,0 +1,15 @@
+id: battery/critical-while-charging-keeps-running
+summary: >
+  Committee item 6. A critical reading on the charger must not power the
+  pendant off (3.0.23 shut down on one raw reading, even while charging).
+committee: [6]
+tags: [fix]
+initial: {charging: true}
+timeline:
+  - {t: 1000, battery_mv: 3300}
+end: 90000
+expect:
+  boot_count: 1
+  boots:
+    - {exit: stop, is_off: false, not_log: ["Battery critical level reached"]}
+  invariants: [critical-battery-respects-charger]

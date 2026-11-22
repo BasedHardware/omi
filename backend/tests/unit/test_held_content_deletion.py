@@ -125,6 +125,9 @@ def test_account_storage_purge_covers_held_orphans_and_preserves_neighbour(monke
 
 @pytest.mark.parametrize('root_exists', [False, True])
 def test_account_wipe_enumerates_custody_and_choice_subcollections_even_without_root(monkeypatch, root_exists):
+    # This mock checks subcollection enumeration and the legacy root delete.
+    # The real SDK root-delete transaction is covered by the writer emulator.
+    monkeypatch.setenv('BATCH_ACCOUNT_PRIVACY_WRITER_ENABLED', 'false')
     names = ['stt_cap_holds', 'stt_cap_hold_summary', 'processing_backlog', 'budget_choice']
     subcollections = [SimpleNamespace(id=name) for name in names]
     user = Mock()

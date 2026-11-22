@@ -162,6 +162,7 @@ struct ConversationDetailView: View {
   @State private var followUpDraftText = ""
   @State private var editedTitle = ""
   @State private var isUpdatingTitle = false
+  @StateObject private var deleteFeedback = ConversationDeleteFeedback()
   @State private var isDeleting = false
 
   // Capture deep-link focus state. A successful acknowledgement is terminal;
@@ -311,6 +312,7 @@ struct ConversationDetailView: View {
     ) {
       Task { await deleteConversation() }
     }
+    .conversationDeleteFeedback(deleteFeedback) { Task { await deleteConversation() } }
     .dismissableSheet(isPresented: $showEditDialog) {
       TextPromptSheet(
         title: "Rename Conversation",
@@ -406,7 +408,7 @@ struct ConversationDetailView: View {
 
       // All detail reads go through the repository. It can paint a complete
       // cached detail immediately, but always revalidates server-owned fields.
-      if requestedConversation.deferred || requestedConversation.status == .processing {
+      if requestedConversation.needsProcessingDetailRefresh {
         isEnrichingDeferred = true
         // Keep following the row for as long as it is open. A bounded loop
         // that silently stops leaves the banner promising a summary that no
@@ -420,7 +422,7 @@ struct ConversationDetailView: View {
           }
           guard isCurrentDetailRequest(requestGeneration) else { return }
           applyLoadedConversation(fetched)
-          if fetched.status != .processing { break }
+          if fetched.homeStep == "failed" || fetched.status != .processing { break }
           let delay = ProcessingConversationWatcher.pollDelay(attempt: attempts)
           attempts += 1
           try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
@@ -793,7 +795,10 @@ struct ConversationDetailView: View {
     defer { isDeleting = false }
 
     let conversationId = conversation.id
-    if await AppState.current?.deleteConversation(conversationId) == true {
+    let outcome =
+      await AppState.current?.deleteConversation(conversationId)
+      ?? .failed(message: "Couldn't delete the conversation. Please try again.")
+    if deleteFeedback.present(outcome) {
       await MainActor.run {
         onDelete?()
         onBack()

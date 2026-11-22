@@ -1277,7 +1277,7 @@ struct RewindPage: View {
           AnalyticsManager.shared.screenCaptureResetClicked(source: "rewind_empty_state")
           // Re-enable screen analysis so it auto-starts after the restart
           screenAnalysisEnabled = true
-          AssistantSettings.shared.screenAnalysisEnabled = true
+          SettingsSyncManager.shared.setUserScreenAnalysisEnabled(true)
           ScreenCaptureService.resetScreenCapturePermissionAndRestart()
         } label: {
           Text("Reset & Restart")
@@ -1313,7 +1313,7 @@ struct RewindPage: View {
         Button {
           // Re-enable screen analysis so it auto-starts after permission is granted and app restarts
           screenAnalysisEnabled = true
-          AssistantSettings.shared.screenAnalysisEnabled = true
+          SettingsSyncManager.shared.setUserScreenAnalysisEnabled(true)
           ScreenCaptureService.requestScreenRecordingAccessAndOpenSettings()
         } label: {
           Text("Grant Permission")

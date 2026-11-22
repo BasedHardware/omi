@@ -63,8 +63,10 @@ enum OmiBleDiscoveryNaming {
 }
 struct TestDeliveryError: Error { let code = "test" }
 final class TestFlutterApi {
+    var disconnectReasons: [String?] = []
     func onPeripheralDiscovered(peripheral: BlePeripheral, completion: (Bool) -> Void) { completion(true) }
     func onPeripheralDisconnected(peripheralUuid: String, error: String?, completion: (Result<Void, TestDeliveryError>) -> Void) {
+        disconnectReasons.append(error)
         completion(.success(()))
     }
 }
@@ -108,6 +110,7 @@ final class ManagerHarness {
     var peripherals: [String: TestPeripheral] = [:]
     var manuallyDisconnected: Set<String> = []
     var everConnected: Set<String> = []
+    lazy var healthStore = OmiDeviceHealthStore(defaults: UserDefaults(suiteName: defaultsSuite)!)
     var pairingRecoveryInFlight: Set<String> = []
     var pairingLostBlocked: Set<String> = []
     var captureReconnects: [String: OmiCaptureReconnect] = [:]
@@ -165,6 +168,12 @@ final class ManagerHarness {
         return (manager, peripheral, uuid)
     }
     static func main() {
+        let restored = ManagerHarness()
+        restored.healthStore.setPolicy(enabled: true, epoch: 1, retire: true)
+        restored.healthStore.recordConnected("restored")
+        precondition(restored.everConnected.isEmpty)
+        precondition(restored.hasEverConnected("restored"))
+
         // A terminal service-discovery failure must retire an OS-connected but
         // unusable saved link, then leave the reconnect delay with CoreBluetooth.
         do {
@@ -183,6 +192,16 @@ final class ManagerHarness {
             manager.centralManager(manager.centralManager, didDisconnectPeripheral: peripheral, error: nil)
             precondition(manager.centralManager.connects == 1, "saved link was not reissued")
             precondition(manager.centralManager.startDelays[0] == OmiBleConnectionPolicy.savedRetryDelay(attempt: 1), "OS retry delay missing")
+        }
+        // Real manager callback forwards stable capture policy, with manual
+        // intent taking precedence over a concurrent platform error.
+        for manual in [false, true] {
+            let (manager, peripheral, uuid) = fixture()
+            if manual { manager.manuallyDisconnected.insert(uuid) }
+            manager.centralManager(manager.centralManager, didDisconnectPeripheral: peripheral,
+                error: NSError(domain: "synthetic", code: 8,
+                               userInfo: [NSLocalizedDescriptionKey: "localized timeout prose"]))
+            precondition(manager.flutterApi!.disconnectReasons.last! == (manual ? "manual" : "test"))
         }
         // Each capture down path must submit an OS request before ANY timer runs.
         for failToConnect in [false, true] {

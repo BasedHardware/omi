@@ -4,6 +4,9 @@ service: sync-backfill-worker
 image: backend-sync-backfill-worker
 namespace: prod-omi-backend
 admissionPercent: 0
+# Shares creator/finalizer admission when this uninstalled pilot is provisioned.
+envFrom:
+  - configMapRef: {name: prod-omi-backend-config}
 replicas: 1
 nodePool:
   name: sync-backfill-pool

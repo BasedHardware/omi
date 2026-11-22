@@ -163,6 +163,12 @@ def test_landed_target_releases_projects_once_and_renews_episode_budget(real_pro
     lane.assign()  # old missing target: hold through the real assignment path
     row = lane.client.rows[(lane.namespace + '_results', 'unit')]
     assert row['projection_state'] == 'quarantine_held'
+    # New writers satisfy held hint -> quarantined receipt/part; only legacy
+    # pre-fix rows (seeded separately in ghost tests) may violate the invariant.
+    assert any(
+        part.get('state') == 'quarantined'
+        for part in [row['projection'], *(row.get('projection_parts') or {}).values()]
+    )
     lane.client.rows[lane.target_key] = deepcopy(lane.target)
     release = ProjectionReleaseStore(lane.projector.store)
     assert release.release('unit', 30001)

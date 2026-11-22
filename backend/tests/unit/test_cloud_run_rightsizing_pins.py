@@ -66,7 +66,7 @@ def test_prod_deploy_flags_match_the_margin20_target():
     integration = model['backend-integration'].scale
     # 2026-11-01 packing (#24308): LLM-bound enrichment runs 80 per instance with 64 postprocess threads.
     assert (integration['memory'], integration['cpu'], integration['concurrency']) == ('4Gi', '2', 80)
-    assert (integration['revision_min'], integration['revision_max']) == (3, 50)
+    assert (integration['revision_min'], integration['revision_max']) == (3, 35)
 
 
 def test_ops_train_values_match_the_live_right_sizing():

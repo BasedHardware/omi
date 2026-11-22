@@ -8,7 +8,9 @@ import {
   GOOD_MARK,
   headlineDelta,
   GROWTH_WEEKS,
+  MARGIN_DAYS,
   MARGIN_PLANS,
+  marginFrames,
   resetSeriesCache,
   Row,
   SeriesName,
@@ -38,7 +40,7 @@ import {
   STT_MONTHLY_USD,
   VARIABLE_MARGIN_TARGET,
 } from "../wall-cost";
-import { HEALTH_COST_DAYS } from "../wall-finops";
+import { HEALTH_COST_DAYS, parseMeterTile } from "../wall-finops";
 import { WallSourceError } from "../wall-source-error";
 
 const now = new Date("2026-10-15T12:00Z");
@@ -317,6 +319,13 @@ describe("v3 series agree with the v2 snapshot", () => {
     expect(headlineDelta("netCost", rows(2000, 2500)).tone).toBe("bad");
     expect(headlineDelta("costPerMau", rows(7, 7)).text).toBe("■\u00a00.0%");
     expect(headlineDelta("mrr", [{ date: "b", value: 1 }]).text).toBe(
+      "history gap"
+    );
+    expect(headlineDelta("arpmau", [{ date: "b", value: 1 }]).text).toBe(
+      "history gap"
+    );
+    expect(headlineDelta("mrr", rows(0, 10)).text).toBe("no prior");
+    expect(headlineDelta("wau", [{ date: "b", value: 1 }]).text).toBe(
       "no prior"
     );
     expect(headlineDelta("arpmau", [{ date: "b", value: null }]).text).toBe(
@@ -389,7 +398,22 @@ describe("v3 series agree with the v2 snapshot", () => {
     expect([...weeks].map((w) => w.date).sort()).toEqual(
       weeks.map((w) => w.date)
     );
+    // A week whose prior week starts before full telemetry has no accounting
+    // (its "lost" count would be undercounted and the quick ratio inflated).
+    const priorStart = (w: (typeof weeks)[number]) =>
+      new Date(Date.parse(String(w.date)) - 13 * 86_400_000)
+        .toISOString()
+        .slice(0, 10);
+    const unaccounted = weeks.filter((w) => priorStart(w) < "2026-05-04");
+    expect(unaccounted.length).toBeGreaterThan(0);
+    for (const w of unaccounted) {
+      expect(w.quickRatio).toBeNull();
+      expect(w.churned).toBeNull();
+      expect(w.new).toBeNull();
+      expect(w.total).not.toBeNull();
+    }
     for (const w of weeks.slice(0, -6)) {
+      if (priorStart(w) < "2026-05-04") continue;
       expect(Number(w.new) + Number(w.resurrected) + Number(w.retained)).toBe(
         w.total
       );
@@ -639,6 +663,33 @@ describe("margin by plan (allocated estimate)", () => {
         { month: "short", day: "numeric", timeZone: "UTC" }
       )} · STT estimate · SaaS estimate · Infra non-GCP estimate as of Oct 16 · Stripe fees unavailable (finops key scope)`
     );
+  });
+
+  it("never emits a day older than the panel's 35-day window", () => {
+    // Prod 2026-11-10: the only day with both plan cost and a book was 35 days
+    // back, at 00:00Z — before the panel's now − 35d start, so Grafana showed
+    // "Data outside time range" instead of the empty-state message.
+    const at = (k: number) => ({ [day(k)]: plans(1) });
+    const legs = {
+      planCost: { plans: { ...at(MARGIN_DAYS), ...at(MARGIN_DAYS - 1) } },
+      finops: {
+        mrr: { [day(MARGIN_DAYS)]: book, [day(MARGIN_DAYS - 1)]: book },
+      },
+    } as unknown as Parameters<typeof marginFrames>[0];
+    const allIn = [MARGIN_DAYS, MARGIN_DAYS - 1].map((k) => ({
+      date: day(k),
+      total: 500,
+    })) as unknown as Parameters<typeof marginFrames>[1];
+    const start = now.getTime() - MARGIN_DAYS * 86_400_000;
+    const rows = marginFrames(legs, allIn, now);
+    expect(rows.map((r) => String(r.date).slice(0, 10))).toEqual([
+      day(MARGIN_DAYS - 1),
+    ]);
+    for (const r of rows)
+      expect(Date.parse(String(r.date))).toBeGreaterThanOrEqual(start);
+    // Only the out-of-window day has both inputs: an empty frame, not a hidden row.
+    delete (legs.finops!.mrr as Record<string, unknown>)[day(MARGIN_DAYS - 1)];
+    expect(marginFrames(legs, allIn, now)).toEqual([]);
   });
 
   it("prefers a measured FinOps STT line and labels it measured", async () => {
@@ -1685,6 +1736,119 @@ describe("the snapshot is shared and never served cold as settled", () => {
 });
 
 describe("variable margin frames (David 2026-10-23)", () => {
+  it("bounds proxy caching to the last millisecond of meter freshness", async () => {
+    const s = sources();
+    const expiry = now.getTime() + 1;
+    s.meter = vi.fn(async () => ({
+      asOf: new Date(expiry - 3 * 3_600_000).toISOString(),
+      variableMarginPct: 41.26,
+      basisVersion: null,
+    }));
+    const fresh = await seriesPayload("health", Promise.resolve(null), now, s);
+    expect(fresh.frames.variableMargin.at(-1)?.marginPct).toBe(41.3);
+    expect(Date.parse(fresh.staleUntil!)).toBe(expiry);
+
+    const expired = await seriesPayload(
+      "health",
+      Promise.resolve(null),
+      new Date(expiry),
+      s
+    );
+    // Current main retains the settled fallback after the meter expires.
+    expect(expired.frames.variableMargin.at(-1)?.live).toBe(0);
+    expect(expired.frames.variableMargin.at(-1)?.marginPct).not.toBe(41.3);
+    expect(String(expired.frames.variableMarginStatus[0].text)).toContain(
+      "Margin meter stale since"
+    );
+    expect(Date.parse(expired.staleUntil!)).toBeGreaterThan(expiry);
+  });
+
+  it("keeps a history bound earlier than meter expiry", async () => {
+    const s = sources();
+    s.meter = vi.fn(async () => ({
+      asOf: now.toISOString(),
+      variableMarginPct: 41.26,
+      basisVersion: null,
+    }));
+    const wall = await computeWall(s, now);
+    const earlier = now.getTime() + 500;
+    const kept = {
+      ...wall,
+      metrics: wall.metrics.map((m, i) => ({
+        ...m,
+        value: i === 0 ? 1 : null,
+        retainedSince: new Date(earlier - 24 * 3_600_000).toISOString(),
+      })),
+    };
+    const served = await seriesPayload("health", Promise.resolve(kept), now, s);
+    expect(served.frames.variableMargin.at(-1)?.marginPct).toBe(41.3);
+    expect(Date.parse(served.staleUntil!)).toBe(earlier);
+  });
+
+  it.each(["empty", "rejected"])(
+    "emits a standalone meter headline on cold %s billing history",
+    async (history) => {
+      const s = sources();
+      s.billing = vi.fn(async () => {
+        if (history === "rejected") throw new Error("billing unavailable");
+        return { ...(await billing()), daily: [] };
+      });
+      const asOf = new Date(now.getTime() - 3_600_000).toISOString();
+      s.meter = vi.fn(async () => ({
+        asOf,
+        variableMarginPct: 41.26,
+        basisVersion: null,
+      }));
+      const served = await seriesPayload(
+        "health",
+        Promise.resolve(null),
+        now,
+        s
+      );
+      expect(served.frames.variableMargin).toEqual([
+        {
+          date: asOf,
+          marginPct: 41.3,
+          live: 1,
+          costPerMonth: null,
+          mrr: null,
+          goalCost: null,
+        },
+      ]);
+      expect(Date.parse(served.staleUntil!)).toBe(
+        Date.parse(asOf) + 3 * 3_600_000
+      );
+      expect(s.meter).toHaveBeenCalledTimes(1);
+      expect(served.frames.cost).toEqual([]);
+      if (history === "rejected") expect(served.gaps.billing).toBeTruthy();
+    }
+  );
+
+  it.each(["expired", "missing", "rejected"])(
+    "does not fabricate a standalone headline with %s meter input",
+    async (input) => {
+      const s = sources();
+      s.billing = vi.fn(async () => ({ ...(await billing()), daily: [] }));
+      s.meter = vi.fn(async () => {
+        if (input === "rejected") throw new Error("meter unavailable");
+        return input === "missing"
+          ? null
+          : {
+              asOf: new Date(now.getTime() - 3 * 3_600_000).toISOString(),
+              variableMarginPct: 41.26,
+              basisVersion: null,
+            };
+      });
+      const served = await seriesPayload(
+        "health",
+        Promise.resolve(null),
+        now,
+        s
+      );
+      expect(served.frames.variableMargin).toEqual([]);
+    }
+  );
+
   it("trails the settled 7-day run rate against that day's book, disclosed", async () => {
     const s = sources();
     const f = await all(null, s);
@@ -1713,8 +1877,9 @@ describe("variable margin frames (David 2026-10-23)", () => {
       STRIPE_FEES_MONTHLY_USD / (365.25 / 12);
     const cost = perDay * MARGIN_DAYS_PER_MONTH;
     expect(last.costPerMonth).toBe(Math.round(cost));
-    // The cutoff point is settled, not live: its headline margin is no value.
-    expect(last.marginPct).toBeNull();
+    // The fallback uses this settled day and visibly names it.
+    expect(last.marginPct as number).toBeCloseTo((100 * (mrr - cost)) / mrr, 0);
+    expect(f.health.variableMarginSource[0].text).toContain("Settled");
     const prev = rows.at(-2)!;
     expect(prev.marginPct as number).toBeCloseTo(
       (100 * ((prev.mrr as number) - (prev.costPerMonth as number))) /
@@ -1748,13 +1913,197 @@ describe("variable margin frames (David 2026-10-23)", () => {
     );
   });
 
-  it("with no live estimate the headline is no value, never the settled cutoff as live", async () => {
+  it("with no live estimate the fallback is the latest settled day and is labelled settled", async () => {
     // sources() carries no live document: the last point is settled D−2.
     const f = await all(null, sources());
     const last = f.health.variableMargin.at(-1)!;
     expect(last.live).toBe(0);
-    expect(last.marginPct).toBeNull();
+    expect(last.marginPct).not.toBeNull();
+    expect(f.health.variableMarginSource[0].text).toMatch(/^Settled · /);
     expect(last.costPerMonth).not.toBeNull(); // the cost stays visible
+  });
+
+  it("headline is the margin meter's newest hourly row while it is fresh", async () => {
+    const s = sources();
+    const asOf = new Date(now.getTime() - 60 * 60_000).toISOString();
+    s.meter = vi.fn(async () => ({
+      asOf,
+      variableMarginPct: 41.26,
+      basisVersion: "2026-11-06.1",
+    }));
+    const f = await all(null, s);
+    const last = f.health.variableMargin.at(-1)!;
+    expect(last.marginPct).toBe(41.3);
+    expect(last.live).toBe(1);
+    const text = String(f.health.variableMarginStatus[0].text);
+    expect(text).toContain("Headline: margin meter hour");
+    expect(text).toContain("basis 2026-11-06.1");
+    expect(f.health.variableMarginSource[0].text).toContain("Hourly meter");
+    expect(f.health.variableMarginSource[0].text).toContain(
+      asOf.slice(5, 16).replace("T", " ")
+    );
+  });
+
+  it.each([0, 6])(
+    "shows a fresh hourly meter with only %s daily cost rows",
+    async (costDays) => {
+      const s = sources();
+      s.billing = vi.fn(async () => ({
+        ...(await billing()),
+        daily: costDays ? billingDays.slice(-costDays) : [],
+      }));
+      const withoutMeter = await all(null, s);
+      expect(withoutMeter.health.variableMargin).toEqual([]);
+      const asOf = new Date(now.getTime() - 3_600_000).toISOString();
+      s.meter = vi.fn(async () => ({
+        asOf,
+        variableMarginPct: 12.34,
+        basisVersion: null,
+      }));
+      const f = await all(null, s);
+      expect(f.health.variableMargin).toEqual([
+        expect.objectContaining({
+          date: asOf,
+          marginPct: 12.3,
+          live: 1,
+          costPerMonth: null,
+          mrr: null,
+          goalCost: null,
+        }),
+      ]);
+      expect(f.health.variableMarginSource[0].text).toContain("Hourly meter");
+      expect(f.health.marginLive).toEqual([]);
+
+      s.meter = vi.fn(async () => ({
+        asOf: new Date(now.getTime() - 4 * 3_600_000).toISOString(),
+        variableMarginPct: 12.34,
+        basisVersion: null,
+      }));
+      const stale = await all(null, s);
+      expect(stale.health.variableMargin).toEqual([]);
+      expect(stale.health.variableMarginSource[0].text).toBe(
+        "No complete cost window"
+      );
+    }
+  );
+
+  it("a fresh meter row wins over a metered live day for the headline", async () => {
+    const cutoff = isoDay(shiftDay(end, -2));
+    const s = sources();
+    s.billing = vi.fn(async () => ({
+      ...(await billing()),
+      daily: billingDays.filter((d) => d.date < cutoff),
+    }));
+    s.live = vi.fn(async () => ({
+      runAt: now.toISOString(),
+      days: {
+        [cutoff]: {
+          date: cutoff,
+          queryEnd: `${isoDay(shiftDay(end, -1))}T00:00:00.000Z`,
+          fraction: 1,
+          metered: { cloudRun: 5, firestore: 0, gcs: 0, logging: 0 },
+          producedAt: now.toISOString(),
+        },
+      },
+    }));
+    const withoutMeter = await all(null, s);
+    expect(withoutMeter.health.variableMargin.at(-1)!.marginPct).not.toBeNull();
+    s.meter = vi.fn(async () => ({
+      asOf: new Date(now.getTime() - 30 * 60_000).toISOString(),
+      variableMarginPct: 12.34,
+      basisVersion: null,
+    }));
+    const f = await all(null, s);
+    expect(f.health.variableMargin.at(-1)!.marginPct).toBe(12.3);
+    expect(f.health.variableMargin.at(-1)!.live).toBe(1);
+  });
+
+  it("a meter row exactly three hours old is stale (the cutoff is under three hours)", async () => {
+    const s = sources();
+    s.meter = vi.fn(async () => ({
+      asOf: new Date(now.getTime() - 3 * 3_600_000).toISOString(),
+      variableMarginPct: 40,
+      basisVersion: null,
+    }));
+    const f = await all(null, s);
+    expect(f.health.variableMargin.at(-1)!.marginPct).not.toBeNull();
+    expect(f.health.variableMarginSource[0].text).toMatch(
+      /^Settled · .*meter stale$/
+    );
+    expect(String(f.health.variableMarginStatus[0].text)).toContain(
+      "Margin meter stale since"
+    );
+  });
+
+  it("a rejected meter read leaves the health series intact with no meter headline", async () => {
+    const s = sources();
+    s.meter = vi.fn(async () => {
+      throw new Error("bigquery unavailable");
+    });
+    const f = await all(null, s);
+    expect(f.health.variableMargin.length).toBeGreaterThan(0);
+    expect(f.health.variableMargin.at(-1)!.marginPct).not.toBeNull();
+    expect(f.health.variableMarginSource[0].text).toMatch(/^Settled · /);
+    expect(String(f.health.variableMarginStatus[0].text)).toContain(
+      "Margin meter row unavailable"
+    );
+  });
+
+  it("a stale meter value is replaced by an explicitly dated settled margin", async () => {
+    const s = sources();
+    const asOf = new Date(now.getTime() - 4 * 3_600_000).toISOString();
+    s.meter = vi.fn(async () => ({
+      asOf,
+      variableMarginPct: 41.26,
+      basisVersion: null,
+    }));
+    const f = await all(null, s);
+    const last = f.health.variableMargin.at(-1)!;
+    expect(last.marginPct).not.toBe(41.3);
+    expect(last.marginPct).not.toBeNull();
+    expect(f.health.variableMarginSource[0].text).toMatch(
+      /^Settled · .*meter stale$/
+    );
+    expect(last.live).toBe(0);
+    expect(String(f.health.variableMarginStatus[0].text)).toContain(
+      `Margin meter stale since ${asOf.slice(0, 16).replace("T", " ")}Z`
+    );
+  });
+
+  it("no meter row is disclosed as unavailable, with a labelled settled fallback", async () => {
+    const s = sources();
+    s.meter = vi.fn(async () => null);
+    const f = await all(null, s);
+    expect(f.health.variableMargin.at(-1)!.marginPct).not.toBeNull();
+    expect(f.health.variableMarginSource[0].text).toMatch(/^Settled · /);
+    expect(String(f.health.variableMarginStatus[0].text)).toContain(
+      "Margin meter row unavailable"
+    );
+  });
+
+  it("parses the meter row and rejects a malformed one", () => {
+    expect(
+      parseMeterTile([
+        {
+          as_of: "2026-11-12T08:00:00Z",
+          variable_margin_pct: 37.5,
+          basis_version: "2026-11-06.1",
+        },
+      ])
+    ).toEqual({
+      asOf: "2026-11-12T08:00:00Z",
+      variableMarginPct: 37.5,
+      basisVersion: "2026-11-06.1",
+    });
+    expect(parseMeterTile([])).toBeNull();
+    expect(
+      parseMeterTile([{ as_of: "not a time", variable_margin_pct: 1 }])
+    ).toBeNull();
+    expect(
+      parseMeterTile([
+        { as_of: "2026-11-12T08:00:00Z", variable_margin_pct: null },
+      ])
+    ).toBeNull();
   });
 
   it("labels a metered D−2 as live when billing has only reached D−3", async () => {
@@ -1786,6 +2135,58 @@ describe("variable margin frames (David 2026-10-23)", () => {
     );
   });
 
+  it.each([null, 4, 1])(
+    "does not borrow a book for a live day (meter age: %s hours)",
+    async (meterAgeHours) => {
+      const cutoff = isoDay(shiftDay(end, -2));
+      const s = sources();
+      s.billing = vi.fn(async () => ({
+        ...(await billing()),
+        daily: billingDays.filter((d) => d.date < cutoff),
+      }));
+      s.live = vi.fn(async () => ({
+        runAt: now.toISOString(),
+        days: {
+          [cutoff]: {
+            date: cutoff,
+            queryEnd: `${isoDay(shiftDay(end, -1))}T00:00:00.000Z`,
+            fraction: 1,
+            metered: { cloudRun: 5, firestore: 0, gcs: 0, logging: 0 },
+            producedAt: now.toISOString(),
+          },
+        },
+      }));
+      const mrr = { ...finopsHistory.mrr };
+      delete mrr[cutoff];
+      s.finops = vi.fn(async () => ({ ...finopsHistory, mrr }));
+      s.meter = vi.fn(async () =>
+        meterAgeHours == null
+          ? null
+          : {
+              asOf: new Date(
+                now.getTime() - meterAgeHours * 3_600_000
+              ).toISOString(),
+              variableMarginPct: 12.34,
+              basisVersion: null,
+            }
+      );
+
+      const f = await all(null, s);
+      const live = f.health.marginLive.at(-1)!;
+      expect(live.date).toBe(`${cutoff}T00:00:00Z`);
+      expect(live.live).toBe(1);
+      expect(live.mrr).toBeNull();
+      expect(live.marginPct).toBeNull();
+      expect(live.costPerMonth).not.toBeNull();
+      expect(f.health.variableMargin.at(-1)!.marginPct).toBe(
+        meterAgeHours === 1 ? 12.3 : null
+      );
+      expect(f.health.variableMarginSource[0].text).toMatch(
+        meterAgeHours === 1 ? /^Hourly meter · / : /^No MRR book · /
+      );
+    }
+  );
+
   it("says the MRR is missing instead of borrowing the neighbour day's book", async () => {
     const s = sources();
     const cutoff = isoDay(shiftDay(end, -2));
@@ -1798,6 +2199,7 @@ describe("variable margin frames (David 2026-10-23)", () => {
     expect(last.date).toBe(`${cutoff}T00:00:00Z`);
     expect(last.mrr).toBeNull();
     expect(last.marginPct).toBeNull(); // the headline then shows no value
+    expect(f.health.variableMarginSource[0].text).toMatch(/^No MRR book · /);
     expect(rows.at(-2)!.marginPct).not.toBeNull(); // yesterday's stands
     expect(String(f.health.variableMarginStatus[0].text)).toContain(
       "MRR: n/a (no book snapshot that day)"
@@ -1822,7 +2224,7 @@ describe("funnelFrames", () => {
   it("splits the latest cohort by paired and shows Kept from the older one", () => {
     const { funnel } = funnelFrames({ deviceFunnel }, now);
     expect(funnel[0]).toEqual({
-      step: "Share of new users",
+      step: "New users",
       Device: 20,
       Organic: 80,
     });
@@ -1832,7 +2234,7 @@ describe("funnelFrames", () => {
       Organic: 23.1,
     });
     expect(funnel.at(-1)).toEqual({
-      step: "Kept, weeks 2–5 (older cohort)",
+      step: "Kept, weeks 2–5",
       Device: 50,
       Organic: 3.3,
     });
@@ -1848,7 +2250,7 @@ describe("funnelFrames", () => {
     );
     const { funnel } = funnelFrames({ deviceFunnel: rows }, now);
     expect(funnel[1]).toEqual({
-      step: "Onboarded (phone and Mac)",
+      step: "Onboarded",
       Device: null,
       Organic: 50,
     });

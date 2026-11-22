@@ -2,9 +2,8 @@
 
 Code and dev defaults keep both gates false. Production config enables the
 first-summary deadline for 100% of owners on all six producing/processing
-hosts. Debt repair on the scheduled backend-sync owner is held off in
-production (`SUMMARY_DEBT_REPAIR_ENABLED=false`, deferred by David 2026-10-20
-until the Nemotron migration completes). These
+hosts. Production source enables debt repair on the scheduled backend-integration
+owner (David 2026-11-09, relay 3e764e); the legacy backend-sync sweep stays off. These
 settings take effect only when the corresponding artifacts are deployed.
 `first_pending_at` is recorded in each outbox obligation even before rollout.
 No account content enters scheduling metadata or metrics.
@@ -73,18 +72,90 @@ rows. Enabling the new flag alone is not a historical backlog drain.
 
 Only the existing scheduled two-minute sequencer sweep scans indexed overdue `summary_due_at` rows,
 including completed kept minimums. A global Firestore cursor/lease permits one
-page per 120 seconds, at most 100 documents and **10 admission attempts** per
-winning tick. Cursor rotation passes blocked rows instead of permanently
-starving later debt. Admission transaction rechecks manual/lifecycle/privacy,
+scan per 120 seconds, a configurable fetched-document budget (default 100) and **8 admission attempts
+by default** per winning tick shared across two phases. First scan pending times in
+`[now - max_age_seconds(), now - max_age_seconds() + REPAIR_NEAR_EXPIRY_SECONDS]`
+oldest-first; then scan the rest of the window newest-first. The named margin is
+five intervals (600 seconds), allowing up to 40 admission attempts before expiry
+at the default cap and configured cadence. This is headroom, not a guarantee
+under overload or blocked admissions. With the age gate disabled, preserve the
+legacy due-time/name order and flat cursor, including due rows with no pending
+timestamp; admission uses their existing due time as the pending-time fallback.
+Both order by due time then document name to break pending-time ties.
+
+Version 2 of the same cursor document stores independent `near_expiry` and
+`newest` cursors under `phases`. Legacy flat cursors rewind safely, preserving
+the existing lease/next-tick fence; flat fields are cleared so older readers also
+rewind on rollback. Each phase wraps at exhaustion and passes blocked rows.
+A phase stopped by the attempt cap resumes at the last examined row, never the
+unattempted fetched tail. Per-owner deferrals retain the cursor immediately
+before the first skipped candidate, so it is eligible again next tick even while
+other owners later in this bounded page can be served. Near-expiry admissions
+consume capacity first; only remaining reads and attempts go to newest-first. A large newer pile cannot
+consume the expiry band's budget. Urgent overload can consume all capacity.
+
+`SUMMARY_DEBT_REPAIR_ADMISSION_LIMIT` is a startup setting clamped to 1..60
+(default 8; invalid uses 8). At 30 ticks/hour, the configured ceiling is
+`limit * 30`: 240 attempts/hour by default, 1,800 at the upper bound. Lead2 ruling `d233ac` (2026-11-10) sets the code
+default to 8. Earlier ruling `8b9c8f` keeps the explicit production
+backend-integration override at 8: 240 attempts/hour, 5,760/day. The capacity record
+`data/run-2026-11-08-retro-fixnow/out-sd-capacity.md` uses a $0.0054/repair
+mean, giving $31.10/day at full admission. This is a planning estimate using
+a mean, not a hard spend bound. Production cap rollback: 10 in both the prod
+runtime overlay and ops values, regenerate the runtime manifest, then deploy
+through the authorized lane. No live deployment is performed by this change.
+`SUMMARY_DEBT_REPAIR_PER_OWNER_LIMIT` is clamped to 1..10 (default 3; invalid
+uses 3). One owner share covers both phases in a tick. Failed/blocked attempts
+also consume the share, preventing one owner from spending the global attempt
+budget. These limits are configuration, not rollout flags. Unset either setting
+to restore its code default on process restart.
+Fairness applies to the fetched sample; a heavy owner filling a whole configured scan
+budget can still delay discovery beyond the page.
+
+`SUMMARY_DEBT_REPAIR_SCAN_LIMIT` is startup config, default 100, clamped to
+1..5,000 (invalid values restore 100). No environment override is added here.
+Owner ruling `215fdc` raises the allowed maximum; it does not raise the default.
+Both phases share this tick budget. Queries return at most 500 documents per
+chunk. Stop fetching at the admission-attempt cap, document budget, or a
+90-second scan-work budget checked between rows/chunks. An in-flight RPC can
+finish later; this is a soft deadline with headroom before the 120-second lease.
+Each durable phase cursor continues after every examined row, including owner
+deferrals, across chunks and ticks, then rewinds when exhausted. Admission/time
+stops retain the fetched but unexamined tail. Deferred rows stay separately in
+the conversation debt store with their original `summary_due_at`; a later pass
+or wrap selects them again without a retry queue or a new debt generation.
+This keeps an owner quota from pinning discovery before another owner. The
+version-2 phase cursor and gate-disabled flat due/path shapes stay unchanged;
+older readers can continue them or safely rewind.
+
+At 720 ticks/day, each 100 returned documents/tick means 72,000 document
+reads/day at full scan utilization. The 2,800-row target means 2,800 document
+reads/tick and 2,016,000/day; the maximum 5,000 means 3,600,000/day. These are
+row-read arithmetic, excluding query retries, empty-query minimums, index-entry
+charges, cursor transactions and admission/fence/outbox reads. The supplied
+`a7dc6f` measurement (~84k rows, mostly refusals) implies an ideal pass of
+~28 hours at 100/tick and exactly one hour at 2,800/tick; **under** one hour
+requires more than 2,800/tick, before admission/time stops or cursor rewinds.
+A debt-only index/filter that skips refusals is the structural fix and is out
+of scope. Neither measured production pass time nor read-billing savings are
+claimed by this source-only change.
+
+Existing eligibility excludes deleted, discarded and local-only rows. There is
+no reliable denormalized Home-today or active-user rank on the debt row. That
+preference is deferred; repair adds no per-row user reads for ranking.
+
+Admission transaction rechecks manual/lifecycle/privacy,
 account deletion, BYOK, active outbox lease and generation ownership; it reuses
 the same outbox key and transcript generation. The eventual lifecycle write
 rechecks repair eligibility and transcript revision. No new finalization job or
 revision is manufactured. The original backfill worker binding is retained.
 
-Worst-case document-read budget, excluding transaction retries: 100 scan reads
-+ 1 cursor claim + 1 cursor finish + 10 × 8 admission reads = **182 per winning
-tick, 131,040/day** at the existing scheduled two-minute cadence. Duplicate
-scheduler deliveries cost one cursor read each and are refused by the durable
+Default worst-case document-read budget, excluding transaction retries: 100 scan reads
++ 1 cursor claim + 1 cursor finish + 8 × 8 admission reads = **166 per winning
+tick, 119,520/day** at the existing scheduled two-minute cadence. At the maximum
+configured 60 attempts, the same formula is 582 reads/tick; owner shares and
+short pages can lower actual work. These are calculated ceilings, not measured
+throughput or spend. Duplicate scheduler deliveries cost one cursor read each and are refused by the durable
 lease/next-tick fence. Batch pump invocations never run the scan or read its cursor.
 Queries may additionally bill bounded index-entry batches because the cursor
 orders by timestamp and document name. Empty/short pages reduce cost. Both gates
@@ -107,7 +178,14 @@ first durable minimum acceptance / server processing admission to durable summar
 It is not capture-duration, ASR-latency or full-upload queue latency.
 
 `omi_summary_debt_overdue` and `omi_summary_debt_oldest_age_seconds` describe the
-**current bounded repair window**, not a fleet census.
+**current bounded repair sample**, not a fleet census. `expired_seen` remains
+sampled without consuming admission attempts. Tick counts include
+`near_expiry_admitted` (successful urgent redrives), including zero on unclaimed
+or disabled ticks. Both sweep responses expose this count as
+`summary_debt_near_expiry_admitted`; `omi_summary_debt_near_expiry_admitted` is
+the corresponding gauge for the last claimed tick. Unclaimed/disabled ticks
+leave gauges and the sample timestamp unchanged. Both phases retain the existing
+overdue/oldest/sample/expired gauges.
 `omi_summary_debt_sample_timestamp_seconds` identifies the winning sampler;
 ignore replica samples older than 300 seconds, then alert on oldest age >120s
 for ten minutes or sustained overdue debt >0. Use max across fresh replicas;
@@ -117,15 +195,30 @@ server-provenance debt only; unmarked historical rows are outside the numerator.
 No recurring COUNT scan was added. Process death after commit but before metric
 emission can lose a Prometheus observation; the durable metadata remains truth.
 
+`omi_summary_debt_repair_total{outcome}` accumulates completed-tick counts with
+exactly `scanned`, `admitted`, `error`, `expired_seen`, `near_expiry_admitted`.
+It increments after cursor completion, outside transactional callbacks; `error`
+maps to the returned `errors` count. Transaction retries never recount a tick.
+Unclaimed/disabled ticks return zero and add no counter increments. After deploy,
+read `rate(omi_summary_debt_repair_total{outcome="admitted"}[10m])` and the
+`near_expiry_admitted` outcome alongside release identity and summary receipts.
+These are repair redrive admissions, not completed summaries.
+
+The ASC `(summary_first_pending_at, summary_due_at, __name__)` composite remains
+for the expiry phase. The additional DESC/ASC/ASC collection-group composite
+must be **READY before deploying** this query change. Declare and provision it
+through the existing index lane; this code change does not apply indexes.
+
 ## Production policy and rollback
 
 The checked-in production policy is ship-on. Keep the six hosts aligned:
 backend-listen, pusher, backend, backend-sync, backend-sync-backfill and
 backend-integration use `FIRST_SUMMARY_DEADLINE_ENABLED=true` and
-`FIRST_SUMMARY_DEADLINE_PERCENT=100`. The scheduled backend-sync owner keeps
-`SUMMARY_DEBT_REPAIR_ENABLED=false` until the deferral above is lifted; turning
-it on is a prod overlay change, not a hand edit, so the next deploy keeps it.
-The bounded repair cost above is unchanged. No new index, scheduler, provider or capacity is required.
+`FIRST_SUMMARY_DEADLINE_PERCENT=100`. The scheduled backend-integration owner
+has `SUMMARY_DEBT_REPAIR_ENABLED=true` and admission limit 8 in production
+source; backend-sync stays disabled. Keep the prod overlay and ops values
+aligned and regenerate the runtime manifest. The new DESC index must be READY
+before deploying this repair order; the scheduler and provider are unchanged.
 
 The master flag also routes summary enrichment on both HTTP adapters through
 the existing `postprocess_executor` rather than the STT `sync_executor`.
@@ -169,10 +262,10 @@ coverage before all processing hosts run the instrumentation.
    present and READY; shipping the image first is not a valid order.
 2. Ship the normal backend train dark to all producers/workers after index readiness.
    Then set `FIRST_SUMMARY_DEADLINE_ENABLED=true`,
-   `FIRST_SUMMARY_UID_ALLOWLIST=<canary uid>`,
+   `FIRST_SUMMARY_DEADLINE_PERCENT=<qualification percent>`,
    `FIRST_SUMMARY_DEADLINE_SECONDS=120` on backend-sync, backend-sync-backfill,
    backend-integration and batch projection/enrichment hosts. Keep
-   `SUMMARY_DEBT_REPAIR_ENABLED=false` initially. The UID selection is enforced
+   `SUMMARY_DEBT_REPAIR_ENABLED=false` initially. The stable percentage selection is enforced
    at writes, mark/claims and repair. Keep demand/lazy/tool and repeat-work flags
    unchanged during this qualification.
 3. For the same canary set `SUMMARY_DEBT_REPAIR_ENABLED=true` on existing repair

@@ -1,12 +1,11 @@
 import os
 import re
 import threading
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from database.fsr_cache_telemetry import OMI_FALLBACK_TOTAL as OMI_FALLBACK_TOTAL
 from utils.conversation_relevance_labels import DECISION_TRIGGERS, TERMINAL_METRIC_TRIGGERS, TERMINAL_METRIC_REASONS
 
-from fastapi import Response
 from prometheus_client import (
     CONTENT_TYPE_LATEST,
     Counter,
@@ -17,9 +16,16 @@ from prometheus_client import (
     generate_latest,
     start_http_server,
 )
+from utils import omi_flag_metrics as _omi_flag_metrics  # pyright: ignore[reportUnusedImport]  # noqa: F401
 from utils.conversations import phase_shadow as _phase_shadow  # pyright: ignore[reportUnusedImport]  # noqa: F401
+from utils.conversations import (
+    processing_metrics as _retry_metrics,  # pyright: ignore[reportUnusedImport]  # noqa: F401
+)
 from utils.episodes import metrics as _episode_metrics  # pyright: ignore[reportUnusedImport]  # noqa: F401
 from utils.sync import absorption_metrics as _absorption_metrics  # pyright: ignore[reportUnusedImport]  # noqa: F401
+
+if TYPE_CHECKING:
+    from fastapi import Response
 
 # All metrics endpoints import this module. prometheus_client otherwise exports a second _created
 # series for every Counter and Histogram child, including idle zero children.
@@ -36,12 +42,6 @@ SCREEN_TASK_GATE_FRAMES_TOTAL = Counter(
 )
 SCREEN_TASK_CLIENT_BYPASS_TOTAL = Counter(
     'omi_screen_task_client_bypass_total', 'Flagged screenshot requests that bypassed a usable client gate', []
-)
-
-OMI_FLAG_DUAL_READ_TOTAL = Counter(
-    'omi_flag_dual_read_total',
-    'Server flag reads in OMI_FLAGS_SOURCE=dual: Omi store answer compared with the serving PostHog answer',
-    ['flag', 'outcome'],
 )
 
 OMI_LISTEN_STT_UNAVAILABLE_TOTAL = Counter(
@@ -80,6 +80,44 @@ PUSHER_ACTIVE_WS_CONNECTIONS = Gauge(
     'pusher_active_ws_connections',
     'Number of currently active WebSocket connections in pusher',
 )
+
+PUSHER_STORAGE_PCM_INFLIGHT_BYTES = Gauge(
+    'omi_pusher_storage_pcm_inflight_bytes',
+    'PCM payload bytes in custody storage awaits; enabled byte admission retains accounting until actual completion',
+)
+
+PUSHER_STORAGE_PCM_BUDGET_LIMIT_BYTES = Gauge(
+    'omi_pusher_storage_pcm_budget_limit_bytes',
+    'Pusher storage PCM byte budget limit; zero means no budget is enforced',
+)
+
+from utils.observability.reasons import (
+    AppReviewConfigOutcome,
+    AppReviewConfigReason,
+    PusherPcmErrorReason,
+    PusherPcmStage,
+    ReasonFamily,
+    reason_label,
+)
+
+PUSHER_STORAGE_PCM_REFUSALS_TOTAL = Counter(
+    'omi_pusher_storage_pcm_refusals_total',
+    'Custody PCM submissions refused before storage; no receipt or ACK',
+    ['stage'],
+)
+
+for _pcm_stage in PusherPcmStage:
+    PUSHER_STORAGE_PCM_REFUSALS_TOTAL.labels(stage=reason_label(ReasonFamily.PUSHER_PCM, _pcm_stage, PusherPcmStage))
+
+PUSHER_STORAGE_PCM_ERRORS_TOTAL = Counter(
+    'omi_pusher_storage_pcm_errors_total',
+    'PCM admission accounting faults and late post-cancellation storage failures',
+    ['reason'],
+)
+for _pcm_error in PusherPcmErrorReason:
+    PUSHER_STORAGE_PCM_ERRORS_TOTAL.labels(
+        reason=reason_label(ReasonFamily.PUSHER_PCM, _pcm_error, PusherPcmErrorReason)
+    )
 
 PUSHER_QUEUE_DROPS = Counter(
     'pusher_queue_drops_total',
@@ -543,6 +581,7 @@ JEV_DECISION_LABELS = {
             'capture_resummary',
             'conversation_smart_merge',
             'episode_boundary',
+            'episode_boundary_f',
         }
     ),
     'outcome': frozenset(
@@ -785,6 +824,83 @@ OMI_CANDIDATE_INTEGRATION_SWEEP_TOTAL = Counter(
 for _disposition in CANDIDATE_INTEGRATION_SWEEP_DISPOSITIONS:
     OMI_CANDIDATE_INTEGRATION_SWEEP_TOTAL.labels(disposition=_disposition)
 
+# Error-class sentinel (services/error_class_sentinel.py). Outcomes are pinned
+# literals: ok, truncated (counts unbounded, alerts suppressed), error (read
+# failed), permission_denied (logging.read grant missing on backend-runtime).
+OMI_ERROR_CLASS_SWEEP_TOTAL = Counter(
+    'omi_error_class_sweep_total',
+    'Error-class sentinel sweep ticks by outcome',
+    ['outcome'],
+)
+for _outcome in ('ok', 'truncated', 'error', 'permission_denied'):
+    OMI_ERROR_CLASS_SWEEP_TOTAL.labels(outcome=_outcome)
+OMI_ERROR_CLASS_ALERT_FIRING = Gauge(
+    'omi_error_class_alert_firing',
+    'Error classes currently firing a new/surge alert (1) on the last sweep tick',
+    ['fingerprint', 'service'],
+)
+# Monotonic firing signal the Grafana rule keys on (display gauge above cannot
+# be cleared reliably across instances). No pre-zeroed labels: a series appears
+# the first time that class fires.
+OMI_ERROR_CLASS_ALERT_FIRED_TOTAL = Counter(
+    'omi_error_class_alert_fired_total',
+    'Error-class new/surge alert firings by class',
+    ['fingerprint', 'service'],
+)
+# increase() over a series born at 1 and flat returns 0, so the paging rule
+# keys on this timestamp gauge instead: freshly fired = time() - max(...) is
+# small; a frozen or stale instance's value ages out of the window.
+OMI_ERROR_CLASS_LAST_FIRED_TIMESTAMP = Gauge(
+    'omi_error_class_last_fired_timestamp_seconds',
+    'Unix time of the most recent new/surge firing per error class',
+    ['fingerprint', 'service'],
+)
+
+OMI_APP_REVIEW_CONFIG_ALERT_TOTAL = Counter(
+    'omi_app_review_config_alert_total',
+    'App-review hide lifecycle alerts by platform and bounded reason',
+    ['platform', 'reason'],
+)
+OMI_APP_REVIEW_CONFIG_LAST_ALERT_TIMESTAMP = Gauge(
+    'omi_app_review_config_last_alert_timestamp_seconds',
+    'Unix time of the latest app-review hide lifecycle alert by platform and reason',
+    ['platform', 'reason'],
+)
+OMI_APP_REVIEW_CONFIG_SWEEP_TOTAL = Counter(
+    'omi_app_review_config_sweep_total',
+    'App-review lifecycle sweep ticks by overall outcome',
+    ['outcome'],
+)
+OMI_APP_REVIEW_CONFIG_LAST_SWEEP_TIMESTAMP = Gauge(
+    'omi_app_review_config_last_sweep_timestamp_seconds',
+    'Unix time of the most recent completed app-review lifecycle sweep',
+)
+for _app_review_platform in ('ios', 'android'):
+    for _app_review_reason in (
+        AppReviewConfigReason.CREDENTIALS_UNAVAILABLE,
+        AppReviewConfigReason.STORE_API_ERROR,
+        AppReviewConfigReason.RECONCILIATION_REPAIR,
+        AppReviewConfigReason.LIVE_HIDE_CLEARED,
+        AppReviewConfigReason.SUBMISSION_TOKEN_UNAVAILABLE,
+        AppReviewConfigReason.SUBMISSION_TOKEN_REJECTED,
+    ):
+        OMI_APP_REVIEW_CONFIG_ALERT_TOTAL.labels(
+            platform=_app_review_platform,
+            reason=reason_label(ReasonFamily.APP_REVIEW_CONFIG, _app_review_reason, AppReviewConfigReason),
+        )
+        OMI_APP_REVIEW_CONFIG_LAST_ALERT_TIMESTAMP.labels(
+            platform=_app_review_platform,
+            reason=reason_label(ReasonFamily.APP_REVIEW_CONFIG, _app_review_reason, AppReviewConfigReason),
+        )
+for _app_review_outcome in (
+    AppReviewConfigOutcome.OK,
+    AppReviewConfigOutcome.PARTIAL,
+    AppReviewConfigOutcome.ERROR,
+):
+    OMI_APP_REVIEW_CONFIG_SWEEP_TOTAL.labels(
+        outcome=reason_label(ReasonFamily.APP_REVIEW_CONFIG, _app_review_outcome, AppReviewConfigOutcome)
+    )
+
 
 LISTEN_FINALIZATION_JOB_STATUS = Gauge(
     'listen_finalization_jobs',
@@ -980,11 +1096,23 @@ OMI_SYNC_CAPTURE_TIME_TOTAL = Counter(
     ['outcome'],
 )
 
+OMI_PIPELINE_RECORD_WAIT_ANSWERS_TOTAL = Counter(
+    'omi_pipeline_record_wait_answers_total',
+    'Registered-record upload waits answered by bounded reason',
+    ['reason'],
+)
+
+OMI_PIPELINE_RECORD_WAIT_MEMO_HITS_TOTAL = Counter(
+    'omi_pipeline_record_wait_memo_hits_total',
+    'Registered-record upload wait memo hits by bounded memo kind',
+    ['memo'],
+)
+
 OMI_SYNC_RECORDING_AGE_SECONDS = Histogram(
     'omi_sync_recording_age_seconds',
     'Oldest recording age at sync admission by lane',
     ['lane'],
-    buckets=(300, 1800, 3600, 21600, 86400, 259200, 604800, 1209600, 2592000),
+    buckets=(300, 1800, 3600, 21600, 86400, 259200, 604800, 1209600, 2592000, 5184000),
 )
 
 OMI_SYNC_QUEUE_WAIT_SECONDS = Histogram(
@@ -1055,6 +1183,17 @@ OMI_SYNC_BRIDGE_RETRACTION_TOTAL = Counter(
         'Never labeled by uid, conversation id, or exception text.'
     ),
     ['outcome', 'reason'],
+)
+
+OMI_SYNC_BRIDGE_CONTAINED_DONOR_SHADOW_TOTAL = Counter(
+    'omi_sync_bridge_contained_donor_shadow_total',
+    (
+        'Shadow-mode outcomes for a processed sync donor the contained-donor bridge merge would consider. '
+        'Labels are a closed set: '
+        'outcome=would_absorb|partial_overlap|no_segment_span|unplaced_donor|donor_ineligible|open_target|no_overlap|error. '
+        'Never labeled by uid, conversation id, or content.'
+    ),
+    ['outcome'],
 )
 
 # Counted alongside omi_sync_transcription_*_total{outcome="internal_error"}:
@@ -1262,16 +1401,6 @@ OMI_LISTEN_DEFERRED_STREAM_OPENED_TOTAL = Counter(
     'omi_listen_deferred_stream_opened_total',
     'Deferred cloud live STT streams opened because audio reached the socket, by why the stream was deferred',
     ['deferred_by'],
-)
-
-OMI_LISTEN_VISIBLE_RESTORE_STREAMS_TOTAL = Counter(
-    'omi_listen_visible_restore_streams_total',
-    'Batch-only visible Modulate preview stream attempts by bounded outcome',
-    ['outcome'],
-)
-OMI_LISTEN_VISIBLE_RESTORE_SECONDS_TOTAL = Counter(
-    'omi_listen_visible_restore_seconds_total',
-    'Visible wall seconds served by batch-only Modulate preview streams',
 )
 
 OMI_LISTEN_AUDIO_OUTCOME_TOTAL = Counter(
@@ -1508,6 +1637,18 @@ AUTH_FLOW_DURATION_SECONDS = Histogram(
     ['provider', 'terminal_state'],
 )
 
+OMI_BILLING_RENEWAL_OBSERVATIONS = Counter(
+    'omi_billing_renewal_observations_total',
+    'Verified billing observation deliveries, not distinct invoices or attempts',
+    ['outcome'],
+)
+OMI_BILLING_RENEWAL_OBSERVATIONS.labels(outcome='eligible')
+OMI_BILLING_RENEWAL_OBSERVATIONS.labels(outcome='created')
+OMI_BILLING_RENEWAL_OBSERVATIONS.labels(outcome='duplicate')
+OMI_BILLING_RENEWAL_OBSERVATIONS.labels(outcome='projection_error')
+OMI_BILLING_RENEWAL_OBSERVATIONS.labels(outcome='write_error')
+OMI_BILLING_RENEWAL_OBSERVATIONS.labels(outcome='timeout')
+
 OMI_SUBSCRIPTION_EVENTS = Counter(
     'omi_subscription_events_total',
     'Stripe subscription lifecycle events observed via webhook. Counts webhook '
@@ -1604,7 +1745,13 @@ def record_action_items_list_cache(outcome: str) -> None:
     OMI_ACTION_ITEMS_LIST_CACHE_TOTAL.labels(outcome=outcome).inc()
 
 
-def metrics_response() -> Response:
+def metrics_response() -> 'Response':
+    # Imported here, not at module scope: this module is reachable from the
+    # record-seal row process (utils.observability.fallback -> utils.metrics),
+    # and fastapi/pydantic is ~60% of that process's import bill. Only the
+    # /metrics route needs the web framework.
+    from fastapi import Response
+
     return Response(content=generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
 

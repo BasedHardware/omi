@@ -176,6 +176,31 @@ operator clear the affected `cursor_audio` or `cursor_text` field on that one
 token, reservation, and all cap-hold receipts. Do not bulk-reset owners or
 manufacture new choices.
 
+## Fleet snapshot freshness alert
+
+`omi-held-content-snapshot-stale` is an agent-tier warning muted by
+`omi-tier-silent`. It fires when
+`time() - max(omi_held_content_fleet_snapshot_timestamp_seconds) > 3600` persists
+for ten minutes; `noDataState: Alerting` also catches a fleet that never published.
+The default 120-second cadence makes one hour about 30 missed publications.
+Select replicas using the newest snapshot timestamp, never the maximum held-content
+age: the fleet snapshot's age may stay fixed between publishes.
+
+Check cap-hold redrive completion, snapshot publication and supervised tick logs.
+Confirm the publisher is enabled, the scheduled sweep runs, and aggregation finishes
+within its documented budgets; verify a new timestamp and fresh held-content gauges.
+This alert authorizes no runtime changes. Preserve choices, leases, reservations
+and receipts; a stale snapshot does not justify data repair or changing drain policy.
+The N5 baseline measured 6859 seconds stale at 2026-11-08T14:08Z, so this warning is
+expected to fire on initial production import if that stall persists.
+
+After merge, an authorized deployer dispatches
+`grafana_dashboard_provisioning.yml` with `environment=prod`. Read back the UID,
+query, ten-minute pending window, agent tier, mute and no-data state with the
+provisioner's production drift check. Roll back by pausing this UID or reverting
+its split definition, regenerating the combined export and reapplying through that
+workflow. This alert has no backend lifecycle or storage side effects.
+
 ## Provider spend and uncertainty
 
 Current serving Modulate and Parakeet adapters POST synchronous batch requests.

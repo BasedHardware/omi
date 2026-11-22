@@ -86,6 +86,9 @@ class WalSyncs implements IWalSync {
     this.listener, {
     SDCardWalSyncImpl? sdcardSync,
     LocalWalSyncImpl? phoneSync,
+    StorageSyncImpl? storageSync,
+    RingStorageSyncImpl? ringSync,
+    FlashPageWalSyncImpl? flashPageSync,
     SyncUploadGate? phoneUploadGate,
     DateTime Function()? phoneNow,
     Timer Function(Duration, void Function(Timer))? phonePeriodic,
@@ -104,9 +107,9 @@ class WalSyncs implements IWalSync {
           coverageTelemetry: phoneCoverageTelemetry,
         );
     _sdcardSync = sdcardSync ?? SDCardWalSyncImpl(listener);
-    _flashPageSync = FlashPageWalSyncImpl(listener);
-    _storageSync = StorageSyncImpl(listener);
-    _ringSync = RingStorageSyncImpl(listener);
+    _flashPageSync = flashPageSync ?? FlashPageWalSyncImpl(listener);
+    _storageSync = storageSync ?? StorageSyncImpl(listener);
+    _ringSync = ringSync ?? RingStorageSyncImpl(listener);
 
     _sdcardSync.setLocalSync(_phoneSync);
     _flashPageSync.setLocalSync(_phoneSync);
@@ -315,6 +318,54 @@ class WalSyncs implements IWalSync {
       resp.localUploadPermanentError ??= preDrainResult.localUploadPermanentError;
     }
 
+    Object? deviceError;
+    StackTrace? deviceStack;
+    try {
+      await _downloadDeviceSources(progress: progress);
+    } catch (error, stack) {
+      // Device protocols own their bounded first-data/idle deadlines and settle
+      // their reader before returning/throwing. Do not race a timed-out future
+      // against another device reader. A failed device source must still give
+      // the independent, already-durable phone backlog its upload turn.
+      if (const bool.fromEnvironment('OMI_PHONE_AFTER_DEVICE_FAILURE_OFF')) rethrow;
+      deviceError = error;
+      deviceStack = stack;
+      DebugLogManager.logWarning('Device download incomplete; attempting phone backlog', {'error': '$error'});
+    }
+    if (_isCancelled) return resp;
+
+    // Phase 2: Upload all phone files to cloud (includes SD card and flash page downloads)
+    Logger.debug("WalSyncs: Phase 2 - Uploading phone files to cloud");
+    DebugLogManager.logInfo('Sync Phase 2: Uploading phone files to cloud');
+    progress?.onWalSyncedProgress(0.0, phase: SyncPhase.uploadingToCloud);
+    var partialRes = await _phoneSync.syncAll(progress: progress);
+    if (partialRes != null) {
+      resp.newConversationIds.addAll(
+        partialRes.newConversationIds.where((id) => !resp.newConversationIds.contains(id)),
+      );
+      resp.updatedConversationIds.addAll(
+        partialRes.updatedConversationIds.where(
+          (id) => !resp.updatedConversationIds.contains(id) && !resp.newConversationIds.contains(id),
+        ),
+      );
+      resp.localUploadFailures += partialRes.localUploadFailures;
+      resp.localUploadPermanentFailures += partialRes.localUploadPermanentFailures;
+      resp.localUploadPermanentError ??= partialRes.localUploadPermanentError;
+    }
+
+    // Keep the device failure visible after the phone ledger has had its turn.
+    // The original device record is still pending; this is not a completed sync.
+    if (deviceError != null) Error.throwWithStackTrace(deviceError, deviceStack!);
+
+    DebugLogManager.logEvent('sync_completed', {
+      'newConversations': resp.newConversationIds.length,
+      'updatedConversations': resp.updatedConversationIds.length,
+    });
+
+    return resp;
+  }
+
+  Future<void> _downloadDeviceSources({IWalSyncProgressListener? progress}) async {
     // Phase 0: New offline storage sync, gated by firmware version.
     //   fw >= 3.0.20  -> ring-buffer protocol (RingStorageSync)
     //   fw 3.0.17–.19 -> multi-file LittleFS protocol (StorageSync)
@@ -343,7 +394,7 @@ class WalSyncs implements IWalSync {
 
     if (_isCancelled) {
       Logger.debug("WalSyncs: Cancelled after storage sync phase");
-      return resp;
+      return;
     }
 
     // Phase 1a: Download SD card data to phone (legacy firmware)
@@ -362,7 +413,7 @@ class WalSyncs implements IWalSync {
     if (_isCancelled) {
       Logger.debug("WalSyncs: Cancelled after SD card phase");
       DebugLogManager.logWarning('Sync cancelled after SD card phase');
-      return resp;
+      return;
     }
 
     // Phase 1b: Download flash page data to phone
@@ -381,34 +432,8 @@ class WalSyncs implements IWalSync {
     if (_isCancelled) {
       Logger.debug("WalSyncs: Cancelled after flash page phase");
       DebugLogManager.logWarning('Sync cancelled after flash page phase');
-      return resp;
+      return;
     }
-
-    // Phase 2: Upload all phone files to cloud (includes SD card and flash page downloads)
-    Logger.debug("WalSyncs: Phase 2 - Uploading phone files to cloud");
-    DebugLogManager.logInfo('Sync Phase 2: Uploading phone files to cloud');
-    progress?.onWalSyncedProgress(0.0, phase: SyncPhase.uploadingToCloud);
-    var partialRes = await _phoneSync.syncAll(progress: progress);
-    if (partialRes != null) {
-      resp.newConversationIds.addAll(
-        partialRes.newConversationIds.where((id) => !resp.newConversationIds.contains(id)),
-      );
-      resp.updatedConversationIds.addAll(
-        partialRes.updatedConversationIds.where(
-          (id) => !resp.updatedConversationIds.contains(id) && !resp.newConversationIds.contains(id),
-        ),
-      );
-      resp.localUploadFailures += partialRes.localUploadFailures;
-      resp.localUploadPermanentFailures += partialRes.localUploadPermanentFailures;
-      resp.localUploadPermanentError ??= partialRes.localUploadPermanentError;
-    }
-
-    DebugLogManager.logEvent('sync_completed', {
-      'newConversations': resp.newConversationIds.length,
-      'updatedConversations': resp.updatedConversationIds.length,
-    });
-
-    return resp;
   }
 
   @override

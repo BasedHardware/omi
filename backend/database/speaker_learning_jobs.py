@@ -9,6 +9,8 @@ publication fences the extractors already use. Deterministic job ids make
 duplicate delivery a no-op; expired leases are reclaimed by the next trigger.
 """
 
+from database.transcript_pointer import TranscriptSegmentsDecodeError, TranscriptBlobAbsent, TranscriptShredded
+
 import hashlib
 import json
 import math
@@ -104,7 +106,7 @@ def get_firestore_client() -> Any:
 
 
 def run_transactional(client: Any, fn: Callable[..., Any], **kwargs: Any) -> Any:
-    from database._client import run_transactional as run
+    from database.transcript_pointer import run_preloaded_transactional as run
 
     return run(client, fn, **kwargs)
 
@@ -456,7 +458,7 @@ def _admit_legacy_jobs(
             )
             or []
         )
-    except Exception:
+    except (conversations_db.TranscriptSegmentsDecodeError, TranscriptBlobAbsent, TranscriptShredded):
         segments = []
     if not segments:
         return False
@@ -644,7 +646,7 @@ def ensure_job(
                 )
                 or []
             )
-        except Exception:
+        except (TranscriptSegmentsDecodeError, TranscriptBlobAbsent, TranscriptShredded):
             decoded = []
         from utils.speaker_learning_policy import winning_receipt_decision
 

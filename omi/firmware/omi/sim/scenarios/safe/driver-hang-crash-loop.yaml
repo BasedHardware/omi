@@ -1,0 +1,16 @@
+id: safe/driver-hang-crash-loop
+summary: >
+  A deferred driver whose init hangs: each normal boot is cut by the
+  watchdog, the fourth boot is SAFE and never initializes that device.
+committee: [1]
+tags: [guard]
+build: driver-hang
+timeline: []
+end: 130000
+expect:
+  boots:
+    - {exit: watchdog, log: ["FAULT_INJECT: driver init hang"]}
+    - {exit: watchdog, log: ["FAULT_INJECT: driver init hang"]}
+    - {exit: watchdog, log: ["FAULT_INJECT: driver init hang"]}
+    - {exit: stop, safe: true, latch_reason: 1, log: ["Safe mode feed loop started"],
+       not_log: ["FAULT_INJECT"]}

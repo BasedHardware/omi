@@ -15,7 +15,7 @@ from typing import Any, Callable, Mapping, Sequence
 
 import numpy as np
 
-from config.batch_pipeline_gpu_skip import diarize_speech_only_enabled, short_speech_single_enabled
+from config.batch_pipeline_gpu_skip import diarize_speech_only_enabled
 from config.prerecorded_language import language_class
 from config.stt_cap_dispatch import offline_admission_enabled as cap_dispatch_enabled
 from utils.batch_pipeline.worker_silence import inspect_worker_silence, inspect_worker_vad
@@ -52,7 +52,6 @@ from utils.batch_pipeline.diarization_gate import (
     compact as compact_speech,
     map_back,
     plan_compaction,
-    short_single_region,
     speech_regions,
     unassigned_word_count,
 )
@@ -1191,24 +1190,16 @@ class PipelineWorker:
                         and len(set(resolution.speaker_ids.values())) == 1
                     )
                     evidence = speech_regions(state['speech_spans'], words, duration) if words else []
-                    # Default off: one short contiguous utterance takes the
-                    # calibrated single label only once a prod-revision paired
-                    # run qualifies it (see batch_pipeline_runtime.md).
-                    short = not single and short_speech_single_enabled() and short_single_region(evidence)
-                    prepared.append((item, state, words, silence, duration, single, evidence, short))
+                    prepared.append((item, state, words, silence, duration, single, evidence))
                 except Exception as exc:
                     fail(item, exc, stage)
 
             # Speaker labels never pool across units: packing shares only model
             # forwards. Missing outcomes take the serial diarize call below.
             flight_diarized = self._flight_diarize(
-                [
-                    state
-                    for _, state, _, _, _, single, _, short in prepared
-                    if not state['silence'] and not single and not short
-                ]
+                [state for _, state, _, _, _, single, _ in prepared if not state['silence'] and not single]
             )
-            for item, state, words, silence, duration, single, evidence, short in prepared:
+            for item, state, words, silence, duration, single, evidence in prepared:
                 # The admitted pull bounds pending payloads/receipts to 32;
                 # executor size bounds simultaneous uploads. Never wait for an
                 # upload here: both GPU locks remain held until this returns.
@@ -1217,14 +1208,11 @@ class PipelineWorker:
                 try:
                     if state['silence']:
                         diarization = {'turns': [], 'outcome': 'silence'}
-                    elif single or short:
+                    elif single:
                         diarization = {
                             'turns': [{'start': 0, 'end': duration, 'speaker': 'SPEAKER_00'}],
                             'outcome': 'skipped_single',
                         }
-                        if short:
-                            diarization['single_evidence'] = 'short_speech'
-                            record_decision('skipped_short', unit_seconds=duration)
                     else:
                         stage = 'diarize'
                         diarization = flight_diarized.get(item.segment_id)
@@ -1249,7 +1237,7 @@ class PipelineWorker:
                     # skew the production parity distributions.
                     if not item.shadow:
                         record_unit_diarization(
-                            'silence' if state['silence'] else 'skipped_single' if (single or short) else 'diarized',
+                            'silence' if state['silence'] else 'skipped_single' if (single) else 'diarized',
                             diarization.get('turns') if isinstance(diarization, dict) else None,
                             flight_batching=self.config.flight_batching,
                         )

@@ -20,7 +20,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "max(omi_batch_timeliness_new_oldest_age_seconds{leg=~\"uncommitted|quarantined|assignment_held|projection\"} >= 0) or vector(0)",
+          "expr": "max((omi_batch_timeliness_new_oldest_age_seconds{leg=~\"uncommitted|quarantined|assignment_held|projection\"} >= 0) and ignoring(leg) ((max_over_time(omi_batch_timeliness_observed_at_seconds[20m]) == scalar(max(max_over_time(omi_batch_timeliness_observed_at_seconds[20m])))) and (time() - max_over_time(omi_batch_timeliness_observed_at_seconds[20m]) < 1200))) or vector(0)",
           "instant": true,
           "intervalMs": 1000,
           "maxDataPoints": 43200,
@@ -40,7 +40,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "(time() - max(omi_batch_timeliness_observed_at_seconds)) or vector(1e9)",
+          "expr": "(time() - max((max_over_time(omi_batch_timeliness_observed_at_seconds[20m]) == scalar(max(max_over_time(omi_batch_timeliness_observed_at_seconds[20m])))))) or vector(1e9)",
           "instant": true,
           "intervalMs": 1000,
           "maxDataPoints": 43200,
@@ -100,7 +100,7 @@
             "type": "__expr__",
             "uid": "__expr__"
           },
-          "expression": "($A > 7200 && $B < 900) || ($C > 7200 && $F < 120)",
+          "expression": "($A > 7200 && $B < 1200) || ($C > 7200 && $F < 120)",
           "intervalMs": 1000,
           "maxDataPoints": 43200,
           "refId": "D",
@@ -161,11 +161,12 @@
       "user_impact": "An owner is missing the transcript for some recorded audio. Failed-held and quarantined units are the class that lost 165 segments on 2026-11-01.",
       "scope": "One lateness page: new-cohort uncommitted, quarantined, assignment-held and projection legs, plus all-epoch active compute commitments. Each source requires its own fresh sample; deliberate policy holds and dispositioned queue states remain excluded from the compute proxy.",
       "verification": "Read omi_batch_timeliness_new_over_sla_units and the leg label to find the class, then count that class with the batch custody census (counts only, ro-prod).",
-      "safe_next_action": "Redrive or settle the unit through the batch recovery runbook. Never delete staged audio. Set BATCH_TIMELINESS_ALARM_ENABLED=false only to silence a broken sample, never a real breach.",
+      "safe_next_action": "Redrive or settle the unit through the batch recovery runbook. Never delete staged audio. Set BATCH_TIMELINESS_ALARM_ENABLED=false only to silence a broken sample, never a real breach. Paused at the 2026-11-08 import preparation ruling; follow unpause_criteria before enabling notifications.",
       "runbook": "backend/charts/monitoring/batch-projection/README.md",
-      "threshold": "($A > 7200 && $B < 900) || ($C > 7200 && $F < 120) for 5m",
+      "threshold": "($A > 7200 && $B < 1200) || ($C > 7200 && $F < 120) for 5m",
       "evaluated_bad": "Synthetic: a new quarantined unit age 3h with a fresh timeliness sample, or an all-epoch compute commitment age 7201s with a fresh queue sample.",
-      "evaluated_good": "Synthetic: neither fresh source measures a unit older than 7200s; unmeasured queue priorities are covered separately by the blind page."
+      "evaluated_good": "Synthetic: neither fresh source measures a unit older than 7200s; unmeasured queue priorities are covered separately by the blind page.",
+      "unpause_criteria": "After #24731/#24893 drain work reaches production, require both fresh timeliness and queue sources below 7200s continuously for 24h, with no blind scan. The drain owner must approve a separate unpause change; missing or stale samples do not count as healthy."
     },
     "labels": {
       "alert_identity": "omi-batch-unit-unpublished-2h",
@@ -177,7 +178,7 @@
       "audience": "human",
       "owner": "two-lane-lead"
     },
-    "isPaused": false,
+    "isPaused": true,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
       "group_by": [
@@ -211,7 +212,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "(time() - max(omi_batch_timeliness_observed_at_seconds)) or vector(1e9)",
+          "expr": "(time() - max((max_over_time(omi_batch_timeliness_observed_at_seconds[20m]) == scalar(max(max_over_time(omi_batch_timeliness_observed_at_seconds[20m])))))) or vector(1e9)",
           "instant": true,
           "intervalMs": 1000,
           "maxDataPoints": 43200,
@@ -231,7 +232,7 @@
             "type": "__expr__",
             "uid": "__expr__"
           },
-          "expression": "$A >= 900",
+          "expression": "$A >= 1200",
           "intervalMs": 1000,
           "maxDataPoints": 43200,
           "refId": "D",
@@ -288,13 +289,13 @@
     "keep_firing_for": "0s",
     "annotations": {
       "dashboard_url": "https://monitor.omi.me/d/omi-core-features",
-      "summary": "The batch timeliness sample has not refreshed in 15 minutes, so the 2h alarm is blind.",
+      "summary": "The batch timeliness sample has not refreshed in 20 minutes, so the 2h alarm is blind.",
       "user_impact": "Late batch transcripts could go unnoticed while the sample is stale.",
-      "scope": "omi_batch_timeliness_observed_at_seconds; refreshed at most every 5 minutes per batch worker. A never-taken sample reads as stale.",
+      "scope": "Newest numeric timeliness observation across GKE and Cloud Run, retained over 20m; leader cadence defaults to 300s and clamps to 60-600s. Stale at 1200s, including delivery delay; never-taken samples read as stale.",
       "verification": "Check omi_batch_timeliness_samples_total by outcome: error means Firestore reads failed, disabled means the kill switch is off.",
       "safe_next_action": "If disabled, confirm that was intended. If error, read the batch_timeliness_sample warning log on the worker.",
       "runbook": "backend/charts/monitoring/batch-projection/README.md",
-      "threshold": "$A >= 900 for 5m",
+      "threshold": "$A >= 1200 for 5m",
       "evaluated_bad": "Synthetic: no sample for 20 minutes, or the series never existed.",
       "evaluated_good": "Synthetic: a sample 4 minutes old."
     },
@@ -344,7 +345,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "max(omi_batch_timeliness_scan_truncated)",
+          "expr": "max(omi_batch_timeliness_scan_truncated and ignoring(leg) ((max_over_time(omi_batch_timeliness_observed_at_seconds[20m]) == scalar(max(max_over_time(omi_batch_timeliness_observed_at_seconds[20m])))) and (time() - max_over_time(omi_batch_timeliness_observed_at_seconds[20m]) < 1200)))",
           "instant": true,
           "intervalMs": 1000,
           "maxDataPoints": 43200,

@@ -1,0 +1,67 @@
+# Fleet-wide GMP evaluation includes Cloud Run and GKE. Release owns installation.
+apiVersion: monitoring.googleapis.com/v1
+kind: GlobalRules
+metadata:
+  name: omi-batch-firestore-cost
+spec:
+  groups:
+    - name: omi.batch.firestore.cost
+      interval: 1m
+      rules:
+        - record: omi_batch_firestore_attributed_reads_1h
+          labels: {caller_group: batch}
+          expr: >-
+            sum by (project_id) (increase(omi_firestore_billed_reads_by_caller_total{project_id="based-hardware",
+              caller=~"(database|utils)\\.batch.*|database\\.outbox_provider_stt:.*",
+              caller!~"database\\.batch_pipeline_purge:.*|database\\.batch_pipeline_store:packing_candidates"}[1h] offset 5m))
+        - record: omi_batch_firestore_attributed_reads_1h
+          labels: {caller_group: lifecycle}
+          expr: >-
+            sum by (project_id) (increase(omi_firestore_billed_reads_by_caller_total{project_id="based-hardware",
+              caller=~"database\\.lifecycle_metrics_queries:.*"}[1h] offset 5m))
+        - record: omi_batch_firestore_attributed_reads_1h
+          labels: {caller_group: erasure}
+          expr: >-
+            sum by (project_id) (increase(omi_firestore_billed_reads_by_caller_total{project_id="based-hardware",
+              caller=~"database\\.batch_pipeline_purge:.*"}[1h] offset 5m))
+        - record: omi_batch_firestore_attributed_reads_1h
+          labels: {caller_group: packing_probe}
+          expr: >-
+            sum by (project_id) (increase(omi_firestore_billed_reads_by_origin_total{project_id="based-hardware",
+              origin="job:batch_packing_counterfactual"}[1h] offset 5m))
+        - record: omi_batch_completed_audio_hours_1h
+          expr: >-
+            sum by (project_id) (increase(omi_batch_pipeline_completed_audio_seconds_total{project_id="based-hardware"}[1h] offset 5m)) / 3600
+        - record: omi_batch_firestore_reads_per_completed_audio_hour
+          expr: >-
+            (
+              sum by (caller_group) (omi_batch_firestore_attributed_reads_1h{project_id="based-hardware"})
+              or label_replace(
+                sum(omi_batch_firestore_attributed_reads_1h{project_id="based-hardware",caller_group=~"batch|lifecycle|erasure"}),
+                "caller_group", "total", "__name__", ".*")
+            )
+            / on() group_left() (sum(omi_batch_completed_audio_hours_1h{project_id="based-hardware"}) >= 50)
+            and on() omi_batch_firestore_attributed_reads_1h{project_id="based-hardware",caller_group="batch"}
+        - record: omi_batch_firestore_cost_status
+          labels: {condition: denominator_low}
+          expr: >-
+            (sum(omi_batch_completed_audio_hours_1h{project_id="based-hardware"}) < bool 50) == 1
+        - record: omi_batch_firestore_cost_status
+          labels: {condition: telemetry_missing}
+          expr: >-
+            vector(1) unless on() (
+              omi_batch_firestore_attributed_reads_1h{project_id="based-hardware",caller_group="batch"}
+              and on() omi_batch_completed_audio_hours_1h{project_id="based-hardware"}
+            )
+        # The native read metric is per-minute DELTA. Coverage is fleet-wide,
+        # including outside batch, because native counts have no caller dimension.
+        # Every observed series contributing to the sum must meet the sample floor.
+        - record: omi_firestore_attributed_read_coverage_ratio_1h
+          expr: >-
+            sum(increase(omi_firestore_billed_reads_total{project_id="based-hardware"}[1h] offset 5m))
+            / (
+              (sum(sum_over_time(firestore_googleapis_com:document_read_count{project_id="based-hardware",type=~"LOOKUP|NOT_FOUND|QUERY"}[1h] offset 5m)) > 0)
+              and on() (
+                count(min by (type) (count_over_time(firestore_googleapis_com:document_read_count{project_id="based-hardware",type=~"LOOKUP|NOT_FOUND|QUERY"}[1h] offset 5m)) >= 58) == 3
+              )
+            )

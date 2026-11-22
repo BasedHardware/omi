@@ -57,10 +57,12 @@ EXPECTED_TOOL_ORDER = [
     "delete_memory",
     "edit_memory",
     "get_conversations",
+    "get_deleted_conversations",
     "get_conversation_by_id",
     "get_conversations_by_ids",
     "search_memories",
     "search_conversations",
+    "search_transcripts",
     "search_x_posts",
     "get_x_posts",
     "get_action_items",
@@ -101,6 +103,8 @@ FAKE_SUCCESS = {
     },
     "search_memories": {"memories": []},
     "search_conversations": {"conversations": []},
+    "search_transcripts": {"matches": [], "complete": True, "examined": 0, "next_cursor": None},
+    "get_deleted_conversations": {"deleted": [], "has_more": False, "next_cursor": None},
     "search_x_posts": {"posts": []},
     "get_x_posts": {"posts": []},
     "get_action_items": {"action_items": []},
@@ -804,9 +808,11 @@ class TestUnknownsAndScope:
         names = {tool["name"] for tool in response["result"]["tools"]}
         assert names == {
             "get_conversations",
+            "get_deleted_conversations",
             "get_conversation_by_id",
             "get_conversations_by_ids",
             "search_conversations",
+            "search_transcripts",
             "get_daily_summaries",
         }
 
@@ -900,7 +906,7 @@ class TestToolResultContract:
                         ],
                     }
                 ],
-                "search_coverage": "summary_vectors_with_keyword_recovery",
+                "search_coverage": "summary_vectors_and_keyword",
             }
         )
 

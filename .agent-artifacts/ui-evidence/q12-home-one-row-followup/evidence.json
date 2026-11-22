@@ -1,0 +1,44 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-capability-off-before.png",
+      "platform": "mobile-ios",
+      "description": "Before this follow-up, missing capability shows two Processing rows across Today and Yesterday; unknown phases infer Writing notes. Synthetic fixture on merged 3581ad2f UI source.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "002-mobile-ios-capability-off-after.png",
+      "platform": "mobile-ios",
+      "description": "The same older-server/capability-off shape now shows one Transcribing row for three unique pending recordings under Listening, with finished work separate.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "003-mobile-ios-delete-scope-changed.png",
+      "platform": "mobile-ios",
+      "description": "A recording became READY during confirmation: Delete was cancelled, the settled recording left the processing page, and a review-list notice appears. No recording was deleted and no Undo was staged.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ],
+  "captured_at_utc": "2026-11-15T17:40:48Z",
+  "render_source_head": "306ed34d48fc6ce0e971935acec3f603de05d5a9",
+  "merged_origin_main": "fd66e7f3310935adfa203ef68e15d3f7cf9e007a",
+  "flutter_sdk": "3.44.5 (CI and release pin)",
+  "before_ui_ref": "3581ad2fb6e5012ede9dd34b03fbf76bdf913855",
+  "source_blobs": {
+    "app/lib/pages/conversations/conversations_page.dart": "63c62e6752578a629d8156dee390b2104027f58f",
+    "app/lib/pages/conversations/home_rows.dart": "c90cd3c2a87b1b9dba34ca9b7bc570d14ffa79a9",
+    "app/lib/pages/conversations/home_card_rows.dart": "93f3b6645d7ad654481af5ab67766090352fb5b8",
+    "app/lib/pages/episodes/episode_page.dart": "65a4a570d9c6dea9187f4eb6767651277aa3ab90",
+    "app/lib/services/pending_work/pending_work_store.dart": "3c7398465a95b43d8c7938b6c09e499d55bc5dd4",
+    "app/test/widgets/home_row_contract_render_test.dart": "9dbd35e91d40fa071c01c83c1b22baff1b170970",
+    "app/test/widgets/episode_page_delete_test.dart": "9c0dbc46b927b0b9cbd1f4394193d970b045c62b",
+    "app/test/widgets/home_processing_pending_row_test.dart": "3e9c9b214f21e8ffa48079d3ad36ce3d5137f362",
+    "app/lib/l10n/app_en.arb": "d3ded57014e1ec357f86fe8bc86a1db751d7e275",
+    "app/lib/l10n/app_localizations.dart": "5851f054fb5364e878354383d3a94c8b0005cc15",
+    "app/lib/l10n/app_localizations_en.dart": "105fee7bdcb78fb405a29a460b5f4111db18634f"
+  }
+}

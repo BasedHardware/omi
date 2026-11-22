@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+from datetime import date, timedelta
 import importlib.util
 import json
 import re
@@ -12,11 +13,22 @@ from types import SimpleNamespace
 import pytest
 import yaml
 
+from deploy import generate_read_lever_manifest as read_lever_manifest
 from scripts.verify_pusher_cohost_env_diff import parse_env_entries
+from scripts.runtime_env_validation import manifest as manifest_validation
+from scripts.runtime_env_validation.manifest import (
+    _validate_directory_routing_bindings,  # pyright: ignore[reportPrivateUsage]
+)
 
 ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = ROOT / 'scripts/validate-backend-runtime-env.py'
 RENDERER_SCRIPT = ROOT / 'scripts/render_backend_runtime_env.py'
+ALLOWANCE_INTAKE_PARK_BY_SERVICE = {
+    'backend': 'false',
+    'backend-sync': 'true',
+    'backend-sync-backfill': 'false',
+    'backend-integration': 'true',
+}
 READINESS_PROPOSAL_ARGS = (
     ' --proposal-output "$FIRESTORE_PROPOSAL_PATH"'
     ' --source-commit "$FIRESTORE_SOURCE_COMMIT"'
@@ -24,8 +36,128 @@ READINESS_PROPOSAL_ARGS = (
 )
 
 
+@pytest.fixture
+def directory_manifest():
+    """Synthetic provisioning only; B2 intentionally ships no real PG bindings."""
+    bindings = {'DIRECTORY_ROUTING_MODE': {'value': 'new_owners'}}
+    for prefix in ('DIRECTORY', 'CELLS'):
+        for suffix, value in (
+            ('HOST', 'localhost'),
+            ('DATABASE', 'synthetic'),
+            ('USER', 'synthetic'),
+            ('POOL_SIZE', '2'),
+        ):
+            bindings[f'{prefix}_PG_{suffix}'] = {'value': value}
+    return {
+        'cloud_run': {
+            'services': {
+                name: {'env': copy.deepcopy(bindings)} for name in ('backend', 'backend-sync', 'backend-sync-backfill')
+            }
+        },
+        'gke': {name: {'env': copy.deepcopy(bindings)} for name in ('backend-listen', 'pusher')},
+    }
+
+
+@pytest.mark.parametrize('environment', ['dev', 'prod'])
+@pytest.mark.parametrize('binding_kind', ['iam', 'dsn', 'config_map'])
+def test_directory_enablement_requires_complete_fleet_bindings(directory_manifest, environment, binding_kind):
+    if binding_kind == 'dsn':
+        hosts = list(directory_manifest['cloud_run']['services'].values()) + list(directory_manifest['gke'].values())
+        for host in hosts:
+            for prefix in ('DIRECTORY', 'CELLS'):
+                for suffix in ('HOST', 'DATABASE', 'USER'):
+                    host['env'].pop(f'{prefix}_PG_{suffix}')
+                host['env'][f'{prefix}_PG_DSN'] = {'value': 'host=localhost dbname=synthetic'}
+    elif binding_kind == 'config_map':
+        entries = {}
+        for name in ('backend-listen', 'pusher'):
+            for key, entry in directory_manifest['gke'][name]['env'].items():
+                entries[key] = entry['value']
+                directory_manifest['gke'][name]['env'][key] = {'config_map': {'name': 'synthetic-config', 'key': key}}
+        directory_manifest['gke']['config_map'] = {'name': 'synthetic-config', 'entries': entries}
+    assert _validate_directory_routing_bindings(environment, directory_manifest) == []
+
+
+@pytest.mark.parametrize('surface', ['backend', 'backend-sync', 'backend-sync-backfill', 'backend-listen', 'pusher'])
+@pytest.mark.parametrize(
+    'missing',
+    [
+        'DIRECTORY_PG_HOST',
+        'DIRECTORY_PG_DATABASE',
+        'DIRECTORY_PG_USER',
+        'DIRECTORY_PG_POOL_SIZE',
+        'CELLS_PG_HOST',
+        'DIRECTORY_ROUTING_MODE',
+    ],
+)
+def test_directory_enablement_rejects_partial_bindings(directory_manifest, surface, missing):
+    hosts = (
+        directory_manifest['cloud_run']['services']
+        if surface.startswith('backend') and surface != 'backend-listen'
+        else directory_manifest['gke']
+    )
+    hosts[surface]['env'].pop(missing)
+    errors = _validate_directory_routing_bindings('prod', directory_manifest)
+    assert any(surface in error.scope and missing.split('_PG_')[0] in error.message for error in errors)
+
+
+@pytest.mark.parametrize('mode', ['typo', '', None])
+def test_directory_enablement_rejects_invalid_or_unresolved_mode(directory_manifest, mode):
+    directory_manifest['cloud_run']['services']['backend']['env']['DIRECTORY_ROUTING_MODE'] = {'value': mode}
+    assert _validate_directory_routing_bindings('dev', directory_manifest)
+
+
+@pytest.mark.parametrize('mode', [None, 'off'])
+def test_directory_dark_manifest_needs_no_pg_bindings(mode):
+    bindings = {} if mode is None else {'DIRECTORY_ROUTING_MODE': {'value': mode}}
+    manifest = {'cloud_run': {'services': {'backend': {'env': bindings}}}}
+    assert _validate_directory_routing_bindings('prod', manifest) == []
+
+
+def test_directory_mode_inherited_from_shared_config_map_cannot_bypass_guard():
+    manifest = {
+        'gke': {'config_map': {'name': 'synthetic-config', 'entries': {'DIRECTORY_ROUTING_MODE': 'new_owners'}}}
+    }
+    errors = _validate_directory_routing_bindings('prod', manifest)
+    assert any(error.scope == 'prod/gke/pusher' and 'DIRECTORY_PG_*' in error.message for error in errors)
+    assert any(
+        error.scope == 'prod/cloud_run/backend' and 'DIRECTORY_ROUTING_MODE' in error.message for error in errors
+    )
+
+
+@pytest.mark.parametrize('surface', ['integration', 'job', 'desktop'])
+def test_directory_activation_elsewhere_still_requires_all_five_surfaces(surface):
+    host = {'env': {'DIRECTORY_ROUTING_MODE': {'value': 'new_owners'}}}
+    if surface == 'integration':
+        manifest = {'cloud_run': {'services': {'backend-integration': host}}}
+    elif surface == 'job':
+        manifest = {'cloud_run': {'jobs': {'notifications-job': host}}}
+    else:
+        manifest = {'desktop_backend': host}
+    errors = _validate_directory_routing_bindings('prod', manifest)
+    assert len({error.scope for error in errors}) == 5
+    assert any('DIRECTORY_PG_*' in error.message for error in errors)
+
+
+def test_directory_mode_off_elsewhere_does_not_require_bindings():
+    manifest = {'desktop_backend': {'env': {'DIRECTORY_ROUTING_MODE': {'value': 'off'}}}}
+    assert _validate_directory_routing_bindings('prod', manifest) == []
+
+
+def test_directory_binding_guard_is_in_deploy_validator(directory_manifest, monkeypatch):
+    validator = load_validator()
+    manifest = validator._load_yaml(validator.DEFAULT_MANIFEST)
+    manifest['environments']['prod']['cloud_run']['services']['backend']['env']['DIRECTORY_ROUTING_MODE'] = {
+        'value': 'new_owners'
+    }
+    monkeypatch.setattr(manifest_validation, '_load_yaml', lambda path: manifest)
+    # The manifest guard rejects this before consulting charts or live state.
+    errors = validator.validate_runtime_env(env='prod')
+    assert any('DIRECTORY_PG_*' in error.message for error in errors)
+
+
 @pytest.fixture(autouse=True)
-def _fast_safe_yaml_for_contract_fixtures(monkeypatch):
+def fast_safe_yaml_for_contract_fixtures(monkeypatch):
     # Keep the same safe YAML schema and every validator assertion, without
     # spending the call-phase budget on Python tokenization of large manifests.
     monkeypatch.setattr(yaml, 'safe_load', lambda stream: yaml.load(stream, Loader=yaml.CSafeLoader))
@@ -33,6 +165,7 @@ def _fast_safe_yaml_for_contract_fixtures(monkeypatch):
 
 def load_validator():
     spec = importlib.util.spec_from_file_location('validate_backend_runtime_env', SCRIPT)
+    assert spec is not None
     module = importlib.util.module_from_spec(spec)
     assert spec.loader is not None
     sys.modules[spec.name] = module
@@ -41,8 +174,11 @@ def load_validator():
 
 
 def write_yaml(path: Path, payload: dict) -> None:
+    # Same safe schema as ``yaml.safe_dump``; the C dumper avoids ~0.16 s of Python
+    # serialization per call for the ~280 KB runtime manifest, which several tests
+    # here rewrite before validating.
     with path.open('w', encoding='utf-8') as handle:
-        yaml.safe_dump(payload, handle, sort_keys=False)
+        yaml.dump(payload, handle, Dumper=getattr(yaml, 'CSafeDumper', yaml.SafeDumper), sort_keys=False)
 
 
 def render_cloud_run_state(env_config: dict, monkeypatch) -> dict:
@@ -64,18 +200,45 @@ def render_cloud_run_state(env_config: dict, monkeypatch) -> dict:
 
 def with_memory_env(payload: str) -> str:
     memory_env = '''\
+        {"name": "EPISODE_COMPOSER_DEFAULT_CONTEXT_ENABLED", "value": "true"},
+        {"name": "EPISODE_COMPOSER_CONTEXT_ENABLED", "value": "true"},
+        {"name": "EPISODE_COMPOSER_DETAIL_ENABLED", "value": "true"},
+        {"name": "EPISODE_COMPOSE_TRANSCRIPT_WAIT_ENABLED", "value": "true"},
+        {"name": "EPISODE_COMPOSE_TRANSCRIPT_READY_ENABLED", "value": "true"},
+        {"name": "EPISODE_COMPOSE_ANCHORED_WAIT_ENABLED", "value": "true"},
+        {"name": "EPISODE_COMPOSE_SETTLED_TERMINAL_ENABLED", "value": "true"},
+        {"name": "EPISODE_EMPTY_MEMBER_CLEANUP_ENABLED", "value": "false"},
+        {"name": "HOME_SETTLED_EMPTY_WIRE_ENABLED", "value": "true"},
+        {"name": "CONVERSATION_NOTES_SCALED_DETAIL_ENABLED", "value": "true"},
         {"name": "HOME_TRANSCRIPTION_PRESENTATION_GATE", "value": "true"},
+        {"name": "RECORD_FRESH_MERGE_ENABLED", "value": "false"},
+        {"name": "RECORD_NOTES_EAGER_ENABLED", "value": "false"},
+        {"name": "RECORD_FOLLOWUP_WAKE_ENABLED", "value": "true"},
+        {"name": "RECORD_SEAL_WAKE_PRESERVED_ENABLED", "value": "true"},
         {"name": "HOME_TRANSCRIPTION_DEADLINE_SECONDS", "value": "7200"},
+        {"name": "HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED", "value": "true"},
+        {"name": "SYNC_FUTURE_CAPTURE_CLAMP_ENABLED", "value": "false"},
+        {"name": "RECORD_SEAL_REPAIR_FRESH_ENABLED", "value": "true"},
+        {"name": "RECORD_INTAKE_AGE_PRIORITY_ENABLED", "value": "true"},
+        {"name": "HOME_TRANSCRIPTION_MAX_AGE_SECONDS", "value": "86400"},
+        {"name": "HOME_PROCESSING_MAX_AGE_SECONDS", "value": "21600"},
         {"name": "STT_CAP_DISPATCH_ENFORCEMENT", "value": "false"},
         {"name": "STT_CAP_DISPATCH_COHORT", "value": ""},
         {"name": "STT_CAP_DISPATCH_LANES", "value": "live"},
+        {"name": "UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED", "value": "false"},
+        {"name": "UNLIMITED_V2_BACKFILL_HOURS_CAP_HOURS", "value": "24"},
         {"name": "BATCH_PIPELINE_ENABLED", "value": "false"},
+        {"name": "BATCH_PIPELINE_PACKING_SAMPLE_RATE", "value": "0.001"},
         {"name": "BATCH_PIPELINE_UID_ALLOWLIST", "value": ""},
         {"name": "BATCH_PIPELINE_PERCENT", "value": "0"},
         {"name": "FIRST_SUMMARY_DEADLINE_PERCENT", "value": "0"},
         {"name": "BATCH_LIVE_STT_RETIRE_PERCENT", "value": "0"},
         {"name": "BATCH_PIPELINE_SERVING_ENABLED", "value": "false"},
         {"name": "RECORD_SEAL_OVERLAP_TRIM_ENABLED", "value": "true"},
+        {"name": "RECORD_TOKEN_LEASE_MODE", "value": "off"},
+        {"name": "RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT", "value": "0"},
+        {"name": "RECORD_TOKEN_LEASE_SECONDS", "value": "3600"},
+        {"name": "RECORD_TOKEN_LEASE_DEPLOYED_AT", "value": "0"},
         {"name": "BATCH_PIPELINE_AUTHORITATIVE_LABELS_ENABLED", "value": "false"},
         {"name": "BATCH_PIPELINE_LIVE_ADMISSION_ENABLED", "value": "false"},
         {"name": "BATCH_PIPELINE_REQUIRE_LIVE_TARGET_ENABLED", "value": "false"},
@@ -91,6 +254,7 @@ def with_memory_env(payload: str) -> str:
         {"name": "BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED", "value": "true"},
         {"name": "BATCH_PIPELINE_READ_ONLY_METRICS_ENABLED", "value": "false"},
         {"name": "BATCH_PIPELINE_PROJECTION_TIMING_ENABLED", "value": "false"},
+        {"name": "BATCH_PIPELINE_PROJECTION_GHOST_SETTLE_COHORT", "value": "g1"},
         {"name": "FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED", "value": "false"},
         {"name": "BATCH_PIPELINE_RECOVERY_MODE", "value": "off"},
         {"name": "BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST", "value": ""},
@@ -104,6 +268,9 @@ def with_memory_env(payload: str) -> str:
         {"name": "PLAYBACK_ON_DEMAND_ENABLED", "value": "true"},
         {"name": "REPEAT_WORK_LLM_VERSION", "value": "2026-10-16-v1"},
         {"name": "SYNC_POLL_BACKOFF_ENABLED", "value": "false"},
+        {"name": "SYNC_RECORD_COVERAGE_WAIT_MEMO", "value": "true"},
+        {"name": "SYNC_RECORD_WAIT_MEMO_FIRST", "value": "true"},
+        {"name": "SYNC_RECORD_DECODE_FAILURE_MEMO", "value": "true"},
         {"name": "OMI_EXTERNAL_LIST_POLLING_CACHE_ENABLED", "value": "true"},
         {"name": "OMI_EXTERNAL_LIST_POLLING_CACHE_PERCENT", "value": "100"},
         {"name": "AUDIO_ARCHIVE_LIVE_ENABLED", "value": "true"},
@@ -144,6 +311,7 @@ def with_memory_env(payload: str) -> str:
     return payload.replace(
         '        {"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"},',
         '        {"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"},\n'
+        '        {"name": "PRERECORDED_SONIOX_FAILOVER_ENABLED", "value": "true"},\n'
         '        {"name": "GCP_LOCATION", "value": "us-central1"},\n'
         '        {"name": "USE_VERTEX_AI", "value": "true"},\n'
         # Direct-provider surfaces (desktop_proxy, omni_relay) write their attempts to the
@@ -374,6 +542,48 @@ def with_backend_storage_env(payload: str) -> str:
     )
 
 
+def with_conversations_v3_env(payload: str) -> str:
+    """The conversations v3 rollout stage, first app build and task queue ride every product API host."""
+    for service in ('backend', 'backend-sync', 'backend-integration'):
+        payload = re.sub(
+            rf'("{service}":\s*\{{.*?"env":\s*\[)',
+            r'\1\n        {"name": "CONVERSATIONS_V3_STAGE", "value": "beta"},'
+            r'\n        {"name": "CONVERSATIONS_V3_FIRST_APP_BUILD", "value": ""},'
+            r'\n        {"name": "CONVERSATIONS_V3_TASKS_QUEUE", "value": "conversations-v3"},'
+            r'\n        {"name": "CONVERSATIONS_V3_BACKFILL_QUEUE", "value": "conversations-v3-backfill"},',
+            payload,
+            count=1,
+            flags=re.DOTALL,
+        )
+    return payload
+
+
+def with_object_lake_env(payload: str) -> str:
+    """Complete synthetic revisions with the six inert C1 lake bindings."""
+    manifest = yaml.safe_load((ROOT / 'deploy/runtime_env.yaml').read_text())
+    services = manifest['environments']['dev']['cloud_run']['services']
+    names = (
+        'BUCKET_OBJECT_LAKE',
+        'OBJECT_LAKE_KMS_KEY',
+        'OBJECT_LAKE_WRITE_ENABLED',
+        'OBJECT_LAKE_WRITE_PERCENT',
+        'OBJECT_LAKE_READ_ENABLED',
+        'OBJECT_LAKE_INLINE_MAX_BYTES',
+    )
+    for service in ('backend', 'backend-sync'):
+        entries = ',\n'.join(
+            json.dumps({'name': name, 'value': services[service]['env'][name]['value']}) for name in names
+        )
+        payload = re.sub(
+            rf'("{service}":\s*\{{.*?"env":\s*\[)',
+            lambda match: match.group(1) + '\n' + entries + ',',
+            payload,
+            count=1,
+            flags=re.DOTALL,
+        )
+    return payload
+
+
 def with_cloud_run_oauth_secrets(payload: str) -> str:
     # Keep integration snapshots complete while tests remove unrelated fields.
     payload = re.sub(
@@ -393,7 +603,6 @@ def with_cloud_run_oauth_secrets(payload: str) -> str:
     payload = with_wake_word_adjudication_env(payload)
     payload = with_backend_public_shared_chat_auth_env(payload)
     payload = with_audio_timeline_span_env(payload)
-    payload = payload
     payload = with_backend_storage_env(payload)
     payload = with_firestore_read_ledger_env(payload).replace(
         '"FIRESTORE_READ_LEDGER", "value": "1"},',
@@ -452,7 +661,11 @@ def with_cloud_run_oauth_secrets(payload: str) -> str:
     payload = re.sub(
         r'("backend(?:-sync|-sync-backfill|-integration)?":\s*\{.*?"env":\s*\[)',
         r'\1\n        {"name": "ACTION_ITEM_REFRESH_PRESERVE_ENABLED", "value": "true"},'
-        r'\n        {"name": "BATCH_HELD_DEAD_LETTER_ENABLED", "value": "true"},',
+        r'\n        {"name": "PROCESSING_ATTENTION_NON_RETRYABLE_EXPIRY_ENABLED", "value": "true"},'
+        r'\n        {"name": "HOME_LIVE_MEMBER_NOTES_BOUNDED_ENABLED", "value": "true"},'
+        r'\n        {"name": "BATCH_HELD_DEAD_LETTER_ENABLED", "value": "true"},'
+        r'\n        {"name": "BATCH_ACCOUNT_PRIVACY_WRITER_ENABLED", "value": "true"},'
+        r'\n        {"name": "CONVERSATION_TERMINAL_FAMILY_MODE", "value": "on"},',
         payload,
         flags=re.DOTALL,
     )
@@ -471,10 +684,18 @@ def with_cloud_run_oauth_secrets(payload: str) -> str:
         payload,
         flags=re.DOTALL,
     )
-    # Carry each host's explicit ledger bindings.
+    # Carry the role-specific intake switch and explicit ledger bindings.
     payload = re.sub(
         r'("(?P<service>backend(?:-sync|-sync-backfill|-integration)?)":\s*\{.*?"env":\s*\[)',
         lambda match: match.group(1)
+        + '\n        '
+        + json.dumps(
+            {
+                'name': 'BATCH_ALLOWANCE_INTAKE_PARK_ENABLED',
+                'value': ALLOWANCE_INTAKE_PARK_BY_SERVICE[match.group('service')],
+            }
+        )
+        + ','
         + '\n        '
         + json.dumps({'name': 'FIRESTORE_READ_LEDGER', 'value': '1'})
         + ',\n        '
@@ -491,10 +712,12 @@ def with_cloud_run_oauth_secrets(payload: str) -> str:
         flags=re.DOTALL,
     )
     # These gateway/secret fixtures still need the dedicated public v2 binding.
-    public_token = re.search(
+    token_match = re.search(
         r'apiKey = "(phc_[^"]+)"',
         (ROOT.parent / 'desktop/macos/Desktop/Sources/PostHogManager.swift').read_text(),
-    )[1]
+    )
+    assert token_match is not None
+    public_token = token_match[1]
     public_bindings = {
         'PROACTIVITY_V2_POSTHOG_TOKEN': public_token,
         'PROACTIVITY_V2_POSTHOG_HOST': 'https://us.posthog.com',
@@ -509,12 +732,7 @@ def with_cloud_run_oauth_secrets(payload: str) -> str:
     # Keep unrelated Cloud Run failure fixtures complete under the new dark gate.
     payload = re.sub(
         r'("backend-sync(?:-backfill)?":\s*\{.*?"env":\s*\[)',
-        r'\1\n        {"name": "SYNC_LEGACY_FRESH_ENABLED", "value": "false"},'
-        r'\n        {"name": "SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED", "value": "false"},'
-        r'\n        {"name": "SYNC_LEGACY_FRESH_UID_ALLOWLIST", "value": ""},'
-        r'\n        {"name": "SYNC_LEGACY_FRESH_PERCENT", "value": "0"},'
-        r'\n        {"name": "SYNC_LEGACY_FRESH_HOURLY_TOKENS", "value": "60"},'
-        r'\n        {"name": "SYNC_LEGACY_FRESH_BURST_TOKENS", "value": "10"},',
+        r'\1\n        {"name": "SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED", "value": "false"},',
         payload,
         flags=re.DOTALL,
     )
@@ -528,6 +746,12 @@ def with_cloud_run_oauth_secrets(payload: str) -> str:
             '        ' + json.dumps({'name': name, 'value': bindings[name]['value']})
             for name in (
                 'HOSTED_LID_API_URL',
+                'PUSHER_RECORD_CLOSE_NOTIFY_ENABLED',
+                'PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_PERCENT',
+                'PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_UID_SHA256S',
+                'PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED',
+                'BATCH_INPUT_EXPIRING_ENABLED',
+                'BATCH_PROJECTION_OUTBOX',
                 'DREAM_AGENT_ELIGIBILITY',
                 'DREAM_ON_DEMAND_ENABLED',
                 'DEMAND_PROCESSING_ENABLED',
@@ -573,7 +797,9 @@ def with_cloud_run_oauth_secrets(payload: str) -> str:
         count=1,
         flags=re.DOTALL,
     )
-    return with_firestore_read_runtime_env(payload)
+    # Prepending lake entries earlier hides the leading GOOGLE_CLOUD_PROJECT
+    # anchor used by the translation and sync fixture helpers above.
+    return with_conversations_v3_env(with_object_lake_env(with_firestore_read_runtime_env(payload)))
 
 
 def validate_cloud_run_workflows_only(validator, *, env: str, manifest_path: Path, workflow_root: Path | None = None):
@@ -628,6 +854,61 @@ def test_repo_prod_gke_values_match_manifest():
     errors = validator.validate_runtime_env(env='prod')
 
     assert errors == []
+
+
+@pytest.mark.parametrize('stage', ['dev', 'prod'])
+@pytest.mark.parametrize('enabled,percent', [('true', '0'), ('false', '1'), ('true', '100')])
+def test_runtime_manifest_lake_writes_allow_dev_but_require_c4_for_prod(tmp_path, stage, enabled, percent):
+    validator = load_validator()
+    manifest = yaml.safe_load((ROOT / 'deploy/runtime_env.yaml').read_text())
+    bindings = manifest['environments'][stage]['gke']['pusher']['env']
+    for name, value in {
+        'BUCKET_OBJECT_LAKE': 'bound-lake',
+        'OBJECT_LAKE_KMS_KEY': 'projects/p/locations/l/keyRings/r/cryptoKeys/k',
+        'OBJECT_LAKE_WRITE_ENABLED': enabled,
+        'OBJECT_LAKE_WRITE_PERCENT': percent,
+    }.items():
+        bindings[name]['value'] = value
+    # Keep the rendered GKE fixture aligned; this test changes admission, not
+    # the independent manifest-versus-Helm drift contract.
+    host = manifest['environments'][stage]['gke']['pusher']
+    values = yaml.safe_load((ROOT.parent / host['values_file']).read_text())
+    for entry in values['env']:
+        if entry['name'] in (
+            'BUCKET_OBJECT_LAKE',
+            'OBJECT_LAKE_KMS_KEY',
+            'OBJECT_LAKE_WRITE_ENABLED',
+            'OBJECT_LAKE_WRITE_PERCENT',
+        ):
+            entry['value'] = bindings[entry['name']]['value']
+    values_path = tmp_path / 'values.yaml'
+    write_yaml(values_path, values)
+    host['values_file'] = str(values_path)
+    path = tmp_path / 'runtime_env.yaml'
+    write_yaml(path, manifest)
+    errors = validator.validate_runtime_env(env=stage, manifest_path=path)
+    if stage == 'dev':
+        assert errors == []
+    else:
+        assert any('C4 wipe-coverage' in str(error) for error in errors)
+
+
+@pytest.mark.parametrize('missing', ['BUCKET_OBJECT_LAKE', 'OBJECT_LAKE_KMS_KEY'])
+def test_dev_lake_writes_require_real_bindings(tmp_path, missing):
+    validator = load_validator()
+    manifest = yaml.safe_load((ROOT / 'deploy/runtime_env.yaml').read_text())
+    bindings = manifest['environments']['dev']['gke']['pusher']['env']
+    for name, value in {
+        'BUCKET_OBJECT_LAKE': 'bound-lake',
+        'OBJECT_LAKE_KMS_KEY': 'projects/p/locations/l/keyRings/r/cryptoKeys/k',
+        'OBJECT_LAKE_WRITE_ENABLED': 'true',
+        'OBJECT_LAKE_WRITE_PERCENT': '1',
+    }.items():
+        bindings[name]['value'] = '' if name == missing else value
+    path = tmp_path / 'runtime_env.yaml'
+    write_yaml(path, manifest)
+    errors = validator.validate_runtime_env(env='dev', manifest_path=path)
+    assert any(f'enabled writes require a real {missing}' in str(error) for error in errors)
 
 
 def test_translation_cache_ttls_are_set_on_cloud_run_backend_services_in_both_envs():
@@ -1741,6 +2022,7 @@ _MISSING_GATEWAY_CLOUD_RUN_STATE = '''
         {"name": "VAD_CACHE_TTL_SECONDS", "value": "86400"},
         {"name": "REVIEW_SURFACE_MODE", "value": "on"},
         {"name": "CONVERSATION_SMART_MERGE_FLATTEN_ENABLED", "value": "true"},
+        {"name": "SYNC_BRIDGE_CONTAINED_DONOR_MERGE_ENABLED", "value": "off"},
         {"name": "OMI_SHAPED_AGENT_MODE", "value": "on"},
         {"name": "FIREBASE_SIGNER_SERVICE_ACCOUNT", "value": "dev-auth-token-signer@based-hardware.iam.gserviceaccount.com"},
         {"name": "CONVERSATION_REPROCESS_RESULT_CONTRACT_ENABLED", "value": "false"},
@@ -1764,6 +2046,7 @@ _MISSING_GATEWAY_CLOUD_RUN_STATE = '''
         {"name": "TRANSLATION_NEGATIVE_CACHE_TTL", "value": "21600"},
         {"name": "VAD_CACHE_TTL_SECONDS", "value": "86400"},
         {"name": "CONVERSATION_SMART_MERGE_FLATTEN_ENABLED", "value": "true"},
+        {"name": "SYNC_BRIDGE_CONTAINED_DONOR_MERGE_ENABLED", "value": "off"},
         {"name": "OMI_SHAPED_AGENT_MODE", "value": "on"},
         {"name": "OMI_LLM_GATEWAY_URL", "value": "http://172.16.63.232"},
         {"name": "PUBLIC_SHARED_CONVERSATION_CHAT_MODE", "value": "gateway"},
@@ -1782,6 +2065,7 @@ _MISSING_GATEWAY_CLOUD_RUN_STATE = '''
         {"name": "TRANSLATION_CACHE_TTL", "value": "86400"},
         {"name": "TRANSLATION_NEGATIVE_CACHE_TTL", "value": "21600"},
         {"name": "CONVERSATION_SMART_MERGE_FLATTEN_ENABLED", "value": "true"},
+        {"name": "SYNC_BRIDGE_CONTAINED_DONOR_MERGE_ENABLED", "value": "off"},
         {"name": "OMI_SHAPED_AGENT_MODE", "value": "on"},
         {"name": "OMI_LLM_GATEWAY_URL", "value": "http://172.16.63.232"},
         {"name": "PUBLIC_SHARED_CONVERSATION_CHAT_MODE", "value": "gateway"},
@@ -1797,61 +2081,42 @@ _MISSING_GATEWAY_CLOUD_RUN_STATE = '''
 '''
 
 
-def test_cloud_run_state_reports_missing_gateway_url(tmp_path):
+@pytest.fixture(scope='module')
+def missing_gateway_cloud_run_state():
+    # Normalize the complete synthetic revision once; the test still mutates
+    # independent on-disk JSON snapshots and runs the full real validator.
+    return with_cloud_run_oauth_secrets(_MISSING_GATEWAY_CLOUD_RUN_STATE)
+
+
+@pytest.mark.parametrize(
+    'missing',
+    [
+        None,
+        'BATCH_ACCOUNT_PRIVACY_WRITER_ENABLED',
+        'BATCH_INPUT_EXPIRING_ENABLED',
+        'BATCH_PROJECTION_OUTBOX',
+        'BATCH_HELD_DEAD_LETTER_ENABLED',
+        'SYNC_LINEAGE_LIVE_DEDUPE_ENABLED',
+        'SYNC_WAL_AUDIO_COVERAGE_ENABLED',
+    ],
+)
+def test_cloud_run_state_reports_missing_gateway_url(tmp_path, missing_gateway_cloud_run_state, missing):
     validator = load_validator()
+    state = missing_gateway_cloud_run_state
+    expected = {('cloud_run/backend', 'missing env OMI_LLM_GATEWAY_URL')}
+    if missing is not None:
+        marker = f'{{"name": "{missing}", "value": "true"}},\n        '
+        assert marker in state
+        state = state.replace(marker, '')
+        expected.update(
+            (f'cloud_run/{host}', f'missing env {missing}')
+            for host in ('backend', 'backend-sync', 'backend-integration')
+        )
     state_path = tmp_path / 'cloud_run_state.json'
-    state_path.write_text(
-        with_cloud_run_oauth_secrets(_MISSING_GATEWAY_CLOUD_RUN_STATE),
-        encoding='utf-8',
-    )
-
+    state_path.write_text(state, encoding='utf-8')
     errors = validator.validate_runtime_env(env='dev', cloud_run_state_path=state_path)
-
-    assert [error.message for error in errors] == ['missing env OMI_LLM_GATEWAY_URL']
-    assert errors[0].scope == 'cloud_run/backend'
-
-    # A complete synthetic revision carries the new kill switch. Removing it
-    # must still fail validation; completing the fixture must not weaken the guard.
-    state_path.write_text(
-        with_cloud_run_oauth_secrets(_MISSING_GATEWAY_CLOUD_RUN_STATE).replace(
-            '{"name": "BATCH_HELD_DEAD_LETTER_ENABLED", "value": "true"},\n        ', ''
-        ),
-        encoding='utf-8',
-    )
-    errors = validator.validate_runtime_env(env='dev', cloud_run_state_path=state_path)
-    assert {(error.scope, error.message) for error in errors} == {
-        ('cloud_run/backend', 'missing env BATCH_HELD_DEAD_LETTER_ENABLED'),
-        ('cloud_run/backend-sync', 'missing env BATCH_HELD_DEAD_LETTER_ENABLED'),
-        ('cloud_run/backend-integration', 'missing env BATCH_HELD_DEAD_LETTER_ENABLED'),
-        ('cloud_run/backend', 'missing env OMI_LLM_GATEWAY_URL'),
-    }
-
-    state_path.write_text(
-        with_cloud_run_oauth_secrets(_MISSING_GATEWAY_CLOUD_RUN_STATE).replace(
-            '{"name": "SYNC_LINEAGE_LIVE_DEDUPE_ENABLED", "value": "true"},\n        ', ''
-        ),
-        encoding='utf-8',
-    )
-    errors = validator.validate_runtime_env(env='dev', cloud_run_state_path=state_path)
-    assert {(error.scope, error.message) for error in errors} == {
-        ('cloud_run/backend', 'missing env SYNC_LINEAGE_LIVE_DEDUPE_ENABLED'),
-        ('cloud_run/backend-sync', 'missing env SYNC_LINEAGE_LIVE_DEDUPE_ENABLED'),
-        ('cloud_run/backend-integration', 'missing env SYNC_LINEAGE_LIVE_DEDUPE_ENABLED'),
-        ('cloud_run/backend', 'missing env OMI_LLM_GATEWAY_URL'),
-    }
-    state_path.write_text(
-        with_cloud_run_oauth_secrets(_MISSING_GATEWAY_CLOUD_RUN_STATE).replace(
-            '{"name": "SYNC_WAL_AUDIO_COVERAGE_ENABLED", "value": "true"},\n        ', ''
-        ),
-        encoding='utf-8',
-    )
-    errors = validator.validate_runtime_env(env='dev', cloud_run_state_path=state_path)
-    assert {(error.scope, error.message) for error in errors} == {
-        ('cloud_run/backend', 'missing env SYNC_WAL_AUDIO_COVERAGE_ENABLED'),
-        ('cloud_run/backend-sync', 'missing env SYNC_WAL_AUDIO_COVERAGE_ENABLED'),
-        ('cloud_run/backend-integration', 'missing env SYNC_WAL_AUDIO_COVERAGE_ENABLED'),
-        ('cloud_run/backend', 'missing env OMI_LLM_GATEWAY_URL'),
-    }
+    assert len(errors) == len(expected)
+    assert {(error.scope, error.message) for error in errors} == expected
 
 
 def test_cloud_run_workflow_reports_missing_gateway_url(tmp_path):
@@ -2083,6 +2348,7 @@ def test_cloud_run_workflow_validation_uses_custom_manifest_for_runtime_env_outp
         {"name": "VAD_CACHE_TTL_SECONDS", "value": "86400"},
         {"name": "REVIEW_SURFACE_MODE", "value": "on"},
         {"name": "CONVERSATION_SMART_MERGE_FLATTEN_ENABLED", "value": "true"},
+        {"name": "SYNC_BRIDGE_CONTAINED_DONOR_MERGE_ENABLED", "value": "off"},
         {"name": "OMI_SHAPED_AGENT_MODE", "value": "on"},
         {"name": "FIREBASE_SIGNER_SERVICE_ACCOUNT", "value": "dev-auth-token-signer@based-hardware.iam.gserviceaccount.com"},
         {"name": "CONVERSATION_REPROCESS_RESULT_CONTRACT_ENABLED", "value": "false"},
@@ -2107,6 +2373,7 @@ def test_cloud_run_workflow_validation_uses_custom_manifest_for_runtime_env_outp
         {"name": "TRANSLATION_NEGATIVE_CACHE_TTL", "value": "21600"},
         {"name": "VAD_CACHE_TTL_SECONDS", "value": "86400"},
         {"name": "CONVERSATION_SMART_MERGE_FLATTEN_ENABLED", "value": "true"},
+        {"name": "SYNC_BRIDGE_CONTAINED_DONOR_MERGE_ENABLED", "value": "off"},
         {"name": "OMI_SHAPED_AGENT_MODE", "value": "on"},
         {"name": "OMI_LLM_GATEWAY_URL", "value": "http://172.16.63.232"},
         {"name": "PUBLIC_SHARED_CONVERSATION_CHAT_MODE", "value": "gateway"},
@@ -2125,6 +2392,7 @@ def test_cloud_run_workflow_validation_uses_custom_manifest_for_runtime_env_outp
         {"name": "TRANSLATION_CACHE_TTL", "value": "86400"},
         {"name": "TRANSLATION_NEGATIVE_CACHE_TTL", "value": "21600"},
         {"name": "CONVERSATION_SMART_MERGE_FLATTEN_ENABLED", "value": "true"},
+        {"name": "SYNC_BRIDGE_CONTAINED_DONOR_MERGE_ENABLED", "value": "off"},
         {"name": "OMI_SHAPED_AGENT_MODE", "value": "on"},
         {"name": "OMI_LLM_GATEWAY_URL", "value": "http://172.16.63.232"},
         {"name": "PUBLIC_SHARED_CONVERSATION_CHAT_MODE", "value": "gateway"},
@@ -2165,6 +2433,7 @@ def test_cloud_run_state_rejects_old_secret_versions(tmp_path):
         {"name": "VAD_CACHE_TTL_SECONDS", "value": "86400"},
         {"name": "REVIEW_SURFACE_MODE", "value": "on"},
         {"name": "CONVERSATION_SMART_MERGE_FLATTEN_ENABLED", "value": "true"},
+        {"name": "SYNC_BRIDGE_CONTAINED_DONOR_MERGE_ENABLED", "value": "off"},
         {"name": "OMI_SHAPED_AGENT_MODE", "value": "on"},
         {"name": "FIREBASE_SIGNER_SERVICE_ACCOUNT", "value": "dev-auth-token-signer@based-hardware.iam.gserviceaccount.com"},
         {"name": "CONVERSATION_REPROCESS_RESULT_CONTRACT_ENABLED", "value": "false"},
@@ -2188,6 +2457,7 @@ def test_cloud_run_state_rejects_old_secret_versions(tmp_path):
         {"name": "TRANSLATION_NEGATIVE_CACHE_TTL", "value": "21600"},
         {"name": "VAD_CACHE_TTL_SECONDS", "value": "86400"},
         {"name": "CONVERSATION_SMART_MERGE_FLATTEN_ENABLED", "value": "true"},
+        {"name": "SYNC_BRIDGE_CONTAINED_DONOR_MERGE_ENABLED", "value": "off"},
         {"name": "OMI_SHAPED_AGENT_MODE", "value": "on"},
         {"name": "OMI_LLM_GATEWAY_URL", "value": "http://172.16.63.232"},
         {"name": "OMI_LLM_CHAT_AGENT_ROUTE", "value": "gateway"},
@@ -2205,6 +2475,7 @@ def test_cloud_run_state_rejects_old_secret_versions(tmp_path):
         {"name": "TRANSLATION_CACHE_TTL", "value": "86400"},
         {"name": "TRANSLATION_NEGATIVE_CACHE_TTL", "value": "21600"},
         {"name": "CONVERSATION_SMART_MERGE_FLATTEN_ENABLED", "value": "true"},
+        {"name": "SYNC_BRIDGE_CONTAINED_DONOR_MERGE_ENABLED", "value": "off"},
         {"name": "OMI_SHAPED_AGENT_MODE", "value": "on"},
         {"name": "OMI_LLM_GATEWAY_URL", "value": "http://172.16.63.232"},
         {"name": "OMI_LLM_CHAT_AGENT_ROUTE", "value": "gateway"},
@@ -2386,11 +2657,46 @@ def test_non_empty_literal_env_still_rejects_cloud_run_entry_without_value():
     assert errors[0].message == "env MEMORY_MODE value mismatch: expected 'off'"
 
 
-def test_backend_listen_chart_only_workflow_preserves_runtime_project():
+def test_backend_listen_chart_only_workflow_preserves_runtime_project(tmp_path):
+    import subprocess
+
     workflow_path = ROOT.parent / '.github/workflows/gcp_backend_listen_helm.yml'
     workflow_text = workflow_path.read_text(encoding='utf-8')
-
-    assert workflow_text.count('--set runtimeGcpProjectId=${{ vars.RUNTIME_GCP_PROJECT_ID }}') == 2
+    workflow = yaml.safe_load(workflow_text)
+    steps = {s['name']: s for s in workflow['jobs']['helm-upgrade']['steps']}
+    dry_run = steps['Helm diff (dry run)']['run']
+    upgrade = steps['Upgrade backend-listen Helm chart']['run']
+    assert dry_run.count('--runtime-project "${{ vars.RUNTIME_GCP_PROJECT_ID }}"') == 1
+    assert 'DRY_RUN=("${DEPLOY_ARGV[@]}" --dry-run=client)' in dry_run
+    assert 'mapfile -t DEPLOY_ARGV < "$RUNNER_TEMP/listen-deploy.argv"' in upgrade
+    assert '"${DEPLOY_ARGV[@]}"' in upgrade
+    # Exercise the actual shared builder with distinct control/runtime projects;
+    # matching two old literal strings would miss a swapped or dropped binding.
+    argv_file = tmp_path / 'listen.argv'
+    subprocess.run(
+        [
+            sys.executable,
+            str(ROOT.parent / '.github/scripts/listen_overlay_evidence.py'),
+            'argv',
+            '--output',
+            str(argv_file),
+            '--image-tag',
+            'abcdef1',
+            '--environment',
+            'prod',
+            '--project',
+            'infra-control',
+            '--runtime-project',
+            'based-hardware',
+        ],
+        check=True,
+        capture_output=True,
+        timeout=10,
+    )
+    argv = argv_file.read_text().splitlines()
+    assert 'gcpProjectId=infra-control' in argv
+    assert 'runtimeGcpProjectId=based-hardware' in argv
+    assert 'runtimeGcpProjectId=infra-control' not in argv
 
 
 def test_repo_rendered_cloud_run_artifact_matches_manifest(tmp_path, monkeypatch):
@@ -3044,7 +3350,9 @@ def test_fetch_live_cloud_run_state_validates_services_only(monkeypatch):
 
 
 def test_live_chain_ramp_accepts_policy_tokens_unconditionally():
-    from scripts.runtime_env_validation.manifest import _validate_stt_serving_model_policy
+    from scripts.runtime_env_validation.manifest import (
+        _validate_stt_serving_model_policy,  # pyright: ignore[reportPrivateUsage]
+    )
 
     env_map = {
         'STT_SERVICE_MODELS': {'value': 'parakeet-window,soniox'},
@@ -3056,7 +3364,9 @@ def test_live_chain_ramp_accepts_policy_tokens_unconditionally():
 
 
 def test_non_listener_stt_models_accept_a_policy_ordered_subset():
-    from scripts.runtime_env_validation.manifest import _validate_stt_serving_model_policy
+    from scripts.runtime_env_validation.manifest import (
+        _validate_stt_serving_model_policy,  # pyright: ignore[reportPrivateUsage]
+    )
 
     env_map = {'STT_SERVICE_MODELS': {'value': 'modulate-velma-2,soniox'}}
     config = {'gke': {'pusher': {'env': env_map}}}
@@ -3178,6 +3488,7 @@ def test_transcription_shadow_prod_scope_matches_generated_manifest_overlay_and_
     manifest = validator._load_yaml(validator.DEFAULT_MANIFEST)
     prod = validator._get_env_config(manifest, 'prod')
     overlay = validator._load_yaml(ROOT / 'deploy/runtime_env/prod.overlay.yaml')['overlay']
+    selected = {}
     for source in (prod, overlay):
         pusher = source['gke']['pusher']['env']
         selected = {key: pusher[key]['value'] for key in controls}
@@ -3291,32 +3602,17 @@ def test_shaped_notes_enabled_on_every_process_conversation_cohost():
             assert overlay_blocks[scope]['OMI_SHAPED_AGENT_MODE'] == expected, f'{env_name} overlay {scope}'
 
 
-def test_production_speaker_match_scores_on_all_computing_and_persisting_hosts():
-    # main.py serves capture, sync, developer processing and reprocess on all
-    # four Cloud Run copies. pusher runs the same finalizer; desktop_backend
-    # and the cron jobs never compute/persist these snapshots.
-    expected = {
-        'gke/backend-listen',
-        'gke/pusher',
-        'cloud_run/backend',
-        'cloud_run/backend-sync',
-        'cloud_run/backend-sync-backfill',
-        'cloud_run/backend-integration',
-    }
+def test_graduated_speaker_match_scores_have_no_runtime_knob():
     validator = load_validator()
     prod = validator._get_env_config(validator._load_yaml(validator.DEFAULT_MANIFEST), 'prod')
     overlay = validator._load_yaml(ROOT / 'deploy/runtime_env/prod.overlay.yaml')['overlay']
     for source in (prod, overlay):
-        declared = {scope for scope, env in _manifest_env_blocks(source) if 'SPEAKER_MATCH_SCORES_ENABLED' in env}
-        assert declared == expected
-        for scope, env in _manifest_env_blocks(source):
-            if scope in expected:
-                assert env['SPEAKER_MATCH_SCORES_ENABLED'] == {'value': 'true', 'category': 'rollout'}
+        assert all('SPEAKER_MATCH_SCORES_ENABLED' not in env for _, env in _manifest_env_blocks(source))
     for chart in (
         ROOT / 'charts/backend-listen/prod_omi_backend_listen_values.yaml',
         ROOT / 'charts/pusher/prod_omi_pusher_values.yaml',
     ):
-        assert parse_env_entries(chart.read_text())['SPEAKER_MATCH_SCORES_ENABLED'].value == 'true'
+        assert 'SPEAKER_MATCH_SCORES_ENABLED' not in parse_env_entries(chart.read_text())
 
 
 def _posthog_billing_key_bindings(node, path='manifest'):
@@ -3434,10 +3730,11 @@ def test_proactivity_v2_posthog_token_is_required_only_off_the_omi_flag_store():
     gateway_env = env_config['llm_gateway']['env']
     assert gateway_env['OMI_FLAGS_SOURCE']['value'] == 'omi'
     assert 'PROACTIVITY_V2_POSTHOG_TOKEN' not in gateway_env
-    assert manifest_validation._validate_proactivity_v2_flag_hosts('prod', env_config) == []
+    check_hosts = manifest_validation._validate_proactivity_v2_flag_hosts  # pyright: ignore[reportPrivateUsage]
+    assert check_hosts('prod', env_config) == []
 
     gateway_env['OMI_FLAGS_SOURCE']['value'] = 'dual'
-    errors = manifest_validation._validate_proactivity_v2_flag_hosts('prod', env_config)
+    errors = check_hosts('prod', env_config)
     assert [error.scope for error in errors] == ['prod/llm_gateway']
 
 
@@ -3455,3 +3752,512 @@ def test_guarded_long_recovery_stays_disabled_and_hours_are_inert():
             env = services[name]['env']
             assert env['SYNC_BACKFILL_GLOBAL_DAILY_HOURS']['value'] == '1665'
             assert env.get('SYNC_BACKFILL_ADMISSION_LIMITS', {}).get('value', 'false') == 'false'
+
+
+def _settings_named(node, key):
+    if isinstance(node, dict):
+        for name, child in node.items():
+            if name == key:
+                yield child
+            else:
+                yield from _settings_named(child, key)
+    elif isinstance(node, list):
+        for child in node:
+            yield from _settings_named(child, key)
+
+
+def test_prod_sync_backfill_lookback_is_sixty_days_and_no_release_reach_undercuts_it():
+    # The lookback is checked once, at upload admission; a backlog that older app builds
+    # or slow drains cannot clear within the window gets a terminal 422 on the phone.
+    # Prod admits 60 days. The batch backlog-release reach (capture-age based) must never
+    # hold back what admission accepted, on any prod surface (Cloud Run services and
+    # jobs, GKE). This covers the env seed only: the effective reach lives on the
+    # Firestore gate row, whose code floor is MIN_REACH_SECONDS (30 days).
+    manifest = yaml.safe_load((ROOT / 'deploy/runtime_env.yaml').read_text())
+    prod = manifest['environments']['prod']
+    services = prod['cloud_run']['services']
+    lookback = 60 * 86400
+    for name in ('backend-sync', 'backend-sync-backfill'):
+        assert services[name]['env']['SYNC_BACKFILL_MAX_AGE_SECONDS']['value'] == str(lookback)
+    assert len(list(_settings_named(prod, 'SYNC_BACKFILL_MAX_AGE_SECONDS'))) >= 2  # walker reaches service env
+    for setting in _settings_named(prod, 'BATCH_PIPELINE_BACKLOG_RELEASE_REACH_SECONDS'):
+        reach = int(setting.get('value', '0') if isinstance(setting, dict) else setting)
+        assert reach == 0 or reach >= lookback
+
+
+def test_prod_unlimited_backfill_day_cap_is_on_at_24_hours_on_every_declaring_surface():
+    # Enforced only at sync upload (retryable 503 backfill_capacity); dev keeps it off.
+    manifest = yaml.safe_load((ROOT / 'deploy/runtime_env.yaml').read_text())
+    for stage, expected in (('prod', 'true'), ('dev', 'false')):
+        environment = manifest['environments'][stage]
+        enabled = list(_settings_named(environment, 'UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED'))
+        hours = list(_settings_named(environment, 'UNLIMITED_V2_BACKFILL_HOURS_CAP_HOURS'))
+        assert len(enabled) == len(hours) >= 5
+        assert {setting['value'] for setting in enabled} == {expected}
+        assert {setting['value'] for setting in hours} == {'24'}
+    services = manifest['environments']['prod']['cloud_run']['services']
+    for name in ('backend-sync', 'backend-sync-backfill'):
+        assert services[name]['env']['UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED']['value'] == 'true'
+
+
+# M7: compose and validate declarations offline; no cloud clients or rollout writes.
+@pytest.fixture(scope='module')
+def read_lever_sources():
+    return read_lever_manifest.collect_sources()
+
+
+def test_generated_read_lever_manifest_is_current_and_records_unresolved_sources():
+    generated = read_lever_manifest.build_manifest()
+    assert json.loads(read_lever_manifest.OUTPUT.read_text()) == generated
+    notes = '\n'.join(generated['notes'])
+    assert 'RESOLVED: prod chart-vs-CR batch_timeliness_leader is 100' in notes
+    assert 'UNRESOLVED: README-vs-base triple' in notes
+    for lever in ('memory_list_index_window', 'people_scan_dedupe', 'finjob_candidate_queries'):
+        assert lever in notes
+    prod_worker = generated['surfaces']['chart/prod/batch-pipeline-worker']
+    integration = generated['surfaces']['runtime/prod/cloud_run/services/backend-integration']
+    assert prod_worker['explicit'] == dict(
+        integration['explicit'],
+        usage_month_cache=0,
+        usage_month_total=0,
+        bpp_decision_cache=100,
+        privacy_checks_shadow=10,
+        bpp_owner_memo_enforce=0,
+    )
+    assert prod_worker['effective']['bpp_decision_cache'] == 100
+    assert prod_worker['effective']['batch_timeliness_leader'] == 100
+    for service in ('backend', 'backend-sync', 'backend-sync-backfill', 'backend-integration'):
+        surface = generated['surfaces'][f'runtime/prod/cloud_run/services/{service}']
+        assert surface['explicit']['bpp_decision_cache'] == 0
+    dev_worker = generated['surfaces']['chart/dev/batch-pipeline-worker']
+    assert dev_worker['explicit'] == {}
+    assert dev_worker['inheritance']['status'] == 'UNRESOLVED'
+    assert (
+        generated['surfaces']['runtime/prod/cloud_run/services/backend']['effective']['batch_timeliness_leader'] == 100
+    )
+
+
+@pytest.mark.parametrize('lever', ['memory_list_index_window', 'people_scan_dedupe', 'finjob_candidate_queries', 'all'])
+@pytest.mark.parametrize('source', ['readme', 'base'])
+def test_read_lever_manifest_rejects_silently_resolved_readme_discrepancy(tmp_path, lever, source):
+    levers = read_lever_manifest.README_TRAIN_LEVERS if lever == 'all' else (lever,)
+    kwargs = {}
+    if source == 'readme':
+        target = tmp_path / 'README.md'
+        text = (ROOT / 'deploy/runtime_env/README.md').read_text()
+        for key in levers:
+            text = text.replace(f'`{key}:0`', f'`{key}:100`')
+        kwargs['readme_path'] = target
+    else:
+        target = tmp_path / '_base.yaml'
+        text = read_lever_manifest.composer.DEFAULT_BASE.read_text()
+        for key in levers:
+            text = text.replace(f'"{key}":100', f'"{key}":0')
+        kwargs['base_path'] = target
+    target.write_text(text)
+    # Real file extraction must detect resolution from either source, including
+    # partial resolution of the triple, even though the unchanged note remains.
+    with pytest.raises(ValueError, match='README and base now agree.*stale UNRESOLVED'):
+        read_lever_manifest.build_manifest(today=date(2026, 11, 11), **kwargs)
+
+
+def test_read_lever_manifest_rejects_missing_note_while_readme_disagrees(monkeypatch):
+    notes = [
+        note
+        for note in read_lever_manifest.UNRESOLVED_NOTES
+        if not note.startswith(read_lever_manifest.README_TRIPLE_NOTE_PREFIX)
+    ]
+    monkeypatch.setattr(read_lever_manifest, 'UNRESOLVED_NOTES', notes)
+    with pytest.raises(ValueError, match='source disagreement requires its UNRESOLVED note'):
+        read_lever_manifest.build_manifest(today=date(2026, 11, 11))
+
+
+@pytest.mark.parametrize('lever', ['memory_list_index_window', 'people_scan_dedupe', 'finjob_candidate_queries'])
+@pytest.mark.parametrize('mutation', ['missing', 'duplicate'])
+def test_read_lever_readme_comparison_rejects_missing_or_ambiguous_claims(tmp_path, lever, mutation):
+    target = tmp_path / 'README.md'
+    text = (ROOT / 'deploy/runtime_env/README.md').read_text()
+    claim = f'`{lever}:0`'
+    text = text.replace(claim, lever if mutation == 'missing' else f'{claim} {claim}')
+    target.write_text(text)
+    with pytest.raises(ValueError, match=f'exactly one historical train claim for {lever}'):
+        read_lever_manifest.build_manifest(today=date(2026, 11, 11), readme_path=target)
+
+
+def test_read_lever_evidence_metadata_lives_only_in_generator(read_lever_sources):
+    base = read_lever_manifest.composer._load_yaml(read_lever_manifest.composer.DEFAULT_BASE)
+    assert set(base[read_lever_manifest.POLICY_KEY]) == {'lever_expiry'}
+    policy, _, _ = read_lever_sources
+    assert policy['reviewed_inheritance'] == read_lever_manifest.REVIEWED_INHERITANCE
+    assert policy['unresolved_notes'] == read_lever_manifest.UNRESOLVED_NOTES
+    # This inspects current source metadata; fixed-date expiry boundary cases are separate below.
+    generated = read_lever_manifest.build_manifest()
+    assert generated['notes'] == [*read_lever_manifest.RESOLVED_NOTES, *read_lever_manifest.UNRESOLVED_NOTES]
+    for surface, annotation in read_lever_manifest.REVIEWED_INHERITANCE.items():
+        assert generated['surfaces'][surface]['inheritance'] == annotation
+
+
+@pytest.mark.parametrize('key', ['reviewed_inheritance', 'unresolved_notes'])
+def test_read_lever_policy_rejects_evidence_metadata_in_base(tmp_path, key):
+    target = tmp_path / '_base.yaml'
+    target.write_text(read_lever_manifest.composer.DEFAULT_BASE.read_text() + f'  {key}: {{}}\n')
+    with pytest.raises(ValueError, match='firestore_read_lever_policy must contain only lever_expiry'):
+        read_lever_manifest.collect_sources(base_path=target)
+
+
+@pytest.mark.parametrize('days', [0, 7])
+def test_read_lever_expiry_accepts_only_matching_bounded_approvals(days):
+    expiry = {
+        'surface': {'listen_poll': {'value': 5, 'expires': (date(2026, 11, 11) + timedelta(days=days)).isoformat()}}
+    }
+    assert read_lever_manifest.expiry_errors({'surface': {'listen_poll': 5}}, expiry, today=date(2026, 11, 11)) == []
+
+
+@pytest.mark.parametrize(
+    'entry',
+    [
+        None,
+        {},
+        {'value': 10, 'expires': '2026-11-17'},
+        {'value': True, 'expires': '2026-11-17'},
+        {'value': 5},
+        {'value': 5, 'expires': 'tomorrow'},
+        {'value': 5, 'expires': '2026-11-31'},
+        {'value': 5, 'expires': '20261117'},
+        {'value': 5, 'expires': date(2026, 11, 17)},
+        {'value': 5, 'expires': '2026-11-10'},
+        {'value': 5, 'expires': '2026-11-19'},
+    ],
+)
+def test_read_lever_expiry_rejects_missing_malformed_stale_or_unbounded(entry):
+    assert read_lever_manifest.expiry_errors(
+        {'surface': {'listen_poll': 5}}, {'surface': {'listen_poll': entry}}, today=date(2026, 11, 11)
+    )
+
+
+@pytest.mark.parametrize('expiry', [None, [], {'surface': []}, {'surface': {'dead_lever': {}}}])
+def test_read_lever_expiry_rejects_malformed_map(expiry):
+    assert read_lever_manifest.expiry_errors({'surface': {'listen_poll': 5}}, expiry, today=date(2026, 11, 11))
+
+
+@pytest.mark.parametrize(
+    'values',
+    [{'dead_lever': 100}, {'listen_poll': True}, {'listen_poll': -1}, {'listen_poll': 101}, {'listen_poll': 5.5}],
+)
+def test_read_lever_rejects_unknown_keys_and_invalid_percentages(values):
+    with pytest.raises(ValueError):
+        read_lever_manifest.parse_levers(json.dumps(values), 'synthetic')
+
+
+def test_read_lever_partial_code_default_cannot_hide_behind_chart_inheritance(monkeypatch):
+    monkeypatch.setitem(read_lever_manifest.DEFAULT_PERCENTAGES, 'listen_poll', 5)
+    sources = {'code/defaults': dict(read_lever_manifest.DEFAULT_PERCENTAGES), 'chart/dev/batch-pipeline-worker': {}}
+    errors = read_lever_manifest.expiry_errors(sources, {}, today=date(2026, 11, 11))
+    assert any('code/defaults/listen_poll=5' in error for error in errors)
+    assert any('chart/dev/batch-pipeline-worker/listen_poll=5' in error for error in errors)
+
+
+@pytest.mark.parametrize(
+    ('prefix', 'has_partials'),
+    [
+        ('base/', True),
+        ('overlay/prod/', True),
+        ('runtime/dev/', True),
+        ('runtime/prod/', True),
+        ('chart/dev/', True),
+        ('chart/prod/', True),
+    ],
+)
+def test_read_lever_expiry_covers_every_partial_source_surface(read_lever_sources, prefix, has_partials):
+    policy, sources, _ = read_lever_sources
+    selected = {surface: values for surface, values in sources.items() if surface.startswith(prefix)}
+    assert selected
+    for surface, values in selected.items():
+        partials = {lever: value for lever, value in values.items() if 0 < value < 100}
+        for lever in partials:
+            expiry = copy.deepcopy(policy['lever_expiry'])
+            del expiry[surface][lever]
+            errors = read_lever_manifest.expiry_errors(sources, expiry, today=date(2026, 11, 11))
+            assert any(f'{surface}/{lever}=' in error for error in errors)
+    assert any(0 < value < 100 for values in selected.values() for value in values.values()) == has_partials
+
+
+@pytest.mark.parametrize(
+    'surface',
+    [
+        'runtime/prod/cloud_run/services/backend',
+        'runtime/dev/gke/backend-listen',
+        'chart/prod/backend-listen',
+        'chart/prod/batch-pipeline-worker',
+        'chart/dev/pusher',
+    ],
+)
+def test_read_lever_parity_rejects_effective_drift(read_lever_sources, surface):
+    policy, sources, expected = read_lever_sources
+    changed = copy.deepcopy(sources)
+    changed[surface]['listen_poll'] = 100
+    assert read_lever_manifest.parity_errors(changed, expected, policy)
+
+
+@pytest.mark.parametrize(
+    'mutation',
+    ['missing_surface', 'extra_surface', 'missing_allowlist', 'resolved_annotation', 'missing_note', 'stale_allowlist'],
+)
+def test_read_lever_parity_requires_exact_surfaces_and_reviewed_unresolved_annotations(read_lever_sources, mutation):
+    policy, sources, expected = copy.deepcopy(read_lever_sources)
+    if mutation == 'missing_surface':
+        del sources['runtime/dev/gke/pusher']
+    elif mutation == 'extra_surface':
+        sources['runtime/prod/new-surface'] = {}
+    elif mutation == 'missing_allowlist':
+        policy['reviewed_inheritance'].clear()
+    elif mutation == 'resolved_annotation':
+        policy['reviewed_inheritance']['chart/dev/batch-pipeline-worker']['status'] = 'RESOLVED'
+    elif mutation == 'missing_note':
+        policy['reviewed_inheritance']['chart/dev/batch-pipeline-worker']['notes'] = ''
+    else:
+        policy['reviewed_inheritance']['chart/dev/unused'] = {}
+    assert read_lever_manifest.parity_errors(sources, expected, policy)
+
+
+@pytest.mark.parametrize('source', ['base', 'dev.overlay', 'prod.overlay', 'runtime', 'chart-dev', 'chart-prod'])
+def test_read_lever_unknown_declaration_is_rejected_from_actual_source_files(tmp_path, source):
+    """Exercise input discovery, not just the percentage helper, for every source family."""
+    base = ROOT / 'deploy/runtime_env/_base.yaml'
+    runtime = ROOT / 'deploy/runtime_env.yaml'
+    inputs = ROOT / 'deploy/runtime_env'
+    charts = ROOT / 'charts'
+    kwargs = {}
+    if source.startswith('chart-'):
+        local_charts = tmp_path / 'charts'
+        for chart in read_lever_manifest.CHARTS:
+            (local_charts / chart).mkdir(parents=True)
+            for path in (charts / chart).glob('*values.yaml'):
+                (local_charts / chart / path.name).write_text(path.read_text())
+        target = local_charts / 'pusher' / f'{source.removeprefix("chart-")}_omi_pusher_values.yaml'
+        kwargs['charts_dir'] = local_charts
+    elif source == 'base':
+        target = tmp_path / '_base.yaml'
+        target.write_text(base.read_text())
+        kwargs['base_path'] = target
+    elif source == 'runtime':
+        target = tmp_path / 'runtime_env.yaml'
+        target.write_text(runtime.read_text())
+        kwargs['runtime_path'] = target
+    else:
+        for path in inputs.glob('*.yaml'):
+            (tmp_path / path.name).write_text(path.read_text())
+        target = tmp_path / f'{source}.yaml'
+        # Dev currently has no lever literal: introduce one in a real service env block.
+        if source == 'dev.overlay':
+            doc = read_lever_manifest.composer._load_yaml(target)
+            doc['overlay'].setdefault('cloud_run', {}).setdefault('services', {}).setdefault('backend', {}).setdefault(
+                'env', {}
+            )['FIRESTORE_READ_LEVERS'] = {'value': '{"dead_lever":100}'}
+            target.write_text(yaml.safe_dump(doc))
+        kwargs['runtime_env_dir'] = tmp_path
+    if source != 'dev.overlay':
+        target.write_text(target.read_text().replace('"action_items_page":100', '"dead_lever":100', 1))
+    with pytest.raises(ValueError, match='unknown lever dead_lever'):
+        read_lever_manifest.collect_sources(**kwargs)
+
+
+@pytest.mark.parametrize('environment', ['dev', 'prod'])
+def test_allowance_intake_parking_is_bound_only_to_upload_roles(environment, monkeypatch):
+    config = yaml.safe_load((ROOT / 'deploy/runtime_env.yaml').read_text())['environments'][environment]
+    state = render_cloud_run_state(config, monkeypatch)
+    rendered = {
+        service: [entry['value'] for entry in target['env'] if entry['name'] == 'BATCH_ALLOWANCE_INTAKE_PARK_ENABLED']
+        for service, target in state['services'].items()
+    }
+    assert rendered == {service: [value] for service, value in ALLOWANCE_INTAKE_PARK_BY_SERVICE.items()}
+
+
+@pytest.mark.parametrize('environment', ['dev', 'prod'])
+def test_post_seal_controls_are_rendered_on_every_cpu_reader(environment):
+    config = yaml.safe_load((ROOT / 'deploy/runtime_env.yaml').read_text())['environments'][environment]
+    renderer = runpy.run_path(str(RENDERER_SCRIPT), run_name='record_latency_renderer')
+    flags = [
+        'RECORD_FRESH_MERGE_ENABLED',
+        'RECORD_NOTES_EAGER_ENABLED',
+        'RECORD_FOLLOWUP_WAKE_ENABLED',
+        'RECORD_SEAL_WAKE_PRESERVED_ENABLED',
+    ]
+    hosts = [config['gke']['backend-listen'], *config['cloud_run']['services'].values()]
+    assert len(hosts) == 5
+    for host in hosts:
+        for key in flags:
+            value = 'false' if key in {'RECORD_FRESH_MERGE_ENABLED', 'RECORD_NOTES_EAGER_ENABLED'} else 'true'
+            assert host['env'][key] == {'value': value, 'category': 'ops_kill'}
+            assert renderer['_render_env_entries']({key: host['env'][key]}) == [{'name': key, 'value': value}]
+
+
+@pytest.mark.parametrize('env', ['dev', 'prod'])
+def test_home_transcription_queue_hold_is_pinned_on_every_existing_host(env):
+    manifest = yaml.safe_load((ROOT / 'deploy/runtime_env.yaml').read_text())
+    config = manifest['environments'][env]
+    targets = [
+        config['gke']['backend-listen'],
+        config['gke']['pusher'],
+        *(
+            config['cloud_run']['services'][name]
+            for name in ('backend', 'backend-sync', 'backend-sync-backfill', 'backend-integration')
+        ),
+    ]
+    for target in targets:
+        assert target['env']['HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED'] == {'value': 'true', 'category': 'ops_kill'}
+        assert target['env']['HOME_TRANSCRIPTION_MAX_AGE_SECONDS'] == {'value': '86400', 'category': 'config'}
+    for name in ('backend-listen', 'pusher'):
+        values = yaml.safe_load((ROOT.parent / config['gke'][name]['values_file']).read_text())
+        chart_env = {entry['name']: entry.get('value') for entry in values['env']}
+        assert chart_env['HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED'] == 'true'
+        assert chart_env['HOME_TRANSCRIPTION_MAX_AGE_SECONDS'] == '86400'
+
+
+@pytest.mark.parametrize('environment', ['dev', 'prod'])
+def test_quality_push_switches_are_bound_on_every_owning_backend_host(environment):
+    config = yaml.safe_load((ROOT / 'deploy/runtime_env.yaml').read_text())['environments'][environment]
+    expected = {'value': 'true', 'category': 'ops_kill'}
+    assert config['gke']['pusher']['env']['PUSHER_RECORD_SEAL_PENDING_RETRY_BOUND_ENABLED'] == expected
+    renderer = runpy.run_path(str(RENDERER_SCRIPT), run_name='quality_push_switch_renderer')
+    for host, key in [
+        (config['gke']['pusher'], 'PUSHER_RECORD_SEAL_PENDING_RETRY_BOUND_ENABLED'),
+    ]:
+        assert renderer['_render_env_entries']({key: host['env'][key]}) == [{'name': key, 'value': 'true'}]
+    classification = json.loads((ROOT.parent / 'config/deployment-setting-classification.json').read_text())
+    hosts = [config['gke']['backend-listen']]
+    hosts.extend(
+        config['cloud_run']['services'][name]
+        for name in ('backend', 'backend-sync', 'backend-sync-backfill', 'backend-integration')
+    )
+    for host in hosts:
+        for key in (
+            'RECORD_SEAL_REPAIR_FRESH_ENABLED',
+            'BATCH_HELD_DEAD_LETTER_ENABLED',
+            'RECORD_INTAKE_AGE_PRIORITY_ENABLED',
+        ):
+            assert key in classification['kinds']['config']
+            assert host['env'][key] == expected
+            assert renderer['_render_env_entries']({key: host['env'][key]}) == [{'name': key, 'value': 'true'}]
+    assert 'RECORD_SEAL_REPAIR_FRESH_ENABLED' not in config['gke']['pusher']['env']
+
+
+def _assert_record_close_listener_bindings(config):
+    # main.py defaults to ALL: every declared backend service can mount /v4/listen.
+    hosts = [config['gke']['backend-listen'], config['gke']['pusher']]
+    hosts.extend(config['cloud_run']['services'].values())
+    expected = {'value': 'true', 'category': 'ops_kill'}
+    for host in hosts:
+        assert host['env'].get('PUSHER_RECORD_CLOSE_NOTIFY_ENABLED') == {'value': 'false', 'category': 'rollout'}
+        assert host['env'].get('PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_PERCENT') == {
+            'value': '100',
+            'category': 'rollout',
+        }
+        assert host['env'].get('PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_UID_SHA256S') == {
+            'value': '',
+            'category': 'rollout',
+        }
+        assert host['env'].get('PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED') == expected
+
+
+@pytest.mark.parametrize('environment', ['dev', 'prod'])
+def test_record_close_notify_bound_on_all_listener_hosts(environment):
+    config = yaml.safe_load((ROOT / 'deploy/runtime_env.yaml').read_text())['environments'][environment]
+    _assert_record_close_listener_bindings(config)
+    classification = json.loads((ROOT.parent / 'config/deployment-setting-classification.json').read_text())
+    assert 'PUSHER_RECORD_CLOSE_NOTIFY_ENABLED' in classification['kinds']['config']
+    for host in ('backend', 'backend-sync', 'backend-sync-backfill', 'backend-integration'):
+        missing = copy.deepcopy(config)
+        del missing['cloud_run']['services'][host]['env']['PUSHER_RECORD_CLOSE_NOTIFY_ENABLED']
+        with pytest.raises(AssertionError):
+            _assert_record_close_listener_bindings(missing)
+
+
+@pytest.mark.parametrize(
+    'key,value',
+    [
+        ('PUSHER_RECORD_CLOSE_NOTIFY_ENABLED', 'false'),
+        ('PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED', 'true'),
+        ('PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_PERCENT', '100'),
+        ('PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_UID_SHA256S', ''),
+    ],
+)
+def test_cloud_run_runtime_rejects_missing_listener_close_binding(tmp_path, key, value):
+    validator = load_validator()
+    payload = with_cloud_run_oauth_secrets(_MISSING_GATEWAY_CLOUD_RUN_STATE)
+    payload = payload.replace(json.dumps({'name': key, 'value': value}) + ',', '')
+    path = tmp_path / 'missing-close-switch.json'
+    path.write_text(payload)
+    errors = validator.validate_runtime_env(env='dev', cloud_run_state_path=path)
+    assert {(error.scope, error.message) for error in errors} == {
+        ('cloud_run/backend', 'missing env OMI_LLM_GATEWAY_URL'),
+        *(('cloud_run/' + name, 'missing env ' + key) for name in ('backend', 'backend-sync', 'backend-integration')),
+    }
+
+
+@pytest.mark.parametrize('environment', ['dev', 'prod'])
+def test_future_capture_admissions_default_off_until_reader_rollout(environment):
+    config = yaml.safe_load((ROOT / 'deploy/runtime_env.yaml').read_text())['environments'][environment]
+    expected = {'value': 'false', 'category': 'rollout'}
+    hosts = [config['gke']['backend-listen'], *config['cloud_run']['services'].values()]
+    assert len(hosts) == 5
+    renderer = runpy.run_path(str(RENDERER_SCRIPT), run_name='future_capture_staged_renderer')
+    for host in hosts:
+        assert host['env']['SYNC_FUTURE_CAPTURE_CLAMP_ENABLED'] == expected
+        assert renderer['_render_env_entries']({'SYNC_FUTURE_CAPTURE_CLAMP_ENABLED': expected}) == [
+            {'name': 'SYNC_FUTURE_CAPTURE_CLAMP_ENABLED', 'value': 'false'}
+        ]
+    values = yaml.safe_load((ROOT.parent / config['gke']['backend-listen']['values_file']).read_text())
+    assert {entry['name']: entry.get('value') for entry in values['env']}[
+        'SYNC_FUTURE_CAPTURE_CLAMP_ENABLED'
+    ] == 'false'
+
+
+@pytest.mark.parametrize('service', ['all', 'backend-sync'])
+def test_control_sync_routing_validates_deployed_values_without_changing_manifest(tmp_path, monkeypatch, service):
+    from scripts.sync_backfill_routing import compose_rendered_routing, read_routing
+
+    validator = load_validator()
+    manifest = validator._load_yaml(validator.DEFAULT_MANIFEST)
+    # Exercise each validation against the same parsed input without reparsing
+    # the full fleet manifest on every call.
+    monkeypatch.setattr(
+        manifest_validation,
+        '_load_yaml',
+        lambda path: manifest if path == validator.DEFAULT_MANIFEST else validator._load_yaml(path),
+    )
+    config = validator._get_env_config(manifest, 'prod')
+    original = copy.deepcopy(config)
+    overlay = tmp_path / 'routing.env'
+    overlay.write_text(
+        'SYNC_BACKFILL_TASKS_QUEUE=control-current\n'
+        'SYNC_BACKFILL_TASKS_HANDLER_URL=https://backfill.example.invalid/v2/sync-jobs/run\n'
+        'SYNC_BACKFILL_TASKS_OIDC_AUDIENCE=https://backfill.example.invalid/v2/sync-jobs/run\n'
+    )
+    state = compose_rendered_routing(render_cloud_run_state(config, monkeypatch), read_routing(overlay))
+    path = tmp_path / 'state.json'
+    path.write_text(json.dumps(state))
+    mismatches = validator.validate_runtime_env(env='prod', cloud_run_state_path=path, cloud_run_service=service)
+    assert any('SYNC_BACKFILL_TASKS_QUEUE' in e.message for e in mismatches), [(e.scope, e.message) for e in mismatches]
+    assert (
+        validator.validate_runtime_env(
+            env='prod', cloud_run_state_path=path, cloud_run_service=service, sync_routing_env_path=overlay
+        )
+        == []
+    )
+    assert config == original
+    assert validator.validate_runtime_env(
+        env='prod', cloud_run_state_path=path, cloud_run_service='backend-integration', sync_routing_env_path=overlay
+    )[0].message == ('sync routing overlay outside selected service scope')
+
+
+@pytest.mark.parametrize('lever', ['bpp_decision_cache', 'privacy_checks_shadow', 'bpp_owner_memo_enforce'])
+def test_read_lever_parity_rejects_worker_inheriting_api_privacy_scope(read_lever_sources, lever):
+    """API-only admission must not flow through the integration comparison into a worker train."""
+    policy, sources, expected = read_lever_sources
+    changed = copy.deepcopy(sources)
+    worker = 'chart/prod/batch-pipeline-worker'
+    integration = 'runtime/prod/cloud_run/services/backend-integration'
+    assert changed[worker][lever] != expected[integration][lever]
+    changed[worker][lever] = expected[integration][lever]
+    assert any(worker in error for error in read_lever_manifest.parity_errors(changed, expected, policy))

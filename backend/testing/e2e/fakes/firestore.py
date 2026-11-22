@@ -30,6 +30,7 @@ _original_document_set = None
 _original_document_delete = None
 _original_snapshot_to_dict = None
 _delete_field_noop_patched = False
+_nonmap_update_patched = False
 
 
 class _DocumentIdAwareDict(dict):
@@ -92,7 +93,11 @@ def _patch_document_merge_preserves_subcollections():
 
     _original_document_set = FakeDocumentReference.set
 
-    def _set(self, data: dict, merge: bool = False, timeout: Optional[float] = None) -> None:
+    def _set(self, data: dict, merge: bool = False, timeout: Optional[float] = None, *, retry=None) -> None:
+        # Real bounded writers explicitly disable RPC retries. This in-memory
+        # adapter performs no RPC, and the third-party fake has no retry keyword.
+        if retry is not None:
+            raise NotImplementedError('hermetic Firestore set does not model RPC retry policies')
         if not merge:
             return _original_document_set(self, data, merge=merge, timeout=timeout)
 
@@ -136,6 +141,31 @@ def _patch_delete_field_missing_key_noop():
 
     fake_firestore_transformations._apply_deletes = _apply_deletes
     _delete_field_noop_patched = True
+
+
+def _patch_update_nonmap_parents():
+    """Match emulator-proven dotted updates over null/scalar parent fields.
+
+    Proof: tests/integration/test_conversation_terminal_family_firestore.py.
+    fake-firestore only creates absent parents and otherwise attempts to assign
+    into None. Real Firestore replaces a non-map ancestor with a map.
+    """
+    global _nonmap_update_patched
+    if _nonmap_update_patched:
+        return
+
+    def _apply_updates(document: dict, data: dict) -> None:
+        for key, value in data.items():
+            path = key.split('.')
+            parent = document
+            for part in path[:-1]:
+                if not isinstance(parent.get(part), dict):
+                    parent[part] = {}
+                parent = parent[part]
+            parent[path[-1]] = value
+
+    fake_firestore_transformations._apply_updates = _apply_updates
+    _nonmap_update_patched = True
 
 
 def _patch_document_delete_missing_doc_noop():
@@ -184,6 +214,7 @@ def setup_fake_firestore() -> MockFirestore:
     global _mock_store
     _patch_document_merge_preserves_subcollections()
     _patch_delete_field_missing_key_noop()
+    _patch_update_nonmap_parents()
     _patch_document_delete_missing_doc_noop()
     _patch_document_id_query_ordering()
     _patch_transaction_create()

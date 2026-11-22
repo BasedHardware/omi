@@ -39,7 +39,7 @@ def test_parent_waits_for_last_content_and_merge_then_runs_once(state):
     for at in (100, 300, 450):
         outbox.mark('u', 'c', 'en', now=at, sync_hold=True)
     key = outbox.key('u', 'c')
-    process = Mock()
+    process = Mock(return_value=None)
     assert outbox.run(key, tasks[-1]['task_token'], process, now=700) == 'deferred'
     process.assert_not_called()
     assert outbox.run(key, tasks[-1]['task_token'], process, now=1050) == 'processed'
@@ -87,11 +87,56 @@ def test_optional_watermark_must_pass_quiet_gap():
     assert hold.admission(conversation, {'first_pending_at': 100}, now=700) == ('ready', None)
 
 
+def test_arrival_gap_is_observed_only_between_arrivals_of_one_hold_epoch():
+    from prometheus_client import REGISTRY
+
+    def count():
+        return REGISTRY.get_sample_value('omi_sync_content_arrival_gap_seconds_count') or 0
+
+    def within_300():
+        return REGISTRY.get_sample_value('omi_sync_content_arrival_gap_seconds_bucket', {'le': '300.0'}) or 0
+
+    before, short_before = count(), within_300()
+    first = {hold.FIELD: hold.activity_patch({}, 1000)}
+    assert count() == before  # The first arrival of an epoch has no gap.
+    second = {hold.FIELD: hold.activity_patch(first, 1250)}
+    assert count() == before + 1 and within_300() == short_before + 1
+    hold.activity_patch(second, 1700)
+    assert count() == before + 2 and within_300() == short_before + 1
+    settled = {hold.FIELD: hold.completion_patch(second, {'digest': 'd'})}
+    hold.activity_patch(settled, 9000)
+    assert count() == before + 2  # A new epoch starts after a completed run.
+
+
+def test_quiet_window_is_read_from_the_environment_per_call(monkeypatch):
+    conversation = row()
+    assert hold.admission(conversation, {'first_pending_at': 100}, now=400)[0] == 'quiet_wait'
+    monkeypatch.setenv('SYNC_PROCESSING_QUIET_SECONDS', '300')
+    assert hold.quiet_seconds() == 300
+    assert hold.admission(conversation, {'first_pending_at': 100}, now=399) == ('quiet_wait', 400)
+    assert hold.admission(conversation, {'first_pending_at': 100}, now=400) == ('ready', None)
+
+
+@pytest.mark.parametrize(
+    'raw, expected', [('30', 120), ('120', 120), ('9000', 600), ('', 600), ('fast', 600), ('-5', 120)]
+)
+def test_quiet_window_is_clamped_and_malformed_values_keep_the_default(monkeypatch, raw, expected):
+    monkeypatch.setenv('SYNC_PROCESSING_QUIET_SECONDS', raw)
+    assert hold.quiet_seconds() == expected
+
+
+def test_outbox_due_time_follows_the_configured_quiet_window(state, monkeypatch):
+    rows, _tasks = state
+    monkeypatch.setenv('SYNC_PROCESSING_QUIET_SECONDS', '300')
+    outbox.mark('u', 'c', 'en', now=100, sync_hold=True)
+    assert rows[outbox.key('u', 'c')]['due_at'] == 400
+
+
 def test_kill_switch_drains_already_held_obligation_without_waiting(state, monkeypatch):
     rows, tasks = state
     outbox.mark('u', 'c', 'en', now=100, sync_hold=True)
     monkeypatch.setenv('SYNC_PROCESSING_HOLD_ENABLED', 'false')
-    process = Mock()
+    process = Mock(return_value=None)
     assert outbox.run(outbox.key('u', 'c'), tasks[-1]['task_token'], process, now=101) == 'processed'
     process.assert_called_once()
 
@@ -217,6 +262,90 @@ def test_first_summary_repair_cannot_bypass_a_stored_hold(monkeypatch):
         PROCESS_CONTEXT.reset(token)
     assert context['defer_until'] == 700 and context['sync_hold']
     full.assert_not_called()
+
+
+def sealed_live_row():
+    # The server sealed this live recording at 150; a phone copy just landed
+    # (last_content_at 100), which alone would hold notes until 700.
+    return {
+        **row(),
+        'status': 'completed',
+        'record_lane_owner': 'batch_live_v1',
+        'record_audio_closed': True,
+        'record_sealed_at': 150.0,
+        'record_projection_revision': 1,
+        'sync_live_target': True,
+        'updated_at': 'revision-at-admission',
+    }
+
+
+def run_claim(monkeypatch, current, ledger_stages, *, client=None):
+    from database import capture_end as capture_end_db
+
+    class Reached(Exception):
+        pass
+
+    transitions = [{'stage': stage, 'at': at} for stage, at in ledger_stages]
+    monkeypatch.setattr(capture_end_db, 'load_ledger', Mock(return_value={'transitions': transitions}))
+    monkeypatch.setattr(callback.conversations_db, 'get_conversation', lambda *_: current)
+    monkeypatch.setattr(callback, 'repair_fenced', lambda _: False)
+    if client is None:
+        monkeypatch.setattr(callback, 'claim_from_snapshot', lambda *_: True)
+    monkeypatch.setattr(callback, 'get_firestore_client', lambda: client)
+    monkeypatch.setattr(callback.time, 'time', lambda: 200)
+    full = Mock(side_effect=Reached)
+    # Past admission and the summary claim, the next step builds the model for processing.
+    monkeypatch.setattr(callback, 'deserialize_conversation', full)
+    context = {'owner': 'worker', 'lease_until': 4e9, 'first_pending_at': 100, 'sync_hold': True}
+    token = PROCESS_CONTEXT.set(context)
+    try:
+        try:
+            callback.enrich_conversation('u', 'c', 'en')
+        except Reached:
+            pass
+    finally:
+        PROCESS_CONTEXT.reset(token)
+    return context, full
+
+
+def test_sealed_live_record_is_processed_at_claim_once_every_unit_landed(monkeypatch):
+    current = sealed_live_row()
+    context, full = run_claim(monkeypatch, current, [('sealed', 150.0), ('transcribed', 180.0)])
+    full.assert_called_once()
+    assert context['hold_outcome'] == 'end_proof' and 'defer_until' not in context
+    assert context['hold_snapshot'] == hold.content_snapshot(current)
+
+
+def test_sealed_live_record_with_a_unit_still_transcribing_keeps_the_quiet_wait(monkeypatch):
+    # Revision 1 projected, its sibling unit not yet: the record's projection has not completed.
+    context, full = run_claim(monkeypatch, sealed_live_row(), [('sealed', 150.0)])
+    full.assert_not_called()
+    assert context['hold_outcome'] == 'quiet_wait' and context['defer_until'] == 700
+
+
+def test_a_reopen_between_admission_and_the_summary_run_fences_the_run(monkeypatch):
+    from google.api_core.exceptions import FailedPrecondition
+
+    class Reopened:
+        """The row changed after admission read it (a reconnect reopened the record)."""
+
+        def __init__(self):
+            self.preconditions = []
+
+        def collection(self, *_):
+            return self
+
+        def document(self, *_):
+            return self
+
+        def update(self, _fields, option=None):
+            self.preconditions.append(option)
+            raise FailedPrecondition('document changed since the snapshot')
+
+    client = Reopened()
+    with pytest.raises(callback.SyncConversationPersistenceFenced):
+        run_claim(monkeypatch, sealed_live_row(), [('sealed', 150.0), ('transcribed', 180.0)], client=client)
+    assert len(client.preconditions) == 1
 
 
 @pytest.mark.parametrize('has_summary', [True, False])
@@ -465,8 +594,9 @@ def test_rollback_sweep_releases_future_holds_and_fences_old_delivery(state, mon
     assert outbox.sweep(now=101) == {'repaired': 1, 'error': 0}
     assert rows[key]['due_at'] == 101 and rows[key]['task_token'] != old_token
     assert leased['lease_until'] == 500
-    assert rows[outbox.key('u', 'ordinary')]['due_at'] == 700
-    process = Mock()
+    # The graduated first-summary deadline (120s) caps the ordinary settle wake.
+    assert rows[outbox.key('u', 'ordinary')]['due_at'] == 220
+    process = Mock(return_value=None)
     assert outbox.run(key, old_token, process, now=101) == 'stale'
     assert outbox.run(key, rows[key]['task_token'], process, now=101) == 'processed'
     process.assert_called_once()

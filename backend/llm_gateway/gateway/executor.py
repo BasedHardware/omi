@@ -481,7 +481,9 @@ PROVIDER_429_BACKOFF_CAP_SECONDS = 60.0
 # almost none of that. Kill switch: LLM_GATEWAY_FLEX_FIRST_LANES=off.
 FLEX_FIRST_LANES_ENV_VAR = 'LLM_GATEWAY_FLEX_FIRST_LANES'
 FLEX_FIRST_TIMEOUT_MS_ENV_VAR = 'LLM_GATEWAY_FLEX_FIRST_TIMEOUT_MS'
-DEFAULT_FLEX_FIRST_LANES = frozenset({'omi:auto:conv-structure', 'omi:auto:memory-l1'})
+DEFAULT_FLEX_FIRST_LANES = frozenset(
+    {'omi:auto:conv-structure', 'omi:auto:memory-l1', 'omi:auto:conversation-v3-summary'}
+)
 DEFAULT_FLEX_FIRST_TIMEOUT_MS = 10_000
 FLEX_FIRST_LANE_TIMEOUT_MS = {'omi:auto:conv-structure': 15_000, 'omi:auto:memory-l1': 10_000}
 

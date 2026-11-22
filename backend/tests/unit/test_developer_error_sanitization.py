@@ -33,7 +33,6 @@ class _AutoMockModule(ModuleType):
 _STUBS = [
     "redis",
     "cachetools",
-    "prometheus_client",
     "google.cloud.tasks_v2",
     "ulid",
     "pinecone",
@@ -176,14 +175,7 @@ class DeveloperErrorSanitizationTests(unittest.TestCase):
                 'source',
                 'geolocation',
                 'folder_id',
-                'home_transcription_pending_at',
-                'home_transcription_deadline_at',
-                'record_lane_owner',
-                'status',
-                'record_projection_revision',
-                'record_upload_failed',
-                'finalization_status',
-                'user_title',
+                *developer.transcribing_hold.READ_FIELDS,
             ],
         )
 

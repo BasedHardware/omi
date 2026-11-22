@@ -1116,6 +1116,11 @@ class AppLocalizationsHe extends AppLocalizations {
   String get nameUpdatedSuccessfully => 'השם עודכן בהצלחה!';
 
   @override
+  String calendarReadSelectionHelp(String calendar) {
+    return 'קריאת היומנים שנבחרו. אירועים חדשים משתמשים ב־$calendar.';
+  }
+
+  @override
   String get calendarSettings => 'הגדרות קלנדר';
 
   @override
@@ -1969,6 +1974,15 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get memoryHistory => 'היסטוריה';
+
+  @override
+  String get recordingWithYourPhone => 'מקליט בטלפון שלך';
+
+  @override
+  String get wrapUp => 'סכם';
+
+  @override
+  String get recordingDiscarded => 'ההקלטה בוטלה';
 
   @override
   String get undo => 'בטל';
@@ -6976,6 +6990,9 @@ class AppLocalizationsHe extends AppLocalizations {
   String get authFailedToSignInWithApple => 'כישלון בכניסה עם Apple, אנא נסה שוב.';
 
   @override
+  String get authAppleSignInFailedUseGoogle => 'ההתחברות עם Apple לא הצליחה. נסו שוב או המשיכו עם Google.';
+
+  @override
   String get authFailedToRetrieveToken => 'כישלון בשליפת אסימון firebase, אנא נסה שוב.';
 
   @override
@@ -8995,7 +9012,7 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get deleteWhileProcessingMessage =>
-      'ההקלטה הזו הועלתה אך Omi עדיין יוצר את השיחה. אם תמחק אותה עכשיו והעיבוד ייכשל, לא יהיה ניתן לשחזר אותה. למחוק בכל זאת?';
+      'ההקלטה הזו כבר הועלתה ו-Omi מעבד אותה. מחיקה כאן מסירה את העותק שבטלפון. אם העיבוד ייכשל, Omi לא יוכל לנסות שוב מהטלפון הזה.';
 
   @override
   String get syncCardAllBackedUp => 'כל ההקלטות סונכרנו';
@@ -9102,6 +9119,24 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get unableToDetermineFirmwareVersion => 'לא ניתן לקבוע את גרסת הקושחה הנוכחית';
+
+  @override
+  String get applyCodeToCurrentPlan => 'החל על התוכנית הנוכחית';
+
+  @override
+  String subscriptionCodeResult(String result) {
+    String _temp0 = intl.Intl.selectLogic(
+      result,
+      {
+        'applied': 'הקוד הוחל על התוכנית הנוכחית שלך.',
+        'refused': 'לא ניתן להחיל קוד זה. בדוק את הקוד ואת התוכנית הנדרשת.',
+        'conflict': 'הקוד כבר נוצל או שכבר יש הנחה בתוכנית שלך.',
+        'rateLimited': 'יותר מדי ניסיונות. המתן ונסה שוב מאוחר יותר.',
+        'other': 'לא ניתן היה להחיל את הקוד. נסה שוב.',
+      },
+    );
+    return '$_temp0';
+  }
 
   @override
   String get promoCode => 'קוד קידום';
@@ -12104,7 +12139,7 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String diagnosticsSincePairingSummary(int drops, int failed) {
-    return 'מאז ההתאמה: $drops ניתוקים, $failed חיבורים שנכשלו.';
+    return 'מאז ההתאמה: $drops חיבורים מחדש, $failed חיבורים שנכשלו.';
   }
 
   @override
@@ -13287,6 +13322,9 @@ class AppLocalizationsHe extends AppLocalizations {
   }
 
   @override
+  String get paywallTrialCodeHint => 'יש לך קוד Omi Pro? הזן אותו במסך הבא.';
+
+  @override
   String get paywallTrialCancelNote => 'בטל בכל עת. ללא עמלות, ללא קנסות.';
 
   @override
@@ -13333,16 +13371,6 @@ class AppLocalizationsHe extends AppLocalizations {
   }
 
   @override
-  String syncCardTranscribingAmount(String amount) {
-    return 'הופך $amount לשיחות';
-  }
-
-  @override
-  String syncCardTranscribedOf(String done, String total) {
-    return '$done מתוך $total הושלמו · אפשר לצאת ממסך זה';
-  }
-
-  @override
   String syncCardReadyAmount(String amount) {
     return '$amount מוכנים לסנכרון';
   }
@@ -13366,7 +13394,7 @@ class AppLocalizationsHe extends AppLocalizations {
   String get syncDetailsWaitingOnPhone => 'ממתין בטלפון זה';
 
   @override
-  String get syncDetailsTranscribing => 'מתמלל ב-Omi';
+  String get syncDetailsTranscribing => 'הועלה, בהמתנה לשרת';
 
   @override
   String get syncDetailsAudioFiles => 'קובצי אודיו';
@@ -13554,6 +13582,9 @@ class AppLocalizationsHe extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get attentionRerunNotes => 'יצירת הערות מחדש';
 
   @override
   String get attentionSummaryFailed => 'לא ניתן היה לסכם את השיחה הזו';
@@ -13818,6 +13849,12 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get summaryBusyBody => 'Omi כבר עובד על השיחה הזו. הסיכום יופיע כאן כשהוא יסתיים.';
+
+  @override
+  String get summaryTranscriptionPendingTitle => 'עדיין לא תומלל';
+
+  @override
+  String get summaryTranscriptionPendingBody => 'הסיכום יופיע כשהתמלול יהיה מוכן.';
 
   @override
   String get summaryCheckAgain => 'בדיקה חוזרת';
@@ -14348,14 +14385,6 @@ class AppLocalizationsHe extends AppLocalizations {
   }
 
   @override
-  String get deviceRecently => 'לאחרונה';
-
-  @override
-  String deviceDisconnectedFor(String duration) {
-    return 'מנותק למשך $duration';
-  }
-
-  @override
   String get deviceControls => 'פקדים';
 
   @override
@@ -14709,6 +14738,22 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get episodeWritingNotes => 'כותבים הערות…';
+
+  @override
+  String get homeStepTranscribing => 'מתמללים…';
+
+  @override
+  String homeRecordingsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count הקלטות',
+      many: '$count הקלטות',
+      two: 'שתי הקלטות',
+      one: 'הקלטה אחת',
+    );
+    return '$_temp0';
+  }
 
   @override
   String get episodeWritingNotesDetail => 'קודם מסיימים את התמלול. אפשר לעזוב את הדף.';
@@ -15249,7 +15294,181 @@ class AppLocalizationsHe extends AppLocalizations {
   String get paymentDeclinedTitle => 'הכרטיס שלך נדחה';
 
   @override
+  String paymentDeclinedMonthlyMessage(String plan, String price) {
+    return 'עדכנו את הכרטיס או קבלו שוב את $plan ב-$price לחודש';
+  }
+
+  @override
   String paymentDeclinedMessage(Object plan) {
     return 'עדכנו את הכרטיס כדי לקבל שוב את $plan';
   }
+
+  @override
+  String get hasLinkedTasksLabel => 'כולל משימות מקושרות';
+
+  @override
+  String get hasTasksFilter => 'עם משימות';
+
+  @override
+  String firmwareUpdateNotInstalledMessage(String version) {
+    return 'The update didn\'t install. Your pendant is still on $version. Please try again.';
+  }
+
+  @override
+  String firmwareUpdateNotInstalledCv1Message(String version) {
+    return 'העדכון לא הותקן. התליון שלך ממשיך לעבוד עם הקושחה הנוכחית ($version). במקום לנסות שוב את העדכון, פנה לתמיכה.';
+  }
+
+  @override
+  String get firmwareUpdateUnconfirmedMessage =>
+      'Couldn\'t confirm the update. Your pendant hasn\'t reconnected yet. Keep it nearby and check its firmware version before trying again.';
+
+  @override
+  String get firmwareUpdateUnconfirmedTitle => 'Update Not Confirmed';
+
+  @override
+  String get firmwareVerifyingInstallation => 'Confirming installation… This may take up to 3 minutes.';
+
+  @override
+  String get monthlySwitchTitle => 'מעבר לתשלום חודשי';
+
+  @override
+  String monthlySwitchPlanValue(String plan, String price) {
+    return '$plan, $price לחודש';
+  }
+
+  @override
+  String monthlySwitchNote(String yearly) {
+    return 'מחליף את החיוב השנתי שלא שולם בסך $yearly. מתחדש מדי חודש. אפשר לבטל בכל עת.';
+  }
+
+  @override
+  String get monthlySwitchDeclined => 'התשלום נדחה. התוכנית שלך לא השתנתה.';
+
+  @override
+  String get monthlySwitchUnavailable => 'המעבר אינו זמין כרגע. עדכנו את הכרטיס במקום.';
+
+  @override
+  String get monthlySwitchDoneTitle => 'עברת לתשלום חודשי';
+
+  @override
+  String monthlySwitchDoneBody(String price) {
+    return '$price שולמו היום. מתחדש מדי חודש.';
+  }
+
+  @override
+  String get processingDeleteScopeChanged => 'רשימת העיבוד השתנתה. יש לבדוק את הרשימה ולנסות שוב.';
+
+  @override
+  String get syncTooOldExplanation =>
+      'This recording is older than Omi\'s sync window, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
+
+  @override
+  String freeCapTitle(int minutes) {
+    return 'ניצלת את $minutes הדקות של החודש';
+  }
+
+  @override
+  String get freeCapBody => 'Omi ממשיך להקליט. בחרו איך להמשיך בתמלול.';
+
+  @override
+  String get omiProPlanName => 'Omi Pro';
+
+  @override
+  String get freeCapProUnlimited => 'תמלול בענן ללא הגבלה';
+
+  @override
+  String get freeCapProAccuracy => 'הדיוק הטוב ביותר';
+
+  @override
+  String get freeCapProWaiting => 'מתמלל את ההקלטות הממתינות שלך';
+
+  @override
+  String get freeCapPhoneSubtitle => 'חינם. נשאר פעיל עד שתחזרו.';
+
+  @override
+  String get transcribingOnThisPhone => 'מתמלל בטלפון הזה';
+
+  @override
+  String get getPro => 'קבלו Pro';
+
+  @override
+  String get unlock => 'ביטול נעילה';
+
+  @override
+  String get transcribeWith => 'תמלול באמצעות';
+
+  @override
+  String get omiCloud => 'הענן של Omi';
+
+  @override
+  String get thisPhone => 'הטלפון הזה';
+
+  @override
+  String get onDeviceReady => 'מוכן';
+
+  @override
+  String cloudMinutesLeft(int left, int limit, String date) {
+    return 'נותרו $left מתוך $limit דק׳ · מתאפס ב-$date';
+  }
+
+  @override
+  String cloudMinutesAvailable(int minutes) {
+    return '$minutes דקות ענן זמינות';
+  }
+
+  @override
+  String get switchBack => 'חזרה';
+
+  @override
+  String get setUpThisPhone => 'הגדרת הטלפון הזה';
+
+  @override
+  String get speechRecognition => 'זיהוי דיבור';
+
+  @override
+  String get audioStaysOnPhone => 'השמע נשאר בטלפון שלך';
+
+  @override
+  String onDeviceModelDownloadSize(int size) {
+    return 'הורדה של $size MB';
+  }
+
+  @override
+  String get downloadNow => 'הורדה עכשיו';
+
+  @override
+  String get onWifiLater => 'מאוחר יותר ב-Wi-Fi';
+
+  @override
+  String get conversationWritingSummary => 'כותבים את הסיכום שלך…';
+
+  @override
+  String get onTheWayServerWork => 'עבודה שדווחה מהשרת';
+
+  @override
+  String get finishNothingToProcess => 'עדיין אין מה לעבד.';
+
+  @override
+  String get finishStillProcessing => 'עדיין בעיבוד. זה יופיע במסך הבית.';
+
+  @override
+  String get finishBackToHome => 'חזרה למסך הבית';
+
+  @override
+  String get conversationSummaryWhenItEnds => 'סיכום כשהשיחה הזו תסתיים';
+
+  @override
+  String get deviceUploadsWaitingOnServer => 'העלאות שממתינות בשרת';
+
+  @override
+  String get deviceUploadsWaitingOnServerSubtitle => 'האודיו שלך נשמר בבטחה במכשיר או בטלפון שלך';
+
+  @override
+  String conversationSummaryThrough(String time) {
+    return 'סיכום עד $time';
+  }
+
+  @override
+  String get conversationRecentTranscript => 'תמלול אחרון';
 }

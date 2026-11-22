@@ -75,6 +75,22 @@ fixture is absent here, so this is a minimal virtual-time equivalent.
 | `stale_finalize_targets` | Merged targets complete, deleted targets are excluded, and no paid call lands after the fence; duplicates never double-spend |
 | `privacy_blocked_users` | 409 at admission or purge mid-flight; no paid calls after the fence; reported under `sim.upload_status`/`excluded_uploads` |
 | `summary_behind_transcription` | Shared `sync_executor` breaches the first-summary deadline; an isolated summary pool passes |
+| `backlog_flood_fresh_latency` | A 22x-hourly settled flood leaves held fresh p50/p90 within 10% of baseline; unmetered FIFO release delays p90 by more than 2x |
+
+`backlog_flood.py` owns the flood fixture and its named projection model. Sixty steady owners
+produce 360 fresh units/hour; thirty owners inject 7,920 old, already-transcribed units at the same
+virtual instant (22x steady hourly volume). Ten flooded owners also upload fresh work. The stored
+classes include 396 Parakeet and 7,524 provider catch-up rows. Admission is real; the backlog's
+post-STT result rows are installed directly and make no paid calls. Fresh rows use the real provider
+stage and its owner-local merge wake. The scenario compares each arm with the same seed and scheduler
+without a flood, and its verdict replaces the whole-fleet gate because held provider rows deliberately
+remain incomplete. It reports fresh capture-to-projection p50/p90, baseline ratios, backlog rows/min,
+and the peak fresh share unprojected in the real closed 10–20-minute commit window (sampled each
+virtual minute). The named `release='gated'` input is
+reserved for step 4; it must not be implemented by relabeling the unmetered rollback. Run the two
+projection queue shapes with `owner_drain_first_turn_seconds=15` and `0`. The deterministic fixture is
+`tests/unit/fixtures/pipeline_sim_goldens/backlog_flood/fresh_latency.json`; update it through
+`PIPELINE_GOLDEN_UPDATE=1 python -m pytest tests/unit/test_pipeline_sim_backlog_flood.py`.
 
 ## Limits
 

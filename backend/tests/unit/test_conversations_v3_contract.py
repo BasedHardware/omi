@@ -1,0 +1,796 @@
+"""Synthetic v3 switch, read boundaries, capture and released-wire contracts."""
+
+from datetime import datetime, timedelta, timezone
+from unittest.mock import MagicMock
+
+import importlib.util
+from pathlib import Path
+
+import pytest
+from fastapi import HTTPException
+
+from config import conversations_v3 as switch
+from database import conversations as db
+from routers import conversations as routes, episodes
+from utils.conversations.v3 import service, audio, triggers
+from utils.conversations.processing_trigger import ProcessingTrigger
+
+
+def test_manual_end_wake_survives_a_completed_live_task_in_same_minute(monkeypatch):
+    tasks = {}
+    calls = []
+    monkeypatch.setenv('CONVERSATIONS_V3_TASKS_URL', 'https://test.invalid')
+    monkeypatch.setattr(triggers.store, 'mark_pending', lambda *a, **kw: True)
+
+    def enqueue(queue, url, task_id, payload, **kwargs):
+        calls.append(task_id)
+        tasks.setdefault(task_id, (payload, kwargs))
+
+    monkeypatch.setattr(triggers, 'enqueue_named_task', enqueue)
+    fixed = datetime(2026, 11, 16, 12, 0, 10, tzinfo=timezone.utc)
+
+    class Clock(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return fixed
+
+    monkeypatch.setattr(triggers, 'datetime', Clock)
+    triggers.changed('owner', 'recording')  # Live task runs and Cloud Tasks retains its name.
+    triggers.changed('owner', 'recording', manual_end=True)
+    triggers.changed('owner', 'recording', manual_end=True)  # Delivery retry stays idempotent.
+    assert len(tasks) == 2
+    assert calls[0] != calls[1] == calls[2]
+    assert all(kw['schedule_at'] == int(fixed.timestamp()) for _, kw in tasks.values())
+
+
+@pytest.mark.parametrize(
+    'stage,seen,capable,cohort,expected',
+    [
+        ('beta', False, False, False, False),
+        ('beta', True, True, False, True),
+        # A stale episodes marker from a pre-v3 store build is not v3 capability.
+        ('beta', True, False, False, False),
+        # The capability marker alone does not widen beta past TestFlight.
+        ('beta', False, True, False, False),
+        ('beta', False, False, True, True),
+        ('cohort', True, True, False, False),
+        ('cohort', False, False, True, True),
+        # all admits any owner with a v3-capable app, never an owner whose apps all predate v3.
+        ('all', False, False, False, False),
+        ('all', False, True, False, True),
+        ('all', True, False, False, False),
+        ('all', False, False, True, True),
+        ('invalid', True, True, False, False),
+    ],
+)
+def test_switch_is_per_owner_not_device(monkeypatch, stage, seen, capable, cohort, expected):
+    monkeypatch.setenv('CONVERSATIONS_V3_STAGE', stage)
+    monkeypatch.delenv('CONVERSATIONS_V3', raising=False)
+    monkeypatch.setattr(switch.client_gate, 'client_seen_cached', lambda uid: seen)
+    monkeypatch.setattr(switch.client_capability, 'capable_cached', lambda uid: capable)
+    monkeypatch.setattr(switch, 'in_rollout_cohort', lambda uid, key: cohort)
+    assert switch.conversations_v3_enabled('synthetic') is expected
+    monkeypatch.setenv('CONVERSATIONS_V3', 'off')
+    assert switch.conversations_v3_enabled('synthetic') is False
+
+
+@pytest.mark.parametrize('channel,expected', [('beta', ['seen', 'capable', 'check']), ('store', ['capable', 'check'])])
+def test_live_call_marks_capability_before_v3_check(monkeypatch, channel, expected):
+    calls = []
+    monkeypatch.setattr(routes.client_gate, 'note_client_seen', lambda uid: calls.append('seen'))
+    monkeypatch.setattr(routes.v3_client_capability, 'note_capable', lambda uid: calls.append('capable'))
+    monkeypatch.setattr(routes, 'conversations_v3_enabled', lambda uid: calls.append('check') or False)
+    assert routes.get_live_conversation('synthetic', channel) == {'v3': False, 'conversation': None}
+    assert calls == expected
+
+
+class _FakeRedis:
+    def __init__(self):
+        self.store, self.sets, self.fail = {}, [], False
+
+    def set(self, key, value, ex=None):
+        if self.fail:
+            raise ConnectionError('redis down')
+        self.sets.append((key, ex))
+        self.store[key] = value
+
+    def exists(self, key):
+        if self.fail:
+            raise ConnectionError('redis down')
+        return 1 if key in self.store else 0
+
+
+def test_capability_marker_refreshes_hourly_and_fails_closed(monkeypatch):
+    from database import redis_db
+    from utils.conversations.v3 import client_capability as capability
+
+    fake = _FakeRedis()
+    monkeypatch.setattr(redis_db, 'r', fake)
+    capability.reset_for_tests()
+    assert capability.capable_cached('u', now=0) is False
+    capability.note_capable('u', now=10)
+    # The noting process admits at once, despite its cached miss.
+    assert capability.capable_cached('u', now=11) is True
+    capability.note_capable('u', now=20)
+    assert fake.sets == [('conversations_v3:client_capable:u', capability.TTL_SECONDS)]
+    capability.note_capable('u', now=10 + capability.REFRESH_SECONDS)
+    assert len(fake.sets) == 2
+    # Another process (empty cache) reads the shared marker.
+    capability.reset_for_tests()
+    assert capability.capable_cached('u', now=0) is True
+    capability.reset_for_tests()
+    fake.fail = True
+    capability.note_capable('v', now=0)  # never raises
+    # A failed write does not make this process answer v3 for an owner the shared marker lacks.
+    assert capability.capable_cached('v', now=1) is False
+    capability.reset_for_tests()
+    assert capability.capable_cached('u', now=0) is False  # read error fails closed
+    fake.fail = False
+    assert capability.capable_cached('u', now=1) is False  # and the miss is cached briefly
+    capability.note_capable('v', now=2)  # a failed write is retried, not memoized
+    assert fake.sets[-1][0] == 'conversations_v3:client_capable:v'
+    capability.reset_for_tests()
+
+
+@pytest.mark.parametrize('include', [False, True])
+def test_visibility_predicate_requires_recording_opt_in(include):
+    row = {'recording': True, 'status': 'completed', 'discarded': False}
+    assert db.is_visible_conversation(row, include_recordings=include) is include
+    assert db.is_visible_conversation({**row, 'recording': False, 'home_hidden': True})
+
+
+@pytest.mark.parametrize('allow', [False, True])
+def test_by_id_recording_opt_in(monkeypatch, allow):
+    monkeypatch.setattr(db, 'get_conversation', lambda *a, **kw: {'id': 'r', 'recording': True})
+    monkeypatch.setattr(routes, '_heal_locked_conversations_if_eligible', lambda *a: None)
+    if allow:
+        assert routes._get_valid_conversation_by_id('synthetic', 'r', allow_recording=True)['id'] == 'r'
+    else:
+        with pytest.raises(HTTPException) as error:
+            routes._get_valid_conversation_by_id('synthetic', 'r')
+        assert error.value.status_code == 404
+
+
+@pytest.mark.parametrize('trigger', list(ProcessingTrigger))
+def test_all_processing_triggers_take_no_model_recording_path(monkeypatch, trigger):
+    from utils.conversations import lifecycle
+    from models.conversation import Conversation
+
+    at = datetime(2026, 11, 16, tzinfo=timezone.utc)
+    row = Conversation(id='r', created_at=at, started_at=at, finished_at=at, structured={}, recording=True)
+    forbidden = MagicMock(side_effect=AssertionError('recording reached processing body'))
+    monkeypatch.setattr(lifecycle, 'complete', lambda *a: True)
+    monkeypatch.setattr(db, 'get_conversation', lambda *a: {'status': 'completed', 'recording': True})
+    marked = []
+    monkeypatch.setattr(service, 'changed', lambda *a, **kw: marked.append((a, kw)))
+    disposition = []
+    result = service.recording_short_path(forbidden)(
+        'synthetic', 'en', row, trigger=trigger, derived_effects_disposition_observer=disposition.append
+    )
+    assert disposition[0].value == 'terminal_no_derived_effects'
+    assert result.status.value == 'completed'
+    assert marked
+    forbidden.assert_not_called()
+
+
+def test_non_v3_processing_is_unchanged():
+    original = MagicMock(return_value='ordinary')
+    assert service.recording_short_path(original)('synthetic', 'en', object()) == 'ordinary'
+    original.assert_called_once()
+
+
+@pytest.mark.parametrize(
+    'source,marked',
+    [('omi', True), ('phone', True), ('desktop', False), ('phone_call', False), ('external_integration', False)],
+)
+def test_only_pendant_creation_is_marked(monkeypatch, source, marked):
+    monkeypatch.setattr(triggers, 'conversations_v3_enabled', lambda uid: True)
+    row = {'source': source, 'data_protection_level': 'standard'}
+    triggers.mark_new('synthetic', row)
+    assert bool(row.get('recording')) is marked
+    assert bool(row.get('terminal_no_derived_effects')) is marked
+
+
+def test_kill_switch_does_not_suppress_existing_recordings(monkeypatch):
+    monkeypatch.setenv('CONVERSATIONS_V3', 'off')
+    called = []
+    monkeypatch.setattr(service.store, 'mark_pending', lambda *a, **kw: True)
+    monkeypatch.setattr(triggers, 'enqueue', lambda uid: called.append(uid))
+    service.changed('synthetic', 'already-marked')
+    assert called == ['synthetic']
+
+
+def test_released_episode_and_home_kind_fallback(monkeypatch):
+    monkeypatch.setattr(episodes, 'conversations_v3_enabled', lambda uid: True)
+    monkeypatch.setattr(episodes.client_gate, 'note_client_seen', lambda uid: None)
+    assert episodes.get_live_episode('synthetic', 'beta') == {'enabled': False, 'episode': None}
+    # The released decoder's closed vocabulary remains unchanged.
+    from models.home_feed import HomeFeedCard
+
+    assert set(HomeFeedCard.model_fields['kind'].annotation.__args__) == {'episode', 'conversation'}
+
+
+def test_audio_alias_is_owner_checked(monkeypatch):
+    calls = []
+
+    def load(uid, cid):
+        calls.append((uid, cid))
+        if cid == 'c':
+            return {'id': 'c'}
+        if cid != 'r':
+            return None
+        return {'recording': True, 'claims': [{'conversation_id': 'c'}], 'audio_files': [{'id': 'file'}]}
+
+    monkeypatch.setattr(db, 'get_conversation', load)
+    assert audio.resolve('synthetic', {'id': 'c'}, {'id': 'alias', 'recording_id': 'r', 'recording_file_id': 'file'})[
+        :2
+    ] == ('r', {'id': 'file'})
+    assert calls == [('synthetic', 'c'), ('synthetic', 'r')]
+    with pytest.raises(HTTPException):
+        audio.resolve('synthetic', {'id': 'different'}, {'id': 'file', 'recording_id': 'r'})
+
+
+def test_deleted_spans_preserve_neighbours():
+    assert audio.subtract_spans(0, 100, [(20, 30), (60, 120)]) == [(0, 20), (30, 60)]
+
+
+def test_index_planted_recording_is_rejected_on_hydration(monkeypatch):
+    from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
+
+    client = StrictFirestore(
+        {
+            ('users', 'synthetic', 'conversations', 'r'): {'id': 'r', 'recording': True, 'status': 'completed'},
+            ('users', 'synthetic', 'conversations', 'short'): {
+                'id': 'short',
+                'home_hidden': True,
+                'status': 'completed',
+            },
+        }
+    )
+    monkeypatch.setattr(db, 'db', client)
+    assert [r['id'] for r in db._get_conversations_by_id('synthetic', ['r', 'short'])] == ['short']
+    assert len(db._get_conversations_by_id('synthetic', ['r', 'short'], include_recordings=True)) == 2
+
+
+def test_counts_include_legacy_documents_without_recording_field(monkeypatch):
+    from tests.unit.test_sync_donor_tombstone_visibility import _install_listing
+
+    at = datetime(2026, 11, 16, tzinfo=timezone.utc)
+    rows = {
+        cid: {'id': cid, 'created_at': at, 'status': 'completed', 'discarded': False, **fields}
+        for cid, fields in [
+            ('legacy', {}),
+            ('ordinary', {'recording': False}),
+            ('recording', {'recording': True}),
+            ('short', {'home_hidden': True}),
+        ]
+    }
+    _install_listing(monkeypatch, rows)
+    assert db.get_conversations_count('synthetic') == 3
+    assert db.get_conversations_count('synthetic', hide_home=True) == 2
+
+
+@pytest.mark.parametrize('update_only', [False, True])
+def test_recordings_never_embed_even_on_completed_replay(monkeypatch, update_only):
+    from types import SimpleNamespace
+    from utils.conversations import process_conversation as process
+
+    forbidden = MagicMock(side_effect=AssertionError('recording embedded'))
+    monkeypatch.setattr(process, 'generate_embedding', forbidden)
+    assert process.save_structured_vector('synthetic', SimpleNamespace(recording=True), update_only=update_only)
+    forbidden.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    'statuses,capture', [('in_progress', True), ('completed', False), ('processing,completed', False)]
+)
+def test_released_capture_poll_keeps_recording_identity(monkeypatch, statuses, capture):
+    from types import SimpleNamespace
+    from utils.episodes import home_membership
+
+    class CapturedRead(BaseException):
+        pass
+
+    bound = {}
+
+    def read(*args, **kwargs):
+        bound.update(kwargs)
+        raise CapturedRead()
+
+    monkeypatch.setattr(routes, 'home_transcription_presentation_gate_enabled', lambda: False)
+    monkeypatch.setattr(routes, 'home_step_projection_enabled', lambda: False)
+    monkeypatch.setattr(home_membership, 'held_for', lambda request: False)
+    monkeypatch.setattr(home_membership, 'live_suppression_for', lambda *a: False)
+    monkeypatch.setattr(routes.ListVersionCheck, 'start', lambda *a: SimpleNamespace(not_modified=None))
+    monkeypatch.setattr(routes, 'list_read_budget_for_request', lambda *a, **kw: None)
+    monkeypatch.setattr(db, 'get_conversations_without_photos', read)
+    with pytest.raises(CapturedRead):
+        routes.get_conversations(
+            uid='synthetic',
+            statuses=statuses,
+            sources=None,
+            start_date=None,
+            end_date=None,
+            folder_id=None,
+            starred=None,
+        )
+    assert bound['include_recordings'] is capture
+    assert bound['capture_only'] is capture
+    if capture:
+        assert db.is_visible_conversation(
+            {'id': 'recording', 'recording': True, 'status': 'in_progress'}, include_recordings=True, capture_only=True
+        )
+        assert not db.is_visible_conversation(
+            {'id': 'derived', 'v3_derived': True, 'status': 'in_progress'}, include_recordings=True, capture_only=True
+        )
+
+
+@pytest.mark.parametrize(
+    'include_recordings,hide_home,expected', [(True, False, 'r'), (False, True, 'good'), (False, False, 'short')]
+)
+def test_cursor_refills_after_recording_and_hidden_rows(include_recordings, hide_home, expected):
+    from tests.unit.test_sync_donor_tombstone_visibility import _ListingDoc, _ListingQuery
+
+    anchor = _ListingDoc('anchor', {})
+    docs = [anchor] + [
+        _ListingDoc(cid, {'status': 'completed', 'discarded': False, **fields})
+        for cid, fields in [('r', {'recording': True}), ('short', {'home_hidden': True}), ('good', {})]
+    ]
+    rows, last = db._collect_cursor_conversation_page(
+        _ListingQuery(docs),
+        limit=1,
+        include_discarded=False,
+        budget=None,
+        bookmark=anchor,
+        include_recordings=include_recordings,
+        hide_home=hide_home,
+    )
+    assert len(rows) == 1 and rows[0]['id'] == expected
+    assert last.id == expected
+
+
+def _open_row(cid, last, **extra):
+    return {
+        'id': cid,
+        'status': 'in_progress',
+        'created_at': last,
+        'started_at': last,
+        'finished_at': last,
+        'v3_derived': True,
+        'tile_state': 'live',
+        **extra,
+    }
+
+
+def _serve_windows(monkeypatch, rows, calls=None):
+    """Stub the indexed v3 read the live route uses (database.conversations_v3_live)."""
+
+    def recent(uid, *, now, max_idle, **kw):
+        if calls is not None:
+            calls.append(dict(now=now, max_idle=max_idle))
+        served = rows() if callable(rows) else rows
+        return served, len(served)
+
+    monkeypatch.setattr(routes, 'conversations_v3_enabled', lambda uid: True)
+    monkeypatch.setattr(routes.conversations_v3_live, 'recent_windows', recent)
+
+
+def test_live_skips_a_capture_that_never_closed(monkeypatch):
+    now = datetime.now(timezone.utc)
+    seen = {}
+    calls = []
+    _serve_windows(monkeypatch, lambda: seen['rows'], calls)
+    stale = _open_row('stale', now - routes.v3_live.MAX_IDLE - timedelta(minutes=1))
+    # Only a days-old open row: nothing is in progress, so the client keeps its capture card.
+    seen['rows'] = [stale]
+    assert routes.get_live_conversation('u', 'beta') == {'v3': True, 'conversation': None}
+    assert calls[-1]['max_idle'] == routes.v3_live.MAX_IDLE
+    # A stale stub beside it does not hide the open conversation.
+    seen['rows'] = [stale, _open_row('rec', now, recording=True), _open_row('open', now - timedelta(minutes=10))]
+    assert routes.get_live_conversation('u', 'beta')['conversation']['id'] == 'open'
+    # Naive stored times read as UTC; a row with no time at all is not served.
+    seen['rows'] = [_open_row('naive', now.replace(tzinfo=None))]
+    assert routes.get_live_conversation('u', 'beta')['conversation']['id'] == 'naive'
+    seen['rows'] = [{'id': 'bare', 'status': 'in_progress', 'v3_derived': True, 'tile_state': 'live'}]
+    assert routes.get_live_conversation('u', 'beta')['conversation'] is None
+
+
+@pytest.mark.parametrize('recording, locked', [(False, False), (False, True), (True, False)])
+def test_live_response_is_compact_and_never_a_recording(monkeypatch, recording, locked):
+    started = datetime.now(timezone.utc) - timedelta(minutes=3)
+    _serve_windows(
+        monkeypatch,
+        [
+            {
+                'id': 'c',
+                'started_at': started,
+                'status': 'in_progress',
+                'created_at': started,
+                'v3_derived': True,
+                'tile_state': 'live',
+                'recording': recording,
+                'is_locked': locked,
+                'v3_recording_ids': ['old-recording'] * 8 + ['raw-a', 'invalid/path', 'raw-b'],
+                'transcript_segments': [{'text': 'private capture'}],
+                'structured': {'title': 'Plan', 'emoji': '🌳', 'overview': 'omit'},
+            }
+        ],
+    )
+    result = routes.get_live_conversation('u', 'store')
+    if recording:
+        assert result['conversation'] is None
+    else:
+        from models.conversation import ConversationsLiveResponse
+
+        wire = ConversationsLiveResponse(**result).model_dump(exclude_unset=True)
+        assert 'transcript_segments' not in wire['conversation']
+        if locked:
+            assert wire['conversation']['is_locked'] is True
+            assert 'v3_recording_ids' not in wire['conversation']
+        else:
+            assert wire['conversation']['v3_recording_ids'] == ['old-recording'] * 5 + ['raw-a', 'raw-b']
+        assert wire['conversation']['structured'] == {'title': 'Plan', 'emoji': '🌳'}
+        import json
+        from pathlib import Path
+
+        schema = json.loads(
+            (Path(__file__).resolve().parents[3] / 'docs/api-reference/app-client-openapi.json').read_text()
+        )
+        required = schema['components']['schemas']['Conversation']['required']
+        assert set(required) <= wire['conversation'].keys()
+        assert wire['conversation']['finished_at'] is None
+
+
+def _live_row(id, *, v3=True, minutes_ago=1, tile_state='live', **extra):
+    now = datetime.now(timezone.utc)
+    return {
+        'id': id,
+        'status': 'in_progress',
+        'created_at': now - timedelta(minutes=minutes_ago + 5),
+        'started_at': now - timedelta(minutes=minutes_ago + 5),
+        'finished_at': now - timedelta(minutes=minutes_ago),
+        'v3_derived': v3 or None,
+        'tile_state': tile_state if v3 else None,
+        'structured': {'title': '', 'emoji': ''},
+        **extra,
+    }
+
+
+@pytest.mark.parametrize(
+    'rows, expected',
+    [
+        # A legacy in-progress row (not v3-derived) is never the live tile, however new.
+        ([_live_row('legacy', v3=False)], None),
+        ([_live_row('legacy', v3=False), _live_row('window')], 'window'),
+        # A v3 window whose last speech is past the idle bound is stale, not live.
+        ([_live_row('stale', minutes_ago=121)], None),
+        ([_live_row('writing', tile_state='writing')], None),
+        ([_live_row('window', minutes_ago=119)], 'window'),
+        # Hidden, deleted, discarded or finished windows are never the live tile.
+        ([_live_row('hidden', home_hidden=True)], None),
+        ([_live_row('deleted', deleted=True)], None),
+        ([_live_row('discarded', discarded=True)], None),
+        ([_live_row('done', status='processing')], None),
+        # The index returns windows oldest-first: the newest open window wins.
+        ([_live_row('older', minutes_ago=40), _live_row('newer', minutes_ago=2)], 'newer'),
+    ],
+)
+def test_live_returns_only_a_recent_open_v3_window(monkeypatch, rows, expected):
+    _serve_windows(monkeypatch, rows)
+    result = routes.get_live_conversation('u', 'store')
+    assert (result['conversation'] or {}).get('id') == expected
+
+
+class _WindowQuery:
+    """A Firestore query fake over v3 windows: records the shape and pages by limit/start_after."""
+
+    def __init__(self, docs, log, filters=(), size=None, after=None, fields=None, bounds=()):
+        self.docs, self.log, self.filters, self.size, self.after, self.fields = docs, log, filters, size, after, fields
+        self.bounds = bounds
+
+    def _clone(self, **kw):
+        state = dict(filters=self.filters, size=self.size, after=self.after, fields=self.fields, bounds=self.bounds)
+        state.update(kw)
+        return _WindowQuery(self.docs, self.log, **state)
+
+    def collection(self, name):
+        return self
+
+    def document(self, name):
+        return self
+
+    def where(self, *, filter):
+        return self._clone(
+            filters=(*self.filters, (filter.field_path, filter.op_string)),
+            bounds=(*self.bounds, (filter.field_path, filter.op_string, filter.value)),
+        )
+
+    def _matches(self, doc):
+        ops = {'==': lambda a, b: a == b, '>=': lambda a, b: a >= b, '<=': lambda a, b: a <= b, '<': lambda a, b: a < b}
+        return all(ops[op](doc._data.get(field), value) for field, op, value in self.bounds)
+
+    def select(self, fields):
+        return self._clone(fields=list(fields))
+
+    def order_by(self, field):
+        assert field == 'finished_at'
+        return self
+
+    def limit(self, size):
+        return self._clone(size=size)
+
+    def start_after(self, snapshot):
+        return self._clone(after=snapshot)
+
+    def stream(self):
+        self.log.append(dict(filters=self.filters, size=self.size, fields=self.fields))
+        docs = sorted((d for d in self.docs if self._matches(d)), key=lambda d: d._data['finished_at'])
+        start = 0 if self.after is None else docs.index(self.after) + 1
+        return iter(docs[start : start + self.size])
+
+
+class _Snap:
+    def __init__(self, data):
+        self.id, self._data = data['id'], data
+
+    def to_dict(self):
+        return dict(self._data)
+
+
+def _live_read(monkeypatch, docs, log):
+    from database import conversations_v3_live as live_db
+
+    monkeypatch.setattr(live_db, 'prepare_conversation_for_read', lambda row, uid: row)
+    now = datetime.now(timezone.utc)
+    row = live_db.live_window(
+        'u',
+        now=now,
+        max_idle=routes.v3_live.MAX_IDLE,
+        pick=routes.v3_live.active,
+        firestore_client=_WindowQuery(docs, log),
+    )
+    return live_db, row
+
+
+def _finished(n, *, newest_minutes_ago):
+    # n finished windows, one a minute, the newest ``newest_minutes_ago`` old.
+    return [
+        _Snap(_live_row(f'done-{i:03d}', minutes_ago=newest_minutes_ago + i, status='processing', tile_state='done'))
+        for i in range(n)
+    ]
+
+
+def test_live_read_finds_a_speaking_window_in_the_recent_band(monkeypatch):
+    # A busy account: 100 finished windows in the idle cap. The open window spoke a minute
+    # ago, so the recent band holds it and the full window is never read.
+    log = []
+    live_db, row = _live_read(monkeypatch, _finished(100, newest_minutes_ago=20) + [_Snap(_live_row('open'))], log)
+    assert row['id'] == 'open'
+    assert len(log) == 1 and log[0]['size'] == live_db.PAGE
+    # Indexed filters only (v3_derived, finished_at, started_at): legacy rows never enter the scan.
+    assert log[0]['filters'] == (('v3_derived', '=='), ('finished_at', '>='), ('started_at', '<='))
+    # The projection is unconditional and carries no transcript.
+    assert 'transcript_segments' not in log[0]['fields'] and 'structured' in log[0]['fields']
+
+
+def test_live_read_widens_to_the_idle_cap_for_a_quiet_open_window(monkeypatch):
+    log = []
+    docs = _finished(30, newest_minutes_ago=40) + [_Snap(_live_row('quiet', minutes_ago=30))]
+    _, row = _live_read(monkeypatch, docs, log)
+    assert row['id'] == 'quiet'
+    assert len(log) == 2
+    # The wider band excludes the recent one, so no recent window is read twice.
+    assert log[1]['filters'][-1] == ('finished_at', '<')
+
+
+def test_live_read_with_nothing_open_stops_at_its_cap_and_logs(monkeypatch, caplog):
+    from database import conversations_v3_live as live_db
+
+    monkeypatch.setattr(live_db, 'READ_CAP', 7)
+    monkeypatch.setattr(live_db, 'PAGE', 3)
+    log = []
+    with caplog.at_level('WARNING', logger=live_db.__name__):
+        _, row = _live_read(monkeypatch, _finished(4, newest_minutes_ago=1) + _finished(20, newest_minutes_ago=30), log)
+    assert row is None
+    # The cap is shared across both bands: 4 rows in the recent band, then 3 more.
+    assert [call['size'] for call in log] == [3, 3, 3]
+    assert 'stopped at its bound of 3 windows' in caplog.text
+
+
+def test_merge_rejects_recording_before_admission(monkeypatch):
+    from fastapi import BackgroundTasks
+    from models.conversation import MergeConversationsRequest
+
+    monkeypatch.setattr(db, 'get_conversation', lambda *a, **kw: {'id': 'r', 'recording': True})
+    monkeypatch.setattr(routes, '_heal_locked_conversations_if_eligible', lambda *a: None)
+    with pytest.raises(HTTPException) as error:
+        routes.merge_conversations(MergeConversationsRequest(conversation_ids=['r', 'c']), BackgroundTasks(), 'u')
+    assert error.value.status_code == 404
+
+
+def test_reprocess_rejects_recording_before_processing(monkeypatch):
+    monkeypatch.setattr(db, 'get_conversation', lambda *a, **kw: {'id': 'r', 'recording': True})
+    monkeypatch.setattr(routes, '_heal_locked_conversations_if_eligible', lambda *a: None)
+    with pytest.raises(HTTPException) as error:
+        routes.reprocess_conversation('r', uid='u')
+    assert error.value.status_code == 404
+
+
+def test_joan_rejects_recording_before_prompt(monkeypatch):
+    from routers import users
+
+    monkeypatch.setattr(users, 'get_conversation', lambda *a: {'id': 'r', 'recording': True})
+    monkeypatch.setattr(users, 'followup_question_prompt', lambda *a: pytest.fail('raw capture sent to prompt'))
+    with pytest.raises(HTTPException) as error:
+        users.delete_followup_question_endpoint('r', 'u')
+    assert error.value.status_code == 404
+
+
+def test_lapsed_beta_marker_restores_legacy_capture_and_episode_admission(monkeypatch):
+    monkeypatch.setenv('CONVERSATIONS_V3_STAGE', 'beta')
+    monkeypatch.delenv('CONVERSATIONS_V3', raising=False)
+    monkeypatch.setattr(switch, 'in_rollout_cohort', lambda *a: False)
+    monkeypatch.setattr(switch.client_gate, 'client_seen_cached', lambda uid: False)
+    monkeypatch.setattr(triggers, 'conversations_v3_enabled', switch.conversations_v3_enabled)
+    row = {'source': 'omi', 'data_protection_level': 'standard'}
+    triggers.mark_new('u', row)
+    assert 'recording' not in row and 'v3_pending' not in row
+    monkeypatch.setattr(episodes, 'conversations_v3_enabled', switch.conversations_v3_enabled)
+    monkeypatch.setattr(episodes, 'episodes_enabled_for', lambda *a: True)
+    monkeypatch.setattr(episodes, 'client_channel_admitted', lambda *a: True)
+    assert episodes._admitted('u', 'store') is True
+
+
+def test_episode_admission_is_cached_once_per_request(monkeypatch):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    calls = []
+    monkeypatch.setattr(episodes, 'conversations_v3_enabled', lambda uid: calls.append(uid) or True)
+    monkeypatch.setattr(episodes.client_gate, 'note_client_seen', lambda *a: None)
+    app = FastAPI()
+    app.include_router(episodes.router)
+    app.dependency_overrides[episodes.auth.get_current_user_uid] = lambda: 'u'
+    assert TestClient(app).get('/v1/episodes/live', headers={'X-Omi-App-Channel': 'beta'}).status_code == 200
+    assert calls == ['u']
+
+
+@pytest.mark.parametrize(
+    'raw,expected',
+    [
+        ('992', 'pre_v3'),
+        ('993', 'v3_capable'),
+        ('1200', 'v3_capable'),
+        ('', 'unknown'),
+        ('1.0.599', 'unknown'),
+        ('-1', 'unknown'),
+    ],
+)
+def test_episode_build_bucket_uses_first_v3_build(monkeypatch, raw, expected):
+    monkeypatch.setenv('CONVERSATIONS_V3_FIRST_APP_BUILD', '993')  # synthetic boundary, not a release assertion
+    assert switch.episode_build_bucket(raw) == expected
+
+
+def test_episode_request_uses_build_header_not_marketing_version(monkeypatch):
+    from types import SimpleNamespace
+    from unittest.mock import MagicMock
+
+    meter = MagicMock()
+    monkeypatch.setenv('CONVERSATIONS_V3_FIRST_APP_BUILD', '993')
+    monkeypatch.setattr(episodes.v3_metrics, 'EPISODE_CALLS', meter)
+    request = SimpleNamespace(
+        url=SimpleNamespace(path='/v1/episodes/live'),
+        headers={'X-App-Version': '1.0.599', 'X-App-Build': '992'},
+        scope={'route': SimpleNamespace(path='/v1/episodes/live')},
+    )
+    episodes._record_episode_request(request, 'u', 'store', False)
+    meter.labels.assert_called_once_with('/v1/episodes/live', 'store', 'pre_v3', 'false')
+    monkeypatch.delenv('CONVERSATIONS_V3_FIRST_APP_BUILD')
+    assert switch.episode_build_bucket('992') == 'unknown'
+
+
+@pytest.mark.parametrize(
+    'mark, pending',
+    [
+        (None, False),
+        ({'generation': 0, 'applied_generation': 0}, True),
+        ({'generation': 2, 'applied_generation': 1}, True),
+        ({'generation': 2, 'applied_generation': 2}, False),
+    ],
+)
+def test_settled_partial_recording_is_not_pending_transcription(mark, pending):
+    from utils.conversations.v3 import policy
+
+    row = {'record_audio_partial': mark} if mark is not None else {}
+    assert policy.transcription_pending(row) is pending
+
+
+def test_projection_reads_hydrated_segments_with_speaker_corrections(monkeypatch):
+    from types import SimpleNamespace
+
+    from database import conversations as conversations_db, conversations_v3 as store
+
+    raw = [{'text': 'hi', 'speaker_id': 0, 'is_user': False}]
+    corrected = [{'text': 'hi', 'speaker_id': 0, 'is_user': True, 'person_id': 'p'}]
+    monkeypatch.setattr(conversations_db, 'decode_transcript_segments_verified', lambda *a: raw)
+    monkeypatch.setattr(
+        conversations_db, 'prepare_conversation_for_read', lambda data, uid: {**data, 'transcript_segments': corrected}
+    )
+    snapshot = SimpleNamespace(exists=True, id='r', update_time=1, to_dict=lambda: {'transcript_segments': []})
+    assert store.decode_row('u', snapshot)['transcript_segments'] == corrected
+
+
+# The classification gate discovers new raw readers, including imported aliases.
+READER_GUARD = Path(__file__).resolve().parents[2] / 'scripts' / 'check_conversation_readers.py'
+
+
+def load_reader_guard():
+    spec = importlib.util.spec_from_file_location('conversation_reader_guard', READER_GUARD)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_new_collection_reader_is_detected(tmp_path):
+    path = tmp_path / 'backend/routers/unclassified.py'
+    path.parent.mkdir(parents=True)
+    path.write_text("def read(db):\n    return db.collection('conversations').stream()\n")
+    assert list(load_reader_guard().references(tmp_path)) == [('backend/routers/unclassified.py', 'collection', 2)]
+    assert load_reader_guard().check({}, root=tmp_path) == 1
+    assert (
+        load_reader_guard().check(
+            {
+                'backend/routers/unclassified.py:collection': {
+                    'policy': 'conversations',
+                    'reason': 'Synthetic product boundary',
+                }
+            },
+            root=tmp_path,
+        )
+        == 0
+    )
+
+
+def test_alias_and_document_path_readers_are_detected(tmp_path):
+    path = tmp_path / 'backend/utils/new_reader.py'
+    path.parent.mkdir(parents=True)
+    path.write_text(
+        "from database.conversations import get_conversation as read_one\ndef read(db, uid, cid):\n    read_one(uid, cid)\n    return db.document(f'users/{uid}/conversations/{cid}').get()\n"
+    )
+    assert {operation for _, operation, _ in load_reader_guard().references(tmp_path)} == {'read_one', 'document_path'}
+
+
+def test_attribute_collection_constant_is_detected(tmp_path):
+    path = tmp_path / 'backend/database/recovery.py'
+    path.parent.mkdir(parents=True)
+    path.write_text('def read(db):\n    return db.collection(jobs.CONVERSATIONS_COLLECTION).stream()\n')
+    assert list(load_reader_guard().references(tmp_path)) == [('backend/database/recovery.py', 'collection', 2)]
+
+
+@pytest.mark.parametrize(
+    'before, update, rearmed',
+    [
+        ({'recording': True}, {'audio_files': [{'id': 'f'}]}, True),
+        ({'recording': True, 'v3_pending': True}, {'audio_files': [{'id': 'f'}]}, False),
+        ({'recording': True}, {'audio_files': []}, False),
+        ({}, {'audio_files': [{'id': 'f'}]}, False),
+        ({'recording': True, 'deleted': True}, {'audio_files': [{'id': 'f'}]}, False),
+    ],
+)
+def test_late_audio_on_a_settled_recording_rearms_the_builder(monkeypatch, before, update, rearmed):
+    from utils.conversations.v3 import triggers as v3_triggers
+
+    snapshot = MagicMock(exists=True, update_time=1)
+    snapshot.to_dict.return_value = before
+    ref = MagicMock()
+    ref.get.return_value = snapshot
+    monkeypatch.setattr(db, 'db', MagicMock())
+    db.db.collection.return_value.document.return_value.collection.return_value.document.return_value = ref
+    monkeypatch.setattr(db, '_prepare_conversation_for_write', lambda data, *a, **k: data)
+    monkeypatch.setattr(db, 'retain_aliases', lambda files, _old: files)
+    monkeypatch.setattr(db, 'guard_match_score_size', lambda *a: None)
+    monkeypatch.setattr(db, 'invalidate_people_stats_cache', lambda *a: None)
+    calls = []
+    monkeypatch.setattr(v3_triggers, 'changed', lambda uid, cid: calls.append((uid, cid)))
+    assert db.update_conversation('u', 'r', update) is True
+    assert calls == ([('u', 'r')] if rearmed else [])

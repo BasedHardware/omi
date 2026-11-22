@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import Any
 
-ACCOUNT_DELETION_COLLECTION = "account_deletions"
+from database.batch_account_authority_schema import ACCOUNT_DELETION_COLLECTION as ACCOUNT_DELETION_COLLECTION
 
 
 def account_deletion_firestore_client(*, firestore_client: Any | None = None) -> Any:
@@ -38,27 +38,25 @@ def get_user_deletion_wipe_status(uid: str, *, firestore_client: Any | None = No
     """Negative-only cache, generation-fenced by every marker writer."""
     from database import privacy_check_metrics as metrics
     from database.account_deletion_policy import account_deletion_blocks_access
-    from database.fsr_read_cache import cached_read, memo, plane_id, ttl
+    from database.fsr_read_cache import cached_read, plane_id, ttl
 
     metrics.called('deletion_marker')
     try:
         client = account_deletion_firestore_client(firestore_client=firestore_client)
-        status = memo(
+        status = cached_read(
+            'deletion_marker_cache',
             uid,
-            ('deletion', plane_id(client)),
-            lambda: cached_read(
-                'deletion_marker_cache',
-                uid,
-                'absent:' + plane_id(client),
-                lambda: _s4_read_deletion_status(uid, firestore_client=client),
-                seconds=ttl('FSR_DELETION_NEGATIVE_TTL_SECONDS', 30),
-                cacheable=lambda status: status is None,
-            ),
+            'absent:' + plane_id(client),
+            lambda: _s4_read_deletion_status(uid, firestore_client=client),
+            seconds=ttl('FSR_DELETION_NEGATIVE_TTL_SECONDS', 30),
+            cacheable=lambda status: status is None,
         )
     except Exception:
-        metrics.decision('deletion_marker', 'authority_unavailable')
+        metrics.decision('deletion_marker', 'authority_unavailable', uid=uid)
         raise
-    metrics.decision('deletion_marker', 'account_deleted' if account_deletion_blocks_access(status) else 'allow')
+    metrics.decision(
+        'deletion_marker', 'account_deleted' if account_deletion_blocks_access(status) else 'allow', uid=uid
+    )
     return status
 
 
@@ -82,7 +80,7 @@ def _s4_read_deletion_status(uid: str, *, firestore_client: Any | None = None) -
     from database.firestore_read_metrics import FirestoreReadOutcome, FirestoreReadSite, record_document_read
 
     client = account_deletion_firestore_client(firestore_client=firestore_client)
-    snapshot = read_snapshot('deletion_marker', account_deletion_document(uid, firestore_client=client))
+    snapshot = read_snapshot('deletion_marker', account_deletion_document(uid, firestore_client=client), uid=uid)
     record_document_read(
         FirestoreReadSite.USER_DELETION_WIPE_STATUS,
         FirestoreReadOutcome.HIT if snapshot.exists else FirestoreReadOutcome.MISS,

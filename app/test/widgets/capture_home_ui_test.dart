@@ -77,12 +77,18 @@ class _Capture extends ChangeNotifier implements CaptureProvider {
   int phoneStarts = 0;
   Object? phoneStartFailure;
 
+  /// A start that succeeds hands this phone the live recording.
+  bool phoneStartTakesOwnership = false;
+  bool _phoneOwns = false;
+
   @override
-  String? get liveCaptureSource => switch (live) {
-        _Live.idle || _Live.idleDeviceConnected => null,
-        _Live.pendant || _Live.pendantPaused || _Live.pendantBatch => 'omi',
-        _ => 'phone',
-      };
+  String? get liveCaptureSource => _phoneOwns
+      ? 'phone'
+      : switch (live) {
+          _Live.idle || _Live.idleDeviceConnected => null,
+          _Live.pendant || _Live.pendantPaused || _Live.pendantBatch => 'omi',
+          _ => 'phone',
+        };
   @override
   RecordingState get recordingState => interrupted
       ? RecordingState.interrupted
@@ -170,6 +176,7 @@ class _Capture extends ChangeNotifier implements CaptureProvider {
     phoneStarts++;
     final failure = phoneStartFailure;
     if (failure != null) throw failure;
+    _phoneOwns = phoneStartTakesOwnership;
   }
 
   @override
@@ -683,6 +690,16 @@ void main() {
       expect(capture.phoneStarts, 1);
       expect(find.text(en.somethingWentWrong), findsOneWidget);
       expect(find.byType(LiveEpisodePage), findsNothing);
+    });
+
+    testWidgets('a live phone start keeps the reader on Home', (tester) async {
+      final capture = _Capture(_Live.idle)..phoneStartTakesOwnership = true;
+      await pump(tester, const HomeRecordButton(), capture: capture);
+      await tester.tap(find.bySemanticsLabel(en.startRecording));
+      await tester.pumpAndSettle();
+      expect(capture.phoneStarts, 1);
+      expect(capture.liveCaptureSource, 'phone');
+      expect(find.byType(LiveEpisodePage), findsNothing, reason: "Home's recording bar confirms the start instead");
     });
 
     testWidgets('a start that resolves without phone ownership navigates nowhere', (tester) async {

@@ -1,7 +1,7 @@
 // The AI-profile renderer host is a pure session relay: it forwards the Firebase
-// session to the main-process profile service (which is inert without one) and
-// clears it on sign-out. It must NEVER drive generation — cadence lives in main.
-// These tests pin exactly that contract.
+// session to the main-process profile reader (which can't reach the backend
+// without one) and clears it on sign-out. It must NEVER drive generation — the
+// backend owns the profile and its cadence. These tests pin exactly that contract.
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 // Hoisted so the vi.mock factories below (which are hoisted above the imports)
@@ -50,8 +50,8 @@ function installWindowOmi(): {
   ;(globalThis as unknown as { window: unknown }).window = {
     omi: {
       aiProfileSetSession,
-      aiProfileGenerateNow: vi.fn(),
-      aiProfileGetLatest: vi.fn(),
+      aiProfileRefresh: vi.fn(),
+      aiProfileGet: vi.fn(),
       onSessionTokenRequest: (cb: (requestId: number) => void) => {
         tokenRequestCb = cb
         return () => {}
@@ -123,7 +123,7 @@ describe('startAiProfileHost (session relay)', () => {
     expect(aiProfileSetSession).toHaveBeenCalledWith(null)
   })
 
-  it('never drives generation itself (cadence belongs to main)', async () => {
+  it('never drives generation itself (the backend owns cadence)', async () => {
     installWindowOmi()
     const omi = (
       globalThis as unknown as { window: { omi: Record<string, ReturnType<typeof vi.fn>> } }
@@ -134,8 +134,8 @@ describe('startAiProfileHost (session relay)', () => {
     signIn('tok-abc')
     await flush()
 
-    expect(omi.aiProfileGenerateNow).not.toHaveBeenCalled()
-    expect(omi.aiProfileGetLatest).not.toHaveBeenCalled()
+    expect(omi.aiProfileRefresh).not.toHaveBeenCalled()
+    expect(omi.aiProfileGet).not.toHaveBeenCalled()
   })
 
   // C2. getIdToken() can be a real network refresh (hundreds of ms). If the user

@@ -22,6 +22,7 @@ import 'package:omi/utils/other/temp.dart';
 import 'package:omi/widgets/extensions/string.dart';
 import 'package:omi/widgets/omi_map_preview.dart';
 import 'maps_util.dart';
+import 'package:omi/providers/transcription_pending_conversations.dart';
 
 /// The detail page's length label: the same rule and format as the conversation list row
 /// ([ServerConversation.getDurationInSeconds], [OmiDuration.compact]), so both always agree.
@@ -198,6 +199,16 @@ class ReprocessDiscardedWidget extends StatelessWidget {
   }
 }
 
+/// Whether an empty Summary tab shows the failed-processing slot: Retry, or the not-transcribed
+/// notice once the server said a summary retry cannot help. The held detail copy carries no
+/// Home step and is not retryable, so the not-transcribed answer itself must open the slot;
+/// otherwise the tab would offer "Generate Summary", which can only be answered 409 again.
+bool summaryRetrySlotApplies(ServerConversation conversation) =>
+    TranscriptionPendingConversations.contains(conversation.id) ||
+    conversation.homeStep == 'failed' ||
+    conversation.showsSummaryRetry ||
+    (conversation.status == ConversationStatus.failed && !conversation.discarded && !conversation.isLocked);
+
 /// "Summary failed" with Retry, for a row the server marked retryable: its summary pass failed on
 /// a transient error, so a reprocess can still succeed. Success replaces the conversation, which
 /// clears the marker and removes this widget.
@@ -206,12 +217,26 @@ class SummaryRetryWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    return ValueListenableBuilder<Map<String, DateTime>>(
+      valueListenable: TranscriptionPendingConversations.ids,
+      builder: (context, _, __) => _build(context),
+    );
+  }
+
+  Widget _build(BuildContext context) {
     return Consumer<ConversationDetailProvider>(
       builder: (context, provider, child) {
         if (provider.loadingReprocessConversation && provider.reprocessConversationId == provider.conversation.id) {
           return Padding(
             padding: const EdgeInsets.only(top: 18.0),
             child: OmiLoadingState(label: context.l10n.summarizingConversation),
+          );
+        }
+        if (TranscriptionPendingConversations.contains(provider.conversation.id)) {
+          return _SummaryWaitingNotice(
+            key: const Key('conversation_detail_transcription_pending'),
+            title: context.l10n.summaryTranscriptionPendingTitle,
+            body: context.l10n.summaryTranscriptionPendingBody,
           );
         }
         return _SummaryCallToAction(
@@ -221,6 +246,32 @@ class SummaryRetryWidget extends StatelessWidget {
           onPressed: () => provider.reprocessConversation(),
         );
       },
+    );
+  }
+}
+
+/// A centred status with no action: the server is still transcribing, so there is nothing to retry.
+class _SummaryWaitingNotice extends StatelessWidget {
+  const _SummaryWaitingNotice({super.key, required this.title, required this.body});
+
+  final String title;
+  final String body;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: OmiSpacing.xxl),
+      child: Column(
+        children: [
+          Text(title, style: OmiType.title3, textAlign: TextAlign.center),
+          const SizedBox(height: OmiSpacing.xs),
+          Text(
+            body,
+            style: OmiType.subhead.copyWith(color: OmiColors.textSecondary),
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
     );
   }
 }
@@ -286,6 +337,13 @@ class _AppResultDetailWidgetState extends State<AppResultDetailWidget> {
   FocusNode? _focusNode;
   ConversationSummarySelection? _editingSelection;
   String? _editingOriginalContent;
+
+  /// The store app the attribution row opens. The built-in template ("The Best Summarizer") is a
+  /// local stand-in with no store entry, so its detail page could only fail; it gets no row.
+  App? get _attributionApp {
+    final app = widget.app;
+    return app == null || app.id == builtInSummaryTemplateAppId ? null : app;
+  }
 
   @override
   void dispose() {
@@ -382,7 +440,8 @@ class _AppResultDetailWidgetState extends State<AppResultDetailWidget> {
                         ),
                       ),
           ),
-          if (content.isNotEmpty && !_isEditing && widget.app != null) _buildAppAttribution(context, widget.app!),
+          if (content.isNotEmpty && !_isEditing && _attributionApp != null)
+            _buildAppAttribution(context, _attributionApp!),
         ],
       ),
     );
@@ -450,9 +509,10 @@ class GetAppsWidgets extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ValueListenableBuilder<bool>(
-      valueListenable: SummaryGenerationV2Gate.listenable,
-      builder: (context, _, __) => Consumer<ConversationDetailProvider>(
+    return ListenableBuilder(
+      // The not-transcribed answer changes which empty state applies, including when it expires.
+      listenable: Listenable.merge([SummaryGenerationV2Gate.listenable, TranscriptionPendingConversations.ids]),
+      builder: (context, _) => Consumer<ConversationDetailProvider>(
         builder: (context, provider, child) {
           final redesign = SummaryGenerationV2Gate.isEnabled;
           // One progress surface: while a summary is being written, the tab shows that, never the
@@ -466,10 +526,7 @@ class GetAppsWidgets extends StatelessWidget {
             if (failure != null) return SliverToBoxAdapter(child: SummaryFailureCard(failure: failure));
             final conversation = provider.conversation;
             // A failed processing pass can be retried the same way as a failed summary.
-            if (conversation.showsSummaryRetry ||
-                (conversation.status == ConversationStatus.failed &&
-                    !conversation.discarded &&
-                    !conversation.isLocked)) {
+            if (summaryRetrySlotApplies(conversation)) {
               return const SliverToBoxAdapter(child: SummaryRetryWidget());
             }
             if (conversation.status == ConversationStatus.processing) {
@@ -659,13 +716,13 @@ extension _AppResultDetailWidgetSliver on _AppResultDetailWidgetState {
                 : () => _startEditing(content),
           ),
         ),
-        if (widget.app != null) SliverToBoxAdapter(child: _buildAppAttribution(context, widget.app!)),
+        if (_attributionApp != null) SliverToBoxAdapter(child: _buildAppAttribution(context, _attributionApp!)),
       ],
     );
   }
 
-  /// The app that wrote this summary, opening its page. Omi's own summary (and an app the catalog no
-  /// longer knows) has nowhere to go, so it shows no row; the bottom pill names the source either way.
+  /// The app that wrote this summary, opening its page. Omi's own summary, the built-in template and an
+  /// app the catalog no longer knows have nowhere to go, so they show no row; the bottom pill names the source either way.
   Widget _buildAppAttribution(BuildContext context, App app) {
     const avatarRadius = 12.0;
     // An app without an image has nothing to fetch.

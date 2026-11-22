@@ -95,7 +95,7 @@ def _migration_reconcile_lease_active(
         raise RuntimeError('Agent VM migration reconcile lease is ambiguous')
     try:
         expires_at = float(raw_expires_at)
-    except (TypeError, ValueError) as exc:
+    except (TypeError, ValueError, OverflowError) as exc:
         raise RuntimeError('Agent VM migration reconcile lease is ambiguous') from exc
     if not math.isfinite(expires_at):
         raise RuntimeError('Agent VM migration reconcile lease is ambiguous')

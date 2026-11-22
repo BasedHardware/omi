@@ -6,6 +6,7 @@ from dataclasses import replace
 import pytest
 
 from database.batch_pipeline_intake import AdmissionDisabled, admit
+from config.record_audio import record_identity
 from tests.unit.test_batch_pipeline_scheduler import MemoryStore, item
 from utils.batch_pipeline.contracts import ProjectionBinding
 from utils.batch_pipeline.intake import durable_status, get_durable_job_status
@@ -73,6 +74,100 @@ def test_legacy_owner_cannot_be_taken_even_when_redis_expired(cohort):
     store.rows['content', 'synthetic-owner/content'] = {'status': 'processing', 'job_id': 'legacy', 'updated_at': 0}
     assert submit(store, *proposal()) == {'outcome': 'busy', 'job_id': 'legacy'}
     assert not any(table == 'jobs' for table, _ in store.rows)
+
+
+@pytest.mark.parametrize('native_record', [False, True])
+@pytest.mark.parametrize(
+    'ledger',
+    [
+        {},
+        {'dispatch_protocol': 'batch_v1', 'job_id': 'batch'},
+        {'status': 'processing'},
+        {
+            'status': 'completed',
+            'result': {
+                'new_memories': [],
+                'updated_memories': [],
+                'failed_segments': 0,
+                'total_segments': 1,
+                'errors': [],
+            },
+        },
+    ],
+)
+@pytest.mark.parametrize('obligation_source', ['unit', 'canonical', 'partial_parent'])
+def test_restore_pending_record_is_fenced_before_new_admission_or_ledger_replay(
+    cohort, native_record, ledger, obligation_source
+):
+    store = MemoryStore()
+    works, binding = proposal()
+    binding = replace(binding, record_origin=True, native_record=native_record, target_conversation_id='capture')
+    store.rows['conversations', 'synthetic-owner/capture'] = {'discarded': True}
+    segment = {
+        'unit': binding.segment_ids[0],
+        'canonical': record_identity(binding.owner_id, 'capture')[1],
+        'partial_parent': 'partial-parent',
+    }[obligation_source]
+    store.rows['jobs', segment] = {'registration_origin': 'restore', 'state': 'record_pending'}
+    before = dict(store.rows)
+    if ledger:
+        store.rows['content', 'synthetic-owner/content'] = dict(ledger)
+    with pytest.raises(ValueError, match='^registered record target unavailable$'):
+        admit(
+            store,
+            works,
+            binding,
+            100,
+            namespace=NAMESPACE,
+            intake={'record_partial_parent': segment} if obligation_source == 'partial_parent' else None,
+        )
+    assert {key: value for key, value in store.rows.items() if key[0] != 'content'} == before
+    assert store.rows.get(('content', 'synthetic-owner/content'), {}) == ledger
+
+
+@pytest.mark.parametrize('registration_origin', [None, 'capture'])
+@pytest.mark.parametrize('native_record', [False, True])
+@pytest.mark.parametrize('ledger_outcome', [None, 'batch', 'busy', 'completed'])
+def test_ordinary_discarded_record_still_admits(
+    cohort, monkeypatch, registration_origin, native_record, ledger_outcome
+):
+    monkeypatch.setenv('BATCH_PIPELINE_RECORD_PROTOCOL_READY', 'true')
+    store = MemoryStore()
+    works, binding = proposal()
+    binding = replace(binding, record_origin=True, native_record=native_record, target_conversation_id='capture')
+    store.rows['conversations', 'synthetic-owner/capture'] = {
+        'discarded': True,
+        'status': 'completed',
+        'record_lane_owner': 'batch_sync_v1',
+        'record_audio_closed': True,
+        'relevance_decision': {'verdict': 'discard', 'decided_by': 'rule', 'reason': 'empty_transcript'},
+    }
+    _, segment = record_identity(binding.owner_id, 'capture')
+    store.rows['jobs', segment] = {
+        'state': 'record_pending',
+        'registration_origin': registration_origin,
+        'owner_key': owner_key(binding.owner_id),
+        'merge_pending': False,
+    }
+    if ledger_outcome is not None:
+        store.rows['content', 'synthetic-owner/content'] = {
+            'batch': {'dispatch_protocol': 'batch_v1', 'job_id': 'existing'},
+            'busy': {'status': 'processing', 'job_id': 'legacy'},
+            'completed': {
+                'status': 'completed',
+                'result': {
+                    'new_memories': [],
+                    'updated_memories': [],
+                    'failed_segments': 0,
+                    'total_segments': 1,
+                    'errors': [],
+                },
+            },
+        }[ledger_outcome]
+    assert submit(store, works, binding)['outcome'] == (ledger_outcome or 'batch')
+    assert store.rows['conversations', 'synthetic-owner/capture']['discarded'] is True
+    if ledger_outcome is None:
+        assert store.rows['jobs', binding.segment_ids[0]]['projection_binding']['record_origin'] is True
 
 
 def test_late_capture_admits_without_rewriting_high_watermark(cohort):

@@ -12,6 +12,7 @@ import threading
 import time
 
 from prometheus_client import Counter
+from google.api_core.exceptions import NotFound
 
 from utils.batch_pipeline.admission import admitted_as_byok
 from utils.stt_cap_dispatch import sync_allowed, funded_allowance
@@ -361,6 +362,18 @@ class QuarantineRecovery:
                 return 'held'
             try:
                 audio = self.artifacts.fetch_audio(item)
+            except NotFound:
+                # Only an authoritative missing object is terminal; outages still retry.
+                if not self.protocol.hold_input_missing(segment_id, token, self.clock(), audio_uri=item.audio_uri):
+                    return 'held'
+                record_fallback(
+                    component='stt_selection',
+                    from_mode='batch',
+                    to_mode='none',
+                    reason='input_missing',
+                    outcome='degraded',
+                )
+                return 'failed_held'
             except InvalidRetainedManifest:
                 # Deterministic on the stored bytes: hold once instead of a 500 retry loop.
                 if not self.protocol.hold_invalid_manifest(segment_id, token, self.clock(), audio_uri=item.audio_uri):

@@ -58,3 +58,14 @@ def test_repeat_counter_and_paid_generation_grade_metrics_leave_both_gmp_profile
         rules = profile['spec']['endpoints'][0]['metricRelabeling']
         keep = [rule['regex'] for rule in rules if rule['action'] == 'keep' and rule['sourceLabels'] == ['__name__']]
         assert all(any(re.fullmatch(pattern, metric) for pattern in keep) for metric in metrics)
+
+
+def test_read_only_people_reader_changes_also_require_reaudit():
+    source = """
+def reader(client):
+    return client.collection('people').document('p').get(field_paths=['name'])
+"""
+    reviewed = audit.fingerprints(source)
+    assert audit.changes({}, reviewed)['new'] == ['reader']
+    changed = audit.fingerprints(source.replace("['name']", "['name', 'is_dismissed']"))
+    assert audit.changes(reviewed, changed)['changed'] == ['reader']

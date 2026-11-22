@@ -29,7 +29,14 @@ class WalFileManager {
   // Both writers use the same main/backup temporary paths.
   static final _saveLock = Pool(1);
 
+  // Revokes per-read custody snapshots before any index mutation, including
+  // worker writes and recovery. A stale row must never hide a corruption or
+  // deletion recorded by another writer while the audio file still exists.
+  static int _indexRevision = 0;
+  static int get indexRevision => _indexRevision;
+
   static Future<void> init() async {
+    _indexRevision++;
     final directory = await getApplicationDocumentsDirectory();
     _walFile = File('${directory.path}/$_walFileName');
     _walBackupFile = File('${directory.path}/$_walBackupFileName');
@@ -37,14 +44,22 @@ class WalFileManager {
 
   static Future<List<Wal>> loadWals() => _saveLock.withResource(_loadWals);
 
+  /// Custody must never mistake a replayed, unindexed journal for an index
+  /// commit. This reader deliberately excludes journal discovery/repair.
+  static Future<List<Wal>> loadIndexedWals() => _saveLock.withResource(_loadIndexedWals);
+
   static Future<List<Wal>> _loadWals() async {
+    final indexed = await _loadIndexedWals();
+    return MobileBatchBuffer.recover(_walFile!.parent, indexed);
+  }
+
+  static Future<List<Wal>> _loadIndexedWals() async {
     if (_walFile == null) {
       await init();
     }
 
     final loaded = _walFile != null && await _walFile!.exists() ? await _loadIndex(_walFile!) : null;
-    final indexed = loaded ?? await _loadFromBackup();
-    return MobileBatchBuffer.recover(_walFile!.parent, indexed);
+    return loaded ?? await _loadFromBackup();
   }
 
   /// Null means the index is unusable; a partially valid index retains every
@@ -86,7 +101,10 @@ class WalFileManager {
             seedFromDisk: seedFromDisk,
             seedPath: seedPath,
             beforeWriteForTesting: beforeWriteForTesting,
-            serialize: (write) => _saveLock.withResource(write));
+            serialize: (write) => _saveLock.withResource(() async {
+                  _indexRevision++;
+                  await write();
+                }));
       });
 
   static ({List<Wal> wals, bool invalid}) _decodeIndex(String content, String path) {
@@ -119,6 +137,10 @@ class WalFileManager {
           'live_ring_id',
           'live_ordinal_start',
           'live_ordinal_end',
+          'download_ring_id',
+          'download_seq_start',
+          'download_seq_end',
+          'download_file_bytes',
         ]) {
           if (entry[key] != null && entry[key] is! int) throw const FormatException();
         }
@@ -131,6 +153,8 @@ class WalFileManager {
           'owner_uid',
           'capture_root',
           'job_id',
+          'batch_live_session',
+          'live_device_id',
         ]) {
           if (entry[key] != null && entry[key] is! String) throw const FormatException();
         }
@@ -152,6 +176,7 @@ class WalFileManager {
   static Future<void> Function(File file)? quarantineRenameForTesting;
 
   static Future<void> _quarantineIndex(File file, String reason) async {
+    _indexRevision++;
     try {
       if (await file.exists()) {
         final rename = quarantineRenameForTesting;
@@ -188,6 +213,7 @@ class WalFileManager {
   static ({String path, int length, DateTime modified})? _lastWritten;
 
   static Future<bool> saveWals(List<Wal> wals) {
+    _indexRevision++;
     final queued = _queued;
     if (queued != null) {
       queued.superseded = queued.wals;
@@ -204,6 +230,7 @@ class WalFileManager {
   }
 
   static Future<bool> _saveWals(List<Wal> wals, {List<Wal>? superseded}) async {
+    _indexRevision++;
     if (_walFile == null) {
       await init();
     }
@@ -310,6 +337,7 @@ class WalFileManager {
   }
 
   static Future<void> clearAll() async {
+    _indexRevision++;
     if (_walFile != null && _walFile!.existsSync()) {
       await _walFile!.delete();
     }

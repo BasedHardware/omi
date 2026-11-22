@@ -285,7 +285,7 @@ if [ -n "$STAGED_C_FILES" ]; then
 fi
 
 # Swift formatting for desktop/macos/Desktop/
-STAGED_SWIFT_FILES=$(git diff --cached --name-only --diff-filter=ACM | grep -E '^desktop/macos/Desktop/.*\.swift$' | grep -v '/Generated/' || true)
+STAGED_SWIFT_FILES=$(git diff --cached --name-only --diff-filter=ACM | grep -E '^desktop/macos/Desktop/.*\.swift$' | grep -v '/Generated/' | drop_merge_incoming || true)
 
 if [ -n "$STAGED_SWIFT_FILES" ]; then
   echo "Formatting staged Swift files in desktop/macos/Desktop/..."

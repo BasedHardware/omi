@@ -210,6 +210,51 @@ def test_log_metrics_require_explicit_apply_and_verify_then_become_noop():
     assert all(c[0] == 'GET' for c in session.calls)
 
 
+def test_batch_projection_log_metrics_match_without_writes(capsys):
+    bodies = json.loads(ops.BATCH_PROJECTION_LOG_METRICS.read_text())
+    session = Session()
+    session.metrics = {body['name']: body for body in bodies}
+    assert not ops.reconcile_log_metrics(session, 'apply', ops.BATCH_PROJECTION_LOG_METRICS)
+    assert capsys.readouterr().out.splitlines() == ['MATCH ' + body['name'] for body in bodies]
+    assert all(call[0] == 'GET' for call in session.calls)
+
+
+def test_batch_projection_cli_check_then_create_and_verify(monkeypatch, capsys):
+    session = Session()
+    monkeypatch.setattr(sys, 'argv', ['messaging_operations.py', 'batch-projection-log-metrics', '--check'])
+    monkeypatch.setattr(ops.subprocess, 'run', lambda *a, **kw: SimpleNamespace(returncode=0, stdout='fake-token'))
+    monkeypatch.setattr(ops, 'AuthorizedSession', lambda credentials: session)
+    bodies = json.loads(ops.BATCH_PROJECTION_LOG_METRICS.read_text())
+    assert ops.main() == 1
+    assert capsys.readouterr().out.splitlines() == ['DIFF ' + body['name'] for body in bodies]
+    assert all(call[0] == 'GET' for call in session.calls)
+    assert not session.metrics
+    session.calls.clear()
+    monkeypatch.setattr(sys, 'argv', ['messaging_operations.py', 'batch-projection-log-metrics', '--apply'])
+    assert ops.main() == 0
+    assert session.metrics == {body['name']: body for body in bodies}
+    assert [call[0] for call in session.calls] == ['GET'] * len(bodies) + ['PUT', 'GET'] * len(bodies)
+    assert [call[2]['json'] for call in session.calls if call[0] == 'PUT'] == bodies
+    assert 'VERIFIED omi_pipeline_owner_drain_advanced' in capsys.readouterr().out
+
+
+@pytest.mark.parametrize('mismatch', ['metricKind', 'valueType', 'labels'])
+def test_batch_projection_schema_drift_refuses_all_writes(mismatch):
+    session = Session()
+    bodies = json.loads(ops.BATCH_PROJECTION_LOG_METRICS.read_text())
+    session.metrics = {body['name']: body for body in bodies}
+    bodies[0]['description'] = 'Compatible drift must not be written before the full schema audit'
+    descriptor = session.metrics['omi_pipeline_owner_drain_advanced']['metricDescriptor']
+    descriptor[mismatch] = {
+        'metricKind': 'GAUGE',
+        'valueType': 'INT64',
+        'labels': [{'key': 'unmanaged', 'valueType': 'STRING'}],
+    }[mismatch]
+    with pytest.raises(RuntimeError, match='schema differs'):
+        ops.reconcile_log_metrics(session, 'apply', ops.BATCH_PROJECTION_LOG_METRICS)
+    assert all(call[0] == 'GET' for call in session.calls)
+
+
 @pytest.mark.parametrize('mismatch', ['value_type', 'reason_type', 'extra_label'])
 def test_incompatible_existing_log_metric_fails_before_any_write(mismatch):
     session = Session()

@@ -15,9 +15,11 @@ test_folder_delete_concurrency_emulator.py; all of its reads obey the same
 read-before-write rule. BatchGet does not promise request-order results.
 Transaction deletes are proven by test_recurring_voice_privacy_firestore.py:
 removed profiles must disappear rather than leave documents outside TTL.
-It deliberately does not model other queries, standalone deletes, commit/rollback visibility,
-or retry and contention semantics. Extend it only when an incident proves that
-one of those boundaries needs a hermetic guard.
+It also models the app-review config document's top-level merge write, which
+backs the lifecycle persistence boundary. It deliberately does not model other
+queries, standalone deletes, commit/rollback visibility, or retry and
+contention semantics. Extend it only when an incident proves that one of those
+boundaries needs a hermetic guard.
 
 As fixture-integrity policy, a transaction accepts references created by its
 own ``StrictFirestore`` instance only. This prevents accidental mixing of
@@ -31,6 +33,7 @@ from threading import RLock
 from typing import Any
 
 from google.cloud.firestore_v1.transforms import Increment
+from google.cloud.firestore_v1.field_path import FieldPath
 
 
 class ReadAfterWriteError(RuntimeError):
@@ -62,7 +65,7 @@ def _assert_storable(value: Any, *, in_array: bool = False) -> None:
 
 _SUPPORTED_OPERATIONS = (
     'document get/create, transaction-bound document get, transaction create/set/update/delete, bounded equality id queries, '
-    'projected client folder-membership BatchGet'
+    'app-review config merge writes, projected client folder-membership BatchGet'
 )
 
 
@@ -71,6 +74,14 @@ class StrictFirestoreSnapshot:
         self._data = deepcopy(data)
         self.exists = data is not None
         self.reference: Any = None
+
+    @property
+    def id(self) -> str:
+        return self._explicit_id if hasattr(self, '_explicit_id') else self.reference.id
+
+    @id.setter
+    def id(self, value: str) -> None:
+        self._explicit_id = value
 
     def to_dict(self) -> dict[str, Any] | None:
         return deepcopy(self._data)
@@ -111,11 +122,17 @@ class StrictFirestoreDocument:
             transaction._assert_read_allowed()
         data = self._database.rows.get(self.path)
         if field_paths is not None and data is not None:
-            if field_paths not in (
+            # Additive v3 classification metadata uses the same field-mask
+            # semantics as the already supported projection below.
+            supported_field_paths = [field for field in field_paths if field != 'recording']
+            if supported_field_paths not in (
                 ["is_locked"],
                 ["folder_id"],
                 ["language"],
+                ["private_cloud_sync_enabled"],
+                ['uses_custom_stt', 'private_cloud_sync_enabled', 'data_protection_level'],
                 ['discarded', 'deleted', 'sync_merged_into'],
+                ['external_data', 'created_at', 'deleted', 'sync_merged_from'],
                 [
                     'discarded',
                     'deleted',
@@ -164,6 +181,13 @@ class StrictFirestoreDocument:
                     'record_projection_revision',
                     'record_upload_failed',
                     'record_audio_partial',
+                    'record_transcription_empty',
+                    'episode_transcription_pending_at',
+                    'server_batch_audio_closed',
+                    'server_batch_audio_start',
+                    'server_batch_audio_end',
+                    'record_audio_closed',
+                    'record_upload_sessions',
                     'status',
                     'started_at',
                     'finished_at',
@@ -218,6 +242,10 @@ class StrictFirestoreCollection:
     def __init__(self, database: StrictFirestore, path: tuple[str, ...]):
         self._database = database
         self._path = path
+
+    @property
+    def id(self) -> str:
+        return self._path[-1]
 
     @property
     def parent(self) -> StrictFirestoreDocument | None:
@@ -293,8 +321,11 @@ class StrictFirestoreIdQuery:
 
 
 class StrictFirestoreTransaction:
-    def __init__(self, database: StrictFirestore, *, allow_reads_after_writes: bool = False):
+    def __init__(
+        self, database: StrictFirestore, *, allow_reads_after_writes: bool = False, require_begun: bool = False
+    ):
         self._database = database
+        self._require_begun = require_begun
         self._allow_reads_after_writes = allow_reads_after_writes
         self.lock = database.lock
         self.creates: list[tuple[tuple[str, ...], dict[str, Any]]] = []
@@ -326,6 +357,9 @@ class StrictFirestoreTransaction:
             raise ReadAfterWriteError('Firestore transactions must complete all reads before the first write')
 
     def _assert_reference_belongs(self, ref: StrictFirestoreDocument) -> None:
+        # The SDK refuses an unbegun transaction; only @firestore.transactional begins one.
+        if self._require_begun and self._id is None:
+            raise ValueError('Transaction not in progress, cannot be used in API requests.')
         if ref._database is not self._database:
             raise ForeignTransactionError('Firestore transaction and document reference must belong to the same store')
 
@@ -336,16 +370,23 @@ class StrictFirestoreTransaction:
         payload = deepcopy(data)
         self.sets.append((ref.path, payload))
         if merge:
-            # Proven by fsr_people_generation_emulator_test.py: set+Increment
-            # without merge replaces the counter and repeatedly stores 1.
-            # Keep this fixture narrow: only the People generation transform
-            # has an emulator proof; do not approximate arbitrary merge masks.
-            if set(data) != {'generation'} or not isinstance(data['generation'], Increment):
-                raise UnsupportedFirestoreOperationError('only the People generation merge transform is supported')
-            prior = dict(self._database.rows.get(ref.path) or {})
-            value = prior.get('generation', 0)
-            prior['generation'] = (value if type(value) in (int, float) else 0) + data['generation'].value
-            self._database.rows[ref.path] = prior
+            if ref.path[0] == 'app_review_config' and len(ref.path) == 2:
+                # App-review persists a complete top-level config snapshot with
+                # merge=True, preserving fields owned by other writers.
+                prior = deepcopy(self._database.rows.get(ref.path) or {})
+                prior.update(payload)
+                self._database.rows[ref.path] = prior
+            elif set(data) == {'generation'} and isinstance(data['generation'], Increment):
+                # Proven by fsr_people_generation_emulator_test.py: set+Increment
+                # without merge replaces the counter and repeatedly stores 1.
+                prior = dict(self._database.rows.get(ref.path) or {})
+                value = prior.get('generation', 0)
+                prior['generation'] = (value if type(value) in (int, float) else 0) + data['generation'].value
+                self._database.rows[ref.path] = prior
+            else:
+                raise UnsupportedFirestoreOperationError(
+                    'merge set is supported only for app-review config and People generation'
+                )
         else:
             self._database.rows[ref.path] = payload
 
@@ -367,7 +408,16 @@ class StrictFirestoreTransaction:
             raise RuntimeError('missing row')
         payload = deepcopy(patch)
         self.updates.append((ref.path, payload))
-        self._database.rows[ref.path].update(payload)
+        # Emulator proof: test_conversation_terminal_family_firestore.py covers
+        # nested updates, quoted keys, and replacement of non-map ancestors.
+        for key, value in payload.items():
+            parts = FieldPath.from_api_repr(key).parts
+            parent = self._database.rows[ref.path]
+            for part in parts[:-1]:
+                if not isinstance(parent.get(part), dict):
+                    parent[part] = {}
+                parent = parent[part]
+            parent[parts[-1]] = value
 
     def delete(self, ref: StrictFirestoreDocument) -> None:
         self._assert_reference_belongs(ref)
@@ -388,6 +438,8 @@ class StrictFirestore:
     ``allow_reads_after_writes`` is an explicit, greppable opt-out for tests
     that intentionally do not exercise Firestore transaction semantics. It
     defaults to ``False`` and must not be used by production-boundary tests.
+    ``require_begun`` rejects an unbegun transaction as the SDK does, for tests
+    that drive a full ``run`` path rather than an inner transaction body.
     """
 
     def __init__(
@@ -395,8 +447,10 @@ class StrictFirestore:
         rows: dict[tuple[str, ...], dict[str, Any]] | None = None,
         *,
         allow_reads_after_writes: bool = False,
+        require_begun: bool = False,
     ):
         self.rows = deepcopy(rows or {})
+        self._require_begun = require_begun
         self.lock = RLock()
         self._allow_reads_after_writes = allow_reads_after_writes
         self.transactions: list[StrictFirestoreTransaction] = []
@@ -411,7 +465,9 @@ class StrictFirestore:
         return StrictFirestoreDocument(self, segments)
 
     def transaction(self, max_attempts: int | None = None) -> StrictFirestoreTransaction:
-        transaction = StrictFirestoreTransaction(self, allow_reads_after_writes=self._allow_reads_after_writes)
+        transaction = StrictFirestoreTransaction(
+            self, allow_reads_after_writes=self._allow_reads_after_writes, require_begun=self._require_begun
+        )
         if max_attempts is not None:
             transaction._max_attempts = max_attempts
         self.transactions.append(transaction)
@@ -421,11 +477,12 @@ class StrictFirestore:
         self,
         references: list[StrictFirestoreDocument],
         *,
-        field_paths: list[str],
-        transaction: StrictFirestoreTransaction,
+        field_paths: list[str] | None = None,
+        transaction: StrictFirestoreTransaction | None = None,
     ) -> list[StrictFirestoreSnapshot]:
-        if field_paths != ['folder_id']:
-            raise UnsupportedFirestoreOperationError('only folder membership BatchGet is supported')
+        # Whole-document BatchGet (no field mask) and the folder-membership mask are modelled.
+        if field_paths is not None and field_paths != ['folder_id']:
+            raise UnsupportedFirestoreOperationError('only whole-document or folder membership BatchGet is supported')
         snapshots = []
         for reference in reversed(references):
             if reference._database is not self:

@@ -1,7 +1,9 @@
+import 'dart:async';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/schema/pending_work.dart';
+import 'package:omi/backend/schema/gen/pending_work_wire.g.dart' as wire;
 import 'package:omi/services/pending_work/pending_work_store.dart';
 
 /// The one-row Home and the bell's Needs attention read one store; retries reuse one idempotency
@@ -59,6 +61,132 @@ PendingWorkStore _store(
 }
 
 void main() {
+  test('placement requires an explicit true wire confirmation', () {
+    for (final value in [null, false, true]) {
+      final json = <String, dynamic>{
+        'enabled': true,
+        'items': [],
+        'attention_unseen_count': 0,
+        if (value != null) 'home_processing_today': value
+      };
+      expect(PendingWorkSnapshot.fromJson(json).homeProcessingToday, value == true);
+      expect(PendingWorkSnapshot.fromGenerated(wire.GeneratedPendingWorkSnapshot.fromJson(json)).homeProcessingToday,
+          value == true);
+    }
+  });
+
+  test('every failed read restores old Home after a successful opt-in', () async {
+    for (final kind in ApiProblemKind.values) {
+      var failing = false;
+      final store = PendingWorkStore(
+          loadPending: () async => failing
+              ? ApiFailure(ApiProblem(kind))
+              : const ApiSuccess(
+                  PendingWorkSnapshot(enabled: true, items: [], attentionUnseenCount: 0, homeProcessingToday: true)),
+          loadAttention: () async => const ApiSuccess(AttentionItemsPage.disabled));
+      expect(store.homeProcessingToday, isFalse);
+      await store.refresh();
+      expect(store.homeProcessingToday, isTrue);
+      failing = true;
+      await store.refresh();
+      expect(store.homeProcessingToday, isFalse, reason: kind.name);
+      store.dispose();
+    }
+  });
+
+  test('thrown reads and account reset restore old placement', () async {
+    var throwing = false;
+    final store = PendingWorkStore(
+        loadPending: () async {
+          if (throwing) throw StateError('offline');
+          return const ApiSuccess(
+              PendingWorkSnapshot(enabled: true, items: [], attentionUnseenCount: 0, homeProcessingToday: true));
+        },
+        loadAttention: () async => const ApiSuccess(AttentionItemsPage.disabled));
+    await store.refresh();
+    throwing = true;
+    await store.refresh();
+    expect(store.homeProcessingToday, isFalse);
+    throwing = false;
+    await store.refresh();
+    store.reset();
+    expect(store.homeProcessingToday, isFalse);
+    expect(store.pending, isEmpty);
+    store.dispose();
+  });
+
+  test('an old account response cannot enable placement after reset', () async {
+    final response = Completer<ApiResult<PendingWorkSnapshot>>();
+    final store = PendingWorkStore(
+        loadPending: () => response.future, loadAttention: () async => const ApiSuccess(AttentionItemsPage.disabled));
+    final refreshing = store.refresh();
+    store.reset();
+    response.complete(const ApiSuccess(
+        PendingWorkSnapshot(enabled: true, items: [], attentionUnseenCount: 0, homeProcessingToday: true)));
+    await refreshing;
+    expect(store.homeProcessingToday, isFalse);
+    store.dispose();
+  });
+
+  test('failed pending rows belong only to Activity when on; off restores catch-up', () async {
+    var enabled = true;
+    final store = PendingWorkStore(
+        loadPending: () async => ApiSuccess(PendingWorkSnapshot(
+            enabled: true,
+            homeProcessingToday: enabled,
+            items: const [
+              PendingWorkItem(
+                  id: 'conv:f', kind: 'conversation', state: 'summarizing', conversationIds: ['f'], homeStep: 'failed')
+            ],
+            attentionUnseenCount: 0)),
+        loadAttention: () async => const ApiSuccess(AttentionItemsPage.disabled));
+    await store.refresh();
+    expect(store.pending, isEmpty);
+    expect(store.pendingForActivity.single.homeStep, 'failed');
+    enabled = false;
+    await store.refresh();
+    expect(store.pending.single.id, 'conv:f');
+    final wireItem = PendingWorkItem.fromJson(
+        {'id': 'conv:f', 'kind': 'conversation', 'state': 'summarizing', 'home_step': 'failed'});
+    expect(wireItem!.homeStep, 'failed');
+    store.dispose();
+  });
+
+  test('confirmed failed ledger attempt uses a fresh key for the next retry', () async {
+    final calls = _Calls();
+    final store = _store(calls,
+        attention: ApiSuccess(AttentionItemsPage(enabled: true, items: [_item('x')], unseenCount: 1)),
+        retry: (id) => ApiSuccess(AttentionRetryResult(itemId: id, state: AttentionRetryState.failed)));
+    await store.refresh();
+    await store.retry(store.attention.single);
+    await store.retry(store.attention.single);
+    expect(calls.retryKeys, ['key-0', 'key-1']);
+    store.dispose();
+  });
+
+  test('generated pending work keeps the recording count and legacy default', () {
+    for (final count in [null, 3]) {
+      final decoded = wire.GeneratedPendingWorkSnapshot.fromJson({
+        'enabled': true,
+        'attention_unseen_count': 0,
+        'items': [
+          {
+            'id': 'sync:job',
+            'kind': 'sync_job',
+            'state': 'transcribing',
+            'conversation_ids': ['target'],
+            'duration_seconds': 0,
+            'started_at': null,
+            'updated_at': null,
+            if (count != null) 'recording_count': count,
+          }
+        ],
+      });
+      final snapshot = PendingWorkSnapshot.fromGenerated(decoded);
+      expect(snapshot.items.single.recordingCount, count ?? 1);
+    }
+  });
+
   test('a backend answering enabled:false reads as empty', () async {
     final calls = _Calls();
     final store = _store(calls);

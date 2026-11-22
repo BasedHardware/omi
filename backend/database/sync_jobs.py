@@ -28,9 +28,11 @@ import os
 import time
 import uuid
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Dict, Optional, Set, cast
 
+from config.home_processing import ownership_enabled
 from config.sync_telemetry import bounded_correlation_ref, bounded_exception_class, bounded_sync_phase
 from database import sync_dead_letters
 from database.redis_db import r
@@ -188,6 +190,8 @@ def create_sync_job(
     content_id: Optional[str] = None,
     dispatch_mode: str = 'inline',
     ledger_fence_mode: str = SyncLedgerFenceMode.LEGACY.value,
+    recording_ids: list[str] | None = None,
+    target_conversation_id: str | None = None,
     policy=None,
 ) -> Dict[str, Any]:
     """Create a new sync job and store in Redis. Returns the job dict."""
@@ -212,6 +216,8 @@ def create_sync_job(
         'successful_segments': 0,
         'failed_segments': 0,
         'result': None,
+        'recording_ids': sorted(set(recording_ids or [])),
+        'target_conversation_id': target_conversation_id,
         'error': None,
         'reason_code': None,
         'retry_after': None,
@@ -1372,10 +1378,11 @@ def try_mark_once(job_id: str, tag: str) -> bool:
         return True
 
 
-def pending_sync_jobs(uid: str) -> list[dict[str, Any]]:
+def pending_sync_jobs(uid: str, *, listed_conversation_ids: set[str] | None = None) -> list[dict[str, Any]]:
     """Read at most 100 owner-indexed Redis jobs, without scanning global keys."""
-    from datetime import datetime, timezone
-
+    enabled = ownership_enabled(uid)
+    represented = set(listed_conversation_ids or ())
+    seen_recordings: set[tuple[str, str]] = {('conversation', cid) for cid in represented}
     index_key = _key(f'pending_sync_jobs:{uid}')
     ids = r.zrevrange(index_key, 0, 99) or []
     result = []
@@ -1390,12 +1397,39 @@ def pending_sync_jobs(uid: str) -> list[dict[str, Any]]:
         conversations = sorted(
             set(job_result.get('new_memories') or []) | set(job_result.get('updated_memories') or [])
         )
+        recording_count = 1
+        if enabled:
+            target = job.get('target_conversation_id')
+            if target:
+                conversations = sorted(set(conversations) | {target})
+            # Suppress only a completely represented job. Empty and partial
+            # ownership cannot prove that its remaining recordings are listed.
+            if listed_conversation_ids is not None and conversations and set(conversations).issubset(represented):
+                continue
+            # Several chunk uploads may still be separate jobs for one recording.
+            # Dedupe representation only; raw writer-lease readers keep every job.
+            recording_ids = job.get('recording_ids') or []
+            keys = (
+                {('recording', rid) for rid in recording_ids}
+                if recording_ids
+                else {('conversation', cid) for cid in conversations}
+            )
+            recording_count = len(keys) or 1
+            if listed_conversation_ids is not None and keys:
+                unseen = keys - seen_recordings
+                if not unseen:
+                    continue
+                recording_count = len(unseen)
+                seen_recordings.update(unseen)
+            if listed_conversation_ids is not None:
+                conversations = [cid for cid in conversations if cid not in represented]
         result.append(
             {
                 'id': 'sync:' + job_id,
                 'kind': 'sync_job',
                 'state': 'queued' if job['status'] == 'queued' else 'transcribing',
                 'conversation_ids': conversations,
+                **({'recording_count': recording_count} if enabled else {}),
                 'started_at': datetime.fromtimestamp(start, timezone.utc),
                 'duration_seconds': 0,
                 'updated_at': datetime.fromtimestamp(job['updated_at'], timezone.utc),

@@ -38,7 +38,16 @@ DAILY = {
     # the modulate series feeds the modelled vendor line (pull_modulate_modelled.py).
     "d_live_stt_audio_seconds": "sum by (provider) (increase(omi_live_stt_audio_seconds_total[1d]))",
     "d_parakeet_audio_duration_sum": "sum (increase(parakeet_audio_duration_seconds_sum[1d]))",
+    "d_modulate_rest_audio_seconds": 'sum by (endpoint, outcome) (increase(omi_prerecorded_vendor_audio_seconds_total{provider="modulate",cluster!="__run__"}[1d]))',
 }
+
+GMP_DAILY = {
+    "d_gmp_modulate_rest_audio_seconds": 'sum by (namespace, endpoint, outcome) (increase(omi_prerecorded_vendor_audio_seconds_total{project_id="based-hardware",cluster="__run__",job="omi-cloud-run-application-metrics",provider="modulate"}[1d]))',
+}
+
+
+def datasource_url(root: str, uid: str) -> str:
+    return root.rstrip("/") + "/api/datasources/proxy/uid/" + uid + "/api/v1"
 
 
 def load_env() -> tuple[str, str]:
@@ -47,14 +56,14 @@ def load_env() -> tuple[str, str]:
         from cloudrun import secret
 
         ep = os.environ.get("OMI_PROMETHEUS_ENDPOINT", "https://monitor.omi.me").rstrip("/")
-        return ep + "/api/datasources/proxy/uid/prometheus/api/v1", secret("prometheus")
+        return ep, secret("prometheus")
     for line in ENV.read_text().splitlines():
         line = line.strip()
         if line and not line.startswith("#") and "=" in line:
             k, v = line.split("=", 1)
             os.environ.setdefault(k, v)
     ep = os.environ.get("OMI_PROMETHEUS_ENDPOINT", "https://monitor.omi.me").rstrip("/")
-    return ep + "/api/datasources/proxy/uid/prometheus/api/v1", os.environ["OMI_PROMETHEUS_TOKEN"]
+    return ep, os.environ["OMI_PROMETHEUS_TOKEN"]
 
 
 def call(base: str, tok: str, api: str, params) -> dict:
@@ -77,26 +86,32 @@ def main() -> None:
     ap.add_argument("--end", required=True, help="last usage day, inclusive")
     ap.add_argument("--raw", required=True)
     a = ap.parse_args()
-    base, tok = load_env()
+    root, tok = load_env()
     # evaluation points are one day AFTER each usage day: increase(...[1d]) at T covers day T-1
     t0 = dt.datetime.fromisoformat(a.start).replace(tzinfo=dt.timezone.utc) + dt.timedelta(days=1)
     t1 = dt.datetime.fromisoformat(a.end).replace(tzinfo=dt.timezone.utc) + dt.timedelta(days=1)
     out = {
         "window": {"start": a.start, "end": a.end},
         "method": "query_range step=86400 with increase(...[1d]); bucket at T is usage day T-1",
-        "endpoint": "Grafana datasource proxy uid=prometheus on monitor.omi.me",
+        "endpoint": "Grafana datasource proxies uid=prometheus and uid=gmp-cloud-run on monitor.omi.me",
         "daily": {},
     }
-    for name, q in DAILY.items():
-        r = call(
-            base,
-            tok,
-            "query_range",
-            [("query", q), ("start", str(int(t0.timestamp()))), ("end", str(int(t1.timestamp()))), ("step", "86400")],
-        )
-        out["daily"][name] = {"query": q, "result": r}
-        n = len(r.get("data", {}).get("result", [])) if r.get("status") == "success" else 0
-        sys.stderr.write("%s: %s series=%d\n" % (name, r.get("status"), n))
+    for uid, queries in (("prometheus", DAILY), ("gmp-cloud-run", GMP_DAILY)):
+        for name, q in queries.items():
+            r = call(
+                datasource_url(root, uid),
+                tok,
+                "query_range",
+                [
+                    ("query", q),
+                    ("start", str(int(t0.timestamp()))),
+                    ("end", str(int(t1.timestamp()))),
+                    ("step", "86400"),
+                ],
+            )
+            out["daily"][name] = {"query": q, "datasource": uid, "result": r}
+            n = len(r.get("data", {}).get("result", [])) if r.get("status") == "success" else 0
+            sys.stderr.write("%s (%s): %s series=%d\n" % (name, uid, r.get("status"), n))
     raw = pathlib.Path(a.raw)
     raw.mkdir(parents=True, exist_ok=True)
     (raw / "prom_stt_7d.json").write_text(json.dumps(out, indent=1))

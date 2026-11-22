@@ -34,6 +34,13 @@ Memory-only rollout: backfill 8 → 4 GiB, keep 2 vCPU, concurrency 3, min/max 3
 
 ## Concurrency and dispatch
 
+Production `backend-integration` deploys declare `--max-instances=35` in
+`.github/actions/deploy-backend-stack/action.yml` (David, 2026-11-05 16:01Z;
+coordinator `ac3408`). Hold only while CPU p50 stays below approximately 0.75,
+queues fall, and drain stays near 11 rows/s; otherwise restore 50. Non-production
+retains 50. Rollback: set the live service to `--max-instances=50` and restore the
+production deploy declaration to 50 so the next deploy preserves the rollback.
+
 Updated 2026-10-15 for Train 1: `.github/actions/sync-backfill-lifecycle/action.yml` sets revision max 40 **and** service max 40, concurrency 6, CPU 2, memory 8 GiB, min 3. Both queue create/update branches set 90 concurrent dispatches / 15 per second,5–60s retry backoff. This is source configuration; verify the applied revision, traffic, worker capacity and queue separately. The earlier 40/10 and concurrency 3 sizing proposals below are historical, not current settings.
 
 The prior baseline was 60/10 and 18×6 slots. Release worker capacity before queue dispatch. Keep 90/ 15 as the persisted first step; later operator increases 135/20→180/25→200/25 require at least 15 min per step, durable-throughput evidence, <10% latency/retry regression, no OOM/capacity 429, unchanged GPU admission, and observed Firestore/Redis headroom. See [capacity and retirement runbook](sync-backfill-concurrency.md) for the exact queue rollback and flag-off behavior. Retire Redis-absent heads under the new guarded policy instead of consuming a full Cloud Tasks turn per expired job; this recovers capacity but does not itself recover audio or count as a completed transcript.

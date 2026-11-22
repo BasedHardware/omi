@@ -204,8 +204,8 @@ class TestPlaybackReadPathsStructure:
 
     def test_urls_endpoint_gated(self):
         src = _read_source(os.path.join('utils', 'sync', 'playback.py'))
-        fn = src[src.index('def get_audio_signed_urls') :]
-        assert 'is_audio_merge_dispatch_enabled()' in fn[:1500]
+        fn = src[src.index('def get_audio_signed_urls') : src.index('def _get_artifact_download_payload')]
+        assert 'is_audio_merge_dispatch_enabled()' in fn
 
     def test_download_endpoint_returns_202_on_miss(self):
         src = _read_source(os.path.join('utils', 'sync', 'playback.py'))

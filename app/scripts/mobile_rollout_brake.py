@@ -38,8 +38,37 @@ def github_json(path: str) -> object:
         return json.load(response)
 
 
-def require_quiesced_writers(fetch=github_json) -> None:
-    """Opening even a read edit invalidates another edit by this API user."""
+def scheduler_job_json() -> object:
+    credentials_raw = os.environ.get("GCLOUD_SERVICE_ACCOUNT_CREDENTIALS", "").strip()
+    if not credentials_raw:
+        raise BrakeError("cannot verify app-review-config-sweep-hourly is paused")
+    try:
+        from google.auth.transport.requests import AuthorizedSession
+        from google.oauth2 import service_account
+
+        credentials = service_account.Credentials.from_service_account_info(
+            json.loads(credentials_raw),
+            scopes=["https://www.googleapis.com/auth/cloud-scheduler"],
+        )
+        session = AuthorizedSession(credentials)
+        response = session.get(
+            "https://cloudscheduler.googleapis.com/v1/projects/based-hardware/locations/us-central1/"
+            "jobs/app-review-config-sweep-hourly",
+            timeout=30,
+        )
+        response.raise_for_status()
+        result = response.json()
+        if not isinstance(result, dict):
+            raise ValueError("Cloud Scheduler returned a non-object response")
+        return result
+    except Exception:
+        raise BrakeError("cannot verify app-review-config-sweep-hourly is paused") from None
+
+
+def require_quiesced_writers(fetch=None, scheduler_fetch=None) -> None:
+    """Require the scheduled sweep and both GitHub Play writers to be paused."""
+    fetch = fetch or github_json
+    scheduler_fetch = scheduler_fetch or scheduler_job_json
     try:
         for workflow in ("mobile_rollout_watch.yml", "mobile_daily_train.yml"):
             metadata = fetch(f"actions/workflows/{workflow}")
@@ -50,6 +79,9 @@ def require_quiesced_writers(fetch=github_json) -> None:
                 raise BrakeError("cannot verify Play writer workflows are drained")
             if any(not isinstance(run, dict) or run.get("status") != "completed" for run in payload["workflow_runs"]):
                 raise BrakeError("wait for all mobile Play writer workflow runs to finish before using the brake")
+        scheduler = scheduler_fetch()
+        if not isinstance(scheduler, dict) or scheduler.get("state") != "PAUSED":
+            raise BrakeError("pause app-review-config-sweep-hourly before using the brake")
     except BrakeError:
         raise
     except Exception as exc:

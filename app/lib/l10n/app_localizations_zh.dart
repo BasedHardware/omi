@@ -1109,6 +1109,11 @@ class AppLocalizationsZh extends AppLocalizations {
   String get nameUpdatedSuccessfully => '姓名更新成功！';
 
   @override
+  String calendarReadSelectionHelp(String calendar) {
+    return '读取所选日历。新建活动使用 $calendar。';
+  }
+
+  @override
   String get calendarSettings => '日历设置';
 
   @override
@@ -1950,6 +1955,15 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get memoryHistory => '历史';
+
+  @override
+  String get recordingWithYourPhone => '正在用手机录音';
+
+  @override
+  String get wrapUp => '结束';
+
+  @override
+  String get recordingDiscarded => '已舍弃录音';
 
   @override
   String get undo => '撤销';
@@ -6921,6 +6935,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get authFailedToSignInWithApple => '使用Apple登录失败，请重试。';
 
   @override
+  String get authAppleSignInFailedUseGoogle => '无法通过 Apple 登录。请重试，或使用 Google 继续。';
+
+  @override
   String get authFailedToRetrieveToken => '获取Firebase令牌失败，请重试。';
 
   @override
@@ -8927,7 +8944,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get deleteWhileProcessingTitle => '仍在处理';
 
   @override
-  String get deleteWhileProcessingMessage => '此录音已上传，但 Omi 仍在创建对话。如果现在删除且处理失败，将无法恢复。仍要删除吗？';
+  String get deleteWhileProcessingMessage => '此录音已上传，Omi 正在处理。在这里删除会移除手机上的副本。如果处理失败，Omi 将无法从这部手机重试。';
 
   @override
   String get syncCardAllBackedUp => '所有录音已同步';
@@ -9027,6 +9044,24 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get unableToDetermineFirmwareVersion => '无法确定当前固件版本';
+
+  @override
+  String get applyCodeToCurrentPlan => '应用于当前套餐';
+
+  @override
+  String subscriptionCodeResult(String result) {
+    String _temp0 = intl.Intl.selectLogic(
+      result,
+      {
+        'applied': '代码已应用于您当前的套餐。',
+        'refused': '无法应用此代码。请检查代码及其适用套餐。',
+        'conflict': '代码已使用，或您的套餐已有折扣。',
+        'rateLimited': '尝试次数过多。请稍后重试。',
+        'other': '无法应用此代码。请重试。',
+      },
+    );
+    return '$_temp0';
+  }
 
   @override
   String get promoCode => '促销代码';
@@ -11999,7 +12034,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String diagnosticsSincePairingSummary(int drops, int failed) {
-    return '配对以来：断开 $drops 次，连接失败 $failed 次。';
+    return '自配对以来：重连 $drops 次，连接失败 $failed 次。';
   }
 
   @override
@@ -13177,6 +13212,9 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String get paywallTrialCodeHint => '有 Omi Pro 兑换码？请在下一个页面输入。';
+
+  @override
   String get paywallTrialCancelNote => '随时取消。无费用，无罚款。';
 
   @override
@@ -13223,16 +13261,6 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String syncCardTranscribingAmount(String amount) {
-    return '正在将 $amount 转为对话';
-  }
-
-  @override
-  String syncCardTranscribedOf(String done, String total) {
-    return '已完成 $done / $total · 你可以离开此屏幕';
-  }
-
-  @override
   String syncCardReadyAmount(String amount) {
     return '$amount 可同步';
   }
@@ -13256,7 +13284,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get syncDetailsWaitingOnPhone => '等待此手机上传';
 
   @override
-  String get syncDetailsTranscribing => 'Omi 正在转录';
+  String get syncDetailsTranscribing => '已上传，等待服务器';
 
   @override
   String get syncDetailsAudioFiles => '音频文件';
@@ -13442,6 +13470,9 @@ class AppLocalizationsZh extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get attentionRerunNotes => '重新生成笔记';
 
   @override
   String get attentionSummaryFailed => '无法总结这段对话';
@@ -13703,6 +13734,12 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get summaryBusyBody => 'Omi 已在处理此对话。完成后，摘要将显示在这里。';
+
+  @override
+  String get summaryTranscriptionPendingTitle => '尚未转录';
+
+  @override
+  String get summaryTranscriptionPendingBody => '转录完成后将显示摘要。';
 
   @override
   String get summaryCheckAgain => '再次检查';
@@ -14228,14 +14265,6 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get deviceRecently => '最近';
-
-  @override
-  String deviceDisconnectedFor(String duration) {
-    return '断开连接 $duration';
-  }
-
-  @override
   String get deviceControls => '控制';
 
   @override
@@ -14588,6 +14617,19 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get episodeWritingNotes => '正在撰写笔记…';
+
+  @override
+  String get homeStepTranscribing => '正在转录…';
+
+  @override
+  String homeRecordingsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 条录音',
+    );
+    return '$_temp0';
+  }
 
   @override
   String get episodeWritingNotesDetail => '正在先完成转录。你可以离开此页面。';
@@ -15113,7 +15155,181 @@ class AppLocalizationsZh extends AppLocalizations {
   String get paymentDeclinedTitle => '您的银行卡被拒绝';
 
   @override
+  String paymentDeclinedMonthlyMessage(String plan, String price) {
+    return '更新银行卡，或恢复使用 $plan，每月 $price';
+  }
+
+  @override
   String paymentDeclinedMessage(Object plan) {
     return '更新银行卡以恢复使用 $plan';
   }
+
+  @override
+  String get hasLinkedTasksLabel => '包含关联任务';
+
+  @override
+  String get hasTasksFilter => '有任务';
+
+  @override
+  String firmwareUpdateNotInstalledMessage(String version) {
+    return 'The update didn\'t install. Your pendant is still on $version. Please try again.';
+  }
+
+  @override
+  String firmwareUpdateNotInstalledCv1Message(String version) {
+    return '更新未能安装。你的吊坠仍可使用当前固件（$version）正常工作。请联系支持团队，不要反复重试更新。';
+  }
+
+  @override
+  String get firmwareUpdateUnconfirmedMessage =>
+      'Couldn\'t confirm the update. Your pendant hasn\'t reconnected yet. Keep it nearby and check its firmware version before trying again.';
+
+  @override
+  String get firmwareUpdateUnconfirmedTitle => 'Update Not Confirmed';
+
+  @override
+  String get firmwareVerifyingInstallation => 'Confirming installation… This may take up to 3 minutes.';
+
+  @override
+  String get monthlySwitchTitle => '改为按月付费';
+
+  @override
+  String monthlySwitchPlanValue(String plan, String price) {
+    return '$plan，每月 $price';
+  }
+
+  @override
+  String monthlySwitchNote(String yearly) {
+    return '替代未支付的年费 $yearly。按月续订。可随时取消。';
+  }
+
+  @override
+  String get monthlySwitchDeclined => '付款被拒。你的计划没有变化。';
+
+  @override
+  String get monthlySwitchUnavailable => '目前无法切换。请改为更新银行卡。';
+
+  @override
+  String get monthlySwitchDoneTitle => '已改为按月付费';
+
+  @override
+  String monthlySwitchDoneBody(String price) {
+    return '今日已支付 $price。按月续订。';
+  }
+
+  @override
+  String get processingDeleteScopeChanged => '处理列表已更改。请检查列表后重试。';
+
+  @override
+  String get syncTooOldExplanation =>
+      'This recording is older than Omi\'s sync window, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
+
+  @override
+  String freeCapTitle(int minutes) {
+    return '本月的 $minutes 分钟已用完';
+  }
+
+  @override
+  String get freeCapBody => 'Omi 仍在录音。选择继续转录的方式。';
+
+  @override
+  String get omiProPlanName => 'Omi Pro';
+
+  @override
+  String get freeCapProUnlimited => '无限云端转录';
+
+  @override
+  String get freeCapProAccuracy => '最佳准确度';
+
+  @override
+  String get freeCapProWaiting => '转录你等待中的录音';
+
+  @override
+  String get freeCapPhoneSubtitle => '免费。在你切换回来之前保持开启。';
+
+  @override
+  String get transcribingOnThisPhone => '正在此手机上转录';
+
+  @override
+  String get getPro => '获取 Pro';
+
+  @override
+  String get unlock => '解锁';
+
+  @override
+  String get transcribeWith => '转录方式';
+
+  @override
+  String get omiCloud => 'Omi 云端';
+
+  @override
+  String get thisPhone => '此手机';
+
+  @override
+  String get onDeviceReady => '已就绪';
+
+  @override
+  String cloudMinutesLeft(int left, int limit, String date) {
+    return '剩余 $left/$limit 分钟 · $date 重置';
+  }
+
+  @override
+  String cloudMinutesAvailable(int minutes) {
+    return '可用 $minutes 分钟云端转录';
+  }
+
+  @override
+  String get switchBack => '切换回来';
+
+  @override
+  String get setUpThisPhone => '设置此手机';
+
+  @override
+  String get speechRecognition => '语音识别';
+
+  @override
+  String get audioStaysOnPhone => '音频保留在你的手机上';
+
+  @override
+  String onDeviceModelDownloadSize(int size) {
+    return '下载 $size MB';
+  }
+
+  @override
+  String get downloadNow => '立即下载';
+
+  @override
+  String get onWifiLater => '稍后通过 Wi-Fi';
+
+  @override
+  String get conversationWritingSummary => '正在撰写你的摘要…';
+
+  @override
+  String get onTheWayServerWork => '服务器报告的任务';
+
+  @override
+  String get finishNothingToProcess => '还没有可处理的内容。';
+
+  @override
+  String get finishStillProcessing => '仍在处理中。完成后会显示在首页。';
+
+  @override
+  String get finishBackToHome => '返回首页';
+
+  @override
+  String get conversationSummaryWhenItEnds => '对话结束后生成摘要';
+
+  @override
+  String get deviceUploadsWaitingOnServer => '上传内容正在等待服务器处理';
+
+  @override
+  String get deviceUploadsWaitingOnServerSubtitle => '您的音频安全保存在您的设备或手机上';
+
+  @override
+  String conversationSummaryThrough(String time) {
+    return '截至 $time 的摘要';
+  }
+
+  @override
+  String get conversationRecentTranscript => '最近的文字记录';
 }

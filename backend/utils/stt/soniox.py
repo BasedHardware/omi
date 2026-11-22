@@ -881,11 +881,7 @@ async def process_audio_soniox(
         config['language_hints'] = hints
     rejected = (
         profile.primary
-        if profile
-        and profile.in_scope
-        and profile.multi
-        and profile.primary_group == 'non_en'
-        and os.getenv('STT_MULTI_LANGUAGE_HINTS', 'true').lower() == 'true'
+        if profile and profile.in_scope and profile.multi and profile.primary_group == 'non_en'
         else normalized_stt_language(language)
     )
     if rejected and rejected != 'multi' and not soniox_accepts_language_hint(rejected):

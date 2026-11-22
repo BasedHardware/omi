@@ -23,6 +23,9 @@ _BACKEND = Path(__file__).resolve().parents[2]
 @pytest.fixture(scope="module")
 def users_db():
     """Load a fresh database.users against stubbed database._client + firestore chain."""
+    # Resolve the import-pure codec before this fixture closes SDK package paths.
+    from database import transcript_pointer
+
     client_stub = ModuleType("database._client")
     client_stub.db = MagicMock(name="db")
     client_stub.delete_collection_recursive = MagicMock(name="delete_collection_recursive")
@@ -58,6 +61,7 @@ def users_db():
     fv1_stub.transactional = lambda func: func
 
     fakes = {
+        "database.transcript_pointer": transcript_pointer,
         "database._client": client_stub,
         "google": google_pkg,
         "google.api_core.retry": api_retry,

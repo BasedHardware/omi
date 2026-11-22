@@ -2301,6 +2301,12 @@ abstract class AppLocalizations {
   /// **'Name updated successfully!'**
   String get nameUpdatedSuccessfully;
 
+  /// Explains that read/import choices do not change the primary calendar used for new events
+  ///
+  /// In en, this message translates to:
+  /// **'Read selected calendars. New events use {calendar}.'**
+  String calendarReadSelectionHelp(String calendar);
+
   /// No description provided for @calendarSettings.
   ///
   /// In en, this message translates to:
@@ -3866,6 +3872,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'History'**
   String get memoryHistory;
+
+  /// Home's recording bar, line 1: this phone is recording a live conversation
+  ///
+  /// In en, this message translates to:
+  /// **'Recording with your phone'**
+  String get recordingWithYourPhone;
+
+  /// Button on Home's recording bar: end the phone recording and process it
+  ///
+  /// In en, this message translates to:
+  /// **'Wrap Up'**
+  String get wrapUp;
+
+  /// Confirmation after Undo on Home's recording bar: the accidental recording was thrown away
+  ///
+  /// In en, this message translates to:
+  /// **'Recording discarded'**
+  String get recordingDiscarded;
 
   /// Undo button text
   ///
@@ -13251,6 +13275,12 @@ abstract class AppLocalizations {
   /// **'Failed to sign in with Apple, please try again.'**
   String get authFailedToSignInWithApple;
 
+  /// Shown after Sign in with Apple fails for a reason other than the user cancelling; points to the Google button on the same screen
+  ///
+  /// In en, this message translates to:
+  /// **'Sign in with Apple didn\'t work. Try again or continue with Google.'**
+  String get authAppleSignInFailedUseGoogle;
+
   /// Error message when retrieving Firebase token fails
   ///
   /// In en, this message translates to:
@@ -16893,10 +16923,10 @@ abstract class AppLocalizations {
   /// **'Still Processing'**
   String get deleteWhileProcessingTitle;
 
-  /// No description provided for @deleteWhileProcessingMessage.
+  /// Delete confirmation for a recording already uploaded whose server job has not finished. Deleting removes the phone copy; the server keeps processing, but if that job fails the app has no local file to re-upload from.
   ///
   /// In en, this message translates to:
-  /// **'This recording is uploaded but Omi is still creating the conversation. If you delete it now and processing fails, it can\'t be recovered. Delete anyway?'**
+  /// **'This recording is already uploaded and Omi is processing it. Deleting it here removes the phone\'s copy. If processing fails, Omi can\'t retry from this phone.'**
   String get deleteWhileProcessingMessage;
 
   /// No description provided for @syncCardAllBackedUp.
@@ -17060,6 +17090,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Unable to determine current firmware version'**
   String get unableToDetermineFirmwareVersion;
+
+  /// Apply a code only to the existing subscription, regardless of highlighted checkout plan; never changes plans.
+  ///
+  /// In en, this message translates to:
+  /// **'Apply to Current Plan'**
+  String get applyCodeToCurrentPlan;
+
+  /// Existing-subscription code application result; never promises payment or entitlement. result: applied, refused, conflict, rateLimited, other.
+  ///
+  /// In en, this message translates to:
+  /// **'{result, select, applied{Code applied to your current plan.} refused{This code cannot be applied. Check the code and its required plan.} conflict{Code already used, or your plan already has a discount.} rateLimited{Too many tries. Please wait and try again later.} other{Could not apply this code. Please try again.}}'**
+  String subscriptionCodeResult(String result);
 
   /// No description provided for @promoCode.
   ///
@@ -21756,7 +21798,7 @@ abstract class AppLocalizations {
   /// Device Diagnostics footnote under the 7-day summary with lifetime counts
   ///
   /// In en, this message translates to:
-  /// **'Since pairing: {drops} drops, {failed} failed connections.'**
+  /// **'Since pairing: {drops} reconnections, {failed} failed connections.'**
   String diagnosticsSincePairingSummary(int drops, int failed);
 
   /// Caption beside the live signal chart title; duration is the chart window, e.g. 60s
@@ -23823,6 +23865,12 @@ abstract class AppLocalizations {
   /// **'Try for {price}'**
   String paywallTrialCta(String price);
 
+  /// Trial paywall line under the Try button: a prepaid or promo code is entered on the Stripe checkout screen that opens next
+  ///
+  /// In en, this message translates to:
+  /// **'Have an Omi Pro code? Add it on the next screen.'**
+  String get paywallTrialCodeHint;
+
   /// Paywall footnote
   ///
   /// In en, this message translates to:
@@ -23895,18 +23943,6 @@ abstract class AppLocalizations {
   /// **'Uploading · {done} of {total}'**
   String syncStepUploadingAmount(String done, String total);
 
-  /// Offline Sync status card title while the server transcribes uploaded audio; amount is a compact audio length.
-  ///
-  /// In en, this message translates to:
-  /// **'Turning {amount} into conversations'**
-  String syncCardTranscribingAmount(String amount);
-
-  /// Offline Sync status card subtitle while the server transcribes: compact audio lengths done and total.
-  ///
-  /// In en, this message translates to:
-  /// **'{done} of {total} done · you can leave this screen'**
-  String syncCardTranscribedOf(String done, String total);
-
   /// Offline Sync status card title when recordings wait for a manual sync; amount is a compact audio length.
   ///
   /// In en, this message translates to:
@@ -23949,10 +23985,10 @@ abstract class AppLocalizations {
   /// **'Waiting on this phone'**
   String get syncDetailsWaitingOnPhone;
 
-  /// Sync details row label: audio uploaded and still being transcribed by Omi.
+  /// Sync details stage label for uploaded audio awaiting a confirmed server outcome.
   ///
   /// In en, this message translates to:
-  /// **'Transcribing on Omi'**
+  /// **'Uploaded, awaiting server'**
   String get syncDetailsTranscribing;
 
   /// Sync details row label: number of raw audio files the app holds.
@@ -24284,6 +24320,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'{count, plural, =1{1 recording waiting} other{{count} recordings waiting}}'**
   String activityAttentionUploadRecordings(int count);
+
+  /// Activity Needs attention button: retry notes only, preserving saved tasks and events
+  ///
+  /// In en, this message translates to:
+  /// **'Re-run notes'**
+  String get attentionRerunNotes;
 
   /// Needs attention row: the server gave up summarizing a conversation
   ///
@@ -24758,6 +24800,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Omi is already working on this conversation. The summary will appear here when it finishes.'**
   String get summaryBusyBody;
+
+  /// Status shown in place of a summary when the recording has no transcript yet.
+  ///
+  /// In en, this message translates to:
+  /// **'Not transcribed yet'**
+  String get summaryTranscriptionPendingTitle;
+
+  /// Shown when a recording has no transcript yet, so its summary cannot be made. Tells the user the summary will come after the transcript.
+  ///
+  /// In en, this message translates to:
+  /// **'The summary will appear once the transcript is ready.'**
+  String get summaryTranscriptionPendingBody;
 
   /// Button that re-reads the conversation to see if processing finished.
   ///
@@ -25611,18 +25665,6 @@ abstract class AppLocalizations {
   /// **'{done} of {total} min'**
   String deviceCatchingUpProgress(int done, int total);
 
-  /// Device page section: recent connection events.
-  ///
-  /// In en, this message translates to:
-  /// **'Recently'**
-  String get deviceRecently;
-
-  /// Device page event: the Omi was disconnected for this long (a compact duration such as 10m).
-  ///
-  /// In en, this message translates to:
-  /// **'Disconnected for {duration}'**
-  String deviceDisconnectedFor(String duration);
-
   /// Device page section: controls such as pausing recording.
   ///
   /// In en, this message translates to:
@@ -26174,6 +26216,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Writing notes…'**
   String get episodeWritingNotes;
+
+  /// Home processing row subtitle while a recording is being transcribed.
+  ///
+  /// In en, this message translates to:
+  /// **'Transcribing…'**
+  String get homeStepTranscribing;
+
+  /// Home processing row subtitle giving how many recordings one row stands for.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 recording} other{{count} recordings}}'**
+  String homeRecordingsCount(int count);
 
   /// Under Writing notes on the processing page.
   ///
@@ -26991,11 +27045,311 @@ abstract class AppLocalizations {
   /// **'Your card was declined'**
   String get paymentDeclinedTitle;
 
+  /// Home row line under 'Your card was declined' when a declined yearly renewal can switch to monthly. it = the card; plan = a product name such as Omi Pro; price = the monthly price, e.g. US$29.99
+  ///
+  /// In en, this message translates to:
+  /// **'Update it, or get {plan} back for {price} a month'**
+  String paymentDeclinedMonthlyMessage(String plan, String price);
+
   /// Home row line under 'Your card was declined'. it = the card; plan = a product name such as Omi Pro
   ///
   /// In en, this message translates to:
   /// **'Update it to get {plan} back'**
   String paymentDeclinedMessage(Object plan);
+
+  /// Accessible conversation-row badge: at least one current canonical task is linked
+  ///
+  /// In en, this message translates to:
+  /// **'Has linked tasks'**
+  String get hasLinkedTasksLabel;
+
+  /// Conversation search and browse filter: only conversations with current linked tasks
+  ///
+  /// In en, this message translates to:
+  /// **'Has tasks'**
+  String get hasTasksFilter;
+
+  /// No description provided for @firmwareUpdateNotInstalledMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'The update didn\'t install. Your pendant is still on {version}. Please try again.'**
+  String firmwareUpdateNotInstalledMessage(String version);
+
+  /// CV1 pendant: firmware update finished transferring but the pendant reconnected on its old version. Retrying is discouraged on affected units, so point to support.
+  ///
+  /// In en, this message translates to:
+  /// **'The update didn\'t install. Your pendant still works on its current firmware ({version}). Please contact support rather than retrying the update.'**
+  String firmwareUpdateNotInstalledCv1Message(String version);
+
+  /// No description provided for @firmwareUpdateUnconfirmedMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t confirm the update. Your pendant hasn\'t reconnected yet. Keep it nearby and check its firmware version before trying again.'**
+  String get firmwareUpdateUnconfirmedMessage;
+
+  /// No description provided for @firmwareUpdateUnconfirmedTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Update Not Confirmed'**
+  String get firmwareUpdateUnconfirmedTitle;
+
+  /// No description provided for @firmwareVerifyingInstallation.
+  ///
+  /// In en, this message translates to:
+  /// **'Confirming installation… This may take up to 3 minutes.'**
+  String get firmwareVerifyingInstallation;
+
+  /// Title of the sheet and the button that move a declined yearly renewal to the same plan billed monthly
+  ///
+  /// In en, this message translates to:
+  /// **'Switch to Monthly'**
+  String get monthlySwitchTitle;
+
+  /// Value of the Plan row in the switch-to-monthly sheet, e.g. "Omi Pro, US$29.99 a month"
+  ///
+  /// In en, this message translates to:
+  /// **'{plan}, {price} a month'**
+  String monthlySwitchPlanValue(String plan, String price);
+
+  /// Line under the switch-to-monthly preview. yearly = the declined yearly amount, e.g. US$269.91
+  ///
+  /// In en, this message translates to:
+  /// **'Replaces the unpaid {yearly} yearly charge. Renews monthly. Cancel anytime.'**
+  String monthlySwitchNote(String yearly);
+
+  /// Switch-to-monthly sheet: the monthly charge was declined; nothing changed
+  ///
+  /// In en, this message translates to:
+  /// **'Payment declined. Your plan didn\'t change.'**
+  String get monthlySwitchDeclined;
+
+  /// Switch-to-monthly sheet: the server refused the switch for this subscription
+  ///
+  /// In en, this message translates to:
+  /// **'Switching isn\'t available right now. Update your card instead.'**
+  String get monthlySwitchUnavailable;
+
+  /// Switch-to-monthly sheet title after a successful switch
+  ///
+  /// In en, this message translates to:
+  /// **'You\'re on monthly'**
+  String get monthlySwitchDoneTitle;
+
+  /// Switch-to-monthly sheet body after a successful switch. price = the amount charged, e.g. US$29.99
+  ///
+  /// In en, this message translates to:
+  /// **'{price} paid today. Renews monthly.'**
+  String monthlySwitchDoneBody(String price);
+
+  /// Deletion was cancelled because recordings left the visible processing scope during confirmation. Review the current list before deleting again.
+  ///
+  /// In en, this message translates to:
+  /// **'Processing changed. Review the list and try again.'**
+  String get processingDeleteScopeChanged;
+
+  /// No description provided for @syncTooOldExplanation.
+  ///
+  /// In en, this message translates to:
+  /// **'This recording is older than Omi\'s sync window, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.'**
+  String get syncTooOldExplanation;
+
+  /// Title of the sheet shown when a free plan has used all of its monthly cloud transcription minutes
+  ///
+  /// In en, this message translates to:
+  /// **'You\'ve used this month\'s {minutes} minutes'**
+  String freeCapTitle(int minutes);
+
+  /// Body of the free-plan cap sheet
+  ///
+  /// In en, this message translates to:
+  /// **'Omi is still recording. Choose how to keep transcribing.'**
+  String get freeCapBody;
+
+  /// Product name of the paid plan; keep the brand name
+  ///
+  /// In en, this message translates to:
+  /// **'Omi Pro'**
+  String get omiProPlanName;
+
+  /// Omi Pro benefit on the cap sheet
+  ///
+  /// In en, this message translates to:
+  /// **'Unlimited cloud transcription'**
+  String get freeCapProUnlimited;
+
+  /// Omi Pro benefit on the cap sheet
+  ///
+  /// In en, this message translates to:
+  /// **'Best accuracy'**
+  String get freeCapProAccuracy;
+
+  /// Omi Pro benefit: recordings held at the cap get transcribed
+  ///
+  /// In en, this message translates to:
+  /// **'Transcribes your waiting recordings'**
+  String get freeCapProWaiting;
+
+  /// Subtitle of the 'Transcribe on this phone' option at the cap; the choice is permanent until switched back
+  ///
+  /// In en, this message translates to:
+  /// **'Free. Stays on until you switch back.'**
+  String get freeCapPhoneSubtitle;
+
+  /// Banner during recording when transcription runs on the phone
+  ///
+  /// In en, this message translates to:
+  /// **'Transcribing on this phone'**
+  String get transcribingOnThisPhone;
+
+  /// Short button label to open the Omi Pro plans; keep 'Pro'
+  ///
+  /// In en, this message translates to:
+  /// **'Get Pro'**
+  String get getPro;
+
+  /// Button on a recording held at the cap; opens the plans
+  ///
+  /// In en, this message translates to:
+  /// **'Unlock'**
+  String get unlock;
+
+  /// Settings section header above the transcription source choices
+  ///
+  /// In en, this message translates to:
+  /// **'Transcribe with'**
+  String get transcribeWith;
+
+  /// Transcription source: Omi's cloud service; keep 'Omi'
+  ///
+  /// In en, this message translates to:
+  /// **'Omi cloud'**
+  String get omiCloud;
+
+  /// Transcription source: on this phone
+  ///
+  /// In en, this message translates to:
+  /// **'This phone'**
+  String get thisPhone;
+
+  /// Status: this phone can transcribe now
+  ///
+  /// In en, this message translates to:
+  /// **'Ready'**
+  String get onDeviceReady;
+
+  /// Cloud transcription minutes left this month and the reset date, e.g. '258 of 300 min left · resets Dec 1'
+  ///
+  /// In en, this message translates to:
+  /// **'{left} of {limit} min left · resets {date}'**
+  String cloudMinutesLeft(int left, int limit, String date);
+
+  /// Shown to a free plan on the phone after the monthly reset: cloud minutes available again
+  ///
+  /// In en, this message translates to:
+  /// **'{minutes} cloud minutes available'**
+  String cloudMinutesAvailable(int minutes);
+
+  /// Button: switch transcription back to Omi's cloud
+  ///
+  /// In en, this message translates to:
+  /// **'Switch Back'**
+  String get switchBack;
+
+  /// Settings section header: steps before the phone can transcribe
+  ///
+  /// In en, this message translates to:
+  /// **'Set up this phone'**
+  String get setUpThisPhone;
+
+  /// Row title: the iOS speech recognition permission
+  ///
+  /// In en, this message translates to:
+  /// **'Speech recognition'**
+  String get speechRecognition;
+
+  /// Subtitle: on-device transcription keeps audio on the phone
+  ///
+  /// In en, this message translates to:
+  /// **'Audio stays on your phone'**
+  String get audioStaysOnPhone;
+
+  /// Download size of the on-device speech model in megabytes
+  ///
+  /// In en, this message translates to:
+  /// **'{size} MB download'**
+  String onDeviceModelDownloadSize(int size);
+
+  /// Button: download the speech model now on any network
+  ///
+  /// In en, this message translates to:
+  /// **'Download Now'**
+  String get downloadNow;
+
+  /// Button: download the speech model later, when on Wi-Fi
+  ///
+  /// In en, this message translates to:
+  /// **'On Wi-Fi Later'**
+  String get onWifiLater;
+
+  /// Shown with a pen over a skeleton while the summary of a conversation in progress is written
+  ///
+  /// In en, this message translates to:
+  /// **'Writing your summary…'**
+  String get conversationWritingSummary;
+
+  /// No description provided for @onTheWayServerWork.
+  ///
+  /// In en, this message translates to:
+  /// **'Server-reported work'**
+  String get onTheWayServerWork;
+
+  /// Brief notice after tapping Finish on the live capture page when nothing was heard since the last conversation, so no conversation is made.
+  ///
+  /// In en, this message translates to:
+  /// **'Nothing to process yet.'**
+  String get finishNothingToProcess;
+
+  /// Shown on the page Finish opens when the conversation has not arrived after a long wait; it will show up on Home by itself.
+  ///
+  /// In en, this message translates to:
+  /// **'Still processing. It will appear on Home.'**
+  String get finishStillProcessing;
+
+  /// Button that leaves the processing page for the Home conversation list.
+  ///
+  /// In en, this message translates to:
+  /// **'Back to Home'**
+  String get finishBackToHome;
+
+  /// On the detail page of a conversation still in progress (v3): the summary is written once it ends.
+  ///
+  /// In en, this message translates to:
+  /// **'Summary when this conversation ends'**
+  String get conversationSummaryWhenItEnds;
+
+  /// Device Settings row (tappable, opens upload details): some recordings were uploaded but the server has not accepted or processed them yet. Calm status, not an error.
+  ///
+  /// In en, this message translates to:
+  /// **'Uploads waiting on the server'**
+  String get deviceUploadsWaitingOnServer;
+
+  /// Subtitle under 'Uploads waiting on the server' in Device Settings: reassures that the recorded audio is still stored on the Omi device or the phone, so nothing is lost while the server catches up.
+  ///
+  /// In en, this message translates to:
+  /// **'Your audio is safe on your device or phone'**
+  String get deviceUploadsWaitingOnServerSubtitle;
+
+  /// Timestamp of the last speech included in the displayed conversation summary. The local time is formatted, e.g. 10:42 AM.
+  ///
+  /// In en, this message translates to:
+  /// **'Summary through {time}'**
+  String conversationSummaryThrough(String time);
+
+  /// Heading for the latest spoken lines from the current conversation.
+  ///
+  /// In en, this message translates to:
+  /// **'Recent transcript'**
+  String get conversationRecentTranscript;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

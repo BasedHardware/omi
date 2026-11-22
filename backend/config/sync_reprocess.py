@@ -17,7 +17,6 @@ margin lever — the dedupe savings (~$6-9/day weekday) were already live:
 import os
 
 from config.refactor_modes import default_off, default_on, serving_for
-from config.repeat_work import revision_reuse
 
 
 def _outbox_runtime() -> bool:
@@ -29,16 +28,16 @@ def _outbox_runtime() -> bool:
 def _enabled(name: str, *, default: bool) -> bool:
     raw = os.getenv(name)
     if serving_for('CAPTURE_COVERAGE_MODE', None):
-        # Explicit child configuration wins; only an absent child inherits revision reuse.
-        return revision_reuse() if raw is None else default_off(name)
+        # Preserve the former revision-off serve-mode default: only explicit children opt in.
+        return False if raw is None else default_off(name)
     if raw is None or not raw.strip():
         # A blank value is an unset value, never a blank kill switch: a dev host
         # must not fall onto the outbox path through an empty token.
-        return revision_reuse() or default
+        return default
     # Kill-switch grammar outside serve mode: an explicit false word turns the
     # switch off; anything else keeps the serving default (warn-once on typos).
     # refactor: superseded by explicit child precedence when CAPTURE_COVERAGE_MODE=serve
-    return revision_reuse() or default_on(name)
+    return default_on(name)
 
 
 def coalesce_enabled() -> bool:

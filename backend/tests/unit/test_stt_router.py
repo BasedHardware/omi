@@ -76,6 +76,49 @@ def test_unavailable_allowance_never_calls_provider(monkeypatch, metering, reaso
     record.assert_not_called()
 
 
+@pytest.mark.parametrize('outcome', ['transport', 'upstream', 'invalid_json', 'cancelled'])
+def test_failed_one_shot_releases_shadow_hold_as_zero(monkeypatch, outcome):
+    import asyncio
+    from unittest.mock import AsyncMock
+    from utils.stt.allowance_session import Operation
+
+    monkeypatch.setenv('STT_GPU_FLEET_OFF', 'false')
+    monkeypatch.setattr(Operation, 'reserve_async', AsyncMock())
+    billed = Mock()
+    monkeypatch.setattr(Operation, 'billed', billed)
+    fake = _FakeSttClient(
+        response=_FakeResponse(status_code=503 if outcome == 'upstream' else 200),
+        exc=(
+            httpx.ReadTimeout('test')
+            if outcome == 'transport'
+            else asyncio.CancelledError() if outcome == 'cancelled' else None
+        ),
+    )
+    client = _make_client(monkeypatch, fake)
+    if outcome == 'cancelled':
+        import concurrent.futures
+
+        with pytest.raises(concurrent.futures.CancelledError):
+            _upload(client)
+    else:
+        assert _upload(client).status_code in {502, 503}
+    billed.assert_called_once_with(0)
+
+
+def test_completed_one_shot_with_uncertain_billing_retains_shadow_hold(monkeypatch, metering):
+    from unittest.mock import AsyncMock
+    from utils.stt.allowance_session import Operation
+
+    monkeypatch.setenv('STT_GPU_FLEET_OFF', 'false')
+    monkeypatch.setattr(Operation, 'reserve_async', AsyncMock())
+    billed = Mock()
+    monkeypatch.setattr(Operation, 'billed', billed)
+    metering[1].side_effect = TimeoutError
+    fake = _FakeSttClient(response=_FakeResponse(json_data={'text': 'done'}))
+    assert _upload(_make_client(monkeypatch, fake)).status_code == 200
+    billed.assert_not_called()
+
+
 @pytest.mark.parametrize('remaining', [10, None])
 def test_success_charges_media_duration_even_without_transcript(monkeypatch, metering, remaining):
     allowance, record = metering

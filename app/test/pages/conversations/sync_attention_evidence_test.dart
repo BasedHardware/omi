@@ -57,7 +57,7 @@ class _Device extends ChangeNotifier implements DeviceProvider {
   @override
   String get latestStableFirmwareVersion => '';
   @override
-  Future<void> getDeviceInfo() async {}
+  Future<void> getDeviceInfo({bool forceRefresh = false}) async {}
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
@@ -151,6 +151,7 @@ Wal _wal(DateTime start, int minutes, WalStatus status,
     codec: BleAudioCodec.opus,
     seconds: minutes * 60,
     status: status,
+    uploadedAt: status == WalStatus.uploaded ? DateTime.now().millisecondsSinceEpoch ~/ 1000 : 0,
     storage: storage,
     device: 'pendant',
     uploadRejectionReason: rejectionReason,
@@ -334,9 +335,20 @@ void main() {
     await writeFrame(tester, '002-mobile-ios-device-nothing-pending');
   });
 
+  testWidgets('Device settings keeps expired upload details reachable', (tester) async {
+    final wal = _wal(_at(40, 10, 0), 60, WalStatus.uploaded)..uploadedAt = 0;
+    await pumpDevice(tester, _FakeSync([wal]));
+    expect(find.byKey(const Key('device_stalled_upload_details')), findsOneWidget);
+    expect(find.text('Uploads waiting on the server'), findsOneWidget);
+    expect(find.text('Transcription unavailable'), findsNothing);
+    expect(wal.status, WalStatus.uploaded);
+    expect(walDeletionAllowed(wal), isFalse);
+    await writeFrame(tester, '004-mobile-ios-stalled-upload-details');
+  });
+
   testWidgets('On the Way with mixed days', (tester) async {
     await pumpOnTheWay(tester);
-    for (final status in ['Uploading', 'Transcribing…', 'Next', 'Queued']) {
+    for (final status in ['Uploading', 'Uploaded, awaiting server', 'Next', 'Queued']) {
       expect(find.text(status), findsOneWidget, reason: status);
     }
     expect(find.text('Try Again'), findsNothing);

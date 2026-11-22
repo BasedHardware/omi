@@ -141,7 +141,6 @@ async def test_server_batch_only_publishes_local_preview_admission(monkeypatch, 
     monkeypatch.setenv(KILL, str(enabled).lower())
     monkeypatch.setenv('MOBILE_STANDARD_BATCH_ENABLED', 'false')
     monkeypatch.setattr(receiver_module, 'server_batch_suppresses_live', lambda host: True)
-    monkeypatch.setattr(receiver_module, 'attach_visible_restore', Mock())
     monkeypatch.setattr(receiver_module, 'capture_batch_preview', Mock(side_effect=AssertionError('provider selected')))
     monkeypatch.setattr(receiver_module, 'attach_live_demand', Mock(side_effect=AssertionError('demand attached')))
     monkeypatch.setattr(receiver_module, 'resolve_ondemand_config', lambda: SimpleNamespace(gate_enabled=False))
@@ -453,7 +452,6 @@ async def test_engine_unavailable_counts_once_and_rescind_is_sticky(monkeypatch,
     assert admit_local_preview(host)
     fake = make_receiver(host)
     attach = Mock()
-    monkeypatch.setattr(local_preview_module, 'attach_visible_restore', attach)
     labels = dict(client_platform='ios', reason='locale_asset_missing')
     before = counter(OMI_LISTEN_LOCAL_PREVIEW_ENGINE_UNAVAILABLE_TOTAL, **labels)
     original_request = host.request
@@ -464,7 +462,6 @@ async def test_engine_unavailable_counts_once_and_rescind_is_sticky(monkeypatch,
     assert host.local_preview_batch is (not enabled)
     assert host.request.local_preview is (not enabled)
     assert original_request.local_preview is True  # The actual request contract is frozen.
-    assert attach.call_count == int(enabled)
     monkeypatch.setenv('LOCAL_PREVIEW_ENGINE_RESCIND_ENABLED', 'true')
     # Neither policy admission nor repeated lease renewal can undo a rescind.
     for _ in range(2):
@@ -498,7 +495,6 @@ async def test_engine_unavailable_counter_preserves_known_reasons_and_counts_unk
     host = make_host(client_device_context=SimpleNamespace(platform='unbounded-platform'))
     assert admit_local_preview(host)
     fake = make_receiver(host)
-    monkeypatch.setattr(local_preview_module, 'attach_visible_restore', Mock())
     labels = dict(client_platform='unknown', reason=expected)
     before = counter(OMI_LISTEN_LOCAL_PREVIEW_ENGINE_UNAVAILABLE_TOTAL, **labels)
     await ListenReceiver._handle_text(fake, json.dumps({'type': 'local_preview_engine_unavailable', 'reason': raw}))
@@ -510,12 +506,10 @@ async def test_engine_unavailable_counter_preserves_known_reasons_and_counts_unk
 async def test_unknown_control_and_ungranted_engine_event_are_noops(monkeypatch, kind):
     fake = make_receiver(make_host(local_preview=False, local_preview_batch=False))
     attach = Mock(side_effect=AssertionError('restore attached'))
-    monkeypatch.setattr(local_preview_module, 'attach_visible_restore', attach)
     await ListenReceiver._handle_text(fake, json.dumps({'type': kind, 'reason': 'engine_error'}))
     assert fake.host.local_preview_batch is False
     assert fake.host.request.local_preview is False
     assert not getattr(fake.host, '_local_preview_engine_reported', False)
-    attach.assert_not_called()
 
 
 def test_ready_event_identifies_server_batch_without_confusing_deferred_stream():

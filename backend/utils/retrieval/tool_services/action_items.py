@@ -3,11 +3,14 @@ Shared service functions for action item retrieval and management.
 Used by both LangChain tools (mobile chat) and REST router (desktop/web).
 """
 
+from utils.conversations.layer import read_product as read_product_conversation
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
 from config.action_item_reminder_triggers import action_item_write_affects_reminder
 import database.action_items as action_items_db
+
+conversations_db: Any = None
 from utils.notifications import (
     send_action_item_completed_notification,
     send_action_item_created_notification,
@@ -169,6 +172,14 @@ def create_action_item_text(
     if not description or not description.strip():
         return "Error: Description is required."
 
+    if conversation_id is not None:
+        conv_db = conversations_db
+        if conv_db is None:
+            import database.conversations as conv_db
+        conversation = read_product_conversation(conv_db.get_conversation, uid, conversation_id)
+        if not conversation or conv_db.is_soft_deleted(conversation):
+            return f"Error: Conversation '{conversation_id}' not found."
+
     action_item_data: Dict[str, Any] = {
         'description': description.strip(),
         'completed': False,
@@ -243,9 +254,9 @@ def update_action_item_text(
     if not action_item_id or not action_item_id.strip():
         return "Error: action_item_id is required."
 
-    # Verify exists and not locked
+    # Verify exists, not soft-deleted, and not locked
     existing = action_items_db.get_action_item(uid, action_item_id)
-    if not existing:
+    if not existing or existing.get('deleted', False):
         return f"Error: Action item '{action_item_id}' not found."
     if existing.get('is_locked', False):
         return "Error: A paid plan is required to modify this action item."

@@ -65,6 +65,27 @@ def test_preflight_passes_on_good_fixture(gate: SimpleNamespace, chart_fixture: 
     assert gate.validate_preflight(chart_fixture) == []
 
 
+@pytest.mark.parametrize('environment', ['dev', 'prod'])
+@pytest.mark.parametrize(
+    'key',
+    [
+        'RECORD_FRESH_MERGE_ENABLED',
+        'RECORD_NOTES_EAGER_ENABLED',
+        'RECORD_FOLLOWUP_WAKE_ENABLED',
+        'RECORD_SEAL_WAKE_PRESERVED_ENABLED',
+    ],
+)
+def test_record_latency_binding_cannot_disappear(gate, chart_fixture, environment, key):
+    values = chart_fixture / f'backend/charts/backend-listen/{environment}_omi_backend_listen_values.yaml'
+    source = values.read_text()
+    source, count = re.subn(r'  - name: ' + key + r'\n    value: [^\n]+\n', '', source)
+    assert count == 1
+    values.write_text(source)
+    assert f'[{environment}] record latency flag {key} missing on backend-listen' in gate.validate_preflight(
+        chart_fixture
+    )
+
+
 @pytest.mark.parametrize("env", ("dev", "prod"))
 def test_shared_chat_frontend_auth_is_listen_only(gate: SimpleNamespace, env: str) -> None:
     allowed = gate.LISTEN_ONLY_ALLOWED[env]
@@ -213,6 +234,32 @@ def test_ledger_switch_off_on_pusher_fails(gate: SimpleNamespace, chart_fixture:
     assert any(f"[{env}] required identical flag LLM_GATEWAY_ACCOUNTING_ENABLED disagrees" in error for error in errors)
 
 
+@pytest.mark.parametrize('env', ['dev', 'prod'])
+@pytest.mark.parametrize(
+    'key',
+    [
+        'EPISODE_COMPOSER_DEFAULT_CONTEXT_ENABLED',
+        'EPISODE_COMPOSER_CONTEXT_ENABLED',
+        'EPISODE_COMPOSER_DETAIL_ENABLED',
+        'EPISODE_COMPOSE_TRANSCRIPT_WAIT_ENABLED',
+        'EPISODE_COMPOSE_TRANSCRIPT_READY_ENABLED',
+        'EPISODE_COMPOSE_SETTLED_TERMINAL_ENABLED',
+        'EPISODE_COMPOSE_ANCHORED_WAIT_ENABLED',
+        'EPISODE_EMPTY_MEMBER_CLEANUP_ENABLED',
+        'HOME_SETTLED_EMPTY_WIRE_ENABLED',
+        'CONVERSATION_NOTES_SCALED_DETAIL_ENABLED',
+    ],
+)
+def test_episode_switch_missing_on_either_cohost_refuses_roll(gate, chart_fixture, env, key):
+    values = chart_fixture / f'backend/charts/pusher/{env}_omi_pusher_values.yaml'
+    value = 'false' if key == 'EPISODE_EMPTY_MEMBER_CLEANUP_ENABLED' else 'true'
+    replace_once(values, f'  - name: {key}\n    value: "{value}"\n', '')
+    assert any(
+        f'required identical flag {key} is missing on pusher' in error
+        for error in gate.validate_preflight(chart_fixture)
+    )
+
+
 def test_stale_listen_only_allowlist_entry_fails(gate: SimpleNamespace, chart_fixture: Path) -> None:
     values = chart_fixture / "backend/charts/pusher/prod_omi_pusher_values.yaml"
     replace_once(
@@ -295,6 +342,7 @@ def test_batch_intake_and_worker_settings_are_explained_listen_only(gate: Simple
     assert ('BATCH_PIPELINE_UID_ALLOWLIST' in gate.LISTEN_ONLY_ALLOWED[env]) == (env == 'dev')
     assert 'SERVER_BATCH_UNSUPPORTED_LANGUAGES' in gate._BATCH_PIPELINE_LISTEN_ONLY
     assert 'BATCH_PIPELINE_ENABLED' in gate._BATCH_PIPELINE_LISTEN_ONLY
+    assert 'BATCH_INPUT_EXPIRING_ENABLED' in gate._BATCH_PIPELINE_LISTEN_ONLY
     assert 'BATCH_PIPELINE_UID_ALLOWLIST' in gate._BATCH_PIPELINE_LISTEN_ONLY
     assert 'BATCH_PIPELINE_LIVE_ADMISSION_ENABLED' not in gate._BATCH_PIPELINE_LISTEN_ONLY
     assert 'BUCKET_BATCH_PIPELINE' in gate._BATCH_PIPELINE_LISTEN_ONLY
@@ -373,3 +421,18 @@ def test_web_batch_cohort_is_listen_admission_only(gate: SimpleNamespace, monkey
         gate.LISTEN_ONLY_ALLOWED['prod'] - {'SERVER_BATCH_ONLY_WEB_PERCENT'},
     )
     assert any('SERVER_BATCH_ONLY_WEB_PERCENT' in error for error in gate.validate_preflight(REPO_ROOT))
+
+
+@pytest.mark.parametrize('environment', ['dev', 'prod'])
+@pytest.mark.parametrize(
+    'chart,key',
+    [
+        ('pusher', 'PUSHER_RECORD_SEAL_PENDING_RETRY_BOUND_ENABLED'),
+        ('backend-listen', 'RECORD_SEAL_REPAIR_FRESH_ENABLED'),
+    ],
+)
+def test_quality_switch_binding_cannot_disappear_from_its_owning_cohost(gate, chart_fixture, environment, chart, key):
+    values = chart_fixture / 'backend/charts' / chart / f'{environment}_omi_{chart.replace("-", "_")}_values.yaml'
+    value = 'false' if key == 'EPISODE_EMPTY_MEMBER_CLEANUP_ENABLED' else 'true'
+    replace_once(values, f'  - name: {key}\n    value: "{value}"\n', '')
+    assert any(key in error and 'no longer' in error for error in gate.validate_preflight(chart_fixture))

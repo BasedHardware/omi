@@ -76,7 +76,13 @@ With several serving instances, the periodic ticks (the supervisor and metrics
 scrapes) run maintenance (staging reap, artifact cleanup, enrichment sweep,
 quarantine discovery, lease recovery and the result-ready drain) on one instance
 per 60-second Firestore lease in `{namespace}_leases`. Projection sweeps and
-gauge refreshes stay per instance. Explicit `POST /reconcile` and the
+local samplers stay per instance. Fleet queue gauges use an independent
+20-second `queue_metrics` lease in the same store (default sample cadence 40s,
+60s export freshness bound). GPU queue queries use the 60s per-pod fallback
+because autoscaling also consumes per-pod freshness. Set
+`FIRESTORE_READ_LEVERS` entry `batch_metrics_oldest_leader` to 0 to restore
+per-instance sampling; see [queue sample ownership](runbooks/batch-queue-safety.md#fleet-queue-sample-ownership).
+Explicit `POST /reconcile` and the
 post-recovery drain always run. Every guarded step is already idempotent and
 transaction-fenced, so the lease saves reads and enqueues only. A lease-store
 error fails open to every instance running, and
@@ -1080,9 +1086,15 @@ page; recovery and repair still return them through pending assignment to
 persisted/ready. Unchanged finishable receipts are retried each cycle: a sibling
 or destination can unblock them without changing their own result version.
 Already-ready siblings in one discovered page share a content-completion
-probe for their exact immutable binding. Every row still rechecks its receipt
-and privacy fences; persisted rows still finish their own side effects and
-probe completion. Failed/cancelled probes clear their marker. Each new
+probe for their exact immutable binding. With the default-on
+`BATCH_PIPELINE_FOLLOWUP_EARLY_COALESCE_ENABLED`, a duplicate can skip the
+read-only session check after a successful same-process, same-page probe.
+Its ready receipt and pinned policy must match, the first live deletion and
+privacy walk must cover all of its inputs and outputs, and a fresh privacy
+token must match the token revision in that walk. The proof expires within
+60 seconds. Any uncertainty runs the full check. Set the switch to `false`
+to restore the original check order. Persisted rows still finish their own
+side effects and probe completion. Failed/cancelled probes clear their marker. Each new
 discovery page gets a fresh probe; an older page keeps its marker until its
 queued/running rows finish. Priority/owed recovery work bypasses sharing,
 including owed rows also found by discovery or woken before their probe. Thus an
@@ -1153,6 +1165,18 @@ an unready or fenced row is dropped from the set. Release commits carry
 source= head_state=` (closed labels only). `python -m
 testing.recovered_release_scenario` replays the run 18 shape.
 
+`BATCH_PIPELINE_PROVIDER_MERGE_MEMBERSHIP_ENABLED` defaults to `true` (kill
+switch: `false`). A provider-route unit settles in its own delivery, outside
+the pump, so the serving route wakes one coalesced owner drain after each
+delivery that settles a unit or ends it terminally
+(`Serving.drain_settled_async`: the owner-only merge drain and chain walk, with
+no release set, so no row skips the head wait or the depth hold). Provider
+settle stamps `ready_at` and provider admission stamps `fresh_capture`, as the
+GPU path does, and a provider row admitted before that stamp counts as
+catch-up. Without the switch a settled provider unit is found only by the
+100-row maintenance page and can use neither the head wait nor fresh-first.
+See `listen_pusher_pipeline/changes/2026-11-13-provider-merge-membership.md`.
+
 The walk is only a wakeup. Each row still passes the transactional predecessor,
 privacy, receipt-replay and owner-claim fences, so ordering is unchanged. For
 async projection, the persisted rows and their contents' persisted, not-ready
@@ -1221,6 +1245,47 @@ Async follow-up discovery keeps its own cursor and uses a persisted/ready
 page by default (its kill switch restores the mixed page). All three pages
 use the same `in` filter on the declared results composite index
 (`projection_state, committed_at, __name__`), so no index changes are needed.
+
+### Finish backoff (dark, default off)
+
+`BATCH_PROJECTION_FINISH_BACKOFF_ENABLED` (default `false`, `true` is the only
+enable) bounds the replay the finish page does for already-projected work. Off,
+the page is exactly the one above and no no-change deferral transaction runs.
+State transitions maintain additive clock fields even with the lever off.
+
+On, a finish walk that changed nothing writes `projection_finish_due_at` and
+`projection_finish_backoff_step` on the row. The page then asks for
+`projection_state in (persisted, ready)` **and** `projection_finish_due_at <=
+now`: a no-change row is retried after 60 s, then 300 s, then 900 s (capped),
+instead of being re-read and re-fenced on every tick. A row that moved state is
+a changed row and is not deferred. The `pending` assignment page is untouched,
+so new work is never delayed.
+
+The range filter must lead the ordering, so that page uses the second declared
+results index `(projection_state, projection_finish_due_at, committed_at,
+__name__)` and its cursor becomes `(due_at, committed_at, key)`. Rows written
+before the lever have no clock and are outside every range filter. A bounded
+operator [backfill](runbooks/projection-finish-backfill.md) stamps missing clocks
+and atomically checkpoints progress in a shared, versioned control document.
+Until that marker is complete, serving processes use the legacy page without
+adding stamp transactions. New replicas trust the same completion marker and
+filter immediately; a negative marker read is cached for 60 seconds.
+
+Every transition into `persisted`/`ready` writes due now and step 0 in the same
+transaction, regardless of this lever or whether the host runs the serving loop.
+Session receipts, part summaries, privacy restore, quarantine release, sibling
+wake, and the ghost-hold repair script all use the shared clock helpers. Other
+state transitions retire the clock. Deploy these writers everywhere before
+finishing the backfill. Rollback of the read lever restores the legacy query;
+clock maintenance continues, so re-enable does not require another survey.
+
+The existing oldest-age and over-SLA guards cannot detect a sub-900 s delay
+introduced by this lever: the oldest-age max is already saturated by a
+multi-week held obligation, and the over-SLA stock is large enough that a few
+hundred units crossing the boundary is inside its noise. The finish-page
+reads-per-completion ratio (`omi_batch_projection_finish_reads_total` over
+`omi_batch_projection_finish_completed_total`) is the guard that can move; see
+`charts/monitoring/batch-projection/alerts.yaml`.
 
 ### Per-owner projection drain (Phase 1)
 
@@ -1380,3 +1445,83 @@ The [policy contract](../config/policy/README.md) owns the read map, unchanged
 legacy cohort assignments, nested live-STT retirement rule, explicit process/worker
 exceptions, replay commands and revert procedure. This change alters no environment
 values; deployment remains part of the two-lane train.
+
+The maintenance leader also samples the fresh-delivery guard at most once per
+minute using two Firestore count aggregations, never streamed documents: fresh
+results committed in the inclusive interval 10–20 minutes ago, and that cohort's
+`projection_state=pending` subset. The merge transaction alone stamps the stored
+class `results.fresh_capture` from the job's exact `True` value (missing means
+`False`); no existing routing reader changes. The gauges
+`omi_batch_pipeline_fresh_committed_window_total`,
+`omi_batch_pipeline_fresh_unprojected_window_total`,
+`omi_batch_pipeline_fresh_unprojected_ratio` and
+`omi_batch_pipeline_fresh_guard_sample_age_seconds` expose the pair and its age;
+the ratio is absent for empty/failed samples, both counts and ratio expire after
+120 s, and a failed query leaves age advancing from the last successful pair.
+`BATCH_PIPELINE_FRESH_GUARD_ENABLED=off` stops the queries and removes all guard
+gauges. Counts use declared prod/dev indexes, cost roughly one read per 1,000
+index entries per count (minimum two reads per sample), and do not alter merge,
+projection or enrichment order. See the 2026-11-13 fresh-delivery change note
+for the complete reader inventory and release-owner live acceptance procedure.
+
+An independent 20s supervised guard timer uses the same maintenance lease and
+the DB executor, rather than waiting for the general maintenance pass and its
+sync executor. The existing lock still limits all callers together to one count
+pair per 60s. A slow pass can therefore continue without delaying guard refresh;
+query failures still remove counts/ratio and let age advance. The additional
+`omi_batch_pipeline_fresh_guard_sample_timestamp_seconds` gauge records the
+successful pair's **window anchor** (before either RPC), expires with the counts,
+and lets acceptance use the identical inclusive commit bounds. On the ro-prod
+tier run `python backend/scripts/fresh_guard_cohort.py --project based-hardware
+--stage prod --sample-time <anchor>` for two count aggregations and JSON totals,
+pending, ratio, and bounds. This replaces `projection_cohort.py` for this guard's
+comparison: that tool's `fresh_first`/capture-age cohort is different. The command
+never streams documents; empty/failed counts produce a null ratio. Compare near
+the metric sample because projection can advance between reads. No healthy hour
+or live agreement is inferred from these implementation tests.
+
+The same leader also samples the per-route, per-language delivered share at most
+every 300 s. It walks one bounded page of job metadata (states in the census
+vocabulary minus `record_pending`, admitted 20 to 5 minutes ago, ordered by
+`enqueued_at`, capped at 5,000 rows) and counts each unit as delivered in target
+when the projection acknowledge stamped `jobs.delivered_in_target` within 300 s
+of `enqueued_at`. `ProjectionStore.acknowledge` writes `delivered_at` and
+`delivered_in_target` on the job row it already reads, in the transaction that
+sets `projection_state=completed`; no other reader selects them. Gauges
+`omi_batch_pipeline_delivered_share_{ratio,admitted_units,units,truncated,sample_age_seconds}`
+carry the cells; a failed page clears counts and ratio, and both expire after
+600 s. `BATCH_PIPELINE_DELIVERED_SHARE_ENABLED=off` stops the page and hides the
+gauges. The Core Features row "Did the user get a transcript?" and the
+`omi-batch-delivered-share-language` rule read them. See the 2026-11-14
+delivered-share change note and `docs/runbooks/batch-language-delivery.md`.
+
+## Lease packing observation
+
+`BATCH_PIPELINE_PACKING_SAMPLE_RATE` defaults to `0.001` of committed leases and
+accepts rates up to `0.01`. Set `0` on intake, serving, and GPU worker roles to
+disable new metadata stamps, candidate reads, and cohort completion counters.
+In Helm use `worker.packingSampleRate: '0'`.
+
+Each accepted probe reads at most 17 projected job rows in capture order for the
+selected owner. One probe may be queued or running per process. The read runs
+after commit with a one-second RPC deadline and no retry. Its Firestore origin is
+`job:batch_packing_counterfactual`. The read is a near-lease observation. Concurrent
+lease, completion, and erasure can change its view. Stale, busy, missing-anchor,
+and capped observations have explicit coverage signals. Due depth describes only
+the observed owner-priority partition. Costs multiply across worker replicas.
+
+The nine packing estimates use validated device-bound source intervals and the
+original PCM seconds before inserted gap silence. The size ceiling also includes
+decoded padding already present in the row. A pack ends at the first incompatible,
+unready, overlapping, oversize, or predecessor-blocked row, or at the count cap.
+The admission stamp carries only bounded proof and cohort metadata. Session and
+compatibility equality use owner-local digests. Logs and metric labels carry no
+customer IDs. Old or uncertain clocks and ambiguous paid-versus-trial snapshots
+remain unknown. Trial and conversion releases carry their explicit evidence.
+
+Existing readers, including GPU image `ef42ee8`, ignore the optional job stamp.
+New readers accept unstamped jobs and the worker RPC payload is unchanged. The
+ordinary fenced completion counter remains the cost denominator. The separate
+cohort counter uses the newest-source age frozen at intake and records each
+completion once. Compare coverage, sample overhead and production results before
+using the estimates to choose a packing policy.

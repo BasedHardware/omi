@@ -4,6 +4,8 @@ Verifies that legacy or malformed Firestore folder documents (missing required f
 are cleanly skipped rather than causing FastAPI ResponseValidationError (HTTP 500) for the user.
 """
 
+from database.ports.folders import FolderEntity, FolderUpdate
+
 import importlib.abc
 import importlib.machinery
 import os
@@ -93,6 +95,8 @@ finally:
     sys.meta_path.remove(_finder)
     _restore(_snap)
 
+folders_mod.FolderUpdate = FolderUpdate
+
 
 import unittest
 
@@ -117,7 +121,7 @@ class TestFoldersSafeDeserialization(unittest.TestCase):
                 "description": "Corrupt record",
             },
             {
-                # missing required 'id'
+                'id': '',  # missing required 'id'
                 "name": "Missing ID",
                 "color": "#8B5CF6",
                 "icon": "👥",
@@ -135,7 +139,11 @@ class TestFoldersSafeDeserialization(unittest.TestCase):
             },
         ]
 
-        with patch.object(folders_mod.folders_db, "get_folders", return_value=mock_data):
+        with patch.object(
+            folders_mod.folders_db,
+            "get_folders",
+            return_value=[FolderEntity.model_construct(**row) for row in mock_data],
+        ):
             result = folders_mod.get_folders(uid="test_user")
 
         folder_ids = [f.id if hasattr(f, "id") else f["id"] for f in result]
@@ -157,7 +165,9 @@ class TestFoldersSafeDeserialization(unittest.TestCase):
             }
         ]
         with patch.object(folders_mod.folders_db, "get_folders", return_value=[]), patch.object(
-            folders_mod.folders_db, "initialize_system_folders", return_value=system_folders
+            folders_mod.folders_db,
+            "initialize_system_folders",
+            return_value=[FolderEntity.model_construct(**row) for row in system_folders],
         ):
             result = folders_mod.get_folders(uid="test_new_user")
 

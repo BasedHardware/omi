@@ -77,11 +77,19 @@ def resolve(
     deploy_targets: str,
     deploy_gateway: bool,
     base_service: str = "backend",
+    cloud_run_service: str = "all",
     registry: dict[str, Any] | None = None,
     inspect: Inspector = inspect_image_config,
 ) -> dict[str, str]:
     registry = registry or json.loads(REGISTRY_PATH.read_text(encoding="utf-8"))
+    if str(Path(__file__).resolve().parents[1]) not in sys.path:
+        sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+    from scripts.cloud_run_scope import selected
+
+    scope = selected(cloud_run_service)
     pairs = parse_pairs(raw)
+    if cloud_run_service != "all" and (deploy_targets != "cloud-run-only" or deploy_gateway or set(pairs) - set(scope)):
+        raise ServiceImageError("selected-service image scope mismatch")
     if "backend-listen" in pairs and deploy_targets != "all":
         raise ServiceImageError("backend-listen deploys only with deploy_targets=all")
     if "llm-gateway" in pairs and not deploy_gateway:
@@ -132,6 +140,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--deploy-targets", required=True)
     parser.add_argument("--deploy-gateway", required=True, choices=("true", "false"))
     parser.add_argument("--base-service", default="backend")
+    parser.add_argument("--cloud-run-service", choices=("all", *CLOUD_RUN_SERVICES), default="all")
     parser.add_argument("--github-output", type=Path)
     args = parser.parse_args(argv)
     try:
@@ -143,6 +152,7 @@ def main(argv: list[str] | None = None) -> int:
             deploy_targets=args.deploy_targets,
             deploy_gateway=args.deploy_gateway == "true",
             base_service=args.base_service,
+            cloud_run_service=args.cloud_run_service,
         )
     except ServiceImageError as error:
         print(f"ERROR: {error}", file=sys.stderr)

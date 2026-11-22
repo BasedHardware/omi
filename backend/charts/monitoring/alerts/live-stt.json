@@ -3263,7 +3263,7 @@
     "updated": "2026-10-18T00:00:00Z",
     "noDataState": "OK",
     "execErrState": "KeepLast",
-    "for": "15m",
+    "for": "30m",
     "keep_firing_for": "0s",
     "annotations": {
       "dashboard_url": "https://monitor.omi.me/d/855b2e16-c098-407a-85dc-dc9ce87698a9",
@@ -3273,8 +3273,8 @@
       "verification": "Hermetic rule contract checked; no production Prometheus evaluation or notification delivery performed.",
       "safe_next_action": "Keep router on-percent at 0; inspect aggregate continuity and provider headroom before changing allocation.",
       "runbook": "backend/docs/runbooks/live-stt-routing.md",
-      "threshold": "Settlement-normalized proxy >1% with at least 100 cost-routing settlements in 15m, sustained for 15m. Switch to dropped/attempted after the new counters have a day of data.",
-      "evaluated_bad": "At least 100 cost-routing settlements in 15m and the settlement-normalized proxy is >1% for 15m.",
+      "threshold": "Settlement-normalized proxy >1% with at least 100 cost-routing settlements in 15m, sustained for 30m. Switch to dropped/attempted after the new counters have a day of data.",
+      "evaluated_bad": "At least 100 cost-routing settlements in 15m and the settlement-normalized proxy is >1% for 30m.",
       "evaluated_good": "Fewer than 100 cost-routing settlements in 15m or the settlement-normalized proxy is at most 1%."
     },
     "labels": {
@@ -3875,7 +3875,7 @@
     "updated": "2026-10-04T00:00:00Z",
     "noDataState": "OK",
     "execErrState": "KeepLast",
-    "for": "1m",
+    "for": "5m",
     "keep_firing_for": "0s",
     "annotations": {
       "dashboard_url": "https://monitor.omi.me/d/855b2e16-c098-407a-85dc-dc9ce87698a9",
@@ -4028,7 +4028,7 @@
     "updated": "2026-10-04T00:00:00Z",
     "noDataState": "OK",
     "execErrState": "KeepLast",
-    "for": "5m",
+    "for": "15m",
     "keep_firing_for": "0s",
     "annotations": {
       "dashboard_url": "https://monitor.omi.me/d/855b2e16-c098-407a-85dc-dc9ce87698a9",
@@ -4181,7 +4181,7 @@
     "updated": "2026-10-04T00:00:00Z",
     "noDataState": "OK",
     "execErrState": "KeepLast",
-    "for": "1m",
+    "for": "5m",
     "keep_firing_for": "0s",
     "annotations": {
       "dashboard_url": "https://monitor.omi.me/d/855b2e16-c098-407a-85dc-dc9ce87698a9",
@@ -5060,19 +5060,19 @@
     "updated": "2026-10-24T00:00:00Z",
     "noDataState": "OK",
     "execErrState": "KeepLast",
-    "for": "5m",
+    "for": "30m",
     "keep_firing_for": "0s",
     "annotations": {
       "dashboard_url": "https://monitor.omi.me/d/855b2e16-c098-407a-85dc-dc9ce87698a9",
-      "summary": "Live STT pressure sampler has no fresh observations or has stopped progressing for five minutes",
+      "summary": "Live STT pressure sampler has no fresh observations or has stopped progressing for thirty minutes",
       "user_impact": "This listen pod refuses Parakeet windows after its bounded cache expires and shifts audio to paid STT.",
       "scope": "Per backend-listen namespace/pod; no traffic floor, so a quiet broken pod remains visible.",
       "verification": "Hermetic sampler and alert behavior tests; live delivery requires authorized monitoring provisioning.",
       "safe_next_action": "Inspect fetch_failures_total by cause and refresh_total reset_client outcomes. Check pool discovery and sampler progress; if recovery fails, have the rollout lead replace affected listen pods. Do not disable pressure admission.",
       "runbook": "backend/docs/operational/windowed-live-stt.md",
-      "threshold": "fresh == 0 OR no sampler start/valid response within 15s, continuously for 5m. Telegram group_wait adds 30s.",
-      "evaluated_bad": "One zero-fresh pod among healthy pods fires after 5m, including at zero admissions; a frozen positive fresh gauge fires after progress ages 15s plus 5m.",
-      "evaluated_good": "A valid response resets progress; recovered freshness before 5m clears pending. Missing scrape targets use existing coverage alerts."
+      "threshold": "fresh == 0 OR no sampler start/valid response within 15s, continuously for 30m. Telegram group_wait adds 30s.",
+      "evaluated_bad": "One zero-fresh pod among healthy pods fires after 30m, including at zero admissions; a frozen positive fresh gauge fires after progress ages 15s plus 30m.",
+      "evaluated_good": "A valid response resets progress; recovered freshness before 30m clears pending. Missing scrape targets use existing coverage alerts."
     },
     "labels": {
       "alert_identity": "omi-stt-pressure-sampler-stuck",

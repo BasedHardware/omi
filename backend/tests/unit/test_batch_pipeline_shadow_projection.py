@@ -2,12 +2,13 @@
 
 from copy import deepcopy
 from dataclasses import replace
+from functools import partial
 from unittest.mock import Mock
 
 import pytest
 
 from utils.batch_pipeline.contracts import WorkItem
-from utils.batch_pipeline import projection
+from utils.batch_pipeline import projection, shadow_projection
 from utils.sync import assignment
 from utils.batch_pipeline.shadow_projection import plan, run
 from utils.batch_pipeline.shadow_transaction import ShadowBoundaryError, ShadowTransaction, Reference
@@ -35,6 +36,8 @@ def test_real_builder_and_assignment_plan_without_a_writer(monkeypatch):
     monkeypatch.setattr(projection, 'cap_dispatch_enabled', lambda *args: False)
     monkeypatch.setattr(assignment, 'smart_merge_flatten_enabled', lambda: False)
     monkeypatch.setattr(assignment, 'sync_lineage_resolve_enabled', lambda: False)
+    # This case verifies capabilities, not scheduling latency on a loaded host.
+    monkeypatch.setattr(shadow_projection, 'ShadowTransaction', partial(ShadowTransaction, clock=lambda: 0.0))
     reads = []
 
     def read(path, fields, timeout):
@@ -62,6 +65,16 @@ def test_rejected_plan_has_no_customer_writer_and_does_not_retain_payload():
         ref.get()
     tx.close()
     assert not tx._cache
+
+
+def test_shadow_deadline_refuses_a_read_before_calling_the_reader():
+    now = [0.0]
+    reader = Mock(return_value=None)
+    transaction = ShadowTransaction('owner', reader, clock=lambda: now[0])
+    now[0] = 2.0
+    with pytest.raises(ShadowBoundaryError, match='time_budget'):
+        transaction.user().collection('conversations').document('one').get()
+    reader.assert_not_called()
 
 
 def test_capabilities_refuse_foreign_owner_real_references_and_excess_reads():

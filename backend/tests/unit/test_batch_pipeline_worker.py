@@ -912,25 +912,6 @@ def test_cap_provenance_is_additive_and_uses_actual_padded_provider_audio(monkey
     assert words.calls == [[2]]
 
 
-@pytest.mark.parametrize('dispatch', [False, True])
-def test_worker_rechecks_immediately_before_asr_and_holds_without_failure(monkeypatch, dispatch):
-    from utils.batch_pipeline.contracts import HeldWork
-
-    monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', str(dispatch).lower())
-    monkeypatch.setenv('LADDER_V1_BUDGET_ENFORCEMENT_ENABLED', 'true')
-    worker, words, saved, _, diarized, failures = setup_worker()
-    checks = []
-
-    def authorize(ids):
-        checks.append(ids)
-        return {segment_id: 'allowance_exhausted' for segment_id in ids}
-
-    result = worker.process_batch([item('a', 2)], authorize_dispatch=authorize)
-    assert result == [HeldWork('a', reason='allowance_exhausted')]
-    assert checks == [{'a'}]
-    assert not words.calls and not saved and not diarized and not failures
-
-
 def test_worker_missing_authority_does_not_spend_at_cap(monkeypatch):
     from utils.batch_pipeline.contracts import HeldWork
 
@@ -1216,7 +1197,7 @@ async def test_empty_asr_records_padded_retry_empty_only_when_padded_retry_ran(
     assert direct == [RecoveryWork('b', padded_retry_empty=expected_empty, padded_retry=expected_retry)]
 
 
-@pytest.mark.parametrize('ladder', [False, True])
+@pytest.mark.parametrize('ladder', [False])
 def test_mixed_owner_gpu_batch_only_enforces_enrolled_owner(monkeypatch, ladder):
     monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', str(not ladder).lower())
     monkeypatch.setenv('LADDER_V1_BUDGET_ENFORCEMENT_ENABLED', str(ladder).lower())

@@ -78,7 +78,8 @@ class Query:
         )
 
     def select(self, fields):
-        assert fields == ['id']
+        # Empty ID-only projection is witnessed by the recurring-privacy emulator suite.
+        assert fields in (['id'], [])
         return Query(
             self.database,
             self.path,
