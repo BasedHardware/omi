@@ -42,7 +42,6 @@ WAVE2_MODES = frozenset(
         'MEDIA_NOISE',
         'CAPTURE_COVERAGE',
         'NOTES_PACKET_V2',
-        'EPISODE_BOUNDARIES',
         'LIFECYCLE_V2',
         'CALLS_RECAP',
         'ACTION_ITEMS_V2',
