@@ -10,12 +10,14 @@ worker. The feature flag registry records both as retired names.
 Serving behavior does not change. Before this change a task left the default
 handler only when the phase admitted its owner, and the enable flag was `false`
 on every committed serving surface (the composed prod and dev manifest and the
-prod and dev listen and pusher charts). That flag was the only gate in prod:
-`AUDIO_ARCHIVE_PERCENT`, which the COALESCE phase pins, is `100` there, so
-setting the flag would have sent every owner to the worker with no ramp. Every
-merge task therefore already went to `AUDIO_MERGE_HANDLER_URL`. The inbound
-check accepted the handler URL plus the worker URL, and the worker URL was
-empty on all of those surfaces, so it already collapsed to the handler URL
+prod and dev listen and pusher charts). That flag was the only cohort gate in
+prod: `AUDIO_ARCHIVE_PERCENT`, which the COALESCE phase pins, is `100` there, so
+setting the flag would have admitted every owner with no ramp. Dispatch would
+have moved to the worker only once `AUDIO_MERGE_WORKER_URL` was also set, and
+it was empty on every surface. Every merge task therefore already went to
+`AUDIO_MERGE_HANDLER_URL`. The inbound
+check accepted the handler URL plus the worker URL; with the worker URL empty
+that list already collapsed to the handler URL
 alone. Audio-merge tasks now always use the handler URL as both the dispatch
 target and the single OIDC audience.
 

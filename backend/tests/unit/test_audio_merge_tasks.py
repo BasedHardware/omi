@@ -16,6 +16,7 @@ from contextlib import ExitStack
 from unittest.mock import MagicMock, patch
 
 import pytest
+from fastapi import HTTPException
 
 from config import audio_archive
 
@@ -208,6 +209,34 @@ class TestEnqueueAudioMergeJob:
             assert ct.verify_audio_merge_cloud_tasks_oidc(_request_with({'authorization': 'Bearer t'})) == 0
             assert verify.call_args.kwargs['audience'] == merge_url
             assert not isinstance(verify.call_args.kwargs['audience'], list)
+
+    def test_token_minted_for_retired_worker_audience_is_refused(self):
+        """A task token whose audience is the retired worker URL gets a 403.
+
+        Stands in for google.oauth2.id_token.verify_oauth2_token's audience
+        check with its permissive shape: the token audience may match the
+        expected audience or any member of a list. Only the signature check
+        is faked; the accepted-audience decision is the production code's.
+        """
+        ct = _load_cloud_tasks()
+        handler_url = AUDIO_ENV['AUDIO_MERGE_HANDLER_URL']
+        worker_url = 'https://retired-merge-worker.example.com/v2/audio-merge-jobs/run'
+        token_audience = {'handler-token': handler_url, 'worker-token': worker_url}
+
+        def verify_stub(token, request, audience):
+            allowed = audience if isinstance(audience, list) else [audience]
+            if token_audience[token] not in allowed:
+                raise ValueError("Audience doesn't match")
+            return {'email': AUDIO_ENV['SYNC_TASKS_INVOKER_SA'], 'email_verified': True}
+
+        with patch.dict(os.environ, {**AUDIO_ENV, 'AUDIO_MERGE_WORKER_URL': worker_url}), patch.object(
+            ct.id_token, 'verify_oauth2_token', side_effect=verify_stub
+        ):
+            accepted = ct.verify_audio_merge_cloud_tasks_oidc(_request_with({'authorization': 'Bearer handler-token'}))
+            with pytest.raises(HTTPException) as refused:
+                ct.verify_audio_merge_cloud_tasks_oidc(_request_with({'authorization': 'Bearer worker-token'}))
+        assert accepted == 0
+        assert refused.value.status_code == 403
 
 
 class TestPlaybackReadPathsStructure:
