@@ -10,7 +10,7 @@ import json
 from datetime import date, datetime, timedelta, timezone
 from functools import partial
 from types import SimpleNamespace
-from unittest.mock import Mock
+from unittest.mock import Mock, call
 
 import httpx
 import pytest
@@ -479,7 +479,8 @@ def test_model_failure_raises_releases_the_claim_and_retries_once(pass_env):
     assert not open_loops_db.claim_daily_pass(UID, DATE_STR, now=NOW, firestore_client=pass_env.fake)
 
 
-def test_timeout_then_success_writes_loops_cards_and_usage_once(pass_env, monkeypatch):
+@pytest.mark.parametrize('elapsed, retry_timeout', [(2, 25), (25.25, 4)])
+def test_timeout_then_success_writes_loops_cards_and_usage_once(pass_env, monkeypatch, elapsed, retry_timeout):
     db = daily.open_loops_db
     claim = Mock(wraps=db.claim_daily_pass)
     upsert = Mock(wraps=db.upsert_loop)
@@ -507,11 +508,15 @@ def test_timeout_then_success_writes_loops_cards_and_usage_once(pass_env, monkey
     llm.invoke.side_effect = invoke
     get_llm = Mock(return_value=llm)
     monkeypatch.setattr(daily, 'get_llm', get_llm)
+    monkeypatch.setattr(daily, 'monotonic', Mock(side_effect=[100, 100 + elapsed]))
 
     assert _run(pass_env, None) == daily.RAN
     assert _run(pass_env, None) == daily.SKIPPED_ALREADY_RAN
 
-    get_llm.assert_called_once_with('open_loop_daily', request_timeout=15.0, max_retries=0)
+    expected_clients = [call('open_loop_daily', request_timeout=25, max_retries=0)]
+    if retry_timeout < 25:
+        expected_clients.append(call('open_loop_daily', request_timeout=retry_timeout, max_retries=0))
+    assert get_llm.call_args_list == expected_clients
     assert llm.invoke.call_count == 2
     assert llm.invoke.call_args_list[0] == llm.invoke.call_args_list[1]
     claim.assert_called_once()
@@ -522,21 +527,24 @@ def test_timeout_then_success_writes_loops_cards_and_usage_once(pass_env, monkey
     assert len(get_cards(UID, DATE_STR, firestore_client=pass_env.fake)) == 1
 
 
-def test_two_timeouts_degrade_once_and_leave_the_day_unrun(pass_env, monkeypatch, caplog):
+@pytest.mark.parametrize('elapsed, expected_attempts', [(25, 2), (30, 1)])
+def test_timeout_exhaustion_degrades_once_and_leaves_the_day_unrun(
+    pass_env, monkeypatch, caplog, elapsed, expected_attempts
+):
     from utils.other import notifications
 
     timeout = APITimeoutError(request=httpx.Request('POST', 'https://example.com'))
     llm = Mock()
     llm.invoke.side_effect = timeout
-    monkeypatch.setattr(
-        daily, 'run_daily_pass', partial(daily.run_daily_pass, now=NOW, firestore_client=pass_env.fake, llm=llm)
-    )
+    monkeypatch.setattr(daily, 'get_llm', Mock(return_value=llm))
+    monkeypatch.setattr(daily, 'monotonic', Mock(side_effect=[100, 100 + elapsed]))
+    monkeypatch.setattr(daily, 'run_daily_pass', partial(daily.run_daily_pass, now=NOW, firestore_client=pass_env.fake))
     fallback = Mock()
     monkeypatch.setattr(notifications, '_record_daily_summary_fallback', fallback)
 
     notifications._run_open_loops_daily_pass(UID, DATE_STR, None, None, 'UTC')
 
-    assert llm.invoke.call_count == 2
+    assert llm.invoke.call_count == expected_attempts
     fallback.assert_called_once_with(
         from_mode='open_loops_daily_pass', to_mode='skipped', reason='error', outcome='degraded'
     )
