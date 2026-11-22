@@ -22,6 +22,7 @@ from config.batch_pipeline import scheduler_control_key
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
 from database import batch_pipeline_projection_outbox as projection_outbox
 from testing.store_fixtures import store_backend  # noqa: F401  (the parametrized fixture)
+from utils.batch_pipeline import scheduler as scheduler_module
 from utils.batch_pipeline.contracts import Priority, WorkItem, WorkResult
 from utils.batch_pipeline.merge import OrderedMerge
 from utils.batch_pipeline.scheduler import Scheduler, owner_key as scheduler_owner_key
@@ -556,8 +557,6 @@ def _projection_rows(h):
 
 
 def test_projection_outbox_merge_and_token_conformance(h, monkeypatch):
-    from utils.batch_pipeline import scheduler as scheduler_module
-
     # This test advances a synthetic domain clock. Host load must not expire the scheduler's setup claim.
     monkeypatch.setattr(scheduler_module, 'monotonic', lambda: 100.0)
     queue = Scheduler(h.store)
@@ -593,6 +592,53 @@ def test_projection_outbox_merge_and_token_conformance(h, monkeypatch):
     assert outbox.settle(h.store, key, token, lambda: 85, 'retry') is None
     snapshot = h.store.run(lambda tx: tx.get('results', 'new'))
     assert snapshot['projection_state'] == 'pending' and snapshot[outbox.TOKEN_FIELD] == second
+
+
+@pytest.mark.parametrize(
+    ('first_digest', 'replay_digest', 'replay_accepted'),
+    [
+        pytest.param('a', 'a', True, id='same-producer'),
+        pytest.param('a', 'b', False, id='different-producer'),
+        pytest.param('a', None, True, id='legacy-replay'),
+        pytest.param(None, 'b', True, id='legacy-original'),
+    ],
+)
+def test_pl704_completion_replay_preserves_original_worker_image(
+    h, monkeypatch, first_digest, replay_digest, replay_accepted
+):
+    monkeypatch.setattr(scheduler_module, 'monotonic', lambda: 100.0)
+    queue = Scheduler(h.store)
+    merge = OrderedMerge(h.store, head_wait_seconds=0, catch_up_depth=0)
+    segment = 'recording'
+    uid = h.uid('o')
+    uri = 'gs://synthetic/result'
+    first = f'sha256:{first_digest * 64}' if first_digest is not None else None
+    replay = f'sha256:{replay_digest * 64}' if replay_digest is not None else None
+    expected = {'segment_id': segment, 'result_uri': uri, 'outcome': 'success'}
+    if first is not None:
+        expected['worker_image_digest'] = first
+
+    assert queue.enqueue(WorkItem(segment, uid, 90, 'gs://synthetic/input', 30, Priority.FRESH), 100)
+    (lease,) = queue.pull(101)
+    assert queue.complete(WorkResult(segment, uri, worker_image_digest=first), lease.token, 102)
+    ready = h.store.run(lambda tx: tx.get('jobs', segment))
+    assert ready['state'] == 'result_ready' and ready['result'] == expected
+
+    duplicate = WorkResult(segment, uri, worker_image_digest=replay)
+    assert queue.complete(duplicate, 'stale-token', 103) is False
+    assert queue.complete(duplicate, lease.token, 103) is replay_accepted
+    assert h.store.run(lambda tx: tx.get('jobs', segment)) == ready
+
+    entry = merge.commit_next(uid, 104)
+    assert entry is not None
+    assert entry['result'] == expected and entry['log_sequence'] == 1
+    committed = h.store.run(lambda tx: tx.get('jobs', segment))
+    assert committed['state'] == 'committed'
+
+    assert queue.complete(duplicate, lease.token, 105) is replay_accepted
+    assert h.store.run(lambda tx: tx.get('jobs', segment)) == committed
+    assert merge.committed_result(segment) == entry
+    assert merge.commit_next(uid, 106) is None
 
 
 def test_projection_page_is_a_stable_keyset_scan(h):
