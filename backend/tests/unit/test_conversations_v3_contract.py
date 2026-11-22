@@ -286,7 +286,6 @@ def test_recordings_never_embed_even_on_completed_replay(monkeypatch, update_onl
 )
 def test_released_capture_poll_keeps_recording_identity(monkeypatch, statuses, capture):
     from types import SimpleNamespace
-    from utils.episodes import home_membership
 
     class CapturedRead(BaseException):
         pass
@@ -297,11 +296,6 @@ def test_released_capture_poll_keeps_recording_identity(monkeypatch, statuses, c
         bound.update(kwargs)
         raise CapturedRead()
 
-    monkeypatch.setattr(routes, 'home_transcription_presentation_gate_enabled', lambda: False)
-    monkeypatch.setattr(routes, 'home_step_projection_enabled', lambda: False)
-    monkeypatch.setattr(home_membership, 'held_for', lambda request: False)
-    monkeypatch.setattr(home_membership, 'live_suppression_for', lambda *a: False)
-    monkeypatch.setattr(routes.ListVersionCheck, 'start', lambda *a: SimpleNamespace(not_modified=None))
     monkeypatch.setattr(routes, 'list_read_budget_for_request', lambda *a, **kw: None)
     monkeypatch.setattr(db, 'get_conversations_without_photos', read)
     with pytest.raises(CapturedRead):

@@ -36,7 +36,6 @@ def store(monkeypatch):
         hook=None,
         schema=projection.HEAD_SCHEMA,
         generation=1,
-        p1_capable=True,
     )
     stamp = datetime(2026, 10, 23, tzinfo=timezone.utc)
     state.stamp = stamp
@@ -60,10 +59,6 @@ def store(monkeypatch):
                 'commit_generation': state.generation,
             }
         )
-        if ref.path.endswith('/list_serving_versions/conversations') and data is not None:
-            data = {'version': state.token}
-            if state.p1_capable:
-                data.update(schema=state.schema, commit_generation=state.generation)
         if state.blocked is not None and data is not None:
             data['blocked'] = state.blocked
         return snapshot(ref.path, data)
@@ -322,33 +317,16 @@ def test_coverage_epoch_rotation_never_reuses_pre_gap_payloads(store, monkeypatc
     assert store.scans == 2
 
 
-def test_mcp_cards_reuse_only_retry_safe_p1_versions_and_respect_its_kill_switch(store, monkeypatch):
-    monkeypatch.setenv('OMI_LIST_VERSION_EPOCH', 'v2:p1-coverage')
-    store.token = 'a' * 32
-    store.query = store.client.collection('users/u/conversations').limit(100)
-    store.rows = {f'users/u/conversations/{i}': {'n': i} for i in range(100)}
-    first = projection.projected_stream_list(store.query, surface='mcp_cards')
-    before = store.reads
-    assert payloads(projection.projected_stream_list(store.query, surface='mcp_cards')) == payloads(first)
-    assert store.reads - before == 2
-    store.rows.clear()
-    monkeypatch.setenv('OMI_LIST_PROJECTION_WRITER_ENABLED', 'false')
-    assert projection.projected_stream_list(store.query, surface='mcp_cards') == []
-
-
-@pytest.mark.parametrize('legacy', ['epoch', 'head'])
-def test_legacy_p1_capability_keeps_mcp_on_the_existing_source_path(store, monkeypatch, legacy):
-    monkeypatch.setenv('OMI_LIST_VERSION_EPOCH', 'v2:p1-audited' if legacy == 'head' else 'legacy-epoch')
-    store.token = 'a' * 32
-    store.p1_capable = legacy != 'head'
-    store.query = store.client.collection('users/u/conversations').limit(100)
+def test_mcp_conversation_cards_keep_reading_the_source(store):
+    query = store.client.collection('users/u/conversations').limit(100)
     store.rows = {f'users/u/conversations/{i}': {'n': i} for i in range(3)}
-    projection.projected_stream_list(store.query, surface='mcp_cards')
+
+    assert len(projection.projected_stream_list(query, surface='mcp_cards')) == 3
     store.rows.clear()
-    assert projection.projected_stream_list(store.query, surface='mcp_cards') == []
-    assert store.scans == 2 and not projection._entries
-    if legacy == 'epoch':
-        assert store.heads == 0
+    assert projection.projected_stream_list(query, surface='mcp_cards') == []
+    assert store.scans == 2
+    assert store.heads == 0
+    assert not projection._entries
 
 
 def test_offset_is_charged_only_when_the_source_query_runs(store):
@@ -374,22 +352,16 @@ def test_stream_partial_prefix_retains_existing_budget_semantics(store, monkeypa
     assert not projection._entries
 
 
-@pytest.mark.parametrize('warm', [False, True])
-def test_last_read_preserves_mcp_source_prefix_instead_of_spending_it_on_heads(store, monkeypatch, warm):
-    monkeypatch.setenv('OMI_LIST_VERSION_EPOCH', 'v2:p1-coverage')
-    store.token = 'a' * 32
+def test_last_read_preserves_mcp_source_prefix_without_head_reads(store):
     store.query = store.client.collection('users/u/conversations').limit(100)
     store.rows = {f'users/u/conversations/{i}': {'n': i} for i in range(3)}
-    if warm:
-        list(projection.projected_stream_iter(store.query, surface='mcp_cards'))
-    before = store.heads
     budget = ListReadBudget(deadline_monotonic=24, max_documents=1, clock=lambda: 0)
     actual = []
     with pytest.raises(ListReadBudgetExhausted):
         for row in projection.projected_stream_iter(store.query, budget, surface='mcp_cards'):
             actual.append(row.to_dict())
     assert actual == [{'n': 0}]
-    assert store.heads == before
+    assert store.heads == 0
 
 
 def test_sync_scrape_keeps_projection_and_existing_billing_authority_counters():

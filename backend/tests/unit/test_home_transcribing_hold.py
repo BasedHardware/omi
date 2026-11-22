@@ -3,7 +3,6 @@
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
-from unittest.mock import Mock
 
 import pytest
 from fastapi import FastAPI
@@ -173,13 +172,12 @@ def test_list_and_detail_wire_serialization(api, overdue):
     assert row['status'] == 'completed' and row['structured']['title'] == ''
 
 
-def test_gate_disables_writer_only_conditional_get_before_query(api, monkeypatch):
-    client, _ = api
-    start = Mock(wraps=routes.ListVersionCheck.start)
-    monkeypatch.setattr(routes.ListVersionCheck, 'start', start)
-    response = client.get('/v1/conversations', headers={'If-None-Match': 'old-writer-version'})
+def test_conditional_list_fetch_keeps_transcribing_presentation(api):
+    client, row = api
+    row['home_transcription_deadline_at'] = NOW + timedelta(seconds=7200)
+    response = client.get('/v1/conversations', headers={'If-None-Match': 'W/"lp1-retired-validator"'})
     assert response.status_code == 200
-    assert start.call_args.args[0] is None
+    assert response.json()[0]['status'] == 'processing'
     assert 'etag' not in response.headers
 
 

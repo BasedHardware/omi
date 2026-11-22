@@ -43,16 +43,9 @@ use the source path: two head reads would not save money. The small-query hint
 only disables reuse and does not suppress any source query. No Redis dependency,
 polling change, field/index migration or recurring scan is introduced.
 
-MCP conversation cards reuse fs-p1's atomic
-`users/{uid}/list_serving_versions/conversations`. They require schema2,
-an atomically incremented `commit_generation`, exact snapshot revision, a
-`v2:<unique-epoch>` P1 `OMI_LIST_VERSION_EPOCH` and enabled
-`OMI_LIST_PROJECTION_WRITER_ENABLED`, in addition to P2's gate. Legacy P1
-UUID-only heads lack that retry-safe capability and retain the existing MCP
-source path. P1's owner must provide the capability and prove ambiguous-success
-retry parity before MCP reuse is enabled; an epoch alone is not proof.
-P2 adds no second conversation head. Offset skips are charged only on source
-queries, while partial-stream prefixes keep their previous budget behavior.
+MCP conversation cards read their source query directly. Offset skips are
+charged on source queries, and partial-stream prefixes retain their existing
+read-budget behavior.
 
 ## Rollout and rollback
 
@@ -74,7 +67,7 @@ readers reject v1 epochs/schema1 heads. Never re-enable a UUID-only attestation.
    and repeated source Increment without another writer.
    If coverage cannot be proved, report the blocker and leave reuse disabled.
 3. Only after that proof, the lead sets a new unique coverage epoch across
-   participating readers. MCP additionally waits for P1 coverage and its epoch.
+   participating memory readers.
    All eligible accounts participate; bulk-blocked/missing-head accounts retain
    source reads. No user-data backfill is required or authorized by this PR.
 4. Compare exact output/order/access decisions and p95; on mismatch or latency

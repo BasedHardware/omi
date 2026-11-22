@@ -27,7 +27,6 @@ def test_ambiguous_success_retry_invalidates_projection(monkeypatch, interleaved
     monkeypatch.setenv('MEMORY_RELEASED_WRITERS_COVERED', 'v2:retry-emulator')
     monkeypatch.setenv('MEMORY_RELEASED_PROJECTION', 'on')
     _client._install_memory_change_heads()
-    _client._install_list_projection_writer()
     client = firestore.Client(project='demo-fs-p2-retry', credentials=AnonymousCredentials())
     root = f'users/retry-{uuid4().hex}'
     refs = {key: client.document(f'{root}/memory_items/{key}') for key in 'abc'}

@@ -6,7 +6,6 @@ import json
 from pathlib import Path
 import re
 import threading
-from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
@@ -169,9 +168,6 @@ def test_default_home_http_list_hides_pending_row(monkeypatch, pending, indexed)
     store, _, _, _ = pending
     _install_listing(monkeypatch, _rows_from_store(store))
     monkeypatch.setattr(routes, '_heal_locked_conversations_if_eligible', lambda *a: None)
-    monkeypatch.setattr(
-        routes.ListVersionCheck, 'start', lambda *a: SimpleNamespace(not_modified=None, finish=lambda *a, **kw: None)
-    )
     app = FastAPI()
     app.include_router(routes.router)
     app.dependency_overrides[auth.get_current_user_uid] = lambda: 'u'

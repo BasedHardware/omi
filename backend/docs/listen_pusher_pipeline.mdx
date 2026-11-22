@@ -706,12 +706,6 @@ the final refresh. `SYNC_OPERATION_SNAPSHOT_ENABLED=false` restores the prior
 reads. The [operation snapshot contract](sync-operation-snapshots.md) documents
 the constant read origin, counted savings and the separate P4/index designs.
 
-Python conversation/action commits also maintain compact list metadata rows and
-opaque per-owner versions in the same Firestore commit. This does not change
-transcript, lifecycle, privacy or hold policy. Conditional list reads require a
-completed writer-fleet rollout; see [list serving projections](list-serving-projection.md)
-for the kill switch, rollout epoch, migration coverage and read/write cost contract.
-
 ## Legacy sync staging and batch cleanup custody
 
 Legacy sync no longer schedules staging deletion when it creates a signed URL.
