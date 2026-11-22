@@ -119,7 +119,7 @@ APIs and workers, so no service may be assumed reader-only.
 
 Owner: **quality lead**. Target: **the same day as image rollout**. Once every
 reachable reader and admitter serves an image containing this change, enable
-**everyone in one config change** setting all twelve bindings true, regenerate
+**everyone in one config change** setting the prod bindings true (as shipped 2026-11-22 in #26025: the five prod overlay services and the prod listen chart; dev stays off), regenerate
 the runtime manifest and verify serving env/release readback. Do not leave a
 David-only cohort or an unexpanded default-off gate overnight.
 
@@ -189,3 +189,8 @@ A future explicit, owner-scoped import-session container could reference these
 unchanged source rows without merging trusted chronology or audio. It needs a
 stable session identity across requests and Home rendering support; no such
 container or app UI is built here, pending the lead's go.
+
+
+## 2026-11-22: prod enablement
+
+Prod turned on in one config change (#26025, SCA-3501), after every reader and admitter was confirmed serving clamp code. That covered the five Cloud Run sources (each containing #25401) and listen `96f0631`. The provider-STT queue was inventoried in full, with every task aimed at backend-integration and no URI override. The pre-clamp epoch-3 redrive stays dormant under a relaunch restriction. Dev and the code default stay off, so dev keeps exercising the refusal path. Rollback: `false` on the same prod lines.
