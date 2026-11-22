@@ -60,6 +60,19 @@ class WalFileManager {
         }
       });
 
+  static Future<int> purgeUnindexedLiveWalReceipts({
+    required Set<String> owners,
+    required Set<String> reservedNames,
+    required bool Function(String) mayDelete,
+  }) =>
+      _saveLock.withResource(() async {
+        final primary = _walFile;
+        final backup = _walBackupFile;
+        if (primary == null || backup == null) return 0;
+        return LiveWalReceipt.purgeUnindexed(primary, backup,
+            owners: owners, reservedNames: reservedNames, mayDelete: mayDelete);
+      });
+
   static Future<List<Wal>> _loadWals() async {
     final indexed = await _loadIndexedWals();
     return MobileBatchBuffer.recover(_walFile!.parent, indexed);

@@ -23,6 +23,7 @@ typedef LiveWalReplay = ({List<Wal> rows, Map<LiveWalWithheld, int> withheld, bo
 class LiveWalReceipt {
   static const directoryName = '.wal-live-receipts';
   static const writeEnabled = !bool.fromEnvironment('OMI_LIVE_WAL_RECEIPT_OFF');
+  static const purgeEnabled = !bool.fromEnvironment('OMI_LIVE_WAL_RECEIPT_PURGE_OFF');
   static const _pending = '.json';
   static const _stagingDirectory = 'staging';
   static const _retiredDirectory = 'retired';
@@ -170,6 +171,103 @@ class LiveWalReceipt {
     return (wal: decodeWalIndexRow(fields), length: length, binding: binding);
   }
 
+  static Future<bool> _matchesAudio(File audio, int length, String expectedDigest) async {
+    final handle = await audio.open();
+    final List<int> bytes;
+    try {
+      bytes = await handle.read(length);
+    } finally {
+      await handle.close();
+    }
+    return bytes.length == length && await _digest(bytes) == expectedDigest && await audio.length() == length;
+  }
+
+  static Future<bool> _matchesPurgeAudio(File audio, int length, String digest) async {
+    if (await FileSystemEntity.type(audio.path, followLinks: false) != FileSystemEntityType.file) return false;
+    final before = await audio.stat();
+    if (before.size != length || !await _matchesAudio(audio, length, digest)) return false;
+    final after = await audio.stat();
+    return after.size == before.size &&
+        after.changed == before.changed &&
+        after.modified == before.modified &&
+        await FileSystemEntity.type(audio.path, followLinks: false) == FileSystemEntityType.file;
+  }
+
+  /// A failed index commit can leave a disk WAL in memory. A memory row does
+  /// not waive the receipt proof needed to purge that still-unindexed file.
+  static Future<bool> matchesPendingPurge(File audio, Wal wal) async {
+    if (!purgeEnabled) return false;
+    final name = path.basename(audio.path);
+    final expected = _binding(name, wal.toJson());
+    if (expected == null) return false;
+    final pending = _receipt(audio.parent, name);
+    if (await FileSystemEntity.type(pending.parent.path, followLinks: false) != FileSystemEntityType.directory) {
+      return false;
+    }
+    final record = await _read(pending, name);
+    return record != null &&
+        record.binding == expected &&
+        await _matchesPurgeAudio(audio, record.length, record.binding.digest);
+  }
+
+  static Future<Set<String>> _indexedBasenames(List<File> indexes) async {
+    final names = <String>{};
+    for (final index in indexes) {
+      final type = await FileSystemEntity.type(index.path, followLinks: false);
+      if (type == FileSystemEntityType.notFound) continue;
+      if (type != FileSystemEntityType.file) throw const FileSystemException('invalid WAL index path');
+      final content = await index.readAsString();
+      names.addAll(await offUiIsolate(() {
+        final rows = (jsonDecode(content) as Map)['wals'] as List;
+        return [
+          for (final row in rows)
+            if (row case {'file_path': final String filePath}) path.basename(filePath).toLowerCase(),
+        ];
+      }, size: content.length, threshold: 0, debugName: 'live_wal_purge_index'));
+    }
+    return names;
+  }
+
+  /// Delete only pending receipt audio that has no live or durable index
+  /// reference. The caller holds the index writer lock during validation.
+  static Future<int> purgeUnindexed(
+    File primary,
+    File backup, {
+    required Set<String> owners,
+    required Set<String> reservedNames,
+    required bool Function(String) mayDelete,
+  }) async {
+    if (!purgeEnabled || owners.isEmpty) return 0;
+    final documents = primary.parent;
+    final pending = directory(documents);
+    var removed = 0;
+    try {
+      if (await FileSystemEntity.type(pending.path, followLinks: false) != FileSystemEntityType.directory) return 0;
+      Set<String>? indexedNames;
+      await for (final entry in pending.list(followLinks: false)) {
+        final name = _receiptBasename(entry.path);
+        if (entry is! File || name == null || reservedNames.contains(name.toLowerCase())) continue;
+        final ({Wal wal, int length, LiveWalBinding binding})? record;
+        try {
+          record = await _read(entry, name);
+        } catch (_) {
+          continue;
+        }
+        if (record == null || !owners.contains(record.binding.owner) || !mayDelete(name)) continue;
+        indexedNames ??= await _indexedBasenames([primary, backup]);
+        if (indexedNames.contains(name.toLowerCase())) continue;
+        try {
+          final audio = File(path.join(documents.path, name));
+          if (!await _matchesPurgeAudio(audio, record.length, record.binding.digest) || !mayDelete(name)) continue;
+          await audio.delete();
+          removed++;
+          await retireAfterFileDeletion(audio, record.wal);
+        } catch (_) {/* Keep uncertain files and leave failed cleanup for a later purge. */}
+      }
+    } catch (_) {/* An unreadable index or receipt directory gives no deletion authority. */}
+    return removed;
+  }
+
   static Future<LiveWalReplay> recover(
     Directory documents, {
     required Set<String> knownBasenames,
@@ -237,15 +335,7 @@ class LiveWalReceipt {
           break;
         }
         bytesRemaining -= record.length;
-        final handle = await audio.open();
-        final List<int> bytes;
-        try {
-          bytes = await handle.read(record.length);
-        } finally {
-          await handle.close();
-        }
-        final digest = await _digest(bytes);
-        if (bytes.length != record.length || digest != record.binding.digest || await audio.length() != record.length) {
+        if (!await _matchesAudio(audio, record.length, record.binding.digest)) {
           reject(LiveWalWithheld.contentMismatch);
           continue;
         }

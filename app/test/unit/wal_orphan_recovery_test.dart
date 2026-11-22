@@ -18,6 +18,7 @@ import 'package:omi/services/wals/sync_upload_gate.dart';
 import 'package:omi/services/wals/sync_rate_limiter.dart';
 import 'package:omi/services/wals/local_wal_sync.dart';
 import 'package:omi/services/wals/live_wal_receipt.dart';
+import 'package:omi/services/wals/deleted_account_uids.dart';
 import 'package:omi/services/wals/pendant_ring_custody.dart';
 import 'package:omi/services/capture/local_stt_custody.dart';
 import 'package:omi/services/wals/device_capture_clock.dart';
@@ -519,6 +520,148 @@ void main() {
     expect(isAutoUploadEligible(replayed), isFalse);
     expect(await restarted.hasDurableWal(replayed, admittedGeneration: restarted.sessionGeneration), isTrue);
   });
+
+  Future<File> makePendingReceipt(String? owner, {List<int>? audioBytes}) async {
+    final id = LiveWalReceipt.newId();
+    final basename = LiveWalReceipt.uniqueName(name(now), id);
+    final file = File('${dir.path}/$basename');
+    final bytes = encodeWalFrames(receiptFrames);
+    final captured = Wal(
+      codec: BleAudioCodec.opusFS320,
+      timerStart: now,
+      seconds: 1,
+      totalFrames: receiptFrames.length,
+      storage: WalStorage.mem,
+      status: WalStatus.miss,
+      ownerUid: owner,
+      device: 'pendant',
+    );
+    await LiveWalReceipt.prepare(file, captured, id, bytes);
+    return file.writeAsBytes(audioBytes ?? bytes, flush: true);
+  }
+
+  Future<void> purgeOwnerA({
+    required bool coldStart,
+    LocalWalSyncImpl? existing,
+    bool rejectForeignReplay = false,
+  }) async {
+    if (coldStart) {
+      SharedPreferencesUtil().uid = 'owner-b';
+      expect(await saveDeletedAccountUids(['owner-a']), isTrue);
+      final restarted = await ledger(
+        realCensus: true,
+        persist: rejectForeignReplay
+            ? (rows) async {
+                // Exercise the purge check while this valid foreign file is
+                // still unindexed. Successful replay would reserve its path.
+                if (rows.any((wal) => wal.ownerUid == 'owner-c')) {
+                  throw const FileSystemException('injected foreign replay save failure');
+                }
+                expect(await WalFileManager.saveWals(rows), isTrue);
+              }
+            : null,
+      );
+      expect(restarted.testWals.where((w) => w.ownerUid == 'owner-a'), isEmpty);
+    } else {
+      await existing!.purgeAccountWals('owner-a');
+    }
+  }
+
+  for (final coldStart in [false, true]) {
+    test('account purge removes its exact pending audio (cold start $coldStart)', () async {
+      final existing = coldStart ? null : await ledger(realCensus: true);
+      final deletedCopy = await makePendingReceipt('owner-a');
+      final receipt = receiptFor(deletedCopy.uri.pathSegments.last);
+      final indexed = await WalFileManager.loadIndexedWals();
+      expect(indexed.map((wal) => wal.filePath), isNot(contains(deletedCopy.uri.pathSegments.last)));
+
+      await purgeOwnerA(coldStart: coldStart, existing: existing);
+
+      const purgeOff = bool.fromEnvironment('OMI_LIVE_WAL_RECEIPT_PURGE_OFF');
+      expect(await deletedCopy.exists(), purgeOff);
+      expect(await receipt.exists(), purgeOff);
+    });
+
+    for (final scenario in [
+      'foreign owner',
+      'unknown owner',
+      'digest mismatch',
+      'outside path',
+      'symlink outside documents',
+      'backup reference',
+    ]) {
+      test('account purge keeps pending audio with $scenario (cold start $coldStart)', () async {
+        final existing = coldStart ? null : await ledger(realCensus: true);
+        final owner = switch (scenario) {
+          'foreign owner' => 'owner-c',
+          'unknown owner' => null,
+          _ => 'owner-a',
+        };
+        final bytes = scenario == 'digest mismatch'
+            ? encodeWalFrames(List.generate(50, (_) => [255]))
+            : encodeWalFrames(receiptFrames);
+        final retained = await makePendingReceipt(owner, audioBytes: bytes);
+        final basename = retained.uri.pathSegments.last;
+        final receipt = receiptFor(basename);
+        if (scenario == 'outside path' || scenario == 'symlink outside documents') {
+          final outside = await dir.parent.createTemp('orphan-purge-outside-');
+          addTearDown(() => outside.delete(recursive: true));
+          final otherFile = await retained.copy('${outside.path}/$basename');
+          if (scenario == 'outside path') {
+            final body = jsonDecode(await receipt.readAsString()) as Map<String, dynamic>;
+            body['wal']['file_path'] = otherFile.path;
+            await receipt.writeAsString(jsonEncode(body));
+          } else {
+            await retained.delete();
+            await Link(retained.path).create(otherFile.path);
+          }
+          addTearDown(() async => expect(await otherFile.readAsBytes(), orderedEquals(bytes)));
+        }
+        if (scenario == 'backup reference') {
+          await json('wals_backup.json', {
+            'wals': [row(basename, 'owner-c')],
+          });
+        }
+
+        await purgeOwnerA(coldStart: coldStart, existing: existing, rejectForeignReplay: scenario == 'foreign owner');
+
+        expect(await retained.readAsBytes(), orderedEquals(bytes));
+        expect(await receipt.exists(), isTrue);
+      });
+    }
+  }
+
+  for (final replaceAudio in [false, true]) {
+    test('account purge requires exact bytes after a failed live index save (replaced $replaceAudio)', () async {
+      var failWrite = false;
+      final writer = await ledger(
+          realCensus: true,
+          persist: (rows) async {
+            if (failWrite) throw const FileSystemException('injected index failure');
+            expect(await WalFileManager.saveWals(rows), isTrue);
+          });
+      await captureReceiptAudio(writer);
+      failWrite = true;
+      try {
+        await expectLater(writer.finalizeCurrentSession(), throwsA(isA<FileSystemException>()));
+      } finally {
+        failWrite = false;
+      }
+      final pending = writer.testWals.singleWhere((wal) => wal.liveFileWriteId != null);
+      final basename = pending.filePath!;
+      final file = File('${dir.path}/$basename');
+      expect((await WalFileManager.loadIndexedWals()).map((wal) => wal.filePath), isNot(contains(basename)));
+      if (replaceAudio) {
+        await file.writeAsBytes(encodeWalFrames(List.generate(50, (_) => [255])), flush: true);
+      }
+
+      await writer.purgeAccountWals('owner-a');
+
+      const purgeOff = bool.fromEnvironment('OMI_LIVE_WAL_RECEIPT_PURGE_OFF');
+      expect(await file.exists(), replaceAudio || purgeOff);
+      expect(await receiptFor(basename).exists(), replaceAudio || purgeOff);
+    });
+  }
 
   test('receipt-managed basename keeps both backend timestamp contracts and estimated run identity', () {
     final id = List.filled(32, 'a').join();

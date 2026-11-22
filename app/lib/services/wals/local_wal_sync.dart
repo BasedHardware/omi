@@ -1712,7 +1712,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     DebugLogManager.logEvent('wal_transcript_coverage', fields);
   }
 
-  Future<bool> _deleteWal(Wal wal, {required int generation}) async {
+  Future<bool> _deleteWal(Wal wal, {required int generation, bool accountPurge = false}) async {
     if (!_isCurrent(generation) || !_isTrackedWal(wal)) return false;
     final filePath = wal.filePath;
     if (filePath != null && filePath.isNotEmpty) {
@@ -1724,6 +1724,15 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
         if (!_isCurrent(generation) || !_isTrackedWal(wal)) return false;
         if (type == FileSystemEntityType.file || type == FileSystemEntityType.link) {
           final file = File(fullPath);
+          if (accountPurge &&
+              LiveWalReceipt.isManagedBasename(path.basename(fullPath)) &&
+              !_confirmedDurableWalKeys.contains(_durableKey(wal))) {
+            if (!await LiveWalReceipt.matchesPendingPurge(file, wal) ||
+                !_isCurrent(generation) ||
+                !_isTrackedWal(wal)) {
+              return false;
+            }
+          }
           if (_fileReferencedByOtherWal(wal, fullPath.split('/').last)) {
             if (wal.liveFileWriteId != null && !await LiveWalReceipt.retireForSharedDeletion(file, wal)) return false;
           } else {

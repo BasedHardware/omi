@@ -89,9 +89,9 @@ abstract class LocalWalSync implements IWalSync {
   /// of local copies removed.
   Future<int> applySyncedCopyRetention();
 
-  /// Deletes every local recording (index entry and file) owned by [uid],
-  /// whether active, retired or foreign. Called when that account is deleted
-  /// from this phone. Returns the number of records removed.
+  /// Purges local recordings owned by [uid] when that account is deleted
+  /// from this phone. Returns the number of index rows and exact unindexed
+  /// receipt files removed.
   Future<int> purgeAccountWals(String uid);
 
   /// Re-admits parked/retired WALs belonging to the currently signed-in account.

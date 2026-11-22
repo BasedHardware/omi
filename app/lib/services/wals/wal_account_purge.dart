@@ -24,6 +24,7 @@ extension _WalAccountPurge on LocalWalSyncImpl {
   /// save for the life of the install. Returns false when the session moved on.
   Future<bool> _purgeDeletedAccountWalsAtLoad(int generation) async {
     final deleted = (await readDeletedAccountUids()).toSet();
+    await _purgeUnindexedAccountWals(deleted, generation);
     final doomed = deleted.isEmpty ? const <Wal>[] : _foreignWals.where((w) => deleted.contains(w.ownerUid)).toList();
     final removed = <String, int>{};
     for (final wal in doomed) {
@@ -41,18 +42,23 @@ extension _WalAccountPurge on LocalWalSyncImpl {
     return false;
   }
 
-  /// Deletes every local recording (index entry and file) owned by [uid]: active,
-  /// retired and foreign. Unstamped records count as the signed-in account's.
+  /// Purges active, retired and foreign recordings owned by [uid].
+  /// Unstamped index rows count as the signed-in account's. Unindexed files
+  /// need an exact receipt.
   Future<int> _purgeAccountWals(String uid) async {
     if (uid.isEmpty) return 0;
     final generation = _sessionGeneration;
+    // Startup may still be admitting a receipt into the index.
+    await _initializationInFlight;
+    if (!_isCurrent(generation)) return 0;
     final current = _currentWalOwnerUid();
     bool owned(Wal wal) => wal.ownerUid == uid || (wal.ownerUid == null && uid == current);
     final doomed = [..._wals, ..._retiredWals, ..._foreignWals].where(owned).toList();
+    final unindexedRemoved = await _purgeUnindexedAccountWals({uid}, generation);
     var removed = 0;
     for (final wal in doomed) {
       if (!_isCurrent(generation)) break;
-      if (await _deleteWal(wal, generation: generation)) removed++;
+      if (await _deleteWal(wal, generation: generation, accountPurge: true)) removed++;
     }
     if (removed > 0 && _isCurrent(generation)) {
       await _saveWalsToFile(generation);
@@ -62,9 +68,19 @@ extension _WalAccountPurge on LocalWalSyncImpl {
       'phase': 'account_deleted',
       'owner_uid': uid,
       'count': removed,
+      'unindexed_removed': unindexedRemoved,
       'requested': doomed.length,
     });
-    return removed;
+    return removed + unindexedRemoved;
+  }
+
+  Future<int> _purgeUnindexedAccountWals(Set<String> owners, int generation) async {
+    if (!LiveWalReceipt.purgeEnabled || owners.isEmpty || !_isCurrent(generation)) return 0;
+    return WalFileManager.purgeUnindexedLiveWalReceipts(
+      owners: owners,
+      reservedNames: _liveWalReservedNames(),
+      mayDelete: (name) => _isCurrent(generation) && !_liveWalReservedNames().contains(name.toLowerCase()),
+    );
   }
 
   /// Synchronously reconciles active (`_wals`), foreign (`_foreignWals`), and
