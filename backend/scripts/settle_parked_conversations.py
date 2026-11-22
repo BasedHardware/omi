@@ -48,13 +48,10 @@ def _save(path: Path, state: dict) -> None:
 
 
 def _initial_state(args, now: datetime) -> dict:
-    applying = args.phase != 'dry-run'
-    if args.phase == 'apply':
-        raise ValueError('apply requires a verified canary checkpoint')
     return {
         'cutoff': args.cutoff.isoformat(),
         'utc_day': now.date().isoformat(),
-        'applying': applying,
+        'applying': args.phase == 'canary',
         'cursor': None,
         'scanned': 0,
         'prior_dry_run_rows': 0,
@@ -205,7 +202,10 @@ def main() -> int:
     lock = args.checkpoint.with_suffix('.lock')
     descriptor = os.open(lock, os.O_CREAT | os.O_RDWR, 0o600)
     with os.fdopen(descriptor, 'r+') as handle:
-        fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        try:
+            fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            parser.error('another pass holds the checkpoint lock')
         if args.checkpoint.exists():
             state = json.loads(args.checkpoint.read_text())
             if (
@@ -223,6 +223,8 @@ def main() -> int:
             elif not _can_resume(state, args.phase, args.cutoff):
                 parser.error('checkpoint does not match a clean canary or verified apply pass')
         else:
+            if args.phase == 'apply':
+                parser.error('apply requires a verified canary checkpoint')
             state = _initial_state(args, now)
         if state['utc_day'] != now.date().isoformat():
             parser.error('checkpoint is from another UTC day; review remaining range on SCA-3590')

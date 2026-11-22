@@ -410,29 +410,25 @@ struct ConversationDetailView: View {
       // loading presentation, then follow the server's actual admission.
       isEnrichingDeferred = requestedConversation.needsProcessingDetailRefresh
       isLoadingConversation = !isEnrichingDeferred
-      var attempts = 0
-      while isCurrentDetailRequest(requestGeneration), let appState = AppState.current {
-        let fetched = await appState.loadConversationDetail(requestedConversation, polling: attempts > 0) { cached in
-          guard isCurrentDetailRequest(requestGeneration) else { return }
-          applyLoadedConversation(cached)
+      await ProcessingConversationWatcher.followDetail(
+        fetch: { polling in
+          guard isCurrentDetailRequest(requestGeneration), let appState = AppState.current else { return nil }
+          let fetched = await appState.loadConversationDetail(requestedConversation, polling: polling) { cached in
+            guard isCurrentDetailRequest(requestGeneration) else { return }
+            applyLoadedConversation(cached)
+          }
+          return isCurrentDetailRequest(requestGeneration) ? fetched : nil
+        },
+        onResponse: { fetched, isProcessing in
+          applyLoadedConversation(fetched)
+          isLoadingConversation = false
+          isEnrichingDeferred = isProcessing
         }
-        guard isCurrentDetailRequest(requestGeneration) else { return }
-        applyLoadedConversation(fetched)
-        isLoadingConversation = false
-        if fetched.homeStep == "failed" || fetched.status != .processing { break }
-
-        // Continue only while this detail stays open. Backoff bounds the
-        // cost without abandoning a first-open enrichment already in flight.
-        isEnrichingDeferred = true
-        let delay = ProcessingConversationWatcher.pollDelay(attempt: attempts)
-        attempts += 1
-        try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
-      }
+      )
       guard isCurrentDetailRequest(requestGeneration) else { return }
       isEnrichingDeferred = false
       isLoadingConversation = false
 
-      guard isCurrentDetailRequest(requestGeneration) else { return }
       detailReadyConversationID = requestedConversation.id
     }
     .task(id: capturePlaybackTaskID) {
