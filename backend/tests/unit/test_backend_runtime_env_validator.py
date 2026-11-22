@@ -4228,23 +4228,27 @@ def test_cloud_run_runtime_rejects_missing_listener_close_binding(tmp_path, key,
     }
 
 
-@pytest.mark.parametrize('environment', ['dev', 'prod'])
-def test_future_capture_admissions_default_off_until_reader_rollout(environment):
+@pytest.mark.parametrize(('environment', 'enabled'), [('dev', 'false'), ('prod', 'true')])
+def test_future_capture_clamp_is_on_for_every_prod_reader_and_off_in_dev(environment, enabled):
+    # SCA-3501: prod turns the clamp on in one change once every reader and admitter serves the clamp
+    # code (listen 96f0631 and the Cloud Run readers, verified on SCA-3501). Dev stays off.
     config = yaml.safe_load((ROOT / 'deploy/runtime_env.yaml').read_text())['environments'][environment]
-    expected = {'value': 'false', 'category': 'rollout'}
+    expected = {'value': enabled, 'category': 'rollout'}
     hosts = [config['gke']['backend-listen'], *config['cloud_run']['services'].values()]
     # SCA-3120: prod adds the derived projection pump as a sixth reader.
     assert len(hosts) == (6 if environment == 'prod' else 5)
     renderer = runpy.run_path(str(RENDERER_SCRIPT), run_name='future_capture_staged_renderer')
     for host in hosts:
         assert host['env']['SYNC_FUTURE_CAPTURE_CLAMP_ENABLED'] == expected
-        assert renderer['_render_env_entries']({'SYNC_FUTURE_CAPTURE_CLAMP_ENABLED': expected}) == [
-            {'name': 'SYNC_FUTURE_CAPTURE_CLAMP_ENABLED', 'value': 'false'}
+        # Render this host's own manifest entry (not the expected literal).
+        entry = {'SYNC_FUTURE_CAPTURE_CLAMP_ENABLED': host['env']['SYNC_FUTURE_CAPTURE_CLAMP_ENABLED']}
+        assert renderer['_render_env_entries'](entry) == [
+            {'name': 'SYNC_FUTURE_CAPTURE_CLAMP_ENABLED', 'value': enabled}
         ]
     values = yaml.safe_load((ROOT.parent / config['gke']['backend-listen']['values_file']).read_text())
     assert {entry['name']: entry.get('value') for entry in values['env']}[
         'SYNC_FUTURE_CAPTURE_CLAMP_ENABLED'
-    ] == 'false'
+    ] == enabled
 
 
 @pytest.mark.parametrize('service', ['all', 'backend-sync'])

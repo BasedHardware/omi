@@ -1174,8 +1174,8 @@
     },
     "SYNC_FUTURE_CAPTURE_CLAMP_ENABLED": {
       "owner": "Q12-AD / sync capture recovery",
-      "review_by": "2026-11-22",
-      "reason": "2026-11-16 renewed: review_by expiry failed the flag-budget guard for every branch; enabling waits on the product decision how recovered future-dated recordings appear on Home; quality lead keeps or deletes by 2026-11-22"
+      "review_by": "2026-11-29",
+      "reason": "2026-11-22 renewed: prod enabled for every reader and admitter (SCA-3501, go-ahead SCA-1819, David 2026-11-21 dark-ready ruling 17); after the 24 h guard and readback the flag graduates or is relabelled under SCA-3682 by 2026-11-29"
     },
     "SYNC_INLINE_BACKFILL_CONCURRENCY": {
       "seeded": "2026-10-25"
