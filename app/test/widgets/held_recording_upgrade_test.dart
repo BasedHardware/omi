@@ -76,7 +76,8 @@ void main() {
     });
   });
 
-  Future<int Function()> pump(WidgetTester tester, UsageProvider usage, ServerConversation row) async {
+  Future<int Function()> pump(WidgetTester tester, UsageProvider usage, ServerConversation row,
+      {double textScale = 1}) async {
     final store = PendingWorkStore(
       loadPending: () async => const ApiSuccess(PendingWorkSnapshot(enabled: true, items: [], attentionUnseenCount: 0)),
       loadAttention: () async => const ApiSuccess(AttentionItemsPage(enabled: true, items: [], unseenCount: 0)),
@@ -94,11 +95,14 @@ void main() {
     await tester.pumpWidget(ChangeNotifierProvider<UsageProvider>.value(
       value: usage,
       child: MaterialApp(
+        builder: (context, child) =>
+            MediaQuery(data: MediaQuery.of(context).copyWith(textScaler: TextScaler.linear(textScale)), child: child!),
         theme: buildOmiTheme(brightness: Brightness.light),
         localizationsDelegates: AppLocalizations.localizationsDelegates,
         supportedLocales: AppLocalizations.supportedLocales,
         home: Scaffold(
-          body: NeedsAttentionSection(
+          body: SingleChildScrollView(
+              child: NeedsAttentionSection(
             store: store,
             captureMonitor: monitor,
             failedConversations: [row],
@@ -107,7 +111,7 @@ void main() {
               attempts++;
               return reProcessConversationServer(id, send: (_) async => heldJsonResponse(409, heldReprocess409Body));
             },
-          ),
+          )),
         ),
       ),
     ));
@@ -117,7 +121,7 @@ void main() {
 
   testWidgets('a held row says it is waiting for minutes and offers Upgrade, not Try Again', (tester) async {
     final attempts = await pump(tester, _usage(PlanType.basic), _held());
-    expect(find.byKey(Key('activity_held_$heldConversationId')), findsOneWidget);
+    expect(find.byKey(const Key('activity_held_$heldConversationId')), findsOneWidget);
     expect(find.text('Not transcribed yet'), findsOneWidget);
     expect(find.textContaining("You've used this month's 300 minutes"), findsOneWidget);
     expect(find.text('Upgrade'), findsOneWidget);
@@ -143,6 +147,19 @@ void main() {
     await pump(tester, _usage(PlanType.basic), _held(newServer: false));
     expect(find.text('Try Again'), findsOneWidget);
     expect(find.text('Upgrade'), findsNothing);
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('at the largest text size the action sits under the text, the title stays readable', (tester) async {
+    tester.view.physicalSize = const Size(402, 874);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await pump(tester, _usage(PlanType.basic), _held(), textScale: 3.1);
+    final title = tester.getRect(find.text('Not transcribed yet'));
+    final upgrade = tester.getRect(find.text('Upgrade'));
+    expect(upgrade.top, greaterThan(title.bottom));
+    expect(title.width, greaterThan(150), reason: 'not squeezed to one letter per line');
+    expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox());
   });
 }

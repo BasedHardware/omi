@@ -406,6 +406,16 @@ class _AttentionRow extends StatelessWidget {
   }
 
   Widget _row(BuildContext context) {
+    final action = busy || onRetry == null
+        ? null
+        : OmiButton.secondary(
+            label: retryLabel ?? context.l10n.tryAgain,
+            onPressed: onRetry,
+            size: OmiButtonSize.compact,
+          );
+    // At the accessibility text sizes a trailing button leaves the title one letter per line: the
+    // action moves under the text instead.
+    final stacked = action != null && MediaQuery.textScalerOf(context).scale(1) >= 1.6;
     return InkWell(
       onTap: onTap,
       child: Padding(
@@ -429,6 +439,10 @@ class _AttentionRow extends StatelessWidget {
                     const SizedBox(height: 3),
                     Text(subtitle, style: OmiType.subhead.copyWith(color: OmiColors.textTertiary)),
                   ],
+                  if (stacked) ...[
+                    const SizedBox(height: OmiSpacing.xs),
+                    action,
+                  ],
                 ],
               ),
             ),
@@ -437,13 +451,9 @@ class _AttentionRow extends StatelessWidget {
                 padding: EdgeInsetsDirectional.only(start: OmiSpacing.xs, end: OmiSpacing.xs),
                 child: OmiSpinner(size: OmiSpinnerSize.small),
               )
-            else if (onRetry != null)
-              OmiButton.secondary(
-                label: retryLabel ?? context.l10n.tryAgain,
-                onPressed: onRetry,
-                size: OmiButtonSize.compact,
-              )
-            else if (onTap != null)
+            else if (action != null && !stacked)
+              action
+            else if (action == null && onTap != null)
               Icon(Icons.chevron_right, color: OmiColors.textTertiary),
           ],
         ),
