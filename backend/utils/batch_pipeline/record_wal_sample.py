@@ -13,12 +13,15 @@ import threading
 import time
 from typing import Any
 
+from cryptography.exceptions import InvalidTag
 from google.api_core.exceptions import GoogleAPICallError
 from prometheus_client import Counter as Metric
 
 from config.audio_archive import derived_audio_bucket
 from config.record_wal_sample import ATTEMPT_SECONDS, slot_at
 from database import record_wal_sample as state
+from database.batch_pipeline_privacy import BatchPrivacyBlocked
+from database.record_wal_handoff import HandoffConflict
 from database.batch_pipeline_store import FirestoreStore
 from utils import encryption
 from utils.batch_pipeline.artifact_reads import ArtifactReadBudget, ArtifactReadLimit
@@ -87,45 +90,63 @@ def _upload_packets(paths: Sequence[str], budget: ArtifactReadBudget) -> list[tu
         info = filename_provenance(str(path))
         packets = []
         if info.get('format') == WAL_FORMAT and info.get('channels') == 1:
-            with path.open('rb') as stream:
-                raw = stream.read(size)
-                observed_size = os.fstat(stream.fileno()).st_size
-            if len(raw) != size or observed_size != size:
-                raise ValueError('WAL size changed during sampling')
-            rate = info['sample_rate']
-            if rate not in {8000, 12000, 16000, 24000, 48000}:
-                raise ValueError('unsupported sample geometry')
-            cursor = tick(info['capture_start'])
-            for packet in wal_packets(raw):
-                packet_count += 1
-                if packet_count > MAX_PACKETS:
-                    raise ArtifactReadLimit('WAL sample packet count')
-                budget.timeout(2)
-                samples = opus_packet_samples(packet, rate)
-                if not 0 < samples == info['frame_size'] <= rate * 120 // 1000:
-                    raise ValueError('inconsistent WAL packet duration')
-                span = samples * CLOCK_RATE // rate
-                packets.append(Packet(hashlib.sha256(packet).hexdigest(), span, cursor, len(packet)))
-                cursor += span
+            try:
+                with path.open('rb') as stream:
+                    raw = stream.read(size)
+                    observed_size = os.fstat(stream.fileno()).st_size
+                if len(raw) != size or observed_size != size:
+                    raise ValueError('WAL size changed during sampling')
+                rate = info['sample_rate']
+                if rate not in {8000, 12000, 16000, 24000, 48000}:
+                    raise ValueError('unsupported sample geometry')
+                cursor = tick(info['capture_start'])
+                for packet in wal_packets(raw):
+                    packet_count += 1
+                    if packet_count > MAX_PACKETS:
+                        raise ArtifactReadLimit('WAL sample packet count')
+                    budget.timeout(2)
+                    samples = opus_packet_samples(packet, rate)
+                    if not 0 < samples <= rate * 120 // 1000:
+                        raise ValueError('inconsistent WAL packet duration')
+                    span = samples * CLOCK_RATE // rate
+                    packets.append(Packet(hashlib.sha256(packet).hexdigest(), span, cursor, len(packet)))
+                    cursor += span
+            except (OSError, ValueError):
+                # A known-size unreadable file has ambiguous bytes but no
+                # measured duration. Its valid siblings still contribute.
+                packets.clear()
         files.append((path.name, size, packets))
     return files
 
 
-def _page(bucket, prefix, max_entries, budget):
+def _first_page(bucket, prefix, page_size, budget):
     budget.begin()
     iterator = bucket.list_blobs(
         prefix=prefix,
-        page_size=max_entries + 1,
+        page_size=page_size,
         timeout=budget.timeout(2),
         retry=None,
     )
-    page = next(iterator.pages, ())
-    if iterator.next_page_token:
+    return list(next(iterator.pages, ())), bool(iterator.next_page_token)
+
+
+def _page(bucket, prefix, max_entries, budget):
+    items, more = _first_page(bucket, prefix, max_entries + 1, budget)
+    if more:
         raise ArtifactReadLimit('partial WAL sample inventory')
-    items = list(page)
     if len(items) > max_entries:
         raise ArtifactReadLimit('WAL sample inventory object count')
     return items
+
+
+def _has_chunks(bucket, prefix, budget):
+    # This probe only certifies the empty set. Any object or continuation page
+    # prevents a gap claim while preserving positive packet matches.
+    try:
+        items, more = _first_page(bucket, prefix, 1, budget)
+    except GoogleAPICallError:
+        return True
+    return bool(items) or more
 
 
 def _is_sha256(value: object) -> bool:
@@ -163,6 +184,7 @@ def _manifest(bucket, uid, cid, media, listed, budget):
     budget.reserve(listed.size)
     blob = bucket.blob(listed.name)
     raw = blob.download_as_bytes(
+        raw_download=True,
         if_generation_match=listed.generation,
         if_metageneration_match=listed.metageneration,
         timeout=budget.timeout(2),
@@ -232,10 +254,10 @@ def _inventory(uid, cid, check_alternate_sources, budget):
     alternate = True
     if check_alternate_sources:
         prefix = f'chunks/{uid}/{cid}/'
-        alternate = bool(_page(bucket, prefix, 1, budget))
+        alternate = _has_chunks(bucket, prefix, budget)
         regional = derived_audio_bucket()
         if not alternate and regional and regional != bucket.name:
-            alternate = bool(_page(bucket.client.bucket(regional), prefix, 1, budget))
+            alternate = _has_chunks(bucket.client.bucket(regional), prefix, budget)
     return sorted(runs, key=lambda run: run[0].start), not alternate
 
 
@@ -363,10 +385,17 @@ async def observe(
             generation, row = await run_blocking(
                 db_executor, state.authority, store, uid, cid, source, device, budget, reads
             )
-            layout = await run_blocking(sync_executor, _upload_packets, paths, budget)
+            try:
+                layout = await run_blocking(sync_executor, _upload_packets, paths, budget)
+            except OSError:
+                attempts.labels('unreadable_staged').inc()
+                return
             candidate = not has_jobs and _same_sealed_capture(row, row)
             try:
                 runs, no_alternate = await run_blocking(storage_executor, _inventory, uid, cid, candidate, budget)
+            except InvalidTag:
+                attempts.labels('unreadable_manifest').inc()
+                runs, no_alternate = [], False
             except (ValueError, KeyError, TypeError, GoogleAPICallError, ArtifactReadLimit):
                 attempts.labels('unproven_inventory').inc()
                 runs, no_alternate = [], False
@@ -396,6 +425,8 @@ async def observe(
             for label, count in clock.items():
                 offsets.labels(label).inc(count)
             attempts.labels('counted').inc()
+    except (BatchPrivacyBlocked, HandoffConflict):
+        attempts.labels('authority_refused').inc()
     except (ArtifactReadLimit, TimeoutError):
         attempts.labels('limit').inc()
     except Exception:

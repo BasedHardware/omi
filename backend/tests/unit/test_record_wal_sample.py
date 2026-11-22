@@ -165,6 +165,7 @@ def test_manifest_body_only_with_both_preconditions(monkeypatch):
     assert blob.download_as_bytes.call_args.kwargs['if_generation_match'] == 456
     assert blob.download_as_bytes.call_args.kwargs['if_metageneration_match'] == 5
     assert blob.download_as_bytes.call_args.kwargs['retry'] is None
+    assert blob.download_as_bytes.call_args.kwargs['raw_download'] is True
     assert spent.received_bytes == len(payload)
     media.generation += 1
     with pytest.raises(ValueError):
@@ -215,3 +216,39 @@ async def test_privacy_race_drops_the_sample_before_any_measurement_publishes(mo
     )
     counted.assert_not_called()
     assert state.authority.call_args.kwargs['expected_generation'] == 1
+
+
+def test_alternate_chunks_suppress_gaps_without_discarding_positive_evidence(monkeypatch, tmp_path):
+    path = _pack(tmp_path)
+    files = sampler._upload_packets([path], budget())
+    _, size, wal = files[0]
+    media = SimpleNamespace(name='raw-live/owner/record/pack/hash.bin')
+    listed = SimpleNamespace(name='audio-outbox/owner/record/pack/hash.bin')
+    root = Mock()
+    root.list_blobs.side_effect = [
+        SimpleNamespace(pages=iter([[media]]), next_page_token=None),
+        SimpleNamespace(pages=iter([[listed]]), next_page_token=None),
+        SimpleNamespace(pages=iter([[object()]]), next_page_token='another-chunk'),
+    ]
+    monkeypatch.setattr(sampler, 'get_private_cloud_sync_bucket', lambda: root)
+    monkeypatch.setattr(sampler, '_manifest', lambda *_: wal)
+    inventory_budget = budget()
+    runs, no_alternate = sampler._inventory('owner', 'record', True, inventory_budget)
+    measured, _ = sampler._count(files, runs, {}, no_alternate, budget())
+    assert not no_alternate
+    assert measured['duplicate', 'bytes'] == size
+    assert inventory_budget.objects == 3
+    assert root.list_blobs.call_args.kwargs['page_size'] == 1
+
+
+def test_staged_durations_come_from_headers_and_bad_sibling_keeps_its_byte_count(tmp_path):
+    variable = _pack(tmp_path)
+    short, nominal = bytes((0xF0, 1)), bytes((0xF8, 2))
+    variable.write_bytes(struct.pack('<I', len(short)) + short + struct.pack('<I', len(nominal)) + nominal)
+    bad = variable.with_name(variable.name.replace('1700000000', '1700000010'))
+    bad.write_bytes(struct.pack('<I', 100) + short)
+    files = sampler._upload_packets([str(variable), str(bad)], budget())
+    measured, _ = sampler._count(files, [], {}, False, budget())
+    assert measured['ambiguous', 'ticks'] == 480 + 960
+    assert measured['ambiguous', 'bytes'] == variable.stat().st_size + bad.stat().st_size
+    assert measured['ambiguous', 'unknown_duration_files'] == 1
