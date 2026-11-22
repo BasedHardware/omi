@@ -224,7 +224,7 @@ and an explicit empty literal renders as `''`.
 | `DIRECTORY_ROUTING_NEW_OWNER_PERCENT` | Default 0; env fallback for new-owner-cell1 runtime percent; enrollment only | backend | env | closed | — | — | — | — | pending | undecided | 2026-12-06 | auditfix |
 | `DREAM_AGENT_CONCURRENCY` | Parallel Dream workers and shared reserved slots; derived default 334 at 2M TPM and 12k expected tokens; bounded 1 to 512 | backend | env | closed | — | — | 8 | — | graduate | on | 2026-12-01 | auditfix |
 | `DREAM_AGENT_MANUAL_RUNS_PER_DAY` | Separate manual dream allowance per UTC day; default 3 | backend | env | closed | — | — | 3 | — | graduate | on | 2026-12-01 | auditfix |
-| `DREAM_AGENT_PAID_PERCENT` | Stable per-owner percent of paid owners eligible under ELIGIBILITY=paid; unset admits all paid owners, malformed admits none; listed owners always stay in | backend | env | closed | — | — | 100 | — | kill | off | 2026-11-18 | auditfix |
+| `DREAM_AGENT_PAID_PERCENT` | Stable per-owner percent of paid owners eligible under ELIGIBILITY=paid; unset admits all paid owners, malformed admits none; listed owners always stay in | backend | env | closed | — | — | — | — | kill | off | 2026-11-18 | auditfix |
 | `DREAM_HUNT_BACKOFF_MODE` | Double an owner's Dream hunt interval after each dry hunt (nothing applied), up to 8x; any yield resets it: off/shadow/serve; default shadow records would_defer only | backend | env | open | — | — | — | — | kill | off | 2026-11-08 | auditfix |
 | `DREAM_HUNT_BACKOFF_MODE_SERVE_PERCENT` | Hunt-backoff serve cohort percentage under shadow mode; default 0, invalid admits nobody | backend | env | open | — | — | — | — | kill | off | 2026-11-08 | auditfix |
 | `DREAM_IDLE_SKIP_MODE` | Skip and park scheduled Dream passes for owners with no dirty work or owed backlog intake (no slow-rotation floor, David 2026-10-28): off/shadow/serve; default off (retired 2026-10-30); shadow records would_skip | backend | env | open | — | — | — | — | kill | off | 2026-11-18 | auditfix |
@@ -1308,6 +1308,7 @@ their code default (`fail` tells you which way a missing value resolves).
 - `DIRECTORY_ROUTING_MODE` — Default off; sticky new-owner enrollment and per-request resolution; off is zero IO (fail: closed)
 - `DIRECTORY_ROUTING_NEW_OWNER_PERCENT` — Default 0; env fallback for new-owner-cell1 runtime percent; enrollment only (fail: closed)
 - `DREAM_AGENT_EXPECTED_TOKENS` — Expected session tokens for initial spend holds and derived concurrency; default 12000; actual turn reservations enforce ceilings (fail: closed)
+- `DREAM_AGENT_PAID_PERCENT` — Stable per-owner percent of paid owners eligible under ELIGIBILITY=paid; unset admits all paid owners, malformed admits none; listed owners always stay in (fail: closed)
 - `DREAM_DEFECT_REPORTS_ENABLED` — Default-on Dream report_defect tool storing k-anonymous harness defect patterns (dream_feedback); 0/false/off/no withdraws the tool from new sessions (fail: open)
 - `DREAM_GATEWAY_PROBE_ENABLED` — Default-on 3.8 reservation probe through the LLM gateway's reserved Dream route; 0/false/off/no makes no probe call and admission relies on fresh evidence from real Dream turns (fail: open)
 - `DREAM_HALF_HOUR_SWEEP_ENABLED` — Default-on: the Dream sweep job also ticks at :30 so Dream drains about 56 of every 60 minutes; 0/false/off/no makes the :30 tick return without work (fail: open)

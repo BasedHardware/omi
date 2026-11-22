@@ -581,6 +581,7 @@ overlay:
         # Cloud Run preserves omitted env entries. Remove the retired rollout keys.
         - BATCH_HELD_POLL_SKIP_ENABLED
         - BATCH_PROJECTION_FINISH_BACKOFF_ENABLED
+        - DREAM_AGENT_PAID_PERCENT
         - DEEPGRAM_SELF_HOSTED_ENABLED
         - DEEPGRAM_SELF_HOSTED_URL
         - DEEPGRAM_API_KEY
@@ -817,9 +818,6 @@ overlay:
           DREAM_AGENT_ELIGIBILITY:
             value: paid
             category: rollout
-          DREAM_AGENT_PAID_PERCENT:
-            value: '100'
-            category: rollout
           DREAM_AGENT_CONCURRENCY:
             value: '8'
             category: reliability
@@ -1015,6 +1013,7 @@ overlay:
         # Cloud Run preserves omitted env entries. Remove the retired rollout keys.
         - BATCH_HELD_POLL_SKIP_ENABLED
         - BATCH_PROJECTION_FINISH_BACKOFF_ENABLED
+        - DREAM_AGENT_PAID_PERCENT
         - DEEPGRAM_SELF_HOSTED_ENABLED
         - DEEPGRAM_SELF_HOSTED_URL
         - DEEPGRAM_API_KEY
@@ -1212,9 +1211,6 @@ overlay:
             category: rollout
           DREAM_AGENT_ELIGIBILITY:
             value: paid
-            category: rollout
-          DREAM_AGENT_PAID_PERCENT:
-            value: '100'
             category: rollout
           DREAM_AGENT_CONCURRENCY:
             value: '8'
@@ -1457,6 +1453,7 @@ overlay:
         # Cloud Run preserves omitted env entries. Remove the retired rollout keys.
         - BATCH_HELD_POLL_SKIP_ENABLED
         - BATCH_PROJECTION_FINISH_BACKOFF_ENABLED
+        - DREAM_AGENT_PAID_PERCENT
         - DEEPGRAM_SELF_HOSTED_ENABLED
         - DEEPGRAM_SELF_HOSTED_URL
         - DEEPGRAM_API_KEY
@@ -1629,9 +1626,6 @@ overlay:
             category: rollout
           DREAM_AGENT_ELIGIBILITY:
             value: paid
-            category: rollout
-          DREAM_AGENT_PAID_PERCENT:
-            value: '100'
             category: rollout
           DREAM_AGENT_CONCURRENCY:
             value: '8'
@@ -1846,6 +1840,7 @@ overlay:
         # Cloud Run preserves omitted env entries. Remove the retired rollout keys.
         - BATCH_HELD_POLL_SKIP_ENABLED
         - BATCH_PROJECTION_FINISH_BACKOFF_ENABLED
+        - DREAM_AGENT_PAID_PERCENT
         - DEEPGRAM_SELF_HOSTED_ENABLED
         - DEEPGRAM_SELF_HOSTED_URL
         - DEEPGRAM_API_KEY
@@ -2039,9 +2034,6 @@ overlay:
             category: rollout
           DREAM_AGENT_ELIGIBILITY:
             value: paid
-            category: rollout
-          DREAM_AGENT_PAID_PERCENT:
-            value: '100'
             category: rollout
           DREAM_AGENT_CONCURRENCY:
             value: '8'
