@@ -32,8 +32,7 @@ from testing.owner_lab import replay_bench
 from testing.owner_lab.store import Snapshot, parse_time, score, terms
 
 LANE = 'omi:auto:conv-structure'
-# Packet-v2 and action-items-v2 pinned to the unset production default: shadow,
-# zero serve percent — verified equal to the unset parser in qualify().
+# qualify() verifies these packet-v2 pins match the unset production defaults.
 PINNED_DEFAULTS = {
     'NOTES_PACKET_V2_MODE': 'shadow',
     'NOTES_PACKET_V2_MODE_SERVE_PERCENT': '0',
