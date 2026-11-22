@@ -171,7 +171,7 @@ def discover(database, now, *, pages=20, budget_seconds=DISCOVERY_BUDGET_SECONDS
                 for row in chunk:
                     target = database.collection('dream_due').document(row.id)
                     if eligible_owners[row.id]:
-                        if row.id not in queued and not _parked(row.id, states.get(row.id, {})):
+                        if row.id not in queued:
                             tx.set(target, {'due_at': due_time(states.get(row.id, {}), now, row.id)})
                     elif row.id in queued:
                         tx.delete(target)
@@ -182,27 +182,6 @@ def discover(database, now, *, pages=20, budget_seconds=DISCOVERY_BUDGET_SECONDS
                 database.transaction, initialize, operation_name='dream_discover'
             )
         after = rows[-1].id
-
-
-def _parked(uid, state):
-    """Idle-skip serve owners with no pending score wait for mark_dirty, not a timed hunt.
-
-    Fails open: any doubt (lever error, a score, an unreadable state) enqueues as before.
-    """
-    try:
-        return (
-            dream_levers.arm(dream_levers.IDLE_SKIP_MODE_ENV, uid) == 'serve'
-            and not state.get('score', 0)
-            and not _backlog_owed(uid)
-        )
-    except Exception:
-        return False
-
-
-def _backlog_owed(uid):
-    from config import required_memory_intake
-
-    return required_memory_intake.backlog_enabled(uid)
 
 
 # Payoff ordering (lever B2). Owners overdue this long run first in due order, so

@@ -219,14 +219,10 @@ def acquire(
     firestore_client=None,
     reclaim_sink: dict[str, Any] | None = None,
     denial_sink: dict[str, Any] | None = None,
-    skip_idle=False,
 ):
     """Return admission and publish count-only reclaim details after commit, even on denial.
 
     ``denial_sink['reason']`` names why a scheduled owner was not admitted.
-    ``skip_idle`` (the idle-skip lever) denies a scheduled hunt with no dirty
-    work and parks the owner: the due row is deleted, and the next product
-    write re-enqueues it through ``mark_dirty``.
     """
     database = client(firestore_client)
     now = now or datetime.now(timezone.utc)
@@ -266,9 +262,6 @@ def acquire(
             denial_reason = 'run_in_progress'
             started = data['lease'].get('started_at') or now
             return None, {'next_due_at': started + timedelta(seconds=1741)}
-        if skip_idle and not canary and trigger != 'manual' and not has_dirty:
-            denial_reason = 'idle_no_material'
-            return None, {'park': True}
         if (
             mode() == 'off'
             or (not canary and os.getenv('REVIEW_SURFACE_MODE', 'off') != 'on')
@@ -375,7 +368,6 @@ def acquire(
         except AdmissionDenied as exc:
             # A denial must not roll back reclamation (including manual caps).
             lease, patch, denial = None, {}, exc.reason
-        park = bool(patch.pop('park', False))
         # All reads, including admission's dirty count, precede settlement writes.
         if old_spend is not None and isinstance(started, datetime):
             usage = _abandoned_usage(abandoned)
@@ -418,9 +410,7 @@ def acquire(
             tx.set(spend, {**budget, 'reserved_usd': float(budget.get('reserved_usd', 0))})
         elif reclaimed or patch:
             tx.set(state, {**data, **patch})
-        if park:
-            tx.delete(database.collection('dream_due').document(uid))
-        elif patch.get('next_due_at'):
+        if patch.get('next_due_at'):
             tx.set(database.collection('dream_due').document(uid), {'due_at': patch['next_due_at']})
         return lease, reclaimed, denial
 
@@ -434,29 +424,6 @@ def acquire(
     if denial:
         raise AdmissionDenied(denial)
     return lease
-
-
-def park_if_idle(uid, *, firestore_client=None):
-    """Idle-skip lever: drop the due row when no dirty work is queued; True when parked.
-
-    The state read is the conflict fence: every mark_dirty batch writes the
-    state doc (score increment), so a concurrent write aborts and retries this
-    transaction; an aggregation count alone carries no document identity.
-    A positive score also keeps the owner queued, matching discovery's rule.
-    """
-    database = client(firestore_client)
-
-    @firestore.transactional
-    def park(tx):
-        state = state_ref(database, uid).get(transaction=tx).to_dict() or {}
-        if state.get('score', 0) or dirty_count(uid, transaction=tx, firestore_client=database) > 0:
-            return False
-        tx.delete(database.collection('dream_due').document(uid))
-        return True
-
-    return firestore_transaction_retry.run_with_transaction_contention_retry(
-        database.transaction, park, operation_name='dream_park_idle'
-    )
 
 
 def assert_lease(uid, run_id, *, firestore_client=None):
@@ -489,7 +456,6 @@ def finish(
     cleanup_cursor=None,
     now=None,
     firestore_client=None,
-    park_when_idle=False,
 ):
     database = client(firestore_client)
     state = state_ref(database, uid)
@@ -734,11 +700,7 @@ def finish(
             next_due = deferred_until
         if not release:
             next_due = now + timedelta(seconds=1740)
-        if park_when_idle and release and queued_after == 0 and patch['score'] == 0:
-            # Idle-skip lever: nothing left to do, so wait for mark_dirty instead of a timed hunt.
-            tx.delete(database.collection('dream_due').document(uid))
-        else:
-            tx.set(database.collection('dream_due').document(uid), {'due_at': next_due})
+        tx.set(database.collection('dream_due').document(uid), {'due_at': next_due})
         return settled
 
     report.update(complete(database.transaction()))
