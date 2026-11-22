@@ -631,6 +631,7 @@ def commit_projection(
             raise Conflict('source_changed')
     redirected = {cid for cid, patch in retire.items() if patch.get('sync_merged_into')}
     retired = {cid for cid, patch in retire.items() if patch.get('deleted')}
+    checked_retirements = redirected | retired
     failure_transitions = {
         r['id']: r.get('v3_process_failed') and not (existing.get(r['id']) or {}).get('v3_process_failed') for r in rows
     }
@@ -690,7 +691,9 @@ def commit_projection(
         absorbed = {cid: row['id'] for row in batch_rows for cid in row.get('_v3_absorbed', ())}
         if absorbed and merge_donors_have_tasks(uid, absorbed, firestore_client=client, transaction=tx):
             raise Conflict('source_changed')
-        if redirected and merge_donors_have_tasks(uid, redirected, firestore_client=client, transaction=tx):
+        if checked_retirements and merge_donors_have_tasks(
+            uid, checked_retirements, firestore_client=client, transaction=tx
+        ):
             raise Conflict('rederive_live_donor_tasks')
         for cid in [*(row['id'] for row in batch_rows), *absorbed, *(retire if final else ())]:
             tombstone = (

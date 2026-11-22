@@ -7,6 +7,7 @@ from datetime import datetime, timedelta, timezone
 import pytest
 
 from database import conversations_v3 as store, conversations_v3_leases as leases
+from database.conversations_v3_undo_removals import removal_ref
 from utils.conversations.v3 import Conflict, created, service
 from tests.unit.test_conversations_v3_transactions import R, strict  # noqa: F401
 from tests.unit.test_conversations_v3_engine import native_ready_fields
@@ -383,7 +384,8 @@ def test_promoted_native_source_custody_change_is_not_a_speech_only_race(strict,
 
 
 @pytest.mark.asyncio
-async def test_adjacent_revoked_native_windows_retire_unmatched_pending_tile(strict, monkeypatch):
+@pytest.mark.parametrize('linked_task', [False, True], ids=['unlinked', 'task-linked'])
+async def test_adjacent_revoked_native_windows_retire_unmatched_pending_tile(strict, monkeypatch, linked_task):
     start = datetime.now(timezone.utc) - timedelta(minutes=2)
     rid_paths = {'r': R, 'second': (*R[:-1], 'second')}
     for offset, (rid, path) in enumerate(rid_paths.items()):
@@ -423,6 +425,19 @@ async def test_adjacent_revoked_native_windows_retire_unmatched_pending_tile(str
     assert len(pending) == 2 and all(row['v3_process_pending'] for row in pending)
     for path in rid_paths.values():
         strict.rows[path].update(record_upload_revision=8, v3_pending=True)
+
+    if linked_task:
+        donor_id = pending[1]['id']
+        task_path = ('users', 'synthetic', 'action_items', 'linked-task')
+        strict.rows[task_path] = {'conversation_id': donor_id, 'description': 'Keep this linked task'}
+        before = {path: deepcopy(row) for path, row in strict.rows.items() if path[2] == 'conversations'}
+        report = {}
+        assert await service.reconcile('synthetic', report=report) == 'blocked'
+        assert report['blocked_reason'] == 'rederive_live_donor_tasks'
+        assert {path: row for path, row in strict.rows.items() if path[2] == 'conversations'} == before
+        assert strict.rows[task_path]['conversation_id'] == donor_id
+        assert not removal_ref(strict.document('users/synthetic'), donor_id).get().exists
+        return
 
     for _ in range(2):
         assert await service.reconcile('synthetic') == 'committed'
