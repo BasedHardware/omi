@@ -1365,7 +1365,13 @@ runs:
       if: >-
         ${{ inputs.integration_only != 'true' && (success()) }}
       shell: bash
+      env:
+        RUNTIME_ENV: ${{ inputs.runtime_env }}
+        PROJECT_ID: ${{ inputs.project_id }}
+        REGION: ${{ inputs.region }}
+        BACKFILL_REVISION: ${{ steps.sync-backfill.outputs.revision }}
       run: |
+        set -euo pipefail
         scope_args=()
         if [[ " $SELECTED_CLOUD_RUN_SERVICES " == *" backend "* ]]; then scope_args+=(--wait-revision-ready backend=${{ steps.capture-backend-revision.outputs.revision }}); fi
         if [[ " $SELECTED_CLOUD_RUN_SERVICES " == *" backend-sync "* ]]; then scope_args+=(--wait-revision-ready backend-sync=${{ steps.capture-backend-sync-revision.outputs.revision }}); fi
@@ -1373,9 +1379,87 @@ runs:
         if [[ " $SELECTED_CLOUD_RUN_SERVICES " == *" backend-integration "* ]]; then scope_args+=(--wait-revision-ready backend-integration=${{ steps.capture-backend-integration-revision.outputs.revision }}); fi
         python3 "$DEPLOY_CONTROL_SCRIPTS/preflight-cloud-run-deploy.py" \
           "${scope_args[@]}" \
-          --env ${{ inputs.runtime_env }} \
-          --project ${{ inputs.project_id }} \
-          --region ${{ inputs.region }}
+          --env "$RUNTIME_ENV" --project "$PROJECT_ID" --region "$REGION"
+
+        if [[ "$RUNTIME_ENV" == prod && " $SELECTED_CLOUD_RUN_SERVICES " == *" backend-sync-backfill "* ]]; then
+          python3 - <<'PY'
+        import hashlib
+        import json
+        import os
+        import subprocess
+
+        service = 'backend-sync-backfill'
+        revision = os.environ['BACKFILL_REVISION']
+        if not revision.startswith(f'{service}-') or revision == f'{service}-':
+            raise SystemExit('Missing or invalid backfill candidate revision')
+
+
+        def describe(resource, name):
+            return json.loads(subprocess.check_output([
+                'gcloud', 'run', resource, 'describe', name,
+                '--project', os.environ['PROJECT_ID'], '--region', os.environ['REGION'],
+                '--format=json',
+            ]))
+
+
+        status = describe('services', service)['status']
+        traffic = status['traffic']
+        if not isinstance(traffic, list) or not traffic:
+            raise SystemExit('Backfill serving traffic status is unavailable')
+        for target in traffic:
+            target_revision = target.get('revisionName')
+            if not target_revision and target.get('latestRevision') is True:
+                target_revision = status.get('latestReadyRevisionName')
+            percent = target.get('percent', 0)  # Cloud Run omits zero for tag-only targets.
+            if not target_revision or type(percent) is not int or not 0 <= percent <= 100:
+                raise SystemExit('Backfill serving traffic target is ambiguous')
+            if target_revision == revision and percent != 0:
+                raise SystemExit('Backfill candidate is already receiving traffic')
+        if sum(target.get('percent', 0) for target in traffic) != 100:
+            raise SystemExit('Backfill serving traffic allocation is incomplete')
+
+        candidate = describe('revisions', revision)
+        metadata = candidate['metadata']
+        if metadata['name'] != revision or metadata['labels']['serving.knative.dev/service'] != service:
+            raise SystemExit('Backfill revision identity mismatch')
+        ready = [
+            condition.get('status')
+            for condition in candidate['status']['conditions']
+            if condition.get('type') == 'Ready'
+        ]
+        if ready != ['True']:
+            raise SystemExit('Backfill candidate is not Ready')
+
+        # SCA-3120 production receiver preservation receipt.
+        receiver_hash = '3a180b6e241438dbc43a7292b07de3866e95a35af1bb08210be1d05e80017ceb'
+        binding_names = ('SYNC_TASKS_HANDLER_URL', 'SYNC_TASKS_OIDC_AUDIENCE')
+        expected_literals = {
+            'SYNC_TASKS_QUEUE': 'sync-backfill-fresh',
+            'BATCH_ACCOUNT_PRIVACY_WRITER_ENABLED': 'false',
+            'BATCH_PROJECTION_OUTBOX': 'false',
+        }
+        env_entries = [
+            (container['name'], entry)
+            for container in candidate['spec']['containers']
+            for entry in container.get('env', [])
+        ]
+        for name in (*binding_names, *expected_literals):
+            matches = [(container, entry) for container, entry in env_entries if entry['name'] == name]
+            if len(matches) != 1 or matches[0][0] != 'backend-1':
+                raise SystemExit(f'{name}: expected exactly one entry on the backfill ingress container')
+            entry = matches[0][1]
+            value = entry.get('value')
+            if 'valueFrom' in entry or not isinstance(value, str):
+                raise SystemExit(f'{name}: expected a literal string')
+            if name in binding_names:
+                if hashlib.sha256(value.encode('utf-8')).hexdigest() != receiver_hash:
+                    raise SystemExit(f'{name}: receiver hash mismatch')
+            elif value != expected_literals[name]:
+                raise SystemExit(f'{name}: literal value mismatch')
+
+        print(f'{revision}: Ready at 0% with both receiver hashes, backfill queue and custody flags verified')
+        PY
+        fi
 
     - name: Verify ${{ inputs.service }} release provenance
       if: ${{ inputs.integration_only != 'true' && success() }}
