@@ -279,6 +279,15 @@ class SyncProcessingHoldOutcome(StrEnum):
     LATE_CAP = 'late_cap'
 
 
+class FutureCaptureRecoveryOutcome(StrEnum):
+    UNKNOWN = 'unknown'
+    ANCHORED = 'anchored'
+    ANCHOR_PENDING = 'anchor_pending'
+    IDENTITY_REQUIRED = 'identity_required'
+    ANCHOR_ERROR = 'anchor_error'
+    REFUSED = 'refused'
+
+
 class ListenSessionTranscriptOutcome(StrEnum):
     """One listen session's headline transcript outcome (``ListenSessionRuntime._session_transcript_outcome``)."""
 

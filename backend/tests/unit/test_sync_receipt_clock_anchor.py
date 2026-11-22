@@ -196,6 +196,24 @@ def test_offset_exit_is_counted_once_and_preserves_response(anchors, monkeypatch
     assert recovery_counts() == {**before_counts, outcome: before_counts[outcome] + 1}
 
 
+@pytest.mark.parametrize('detail', ['unstructured retry', {}, {'code': []}, {'code': 'unrecognized'}])
+def test_unclassified_retry_detail_preserves_original_exception(monkeypatch, detail):
+    retry = receipt_clock.FutureCaptureRetry()
+    retry.detail = detail
+
+    def unavailable(*args, **kwargs):
+        raise retry
+
+    monkeypatch.setattr(receipt_clock, '_resolve_receipt_clock_offsets', unavailable)
+    before_counts = recovery_counts()
+    with pytest.raises(receipt_clock.FutureCaptureRetry) as caught:
+        receipt_clock.receipt_clock_offsets([], uid='synthetic', device_id=None, received_at=RECEIVED)
+    assert caught.value is retry
+    assert caught.value.detail == detail
+    assert caught.value.headers == {'Retry-After': '30'}
+    assert recovery_counts() == {**before_counts, 'anchor_error': before_counts['anchor_error'] + 1}
+
+
 def test_metrics_failure_preserves_offsets_and_retry(anchors, monkeypatch):
     class BrokenCounter:
         def labels(self, *, outcome):
