@@ -6,7 +6,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from database import conversations_v3 as store, conversations_v3_leases as leases
+from database import conversations, conversations_v3 as store, conversations_v3_leases as leases, memories
 from database.conversations_v3_undo_removals import removal_ref
 from utils.conversations.v3 import Conflict, created, service
 from tests.unit.test_conversations_v3_transactions import R, strict  # noqa: F401
@@ -384,8 +384,7 @@ def test_promoted_native_source_custody_change_is_not_a_speech_only_race(strict,
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('linked_task', [False, True], ids=['unlinked', 'task-linked'])
-async def test_adjacent_revoked_native_windows_retire_unmatched_pending_tile(strict, monkeypatch, linked_task):
+async def test_adjacent_revoked_native_windows_settle_unmatched_tile_with_links(strict, monkeypatch):
     start = datetime.now(timezone.utc) - timedelta(minutes=2)
     rid_paths = {'r': R, 'second': (*R[:-1], 'second')}
     for offset, (rid, path) in enumerate(rid_paths.items()):
@@ -426,19 +425,14 @@ async def test_adjacent_revoked_native_windows_retire_unmatched_pending_tile(str
     for path in rid_paths.values():
         strict.rows[path].update(record_upload_revision=8, v3_pending=True)
 
-    if linked_task:
-        donor_id = pending[1]['id']
-        task_path = ('users', 'synthetic', 'action_items', 'linked-task')
-        strict.rows[task_path] = {'conversation_id': donor_id, 'description': 'Keep this linked task'}
-        before = {path: deepcopy(row) for path, row in strict.rows.items() if path[2] == 'conversations'}
-        report = {}
-        assert await service.reconcile('synthetic', report=report) == 'blocked'
-        assert report['blocked_reason'] == 'rederive_live_donor_tasks'
-        assert {path: row for path, row in strict.rows.items() if path[2] == 'conversations'} == before
-        assert strict.rows[task_path]['conversation_id'] == donor_id
-        assert not removal_ref(strict.document('users/synthetic'), donor_id).get().exists
-        return
+    donor_id = pending[1]['id']
+    task_path = ('users', 'synthetic', 'action_items', 'linked-task')
+    strict.rows[task_path] = {'conversation_id': donor_id, 'description': 'Keep this linked task'}
+    strict.rows[('users', 'synthetic', 'memories', 'linked-memory')] = {
+        'evidence': [{'source_type': 'conversation', 'source_id': donor_id}]
+    }
 
+    strict.rows[(*R[:-1], donor_id)]['has_photos'] = False
     for _ in range(2):
         assert await service.reconcile('synthetic') == 'committed'
         _, existing, _ = load('synthetic')
@@ -446,7 +440,44 @@ async def test_adjacent_revoked_native_windows_retire_unmatched_pending_tile(str
         assert replacement['id'] == pending[0]['id']
         assert replacement['v3_recording_ids'] == ['r', 'second']
         assert replacement['status'] == 'in_progress' and not replacement['v3_process_pending']
-        retired = strict.rows[(*R[:-1], pending[1]['id'])]
-        assert retired['deleted'] and retired['home_hidden'] and not retired['v3_process_pending']
+        assert not replacement['home_hidden']
+        task = strict.document('/'.join(task_path)).get().to_dict()
+        memory = memories.get_memory('synthetic', 'linked-memory', firestore_client=strict)
+        for linked_id in (task['conversation_id'], memory['evidence'][0]['source_id']):
+            kept = conversations.get_conversation('synthetic', linked_id, firestore_client=strict)
+            assert kept['id'] == donor_id and not kept.get('deleted')
+            assert kept['home_hidden'] and not kept['v3_process_pending'] and not kept['summary_retryable']
+            assert kept[service.policy.NATIVE_MANUAL_BINDING] is None and kept['summary_due_at'] is None
+        assert not removal_ref(strict.document('users/synthetic'), donor_id).get().exists
+        assert not strict.rows.get(('users', 'synthetic', 'deleted_conversations', donor_id))
         for path in rid_paths.values():
             assert {claim['conversation_id'] for claim in strict.rows[path]['claims']} == {replacement['id']}
+
+
+@pytest.mark.asyncio
+async def test_backfill_rederive_fails_before_native_finish_can_expand_delete_set(strict, monkeypatch):
+    start = datetime.now(timezone.utc) - timedelta(hours=1)
+    source = live(start, **native_ready_fields(start + timedelta(seconds=20)))
+    source['record_upload_revision'] = 8
+    prior = window(start, status='processing')
+    prior.update(
+        backfilled=True,
+        v3_process_pending=True,
+        **{service.policy.NATIVE_MANUAL_BINDING: {'recording_id': 'r', 'upload_revision': 7}},
+    )
+    strict.rows[R] = source
+    strict.rows[C] = prior
+    before = deepcopy((source, prior))
+
+    async def blocking(pool, fn, *args, **kwargs):
+        return fn(*args, **kwargs)
+
+    monkeypatch.setattr(service, 'run_blocking', blocking)
+    monkeypatch.setattr(store, 'load_derive', lambda *a, **kw: ({'r': loaded(source, 1)}, {'c': prior}, []))
+    monkeypatch.setattr(service, '_commit', lambda *a, **kw: pytest.fail('unsafe backfill reached projection'))
+    report = {}
+    assert await service.reconcile('synthetic', derive=True, rederive=True, run_id='run', report=report) == 'blocked'
+    assert report['blocked_reason'] == 'backfill_native_finish_unsupported'
+    with pytest.raises(Conflict, match='backfill_native_finish_unsupported'):
+        store.commit_projection('synthetic', 'unused', {}, {'c': prior}, [], [], remove=['c'], firestore_client=strict)
+    assert (strict.rows[R], strict.rows[C]) == before

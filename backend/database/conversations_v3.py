@@ -180,7 +180,8 @@ def adoptable(uid, ids, *, firestore_client=None):
     """Derived rows that already own a planned id but were outside the loaded closure.
 
     Only live derived rows qualify: a deleted or tombstoned target keeps raising, so a rebuild can
-    never resurrect a window the user deleted.
+    never resurrect a window the user deleted. Settled native tiles are returned
+    so the planner can reserve their IDs without adopting their speech.
     """
     client = firestore_client or get_firestore_client()
     coll = user_conversations(client, uid)
@@ -188,7 +189,11 @@ def adoptable(uid, ids, *, firestore_client=None):
     for cid in ids:
         snapshot = coll.document(cid).get()
         raw = snapshot.to_dict() or {} if snapshot.exists else {}
-        if not raw.get('v3_derived') or raw.get('deleted') or raw.get('recording'):
+        if (
+            not (raw.get('v3_derived') or raw.get(policy.NATIVE_MANUAL_SETTLED))
+            or raw.get('deleted')
+            or raw.get('recording')
+        ):
             continue
         tombstone = client.collection('users').document(uid).collection('deleted_conversations').document(cid).get()
         if tombstone.exists:
@@ -592,12 +597,13 @@ def commit_projection(
     clear_pending=True,
     remove=(),
     retire=None,
+    settle=None,
     key='builder',
     firestore_client=None,
 ):
     """Commit derived rows and source claims; returns the ids of source recordings that kept moving.
 
-    ``retire`` maps a row id to the soft-retirement patch the final batch applies:
+    ``retire`` (live re-derive only) maps a row id to the soft-retirement patch the final batch applies:
     its claims leave every loaded recording with the same commit that writes the rows absorbing them.
 
     A recording that only received more speech during the pass does not fail the commit (a live
@@ -607,6 +613,17 @@ def commit_projection(
     """
     client = firestore_client or get_firestore_client()
     retire = dict(retire or {})
+    settle = dict(settle or {})
+    if any(
+        existing.get(cid, {}).get(field)
+        for cid in remove
+        for field in (policy.NATIVE_MANUAL_BINDING, policy.NATIVE_MANUAL_NOTES_VISIBILITY, policy.NATIVE_MANUAL_SETTLED)
+    ):
+        raise Conflict('backfill_native_finish_unsupported')
+    if settle and (
+        key != 'builder' or remove or retire or not settle.keys() <= existing.keys() - {r['id'] for r in rows}
+    ):
+        raise Conflict('source_changed')
     moved = set()
     coll = user_conversations(client, uid)
     held = leases.lease_ref(client, uid, key)
@@ -629,9 +646,7 @@ def commit_projection(
             or len(all_absorbed) != len(set(all_absorbed))
         ):
             raise Conflict('source_changed')
-    redirected = {cid for cid, patch in retire.items() if patch.get('sync_merged_into')}
-    retired = {cid for cid, patch in retire.items() if patch.get('deleted')}
-    checked_retirements = redirected | retired
+    retired = {cid for cid, patch in retire.items() if patch.get('sync_merged_into')}
     failure_transitions = {
         r['id']: r.get('v3_process_failed') and not (existing.get(r['id']) or {}).get('v3_process_failed') for r in rows
     }
@@ -691,11 +706,9 @@ def commit_projection(
         absorbed = {cid: row['id'] for row in batch_rows for cid in row.get('_v3_absorbed', ())}
         if absorbed and merge_donors_have_tasks(uid, absorbed, firestore_client=client, transaction=tx):
             raise Conflict('source_changed')
-        if checked_retirements and merge_donors_have_tasks(
-            uid, checked_retirements, firestore_client=client, transaction=tx
-        ):
+        if retired and merge_donors_have_tasks(uid, retired, firestore_client=client, transaction=tx):
             raise Conflict('rederive_live_donor_tasks')
-        for cid in [*(row['id'] for row in batch_rows), *absorbed, *(retire if final else ())]:
+        for cid in [*(row['id'] for row in batch_rows), *absorbed, *((retire.keys() | settle.keys()) if final else ())]:
             tombstone = (
                 client.collection('users')
                 .document(uid)
@@ -742,6 +755,8 @@ def commit_projection(
             )
             tx.set(removal_ref(user, cid), {'absorbed_by_refinement': True})
         if final:
+            for cid, patch in settle.items():
+                tx.update(coll.document(cid), patch)
             for cid in remove:
                 tx.delete(coll.document(cid))
             written = {r['id'] for r in batch_rows}
@@ -750,7 +765,9 @@ def commit_projection(
                     tx.update(coll.document(cid), patch)
                 if cid in retired:
                     tx.set(removal_ref(user, cid), {'retired_by_repair': True})
-        replaced = {r['id'] for r in batch_rows} | set(absorbed) | (set(remove) | retired if final else set())
+        replaced = (
+            {r['id'] for r in batch_rows} | set(absorbed) | (set(remove) | retired | settle.keys() if final else set())
+        )
         for rid, recording in recordings.items():
             if recording.get('deleted') or recording.get('sync_merged_into'):
                 tx.update(coll.document(rid), {'v3_pending': False, 'v3_pending_since': None})
@@ -842,8 +859,10 @@ def commit_projection(
         return observed
 
     fixed = fixed_write_bytes(recordings, rows, encrypted_cache)
+    if settle:
+        fixed += len(json.dumps(settle, default=str).encode())
     # Reserve space for all donor writes, including the task-link fences in the survivor's batch.
-    fixed_writes = len(recordings) + len(remove) + absorption_writes + len(retire) + len(retired) + 1
+    fixed_writes = len(recordings) + len(remove) + absorption_writes + len(retire) + len(retired) + len(settle) + 1
     if retired and fixed_writes + bool(rows) > BATCH_MAX_WRITES:
         raise Conflict('backfill_partition_budget')
     max_rows = max(1, BATCH_MAX_WRITES - fixed_writes)
@@ -859,6 +878,11 @@ def commit_projection(
         size += amount
     if current or not batches:
         batches.append(current)
+    if settle and (
+        len(batches) != 1 or fixed_writes + len(rows) > BATCH_MAX_WRITES or fixed + size > BATCH_WRITE_BYTES
+    ):
+        # Settling a tile and giving its claims to the replacement must be a single commit.
+        raise Conflict('request_too_large')
     for index, batch in enumerate(batches):
         try:
             observed = commit(

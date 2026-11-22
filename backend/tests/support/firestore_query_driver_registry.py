@@ -163,7 +163,7 @@ BODY_DIGEST = {
     'utils.support.holds._events': '360ff57663deaf3c17c934276f219cce74f4a468dc28c8a1145623524625927e',
     'utils.support.holds._held_deferred_deletes': '612a521045553ef1b02d1eb81aac37a3c63a75c598ce5e99484c007c7c87e878',
     'utils.support.retention._select_conversations': 'f36920350f4e3a557e0e474e8801ae414c21ce67203e0627f7a39ba820243d16',
-    'database.conversations_v3.commit_projection': 'ed85a0f87891409ae8739a27b1f662a292ebbd0fa3f79f5ac1e3c850d69aada3',
+    'database.conversations_v3.commit_projection': '822472fbe2d3ffabe42c90fb74fd7cca37540c8d8c1c7e8135a6fff1d3266a2d',
     'database.batch_pipeline_conversation_purge_scans._claim': 'faa5dabcf01dc5bd377b2e14a149282aa2db93b2872cdc97a3b756157701532c',
     'database.batch_pipeline_conversation_purge_scans.run_job': '1916be25d4e9d5b8a350a665ae0fce626ccc56f68fc66107e8f4b0bb1243b00e',
     'database.batch_pipeline_store.FirestoreStore.protected_retries': 'b55d2960c94057cb8df9b9cdd2e7728b6af63728bc0a2cb6f5bd333efed443a2',
@@ -3647,7 +3647,8 @@ for entry in (
         'database.conversations_v3.commit_projection',
         covered_by=('database.conversations_v3.merge_donors_have_tasks',),
         reason=(
-            'Refinement, live repair redirects, and unmatched native retirements use the bounded donor-task query.'
+            'Refinement and live repair redirects use the bounded donor-task query. '
+            'Native settlement only updates existing documents and their recording claims.'
         ),
         expect_observed=False,
         body_digest=BODY_DIGEST['database.conversations_v3.commit_projection'],

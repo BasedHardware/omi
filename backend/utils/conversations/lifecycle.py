@@ -1460,7 +1460,18 @@ def close_no_speech_capture(
 
 
 def commit_v3_projection(
-    uid, token, recordings, existing, rows, cache, *, clear_pending=True, remove=(), retire=None, key='builder'
+    uid,
+    token,
+    recordings,
+    existing,
+    rows,
+    cache,
+    *,
+    clear_pending=True,
+    remove=(),
+    retire=None,
+    settle=None,
+    key='builder',
 ):
     """The lifecycle owner delegates the atomic derived-row/claim transaction."""
     from database import conversations_v3
@@ -1476,4 +1487,5 @@ def commit_v3_projection(
         remove=remove,
         retire=retire,
         key=key,
+        **({'settle': settle} if settle else {}),
     )

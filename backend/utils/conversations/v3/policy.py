@@ -17,6 +17,7 @@ NATIVE_MANUAL_READY = 'v3_native_manual_ready_revision'
 NATIVE_MANUAL_PROOF = 'v3_native_manual_ready_proof'
 NATIVE_MANUAL_BINDING = 'v3_native_manual_binding'
 NATIVE_MANUAL_NOTES_VISIBILITY = 'v3_native_manual_notes_visibility'
+NATIVE_MANUAL_SETTLED = 'v3_native_manual_settled'
 NATIVE_MANUAL_SOURCE_FIELDS = (
     NATIVE_MANUAL_STOP,
     NATIVE_MANUAL_READY,

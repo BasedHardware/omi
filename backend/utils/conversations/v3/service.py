@@ -79,6 +79,7 @@ BLOCKED = frozenset(
         'remove_not_backfilled',
         'rederive_mixed_runs',
         'backfill_source_unreadable',
+        'backfill_native_finish_unsupported',
         'rederive_live_open',
         'rederive_live_boundary',
         'rederive_live_outline_failed',
@@ -304,6 +305,27 @@ async def reconcile(
                 uid,
                 **({'conversation_id': conversation_id} if on_open and conversation_id else {}),
             )
+        # The legacy backfill delete set must never depend on native Finish planning.
+        if (
+            derive
+            and rederive
+            and not live
+            and (
+                any(policy.NATIVE_MANUAL_READY in row for row in recordings.values())
+                or any(
+                    row.get(field)
+                    for row in existing.values()
+                    for field in (
+                        policy.NATIVE_MANUAL_BINDING,
+                        policy.NATIVE_MANUAL_NOTES_VISIBILITY,
+                        policy.NATIVE_MANUAL_SETTLED,
+                    )
+                )
+            )
+        ):
+            raise Conflict('backfill_native_finish_unsupported')
+        if on_open and existing.get(conversation_id, {}).get(policy.NATIVE_MANUAL_SETTLED):
+            return 'stored'
         now = datetime.now(timezone.utc)
         eligible = [r for r in recordings.values() if policy.builder_eligible(r)]
         custom_timing = (silence_seconds, lock_seconds) != (DEFAULT_BOUNDARY_SECONDS, DEFAULT_BOUNDARY_SECONDS)
@@ -450,8 +472,13 @@ async def reconcile(
         }
 
         async def plan():
-            revoked_native_ids = {cid for cid, row in existing.items() if _revoked_native_window(row, recordings)}
-            immutable = {cid: row for cid, row in existing.items() if cid not in revoked_native_ids}
+            revoked_native_ids = {
+                cid for cid, row in existing.items() if not derive and _revoked_native_window(row, recordings)
+            }
+            settled_ids = {cid for cid, row in existing.items() if row.get(policy.NATIVE_MANUAL_SETTLED)}
+            immutable = {
+                cid: row for cid, row in existing.items() if cid not in revoked_native_ids and cid not in settled_ids
+            }
             # One ownership index per plan (adoption can add rows before a replan), shared by the
             # two-hour cap and both projections below.
             ownership = planner.Ownership(immutable, recordings)
@@ -488,6 +515,7 @@ async def reconcile(
             rows = []
             used = (
                 reserved
+                | settled_ids
                 | unavailable.keys()
                 | {window['existing_id'] for window in windows if window.get('existing_id')}
             )
@@ -699,22 +727,29 @@ async def reconcile(
         # A re-derive reuses prior ids; a prior copy no rebuilt window claims is retired with the commit.
         remove = [cid for cid in existing if cid not in planned] if derive and rederive else []
         retire, commit_recordings, commit_existing, priors = {}, recordings, existing, []
-        if not (derive or on_open):
-            # The natural plan may join several revoked native windows into one.
-            # Retire unmatched tiles and release their claims in the projection commit.
-            retire = {
-                cid: {
-                    'deleted': True,
-                    'home_hidden': True,
-                    'v3_derived': False,
-                    'v3_process_pending': False,
-                    'summary_due_at': None,
-                    policy.NATIVE_MANUAL_BINDING: None,
-                    'sync_content_revision': int(prior.get('sync_content_revision') or 0) + 1,
-                }
-                for cid, prior in existing.items()
-                if cid not in planned and not prior.get('deleted') and _revoked_native_window(prior, recordings)
+        # An unmatched revoked tile keeps its ID for direct links, but no longer owns speech or work.
+        settle = {
+            cid: {
+                'status': 'completed',
+                'home_hidden': True,
+                'v3_derived': False,
+                'v3_unlocked': False,
+                'v3_process_pending': False,
+                'v3_created_pending': False,
+                'tile_state': 'failed',
+                'summary_retryable': False,
+                'summary_due_at': None,
+                'manual_end': False,
+                policy.NATIVE_MANUAL_BINDING: None,
+                policy.NATIVE_MANUAL_SETTLED: True,
+                'sync_content_revision': int(prior.get('sync_content_revision') or 0) + 1,
             }
+            for cid, prior in existing.items()
+            if not (derive or on_open)
+            and cid not in planned
+            and not prior.get('deleted')
+            and _revoked_native_window(prior, recordings)
+        }
         if live:
             rows, retire, touched, sources, priors, outcome = _live_outcome(
                 rows, existing, recordings, since=since, until=until, run_id=run_id
@@ -746,6 +781,7 @@ async def reconcile(
                 remove=remove,
                 retire=retire,
                 key=key,
+                **({'settle': settle} if settle else {}),
             )
         except Exception:
             if live:
@@ -1048,7 +1084,18 @@ def _live_outcome(rows, existing, recordings, *, since, until, run_id):
 
 
 def _commit(
-    uid, token, recordings, existing, rows, cache, *, clear_pending=True, remove=(), retire=None, key='builder'
+    uid,
+    token,
+    recordings,
+    existing,
+    rows,
+    cache,
+    *,
+    clear_pending=True,
+    remove=(),
+    retire=None,
+    settle=None,
+    key='builder',
 ):
     from google.api_core.exceptions import InvalidArgument
 
@@ -1066,6 +1113,7 @@ def _commit(
             remove=remove,
             retire=retire,
             key=key,
+            **({'settle': settle} if settle else {}),
         )
     except InvalidArgument as error:
         # A document over Firestore's 1 MiB limit, or a commit request over its payload limit, fails the
