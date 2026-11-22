@@ -216,12 +216,6 @@ env:
     value: "false"
   - name: UNLIMITED_V2_BACKFILL_HOURS_CAP_HOURS
     value: "24"
-    value: "false"
-    value: "false"
-    value: "false"
-    value: "false"
-    value: ""
-    value: "0"
   - name: BATCH_CONTROL_CANDIDATE_FANOUT
     value: "16"
   - name: BATCH_ADMISSION_PARALLEL_CALLS
