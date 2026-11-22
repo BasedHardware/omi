@@ -4175,13 +4175,12 @@ but new socket construction/restart is needed to remove existing socket state.
 Initial and idle-reopened transports have separate phase labels;
 reopened ledger references subtract the exact configured provider resume offset.
 
-The same switch adds `omi_audio_timeline_elapsed_validation_detail_total` with
-`map_refused|no_gate|invalid_interval|vad_uncovered|classified`, leaving the old
-validation metric unchanged. `map_refused` includes outside-send, discontinuity
-and collapsed candidates; `vad_uncovered` includes decisions evicted from the
-2048-chunk retention. This decomposition cannot retrospectively explain the
-supplied production `unknown` aggregate. None of these metrics changes capture
-placement or enables the elapsed hypothesis.
+When diagnostics are enabled, the Modulate control also emits
+`omi_audio_timeline_elapsed_validation_detail_total` by
+`map_refused|no_gate|invalid_interval|vad_uncovered|classified`. A missing
+compact interval records `map_refused`. A valid interval outside the retained
+raw VAD decisions records `vad_uncovered`. This counter observes placement
+evidence. Soniox timing uses the separate capture-axis measurements above.
 
 `SONIOX_WIRE_LEDGER` defaults to `false` in code. Production listen and pusher
 declarations are enabled; other services and dev stay off. New

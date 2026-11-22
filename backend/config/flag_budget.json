@@ -24,7 +24,7 @@
     "config/batch_language_recovery.py": "planscost"
   },
   "seed_review_by": "2026-11-15",
-  "budget": 161,
+  "budget": 159,
   "names": {
     "BATCH_ACCOUNT_PRIVACY_WRITER_ENABLED": {
       "owner": "batch-custody / lead2",
@@ -1308,6 +1308,14 @@
     },
     "BATCH_PIPELINE_PROVIDER_STT_SWEEP_MAX_AGE_DAYS": {
       "on": "2026-11-16",
+      "replaced_by": null
+    },
+    "PARAKEET_WINDOW_DIARIZATION": {
+      "on": "2026-11-22",
+      "replaced_by": null
+    },
+    "STT_RESILIENT_RECONNECT": {
+      "on": "2026-11-22",
       "replaced_by": null
     }
   }
