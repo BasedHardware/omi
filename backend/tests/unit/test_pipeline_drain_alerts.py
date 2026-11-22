@@ -33,15 +33,18 @@ def test_sources_match_inventory_and_are_routed_resolving_warnings():
         assert rule['keep_firing_for'] == '0s'
         assert rule['missingSeriesEvalsToResolve'] == 2
         assert rule['noDataState'] == 'OK'
-        assert rule['isPaused'] == (uid in {'omi-pipeline-held-row-age', 'omi-pipeline-projection-drain-stall'})
+        assert rule['isPaused'] is False
         assert uid not in gate
         assert (BACKEND.parent / rule['annotations']['runbook']).is_file()
         assert rule['annotations']['verification']
         if uid == 'omi-oldest-age-gauge-flat-1h':
-            # Sampler health is agent-tier; the original drain warnings keep their review deadline.
+            # Sampler health is agent-tier.
             assert rule['labels']['tier'] == 'agent'
             assert rule['labels']['audience'] == 'agent'
             assert rule['notification_settings']['mute_time_intervals'] == ['omi-tier-silent']
+        elif uid in {'omi-pipeline-projection-drain-stall', 'omi-pipeline-held-row-age'}:
+            assert rule['annotations']['review_by'] == rule['annotations']['page_review_by'] == '2026-11-21'
+            assert 'see page_disposition and page_review_by.' in rule['annotations']['safe_next_action']
         else:
             assert rule['annotations']['review_by'] == '2026-11-07'
         for q in rule['data']:

@@ -37,25 +37,11 @@ class Alert:
     tier: str | None = None
 
 
-# Reviewed observability debt, independent of live rule state or failed assertions.
-# Lead2 ruling699300 (2026-11-08T15:13Z), PR #24938 explicitly pauses known
-# backlog pages until #24731/#24893 drain work ships and clean24h criteria hold.
-# These rows do NOT have active dwell-alert protection while paused. The strict
-# invariant still fails; strict xfail removal is required when an owner unpauses.
-# Criteria: backend/charts/monitoring/batch-projection/pipeline-alerts.md.
-IMPORT_PAUSED_DWELL_ROWS = {
-    'batch:record_pending': 'omi-record-pending-dwell',
-    'batch:ready': 'omi-batch-unit-unpublished-2h',
-    'batch:leased': 'omi-batch-unit-unpublished-2h',
-    'batch:retry': 'omi-batch-unit-unpublished-2h',
-    'batch:result_ready': 'omi-batch-unit-unpublished-2h',
-    'batch:vendor_held': 'omi-batch-unit-unpublished-2h',
-    'batch:quarantined': 'omi-batch-unit-unpublished-2h',
-    'batch_projection:pending': 'omi-batch-unit-unpublished-2h',
-    'batch_projection:persisted': 'omi-batch-unit-unpublished-2h',
-    'batch_projection:ready': 'omi-batch-unit-unpublished-2h',
-    'batch_projection:quarantine_held': 'omi-pipeline-held-row-age',
-}
+# SCA-2116 (2026-11-14) retired the 2026-11-08 import pauses: the five backlog
+# pages are active again with their thresholds unchanged, a 24h repeat cap so a
+# standing breach pages at most once a day, and a recorded owner and review date.
+# Their written dispositions live in the committed rules and in
+# backend/charts/monitoring/batch-projection/pipeline-alerts.md.
 
 
 @dataclass(frozen=True)

@@ -13,6 +13,15 @@ from scripts.redis_pager_route import REDIS_PAGER_RECEIVER, REDIS_PAGER_TARGET, 
 ROOT = Path(__file__).resolve().parents[3]
 MONITORING = ROOT / 'backend/charts/monitoring'
 NOTIFICATIONS = MONITORING / 'notifications'
+# SCA-2116: standing backlog breaches retain page severity with a daily repeat
+# until the owned 2026-11-21 review. Other critical rules retain the 4h default.
+DAILY_BACKLOG_PAGES = {
+    'omi-batch-unit-unpublished-2h',
+    'omi-record-pending-dwell',
+    'omi-enrichment-fresh-dwell',
+    'omi-pipeline-projection-drain-stall',
+    'omi-pipeline-held-row-age',
+}
 
 
 def test_severity_timing_and_actionable_annotations():
@@ -24,6 +33,11 @@ def test_severity_timing_and_actionable_annotations():
             severity = labels['severity']
             assert severity in {'critical', 'warning', 'ticket'}, rule['uid']
             wait, interval, repeat = ('30s', '5m', '4h') if severity == 'critical' else ('5m', '1h', '24h')
+            if rule['uid'] in DAILY_BACKLOG_PAGES:
+                assert rule['labels']['tier'] == 'page' and rule['labels']['owner'], rule['uid']
+                assert 'SCA-2116' in rule['annotations']['page_disposition'], rule['uid']
+                assert rule['annotations']['page_review_by'] == '2026-11-21', rule['uid']
+                repeat = '24h'
             settings = dict(rule['notification_settings'])
             receiver = TELEGRAM_RECEIVER
             if uid == REDIS_PAGER_UID:
@@ -171,7 +185,10 @@ def test_storm_unicode_links_and_resolved_stay_bounded(render):
 def test_split_and_combined_rule_objects_are_byte_identical():
     # Semantic JSON equality alone misses accidental bulk reformatting.
     def objects(path):
-        return {json.loads(raw)['uid']: raw for raw in re.findall(r'^  \{\n.*?^  \}', path.read_text(), re.M | re.S)}
+        text = path.read_text()
+        result = {json.loads(raw)['uid']: raw for raw in re.findall(r'^  \{\n.*?^  \}', text, re.M | re.S)}
+        assert len(result) == len(json.loads(text)), f'{path.name}: every rule must use canonical indentation'
+        return result
 
     combined = objects(MONITORING / 'alert-rules.json')
     split = {}
