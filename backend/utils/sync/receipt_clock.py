@@ -90,7 +90,7 @@ def receipt_clock_offsets(
         )
     except FutureCaptureRetry as error:
         code = error.detail.get('code') if isinstance(error.detail, dict) else None
-        record_recovery(_RETRY_OUTCOMES.get(code, 'retry_other'))
+        record_recovery(_RETRY_OUTCOMES.get(code, 'retry_other') if isinstance(code, str) else 'retry_other')
         raise
     except FutureCaptureRefused:
         record_recovery('refused')
