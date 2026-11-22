@@ -232,7 +232,9 @@ environments:
           STT_NO_TEXT_SECONDS: {value: '30', category: rollout}
           STT_LEARNED_LANGUAGE_PROFILE: {value: 'true', category: rollout}
           STT_NON_EN_MULTI_PREFER_HINTABLE_PERCENT: {value: '100', category: rollout}
-          PARAKEET_WINDOW_ALLOCATION_PERCENT: {category: rollout, value: '1'}
+          PARAKEET_WINDOW_ALLOCATION_PERCENT:
+            category: ops_kill
+            value: '1'
           PARAKEET_WINDOW_MAX_SESSIONS: {category: rollout, value: '1'}
           PARAKEET_WINDOW_POST_TIMEOUT_SECONDS: {value: '8', category: rollout}
           PARAKEET_WINDOW_DIARIZATION: {value: 'false', category: rollout}
@@ -489,7 +491,9 @@ environments:
           PARAKEET_STREAM_CAPACITY:
             value: '25'
             category: reliability
-          PARAKEET_STREAM_ALLOCATION_PERCENT: {value: '100', category: rollout}
+          PARAKEET_STREAM_ALLOCATION_PERCENT:
+            value: '100'
+            category: ops_kill
         values_file: backend/charts/parakeet/dev_omi_parakeet_values.yaml
       pusher:
         capabilities:
@@ -3178,7 +3182,9 @@ environments:
           STT_NO_TEXT_SECONDS: {value: '30', category: rollout}
           STT_LEARNED_LANGUAGE_PROFILE: {value: 'true', category: rollout}
           STT_NON_EN_MULTI_PREFER_HINTABLE_PERCENT: {value: '0', category: rollout}
-          PARAKEET_WINDOW_ALLOCATION_PERCENT: {category: rollout, value: '100'}
+          PARAKEET_WINDOW_ALLOCATION_PERCENT:
+            category: ops_kill
+            value: '100'
           PARAKEET_WINDOW_MAX_SESSIONS: {category: rollout, value: '16'}
           PARAKEET_WINDOW_POST_TIMEOUT_SECONDS: {value: '8', category: rollout}
           PARAKEET_WINDOW_DIARIZATION: {value: 'false', category: rollout}
@@ -3560,7 +3566,9 @@ environments:
           PARAKEET_STREAM_CAPACITY:
             value: '25'
             category: reliability
-          PARAKEET_STREAM_ALLOCATION_PERCENT: {value: '100', category: rollout}
+          PARAKEET_STREAM_ALLOCATION_PERCENT:
+            value: '100'
+            category: ops_kill
         values_file: backend/charts/parakeet/prod_omi_parakeet_values.yaml
       pusher:
         capabilities:

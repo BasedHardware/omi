@@ -24,8 +24,12 @@ DECISIONS = {"pending", "graduate", "ship", "kill", "kill_after_readout", "keep"
 TERMINALS = {"on", "off", "keep", "undecided"}
 REVIEW_GRACE_DAYS = 7
 RAMP_REQUIRED_FROM = date(2026, 10, 21)
-OPS_KILL_DEFAULT_OFF_ALLOWLIST_EXPIRES = date(2026, 11, 29)
-OPS_KILL_DEFAULT_OFF_ALLOWLIST: set[str] = set()
+# DEC-BTR-001 keeps these two fail-closed allocation controls as permanent
+# ops_kill flags: production declares 100 explicitly and zero withdraws the leg.
+OPS_KILL_DEFAULT_OFF_ALLOWLIST = frozenset({
+    "PARAKEET_STREAM_ALLOCATION_PERCENT",
+    "PARAKEET_WINDOW_ALLOCATION_PERCENT",
+})
 
 
 POSTHOG_ROLES = {"enable", "kill", "exposure", "payload"}
@@ -249,10 +253,6 @@ def validate_registry(
                     if key not in OPS_KILL_DEFAULT_OFF_ALLOWLIST:
                         errors.append(
                             f"{key}: ops_kill must default on (off is the kill); use rollout or config_switch"
-                        )
-                    elif current_date > OPS_KILL_DEFAULT_OFF_ALLOWLIST_EXPIRES:
-                        errors.append(
-                            f"ops_kill default-off exception expired {OPS_KILL_DEFAULT_OFF_ALLOWLIST_EXPIRES}: {key}"
                         )
                 if _ramp_applies_to(entry) and "ramp" not in entry:
                     try:

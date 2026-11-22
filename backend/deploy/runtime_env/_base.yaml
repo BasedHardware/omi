@@ -326,7 +326,7 @@ environment_shared:
           value: '100'
           category: rollout
         PARAKEET_WINDOW_ALLOCATION_PERCENT:
-          category: rollout
+          category: ops_kill
         PARAKEET_WINDOW_MAX_SESSIONS:
           category: rollout
         PARAKEET_WINDOW_POST_TIMEOUT_SECONDS:
@@ -551,7 +551,7 @@ environment_shared:
           category: reliability
         PARAKEET_STREAM_ALLOCATION_PERCENT:
           value: '100'
-          category: rollout
+          category: ops_kill
       values_file: backend/charts/parakeet/{env}_omi_parakeet_values.yaml
     pusher:
       capabilities:
