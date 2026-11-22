@@ -32,8 +32,10 @@ probe does not change the reply or bypass a coverage memo. Conversation-memo
 refusals before staging fall outside this cohort. First-arrival slotting and
 retries can weight the results. Report sample counts, slot misses, unreadable
 files and attempts that did not finish. Read available durations separately
-from bytes for unsupported files. A gap requires packet anchors on both sides
-in the same positioned stream after an unchanged closed capture, a complete
-inventory and no evidence of alternate ownership. Mismatches and unavailable
-or incomplete evidence remain ambiguous. Neither overlap nor gap observations
-serve as recovery authorization or client acknowledgement.
+from bytes for unsupported files. Bracketed positions require exact packet
+anchors on both sides, the same positioned stream, an unchanged closed
+capture, a complete inventory and no evidence of alternate ownership. The
+client upload's ordinal claims do not authenticate the unmatched packets.
+These observations go into the distinct ambiguous_bracketed subset, counted
+with other ambiguous audio. There is no proved-new fraction from this
+sampler. Its observations have no recovery or client acknowledgment authority.

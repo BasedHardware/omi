@@ -9,6 +9,7 @@ import json
 import os
 from pathlib import Path
 import re
+from struct import error as StructError
 import threading
 import time
 from typing import Any
@@ -284,7 +285,7 @@ def _same_sealed_capture(row: Mapping[str, Any], current: Mapping[str, Any]) -> 
     )
 
 
-def _gap_indexes(
+def _bracketed_candidates(
     claim: Mapping[str, Any] | None,
     wal: list[Packet],
     runs: list[list[Packet]],
@@ -327,7 +328,7 @@ def _count(
     files: list[tuple[str, int, list[Packet]]],
     runs: list[list[Packet]],
     claims: Mapping[str, dict[str, Any]],
-    complete_gap_evidence: bool,
+    check_bracketed_candidates: bool,
     budget: ArtifactReadBudget,
 ) -> tuple[Counter[tuple[str, str]], Counter[str]]:
     result: Counter[tuple[str, str]] = Counter()
@@ -340,13 +341,21 @@ def _count(
             result['ambiguous', 'unknown_duration_files'] += 1
             continue
         matches = overlap(wal, runs, placements, budget.timeout)
-        gaps = _gap_indexes(claims.get(name), wal, runs, matches) if complete_gap_evidence else set()
+        bracketed = _bracketed_candidates(claims.get(name), wal, runs, matches) if check_bracketed_candidates else set()
         if matches:
             index = min(matches)
             run, position = matches[index]
             clock[_offset_bucket(runs[run][position].start - wal[index].start)] += 1
         for index, packet in enumerate(wal):
-            classification = 'duplicate' if index in matches else 'gap' if index in gaps else 'ambiguous'
+            if index in matches:
+                classification = 'duplicate'
+            elif index in bracketed:
+                # Client ordinal claims bind only the matching anchors. There
+                # is no authenticated source position for the intervening WAL
+                # packets, so they remain ambiguous even in a sealed record.
+                classification = 'ambiguous_bracketed'
+            else:
+                classification = 'ambiguous'
             result[classification, 'bytes'] += packet.size + 4
             result[classification, 'ticks'] += packet.ticks
     return result, clock
@@ -393,7 +402,7 @@ async def observe(
             candidate = not has_jobs and _same_sealed_capture(row, row)
             try:
                 runs, no_alternate = await run_blocking(storage_executor, _inventory, uid, cid, candidate, budget)
-            except InvalidTag:
+            except (InvalidTag, StructError):
                 attempts.labels('unreadable_manifest').inc()
                 runs, no_alternate = [], False
             except (ValueError, KeyError, TypeError, GoogleAPICallError, ArtifactReadLimit):

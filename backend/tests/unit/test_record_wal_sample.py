@@ -11,6 +11,7 @@ import pytest
 
 from config import record_wal_sample as config
 from database import record_wal_sample as state
+from database.batch_pipeline_privacy import BatchPrivacyBlocked
 from utils.batch_pipeline import record_wal_sample as sampler
 from utils.batch_pipeline.artifact_reads import ArtifactReadBudget, ArtifactReadLimit
 from utils.batch_pipeline.record_wal_alignment import CLOCK_RATE, Packet
@@ -81,7 +82,7 @@ def test_counts_encoded_packet_matches_and_clock_without_releasing_custody(tmp_p
     assert not offsets
 
 
-def test_gap_requires_bounded_anchors_and_no_alternate_coverage(tmp_path):
+def test_bracketed_hole_remains_ambiguous_with_unverified_upload_ordinals(tmp_path):
     path = _pack(tmp_path)
     files = sampler._upload_packets([path], budget())
     _, _, wal = files[0]
@@ -100,11 +101,14 @@ def test_gap_requires_bounded_anchors_and_no_alternate_coverage(tmp_path):
         }
     }
     counted, _ = sampler._count(files, [live], claims, True, budget())
-    assert counted['gap', 'ticks'] == 1920
+    assert counted['ambiguous_bracketed', 'ticks'] == 1920
+    assert ('gap', 'ticks') not in counted
     counted, _ = sampler._count(files, [live], claims, False, budget())
-    assert not counted['gap', 'ticks']
+    assert not counted['ambiguous_bracketed', 'ticks']
+    assert counted['ambiguous', 'ticks'] == 1920
     counted, _ = sampler._count(files, [live], {}, True, budget())
-    assert not counted['gap', 'ticks']
+    assert not counted['ambiguous_bracketed', 'ticks']
+    assert counted['ambiguous', 'ticks'] == 1920
 
 
 def test_manifest_body_only_with_both_preconditions(monkeypatch):
@@ -190,10 +194,14 @@ async def test_privacy_race_drops_the_sample_before_any_measurement_publishes(mo
     monkeypatch.setattr(sampler, 'slot_at', lambda now: slot)
     monkeypatch.setattr(sampler, '_latest_attempted', -1)
     monkeypatch.setattr(state, 'claim_slot', Mock(return_value=True))
-    monkeypatch.setattr(state, 'authority', Mock(side_effect=[(1, {}), ValueError('authority changed')]))
+    monkeypatch.setattr(
+        state, 'authority', Mock(side_effect=[(1, {}), BatchPrivacyBlocked('privacy_generation_changed')])
+    )
     monkeypatch.setattr(sampler, '_inventory', Mock(return_value=([], False)))
     counted = Mock(return_value=(Counter(), Counter()))
     monkeypatch.setattr(sampler, '_count', counted)
+    attempts = Mock()
+    monkeypatch.setattr(sampler, 'attempts', attempts)
 
     async def direct(executor, fn, *args, **kwargs):
         return fn(*args, **kwargs)
@@ -215,6 +223,7 @@ async def test_privacy_race_drops_the_sample_before_any_measurement_publishes(mo
         has_jobs=True,
     )
     counted.assert_not_called()
+    attempts.labels.assert_any_call('authority_refused')
     assert state.authority.call_args.kwargs['expected_generation'] == 1
 
 
@@ -252,3 +261,44 @@ def test_staged_durations_come_from_headers_and_bad_sibling_keeps_its_byte_count
     assert measured['ambiguous', 'ticks'] == 480 + 960
     assert measured['ambiguous', 'bytes'] == variable.stat().st_size + bad.stat().st_size
     assert measured['ambiguous', 'unknown_duration_files'] == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(('status', 'dispatch'), [(503, 'refused'), (200, 'accepted'), (202, 'accepted')])
+async def test_observe_publishes_counted_duplicate_bytes_under_the_existing_reply(
+    monkeypatch, tmp_path, status, dispatch
+):
+    path = _pack(tmp_path)
+    _, size, wal = sampler._upload_packets([str(path)], budget())[0]
+    monkeypatch.setattr(sampler, 'slot_at', lambda now: 5002)
+    monkeypatch.setattr(sampler, '_latest_attempted', -1)
+    monkeypatch.setattr(state, 'claim_slot', Mock(return_value=True))
+    monkeypatch.setattr(state, 'authority', Mock(return_value=(1, {})))
+    monkeypatch.setattr(sampler, '_inventory', Mock(return_value=([wal], False)))
+    observed = Mock()
+    monkeypatch.setattr(sampler, 'totals', observed)
+
+    async def direct(executor, fn, *args, **kwargs):
+        return fn(*args, **kwargs)
+
+    monkeypatch.setattr(sampler, 'run_blocking', direct)
+    content = next(
+        str(i) for i in range(10000) if int(hashlib.sha256(str(i).encode()).hexdigest()[:12], 16) % 1000 == 0
+    )
+    await sampler.observe(
+        store=object(),
+        uid='owner',
+        cid='record',
+        source='device',
+        device='model',
+        paths=[str(path)],
+        content_id=content,
+        claims={},
+        status_code=status,
+        has_jobs=True,
+    )
+    assert [call.args for call in observed.labels.call_args_list] == [
+        (dispatch, 'duplicate', 'bytes'),
+        (dispatch, 'duplicate', 'ticks'),
+    ]
+    assert [call.args for call in observed.labels.return_value.inc.call_args_list] == [(size,), (9600,)]
