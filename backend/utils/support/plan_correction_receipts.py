@@ -8,8 +8,8 @@ from pathlib import Path
 import re
 import subprocess
 from typing import Any, TextIO
+from urllib.parse import urlsplit
 
-ORIGIN = 'ssh://git@git-01.tail76ea03.ts.net:2222/david/omi-support-triage.git'
 OWNER = re.compile(r'[A-Za-z0-9_-]{1,128}')
 
 
@@ -18,14 +18,26 @@ class PrivatePacketError(ValueError):
 
 
 class PrivatePacket:
-    def __init__(self, root: Path):
+    def __init__(self, root: Path, expected_origin: str):
+        url = urlsplit(expected_origin)
+        if (
+            url.scheme != 'ssh'
+            or url.username != 'git'
+            or not url.hostname
+            or not url.path
+            or url.password is not None
+            or url.query
+            or url.fragment
+        ):
+            raise PrivatePacketError('expected the private Forgejo SSH origin')
         self.root = root.resolve(strict=True)
         if self.root.stat().st_mode & 0o077:
             raise PrivatePacketError('private checkout must be accessible only to the operator')
         if self._git('rev-parse', '--show-toplevel').strip() != str(self.root):
             raise PrivatePacketError('expected the root of the private checkout')
-        if self._git('config', '--local', '--get-all', 'remote.origin.url').splitlines() != [ORIGIN]:
-            raise PrivatePacketError('private checkout origin does not match')
+        for direction in ((), ('--push',)):
+            if self._git('remote', 'get-url', '--all', *direction, 'origin').splitlines() != [expected_origin]:
+                raise PrivatePacketError('private checkout origin does not match')
 
     def _git(self, *args: str) -> str:
         return subprocess.check_output(

@@ -14,15 +14,18 @@ from uuid import uuid4
 from google.cloud import firestore
 import httpx
 
+from config.plan_catalog_generated import PAID_PLAN_IDS
+from config.refactor_modes import default_on
 from database import legal_holds, support_actions
 from database.account_deletion_marker import account_deletion_document, account_deletion_firestore_client
 from database.support_actions import ActionContext, digest
 from utils.support.plan_correction_receipts import OWNER, PrivatePacket, append_receipt
 
 BASIC = 'basic'
-PAID_PLANS = frozenset({'architect', 'plus', 'pro', 'unlimited', 'unlimited_v2'})
+PAID_PLANS = PAID_PLAN_IDS | {'pro'}
 TERMINAL_SUBSCRIPTIONS = frozenset({'canceled', 'incomplete_expired'})
 BILLING_ROUTE = 'account correct-plan'
+RECEIPT_SCHEMA = 'support_plan_correction.v1'
 MAX_PAGES = 10
 MAX_STRIPE_CUSTOMERS = 10
 MAX_DRY_RUN_OWNERS = 100
@@ -56,13 +59,10 @@ class StripeBilling:
             params['starting_after'] = data[-1]['id']
         raise EvidenceUnavailable()
 
-    def _billing_customers(self, uid: str, customer: str) -> set[str]:
-        # Search only discovers historical customer bindings. Live lists on
-        # each discovered customer supply the actual guard evidence.
-        customers = {customer}
+    def _search_owner(self, path: str, uid: str) -> Iterator[dict[str, Any]]:
         params = {'query': f"metadata['uid']:'{uid}'", 'limit': '100'}
         for _ in range(MAX_PAGES):
-            response = self.client.get('subscriptions/search', params=params)
+            response = self.client.get(path, params=params)
             response.raise_for_status()
             page = response.json()
             if page['object'] != 'search_result' or not isinstance(page['data'], list):
@@ -70,26 +70,39 @@ class StripeBilling:
             for row in page['data']:
                 if row['livemode'] is not True or row['metadata'].get('uid') != uid:
                     raise EvidenceUnavailable()
-                bound = row['customer']
-                if not isinstance(bound, str) or not re.fullmatch(r'cus_[A-Za-z0-9]+', bound):
-                    raise EvidenceUnavailable()
-                customers.add(bound)
-                if len(customers) > MAX_STRIPE_CUSTOMERS:
-                    raise EvidenceUnavailable()
+                yield row
             if page['has_more'] is False:
-                return customers
+                return
             if page['has_more'] is not True or not page['next_page']:
                 raise EvidenceUnavailable()
             params['page'] = page['next_page']
         raise EvidenceUnavailable()
 
-    def guard(self, uid: str, customer: str, subscription: str, since: int, now: int) -> str | None:
+    def _billing_customers(self, uid: str, customer: str) -> set[str]:
+        # Search discovers historical customer bindings. Live lists on each
+        # discovered customer supply the guard evidence.
+        customers = {customer}
+        for path, field in (('subscriptions/search', 'customer'), ('customers/search', 'id')):
+            for row in self._search_owner(path, uid):
+                bound = row[field]
+                if not isinstance(bound, str) or not re.fullmatch(r'cus_[A-Za-z0-9]+', bound):
+                    raise EvidenceUnavailable()
+                customers.add(bound)
+                if len(customers) > MAX_STRIPE_CUSTOMERS:
+                    raise EvidenceUnavailable()
+        return customers
+
+    def guard(
+        self, uid: str, customer: str, subscription: str, since: int, now: int, *, price: str | None = None
+    ) -> str | None:
         rows = list(self._list('subscriptions', customer, status='all'))
         projected = next((row for row in rows if row['id'] == subscription), None)
         reason = self._subscription_guard(rows)
         if reason:
             return reason
         if not projected or projected['status'] != 'canceled' or projected['metadata'].get('uid') != uid:
+            return 'billing_unknown'
+        if price is not None and not any(item['price']['id'] == price for item in projected['items']['data']):
             return 'billing_unknown'
         ended_at = projected['ended_at']
         if type(ended_at) is not int or not 0 < ended_at <= now:
@@ -142,8 +155,8 @@ class StripeBilling:
                     return 'billing_unknown'
                 if charge['created'] >= cutoff or settlement['created'] >= cutoff:
                     return 'recent_payment'
-        for session in self._list('checkout/sessions', customer, status='complete', **{'created[gte]': cutoff}):
-            if session['mode'] == 'subscription' and session['payment_status'] == 'unpaid':
+        for session in self._list('checkout/sessions', customer, status='complete'):
+            if session['mode'] in {'subscription', 'payment'} and session['payment_status'] == 'unpaid':
                 return 'pending_checkout'
         if any(self._list('checkout/sessions', customer, status='open')):
             return 'pending_checkout'
@@ -199,7 +212,7 @@ class PlanCorrection:
 
     def _read(self, ref, transaction=None, field_paths=None):
         self.reads += 1
-        return ref.get(transaction=transaction, field_paths=field_paths, retry=None, timeout=8)
+        return ref.get(transaction=transaction, field_paths=field_paths, retry=None, timeout=3)
 
     def _state(self, uid: str, user_ref, transaction=None):
         user = self._read(user_ref, transaction, ['subscription', 'stripe_customer_id'])
@@ -239,7 +252,16 @@ class PlanCorrection:
             and sub.get('status') == 'active'
         ):
             return {'outcome': 'billing_unknown'}
-        row: dict[str, Any] = {'before': plan, 'after': BASIC}
+        before_price = sub.get('current_price_id')
+        if before_price is not None and not isinstance(before_price, str):
+            return {'outcome': 'billing_unknown'}
+        row: dict[str, Any] = {
+            'before': plan,
+            'after': BASIC,
+            'before_price_present': 'current_price_id' in sub,
+            'before_price_id': before_price,
+            'after_price_id': None,
+        }
         state_digest = digest([customer, sub])
         if proof and not rollback and (proof['before'] != plan or proof['state_digest'] != state_digest):
             return {**row, 'outcome': 'state_changed'}
@@ -249,7 +271,29 @@ class PlanCorrection:
         if rollback and proof is not None:
             original_ref = self.client.collection(support_actions.SUPPORT_ACTIONS_COLLECTION).document(proof['action'])
             row['after'] = proof['before']
-        problem = self.billing.guard(uid, customer, stripe_sub, self.since, int(datetime.now(timezone.utc).timestamp()))
+            price_present = proof['before_price_present']
+            prior_price = proof['before_price_id']
+            if (
+                type(price_present) is not bool
+                or price_present != row['before_price_present']
+                or (prior_price is not None and (not isinstance(prior_price, str) or not price_present))
+                or before_price is not None
+            ):
+                return {**row, 'outcome': 'rollback_conflict'}
+            row['after_price_id'] = prior_price
+        expected = {**sub, 'plan': row['after']}
+        patch = {'subscription.plan': row['after']}
+        if before_price != row['after_price_id']:
+            expected['current_price_id'] = row['after_price_id']
+            patch['subscription.current_price_id'] = row['after_price_id']
+        problem = self.billing.guard(
+            uid,
+            customer,
+            stripe_sub,
+            self.since,
+            int(datetime.now(timezone.utc).timestamp()),
+            price=row['after_price_id'] if rollback else before_price,
+        )
         if problem:
             return {**row, 'outcome': problem}
         if not self.ctx.apply and not rollback:
@@ -274,6 +318,7 @@ class PlanCorrection:
                     or original.get('outcome') != 'succeeded'
                     or original.get('args_digest') != digest([original_ref.id, uid])
                     or original.get('after_digest') != digest(sub)
+                    or original.get('before_digest') != digest(expected)
                     or original.get('summary', {}).get('before_plan') != row['after']
                     or row['after'] not in PAID_PLANS
                     or original.get('ticket') != self.ctx.ticket
@@ -281,9 +326,10 @@ class PlanCorrection:
                 ):
                     return 'rollback_conflict'
             if self.ctx.apply:
-                new = {**sub, 'plan': row['after']}
-                txn.update(user_ref, {'subscription.plan': row['after']})
-                _write_audit(txn, action_ref, self.ctx, uid, row, sub, new, original_ref.id if original_ref else None)
+                txn.update(user_ref, patch)
+                _write_audit(
+                    txn, action_ref, self.ctx, uid, row, sub, expected, original_ref.id if original_ref else None
+                )
             return None
 
         problem = change(transaction)
@@ -297,10 +343,10 @@ class PlanCorrection:
         audit = self._read(action_ref).to_dict() or {}
         if (
             _version(current.update_time) != version
-            or (current.to_dict() or {}).get('subscription') != {**sub, 'plan': row['after']}
+            or (current.to_dict() or {}).get('subscription') != expected
             or audit.get('outcome') != 'succeeded'
             or audit.get('args_digest') != digest([action_ref.id, uid])
-            or audit.get('after_digest') != digest({**sub, 'plan': row['after']})
+            or audit.get('after_digest') != digest(expected)
         ):
             return {**result, 'outcome': 'readback_failed'}
         return {**result, 'outcome': 'rolled_back' if rollback else 'corrected'}
@@ -329,14 +375,14 @@ def _inputs(args: argparse.Namespace, ctx: ActionContext, packet: PrivatePacket,
     if not proof_path:
         return owners, mode, {}
     header, *entries, trailer = packet.receipt(proof_path)
-    if trailer.get('complete') is not True:
+    if header.get('schema') != RECEIPT_SCHEMA or trailer.get('complete') is not True:
         raise EvidenceUnavailable()
     expected_mode, status = ('apply', 'corrected') if mode == 'rollback' else ('dry_run', 'ready')
     if header['mode'] != expected_mode or header['ticket'] != ctx.ticket or header['since'] != args.since.isoformat():
         raise EvidenceUnavailable()
     if mode == 'apply' and not 0 <= (now - datetime.fromisoformat(header['created_at'])).total_seconds() <= 86400:
         raise EvidenceUnavailable()
-    eligible = {row['owner']: row for row in entries if row.get('outcome', row.get('status')) == status}
+    eligible = {row['owner']: row for row in entries if row.get('outcome') == status}
     if any(trailer['counts'].get(reason, 0) for reason in ('failed', 'billing_unknown')) and mode == 'apply':
         raise EvidenceUnavailable()
     if not set(owners) <= eligible.keys():
@@ -349,12 +395,12 @@ def run(args: argparse.Namespace, ctx: ActionContext, *, firestore_client=None) 
     reads = 0
     counts: Counter = Counter()
     try:
-        if ctx.apply and os.getenv('OMI_SUPPORT_CORRECT_PLAN_ENABLED', 'true').lower() == 'false':
+        if ctx.apply and not default_on('OMI_SUPPORT_CORRECT_PLAN_ENABLED'):
             return {'document_reads': 0, 'counts': {}, 'error': 'disabled'}, 1
         key = os.environ['STRIPE_PLAN_CORRECTION_READ_KEY']
-        if not key.startswith(('rk_live_', 'sk_live_')):
+        if not key.startswith('rk_live_'):
             raise EvidenceUnavailable()
-        packet = PrivatePacket(args.private_checkout)
+        packet = PrivatePacket(args.private_checkout, os.environ['OMI_SUPPORT_TRIAGE_ORIGIN'])
         now = datetime.now(timezone.utc)
         owners, mode, proofs = _inputs(args, ctx, packet, now)
         since = int(datetime.combine(args.since, time.min, tzinfo=timezone.utc).timestamp())
@@ -369,7 +415,14 @@ def run(args: argparse.Namespace, ctx: ActionContext, *, firestore_client=None) 
             ) as stripe,
         ):
             append_receipt(
-                f, {'mode': mode, 'ticket': ctx.ticket, 'created_at': now.isoformat(), 'since': args.since.isoformat()}
+                f,
+                {
+                    'schema': RECEIPT_SCHEMA,
+                    'mode': mode,
+                    'ticket': ctx.ticket,
+                    'created_at': now.isoformat(),
+                    'since': args.since.isoformat(),
+                },
             )
             operator = PlanCorrection(
                 account_deletion_firestore_client(firestore_client=firestore_client), StripeBilling(stripe), since, ctx
