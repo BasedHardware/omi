@@ -1,3 +1,6 @@
+// Home's quiet row for a paying monthly reader whose saved Omi has recorded nothing for 5 days.
+// It decides who sees it (unknown answers show nothing) and sends its two Subscription events.
+
 import 'package:flutter/material.dart';
 
 import 'package:clock/clock.dart';
