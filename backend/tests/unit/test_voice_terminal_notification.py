@@ -171,8 +171,16 @@ def test_notification_failure_never_discards_the_terminal_answer(environment, mo
         notifications.notification_db.get_all_tokens = MagicMock(side_effect=RuntimeError('synthetic lookup failure'))
     elif failure == 'timeout':
         cancelled = []
+        timeouts = []
+
+        def capture_timeout(seconds):
+            timeout = asyncio.timeout(seconds)
+            timeouts.append(timeout)
+            return timeout
 
         async def blocked(*args, **kwargs):
+            # Expire the actual dispatch deadline after the provider starts.
+            timeouts[-1].reschedule(asyncio.get_running_loop().time())
             try:
                 await asyncio.Event().wait()
             finally:
@@ -180,7 +188,7 @@ def test_notification_failure_never_discards_the_terminal_answer(environment, mo
 
         chat.send_chat_message_notification_async = blocked
         monkeypatch.setattr(
-            sys.modules['utils.voice_answer_delivery'], 'VOICE_ANSWER_NOTIFICATION_TIMEOUT_SECONDS', 0.01
+            sys.modules['utils.voice_answer_delivery'], 'asyncio', SimpleNamespace(timeout=capture_timeout)
         )
 
     async def bounded_answer():
