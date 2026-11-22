@@ -3031,6 +3031,7 @@ export interface FullConversation {
   source?: string | null;
   started_at: string | null;
   structured: SimpleStructured;
+  sync_content_revision?: number | null;
   transcript_segments?: Array<SimpleTranscriptSegment>;
   truncated?: boolean;
 }
@@ -5444,6 +5445,7 @@ export interface SimpleConversation {
   source?: string | null;
   started_at: string | null;
   structured: SimpleStructured;
+  sync_content_revision?: number | null;
 }
 
 export interface SimplePerson {

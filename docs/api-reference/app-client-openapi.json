@@ -19274,6 +19274,17 @@
           "structured": {
             "$ref": "#/components/schemas/SimpleStructured"
           },
+          "sync_content_revision": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sync Content Revision"
+          },
           "transcript_segments": {
             "default": [],
             "items": {
@@ -33654,6 +33665,17 @@
           },
           "structured": {
             "$ref": "#/components/schemas/SimpleStructured"
+          },
+          "sync_content_revision": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sync Content Revision"
           }
         },
         "required": [

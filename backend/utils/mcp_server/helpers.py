@@ -133,6 +133,9 @@ def conversation_state_fields(conversation: Dict[str, Any]) -> Dict[str, Any]:
         'status': status if isinstance(status, str) else None,
         'duration_seconds': round(duration) if isinstance(duration, (int, float)) else None,
     }
+    revision = conversation.get('sync_content_revision')
+    if type(revision) is int:
+        fields['sync_content_revision'] = revision
     kind = conversation.get('kind')
     if kind in CONVERSATION_KINDS:
         fields['kind'] = kind

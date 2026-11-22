@@ -63,4 +63,5 @@ commit=$(git -C "$go_root/.." rev-parse HEAD)
 
         "$python_bin" -O "$repo_go/tools/replay/verify.py" "$scratch/parity.json" "$scratch/gaps.json"
     fi
+    "$python_bin" -O "$repo_go/tools/replay/verify.py" --mutation-check "$scratch/gaps.json"
 ' bash "$scratch" "$python_bin" "$commit"

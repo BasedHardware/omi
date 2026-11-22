@@ -589,3 +589,170 @@ def test_transcript_chunk_backfill_removes_chunks_of_a_conversation_deleted_mid_
     )
     assert (summary.removed_after_delete, summary.failed) == (1, 0)
     assert fake_index.count(namespace=vector_db.TRANSCRIPT_CHUNKS_NAMESPACE) == 0
+
+
+def test_deferred_live_and_batch_receipt_reads_return_latest_revision_without_enrichment(
+    client, auth_headers, live_user, sample_conversation_data, fake_firestore, monkeypatch, test_uid
+):
+    """MCP/REST list, search and detail reads expose a deferred receipt revision without promoting it."""
+    from database import conversations as conversations_db, vector_db
+    from routers import conversations as conversations_router, mcp as mcp_router
+    from utils.mcp_server.handlers import conversations as mcp_conversation_handlers
+
+    # This revision is ordinary card state, not conditional on the Home hold feature.
+    monkeypatch.setattr(mcp_router.transcribing_hold, 'home_transcription_presentation_gate_enabled', lambda: False)
+
+    receipt_ids = ('deferred-live-receipt', 'deferred-batch-receipt')
+    for conversation_id, lane_owner in zip(receipt_ids, (None, 'batch_live_v1'), strict=True):
+        finished_at = datetime.now(timezone.utc) - timedelta(hours=3) if lane_owner else None
+        seeded = dict(
+            sample_conversation_data,
+            id=conversation_id,
+            record_lane_owner=lane_owner,
+            started_at=finished_at or sample_conversation_data['started_at'],
+            finished_at=finished_at or sample_conversation_data['finished_at'],
+            deferred=True,
+            processing_deferred=True,
+            sync_content_revision=1,
+            transcript_segments=[
+                {
+                    'id': f'{conversation_id}-segment-1',
+                    'text': 'Synthetic stored revision one.',
+                    'start': 0,
+                    'end': 2,
+                    'is_user': False,
+                }
+            ],
+        )
+        seed_conversation(test_uid, seeded)
+
+    enrichment_calls = []
+    monkeypatch.setattr(
+        conversations_router,
+        '_enrich_deferred_conversation',
+        lambda uid, row: enrichment_calls.append((uid, row['id'])) or row,
+    )
+    monkeypatch.setattr(conversations_router, '_heal_locked_conversations_if_eligible', lambda *_args: None)
+    monkeypatch.setattr(vector_db, 'index', None)
+    monkeypatch.setattr(
+        conversations_router,
+        'search_conversations',
+        lambda **_kwargs: {
+            'items': [{'id': conversation_id} for conversation_id in receipt_ids],
+            'current_page': 1,
+            'per_page': 10,
+            'total_pages': 1,
+            'total': len(receipt_ids),
+        },
+    )
+
+    def mcp_rows(uid, *, extra_field_paths=None, **_kwargs):
+        return conversations_db.get_mcp_conversations_by_id(
+            uid,
+            list(receipt_ids),
+            include_transcript=False,
+            include_discarded=True,
+            extra_field_paths=extra_field_paths,
+        )
+
+    monkeypatch.setattr(
+        mcp_conversation_handlers,
+        'conversation_cards_page_core',
+        lambda uid, **kwargs: (mcp_rows(uid, extra_field_paths=kwargs.get('extra_field_paths')), None),
+    )
+    monkeypatch.setattr(
+        mcp_conversation_handlers,
+        'search_conversations_core',
+        lambda uid, _query, **kwargs: mcp_rows(uid, extra_field_paths=kwargs.get('extra_field_paths')),
+    )
+    overrides = dict(client.app.dependency_overrides)
+    client.app.dependency_overrides[mcp_router.get_uid_with_mcp_conversations_read] = lambda: test_uid
+
+    def read_surfaces(expected_revision):
+        rest_list = client.get('/v1/conversations?statuses=completed', headers=auth_headers)
+        assert rest_list.status_code == 200, rest_list.text
+        rest_list_items = {item['id']: item for item in rest_list.json()}
+
+        mcp_list = client.get('/v1/mcp/conversations?limit=100')
+        assert mcp_list.status_code == 200, mcp_list.text
+        mcp_list_items = {item['id']: item for item in mcp_list.json()}
+
+        rest_search = client.post('/v1/conversations/search', headers=auth_headers, json={'query': 'Deferred receipt'})
+        assert rest_search.status_code == 200, rest_search.text
+        rest_search_items = {item['id']: item for item in rest_search.json()['items']}
+
+        mcp_search = client.get('/v1/mcp/conversations/search?query=Deferred%20receipt')
+        assert mcp_search.status_code == 200, mcp_search.text
+        mcp_search_items = {item['id']: item for item in mcp_search.json()}
+
+        for conversation_id in receipt_ids:
+            rest_detail = client.get(f'/v1/conversations/{conversation_id}', headers=auth_headers)
+            mcp_detail = client.get(f'/v1/mcp/conversations/{conversation_id}')
+            assert rest_detail.status_code == 200, rest_detail.text
+            assert mcp_detail.status_code == 200, mcp_detail.text
+            rest_detail_item, mcp_detail_item = rest_detail.json(), mcp_detail.json()
+            for item in (
+                rest_list_items[conversation_id],
+                mcp_list_items[conversation_id],
+                rest_search_items[conversation_id],
+                mcp_search_items[conversation_id],
+                rest_detail_item,
+                mcp_detail_item,
+            ):
+                assert item['sync_content_revision'] == expected_revision, (conversation_id, item)
+            if expected_revision == 2:
+                for item in (rest_detail_item, mcp_detail_item):
+                    assert any(
+                        segment.get('text') == 'Synthetic stored revision two follows the cached miss.'
+                        for segment in item['transcript_segments']
+                    ), (conversation_id, item)
+
+    try:
+        read_surfaces(1)
+        for conversation_id in receipt_ids:
+            reference = (
+                fake_firestore.collection('users')
+                .document(test_uid)
+                .collection('conversations')
+                .document(conversation_id)
+            )
+            stored = reference.get().to_dict()
+            reference.update(
+                {
+                    'sync_content_revision': 2,
+                    'transcript_segments': stored['transcript_segments']
+                    + [
+                        {
+                            'id': f'{conversation_id}-segment-2',
+                            'text': 'Synthetic stored revision two follows the cached miss.',
+                            'start': 3,
+                            'end': 5,
+                            'is_user': False,
+                        }
+                    ],
+                }
+            )
+        read_surfaces(2)
+        read_surfaces(2)
+        assert enrichment_calls == []
+
+        locked = dict(sample_conversation_data, id='deferred-locked-receipt', is_locked=True)
+        seed_conversation(test_uid, locked)
+        assert client.get('/v1/conversations/deferred-locked-receipt', headers=auth_headers).status_code == 402
+        assert client.get('/v1/mcp/conversations/deferred-locked-receipt').status_code == 402
+        assert client.get('/v1/conversations/deferred-erased-receipt', headers=auth_headers).status_code == 404
+        assert client.get('/v1/mcp/conversations/deferred-erased-receipt').status_code == 404
+
+        positive_control = dict(
+            sample_conversation_data,
+            id='gui-open-deferred-receipt',
+            deferred=True,
+            processing_deferred=False,
+        )
+        seed_conversation(test_uid, positive_control)
+        opened = client.get('/v1/conversations/gui-open-deferred-receipt', headers=auth_headers)
+        assert opened.status_code == 200, opened.text
+        assert enrichment_calls == [(test_uid, 'gui-open-deferred-receipt')]
+    finally:
+        client.app.dependency_overrides.clear()
+        client.app.dependency_overrides.update(overrides)

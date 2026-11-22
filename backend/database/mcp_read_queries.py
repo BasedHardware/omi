@@ -25,6 +25,7 @@ MCP_CONVERSATION_CARD_FIELD_PATHS = (
     'starred',
     'folder_user_set',
     'created_at',
+    'sync_content_revision',
     'started_at',
     'finished_at',
     'language',

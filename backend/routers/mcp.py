@@ -545,6 +545,7 @@ class SimpleConversation(BaseModel):
     participants: List[dict] = Field(default_factory=list)
     person_ids: List[str] = Field(default_factory=list)
     source: Optional[str] = None
+    sync_content_revision: Optional[int] = None
     is_call: Optional[bool] = None
     call_platform: Optional[str] = None
     calendar_event_id: Optional[str] = None

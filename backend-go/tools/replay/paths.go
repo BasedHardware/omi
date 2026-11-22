@@ -463,7 +463,7 @@ func syntheticDigests() map[string]string {
 	// as synthetic, including the decoded contents of encrypted fixture records.
 	return map[string]string{
 		"admission-parity.json": "3d9d4ffec0a1053bbca24f481f0c776d5c5acc97ebc3b18020b369e7b313e9ab",
-		"conformance-gaps.json": "63c7b644b63985ae1f9434f7c0d6e6730fbb52b388572a56235e479aab53a160",
+		"conformance-gaps.json": "0164e17d82dc267a33f9a0dce768d5cf573527a8e873ad6026f6be8b42cdc161",
 		"held-out.json":         "a1ae0f2357f1f4debc04be7fb09487da966c8660e90738ae4b225f4948193ce9",
 	}
 }

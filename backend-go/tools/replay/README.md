@@ -122,7 +122,7 @@ retain their different transport payloads separately as drift.
 Set `final_attempt` and name an `unavailable_app` from `apps` to exercise the
 terminal delivery path with a synthetic HTTP 503.
 Review new in-repo fixtures as synthetic, including decoded encrypted fixture contents,
-before updating their SHA-256 pins in `paths.go`. The 50-case active floor and each case's
+before updating their SHA-256 pins in `paths.go`. The 51-case active floor and each case's
 contract-rule mapping are in `case-map.json`. It names every F01–F38 rule the current oracle
 can drive and those it cannot. `corpus/held-out.json` contains four synthetic cases excluded
 from CI replay until the worker exposes the needed seams.
@@ -162,16 +162,18 @@ not fetch conversations or read production keys.
 | Job IDs and fanout keys must match admission, and generated timestamps must be inside the replay window | `TestCompareOnlyExcusesVerifiedBindingsAndClocks` |
 | Missing evidence or driver errors cannot yield a pass | `TestCompareRejectsInvalidEvidence`, `TestCompareCountsExecutionErrors` |
 | Ten completed, failed, discarded and missing-row admissions across both paths produce zero unexplained differences | `test.sh` with `corpus/admission-parity.json` |
-| Forty active-worker cases persist notes, reach the memory and vector sinks, deliver webhooks, resume seeded own-key jobs and cover the mapped F01/F02/F04/F08/F09/F14/F17/F32 surfaces; Python also runs its canonical memory, app, task, folder, goal and developer-webhook code | `test.sh` with `corpus/conformance-gaps.json` and `case-map.json` |
+| Forty-one active-worker cases persist notes, reach the memory and vector sinks, deliver webhooks, resume seeded own-key jobs and cover the mapped F01/F02/F04/F08/F09/F14/F17/F32 surfaces; Python also runs its canonical memory, app, task, folder, goal and developer-webhook code | `test.sh` with `corpus/conformance-gaps.json` and `case-map.json` |
+| Deferred live and batch receipts expose their stored `sync_content_revision` through REST and MCP list, search and detail; the second segment is returned after the initial cached miss and repeated reads request no enrichment promotion. Locked/erased detail reads retain typed HTTP refusals; unreadable ciphertext is covered by the dead-letter case. A non-deferred GUI detail open is the positive control. | `test_deferred_live_and_batch_receipt_reads_return_latest_revision_without_enrichment` in `backend/testing/e2e/test_retrieval_search.py` and `unreadable-ciphertext-dead-letters` |
 
-The ten-case admission corpus is a zero-difference gate. The 40-case active-finalizer corpus
+The ten-case admission corpus is a zero-difference gate. The 41-case active-finalizer corpus
 is an interim measurement against `cmd/jobd`; its unexplained-difference count is expected to
 be non-zero. The gate records that count per commit, with no expected-drift signature pin,
 and preserves reasons on allowlisted differences. CI verifies the count against the observed
 unexplained paths and requires zero execution errors. This is the lane 6 worklist, not the
-final cohort gate. After the lane 6 handler lands, switch the driver to `cmd/workerd`, add a
-CI-runnable mutation check (breaking a fence or duplicating a paid call must make the oracle
-red), then require zero unexplained differences over the active floor.
+final cohort gate. `test.sh` also mutates the recorded fence outcome and duplicates a paid
+model call, then verifies each mutation is rejected. After the lane 6 handler lands, switch
+the driver to `cmd/workerd` and run the same mutations against the worker before requiring
+zero unexplained differences over the active floor.
 
 The oracle does not cover Redis cache or suppression keys, mixed-version ownership handback,
 or rollback durability; the shadow plan covers these behaviors. Separate cases assert that
