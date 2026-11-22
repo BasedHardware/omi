@@ -181,6 +181,51 @@ def test_crash_without_teardown_retains_due_obligation(store, monkeypatch):
     assert store.rows[ROW]['finalization_revision'] == 1
 
 
+@pytest.mark.parametrize('tail_committed', [False, True])
+def test_quiet_check_preserves_archive_through_the_producer_lease(store, monkeypatch, tail_committed):
+    row = store.rows[ROW]
+    row.update(
+        record_lane_owner='batch_live_v1',
+        server_batch_only=True,
+        server_batch_audio_received=True,
+        has_content=False,
+        transcript_segments=[],
+        audio_files=[{'id': 'retained-audio'}],
+    )
+    quiet.arm('synthetic', 'old', 120, firestore_client=store)
+    check_id = checks.quiet_check_id('synthetic', 'old')
+    _advance(monkeypatch, 120)
+    assert quiet.run(check_id, 1, firestore_client=store) == 'deferred'
+    assert 'finalization_job_id' not in store.rows[ROW]
+
+    if tail_committed:
+        # The producer drained and published its final span while the wake was deferred.
+        store.rows[ROW].update(
+            has_content=True,
+            server_batch_audio_start=1000,
+            server_batch_audio_end=1002,
+            listen_batch_producer={
+                'version': 1,
+                'phase': 'disconnected',
+                'drained': True,
+                'deadline_at': NOW + timedelta(seconds=120),
+            },
+        )
+    _advance(monkeypatch, 301)
+    gen = _job(store)['dispatch_generation']
+    assert quiet.run(check_id, gen, firestore_client=store) == ('queued' if tail_committed else 'done')
+    row = store.rows[ROW]
+    if tail_committed:
+        assert row['server_batch_audio_closed'] is True
+        assert row['finalization_revision'] == 1
+    else:
+        assert _job(store)['status'] == 'quiet_done'
+        assert 'server_batch_audio_closed' not in row
+        assert 'finalization_job_id' not in row
+        assert row['status'] == 'in_progress'
+        assert row['audio_files'] == [{'id': 'retained-audio'}]
+
+
 @pytest.mark.parametrize(
     'updates',
     [
