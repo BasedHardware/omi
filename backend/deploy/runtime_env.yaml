@@ -4447,7 +4447,7 @@ environments:
               value: 'true'
               category: ops_kill
             BATCH_PIPELINE_FOLLOWUP_CLAIMED_SIBLING_SKIP_ENABLED:
-              value: 'false'
+              value: 'true'
               category: ops_kill
             PUSHER_RECORD_CLOSE_NOTIFY_ENABLED: {value: 'false', category: rollout}
             PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_PERCENT: {value: '100', category: rollout}
@@ -5022,7 +5022,7 @@ environments:
               value: 'true'
               category: ops_kill
             BATCH_PIPELINE_FOLLOWUP_CLAIMED_SIBLING_SKIP_ENABLED:
-              value: 'false'
+              value: 'true'
               category: ops_kill
             PUSHER_RECORD_CLOSE_NOTIFY_ENABLED: {value: 'false', category: rollout}
             PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_PERCENT: {value: '100', category: rollout}
@@ -6088,7 +6088,7 @@ environments:
             BATCH_PIPELINE_SERVING_TICK_SECONDS: {value: '10', category: rollout}
             BATCH_PROJECTION_FINISH_CLASSIFY_PAGE_LIMIT: {value: '16', category: rollout}
             BATCH_PIPELINE_FOLLOWUP_CLAIMED_SIBLING_SKIP_ENABLED:
-              value: 'false'
+              value: 'true'
               category: ops_kill
             BATCH_PIPELINE_SERVING_PROJECTION_SWEEP:
               value: 'off'
@@ -6580,7 +6580,7 @@ environments:
             BATCH_PIPELINE_SERVING_TICK_SECONDS: {value: '10', category: rollout}
             BATCH_PROJECTION_FINISH_CLASSIFY_PAGE_LIMIT: {value: '16', category: rollout}
             BATCH_PIPELINE_FOLLOWUP_CLAIMED_SIBLING_SKIP_ENABLED:
-              value: 'false'
+              value: 'true'
               category: ops_kill
             BATCH_PIPELINE_SERVING_PROJECTION_SWEEP:
               value: 'true'
