@@ -362,7 +362,7 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
         self._last_post_end = -1
         self._next_post = 0.0
         self._post_timeout = max(0.1, float(os.getenv('PARAKEET_WINDOW_POST_TIMEOUT_SECONDS', '8')))
-        self._diarize = self._diarize and qualification_diarization
+        self._diarize = qualification_diarization and bool(os.getenv('HOSTED_SPEAKER_EMBEDDING_API_URL'))
         self._embedded_this_window = False
         self._next_send_speech = False
         self._received_bytes = 0
