@@ -62,9 +62,7 @@ def classify(row: Mapping[str, Any], *, cutoff: datetime, discard_deletion_only:
     if not python_owns_finalization(row) or any(row.get(field) for field in OWNERSHIP_FIELDS):
         return 'other_owner'
     admitted_at = row.get('processing_admitted_at')
-    if admitted_at is not None and (
-        not isinstance(admitted_at, datetime) or admitted_at.tzinfo is None or admitted_at >= cutoff
-    ):
+    if not isinstance(admitted_at, datetime) or admitted_at.tzinfo is None or admitted_at >= cutoff:
         return 'recent_or_unknown_admission'
     if (
         row.get('processing_state') == 'local_pending'

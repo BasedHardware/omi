@@ -43,7 +43,8 @@ The runner reads projected status and custody metadata. It checks the scanned
 row revision and authoritative job, outbox, and tombstone state in the same
 transaction that writes the status. Discards require a valid stored relevance
 decision, and deletions require the corresponding tombstone. Missing binding
-evidence leaves rows for their current owner. The runner reads and writes no
+evidence or an unknown processing admission clock leaves rows for their current
+owner. The runner reads and writes no
 transcript or audio. The canary writes at most 50 statuses. Each pass is capped
 at 450,000 inspected rows and 3,499,000 document reads including the canary
 readback. The remaining daily

@@ -12,6 +12,7 @@ from database import conversation_parked_status as parked, conversations
 from utils.conversations import capture_group_notes_refresh, summary_delivery
 
 CUTOFF = datetime(2026, 11, 21, tzinfo=timezone.utc)
+ADMITTED = CUTOFF - timedelta(hours=1)
 DISCARD = {'verdict': 'discard', 'decided_by': 'rule', 'reason': 'filler_only', 'trigger': 'capture_end'}
 
 
@@ -26,6 +27,8 @@ DISCARD = {'verdict': 'discard', 'decided_by': 'rule', 'reason': 'filler_only', 
             {'deferred': True, 'source': 'desktop', 'processing_admitted_at': CUTOFF + timedelta(minutes=1)},
             'recent_or_unknown_admission',
         ),
+        ({'deferred': True, 'source': 'desktop', 'processing_admitted_at': None}, 'recent_or_unknown_admission'),
+        ({'deleted': True, 'processing_admitted_at': 'unknown'}, 'recent_or_unknown_admission'),
         ({'discarded': True}, 'discard_unproven'),
         ({'discarded': True, 'finalization_job_id': 'job'}, 'discard_unproven'),
         ({'discarded': True, 'relevance_decision': {'verdict': 'discard'}}, 'discard_unproven'),
@@ -38,7 +41,13 @@ DISCARD = {'verdict': 'discard', 'decided_by': 'rule', 'reason': 'filler_only', 
     ],
 )
 def test_candidate_uses_durable_disposition(fields, expected):
-    assert parked.classify({'status': 'processing', **fields}, cutoff=CUTOFF) == expected
+    row = {'status': 'processing', 'processing_admitted_at': ADMITTED, **fields}
+    assert parked.classify(row, cutoff=CUTOFF) == expected
+
+
+def test_older_finished_clock_does_not_prove_processing_admission():
+    row = {'status': 'processing', 'source': 'desktop', 'deferred': True, 'finished_at': ADMITTED}
+    assert parked.classify(row, cutoff=CUTOFF) == 'recent_or_unknown_admission'
 
 
 class _Ref:
@@ -67,7 +76,7 @@ def _snapshot(ref, data, revision, *, scan=False):
 @pytest.mark.parametrize('apply', [True, False])
 def test_status_only_after_ownership_validation(apply):
     ref_active, ref_changed, ref_settled = (_Ref(f'users/owner/conversations/{cid}') for cid in ('one', 'two', 'three'))
-    parked_row = {'status': 'processing', 'source': 'desktop', 'deferred': True}
+    parked_row = {'status': 'processing', 'source': 'desktop', 'deferred': True, 'processing_admitted_at': ADMITTED}
     active_row = {**parked_row, 'finalization_job_id': 'job', 'finalization_revision': 1}
     job_ref = _Ref(f'{parked.FINALIZATION_JOBS_COLLECTION}/job')
     current = {
@@ -112,7 +121,7 @@ def test_status_only_after_ownership_validation(apply):
 )
 def test_status_write_refuses_conflicting_custody(fields, metadata_path, expected):
     ref = _Ref('users/owner/conversations/c1')
-    row = {'status': 'processing', 'source': 'desktop', **fields}
+    row = {'status': 'processing', 'source': 'desktop', 'processing_admitted_at': ADMITTED, **fields}
     snapshots = {ref.path: _snapshot(ref, row, 1)}
     if metadata_path:
         metadata_ref = _Ref(metadata_path)
@@ -143,7 +152,12 @@ def test_discard_deletion_scope_refuses_deferred_markers_before_custody_reads(di
 @pytest.mark.parametrize(('revision', 'expected'), [(1, 'deferred_excluded'), (2, 'changed')])
 def test_discard_deletion_transaction_refuses_deferred_added_after_scan(revision, expected):
     ref = _Ref('users/owner/conversations/c1')
-    row = {'status': 'processing', 'discarded': True, 'relevance_decision': DISCARD}
+    row = {
+        'status': 'processing',
+        'discarded': True,
+        'relevance_decision': DISCARD,
+        'processing_admitted_at': ADMITTED,
+    }
     scanned = _snapshot(ref, row, 1, scan=True)
     latest = _snapshot(ref, {**row, 'deferred': True}, revision)
     client = SimpleNamespace(collection=_Ref, get_all=Mock(return_value=[latest]))
@@ -164,6 +178,7 @@ def test_discard_deletion_scope_preserves_visibility_and_notes_refusals(disposit
         disposition: True,
         'deferred': False,
         'relevance_decision': DISCARD,
+        'processing_admitted_at': ADMITTED,
     }
     current = {ref.path: _snapshot(ref, row, 1)}
     if disposition == 'deleted':
