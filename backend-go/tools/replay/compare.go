@@ -18,19 +18,22 @@ type admission struct {
 }
 
 type observation struct {
-	QueueFanout      string         `json:"queue_fanout_key"`
-	UpdatedAtChanged bool           `json:"updated_at_changed"`
-	Admitted         *admission     `json:"admitted"`
-	Started          time.Time      `json:"started_at"`
-	Finished         time.Time      `json:"finished_at"`
-	ProviderCalls    []string       `json:"provider_calls"`
-	Effects          map[string]any `json:"effects"`
-	Status           string         `json:"status"`
-	Document         any            `json:"conversation"`
-	Derived          map[string]any `json:"derived_documents"`
-	Webhooks         []any          `json:"webhooks"`
-	Cost             replayCost     `json:"cost"`
-	GoEvidence       map[string]any `json:"go_evidence,omitempty"`
+	OwnerID           string         `json:"owner_id"`
+	ConversationID    string         `json:"conversation_id"`
+	SeededTokenHashes []string       `json:"seeded_token_hashes"`
+	QueueFanout       string         `json:"queue_fanout_key"`
+	UpdatedAtChanged  bool           `json:"updated_at_changed"`
+	Admitted          *admission     `json:"admitted"`
+	Started           time.Time      `json:"started_at"`
+	Finished          time.Time      `json:"finished_at"`
+	ProviderCalls     []string       `json:"provider_calls"`
+	Effects           map[string]any `json:"effects"`
+	Status            string         `json:"status"`
+	Document          any            `json:"conversation"`
+	Derived           map[string]any `json:"derived_documents"`
+	Webhooks          []any          `json:"webhooks"`
+	Cost              replayCost     `json:"cost"`
+	GoEvidence        map[string]any `json:"go_evidence,omitempty"`
 }
 
 type tokenUsage struct {
@@ -106,6 +109,8 @@ type costRow struct {
 
 func compare(cases []replayCase) (report, error) {
 	out := report{Version: 1, Cases: make([]caseReport, 0, len(cases)), CostRows: make([]costRow, 0, len(cases))}
+	pythonTokenCounts := generatedHomeTokenCounts(cases, false)
+	goTokenCounts := generatedHomeTokenCounts(cases, true)
 	seen := make(map[string]bool)
 	for _, c := range cases {
 		if c.Name == "" || seen[c.Name] {
@@ -133,7 +138,7 @@ func compare(cases []replayCase) (report, error) {
 		case c.Python.Effects == nil || c.Go.Effects == nil:
 			return report{}, fmt.Errorf("effects must be a JSON object in both observations")
 		default:
-			entry.Differences = compareObservations(c.Python, c.Go)
+			entry.Differences = compareObservationsForRun(c.Python, c.Go, pythonTokenCounts, goTokenCounts)
 			matched := true
 			for _, diff := range entry.Differences {
 				if diff.Reason == "" {

@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from hashlib import sha256
+import re
 from threading import Lock
 
 from testing.finalization_replay.corpus import FIXED_DATE, pack, seed_document
@@ -10,6 +12,32 @@ from testing.finalization_replay.corpus import FIXED_DATE, pack, seed_document
 # Python stores its queue and queue metrics projection in Firestore. Go stores
 # the queue in Postgres. The disposition is compared separately from these rows.
 QUEUE_COLLECTIONS = {'conversation_finalization_jobs', 'conversation_finalization_projection_shards'}
+TOKEN_HEX = re.compile(r'[0-9a-f]{32}')
+
+
+def _seeded_tokens(value):
+    """Collect UUID-shaped fixture values; generated Home tokens are UUIDv4 hex."""
+    if isinstance(value, str):
+        if TOKEN_HEX.fullmatch(value):
+            yield value
+    elif isinstance(value, dict):
+        for key, item in value.items():
+            if isinstance(key, str) and TOKEN_HEX.fullmatch(key):
+                yield key
+            yield from _seeded_tokens(item)
+    elif isinstance(value, (list, tuple)):
+        for item in value:
+            yield from _seeded_tokens(item)
+
+
+def seeded_token_hashes(client):
+    """Return hashes of UUID-shaped values already present after corpus seeding."""
+    tokens = set()
+    for collection in client.collections():
+        for path, document in _documents(collection):
+            tokens.update(part for part in path.split('/') if TOKEN_HEX.fullmatch(part))
+            tokens.update(_seeded_tokens(document))
+    return sorted(sha256(value.encode('ascii')).hexdigest() for value in tokens)
 
 
 def _same_snapshot_value(left, right):
@@ -64,6 +92,7 @@ class CaseState:
         self._metrics_lock = Lock()
         self.cost_measured = False
         self.started_at = None
+        self.seeded_token_hashes = []
 
     def record_provider_call(self, feature, prompt, completion):
         from testing.finalization_replay.metrics import prompt_token_estimate, token_estimate
@@ -183,6 +212,9 @@ class CaseState:
         }
         document = self.conversation.get().to_dict()
         return {
+            'owner_id': getattr(self, 'uid', ''),
+            'conversation_id': getattr(self, 'cid', ''),
+            'seeded_token_hashes': getattr(self, 'seeded_token_hashes', []),
             'status': status,
             'queue_fanout_key': self.queue_fanout_key,
             'updated_at_changed': (document or {}).get('updated_at') != self.initial_updated_at,

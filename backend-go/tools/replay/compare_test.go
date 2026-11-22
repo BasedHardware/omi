@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 	"testing"
@@ -78,7 +79,7 @@ func TestCompareDifferencesWithIncompatibleJSONShapes(t *testing.T) {
 	}
 }
 
-func TestCompareOnlyExcusesVerifiedBindingsAndClocks(t *testing.T) {
+func TestCompareOnlyExcusesVerifiedFanoutAndClocks(t *testing.T) {
 	t.Parallel()
 	start := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
 	build := func(job, fanout string, stamp time.Time) *observation {
@@ -106,6 +107,12 @@ func TestCompareOnlyExcusesVerifiedBindingsAndClocks(t *testing.T) {
 		if diff.Path == "/fanout_key" {
 			fanoutCompared = true
 		}
+		if diff.Path == "/conversation/finalization_job_id" {
+			if diff.Reason != "" {
+				t.Fatalf("finalization_job_id must stay unexplained pending reader evidence: %v", diff)
+			}
+			continue
+		}
 		if diff.Reason == "" {
 			t.Fatalf("verified binding and timestamp drift: %v", diff)
 		}
@@ -124,6 +131,15 @@ func TestCompareOnlyExcusesVerifiedBindingsAndClocks(t *testing.T) {
 		if diff.Reason != "" {
 			t.Fatalf("invalid binding or clock was allowed: %v", diff)
 		}
+	}
+}
+
+func TestCompareKeepsBooleanAndIntegerValuesDistinct(t *testing.T) {
+	t.Parallel()
+	var diffs []difference
+	compareValue(&diffs, "/conversation/enabled", true, json.Number("1"))
+	if len(diffs) != 1 || diffs[0].Kind != "different_value" || diffs[0].Reason != "" {
+		t.Fatalf("boolean-to-integer change was normalized away: %+v", diffs)
 	}
 }
 

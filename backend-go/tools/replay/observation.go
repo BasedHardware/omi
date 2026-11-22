@@ -5,15 +5,23 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
-	"time"
 )
 
 func compareObservations(python, goRun *observation) []difference {
+	return compareObservationsForRun(
+		python,
+		goRun,
+		generatedHomeTokenCounts([]replayCase{{Python: python}}, false),
+		generatedHomeTokenCounts([]replayCase{{Go: goRun}}, true),
+	)
+}
+
+func compareObservationsForRun(python, goRun *observation, pythonTokens, goTokens map[string]int) []difference {
 	diffs := []difference{}
 	compareValue(&diffs, "/status", python.Status, goRun.Status)
 	compareValue(&diffs, "/conversation", python.Document, goConversation(goRun, python))
 	compareFanout(&diffs, python, goRun)
-	compareObject(&diffs, "/derived_documents", python.Derived, goRun.Derived)
+	compareDerivedDocuments(&diffs, python, goRun)
 	compareObject(&diffs, "/effects", python.Effects, goRun.Effects)
 	compareObject(&diffs, "/provider_calls", countProviderCalls(python.ProviderCalls), countProviderCalls(goRun.ProviderCalls))
 	compareObject(&diffs, "/webhooks", webhookGroups(python), webhookGroups(goRun))
@@ -22,7 +30,13 @@ func compareObservations(python, goRun *observation) []difference {
 		switch diff.Kind {
 		case "different_value":
 			if diff.Reason == "" {
-				diff.Reason = allowedDifference(diff.Path, python, goRun)
+				diff.Reason = approvedTimestampDifference(diff.Path, python, goRun)
+			}
+			if diff.Reason == "" {
+				diff.Reason = allowedHomeTokenDifference(diff.Path, python, goRun, pythonTokens, goTokens)
+			}
+			if diff.Reason == "" && webhookMatches(diff.Path, python) && webhookMatches(diff.Path, goRun) {
+				diff.Reason = "both webhook keys bind to their own admitted fanout"
 			}
 		case "missing_in_go":
 			if unported(diff.Path) {
@@ -30,6 +44,10 @@ func compareObservations(python, goRun *observation) []difference {
 			}
 		}
 	}
+	validateTimestampEvidence(&diffs, "python", python)
+	validateTimestampEvidence(&diffs, "go", goRun)
+	validateHomeTokenEvidence(&diffs, "python", python, pythonTokens)
+	validateHomeTokenEvidence(&diffs, "go", goRun, goTokens)
 	validateBinding(&diffs, "/python", python, false)
 	validateBinding(&diffs, "/go", goRun, true)
 	if (python.Admitted == nil) != (goRun.Admitted == nil) {
@@ -102,13 +120,7 @@ func objectField(value any, field string) any {
 }
 
 func timestampInWindow(run *observation) bool {
-	stamp, ok := objectField(documentField(run, "updated_at"), "$timestamp").(string)
-	if !ok {
-		return false
-	}
-	t, err := time.Parse(time.RFC3339Nano, stamp)
-	return err == nil && run.UpdatedAtChanged && !run.Started.IsZero() && !run.Finished.Before(run.Started) &&
-		!t.Before(run.Started) && !t.After(run.Finished)
+	return run.UpdatedAtChanged && validTimestampValue(run, documentField(run, "updated_at"), true)
 }
 
 func validateBinding(diffs *[]difference, side string, run *observation, goSide bool) {
@@ -133,25 +145,6 @@ func validateBinding(diffs *[]difference, side string, run *observation, goSide 
 			addDifference(diffs, fmt.Sprintf("%s/webhooks/%d/idempotency_key", side, i), "invalid_binding")
 		}
 	}
-}
-
-func allowedDifference(path string, python, goRun *observation) string {
-	switch path {
-	case "/conversation/updated_at/$timestamp":
-		if timestampInWindow(python) && timestampInWindow(goRun) {
-			return "both writes occurred within their observed replay windows"
-		}
-	case "/conversation/finalization_job_id":
-		if python.Admitted != nil && goRun.Admitted != nil && python.Admitted.Job != "" && goRun.Admitted.Job != "" &&
-			documentField(python, "finalization_job_id") == python.Admitted.Job &&
-			documentField(goRun, "finalization_job_id") == goRun.Admitted.Job {
-			return "both stored identifiers bind to their own admitted queue job"
-		}
-	}
-	if webhookMatches(path, python) && webhookMatches(path, goRun) {
-		return "both webhook keys bind to their own admitted fanout"
-	}
-	return ""
 }
 
 func webhookGroups(run *observation) map[string]any {

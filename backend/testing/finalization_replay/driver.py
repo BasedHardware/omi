@@ -19,7 +19,7 @@ from testing.finalization_replay.corpus import DEFAULT_TEST_KEY, pack, read_corp
 from testing.finalization_replay.metrics import install_firestore_meter, measure
 from testing.finalization_replay.providers import allow_provider_port, provider_server
 from testing.finalization_replay.reference import run_reference
-from testing.finalization_replay.state import CaseState
+from testing.finalization_replay.state import CaseState, seeded_token_hashes
 from testing.replay_harness.env import emulator_endpoint, replay_environment
 from testing.replay_harness.guard import private_text
 
@@ -35,6 +35,9 @@ def _observe(state, run, output, side):
         output['errors'][side] = type(error).__name__
         finished = datetime.now(timezone.utc)
         output[side] = {
+            'owner_id': getattr(state, 'uid', ''),
+            'conversation_id': getattr(state, 'cid', ''),
+            'seeded_token_hashes': getattr(state, 'seeded_token_hashes', []),
             'status': 'execution_error',
             'queue_fanout_key': state.queue_fanout_key,
             'updated_at_changed': False,
@@ -84,6 +87,9 @@ def _seed(client, cases, url):
         raise ValueError('each case needs its own replay uid')
     for state in states:
         state.seed(url)
+    seeded = seeded_token_hashes(client)
+    for state in states:
+        state.seeded_token_hashes = seeded
     return states
 
 

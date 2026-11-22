@@ -27,6 +27,13 @@ the developer-created webhook appear as `unported` when missing in Go. They stil
 count as unexplained differences. Queue bookkeeping collections are excluded from the
 derived-document diff, with the finalization disposition and queue binding checked directly.
 
+The approved timestamp, goal-event and Home-token rules for the 438-difference
+ordinary-sync report are recorded in [`comparison-rules.md`](comparison-rules.md).
+Each rule checks side-local evidence before explaining a difference. The
+`finalization_job_id` difference remains unexplained pending the required reader and
+queue-binding evidence. No rule treats null and absent as equivalent; Go must match
+Python's stored writes.
+
 ## Run
 
 From `backend-go/`, with the backend lock installed via
@@ -159,7 +166,10 @@ not fetch conversations or read production keys.
 | --- | --- |
 | Nested fields, arrays, numeric values, missing fields and escaped paths compare deterministically | `TestCompareReportsNestedDiffsAndKeepsPresence` |
 | Object, array, scalar and null mismatches produce a report | `TestCompareDifferencesWithIncompatibleJSONShapes` |
-| Job IDs and fanout keys must match admission, and generated timestamps must be inside the replay window | `TestCompareOnlyExcusesVerifiedBindingsAndClocks` |
+| Fanout bindings and the existing conversation timestamp rule require side-local evidence; `finalization_job_id` remains unexplained | `TestCompareOnlyExcusesVerifiedFanoutAndClocks` |
+| Each approved derived timestamp retains its Firestore or RFC3339 type, is inside its own replay window, and meets its fixture day bucket | `TestApprovedTimestampRulesRequireSideLocalTypeAndWindow` |
+| Goal event IDs bind to their paths, parent goals and progress sequence before event semantics are compared | `TestGoalEventIdentityIsBoundBeforeSemanticComparison` |
+| Every approved Home token is UUIDv4 hex, fresh, unique in its side's run, and bound to the same-side dependent record | `TestEachHomeTokenRequiresUUIDv4AndItsSameSideLink`, `TestHomeTokensRejectSeedCollisionsAndRunWideDuplicates` |
 | Missing evidence or driver errors cannot yield a pass | `TestCompareRejectsInvalidEvidence`, `TestCompareCountsExecutionErrors` |
 | Ten completed, failed, discarded and missing-row admissions across both paths produce zero unexplained differences | `test.sh` with `corpus/admission-parity.json` |
 | Forty-one active-worker cases persist notes, reach the memory and vector sinks, deliver webhooks, resume seeded own-key jobs and cover the mapped F01/F02/F04/F08/F09/F14/F17/F32 surfaces; Python also runs its canonical memory, app, task, folder, goal and developer-webhook code | `test.sh` with `corpus/conformance-gaps.json` and `case-map.json` |
