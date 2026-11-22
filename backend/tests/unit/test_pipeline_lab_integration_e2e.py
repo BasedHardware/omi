@@ -6,7 +6,6 @@ not product fidelity (that is ``stack/chain_smoke.py`` on the local stack).
 """
 
 import http.client
-import io
 import json
 import os
 
@@ -15,7 +14,6 @@ import pytest
 from testing.pipeline_lab import cli
 from testing.pipeline_lab.inspector import server
 from testing.pipeline_lab.llm_proxy.fake_upstream import FakeUpstream
-from testing.pipeline_lab.llm_proxy.server import _Handler
 from testing.pipeline_lab.seed.synthetic import SYNTHETIC_SOURCE_UID, write_synthetic_snapshot
 
 DAY = '2026-03-14'
@@ -27,21 +25,6 @@ def lab(tmp_path, monkeypatch):
     monkeypatch.setenv('OMI_PIPELINE_LAB_ROOT', str(root))
     monkeypatch.setenv('OMI_PIPELINE_LAB_VERDICTS', str(verdicts))
 
-    handle_post = _Handler.do_POST
-
-    def respond_after_logging(handler):
-        # The fake chain runs in a subprocess. Release its non-streaming HTTP
-        # response only after the proxy handler finishes appending the call.
-        socket_writer = handler.wfile
-        with io.BytesIO() as response:
-            handler.wfile = response
-            try:
-                handle_post(handler)
-            finally:
-                handler.wfile = socket_writer
-            socket_writer.write(response.getvalue())
-
-    monkeypatch.setattr(_Handler, 'do_POST', respond_after_logging)
     upstream = FakeUpstream().start()
     yield {
         'root': root,

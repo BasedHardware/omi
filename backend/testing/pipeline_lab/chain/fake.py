@@ -14,6 +14,7 @@ memories) through the proxy; per day one ``daily_summary`` call. Everything is l
 from __future__ import annotations
 
 import json
+import time
 import urllib.request
 from pathlib import Path
 from typing import Any, Mapping, Optional, Sequence
@@ -26,6 +27,7 @@ from testing.pipeline_lab.llm_proxy.tagging import CONVERSATION_HEADER, STAGE_HE
 from testing.pipeline_lab.sinks.capture import CaptureSinks, capture_scope
 from testing.pipeline_lab.stack.clock import LabClock
 from testing.pipeline_lab.stack.io import iso, write_json
+from testing.pipeline_lab.store import read_jsonl
 
 NOTES_SCHEMA = {
     'type': 'object',
@@ -49,7 +51,25 @@ SUMMARY_SCHEMA = {
 }
 
 
-def ask(proxy_url: str, *, stage: str, conversation_id: Optional[str], prompt: str, schema: dict) -> dict[str, Any]:
+def _wait_for_logged_call(call_log: Path, call_id: str | None) -> None:
+    if not call_id:
+        raise RuntimeError('fake chain proxy response is missing its LLM call ID')
+    deadline = time.monotonic() + 5
+    while not any(row.get('id') == call_id for row in read_jsonl(call_log)):
+        if time.monotonic() >= deadline:
+            raise TimeoutError('fake chain proxy call did not reach the log before export')
+        time.sleep(0.01)
+
+
+def ask(
+    proxy_url: str,
+    *,
+    stage: str,
+    conversation_id: Optional[str],
+    prompt: str,
+    schema: dict,
+    call_log: Path | None = None,
+) -> dict[str, Any]:
     """One structured chat call through the lab proxy, tagged for attribution."""
     body = {
         'model': 'lab-fake-model',
@@ -70,6 +90,10 @@ def ask(proxy_url: str, *, stage: str, conversation_id: Optional[str], prompt: s
     opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
     with opener.open(request, timeout=60) as response:  # noqa: S310 - loopback proxy only
         payload = json.loads(response.read())
+        call_id = response.headers.get('X-Pipeline-Lab-Call-Id')
+    if call_log is not None:
+        # The response can arrive while the proxy is still recording this call.
+        _wait_for_logged_call(call_log, call_id)
     return json.loads(payload['choices'][0]['message']['content'] or '{}')
 
 
@@ -99,8 +123,9 @@ class FakeChainStore:
 
 
 class FakeFinalizer:
-    def __init__(self, store: FakeChainStore, sinks: CaptureSinks, proxy_url: str, clock: LabClock):
+    def __init__(self, store: FakeChainStore, sinks: CaptureSinks, proxy_url: str, clock: LabClock, call_log: Path):
         self.store, self.sinks, self.proxy_url, self.clock = store, sinks, proxy_url, clock
+        self.call_log = call_log
 
     async def finalize(self, uid: str, conversation_id: str, language: str | None) -> str:
         import asyncio
@@ -111,7 +136,13 @@ class FakeFinalizer:
             row.update(discarded=True, discard_reason='empty transcript', status='completed')
             return 'completed'
         notes = await asyncio.to_thread(
-            ask, self.proxy_url, stage='notes', conversation_id=conversation_id, prompt=transcript, schema=NOTES_SCHEMA
+            ask,
+            self.proxy_url,
+            stage='notes',
+            conversation_id=conversation_id,
+            prompt=transcript,
+            schema=NOTES_SCHEMA,
+            call_log=self.call_log,
         )
         row['status'] = 'completed'
         row['discarded'] = bool(notes.get('discarded'))
@@ -157,7 +188,7 @@ async def replay_chain_fake(
     driver = ChainDriver(
         uid=uid,
         store=store,
-        finalizer=FakeFinalizer(store, sinks, proxy_url, clock),
+        finalizer=FakeFinalizer(store, sinks, proxy_url, clock, Path(run_dir) / 'llm_calls.jsonl'),
         clock=clock,
         barrier=ExecutorBarrier(),
         sinks=sinks,
