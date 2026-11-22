@@ -36,7 +36,7 @@ import os
 import socket
 import sys
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, NoReturn
 
 import google.auth
 
@@ -68,13 +68,13 @@ def _default_agent() -> str:
 
 
 class _PrivateArgumentsParser(argparse.ArgumentParser):
-    def error(self, message: str) -> None:
+    def error(self, message: str) -> NoReturn:
         super().error("invalid plan correction arguments (see account correct-plan --help)")
 
 
 def build_parser(*, private_arguments: bool = False) -> argparse.ArgumentParser:
     parser_type = _PrivateArgumentsParser if private_arguments else argparse.ArgumentParser
-    parser = parser_type(prog="omi-support-ops", description=__doc__.split("\n\n")[0])
+    parser = parser_type(prog="omi-support-ops", description=(__doc__ or "").split("\n\n")[0])
     parser.add_argument("--ticket", required=True, help="Intercom conversation ID or issue reference")
     parser.add_argument("--actor", required=True, help="the human who asked for this action")
     parser.add_argument("--reason", required=True, help="why, in one line (no customer content)")
