@@ -912,6 +912,33 @@ def test_consumer_retries_a_processing_dependency_failure_and_keeps_the_wake(row
     assert rows[0][KEY]['lease_until'] == 0 and rows[0][KEY]['task_token'] == token
 
 
+@pytest.mark.asyncio
+async def test_legacy_handler_records_an_empty_first_summary_instead_of_answering_500(rows, monkeypatch):
+    """SCA-2865: an empty kept output is a bounded retry, never an unhandled ``SummaryOutputUnavailable``.
+
+    The consumer path already records the strike (``test_empty_output_twice_records_a_bounded_retry_then_blocks``);
+    the legacy ``sync_handler`` route used to re-raise on the same strike and answer 500.
+    """
+    from routers import batch_pipeline
+
+    monkeypatch.delenv('ENRICHMENT_ROUTE', raising=False)
+    monkeypatch.setattr(reprocess, 'owns_runtime', lambda: True)
+    monkeypatch.setattr(callback, 'enrich_conversation', lambda *_: SimpleNamespace(discarded=False, structured={}))
+
+    async def run(_executor, func, *args):
+        return func(*args)
+
+    monkeypatch.setattr(batch_pipeline, 'run_blocking', run)
+    state_rows, _tasks = rows
+    token = state_rows[KEY]['task_token']
+    response = await batch_pipeline.enrichment_response({'kind': 'sync_reprocess', 'key': KEY, 'task_token': token})
+    assert response.status_code == 200
+    assert json.loads(response.body) == {'status': 'deferred'}
+    assert state_rows[KEY]['summary_empty_failures'] == 1
+    assert state_rows[KEY]['deferred_reason'] == reprocess.EMPTY_OUTPUT_DEFER_REASON
+    assert state_rows[KEY]['due_at'] is not None and state_rows[KEY]['lease_until'] == 0
+
+
 def _gateway_status(status):
     import httpx
 

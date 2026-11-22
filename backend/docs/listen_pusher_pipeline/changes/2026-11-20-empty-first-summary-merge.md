@@ -33,3 +33,26 @@ Regression evidence in [PR #25890](https://github.com/BasedHardware/omi/pull/258
 covers empty then success, empty twice, an import whose merge carries an empty
 summary, a finalization-owned empty attempt that keeps its job retryable, and a
 projection-verified row that commits with debt.
+
+## 2026-11-22 follow-up: the legacy `sync_handler` path no longer re-raises
+
+The consumer path already recorded the bounded strike, but the legacy
+`utils.enrichment.outbox.run` path (the default `ENRICHMENT_ROUTE=sync_handler`,
+reached by `/v2/sync-jobs/run`, `/v1/conversation-finalization-jobs/run` and the
+batch-pipeline enrichment RPC) still re-raised `SummaryOutputUnavailable` on the
+first two strikes and on an already-enriched row's empty reprocess. Both escaped
+as a 500 on the request.
+
+`run` now settles the same way the consumer does:
+
+- Already-enriched row (no `PROCESS_CONTEXT`): settle the reprocess instead of
+  raising; the delivered summary is untouched.
+- Strike 1-2 (`EmptyFailureOutcome.RETRY`): the strike is recorded and the row is
+  re-armed under `deferred_reason=empty_output` for its bounded retry
+  (`LIVE_DEFER_SECONDS`), so the debt and wake stay intact.
+- Strike 3 (`EmptyFailureOutcome.BLOCKED`): unchanged terminal outcome
+  (`summary_blocked_reason`, dormant row).
+
+An empty structured is still never a delivered summary. No prompt, routing,
+metering or from-segments contract change; no data migration. The kill switch is
+still reverting the empty-output handling.
