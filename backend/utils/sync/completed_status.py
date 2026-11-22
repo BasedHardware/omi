@@ -116,6 +116,7 @@ def get_completed_legacy_status(job_id: str, uid: str, job: dict[str, Any] | Non
         status = {
             'job_id': job_id,
             'status': 'completed',
+            'completed_at': ledger.get('completed_at'),
             'lane': lane if lane in {'fresh', 'backfill'} else 'fresh',
             'total_segments': total,
             'processed_segments': total,

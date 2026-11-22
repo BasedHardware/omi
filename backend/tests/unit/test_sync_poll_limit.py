@@ -2,6 +2,7 @@
 
 import time
 from collections.abc import Iterator
+from datetime import datetime, timezone
 from unittest.mock import MagicMock
 from uuid import uuid4
 
@@ -183,7 +184,7 @@ def test_partial_backoff_http_uses_uid_and_reports_rollout_metrics(poll_client, 
     assert OMI_SYNC_JOB_POLL_ACTIVE_UPLOADERS.labels(cohort='out')._value.get() == active_out + 1
 
     terminal_job_id = f'terminal-{uuid4().hex}'
-    completed_at = time.time() - 10
+    completed_at = datetime.fromtimestamp(time.time() - 10, timezone.utc)
 
     def durable_status(job_id, *_args, **_kwargs):
         if job_id == terminal_job_id:
@@ -193,7 +194,9 @@ def test_partial_backoff_http_uses_uid_and_reports_rollout_metrics(poll_client, 
     monkeypatch.setattr(sync_router, 'get_durable_job_status', durable_status)
     histogram = OMI_SYNC_JOB_COMPLETION_TO_FIRST_TERMINAL_READ_SECONDS.labels(cohort='in')
     before = histogram._sum.get()
-    assert poll_client.get(f'/v2/sync-local-files/{terminal_job_id}').json()['poll_after_ms'] == 0
+    first_response = poll_client.get(f'/v2/sync-local-files/{terminal_job_id}')
+    assert first_response.json()['poll_after_ms'] == 0
+    assert 'completed_at' not in first_response.json()
     first_read_sum = histogram._sum.get()
     assert first_read_sum >= before + 9
     assert poll_client.get(f'/v2/sync-local-files/{terminal_job_id}').json()['poll_after_ms'] == 0

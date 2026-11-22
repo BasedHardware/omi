@@ -695,11 +695,15 @@ def _mark_completed_transaction(
     existing = cast(Dict[str, Any], snapshot.to_dict() or {}) if getattr(snapshot, 'exists', False) else {}
     if not ledger_owner_matches(existing, job_id, run_token, run_epoch):
         return False
+    completed_at = existing.get('completed_at')
+    if existing.get('status') != 'completed':
+        completed_at = now
     transaction.set(
         ref,
         {
             'status': 'completed',
             'result': result,
+            'completed_at': completed_at,
             **({'staging_custody': staging_custody} if staging_custody else {}),
             'updated_at': now,
             'expires_at': now + timedelta(days=LEDGER_RETENTION_DAYS),
@@ -886,11 +890,15 @@ def complete_batch_projection_in_transaction(
         )
     ):
         raise RuntimeError('batch projection lost content ledger ownership')
+    completed_at = existing.get('completed_at')
+    if existing.get('status') != 'completed':
+        completed_at = now
     transaction.update(
         ref,
         {
             'status': 'completed',
             'result': result,
+            'completed_at': completed_at,
             'updated_at': now,
             'expires_at': now + timedelta(days=LEDGER_RETENTION_DAYS),
         },

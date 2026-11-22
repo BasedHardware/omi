@@ -2,6 +2,7 @@
 
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
+from datetime import datetime, timezone
 
 import pytest
 
@@ -218,11 +219,15 @@ def test_status_is_durable_and_completed_result_is_authoritative(cohort):
     submit(store, *proposal())
     assert durable_status(store, 'synthetic-owner', 'bp_first')['status'] == 'queued'
     ledger = store.rows['content', 'synthetic-owner/content']
+    completed_at = datetime(2026, 11, 22, 1, 0, tzinfo=timezone.utc)
     ledger.update(
         status='completed',
+        completed_at=completed_at,
         result={'new_memories': [], 'updated_memories': [], 'failed_segments': 0, 'total_segments': 1, 'errors': []},
     )
-    assert durable_status(store, 'synthetic-owner', 'bp_first')['status'] == 'completed'
+    status = durable_status(store, 'synthetic-owner', 'bp_first')
+    assert status['status'] == 'completed'
+    assert status['completed_at'] == completed_at
     with pytest.raises(Exception) as error:
         durable_status(store, 'foreign-owner', 'bp_first')
     assert error.value.status_code == 403

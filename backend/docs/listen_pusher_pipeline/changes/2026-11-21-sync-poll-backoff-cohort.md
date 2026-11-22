@@ -28,10 +28,12 @@ sum by (cohort) (omi_sync_job_poll_active_uploaders)`. UIDs are never metric
 labels. Because one UID can poll through multiple processes, the denominator is
 process-local and is an approximation when aggregating replicas.
 
-`omi_sync_job_completion_to_first_terminal_read_seconds{cohort=...}` records the
+omi_sync_job_completion_to_first_terminal_read_seconds{cohort=...} records the
 delay from the stored completion timestamp to the first terminal read observed by
-each process. It uses a bounded, process-salted job-ID cache and makes no status
-write. Compare its cohort p50 from
+each process. The completion timestamp is added to the existing durable completion
+transaction and passed through the already-read status data; polling adds no store
+read or write. Older terminal rows without that timestamp are not sampled. It uses a
+bounded, process-salted job-ID cache. Compare its cohort p50 from
 `histogram_quantile(0.5, sum by (le, cohort) (rate(omi_sync_job_completion_to_first_terminal_read_seconds_bucket[5m])))`
 with the 60-second guard, and corroborate the poll ratio with the rollout's 5xx,
 429, support, and upload-retry signals.

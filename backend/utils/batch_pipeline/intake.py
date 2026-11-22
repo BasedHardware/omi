@@ -223,6 +223,7 @@ def _deleted_conversation_status(ledger: dict, intake: dict, job_id: str) -> dic
     return {
         'job_id': job_id,
         'status': 'completed',
+        'completed_at': ledger.get('completed_at'),
         'lane': intake['lane'],
         'total_files': intake['total_files'],
         'total_segments': total,
@@ -433,6 +434,7 @@ def durable_status(store, uid: str, job_id: str) -> dict | None:
             'failed_segments': failed,
             'errors': ['batch_worker_quarantined'] if failed else [],
             'result': result if completed and not failed else None,
+            'completed_at': ledger.get('completed_at') if completed else None,
             'poll_after_ms': 0 if completed or failed else 3000,
         }
 
