@@ -1614,16 +1614,12 @@ four-second hangover, then withholds silence and sends a keepalive control every
 after finalizing already received audio. Neither control carries PCM or adds a
 send span. Soniox's [keepalive](https://soniox.com/docs/stt/rt/connection-keepalive)
 and [manual finalization](https://soniox.com/docs/stt/rt/manual-finalization)
-docs describe this lifecycle, but do not promise an exact timestamp shift across
-a pause. Production final tokens observed 1–30 seconds beyond the cumulative
-sent-PCM axis. This does not establish clock semantics: the default shadow
-ledger reserves elapsed wall gaps only as a hypothesis, without registering
-withheld audio as received. Compact placement stays authoritative. No PCM
-silence is synthesized by the managed leg or adapter. Pre-roll and the hangover
-are real receiver PCM and their spans are registered when admitted. Neither
-keepalive nor finalize establishes that Soniox advances its audio clock.
-The 5/9/34-second tests simulate the elapsed hypothesis; they do not prove
-remote provider timing. A controlled timing probe remains necessary.
+describe the transport lifecycle. The managed leg places provider timestamps
+against the compact accepted-send ledger. Pre-roll and hangover use receiver
+PCM, while withheld silence contributes no send span. The separate capture-axis
+diagnostics measure provider timing against sent PCM without affecting placement.
+The 5-, 9-, and 34-second tests exercise compact placement across withheld
+silence using synthetic provider responses.
 
 
 Segments buffered in `realtime_segment_buffers` are sorted by `start` time
