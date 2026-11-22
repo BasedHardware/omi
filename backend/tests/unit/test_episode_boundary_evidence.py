@@ -180,7 +180,8 @@ def test_saved_context_cannot_rewind_an_authoritative_calendar_reschedule(store)
 
 
 @pytest.mark.parametrize(
-    'uid,stored', [('fixture-owner-39', True), ('fixture-owner-0', False)],
+    'uid,stored',
+    [('fixture-owner-39', True), ('fixture-owner-0', False)],
 )
 def test_shared_call_and_relevance_inputs_keep_the_production_sample(store, monkeypatch, uid, stored):
     from utils.conversations import call_metadata, relevance_media

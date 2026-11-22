@@ -642,11 +642,7 @@ def _attach_once(
         owner = episode_owning_recorded_time(uid, started_at, firestore_client=c.firestore_client)
         late = is_late((started_at, ended_at or started_at), now)
         if owner or late:
-            uncertain = (
-                None
-                if late
-                else f_join.uncertain(uid, owner, conversation_id, source, started_at)
-            )
+            uncertain = None if late else f_join.uncertain(uid, owner, conversation_id, source, started_at)
             placed = attach_recorded(uid, conversation_id, {'source': source}, started_at, started_at, c)
             if uncertain is not None and owner is not None:
                 f_join.mark_pending(
