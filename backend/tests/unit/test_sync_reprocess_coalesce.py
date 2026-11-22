@@ -697,6 +697,25 @@ def test_live_request_heartbeats_same_owner_token_without_a_replacement_wake(sta
     assert not any(t.name == 'first-summary-heartbeat' and t.is_alive() for t in threading.enumerate())
 
 
+def test_unavailable_empty_output_strike_defers_instead_of_raising(state, monkeypatch):
+    """SCA-2865: a strike write that cannot land re-arms the row instead of answering 500."""
+    from database.summary_processing import EmptyFailureOutcome
+
+    rows, tasks = state
+    reprocess.mark('u', 'c', 'en', now=0)
+    key, token = reprocess.key('u', 'c'), tasks[-1]['task_token']
+    monkeypatch.setattr(reprocess, 'record_empty_failure', lambda *_: EmptyFailureOutcome.UNAVAILABLE)
+
+    def empty(*_):
+        return SimpleNamespace(discarded=False, structured={})
+
+    assert reprocess.run(key, token, empty, now=120) == 'deferred'
+    assert rows[key]['deferred_reason'] == reprocess.EMPTY_OUTPUT_DEFER_REASON
+    assert rows[key]['due_at'] == 120 + reprocess.LIVE_DEFER_SECONDS
+    assert rows[key]['lease_until'] == 0 and rows[key]['owner'] is None
+    assert rows[key].get('summary_empty_failures', 0) == 0
+
+
 def test_empty_kept_output_has_a_terminal_budget_and_cannot_be_remarked(state, monkeypatch):
     rows, tasks = state
     reprocess.mark('u', 'c', 'en', now=0)

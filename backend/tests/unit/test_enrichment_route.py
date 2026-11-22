@@ -1000,6 +1000,25 @@ def test_transient_fault_in_the_empty_output_strike_releases_the_lease(rows, mon
     assert rows[0][KEY]['lease_until'] == 0 and rows[0][KEY]['task_token'] == token
 
 
+def test_unavailable_empty_output_strike_answers_409_instead_of_500(rows, client, monkeypatch):
+    """SCA-2865: an expired strike transaction is a bounded retry, never an unhandled 500."""
+    import database._client as firestore_client
+    import database.summary_processing as summary_processing
+
+    monkeypatch.setattr(firestore_client, 'get_firestore_client', Mock())
+    monkeypatch.setattr(consumer_module.EnrichmentConsumer, '_callback', lambda self: _empty_output)
+    monkeypatch.setattr(
+        summary_processing,
+        'record_empty_failure',
+        Mock(return_value=summary_processing.EmptyFailureOutcome.UNAVAILABLE),
+    )
+    token = rows[0][KEY]['task_token']
+    response = client.post('/v2/enrichment/run', json={'kind': 'enrichment', 'key': KEY, 'task_token': token})
+    assert response.status_code == 409
+    assert response.json() == {'status': 'retry', 'reason': 'dependency_warming'}
+    assert rows[0][KEY]['lease_until'] == 0 and rows[0][KEY]['task_token'] == token
+
+
 def test_empty_output_owner_race_defers_without_burning_callback_attempts(rows, monkeypatch):
     import database._client as firestore_client
     import database.summary_processing as summary_processing

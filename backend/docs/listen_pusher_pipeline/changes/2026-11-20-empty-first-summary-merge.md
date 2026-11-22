@@ -56,3 +56,23 @@ as a 500 on the request.
 An empty structured is still never a delivered summary. No prompt, routing,
 metering or from-segments contract change; no data migration. The kill switch is
 still reverting the empty-output handling.
+
+## 2026-11-22 follow-up: the strike write itself can no longer fail the request
+
+The residual `SummaryOutputUnavailable` events after the 11-20 serving were not
+the raise escaping: the consumer caught it and called `record_empty_failure`,
+whose Firestore transaction then failed. `_Transactional` replays the same
+transaction id on contention, which cannot work once Firestore has retired that
+id, so the commit came back `400 The referenced transaction has expired or is no
+longer valid` (or `409 Aborted` once contention was exhausted). That error
+escaped the consumer's `except` block as a 500, with the caught
+`SummaryOutputUnavailable` as its context — which is what Error Reporting
+grouped.
+
+`record_empty_failure` now runs through `run_transactional`, which restarts an
+expired transaction with a fresh id. A strike that still cannot land returns
+`EmptyFailureOutcome.UNAVAILABLE` instead of raising; both callers (the consumer
+and the legacy `run`) re-arm the row for a bounded retry, so the debt and wake
+stay intact and the next attempt records the strike. A permanent rejection
+(permission denied, document size) still raises. An empty structured is still
+never a delivered summary; no prompt, routing, metering or from-segments change.

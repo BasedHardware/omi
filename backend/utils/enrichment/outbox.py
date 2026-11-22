@@ -849,6 +849,13 @@ def run(document_id: str, task_token: str, process: Callable[[str, str, str], An
                     process_context.update(
                         defer_reason=EMPTY_OUTPUT_DEFER_REASON, defer_until=current + LIVE_DEFER_SECONDS
                     )
+                elif empty_outcome is EmptyFailureOutcome.UNAVAILABLE:
+                    # The strike write could not land, so nothing was recorded. Re-arm
+                    # the row for a bounded retry instead of failing the request.
+                    logger.warning('event=sync_reprocess outcome=deferred reason=%s', EMPTY_OUTPUT_DEFER_REASON)
+                    process_context.update(
+                        defer_reason=EMPTY_OUTPUT_DEFER_REASON, defer_until=current + LIVE_DEFER_SECONDS
+                    )
                 elif empty_outcome is EmptyFailureOutcome.OWNER_MISMATCH:
                     process_context.update(
                         defer_reason='summary_owner_changed', defer_until=current + LIVE_DEFER_SECONDS
