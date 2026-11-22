@@ -1854,7 +1854,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
           if (accountPurge &&
               LiveWalReceipt.isManagedBasename(path.basename(fullPath)) &&
               !_confirmedDurableWalKeys.contains(_durableKey(wal))) {
-            if (!await LiveWalReceipt.matchesPendingPurge(file, wal) ||
+            if (!await WalFileManager.matchesPendingLiveWalPurge(file, wal) ||
                 !_isCurrent(generation) ||
                 !_isTrackedWal(wal)) {
               return false;

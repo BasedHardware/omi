@@ -73,6 +73,13 @@ class WalFileManager {
             owners: owners, reservedNames: reservedNames, mayDelete: mayDelete);
       });
 
+  static Future<bool> matchesPendingLiveWalPurge(File audio, Wal wal) => _saveLock.withResource(() async {
+        final primary = _walFile;
+        final backup = _walBackupFile;
+        if (primary == null || backup == null) return false;
+        return LiveWalReceipt.matchesPendingPurge(audio, wal, primary, backup);
+      });
+
   static Future<List<Wal>> _loadWals() async {
     final indexed = await _loadIndexedWals();
     return MobileBatchBuffer.recover(_walFile!.parent, indexed);
@@ -166,7 +173,7 @@ class WalFileManager {
         if (rename != null) {
           await rename(file);
         } else {
-          await file.rename('${file.path}.corrupt-${DateTime.now().microsecondsSinceEpoch}');
+          await file.rename('${walIndexQuarantinePrefix(file.path)}${DateTime.now().microsecondsSinceEpoch}');
         }
       }
       await BootJournal.instance.record('quarantine:${file.uri.pathSegments.last}', reason);

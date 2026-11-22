@@ -589,6 +589,8 @@ void main() {
       'outside path',
       'symlink outside documents',
       'backup reference',
+      'quarantined index reference',
+      'unreadable quarantined index',
     ]) {
       test('account purge keeps pending audio with $scenario (cold start $coldStart)', () async {
         final existing = coldStart ? null : await ledger(realCensus: true);
@@ -622,9 +624,23 @@ void main() {
             'wals': [row(basename, 'owner-c')],
           });
         }
+        final quarantined = scenario == 'quarantined index reference' || scenario == 'unreadable quarantined index';
+        if (quarantined) {
+          if (scenario == 'quarantined index reference') {
+            await json('wals.json', {
+              'wals': [row(basename, 'owner-c')..['timer_start'] = 'invalid'],
+            });
+          } else {
+            await File('${dir.path}/wals.json').writeAsString('{');
+          }
+          if (!coldStart) await WalFileManager.loadIndexedWals();
+        }
 
         await purgeOwnerA(coldStart: coldStart, existing: existing, rejectForeignReplay: scenario == 'foreign owner');
 
+        if (quarantined) {
+          expect(dir.listSync().where((file) => file.path.startsWith('${dir.path}/wals.json.corrupt-')), isNotEmpty);
+        }
         expect(await retained.readAsBytes(), orderedEquals(bytes));
         expect(await receipt.exists(), isTrue);
       });

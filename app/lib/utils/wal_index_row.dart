@@ -2,6 +2,8 @@
 // decoder. Retiring a receipt must not rely on a row the loader would reject.
 import 'package:omi/services/wals/wal.dart';
 
+String walIndexQuarantinePrefix(String indexPath) => '$indexPath.corrupt-';
+
 Wal decodeWalIndexRow(Object? entry) {
   if (entry is! Map<String, dynamic>) throw const FormatException();
   // Old indices can omit new optional fields, but a WAL without its

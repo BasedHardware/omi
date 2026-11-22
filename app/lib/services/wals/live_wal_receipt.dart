@@ -195,8 +195,8 @@ class LiveWalReceipt {
 
   /// A failed index commit can leave a disk WAL in memory. A memory row does
   /// not waive the receipt proof needed to purge that still-unindexed file.
-  static Future<bool> matchesPendingPurge(File audio, Wal wal) async {
-    if (!purgeEnabled) return false;
+  static Future<bool> matchesPendingPurge(File audio, Wal wal, File primary, File backup) async {
+    if (!purgeEnabled || audio.parent.path != primary.parent.path) return false;
     final name = path.basename(audio.path);
     final expected = _binding(name, wal.toJson());
     if (expected == null) return false;
@@ -207,22 +207,36 @@ class LiveWalReceipt {
     final record = await _read(pending, name);
     return record != null &&
         record.binding == expected &&
+        !(await _indexedBasenames(primary, backup)).contains(name.toLowerCase()) &&
         await _matchesPurgeAudio(audio, record.length, record.binding.digest);
   }
 
-  static Future<Set<String>> _indexedBasenames(List<File> indexes) async {
+  static Future<Set<String>> _indexedBasenames(File primary, File backup) async {
     final names = <String>{};
+    final indexes = [primary, backup];
+    // Index repair can discard a malformed row while retaining its file
+    // reference in the quarantine copy. Missing canonical files alone do
+    // not establish that the basename was unreferenced.
+    final quarantinePrefixes = indexes.map((index) => walIndexQuarantinePrefix(index.path)).toList();
+    await for (final entry in primary.parent.list(followLinks: false)) {
+      if (quarantinePrefixes.any((prefix) => entry.path.startsWith(prefix))) {
+        if (entry is! File) throw const FileSystemException('invalid quarantined WAL index path');
+        indexes.add(entry);
+      }
+    }
     for (final index in indexes) {
       final type = await FileSystemEntity.type(index.path, followLinks: false);
-      if (type == FileSystemEntityType.notFound) continue;
+      if (type == FileSystemEntityType.notFound && (index == primary || index == backup)) continue;
       if (type != FileSystemEntityType.file) throw const FileSystemException('invalid WAL index path');
       final content = await index.readAsString();
       names.addAll(await offUiIsolate(() {
         final rows = (jsonDecode(content) as Map)['wals'] as List;
-        return [
-          for (final row in rows)
-            if (row case {'file_path': final String filePath}) path.basename(filePath).toLowerCase(),
-        ];
+        final basenames = <String>[];
+        for (final row in rows) {
+          final filePath = (row as Map)['file_path'];
+          if (filePath != null) basenames.add(path.basename(filePath as String).toLowerCase());
+        }
+        return basenames;
       }, size: content.length, threshold: 0, debugName: 'live_wal_purge_index'));
     }
     return names;
@@ -254,7 +268,7 @@ class LiveWalReceipt {
           continue;
         }
         if (record == null || !owners.contains(record.binding.owner) || !mayDelete(name)) continue;
-        indexedNames ??= await _indexedBasenames([primary, backup]);
+        indexedNames ??= await _indexedBasenames(primary, backup);
         if (indexedNames.contains(name.toLowerCase())) continue;
         try {
           final audio = File(path.join(documents.path, name));
