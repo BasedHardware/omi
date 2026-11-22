@@ -15498,4 +15498,10 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get stillWorkingOnIt => '아직 처리 중입니다.';
+
+  @override
+  String get firmwareUpdateFirmwareTooOld => '기기의 펌웨어가 너무 오래되어 이 업데이트를 설치할 수 없습니다. 기기 업데이트에 도움이 필요하면 지원팀에 문의하세요.';
+
+  @override
+  String get firmwareUpdateAppRequired => '이 펌웨어 업데이트에는 더 최신 버전의 Omi 앱이 필요합니다. 앱 스토어에서 앱을 업데이트한 후 다시 확인하세요.';
 }

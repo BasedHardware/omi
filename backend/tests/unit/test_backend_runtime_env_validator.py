@@ -268,6 +268,7 @@ def with_memory_env(payload: str) -> str:
         {"name": "PLAYBACK_ON_DEMAND_ENABLED", "value": "true"},
         {"name": "REPEAT_WORK_LLM_VERSION", "value": "2026-10-16-v1"},
         {"name": "SYNC_POLL_BACKOFF_ENABLED", "value": "false"},
+        {"name": "SYNC_POLL_BACKOFF_PERCENT", "value": "0"},
         {"name": "SYNC_RECORD_COVERAGE_WAIT_MEMO", "value": "true"},
         {"name": "SYNC_RECORD_WAIT_MEMO_FIRST", "value": "true"},
         {"name": "SYNC_RECORD_DECODE_FAILURE_MEMO", "value": "true"},

@@ -4735,5 +4735,7 @@
     "conversationLiveNoEdits": "Tunggu sehingga tamat untuk mengubahnya.",
     "finishedSummaryReady": "Ringkasan sedia",
     "writingSummaryStatus": "Menulis ringkasan…",
-    "stillWorkingOnIt": "Masih memprosesnya."
+    "stillWorkingOnIt": "Masih memprosesnya.",
+    "firmwareUpdateFirmwareTooOld": "Perisian tegar peranti anda terlalu lama untuk kemas kini ini. Hubungi sokongan untuk mendapatkan bantuan mengemas kini peranti anda.",
+    "firmwareUpdateAppRequired": "Kemas kini perisian tegar ini memerlukan versi apl Omi yang lebih baharu. Kemas kini apl daripada gedung aplikasi anda, kemudian semak semula."
 }
