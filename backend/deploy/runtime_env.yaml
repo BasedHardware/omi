@@ -136,7 +136,6 @@ environments:
           AUDIO_ARCHIVE_STOP_PCM_PERCENT: {category: rollout, value: '0'}
           AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT: {category: rollout, value: '0'}
           BUCKET_AUDIO_DERIVED: {value: '', category: rollout}
-          LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION: {value: 'false', category: rollout}
           LIVE_CAPTURE_WINDOW_MERGE_UNION: {category: rollout, value: 'false'}
           LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS: {category: rollout, value: 'false'}
           SONIOX_CAPTURE_AXIS_DIAGNOSTICS: {category: rollout, value: 'false'}
@@ -584,7 +583,6 @@ environments:
           AUDIO_ARCHIVE_STOP_PCM_PERCENT: {category: rollout, value: '0'}
           AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT: {category: rollout, value: '0'}
           BUCKET_AUDIO_DERIVED: {value: '', category: rollout}
-          LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION: {value: 'false', category: rollout}
           LIVE_CAPTURE_WINDOW_MERGE_UNION: {category: rollout, value: 'false'}
           LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS: {category: rollout, value: 'false'}
           SONIOX_CAPTURE_AXIS_DIAGNOSTICS: {category: rollout, value: 'false'}
@@ -1187,7 +1185,6 @@ environments:
             OMI_VERTEX_RESERVATION_PROJECT:
               value: based-hardware-dev
               category: runtime_identity
-            LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION: {value: 'false', category: rollout}
             LIVE_CAPTURE_WINDOW_MERGE_UNION: {value: 'false', category: rollout}
             LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS: {value: 'false', category: rollout}
             SONIOX_CAPTURE_AXIS_DIAGNOSTICS: {value: 'false', category: rollout}
@@ -1605,7 +1602,6 @@ environments:
               value: backend-sync
             TRANSLATION_CACHE_TTL: {value: '86400', category: rollout}
             TRANSLATION_NEGATIVE_CACHE_TTL: {value: '21600', category: rollout}
-            LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION: {value: 'false', category: rollout}
             LIVE_CAPTURE_WINDOW_MERGE_UNION: {value: 'false', category: rollout}
             LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS: {value: 'false', category: rollout}
             SONIOX_CAPTURE_AXIS_DIAGNOSTICS: {value: 'false', category: rollout}
@@ -2030,7 +2026,6 @@ environments:
               value: backend-sync-backfill
             TRANSLATION_CACHE_TTL: {value: '86400', category: rollout}
             TRANSLATION_NEGATIVE_CACHE_TTL: {value: '21600', category: rollout}
-            LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION: {value: 'false', category: rollout}
             LIVE_CAPTURE_WINDOW_MERGE_UNION: {value: 'false', category: rollout}
             LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS: {value: 'false', category: rollout}
             SONIOX_CAPTURE_AXIS_DIAGNOSTICS: {value: 'false', category: rollout}
@@ -2432,7 +2427,6 @@ environments:
               value: backend-integration
             TRANSLATION_CACHE_TTL: {value: '86400', category: rollout}
             TRANSLATION_NEGATIVE_CACHE_TTL: {value: '21600', category: rollout}
-            LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION: {value: 'false', category: rollout}
             LIVE_CAPTURE_WINDOW_MERGE_UNION: {value: 'false', category: rollout}
             LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS: {value: 'false', category: rollout}
             SONIOX_CAPTURE_AXIS_DIAGNOSTICS: {value: 'false', category: rollout}
@@ -3078,7 +3072,6 @@ environments:
           AUDIO_ARCHIVE_STOP_PCM_PERCENT: {category: rollout, value: '0'}
           AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT: {category: rollout, value: '0'}
           BUCKET_AUDIO_DERIVED: {value: '', category: rollout}
-          LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION: {value: 'false', category: rollout}
           LIVE_CAPTURE_WINDOW_MERGE_UNION: {category: rollout, value: 'true'}
           LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS: {category: rollout, value: 'true'}
           SONIOX_CAPTURE_AXIS_DIAGNOSTICS: {category: rollout, value: 'true'}
@@ -3651,7 +3644,6 @@ environments:
           AUDIO_ARCHIVE_STOP_PCM_PERCENT: {category: rollout, value: '0'}
           AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT: {category: rollout, value: '0'}
           BUCKET_AUDIO_DERIVED: {value: '', category: rollout}
-          LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION: {value: 'false', category: rollout}
           LIVE_CAPTURE_WINDOW_MERGE_UNION: {category: rollout, value: 'true'}
           LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS: {category: rollout, value: 'true'}
           SONIOX_CAPTURE_AXIS_DIAGNOSTICS: {category: rollout, value: 'true'}
@@ -4294,7 +4286,6 @@ environments:
             OMI_VERTEX_RESERVATION_PROJECT:
               value: based-hardware
               category: runtime_identity
-            LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION: {value: 'false', category: rollout}
             LIVE_CAPTURE_WINDOW_MERGE_UNION: {value: 'false', category: rollout}
             LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS: {value: 'false', category: rollout}
             SONIOX_CAPTURE_AXIS_DIAGNOSTICS: {value: 'false', category: rollout}
@@ -4858,7 +4849,6 @@ environments:
               value: backend-sync
             TRANSLATION_CACHE_TTL: {value: '86400', category: rollout}
             TRANSLATION_NEGATIVE_CACHE_TTL: {value: '21600', category: rollout}
-            LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION: {value: 'false', category: rollout}
             LIVE_CAPTURE_WINDOW_MERGE_UNION: {value: 'false', category: rollout}
             LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS: {value: 'false', category: rollout}
             SONIOX_CAPTURE_AXIS_DIAGNOSTICS: {value: 'false', category: rollout}
@@ -5439,7 +5429,6 @@ environments:
               value: backend-sync-backfill
             TRANSLATION_CACHE_TTL: {value: '86400', category: rollout}
             TRANSLATION_NEGATIVE_CACHE_TTL: {value: '21600', category: rollout}
-            LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION: {value: 'false', category: rollout}
             LIVE_CAPTURE_WINDOW_MERGE_UNION: {value: 'false', category: rollout}
             LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS: {value: 'false', category: rollout}
             SONIOX_CAPTURE_AXIS_DIAGNOSTICS: {value: 'false', category: rollout}
@@ -5973,7 +5962,6 @@ environments:
               value: backend-integration
             TRANSLATION_CACHE_TTL: {value: '86400', category: rollout}
             TRANSLATION_NEGATIVE_CACHE_TTL: {value: '21600', category: rollout}
-            LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION: {value: 'false', category: rollout}
             LIVE_CAPTURE_WINDOW_MERGE_UNION: {value: 'false', category: rollout}
             LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS: {value: 'false', category: rollout}
             SONIOX_CAPTURE_AXIS_DIAGNOSTICS: {value: 'false', category: rollout}
@@ -6464,7 +6452,6 @@ environments:
               value: backend-projection-pump
             TRANSLATION_CACHE_TTL: {value: '86400', category: rollout}
             TRANSLATION_NEGATIVE_CACHE_TTL: {value: '21600', category: rollout}
-            LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION: {value: 'false', category: rollout}
             LIVE_CAPTURE_WINDOW_MERGE_UNION: {value: 'false', category: rollout}
             LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS: {value: 'false', category: rollout}
             SONIOX_CAPTURE_AXIS_DIAGNOSTICS: {value: 'false', category: rollout}

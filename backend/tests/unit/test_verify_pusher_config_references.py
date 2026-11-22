@@ -295,7 +295,6 @@ def test_rendered_dev_pusher_direct_bindings_match_source_contract(preflight: Si
         "HOSTED_PARAKEET_API_URL": "http://parakeet.omiapi.com",
         "HOSTED_SPEAKER_EMBEDDING_API_URL": "http://diarizer.omiapi.com:80",
         "LLM_GATEWAY_ACCOUNTING_ENABLED": "true",
-        "LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION": "false",
         "LIVE_CAPTURE_WINDOW_MERGE_UNION": "false",
         "LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS": "false",
         "SONIOX_CAPTURE_AXIS_DIAGNOSTICS": "false",
