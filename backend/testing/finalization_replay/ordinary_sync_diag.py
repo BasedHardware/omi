@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from contextlib import ExitStack, redirect_stderr, redirect_stdout
 from hashlib import sha256
+import importlib
 import importlib.util
 import json
 import logging
@@ -37,8 +38,10 @@ def _enable_worker_backend(worker_backend):
     backend = str(Path(worker_backend).resolve(strict=True))
     if backend not in sys.path:
         sys.path.insert(0, backend)
-    for name in ('routers', 'utils', 'database', 'models'):
+    for name in ('config', 'routers', 'utils', 'database', 'models'):
         package = sys.modules.get(name)
+        if package is None:
+            package = importlib.import_module(name)
         target = str(Path(backend) / name)
         if (
             package is not None
@@ -50,9 +53,13 @@ def _enable_worker_backend(worker_backend):
 
 
 def _python_sync(state):
-    from utils.enrichment.callback import enrich_conversation
+    try:
+        from utils.enrichment.callback import enrich_conversation
 
-    result = enrich_conversation(state.uid, state.cid, state.case['document'].get('language') or 'en')
+        result = enrich_conversation(state.uid, state.cid, state.case['document'].get('language') or 'en')
+    except ModuleNotFoundError as error:
+        state.diag_missing_module = error.name
+        raise
     if result is None:
         return 'deferred'
     return 'discarded' if result.discarded else result.status.value
@@ -97,7 +104,8 @@ def _go_sync(state, binary, database, key, url):
     result = re.search(r'^ORDINARY_SYNC_RESULT=(\w+)$', process.stdout, re.MULTILINE)
     cause = re.search(r'^ORDINARY_SYNC_CAUSE=(\w+)$', process.stdout, re.MULTILINE)
     if process.returncode or result is None:
-        raise RuntimeError('workerd worker replay failed')
+        details = '\n'.join((process.stdout + process.stderr).splitlines()[-12:])[-2000:]
+        raise RuntimeError(f'workerd worker replay failed (exit {process.returncode}): {details}')
     row = job.get().to_dict() or {}
     fanout = row.get('fanout_key', '')
     state.admitted = {'job_id': job.id, 'fanout_key': fanout, 'own_key': False}
@@ -204,6 +212,8 @@ def _run_side(cases, side, binary, database, key, worker_backend):
                     finalize.attach_synced_at_intake(state.uid, state.cid, state.conversation.get().to_dict())
                     with ExitStack() as leaves:
                         _observe(state, lambda target: _observe_sync(target, invoke, leaves, url), out, side)
+                    if getattr(state, 'diag_missing_module', None):
+                        out['errors'][side] = f'ModuleNotFoundError: {state.diag_missing_module}'
                     if server.errors:
                         out['errors'][side] = server.errors[0]
     return outputs
@@ -230,7 +240,8 @@ def _paired(payload, worker_binary, worker_backend):
             timeout=240,
         )
         if result.returncode:
-            raise RuntimeError(f'{side} replay child failed')
+            detail = result.stderr.decode(errors='replace')[-2000:]
+            raise RuntimeError(f'{side} replay child failed (exit {result.returncode}): {detail}')
         sides.append(json.loads(result.stdout))
     return [{**python, **go, 'errors': {**python['errors'], **go['errors']}} for python, go in zip(*sides, strict=True)]
 
@@ -287,4 +298,4 @@ if __name__ == '__main__':
     try:
         main()
     except Exception as error:
-        sys.exit(f'ordinary-sync replay driver failed: {type(error).__name__}')
+        sys.exit(f'ordinary-sync replay driver failed: {type(error).__name__}: {error}')
