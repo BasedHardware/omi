@@ -843,18 +843,10 @@ def commit_projection(
                     raise Conflict('remove_not_backfilled')
             from database import memories
 
-            tasks = user.collection('action_items')
             without_tasks = {
                 cid
                 for cid in remove
-                if next(
-                    tasks.where(filter=FieldFilter('conversation_id', '==', cid))
-                    .select(('conversation_id',))
-                    .limit(1)
-                    .stream(transaction=tx),
-                    None,
-                )
-                is None
+                if not merge_donors_have_tasks(uid, [cid], firestore_client=client, transaction=tx)
             }
             if without_tasks:
                 deleting = without_tasks - memories.linked_conversation_ids(
