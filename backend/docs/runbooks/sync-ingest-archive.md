@@ -27,12 +27,11 @@ which ramp against their own percent (`AUDIO_ARCHIVE_STOP_PCM_PERCENT`,
 | `AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED` + `AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT` (default off/0) | Route merged/playback caches, sync renditions and new intake staging to `BUCKET_AUDIO_DERIVED`. Canonical raw stays multi-region. Ramps against its own percent (not `AUDIO_ARCHIVE_PERCENT`, which COALESCE pins at 100, or the enable flag would be an instant 100% cutover). |
 | `AUDIO_ARCHIVE_REGIONAL_CHUNKS_PERCENT` (default 0; pusher only; also needs `AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED`) | Route new pusher PCM chunk batches (`chunks/…batch.*`) to `BUCKET_AUDIO_DERIVED`. These are renditions of the canonical raw-live packs, which stay multi-region. Readers list and resolve both buckets; the merge copies inside the chunk's own bucket, deletes sweep both, and the v2 collision check covers both. Before admitting anyone: the derived bucket has no lifecycle `Delete` rule and has soft delete, and the batch worker has `audioDerivedBucket` set with read IAM on that bucket. Otherwise retained-audio references to it are refused. Roll back the percent to 0 and keep `BUCKET_AUDIO_DERIVED` configured. |
 | COALESCE (always on; `AUDIO_ARCHIVE_COALESCE_ENABLED` retired 2026-11-09) | Share concurrent identical file rebuild results, including failures; released admission permits retry. Existing fingerprint-named Cloud Tasks and distributed conversation leases still cover cross-instance rebuilds. |
-| `AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED` | Route admitted merge tasks to `AUDIO_MERGE_WORKER_URL` (full `/v2/audio-merge-jobs/run` URL). Non-admitted tasks retain `AUDIO_MERGE_HANDLER_URL`. |
 
 Stored-format decode support is permanent, with raw playback gated by READ.
 After phase C, rollback STOP_PCM first and retain READ for owners with raw-only
 historical audio until PCM has been regenerated and verified. Never disable
-READ for that cohort prematurely. Regional rendition reads survive write rollback. Keep destination bucket/worker URL configuration while
+READ for that cohort prematurely. Regional rendition reads survive write rollback. Keep destination bucket configuration while
 old objects/tasks exist. Stage C cannot remove already-written PCM and does not
 assume an hour of volatile raw is durable. Stage C queues supervised 60-second part commits within each hour without blocking
 the receive/STT loop. Pusher retires PCM only if the commit finishes before its
@@ -79,15 +78,6 @@ can regenerate it; do not add a deletion TTL to that prefix in this trial.
 Do not change canonical lifecycle/retention policy. Existing legacy staging's
 seven-day soft-delete residue cannot be purged early; deletion verification must
 report it separately rather than claiming physical erasure.
-
-Merge and STT already have distinct Cloud Tasks job classes (`audio-merge`,
-`sync-jobs`) and distributed job leases. An independently sized merge service
-may reuse the same GitHub-built immutable backend image and customer-data
-identity, with authenticated Cloud Run ingress, the merge queue's existing
-invoker SA and its endpoint-specific OIDC audience. Configure
-`AUDIO_MERGE_WORKER_URL` on enqueue and consumer services, then test a single
-named task before the cohort ramp. Do not enable a worker without runtime-image,
-identity, index-readiness and route qualification.
 
 First deploy this SHA at the memory limit declared for `backend-sync` in
 `backend/deploy/ops/prod.yaml` through GitHub Actions. For a
