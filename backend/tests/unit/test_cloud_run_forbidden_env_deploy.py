@@ -12,6 +12,14 @@ import yaml
 
 ROOT = Path(__file__).resolve().parents[3]
 RENDER = runpy.run_path(str(ROOT / 'backend/scripts/render_backend_runtime_env.py'))
+RETIRED_DEMAND_ENV = {
+    'DEMAND_PROCESSING_ENABLED',
+    'DEMAND_PROCESSING_LAZY_ENABLED',
+    'DEMAND_PROCESSING_PERCENT',
+    'DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED',
+    'DEMAND_PROCESSING_TOOL_ENABLED',
+    'DEMAND_PROCESSING_UID_ALLOWLIST',
+}
 
 
 def _action(name):
@@ -39,6 +47,12 @@ def _outputs(raw):
 def test_all_deploy_paths_remove_manifest_forbidden_keys(stage, monkeypatch, capsys, tmp_path):
     manifest = yaml.load((ROOT / 'backend/deploy/runtime_env.yaml').read_text(), Loader=yaml.CSafeLoader)
     services = manifest['environments'][stage]['cloud_run']['services']
+    demand_services = ['backend', 'backend-sync', 'backend-sync-backfill', 'backend-integration']
+    if stage == 'prod':
+        demand_services.append('backend-projection-pump')
+    for name in demand_services:
+        assert RETIRED_DEMAND_ENV <= set(services[name]['forbidden_env'])
+        assert RETIRED_DEMAND_ENV.isdisjoint(services[name]['env'])
     # A new forbidden key must reach every path without another action edit.
     for service in services.values():
         service.setdefault('forbidden_env', []).append('FUTURE_RETIRED_KEY')
@@ -71,6 +85,14 @@ def test_all_deploy_paths_remove_manifest_forbidden_keys(stage, monkeypatch, cap
         assert set(services[name]['forbidden_env']) <= set(removals)
         assert set(RENDER['RETIRED_ENV_NAMES']) <= set(removals)
         assert ('HOSTED_PUSHER_API_URL' in removals) == (name != 'backend')
+    if stage == 'prod':
+        pump = next(s for s in _action('deploy-projection-pump') if s.get('id') == 'deploy-backend-projection-pump')
+        expression = '${{ steps.runtime-env.outputs.backend_projection_pump_remove_env_extra }}'
+        flags = pump['with']['flags']
+        assert expression in flags
+        assert RETIRED_DEMAND_ENV <= set(
+            _removals(flags.replace(expression, rendered['backend_projection_pump_remove_env_extra']))
+        )
     assert (
         worker['with']['forbidden_env_names']
         == '${{ steps.runtime-env.outputs.backend_sync_backfill_forbidden_env_names }}'
@@ -152,6 +174,19 @@ def test_all_deploy_paths_remove_manifest_forbidden_keys(stage, monkeypatch, cap
     assert set(forbidden.split(',')) | {'HOSTED_PUSHER_API_URL'} <= set(_removals(flags))
     # The input's empty default must also be deployable on its own.
     assert set(RENDER['RETIRED_ENV_NAMES']) <= set(_removals(deploy['with']['flags'].replace(expression, '')))
+
+
+@pytest.mark.parametrize('workflow', ['desktop_backend_auto_dev', 'desktop_backend_prod'])
+def test_desktop_backend_removes_retired_demand_env(workflow):
+    steps = yaml.safe_load((ROOT / f'.github/workflows/{workflow}.yml').read_text())['jobs']
+    deploy = next(
+        step
+        for job in steps.values()
+        for step in job.get('steps', [])
+        if step.get('uses', '').startswith('google-github-actions/deploy-cloudrun@')
+    )
+    assert RETIRED_DEMAND_ENV <= set(_removals(deploy['with']['flags']))
+    assert RETIRED_DEMAND_ENV.isdisjoint(line.split('=', 1)[0] for line in deploy['with']['env_vars'].splitlines())
 
 
 def _removals(flags):

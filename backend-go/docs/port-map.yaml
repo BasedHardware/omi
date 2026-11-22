@@ -70,7 +70,6 @@ finalization:
   - backend/utils/conversations/call_metadata.py
   - backend/utils/conversations/capture_group_meeting_context.py
   - backend/utils/conversations/capture_group_notes_refresh.py
-  - backend/utils/conversations/demand_processing.py
   - backend/utils/conversations/deterministic_minimum.py
   - backend/utils/conversations/duplicate_capture.py
   - backend/utils/conversations/duration.py

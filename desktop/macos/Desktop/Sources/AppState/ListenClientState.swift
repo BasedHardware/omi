@@ -5,8 +5,7 @@ import SwiftUI
 /// What the user can see of a live capture, reported to `/v4/listen` as
 /// `{"type":"client_state","foreground":bool,"transcript_visible":bool}`.
 ///
-/// The backend uses it to measure how much live time anyone actually watches in
-/// real time (backend routers/listen/realtime_demand.py). It never changes routing.
+/// The backend uses it for live visibility telemetry and STT routing.
 /// `foreground` is `NSApp.isActive`; `transcriptVisible` is "some live-transcript
 /// surface is on screen and the app is active". No transcript surface renders while
 /// the app is inactive (the floating bar shows none), so requiring both is exact.
@@ -27,13 +26,25 @@ final class ListenClientState: ObservableObject {
 
   private var foreground: Bool
   private var visibleSurfaces: Set<UUID> = []
-  private var observers: [NSObjectProtocol] = []
+  private var observers: [AnyCancellable] = []
 
-  init(foreground: Bool? = nil, observeApplication: Bool = true) {
+  init(
+    foreground: Bool? = nil, observeApplication: Bool = true,
+    notificationCenter: NotificationCenter = .default
+  ) {
     let initial = foreground ?? NSApplication.shared.isActive
     self.foreground = initial
     self.snapshot = Snapshot(foreground: initial, transcriptVisible: false)
     guard observeApplication else { return }
+    observers = [
+      (NSApplication.didBecomeActiveNotification, true),
+      (NSApplication.didResignActiveNotification, false),
+    ].map { name, isActive in
+      let observer = notificationCenter.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
+        MainActor.assumeIsolated { self?.setForeground(isActive) }
+      }
+      return AnyCancellable { notificationCenter.removeObserver(observer) }
+    }
   }
 
   func setForeground(_ value: Bool) {

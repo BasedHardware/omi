@@ -582,6 +582,12 @@ overlay:
     services:
       backend:
         forbidden_env:
+        - DEMAND_PROCESSING_ENABLED
+        - DEMAND_PROCESSING_LAZY_ENABLED
+        - DEMAND_PROCESSING_PERCENT
+        - DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED
+        - DEMAND_PROCESSING_TOOL_ENABLED
+        - DEMAND_PROCESSING_UID_ALLOWLIST
         # Cloud Run preserves omitted env entries. Remove the retired rollout keys.
         - BATCH_HELD_POLL_SKIP_ENABLED
         - BATCH_PROJECTION_FINISH_BACKOFF_ENABLED
@@ -1001,6 +1007,12 @@ overlay:
         flags:
           --timeout: 3600s
         forbidden_env:
+        - DEMAND_PROCESSING_ENABLED
+        - DEMAND_PROCESSING_LAZY_ENABLED
+        - DEMAND_PROCESSING_PERCENT
+        - DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED
+        - DEMAND_PROCESSING_TOOL_ENABLED
+        - DEMAND_PROCESSING_UID_ALLOWLIST
         # Cloud Run preserves omitted env entries. Remove the retired rollout keys.
         - BATCH_HELD_POLL_SKIP_ENABLED
         - BATCH_PROJECTION_FINISH_BACKOFF_ENABLED
@@ -1428,6 +1440,12 @@ overlay:
             secret: SONIOX_API_KEY
             version: latest
         forbidden_env:
+        - DEMAND_PROCESSING_ENABLED
+        - DEMAND_PROCESSING_LAZY_ENABLED
+        - DEMAND_PROCESSING_PERCENT
+        - DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED
+        - DEMAND_PROCESSING_TOOL_ENABLED
+        - DEMAND_PROCESSING_UID_ALLOWLIST
         # Cloud Run preserves omitted env entries. Remove the retired rollout keys.
         - BATCH_HELD_POLL_SKIP_ENABLED
         - BATCH_PROJECTION_FINISH_BACKOFF_ENABLED
@@ -1802,6 +1820,12 @@ overlay:
             secret: SONIOX_API_KEY
             version: latest
         forbidden_env:
+        - DEMAND_PROCESSING_ENABLED
+        - DEMAND_PROCESSING_LAZY_ENABLED
+        - DEMAND_PROCESSING_PERCENT
+        - DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED
+        - DEMAND_PROCESSING_TOOL_ENABLED
+        - DEMAND_PROCESSING_UID_ALLOWLIST
         # Cloud Run preserves omitted env entries. Remove the retired rollout keys.
         - BATCH_HELD_POLL_SKIP_ENABLED
         - BATCH_PROJECTION_FINISH_BACKOFF_ENABLED

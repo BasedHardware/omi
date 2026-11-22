@@ -1,3 +1,4 @@
+import AppKit
 import Combine
 import XCTest
 
@@ -19,13 +20,14 @@ final class ListenClientStateTests: XCTestCase {
   }
 
   func testDeactivatingTheAppHidesTheTranscriptAndReactivatingRestoresIt() {
-    let state = ListenClientState(foreground: true, observeApplication: false)
+    let center = NotificationCenter()
+    let state = ListenClientState(foreground: true, notificationCenter: center)
     state.setSurface(UUID(), visible: true)
 
-    state.setForeground(false)
+    center.post(name: NSApplication.didResignActiveNotification, object: nil)
     XCTAssertEqual(state.snapshot, .init(foreground: false, transcriptVisible: false))
 
-    state.setForeground(true)
+    center.post(name: NSApplication.didBecomeActiveNotification, object: nil)
     XCTAssertEqual(state.snapshot, .init(foreground: true, transcriptVisible: true))
   }
 
