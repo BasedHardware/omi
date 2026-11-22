@@ -2190,6 +2190,8 @@ overlay:
           # never on backend-integration (the selector is service-wide). Rollback: 'false'.
           # SCA-3318 (2026-11-22): back to dark. Four replicas could not carry the sweep (14k/h vs ~500/h)
           # and integration's sweep does the work, so the pump only added reads. Dark = no loops start.
+          # Rollback: set only this flag back to 'true'. Keep integration's sweep 'true' (a full revert
+          # would restore sweep-off on integration, the state that cut completions by ~14k/h).
           BATCH_PIPELINE_SERVING_ENABLED: {value: 'false', category: rollout}
           BATCH_PIPELINE_PROJECTION_PUMP_ENABLED: {value: 'false', category: rollout}
           # The pump's loop runs in 'pump' mode, which ignores this switch (projection_drain.py); pin the
