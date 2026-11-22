@@ -11,6 +11,7 @@ import 'package:omi/backend/schema/folder.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_meta.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:omi/pages/conversation_detail/share.dart';
+import 'package:omi/pages/conversation_detail/share_flow.dart';
 import 'package:omi/pages/conversation_detail/widgets.dart';
 import 'package:omi/pages/conversation_detail/widgets/calendar_event_sheets.dart';
 import 'package:omi/pages/conversation_detail/widgets/capture_recordings.dart';
@@ -18,9 +19,11 @@ import 'package:omi/pages/conversation_detail/widgets/conversation_detail_chip.d
 import 'package:omi/pages/conversation_detail/widgets/conversation_entity_chips.dart';
 import 'package:omi/pages/conversations/conversation_action_analytics.dart';
 import 'package:omi/pages/conversations/widgets/move_to_folder_sheet.dart';
+import 'package:omi/pages/held_audio/held_audio_views.dart';
 import 'package:omi/providers/conversations_v3_provider.dart';
 import 'package:omi/providers/folder_provider.dart';
 import 'package:omi/providers/transcription_pending_conversations.dart';
+import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/utils/conversations/capture_groups.dart';
 import 'package:omi/utils/conversations/conversation_title.dart';
 import 'package:omi/utils/folders/folder_icon_mapper.dart';
@@ -110,12 +113,14 @@ class ConversationDetailHeader extends StatelessWidget {
   Widget _titleRow(BuildContext context, ConversationDetailProvider provider, ServerConversation conversation) {
     final titleStyle = OmiType.title1.copyWith(height: 1.15, letterSpacing: -0.4);
     if (conversation.discarded) return Text(context.l10n.discardedConversation, style: titleStyle);
-    // Once the server says the audio is still waiting for a transcript, its "Couldn't transcribe"
-    // stand-in title would contradict the Summary tab, so the page shows the untitled fallback.
+    // Once the server says the audio is still waiting for a transcript (or the free allowance holds
+    // it), its "Couldn't transcribe" stand-in title would contradict the Summary tab, so the page
+    // shows the untitled fallback.
     return ValueListenableBuilder<Map<String, DateTime>>(
       valueListenable: TranscriptionPendingConversations.ids,
       builder: (context, _, __) {
-        final waiting = TranscriptionPendingConversations.replacesTitle(conversation);
+        final waiting = TranscriptionPendingConversations.replacesTitle(conversation) ||
+            heldByFreeAllowance(conversation, context.watch<UsageProvider?>());
         return ConversationTitleField(
           focusNode: provider.titleFocusNode,
           controller: provider.titleController,
@@ -123,8 +128,12 @@ class ConversationDetailHeader extends StatelessWidget {
           displayText: (stored) => waiting && stored.trim() == TranscriptionPendingConversations.serverHoldTitle
               ? ''
               : presentableConversationTitle(conversation, title: stored),
-          hintText: transcriptFallbackTitle(conversation) ??
-              recordingFallbackTitle(conversation, context.l10n, dates: OmiDateFormat.of(context)),
+          // A hint shows only while the field is empty, so a live conversation's empty field reads
+          // Listening even if the server named it during an edit that skipped the server title.
+          hintText: conversation.v3?.tileState == ConversationTileState.live
+              ? context.l10n.listening
+              : transcriptFallbackTitle(conversation) ??
+                  recordingFallbackTitle(conversation, context.l10n, dates: OmiDateFormat.of(context)),
         );
       },
     );
@@ -356,12 +365,43 @@ abstract final class ConversationVisibilitySheet {
   static void show(BuildContext context, ServerConversation conversation) {
     final provider = context.read<ConversationDetailProvider>();
 
+    Future<void> makePrivate() async {
+      final ok = await setConversationVisibility(conversation.id, visibility: ConversationVisibility.private_.value);
+      if (ok) provider.updateVisibilityLocally(ConversationVisibility.private_);
+      if (!ok && context.mounted) showShareFlowEnd(context, ShareFlowEnd.stillPublic, makePrivate: makePrivate);
+    }
+
     Future<void> choose(BuildContext sheetContext, ConversationVisibility target) async {
       if (conversation.visibility == target) {
         Navigator.pop(sheetContext);
         return;
       }
       final previousVisibility = conversation.visibility;
+      if (target == ConversationVisibility.shared) {
+        // Making it shared is Share: the same consent step, sheet and revert (ux-contract §17.7).
+        Navigator.pop(sheetContext); // omi-ux-allow: pop-before-await -- the next step is the share consent dialog
+        final end = await runConversationShare(
+          wasPrivate: true,
+          confirm: () => showOmiConfirm(
+            context,
+            title: context.l10n.shareConversationQuestion,
+            message: context.l10n.anyoneWithLinkCanView,
+            confirmLabel: context.l10n.share,
+          ),
+          setVisibility: (visibility) => setConversationVisibility(conversation.id, visibility: visibility.value),
+          onVisibility: provider.updateVisibilityLocally,
+          openSheet: () async => (await shareConversationLink(conversation)).status,
+        );
+        if (end == ShareFlowEnd.shared) {
+          PlatformManager.instance.analytics.conversationVisibilityChanged(
+            conversationId: conversation.id,
+            fromVisibility: previousVisibility.value,
+            toVisibility: target.value,
+          );
+        }
+        if (context.mounted) showShareFlowEnd(context, end, makePrivate: makePrivate);
+        return;
+      }
       provider.updateVisibilityLocally(target);
       Navigator.pop(sheetContext);
       final success = await setConversationVisibility(conversation.id, visibility: target.value);
@@ -375,7 +415,6 @@ abstract final class ConversationVisibilitySheet {
         fromVisibility: previousVisibility.value,
         toVisibility: target.value,
       );
-      if (target == ConversationVisibility.shared && context.mounted) shareConversationLink(conversation);
     }
 
     showOmiSheet<void>(

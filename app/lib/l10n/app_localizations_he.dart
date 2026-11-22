@@ -15471,4 +15471,148 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get conversationRecentTranscript => 'תמלול אחרון';
+
+  @override
+  String get finishAlreadySaved => 'כבר נשמר. השיחה נמצאת במסך הבית.';
+
+  @override
+  String get finishAudioNotReceived => 'האודיו עדיין בדרך.';
+
+  @override
+  String get finishFailedOffline => 'הפעולה לא עברה. האודיו שלך בטוח.';
+
+  @override
+  String get finishFailed => 'הפעולה לא עברה. האודיו שלך בטוח.';
+
+  @override
+  String get micBlockedCannotRecord => 'יש לאפשר למיקרופון להקליט.';
+
+  @override
+  String get couldNotStartRecording => 'לא הצלחנו להתחיל את ההקלטה.';
+
+  @override
+  String get restorePurchasesFailed => 'לא הצלחנו לבדוק את המסלול שלך.';
+
+  @override
+  String get firmwareCheckFailed => 'לא הצלחנו לבדוק עדכונים.';
+
+  @override
+  String get conversationStillPublic => 'השיחה עדיין משותפת בקישור.';
+
+  @override
+  String get goalSaveFailed => 'לא הצלחנו לשמור את היעד שלך.';
+
+  @override
+  String get goalDeleteFailed => 'לא הצלחנו למחוק. היעד הוחזר.';
+
+  @override
+  String get goalsLoadFailed => 'לא הצלחנו לטעון את היעדים שלך.';
+
+  @override
+  String get missingTargetEndedRecording => 'ההקלטה הזו הסתיימה.';
+
+  @override
+  String get missingTargetMemory => 'הזיכרון הזה לא נמצא.';
+
+  @override
+  String get missingTargetTask => 'המשימה הזו לא נמצאה.';
+
+  @override
+  String get missingTargetConversation => 'לא הצלחנו לפתוח את השיחה הזו.';
+
+  @override
+  String get couldNotRefreshConversations => 'לא הצלחנו לרענן.';
+
+  @override
+  String get connectDeviceForOfflineSync => 'יש לחבר את ה-Omi כדי לסנכרן.';
+
+  @override
+  String get useDifferentAccountMessage => 'תיצא מהחשבון, והגדרות ה-Omi בטלפון הזה יאופסו.';
+
+  @override
+  String get rayBanMetaNotFoundAfterSetup => 'המשקפיים לא נמצאו. האם הן דלוקות?';
+
+  @override
+  String get couldNotMoveTask => 'לא הצלחנו להעביר את המשימה.';
+
+  @override
+  String lockedTasksKept(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'נמחקו. $count משימות נעולות נשמרו.',
+      one: 'נמחקו. משימה נעולה אחת נשמרה.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get settingNotSaved => 'לא הצלחנו לשמור את השינוי.';
+
+  @override
+  String get couldNotLoadNotificationSettings => 'לא הצלחנו לטעון את ההגדרות שלך.';
+
+  @override
+  String get waitForOmiToFinish => 'המתן עד ש-Omi יסיים.';
+
+  @override
+  String get voiceNoteTooShort => 'קצר מדי. החזק כדי להקליט.';
+
+  @override
+  String get submitAppMissingFields => 'הוסף שם, תיאור, תמונה, קטגוריה ויכולת כדי לשלוח.';
+
+  @override
+  String get appSetupNotFinished => 'ההגדרה עדיין לא הושלמה.';
+
+  @override
+  String get finishNothingKeptTitle => 'אין מה לשמור';
+
+  @override
+  String get submitAppFinishDetails => 'השלם את פרטי היכולת והתמחור למעלה כדי לשלוח.';
+
+  @override
+  String get finishNothingNew => 'עדיין אין משהו חדש.';
+
+  @override
+  String get takingLongerThanUsual => 'לוקח יותר זמן מהרגיל. השיחה תופיע במסך הבית.';
+
+  @override
+  String get couldNotCheckOnIt => 'לא הצלחנו לבדוק. נסה שוב.';
+
+  @override
+  String get upgradeToOpenThisOne => 'שדרג כדי לפתוח את השיחה הזו.';
+
+  @override
+  String get missingTargetConversationGone => 'השיחה נמחקה.';
+
+  @override
+  String get cantConnectRightNow => 'לא ניתן להתחבר כרגע.';
+
+  @override
+  String get loadOlderFailed => 'לא הצלחנו לטעון פריטים ישנים יותר. הקש לניסיון חוזר.';
+
+  @override
+  String listeningWithDuration(String duration) {
+    return 'מקשיב · $duration';
+  }
+
+  @override
+  String get conversationLiveNoEdits => 'המתן עד שההקלטה תסתיים כדי לשנות.';
+
+  @override
+  String get finishedSummaryReady => 'הסיכום מוכן';
+
+  @override
+  String get writingSummaryStatus => 'כותב סיכום…';
+
+  @override
+  String get stillWorkingOnIt => 'עדיין עובדים על זה.';
+
+  @override
+  String get firmwareUpdateFirmwareTooOld =>
+      'הקושחה של המכשיר שלך ישנה מדי לעדכון הזה. יש לפנות לתמיכה לקבלת עזרה בעדכון המכשיר.';
+
+  @override
+  String get firmwareUpdateAppRequired =>
+      'עדכון הקושחה הזה דורש גרסה חדשה יותר של אפליקציית Omi. יש לעדכן את האפליקציה מחנות האפליקציות שלך, ואז לבדוק שוב.';
 }

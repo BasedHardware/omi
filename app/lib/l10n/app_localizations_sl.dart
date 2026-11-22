@@ -15612,4 +15612,148 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get conversationRecentTranscript => 'Nedavni prepis';
+
+  @override
+  String get finishAlreadySaved => 'Že shranjeno. Najdete ga v zavihku Domov.';
+
+  @override
+  String get finishAudioNotReceived => 'Zvok je še na poti.';
+
+  @override
+  String get finishFailedOffline => 'Ni uspelo. Vaš zvok je varen.';
+
+  @override
+  String get finishFailed => 'Ni uspelo. Vaš zvok je varen.';
+
+  @override
+  String get micBlockedCannotRecord => 'Za snemanje dovolite dostop do mikrofona.';
+
+  @override
+  String get couldNotStartRecording => 'Snemanja ni bilo mogoče začeti.';
+
+  @override
+  String get restorePurchasesFailed => 'Vašega paketa ni bilo mogoče preveriti.';
+
+  @override
+  String get firmwareCheckFailed => 'Posodobitev ni bilo mogoče preveriti.';
+
+  @override
+  String get conversationStillPublic => 'Še vedno je v skupni rabi prek povezave.';
+
+  @override
+  String get goalSaveFailed => 'Cilja ni bilo mogoče shraniti.';
+
+  @override
+  String get goalDeleteFailed => 'Brisanje ni uspelo. Cilj je bil obnovljen.';
+
+  @override
+  String get goalsLoadFailed => 'Vaših ciljev ni bilo mogoče naložiti.';
+
+  @override
+  String get missingTargetEndedRecording => 'Snemanje se je že končalo.';
+
+  @override
+  String get missingTargetMemory => 'Tisti spomin ni več na voljo.';
+
+  @override
+  String get missingTargetTask => 'Tista naloga ni več na voljo.';
+
+  @override
+  String get missingTargetConversation => 'Tega pogovora ni bilo mogoče odpreti.';
+
+  @override
+  String get couldNotRefreshConversations => 'Ni bilo mogoče osvežiti.';
+
+  @override
+  String get connectDeviceForOfflineSync => 'Za sinhronizacijo povežite napravo Omi.';
+
+  @override
+  String get useDifferentAccountMessage => 'Odjavljeni boste, nastavitve Omi na tem telefonu pa bodo ponastavljene.';
+
+  @override
+  String get rayBanMetaNotFoundAfterSetup => 'Očal ni bilo mogoče najti. Ali so vklopljena?';
+
+  @override
+  String get couldNotMoveTask => 'Naloge ni bilo mogoče premakniti.';
+
+  @override
+  String lockedTasksKept(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Izbrisano. Zaklenjene naloge so ostale ohranjene: $count.',
+      one: 'Izbrisano. 1 zaklenjena naloga je ostala ohranjena.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get settingNotSaved => 'Te spremembe ni bilo mogoče shraniti.';
+
+  @override
+  String get couldNotLoadNotificationSettings => 'Vaših nastavitev ni bilo mogoče naložiti.';
+
+  @override
+  String get waitForOmiToFinish => 'Počakajte, da Omi konča.';
+
+  @override
+  String get voiceNoteTooShort => 'Prekratko. Pridržite za snemanje.';
+
+  @override
+  String get submitAppMissingFields => 'Za oddajo dodajte ime, opis, sliko, kategorijo in zmožnost.';
+
+  @override
+  String get appSetupNotFinished => 'Nastavitev še ni končana.';
+
+  @override
+  String get finishNothingKeptTitle => 'Nič za ohraniti';
+
+  @override
+  String get submitAppFinishDetails => 'Za oddajo dopolnite zgornje podatke o zmožnosti in cenah.';
+
+  @override
+  String get finishNothingNew => 'Za zdaj nič novega.';
+
+  @override
+  String get takingLongerThanUsual => 'Traja dlje kot običajno. Prikazal se bo v zavihku Domov.';
+
+  @override
+  String get couldNotCheckOnIt => 'Ni bilo mogoče preveriti. Poskusite znova.';
+
+  @override
+  String get upgradeToOpenThisOne => 'Za odpiranje tega pogovora nadgradite svoj paket.';
+
+  @override
+  String get missingTargetConversationGone => 'Ta pogovor je bil izbrisan.';
+
+  @override
+  String get cantConnectRightNow => 'Trenutno ni mogoče vzpostaviti povezave.';
+
+  @override
+  String get loadOlderFailed => 'Starejših elementov ni bilo mogoče naložiti. Tapnite za poskus znova.';
+
+  @override
+  String listeningWithDuration(String duration) {
+    return 'Poslušanje · $duration';
+  }
+
+  @override
+  String get conversationLiveNoEdits => 'Počakajte, da se konča, nato ga spremenite.';
+
+  @override
+  String get finishedSummaryReady => 'Povzetek je pripravljen';
+
+  @override
+  String get writingSummaryStatus => 'Povzetek se zapisuje…';
+
+  @override
+  String get stillWorkingOnIt => 'Še vedno poteka obdelava.';
+
+  @override
+  String get firmwareUpdateFirmwareTooOld =>
+      'Vdelana programska oprema vaše naprave je prestara za to posodobitev. Za pomoč pri posodobitvi naprave se obrnite na podporo.';
+
+  @override
+  String get firmwareUpdateAppRequired =>
+      'Ta posodobitev vdelane programske opreme zahteva novejšo aplikacijo Omi. Posodobite aplikacijo v trgovini z aplikacijami in nato znova preverite.';
 }

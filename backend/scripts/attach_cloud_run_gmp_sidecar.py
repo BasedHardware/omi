@@ -59,7 +59,9 @@ CONFIG_ENV_COMMAND = (
     'printf \'%s\' "${OMI_GMP_RUN_MONITORING_CONFIG:?RunMonitoring config missing}" '
     '> /etc/rungmp/config.yaml && exec /run-gmp-entrypoint'
 )
-SYNC_SERVICES = frozenset({'backend-sync', 'backend-sync-backfill', 'backend-integration'})
+# The SCA-3120 projection pump scrapes the sync keep-list plus its own gauges, so it
+# takes the sync collector limits rather than the 1-CPU default.
+SYNC_SERVICES = frozenset({'backend-sync', 'backend-sync-backfill', 'backend-integration', 'backend-projection-pump'})
 # Dev services.replace --dry-run accepts app=2 + collector=0.08 (total=2.08),
 # gen2 and cpu-throttling=false. 128Mi is the minimum accepted memory limit.
 SYNC_COLLECTOR_LIMITS = {'cpu': '0.08', 'memory': '128Mi'}

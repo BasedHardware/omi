@@ -229,20 +229,28 @@ class AuthenticationProvider extends BaseProvider {
     setLoadingState(false);
   }
 
+  /// Google's own account sheet (true) or the web flow. The native sheet answers null when the
+  /// reader closed it.
+  @visibleForTesting
+  bool get googleUsesNativeSheet => PlatformService.isMobile && !Env.useWebAuth;
+
+  /// Asks Google (or the web flow) for a credential. Tests stand in for the platform here.
+  @visibleForTesting
+  Future<UserCredential?> requestGoogleCredential() => googleUsesNativeSheet
+      ? AuthService.instance.signInWithGoogleMobile()
+      : AuthService.instance.authenticateWithProvider('google');
+
   Future<void> onGoogleSignIn(Function() onSignIn) async {
-    final useWebAuth = Env.useWebAuth;
     if (!loading) {
       setLoadingState(true);
       PlatformManager.instance.analytics.signInStarted('google');
       try {
-        UserCredential? credential;
-        if (PlatformService.isMobile && !useWebAuth) {
-          credential = await AuthService.instance.signInWithGoogleMobile();
-        } else {
-          credential = await AuthService.instance.authenticateWithProvider('google');
-        }
+        final credential = await requestGoogleCredential();
         if (credential != null && _hasFirebaseUser) {
           await _signIn(onSignIn, credential: credential, authProvider: 'google');
+        } else if (credential == null && googleUsesNativeSheet) {
+          // The reader closed Google's sheet: nothing to say, the same as cancelling Apple (D2).
+          PlatformManager.instance.analytics.signInFailed('google', cancelled: true);
         } else {
           PlatformManager.instance.analytics.signInFailed('google', cancelled: true);
           AppSnackbar.showSnackbarError(
@@ -253,6 +261,10 @@ class AuthenticationProvider extends BaseProvider {
       } catch (e) {
         Logger.debug('OAuth Google sign in error: $e');
         PlatformManager.instance.analytics.signInFailed('google', error: e);
+        if (isSignInCancellation(e)) {
+          setLoadingState(false);
+          return;
+        }
         AppSnackbar.showSnackbarError(
           globalNavigatorKey.currentContext?.l10n.authenticationFailed ?? 'Authentication failed. Please try again.',
         );

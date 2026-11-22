@@ -38,7 +38,18 @@ def _construct_unique_mapping(loader, node, deep=False):
 _UniqueKeyLoader.add_constructor(yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG, _construct_unique_mapping)
 
 ENVIRONMENTS = ('dev', 'prod')
-_CLOUD_RUN_SERVICE_ORDER = ('backend', 'backend-sync', 'backend-sync-backfill', 'backend-integration')
+_CLOUD_RUN_SERVICE_ORDER = (
+    'backend',
+    'backend-sync',
+    'backend-sync-backfill',
+    'backend-integration',
+    'backend-projection-pump',
+)
+# A service may declare ``derive_from: <service>`` to start from that service's fully
+# composed section (env, secrets, flags, identity, forbidden_env) and override keys.
+DERIVE_FROM_KEY = 'derive_from'
+# Prod-only services that staging never runs (SCA-3120): compose_staging drops them.
+STAGING_EXCLUDED_SERVICES = ('backend-projection-pump',)
 _GKE_SERVICE_ORDER = ('backend-listen', 'parakeet', 'pusher')
 
 
@@ -124,6 +135,32 @@ def _stabilize_env_config(env_config: ConfigDict) -> ConfigDict:
     return stabilized
 
 
+def _resolve_derived_services(env_config: ConfigDict) -> None:
+    """Expand ``derive_from`` so a derived service carries its source's composed contract.
+
+    The source is read after the base and overlay merge, so the derived service tracks
+    every later change to its source; its own keys deep-merge on top. Chains are refused.
+    """
+    cloud_run = _as_config_dict(env_config.get('cloud_run')) or {}
+    services = _as_config_dict(cloud_run.get('services'))
+    if services is None:
+        return
+    derived = {name for name, raw in services.items() if DERIVE_FROM_KEY in (_as_config_dict(raw) or {})}
+    for name, raw in list(services.items()):
+        config = _as_config_dict(raw)
+        if config is None or DERIVE_FROM_KEY not in config:
+            continue
+        source_name = config[DERIVE_FROM_KEY]
+        source = _as_config_dict(services.get(source_name)) if isinstance(source_name, str) else None
+        if source is None:
+            raise ValueError(f'Cloud Run service {name} derives from unknown service {source_name!r}')
+        # Checked against the declared set, so a chain is refused whatever the mapping order.
+        if source_name in derived:
+            raise ValueError(f'Cloud Run service {name} derives from derived service {source_name!r}')
+        own = {key: value for key, value in config.items() if key != DERIVE_FROM_KEY}
+        services[name] = _deep_merge(source, own)
+
+
 def _overlay_path(env: str, runtime_env_dir: Path = RUNTIME_ENV_DIR) -> Path:
     return runtime_env_dir / f'{env}.overlay.yaml'
 
@@ -152,7 +189,9 @@ def _compose_environment(
         raise ValueError(f'composed environment {env} must be a mapping')
 
     env_config = cast(ConfigDict, merged)
+    _resolve_derived_services(env_config)
     _apply_conversations_v3_stage(env_config)
+    _apply_go_queue_erase_setting(env_config)
     env_config['compute_project'] = compute_project
     env_config['data_plane_project'] = data_plane_project
     # Legacy aliases consumed by deploy scripts and validators.
@@ -263,6 +302,33 @@ def _apply_conversations_v3_stage(env_config: ConfigDict) -> None:
                 service['env']['CONVERSATIONS_V3_FIRST_APP_BUILD'] = deepcopy(build_descriptor)
 
 
+def _apply_go_queue_erase_setting(env_config: ConfigDict) -> None:
+    """Render one environment-wide value for all hosts that can run deletion."""
+    required = env_config.pop('go_queue_erase_required', None)
+    if required is not None and not isinstance(required, bool):
+        raise ValueError('go_queue_erase_required must be a YAML boolean')
+    key = 'GO_QUEUE_ERASE_REQUIRED'
+    descriptor = {'value': 'true' if required else 'false', 'category': 'rollout'}
+    cloud_run = env_config.get('cloud_run', {})
+    for service in cloud_run.get('services', {}).values():
+        env = service.setdefault('env', {})
+        if key in env:
+            raise ValueError('set go_queue_erase_required at environment scope')
+        if required is not None:
+            env[key] = dict(descriptor)
+    gke = env_config.get('gke', {})
+    config_map = gke.get('config_map')
+    if isinstance(config_map, dict):
+        entries = config_map.setdefault('entries', {})
+        if key in entries:
+            raise ValueError('set go_queue_erase_required at environment scope')
+        if required is not None:
+            entries[key] = {'source': 'literal', 'value': descriptor['value']}
+    for name in ('backend-listen', 'pusher'):
+        if name in gke and key in gke[name].get('env', {}):
+            raise ValueError('set go_queue_erase_required at environment scope')
+
+
 def compose_staging(
     *,
     base_path: Path = DEFAULT_BASE,
@@ -291,7 +357,17 @@ def compose_staging(
     merged = cast(
         ConfigDict, _deep_merge(_deep_merge(substituted, prod_doc.get('overlay', {})), staging_doc.get('overlay', {}))
     )
+    # Explicit exclusion: the prod-only projection pump (SCA-3120) never deploys to staging,
+    # whose deploy.sh and scale flags cover only the four shared services.
+    merged_services = _as_config_dict((_as_config_dict(merged.get('cloud_run')) or {}).get('services')) or {}
+    for excluded in STAGING_EXCLUDED_SERVICES:
+        merged_services.pop(excluded, None)
+    derived = sorted(name for name, raw in merged_services.items() if DERIVE_FROM_KEY in (_as_config_dict(raw) or {}))
+    if derived:
+        raise StagingComposeError(f'staging does not compose derived services: {", ".join(derived)}')
     _apply_conversations_v3_stage(merged)
+    merged['go_queue_erase_required'] = staging_doc.get('overlay', {}).get('go_queue_erase_required')
+    _apply_go_queue_erase_setting(merged)
 
     spec = _as_config_dict(staging_doc.get('cloud_run')) or {}
     run_url_template = str(staging_doc['run_url_template'])

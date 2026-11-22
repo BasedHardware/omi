@@ -15574,4 +15574,149 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get conversationRecentTranscript => 'Seneste udskrift';
+
+  @override
+  String get finishAlreadySaved => 'Allerede gemt. Den ligger på Hjem.';
+
+  @override
+  String get finishAudioNotReceived => 'Lyd er stadig på vej.';
+
+  @override
+  String get finishFailedOffline => 'Det lykkedes ikke. Din lyd er i sikkerhed.';
+
+  @override
+  String get finishFailed => 'Det lykkedes ikke. Din lyd er i sikkerhed.';
+
+  @override
+  String get micBlockedCannotRecord => 'Giv adgang til mikrofonen for at optage.';
+
+  @override
+  String get couldNotStartRecording => 'Kunne ikke starte optagelsen.';
+
+  @override
+  String get restorePurchasesFailed => 'Kunne ikke tjekke dit abonnement.';
+
+  @override
+  String get firmwareCheckFailed => 'Kunne ikke søge efter opdateringer.';
+
+  @override
+  String get conversationStillPublic => 'Den er stadig delt via link.';
+
+  @override
+  String get goalSaveFailed => 'Kunne ikke gemme dit mål.';
+
+  @override
+  String get goalDeleteFailed => 'Kunne ikke slette. Målet er gendannet.';
+
+  @override
+  String get goalsLoadFailed => 'Kunne ikke indlæse dine mål.';
+
+  @override
+  String get missingTargetEndedRecording => 'Den optagelse er afsluttet.';
+
+  @override
+  String get missingTargetMemory => 'Mindet er væk.';
+
+  @override
+  String get missingTargetTask => 'Opgaven er væk.';
+
+  @override
+  String get missingTargetConversation => 'Kunne ikke åbne denne samtale.';
+
+  @override
+  String get couldNotRefreshConversations => 'Kunne ikke opdatere.';
+
+  @override
+  String get connectDeviceForOfflineSync => 'Tilslut din Omi for at synkronisere.';
+
+  @override
+  String get useDifferentAccountMessage =>
+      'Du bliver logget ud, og Omis indstillinger på denne telefon bliver nulstillet.';
+
+  @override
+  String get rayBanMetaNotFoundAfterSetup => 'Brillerne blev ikke fundet. Er de tændte?';
+
+  @override
+  String get couldNotMoveTask => 'Kunne ikke flytte opgaven.';
+
+  @override
+  String lockedTasksKept(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Slettet. $count låste opgaver blev beholdt.',
+      one: 'Slettet. 1 låst opgave blev beholdt.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get settingNotSaved => 'Kunne ikke gemme ændringen.';
+
+  @override
+  String get couldNotLoadNotificationSettings => 'Kunne ikke indlæse dine indstillinger.';
+
+  @override
+  String get waitForOmiToFinish => 'Vent til Omi er færdig.';
+
+  @override
+  String get voiceNoteTooShort => 'For kort. Hold nede for at optage.';
+
+  @override
+  String get submitAppMissingFields => 'Tilføj navn, beskrivelse, billede, kategori og funktion for at indsende.';
+
+  @override
+  String get appSetupNotFinished => 'Opsætningen er ikke færdig endnu.';
+
+  @override
+  String get finishNothingKeptTitle => 'Intet at gemme';
+
+  @override
+  String get submitAppFinishDetails => 'Færdiggør detaljerne om funktion og priser ovenfor for at indsende.';
+
+  @override
+  String get finishNothingNew => 'Intet nyt endnu.';
+
+  @override
+  String get takingLongerThanUsual => 'Det tager længere tid end normalt. Vi får den på Hjem.';
+
+  @override
+  String get couldNotCheckOnIt => 'Kunne ikke tjekke status. Prøv igen.';
+
+  @override
+  String get upgradeToOpenThisOne => 'Opgrader for at åbne denne.';
+
+  @override
+  String get missingTargetConversationGone => 'Samtalen er slettet.';
+
+  @override
+  String get cantConnectRightNow => 'Kan ikke oprette forbindelse lige nu.';
+
+  @override
+  String get loadOlderFailed => 'Kunne ikke indlæse ældre. Tryk for at prøve igen.';
+
+  @override
+  String listeningWithDuration(String duration) {
+    return 'Lytter · $duration';
+  }
+
+  @override
+  String get conversationLiveNoEdits => 'Vent til den er slut, før du ændrer den.';
+
+  @override
+  String get finishedSummaryReady => 'Opsummering klar';
+
+  @override
+  String get writingSummaryStatus => 'Skriver opsummering…';
+
+  @override
+  String get stillWorkingOnIt => 'Vi arbejder stadig på det.';
+
+  @override
+  String get firmwareUpdateFirmwareTooOld =>
+      'Din enheds firmware er for gammel til denne opdatering. Kontakt support for at få hjælp til at opdatere din enhed.';
+
+  @override
+  String get firmwareUpdateAppRequired =>
+      'Denne firmwareopdatering kræver en nyere version af Omi-appen. Opdater appen fra din appbutik, og søg derefter efter opdateringer igen.';
 }

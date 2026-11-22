@@ -15646,4 +15646,148 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get conversationRecentTranscript => 'ఇటీవలి ట్రాన్‌స్క్రిప్ట్';
+
+  @override
+  String get finishAlreadySaved => 'ఇప్పటికే సేవ్ చేయబడింది. హోమ్‌లో ఉంది.';
+
+  @override
+  String get finishAudioNotReceived => 'ఆడియో ఇంకా వస్తోంది.';
+
+  @override
+  String get finishFailedOffline => 'అందలేదు. మీ ఆడియో సురక్షితంగా ఉంది.';
+
+  @override
+  String get finishFailed => 'అందలేదు. మీ ఆడియో సురక్షితంగా ఉంది.';
+
+  @override
+  String get micBlockedCannotRecord => 'రికార్డ్ చేయడానికి మైక్రోఫోన్‌ను అనుమతించండి.';
+
+  @override
+  String get couldNotStartRecording => 'రికార్డింగ్‌ను ప్రారంభించడం సాధ్యపడలేదు.';
+
+  @override
+  String get restorePurchasesFailed => 'మీ ప్లాన్‌ను తనిఖించడం సాధ్యపడలేదు.';
+
+  @override
+  String get firmwareCheckFailed => 'అప్‌డేట్‌లను తనిఖించడం సాధ్యపడలేదు.';
+
+  @override
+  String get conversationStillPublic => 'ఇది ఇప్పటికీ లింక్ ద్వారా షేర్ చేయబడి ఉంది.';
+
+  @override
+  String get goalSaveFailed => 'మీ లక్ష్యాన్ని సేవ్ చేయడం సాధ్యపడలేదు.';
+
+  @override
+  String get goalDeleteFailed => 'తొలగించడం సాధ్యపడలేదు. లక్ష్యం తిరిగి వచ్చింది.';
+
+  @override
+  String get goalsLoadFailed => 'మీ లక్ష్యాలను లోడ్ చేయడం సాధ్యపడలేదు.';
+
+  @override
+  String get missingTargetEndedRecording => 'ఆ రికార్డింగ్ ముగిసింది.';
+
+  @override
+  String get missingTargetMemory => 'ఆ జ్ఞాపకం ఇకపై లేదు.';
+
+  @override
+  String get missingTargetTask => 'ఆ పని ఇకపై లేదు.';
+
+  @override
+  String get missingTargetConversation => 'ఈ సంభాషణను తెరవడం సాధ్యపడలేదు.';
+
+  @override
+  String get couldNotRefreshConversations => 'రిఫ్రెష్ చేయడం సాధ్యపడలేదు.';
+
+  @override
+  String get connectDeviceForOfflineSync => 'సింక్ చేయడానికి మీ Omiని కనెక్ట్ చేయండి.';
+
+  @override
+  String get useDifferentAccountMessage => 'మీరు సైన్ అవుట్ అవుతారు, ఈ ఫోన్‌లోని Omi సెట్టింగ్‌లు రీసెట్ అవుతాయి.';
+
+  @override
+  String get rayBanMetaNotFoundAfterSetup => 'కళ్లద్దాలు కనుగొనబడలేదు. అవి ఆన్‌లో ఉన్నాయా?';
+
+  @override
+  String get couldNotMoveTask => 'ఆ పనిని తరలించడం సాధ్యపడలేదు.';
+
+  @override
+  String lockedTasksKept(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'తొలగించబడింది. $count లాక్ చేసిన పనులు ఉంచబడ్డాయి.',
+      one: 'తొలగించబడింది. 1 లాక్ చేసిన పని ఉంచబడింది.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get settingNotSaved => 'ఆ మార్పును సేవ్ చేయడం సాధ్యపడలేదు.';
+
+  @override
+  String get couldNotLoadNotificationSettings => 'మీ సెట్టింగ్‌లను లోడ్ చేయడం సాధ్యపడలేదు.';
+
+  @override
+  String get waitForOmiToFinish => 'Omi పూర్తి కావడానికి వేచి ఉండండి.';
+
+  @override
+  String get voiceNoteTooShort => 'చాలా పొట్టిగా ఉంది. రికార్డ్ చేయడానికి నొక్కి పట్టి ఉంచండి.';
+
+  @override
+  String get submitAppMissingFields => 'సబ్మిట్ చేయడానికి పేరు, వివరణ, చిత్రం, కేటగిరీ మరియు సామర్థ్యాన్ని జోడించండి.';
+
+  @override
+  String get appSetupNotFinished => 'సెటప్ ఇంకా పూర్తి కాలేదు.';
+
+  @override
+  String get finishNothingKeptTitle => 'ఉంచుకోవడానికి ఏమీ లేదు';
+
+  @override
+  String get submitAppFinishDetails => 'సబ్మిట్ చేయడానికి పైన ఉన్న సామర్థ్యం మరియు ధర వివరాలను పూర్తి చేయండి.';
+
+  @override
+  String get finishNothingNew => 'ఇంకా కొత్తదేమీ లేదు.';
+
+  @override
+  String get takingLongerThanUsual => 'సాధారణం కంటే ఎక్కువ సమయం పడుతోంది. త్వరలో హోమ్‌లో కనిపిస్తుంది.';
+
+  @override
+  String get couldNotCheckOnIt => 'దానిని తనిఖించడం సాధ్యపడలేదు. మళ్లీ ప్రయత్నించండి.';
+
+  @override
+  String get upgradeToOpenThisOne => 'దీన్ని తెరవడానికి అప్‌గ్రేడ్ చేయండి.';
+
+  @override
+  String get missingTargetConversationGone => 'ఆ సంభాషణ తొలగించబడింది.';
+
+  @override
+  String get cantConnectRightNow => 'ఇప్పుడు కనెక్ట్ చేయడం సాధ్యపడదు.';
+
+  @override
+  String get loadOlderFailed => 'పాతవి లోడ్ చేయడం సాధ్యపడలేదు. మళ్లీ ప్రయత్నించడానికి నొక్కండి.';
+
+  @override
+  String listeningWithDuration(String duration) {
+    return 'వింటున్నాం · $duration';
+  }
+
+  @override
+  String get conversationLiveNoEdits => 'మార్చడానికి అది ముగిసే వరకు వేచి ఉండండి.';
+
+  @override
+  String get finishedSummaryReady => 'సారాంశం సిద్ధంగా ఉంది';
+
+  @override
+  String get writingSummaryStatus => 'సారాంశం తయారవుతోంది…';
+
+  @override
+  String get stillWorkingOnIt => 'ఇంకా పని జరుగుతోంది.';
+
+  @override
+  String get firmwareUpdateFirmwareTooOld =>
+      'ఈ నవీకరణకు మీ పరికరంలోని ఫర్మ్‌వేర్ చాలా పాతది. మీ పరికరాన్ని నవీకరించడంలో సహాయం కోసం సపోర్ట్‌ను సంప్రదించండి.';
+
+  @override
+  String get firmwareUpdateAppRequired =>
+      'ఈ ఫర్మ్‌వేర్ నవీకరణకు కొత్త వెర్షన్ Omi యాప్ అవసరం. మీ యాప్ స్టోర్ నుండి యాప్‌ను నవీకరించి, మళ్లీ తనిఖీ చేయండి.';
 }

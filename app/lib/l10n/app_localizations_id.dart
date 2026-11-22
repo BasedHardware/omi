@@ -15598,4 +15598,148 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get conversationRecentTranscript => 'Transkrip Terbaru';
+
+  @override
+  String get finishAlreadySaved => 'Sudah tersimpan. Ada di Beranda.';
+
+  @override
+  String get finishAudioNotReceived => 'Audio masih dalam perjalanan.';
+
+  @override
+  String get finishFailedOffline => 'Tidak berhasil. Audiomu aman.';
+
+  @override
+  String get finishFailed => 'Tidak berhasil. Audiomu aman.';
+
+  @override
+  String get micBlockedCannotRecord => 'Izinkan mikrofon untuk merekam.';
+
+  @override
+  String get couldNotStartRecording => 'Tidak bisa memulai perekaman.';
+
+  @override
+  String get restorePurchasesFailed => 'Tidak bisa memeriksa paketmu.';
+
+  @override
+  String get firmwareCheckFailed => 'Tidak bisa memeriksa pembaruan.';
+
+  @override
+  String get conversationStillPublic => 'Masih dibagikan lewat tautan.';
+
+  @override
+  String get goalSaveFailed => 'Tidak bisa menyimpan tujuanmu.';
+
+  @override
+  String get goalDeleteFailed => 'Tidak bisa menghapus. Tujuan dikembalikan.';
+
+  @override
+  String get goalsLoadFailed => 'Tidak bisa memuat tujuanmu.';
+
+  @override
+  String get missingTargetEndedRecording => 'Rekaman itu sudah berakhir.';
+
+  @override
+  String get missingTargetMemory => 'Kenangan itu sudah tidak ada.';
+
+  @override
+  String get missingTargetTask => 'Tugas itu sudah tidak ada.';
+
+  @override
+  String get missingTargetConversation => 'Tidak bisa membuka percakapan ini.';
+
+  @override
+  String get couldNotRefreshConversations => 'Tidak bisa memuat ulang.';
+
+  @override
+  String get connectDeviceForOfflineSync => 'Hubungkan Omi-mu untuk sinkronisasi.';
+
+  @override
+  String get useDifferentAccountMessage => 'Kamu akan keluar, dan setelan Omi di ponsel ini akan direset.';
+
+  @override
+  String get rayBanMetaNotFoundAfterSetup => 'Kacamata tidak ditemukan. Apakah sudah menyala?';
+
+  @override
+  String get couldNotMoveTask => 'Tidak bisa memindahkan tugas.';
+
+  @override
+  String lockedTasksKept(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Terhapus. $count tugas terkunci dipertahankan.',
+      one: 'Terhapus. 1 tugas terkunci dipertahankan.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get settingNotSaved => 'Tidak bisa menyimpan perubahan itu.';
+
+  @override
+  String get couldNotLoadNotificationSettings => 'Tidak bisa memuat setelanmu.';
+
+  @override
+  String get waitForOmiToFinish => 'Tunggu Omi selesai.';
+
+  @override
+  String get voiceNoteTooShort => 'Terlalu pendek. Tahan untuk merekam.';
+
+  @override
+  String get submitAppMissingFields => 'Tambahkan nama, deskripsi, gambar, kategori, dan kapabilitas untuk mengirim.';
+
+  @override
+  String get appSetupNotFinished => 'Penyiapan belum selesai.';
+
+  @override
+  String get finishNothingKeptTitle => 'Tidak Ada yang Perlu Disimpan';
+
+  @override
+  String get submitAppFinishDetails => 'Lengkapi detail kapabilitas dan harga di atas untuk mengirim.';
+
+  @override
+  String get finishNothingNew => 'Belum ada yang baru.';
+
+  @override
+  String get takingLongerThanUsual => 'Lebih lama dari biasanya. Akan muncul di Beranda.';
+
+  @override
+  String get couldNotCheckOnIt => 'Tidak bisa memeriksanya. Coba lagi.';
+
+  @override
+  String get upgradeToOpenThisOne => 'Upgrade untuk membuka yang ini.';
+
+  @override
+  String get missingTargetConversationGone => 'Percakapan itu sudah dihapus.';
+
+  @override
+  String get cantConnectRightNow => 'Tidak bisa terhubung saat ini.';
+
+  @override
+  String get loadOlderFailed => 'Tidak bisa memuat yang lebih lama. Ketuk untuk mencoba lagi.';
+
+  @override
+  String listeningWithDuration(String duration) {
+    return 'Mendengarkan · $duration';
+  }
+
+  @override
+  String get conversationLiveNoEdits => 'Tunggu sampai selesai untuk mengubahnya.';
+
+  @override
+  String get finishedSummaryReady => 'Ringkasan siap';
+
+  @override
+  String get writingSummaryStatus => 'Menulis ringkasan…';
+
+  @override
+  String get stillWorkingOnIt => 'Masih dikerjakan.';
+
+  @override
+  String get firmwareUpdateFirmwareTooOld =>
+      'Firmware perangkat Anda terlalu lama untuk pembaruan ini. Hubungi dukungan untuk bantuan memperbarui perangkat Anda.';
+
+  @override
+  String get firmwareUpdateAppRequired =>
+      'Pembaruan firmware ini memerlukan aplikasi Omi versi lebih baru. Perbarui aplikasi dari toko aplikasi Anda, lalu periksa lagi.';
 }

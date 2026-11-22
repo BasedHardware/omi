@@ -45,6 +45,7 @@ from utils.observability.external_lists import ExternalListMetricsMiddleware
 
 # app_roles imports every router (the route table) in the original order.
 from app_roles import mount_routers, role_from_env
+from config.process_role import ProcessRole, startup_process_role
 from database.batch_account_authority import ErasedAccountMutationRefused
 from routers import messaging  # also used directly for the adapter runtime below
 from routers.listen.registry import proactive_message_dispatcher
@@ -218,6 +219,10 @@ def _run_fsr_loop(loop_name, callback, interval_seconds):
     from database.firestore_read_origin import read_origin
     from database.durable_queue_age import withdraw_queue_oldest_ready_ages
     from utils.other.fsr_leader_lease import loop_lease
+    from config.process_role import is_projection_pump_process
+
+    if is_projection_pump_process():
+        return {}  # A projection pump never takes a reconciler lease (config/process_role.py).
 
     def attributed():
         with read_origin(f'job:{loop_name}'):
@@ -244,22 +249,29 @@ async def startup_event():
     from database.pinecone_partition_state import start_mutations, drain_mutations
     from database.pinecone_mutation_lifecycle import install_shutdown_drain
 
-    start_mutations()
-    app.state.pinecone_restore_signal = install_shutdown_drain(drain_mutations)
-    app.state.messaging_runtime = await start_adapters(messaging.register_adapter)
+    # OMI_PROCESS_ROLE=projection_pump keeps only the pump's set; an unknown role fails here.
+    full = startup_process_role() is ProcessRole.ALL
+    if full:
+        start_mutations()
+        app.state.pinecone_restore_signal = install_shutdown_drain(drain_mutations)
+        app.state.messaging_runtime = await start_adapters(messaging.register_adapter)
     start_metrics_sidecar_server()
     start_background_task(refresh_stt_cap_cohort_forever(), name='stt_cap_cohort_refresh')
-    start_background_task(live_stt_health.refresh_forever(), name='live_stt_fleet_health')
-    from utils.held_content_cohort import refresh_held_content_cohort_forever
+    if full:
+        start_background_task(live_stt_health.refresh_forever(), name='live_stt_fleet_health')
+        from utils.held_content_cohort import refresh_held_content_cohort_forever
 
-    start_background_task(refresh_held_content_cohort_forever(), name='held_content_cohort_refresh')
-    batch_pressure.start_from_env()
+        start_background_task(refresh_held_content_cohort_forever(), name='held_content_cohort_refresh')
+        batch_pressure.start_from_env()
     app.state.batch_pipeline_serving = start_serving_from_env()
-    start_soniox_usage_if_configured(start_background_task)
+    if full:
+        start_soniox_usage_if_configured(start_background_task)
     validate_account_deletion_dispatch_configuration()
     validate_streaming_stt_env()
     start_background_task(log_executor_health(), name='executor_health')
     start_background_task(retry_settled_composes(), name='episode_compose_settle')
+    if not full:
+        return
     # Drain account-deletion wipes orphaned by a previous deploy/restart. Offloaded
     # to db_executor so the blocking Firestore queries don't stall event-loop startup.
     start_background_task(

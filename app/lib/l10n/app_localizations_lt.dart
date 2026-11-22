@@ -15607,4 +15607,149 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get conversationRecentTranscript => 'Naujausia transkripcija';
+
+  @override
+  String get finishAlreadySaved => 'Jau išsaugota. Rasite pradžioje.';
+
+  @override
+  String get finishAudioNotReceived => 'Garso įrašas dar kelyje.';
+
+  @override
+  String get finishFailedOffline => 'Nepavyko. Jūsų garso įrašas saugus.';
+
+  @override
+  String get finishFailed => 'Nepavyko. Jūsų garso įrašas saugus.';
+
+  @override
+  String get micBlockedCannotRecord => 'Norėdami įrašyti, leiskite naudoti mikrofoną.';
+
+  @override
+  String get couldNotStartRecording => 'Nepavyko pradėti įrašymo.';
+
+  @override
+  String get restorePurchasesFailed => 'Nepavyko patikrinti jūsų plano.';
+
+  @override
+  String get firmwareCheckFailed => 'Nepavyko patikrinti, ar yra atnaujinimų.';
+
+  @override
+  String get conversationStillPublic => 'Vis dar bendrinama pagal nuorodą.';
+
+  @override
+  String get goalSaveFailed => 'Nepavyko išsaugoti jūsų tikslo.';
+
+  @override
+  String get goalDeleteFailed => 'Nepavyko ištrinti. Tikslas atkurtas.';
+
+  @override
+  String get goalsLoadFailed => 'Nepavyko įkelti jūsų tikslų.';
+
+  @override
+  String get missingTargetEndedRecording => 'Šis įrašas jau baigėsi.';
+
+  @override
+  String get missingTargetMemory => 'Šio prisiminimo nebėra.';
+
+  @override
+  String get missingTargetTask => 'Šios užduoties nebėra.';
+
+  @override
+  String get missingTargetConversation => 'Nepavyko atidaryti šio pokalbio.';
+
+  @override
+  String get couldNotRefreshConversations => 'Nepavyko atnaujinti.';
+
+  @override
+  String get connectDeviceForOfflineSync => 'Norėdami sinchronizuoti, prijunkite savo Omi.';
+
+  @override
+  String get useDifferentAccountMessage => 'Būsite atsijungę, o šio telefono Omi nustatymai bus atstatyti.';
+
+  @override
+  String get rayBanMetaNotFoundAfterSetup => 'Akiniai nerasti. Ar jie įjungti?';
+
+  @override
+  String get couldNotMoveTask => 'Nepavyko perkelti užduoties.';
+
+  @override
+  String lockedTasksKept(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Ištrinta. $count užrakintos užduotys paliktos.',
+      one: 'Ištrinta. 1 užrakta užduotis palikta.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get settingNotSaved => 'Nepavyko išsaugoti šio pakeitimo.';
+
+  @override
+  String get couldNotLoadNotificationSettings => 'Nepavyko įkelti jūsų nustatymų.';
+
+  @override
+  String get waitForOmiToFinish => 'Palaukite, kol Omi baigs.';
+
+  @override
+  String get voiceNoteTooShort => 'Per trumpai. Norėdami įrašyti, laikykite nuspaudę.';
+
+  @override
+  String get submitAppMissingFields =>
+      'Norėdami pateikti, pridėkite pavadinimą, aprašymą, paveikslėlį, kategoriją ir gebėjimą.';
+
+  @override
+  String get appSetupNotFinished => 'Sąranka dar neatlikta.';
+
+  @override
+  String get finishNothingKeptTitle => 'Nėra ką palikti';
+
+  @override
+  String get submitAppFinishDetails => 'Norėdami pateikti, užpildykite aukščiau nurodytus gebėjimo ir kainų duomenis.';
+
+  @override
+  String get finishNothingNew => 'Kol kas nieko naujo.';
+
+  @override
+  String get takingLongerThanUsual => 'Trunka ilgiau nei įprastai. Jį rasite pradžioje.';
+
+  @override
+  String get couldNotCheckOnIt => 'Nepavyko patikrinti. Bandykite dar kartą.';
+
+  @override
+  String get upgradeToOpenThisOne => 'Norėdami atidaryti, atnaujinkite planą.';
+
+  @override
+  String get missingTargetConversationGone => 'Šis pokalbis buvo ištrintas.';
+
+  @override
+  String get cantConnectRightNow => 'Šiuo metu nepavyksta prisijungti.';
+
+  @override
+  String get loadOlderFailed => 'Nepavyko įkelti senesnių. Bakstelėkite, norėdami bandyti dar kartą.';
+
+  @override
+  String listeningWithDuration(String duration) {
+    return 'Klausomasi · $duration';
+  }
+
+  @override
+  String get conversationLiveNoEdits => 'Norėdami pakeisti, palaukite, kol jis baigsis.';
+
+  @override
+  String get finishedSummaryReady => 'Santrauka paruošta';
+
+  @override
+  String get writingSummaryStatus => 'Rašoma santrauka…';
+
+  @override
+  String get stillWorkingOnIt => 'Vis dar dirbama.';
+
+  @override
+  String get firmwareUpdateFirmwareTooOld =>
+      'Jūsų įrenginio programinė aparatinė įranga per sena šiam naujinimui. Kreipkitės į palaikymo tarnybą, kad padėtų atnaujinti įrenginį.';
+
+  @override
+  String get firmwareUpdateAppRequired =>
+      'Šiam programinės aparatinės įrangos naujinimui reikia naujesnės „Omi“ programėlės versijos. Atnaujinkite programėlę savo programėlių parduotuvėje ir patikrinkite dar kartą.';
 }

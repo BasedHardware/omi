@@ -109,7 +109,18 @@ class _FoundDevicesState extends State<FoundDevices> with WidgetsBindingObserver
         final real = provider.deviceList.firstWhereOrNull(
           (d) => d.type == DeviceType.raybanMeta && d.id != RayBanMetaDiscoverer.setupPlaceholderId,
         );
-        if (real == null) return;
+        if (real == null) {
+          // The setup finished but the glasses did not show up: say so, with Try Again (D8).
+          if (mounted) {
+            OmiFeedback.error(
+              context,
+              context.l10n.rayBanMetaNotFoundAfterSetup,
+              actionLabel: context.l10n.tryAgain,
+              onAction: () => ServiceManager.instance().device.discover(timeout: 5),
+            );
+          }
+          return;
+        }
         target = real;
       }
 

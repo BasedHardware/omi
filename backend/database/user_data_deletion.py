@@ -17,7 +17,6 @@ from database.batch_account_authority import account_authority_writer_enabled, m
 from database.memory_collections import RELEASED_MEMORY_CHANGE_HEAD
 from database.people_generation import generation_ref
 from database.staged_promote_cache import invalidate_around_write
-from config.list_projection import STATE_COLLECTION, ROW_COLLECTIONS
 from database.apps import apps_collection, PUBLIC_APPROVED_APPS_CACHE_KEY, search_apps_db
 from database.redis_db import delete_app_cache_by_id, delete_generic_cache
 
@@ -71,10 +70,10 @@ def purge_user_subtree(uid: str, client: Any, delete_collection: Callable) -> di
     # Atomic source deletes also maintain this derived head. Erase it after
     # every source collection, including when memory_state was visited first.
     user_ref.collection('memory_state').document(RELEASED_MEMORY_CHANGE_HEAD).delete()
-    # Source deletes can rotate these content-free heads after their collection
-    # was walked, including a retry whose root user document is already absent.
-    for family in ROW_COLLECTIONS:
-        user_ref.collection(STATE_COLLECTION).document(family).delete()
+    # Explicitly erase historical heads as part of account deletion, including
+    # a retry whose root user document is already absent.
+    for family in ('conversations', 'action_items'):
+        user_ref.collection('list_serving_versions').document(family).delete()
 
     # People deletes can recreate their content-free generation head after
     # people_meta was enumerated. Missing metadata never authorizes memo reuse.

@@ -15585,4 +15585,148 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get conversationRecentTranscript => 'Bản chép lời gần đây';
+
+  @override
+  String get finishAlreadySaved => 'Đã lưu rồi. Đã có ở Trang chủ.';
+
+  @override
+  String get finishAudioNotReceived => 'Âm thanh vẫn đang được gửi tới.';
+
+  @override
+  String get finishFailedOffline => 'Không thực hiện được. Bản ghi âm của bạn vẫn an toàn.';
+
+  @override
+  String get finishFailed => 'Không thực hiện được. Bản ghi âm của bạn vẫn an toàn.';
+
+  @override
+  String get micBlockedCannotRecord => 'Hãy cấp quyền micrô để ghi âm.';
+
+  @override
+  String get couldNotStartRecording => 'Không thể bắt đầu ghi âm.';
+
+  @override
+  String get restorePurchasesFailed => 'Không thể kiểm tra gói của bạn.';
+
+  @override
+  String get firmwareCheckFailed => 'Không thể kiểm tra bản cập nhật.';
+
+  @override
+  String get conversationStillPublic => 'Mục này vẫn đang được chia sẻ bằng liên kết.';
+
+  @override
+  String get goalSaveFailed => 'Không thể lưu mục tiêu của bạn.';
+
+  @override
+  String get goalDeleteFailed => 'Không thể xóa. Mục tiêu đã được khôi phục.';
+
+  @override
+  String get goalsLoadFailed => 'Không thể tải mục tiêu của bạn.';
+
+  @override
+  String get missingTargetEndedRecording => 'Bản ghi âm đó đã kết thúc.';
+
+  @override
+  String get missingTargetMemory => 'Kỷ niệm đó không còn nữa.';
+
+  @override
+  String get missingTargetTask => 'Nhiệm vụ đó không còn nữa.';
+
+  @override
+  String get missingTargetConversation => 'Không thể mở cuộc trò chuyện này.';
+
+  @override
+  String get couldNotRefreshConversations => 'Không thể làm mới.';
+
+  @override
+  String get connectDeviceForOfflineSync => 'Kết nối Omi của bạn để đồng bộ.';
+
+  @override
+  String get useDifferentAccountMessage => 'Bạn sẽ bị đăng xuất và cài đặt Omi trên điện thoại này sẽ được đặt lại.';
+
+  @override
+  String get rayBanMetaNotFoundAfterSetup => 'Không tìm thấy kính. Kính đã bật chưa?';
+
+  @override
+  String get couldNotMoveTask => 'Không thể di chuyển nhiệm vụ.';
+
+  @override
+  String lockedTasksKept(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Đã xóa. $count nhiệm vụ bị khóa đã được giữ lại.',
+      one: 'Đã xóa. 1 nhiệm vụ bị khóa đã được giữ lại.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get settingNotSaved => 'Không thể lưu thay đổi này.';
+
+  @override
+  String get couldNotLoadNotificationSettings => 'Không thể tải cài đặt của bạn.';
+
+  @override
+  String get waitForOmiToFinish => 'Hãy đợi Omi hoàn tất.';
+
+  @override
+  String get voiceNoteTooShort => 'Quá ngắn. Hãy giữ để ghi âm.';
+
+  @override
+  String get submitAppMissingFields => 'Thêm tên, mô tả, hình ảnh, danh mục và tính năng để gửi.';
+
+  @override
+  String get appSetupNotFinished => 'Thiết lập chưa hoàn tất.';
+
+  @override
+  String get finishNothingKeptTitle => 'Không có gì để lưu lại';
+
+  @override
+  String get submitAppFinishDetails => 'Hoàn tất phần tính năng và giá ở trên để gửi.';
+
+  @override
+  String get finishNothingNew => 'Chưa có gì mới.';
+
+  @override
+  String get takingLongerThanUsual => 'Hơi lâu hơn bình thường. Kết quả sẽ có ở Trang chủ.';
+
+  @override
+  String get couldNotCheckOnIt => 'Không thể kiểm tra. Hãy thử lại.';
+
+  @override
+  String get upgradeToOpenThisOne => 'Hãy nâng cấp để mở cuộc trò chuyện này.';
+
+  @override
+  String get missingTargetConversationGone => 'Cuộc trò chuyện đó đã bị xóa.';
+
+  @override
+  String get cantConnectRightNow => 'Không thể kết nối ngay lúc này.';
+
+  @override
+  String get loadOlderFailed => 'Không thể tải các mục cũ hơn. Chạm để thử lại.';
+
+  @override
+  String listeningWithDuration(String duration) {
+    return 'Đang nghe · $duration';
+  }
+
+  @override
+  String get conversationLiveNoEdits => 'Hãy đợi đến khi kết thúc rồi hãy thay đổi.';
+
+  @override
+  String get finishedSummaryReady => 'Đã có tóm tắt';
+
+  @override
+  String get writingSummaryStatus => 'Đang viết tóm tắt…';
+
+  @override
+  String get stillWorkingOnIt => 'Vẫn đang xử lý.';
+
+  @override
+  String get firmwareUpdateFirmwareTooOld =>
+      'Firmware trên thiết bị của bạn quá cũ để cài đặt bản cập nhật này. Hãy liên hệ bộ phận hỗ trợ để được giúp cập nhật thiết bị.';
+
+  @override
+  String get firmwareUpdateAppRequired =>
+      'Bản cập nhật firmware này yêu cầu phiên bản ứng dụng Omi mới hơn. Hãy cập nhật ứng dụng từ cửa hàng ứng dụng của bạn, rồi kiểm tra lại.';
 }

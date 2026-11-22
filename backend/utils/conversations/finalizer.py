@@ -23,6 +23,9 @@ from config.episodes import episodes_enabled_for
 from config.episode_attach import noop_schedule_enabled
 from config.rollout_cohorts import warm_rollout_cohorts
 
+from models.finalization_owner import REFUSAL as FINALIZATION_OWNER_REFUSAL
+from models.finalization_owner import FinalizationOwnedElsewhere, python_owns_finalization
+from utils.sync.processing_hold import ProcessingDeferred
 from database import conversations as conversations_db
 from database import conversation_finalization_jobs as finalization_jobs_db
 from database.firestore_read_metrics import FirestoreReadSite
@@ -225,6 +228,10 @@ async def _episode_after_absorb(uid: str, donor_id: str, trigger: ProcessingTrig
         logger.warning('event=episode_finalize outcome=error exception_type=%s', type(error).__name__)
 
 
+class ServerBatchArchiveNotClosed(RuntimeError):
+    """The batch producer has not published the archive-close barrier."""
+
+
 class ConversationFinalizationError(RuntimeError):
     """A persisted-conversation failure classified by its owning entrypoint.
 
@@ -321,7 +328,7 @@ async def finalize_persisted_conversation(
             return ConversationFinalizationDisposition.discarded
         if not server_batch_has_audio(conversation_data):
             if not conversation_data.get('server_batch_audio_closed'):
-                raise RuntimeError('server batch archive is not closed')
+                raise ServerBatchArchiveNotClosed('server batch archive is not closed')
             if not await run_blocking(
                 db_executor,
                 lifecycle_service.delete_empty_recording_conversation,
@@ -770,6 +777,22 @@ async def finalize_persisted_conversation(
         await _episode_after_absorb(uid, conversation_id, trigger)
         return ConversationFinalizationDisposition(fanout['status'])
     except Exception as error:
+        if isinstance(error, FinalizationOwnedElsewhere):
+            return ConversationFinalizationDisposition.fenced
+        if isinstance(error, ProcessingDeferred) and error.reason == FINALIZATION_OWNER_REFUSAL:
+            yielded = await run_blocking(
+                db_executor,
+                finalization_jobs_db.mark_finalization_retryable,
+                finalization_job_id,
+                dispatch_generation,
+                lease_epoch,
+                error.reason,
+                count_attempt=False,
+                **({'ownership_target_id': error.ownership_target_id} if error.ownership_target_id else {}),
+            )
+            return (
+                ConversationFinalizationDisposition.deferred if yielded else ConversationFinalizationDisposition.fenced
+            )
         # Provider and validation exceptions can contain transcript excerpts.
         # Collapse them onto a closed operational vocabulary before emitting a
         # metric or log; never include the exception message or user identity.
@@ -867,6 +890,9 @@ async def _load_admitted_conversation(
         )
         return ConversationFinalizationDisposition.fenced, None, None
 
+    if not python_owns_finalization(conversation_data):
+        return ConversationFinalizationDisposition.fenced, None, None
+
     if trigger is ProcessingTrigger.SILENT_BACKFILL and conversation_data.get('record_lane_owner'):
         # Historical enrichment must not process a batch-owned row. Preserve
         # that fence, but first retain its deterministic batch obligation.
@@ -894,7 +920,7 @@ async def _load_admitted_conversation(
                 read_site=FirestoreReadSite.FINALIZER_JOB_REPLAY,
                 include_transcript_decode_status=is_recovery_trigger(trigger),
             )
-            if not conversation_data:
+            if not conversation_data or not python_owns_finalization(conversation_data):
                 return ConversationFinalizationDisposition.fenced, None, None
     else:
         deferred = await run_blocking(

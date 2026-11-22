@@ -31,7 +31,6 @@ from database.batch_pipeline_projection_finish import (
     PROJECTION_FINISH_ASYNC_CLOCK,
     PROJECTION_FINISH_DUE_FIELD,
     PROJECTION_FINISH_STATES,
-    PROJECTION_FINISH_STEP_FIELD,
     projection_finish_state_fields,
 )
 from database.batch_pipeline_privacy import assert_batch_write_allowed, BatchPrivacyBlocked, BatchPrivacyReason
@@ -355,43 +354,6 @@ class ProjectionStore:
             return True
 
         return self.run(commit)
-
-    def defer_finish(self, segment_id: str, state: str | None, now: float) -> bool:
-        """Bound when the finish page retries a row whose last walk changed nothing.
-
-        The fence re-reads ``projection_state`` inside the transaction. A row
-        that moved on is left untouched: its own state write already stamped it
-        due now, so a stale write can never defer a row with new work. Repeats
-        escalate 60 s, 300 s, 900 s and stay capped; only the lever's sweep
-        calls this, and a lever-off caller writes nothing. ``state`` is ``None``
-        when the sweep could not read the row: the clock is then stamped only
-        while the row is still in a finish state, so a failed read cannot strand
-        it and cannot touch a completed or pending row.
-        """
-        from config.batch_pipeline import PROJECTION_FINISH_BACKOFF_SECONDS, projection_finish_backoff_delay
-
-        @firestore.transactional
-        def commit(transaction):
-            ref = self.ref('results', segment_id)
-            row = ref.get(transaction=transaction).to_dict() or {}
-            current = row.get('projection_state')
-            if state is not None and current != state:
-                return False
-            if current not in PROJECTION_FINISH_STATES:
-                return False
-            previous = row.get(PROJECTION_FINISH_STEP_FIELD)
-            cap = len(PROJECTION_FINISH_BACKOFF_SECONDS) - 1
-            step = min(previous + 1, cap) if isinstance(previous, int) and previous >= 0 else 0
-            transaction.update(
-                ref,
-                {
-                    PROJECTION_FINISH_DUE_FIELD: now + projection_finish_backoff_delay(step),
-                    PROJECTION_FINISH_STEP_FIELD: step,
-                },
-            )
-            return True
-
-        return bool(self.run(commit))
 
     def acknowledge(self, segment_id: str, binding: ProjectionBinding, now: float, *, policy=None):
 

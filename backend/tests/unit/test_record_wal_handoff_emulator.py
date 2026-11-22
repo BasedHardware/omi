@@ -5,6 +5,7 @@ from copy import deepcopy
 import os
 import json
 import struct
+import time
 from types import SimpleNamespace
 from uuid import uuid4
 from unittest.mock import Mock
@@ -15,13 +16,16 @@ from google.cloud import firestore
 import pytest
 
 from database import record_wal_handoff as handoff
+from database import record_wal_sample as sample_state
 from database import batch_pipeline_purge as purge
 from database import batch_pipeline_conversation_purge as conversation_purge
 from database import record_wal_capacity as capacity
 from contextlib import contextmanager
+from database import batch_pipeline_privacy as privacy
 from database.batch_pipeline_privacy import BatchPrivacyBlocked, privacy_owner_key
 from database.batch_pipeline_store import FirestoreStore
-from utils.batch_pipeline import live_upload, intake, record_wal_erasure
+from utils.batch_pipeline import live_upload, intake, record_wal_erasure, record_wal_sample
+from utils.batch_pipeline.artifact_reads import ArtifactReadBudget
 from utils.other import storage, local_storage
 from utils.other.local_storage import LocalStorageClient
 
@@ -345,3 +349,32 @@ def test_completed_legacy_purge_checkpoint_still_sweeps_crash_orphans(world, mon
     assert [blob.name for blob in bucket.list_blobs(prefix=f'record-wal/{uid}/')] == [
         f'record-wal/{uid}/other/keep.bin'
     ]
+
+
+def test_sample_slot_only_has_one_winner_across_runtime_namespaces(world, monkeypatch):
+    client, _, uid, cid, _, _, _, _ = world
+    old_revision = FirestoreStore('batch_pipeline_test_sampler_a', firestore_client=client)
+    new_revision = FirestoreStore('batch_pipeline_test_sampler_b', firestore_client=client)
+    slot = 600_000
+
+    def claim(store):
+        return sample_state.claim_slot(store, slot, ArtifactReadBudget(time.monotonic() + 5, 0, 0))
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        assert sorted(pool.map(claim, [old_revision, new_revision])) == [False, True]
+
+    # An authorization memo can return no owner rows. Both sampler fences need
+    # a fresh complete snapshot even when the production memo lever enforces.
+    monkeypatch.setattr(privacy, 'lever_enabled', lambda name, *_: name in {'bpp_owner_memo', 'bpp_owner_memo_enforce'})
+    memo = Mock(side_effect=AssertionError('sampler must read live rows'))
+    monkeypatch.setattr(privacy, '_assert_batch_write_allowed_memo', memo)
+    budget = ArtifactReadBudget(time.monotonic() + 5, 0, 0)
+    reads = record_wal_sample.SampleReads(budget)
+    generation, snapshot = sample_state.authority(old_revision, uid, cid, 'omi', 'synthetic-device', budget, reads)
+    assert snapshot['record_upload_revision'] == 7
+    _, same = sample_state.authority(
+        old_revision, uid, cid, 'omi', 'synthetic-device', budget, reads, expected_generation=generation
+    )
+    assert same == snapshot
+    assert reads.issued == 10
+    memo.assert_not_called()

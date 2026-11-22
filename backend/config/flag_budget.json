@@ -24,7 +24,7 @@
     "config/batch_language_recovery.py": "planscost"
   },
   "seed_review_by": "2026-11-15",
-  "budget": 161,
+  "budget": 159,
   "names": {
     "BATCH_ACCOUNT_PRIVACY_WRITER_ENABLED": {
       "owner": "batch-custody / lead2",
@@ -70,12 +70,6 @@
       "owner": "uicleanup / omi-lifecycle",
       "review_by": "2026-12-06",
       "registry": "config/feature-flags.yaml"
-    },
-    "BATCH_HELD_POLL_SKIP_ENABLED": {
-      "owner": "firestore-lead",
-      "review_by": "2026-12-02",
-      "registry": "config/feature-flags.yaml",
-      "reason": "2026-11-18: turned off on all four prod workloads because the registry's enable gates (replay, integration-first ramp, terminal-loss/SLA/read and D+2 settled-SKU evidence) were never recorded. Indexes READY and state census PASS (0) verified. Renewed to 2026-12-02 for a recorded gated ramp; delete the flag if that ramp does not happen."
     },
     "BATCH_LEGACY_CAPACITY_FALLBACK_ENABLED": {
       "owner": "overflow / two-lane lead",
@@ -375,6 +369,11 @@
     },
     "BATCH_PIPELINE_RECOVERY_WAKE_LEASE_SECONDS": {
       "seeded": "2026-10-25"
+    },
+    "BATCH_PIPELINE_RETAINED_DIGEST_HOLD_ENABLED": {
+      "owner": "Goal: Pipeline",
+      "review_by": "2026-12-19",
+      "registry": "config/feature-flags.yaml"
     },
     "BATCH_PIPELINE_REUSE_LIVE_ENABLED": {
       "seeded": "2026-10-25"
@@ -850,9 +849,6 @@
     "PARAKEET_WINDOW_ALLOCATION_PERCENT": {
       "seeded": "2026-10-25"
     },
-    "PARAKEET_WINDOW_DIARIZATION": {
-      "seeded": "2026-10-25"
-    },
     "PARAKEET_WINDOW_FIRST_TEXT_CUT_ENABLED": {
       "owner": "dazheng (live STT / rollout lead)",
       "review_by": "2026-12-14"
@@ -1076,9 +1072,6 @@
     "STT_PRERECORDED_VENDOR_FAIL_FAST": {
       "seeded": "2026-10-25"
     },
-    "STT_RESILIENT_RECONNECT": {
-      "seeded": "2026-10-25"
-    },
     "STT_ROUTING_DISRUPTION_GATE": {
       "seeded": "2026-10-25"
     },
@@ -1175,8 +1168,8 @@
     },
     "SYNC_FUTURE_CAPTURE_CLAMP_ENABLED": {
       "owner": "Q12-AD / sync capture recovery",
-      "review_by": "2026-11-22",
-      "reason": "2026-11-16 renewed: review_by expiry failed the flag-budget guard for every branch; enabling waits on the product decision how recovered future-dated recordings appear on Home; quality lead keeps or deletes by 2026-11-22"
+      "review_by": "2026-11-29",
+      "reason": "2026-11-22 renewed: prod enabled for every reader and admitter (SCA-3501, go-ahead SCA-1819, David 2026-11-21 dark-ready ruling 17); after the 24 h guard and readback the flag graduates or is relabelled under SCA-3682 by 2026-11-29"
     },
     "SYNC_INLINE_BACKFILL_CONCURRENCY": {
       "seeded": "2026-10-25"
@@ -1261,7 +1254,8 @@
     },
     "LISTEN_BATCH_RECONNECT_ENABLED": {
       "owner": "capture-quality / Release",
-      "review_by": "2026-11-20"
+      "review_by": "2026-11-23",
+      "reason": "Aligned 2026-11-21 to the registry extension (until 2026-11-23, David's 2026-11-17 bulk ruling: extend); ramp not expanded by 2026-11-20 and the lapsed date turned main's unit tests red"
     },
     "LISTEN_BATCH_RECONNECT_GRACE_SECONDS": {
       "owner": "capture-quality / Release",
@@ -1314,6 +1308,14 @@
     },
     "BATCH_PIPELINE_PROVIDER_STT_SWEEP_MAX_AGE_DAYS": {
       "on": "2026-11-16",
+      "replaced_by": null
+    },
+    "PARAKEET_WINDOW_DIARIZATION": {
+      "on": "2026-11-22",
+      "replaced_by": null
+    },
+    "STT_RESILIENT_RECONNECT": {
+      "on": "2026-11-22",
       "replaced_by": null
     }
   }

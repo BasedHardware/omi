@@ -15356,4 +15356,146 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get conversationRecentTranscript => '最近の文字起こし';
+
+  @override
+  String get finishAlreadySaved => 'すでに保存されています。ホームにあります。';
+
+  @override
+  String get finishAudioNotReceived => '音声はまだ送信中です。';
+
+  @override
+  String get finishFailedOffline => '処理を完了できませんでした。音声は失われていません。';
+
+  @override
+  String get finishFailed => '処理を完了できませんでした。音声は失われていません。';
+
+  @override
+  String get micBlockedCannotRecord => '録音するにはマイクを許可してください。';
+
+  @override
+  String get couldNotStartRecording => '録音を開始できませんでした。';
+
+  @override
+  String get restorePurchasesFailed => 'プランを確認できませんでした。';
+
+  @override
+  String get firmwareCheckFailed => 'アップデートを確認できませんでした。';
+
+  @override
+  String get conversationStillPublic => 'まだリンクで共有されています。';
+
+  @override
+  String get goalSaveFailed => '目標を保存できませんでした。';
+
+  @override
+  String get goalDeleteFailed => '削除できませんでした。目標は復元されました。';
+
+  @override
+  String get goalsLoadFailed => '目標を読み込めませんでした。';
+
+  @override
+  String get missingTargetEndedRecording => 'その録音はすでに終了しています。';
+
+  @override
+  String get missingTargetMemory => 'その記憶はなくなりました。';
+
+  @override
+  String get missingTargetTask => 'そのタスクはなくなりました。';
+
+  @override
+  String get missingTargetConversation => 'この会話を開けませんでした。';
+
+  @override
+  String get couldNotRefreshConversations => '更新できませんでした。';
+
+  @override
+  String get connectDeviceForOfflineSync => '同期するにはOmiを接続してください。';
+
+  @override
+  String get useDifferentAccountMessage => 'サインアウトされ、この端末のOmi設定はリセットされます。';
+
+  @override
+  String get rayBanMetaNotFoundAfterSetup => 'メガネが見つかりません。電源が入っていますか？';
+
+  @override
+  String get couldNotMoveTask => 'タスクを移動できませんでした。';
+
+  @override
+  String lockedTasksKept(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '削除しました。ロックされたタスク$count件を残しました。',
+      one: '削除しました。ロックされたタスク1件を残しました。',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get settingNotSaved => '変更を保存できませんでした。';
+
+  @override
+  String get couldNotLoadNotificationSettings => '設定を読み込めませんでした。';
+
+  @override
+  String get waitForOmiToFinish => 'Omiの応答が終わるまでお待ちください。';
+
+  @override
+  String get voiceNoteTooShort => '短すぎます。長押しして録音してください。';
+
+  @override
+  String get submitAppMissingFields => '送信するには、名前、説明、画像、カテゴリ、機能を追加してください。';
+
+  @override
+  String get appSetupNotFinished => 'セットアップはまだ完了していません。';
+
+  @override
+  String get finishNothingKeptTitle => '残すものはありません';
+
+  @override
+  String get submitAppFinishDetails => '送信するには、上記の機能と料金の詳細を入力してください。';
+
+  @override
+  String get finishNothingNew => 'まだ新しい内容はありません。';
+
+  @override
+  String get takingLongerThanUsual => '通常より時間がかかっています。ホームに追加されます。';
+
+  @override
+  String get couldNotCheckOnIt => '確認できませんでした。もう一度お試しください。';
+
+  @override
+  String get upgradeToOpenThisOne => '開くにはアップグレードが必要です。';
+
+  @override
+  String get missingTargetConversationGone => 'その会話は削除されました。';
+
+  @override
+  String get cantConnectRightNow => '現在接続できません。';
+
+  @override
+  String get loadOlderFailed => '前の項目を読み込めませんでした。タップして再試行。';
+
+  @override
+  String listeningWithDuration(String duration) {
+    return '聞き取り中 · $duration';
+  }
+
+  @override
+  String get conversationLiveNoEdits => '終了してから変更してください。';
+
+  @override
+  String get finishedSummaryReady => '要約が完了しました';
+
+  @override
+  String get writingSummaryStatus => '要約を作成中…';
+
+  @override
+  String get stillWorkingOnIt => 'まだ処理中です。';
+
+  @override
+  String get firmwareUpdateFirmwareTooOld => 'デバイスのファームウェアが古いため、この更新を適用できません。デバイスの更新についてはサポートにお問い合わせください。';
+
+  @override
+  String get firmwareUpdateAppRequired => 'このファームウェアの更新には、新しいバージョンのOmiアプリが必要です。アプリストアからアプリを更新してから、もう一度確認してください。';
 }

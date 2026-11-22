@@ -27,6 +27,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from models import finalization_owner
 from testing.import_isolation import load_module_fresh, stub_modules
 
 _BACKEND = Path(__file__).resolve().parents[2]
@@ -128,6 +129,7 @@ def merge():
         "database._client": client_stub,
         "database.conversations": conversations_stub,
         "database.conversation_tombstones": tombstones_stub,
+        "database.conversations_v3_backfill_runs": ModuleType("database.conversations_v3_backfill_runs"),
         "database.vector_db": vector_db_stub,
         "database.redis_db": redis_db_stub,
         "database.users": users_stub,
@@ -135,6 +137,7 @@ def merge():
         "utils.conversations.lifecycle": lifecycle_stub,
         "utils.other.storage": storage_stub,
         "models": models_pkg,
+        "models.finalization_owner": finalization_owner,
         "utils.memory.memory_service": memory_service_stub,
         "utils.memory.memory_system": memory_system_stub,
         "utils.memory.canonical_activation": canonical_activation_stub,

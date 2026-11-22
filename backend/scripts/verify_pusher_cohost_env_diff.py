@@ -193,7 +193,6 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
             "PARAKEET_BATCH_PRESSURE_MIN_REPLICAS",
             "PARAKEET_BATCH_PRESSURE_POOL_HOST",
             "PARAKEET_WINDOW_ALLOCATION_PERCENT",
-            "PARAKEET_WINDOW_DIARIZATION",
             # Pusher never creates a window decoder or owns its delivery deadline.
             "PARAKEET_WINDOW_DEADLINE_CUT_POST_LATENCY_SECONDS",
             "PARAKEET_WINDOW_MAX_SESSIONS",
@@ -205,7 +204,6 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
             "STT_ACCOUNT_CIRCUIT_COOLDOWN_SECONDS",
             "STT_CIRCUIT_HALF_OPEN_PROBES",
             "STT_SHED_CONNECT_FAILURES",
-            "STT_RESILIENT_RECONNECT",
             "STT_FAILOVER_RECOVERY_ENABLED",
             "STT_LEARNED_LANGUAGE_PROFILE",
             "STT_NON_EN_MULTI_PREFER_HINTABLE_PERCENT",
@@ -321,7 +319,6 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
             "PARAKEET_BATCH_PRESSURE_MIN_REPLICAS",
             "PARAKEET_BATCH_PRESSURE_POOL_HOST",
             "PARAKEET_WINDOW_ALLOCATION_PERCENT",
-            "PARAKEET_WINDOW_DIARIZATION",
             # Pusher never creates a window decoder or owns its delivery deadline.
             "PARAKEET_WINDOW_DEADLINE_CUT_POST_LATENCY_SECONDS",
             "PARAKEET_WINDOW_MAX_SESSIONS",
@@ -333,16 +330,11 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
             "PARAKEET_WINDOW_PACE_SECONDS",
             "PARAKEET_WINDOW_POST_TIMEOUT_SECONDS",
             # Listen-only Soniox idle-close treatment cohort; pusher opens no Soniox stream.
-            "SONIOX_IDLE_COHORT_PERCENT",
-            "SONIOX_IDLE_COHORT_CLOSE_SECONDS",
-            "SONIOX_IDLE_COHORT_REARM_SECONDS",
-            "SONIOX_IDLE_COHORT_MAX_CLOSES_PER_HOUR",
             "SONIOX_CIRCUIT_COOLDOWN_SECONDS",
             "SONIOX_CIRCUIT_FAILURE_THRESHOLD",
             "STT_ACCOUNT_CIRCUIT_COOLDOWN_SECONDS",
             "STT_CIRCUIT_HALF_OPEN_PROBES",
             "STT_SHED_CONNECT_FAILURES",
-            "STT_RESILIENT_RECONNECT",
             "STT_FAILOVER_RECOVERY_ENABLED",
             "STT_NO_TEXT_RESCUE_ENABLED",
             "STT_LEARNED_LANGUAGE_PROFILE",
@@ -479,6 +471,10 @@ PUSHER_ONLY_ALLOWED: dict[str, frozenset[str]] = {
             "TRANSCRIPTION_SHADOW_UID_ALLOWLIST",
             "TRANSCRIPTION_SHADOW_PERCENT",
             "TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS",
+            # Listen reads its STT cap enforcement and fallback cohort from privateSecretEnv (Secret
+            # Manager references, not env literals); pusher keeps its public observe-only values.
+            "STT_CAP_DISPATCH_ENFORCEMENT",
+            "STT_CAP_DISPATCH_COHORT",
         }
     )
     | frozenset(PROD_FINAL_PASS_SHADOW_VALUES),

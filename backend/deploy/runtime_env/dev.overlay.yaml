@@ -16,6 +16,8 @@ overlay:
   gke:
     backend-listen:
       env:
+        STT_CAP_DISPATCH_ENFORCEMENT: {value: 'false', category: rollout}
+        STT_CAP_DISPATCH_COHORT: {value: '', category: rollout}
         PUSHER_RECORD_CLOSE_NOTIFY_ENABLED: {value: 'false', category: rollout}
         PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_PERCENT: {value: '100', category: rollout}
         PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_UID_SHA256S: {value: '', category: rollout}
@@ -424,6 +426,7 @@ overlay:
           # Dev qualification for the David-approved graduation (DEC-BTR-004): open/play/download,
           # changed-source and duplicate-task checks before prod.
           PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
+          SYNC_POLL_BACKOFF_PERCENT: {value: '0', category: rollout}
           BATCH_PIPELINE_API_URL:
             value: ''
           BUCKET_BATCH_PIPELINE:

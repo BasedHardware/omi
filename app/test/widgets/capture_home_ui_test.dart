@@ -688,7 +688,8 @@ void main() {
       await tester.tap(find.bySemanticsLabel(en.startRecording));
       await tester.pump();
       expect(capture.phoneStarts, 1);
-      expect(find.text(en.somethingWentWrong), findsOneWidget);
+      expect(find.text(en.couldNotStartRecording), findsOneWidget);
+      expect(find.text(en.tryAgain), findsOneWidget, reason: 'ux-contract §17: an error offers the way forward');
       expect(find.byType(LiveEpisodePage), findsNothing);
     });
 

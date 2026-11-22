@@ -98,6 +98,16 @@ ACCOUNTING_EVENTS_TOTAL = Counter(
     ['api_surface', 'provider', 'payer', 'usage_status', 'cost_status', 'delivery'],
 )
 
+KEYED_PROVIDER_ATTEMPTS_TOTAL = Counter(
+    'llm_gateway_keyed_provider_attempts_total',
+    'Keyed provider attempts before dispatch',
+)
+KEYED_ACCOUNTING_DELIVERY_TOTAL = Counter(
+    'llm_gateway_keyed_accounting_delivery_total',
+    'Accounting event delivery for keyed chat provider attempts',
+    ['delivery'],
+)
+
 # Only newly persisted events contribute. Delivery failures/drops remain visible
 # in ACCOUNTING_EVENTS_TOTAL; duplicate persistence never bills a second time.
 _SPEND_LABELS = ['lane_id', 'api_surface', 'provider', 'model', 'payer', 'traffic_type']
@@ -364,6 +374,8 @@ def observe_accounting_event(event: AccountingEvent, *, delivery: str) -> None:
         cost_status=_bounded(event.cost_status.value),
         delivery=delivery_label,
     ).inc()
+    if event.idempotency_scope is not None:
+        KEYED_ACCOUNTING_DELIVERY_TOTAL.labels(delivery_label).inc()
     if delivery_label == 'written':
         observe_accounted_spend(event)
 

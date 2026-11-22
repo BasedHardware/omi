@@ -15706,4 +15706,150 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get conversationRecentTranscript => 'Pinakabagong Transcript';
+
+  @override
+  String get finishAlreadySaved => 'Naka-save na. Nasa Home na ito.';
+
+  @override
+  String get finishAudioNotReceived => 'Paparating pa lang ang audio.';
+
+  @override
+  String get finishFailedOffline => 'Hindi natuloy. Ligtas pa ang audio mo.';
+
+  @override
+  String get finishFailed => 'Hindi natuloy. Ligtas pa ang audio mo.';
+
+  @override
+  String get micBlockedCannotRecord => 'Payagan ang mikropono upang makapag-record.';
+
+  @override
+  String get couldNotStartRecording => 'Hindi nasimulan ang pag-record.';
+
+  @override
+  String get restorePurchasesFailed => 'Hindi na-check ang iyong plano.';
+
+  @override
+  String get firmwareCheckFailed => 'Hindi ma-check ang mga update.';
+
+  @override
+  String get conversationStillPublic => 'Nakabahagi pa rin ito sa pamamagitan ng link.';
+
+  @override
+  String get goalSaveFailed => 'Hindi na-save ang goal mo.';
+
+  @override
+  String get goalDeleteFailed => 'Hindi natanggal. Nabalik ang goal.';
+
+  @override
+  String get goalsLoadFailed => 'Hindi na-load ang mga goal mo.';
+
+  @override
+  String get missingTargetEndedRecording => 'Tapos na ang pag-record na iyon.';
+
+  @override
+  String get missingTargetMemory => 'Wala na ang alaala na iyon.';
+
+  @override
+  String get missingTargetTask => 'Wala na ang gawaing iyon.';
+
+  @override
+  String get missingTargetConversation => 'Hindi mabuksan ang pag-uusap na ito.';
+
+  @override
+  String get couldNotRefreshConversations => 'Hindi na-refresh.';
+
+  @override
+  String get connectDeviceForOfflineSync => 'Ikonekta ang Omi mo para mag-sync.';
+
+  @override
+  String get useDifferentAccountMessage => 'Mag-sign out ka at mareset ang mga Omi setting ng teleponong ito.';
+
+  @override
+  String get rayBanMetaNotFoundAfterSetup => 'Hindi nahanap ang salamin. Naka-on ba ito?';
+
+  @override
+  String get couldNotMoveTask => 'Hindi nailipat ang gawain.';
+
+  @override
+  String lockedTasksKept(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Tinanggal. $count naka-lock na gawain ang naiwan.',
+      one: 'Tinanggal. 1 naka-lock na gawain ang naiwan.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get settingNotSaved => 'Hindi na-save ang pagbabagong iyon.';
+
+  @override
+  String get couldNotLoadNotificationSettings => 'Hindi na-load ang mga setting mo.';
+
+  @override
+  String get waitForOmiToFinish => 'Hintayin mong matapos si Omi.';
+
+  @override
+  String get voiceNoteTooShort => 'Masyadong maikli. Pindutin nang matagal para mag-record.';
+
+  @override
+  String get submitAppMissingFields =>
+      'Magdagdag ng pangalan, paglalarawan, larawan, kategorya at kakayahan para makapag-submit.';
+
+  @override
+  String get appSetupNotFinished => 'Hindi pa tapos ang setup.';
+
+  @override
+  String get finishNothingKeptTitle => 'Walang Mapapanatili';
+
+  @override
+  String get submitAppFinishDetails =>
+      'Tapusin muna ang mga detalye ng kakayahan at presyo sa itaas para makapag-submit.';
+
+  @override
+  String get finishNothingNew => 'Wala pang bago.';
+
+  @override
+  String get takingLongerThanUsual => 'Mas matagal kaysa dati. Malapit na itong makita sa Home.';
+
+  @override
+  String get couldNotCheckOnIt => 'Hindi na-check ito. Subukan ulit.';
+
+  @override
+  String get upgradeToOpenThisOne => 'Mag-upgrade para mabuksan ito.';
+
+  @override
+  String get missingTargetConversationGone => 'Tinanggal na ang pag-uusap na iyon.';
+
+  @override
+  String get cantConnectRightNow => 'Hindi makakonekta ngayon.';
+
+  @override
+  String get loadOlderFailed => 'Hindi na-load ang mga mas luma. I-tap para subukan ulit.';
+
+  @override
+  String listeningWithDuration(String duration) {
+    return 'Nakikinig · $duration';
+  }
+
+  @override
+  String get conversationLiveNoEdits => 'Hintaying matapos muna bago ito baguhin.';
+
+  @override
+  String get finishedSummaryReady => 'Handa na ang buod';
+
+  @override
+  String get writingSummaryStatus => 'Isinusulat ang buod…';
+
+  @override
+  String get stillWorkingOnIt => 'Pinagtatrabahuhan pa rin ito.';
+
+  @override
+  String get firmwareUpdateFirmwareTooOld =>
+      'Napakaluma na ng firmware ng iyong device para sa update na ito. Makipag-ugnayan sa support para sa tulong sa pag-update ng iyong device.';
+
+  @override
+  String get firmwareUpdateAppRequired =>
+      'Kailangan ng firmware update na ito ng mas bagong Omi app. I-update ang app mula sa iyong app store, pagkatapos ay tingnan muli.';
 }

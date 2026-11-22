@@ -242,3 +242,68 @@ test('renames to or from the exempt Swift output still inspect the other Swift p
     assert.deepEqual(refs,[f.p.base.sha,f.p.head.sha]);
   }
 });
+
+const {carryCandidate} = require('../ui-author-approval.cjs');
+const A = 'a'.repeat(40), B = 'b'.repeat(40), C = 'c'.repeat(40);
+const cmd = (id, verb, sha, user = nik) => ({id, user, body:`/${verb}-ui ${sha}`});
+test('R29 carry candidate: newest approver command must approve an earlier head', () => {
+  assert.equal(carryCandidate([cmd(1,'approve',A)],B),A);
+  assert.equal(carryCandidate([cmd(1,'approve',A,actor)],B),A);
+  assert.equal(carryCandidate([cmd(2,'reject',C),cmd(1,'approve',A)],B),null);
+  assert.equal(carryCandidate([cmd(1,'approve',A),cmd(2,'reject',B)],B),null);
+  assert.equal(carryCandidate([cmd(1,'approve',A),cmd(2,'approve',B)],B),null);
+  assert.equal(carryCandidate([cmd(1,'approve',A,{id:3})],B),null);
+  assert.equal(carryCandidate([],B),null);
+  assert.equal(carryCandidate([{id:1,user:nik,body:`/approve-ui ${A} please`}],B),null);
+});
+test('decision uses a carried approval only without a current-head command', () => {
+  const p = {...pr,user:actor};
+  assert.equal(decision(p,ui,[],[],true).allowed,true);
+  assert.equal(decision(p,ui,[],[{...approve,body:`/reject-ui ${pr.head.sha}`}],true).allowed,false);
+  assert.equal(decision({...p,commits:250},ui,[],[],true).allowed,false);
+});
+function carryFixture({rangeFiles, status = 'ahead'}) {
+  const f = fixture();
+  const approved = f.p.head.sha;
+  f.p.head = {sha:B};
+  f.comments[1].push(cmd(1,'approve',approved));
+  f.github.rest.repos.compareCommitsWithBasehead = async args => {
+    f.calls.push(args);
+    if (args.basehead === `${approved}...${B}`) {
+      return {data:{files:rangeFiles,commits:[{sha:B}],total_commits:1,status}};
+    }
+    return {data:{files:ui,commits:[{sha:B}],total_commits:1}};
+  };
+  return {...f,approved};
+}
+test('R29 workflow carries approval across a descendant head with no UI change', async () => {
+  const f = carryFixture({rangeFiles:[{filename:'backend/router.py'}]});
+  await run(f);
+  assert.equal(f.statuses.at(-1).state,'success');
+  assert.ok(f.calls.some(c => c.basehead === `${f.approved}...${B}`));
+  assert.equal(f.comments[1].filter(c => c.user.type === 'Bot').length,0);
+});
+test('R29 carry refuses UI changes, rebases, unreadable ranges and later rejects', async () => {
+  for (const [label, opts] of [
+    ['ui', {rangeFiles:[{filename:'app/lib/pages/home.dart'}]}],
+    ['renamed-ui', {rangeFiles:[{filename:'archive/x',previous_filename:'app/lib/widgets/x.dart'}]}],
+    ['rebase', {rangeFiles:[{filename:'backend/router.py'}],status:'diverged'}],
+    ['behind', {rangeFiles:[],status:'behind'}],
+    ['truncated', {rangeFiles:Array(300).fill({filename:'backend/router.py'})}],
+  ]) {
+    const f = carryFixture(opts);
+    await run(f);
+    assert.equal(f.statuses.at(-1).state,'failure',label);
+  }
+  const f = carryFixture({rangeFiles:[{filename:'backend/router.py'}]});
+  f.comments[1].push(cmd(2,'reject',f.approved));
+  await run(f);
+  assert.equal(f.statuses.at(-1).state,'failure');
+});
+test('R29 carry scans Swift in the range by content', async () => {
+  const f = carryFixture({rangeFiles:[{filename:'desktop/macos/Desktop/Sources/Chrome/Custom.swift'}]});
+  const source = 'import SwiftUI';
+  f.github.rest.repos.getContent = async () => ({data:{encoding:'base64',size:Buffer.byteLength(source),content:Buffer.from(source).toString('base64')}});
+  await run(f);
+  assert.equal(f.statuses.at(-1).state,'failure');
+});

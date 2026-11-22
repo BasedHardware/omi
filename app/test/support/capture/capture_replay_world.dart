@@ -315,6 +315,10 @@ class CaptureReplayWorld {
   /// When set, Process Now returns this outcome instead of a transport miss.
   Future<InProgressProcessOutcome> Function()? processOutcome;
 
+  /// Optional real-index write barrier for close/admission race scenarios. Null preserves the
+  /// production persistence path; callers that override it own writing the supplied inventory.
+  Future<void> Function(List<Wal>)? phonePersistWals;
+
   /// Server deletes of discarded recordings, by recording id, in order.
   final List<String> discardDeletes = [];
 
@@ -355,6 +359,7 @@ class CaptureReplayWorld {
     Future<void> Function(String, bool)? deviceMuteWriter,
     Future<bool?> Function(String)? deviceMuteReader,
     CaptureWedgeMonitor? captureWedgeMonitor,
+    Future<void> Function(List<Wal>)? phonePersistWals,
   }) async {
     TestWidgetsFlutterBinding.ensureInitialized();
     final start = startTime ?? defaultStart;
@@ -368,6 +373,7 @@ class CaptureReplayWorld {
     world.deviceMuteWriter = deviceMuteWriter;
     world.deviceMuteReader = deviceMuteReader;
     world.captureWedgeMonitor = captureWedgeMonitor;
+    world.phonePersistWals = phonePersistWals;
     world.connected = initiallyConnected;
     await world._bootGeneration(supportsBatch: supportsBatch, initialPrefs: initialPrefs, firstBoot: true);
     return world;
@@ -413,6 +419,7 @@ class CaptureReplayWorld {
       periodic: scheduler.periodic,
     );
     wal = WalService(
+      phonePersistWals: phonePersistWals,
       phoneUploadGate: uploads.buildGate(),
       phoneNow: clock.now,
       phonePeriodic: scheduler.periodic,

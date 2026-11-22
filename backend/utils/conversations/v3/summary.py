@@ -19,7 +19,7 @@ from fastapi import HTTPException
 from config.conversations_v3 import live_recap_enabled
 from database import conversations_v3 as store
 from models.conversation import Conversation
-from utils.conversations.v3 import models, policy, recap_telemetry
+from utils.conversations.v3 import models, planner, policy, recap_telemetry, visibility
 from utils.conversations.v3.triggers import enqueue
 from utils.observability.fallback import record_fallback
 from utils.executors import run_blocking, db_executor, llm_executor
@@ -31,6 +31,10 @@ def fresh(row):
     return bool(covers and end and end - covers < timedelta(minutes=5))
 
 
+def needs_open_reconcile(row):
+    return row.get('v3_derived') and (row.get('status') == 'in_progress' or row.get('v3_unlocked'))
+
+
 def summary_eligible(row):
     if row.get('processing_tier') == 'historical':
         # Historical rows summarize only through POST .../summary/open (its caps and gates).
@@ -39,7 +43,7 @@ def summary_eligible(row):
         row.get('kind') not in {'media', 'background'}
         and (
             policy.manual_intent(row)
-            or sum(len(s.get('text', '').split()) for s in row.get('transcript_segments') or []) >= 300
+            or planner.word_count(row.get('transcript_segments') or []) >= visibility.MIN_HOME_WORDS
         )
     )
 
@@ -58,7 +62,9 @@ def write(uid, row, emit):
         structured, _discarded = _get_structured(
             uid, row.get('language') or 'en', Conversation(**row), live_recap=recap_telemetry.active()
         )
-    if row.get('title_locked'):
+    if row.get('title_locked') or (
+        not recap_telemetry.active() and row.get('v3_unlocked') and (row.get('structured') or {}).get('title')
+    ):
         structured.title = (row.get('structured') or {}).get('title', '')
         structured.emoji = (row.get('structured') or {}).get('emoji', '💬')
     # Stream final sections too when the existing notes writer returned a cache
@@ -162,6 +168,7 @@ async def stream(
         yield done(row)
         return
     cid = row['id']
+    fallback_open = not live and bool(row.get('v3_unlocked'))
     loop = asyncio.get_running_loop()
     queue = asyncio.Queue(maxsize=128)
     sent = set()
@@ -193,7 +200,7 @@ async def stream(
         if decoded is None:
             yield 'error: {"detail":"Conversation not found"}\n\n'
             return
-        if not live and policy.live_summary_target(decoded):
+        if not live and policy.live_summary_target(decoded) and not decoded.get('v3_unlocked'):
             yield 'error: {"detail":"Conversation not available"}\n\n'
             return
         if live:
@@ -227,6 +234,9 @@ async def stream(
         row = decoded
         if row.get('recording') or row.get('is_locked'):
             yield 'error: {"detail":"Conversation not available"}\n\n'
+            return
+        if fallback_open and (fresh(row) or not summary_eligible(row)):
+            yield done(row)
             return
         # run_blocking is awaited by a tracked task and never holds a DB worker
         # while waiting on a model. Request cancellation cannot authorize a write.
@@ -266,7 +276,7 @@ async def stream(
             yield _LIVE_UNAVAILABLE
             return
         _record(observation, 'notes_committed')
-        if armed:
+        if armed or fallback_open:
             await _wake_created(uid)
         for section in structured.get('sections') or []:
             text = (
@@ -287,7 +297,7 @@ async def stream(
         raise
     except Exception:
         _record(observation, 'stream_failed')
-        if not live and row.get('v3_derived') and row.get('status') != 'in_progress':
+        if not live and row.get('v3_derived') and not needs_open_reconcile(row):
             try:
                 await run_blocking(
                     db_executor,

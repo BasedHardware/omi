@@ -18,6 +18,7 @@ from utils.conversations import phase_shadow
 from utils.observability.delivery import record_delivery
 
 from prometheus_client import Counter, Gauge, Histogram
+from models.finalization_owner import python_owns_finalization
 from config.refactor_modes import default_on
 from config.summary_guarantee import deadline_seconds
 from config.policy import FirstSummaryPolicy
@@ -51,6 +52,11 @@ OLDEST = Gauge('omi_summary_debt_oldest_age_seconds', 'Oldest overdue summary de
 SAMPLED_AT = Gauge('omi_summary_debt_sample_timestamp_seconds', "Timestamp of this replica's bounded debt sample")
 EXPIRED_SEEN = Gauge('omi_summary_debt_expired_seen', 'Rows skipped as expired in the last claimed repair tick')
 REPAIR = Counter('omi_summary_debt_repair_total', 'Summary debt repair tick outcomes', ['outcome'])
+REPAIR_DISCOVERY = Counter(
+    'omi_summary_debt_repair_discovery_total',
+    'Summary debt repair discovery and redrive observations',
+    ['phase', 'outcome'],
+)
 NEAR_EXPIRY_ADMITTED = Gauge(
     'omi_summary_debt_near_expiry_admitted', 'Successful urgent redrives in the last claimed repair tick'
 )
@@ -323,7 +329,21 @@ def projection_owns_finalization(row: Row) -> bool:
     )
 
 
+def retryable_finalization_owns(row: Row) -> bool:
+    """A finalization job owns this row's summary debt and the repair pass refuses it.
+
+    Repair discovery and redrive skip foreign ownership markers and job rows
+    without a verified batch-projection handoff. An empty attempt must leave
+    delivery with that owner.
+    """
+    return not python_owns_finalization(row) or (
+        bool(row.get('finalization_job_id')) and not projection_owns_finalization(row)
+    )
+
+
 def _refusal(row: Row) -> str | None:
+    if not python_owns_finalization(row):
+        return 'generation_owned'
     if row.get('status') != 'completed' or row.get('deleted') or row.get('discarded'):
         return 'lifecycle'
     if row.get('deferred') or row.get('is_locked') or row.get('processing_state') == 'local_pending':
@@ -427,10 +447,19 @@ def retires_title_marker(existing: Row, write: Row) -> bool:
     )
 
 
+def _retire_title_marker(existing: Row, write: Row) -> None:
+    if retires_title_marker(existing, write):
+        # Sync tests load this module with google.cloud stubbed.
+        from google.cloud.firestore import DELETE_FIELD
+
+        write['structured']['title_provenance'] = DELETE_FIELD
+
+
 def _merge_historical(existing: Row, write: Row, current: float) -> None:
     """A historical row owes no automatic summary; its open-time summary is a delivered one."""
     write['summary_due_at'] = None
     if write.get('summary_output_present'):
+        _retire_title_marker(existing, write)
         write['summary_completed_at'] = existing.get('summary_completed_at') or current
         write['summary_title_provenance'] = 'generated'
         write['summary_blocked_reason'] = None
@@ -484,11 +513,7 @@ def merge_result(existing: Row, write: Row, uid: str, *, now: float | None = Non
         write['summary_first_pending_at'] = accepted
     rich = bool(write.get('summary_output_present'))
     discarded = bool(write.get('discarded'))
-    if retires_title_marker(existing, write):
-        # Imported here like effective_user_title below: sync tests load this module with google.cloud stubbed.
-        from google.cloud.firestore import DELETE_FIELD
-
-        write['structured']['title_provenance'] = DELETE_FIELD
+    _retire_title_marker(existing, write)
     # The fence guards an open first-summary obligation only. Rows outside the
     # server-minimum protocol, already-enriched rows, and rows whose empty
     # budget is exhausted have no caller that catches this exception — the
@@ -501,7 +526,25 @@ def merge_result(existing: Row, write: Row, uid: str, *, now: float | None = Non
         and existing.get('summary_blocked_reason') not in EMPTY_BLOCKED_REASONS
     )
     if not rich and not discarded and obligation_open:
-        raise SummaryOutputUnavailable('kept first-summary output is empty')
+        if PROCESS_CONTEXT.get() is not None:
+            # A consumer owns this write and records the bounded empty-output
+            # strike (``record_empty_failure``) before releasing the lease.
+            raise SummaryOutputUnavailable('kept first-summary output is empty')
+        if retryable_finalization_owns(existing):
+            # The finalization job is the only repair owner: the repair pass
+            # refuses this row as ``generation_owned``. Committing the empty
+            # attempt would let the finalizer complete its job and leave the
+            # armed debt with no owner, so keep the raise and the job retryable.
+            raise SummaryOutputUnavailable('kept first-summary output is empty')
+        # No consumer and no retryable job owns this write: a request path
+        # (from-segments) or a direct sync persist. Raising here aborts the
+        # completed write and surfaces as a 500, so commit the empty attempt
+        # with the debt still armed. The repair pass re-wakes the row and the
+        # consumer's empty budget bounds the retries; an empty structured is
+        # never a delivery.
+        if write.get('summary_due_at') is None:
+            write['summary_due_at'] = current + deadline_seconds()
+        return dict(lane=lane(existing), reason='empty_output', present=False, latency=None)
     if existing.get('summary_completed_at') or existing.get('summary_output_present'):
         write['summary_due_at'] = None
         # An enriched row already holds a usable summary. The old fence refused

@@ -358,6 +358,8 @@ AREA_TESTS = (
             'tests/unit/test_batch_pipeline_chart.py',
             'tests/unit/test_config_train.py',
             'tests/unit/test_runtime_env_sources.py',
+            # Renders the listen chart for the seal overlap switch; it went stale unselected after #25660.
+            'tests/unit/test_record_seal_cluster_repair_deploy.py',
         ),
     ),
     (
@@ -390,6 +392,14 @@ AREA_TESTS = (
             'tests/unit/test_incluster_guards.py',
             'tests/unit/test_gpu_fleet_retirement.py',
             'tests/unit/test_streaming_gpu_teardown.py',
+        ),
+    ),
+    (
+        ('backend/charts/monitoring/prometheus-adapter/prod_omi_prometheus_adapter.yaml',),
+        (),
+        (
+            'tests/unit/test_batch_pipeline_hpa_retune_replay.py',
+            'tests/unit/test_batch_pipeline_hpa_capacity_replay.py',
         ),
     ),
     (('backend/config/flag_budget.json',), (), FLAG_BUDGET_TESTS),
@@ -521,6 +531,7 @@ AREA_TESTS = (
             'tests/unit/test_monitoring_*.py',
             'tests/unit/test_firestore_unattributed_reads_alert.py',
             'tests/unit/test_timeliness_metrics_are_scraped.py',
+            'tests/unit/test_projection_finish_guard_metrics_are_scraped.py',
             'tests/unit/test_serving_podmonitoring_chart.py',
             'tests/unit/test_firestore_attribution_charts.py',
             'tests/unit/test_backend_secrets_chart.py',
@@ -878,6 +889,7 @@ def tests_for_changed_paths(
             test
             for test in (
                 'tests/unit/test_timeliness_metrics_are_scraped.py',
+                'tests/unit/test_projection_finish_guard_metrics_are_scraped.py',
                 'tests/unit/test_enrichment_llm_cost_metrics_are_scraped.py',
             )
             if test in all_tests

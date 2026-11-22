@@ -8,10 +8,14 @@ deletion marker. Legal holds, retention, and unknown metadata remain protected.
 from datetime import datetime, timezone
 import hashlib
 import json
-from typing import Any
+from typing import Any, TypeGuard
 
 from database.account_deletion_marker import account_deletion_document, account_deletion_firestore_client
 from database.legal_holds import assert_account_deletion_permitted, assert_destructive_gate_still_ours
+
+OPERATIONAL_HOLD_RELEASE_PLAN_MAX_OBJECTS = 20_000
+OPERATIONAL_HOLD_RELEASE_PLAN_SHARDS = 'operational_hold_release_plan_shards'
+_HASH_PREFIX_LAYOUT = 'sha256-prefix-v1'
 
 # The preservation operator's COMPLETE.json receipt (2026-10-18T13:05:24Z).
 # These are opaque control-artifact integrity bindings, not account identifiers.
@@ -73,7 +77,7 @@ def object_digest(name: str) -> str:
     return hashlib.sha256(name.encode()).hexdigest()
 
 
-def validate_release_plan(uid: str, approval: Any) -> dict[str, Any]:
+def _validate_release_header(uid: str, approval: Any) -> dict[str, Any]:
     if not isinstance(approval, dict) or approval.get('issuer') != 'reviewed_operator':
         raise OperationalStorageHoldBlocked('operational hold release needs reviewed operator approval')
     plan = approval.get('plan')
@@ -85,11 +89,13 @@ def validate_release_plan(uid: str, approval: Any) -> dict[str, Any]:
         or plan.get('owner_sha256') != object_digest(uid)
         or not isinstance(approval.get('approval_ref'), str)
         or not approval['approval_ref'].strip()
-        or approval.get('plan_sha256') != plan_digest(plan)
     ):
         raise OperationalStorageHoldBlocked('operational hold release approval is malformed or changed')
-    objects = plan.get('objects')
-    if not isinstance(objects, list) or not objects or len(objects) > 1000:
+    return plan
+
+
+def _validate_release_objects(objects: Any) -> TypeGuard[list[dict[str, Any]]]:
+    if not isinstance(objects, list) or not objects or len(objects) > OPERATIONAL_HOLD_RELEASE_PLAN_MAX_OBJECTS:
         raise OperationalStorageHoldBlocked('operational hold release plan size is invalid')
     seen = set()
     for item in objects:
@@ -109,7 +115,61 @@ def validate_release_plan(uid: str, approval: Any) -> dict[str, Any]:
         ):
             raise OperationalStorageHoldBlocked('operational hold release object identity is invalid')
         seen.add(identity)
+    return True
+
+
+def validate_release_plan(uid: str, approval: Any) -> dict[str, Any]:
+    plan = _validate_release_header(uid, approval)
+    if approval.get('plan_sha256') != plan_digest(plan):
+        raise OperationalStorageHoldBlocked('operational hold release approval is malformed or changed')
+    _validate_release_objects(plan.get('objects'))
     return plan
+
+
+def shard_release_approval(uid: str, approval: Any) -> tuple[dict[str, Any], dict[str, dict[str, Any]]]:
+    plan = validate_release_plan(uid, approval)
+    shards: dict[str, dict[str, Any]] = {}
+    for item in plan['objects']:
+        prefix = item['object_sha256'][:2]
+        shards.setdefault(prefix, {'objects': []})['objects'].append(item)
+    manifest = {
+        **approval,
+        'layout': _HASH_PREFIX_LAYOUT,
+        'plan': {key: value for key, value in plan.items() if key != 'objects'},
+        'shard_sha256': {prefix: plan_digest(shard) for prefix, shard in shards.items()},
+    }
+    return {**manifest, 'manifest_sha256': plan_digest(manifest)}, shards
+
+
+def _read_release_objects(uid: str, marker_ref: Any, approval: Any, prefix: str) -> list[dict[str, Any]]:
+    if not isinstance(approval, dict) or 'layout' not in approval:
+        return validate_release_plan(uid, approval)['objects']
+
+    plan = _validate_release_header(uid, approval)
+    manifest = {key: value for key, value in approval.items() if key != 'manifest_sha256'}
+    shard_hashes = approval.get('shard_sha256')
+    if (
+        approval['layout'] != _HASH_PREFIX_LAYOUT
+        or 'objects' in plan
+        or not isinstance(shard_hashes, dict)
+        or approval.get('manifest_sha256') != plan_digest(manifest)
+    ):
+        raise OperationalStorageHoldBlocked('operational hold release manifest is malformed or changed')
+    if prefix not in shard_hashes:
+        return []
+
+    snapshot = marker_ref.collection(OPERATIONAL_HOLD_RELEASE_PLAN_SHARDS).document(prefix).get()
+    shard = snapshot.to_dict() if snapshot.exists else None
+    if not isinstance(shard, dict) or shard_hashes[prefix] != plan_digest(shard):
+        raise OperationalStorageHoldBlocked('operational hold release shard is missing or changed')
+    objects = shard.get('objects')
+    _validate_release_objects(objects)
+    if not isinstance(objects, list):
+        raise OperationalStorageHoldBlocked('operational hold release plan size is invalid')
+    validated: list[dict[str, Any]] = [item for item in objects if isinstance(item, dict)]
+    if any(item['object_sha256'][:2] != prefix for item in validated):
+        raise OperationalStorageHoldBlocked('operational hold release shard contains an invalid object prefix')
+    return validated
 
 
 def release_operational_hold_for_account_deletion(uid: str, blob: Any, *, firestore_client: Any | None = None) -> None:
@@ -129,13 +189,13 @@ def release_operational_hold_for_account_deletion(uid: str, blob: Any, *, firest
     approval = marker.get('operational_hold_release_approval')
     if approval is None and blob.temporary_hold is not True:
         return
-    plan = validate_release_plan(uid, approval)
     name_hash = object_digest(blob.name)
     generation = str(blob.generation)
+    objects = _read_release_objects(uid, marker_ref, approval, name_hash[:2])
     match = next(
         (
             item
-            for item in plan['objects']
+            for item in objects
             if item['bucket'] == blob.bucket.name
             and item['object_sha256'] == name_hash
             and item['generation'] == generation
@@ -157,14 +217,17 @@ def release_operational_hold_for_account_deletion(uid: str, blob: Any, *, firest
     # release event-based holds, object retention, or equivalent legal markers.
     blob.reload(if_generation_match=int(generation))
     assert_no_protected_object_hold(blob)
+    if not isinstance(approval, dict):
+        raise OperationalStorageHoldBlocked('operational hold release approval is missing')
     metadata = blob.metadata or {}
+    campaign = approval['plan']['campaign']
     known_tags = {'incident', 'source_sha256', 'source_generation'}
     if (
         blob.event_based_hold
         or blob.retention.mode
         or blob.retention.retain_until_time
         or blob.retention_expiration_time
-        or (metadata and (set(metadata) - known_tags or metadata.get('incident') != plan['campaign']))
+        or (metadata and (set(metadata) - known_tags or metadata.get('incident') != campaign))
     ):
         raise OperationalStorageHoldBlocked('legal, retention, or unknown object hold metadata is protected')
     receipt_ref = marker_ref.collection('operational_hold_releases').document(f'{name_hash}-{generation}')
@@ -173,8 +236,8 @@ def release_operational_hold_for_account_deletion(uid: str, blob: Any, *, firest
     expected_meta = match['metageneration']
     receipt_identity = {
         'schema_version': 1,
-        'plan_sha256': plan_digest(plan),
-        'campaign': plan['campaign'],
+        'plan_sha256': approval['plan_sha256'],
+        'campaign': campaign,
         'bucket': blob.bucket.name,
         'object_sha256': name_hash,
         'generation': generation,

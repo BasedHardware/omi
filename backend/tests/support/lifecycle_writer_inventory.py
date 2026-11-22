@@ -131,7 +131,33 @@ FIELD_SITES = {
                 'v3_process_fingerprint',
                 'v3_rewrites',
             ),
-        )
+        ),
+        # The claim transfer transaction redirects settled donors and clears legacy notes debt.
+        (
+            'commit_projection.commit',
+            'summary_due_at',
+            'None',
+            (
+                'deleted',
+                'discarded',
+                'home_hidden',
+                'summary_due_at',
+                'sync_content_revision',
+                'sync_merged_into',
+                'v3_claims_transferred_to',
+                'v3_refined',
+            ),
+        ),
+    ],
+    # Reviewed live re-derive: an in-memory planning copy of a protected row, offered as a published
+    # finished window so it keeps its lines; it is never written.
+    'database/conversations_v3_rederive.py': [
+        (
+            'load_live_rederive',
+            'status',
+            "'completed' if row.get('status') == 'in_progress' else row.get('status')",
+            ('_v3_protected', 'status'),
+        ),
     ],
     # Reviewed backfill run ledger: run and partition status, not a conversation lifecycle field.
     'database/conversations_v3_backfill_runs.py': [
@@ -180,6 +206,12 @@ FIELD_SITES = {
                 'v3_process_pending',
             ),
         ),
+        (
+            'store_summary.persist',
+            'status',
+            "'completed'",
+            ('status', 'v3_open_locked', 'v3_process_pending', 'v3_unlocked'),
+        ),
     ],
     'utils/conversations/v3/planner.py': [
         (
@@ -214,9 +246,38 @@ FIELD_SITES = {
                 'v3_derived',
                 'v3_recording_ids',
             ),
-        )
+        ),
+        (
+            'unavailable_preview',
+            'status',
+            "'completed'",
+            (
+                '_v3_claims',
+                'home_hidden',
+                'home_hidden_reason',
+                'status',
+                'tile_state',
+                'v3_process_pending',
+                'v3_unlocked',
+            ),
+        ),
     ],
     'utils/conversations/v3/service.py': [
+        (
+            '_retire_patch',
+            'summary_due_at',
+            'None',
+            (
+                'deleted',
+                'discarded',
+                'summary_due_at',
+                'sync_content_revision',
+                'sync_merged_into',
+                'v3_claims_transferred_to',
+                'v3_derived',
+                'v3_rederive_live_run',
+            ),
+        ),
         ('reconcile.plan', 'status', "prior['status']", ('status',)),
         ('recording_short_path.guarded', 'status', 'ConversationStatus.completed', ('status',)),
     ],
@@ -301,14 +362,22 @@ FIELD_SITES = {
         ('settle_billed.commit', 'status', "'settled'", ('expires_at', 'months', 'status')),
     ],
     'database/batch_pipeline_coalescing_completion.py': [
-        ('write', 'status', "'completed'", ('expires_at', 'result', 'status', 'updated_at')),
+        ('write', 'status', "'completed'", ('completed_at', 'expires_at', 'result', 'status', 'updated_at')),
     ],
     'utils/batch_pipeline/upload_coalescing.py': [
         (
             'member_status',
             'status',
             "'completed'",
-            ('poll_after_ms', 'processed_segments', 'result', 'status', 'successful_segments', 'total_segments'),
+            (
+                'completed_at',
+                'poll_after_ms',
+                'processed_segments',
+                'result',
+                'status',
+                'successful_segments',
+                'total_segments',
+            ),
         ),
         (
             'queued',
@@ -1371,6 +1440,8 @@ FIELD_SITES = {
                 'updated_at',
             ),
         ),
+        ('_record_meeting_receipt_txn', 'status', "'fenced'", ('status',)),
+        ('_record_meeting_receipt_txn', 'status', "'fenced'", ('status',)),
         ('_record_meeting_receipt_txn', 'status', "'identity_mismatch'", ('status',)),
         ('_record_meeting_receipt_txn', 'status', "'missing'", ('status',)),
         ('_record_meeting_receipt_txn', 'status', "'recorded'", ('job_id', 'status')),
@@ -1593,6 +1664,7 @@ FIELD_SITES = {
         # Dark quiet-check retirement names the orphan-repair exit; it does
         # not terminalize the capture or create another arm site.
         ('_evaluate_quiet_check.evaluate', 'status', "'done'", ('exit', 'reason', 'status')),
+        ('_evaluate_quiet_check.evaluate', 'status', "'done'", ('reason', 'status')),
         ('_evaluate_quiet_check.evaluate', 'status', "'done'", ('reason', 'status')),
         ('_evaluate_quiet_check.evaluate', 'status', "'done'", ('reason', 'status')),
         ('_evaluate_quiet_check.evaluate', 'status', "'done'", ('status',)),
@@ -2670,7 +2742,12 @@ FIELD_SITES = {
         ('mark_job_queued_for_retry', 'status', "'queued'", ('attempt', 'last_error', 'status')),
     ],
     'database/sync_ledger.py': [
-        ('_mark_completed_transaction', 'status', "'completed'", ('expires_at', 'result', 'status', 'updated_at')),
+        (
+            '_mark_completed_transaction',
+            'status',
+            "'completed'",
+            ('completed_at', 'expires_at', 'result', 'status', 'updated_at'),
+        ),
         (
             '_processing_claim_updates',
             'status',
@@ -2699,7 +2776,7 @@ FIELD_SITES = {
             'complete_batch_projection_in_transaction',
             'status',
             "'completed'",
-            ('expires_at', 'result', 'status', 'updated_at'),
+            ('completed_at', 'expires_at', 'result', 'status', 'updated_at'),
         ),
     ],
     'database/sync_redrive.py': [
@@ -2906,6 +2983,7 @@ FIELD_SITES = {
             'status',
             "'completed'",
             (
+                'completed_at',
                 'errors',
                 'failed_segments',
                 'job_id',
@@ -3000,6 +3078,7 @@ FIELD_SITES = {
             'status',
             "status; literal aliases=[('status', ('completed', 'failed', 'processing', " "'queued'))]",
             (
+                'completed_at',
                 'errors',
                 'failed_segments',
                 'job_id',
@@ -3325,6 +3404,7 @@ FIELD_SITES = {
         ('merge_result', 'summary_due_at', 'None', ('summary_due_at',)),
         ('merge_result', 'summary_due_at', 'None', ('summary_due_at',)),
         ('merge_result', 'summary_due_at', 'None', ('summary_due_at',)),
+        ('merge_result', 'summary_due_at', 'current + deadline_seconds()', ('summary_due_at',)),
         ('merge_result', 'summary_first_pending_at', 'accepted', ('summary_first_pending_at',)),
         ('prepare', 'summary_due_at', 'None', ('summary_due_at',)),
         ('prepare', 'summary_due_at', 'None', ('summary_due_at',)),
@@ -4499,6 +4579,7 @@ FIELD_SITES = {
             'status',
             "'completed'",
             (
+                'completed_at',
                 'failed_segments',
                 'job_id',
                 'lane',

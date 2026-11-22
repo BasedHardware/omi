@@ -15495,4 +15495,148 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get conversationRecentTranscript => 'النص المكتوب الأخير';
+
+  @override
+  String get finishAlreadySaved => 'تم الحفظ مسبقًا. إنها في الرئيسية.';
+
+  @override
+  String get finishAudioNotReceived => 'ما زال الصوت في طريقه.';
+
+  @override
+  String get finishFailedOffline => 'لم تكتمل العملية. صوتك في أمان.';
+
+  @override
+  String get finishFailed => 'لم تكتمل العملية. صوتك في أمان.';
+
+  @override
+  String get micBlockedCannotRecord => 'اسمح باستخدام الميكروفون للتسجيل.';
+
+  @override
+  String get couldNotStartRecording => 'تعذّر بدء التسجيل.';
+
+  @override
+  String get restorePurchasesFailed => 'تعذّر التحقق من خطتك.';
+
+  @override
+  String get firmwareCheckFailed => 'تعذّر التحقق من التحديثات.';
+
+  @override
+  String get conversationStillPublic => 'ما زالت مشتركة عبر الرابط.';
+
+  @override
+  String get goalSaveFailed => 'تعذّر حفظ هدفك.';
+
+  @override
+  String get goalDeleteFailed => 'تعذّر الحذف. تمت استعادة الهدف.';
+
+  @override
+  String get goalsLoadFailed => 'تعذّر تحميل أهدافك.';
+
+  @override
+  String get missingTargetEndedRecording => 'انتهى هذا التسجيل.';
+
+  @override
+  String get missingTargetMemory => 'هذه الذكرى لم تعد موجودة.';
+
+  @override
+  String get missingTargetTask => 'هذه المهمة لم تعد موجودة.';
+
+  @override
+  String get missingTargetConversation => 'تعذّر فتح هذه المحادثة.';
+
+  @override
+  String get couldNotRefreshConversations => 'تعذّر التحديث.';
+
+  @override
+  String get connectDeviceForOfflineSync => 'قم بتوصيل جهاز Omi للمزامنة.';
+
+  @override
+  String get useDifferentAccountMessage => 'سيتم تسجيل خروجك، وستتم إعادة ضبط إعدادات Omi على هذا الهاتف.';
+
+  @override
+  String get rayBanMetaNotFoundAfterSetup => 'لم يُعثر على النظارات. هل هي قيد التشغيل؟';
+
+  @override
+  String get couldNotMoveTask => 'تعذّر نقل المهمة.';
+
+  @override
+  String lockedTasksKept(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'تم الحذف. تم الإبقاء على $count من المهام المقفلة.',
+      one: 'تم الحذف. تم الإبقاء على مهمة واحدة مقفلة.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get settingNotSaved => 'تعذّر حفظ هذا التغيير.';
+
+  @override
+  String get couldNotLoadNotificationSettings => 'تعذّر تحميل إعداداتك.';
+
+  @override
+  String get waitForOmiToFinish => 'انتظر حتى ينتهي Omi.';
+
+  @override
+  String get voiceNoteTooShort => 'قصير جدًا. اضغط مطولًا للتسجيل.';
+
+  @override
+  String get submitAppMissingFields => 'أضف اسمًا ووصفًا وصورة وفئة وقدرة لتتمكن من الإرسال.';
+
+  @override
+  String get appSetupNotFinished => 'لم يكتمل الإعداد بعد.';
+
+  @override
+  String get finishNothingKeptTitle => 'لا شيء للاحتفاظ به';
+
+  @override
+  String get submitAppFinishDetails => 'أكمل تفاصيل القدرة والتسعير أعلاه لتتمكن من الإرسال.';
+
+  @override
+  String get finishNothingNew => 'لا جديد بعد.';
+
+  @override
+  String get takingLongerThanUsual => 'يستغرق وقتًا أطول من المعتاد. سيكون في الرئيسية قريبًا.';
+
+  @override
+  String get couldNotCheckOnIt => 'تعذّر التحقق منه. حاول مرة أخرى.';
+
+  @override
+  String get upgradeToOpenThisOne => 'قم بالترقية لفتح هذه المحادثة.';
+
+  @override
+  String get missingTargetConversationGone => 'تم حذف هذه المحادثة.';
+
+  @override
+  String get cantConnectRightNow => 'لا يمكن الاتصال الآن.';
+
+  @override
+  String get loadOlderFailed => 'تعذّر تحميل العناصر الأقدم. انقر لإعادة المحاولة.';
+
+  @override
+  String listeningWithDuration(String duration) {
+    return 'جارٍ الاستماع · $duration';
+  }
+
+  @override
+  String get conversationLiveNoEdits => 'انتظر حتى ينتهي قبل تغييره.';
+
+  @override
+  String get finishedSummaryReady => 'الملخص جاهز';
+
+  @override
+  String get writingSummaryStatus => 'جارٍ كتابة الملخص…';
+
+  @override
+  String get stillWorkingOnIt => 'ما زلنا نعمل عليه.';
+
+  @override
+  String get firmwareUpdateFirmwareTooOld =>
+      'البرنامج الثابت لجهازك قديم جدًا لهذا التحديث. تواصل مع الدعم للمساعدة في تحديث جهازك.';
+
+  @override
+  String get firmwareUpdateAppRequired =>
+      'يتطلب تحديث البرنامج الثابت هذا إصدارًا أحدث من تطبيق Omi. حدّث التطبيق من متجر التطبيقات لديك، ثم تحقّق مرة أخرى.';
 }

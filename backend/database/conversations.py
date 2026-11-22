@@ -11,7 +11,7 @@ backend/docs/storing-conversations.md).
 from utils.conversations import phase_shadow
 
 from database import conversation_visibility_counts, processing_backlog, speaker_auto_enroll, capture_group_notes
-from database import conversation_recorded_time
+from database import conversation_recorded_time, conversations_v3_backfill_runs
 from database import pipeline_ledger
 from utils.conversations import summary_delivery, lifecycle_clocks
 from utils.observability.delivery import summary_terminal_outcome
@@ -44,6 +44,7 @@ from utils.conversations.llm_input_dedupe import NOTES_OUTPUT_HASH, output_finge
 from database.audio_file_projection import finalize_audio_file_group as _finalize_audio_file_group
 from models.note_claims import claim_references_segment
 from models.client_processing import PROJECTION_FAMILY_FIELDS
+from models.finalization_owner import REFUSAL as FINALIZATION_OWNER_REFUSAL, python_owns_finalization
 from models.conversation_enums import ConversationStatus, PostProcessingModel, PostProcessingStatus
 from models.conversation_photo import ConversationPhoto
 from models.capture_window_proof import CaptureWindowProof
@@ -144,6 +145,9 @@ from utils.llm.model_constants import LUNA_MODEL
 logger = logging.getLogger(__name__)
 
 conversations_collection = 'conversations'
+ACTION_ITEMS_EDIT_REVISION = 'user_action_items_revision'
+EVENTS_EDIT_REVISION = 'user_events_revision'
+
 
 _LIFECYCLE_FIELDS = frozenset({'status', 'discarded'})
 # Top-level fields behind the Typesense conversation projection (see
@@ -627,7 +631,7 @@ def _decode_public_transcript_segments_bounded(
         raise invalid() from exc
 
 
-def raw_conversation_has_content(uid: str, conversation: Dict[str, Any]) -> bool:
+def raw_conversation_has_content(uid: str, conversation: Dict[str, Any], *, log_decode_failure: bool = True) -> bool:
     """Decide whether an un-decoded Firestore snapshot holds user content.
 
     ``transcript_segments`` is written compressed (and encrypted for enhanced
@@ -650,7 +654,8 @@ def raw_conversation_has_content(uid: str, conversation: Dict[str, Any]) -> bool
         # content marker still forbid empty-recording deletion.
         return other_content
     except (json.JSONDecodeError, TypeError, zlib.error, ValueError) as e:
-        logger.error(f'raw_conversation_has_content: undecodable segments, assuming content. {uid} {e}')
+        if log_decode_failure:
+            logger.error(f'raw_conversation_has_content: undecodable segments, assuming content. {uid} {e}')
         return True
     return bool(segments) or other_content
 
@@ -1578,6 +1583,8 @@ def persist_processing_result_with_lifecycle(
             return False
 
         existing = existing_snapshot.to_dict() or {}
+        if not python_owns_finalization(existing):
+            return False
         if existing.get('arrival_at'):
             write_data['arrival_at'] = existing['arrival_at']
         if expected_capture_group is not None:
@@ -1720,6 +1727,16 @@ def persist_processing_result_with_lifecycle(
             write_data.setdefault('structured', {})['overview'] = existing['user_overview']
 
         _quality_processing_notes(uid, write_data, existing)
+
+        structured = write_data.get('structured')
+        if existing.get('v3_rederive_live_run') and isinstance(structured, dict):
+            # Late repair notes must retain the owner's current embedded state.
+            stored = existing.get('structured')
+            stored = stored if isinstance(stored, dict) else {}
+            if existing.get(ACTION_ITEMS_EDIT_REVISION):
+                structured['action_items'] = stored.get('action_items', [])
+            if existing.get(EVENTS_EDIT_REVISION) or has_created_calendar_events(stored):
+                structured['events'] = stored.get('events', [])
 
         _reapply_current_manual_assignments(uid, write_data, existing)
         _stage_notes_identity(transaction, user_ref, write_data, existing)
@@ -3031,6 +3048,7 @@ def migrate_conversations_level_batch(uid: str, conversation_ids: List[str], tar
         ],
     )
 
+    prior_ids = set()
     for doc_snapshot in doc_snapshots:
         if not doc_snapshot.exists:
             logger.warning(f"Conversation {doc_snapshot.id} not found, skipping.")
@@ -3041,6 +3059,9 @@ def migrate_conversations_level_batch(uid: str, conversation_ids: List[str], tar
             current = doc_snapshot.reference.get(transaction=transaction).to_dict()
             if not current or current.get('deleted') or current.get('visibility') in ('public', 'shared'):
                 return False
+            # Priors can exist before a repair stamps the row. Collect IDs even on a same-target retry.
+            prior_ids.add(doc_snapshot.id)
+            prior_ids.update(current.get('sync_merged_from') or [])
             if current.get('data_protection_level', 'standard') == target_level:
                 return False
             payload = {'data_protection_level': target_level}
@@ -3115,6 +3136,11 @@ def migrate_conversations_level_batch(uid: str, conversation_ids: List[str], tar
 
     if batch_count > 0:
         batch.commit()
+    if prior_ids:
+        # After rows and photos: a live re-derive's undo copies stored at another level are emptied.
+        conversations_v3_backfill_runs.purge_conversation_priors(
+            uid, sorted(prior_ids), 'protection', firestore_client=db, keep_level=target_level
+        )
 
 
 # **************************************
@@ -3295,6 +3321,8 @@ def _terminal_family_serving(uid: str) -> bool:
 
 
 def _conversation_claim_matches(current, expected_status, expected_fields=None, *, allow_discarded=False):
+    if not python_owns_finalization(current):
+        return False
     if (current.get('discarded') and not allow_discarded) or current.get('status') != expected_status:
         return False
     return not any(
@@ -3454,7 +3482,8 @@ def rule_discard_outcome(
     deleted, user-restored or revised row is ``refused``. A row that is already
     stored hidden is ``already_discarded``: that state is what the caller wanted,
     but nothing changed, so no cache or index side effect runs. Only a write
-    returns ``discarded``.
+    returns ``discarded``. A pending or Go-owned row returns
+    ``finalization_owned_elsewhere``.
     """
     user_ref = db.collection('users').document(uid)
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
@@ -3467,6 +3496,8 @@ def rule_discard_outcome(
         current = snapshot.to_dict() or {}
         if is_soft_deleted(current):
             return 'refused'
+        if not python_owns_finalization(current):
+            return FINALIZATION_OWNER_REFUSAL
         if current.get('discarded'):
             return 'already_discarded'
         status = getattr(current.get('status'), 'value', current.get('status'))
@@ -3575,8 +3606,16 @@ def restore_conversation_from_discarded(uid: str, conversation_id: str, *, retur
 # *********************************
 
 
+def has_created_calendar_events(structured: object) -> bool:
+    """Historical calendar confirmations can predate the owner revision marker."""
+    events = structured.get('events') if isinstance(structured, dict) else None
+    return isinstance(events, list) and any(
+        isinstance(event, dict) and event.get('created') is True for event in events
+    )
+
+
 def update_conversation_events(uid: str, conversation_id: str, events: List[dict]):
-    update_conversation(uid, conversation_id, {'structured.events': events})
+    update_conversation(uid, conversation_id, {'structured.events': events, EVENTS_EDIT_REVISION: uuid.uuid4().hex})
 
 
 # *********************************
@@ -3585,7 +3624,11 @@ def update_conversation_events(uid: str, conversation_id: str, events: List[dict
 
 
 def update_conversation_action_items(uid: str, conversation_id: str, action_items: List[dict]):
-    update_conversation(uid, conversation_id, {'structured.action_items': action_items})
+    update_conversation(
+        uid,
+        conversation_id,
+        {'structured.action_items': action_items, ACTION_ITEMS_EDIT_REVISION: uuid.uuid4().hex},
+    )
 
 
 def _page_eligible_action_item_count(conversation: dict, include_completed: bool) -> int:
@@ -4378,6 +4421,20 @@ def update_conversation_segments(
             update_payload.update(
                 v3_pending=True, v3_pending_since=current.get('v3_pending_since') or datetime.now(timezone.utc)
             )
+            if segment_update_fields is None:
+                # The landing time commits with the speech it describes, and only when speech changed:
+                # field-only writes and no-op retries must not extend the v3 lock.
+                from config.conversations_v3 import SPEECH_LANDED_FIELD
+
+                before = persisted if live_segments is not None else None
+                if before is None:
+                    raw = current.get('transcript_segments') or []
+                    before = _decode_transcript_segments_strict(
+                        uid, raw, bool(current.get('transcript_segments_compressed'))
+                    )
+                speech = ('id', 'start', 'end', 'text')
+                if [[r.get(k) for k in speech] for r in before] != [[r.get(k) for k in speech] for r in accepted]:
+                    update_payload[SPEECH_LANDED_FIELD] = datetime.now(timezone.utc)
         prepared_payload = _prepare_conversation_for_write(
             update_payload,
             uid,
@@ -5271,6 +5328,8 @@ def complete_sync_processing_hold(
     @firestore.transactional
     def finish(transaction):
         existing = ref.get(transaction=transaction).to_dict() or {}
+        if not python_owns_finalization(existing):
+            return False
         deleting = deletion.get(transaction=transaction)
         deletion_status = normalize_account_deletion_status(
             marker_exists=deleting.exists, raw_status=(deleting.to_dict() or {}).get('wipe_status')

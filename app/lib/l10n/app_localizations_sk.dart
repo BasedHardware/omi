@@ -15579,4 +15579,148 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get conversationRecentTranscript => 'Najnovší prepis';
+
+  @override
+  String get finishAlreadySaved => 'Už je uložené. Nájdete ho v časti Domov.';
+
+  @override
+  String get finishAudioNotReceived => 'Zvuk je ešte na ceste.';
+
+  @override
+  String get finishFailedOffline => 'Odoslanie sa nepodarilo. Váš zvuk je v bezpečí.';
+
+  @override
+  String get finishFailed => 'Odoslanie sa nepodarilo. Váš zvuk je v bezpečí.';
+
+  @override
+  String get micBlockedCannotRecord => 'Pre nahrávanie povoľte prístup k mikrofónu.';
+
+  @override
+  String get couldNotStartRecording => 'Nahrávanie sa nepodarilo spustiť.';
+
+  @override
+  String get restorePurchasesFailed => 'Nepodarilo sa skontrolovať váš plán.';
+
+  @override
+  String get firmwareCheckFailed => 'Nepodarilo sa skontrolovať aktualizácie.';
+
+  @override
+  String get conversationStillPublic => 'Stále je zdieľané prostredníctvom odkazu.';
+
+  @override
+  String get goalSaveFailed => 'Cieľ sa nepodarilo uložiť.';
+
+  @override
+  String get goalDeleteFailed => 'Odstránenie sa nepodarilo. Cieľ bol obnovený.';
+
+  @override
+  String get goalsLoadFailed => 'Nepodarilo sa načítať vaše ciele.';
+
+  @override
+  String get missingTargetEndedRecording => 'Nahrávanie už skončilo.';
+
+  @override
+  String get missingTargetMemory => 'Spomienka už neexistuje.';
+
+  @override
+  String get missingTargetTask => 'Úloha už neexistuje.';
+
+  @override
+  String get missingTargetConversation => 'Túto konverzáciu sa nepodarilo otvoriť.';
+
+  @override
+  String get couldNotRefreshConversations => 'Nepodarilo sa obnoviť.';
+
+  @override
+  String get connectDeviceForOfflineSync => 'Pre synchronizáciu pripojte svoje Omi.';
+
+  @override
+  String get useDifferentAccountMessage => 'Odhlásime vás a nastavenia Omi na tomto telefóne sa obnovia.';
+
+  @override
+  String get rayBanMetaNotFoundAfterSetup => 'Okuliare sa nenašli. Sú zapnuté?';
+
+  @override
+  String get couldNotMoveTask => 'Úlohu sa nepodarilo presunúť.';
+
+  @override
+  String lockedTasksKept(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Odstránené. Zachované uzamknuté úlohy: $count.',
+      one: 'Odstránené. 1 uzamknutá úloha zostala zachovaná.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get settingNotSaved => 'Túto zmenu sa nepodarilo uložiť.';
+
+  @override
+  String get couldNotLoadNotificationSettings => 'Nepodarilo sa načítať vaše nastavenia.';
+
+  @override
+  String get waitForOmiToFinish => 'Počkajte, kým Omi dokončí.';
+
+  @override
+  String get voiceNoteTooShort => 'Príliš krátke. Podržte pre nahrávanie.';
+
+  @override
+  String get submitAppMissingFields => 'Na odoslanie pridajte názov, popis, obrázok, kategóriu a schopnosť.';
+
+  @override
+  String get appSetupNotFinished => 'Nastavenie ešte nie je dokončené.';
+
+  @override
+  String get finishNothingKeptTitle => 'Nič na zachovanie';
+
+  @override
+  String get submitAppFinishDetails => 'Na odoslanie doplňte vyššie uvedené údaje o schopnosti a cenách.';
+
+  @override
+  String get finishNothingNew => 'Zatiaľ nič nové.';
+
+  @override
+  String get takingLongerThanUsual => 'Trvá to dlhšie ako zvyčajne. Bude to v časti Domov.';
+
+  @override
+  String get couldNotCheckOnIt => 'Nepodarilo sa to skontrolovať. Skúste to znova.';
+
+  @override
+  String get upgradeToOpenThisOne => 'Pre otvorenie tejto konverzácie prejdite na vyšší plán.';
+
+  @override
+  String get missingTargetConversationGone => 'Táto konverzácia bola odstránená.';
+
+  @override
+  String get cantConnectRightNow => 'Momentálne sa nepodarilo pripojiť.';
+
+  @override
+  String get loadOlderFailed => 'Staršie položky sa nepodarilo načítať. Ťuknutím skúste znova.';
+
+  @override
+  String listeningWithDuration(String duration) {
+    return 'Počúvanie · $duration';
+  }
+
+  @override
+  String get conversationLiveNoEdits => 'Počkajte, kým skončí, potom ju môžete zmeniť.';
+
+  @override
+  String get finishedSummaryReady => 'Zhrnutie je pripravené';
+
+  @override
+  String get writingSummaryStatus => 'Zhrnutie sa píše…';
+
+  @override
+  String get stillWorkingOnIt => 'Ešte sa na tom pracuje.';
+
+  @override
+  String get firmwareUpdateFirmwareTooOld =>
+      'Firmvér vášho zariadenia je pre túto aktualizáciu príliš starý. Obráťte sa na podporu, ktorá vám pomôže aktualizovať zariadenie.';
+
+  @override
+  String get firmwareUpdateAppRequired =>
+      'Táto aktualizácia firmvéru vyžaduje novšiu aplikáciu Omi. Aktualizujte aplikáciu v obchode s aplikáciami a potom znova skontrolujte aktualizácie.';
 }

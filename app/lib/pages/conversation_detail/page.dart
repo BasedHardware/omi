@@ -53,6 +53,8 @@ import 'conversation_detail_provider.dart';
 import 'conversation_summary_selection.dart';
 import 'widgets.dart' show summaryRetrySlotApplies;
 import 'share.dart';
+import 'conversation_live_guard.dart';
+import 'share_flow.dart';
 import 'test_prompts.dart';
 import 'live_conversation_refresher.dart';
 import 'widgets/audio_download_progress_sheet.dart';
@@ -798,6 +800,7 @@ class ConversationDetailPageState extends State<ConversationDetailPage>
   };
 
   void _handleMenuSelection(BuildContext context, String value, ConversationDetailProvider provider) async {
+    if (refuseWhileLive(context, provider.conversation, value)) return; // X11
     // Track the menu action selection
     PlatformManager.instance.analytics.conversationThreeDotsMenuActionSelected(
       conversationId: provider.conversation.id,
@@ -1028,48 +1031,49 @@ class ConversationDetailPageState extends State<ConversationDetailPage>
   /// agrees ("Anyone with the link can view"), and goes back to private if the share sheet reports
   /// that it was dismissed without sharing.
   Future<void> _shareConversation(ConversationDetailProvider provider) async {
+    if (refuseWhileLive(context, provider.conversation, 'share')) return; // X11
     HapticFeedback.mediumImpact();
     final conversation = provider.conversation;
-    final wasPrivate = conversation.visibility != ConversationVisibility.shared;
-    if (wasPrivate) {
-      final confirmed = await showOmiConfirm(
-        context,
-        title: context.l10n.shareConversationQuestion,
-        message: context.l10n.anyoneWithLinkCanView,
-        confirmLabel: context.l10n.share,
-      );
-      if (!confirmed || !mounted) return;
-    }
-
-    setState(() => _isSharing = true);
-    try {
-      if (wasPrivate) {
-        final shared = await setConversationVisibility(conversation.id);
-        if (!mounted) return;
-        if (!shared) {
-          OmiFeedback.error(context, context.l10n.conversationUrlNotShared);
-          return;
-        }
-        provider.updateVisibilityLocally(ConversationVisibility.shared);
-      }
-      final origin = shareSheetOrigin(_shareButtonKey);
-      // The sheet is up once the call is made; the button stops spinning while it is shown.
-      final result = shareConversationLink(conversation, sharePositionOrigin: origin);
-      await _delay(const Duration(milliseconds: 150));
-      if (mounted) setState(() => _isSharing = false);
-      final outcome = await result;
-      if (wasPrivate && outcome.status == ShareResultStatus.dismissed) {
-        final reverted = await setConversationVisibility(
-          conversation.id,
-          visibility: ConversationVisibility.private_.value,
+    final end = await runConversationShare(
+      wasPrivate: conversation.visibility != ConversationVisibility.shared,
+      confirm: () async {
+        final confirmed = await showOmiConfirm(
+          context,
+          title: context.l10n.shareConversationQuestion,
+          message: context.l10n.anyoneWithLinkCanView,
+          confirmLabel: context.l10n.share,
         );
-        if (reverted && mounted) provider.updateVisibilityLocally(ConversationVisibility.private_);
-      }
-    } catch (e) {
-      Logger.debug('Failed to share conversation: $e');
-      if (mounted) OmiFeedback.error(context, context.l10n.conversationUrlNotShared);
-    } finally {
-      if (mounted && _isSharing) setState(() => _isSharing = false);
+        if (confirmed && mounted) setState(() => _isSharing = true);
+        return confirmed && mounted;
+      },
+      setVisibility: (visibility) => setConversationVisibility(conversation.id, visibility: visibility.value),
+      onVisibility: (visibility) {
+        if (mounted) provider.updateVisibilityLocally(visibility);
+      },
+      openSheet: () async {
+        if (mounted) setState(() => _isSharing = true);
+        final origin = shareSheetOrigin(_shareButtonKey);
+        // The sheet is up once the call is made; the button stops spinning while it is shown.
+        final result = shareConversationLink(conversation, sharePositionOrigin: origin);
+        await _delay(const Duration(milliseconds: 150));
+        if (mounted) setState(() => _isSharing = false);
+        return (await result).status;
+      },
+    );
+    if (!mounted) return;
+    if (_isSharing) setState(() => _isSharing = false);
+    showShareFlowEnd(context, end, makePrivate: () => _makePrivate(provider));
+  }
+
+  Future<void> _makePrivate(ConversationDetailProvider provider) async {
+    final ok =
+        await setConversationVisibility(provider.conversation.id, visibility: ConversationVisibility.private_.value);
+    if (!mounted) return;
+    if (ok) {
+      provider.updateVisibilityLocally(ConversationVisibility.private_);
+      OmiFeedback.confirm(context, context.l10n.onlyYouCanSeeConversation);
+    } else {
+      showShareFlowEnd(context, ShareFlowEnd.stillPublic, makePrivate: () => _makePrivate(provider));
     }
   }
 

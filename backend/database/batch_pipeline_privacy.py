@@ -96,6 +96,31 @@ def matches_live_privacy_version(client: Any, uid: str, generation: int, version
 
 
 @metrics.with_batch_plan
+def read_batch_owner_snapshot(
+    client: Any,
+    transaction: Any,
+    uid: str,
+    *,
+    conversation_ids: Iterable[str],
+    expected_generation: int | None,
+    snapshots: dict,
+    read_budget,
+) -> int:
+    """Read the live privacy decision and its rows inside a bounded read-only snapshot."""
+    metrics.called('batch')
+    with metrics.mode_scope('live'):
+        return _assert_batch_write_allowed_live(
+            client,
+            transaction,
+            uid,
+            conversation_ids=conversation_ids,
+            expected_generation=expected_generation,
+            snapshots=snapshots,
+            read_budget=read_budget,
+        )
+
+
+@metrics.with_batch_plan
 def assert_batch_write_allowed(
     client: Any,
     transaction: Any,

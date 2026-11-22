@@ -276,9 +276,7 @@ def harness(tmp_path):
     runtime = {'services': {}}
     for service in c.SERVICES:
         entries = [{'name': k, 'value': v} for k, v in c.QUALITY.items()]
-        if service in ('backend-sync', c.SERVICE):
-            entries.append({'name': c.BACKOFF, 'value': 'false'})
-        runtime['services'][service] = {'env': entries}
+        runtime['services'][service] = {'env': entries, 'forbidden_env': sorted(c.RETIRED_BATCH_ENV)}
     controller.prepare(c.SOURCE, transport.image, c.SERVICE + '-' + c.SOURCE[:7] + '-123-1')
     return controller, cloud, transport, clock, runtime
 
@@ -332,20 +330,23 @@ def extended(harness, *, reader=True):
     transport.image = 'gcr.io/based-hardware/backend@' + c.digest_bytes(transport.manifest.raw)
     old_env = c.app(cloud.revisions[c.ROLLBACK]['spec'])['env']
     old_env.extend({'name': k, 'value': v} for k, v in c.RESTORED_DEFAULTS.items())
-    entries = {key: entry for key, entry in c.env_map(old_env).items() if key not in c.RESTORED_DEFAULTS}
+    entries = {
+        key: entry
+        for key, entry in c.env_map(old_env).items()
+        if key not in (c.RESTORED_DEFAULTS.keys() | c.RETIRED_BATCH_ENV)
+    }
     entries.update(
         {
             key: {'name': key, 'value': value}
             for key, value in {
                 **c.QUALITY,
-                c.BACKOFF: 'false',
                 c.PROVIDER: 'false',
                 c.STAMP: source,
             }.items()
         }
     )
     runtime['services'][c.SERVICE]['env'] = list(entries.values())
-    runtime['services'][c.SERVICE]['forbidden_env'] = list(c.RESTORED_DEFAULTS)
+    runtime['services'][c.SERVICE]['forbidden_env'] = sorted(c.RESTORED_DEFAULTS.keys() | c.RETIRED_BATCH_ENV)
     controller.discovery = DiscoveryFixture(clock) if reader else None
     return controller, cloud, transport, clock, runtime, source
 
@@ -719,9 +720,13 @@ def test_monotonic_hold_cannot_be_shortened_by_wall_clock_jump(harness, monkeypa
 
 def test_candidate_honors_source_forbidden_entries_before_first_traffic(harness):
     controller, cloud, _transport, _clock, runtime = harness
-    runtime['services'][c.SERVICE]['forbidden_env'] = ['CREDENTIAL']
+    runtime['services'][c.SERVICE]['forbidden_env'].append('CREDENTIAL')
+    retired = c.RETIRED_BATCH_ENV | {'CREDENTIAL'}
+    saved = c.app(controller.state['services'][c.SERVICE]['revision']['spec'])['env']
+    saved.extend({'name': key, 'value': 'false'} for key in sorted(c.RETIRED_BATCH_ENV))
     controller.candidate(runtime)
-    assert 'CREDENTIAL' not in c.env_map(c.app(cloud.revisions[controller.state['candidate']]['spec'])['env'])
+    candidate = c.app(cloud.revisions[controller.state['candidate']]['spec'])
+    assert not retired.intersection(c.env_map(candidate['env']))
     assert c.traffic(cloud.services[c.SERVICE]['status']['traffic']) == {c.ROLLBACK: 100}
 
 
@@ -887,7 +892,7 @@ def test_overlay_must_preserve_serving_ops_and_secret_references(harness, name):
     assert not cloud.writes
 
 
-@pytest.mark.parametrize('change', ['quality', 'backoff', 'provider', 'other_quality', 'account'])
+@pytest.mark.parametrize('change', ['quality', 'retired', 'provider', 'other_quality', 'account'])
 def test_source_configuration_contract(harness, change):
     controller, cloud, _transport, _clock, runtime = harness
     env = runtime['services'][c.SERVICE]['env']
@@ -895,8 +900,8 @@ def test_source_configuration_contract(harness, change):
         env[0]['value'] = 'false'
     elif change == 'other_quality':
         runtime['services']['backend']['env'][0]['value'] = 'false'
-    elif change == 'backoff':
-        env[-1]['value'] = 'true'
+    elif change == 'retired':
+        env.append({'name': sorted(c.RETIRED_BATCH_ENV)[0], 'value': 'false'})
     elif change == 'provider':
         env.append({'name': c.PROVIDER, 'value': 'true'})
     else:

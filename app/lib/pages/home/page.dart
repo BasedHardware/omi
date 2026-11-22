@@ -461,9 +461,16 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
     );
   }
 
+  HomeProvider? _homeForNewest;
+
+  void _showNewest() => WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _scrollToTop(HomeProvider.homeTab);
+      });
+
   @override
   void initState() {
     ListenClientState.startSurfaceReporting();
+    _homeForNewest = context.read<HomeProvider?>()?..onShowNewest = _showNewest;
     unawaited(
       _backgroundResourceTelemetry.recoverInterrupted(
         launchContext: classifyBackgroundInterruptLaunch(
@@ -1124,6 +1131,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
 
   @override
   void dispose() {
+    if (_homeForNewest?.onShowNewest == _showNewest) _homeForNewest?.onShowNewest = null;
     HomeNavigation.unregister(_openRoute);
     _promptGate.detach();
     // These prompts close over this Home; a later Home (after sign-out and sign-in) enqueues its own.

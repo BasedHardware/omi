@@ -15,6 +15,11 @@ episode callers too. Owners whose apps all predate v3 keep legacy intake: their 
 would show the raw recording a capture ends with as a blank card that 404s. An owner
 with a v3 app on one device and a pre-v3 app on another gets that card on the old device.
 
+Before a stage or kill-switch move, and before each service in its move order, check live prod against
+`backend/deploy/activation/conversations-v3.yaml` (services and minimum commits, order, env, gateway
+lanes, queue, scheduler jobs): `activation_collect.py` then `activation_check.py`; see
+`backend/deploy/activation/README.md`.
+
 Provision the dedicated queue on dev/prod before enabling admission; the prod
 ops manifest declares its bounded concurrency/retry policy. The same stage must reach backend/API, backend-listen (including realtime role),
 backend-sync, backend-sync-backfill, sync-backfill-worker, backend-integration,
@@ -127,6 +132,51 @@ Set the switch to `off` on v3 builder and backfill runners to restore the prior
 prompt and per-topic Home minimum for subsequent passes. Existing published
 windows and claims remain in place when the switch changes.
 
+With stretch cohesion enabled, `CONVERSATIONS_V3_SILENCE_GAP_SECONDS`
+controls recorded-speech grouping (120–1800 seconds), and `CONVERSATIONS_V3_LOCK_SECONDS`
+controls when a card locks and owes notes (120–3600 seconds). Both default to
+300. Invalid values use the defaults. When either value differs from its
+default, the existing summary-open path and explicit End bypass the lock timer.
+Setting both values back to 300 or disabling cohesion restores the prior
+timing; provisional rows remain reachable for the builder to finish.
+A lock delay shorter than the silence threshold can finalize an initial card
+while later speech still belongs to the same outline stretch. Later speech
+gets its own continuation. Reconciliation can merge settled cards when the
+outline and the loaded source claims cover the complete merge.
+
+A silence gap above 300 seconds also switches on sit-down cutting:
+- The outline sees pauses of 2 minutes or more as `---- N min without speech ----`
+  marker lines. A sit-down rule replaces the hard-boundary sentence.
+- Neighbouring `conversation` entries of one stretch join into one card, with
+  topics as sections. They stay apart when both name people and share none.
+  Dictation under the Home word minimum between two of them joins as a section.
+  Media, background, longer dictation and manual-end stretches keep their own
+  cards.
+- Each card meets the Home word minimum on its own words, not the stretch's.
+
+Setting the gap back to 300 seconds turns sit-down cutting off for later passes.
+
+At any timing, a stretch over two hours is cut at the last line that starts
+within two hours of its start, then again from there. The cut ignores the
+outline and does not move as live speech arrives, so a locked part never
+strands lines between an old and a new cut. One ownership rule
+(`planner.Ownership`) serves both the cap and the projection: a row that
+published the exact segment from that recording owns it (open rows included);
+only when no row does, containment in a row's window and audio claim decides,
+locked rows first, so a revised turn stays with its row. When a locked row owns
+the first line of a part, the part ends at the first line it does not own, so
+rows cut by earlier code or an earlier pass keep their cut (even when a turn
+straddles it or a held turn is revised) and the cap counts from there. A locked
+row that owns none of the stretch's lines never cuts it.
+
+Under custom timing (either setting differs from 300), the lock delay counts
+from the later of the stretch's last speech and when that speech landed
+(`v3_speech_landed_at`, written in the same transaction as the speech by the
+live transcript write and sync assignment, and only when the speech changed). A
+batch of old speech from
+offline sync then waits the lock delay after landing instead of locking on
+arrival. Default timing still counts from the last speech.
+
 The recording-speaker picker for a derived conversation reads and edits only
 that copied window. Shared source scopes cannot expand it into other product
 conversations. Legacy recording-wide naming keeps its existing behavior.
@@ -235,6 +285,44 @@ optional-predicate composite indexes. Rare filtered layer counts select at most
 transcript decoding. The generated manifest has 304 composite indexes.
 The daily gauge refuses a truncated scan rather than publishing a partial count.
 
+## Sync redirect custody repair
+
+Sync redirects transfer transcript-only claims and card source links in the same transaction
+as the donor redirect. When playback backing, deletion spans, competing claims, or missing
+speech evidence prevent a transfer, sync keeps the original source. The transfer checks every
+line in the proposed claim against the published card and preserves the card's existing fields.
+
+For an already-published chain, use the explicit custody repair in coordination with the live
+re-derive owner. Keep overlapping repairs on the same owner paused during qualification.
+Run the preview with the read-only operator profile and keep the resulting card IDs, claim
+ranges and receipt in the approved QA channel.
+
+```bash
+PYTHONPATH=backend backend/.venv/bin/python -m scripts.conversations_v3_sync_custody preview \
+  --uid "$QA_UID" --donor "$DONOR_ID"
+```
+
+A `ready` preview lists the original and proposed claims and card links. A `skipped` preview
+reports the first reason the chain needs review. For example, playback references need proof
+of equivalent backing, and competing claims need evidence beyond overlapping clocks.
+The operation moves custody for supported cards. Existing Home visibility, titles, transcripts,
+notes, and audio references are preserved.
+
+After separate approval, use `apply --uid "$QA_UID" --donor "$DONOR_ID" --receipt "$RECEIPT"`
+with the same module and scope. The receipt binds the exact project, owner, redirect path, edits,
+and Firestore revisions. Apply updates all affected documents and creates the rollback journal in
+one transaction. Repeating apply with the same receipt reports the recorded outcome.
+Use `rollback` with the same arguments to restore the prior fields. Rollback refuses when a source
+or card has advanced, acquired a tombstone, or changed lineage. Re-preview and escalate those cases.
+Successful rollback consumes that receipt.
+
+Each attempt reads at most nine source documents, 64 claimant cards, their tombstone documents,
+the account deletion marker and the journal. At most 74 documents are written, including the
+journal, and the journal is capped at 128 KiB. Preview uses a read-only transaction. Restrict
+post-release readback to the approved internal TestFlight scope and record the exact TestFlight
+build and serving revisions. Verify that fresh sync redirects retain custody, Home shows one
+card for the same claimed speech, and separate speech remains present.
+
 ## Backfill and repair (per owner)
 
 `CONVERSATIONS_V3_BACKFILL=off` by default. While it is off, nothing below runs. The switch is
@@ -252,6 +340,8 @@ PYTHONPATH=backend backend/.venv/bin/python $S status --owners-file $O
 PYTHONPATH=backend backend/.venv/bin/python $S resume --owners-file $O --run RUN_ID      # stalled/blocked
 PYTHONPATH=backend backend/.venv/bin/python $S undo --owners-file $O --run RUN_ID [--dry-run]
 PYTHONPATH=backend backend/.venv/bin/python $S run --owners-file $O --days 2 --mode rederive
+PYTHONPATH=backend backend/.venv/bin/python $S run --owners-file $O --since 2026-11-19T00:00:00Z \
+  --until 2026-11-20T00:00:00Z --mode rederive-live --dry-run                            # live windows
 ```
 
 - **Plan.** The window is cut into partitions of at most 48 documents. Each cut is at a recorded gap
@@ -311,6 +401,102 @@ PYTHONPATH=backend backend/.venv/bin/python $S run --owners-file $O --days 2 --m
   recorded in the ledger. Fix the cause, then `resume`. Never describe a blocked or partial run as
   complete. `status` shows partitions committed, windows, Home-visible rows, outline calls and
   notes processed or failed.
+- **Live re-derive (`--mode rederive-live`).** Replans one owner's finished live v3 windows in
+  `[since, until)` from their source recordings with the current planner, after a planner fix (the
+  live builder keeps finished windows as they are). `until` must be at least 15 minutes ago.
+  Partitions hold up to 192 documents (the loader refuses more than 256). Same lease, queue, outline
+  and notes path as a backfill; rebuilt rows are stamped `backfilled` and `v3_rederive_live_run`, so
+  their notes take no derived effects and they never fan out again.
+  - Never touched: open windows and every source they hold, rows that overlap `since` or `until`,
+    sources that are pending, unsealed, still transcribing, failed, purge-pending, private, deleted,
+    legacy backfill donors or within a claims update of Firestore's 1 MiB document limit
+    (`size_limit`, reported by the dry-run; and every row on them), and rows that are edited (`user_title`,
+    corrections, speaker assignments, star, folder, photos, kept), locked, shared, private,
+    discarded, deleted, backfilled by a legacy run, unreadable or still owed notes. These are offered
+    to the planner as published finished rows, so their speech, claims and audio stay theirs. The
+    ledger counts each as `protected_<reason>` (deleted rows included: their claims still fence) or `sources_blocked_<reason>`,
+    plus `sources_with_deleted_spans` (deleted spans are never replanned) and `sources_unclaimed`
+    (sealed live speech no window ever claimed; the run makes new cards of it, so check it first).
+  - Adoption: a rebuilt window keeps the id of the earliest row it absorbs. A rebuilt window equal to
+    its row (speech, bounds, claims and Home decision) is not written and its notes do not re-run.
+    Every other row it absorbs is retired as a sync bridge (`deleted`, `discarded`,
+    `sync_merged_into` the survivor, `v3_derived=false`): reads by id follow it, and no v3 read
+    treats it as a deletion. The survivor lists its bridges in `sync_merged_from`, so deleting it
+    purges them, as with a sync merge. Its claims leave the sources in the same commit. No audio purge is
+    armed or cancelled.
+  - Dry-run: reads only and calls no model. Before counts are exact; `windows_after` and
+    `visible_after` replan with one outline chapter per stretch, so the outline can only add windows
+    and retire fewer rows than `rows_retired_est`. Spend: one outline per stretch plus notes per
+    window after. The run's ledger records the exact `windows_after`, `visible_after`,
+    `rows_rebuilt`, `rows_created`, `rows_unchanged`, `rows_retired` and `outline_calls`.
+  - Use `--historical-sitdown` for the 900-second gap and 3,600-second landing lock. It takes
+    one owner and explicit bounds, with the end at least an hour old. Partitioning refuses forced
+    cuts, and the estimate and worker verify seams using decoded speech. Missing landing timestamps
+    and unsettled stretches block the partition. The estimate still uses placeholder outlines.
+    Before scheduling an approved repair, verify that every backfill task worker serves this
+    code with cohesion enabled and both exact timing settings. The run records the timing pair
+    and each derive attempt checks it against the worker configuration. Pause dispatch before
+    routing an unfinished timed run to an older worker.
+  - Blocked: `rederive_live_open` (speech within five minutes of now), `rederive_live_boundary` (a
+    rebuilt window would cross `since` or `until`), `rederive_live_outline_failed` (the outline fell
+    back; never committed as failed tiles), `rederive_live_coverage` (a row's speech would be lost),
+    `rederive_live_donor_tasks` (a planned retirement would strand standalone tasks),
+    `document_too_large` (a source's planned claims would cross the document limit; checked before
+    any write), `backfill_partition_budget` (the final commit would exceed the write cap) and
+    `rederive_live_range_overflow` (the partition's time range holds more documents than one pass
+    loads; plan smaller partitions). A
+    commit that fails after earlier batches landed leaves the partition blocked: `resume` replans it
+    (rows this run already wrote are replanned, their first prior kept), and `undo` is exact from
+    either state.
+  - Undo: before each commit, the run writes every changed, created or retired row's stored document
+    and claim positions to `conversations_v3_backfill_runs/{run_id}/conversations_v3_rederive_priors` (purged with the account
+    and after a finished undo; never written for a conversation already deleted or once account
+    deletion began). Conversation deletion checks for priors by the requested ID and known bridge
+    IDs, including when the worker stopped before stamping a row. Re-protection empties old-level
+    priors for the same scope, including unstamped rows and same-target retries. Emptied priors
+    become `purged` stubs and undo refuses those runs.
+  - App deletion and re-protection page only the owner's live re-derive runs, 200 IDs at a time.
+    For `L` matching runs and `D` distinct conversation and bridge IDs, the lookup costs at most
+    `L + 1` billed ledger reads and `L × D` prior point reads per attempt before transaction retries.
+    Owners with no matching runs use one minimum query read and zero prior reads. The November 12
+    phone cascade observation of about 1,400 deletes per day is a volume reference. The collection
+    budgets allow 6,000 additional ledger reads and 12,000 prior reads per day, based on 2,000
+    combined deletion and re-protection attempts at averages of three and six reads respectively.
+    These are planning assumptions. Revisit the estimate with actual per-owner run history,
+    duplicate attempts and migration batch sizes if observed traffic exceeds that scenario.
+    [Firestore query billing](https://firebase.google.com/docs/firestore/pricing#minimum-charge-for-queries)
+    A failed commit drops the copies of rows it did not write (a resume records them again).
+    Each partition reads only its own copies, by id; `resume` and `undo` check every copy of the run
+    once. A run whose undo refuses for good keeps its copies until the owner deletes the touched
+    conversations or the account; delete the run's `conversations_v3_rederive_priors` only with the
+    owner's approval, since it gives up the undo.
+    A capture longer than one partition crosses both partitions' edges: the dry-run reports it as
+    `windows_crossing_edge`; widen `since`/`until` around it or leave it.
+    Restores are exact apart from the commit hook's `home_source_version` and
+    `home_content_invalidated` stamps.
+    `undo --run` keeps both builder leases renewed during preflight, refuses in-flight notes or
+    lost leases, then restores each group of
+    rows that share a source in one transaction: stored documents back exactly, created rows removed,
+    each source's claim list back in its original order. It refuses (`undo.reason`) after the owner
+    deleted a rebuilt row (`owner_deleted_rebuilt_row`), after the owner edited, shared, locked,
+    merged or retitled a row the run wrote, created or retired (`owner_edited_rebuilt_row`; compared
+    against the owner-surface digest each settled partition records), or while a newer live run
+    restamped one (`undo_newer_run_first`: undo that one first). A standalone task linked to a card
+    scheduled for removal also blocks undo (`undo_created_row_has_tasks`). The run checks all such
+    cards before restoring any group and rechecks each group inside its transaction, including
+    cards already hidden by an interrupted undo. Refinement absorption, repair retirement and undo
+    each write a content-free, owner-scoped marker in the same transaction that hides the card.
+    A linked task create reads that marker in its write
+    transaction and checks the card itself only on a hit. The source-link switch leaves
+    ordinary missing links alone when off. Account erasure removes the markers.
+    An interrupted undo is rerun as is:
+    rows it already restored, and created rows it already hid (`v3_rederive_live_undone`), are
+    finished rather than refused. It also refuses once account deletion began (`account_deletion`),
+    and before restoring anything when a group of rows sharing sources is too large for one
+    transaction (`undo_group_too_large`). A later live speech append to a rebuilt row is
+    replaced by the restored document. Before a partition settles, the run's own notes may discard a
+    rebuilt card or add app results to it, so an owner discard or app run on that card in those few
+    minutes is not told apart from the run's; undo the run only after it settles. Not undone: outline cache entries and gateway spend.
 
 Rollout owner: lead2. Step 0: set CONVERSATIONS_V3_FIRST_APP_BUILD through the shared runtime source
 from the first TestFlight build containing this PR. Then dev named accounts,

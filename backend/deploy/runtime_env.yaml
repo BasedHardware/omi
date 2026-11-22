@@ -38,13 +38,12 @@ environments:
             value: ''
             category: ops_kill
           STALE_IN_PROGRESS_RECOVERY_ENABLED: {value: 'true', category: rollout}
-          STT_CAP_DISPATCH_ENFORCEMENT: {value: 'false', category: rollout}
-          STT_CAP_DISPATCH_COHORT: {value: '', category: rollout}
           STT_CAP_DISPATCH_LANES: {value: live, category: rollout}
           UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED: {value: 'false', category: rollout}
           UNLIMITED_V2_BACKFILL_HOURS_CAP_HOURS: {value: '24', category: rollout}
           PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
           SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
+          SYNC_POLL_BACKOFF_PERCENT: {value: '0', category: rollout}
           SYNC_RECORD_COVERAGE_WAIT_MEMO:
             value: 'true'
             category: ops_kill
@@ -133,12 +132,10 @@ environments:
           AUDIO_ARCHIVE_STOP_PCM_ENABLED: {value: 'false', category: rollout}
           AUDIO_ARCHIVE_SYNC_ENABLED: {value: 'false', category: rollout}
           AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED: {value: 'false', category: rollout}
-          AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED: {value: 'false', category: rollout}
           AUDIO_ARCHIVE_PERCENT: {category: rollout, value: '0'}
           AUDIO_ARCHIVE_STOP_PCM_PERCENT: {category: rollout, value: '0'}
           AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT: {category: rollout, value: '0'}
           BUCKET_AUDIO_DERIVED: {value: '', category: rollout}
-          AUDIO_MERGE_WORKER_URL: {value: '', category: rollout}
           LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION: {value: 'false', category: rollout}
           LIVE_CAPTURE_WINDOW_MERGE_UNION: {category: rollout, value: 'false'}
           LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS: {category: rollout, value: 'false'}
@@ -218,7 +215,6 @@ environments:
           DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED: {value: 'false', category: rollout}
           DEMAND_PROCESSING_UID_ALLOWLIST: {value: '', category: rollout}
           DEMAND_PROCESSING_PERCENT: {value: '0', category: rollout}
-          STT_RESILIENT_RECONNECT: {value: 'false', category: rollout}
           STT_LIVE_DEMAND_ENABLED: {category: rollout, value: 'false'}
           STT_LIVE_DEMAND_PERCENT: {value: '0', category: rollout}
           STT_LIVE_DEMAND_UID_ALLOWLIST: {category: rollout, value: ''}
@@ -234,10 +230,11 @@ environments:
           STT_NO_TEXT_SECONDS: {value: '30', category: rollout}
           STT_LEARNED_LANGUAGE_PROFILE: {value: 'true', category: rollout}
           STT_NON_EN_MULTI_PREFER_HINTABLE_PERCENT: {value: '100', category: rollout}
-          PARAKEET_WINDOW_ALLOCATION_PERCENT: {category: rollout, value: '1'}
+          PARAKEET_WINDOW_ALLOCATION_PERCENT:
+            category: ops_kill
+            value: '1'
           PARAKEET_WINDOW_MAX_SESSIONS: {category: rollout, value: '1'}
           PARAKEET_WINDOW_POST_TIMEOUT_SECONDS: {value: '8', category: rollout}
-          PARAKEET_WINDOW_DIARIZATION: {value: 'false', category: rollout}
           PARAKEET_WINDOW_DEADLINE_CUT_POST_LATENCY_SECONDS:
             value: '1.2'
             category: reliability
@@ -388,6 +385,8 @@ environments:
           BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'false', category: rollout}
           BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
           BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST: {value: '', category: rollout}
+          STT_CAP_DISPATCH_ENFORCEMENT: {value: 'false', category: rollout}
+          STT_CAP_DISPATCH_COHORT: {value: '', category: rollout}
           PUSHER_RECORD_CLOSE_NOTIFY_ENABLED: {value: 'false', category: rollout}
           PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_PERCENT: {value: '100', category: rollout}
           PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_UID_SHA256S: {value: '', category: rollout}
@@ -489,7 +488,9 @@ environments:
           PARAKEET_STREAM_CAPACITY:
             value: '25'
             category: reliability
-          PARAKEET_STREAM_ALLOCATION_PERCENT: {value: '100', category: rollout}
+          PARAKEET_STREAM_ALLOCATION_PERCENT:
+            value: '100'
+            category: ops_kill
         values_file: backend/charts/parakeet/dev_omi_parakeet_values.yaml
       pusher:
         capabilities:
@@ -551,6 +552,7 @@ environments:
           BATCH_PIPELINE_LIVE_ADMISSION_ENABLED: {value: 'false', category: rollout}
           PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
           SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
+          SYNC_POLL_BACKOFF_PERCENT: {value: '0', category: rollout}
           SYNC_RECORD_COVERAGE_WAIT_MEMO:
             value: 'true'
             category: ops_kill
@@ -578,12 +580,10 @@ environments:
           AUDIO_ARCHIVE_STOP_PCM_ENABLED: {value: 'false', category: rollout}
           AUDIO_ARCHIVE_SYNC_ENABLED: {value: 'false', category: rollout}
           AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED: {value: 'false', category: rollout}
-          AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED: {value: 'false', category: rollout}
           AUDIO_ARCHIVE_PERCENT: {category: rollout, value: '0'}
           AUDIO_ARCHIVE_STOP_PCM_PERCENT: {category: rollout, value: '0'}
           AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT: {category: rollout, value: '0'}
           BUCKET_AUDIO_DERIVED: {value: '', category: rollout}
-          AUDIO_MERGE_WORKER_URL: {value: '', category: rollout}
           LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION: {value: 'false', category: rollout}
           LIVE_CAPTURE_WINDOW_MERGE_UNION: {category: rollout, value: 'false'}
           LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS: {category: rollout, value: 'false'}
@@ -1160,12 +1160,10 @@ environments:
             AUDIO_ARCHIVE_STOP_PCM_ENABLED: {value: 'false', category: rollout}
             AUDIO_ARCHIVE_SYNC_ENABLED: {value: 'false', category: rollout}
             AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED: {value: 'false', category: rollout}
-            AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED: {value: 'false', category: rollout}
             AUDIO_ARCHIVE_PERCENT: {category: rollout, value: '0'}
             AUDIO_ARCHIVE_STOP_PCM_PERCENT: {category: rollout, value: '0'}
             AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT: {category: rollout, value: '0'}
             BUCKET_AUDIO_DERIVED: {value: '', category: rollout}
-            AUDIO_MERGE_WORKER_URL: {value: '', category: rollout}
             REDIS_DB_PORT:
               value: '13151'
               category: service_discovery
@@ -1404,6 +1402,7 @@ environments:
             HOME_PROCESSING_MAX_AGE_SECONDS:
               value: '21600'
               category: config
+            SYNC_POLL_BACKOFF_PERCENT: {value: '0', category: rollout}
             OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
             OMI_CUSTOMER_DATA_PROJECT:
               value: based-hardware
@@ -1488,6 +1487,7 @@ environments:
             UNLIMITED_V2_BACKFILL_HOURS_CAP_HOURS: {value: '24', category: rollout}
             PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
             SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
+            SYNC_POLL_BACKOFF_PERCENT: {value: '0', category: rollout}
             SYNC_RECORD_COVERAGE_WAIT_MEMO:
               value: 'true'
               category: ops_kill
@@ -1573,12 +1573,10 @@ environments:
             AUDIO_ARCHIVE_STOP_PCM_ENABLED: {value: 'false', category: rollout}
             AUDIO_ARCHIVE_SYNC_ENABLED: {value: 'false', category: rollout}
             AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED: {value: 'false', category: rollout}
-            AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED: {value: 'false', category: rollout}
             AUDIO_ARCHIVE_PERCENT: {category: rollout, value: '0'}
             AUDIO_ARCHIVE_STOP_PCM_PERCENT: {category: rollout, value: '0'}
             AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT: {category: rollout, value: '0'}
             BUCKET_AUDIO_DERIVED: {value: '', category: rollout}
-            AUDIO_MERGE_WORKER_URL: {value: '', category: rollout}
             OMI_VERTEX_RESERVATION_PROJECT:
               value: based-hardware-dev
               category: runtime_identity
@@ -1920,6 +1918,7 @@ environments:
               category: reliability
             PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
             SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
+            SYNC_POLL_BACKOFF_PERCENT: {value: '0', category: rollout}
             SYNC_RECORD_COVERAGE_WAIT_MEMO:
               value: 'true'
               category: ops_kill
@@ -2005,12 +2004,10 @@ environments:
             AUDIO_ARCHIVE_STOP_PCM_ENABLED: {value: 'false', category: rollout}
             AUDIO_ARCHIVE_SYNC_ENABLED: {value: 'false', category: rollout}
             AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED: {value: 'false', category: rollout}
-            AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED: {value: 'false', category: rollout}
             AUDIO_ARCHIVE_PERCENT: {category: rollout, value: '0'}
             AUDIO_ARCHIVE_STOP_PCM_PERCENT: {category: rollout, value: '0'}
             AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT: {category: rollout, value: '0'}
             BUCKET_AUDIO_DERIVED: {value: '', category: rollout}
-            AUDIO_MERGE_WORKER_URL: {value: '', category: rollout}
             REDIS_DB_PORT:
               value: '13151'
               category: service_discovery
@@ -2324,6 +2321,7 @@ environments:
             UNLIMITED_V2_BACKFILL_HOURS_CAP_HOURS: {value: '24', category: rollout}
             PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
             SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
+            SYNC_POLL_BACKOFF_PERCENT: {value: '0', category: rollout}
             SYNC_RECORD_COVERAGE_WAIT_MEMO:
               value: 'true'
               category: ops_kill
@@ -2408,12 +2406,10 @@ environments:
             AUDIO_ARCHIVE_STOP_PCM_ENABLED: {value: 'false', category: rollout}
             AUDIO_ARCHIVE_SYNC_ENABLED: {value: 'false', category: rollout}
             AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED: {value: 'false', category: rollout}
-            AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED: {value: 'false', category: rollout}
             AUDIO_ARCHIVE_PERCENT: {category: rollout, value: '0'}
             AUDIO_ARCHIVE_STOP_PCM_PERCENT: {category: rollout, value: '0'}
             AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT: {category: rollout, value: '0'}
             BUCKET_AUDIO_DERIVED: {value: '', category: rollout}
-            AUDIO_MERGE_WORKER_URL: {value: '', category: rollout}
             REDIS_DB_PORT:
               value: '13151'
               category: service_discovery
@@ -2968,7 +2964,7 @@ environments:
             value: 'on'
             category: ops_kill
           BATCH_ACCOUNT_PRIVACY_WRITER_ENABLED:
-            value: 'true'
+            value: 'false'
             category: ops_kill
           CONVERSATIONS_V3_RECORDING_ROTATION: {value: 'off', category: rollout}
           CONVERSATIONS_V3_ROTATION_MIN_SECONDS: {value: '180', category: rollout}
@@ -2984,13 +2980,12 @@ environments:
             value: af,ar,az,be,bn,bs,ca,cy,eu,fa,gl,gu,he,hi,id,kk,kn,ko,mk,ml,mr,ms,no,pa,sq,sr,sw,ta,te,th,tl,tr,ur,vi,zh
             category: ops_kill
           STALE_IN_PROGRESS_RECOVERY_ENABLED: {value: 'true', category: rollout}
-          STT_CAP_DISPATCH_ENFORCEMENT: {value: 'false', category: rollout}
-          STT_CAP_DISPATCH_COHORT: {value: '', category: rollout}
           STT_CAP_DISPATCH_LANES: {value: live, category: rollout}
-          UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED: {value: 'true', category: rollout}
+          UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED: {value: 'false', category: rollout}
           UNLIMITED_V2_BACKFILL_HOURS_CAP_HOURS: {value: '24', category: rollout}
           PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
-          SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
+          SYNC_POLL_BACKOFF_ENABLED: {value: 'true', category: rollout}
+          SYNC_POLL_BACKOFF_PERCENT: {value: '5', category: rollout}
           SYNC_RECORD_COVERAGE_WAIT_MEMO:
             value: 'true'
             category: ops_kill
@@ -3026,7 +3021,7 @@ environments:
             value: g1
             category: config
           BATCH_PIPELINE_PACKING_SAMPLE_RATE:
-            value: '0.001'
+            value: '0'
             category: ops_kill
           BATCH_PIPELINE_ENABLED: {value: 'true', category: rollout}
           FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED: {value: 'false', category: rollout}
@@ -3079,12 +3074,10 @@ environments:
           AUDIO_ARCHIVE_STOP_PCM_ENABLED: {value: 'false', category: rollout}
           AUDIO_ARCHIVE_SYNC_ENABLED: {value: 'false', category: rollout}
           AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED: {value: 'false', category: rollout}
-          AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED: {value: 'false', category: rollout}
           AUDIO_ARCHIVE_PERCENT: {category: rollout, value: '100'}
           AUDIO_ARCHIVE_STOP_PCM_PERCENT: {category: rollout, value: '0'}
           AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT: {category: rollout, value: '0'}
           BUCKET_AUDIO_DERIVED: {value: '', category: rollout}
-          AUDIO_MERGE_WORKER_URL: {value: '', category: rollout}
           LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION: {value: 'false', category: rollout}
           LIVE_CAPTURE_WINDOW_MERGE_UNION: {category: rollout, value: 'true'}
           LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS: {category: rollout, value: 'true'}
@@ -3164,7 +3157,6 @@ environments:
           DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED: {value: 'false', category: rollout}
           DEMAND_PROCESSING_UID_ALLOWLIST: {value: '', category: rollout}
           DEMAND_PROCESSING_PERCENT: {value: '0', category: rollout}
-          STT_RESILIENT_RECONNECT: {value: 'false', category: rollout}
           STT_LIVE_DEMAND_ENABLED: {category: rollout, value: 'true'}
           STT_LIVE_DEMAND_PERCENT: {value: '0', category: rollout}
           STT_LIVE_DEMAND_UID_ALLOWLIST: {category: rollout, value: vi7SA9ckQCe4ccobWNxlbdcNdC23}
@@ -3180,10 +3172,11 @@ environments:
           STT_NO_TEXT_SECONDS: {value: '30', category: rollout}
           STT_LEARNED_LANGUAGE_PROFILE: {value: 'true', category: rollout}
           STT_NON_EN_MULTI_PREFER_HINTABLE_PERCENT: {value: '0', category: rollout}
-          PARAKEET_WINDOW_ALLOCATION_PERCENT: {category: rollout, value: '100'}
+          PARAKEET_WINDOW_ALLOCATION_PERCENT:
+            category: ops_kill
+            value: '100'
           PARAKEET_WINDOW_MAX_SESSIONS: {category: rollout, value: '16'}
           PARAKEET_WINDOW_POST_TIMEOUT_SECONDS: {value: '8', category: rollout}
-          PARAKEET_WINDOW_DIARIZATION: {value: 'false', category: rollout}
           PARAKEET_WINDOW_DEADLINE_CUT_POST_LATENCY_SECONDS:
             value: '1.2'
             category: reliability
@@ -3334,6 +3327,18 @@ environments:
           BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'true', category: rollout}
           BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
           BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST: {value: '', category: rollout}
+          STT_CAP_DISPATCH_ENFORCEMENT:
+            secret:
+              name: prod-omi-backend-listen-private-env
+              key: STT_CAP_DISPATCH_ENFORCEMENT
+          STT_CAP_DISPATCH_COHORT:
+            secret:
+              name: prod-omi-backend-listen-private-env
+              key: STT_CAP_DISPATCH_COHORT
+          MEDIA_NOISE_MODE_SERVE_UID_SHA256S:
+            secret:
+              name: prod-omi-backend-listen-private-env
+              key: MEDIA_NOISE_MODE_SERVE_UID_SHA256S
           MEDIA_NOISE_MODE: {value: shadow, category: rollout}
           MEDIA_NOISE_MODE_SERVE_PERCENT: {value: '0', category: rollout}
           NOTES_SHORT_CLIP_FLOOR: {value: 'true', category: rollout}
@@ -3402,7 +3407,7 @@ environments:
           HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED:
             value: 'true'
             category: ops_kill
-          SYNC_FUTURE_CAPTURE_CLAMP_ENABLED: {value: 'false', category: rollout}
+          SYNC_FUTURE_CAPTURE_CLAMP_ENABLED: {value: 'true', category: rollout}
           RECORD_SEAL_REPAIR_FRESH_ENABLED:
             value: 'true'
             category: ops_kill
@@ -3445,9 +3450,6 @@ environments:
             value: omi-flags
             category: service_discovery
           OMI_FLAGS_SOURCE: {value: dual, category: rollout}
-          SONIOX_IDLE_COHORT_CLOSE_SECONDS: {value: '10', category: rollout}
-          SONIOX_IDLE_COHORT_REARM_SECONDS: {value: '2', category: rollout}
-          SONIOX_IDLE_COHORT_MAX_CLOSES_PER_HOUR: {value: '120', category: rollout}
           PARAKEET_WINDOW_REPLICA_RECOVERY_ENABLED:
             value: 'false'
             category: ops_kill
@@ -3553,7 +3555,9 @@ environments:
           PARAKEET_STREAM_CAPACITY:
             value: '25'
             category: reliability
-          PARAKEET_STREAM_ALLOCATION_PERCENT: {value: '100', category: rollout}
+          PARAKEET_STREAM_ALLOCATION_PERCENT:
+            value: '100'
+            category: ops_kill
         values_file: backend/charts/parakeet/prod_omi_parakeet_values.yaml
       pusher:
         capabilities:
@@ -3614,7 +3618,8 @@ environments:
           BATCH_LIVE_STT_RETIRE_PERCENT: {value: '0', category: rollout}
           BATCH_PIPELINE_LIVE_ADMISSION_ENABLED: {value: 'false', category: rollout}
           PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
-          SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
+          SYNC_POLL_BACKOFF_ENABLED: {value: 'true', category: rollout}
+          SYNC_POLL_BACKOFF_PERCENT: {value: '5', category: rollout}
           SYNC_RECORD_COVERAGE_WAIT_MEMO:
             value: 'true'
             category: ops_kill
@@ -3642,12 +3647,10 @@ environments:
           AUDIO_ARCHIVE_STOP_PCM_ENABLED: {value: 'false', category: rollout}
           AUDIO_ARCHIVE_SYNC_ENABLED: {value: 'false', category: rollout}
           AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED: {value: 'false', category: rollout}
-          AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED: {value: 'false', category: rollout}
           AUDIO_ARCHIVE_PERCENT: {category: rollout, value: '100'}
           AUDIO_ARCHIVE_STOP_PCM_PERCENT: {category: rollout, value: '0'}
           AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT: {category: rollout, value: '0'}
           BUCKET_AUDIO_DERIVED: {value: '', category: rollout}
-          AUDIO_MERGE_WORKER_URL: {value: '', category: rollout}
           LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION: {value: 'false', category: rollout}
           LIVE_CAPTURE_WINDOW_MERGE_UNION: {category: rollout, value: 'true'}
           LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS: {category: rollout, value: 'true'}
@@ -4062,6 +4065,10 @@ environments:
       services:
         backend:
           forbidden_env:
+          - BATCH_HELD_POLL_SKIP_ENABLED
+          - BATCH_PROJECTION_FINISH_BACKOFF_ENABLED
+          - DREAM_AGENT_PAID_PERCENT
+          - SYNC_POLL_BACKOFF_PERCENT
           - DEEPGRAM_SELF_HOSTED_ENABLED
           - DEEPGRAM_SELF_HOSTED_URL
           - DEEPGRAM_API_KEY
@@ -4071,7 +4078,6 @@ environments:
           - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
           - CONVERSATION_LLM_INPUT_DEDUPE_ENABLED
           - REPEAT_WORK_REVISION_ENABLED
-          - BATCH_PROJECTION_FINISH_BACKOFF_ENABLED
           capabilities:
           - conversation.finalize.persisted
           - memory.canonical.mutate
@@ -4100,6 +4106,9 @@ environments:
             SCREEN_FRAME_SIGNING_SECRET:
               secret: SCREEN_FRAME_SIGNING_SECRET
               version: latest
+            CONVERSATIONS_V3_LIVE_RECAP_COHORT:
+              secret: CONVERSATIONS_V3_LIVE_RECAP_COHORT
+              version: '1'
             SONIOX_API_KEY:
               secret: SONIOX_API_KEY
               version: latest
@@ -4258,12 +4267,10 @@ environments:
             AUDIO_ARCHIVE_STOP_PCM_ENABLED: {value: 'false', category: rollout}
             AUDIO_ARCHIVE_SYNC_ENABLED: {value: 'false', category: rollout}
             AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED: {value: 'true', category: rollout}
-            AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED: {value: 'false', category: rollout}
             AUDIO_ARCHIVE_PERCENT: {category: rollout, value: '100'}
             AUDIO_ARCHIVE_STOP_PCM_PERCENT: {category: rollout, value: '0'}
             AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT: {category: rollout, value: '5'}
             BUCKET_AUDIO_DERIVED: {value: omi-audio-derived-uc1, category: rollout}
-            AUDIO_MERGE_WORKER_URL: {value: '', category: rollout}
             REDIS_DB_PORT:
               value: '13151'
               category: service_discovery
@@ -4435,6 +4442,9 @@ environments:
             BATCH_PIPELINE_SILENCE_READ_SKIP_ENABLED:
               value: 'false'
               category: ops_kill
+            BATCH_PIPELINE_FOLLOWUP_CLAIMED_SIBLING_SKIP_ENABLED:
+              value: 'false'
+              category: ops_kill
             PUSHER_RECORD_CLOSE_NOTIFY_ENABLED: {value: 'false', category: rollout}
             PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_PERCENT: {value: '100', category: rollout}
             PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_UID_SHA256S: {value: '', category: rollout}
@@ -4491,9 +4501,6 @@ environments:
               category: ops_kill
             RECORD_SEAL_WAKE_PRESERVED_ENABLED:
               value: 'true'
-              category: ops_kill
-            BATCH_HELD_POLL_SKIP_ENABLED:
-              value: 'false'
               category: ops_kill
             QUIET_EMPTY_EXIT_ENABLED: {value: 'true', category: rollout}
             HOME_TRANSCRIPTION_PRESENTATION_GATE:
@@ -4577,7 +4584,6 @@ environments:
             OMI_MESSAGING_LINK_TARGETS: {value: '{"telegram":{"provider":"telegram","address":"omi_chat_bot","deep_link_template":"https://t.me/{address}?start={proof}"},"imessage":{"provider":"keiki","address":"+14155252967","lines":[{"address":"+14155252967","started":"2026-10-30"}]}}',
               category: rollout}
             DREAM_AGENT_ENABLED: {value: 'true', category: rollout}
-            DREAM_AGENT_PAID_PERCENT: {value: '100', category: rollout}
             DREAM_AGENT_CONCURRENCY:
               value: '8'
               category: reliability
@@ -4733,7 +4739,8 @@ environments:
             UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED: {value: 'true', category: rollout}
             UNLIMITED_V2_BACKFILL_HOURS_CAP_HOURS: {value: '24', category: rollout}
             PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
-            SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
+            SYNC_POLL_BACKOFF_ENABLED: {value: 'true', category: rollout}
+            SYNC_POLL_BACKOFF_PERCENT: {value: '5', category: rollout}
             SYNC_RECORD_COVERAGE_WAIT_MEMO:
               value: 'true'
               category: ops_kill
@@ -4819,12 +4826,10 @@ environments:
             AUDIO_ARCHIVE_STOP_PCM_ENABLED: {value: 'false', category: rollout}
             AUDIO_ARCHIVE_SYNC_ENABLED: {value: 'false', category: rollout}
             AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED: {value: 'true', category: rollout}
-            AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED: {value: 'false', category: rollout}
             AUDIO_ARCHIVE_PERCENT: {category: rollout, value: '100'}
             AUDIO_ARCHIVE_STOP_PCM_PERCENT: {category: rollout, value: '0'}
             AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT: {category: rollout, value: '5'}
             BUCKET_AUDIO_DERIVED: {value: omi-audio-derived-uc1, category: rollout}
-            AUDIO_MERGE_WORKER_URL: {value: '', category: rollout}
             OMI_VERTEX_RESERVATION_PROJECT:
               value: based-hardware
               category: runtime_identity
@@ -5008,7 +5013,10 @@ environments:
               value: 'on'
               category: ops_kill
             BATCH_PIPELINE_SILENCE_READ_SKIP_ENABLED:
-              value: 'false'
+              value: 'true'
+              category: ops_kill
+            BATCH_PIPELINE_FOLLOWUP_CLAIMED_SIBLING_SKIP_ENABLED:
+              value: 'true'
               category: ops_kill
             PUSHER_RECORD_CLOSE_NOTIFY_ENABLED: {value: 'false', category: rollout}
             PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_PERCENT: {value: '100', category: rollout}
@@ -5061,13 +5069,9 @@ environments:
             RECORD_SEAL_WAKE_PRESERVED_ENABLED:
               value: 'true'
               category: ops_kill
-            BATCH_HELD_POLL_SKIP_ENABLED:
-              value: 'false'
-              category: ops_kill
             BATCH_PIPELINE_UPLOAD_COALESCING_ENABLED:
               value: 'true'
               category: ops_kill
-            BATCH_PROJECTION_FINISH_BACKOFF_ENABLED: {value: 'false', category: rollout}
             QUIET_EMPTY_EXIT_ENABLED: {value: 'true', category: rollout}
             HOME_TRANSCRIPTION_PRESENTATION_GATE:
               value: 'true'
@@ -5078,7 +5082,7 @@ environments:
             HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED:
               value: 'true'
               category: ops_kill
-            SYNC_FUTURE_CAPTURE_CLAMP_ENABLED: {value: 'false', category: rollout}
+            SYNC_FUTURE_CAPTURE_CLAMP_ENABLED: {value: 'true', category: rollout}
             RECORD_SEAL_REPAIR_FRESH_ENABLED:
               value: 'true'
               category: ops_kill
@@ -5154,7 +5158,6 @@ environments:
             TRANSCRIPTION_SYNC_FINAL_PASS_HOURLY_REQUESTS: {value: '15000', category: rollout}
             OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
             DREAM_AGENT_ENABLED: {value: 'true', category: rollout}
-            DREAM_AGENT_PAID_PERCENT: {value: '100', category: rollout}
             DREAM_AGENT_CONCURRENCY:
               value: '8'
               category: reliability
@@ -5264,6 +5267,9 @@ environments:
           flags:
             --timeout: 3600s
           forbidden_env:
+          - BATCH_HELD_POLL_SKIP_ENABLED
+          - BATCH_PROJECTION_FINISH_BACKOFF_ENABLED
+          - DREAM_AGENT_PAID_PERCENT
           - DEEPGRAM_SELF_HOSTED_ENABLED
           - DEEPGRAM_SELF_HOSTED_URL
           - DEEPGRAM_API_KEY
@@ -5297,7 +5303,7 @@ environments:
               value: 'on'
               category: ops_kill
             BATCH_ACCOUNT_PRIVACY_WRITER_ENABLED:
-              value: 'true'
+              value: 'false'
               category: ops_kill
             HOME_LIVE_MEMBER_NOTES_BOUNDED_ENABLED:
               value: 'true'
@@ -5320,7 +5326,8 @@ environments:
               value: '8'
               category: reliability
             PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
-            SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
+            SYNC_POLL_BACKOFF_ENABLED: {value: 'true', category: rollout}
+            SYNC_POLL_BACKOFF_PERCENT: {value: '5', category: rollout}
             SYNC_RECORD_COVERAGE_WAIT_MEMO:
               value: 'true'
               category: ops_kill
@@ -5376,7 +5383,7 @@ environments:
               default: '0'
               category: rollout
             BATCH_PROJECTION_OUTBOX:
-              value: 'true'
+              value: 'false'
               category: ops_kill
             BATCH_PIPELINE_SERVING_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_WORKER_ENABLED:
@@ -5406,12 +5413,10 @@ environments:
             AUDIO_ARCHIVE_STOP_PCM_ENABLED: {value: 'false', category: rollout}
             AUDIO_ARCHIVE_SYNC_ENABLED: {value: 'false', category: rollout}
             AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED: {value: 'true', category: rollout}
-            AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED: {value: 'false', category: rollout}
             AUDIO_ARCHIVE_PERCENT: {category: rollout, value: '100'}
             AUDIO_ARCHIVE_STOP_PCM_PERCENT: {category: rollout, value: '0'}
             AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT: {category: rollout, value: '5'}
             BUCKET_AUDIO_DERIVED: {value: omi-audio-derived-uc1, category: rollout}
-            AUDIO_MERGE_WORKER_URL: {value: '', category: rollout}
             REDIS_DB_PORT:
               value: '13151'
               category: service_discovery
@@ -5569,7 +5574,7 @@ environments:
             BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
             BATCH_PIPELINE_SILENCE_READ_SKIP_ENABLED:
-              value: 'false'
+              value: 'true'
               category: ops_kill
             PUSHER_RECORD_CLOSE_NOTIFY_ENABLED: {value: 'false', category: rollout}
             PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_PERCENT: {value: '100', category: rollout}
@@ -5622,9 +5627,6 @@ environments:
             RECORD_SEAL_WAKE_PRESERVED_ENABLED:
               value: 'true'
               category: ops_kill
-            BATCH_HELD_POLL_SKIP_ENABLED:
-              value: 'false'
-              category: ops_kill
             QUIET_EMPTY_EXIT_ENABLED: {value: 'true', category: rollout}
             OMI_FLAGS_FIRESTORE_PROJECT:
               value: based-hardware
@@ -5642,7 +5644,7 @@ environments:
             HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED:
               value: 'true'
               category: ops_kill
-            SYNC_FUTURE_CAPTURE_CLAMP_ENABLED: {value: 'false', category: rollout}
+            SYNC_FUTURE_CAPTURE_CLAMP_ENABLED: {value: 'true', category: rollout}
             RECORD_SEAL_REPAIR_FRESH_ENABLED:
               value: 'true'
               category: ops_kill
@@ -5701,7 +5703,6 @@ environments:
             TRANSCRIPTION_SYNC_FINAL_PASS_HOURLY_REQUESTS: {value: '15000', category: rollout}
             OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
             DREAM_AGENT_ENABLED: {value: 'true', category: rollout}
-            DREAM_AGENT_PAID_PERCENT: {value: '100', category: rollout}
             DREAM_AGENT_CONCURRENCY:
               value: '8'
               category: reliability
@@ -5805,6 +5806,9 @@ environments:
               category: reliability
           provisional: true
           forbidden_env:
+          - BATCH_HELD_POLL_SKIP_ENABLED
+          - BATCH_PROJECTION_FINISH_BACKOFF_ENABLED
+          - DREAM_AGENT_PAID_PERCENT
           - DEEPGRAM_SELF_HOSTED_ENABLED
           - DEEPGRAM_SELF_HOSTED_URL
           - DEEPGRAM_API_KEY
@@ -5815,7 +5819,6 @@ environments:
           - CONVERSATION_LLM_INPUT_DEDUPE_ENABLED
           - SYNC_REPROCESS_COALESCE_ENABLED
           - REPEAT_WORK_REVISION_ENABLED
-          - BATCH_PROJECTION_FINISH_BACKOFF_ENABLED
           service_account: backend-runtime@based-hardware.iam.gserviceaccount.com
         backend-integration:
           flags:
@@ -5844,7 +5847,7 @@ environments:
               value: 'on'
               category: ops_kill
             BATCH_ACCOUNT_PRIVACY_WRITER_ENABLED:
-              value: 'true'
+              value: 'false'
               category: ops_kill
             HOME_LIVE_MEMBER_NOTES_BOUNDED_ENABLED:
               value: 'true'
@@ -5858,7 +5861,8 @@ environments:
             UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED: {value: 'true', category: rollout}
             UNLIMITED_V2_BACKFILL_HOURS_CAP_HOURS: {value: '24', category: rollout}
             PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
-            SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
+            SYNC_POLL_BACKOFF_ENABLED: {value: 'true', category: rollout}
+            SYNC_POLL_BACKOFF_PERCENT: {value: '5', category: rollout}
             SYNC_RECORD_COVERAGE_WAIT_MEMO:
               value: 'true'
               category: ops_kill
@@ -5913,7 +5917,7 @@ environments:
               default: '0'
               category: rollout
             BATCH_PROJECTION_OUTBOX:
-              value: 'true'
+              value: 'false'
               category: ops_kill
             BATCH_PIPELINE_SERVING_ENABLED: {category: rollout, value: 'true'}
             BATCH_PIPELINE_WORKER_ENABLED:
@@ -5943,12 +5947,10 @@ environments:
             AUDIO_ARCHIVE_STOP_PCM_ENABLED: {value: 'false', category: rollout}
             AUDIO_ARCHIVE_SYNC_ENABLED: {value: 'false', category: rollout}
             AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED: {value: 'true', category: rollout}
-            AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED: {value: 'false', category: rollout}
             AUDIO_ARCHIVE_PERCENT: {category: rollout, value: '100'}
             AUDIO_ARCHIVE_STOP_PCM_PERCENT: {category: rollout, value: '0'}
             AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT: {category: rollout, value: '5'}
             BUCKET_AUDIO_DERIVED: {value: omi-audio-derived-uc1, category: rollout}
-            AUDIO_MERGE_WORKER_URL: {value: '', category: rollout}
             REDIS_DB_PORT:
               value: '13151'
               category: service_discovery
@@ -6077,8 +6079,14 @@ environments:
             BATCH_PIPELINE_SERVING_SWEEP_PAGE_ROWS: {value: '200', category: rollout}
             BATCH_PIPELINE_SERVING_TICK_SECONDS: {value: '10', category: rollout}
             BATCH_PROJECTION_FINISH_CLASSIFY_PAGE_LIMIT: {value: '16', category: rollout}
+            BATCH_PIPELINE_FOLLOWUP_CLAIMED_SIBLING_SKIP_ENABLED:
+              value: 'true'
+              category: ops_kill
+            BATCH_PIPELINE_SERVING_PROJECTION_SWEEP:
+              value: 'true'
+              category: ops_kill
             BATCH_PIPELINE_SILENCE_READ_SKIP_ENABLED:
-              value: 'false'
+              value: 'true'
               category: ops_kill
             PUSHER_RECORD_CLOSE_NOTIFY_ENABLED: {value: 'false', category: rollout}
             PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_PERCENT: {value: '100', category: rollout}
@@ -6131,13 +6139,9 @@ environments:
             RECORD_SEAL_WAKE_PRESERVED_ENABLED:
               value: 'true'
               category: ops_kill
-            BATCH_HELD_POLL_SKIP_ENABLED:
-              value: 'false'
-              category: ops_kill
             BATCH_PIPELINE_UPLOAD_COALESCING_ENABLED:
               value: 'true'
               category: ops_kill
-            BATCH_PROJECTION_FINISH_BACKOFF_ENABLED: {value: 'false', category: rollout}
             QUIET_EMPTY_EXIT_ENABLED: {value: 'true', category: rollout}
             OMI_FLAGS_FIRESTORE_PROJECT:
               value: based-hardware
@@ -6155,7 +6159,7 @@ environments:
             HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED:
               value: 'true'
               category: ops_kill
-            SYNC_FUTURE_CAPTURE_CLAMP_ENABLED: {value: 'false', category: rollout}
+            SYNC_FUTURE_CAPTURE_CLAMP_ENABLED: {value: 'true', category: rollout}
             RECORD_SEAL_REPAIR_FRESH_ENABLED:
               value: 'true'
               category: ops_kill
@@ -6231,7 +6235,6 @@ environments:
               category: reliability
             OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
             DREAM_AGENT_ENABLED: {value: 'true', category: rollout}
-            DREAM_AGENT_PAID_PERCENT: {value: '100', category: rollout}
             DREAM_AGENT_CONCURRENCY:
               value: '8'
               category: reliability
@@ -6294,6 +6297,506 @@ environments:
               value: conversations-v3-backfill
               category: reliability
           forbidden_env:
+          - BATCH_HELD_POLL_SKIP_ENABLED
+          - BATCH_PROJECTION_FINISH_BACKOFF_ENABLED
+          - DREAM_AGENT_PAID_PERCENT
+          - DEEPGRAM_SELF_HOSTED_ENABLED
+          - DEEPGRAM_SELF_HOSTED_URL
+          - DEEPGRAM_API_KEY
+          - BASIC_TIER_MINUTES_LIMIT_PER_MONTH
+          - BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH
+          - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
+          - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
+          - CONVERSATION_LLM_INPUT_DEDUPE_ENABLED
+          - REPEAT_WORK_REVISION_ENABLED
+          - HOSTED_DIARIZATION_API_URL
+          service_account: backend-runtime@based-hardware.iam.gserviceaccount.com
+        backend-projection-pump:
+          flags:
+            --timeout: 3600s
+          secrets:
+            GOOGLE_CLIENT_SECRET:
+              secret: GOOGLE_CLIENT_SECRET
+              version: latest
+            MODULATE_API_KEY:
+              secret: MODULATE_API_KEY
+              version: latest
+            ENCRYPTION_SECRET:
+              secret: ENCRYPTION_SECRET
+              version: latest
+            POSTHOG_EVENTS_API_KEY:
+              secret: POSTHOG_EVENTS_API_KEY
+              version: latest
+            OMI_LLM_GATEWAY_SERVICE_TOKEN:
+              secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
+              version: latest
+            SONIOX_API_KEY:
+              secret: SONIOX_API_KEY
+              version: latest
+          env:
+            CONVERSATION_TERMINAL_FAMILY_MODE:
+              value: 'on'
+              category: ops_kill
+            BATCH_ACCOUNT_PRIVACY_WRITER_ENABLED:
+              value: 'false'
+              category: ops_kill
+            HOME_LIVE_MEMBER_NOTES_BOUNDED_ENABLED:
+              value: 'true'
+              category: ops_kill
+            PROCESSING_ATTENTION_NON_RETRYABLE_EXPIRY_ENABLED:
+              value: 'true'
+              category: ops_kill
+            STT_CAP_DISPATCH_ENFORCEMENT: {value: 'false', category: rollout}
+            STT_CAP_DISPATCH_COHORT: {value: '', category: rollout}
+            STT_CAP_DISPATCH_LANES: {value: live, category: rollout}
+            UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED: {value: 'true', category: rollout}
+            UNLIMITED_V2_BACKFILL_HOURS_CAP_HOURS: {value: '24', category: rollout}
+            PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
+            SYNC_POLL_BACKOFF_ENABLED: {value: 'true', category: rollout}
+            SYNC_POLL_BACKOFF_PERCENT: {value: '5', category: rollout}
+            SYNC_RECORD_COVERAGE_WAIT_MEMO:
+              value: 'true'
+              category: ops_kill
+            SYNC_RECORD_WAIT_MEMO_FIRST:
+              value: 'true'
+              category: ops_kill
+            SYNC_RECORD_DECODE_FAILURE_MEMO:
+              value: 'true'
+              category: ops_kill
+            BATCH_PIPELINE_SHADOW_PERCENT: {value: '25', category: rollout}
+            BATCH_PIPELINE_SHADOW_PAID_RECOVERY_PER_HOUR:
+              value: '200'
+              category: ops_kill
+            BATCH_CONTROL_CANDIDATE_FANOUT: {value: '16', category: rollout}
+            BATCH_ADMISSION_PARALLEL_CALLS: {value: 'true', category: rollout}
+            BATCH_PIPELINE_IDLE_POLL_MAX_SECONDS: {value: '10', category: rollout}
+            BATCH_HELD_DEAD_LETTER_ENABLED:
+              value: 'true'
+              category: ops_kill
+            BATCH_ALLOWANCE_INTAKE_PARK_ENABLED:
+              value: 'true'
+              category: ops_kill
+            BATCH_INPUT_EXPIRING_ENABLED:
+              value: 'true'
+              category: ops_kill
+            BATCH_PIPELINE_PROJECTION_GHOST_SETTLE_COHORT:
+              value: g1
+              category: config
+            BATCH_PIPELINE_PACKING_SAMPLE_RATE:
+              value: '0.001'
+              category: ops_kill
+            BATCH_PIPELINE_ENABLED: {value: 'true', category: rollout}
+            FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED: {value: 'true', category: rollout}
+            BATCH_LIVE_STT_RETIRE_PERCENT: {value: '0', category: rollout}
+            RECORD_SEAL_OVERLAP_TRIM_ENABLED:
+              value: 'true'
+              category: ops_kill
+            RECORD_TOKEN_LEASE_MODE:
+              env_var: RECORD_TOKEN_LEASE_MODE
+              default: 'off'
+              category: rollout
+            RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT:
+              env_var: RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT
+              default: '0'
+              category: rollout
+            RECORD_TOKEN_LEASE_SECONDS:
+              env_var: RECORD_TOKEN_LEASE_SECONDS
+              default: '3600'
+              category: rollout
+            RECORD_TOKEN_LEASE_DEPLOYED_AT:
+              env_var: RECORD_TOKEN_LEASE_DEPLOYED_AT
+              default: '0'
+              category: rollout
+            BATCH_PROJECTION_OUTBOX:
+              value: 'false'
+              category: ops_kill
+            BATCH_PIPELINE_SERVING_ENABLED: {category: rollout, value: 'false'}
+            BATCH_PIPELINE_WORKER_ENABLED:
+              value: 'false'
+              category: ops_kill
+            BATCH_PIPELINE_API_URL:
+              category: service_discovery
+              value: https://backend-sync-hhibjajaja-uc.a.run.app
+            BATCH_PIPELINE_WORKER_AUDIENCE:
+              value: ''
+              category: service_auth
+            BATCH_PIPELINE_WORKER_SERVICE_ACCOUNT:
+              value: batch-pipeline-worker@based-hardware.iam.gserviceaccount.com
+              category: service_auth
+            BUCKET_BATCH_PIPELINE:
+              category: service_discovery
+              value: based-hardware-batch-pipeline-staging
+            BATCH_PIPELINE_UNIT_SECONDS:
+              value: '3600'
+              category: reliability
+            BATCH_PIPELINE_SHARED_LIVE_ENABLED: {value: 'false', category: rollout}
+            PROMETHEUS_SIDECAR_PORT:
+              value: '9090'
+              category: telemetry
+            AUDIO_ARCHIVE_LIVE_ENABLED: {value: 'true', category: rollout}
+            AUDIO_ARCHIVE_READ_ENABLED: {value: 'true', category: rollout}
+            AUDIO_ARCHIVE_STOP_PCM_ENABLED: {value: 'false', category: rollout}
+            AUDIO_ARCHIVE_SYNC_ENABLED: {value: 'false', category: rollout}
+            AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED: {value: 'true', category: rollout}
+            AUDIO_ARCHIVE_PERCENT: {category: rollout, value: '100'}
+            AUDIO_ARCHIVE_STOP_PCM_PERCENT: {category: rollout, value: '0'}
+            AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT: {category: rollout, value: '5'}
+            BUCKET_AUDIO_DERIVED: {value: omi-audio-derived-uc1, category: rollout}
+            REDIS_DB_PORT:
+              value: '13151'
+              category: service_discovery
+            FIRESTORE_READ_LEDGER:
+              value: '1'
+            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"action_items_ttl120":100,"backfill_task_reads":100,"bpp_decision_cache":0,"bpp_generation_memo":100,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":100,"historical_scan_memo":100,"ledger_purge_coalesce":100,"lifecycle_record_pending_head":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":100,"people_scan_dedupe":100,"privacy_checks_shadow":0,"privacy_ttl60":0,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"sync_snapshot_resolve_cache":100,"usage_month_cache":100,"usage_month_total":100,"privacy_negative_lookup_cache":0,"batch_timeliness_leader":100,"bpp_owner_memo_enforce":100}',
+              category: rollout}
+            FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
+            FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
+            FSR_LEADER_LEASE_TTL_SECONDS: {value: '0', category: rollout}
+            DELETION_WIPE_RECONCILE_INTERVAL_SECONDS: {value: '300', category: rollout}
+            FSR_DELETION_NEGATIVE_TTL_SECONDS: {value: '30', category: rollout}
+            FSR_USAGE_MONTH_TOTAL_EPOCH: {value: c2fs_20261026_r1, category: rollout}
+            FSR_USAGE_MONTH_TTL_SECONDS: {value: '60', category: rollout}
+            FSR_SUBSCRIPTION_TTL_SECONDS: {value: '55', category: rollout}
+            FSR_SERVING_CONFIG_TTL_SECONDS: {value: '60', category: rollout}
+            ACTION_ITEMS_PAGE_CACHE_TTL_SECONDS: {value: '30', category: rollout}
+            CANDIDATES_COMPATIBILITY_CACHE_TTL_SECONDS: {value: '30', category: rollout}
+            FIRESTORE_READ_LEDGER_SERVICE:
+              value: backend-projection-pump
+            TRANSLATION_CACHE_TTL: {value: '86400', category: rollout}
+            TRANSLATION_NEGATIVE_CACHE_TTL: {value: '21600', category: rollout}
+            LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION: {value: 'false', category: rollout}
+            LIVE_CAPTURE_WINDOW_MERGE_UNION: {value: 'false', category: rollout}
+            LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS: {value: 'false', category: rollout}
+            SONIOX_CAPTURE_AXIS_DIAGNOSTICS: {value: 'false', category: rollout}
+            SONIOX_WIRE_LEDGER: {value: 'false', category: rollout}
+            ACTION_ITEM_REFRESH_PRESERVE_ENABLED: {value: 'true', category: rollout}
+            CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
+              value: 'true'
+              category: ops_kill
+            CAPTURE_GROUP_CONTAINMENT_MODE: {value: shadow, category: rollout}
+            SYNC_FINALIZE_TARGET_RECOVERY_ENABLED:
+              value: 'true'
+              category: ops_kill
+            SYNC_BRIDGE_CONTAINED_DONOR_MERGE_ENABLED:
+              value: 'off'
+              category: ops_kill
+            SYNC_LINEAGE_LIVE_DEDUPE_ENABLED: {value: 'true', category: rollout}
+            SYNC_SAFETY_WAL_DEDUPE_ENABLED: {value: 'true', category: rollout}
+            SYNC_WAL_AUDIO_COVERAGE_ENABLED: {value: 'true', category: rollout}
+            CLIENT_SUMMARIES_AT_CAP_ENABLED: {value: 'true', category: rollout}
+            OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION: {value: 'false', category: rollout}
+            OMI_LLM_GATEWAY_URL:
+              env_var: OMI_LLM_GATEWAY_URL
+              default: http://127.0.0.1:9
+              category: service_discovery
+            OMI_LLM_GATEWAY_FEATURE_MODE: {value: gateway, category: rollout}
+            OMI_LLM_CHAT_AGENT_ROUTE: {value: gateway, category: rollout}
+            GOOGLE_CLIENT_ID:
+              env_var: GOOGLE_CLIENT_ID
+              category: oauth_metadata
+            USE_VERTEX_AI:
+              value: 'true'
+            OMI_ENV_STAGE:
+              value: prod
+              category: runtime_identity
+            DEMAND_PROCESSING_ENABLED: {value: 'false', category: rollout}
+            DEMAND_PROCESSING_LAZY_ENABLED: {value: 'false', category: rollout}
+            DEMAND_PROCESSING_TOOL_ENABLED: {value: 'false', category: rollout}
+            DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED: {value: 'false', category: rollout}
+            DEMAND_PROCESSING_PERCENT: {value: '0', category: rollout}
+            STT_PRERECORDED_MODEL:
+              value: parakeet,modulate-velma-2
+              category: stt_policy
+            PRERECORDED_SONIOX_FAILOVER_ENABLED: {value: 'true', category: rollout}
+            HOSTED_LID_API_URL:
+              value: ''
+              category: service_discovery
+            HOSTED_PARAKEET_API_URL:
+              category: service_discovery
+              value: http://parakeet.omi.me
+            HOSTED_SPEAKER_EMBEDDING_API_URL:
+              category: service_discovery
+              value: http://172.16.160.20/diarizer
+            LISTEN_QUIET_FINALIZATION_ENABLED:
+              value: 'true'
+              category: ops_kill
+            LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS:
+              value: '900'
+              category: reliability
+            MEMORY_ENABLED:
+              category: memory_rollout
+              value: 'on'
+            PUBLIC_SHARED_CONVERSATION_CHAT_MODE: {value: gateway, category: rollout}
+            ACCOUNT_CUTOVER_ENFORCEMENT: {value: 'off', category: rollout}
+            MEMORY_TYPESENSE_COLLECTION:
+              value: canonical_memory_atoms
+              category: memory_rollout
+            POSTHOG_HOST:
+              category: telemetry
+              value: https://us.posthog.com
+            BUCKET_FRAME_REQUESTS:
+              env_var: BUCKET_FRAME_REQUESTS
+              default: prod-omi-frame-requests
+              provisional: true
+              category: storage_retention
+            BUCKET_FRAME_REQUESTS_TEMPORARY:
+              env_var: BUCKET_FRAME_REQUESTS_TEMPORARY
+              default: prod-omi-frame-requests-temporary
+              provisional: true
+              category: storage_retention
+            GCP_LOCATION:
+              value: us-central1
+            DREAM_AGENT_ELIGIBILITY: {value: paid, category: rollout}
+            DREAM_ON_DEMAND_ENABLED: {value: 'false', category: rollout}
+            PROACTIVITY_V2_POSTHOG_TOKEN: {value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y, category: rollout}
+            PROACTIVITY_V2_POSTHOG_HOST: {value: 'https://us.posthog.com', category: rollout}
+            SONIOX_ORDERED_FINALIZE: {value: 'false', category: rollout}
+            BATCH_PIPELINE_AUTHORITATIVE_LABELS_ENABLED: {value: 'true', category: rollout}
+            BATCH_PIPELINE_LIVE_ADMISSION_ENABLED: {value: 'false', category: rollout}
+            BATCH_PIPELINE_REQUIRE_LIVE_TARGET_ENABLED: {value: 'true', category: rollout}
+            BATCH_PIPELINE_EMPTY_ASR_DISPOSITION_ENABLED: {value: 'true', category: rollout}
+            BATCH_PIPELINE_EMPTY_ASR_SAFETY_NET_ENABLED: {value: 'true', category: rollout}
+            BATCH_PIPELINE_SPEECH_EMPTY_MULTILINGUAL_ENABLED: {value: 'true', category: rollout}
+            BATCH_PIPELINE_TERMINAL_EMPTY_DISPOSITION_ENABLED: {value: 'true', category: rollout}
+            BATCH_PIPELINE_RECOVERY_ALL_ADMITTED: {value: 'true', category: rollout}
+            BATCH_PIPELINE_CORRECTNESS_METRICS_ENABLED: {value: 'true', category: rollout}
+            BATCH_PIPELINE_READ_ONLY_METRICS_ENABLED: {value: 'true', category: rollout}
+            BATCH_PIPELINE_PROJECTION_TIMING_ENABLED: {value: 'true', category: rollout}
+            BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED: {value: 'true', category: rollout}
+            BATCH_PIPELINE_HEAD_PRIORITY_ENABLED: {value: 'true', category: rollout}
+            BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED: {value: 'true', category: rollout}
+            BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'true', category: rollout}
+            BATCH_PIPELINE_RECOVERY_MODE: {value: 'on', category: rollout}
+            BATCH_PIPELINE_SERVING_SWEEP_PAGE_ROWS: {value: '200', category: rollout}
+            BATCH_PIPELINE_SERVING_TICK_SECONDS: {value: '10', category: rollout}
+            BATCH_PROJECTION_FINISH_CLASSIFY_PAGE_LIMIT: {value: '16', category: rollout}
+            BATCH_PIPELINE_FOLLOWUP_CLAIMED_SIBLING_SKIP_ENABLED:
+              value: 'true'
+              category: ops_kill
+            BATCH_PIPELINE_SERVING_PROJECTION_SWEEP:
+              value: 'true'
+              category: ops_kill
+            BATCH_PIPELINE_SILENCE_READ_SKIP_ENABLED:
+              value: 'false'
+              category: ops_kill
+            PUSHER_RECORD_CLOSE_NOTIFY_ENABLED: {value: 'false', category: rollout}
+            PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_PERCENT: {value: '100', category: rollout}
+            PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_UID_SHA256S: {value: '', category: rollout}
+            PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED:
+              value: 'true'
+              category: ops_kill
+            EPISODE_COMPOSER_DEFAULT_CONTEXT_ENABLED:
+              value: 'true'
+              category: ops_kill
+            EPISODE_COMPOSER_CONTEXT_ENABLED:
+              value: 'true'
+              category: ops_kill
+            EPISODE_COMPOSER_DETAIL_ENABLED:
+              value: 'true'
+              category: ops_kill
+            EPISODE_COMPOSE_TRANSCRIPT_WAIT_ENABLED:
+              value: 'true'
+              category: ops_kill
+            EPISODE_COMPOSE_TRANSCRIPT_READY_ENABLED:
+              value: 'true'
+              category: ops_kill
+            HOME_SETTLED_EMPTY_WIRE_ENABLED:
+              value: 'true'
+              category: ops_kill
+            EPISODE_EMPTY_MEMBER_CLEANUP_ENABLED:
+              value: 'false'
+              category: ops_kill
+            EPISODES_ENABLED:
+              value: 'off'
+              category: ops_kill
+            EPISODE_COMPOSE_ANCHORED_WAIT_ENABLED:
+              value: 'true'
+              category: ops_kill
+            EPISODE_COMPOSE_SETTLED_TERMINAL_ENABLED:
+              value: 'true'
+              category: ops_kill
+            CONVERSATION_NOTES_SCALED_DETAIL_ENABLED:
+              value: 'true'
+              category: ops_kill
+            RECORD_FRESH_MERGE_ENABLED:
+              value: 'false'
+              category: ops_kill
+            RECORD_NOTES_EAGER_ENABLED:
+              value: 'false'
+              category: ops_kill
+            RECORD_FOLLOWUP_WAKE_ENABLED:
+              value: 'true'
+              category: ops_kill
+            RECORD_SEAL_WAKE_PRESERVED_ENABLED:
+              value: 'true'
+              category: ops_kill
+            BATCH_PIPELINE_UPLOAD_COALESCING_ENABLED:
+              value: 'true'
+              category: ops_kill
+            QUIET_EMPTY_EXIT_ENABLED: {value: 'true', category: rollout}
+            OMI_FLAGS_FIRESTORE_PROJECT:
+              value: based-hardware
+              category: service_discovery
+            OMI_FLAGS_FIRESTORE_DATABASE:
+              value: omi-flags
+              category: service_discovery
+            OMI_FLAGS_SOURCE: {value: dual, category: rollout}
+            HOME_TRANSCRIPTION_PRESENTATION_GATE:
+              value: 'true'
+              category: ops_kill
+            HOME_TRANSCRIPTION_DEADLINE_SECONDS:
+              value: '7200'
+              category: config
+            HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED:
+              value: 'true'
+              category: ops_kill
+            SYNC_FUTURE_CAPTURE_CLAMP_ENABLED: {value: 'true', category: rollout}
+            RECORD_SEAL_REPAIR_FRESH_ENABLED:
+              value: 'true'
+              category: ops_kill
+            RECORD_INTAKE_AGE_PRIORITY_ENABLED:
+              value: 'true'
+              category: ops_kill
+            HOME_TRANSCRIPTION_MAX_AGE_SECONDS:
+              value: '86400'
+              category: config
+            HOME_PROCESSING_MAX_AGE_SECONDS:
+              value: '21600'
+              category: config
+            BATCH_FINAL_PASS_ENABLED:
+              value: 'false'
+              category: ops_kill
+            BATCH_VENDOR_ROUTE_TABLE: {value: '{"schema_version":1,"table_version":"en-overflow-1116","selection":"ordered","gpu_floor_percent":0.0,"routes":{"gpu":{"price_usd_per_audio_hour":null,"daily_audio_hours_cap":null,"monthly_budget_usd":null,"failover_only":false,"speaker_turns":"discard"},"modulate":{"price_usd_per_audio_hour":0.06,"daily_audio_hours_cap":5000.0,"monthly_budget_usd":null,"failover_only":false,"speaker_turns":"discard"},"soniox":{"price_usd_per_audio_hour":null,"daily_audio_hours_cap":1000.0,"monthly_budget_usd":null,"failover_only":true,"speaker_turns":"discard"}},"rows":[{"language_class":"en","options":[{"route":"gpu","quality_tier":"accepted","quality_source":"legacy_parity"},{"route":"modulate","quality_tier":"accepted","quality_source":"legacy_parity"},{"route":"soniox","quality_tier":"accepted","quality_source":"staging_drill"}]},{"language_class":"gpu_supported","options":[{"route":"gpu","quality_tier":"accepted","quality_source":"legacy_parity"}]},{"language_class":"gpu_unsupported","options":[{"route":"modulate","quality_tier":"accepted","quality_source":"legacy_parity"},{"route":"soniox","quality_tier":"accepted","quality_source":"staging_drill"}]},{"language_class":"*","options":[{"route":"gpu","quality_tier":"accepted","quality_source":"legacy_parity"}]}]}',
+              category: rollout}
+            BATCH_VENDOR_OVERFLOW_PRIORITIES:
+              value: fresh,recent
+              category: config
+            BATCH_ALLOWANCE_HOLD_RETRY_SECONDS:
+              value: '86400'
+              category: ops_kill
+            STT_GPU_FLEET_OFF:
+              value: 'true'
+              category: ops_kill
+            ENRICHMENT_ROUTE: {value: enrichment_queue, category: rollout}
+            ENRICHMENT_TASKS_QUEUE:
+              value: enrichment
+              category: reliability
+            ENRICHMENT_MAX_AGE_HOURS:
+              value: '72'
+              category: ops_kill
+            ENRICHMENT_FRESH_TASKS_QUEUE:
+              value: enrichment-fresh
+              category: reliability
+            ENRICHMENT_TASKS_HANDLER_URL:
+              value: https://backend-integration-hhibjajaja-uc.a.run.app/v2/enrichment/run
+              category: reliability
+            ENRICHMENT_TASKS_OIDC_AUDIENCE:
+              value: https://backend-integration-hhibjajaja-uc.a.run.app/v2/enrichment/run
+              category: service_auth
+            PROVIDER_STT_TASKS_QUEUE:
+              value: provider-stt
+              category: reliability
+            PROVIDER_STT_TASKS_HANDLER_URL:
+              value: https://backend-integration-hhibjajaja-uc.a.run.app
+              category: reliability
+            PROVIDER_STT_TASKS_OIDC_AUDIENCE:
+              value: https://backend-integration-hhibjajaja-uc.a.run.app
+              category: service_auth
+            SUMMARY_DEBT_REPAIR_ENABLED: {value: 'true', category: rollout}
+            SUMMARY_DEBT_REPAIR_ADMISSION_LIMIT:
+              value: '8'
+              category: config
+            BATCH_PIPELINE_INDEPENDENT_LANGUAGE_RECOVERY_ENABLED:
+              value: 'false'
+              category: ops_kill
+            BATCH_PIPELINE_GUARDED_LONG_RECOVERY_MAX_SECONDS:
+              value: '0'
+              category: ops_kill
+            BATCH_PIPELINE_RECOVERY_TASK_AUDIENCE:
+              value: https://backend-integration-hhibjajaja-uc.a.run.app
+              category: service_auth
+            BATCH_PIPELINE_RECOVERY_TASKS_QUEUE:
+              value: batch-quarantine-recovery
+              category: reliability
+            BATCH_PIPELINE_RECOVERY_DISPATCH_BATCH_SIZE:
+              value: '64'
+              category: reliability
+            BATCH_PIPELINE_SERVING_METRICS_MIN_REFRESH_SECONDS:
+              value: '60'
+              category: reliability
+            OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
+            DREAM_AGENT_ENABLED: {value: 'true', category: rollout}
+            DREAM_AGENT_CONCURRENCY:
+              value: '8'
+              category: reliability
+            POSTPROCESS_EXECUTOR_WORKERS:
+              value: '64'
+              category: reliability
+            MENTOR_PIPELINE: {value: cohort, category: rollout}
+            SPEAKER_GROUPING_SHADOW: {value: cohort, category: rollout}
+            SPEAKER_GROUPING_SHADOW_PERCENT: {value: '10', category: rollout}
+            OMI_CUSTOMER_DATA_PROJECT:
+              value: based-hardware
+            ACCOUNT_DELETION_DISPATCH_MODE:
+              value: cloud_tasks
+              category: reliability
+            ACCOUNT_DELETION_TASKS_QUEUE:
+              value: account-deletion
+              category: reliability
+            CONVERSATION_ERASURE_TASKS_QUEUE:
+              value: conversation-erasure
+              category: reliability
+            ACCOUNT_DELETION_HANDLER_URL:
+              env_var: ACCOUNT_DELETION_HANDLER_URL
+              category: reliability
+            SYNC_TASKS_PROJECT:
+              value: based-hardware
+              category: reliability
+            SYNC_TASKS_LOCATION:
+              value: us-central1
+              category: reliability
+            SYNC_TASKS_INVOKER_SA:
+              env_var: SYNC_TASKS_INVOKER_SA
+              default: sync-tasks-invoker@based-hardware.iam.gserviceaccount.com
+              category: reliability
+            SYNC_TASKS_QUEUE:
+              value: sync-jobs-fresh
+              category: reliability
+            SYNC_TASKS_OIDC_AUDIENCE:
+              env_var: SYNC_TASKS_HANDLER_URL
+              default: https://backend-sync-hhibjajaja-uc.a.run.app/v2/sync-jobs/run
+              category: reliability
+            SYNC_TASKS_HANDLER_URL:
+              env_var: SYNC_TASKS_HANDLER_URL
+              default: https://backend-sync-hhibjajaja-uc.a.run.app/v2/sync-jobs/run
+              category: reliability
+            GOOGLE_CLOUD_PROJECT:
+              value: based-hardware
+            OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE: {value: 'true', category: rollout}
+            SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED: {value: 'true', category: rollout}
+            OMI_PROCESS_ROLE:
+              value: projection_pump
+            BATCH_PIPELINE_PROJECTION_PUMP_ENABLED: {value: 'false', category: rollout}
+            BATCH_PIPELINE_PUMP_SWEEP_PAGES: {value: '1', category: rollout}
+            BATCH_PIPELINE_PUMP_TICK_SECONDS: {value: '2', category: rollout}
+            BATCH_PIPELINE_MAX_OWNER_DRAINS: {value: '8', category: rollout}
+            CONVERSATIONS_V3:
+              value: 'on'
+              category: ops_kill
+            CONVERSATIONS_V3_STAGE: {value: beta, category: rollout}
+            CONVERSATIONS_V3_FIRST_APP_BUILD:
+              value: ''
+              category: config
+            CONVERSATIONS_V3_TASKS_QUEUE:
+              value: conversations-v3
+              category: reliability
+            CONVERSATIONS_V3_BACKFILL_QUEUE:
+              value: conversations-v3-backfill
+              category: reliability
+          forbidden_env:
+          - BATCH_HELD_POLL_SKIP_ENABLED
+          - BATCH_PROJECTION_FINISH_BACKOFF_ENABLED
+          - DREAM_AGENT_PAID_PERCENT
           - DEEPGRAM_SELF_HOSTED_ENABLED
           - DEEPGRAM_SELF_HOSTED_URL
           - DEEPGRAM_API_KEY

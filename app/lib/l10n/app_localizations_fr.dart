@@ -15712,4 +15712,150 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get conversationRecentTranscript => 'Transcription récente';
+
+  @override
+  String get finishAlreadySaved => 'Déjà enregistré. C\'est sur l\'accueil.';
+
+  @override
+  String get finishAudioNotReceived => 'L\'audio est encore en route.';
+
+  @override
+  String get finishFailedOffline => 'Ça n\'a pas abouti. Votre audio est en sécurité.';
+
+  @override
+  String get finishFailed => 'Ça n\'a pas abouti. Votre audio est en sécurité.';
+
+  @override
+  String get micBlockedCannotRecord => 'Autorisez le micro pour enregistrer.';
+
+  @override
+  String get couldNotStartRecording => 'Impossible de démarrer l\'enregistrement.';
+
+  @override
+  String get restorePurchasesFailed => 'Impossible de vérifier votre abonnement.';
+
+  @override
+  String get firmwareCheckFailed => 'Impossible de rechercher des mises à jour.';
+
+  @override
+  String get conversationStillPublic => 'Elle est toujours partagée par lien.';
+
+  @override
+  String get goalSaveFailed => 'Impossible d\'enregistrer votre objectif.';
+
+  @override
+  String get goalDeleteFailed => 'Impossible de supprimer. L\'objectif a été restauré.';
+
+  @override
+  String get goalsLoadFailed => 'Impossible de charger vos objectifs.';
+
+  @override
+  String get missingTargetEndedRecording => 'Cet enregistrement est terminé.';
+
+  @override
+  String get missingTargetMemory => 'Ce souvenir n\'existe plus.';
+
+  @override
+  String get missingTargetTask => 'Cette tâche n\'existe plus.';
+
+  @override
+  String get missingTargetConversation => 'Impossible d\'ouvrir cette conversation.';
+
+  @override
+  String get couldNotRefreshConversations => 'Impossible d\'actualiser.';
+
+  @override
+  String get connectDeviceForOfflineSync => 'Connectez votre Omi pour synchroniser.';
+
+  @override
+  String get useDifferentAccountMessage =>
+      'Vous serez déconnecté et les paramètres Omi de ce téléphone seront réinitialisés.';
+
+  @override
+  String get rayBanMetaNotFoundAfterSetup => 'Lunettes introuvables. Sont-elles allumées ?';
+
+  @override
+  String get couldNotMoveTask => 'Impossible de déplacer la tâche.';
+
+  @override
+  String lockedTasksKept(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Supprimé. $count tâches verrouillées ont été conservées.',
+      one: 'Supprimé. 1 tâche verrouillée a été conservée.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get settingNotSaved => 'Impossible d\'enregistrer cette modification.';
+
+  @override
+  String get couldNotLoadNotificationSettings => 'Impossible de charger vos paramètres.';
+
+  @override
+  String get waitForOmiToFinish => 'Attendez qu\'Omi ait terminé.';
+
+  @override
+  String get voiceNoteTooShort => 'Trop court. Maintenez pour enregistrer.';
+
+  @override
+  String get submitAppMissingFields =>
+      'Ajoutez un nom, une description, une image, une catégorie et une capacité pour soumettre.';
+
+  @override
+  String get appSetupNotFinished => 'La configuration n\'est pas encore terminée.';
+
+  @override
+  String get finishNothingKeptTitle => 'Rien à conserver';
+
+  @override
+  String get submitAppFinishDetails => 'Complétez les détails de capacité et de tarification ci-dessus pour soumettre.';
+
+  @override
+  String get finishNothingNew => 'Rien de nouveau pour l\'instant.';
+
+  @override
+  String get takingLongerThanUsual => 'C\'est plus long que d\'habitude. Ce sera sur l\'accueil.';
+
+  @override
+  String get couldNotCheckOnIt => 'Impossible de vérifier. Réessayez.';
+
+  @override
+  String get upgradeToOpenThisOne => 'Passez à l\'offre payante pour ouvrir celle-ci.';
+
+  @override
+  String get missingTargetConversationGone => 'Cette conversation a été supprimée.';
+
+  @override
+  String get cantConnectRightNow => 'Connexion impossible pour le moment.';
+
+  @override
+  String get loadOlderFailed => 'Impossible de charger les plus anciens. Touchez pour réessayer.';
+
+  @override
+  String listeningWithDuration(String duration) {
+    return 'Écoute en cours · $duration';
+  }
+
+  @override
+  String get conversationLiveNoEdits => 'Attendez la fin pour le modifier.';
+
+  @override
+  String get finishedSummaryReady => 'Résumé prêt';
+
+  @override
+  String get writingSummaryStatus => 'Écriture du résumé…';
+
+  @override
+  String get stillWorkingOnIt => 'Toujours en cours.';
+
+  @override
+  String get firmwareUpdateFirmwareTooOld =>
+      'Le micrologiciel de votre appareil est trop ancien pour cette mise à jour. Contactez l\'assistance pour obtenir de l\'aide afin de mettre à jour votre appareil.';
+
+  @override
+  String get firmwareUpdateAppRequired =>
+      'Cette mise à jour du micrologiciel nécessite une version plus récente de l\'application Omi. Mettez l\'application à jour depuis votre boutique d\'applications, puis vérifiez à nouveau.';
 }

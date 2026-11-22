@@ -10,7 +10,7 @@ own causes, and the queue supplies everything about when and whether work runs.
 | Declare the kind: name, formats, steps, causes | `Kind`, passed to `Open` |
 | Enqueue once per key | `Store.Enqueue`, or `Scope.Enqueue` inside `Store.Tenant` when admission must do more under the erasure barrier |
 | Bind a job to its subject before it can run | `NewJob.Initializing`, then `Scope.Activate` or `Scope.CancelInitialization`; `Scope.Subject` serializes admissions for one subject |
-| Run work with bounded concurrency | `Start` with a `Handler` per kind; `Workers.Stop` |
+| Run work with bounded concurrency | `Start` with a `Handler` per kind; `Workers.Drain` for bounded shutdown, `Workers.Stop` for immediate cancellation |
 | Report what happened in `Work` | one of the sealed outcomes: `Done`, `DoneWith`, `DoneAt`, `Retry`, `Fail`, `Yield`, `Hold`, `Fence`, `Activate`, `BlockForSecret`, `Abort` |
 | Report what had already happened in `Exhausted` | one of the sealed resolutions: `Resolved`, `ResolvedWith`, `Fenced`, `Park`, `Later`, `Dropped` |
 | Turn an error into an outcome | `FromError`, `LaterOnError`; adapters wrap with `Classify` |
@@ -32,6 +32,8 @@ against Postgres, each test in its own database (`internal/platform/pgtest`).
 
 | Rule | Where it is decided | Test |
 | --- | --- | --- |
+| Drain stops intake while running handlers can renew and save | `Workers.Drain` | `TestDrainLetsRunningHandlerSaveAndFinish` |
+| At the deadline, drain refunds each still-owned claim once, preserving its checkpoint, terminal intent, and secret requirement | `Store.releaseClaims` | `TestDrainDeadlineRefundsWorkAndReconciliationForAnotherReplica` |
 | Enqueue is idempotent on the key; the first enqueue fixes the input | `Scope.Enqueue` | `TestEnqueueIdempotencyProperty` |
 | A kind, format or step nobody declared is refused at enqueue and at save | `Scope.admissible`, `Run.Save` | `TestUndeclaredKindFormatAndStepAreRejected` |
 | Invalid policy or declarations fail at `Open`, before any connection | `Config.Validate`, `newRegistry` | `TestOpenRejectsInvalidPolicyAndDeclarations` |
@@ -50,13 +52,16 @@ against Postgres, each test in its own database (`internal/platform/pgtest`).
 | A lane belongs to one tenant | `candidate`, index `queue_jobs_head` | `TestLanesOfTwoTenantsDoNotShareAHead` |
 | A gated job cannot be in an ordered lane | `Scope.admissible`, `Run.block`, a `CHECK` | `TestGatedJobCannotJoinAnOrderedLane` |
 | A tenant with a long backlog does not starve others | `candidate` (tenant turn) | `TestFairnessAndOrderedHold` |
-| `Hold` refunds the attempt and keeps every job of the tenant off the schedule | `Run.hold` | `TestHoldKeepsTheWholeTenantOffTheSchedule` |
+| `Hold` refunds the attempt and keeps every job of the tenant off the schedule | `Run.hold` | `TestHoldKeepsTheWholeTenantOffTheSchedule`, `TestHoldPausesTenantBeforeReleasingJob` |
 | After an erase returns, no row of the tenant remains, nothing for it is admitted, and no guarded call for it starts | `Store.Erase`, `Store.Tenant`, `Run.Guard` | `TestEraseBarrier`, `TestGuardReadsLeaseAfterWaitingForErase` |
 | A `Guarded` is valid only inside its guard, and an operation's identity survives a takeover | `Run.Guard`, `Guarded.Operation` | `TestGuardedStopsBeingValidWhenTheGuardReturns` |
 | A handler panic or a missing outcome is retried and reported; the replica keeps running; locks are released | `Run.step`, `Run.Guard` | `TestHandlerPanicIsRetriedAndTheReplicaKeepsRunning`, `TestPanicInsideGuardReleasesItsLocks` |
-| A resume after `Stop` reports `ErrStopped` and leaves the job untouched | `Workers.take`, `Run.unclaim` | `TestResumeAfterStopReportsStopped` |
+| A resume after `Stop` reports `ErrStopped` and leaves the job untouched | `Workers.take`, `Run.unclaim` | `TestResumeAfterStopReportsStopped`, `TestScheduledResumeHandsBackClaimWhenStopWinsLaunch` |
 | The watcher sleeps until the next timer, and backs off on work it cannot claim | `rules.IdleWait`, `Workers.idle` | `TestIdleWaitSleepsUntilDueWithinBounds` |
 | A cause no kind declared is recorded as `unknown` | `registry.known` | `TestUndeclaredCauseIsRecordedAsUnknown` |
+| Admission acquires its barrier and checks for erasure in one client statement, reading the tombstone after the lock | `Store.Tenant`, `queue_acquire_tenant` | `TestAdmissionSeesEraseCommittedWhileWaitingForLock`, `TestTenantScopeTakesTwoClientStatements` |
+| Queue-only erase waits for guards, purges tenant queue rows, and records the tombstone while preserving the remote-cleanup completion bit | `Store.EraseQueue` | `TestEraseQueueWaitsForGuardAndCascades`, `TestEraseQueueIncludesAdmissionThatCommitsWhileItWaits`, `TestQueueOnlyErasePreservesRemoteCompletion` |
+| Every job field is scanned from its matching column | `columns`, `scan` | `TestJobScanMatchesItsProjection` |
 | A database whose applied migration differs from the embedded file is refused | `Store.Migrate`, `Store.Ready` | `TestMigrateRefusesAnEditedMigration` |
 
 ## The erasure contract, and its limit
@@ -74,6 +79,28 @@ the write. `internal/platform/docstore` does that for Firestore, and
 kills the session mid-call to prove it. A sink that cannot do this gets the weaker guarantee, and
 its adapter's README must say so.
 
+### Queue-only account erasure
+
+Workerd can call `Store.EraseQueue(ctx, tenant)` after authenticating the deletion executor
+and validating its armed wipe generation. The equivalent SQL is
+`SELECT queue_erase_tenant($1::text)` in the queue schema. Both paths wait for shared
+guards, delete the tenant and its dependent rows, and record the salted tombstone even if
+the tenant never had jobs. Repeating the call after a lost response is safe.
+
+Use a bounded READ COMMITTED transaction. The exclusive transaction lock lasts through commit.
+The Go method uses autocommit. An explicit SQL transaction must commit successfully before the
+caller acknowledges the wipe generation. The returned boolean is the existing remote-cleanup
+completion bit. Both values mean that the SQL operation succeeded. Only `Store.Erase` runs
+remote cleanup and marks it complete, under its exclusive session lock.
+
+Migration 003 installs a SECURITY DEFINER function owned by the queue migrator. It binds
+the table names to the installation schema and revokes PUBLIC execution. The workerd
+runtime needs schema usage and EXECUTE as described in its deployment contract. Check those
+privileges before deploying a separately owned runtime. The dedicated recovery role and
+its grants require David's approval. The [recovery access migration](access/erase_recovery.sql)
+is separate from automatic queue migrations and expects an approved, pre-existing role.
+The executor owns rollout, generation checks, and acknowledgement persistence.
+
 ## Schema
 
 [`migrations/001_queue.sql`](migrations/001_queue.sql). An applied file is never edited; a change
@@ -87,6 +114,8 @@ refuse a mismatch.
 | `queue_lanes` | One row per tenant, kind and order key, for indexed lane lookup. |
 | `queue_lease_token` | The fencing sequence. Gaps are fine; it only grows. |
 | `queue_settings`, `queue_erasure` | The deployment's erasure salt, and one salted hash per erased tenant. |
+| `queue_acquire_tenant` | `Store.Tenant` takes the shared tenant barrier, then reads the erasure tombstone with a fresh snapshot. |
+| `queue_erase_tenant` | Exclusive transaction barrier, cascading queue purge and salted tombstone. Preserves the remote-cleanup completion bit. |
 | `queue_acquire_guard` | The function `Run.Guard` calls: both locks, then a fresh read of the lease. |
 
 ## How a claim works
@@ -104,6 +133,10 @@ statement. Renewals use a separate small pool so a busy work pool cannot starve 
 - A lease renewal that was already waiting on a row lock when the lease expired can still extend
   it, as long as nobody took the job over in between. Once a takeover commits, the old token can
   never write. The fence is the token, not the clock.
+- Call `Workers.Drain(ctx)` before cancelling the context passed to `Start`. At the deadline
+  it cancels handlers and gives fenced lease cleanup up to three additional seconds. A gated
+  job still needs a fresh secret unless it is already reconciling. A guarded call that ignores
+  cancellation holds its advisory locks until the call returns or the session closes.
 - `Workers.Stop` waits for handlers. A handler that ignores its context delays shutdown, so every
   adapter call needs a deadline.
 - A resume scheduled for later keeps its secret in memory until then, on one replica. A restart

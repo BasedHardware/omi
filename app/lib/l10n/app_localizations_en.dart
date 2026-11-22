@@ -15567,4 +15567,148 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get conversationRecentTranscript => 'Recent transcript';
+
+  @override
+  String get finishAlreadySaved => 'Already saved. It\'s on Home.';
+
+  @override
+  String get finishAudioNotReceived => 'Audio\'s still on its way.';
+
+  @override
+  String get finishFailedOffline => 'Didn\'t go through. Your audio is safe.';
+
+  @override
+  String get finishFailed => 'Didn\'t go through. Your audio is safe.';
+
+  @override
+  String get micBlockedCannotRecord => 'Allow the microphone to record.';
+
+  @override
+  String get couldNotStartRecording => 'Couldn\'t start recording.';
+
+  @override
+  String get restorePurchasesFailed => 'Couldn\'t check your plan.';
+
+  @override
+  String get firmwareCheckFailed => 'Couldn\'t check for updates.';
+
+  @override
+  String get conversationStillPublic => 'It\'s still shared by link.';
+
+  @override
+  String get goalSaveFailed => 'Couldn\'t save your goal.';
+
+  @override
+  String get goalDeleteFailed => 'Couldn\'t delete. Goal restored.';
+
+  @override
+  String get goalsLoadFailed => 'Couldn\'t load your goals.';
+
+  @override
+  String get missingTargetEndedRecording => 'That recording has ended.';
+
+  @override
+  String get missingTargetMemory => 'That memory is gone.';
+
+  @override
+  String get missingTargetTask => 'That task is gone.';
+
+  @override
+  String get missingTargetConversation => 'Couldn\'t open this conversation.';
+
+  @override
+  String get couldNotRefreshConversations => 'Couldn\'t refresh.';
+
+  @override
+  String get connectDeviceForOfflineSync => 'Connect your Omi to sync.';
+
+  @override
+  String get useDifferentAccountMessage => 'You\'ll be signed out, and this phone\'s Omi settings will be reset.';
+
+  @override
+  String get rayBanMetaNotFoundAfterSetup => 'Glasses not found. Are they on?';
+
+  @override
+  String get couldNotMoveTask => 'Couldn\'t move the task.';
+
+  @override
+  String lockedTasksKept(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Deleted. $count locked tasks were kept.',
+      one: 'Deleted. 1 locked task was kept.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get settingNotSaved => 'Couldn\'t save that change.';
+
+  @override
+  String get couldNotLoadNotificationSettings => 'Couldn\'t load your settings.';
+
+  @override
+  String get waitForOmiToFinish => 'Wait for Omi to finish.';
+
+  @override
+  String get voiceNoteTooShort => 'Too short. Hold to record.';
+
+  @override
+  String get submitAppMissingFields => 'Add a name, description, image, category and capability to submit.';
+
+  @override
+  String get appSetupNotFinished => 'Setup isn\'t finished yet.';
+
+  @override
+  String get finishNothingKeptTitle => 'Nothing to Keep';
+
+  @override
+  String get submitAppFinishDetails => 'Finish the capability and pricing details above to submit.';
+
+  @override
+  String get finishNothingNew => 'Nothing new yet.';
+
+  @override
+  String get takingLongerThanUsual => 'Taking longer than usual. We\'ll have it on Home.';
+
+  @override
+  String get couldNotCheckOnIt => 'Couldn\'t check on it. Try again.';
+
+  @override
+  String get upgradeToOpenThisOne => 'Upgrade to open this one.';
+
+  @override
+  String get missingTargetConversationGone => 'That conversation was deleted.';
+
+  @override
+  String get cantConnectRightNow => 'Can\'t connect right now.';
+
+  @override
+  String get loadOlderFailed => 'Couldn\'t load older ones. Tap to retry.';
+
+  @override
+  String listeningWithDuration(String duration) {
+    return 'Listening · $duration';
+  }
+
+  @override
+  String get conversationLiveNoEdits => 'Wait until it ends to change it.';
+
+  @override
+  String get finishedSummaryReady => 'Summary ready';
+
+  @override
+  String get writingSummaryStatus => 'Writing summary…';
+
+  @override
+  String get stillWorkingOnIt => 'Still working on it.';
+
+  @override
+  String get firmwareUpdateFirmwareTooOld =>
+      'Your device\'s firmware is too old for this update. Contact support for help updating your device.';
+
+  @override
+  String get firmwareUpdateAppRequired =>
+      'This firmware update needs a newer Omi app. Update the app from your app store, then check again.';
 }

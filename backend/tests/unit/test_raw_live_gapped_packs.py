@@ -23,11 +23,14 @@ import pytest
 from google.api_core.exceptions import NotFound, PreconditionFailed
 
 from utils.batch_pipeline import live, source_audio
+from utils.batch_pipeline.artifacts import ArtifactStore, ProtectionContext
 from utils.other import audio_frame_table, audio_opus, raw_audio_read, storage
 from utils.other.audio_frame_table import FRAME_SCHEMA
 from utils.other.audio_outbox import commit_capture, commit_pcm_window
 from utils.other.raw_audio import CapturePack, _get_opuslib
 from utils.batch_pipeline import record_orphan_repair as repair
+from tests.unit.test_batch_pipeline_invalid_manifest_hold import serve
+from tests.unit.test_batch_pipeline_quarantine_recovery import row, setup  # noqa: F401
 from tests.unit.test_audio_durable_outbox import remote  # noqa: F401
 
 UID, CID = 'owner', 'conversation'
@@ -289,6 +292,70 @@ def test_materialized_unit_places_audio_at_its_capture_position(remote, monkeypa
     assert pcm[: 640 * 2] == captured[: 640 * 2]
     assert pcm[640 * 2 : (640 + gap) * 2] == b'\x00' * (gap * 2)
     assert pcm[(640 + gap) * 2 :] == captured[640 * 2 :]
+
+
+def test_pinned_gapped_unframed_pack_recovers_without_digest_refusal(remote, monkeypatch, native_opus, setup):
+    """Recovery must decode the pinned WAL pack with admission's frame-table semantics."""
+    wire(remote, monkeypatch)
+    monkeypatch.setenv('BUCKET_PRIVATE_CLOUD_SYNC', remote.name)
+    monkeypatch.delenv('BUCKET_AUDIO_DERIVED', raising=False)
+    monkeypatch.setattr(sys.modules[__name__], 'UID', 'synthetic-owner')
+    monkeypatch.setattr(sys.modules[__name__], 'CID', 'c')
+    monkeypatch.setattr(sys.modules[__name__], 'NAME', 'c/0/0/session/0')
+
+    receipt, _, _, packets = build_pack(remote, gapped_frames())
+    storage_client = client(remote)
+    chunks = storage.list_audio_chunks(
+        UID, CID, include_raw=True, require_archive=True, client=storage_client, source_metadata=True
+    )
+    units = list(live.retained_record_units(UID, CID, chunks, storage_client, b'0' * 32))
+    assert len(units) == 1
+    start, duration, references = units[0]
+    assert {ref['generation'] for ref in references} == {int(receipt.generation)}
+    body = (
+        source_audio.MAGIC
+        + json.dumps(
+            {
+                'owner_id': UID,
+                'conversation_id': CID,
+                'capture_at': start,
+                'context': {},
+                'references': references,
+            }
+        ).encode()
+    )
+
+    db_client, _, _, artifacts, stt, _ = setup
+    row(db_client).update(conversation_id=CID, capture_at=start, duration_seconds=duration)
+    source = ArtifactStore(
+        storage_client,
+        bucket='synthetic',
+        namespace='batch_pipeline_prod',
+        authorize=lambda _: ProtectionContext('standard', 0),
+        key_for_owner=lambda _: b'0' * 32,
+        register_artifact=lambda *args: None,
+    )
+    source._read = Mock(return_value=body)
+    artifacts.fetch_audio.side_effect = source.fetch_audio
+
+    media = remote.blob(receipt.path)
+    media.download_as_bytes = Mock(wraps=media.download_as_bytes)
+    response = serve(setup, monkeypatch).post(
+        '/v2/batch-pipeline/recover-quarantine', json={'stage': 'prod', 'segment_id': 'bad'}
+    )
+
+    assert response.status_code == 200 and response.json() == {'status': 'recovered'}
+    assert row(db_client)['recovery_state'] == 'recovered'
+    assert 'refusal' not in row(db_client)['recovery']
+    stt.assert_called_once()
+    assert media.download_as_bytes.call_count == 1
+    assert media.download_as_bytes.call_args.kwargs['if_generation_match'] == int(receipt.generation)
+    audio = stt.call_args.args[2]
+    with wave.open(io.BytesIO(audio), 'rb') as stream:
+        recovered = stream.readframes(stream.getnframes())
+    captured = decode_packets(packets)
+    gap = round((1003.02 - 1000.04) * RATE)
+    assert recovered == captured[: 640 * 2] + b'\x00' * (gap * 2) + captured[640 * 2 :]
 
 
 def test_retained_zero_sample_frame_is_kept_but_contributes_no_audio(remote, monkeypatch, native_opus):

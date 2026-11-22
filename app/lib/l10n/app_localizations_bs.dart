@@ -15612,4 +15612,148 @@ class AppLocalizationsBs extends AppLocalizations {
 
   @override
   String get conversationRecentTranscript => 'Nedavni prepis';
+
+  @override
+  String get finishAlreadySaved => 'Već je sačuvano. Nalazi se na Početnoj.';
+
+  @override
+  String get finishAudioNotReceived => 'Audio je još na putu.';
+
+  @override
+  String get finishFailedOffline => 'Nije uspjelo. Vaš audio je siguran.';
+
+  @override
+  String get finishFailed => 'Nije uspjelo. Vaš audio je siguran.';
+
+  @override
+  String get micBlockedCannotRecord => 'Dozvolite mikrofon za snimanje.';
+
+  @override
+  String get couldNotStartRecording => 'Pokretanje snimanja nije uspjelo.';
+
+  @override
+  String get restorePurchasesFailed => 'Provjera vašeg plana nije uspjela.';
+
+  @override
+  String get firmwareCheckFailed => 'Provjera ažuriranja nije uspjela.';
+
+  @override
+  String get conversationStillPublic => 'Još uvijek je dijeljena putem linka.';
+
+  @override
+  String get goalSaveFailed => 'Cilj se nije mogao sačuvati.';
+
+  @override
+  String get goalDeleteFailed => 'Brisanje nije uspjelo. Cilj je vraćen.';
+
+  @override
+  String get goalsLoadFailed => 'Vaši ciljevi se nisu mogli učitati.';
+
+  @override
+  String get missingTargetEndedRecording => 'To snimanje je završeno.';
+
+  @override
+  String get missingTargetMemory => 'Ta uspomena više ne postoji.';
+
+  @override
+  String get missingTargetTask => 'Taj zadatak više ne postoji.';
+
+  @override
+  String get missingTargetConversation => 'Ovaj razgovor se nije mogao otvoriti.';
+
+  @override
+  String get couldNotRefreshConversations => 'Osvježavanje nije uspjelo.';
+
+  @override
+  String get connectDeviceForOfflineSync => 'Povežite svoj Omi za sinhronizaciju.';
+
+  @override
+  String get useDifferentAccountMessage => 'Bit ćete odjavljeni, a Omi postavke na ovom telefonu će biti resetovane.';
+
+  @override
+  String get rayBanMetaNotFoundAfterSetup => 'Naočale nisu pronađene. Jesu li uključene?';
+
+  @override
+  String get couldNotMoveTask => 'Zadatak se nije mogao premjestiti.';
+
+  @override
+  String lockedTasksKept(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Izbrisano. Zadržano je $count zaključanih zadataka.',
+      one: 'Izbrisano. 1 zaključani zadatak je zadržan.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get settingNotSaved => 'Promjena se nije mogla sačuvati.';
+
+  @override
+  String get couldNotLoadNotificationSettings => 'Vaše postavke se nisu mogle učitati.';
+
+  @override
+  String get waitForOmiToFinish => 'Sačekajte da Omi završi.';
+
+  @override
+  String get voiceNoteTooShort => 'Prekratko. Držite za snimanje.';
+
+  @override
+  String get submitAppMissingFields => 'Za slanje dodajte naziv, opis, sliku, kategoriju i mogućnost.';
+
+  @override
+  String get appSetupNotFinished => 'Podešavanje još nije završeno.';
+
+  @override
+  String get finishNothingKeptTitle => 'Nema šta sačuvati';
+
+  @override
+  String get submitAppFinishDetails => 'Za slanje popunite gore detalje o mogućnosti i cijenama.';
+
+  @override
+  String get finishNothingNew => 'Još nema ništa novo.';
+
+  @override
+  String get takingLongerThanUsual => 'Traje duže nego obično. Uskoro će biti na Početnoj.';
+
+  @override
+  String get couldNotCheckOnIt => 'Provjera nije uspjela. Pokušajte ponovo.';
+
+  @override
+  String get upgradeToOpenThisOne => 'Nadogradite da otvorite ovaj razgovor.';
+
+  @override
+  String get missingTargetConversationGone => 'Ovaj razgovor je izbrisan.';
+
+  @override
+  String get cantConnectRightNow => 'Trenutno se ne može povezati.';
+
+  @override
+  String get loadOlderFailed => 'Starije stavke se nisu mogle učitati. Dodirnite za ponovni pokušaj.';
+
+  @override
+  String listeningWithDuration(String duration) {
+    return 'Slušamo · $duration';
+  }
+
+  @override
+  String get conversationLiveNoEdits => 'Sačekajte da se završi da biste ga promijenili.';
+
+  @override
+  String get finishedSummaryReady => 'Sažetak je spreman';
+
+  @override
+  String get writingSummaryStatus => 'Pišemo sažetak…';
+
+  @override
+  String get stillWorkingOnIt => 'Još radimo na tome.';
+
+  @override
+  String get firmwareUpdateFirmwareTooOld =>
+      'Firmver vašeg uređaja je prestar za ovo ažuriranje. Obratite se podršci za pomoć pri ažuriranju uređaja.';
+
+  @override
+  String get firmwareUpdateAppRequired =>
+      'Ovo ažuriranje firmvera zahtijeva noviju verziju aplikacije Omi. Ažurirajte aplikaciju iz svoje prodavnice aplikacija, a zatim provjerite ponovo.';
 }

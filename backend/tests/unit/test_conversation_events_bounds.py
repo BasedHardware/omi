@@ -201,7 +201,6 @@ def router():
         "utils.other.list_budget": list_budget_real,
         # These tests exercise event/speaker handlers, not list serving. Keep
         # the new router collaborator inside this fixture's existing isolation.
-        "utils.list_version_check": _pkg("utils.list_version_check"),
         "utils.cloud_tasks": cloud_tasks,
         "utils.other.storage": _pkg("utils.other.storage"),
         # utils.conversations.* is DERIVED, not listed: a new module in that package

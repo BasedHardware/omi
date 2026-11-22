@@ -15648,4 +15648,149 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get conversationRecentTranscript => 'Transcriere recentă';
+
+  @override
+  String get finishAlreadySaved => 'Salvată deja. Este în secțiunea Acasă.';
+
+  @override
+  String get finishAudioNotReceived => 'Fișierul audio este încă pe drum.';
+
+  @override
+  String get finishFailedOffline => 'Nu a funcționat. Fișierul tău audio este în siguranță.';
+
+  @override
+  String get finishFailed => 'Nu a funcționat. Fișierul tău audio este în siguranță.';
+
+  @override
+  String get micBlockedCannotRecord => 'Permite accesul la microfon pentru a înregistra.';
+
+  @override
+  String get couldNotStartRecording => 'Nu s-a putut porni înregistrarea.';
+
+  @override
+  String get restorePurchasesFailed => 'Nu am putut verifica planul tău.';
+
+  @override
+  String get firmwareCheckFailed => 'Nu s-a putut verifica dacă există actualizări.';
+
+  @override
+  String get conversationStillPublic => 'Este încă partajată prin link.';
+
+  @override
+  String get goalSaveFailed => 'Nu s-a putut salva obiectivul tău.';
+
+  @override
+  String get goalDeleteFailed => 'Nu s-a putut șterge. Obiectivul a fost restaurat.';
+
+  @override
+  String get goalsLoadFailed => 'Nu s-au putut încărca obiectivele tale.';
+
+  @override
+  String get missingTargetEndedRecording => 'Înregistrarea aceasta s-a încheiat.';
+
+  @override
+  String get missingTargetMemory => 'Această amintire nu mai există.';
+
+  @override
+  String get missingTargetTask => 'Această sarcină nu mai există.';
+
+  @override
+  String get missingTargetConversation => 'Nu s-a putut deschide această conversație.';
+
+  @override
+  String get couldNotRefreshConversations => 'Nu s-a putut actualiza.';
+
+  @override
+  String get connectDeviceForOfflineSync => 'Conectează-ți Omi pentru a sincroniza.';
+
+  @override
+  String get useDifferentAccountMessage =>
+      'Sesiunea va fi închisă, iar setările Omi de pe acest telefon vor fi resetate.';
+
+  @override
+  String get rayBanMetaNotFoundAfterSetup => 'Nu s-au găsit ochelarii. Sunt porniți?';
+
+  @override
+  String get couldNotMoveTask => 'Nu s-a putut muta sarcina.';
+
+  @override
+  String lockedTasksKept(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Șters. Sarcinile blocate ($count) au fost păstrate.',
+      one: 'Șters. 1 sarcină blocată a fost păstrată.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get settingNotSaved => 'Nu s-a putut salva această modificare.';
+
+  @override
+  String get couldNotLoadNotificationSettings => 'Nu s-au putut încărca setările tale.';
+
+  @override
+  String get waitForOmiToFinish => 'Așteaptă ca Omi să termine.';
+
+  @override
+  String get voiceNoteTooShort => 'Prea scurt. Ține apăsat pentru a înregistra.';
+
+  @override
+  String get submitAppMissingFields => 'Adaugă nume, descriere, imagine, categorie și capacitate pentru a trimite.';
+
+  @override
+  String get appSetupNotFinished => 'Configurarea nu este încă finalizată.';
+
+  @override
+  String get finishNothingKeptTitle => 'Nimic de păstrat';
+
+  @override
+  String get submitAppFinishDetails => 'Completează detaliile de capacitate și preț de mai sus pentru a trimite.';
+
+  @override
+  String get finishNothingNew => 'Nimic nou deocamdată.';
+
+  @override
+  String get takingLongerThanUsual => 'Durează mai mult decât de obicei. Va apărea în secțiunea Acasă.';
+
+  @override
+  String get couldNotCheckOnIt => 'Nu am putut verifica. Încearcă din nou.';
+
+  @override
+  String get upgradeToOpenThisOne => 'Fă upgrade pentru a o deschide.';
+
+  @override
+  String get missingTargetConversationGone => 'Această conversație a fost ștearsă.';
+
+  @override
+  String get cantConnectRightNow => 'Nu se poate conecta momentan.';
+
+  @override
+  String get loadOlderFailed => 'Nu s-au putut încărca cele mai vechi. Atinge pentru a reîncerca.';
+
+  @override
+  String listeningWithDuration(String duration) {
+    return 'Ascultare · $duration';
+  }
+
+  @override
+  String get conversationLiveNoEdits => 'Așteaptă să se încheie pentru a o modifica.';
+
+  @override
+  String get finishedSummaryReady => 'Rezumat gata';
+
+  @override
+  String get writingSummaryStatus => 'Se scrie rezumatul…';
+
+  @override
+  String get stillWorkingOnIt => 'Încă lucrăm la asta.';
+
+  @override
+  String get firmwareUpdateFirmwareTooOld =>
+      'Firmware-ul dispozitivului tău este prea vechi pentru această actualizare. Contactează echipa de asistență pentru ajutor la actualizarea dispozitivului.';
+
+  @override
+  String get firmwareUpdateAppRequired =>
+      'Această actualizare de firmware necesită o versiune mai nouă a aplicației Omi. Actualizează aplicația din magazinul de aplicații, apoi verifică din nou.';
 }

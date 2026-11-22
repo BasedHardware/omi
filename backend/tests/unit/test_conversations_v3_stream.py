@@ -150,10 +150,11 @@ def test_v3_short_path_obeys_content_minimum(monkeypatch):
 
 
 @pytest.mark.parametrize(
-    'words,covered,foreground,expect_short',
-    [(299, False, False, True), (300, True, False, False), (599, True, False, False)],
+    'words,covered,expect_short',
+    [(19, False, False), (20, False, True), (299, False, True), (300, True, False), (599, True, False)],
 )
-def test_short_threshold_and_covered_summary(monkeypatch, words, covered, foreground, expect_short):
+@pytest.mark.parametrize('word', ['speech ', '界', 'あ'])
+def test_short_threshold_and_covered_summary(monkeypatch, word, words, covered, expect_short):
     from models.conversation import Conversation
 
     monkeypatch.setattr(process, 'content_minimum', lambda *a, **kw: None)
@@ -173,12 +174,14 @@ def test_short_threshold_and_covered_summary(monkeypatch, words, covered, foregr
         v3_derived=True,
         summary_covers_through=AT if covered else None,
         structured={'title': 'Existing', 'sections': [{'heading': 'Plan', 'body_markdown': 'Real notes.'}]},
-        transcript_segments=[{'text': 'speech ' * words, 'start': 0, 'end': 30, 'is_user': True}],
+        transcript_segments=[{'text': word * words, 'start': 0, 'end': 30, 'is_user': True}],
     )
-    with process.v3_service.models.notes_mode('u', foreground=foreground):
-        structured, _ = process._get_structured('u', 'en', row)
+    with process.v3_service.models.notes_mode('u', foreground=False):
+        structured, discarded = process._get_structured('u', 'en', row)
+    assert discarded is (words < 20)
     assert bool(calls) is expect_short
     assert structured.sections[0].body_markdown == 'Real notes.'
+    assert summary.summary_eligible(row.model_dump()) is (words >= 300)
 
 
 @pytest.mark.asyncio
@@ -879,3 +882,82 @@ def test_legacy_generated_live_sections_are_read_redacted_with_owner_overview_pr
         assert ('sections' in row['structured']) is proven_final
         assert row['transcript_segments'] == catchup['transcript_segments']
     assert catchup['structured'] == legacy
+
+
+@pytest.mark.parametrize('edited_overview', [False, True])
+@pytest.mark.parametrize('version', ['4', '5'])
+def test_completed_note_detail_repairs_uuid_citations_without_rewriting_storage(
+    catchup, monkeypatch, edited_overview, version
+):
+    known = f'11111111-2222-{version}333-8444-555555555555'
+    orphan = f'aaaaaaaa-bbbb-{version}ccc-addd-eeeeeeeeeeee'
+    body = f'- The group took photos. ({orphan})\n- They shared them ({known}). (aside)'
+    clean = '- The group took photos.\n- They shared them. (aside)'
+    edited = f'Owner text ({orphan})'
+    existing = 'existing-source'
+    sources = [existing, known] if edited_overview else [existing]
+    catchup.update(
+        status='completed',
+        v3_notes_written=True,
+        structured={
+            'title': 'Photos',
+            'overview': edited if edited_overview else f'## Sharing\n\n{body}',
+            'sections': [{'heading': 'Sharing', 'body_markdown': body, 'source_segment_ids': sources}],
+        },
+        transcript_segments=[
+            {'id': existing, 'text': 'They took photos.', 'start': 0, 'end': 1},
+            {'id': known, 'text': 'They shared them.', 'start': 1, 'end': 2},
+        ],
+        apps_results=[{'app_id': 'custom', 'content': edited}],
+    )
+    fetched = deepcopy(catchup)
+    before = deepcopy(fetched)
+    monkeypatch.setattr(routes, '_get_valid_conversation_by_id', lambda *args, **kwargs: fetched)
+
+    detail = routes.get_conversation_by_id(
+        'live', source=None, include_discarded=None, uid='synthetic', include_translations=False
+    )
+
+    assert detail['structured']['sections'][0]['body_markdown'] == clean
+    assert detail['structured']['overview'] == (edited if edited_overview else f'## Sharing\n\n{clean}')
+    assert detail['structured']['sections'][0]['source_segment_ids'] == [
+        segment['id'] for segment in detail['transcript_segments']
+    ]
+    assert detail['apps_results'] == before['apps_results']
+    assert fetched['structured'] == before['structured']
+
+
+@pytest.mark.asyncio
+async def test_explicit_summary_open_locks_configured_preview_with_live_recap_present(monkeypatch):
+    row = {
+        'id': 'c',
+        'v3_derived': True,
+        'v3_unlocked': True,
+        'status': 'in_progress',
+        'started_at': AT,
+        'finished_at': AT + timedelta(seconds=1),
+    }
+    reconciles = []
+    prepared = []
+
+    async def blocking(pool, fn, *args, **kwargs):
+        return fn(*args, **kwargs)
+
+    async def reconcile(uid, *, on_open, conversation_id):
+        reconciles.append((on_open, conversation_id))
+        row.update(status='processing', v3_unlocked=False)
+
+    async def prepare(uid, current):
+        prepared.append(current.copy())
+
+    monkeypatch.setenv('CONVERSATIONS_V3_LIVE_RECAP_COHORT', 'uid:synthetic')
+    monkeypatch.setattr(routes, 'run_blocking', blocking)
+    monkeypatch.setattr(routes, '_get_valid_conversation_by_id', lambda *a: row)
+    monkeypatch.setattr(routes, 'require_generated_compute', lambda *a: None)
+    monkeypatch.setattr(service, 'reconcile', reconcile)
+    monkeypatch.setattr(summary, 'prepare', prepare)
+
+    response = await routes.conversation_summary_stream('c', 'synthetic')
+    assert response.media_type == 'text/event-stream'
+    assert reconciles == [(True, 'c')]
+    assert prepared[0]['status'] == 'processing' and not prepared[0]['v3_unlocked']

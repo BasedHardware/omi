@@ -14,16 +14,18 @@ import (
 
 type config struct {
 	queue.Config
-	port     string
-	database string
-	stub     string
-	secret   string
+	port         string
+	replayListen bool
+	database     string
+	stub         string
+	secret       string
 }
 
 func loadConfig() (config, error) {
 	c := config{
-		database: os.Getenv("DATABASE_URL"),
-		stub:     os.Getenv("STUB_URL"), secret: os.Getenv("ENCRYPTION_SECRET"),
+		database:     os.Getenv("DATABASE_URL"),
+		replayListen: os.Getenv("JOBD_REPLAY_LISTEN") == "1",
+		stub:         os.Getenv("STUB_URL"), secret: os.Getenv("ENCRYPTION_SECRET"),
 	}
 	values := []struct {
 		name              string

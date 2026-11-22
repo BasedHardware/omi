@@ -34,6 +34,8 @@ from database import (
 )
 from database.account_deletion_marker import account_deletion_blocks_user_work
 from database._client import get_customer_firestore_client
+from database.go_queue_erase import ERASE_LEASE_SECONDS
+from services.users.go_queue_erase import go_queue_erase_required
 from database.sync_jobs import release_job_run_lock, try_acquire_job_run_lock
 from services.users.data_export import iter_user_data_export, iter_user_data_export_streaming
 from services.users.data_export_response import DataExportStreamingResponse
@@ -359,25 +361,34 @@ async def run_account_deletion_wipe(
         )
 
     lock_key = f'account-deletion:{uid}'
-    lock_token = await run_blocking(db_executor, try_acquire_job_run_lock, lock_key)
+    needs_erase = resolution.get('erase_armed') is True or go_queue_erase_required()
+    lease = (ERASE_LEASE_SECONDS,) if needs_erase else ()
+    lock_token = await run_blocking(db_executor, try_acquire_job_run_lock, lock_key, *lease)
     if not lock_token:
         logger.warning(f'account_deletion handler: run-lock held for {uid}, deferring')
         return JSONResponse(status_code=409, content={'status': 'locked'})
 
     release_lock = True
     try:
-        claim_status = await run_blocking(db_executor, claim_deletion_wipe_for_task, uid)
+        claim_status = (
+            await run_blocking(db_executor, claim_deletion_wipe_for_task, uid, expected_job_id=wipe_job_id)
+            if needs_erase
+            else await run_blocking(db_executor, claim_deletion_wipe_for_task, uid)
+        )
         if claim_status == 'completed':
             return JSONResponse(status_code=200, content={'status': 'acked', 'job_status': 'completed'})
         if claim_status == 'running':
             return JSONResponse(status_code=409, content={'status': 'running'})
+        if claim_status == 'erase_required':
+            return JSONResponse(status_code=409, content={'status': 'retry'})
         if claim_status != 'claimed':
             logger.warning(f'account_deletion handler: non-actionable task for {uid}, claim_status={claim_status}')
             return JSONResponse(status_code=200, content={'status': 'dropped', 'reason': claim_status})
 
         max_attempts = get_account_deletion_tasks_max_attempts()
         terminal = task_authentication.retry_count >= max_attempts - 1
-        ok = await run_deletion_wipe_with_lease(uid, task_authentication.retry_count, terminal, lock_token)
+        erase_args = (wipe_job_id,) if needs_erase else ()
+        ok = await run_deletion_wipe_with_lease(uid, task_authentication.retry_count, terminal, lock_token, *erase_args)
         if ok:
             return JSONResponse(status_code=200, content={'status': 'done'})
 

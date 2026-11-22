@@ -15685,4 +15685,149 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get conversationRecentTranscript => 'Πρόσφατη απομαγνητοφώνηση';
+
+  @override
+  String get finishAlreadySaved => 'Έχει ήδη αποθηκευτεί. Είναι στην Αρχική.';
+
+  @override
+  String get finishAudioNotReceived => 'Ο ήχος είναι ακόμα στον δρόμο.';
+
+  @override
+  String get finishFailedOffline => 'Δεν ολοκληρώθηκε. Ο ήχος σας είναι ασφαλής.';
+
+  @override
+  String get finishFailed => 'Δεν ολοκληρώθηκε. Ο ήχος σας είναι ασφαλής.';
+
+  @override
+  String get micBlockedCannotRecord => 'Επιτρέψτε το μικρόφωνο για εγγραφή.';
+
+  @override
+  String get couldNotStartRecording => 'Δεν ήταν δυνατή η έναρξη της εγγραφής.';
+
+  @override
+  String get restorePurchasesFailed => 'Δεν ήταν δυνατός ο έλεγχος του πλάνου σας.';
+
+  @override
+  String get firmwareCheckFailed => 'Δεν ήταν δυνατός ο έλεγχος για ενημερώσεις.';
+
+  @override
+  String get conversationStillPublic => 'Εξακολουθεί να κοινοποιείται μέσω συνδέσμου.';
+
+  @override
+  String get goalSaveFailed => 'Δεν ήταν δυνατή η αποθήκευση του στόχου σας.';
+
+  @override
+  String get goalDeleteFailed => 'Δεν ήταν δυνατή η διαγραφή. Ο στόχος επαναφέρθηκε.';
+
+  @override
+  String get goalsLoadFailed => 'Δεν ήταν δυνατή η φόρτωση των στόχων σας.';
+
+  @override
+  String get missingTargetEndedRecording => 'Αυτή η εγγραφή έχει τελειώσει.';
+
+  @override
+  String get missingTargetMemory => 'Αυτή η ανάμνηση δεν υπάρχει πια.';
+
+  @override
+  String get missingTargetTask => 'Αυτή η εργασία δεν υπάρχει πια.';
+
+  @override
+  String get missingTargetConversation => 'Δεν ήταν δυνατό το άνοιγμα αυτής της συνομιλίας.';
+
+  @override
+  String get couldNotRefreshConversations => 'Δεν ήταν δυνατή η ανανέωση.';
+
+  @override
+  String get connectDeviceForOfflineSync => 'Συνδέστε το Omi σας για συγχρονισμό.';
+
+  @override
+  String get useDifferentAccountMessage =>
+      'Θα αποσυνδεθείτε και οι ρυθμίσεις του Omi σε αυτό το τηλέφωνο θα επαναφερθούν.';
+
+  @override
+  String get rayBanMetaNotFoundAfterSetup => 'Τα γυαλιά δεν βρέθηκαν. Είναι ενεργοποιημένα;';
+
+  @override
+  String get couldNotMoveTask => 'Δεν ήταν δυνατή η μετακίνηση της εργασίας.';
+
+  @override
+  String lockedTasksKept(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Διαγράφηκαν. Διατηρήθηκαν $count κλειδωμένες εργασίες.',
+      one: 'Διαγράφηκαν. Διατηρήθηκε 1 κλειδωμένη εργασία.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get settingNotSaved => 'Δεν ήταν δυνατή η αποθήκευση της αλλαγής.';
+
+  @override
+  String get couldNotLoadNotificationSettings => 'Δεν ήταν δυνατή η φόρτωση των ρυθμίσεών σας.';
+
+  @override
+  String get waitForOmiToFinish => 'Περιμένετε να τελειώσει το Omi.';
+
+  @override
+  String get voiceNoteTooShort => 'Πολύ σύντομο. Κρατήστε πατημένο για εγγραφή.';
+
+  @override
+  String get submitAppMissingFields => 'Προσθέστε όνομα, περιγραφή, εικόνα, κατηγορία και δυνατότητα για την υποβολή.';
+
+  @override
+  String get appSetupNotFinished => 'Η ρύθμιση δεν έχει ολοκληρωθεί ακόμη.';
+
+  @override
+  String get finishNothingKeptTitle => 'Τίποτα προς διατήρηση';
+
+  @override
+  String get submitAppFinishDetails => 'Συμπληρώστε παραπάνω τα στοιχεία δυνατότητας και τιμολόγησης για την υποβολή.';
+
+  @override
+  String get finishNothingNew => 'Δεν υπάρχει κάτι νέο ακόμη.';
+
+  @override
+  String get takingLongerThanUsual => 'Αργεί περισσότερο από το συνηθισμένο. Θα το έχουμε στην Αρχική.';
+
+  @override
+  String get couldNotCheckOnIt => 'Δεν ήταν δυνατός ο έλεγχος. Δοκιμάστε ξανά.';
+
+  @override
+  String get upgradeToOpenThisOne => 'Αναβαθμίστε για να το ανοίξετε.';
+
+  @override
+  String get missingTargetConversationGone => 'Αυτή η συνομιλία διαγράφηκε.';
+
+  @override
+  String get cantConnectRightNow => 'Δεν είναι δυνατή η σύνδεση αυτή τη στιγμή.';
+
+  @override
+  String get loadOlderFailed => 'Δεν φορτώθηκαν τα παλαιότερα. Πατήστε για επανάληψη.';
+
+  @override
+  String listeningWithDuration(String duration) {
+    return 'Ακούει · $duration';
+  }
+
+  @override
+  String get conversationLiveNoEdits => 'Περιμένετε να τελειώσει για να την αλλάξετε.';
+
+  @override
+  String get finishedSummaryReady => 'Η σύνοψη είναι έτοιμη';
+
+  @override
+  String get writingSummaryStatus => 'Γράφεται η σύνοψη…';
+
+  @override
+  String get stillWorkingOnIt => 'Εξακολουθούμε να δουλεύουμε πάνω σε αυτό.';
+
+  @override
+  String get firmwareUpdateFirmwareTooOld =>
+      'Το υλικολογισμικό της συσκευής σας είναι πολύ παλιό για αυτήν την ενημέρωση. Επικοινωνήστε με την υποστήριξη για βοήθεια με την ενημέρωση της συσκευής σας.';
+
+  @override
+  String get firmwareUpdateAppRequired =>
+      'Αυτή η ενημέρωση υλικολογισμικού απαιτεί νεότερη έκδοση της εφαρμογής Omi. Ενημερώστε την εφαρμογή από το κατάστημα εφαρμογών σας και ελέγξτε ξανά.';
 }

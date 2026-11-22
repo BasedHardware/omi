@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "015-mobile-ios-home-placeholder-preview.png",
+      "platform": "mobile-ios",
+      "description": "v3 Home placeholder showing an admitted verified pendant preview",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ]
+}

@@ -249,6 +249,7 @@ def test_delete_capture_cascades_retained_bridge_sources(store, monkeypatch):
     removed = []
     # The donor intent write goes through its own module-level client; bind it
     # to the same fake store so the purge stays hermetic.
+    monkeypatch.setattr(merge_conversations, '_purge_rederive_priors', lambda *a: None)
     monkeypatch.setattr(merge_conversations.conversation_tombstones, 'db', store)
     monkeypatch.setattr(
         merge_conversations, '_delete_conversation_and_related_data', lambda uid, cid, **kw: removed.append(cid)
@@ -279,6 +280,7 @@ def test_failed_ancestor_purge_keeps_survivor_for_retry(store, monkeypatch):
     conversation = _seed_conversation(store)
     # The donor intent write goes through its own module-level client; bind it
     # to the same fake store so the purge stays hermetic.
+    monkeypatch.setattr(merge_conversations, '_purge_rederive_priors', lambda *a: None)
     monkeypatch.setattr(merge_conversations.conversation_tombstones, 'db', store)
     monkeypatch.setattr(conversations_db, 'get_conversation', lambda *a: {'sync_merged_from': ['donor']})
 

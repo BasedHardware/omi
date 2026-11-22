@@ -15332,4 +15332,146 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get conversationRecentTranscript => '最近的文字记录';
+
+  @override
+  String get finishAlreadySaved => '已保存，就在首页。';
+
+  @override
+  String get finishAudioNotReceived => '音频还在路上。';
+
+  @override
+  String get finishFailedOffline => '操作未成功，你的音频仍然安全。';
+
+  @override
+  String get finishFailed => '操作未成功，你的音频仍然安全。';
+
+  @override
+  String get micBlockedCannotRecord => '请允许使用麦克风录音。';
+
+  @override
+  String get couldNotStartRecording => '无法开始录音。';
+
+  @override
+  String get restorePurchasesFailed => '无法查询你的套餐。';
+
+  @override
+  String get firmwareCheckFailed => '无法检查更新。';
+
+  @override
+  String get conversationStillPublic => '它仍在通过链接共享。';
+
+  @override
+  String get goalSaveFailed => '无法保存你的目标。';
+
+  @override
+  String get goalDeleteFailed => '无法删除，目标已恢复。';
+
+  @override
+  String get goalsLoadFailed => '无法加载你的目标。';
+
+  @override
+  String get missingTargetEndedRecording => '该录音已结束。';
+
+  @override
+  String get missingTargetMemory => '该记忆已不存在。';
+
+  @override
+  String get missingTargetTask => '该任务已不存在。';
+
+  @override
+  String get missingTargetConversation => '无法打开这条对话。';
+
+  @override
+  String get couldNotRefreshConversations => '无法刷新。';
+
+  @override
+  String get connectDeviceForOfflineSync => '请连接你的 Omi 以同步。';
+
+  @override
+  String get useDifferentAccountMessage => '你将被退出登录，此手机上的 Omi 设置也会被重置。';
+
+  @override
+  String get rayBanMetaNotFoundAfterSetup => '未找到眼镜。眼镜开机了吗？';
+
+  @override
+  String get couldNotMoveTask => '无法移动该任务。';
+
+  @override
+  String lockedTasksKept(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '已删除，保留了 $count 个锁定任务。',
+      one: '已删除，保留了 1 个锁定任务。',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get settingNotSaved => '无法保存该更改。';
+
+  @override
+  String get couldNotLoadNotificationSettings => '无法加载你的设置。';
+
+  @override
+  String get waitForOmiToFinish => '请等待 Omi 完成。';
+
+  @override
+  String get voiceNoteTooShort => '太短了，请长按录音。';
+
+  @override
+  String get submitAppMissingFields => '添加名称、描述、图片、分类和功能后即可提交。';
+
+  @override
+  String get appSetupNotFinished => '设置尚未完成。';
+
+  @override
+  String get finishNothingKeptTitle => '无可保留的内容';
+
+  @override
+  String get submitAppFinishDetails => '请完善上方的功能与定价详情后再提交。';
+
+  @override
+  String get finishNothingNew => '还没有新内容。';
+
+  @override
+  String get takingLongerThanUsual => '比平时慢一些，稍后会显示在首页。';
+
+  @override
+  String get couldNotCheckOnIt => '无法查询进度，请重试。';
+
+  @override
+  String get upgradeToOpenThisOne => '升级后才能打开这条对话。';
+
+  @override
+  String get missingTargetConversationGone => '该对话已被删除。';
+
+  @override
+  String get cantConnectRightNow => '暂时无法连接。';
+
+  @override
+  String get loadOlderFailed => '无法加载更早的内容，点按重试。';
+
+  @override
+  String listeningWithDuration(String duration) {
+    return '聆听中 · $duration';
+  }
+
+  @override
+  String get conversationLiveNoEdits => '请等它结束后再修改。';
+
+  @override
+  String get finishedSummaryReady => '摘要已生成';
+
+  @override
+  String get writingSummaryStatus => '正在生成摘要…';
+
+  @override
+  String get stillWorkingOnIt => '仍在处理中。';
+
+  @override
+  String get firmwareUpdateFirmwareTooOld => '你的设备固件版本太旧，无法安装此更新。请联系支持团队，获取设备更新方面的帮助。';
+
+  @override
+  String get firmwareUpdateAppRequired => '此固件更新需要更新版本的 Omi 应用。请前往应用商店更新应用，然后重新检查。';
 }

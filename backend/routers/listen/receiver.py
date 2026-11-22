@@ -15,6 +15,7 @@ from utils.stt_cap_dispatch import LiveAdmission, current_live_admission, suppre
 from utils.manual_speaker_assignments import acknowledged_teaching, manual_rejected_speakers
 from utils.other.live_audio_archive import LiveAudioArchive
 from utils.sync.live_cap_hold import LiveHeldAudio
+from utils.sync.live_cap_capacity import StorageQuotaExceeded
 from utils.sync.cap_hold_lifecycle import SHUTDOWN_DELIVERY_SECONDS
 from contextlib import nullcontext
 from collections import OrderedDict, deque
@@ -100,7 +101,6 @@ from config.live_stt_recovery import current_recovery_enabled, session_recovery_
 from utils.stt.soniox_capture_axis import validation_detail
 from utils.stt.soniox_idle import SonioxIdleBudget
 from routers.listen import legacy_recovery
-from utils.stt import legacy_replay
 from utils.stt.recovery_state import (
     LiveRecoveryController,
     MAX_RECOVERY_TARGETS,
@@ -130,10 +130,6 @@ from utils.stt.resilient_stream import (
     replay_chunks,
     socket_is_finishing,
     retire_window_replay_socket,
-)
-from utils.stt.resilient_stream import (
-    enabled as resilient_reconnect_enabled,
-    reconnect_live_stt_socket,
     trim_window_replay_to_anchor,
     window_replay_action,
 )
@@ -290,7 +286,7 @@ def _strip_capture_word_ranges(segments: List[Dict[str, Any]]) -> None:
 
 class ListenReceiver(ReplayFilterMixin):
     def __init__(self, host: Any, channel_configs: List[ChannelConfig], channel_id_to_index: Dict[int, int]):
-        self.soniox_idle_budget = SonioxIdleBudget(uid_provider=lambda: host.request.uid)
+        self.soniox_idle_budget = SonioxIdleBudget()
         self.host = host
         self.cap_admission: LiveAdmission | None = None
         if stt_cap_dispatch_configured() and not host.use_custom_stt:
@@ -341,7 +337,6 @@ class ListenReceiver(ReplayFilterMixin):
         self._receiving = False
         self.stt_drain_complete = asyncio.Event()
         self.shutdown_deadline: float | None = None
-        self._resilient_audio: ResilientAudio | None = None
         self._window_replay_audio: ResilientAudio | None = None
         self.stt_sockets_multi: List[Any] = [None] * len(channel_configs)
         self.multi_opus_decoders: List[Any] = [None] * len(channel_configs)
@@ -388,10 +383,6 @@ class ListenReceiver(ReplayFilterMixin):
             )
             if self.recovery_enabled:
                 self._window_replay_audio.on_cut = self._live_birth.prune_before
-            if resilient_reconnect_enabled():
-                self._resilient_audio = ResilientAudio(
-                    int(host.request.sample_rate), recovery_enabled=self.recovery_enabled
-                )
             # Pin the persistence mode for the recording's life; the flag is
             # never re-read per message or per callback.
             self.capture_timeline_v2 = host.state.capture_timeline_v2 = audio_flags.audio_timeline_v2_enabled()
@@ -1205,8 +1196,6 @@ class ListenReceiver(ReplayFilterMixin):
         delivery = getattr(self, '_replay_delivery', None)
         if delivery is not None and delivery is not self.stt_socket:
             delivery.finish()
-        if (audio := getattr(self, '_resilient_audio', None)) is not None:
-            audio.close()
         if (ring := getattr(self, '_window_replay_audio', None)) is not None:
             ring.close()
         sockets = self.stt_sockets_multi if self.host.is_multi_channel else [self.stt_socket]
@@ -1544,8 +1533,6 @@ class ListenReceiver(ReplayFilterMixin):
                 return False
             origin_token = current_transport_origin.set('idle_reopened' if idle_reopen else 'replacement')
             try:
-                if not idle_reopen and await self._reconnect_stt_socket_locked():
-                    return True
                 rebuilt = await self._rebuild_stt_socket_locked(idle_reopen=idle_reopen)
                 if rebuilt and idle_transport is not None:
                     idle_transport.note_cost_reopened()
@@ -1570,11 +1557,6 @@ class ListenReceiver(ReplayFilterMixin):
         value = getattr(service, 'value', service)
         identity = DEFAULT_IDS.get(value, value)
         return identity if isinstance(identity, str) else 'unknown'
-
-    async def _reconnect_stt_socket_locked(self) -> bool:
-        if getattr(self, 'recovery', None) is None:
-            return await legacy_replay.reconnect_live_stt_socket(self)
-        return await reconnect_live_stt_socket(self)
 
     def _shutdown_budget(self) -> float | None:
         if self.shutdown_deadline is None:
@@ -1621,11 +1603,8 @@ class ListenReceiver(ReplayFilterMixin):
         sample_rate: int,
         limits: Any,
         dead_provider: str,
-        soniox: Any = None,
-        meter_source: Any = None,
     ) -> bool:
-        """The single owner-side replay/adoption pump shared by cross-provider
-        failover and same-provider Soniox re-entry: candidate binding, opt-in
+        """Pump cross-provider replay and adoption: candidate binding, opt-in
         writer pacing, the paced prefix under the 20s wall (enqueues and frozen
         writes share it), tail transfer, then adoption."""
         self.recovery.replaying()
@@ -1657,9 +1636,8 @@ class ListenReceiver(ReplayFilterMixin):
             rejected_sample = await replay_chunks(
                 record_replay_sends(raw, epoch),
                 replay,
-                source=meter_source if meter_source is not None else ring,
+                source=ring,
                 provider=dead_provider or 'parakeet',
-                soniox=soniox,
                 is_active=self.delivery_active,
                 pacer=delivery.pacer,
                 deadline=prefix_deadline,
@@ -1946,7 +1924,6 @@ class ListenReceiver(ReplayFilterMixin):
                 sample_rate=sample_rate,
                 limits=limits,
                 dead_provider=dead_provider or 'unknown',
-                soniox=self._resilient_audio if self.host.stt_service == STTService.soniox else None,
             ):
                 return True
 
@@ -2234,8 +2211,6 @@ class ListenReceiver(ReplayFilterMixin):
             )
             await self._emit_stt_cap_live_held()
             if sent:
-                if self._resilient_audio is not None and self.host.stt_service == STTService.soniox:
-                    self._resilient_audio.append(outbound_audio, outbound_start_sample)
                 if (ring := self._window_ring()) is not None:
                     ring.append(outbound_audio, outbound_start_sample)
                 self._capture('capture_outbound_stt', outbound_audio)
@@ -2829,6 +2804,10 @@ class ListenReceiver(ReplayFilterMixin):
                     await self._handle_text(message['text'])
         except WebSocketDisconnect as error:
             note_ws_close(self.host.state, 'client', error.code)
+        except StorageQuotaExceeded:
+            # Stop ingress at the existing custody boundary and run final flush
+            # and archive close. The held writer already recorded the refusal.
+            mark_listen_internal_error(self.host.state)
         except Exception as error:
             logger.error('Listen receive failure type=%s', type(error).__name__)
             mark_listen_internal_error(self.host.state)
@@ -2863,7 +2842,8 @@ class ListenReceiver(ReplayFilterMixin):
                         self.live_hold.finish_updates(cap_updates, self._cap_hold_stop), name='stt_cap_live_final_flush'
                     )
                     try:
-                        await asyncio.shield(custody)
+                        if await asyncio.shield(custody) is False:
+                            mark_listen_internal_error(self.host.state)
                     except asyncio.CancelledError:
                         self.stt_drain_complete.set()
                         self.host.state.active = False
@@ -3006,7 +2986,10 @@ class ListenReceiver(ReplayFilterMixin):
                     },
                 )
         if not self.host.use_custom_stt:
-            await self._flush_stt_buffer(buffer, force=True)
+            try:
+                await self._flush_stt_buffer(buffer, force=True)
+            except StorageQuotaExceeded:
+                mark_listen_internal_error(self.host.state)
         await self._drain_stt_sockets()
         note_deferred_stream_closed(self)  # After the final flush, which can itself open the stream.
         if self.recovery is not None and self._replay_tail_bytes:
@@ -3053,8 +3036,6 @@ class ListenReceiver(ReplayFilterMixin):
             self._replay_recovery_task.cancel()
         if self._replay_delivery is not None and self._replay_delivery is not self.stt_socket:
             self._replay_delivery.finish()
-        if self._resilient_audio is not None:
-            self._resilient_audio.close()
         if (ring := getattr(self, '_window_replay_audio', None)) is not None:
             ring.close()
         for socket in self.stt_sockets_multi if self.host.is_multi_channel else [self.stt_socket]:

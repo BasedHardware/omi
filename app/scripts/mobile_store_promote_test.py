@@ -372,6 +372,14 @@ class AndroidChecks(unittest.TestCase):
         self.production["releases"][0]["name"] = "not-a-version"
         promote.select_play_release(self.alpha, self.production, "1.2.3", "23")
 
+    def test_code_first_production_name_is_a_roll_forward_floor(self):
+        live = self.production["releases"][0]
+        live.update(name="30 (1.2.10)", versionCodes=["30"])
+        with self.assertRaisesRegex(promote.PromotionError, "older than"):
+            promote.select_play_release(self.alpha, self.production, "1.2.3", "23")
+        live["name"] = "30 (1.2.2)"
+        promote.select_play_release(self.alpha, self.production, "1.2.3", "23")
+
     def test_production_release_version_parses_play_console_names(self) -> None:
         self.assertEqual(promote.production_release_version("1.0.552"), "1.0.552")
         self.assertEqual(promote.production_release_version("1.0.552 (1246)"), "1.0.552")
@@ -379,6 +387,14 @@ class AndroidChecks(unittest.TestCase):
         self.assertEqual(promote.production_release_version(f"{BUILD_TAG} [{BUILD_ID}]"), "1.2.3")
         self.assertIsNone(promote.production_release_version("not-a-version"))
         self.assertIsNone(promote.production_release_version("1.0"))
+
+    def test_code_first_play_console_name_requires_a_matching_version_code(self):
+        name = "1605 (1.0.595)"
+        self.assertEqual(promote.production_release_version(name, ["1604", "1605"]), "1.0.595")
+        self.assertEqual(promote.production_release_version(name, [1605]), "1.0.595")
+        self.assertIsNone(promote.production_release_version(name, ["1604"]))
+        self.assertIsNone(promote.production_release_version(name))
+        self.assertIsNone(promote.production_release_version("1605 (1.0)", ["1605"]))
 
     def test_manual_cli_keeps_held_android_release_as_draft(self):
         client = Mock()

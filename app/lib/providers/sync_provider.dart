@@ -1381,6 +1381,7 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
       throw Exception('This recording is already on phone');
     }
 
+    _admittedWorkGeneration = generation;
     _updateSyncState(_syncState.toSyncing(), generation);
 
     await _keepAlive.acquire();

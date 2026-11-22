@@ -15617,4 +15617,148 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get conversationRecentTranscript => 'Останній транскрипт';
+
+  @override
+  String get finishAlreadySaved => 'Вже збережено. На головній.';
+
+  @override
+  String get finishAudioNotReceived => 'Аудіо ще в дорозі.';
+
+  @override
+  String get finishFailedOffline => 'Не вдалося надіслати. Ваше аудіо в безпеці.';
+
+  @override
+  String get finishFailed => 'Не вдалося надіслати. Ваше аудіо в безпеці.';
+
+  @override
+  String get micBlockedCannotRecord => 'Дозвольте мікрофону записувати.';
+
+  @override
+  String get couldNotStartRecording => 'Не вдалося почати запис.';
+
+  @override
+  String get restorePurchasesFailed => 'Не вдалося перевірити ваш план.';
+
+  @override
+  String get firmwareCheckFailed => 'Не вдалося перевірити оновлення.';
+
+  @override
+  String get conversationStillPublic => 'Досі доступно за посиланням.';
+
+  @override
+  String get goalSaveFailed => 'Не вдалося зберегти вашу ціль.';
+
+  @override
+  String get goalDeleteFailed => 'Не вдалося видалити. Ціль відновлено.';
+
+  @override
+  String get goalsLoadFailed => 'Не вдалося завантажити ваші цілі.';
+
+  @override
+  String get missingTargetEndedRecording => 'Цей запис уже завершено.';
+
+  @override
+  String get missingTargetMemory => 'Того спогаду більше немає.';
+
+  @override
+  String get missingTargetTask => 'Того завдання більше немає.';
+
+  @override
+  String get missingTargetConversation => 'Не вдалося відкрити цю розмову.';
+
+  @override
+  String get couldNotRefreshConversations => 'Не вдалося оновити.';
+
+  @override
+  String get connectDeviceForOfflineSync => 'Підключіть свій Omi, щоб синхронізувати.';
+
+  @override
+  String get useDifferentAccountMessage => 'Ви вийдете з акаунта, а налаштування Omi на цьому телефоні буде скинуто.';
+
+  @override
+  String get rayBanMetaNotFoundAfterSetup => 'Окуляри не знайдено. Вони увімкнені?';
+
+  @override
+  String get couldNotMoveTask => 'Не вдалося перемістити завдання.';
+
+  @override
+  String lockedTasksKept(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Видалено. $count заблокованих завдань залишилося.',
+      one: 'Видалено. 1 заблоковане завдання залишилося.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get settingNotSaved => 'Не вдалося зберегти цю зміну.';
+
+  @override
+  String get couldNotLoadNotificationSettings => 'Не вдалося завантажити ваші налаштування.';
+
+  @override
+  String get waitForOmiToFinish => 'Зачекайте, доки Omi завершить.';
+
+  @override
+  String get voiceNoteTooShort => 'Занадто коротко. Утримуйте кнопку, щоб записати.';
+
+  @override
+  String get submitAppMissingFields => 'Щоб надіслати, додайте назву, опис, зображення, категорію та здібність.';
+
+  @override
+  String get appSetupNotFinished => 'Налаштування ще не завершено.';
+
+  @override
+  String get finishNothingKeptTitle => 'Немає чого зберігати';
+
+  @override
+  String get submitAppFinishDetails => 'Щоб надіслати, дозаповніть відомості про здібність і ціни вище.';
+
+  @override
+  String get finishNothingNew => 'Поки що нічого нового.';
+
+  @override
+  String get takingLongerThanUsual => 'Триває довше, ніж зазвичай. Незабаром з\'явиться на головній.';
+
+  @override
+  String get couldNotCheckOnIt => 'Не вдалося перевірити. Спробуйте ще раз.';
+
+  @override
+  String get upgradeToOpenThisOne => 'Оновіть план, щоб відкрити її.';
+
+  @override
+  String get missingTargetConversationGone => 'Ту розмову видалено.';
+
+  @override
+  String get cantConnectRightNow => 'Зараз не вдається з\'єднатися.';
+
+  @override
+  String get loadOlderFailed => 'Не вдалося завантажити старіші. Торкніться, щоб спробувати знову.';
+
+  @override
+  String listeningWithDuration(String duration) {
+    return 'Слухає · $duration';
+  }
+
+  @override
+  String get conversationLiveNoEdits => 'Зачекайте на завершення, щоб змінити її.';
+
+  @override
+  String get finishedSummaryReady => 'Підсумок готовий';
+
+  @override
+  String get writingSummaryStatus => 'Пишемо підсумок…';
+
+  @override
+  String get stillWorkingOnIt => 'Ще працюємо над цим.';
+
+  @override
+  String get firmwareUpdateFirmwareTooOld =>
+      'Прошивка вашого пристрою застаріла для цього оновлення. Зверніться до служби підтримки по допомогу з оновленням пристрою.';
+
+  @override
+  String get firmwareUpdateAppRequired =>
+      'Для цього оновлення прошивки потрібна новіша версія застосунку Omi. Оновіть застосунок у магазині застосунків, а потім перевірте ще раз.';
 }

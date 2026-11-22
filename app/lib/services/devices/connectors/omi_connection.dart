@@ -1360,7 +1360,19 @@ class OmiDeviceConnection extends DeviceConnection {
     // getFeatures() intentionally maps failed reads to legacy capabilities.
     // A privacy mutation must distinguish unsupported firmware from a lost
     // connection, otherwise a failed write can be reported as a successful pause.
-    final bytes = await transport.readCharacteristic(featuresServiceUuid, featuresCharacteristicUuid);
+    if (_featuresCharacteristicAbsent()) return;
+    var bytes = <int>[];
+    try {
+      bytes = await transport.readCharacteristic(featuresServiceUuid, featuresCharacteristicUuid);
+    } catch (e) {
+      Logger.debug('OmiDeviceConnection: features read for capture mute failed, retrying: $e');
+    }
+    if (bytes.length < 4) {
+      // One retry covers a read issued while a reconnect is still settling.
+      await Future<void>.delayed(captureMuteRetryDelay);
+      if (_featuresCharacteristicAbsent()) return;
+      bytes = await transport.readCharacteristic(featuresServiceUuid, featuresCharacteristicUuid);
+    }
     if (bytes.length < 4) throw StateError('Unable to confirm device mute capabilities');
     final features = ByteData.sublistView(Uint8List.fromList(bytes)).getUint32(0, Endian.little);
     if ((features & OmiFeatures.captureMute) == 0) return;
@@ -1369,6 +1381,18 @@ class OmiDeviceConnection extends DeviceConnection {
     if (confirmed.length != 1 || confirmed.single != (muted ? 1 : 0)) {
       throw StateError('Device did not confirm capture mute');
     }
+  }
+
+  @visibleForTesting
+  static Duration captureMuteRetryDelay = const Duration(milliseconds: 500);
+
+  /// Only a discovered GATT table proves legacy firmware; before discovery
+  /// the native transport reports every characteristic as missing.
+  bool _featuresCharacteristicAbsent() {
+    final t = transport;
+    return t is NativeBleTransport &&
+        t.servicesDiscovered &&
+        !t.hasCharacteristic(featuresServiceUuid, featuresCharacteristicUuid);
   }
 
   /// Read the pendant mute flag. Returns null when the characteristic is

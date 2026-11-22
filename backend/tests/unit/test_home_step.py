@@ -51,6 +51,20 @@ def test_classify(data, expected):
     assert home_step.classify(data) == expected
 
 
+def test_older_v3_preview_keeps_its_individual_home_card_and_outline():
+    preview = row(
+        status='processing',
+        v3_derived=True,
+        tile_state='live',
+        structured={'title': 'Preview', 'emoji': '🌲', 'overview': 'Outline'},
+    )
+    projected = home_step.project(preview)
+    assert projected['home_step'] == 'ready'
+    assert projected['structured'] == preview['structured']
+    assert home_step.classify({**preview, 'tile_state': 'writing'}) == 'writing_notes'
+    assert home_step.classify({**preview, 'finished_at': NOW - timedelta(days=1)}) == 'failed'
+
+
 def test_row_level_projection_provenance_is_writing_notes_without_structured_provenance():
     stamped = row(
         structured={'title': '', 'overview': ''},

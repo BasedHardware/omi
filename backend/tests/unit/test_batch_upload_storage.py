@@ -133,6 +133,7 @@ def merge():
         "database._client": client_stub,
         "database.conversations": conversations_stub,
         "database.conversation_tombstones": tombstones_stub,
+        "database.conversations_v3_backfill_runs": ModuleType("database.conversations_v3_backfill_runs"),
         "database.vector_db": vector_db_stub,
         "utils.cloud_tasks": cloud_tasks_stub,
         "utils.other.storage": storage_stub,

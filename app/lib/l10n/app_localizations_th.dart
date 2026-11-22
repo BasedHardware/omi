@@ -15509,4 +15509,148 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get conversationRecentTranscript => 'บทถอดความล่าสุด';
+
+  @override
+  String get finishAlreadySaved => 'บันทึกเสร็จแล้ว อยู่ที่หน้าหลัก';
+
+  @override
+  String get finishAudioNotReceived => 'เสียงยังอยู่ระหว่างทาง';
+
+  @override
+  String get finishFailedOffline => 'ไม่สำเร็จ แต่เสียงของคุณปลอดภัย';
+
+  @override
+  String get finishFailed => 'ไม่สำเร็จ แต่เสียงของคุณปลอดภัย';
+
+  @override
+  String get micBlockedCannotRecord => 'อนุญาตไมโครโฟนเพื่อบันทึกเสียง';
+
+  @override
+  String get couldNotStartRecording => 'เริ่มการบันทึกเสียงไม่สำเร็จ';
+
+  @override
+  String get restorePurchasesFailed => 'ตรวจสอบแพ็กเกจของคุณไม่สำเร็จ';
+
+  @override
+  String get firmwareCheckFailed => 'ตรวจสอบอัปเดตไม่สำเร็จ';
+
+  @override
+  String get conversationStillPublic => 'ยังแชร์ผ่านลิงก์อยู่';
+
+  @override
+  String get goalSaveFailed => 'บันทึกเป้าหมายของคุณไม่สำเร็จ';
+
+  @override
+  String get goalDeleteFailed => 'ลบไม่สำเร็จ เป้าหมายถูกคืนกลับมาแล้ว';
+
+  @override
+  String get goalsLoadFailed => 'โหลดเป้าหมายของคุณไม่สำเร็จ';
+
+  @override
+  String get missingTargetEndedRecording => 'การบันทึกนั้นจบแล้ว';
+
+  @override
+  String get missingTargetMemory => 'ความทรงจำนั้นไม่มีแล้ว';
+
+  @override
+  String get missingTargetTask => 'งานนั้นไม่มีแล้ว';
+
+  @override
+  String get missingTargetConversation => 'เปิดบทสนทนานี้ไม่สำเร็จ';
+
+  @override
+  String get couldNotRefreshConversations => 'รีเฟรชไม่สำเร็จ';
+
+  @override
+  String get connectDeviceForOfflineSync => 'เชื่อมต่อ Omi ของคุณเพื่อซิงก์';
+
+  @override
+  String get useDifferentAccountMessage => 'คุณจะออกจากระบบ และการตั้งค่า Omi ของโทรศัพท์เครื่องนี้จะถูกรีเซ็ต';
+
+  @override
+  String get rayBanMetaNotFoundAfterSetup => 'ไม่พบแว่น เปิดอยู่ไหม';
+
+  @override
+  String get couldNotMoveTask => 'ย้ายงานไม่สำเร็จ';
+
+  @override
+  String lockedTasksKept(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'ลบแล้ว มีงานที่ล็อกไว้ $count รายการที่ยังเก็บไว้',
+      one: 'ลบแล้ว มีงานที่ล็อกไว้ 1 รายการที่ยังเก็บไว้',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get settingNotSaved => 'บันทึกการเปลี่ยนแปลงนี้ไม่สำเร็จ';
+
+  @override
+  String get couldNotLoadNotificationSettings => 'โหลดการตั้งค่าของคุณไม่สำเร็จ';
+
+  @override
+  String get waitForOmiToFinish => 'รอให้ Omi เสร็จก่อน';
+
+  @override
+  String get voiceNoteTooShort => 'สั้นเกินไป กดค้างเพื่อบันทึกเสียง';
+
+  @override
+  String get submitAppMissingFields => 'เพิ่มชื่อ คำอธิบาย รูปภาพ หมวดหมู่ และความสามารถก่อนส่ง';
+
+  @override
+  String get appSetupNotFinished => 'การตั้งค่ายังไม่เสร็จสมบูรณ์';
+
+  @override
+  String get finishNothingKeptTitle => 'ไม่มีอะไรต้องเก็บ';
+
+  @override
+  String get submitAppFinishDetails => 'กรอกรายละเอียดความสามารถและราคาด้านบนให้ครบก่อนส่ง';
+
+  @override
+  String get finishNothingNew => 'ยังไม่มีอะไรใหม่';
+
+  @override
+  String get takingLongerThanUsual => 'ใช้เวลานานกว่าปกติ จะอยู่ในหน้าหลักเร็ว ๆ นี้';
+
+  @override
+  String get couldNotCheckOnIt => 'ตรวจสอบไม่สำเร็จ ลองอีกครั้ง';
+
+  @override
+  String get upgradeToOpenThisOne => 'อัปเกรดเพื่อเปิดบทสนทนานี้';
+
+  @override
+  String get missingTargetConversationGone => 'บทสนทนานั้นถูกลบไปแล้ว';
+
+  @override
+  String get cantConnectRightNow => 'เชื่อมต่อไม่ได้ในตอนนี้';
+
+  @override
+  String get loadOlderFailed => 'โหลดรายการเก่ากว่าไม่สำเร็จ แตะเพื่อลองอีกครั้ง';
+
+  @override
+  String listeningWithDuration(String duration) {
+    return 'กำลังฟัง · $duration';
+  }
+
+  @override
+  String get conversationLiveNoEdits => 'รอให้จบก่อนจึงจะเปลี่ยนได้';
+
+  @override
+  String get finishedSummaryReady => 'สรุปพร้อมแล้ว';
+
+  @override
+  String get writingSummaryStatus => 'กำลังเขียนสรุป…';
+
+  @override
+  String get stillWorkingOnIt => 'ยังดำเนินการอยู่';
+
+  @override
+  String get firmwareUpdateFirmwareTooOld =>
+      'เฟิร์มแวร์ของอุปกรณ์คุณเก่าเกินไปสำหรับการอัปเดตนี้ ติดต่อฝ่ายสนับสนุนเพื่อขอความช่วยเหลือในการอัปเดตอุปกรณ์';
+
+  @override
+  String get firmwareUpdateAppRequired =>
+      'การอัปเดตเฟิร์มแวร์นี้ต้องใช้แอป Omi เวอร์ชันใหม่กว่า อัปเดตแอปจากร้านค้าแอปของคุณ แล้วตรวจสอบอีกครั้ง';
 }

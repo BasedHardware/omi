@@ -41,13 +41,20 @@ type Workers struct {
 	report func(error)
 	stop   context.CancelFunc
 	done   <-chan struct{}
-	// spawn hands work to the supervisor, the one goroutine that holds the workers' context.
-	spawn chan func(context.Context)
+	// The supervisor starts handlers on the run context and scheduled resumes
+	// on the intake context. Drain cancels intake first.
+	spawn        chan func(context.Context)
+	scheduled    chan func(context.Context)
+	stopClaims   context.CancelFunc
+	onClaimsDone func(func()) func() bool
+	finished     chan struct{}
 
-	mu       sync.Mutex
-	stopping bool
-	pending  map[string]struct{}
-	wg       sync.WaitGroup
+	mu          sync.Mutex
+	stopping    bool
+	pending     map[string]struct{}
+	active      map[lease]struct{}
+	drainLeases []lease
+	wg          sync.WaitGroup
 }
 
 // Start launches the dispatchers. They run until ctx is cancelled or Stop is called.
@@ -66,37 +73,43 @@ func Start(ctx context.Context, store *Store, handlers map[string]Handler, repor
 		names = append(names, name)
 	}
 	slices.Sort(names)
-	ctx, cancel := context.WithCancel(ctx)
+	runCtx, cancel := context.WithCancel(ctx)
+	claimCtx, stopClaims := context.WithCancel(runCtx)
 	w := &Workers{
 		// The map is copied: the caller cannot change the registry after start.
 		store: store, handlers: maps.Clone(handlers), can: store.kinds.pairs(names), report: report,
-		slots: make(chan struct{}, store.cfg.Workers), stop: cancel, done: ctx.Done(),
-		spawn: make(chan func(context.Context)), pending: make(map[string]struct{}),
+		slots: make(chan struct{}, store.cfg.Workers), stop: cancel, done: claimCtx.Done(),
+		stopClaims: stopClaims, onClaimsDone: func(f func()) func() bool { return context.AfterFunc(claimCtx, f) },
+		spawn: make(chan func(context.Context)), scheduled: make(chan func(context.Context)),
+		finished: make(chan struct{}), pending: make(map[string]struct{}),
 	}
-	w.wg.Go(func() { w.supervise(ctx) })
+	w.wg.Go(func() { w.supervise(claimCtx, runCtx) })
 	for i := range min(dispatchers, store.cfg.Workers) {
-		w.wg.Go(func() { w.dispatch(ctx, i == 0) })
+		w.wg.Go(func() { w.dispatch(claimCtx, i == 0) })
 	}
+	go w.awaitShutdown()
 	return w, nil
 }
 
 // supervise starts every goroutine that must outlive the request that asked for it, so each
 // one runs under the workers' context and is cancelled by Stop.
-func (w *Workers) supervise(ctx context.Context) {
+func (w *Workers) supervise(claimCtx, runCtx context.Context) {
 	for {
 		select {
-		case <-ctx.Done():
+		case <-claimCtx.Done():
 			return
+		case fn := <-w.scheduled:
+			w.wg.Go(func() { fn(claimCtx) })
 		case fn := <-w.spawn:
-			w.wg.Go(func() { fn(ctx) })
+			w.wg.Go(func() { fn(runCtx) })
 		}
 	}
 }
 
 // start asks the supervisor to run fn. It reports false when the workers are stopping.
-func (w *Workers) start(fn func(context.Context)) bool {
+func (w *Workers) start(to chan<- func(context.Context), fn func(context.Context)) bool {
 	select {
-	case w.spawn <- fn:
+	case to <- fn:
 		return true
 	case <-w.done:
 		return false
@@ -139,11 +152,19 @@ func (w *Workers) release() { <-w.slots }
 // without releasing the slot, once Stop has begun.
 func (w *Workers) launch(r *Run) bool {
 	// The claim selected only kinds this replica has a handler for.
+	if !w.registerRun(r.lease) {
+		return false
+	}
 	handler := w.handlers[r.job.Kind]
-	return w.start(func(ctx context.Context) {
+	started := w.start(w.spawn, func(ctx context.Context) {
+		defer w.forgetRun(r.lease)
 		defer w.release()
 		r.execute(ctx, handler, w.report)
 	})
+	if !started {
+		w.forgetRun(r.lease)
+	}
+	return started
 }
 
 // Resume runs a blocked gated job with the caller's secret. If the job is scheduled for
@@ -154,12 +175,26 @@ func (w *Workers) Resume(ctx context.Context, key, secret string) error {
 	if secret == "" {
 		return ErrState
 	}
+	if !w.beginResume() {
+		return ErrStopped
+	}
+	defer w.wg.Done()
+	ctx, cancel := context.WithCancel(ctx)
+	detach := w.onClaimsDone(cancel)
+	defer cancel()
+	defer detach()
 	if err := w.take(ctx); err != nil {
+		if w.isStopped() {
+			return ErrStopped
+		}
 		return err
 	}
 	r, err := w.store.claim(ctx, claimRequest{key: key, secret: secret, can: w.can})
 	if err != nil {
 		w.release()
+		if w.isStopped() {
+			return ErrStopped
+		}
 		if later, ok := errors.AsType[*notDueError](err); ok {
 			return w.resumeAt(key, secret, later.at)
 		}
@@ -178,7 +213,7 @@ func (w *Workers) resumeAt(key, secret string, due time.Time) error {
 	if err := w.reserve(key); err != nil {
 		return err
 	}
-	started := w.start(func(ctx context.Context) {
+	started := w.start(w.scheduled, func(ctx context.Context) {
 		defer w.forget(key)
 		select {
 		case <-w.store.clock.After(due.Sub(w.store.clock.Now())):

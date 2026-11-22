@@ -1111,12 +1111,13 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
       return ('Unable to determine current firmware version', false, '', {});
     }
     var latestFirmwareDetails = await getLatestFirmwareVersion(
-      deviceModelNumber: device.modelNumber,
-      firmwareRevision: device.firmwareRevision,
-      hardwareRevision: device.hardwareRevision,
-      manufacturerName: device.manufacturerName,
-      serialNumber: device.serialNumber,
-    );
+          deviceModelNumber: device.modelNumber,
+          firmwareRevision: device.firmwareRevision,
+          hardwareRevision: device.hardwareRevision,
+          manufacturerName: device.manufacturerName,
+          serialNumber: device.serialNumber,
+        ) ??
+        {};
 
     var (message, hasUpdate, version) = await DeviceUtils.shouldUpdateFirmware(
       currentFirmware: device.firmwareRevision,
@@ -1509,7 +1510,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
         // Fetch latest stable version for rollback comparison
         String? latestStableFirmwareVersion;
         try {
-          var stableDetails = await getStableFirmwareVersion(deviceModelNumber: pairedDevice?.modelNumber ?? '');
+          var stableDetails = await getStableFirmwareVersion(deviceModelNumber: pairedDevice?.modelNumber ?? '') ?? {};
           if (!_isCurrent(generation) || !_isCurrentFirmwareCheckSession(checkSession)) {
             Logger.debug('Discarding stable firmware result from a stale device session');
             return false;

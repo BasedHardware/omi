@@ -26,6 +26,9 @@ typedef UsageRequest = Future<UserUsageResponse?> Function({required String peri
 
 typedef ProcessingBacklogRequest = Future<ProcessingBacklog?> Function({required String idempotencyKey});
 
+/// What Restore Purchases found: a paid plan, the free plan, or no answer.
+enum RestoreOutcome { paid, free, failed }
+
 class UsageProvider with ChangeNotifier {
   UsageProvider({
     Future<String?> Function()? deviceTimeZone,
@@ -369,6 +372,15 @@ class UsageProvider with ChangeNotifier {
       completer.complete();
     });
     return completer.future;
+  }
+
+  /// Restore Purchases: read the plan again. A read that failed is [RestoreOutcome.failed], never
+  /// "Free plan" (ux-contract §17.2): a paying reader must not be told they are free.
+  Future<RestoreOutcome> restorePurchases() async {
+    await fetchSubscription();
+    final plan = _subscription?.subscription.plan;
+    if (_error != null || plan == null) return RestoreOutcome.failed;
+    return plan.isPaid ? RestoreOutcome.paid : RestoreOutcome.free;
   }
 
   Future<void> _fetchSubscription() async {

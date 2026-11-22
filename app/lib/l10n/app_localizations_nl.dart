@@ -15623,4 +15623,149 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get conversationRecentTranscript => 'Recente transcriptie';
+
+  @override
+  String get finishAlreadySaved => 'Al opgeslagen. Deze staat op Start.';
+
+  @override
+  String get finishAudioNotReceived => 'De audio is nog onderweg.';
+
+  @override
+  String get finishFailedOffline => 'Het is niet gelukt. Je audio is veilig.';
+
+  @override
+  String get finishFailed => 'Het is niet gelukt. Je audio is veilig.';
+
+  @override
+  String get micBlockedCannotRecord => 'Geef de microfoon toegang om op te nemen.';
+
+  @override
+  String get couldNotStartRecording => 'Kon de opname niet starten.';
+
+  @override
+  String get restorePurchasesFailed => 'Kon je abonnement niet controleren.';
+
+  @override
+  String get firmwareCheckFailed => 'Kon niet controleren op updates.';
+
+  @override
+  String get conversationStillPublic => 'Deze is nog via een link gedeeld.';
+
+  @override
+  String get goalSaveFailed => 'Kon je doel niet opslaan.';
+
+  @override
+  String get goalDeleteFailed => 'Verwijderen mislukt. Doel is teruggezet.';
+
+  @override
+  String get goalsLoadFailed => 'Kon je doelen niet laden.';
+
+  @override
+  String get missingTargetEndedRecording => 'Die opname is afgelopen.';
+
+  @override
+  String get missingTargetMemory => 'Die herinnering bestaat niet meer.';
+
+  @override
+  String get missingTargetTask => 'Die taak bestaat niet meer.';
+
+  @override
+  String get missingTargetConversation => 'Kon dit gesprek niet openen.';
+
+  @override
+  String get couldNotRefreshConversations => 'Kon niet vernieuwen.';
+
+  @override
+  String get connectDeviceForOfflineSync => 'Verbind je Omi om te synchroniseren.';
+
+  @override
+  String get useDifferentAccountMessage => 'Je wordt uitgelogd en de Omi-instellingen op deze telefoon worden gereset.';
+
+  @override
+  String get rayBanMetaNotFoundAfterSetup => 'Bril niet gevonden. Staat hij aan?';
+
+  @override
+  String get couldNotMoveTask => 'Kon de taak niet verplaatsen.';
+
+  @override
+  String lockedTasksKept(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Verwijderd. $count vergrendelde taken zijn behouden.',
+      one: 'Verwijderd. 1 vergrendelde taak is behouden.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get settingNotSaved => 'Kon die wijziging niet opslaan.';
+
+  @override
+  String get couldNotLoadNotificationSettings => 'Kon je instellingen niet laden.';
+
+  @override
+  String get waitForOmiToFinish => 'Wacht tot Omi klaar is.';
+
+  @override
+  String get voiceNoteTooShort => 'Te kort. Houd ingedrukt om op te nemen.';
+
+  @override
+  String get submitAppMissingFields =>
+      'Voeg een naam, beschrijving, afbeelding, categorie en vaardigheid toe om in te dienen.';
+
+  @override
+  String get appSetupNotFinished => 'Het instellen is nog niet afgerond.';
+
+  @override
+  String get finishNothingKeptTitle => 'Niets om te bewaren';
+
+  @override
+  String get submitAppFinishDetails => 'Vul hierboven de vaardigheids- en prijsdetails in om in te dienen.';
+
+  @override
+  String get finishNothingNew => 'Nog niets nieuws.';
+
+  @override
+  String get takingLongerThanUsual => 'Dit duurt langer dan gebruikelijk. Het staat straks op Start.';
+
+  @override
+  String get couldNotCheckOnIt => 'Kon de status niet controleren. Probeer het opnieuw.';
+
+  @override
+  String get upgradeToOpenThisOne => 'Upgrade om deze te openen.';
+
+  @override
+  String get missingTargetConversationGone => 'Dit gesprek is verwijderd.';
+
+  @override
+  String get cantConnectRightNow => 'Kan nu geen verbinding maken.';
+
+  @override
+  String get loadOlderFailed => 'Kon oudere items niet laden. Tik om opnieuw te proberen.';
+
+  @override
+  String listeningWithDuration(String duration) {
+    return 'Luisteren · $duration';
+  }
+
+  @override
+  String get conversationLiveNoEdits => 'Wacht tot het afgelopen is om het te wijzigen.';
+
+  @override
+  String get finishedSummaryReady => 'Samenvatting klaar';
+
+  @override
+  String get writingSummaryStatus => 'Samenvatting wordt geschreven…';
+
+  @override
+  String get stillWorkingOnIt => 'Er wordt nog aan gewerkt.';
+
+  @override
+  String get firmwareUpdateFirmwareTooOld =>
+      'De firmware van je apparaat is te oud voor deze update. Neem contact op met de ondersteuning voor hulp bij het bijwerken van je apparaat.';
+
+  @override
+  String get firmwareUpdateAppRequired =>
+      'Voor deze firmware-update is een nieuwere Omi-app nodig. Werk de app bij via je appwinkel en controleer daarna opnieuw.';
 }

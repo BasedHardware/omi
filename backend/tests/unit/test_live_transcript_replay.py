@@ -811,6 +811,7 @@ def test_receipt_survives_protection_level_migration(world, monkeypatch, source,
         StrictFirestoreCollection, 'select', lambda self, fields: SimpleNamespace(stream=lambda: []), raising=False
     )
     monkeypatch.setattr(db, 'db', store)
+    monkeypatch.setattr(db.conversations_v3_backfill_runs, '_live_run_ids', lambda *a, **kw: [])
     db.migrate_conversations_level_batch('u', ['c'], target)
     assert row['data_protection_level'] == target
     assert row['live_transcript_replay_receipt'] == blob

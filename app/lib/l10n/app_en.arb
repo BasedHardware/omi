@@ -19040,5 +19040,191 @@
     "conversationRecentTranscript": "Recent transcript",
     "@conversationRecentTranscript": {
         "description": "Heading for the latest spoken lines from the current conversation."
+    },
+    "finishAlreadySaved": "Already saved. It's on Home.",
+    "@finishAlreadySaved": {
+        "description": "Toast after tapping Finish on a live recording when the server had already saved that conversation on its own. 'Home' is the app's conversation list tab."
+    },
+    "finishAudioNotReceived": "Audio's still on its way.",
+    "@finishAudioNotReceived": {
+        "description": "Toast after tapping Finish when the page showed words but the server has none of the audio yet (a wearable device's audio is still on its way). The recording carries on."
+    },
+    "finishFailedOffline": "Didn't go through. Your audio is safe.",
+    "@finishFailedOffline": {
+        "description": "Error toast after tapping Finish on a live recording when the request got no answer (offline, timeout, server error). Shown with a Try Again button; the transcript stays on screen."
+    },
+    "finishFailed": "Didn't go through. Your audio is safe.",
+    "@finishFailed": {
+        "description": "Error toast after tapping Finish on a live recording when something in the app failed. Shown with a Try Again button; the transcript stays on screen."
+    },
+    "micBlockedCannotRecord": "Allow the microphone to record.",
+    "@micBlockedCannotRecord": {
+        "description": "Error toast when the user taps the record button but the microphone permission is blocked. Shown with an Open Settings button."
+    },
+    "couldNotStartRecording": "Couldn't start recording.",
+    "@couldNotStartRecording": {
+        "description": "Error toast when the phone recording failed to start for an unknown reason. Shown with a Try Again button."
+    },
+    "restorePurchasesFailed": "Couldn't check your plan.",
+    "@restorePurchasesFailed": {
+        "description": "Error toast after Restore Purchases when the app could not reach the server to read the plan. Shown with a Try Again button. Must never imply the user is on the free plan."
+    },
+    "firmwareCheckFailed": "Couldn't check for updates.",
+    "@firmwareCheckFailed": {
+        "description": "Error state on the device firmware page when the update check got no answer (offline, server error). Shown with a Try Again button, instead of 'up to date'."
+    },
+    "conversationStillPublic": "It's still shared by link.",
+    "@conversationStillPublic": {
+        "description": "Error toast after sharing a conversation failed or was dismissed and the app could not make it private again. Shown with a Make Private button."
+    },
+    "goalSaveFailed": "Couldn't save your goal.",
+    "@goalSaveFailed": {
+        "description": "Error toast when creating, editing, or moving the progress of a goal failed. Shown with a Try Again button; the goal editor stays open."
+    },
+    "goalDeleteFailed": "Couldn't delete. Goal restored.",
+    "@goalDeleteFailed": {
+        "description": "Error toast when deleting a goal failed on the server and the goal returned to the list. Shown with a Try Again button."
+    },
+    "goalsLoadFailed": "Couldn't load your goals.",
+    "@goalsLoadFailed": {
+        "description": "Error state on the Goals page when goals could not be loaded and none are stored on the phone. Shown with a Try Again button."
+    },
+    "missingTargetEndedRecording": "That recording has ended.",
+    "@missingTargetEndedRecording": {
+        "description": "Toast when a notification or card links to a live recording that has already ended. 'Home' is the conversation list tab."
+    },
+    "missingTargetMemory": "That memory is gone.",
+    "@missingTargetMemory": {
+        "description": "Toast when a link points to a memory that was deleted or is not on this phone."
+    },
+    "missingTargetTask": "That task is gone.",
+    "@missingTargetTask": {
+        "description": "Toast when a link points to a task that was deleted or could not be read."
+    },
+    "missingTargetConversation": "Couldn't open this conversation.",
+    "@missingTargetConversation": {
+        "description": "Error toast when a cited or linked conversation could not be opened (deleted, locked, or offline). Shown with a Try Again button."
+    },
+    "couldNotRefreshConversations": "Couldn't refresh.",
+    "@couldNotRefreshConversations": {
+        "description": "Error toast after pull-to-refresh on the conversation list failed; the rows already shown stay. Shown with a Try Again button."
+    },
+    "connectDeviceForOfflineSync": "Connect your Omi to sync.",
+    "@connectDeviceForOfflineSync": {
+        "description": "Toast when the user taps Offline Sync while their wearable device is disconnected."
+    },
+    "useDifferentAccountMessage": "You'll be signed out, and this phone's Omi settings will be reset.",
+    "@useDifferentAccountMessage": {
+        "description": "Confirmation dialog message before 'Use a Different Account' during onboarding signs the user out and clears local settings."
+    },
+    "rayBanMetaNotFoundAfterSetup": "Glasses not found. Are they on?",
+    "@rayBanMetaNotFoundAfterSetup": {
+        "description": "Error toast when Ray-Ban Meta glasses setup completed but a rescan did not find the glasses. Shown with a Try Again button."
+    },
+    "couldNotMoveTask": "Couldn't move the task.",
+    "@couldNotMoveTask": {
+        "description": "Error toast when dragging a task to another section failed to save. Shown with a Try Again button."
+    },
+    "lockedTasksKept": "{count, plural, =1{Deleted. 1 locked task was kept.} other{Deleted. {count} locked tasks were kept.}}",
+    "@lockedTasksKept": {
+        "description": "Toast after clearing a section of tasks when some tasks are locked (on a paid plan feature) and were intentionally kept. {count} is the number of locked tasks kept.",
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
+    "settingNotSaved": "Couldn't save that change.",
+    "@settingNotSaved": {
+        "description": "Error toast when a settings change failed to save and was put back. Shown with a Try Again button."
+    },
+    "couldNotLoadNotificationSettings": "Couldn't load your settings.",
+    "@couldNotLoadNotificationSettings": {
+        "description": "Error state on the notification settings page when the settings could not be read from the server. Shown with a Try Again button."
+    },
+    "waitForOmiToFinish": "Wait for Omi to finish.",
+    "@waitForOmiToFinish": {
+        "description": "Toast when the user tries to clear the chat or switch chat persona while Omi is still answering."
+    },
+    "voiceNoteTooShort": "Too short. Hold to record.",
+    "@voiceNoteTooShort": {
+        "description": "Toast when a chat voice note was shorter than half a second and was not sent."
+    },
+    "submitAppMissingFields": "Add a name, description, image, category and capability to submit.",
+    "@submitAppMissingFields": {
+        "description": "Hint under the disabled Submit App button explaining what the form still needs."
+    },
+    "appSetupNotFinished": "Setup isn't finished yet.",
+    "@appSetupNotFinished": {
+        "description": "Notice on an app's page when waiting for the user to complete the app's setup in the browser timed out."
+    },
+    "finishNothingKeptTitle": "Nothing to Keep",
+    "@finishNothingKeptTitle": {
+        "description": "Title on the processing page when the server discarded the finished recording (too short or no speech). Title Case."
+    },
+    "submitAppFinishDetails": "Finish the capability and pricing details above to submit.",
+    "@submitAppFinishDetails": {
+        "description": "Small hint under a disabled Submit button on the create-app form, shown when the name, description, image, category and capability are filled in but a capability-specific field (a prompt, a trigger, notification scopes) or the paid plan details are still missing."
+    },
+    "finishNothingNew": "Nothing new yet.",
+    "@finishNothingNew": {
+        "description": "Toast after tapping Finish on a live recording when there is nothing new to save yet."
+    },
+    "takingLongerThanUsual": "Taking longer than usual. We'll have it on Home.",
+    "@takingLongerThanUsual": {
+        "description": "Status on the page that waits for a finished recording's conversation, after a long wait while the app can still reach the server. 'Home' is the app's conversation list."
+    },
+    "couldNotCheckOnIt": "Couldn't check on it. Try again.",
+    "@couldNotCheckOnIt": {
+        "description": "Status on the page that waits for a finished recording's conversation, when the app could not reach the server several times in a row. Shown with a Try Again button."
+    },
+    "upgradeToOpenThisOne": "Upgrade to open this one.",
+    "@upgradeToOpenThisOne": {
+        "description": "Toast when a link opens a conversation that needs a paid plan."
+    },
+    "missingTargetConversationGone": "That conversation was deleted.",
+    "@missingTargetConversationGone": {
+        "description": "Toast when a link opens a conversation that was deleted."
+    },
+    "cantConnectRightNow": "Can't connect right now.",
+    "@cantConnectRightNow": {
+        "description": "Toast when a link could not be opened because the phone is offline. Shown with a Try Again action."
+    },
+    "loadOlderFailed": "Couldn't load older ones. Tap to retry.",
+    "@loadOlderFailed": {
+        "description": "One quiet line at the end of a list when loading older items failed; tapping it retries."
+    },
+    "listeningWithDuration": "Listening · {duration}",
+    "@listeningWithDuration": {
+        "description": "Status line under the title of a conversation that is still being recorded. {duration} is a short length such as '11m'.",
+        "placeholders": {
+            "duration": {
+                "type": "String"
+            }
+        }
+    },
+    "conversationLiveNoEdits": "Wait until it ends to change it.",
+    "@conversationLiveNoEdits": {
+        "description": "Toast when the reader tries to delete, reprocess, share or edit a conversation that is still being recorded."
+    },
+    "finishedSummaryReady": "Summary ready",
+    "@finishedSummaryReady": {
+        "description": "Screen reader announcement when a conversation on Home finishes and its summary is ready."
+    },
+    "writingSummaryStatus": "Writing summary…",
+    "@writingSummaryStatus": {
+        "description": "Status while a finished conversation's summary is being written: under its title on Home, and on the conversation page."
+    },
+    "stillWorkingOnIt": "Still working on it.",
+    "@stillWorkingOnIt": {
+        "description": "Quiet notice on a conversation page when the app stopped checking a conversation that is still being transcribed or summarized. Shown with a Try Again button."
+    },
+    "firmwareUpdateFirmwareTooOld": "Your device's firmware is too old for this update. Contact support for help updating your device.",
+    "@firmwareUpdateFirmwareTooOld": {
+        "description": "Firmware update unavailable because the device is below the release minimum firmware version."
+    },
+    "firmwareUpdateAppRequired": "This firmware update needs a newer Omi app. Update the app from your app store, then check again.",
+    "@firmwareUpdateAppRequired": {
+        "description": "Firmware update unavailable because the installed Omi app does not meet the release app version or build requirement."
     }
 }

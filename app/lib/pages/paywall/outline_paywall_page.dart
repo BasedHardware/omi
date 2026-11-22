@@ -57,17 +57,19 @@ class _OutlinePaywallPageState extends State<OutlinePaywallPage> with TickerProv
   }
 
   Future<void> _restore() async {
-    final usage = context.read<UsageProvider>();
-    await usage.fetchSubscription();
+    final outcome = await context.read<UsageProvider>().restorePurchases();
     if (!mounted) return;
     final l10n = context.l10n;
-    if (usage.subscription?.subscription.plan.isPaid == true) {
-      OmiFeedback.confirm(context, l10n.unlimitedPlan);
-      _dismissed = true;
-      Navigator.of(context).pop(true);
-      return;
+    switch (outcome) {
+      case RestoreOutcome.paid:
+        OmiFeedback.confirm(context, l10n.unlimitedPlan);
+        _dismissed = true;
+        Navigator.of(context).pop(true);
+      case RestoreOutcome.free:
+        OmiFeedback.info(context, l10n.freePlan);
+      case RestoreOutcome.failed:
+        OmiFeedback.error(context, l10n.restorePurchasesFailed, actionLabel: l10n.tryAgain, onAction: _restore);
     }
-    OmiFeedback.info(context, l10n.freePlan);
   }
 
   Future<void> _purchase(PaywallOffer offer) async {

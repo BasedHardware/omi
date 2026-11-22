@@ -4,8 +4,10 @@
 from __future__ import annotations
 
 import importlib.util
+import os
 import re
 import shutil
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -197,6 +199,27 @@ class WorkflowContractTests(unittest.TestCase):
         before = text.index(before_marker)
         path.write_text(text[:before] + step + text[before:], encoding="utf-8")
 
+    def test_workerd_publish_requires_production_admission_and_is_image_only(self) -> None:
+        root = self.fixture_root()
+        self.mutate(
+            root,
+            CHECKER.MANUAL_WORKFLOW_PATH,
+            "inputs.mode == 'workerd-image-only' &&",
+            "(inputs.mode == 'workerd-image-only' || inputs.mode == 'deploy') &&",
+        )
+        self.assertIn(
+            "workerd publish must run only for the normal admitted main-ref production image-only mode",
+            CHECKER.validate(root),
+        )
+        self.mutate(
+            root,
+            CHECKER.MANUAL_WORKFLOW_PATH,
+            '          repository="gcr.io/based-hardware/workerd"',
+            '          kubectl rollout restart deployment/workerd\n'
+            '          repository="gcr.io/based-hardware/workerd"',
+        )
+        self.assertIn("workerd publish must not touch a serving surface: kubectl", CHECKER.validate(root))
+
     def test_current_workflows_are_valid(self) -> None:
         self.assertEqual(CHECKER.validate(), [])
 
@@ -268,8 +291,8 @@ class WorkflowContractTests(unittest.TestCase):
             ),
             (
                 "scope output predicate",
-                "needs.scope.outputs.applies == 'true' &&",
-                "needs.scope.outputs.applies == 'false' &&",
+                "(needs.scope.outputs.applies == 'true' || needs.scope.outputs.workerd == 'true') &&",
+                "(needs.scope.outputs.applies == 'false' || needs.scope.outputs.workerd == 'true') &&",
                 "auto source-admission job must use exactly the fail-closed Release Eligibility predicate",
             ),
             (
@@ -438,25 +461,81 @@ class WorkflowContractTests(unittest.TestCase):
         self.mutate(
             root,
             CHECKER.AUTO_WORKFLOW_PATH,
-            "    needs: firestore_readiness\n",
-            "    needs: firestore_readiness\n    if: always()\n",
+            "  deploy:\n    needs: [scope, firestore_readiness]\n    if: needs.scope.outputs.applies == 'true'\n",
+            "  deploy:\n    needs: [scope, firestore_readiness]\n    if: always()\n",
         )
-        self.assertIn("auto backend deploy must not override source-admission dependency", CHECKER.validate(root))
+        self.assertIn("auto backend deploy must run only for backend changes", CHECKER.validate(root))
+
+    def test_workerd_scope_keeps_workflow_validation_out_of_backend_deploy(self) -> None:
+        workflow = yaml.safe_load((ROOT / CHECKER.AUTO_WORKFLOW_PATH).read_text())
+        scope_script = workflow["jobs"]["scope"]["steps"][1]["run"]
+        git_fixture = """git() {
+  case "$1" in
+    cat-file) return 0 ;;
+    rev-parse) printf 'parent\n' ;;
+    diff) printf '%s\n' "$CHANGED_FILES" ;;
+    *) return 1 ;;
+  esac
+}
+"""
+        workerd_changes = (
+            "backend-go/cmd/workerd/main.go\n"
+            ".github/workflows/gcp_backend_auto_dev.yml\n"
+            "backend/scripts/runtime_env_validation/workflows.py\n"
+            "backend/tests/unit/test_workflow_contracts.py"
+        )
+        for changed_files, expected in (
+            (workerd_changes, "workerd=true\napplies=false\n"),
+            (workerd_changes + "\nbackend/main.py", "workerd=true\napplies=true\n"),
+            ("backend/tests/unit/test_workflow_contracts.py", "workerd=false\napplies=true\n"),
+        ):
+            with self.subTest(changed_files=changed_files), tempfile.TemporaryDirectory() as temp:
+                output = Path(temp) / "output"
+                subprocess.run(
+                    ["bash", "-c", git_fixture + scope_script],
+                    check=True,
+                    capture_output=True,
+                    env={
+                        **os.environ,
+                        "RELEASE_SHA": SHA,
+                        "CHANGED_FILES": changed_files,
+                        "GITHUB_OUTPUT": str(output),
+                        "GITHUB_STEP_SUMMARY": str(Path(temp) / "summary"),
+                    },
+                )
+                self.assertEqual(output.read_text(), expected)
+
+    def test_workerd_publish_is_admitted_dev_only_and_never_deploys(self) -> None:
+        cases = (
+            (
+                "mutable source checkout",
+                "name: Checkout admitted workerd source\n        uses: actions/checkout@v7\n"
+                "        with:\n          ref: ${{ needs.admit_source.outputs.admitted_sha }}",
+                "name: Checkout admitted workerd source\n        uses: actions/checkout@v7\n"
+                "        with:\n          ref: main",
+                "workerd publishing must check out the admitted source SHA",
+            ),
+            (
+                "wrong scope",
+                "if: needs.scope.outputs.workerd == 'true'",
+                "if: always()",
+                "workerd publishing must run only for workerd changes",
+            ),
+            (
+                "deployment added",
+                "docker push \"$image\"",
+                "docker push \"$image\"\n          gcloud run deploy workerd",
+                "workerd image publishing must not deploy development services (gcloud run)",
+            ),
+        )
+        for name, old, new, expected in cases:
+            with self.subTest(name=name):
+                root = self.fixture_root()
+                self.mutate(root, CHECKER.AUTO_WORKFLOW_PATH, old, new)
+                self.assertIn(expected, CHECKER.validate(root))
 
     def test_auto_workflow_rejects_steps_outside_the_source_admission_sequence(self) -> None:
         cases = (
-            (
-                "admitted source checkout",
-                "Checkout admitted Firestore source",
-                "Resolve and verify the newest proven main source",
-                "automatic release-proof freshness validation must run before admitted-source checkout or execution",
-            ),
-            (
-                "Firestore readiness gate before admission",
-                "Verify serving Firestore indexes",
-                "Resolve and verify the newest proven main source",
-                "automatic release-proof freshness validation must run before the Firestore readiness gate",
-            ),
             (
                 "Firestore readiness gate before admitted source checkout",
                 "Verify serving Firestore indexes",
@@ -475,25 +554,7 @@ class WorkflowContractTests(unittest.TestCase):
                 )
                 self.assertIn(expected, CHECKER.validate(root))
 
-    def test_auto_workflow_scopes_admission_steps_to_readiness_and_rejects_duplicates(self) -> None:
-        root = self.fixture_root()
-        self.move_step_before(
-            root,
-            CHECKER.AUTO_WORKFLOW_PATH,
-            "Checkout admitted Firestore source",
-            "Resolve and verify the newest proven main source",
-        )
-        self.mutate(
-            root,
-            CHECKER.AUTO_WORKFLOW_PATH,
-            "  firestore_readiness:\n",
-            "  dummy:\n    runs-on: ubuntu-latest\n    steps:\n      - name: Resolve and verify the newest proven main source\n        run: true\n\n  firestore_readiness:\n",
-        )
-        self.assertIn(
-            "automatic release-proof freshness validation must run before admitted-source checkout or execution",
-            CHECKER.validate(root),
-        )
-
+    def test_auto_workflow_rejects_duplicate_admission_steps(self) -> None:
         root = self.fixture_root()
         self.mutate(
             root,
@@ -539,8 +600,8 @@ class WorkflowContractTests(unittest.TestCase):
         self.mutate(
             root,
             CHECKER.MANUAL_WORKFLOW_PATH,
-            "    if: >-\n      github.ref == 'refs/heads/main' &&\n      (github.event.inputs.mode == 'deploy' || github.event.inputs.mode == 'build-only')\n",
-            "    if: >-\n      github.ref == 'refs/heads/main' &&\n      (github.event.inputs.mode == 'deploy' || github.event.inputs.mode == 'build-only') || true\n",
+            "    if: >-\n      github.ref == 'refs/heads/main' &&\n      (github.event.inputs.mode == 'deploy' || github.event.inputs.mode == 'build-only' || github.event.inputs.mode == 'workerd-image-only')\n",
+            "    if: >-\n      github.ref == 'refs/heads/main' &&\n      (github.event.inputs.mode == 'deploy' || github.event.inputs.mode == 'build-only' || github.event.inputs.mode == 'workerd-image-only') || true\n",
         )
         self.assertIn("manual source admission must use exactly the main-ref deploy condition", CHECKER.validate(root))
 
@@ -548,12 +609,46 @@ class WorkflowContractTests(unittest.TestCase):
         self.mutate(
             root,
             CHECKER.MANUAL_WORKFLOW_PATH,
-            "  deploy:\n    needs: [validate-production-boundary, firestore_readiness, record_break_glass]\n    if: >-\n      always() &&\n      github.ref == 'refs/heads/main' &&\n      github.event.inputs.mode == 'deploy' &&\n      needs.validate-production-boundary.result == 'success' &&\n      needs.firestore_readiness.result == 'success' &&\n      (needs.record_break_glass.result == 'success' || needs.record_break_glass.result == 'skipped')\n",
-            "  deploy:\n    needs: [validate-production-boundary, firestore_readiness, record_break_glass]\n    if: >-\n      always() &&\n      github.ref == 'refs/heads/main' &&\n      github.event.inputs.mode == 'deploy' &&\n      needs.validate-production-boundary.result == 'success' &&\n      needs.firestore_readiness.result == 'success' &&\n      true\n",
+            "  deploy:\n    needs: [validate-production-boundary, firestore_readiness, record_break_glass]\n    if: >-\n      always() &&\n      github.ref == 'refs/heads/main' &&\n      github.event.inputs.mode == 'deploy' &&\n      github.event.inputs.cloud_run_service != 'backend-projection-pump' &&\n      needs.validate-production-boundary.result == 'success' &&\n      needs.firestore_readiness.result == 'success' &&\n      (needs.record_break_glass.result == 'success' || needs.record_break_glass.result == 'skipped')\n",
+            "  deploy:\n    needs: [validate-production-boundary, firestore_readiness, record_break_glass]\n    if: >-\n      always() &&\n      github.ref == 'refs/heads/main' &&\n      github.event.inputs.mode == 'deploy' &&\n      github.event.inputs.cloud_run_service != 'backend-projection-pump' &&\n      needs.validate-production-boundary.result == 'success' &&\n      needs.firestore_readiness.result == 'success' &&\n      true\n",
         )
         self.assertIn(
             "manual deployment must gate break-glass deploys on a successful audit record", CHECKER.validate(root)
         )
+
+    def test_projection_pump_job_is_prod_singleton_and_admitted(self) -> None:
+        root = self.fixture_root()
+        self.mutate(
+            root,
+            CHECKER.MANUAL_WORKFLOW_PATH,
+            "      github.event.inputs.environment == 'prod' &&\n      github.event.inputs.cloud_run_service == 'backend-projection-pump' &&\n",
+            "      github.event.inputs.cloud_run_service == 'backend-projection-pump' &&\n",
+        )
+        self.assertIn(
+            "projection pump deployment must run only for an admitted prod backend-projection-pump selection",
+            CHECKER.validate(root),
+        )
+
+        root = self.fixture_root()
+        path = root / CHECKER.MANUAL_WORKFLOW_PATH
+        text = path.read_text(encoding="utf-8")
+        head, _, tail = text.partition("  deploy-projection-pump:\n")
+        tail = tail.replace(
+            "admitted_sha: ${{ needs.firestore_readiness.outputs.admitted_sha }}",
+            "admitted_sha: ${{ github.event.inputs.release_sha }}",
+            1,
+        )
+        path.write_text(head + "  deploy-projection-pump:\n" + tail, encoding="utf-8")
+        self.assertIn(
+            "projection pump deployment must pass the admitted SHA to its composite action", CHECKER.validate(root)
+        )
+
+        root = self.fixture_root()
+        path = root / CHECKER.MANUAL_WORKFLOW_PATH
+        text = path.read_text(encoding="utf-8")
+        renamed = text.replace("  deploy-projection-pump:\n", "  deploy-projection-pump-renamed:\n", 1)
+        path.write_text(renamed, encoding="utf-8")
+        self.assertIn("manual backend deploy is missing its projection pump deployment job", CHECKER.validate(root))
 
     def test_manual_workflow_rejects_boundary_dependency_bypasses(self) -> None:
         root = self.fixture_root()

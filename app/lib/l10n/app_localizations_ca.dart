@@ -15660,4 +15660,150 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get conversationRecentTranscript => 'Transcripció recent';
+
+  @override
+  String get finishAlreadySaved => 'Ja està desada. La tens a Inici.';
+
+  @override
+  String get finishAudioNotReceived => 'L\'àudio encara està en camí.';
+
+  @override
+  String get finishFailedOffline => 'No s\'ha pogut completar. El teu àudio està desat.';
+
+  @override
+  String get finishFailed => 'No s\'ha pogut completar. El teu àudio està desat.';
+
+  @override
+  String get micBlockedCannotRecord => 'Permet l\'accés al micròfon per enregistrar.';
+
+  @override
+  String get couldNotStartRecording => 'No s\'ha pogut iniciar l\'enregistrament.';
+
+  @override
+  String get restorePurchasesFailed => 'No s\'ha pogut comprovar el teu pla.';
+
+  @override
+  String get firmwareCheckFailed => 'No s\'ha pogut comprovar si hi ha actualitzacions.';
+
+  @override
+  String get conversationStillPublic => 'Encara es comparteix per enllaç.';
+
+  @override
+  String get goalSaveFailed => 'No s\'ha pogut desar l\'objectiu.';
+
+  @override
+  String get goalDeleteFailed => 'No s\'ha pogut eliminar. S\'ha restaurat l\'objectiu.';
+
+  @override
+  String get goalsLoadFailed => 'No s\'han pogut carregar els objectius.';
+
+  @override
+  String get missingTargetEndedRecording => 'Aquest enregistrament ja ha acabat.';
+
+  @override
+  String get missingTargetMemory => 'Aquest record ha desaparegut.';
+
+  @override
+  String get missingTargetTask => 'Aquesta tasca ha desaparegut.';
+
+  @override
+  String get missingTargetConversation => 'No s\'ha pogut obrir aquesta conversa.';
+
+  @override
+  String get couldNotRefreshConversations => 'No s\'ha pogut actualitzar.';
+
+  @override
+  String get connectDeviceForOfflineSync => 'Connecta el teu Omi per sincronitzar.';
+
+  @override
+  String get useDifferentAccountMessage =>
+      'Es tancarà la sessió i es restablirà la configuració de l\'Omi d\'aquest telèfon.';
+
+  @override
+  String get rayBanMetaNotFoundAfterSetup => 'No s\'han trobat les ulleres. Estan engegades?';
+
+  @override
+  String get couldNotMoveTask => 'No s\'ha pogut moure la tasca.';
+
+  @override
+  String lockedTasksKept(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'S\'han eliminat. S\'han conservat $count tasques bloquejades.',
+      one: 'S\'han eliminat. S\'ha conservat 1 tasca bloquejada.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get settingNotSaved => 'No s\'ha pogut desar el canvi.';
+
+  @override
+  String get couldNotLoadNotificationSettings => 'No s\'ha pogut carregar la configuració.';
+
+  @override
+  String get waitForOmiToFinish => 'Espera que Omi acabi.';
+
+  @override
+  String get voiceNoteTooShort => 'Massa curt. Mantén premut per enregistrar.';
+
+  @override
+  String get submitAppMissingFields =>
+      'Afegeix un nom, una descripció, una imatge, una categoria i una capacitat per enviar-ho.';
+
+  @override
+  String get appSetupNotFinished => 'Encara no s\'ha completat la configuració.';
+
+  @override
+  String get finishNothingKeptTitle => 'Res per conservar';
+
+  @override
+  String get submitAppFinishDetails => 'Completa els detalls de capacitat i de preus de més amunt per enviar-ho.';
+
+  @override
+  String get finishNothingNew => 'Encara no hi ha res nou.';
+
+  @override
+  String get takingLongerThanUsual => 'Està trigant més del normal. La tindrem a Inici.';
+
+  @override
+  String get couldNotCheckOnIt => 'No s\'ha pogut comprovar. Torna-ho a provar.';
+
+  @override
+  String get upgradeToOpenThisOne => 'Millora el teu pla per obrir-lo.';
+
+  @override
+  String get missingTargetConversationGone => 'Aquesta conversa s\'ha eliminat.';
+
+  @override
+  String get cantConnectRightNow => 'No es pot connectar ara mateix.';
+
+  @override
+  String get loadOlderFailed => 'No s\'han pogut carregar els anteriors. Toca per tornar-ho a provar.';
+
+  @override
+  String listeningWithDuration(String duration) {
+    return 'Escoltant · $duration';
+  }
+
+  @override
+  String get conversationLiveNoEdits => 'Espera que acabi per modificar-la.';
+
+  @override
+  String get finishedSummaryReady => 'Resum preparat';
+
+  @override
+  String get writingSummaryStatus => 'Escrivint el resum…';
+
+  @override
+  String get stillWorkingOnIt => 'Encara hi estem treballant.';
+
+  @override
+  String get firmwareUpdateFirmwareTooOld =>
+      'El microprogramari del dispositiu és massa antic per a aquesta actualització. Contacta amb el servei d\'assistència perquè t\'ajudi a actualitzar el dispositiu.';
+
+  @override
+  String get firmwareUpdateAppRequired =>
+      'Aquesta actualització del microprogramari necessita una versió més nova de l\'aplicació Omi. Actualitza l\'aplicació des de la botiga d\'aplicacions i torna-ho a comprovar.';
 }

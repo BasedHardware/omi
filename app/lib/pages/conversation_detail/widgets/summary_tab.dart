@@ -85,7 +85,12 @@ class _SummaryTabState extends State<SummaryTab> with AutomaticKeepAliveClientMi
   Future<void> _openConversation(BuildContext context, String id) async {
     final known = context.read<ConversationProvider?>()?.conversations.where((c) => c.id == id).firstOrNull;
     final conversation = known ?? await getConversationById(id);
-    if (conversation == null || !context.mounted) return;
+    if (!context.mounted) return;
+    if (conversation == null) {
+      // The tap answers even when the moment's conversation cannot be read (V12).
+      OmiMissingTarget.conversation.show(context, onRetry: () => _openConversation(context, id));
+      return;
+    }
     routeToPage(context, ConversationDetailPage(conversation: conversation));
   }
 
