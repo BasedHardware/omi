@@ -553,8 +553,8 @@ async def reconcile(
                     row['v3_rederive_live_run'] = run_id
                 if prior and prior.get('deleted'):
                     continue
-                before = sum(len(s.get('text', '').split()) for s in (prior or {}).get('transcript_segments') or [])
-                new_words = max(0, sum(len(s.get('text', '').split()) for s in row['transcript_segments']) - before)
+                before = planner.word_count((prior or {}).get('transcript_segments') or [])
+                new_words = max(0, planner.word_count(row['transcript_segments']) - before)
                 ended = window['finished'] and not deferred_lock
                 was_ended = prior and not planner.is_unlocked(prior)
                 promoted = bool(

@@ -23,6 +23,7 @@ from testing.pipeline_lab.v3.driver import V3Driver, default_horizon
 from testing.pipeline_lab.v3.export import normalize_v3_conversation, pair_by_recordings
 from testing.pipeline_lab.v3.feed import DEFAULT_LAG, plan_arrivals, speech_segments
 from testing.pipeline_lab.v3.tasks import RECONCILE_PATH, LoopbackTasks
+from utils.conversations.v3.word_floor import MIN_HOME_WORDS, text_word_count
 
 SILENCE = timedelta(minutes=5)
 FAKE_UID = 'local-dev-user'
@@ -103,7 +104,7 @@ class FakeV3Ops:
                 prompt=text,
                 schema=OUTLINE_SCHEMA,
             )
-            words = len(text.split())
+            words = text_word_count(text)
             segments = [
                 {**x[3], 'start': (x[0] - start).total_seconds(), 'end': (x[1] - start).total_seconds()} for x in group
             ]
@@ -114,10 +115,10 @@ class FakeV3Ops:
                 'finished_at': iso(end),
                 'status': 'completed',
                 'kind': answer.get('kind') or 'conversation',
-                'home_hidden': words < 300,
-                'home_hidden_reason': 'below_word_minimum' if words < 300 else 'conversation',
+                'home_hidden': words < MIN_HOME_WORDS,
+                'home_hidden_reason': 'below_word_minimum' if words < MIN_HOME_WORDS else 'conversation',
                 'tile_state': 'done',
-                'v3_notes_written': words >= 300,
+                'v3_notes_written': words >= MIN_HOME_WORDS,
                 'v3_recording_ids': recordings,
                 'transcript_segments': segments,
                 'structured': {'title': answer.get('title') or '', 'emoji': '💬'},

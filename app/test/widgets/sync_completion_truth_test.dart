@@ -25,6 +25,20 @@ import '../helpers/sfpro_font_fixtures.dart';
 class _Sync extends ChangeNotifier with WalDerivedSyncViews implements SyncProvider {
   _Sync(this.wals);
   final List<Wal> wals;
+  String? retainedPendingId;
+
+  @override
+  List<Wal> get pendingDeletableWals => derivedWals.deletable;
+  @override
+  List<Wal> get syncedWals => derivedWals.synced;
+
+  @override
+  Future<void> deleteAllPendingWals() async {
+    final targets = pendingDeletableWals.map((wal) => wal.id).toSet();
+    wals.removeWhere((wal) => targets.contains(wal.id) && wal.id != retainedPendingId);
+    notifyListeners();
+  }
+
   @override
   SyncState get syncState => const SyncState();
   @override
@@ -95,7 +109,7 @@ class _User extends ChangeNotifier implements UserProvider {
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
-Future<void> _pump(WidgetTester tester, Widget page, WalStatus status, {List<Wal>? recordings}) async {
+Future<_Sync> _pump(WidgetTester tester, Widget page, WalStatus status, {List<Wal>? recordings}) async {
   SharedPreferences.setMockInitialValues({});
   await SharedPreferencesUtil.init();
   tester.view.physicalSize = const Size(390, 844);
@@ -141,6 +155,9 @@ Future<void> _pump(WidgetTester tester, Widget page, WalStatus status, {List<Wal
   final baseTheme = buildOmiTheme();
   final theme = baseTheme.copyWith(
     platform: TargetPlatform.iOS,
+    snackBarTheme: baseTheme.snackBarTheme.copyWith(
+      contentTextStyle: baseTheme.snackBarTheme.contentTextStyle?.copyWith(fontFamily: 'SF Pro Display'),
+    ),
     textTheme: baseTheme.textTheme.apply(fontFamily: 'SF Pro Display'),
     primaryTextTheme: baseTheme.primaryTextTheme.apply(fontFamily: 'SF Pro Display'),
     appBarTheme: baseTheme.appBarTheme
@@ -168,6 +185,7 @@ Future<void> _pump(WidgetTester tester, Widget page, WalStatus status, {List<Wal
   } else {
     await tester.pumpAndSettle();
   }
+  return sync;
 }
 
 Future<void> _capture(WidgetTester tester, String name) async {
@@ -184,6 +202,37 @@ Future<void> _capture(WidgetTester tester, String name) async {
 }
 
 void main() {
+  for (final retainOne in [true, false]) {
+    testWidgets('Classic Clear Pending reports the actual result (retained: $retainOne)', (tester) async {
+      final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+      final pending = [
+        for (final secondsAgo in [30, 60])
+          Wal(
+              timerStart: now - secondsAgo,
+              codec: BleAudioCodec.opus,
+              seconds: 30,
+              storage: WalStorage.disk,
+              status: WalStatus.miss),
+      ];
+      final retained = pending.first;
+      final sync = await _pump(tester, const SyncPage(), WalStatus.miss, recordings: pending);
+      if (retainOne) sync.retainedPendingId = retained.id;
+      final l = AppLocalizations.of(tester.element(find.byType(SyncPage)));
+      await tester.tap(find.byTooltip(l.manageStorage));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(l.clear));
+      await tester.pumpAndSettle();
+      expect(find.text(l.deletePendingFiles), findsOneWidget);
+      await tester.tap(find.text(l.clear));
+      await tester.pumpAndSettle();
+
+      expect(sync.allWals, retainOne ? [retained] : isEmpty);
+      expect(find.text(l.failedToDeleteSomeItems), retainOne ? findsOneWidget : findsNothing);
+      expect(find.text(l.pendingFilesDeleted), retainOne ? findsNothing : findsOneWidget);
+      await _capture(tester, retainOne ? '001-mobile-ios-pending-retained.png' : '002-mobile-ios-pending-cleared.png');
+    });
+  }
+
   testWidgets('legacy Offline Sync never claims completion while a recording needs attention', (tester) async {
     await _pump(tester, const SyncPage(), WalStatus.corrupted);
     expect(find.text('1 recording need attention'), findsOneWidget);

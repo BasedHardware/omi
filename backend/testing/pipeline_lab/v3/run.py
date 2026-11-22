@@ -36,7 +36,7 @@ from testing.pipeline_lab.stack.io import append_jsonl, parse_time, write_json
 from testing.pipeline_lab.stack.overlay import Overlay
 from testing.pipeline_lab.v3.driver import V3Driver, default_horizon
 from testing.pipeline_lab.v3.export import home_visible, normalize_v3_conversation, pair_by_recordings
-from testing.pipeline_lab.v3.feed import DEFAULT_LAG, plan_arrivals
+from testing.pipeline_lab.v3.feed import DEFAULT_LAG, plan_arrivals, word_count
 from testing.pipeline_lab.v3.product import (
     V3_MODULES,
     ProductV3Ops,
@@ -164,9 +164,7 @@ def recording_fate(
                 'pending': bool(rec.get('v3_pending')),
                 'conversations': sorted(set(listed.get(rid, []))),
                 'claims': len(rec.get('claims') or []),
-                'words': (words or {}).get(
-                    rid, sum(len(str(s.get('text') or '').split()) for s in rec.get('transcript_segments') or [])
-                ),
+                'words': words[rid] if words is not None and rid in words else word_count(rec),
             }
         )
     return {
