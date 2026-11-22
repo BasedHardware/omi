@@ -66,7 +66,7 @@ void main() {
   final custodies = <PendantRingCustody>[];
 
   setUp(() async {
-    SharedPreferences.setMockInitialValues({});
+    SharedPreferences.setMockInitialValues({'uid': 'owner'});
     await SharedPreferencesUtil.init();
     tempDir = await Directory.systemTemp.createTemp('live_custody_');
     custodyDir = await Directory.systemTemp.createTemp('live_custody_cp_');
@@ -189,6 +189,7 @@ void main() {
     final custody = manager();
     final conn = _FakeCustodyConn()..info = info(42);
     final barrier = Completer<void>();
+    final saveEntered = Completer<void>();
     var saves = 0;
     final sync = LocalWalSyncImpl(
       _MockListener(),
@@ -197,6 +198,7 @@ void main() {
       freeDiskBytes: () async => 1 << 40,
       persistWals: (wals) async {
         saves++;
+        if (!saveEntered.isCompleted) saveEntered.complete();
         await barrier.future;
         await WalFileManager.saveWals(wals);
       },
@@ -223,6 +225,8 @@ void main() {
     expect(conn.advances, isEmpty, reason: 'marks alone cannot advance — nothing durable yet');
 
     final stopping = sync.stop();
+    // Wait for stop() to reach the gated index save; a fixed delay races slow CI runners.
+    await saveEntered.future.timeout(const Duration(seconds: 10));
     await pump();
     expect(conn.advances, isEmpty, reason: 'index save still gated — no ADVANCE may leak ahead of it');
     expect(saves, 1);
@@ -289,6 +293,7 @@ void main() {
     await pump();
     expect(conn.advances, isEmpty, reason: 'ring-A buffered frames must not prove ring-B audio');
 
+    sync.start();
     for (var i = 0; i < 15; i++) {
       sync.onFrameCaptured(frame(i));
     }
@@ -374,7 +379,9 @@ void main() {
     await pump();
     expect(saves, 2);
     expect(await WalFileManager.loadWals(), hasLength(1));
-    expect(await custody.isDurableLiveRecord('dev', 42, 3), isTrue);
+    expect(await custody.isDurableLiveRecord('dev', 42, 3), isTrue,
+        reason: 'spent live refs remain fresh-validation candidates for an in-flight read');
+    expect(custody.advanceTarget('dev', 1), isNull, reason: 'spent proofs never reopen ADVANCE work');
     expect(conn.advances, hasLength(1));
     expect(conn.advances.single.seq, 5);
     expect(conn.advances.single.ringId, 42);

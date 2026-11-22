@@ -43,6 +43,10 @@ REQUIRED_IDENTICAL_LITERALS = (
     "EPISODE_COMPOSER_DETAIL_ENABLED",
     "EPISODE_COMPOSE_TRANSCRIPT_WAIT_ENABLED",
     "EPISODE_COMPOSE_TRANSCRIPT_READY_ENABLED",
+    "EPISODE_COMPOSE_SETTLED_TERMINAL_ENABLED",
+    "EPISODE_COMPOSE_ANCHORED_WAIT_ENABLED",
+    "EPISODE_EMPTY_MEMBER_CLEANUP_ENABLED",
+    "HOME_SETTLED_EMPTY_WIRE_ENABLED",
     "CONVERSATION_NOTES_SCALED_DETAIL_ENABLED",
     "MEMORY_ENABLED",
     "MEETING_NOTES_EVIDENCE_WAIT_SECONDS",
@@ -109,6 +113,9 @@ _FINALIZATION_REPLAY_LISTEN_ONLY = frozenset(
 # none of those surfaces and never starts the dedicated GPU process.
 _BATCH_PIPELINE_LISTEN_ONLY = frozenset(
     {
+        # Account protection, consent and erasure writers are mounted by the
+        # API. Pusher finalizes conversations without mutating account policy.
+        'BATCH_ACCOUNT_PRIVACY_WRITER_ENABLED',
         # Held expiry/requeue is owned by main.py maintenance/RPC and GPU workers;
         # pusher does not run the held maintenance loop or worker failure writer.
         'BATCH_HELD_DEAD_LETTER_ENABLED',
@@ -124,6 +131,8 @@ _BATCH_PIPELINE_LISTEN_ONLY = frozenset(
         'BATCH_CONTROL_CANDIDATE_FANOUT',
         'BATCH_ADMISSION_PARALLEL_CALLS',
         'BATCH_PIPELINE_IDLE_POLL_MAX_SECONDS',
+        # Packing telemetry belongs to sync intake and pull. Pusher owns neither.
+        'BATCH_PIPELINE_PACKING_SAMPLE_RATE',
         # Listen admits/suppresses managed live STT; pusher only retains audio.
         'SERVER_BATCH_UNSUPPORTED_LANGUAGES',
         'BATCH_PIPELINE_ENABLED',
@@ -161,10 +170,19 @@ _RECORD_LATENCY_LISTEN_ONLY = frozenset(
         'RECORD_SEAL_WAKE_PRESERVED_ENABLED',
     }
 )
+# Only the listen lifecycle loop rotates live v3 recordings; pusher never owns a capture socket.
+_V3_ROTATION_LISTEN_ONLY = frozenset(
+    {
+        'CONVERSATIONS_V3_RECORDING_ROTATION',
+        'CONVERSATIONS_V3_ROTATION_MIN_SECONDS',
+        'CONVERSATIONS_V3_ROTATION_MAX_SECONDS',
+    }
+)
 LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
     "dev": frozenset(
         {
             # Listen mounts sync upload admission; pusher never accepts sync filenames.
+            "SYNC_FUTURE_CAPTURE_CLAMP_ENABLED",
             # The unlimited_v2 backfill/import day cap is enforced by listen
             # admission and the Cloud Run sync/batch hosts through the shared
             # funded allowance; pusher never admits managed transcription
@@ -266,10 +284,21 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
     | _DEMAND_LISTEN_ONLY
     | _PREVIEW_CUSTODY_LISTEN_ONLY
     | _RECONNECT_RECOVERY_LISTEN_ONLY
+    | _V3_ROTATION_LISTEN_ONLY
     | _BATCH_PIPELINE_LISTEN_ONLY,
     "prod": frozenset(
         {
+            # 2026-11-18 listen chart fold of values listen already served (privateEnv overlay /
+            # lead2 f9bdc4). They equal the code defaults, so pusher, which leaves them unset, behaves the same.
+            "MEDIA_NOISE_MODE",
+            "MEDIA_NOISE_MODE_SERVE_PERCENT",
+            # Prod holds CPU projection off; pusher never constructs Projector.
+            "BATCH_PIPELINE_SILENCE_READ_SKIP_ENABLED",
+            # Occasion stitching runs only in the /v4/listen session (routers/listen/runtime.py);
+            # pusher opens no client listen socket.
+            "OCCASION_CONVERSATIONS_ENABLED",
             # Listen mounts sync upload admission; pusher never accepts sync filenames.
+            "SYNC_FUTURE_CAPTURE_CLAMP_ENABLED",
             # The unlimited_v2 backfill/import day cap is enforced by listen
             # admission and the Cloud Run sync/batch hosts through the shared
             # funded allowance; pusher never admits managed transcription
@@ -303,10 +332,6 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
             "PARAKEET_WINDOW_PACE_SECONDS",
             "PARAKEET_WINDOW_POST_TIMEOUT_SECONDS",
             # Listen-only Soniox idle-close treatment cohort; pusher opens no Soniox stream.
-            "SONIOX_IDLE_COHORT_PERCENT",
-            "SONIOX_IDLE_COHORT_CLOSE_SECONDS",
-            "SONIOX_IDLE_COHORT_REARM_SECONDS",
-            "SONIOX_IDLE_COHORT_MAX_CLOSES_PER_HOUR",
             "SONIOX_CIRCUIT_COOLDOWN_SECONDS",
             "SONIOX_CIRCUIT_FAILURE_THRESHOLD",
             "STT_ACCOUNT_CIRCUIT_COOLDOWN_SECONDS",
@@ -373,8 +398,6 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
             "PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_INVOKER_SA",
             "PUBLIC_SHARED_CONVERSATION_CHAT_MODE",
             "REFERRAL_PUBLIC_BASE_URL",
-            "SYNC_TASKS_LOCATION",
-            "SYNC_TASKS_PROJECT",
             "TRANSLATION_SERVICE_MODELS",
             # HTTP read-aloud routers mount only on backend-listen, not pusher.
             "TTS_PROVIDER",
@@ -396,10 +419,9 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
     | _DEMAND_LISTEN_ONLY
     | _PREVIEW_CUSTODY_LISTEN_ONLY
     | _RECONNECT_RECOVERY_LISTEN_ONLY
+    | _V3_ROTATION_LISTEN_ONLY
     | (_BATCH_PIPELINE_LISTEN_ONLY - {'BATCH_PIPELINE_UID_ALLOWLIST'})
-    | _FINALIZATION_REPLAY_LISTEN_ONLY
-    # SCA-2185 carries existing listen-only media-noise rollout; do not widen to pusher.
-    | frozenset({'MEDIA_NOISE_MODE', 'MEDIA_NOISE_MODE_SERVE_PERCENT'}),
+    | _FINALIZATION_REPLAY_LISTEN_ONLY,
 }
 
 # Pusher owns the process-local shadow worker; sync/backfill also runs the
@@ -452,12 +474,15 @@ PUSHER_ONLY_ALLOWED: dict[str, frozenset[str]] = {
             "TRANSCRIPTION_SHADOW_UID_ALLOWLIST",
             "TRANSCRIPTION_SHADOW_PERCENT",
             "TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS",
+            # Listen reads its STT cap enforcement and fallback cohort from privateSecretEnv (Secret
+            # Manager references, not env literals); pusher keeps its public observe-only values.
+            "STT_CAP_DISPATCH_ENFORCEMENT",
+            "STT_CAP_DISPATCH_COHORT",
         }
     )
     | frozenset(PROD_FINAL_PASS_SHADOW_VALUES)
-    # Captain 02:55Z keeps pusher codec off after latency breaches (SCA-2304).
-    # Listen remains accepted with the code default on.
-    | frozenset({'AUDIO_CUSTODY_PCM_COMPRESSION_ENABLED'}),
+    # SCA-2304 rolled back pusher compression. Listen keeps the code default.
+    | frozenset({"AUDIO_CUSTODY_PCM_COMPRESSION_ENABLED"}),
 }
 
 # Queue-age publishing is active only on backend-listen. Pusher may omit the

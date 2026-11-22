@@ -164,6 +164,16 @@ and measure a complete rotation within that bound. Confirm the target's backup
 retention against the owning deletion contract. Source tests do not establish
 those operating conditions or permit production copying without them.
 
+The environment-selected copy handles share process-owned pools across all
+namespaces and cold erasure calls: two normal sessions for mirror/parity/index
+work, plus one session reserved for synchronous erasure. Saturating the normal
+pool cannot consume the erasure slot. Cold calls borrow these pools rather than
+creating and closing one per invocation; errors still propagate for durable
+retry. A different PG host/database/principal requires a process restart rather
+than creating another allowance. These are per-process source ceilings, not a
+fleet cap or approved operating budget. Count every target-enabled process and
+maximum replica, including deletion executors, before accepting a fleet bound.
+
 Existing deletion seams to preserve and exercise are:
 
 - `database/batch_pipeline_purge.py::purge_batch_owner`: visits both stage
@@ -211,10 +221,20 @@ obligations still apply.
    ready to deploy, under David's recorded startup ruling. Do not infer the
    database name or privileges from this source document. IAM or credentials
    changes require their own specific approval.
-3. Against that exact `JOBSTORE_PG_*` target, apply the released build's
-   `python -m database.jobstore migrate`, then `status`. The current source
-   requires all contiguous migrations `0001_doc_mode_store.sql` through
-   `0008_allowance_holds.sql`, with matching recorded checksums. No fence,
+3. Before any separately approved schema action, record the exact released
+   build's contiguous migration version/name/checksum vector and compare it
+   with the intended target. Do not run `migrate` as a readiness probe or
+   repeat completed initialization. The frozen operator source `97074e78`
+   expects `0001_doc_mode_store.sql` through `0008_allowance_holds.sql`.
+   For a fresh target, the release executor must first complete a separately
+   approved schema-initialization action using the pinned build's migration
+   command and retain its apply/status receipt; readiness cannot initialize it.
+   If initialization is already complete, verify that receipt and the current
+   catalog instead of applying it again. Never use this sequence to authorize
+   another startup, IAM change or schema application implicitly.
+   This source tree additionally contains expand-only `0009_protected_share.sql`
+   for a separately reviewed PostgreSQL-primary worker roll; its presence is
+   not permission to apply it during operator readiness. No fence,
    journal or authoritative-store migrations from frozen PR #25215 are
    admitted by this packet. The only production mirror namespace is
    `batch_pipeline_prod`; database migrations themselves are schema-wide.

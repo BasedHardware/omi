@@ -1,0 +1,95 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-ready-before-compose.png",
+      "platform": "mobile-ios",
+      "description": "Synthetic iOS Home: Listening, one Processing row for two pending recordings, and two finished READY member rows. Fictional fixture; Compose fixture is a harness-only control.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "002-mobile-ios-own-recording-notes.png",
+      "platform": "mobile-ios",
+      "description": "A temporary member opens its real recording notes before episode composition. Fictional fixture; Compose fixture is a harness-only control.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "003-mobile-ios-composed-replacement.png",
+      "platform": "mobile-ios",
+      "description": "The same composed owner replaces all temporary member and Processing rows in Home. Fictional fixture; Compose fixture is a harness-only control.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "004-mobile-ios-replacement-members.png",
+      "platform": "mobile-ios",
+      "description": "The composed replacement page retains all four source recordings; the first source was opened again successfully. Fictional fixture; Compose fixture is a harness-only control.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "005-mobile-ios-pending-delete-scope.png",
+      "platform": "mobile-ios",
+      "description": "Compact Processing page Delete confirms only its 2 pending records, excluding 2 READY records. Fictional fixture; no deletion confirmed.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "006-mobile-ios-cold-processing-members.png",
+      "platform": "mobile-ios",
+      "description": "Cold compact Processing page resolves its source episode on demand and shows only its two pending recordings; two READY recordings remain finished on Home. Fictional fixture.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "007-mobile-ios-reported-shape-before.png",
+      "platform": "mobile-ios",
+      "description": "Synthetic reported shape through pre-one-row source: three duration singletons plus 13 completed members grouped as Transcribing. Fixture render, not owner phone capture.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "008-mobile-ios-reported-shape-after.png",
+      "platform": "mobile-ios",
+      "description": "Same synthetic shape on merged compact Home: Listening, one Transcribing row for three local pending recordings, ten READY rows and three omitted noise results.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ],
+  "captured_at_utc": "2026-11-15T15:09:16Z",
+  "merged_origin_main": "160911e2aa8b3a0cdee13d00e540bb38fe7597e8",
+  "source_blobs": {
+    "app/lib/backend/schema/episode.dart": "e032e0a34d5399481969e20d7c26fd419ab86a3f",
+    "app/lib/pages/conversations/conversations_page.dart": "c2a867ea5444709819fa6e9cf89380d7a9474dda",
+    "app/lib/pages/conversations/conversations_processing_rows.dart": "cf7356151e294b8510e3e0e4957cb457d4bde3d1",
+    "app/lib/pages/conversations/home_card_rows.dart": "09818947d4b673db5ab8eb2c138f9a4e627e650e",
+    "app/lib/pages/conversations/home_rows.dart": "4be585b513fbbfb055ec87a1d3fe034ebeec175a",
+    "app/lib/pages/conversations/widgets/processing_conversation_row.dart": "374cef984f9a7501a0f02de343599bc06ce1a4d3",
+    "app/lib/pages/episodes/episode_page.dart": "d9deee5751a419694d34de38a4a4fbf888dc3f5f",
+    "app/lib/utils/conversations/home_member_fallback.dart": "42c171bf940a03a9fd31d0704f78704e067f95ce",
+    "app/test/helpers/home_ready_members_fixture.dart": "21180761eedc298ccfcfc04d37498870ccf54bc3",
+    "app/test/widgets/home_row_contract_render_test.dart": "78ed7f819347cfff74403d79c194455cc8674a00",
+    "app/lib/l10n/app_en.arb": "12b2a3c2a6a87c3c5e9eec88bcab17d6822dfcd6",
+    "app/lib/l10n/app_localizations.dart": "f2d3d70f926747ccab4bbbb72fb04a2e955f2d43",
+    "app/lib/l10n/app_localizations_en.dart": "60f7a754dfb676f4aa1d5dde9ffe8cda15494a30"
+  },
+  "native_entrypoint_blob": "fcc6954a8d3d71ac3f3b5a7eece7e8b9b52fc7cd",
+  "cold_compact_owner_lookup": true,
+  "baseline_ui_ref": "7b057be79d4a5384c7bc62271823a4a985df46b5",
+  "baseline_provenance": "data/run-2026-11-15-quality-12h/evidence/q12-ready-members/reported-shape-baseline.json in the workspace record",
+  "native_images": [
+    "001-mobile-ios-ready-before-compose.png",
+    "002-mobile-ios-own-recording-notes.png",
+    "003-mobile-ios-composed-replacement.png",
+    "004-mobile-ios-replacement-members.png",
+    "005-mobile-ios-pending-delete-scope.png",
+    "006-mobile-ios-cold-processing-members.png"
+  ],
+  "widget_fixture_images": [
+    "007-mobile-ios-reported-shape-before.png",
+    "008-mobile-ios-reported-shape-after.png"
+  ],
+  "render_source_head": "3ac0b73baef0c11b92c73fc93acde1d24223442e"
+}

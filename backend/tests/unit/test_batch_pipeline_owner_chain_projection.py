@@ -117,28 +117,43 @@ class ResultLog:
         }
 
     # --- FirestoreStore facade --------------------------------------------
-    def projection_page(self, limit=100, *, after=None, states=('pending', 'persisted', 'ready'), due_before=None):
+    def projection_page(
+        self,
+        limit=100,
+        *,
+        after=None,
+        states=('pending', 'persisted', 'ready'),
+        due_before=None,
+        exclude_async=False,
+        followup_due_before=None,
+    ):
+        if due_before is not None and followup_due_before is not None:
+            raise ValueError('finish and follow-up discovery clocks cannot be combined')
+        cutoff = followup_due_before if followup_due_before is not None else due_before
+        clock_field = 'projection_followup_due_at' if followup_due_before is not None else 'projection_finish_due_at'
+
         def key(sid):
             row = self.results[sid]
-            if due_before is None:
+            if cutoff is None:
                 return (row['committed_at'], sid)
-            return (row['projection_finish_due_at'], row['committed_at'], sid)
+            return (row[clock_field], row['committed_at'], sid)
 
         rows = sorted(
             (
                 key(sid)
                 for sid, row in self.results.items()
                 if row['projection_state'] in states
+                and (not exclude_async or due_before is None or row.get('projection_finish_due_at', -1) >= 0)
                 # Firestore range filters exclude a document missing the field;
                 # a missing clock is not due.
-                and (
-                    due_before is None
-                    or ('projection_finish_due_at' in row and row['projection_finish_due_at'] <= due_before)
-                )
+                and (cutoff is None or (clock_field in row and row[clock_field] <= cutoff))
             )
         )
         if after is not None:
-            rows = [row for row in rows if row > after]
+            if cutoff is not None and len(after) != 3 or cutoff is None and after[1] == '':
+                rows = [row for row in rows if row[0] >= after[0]]
+            else:
+                rows = [row for row in rows if row > after]
         page = rows[:limit]
         return [row[-1] for row in page], (page[-1] if len(page) == limit else None)
 
@@ -161,6 +176,19 @@ class ResultLog:
     def run(self, operation, **_):
         return operation(Tx(self))
 
+    def note_head_blocked(self, sid, now, block_type):
+        row = self.results.get(sid)
+        if row is None:
+            return False
+        if row.get('projection_blocked_since') is not None or row.get('projection_state') not in (
+            'pending',
+            'persisted',
+            'ready',
+        ):
+            return False
+        row.update({'projection_blocked_since': now, 'projection_block_type': block_type})
+        return True
+
     def read(self, sid):
         if sid not in self.results:
             raise ProjectionBlocked('committed result and durable intake binding required')
@@ -174,7 +202,7 @@ class ResultLog:
 
         class Session:
             policy = SimpleNamespace(projection_contention=False, projection_timing=False)
-            # Mirrors ProjectionSession.now for the finish-backoff fields.
+            # Mirrors ProjectionSession.now for the shared finish clock.
             session_now = now
 
             def prepare(self, transaction, **_):
@@ -186,15 +214,19 @@ class ResultLog:
             def persist(self, transaction, planned=None, **_):
                 return self.persist_empty()
 
-            def persist_empty(self, *, superseded=False, quarantined=False, privacy_deleted=False):
+            def persist_empty(self, *, superseded=False, quarantined=False, privacy_deleted=False, silence=False):
                 log.check(self)
                 receipt = {
-                    'state': 'quarantined' if quarantined else 'superseded' if superseded else 'persisted',
+                    'state': (
+                        'quarantined'
+                        if quarantined
+                        else 'superseded' if superseded else 'ready' if silence else 'persisted'
+                    ),
                     'conversation_id': None,
                     'enrichment_required': False,
                     'audio_required': False,
                 }
-                state = 'quarantine_held' if quarantined else 'persisted'
+                state = 'quarantine_held' if quarantined else 'ready' if silence else 'persisted'
                 log.results[sid].update(projection=receipt, projection_state=state)
                 log.results[sid].pop('projection_finish_due_at', None)
                 log.results[sid].pop('projection_finish_backoff_step', None)
@@ -222,18 +254,16 @@ class ResultLog:
         self.results[sid].update(projection_finish_entry_fields('ready', now))
         return receipt
 
-    def defer_finish(self, sid, state, now):
-        """Mirrors ProjectionStore.defer_finish: fence on the row's own state."""
-        from config.batch_pipeline import projection_finish_backoff_delay
+    def projection_finish_backfill_complete(self):
+        return False
 
-        row = self.results[sid]
-        if row.get('projection_state') != state:
-            return False
-        step = row.get('projection_finish_backoff_step')
-        step = min(step + 1, 2) if isinstance(step, int) and step >= 0 else 0
-        row.update(projection_finish_due_at=now + projection_finish_backoff_delay(step))
-        row['projection_finish_backoff_step'] = step
-        return True
+    def retire_async_finish(self, sid):
+        if self.jobs[sid]['policy_parts']['projection']['async_projection'] and self.results[sid][
+            'projection_state'
+        ] in {'persisted', 'ready'}:
+            self.results[sid]['projection_finish_due_at'] = -1.0
+            return True
+        return False
 
     def check(self, session):
         row = self.results[session.segment_id]
@@ -312,6 +342,10 @@ def test_walk_follows_erased_receipts_and_resumes_after_watermark():
 
 
 def test_walk_is_bounded_by_rows_and_time(monkeypatch):
+    # This test controls row/time boundaries, independently of read-ahead I/O.
+    # With prefetch on, its third scripted tick expires take() before an async
+    # load completes, so scheduler timing determines whether a third row lands.
+    monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_PREFETCH', '0')
     log = ResultLog()
     ids = chain(log, BURST, 'a', 5)
     projector = projector_for(log)
@@ -319,7 +353,13 @@ def test_walk_is_bounded_by_rows_and_time(monkeypatch):
     assert log.persist_order == ids[:2]
     ticks = itertools.chain([0.0, 0.0], itertools.repeat(2.0))
     # Keep other threads and libraries from consuming this walk's clock ticks.
-    monkeypatch.setattr(projection, 'time', SimpleNamespace(monotonic=lambda: next(ticks)))
+    walk_thread = threading.get_ident()
+
+    def monotonic():
+        assert threading.get_ident() == walk_thread, 'walk clock consumed by another thread'
+        return next(ticks)
+
+    monkeypatch.setattr(projection, 'time', SimpleNamespace(monotonic=monotonic))
     projector.project_owner(BURST, budget_seconds=1.0)
     assert log.persist_order == ids[:3]
     projector.project_owner(BURST, limit=projection.OWNER_CHAIN_LIMIT, budget_seconds=60)
@@ -345,8 +385,8 @@ def test_walk_stops_at_first_fenced_row_and_never_skips_it():
     log.session = Mock(side_effect=RuntimeError('synthetic outage'))
     assert projector.project_owner(BURST) == []
     log.session = real
-    # The touched content's earlier persisted sibling is still owed a follow-up.
-    assert projector.project_owner(BURST) == ids
+    # The silent sibling is already ready; only the unassigned tail needs walking.
+    assert projector.project_owner(BURST) == ids[1:]
 
 
 # --- record-target conflicts cannot wedge the owner chain ------------------------
@@ -522,7 +562,7 @@ def test_generic_poison_head_holds_and_unblocks_the_chain():
     assert log.results[ids[0]]['projection_state'] == 'quarantine_held'
     assert log.results[ids[0]]['projection']['state'] == 'quarantined'
     assert log.jobs[ids[0]]['recovery_state'] == 'held'
-    assert log.results[ids[1]]['projection_state'] == 'persisted'
+    assert log.results[ids[1]]['projection_state'] == 'ready'
     assert log.projection_watermark(owner_key(BURST)) == ids[-1]
     # Held rows never arm retention: the hold path writes no expiry receipt.
     assert 'expires_at' not in log.results[ids[0]]

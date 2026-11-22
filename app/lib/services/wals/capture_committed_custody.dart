@@ -123,7 +123,7 @@ extension CaptureCommittedCustody on LocalWalSyncImpl {
     }
     if (covered.isNotEmpty || kept.isNotEmpty) {
       try {
-        await _saveWalsToFile(generation);
+        if (!await _saveWalsToFile(generation)) throw StateError('WAL index admission unavailable');
       } catch (_) {
         // The durable index never recorded the coverage, so covered copies fail closed too.
         if (_isCurrent(generation)) {

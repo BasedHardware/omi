@@ -22,9 +22,11 @@ array bodies, status codes, and rate buckets.
 | `oauth.py` | OAuth authorize/token/consent endpoints: RFC 9207 `iss` on code and validated-error redirects (unknown clients/mismatched redirects get JSON only), CIMD clients resolved via `database/mcp_client_metadata.py` and shown as `Unverified third-party app` + `Client ID host`, omitted-scope defaults to allowed `*.read`; URL-form client lookups run on the bounded `cimd_executor` behind a per-metadata-host `mcp:oauth_url_client` limit plus a global backstop and fail fast `503` when saturated; `/token` maps token-store outage to `503 temporarily_unavailable`. Grant revoke lives in `routers/mcp.py` |
 | `metadata.py` | Per-path OAuth protected-resource documents (canonical vs `/sse`) and authorization-server metadata (`client_id_metadata_document_supported`, `authorization_response_iss_parameter_supported`, `scopes_supported`); `server/discover` is answered in `transport.py` |
 | `cursors.py` | Opaque cursor tokens for list tools: ≤4 KiB before base64, `(created_at, __name__)`/`(updated_at, __name__)` keyset positions, `DatetimeWithNanoseconds` round-trip |
+| `tool_metrics.py` | Unsampled per-tool Prometheus series (calls, duration, response size, truncation) recorded by `transport.py`; bounded labels only |
 | `payloads.py` | Single leaf for `_tool_result_payload`/`_complete_result` shared by transport and handlers, so the batch response budget measures the real serialized wire form (envelope + SSE frame) |
 | `errors.py` | `ToolExecutionError` → stable model-visible `isError` code mapping (JSON-RPC error envelopes are built in `transport.py`) |
 | `helpers.py` | Shared shaping: date parsing, conversation cards, transcript bounding (int parsing lives in `utils/mcp_memories.py`) |
+| `detail_views.py` | Detail-read views over the transcript pager: `view=outline` (note sections anchored to the segments they cite), `offset` entry points, the `format=lines` rendering, and the `omi_mcp_transcript_pages_total` counter |
 | `constants.py` | Request bounds: batch cap 20, fetch/list/char limits (tools-list TTLs live in `versions.py`) |
 | `handlers/memories.py` | Memory tools incl. ledger-aware `edit_memory` via `update_content` |
 | `handlers/conversations.py` | Conversation list/get/search tools |
@@ -54,6 +56,20 @@ array bodies, status codes, and rate buckets.
   without reducing requested transcript limits; each successful item has one nested
   `conversation`, while locked items have `id` and `error` instead.
   `include_participants=false` omits roster metadata.
+  Hosted detail pages return `total_segments`, `truncated` and nullable
+  `next_cursor`; batch items return the same detail cursor, resumed through
+  `get_conversation_by_id` with identical options. Each page reuses one
+  owner-scoped detail read, without an additional query. Transcript cursors
+  use domain-separated AES-GCM with owner/view as associated data and carry
+  only segment/character positions. Oversized segments continue with explicit
+  field offsets; no text is discarded at page boundaries. The segment default
+  is request-time env `MCP_CONVERSATION_FETCH_DEFAULT_MAX_SEGMENTS` (500;
+  rollback 120). Text defaults stay 24k and the serialized cap stays 120k.
+  `view=outline` returns the note sections with segment anchors and no
+  transcript; `offset` starts a page at a section; `format=lines` renders a
+  page as one line per speaker turn inside the same budget. Cards carry
+  `status` and `duration_seconds`, and the v3 `kind`, `shown_on_home` and
+  `summary_covers_through` where stored.
   List tools offer cursors;
   `get_action_items` also supports `updated_since`.
 - Scope challenges stay protocol errors (`-32003` with `mcp/www_authenticate`);

@@ -1,19 +1,21 @@
 """Backend-only spend policy RPC. GPU images must not import Redis/provider code."""
 
-from utils.observability.stt_cap_dispatch import DispatchPath, DispatchReason, record_decision
+from utils.observability.stt_cap_dispatch import (
+    BATCH_ADMISSION_STAGE_SECONDS,
+    DispatchPath,
+    DispatchReason,
+    record_decision,
+)
 
 import asyncio
 import logging
 import math
 import time
 
-from prometheus_client import Histogram
-
 from config.stt_cap_dispatch import offline_admission_enabled as cap_dispatch_enabled
 from config.sync_telemetry import bounded_exception_class
 from config.batch_pipeline import allowance_hold_retry_seconds
 from utils.stt_cap_dispatch import sync_admission
-from utils import backfill_hours_cap
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
 from utils.batch_pipeline.scheduler import owns_lease
 from utils.fair_use import get_hard_restriction_status, is_daily_audio_ceiling_exceeded
@@ -26,12 +28,6 @@ AUTHORIZE_SECONDS = 4.0
 # A worker that advertises a longer client timeout (X-Omi-Admission-Seconds)
 # gets up to this deadline; workers that send nothing keep AUTHORIZE_SECONDS.
 MAX_AUTHORIZE_SECONDS = 8.0
-STAGE_SECONDS = Histogram(
-    'omi_batch_compute_admission_stage_seconds',
-    'Admission substage wall time including executor wait; bounded stages, no identifiers',
-    ['stage'],
-    buckets=(0.01, 0.05, 0.1, 0.25, 0.5, 1, 2, 4, 8),
-)
 
 
 def admitted_as_byok(job: object) -> bool:
@@ -56,13 +52,11 @@ def deadline_seconds(requested: str | float | None) -> float:
     return min(MAX_AUTHORIZE_SECONDS, max(AUTHORIZE_SECONDS, value))
 
 
-def batch_admission(
-    job: dict, seconds: float, provider: str, *, path: DispatchPath, backfill: bool = False
-) -> tuple[bool, str]:
+def batch_admission(job: dict, seconds: float, provider: str, *, path: DispatchPath) -> tuple[bool, str]:
     """Spend gate with its bounded DispatchReason surfaced for the durable per-unit record."""
     if admitted_as_byok(job):
         return record_decision(path, True, DispatchReason.BYOK), DispatchReason.BYOK.value
-    return sync_admission(job['owner_id'], seconds, provider, lane='batch', path=path, backfill=backfill)
+    return sync_admission(job['owner_id'], seconds, provider, lane='batch', path=path)
 
 
 async def authorize(store, leases: list[dict], *, now: float | None = None, budget: str | float | None = None) -> dict:
@@ -86,7 +80,7 @@ async def authorize(store, leases: list[dict], *, now: float | None = None, budg
                 raise TimeoutError('admission deadline')
             return fn(*args, **kwargs)
 
-        with STAGE_SECONDS.labels(stage=name).time():
+        with BATCH_ADMISSION_STAGE_SECONDS.labels(stage=name).time():
             remaining = deadline - time.monotonic()
             if remaining <= 0:
                 raise TimeoutError('admission deadline')
@@ -108,7 +102,11 @@ async def authorize(store, leases: list[dict], *, now: float | None = None, budg
                     return None
                 tx.check_privacy(
                     job['owner_id'],
-                    (job['conversation_id'],) if job.get('conversation_id') else (),
+                    tuple(
+                        value
+                        for value in (job.get('conversation_id'), job.get('capture_source_conversation_id'))
+                        if value
+                    ),
                     job.get('privacy_generation'),
                 )
                 binding = job.get('projection_binding') or {}
@@ -125,12 +123,9 @@ async def authorize(store, leases: list[dict], *, now: float | None = None, budg
             # outcome, at} so an outside reader can tell an exhausted-owner
             # hold from a wedge without inventing an age TTL.
             allow_reason = 'scope_disabled'
-            # The default-off unlimited_v2 backfill day cap is independent of the
-            # legacy/offline dispatch scope: a backfill unit still resolves the
-            # allowance so the cap can answer on a host with the older scope off.
-            backfill = intake.get('lane') == 'backfill'
-            cap_active = backfill and backfill_hours_cap.cap_enabled()
-            if cap_active or await stage('scope', cap_dispatch_enabled, job['owner_id'], 'batch'):
+            # The unlimited_v2 backfill day cap is enforced only at sync upload
+            # admission, so a batch unit never parks on it in staging.
+            if await stage('scope', cap_dispatch_enabled, job['owner_id'], 'batch'):
                 permitted, reason = await stage(
                     'funding',
                     batch_admission,
@@ -138,7 +133,6 @@ async def authorize(store, leases: list[dict], *, now: float | None = None, budg
                     float(job.get('duration_seconds', 0)),
                     'parakeet',
                     path=DispatchPath.BATCH_GPU,
-                    backfill=backfill,
                 )
                 if not permitted:
                     # An exhausted allowance/budget is durable until the plan

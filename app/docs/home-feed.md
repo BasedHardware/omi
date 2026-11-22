@@ -43,3 +43,17 @@ phone raster cost or production latency; verify a seeded device journey with
 agent-flutter before release.
 
 Each response carries an opaque account mutation generation. A change during continuation redacts cached display text and revalidates the loaded window from the newest page; a later page cannot leave a deleted older card in cache. Generation values are compared only for equality.
+
+
+Under HOME_STEP_PROJECTION, uncomposed and live episodes keep their retained
+recordings as compact standalone cards. READY notes are immediately readable;
+the app folds only today's pending recording cards into one Processing row
+under Listening. Composition replaces those recording cards with the compact
+episode card. Preparation remains fenced: GET refuses every partial generation,
+so no intermediate chunk can publish both representations. This uses existing
+card fields and never adds member IDs or transcript/notes hydration to Home GET.
+The preparation control and per-episode progress record the projection policy;
+a policy change requires a fully prepared replacement before serving resumes.
+Disabling HOME_STEP_PROJECTION restores grouped compact preparation. Pending
+collection Delete uses only its displayed recording IDs; full finished episode
+Delete still waits for authoritative opened detail membership.

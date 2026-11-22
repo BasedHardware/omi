@@ -1,0 +1,5 @@
+apiVersion: v2
+name: workerd
+description: Go queue worker for the Omi GKE clusters
+type: application
+version: 0.1.0

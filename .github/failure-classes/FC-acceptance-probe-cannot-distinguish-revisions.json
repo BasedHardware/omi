@@ -1,6 +1,7 @@
 {
   "schema_version": 1,
   "id": "FC-acceptance-probe-cannot-distinguish-revisions",
+  "family": "cross-boundary-contract",
   "violated_contract": "A promotion smoke that reads a public URL must prove the candidate revision is serving, not only that some revision of the same service is healthy. A canary marker that is identical for every build (frontend:ready) lets the load balancer keep the previous revision live while the smoke still passes, so the post-promotion accept/rollback decision cannot distinguish the new candidate from the revision it was meant to replace. On 2026-09-01 the frontend promotion accepted frontend-700415b-33560919436-1 at h.omi.me on a marker the previous revision also rendered.",
   "canonical_prevention": "Bake the candidate's full commit SHA into the same hidden canary as a distinct data-omi-public-build-sha attribute, pass that SHA as --expect-sha through both smoke invocations, and retry the public-URL route until the SHA matches. Targets that do not declare {sha} keep the ready-marker-only probe.",
   "canonical_prevention_artifact": [

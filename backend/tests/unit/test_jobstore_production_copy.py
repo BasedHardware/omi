@@ -8,11 +8,12 @@ from contextlib import contextmanager
 from copy import deepcopy
 
 import pytest
+from psycopg import sql
 
 from database import batch_pipeline_shadow_hook as hook
 from database import batch_pipeline_store
 from database.batch_pipeline_privacy import privacy_owner_key
-from database.jobstore import connection, dual_store, index_config, serving_parity
+from database.jobstore import connection, copy_connections, dual_store, index_config, serving_parity
 from database.jobstore.dual_store import DualStore
 from database.jobstore.index_store import IndexStore
 from testing.pipeline_sim.store import CustomerData, SimStore
@@ -41,7 +42,7 @@ class Conn:
         self.shadow, self.result = shadow, []
 
     def execute(self, query, params=None):
-        text = str(query)
+        text = query.as_string(None) if isinstance(query, sql.Composable) else str(query)
         self.shadow.statements.append((text, params))
         self.result = []
         # Only owner-census SQL needs results; normal copy reads/writes use
@@ -127,6 +128,7 @@ def production(monkeypatch):
     for name, value in PROD_ENV.items():
         monkeypatch.setenv(name, value)
     monkeypatch.setattr(dual_store, '_SHADOWED', {})
+    monkeypatch.setattr(copy_connections, '_pools', None)
     monkeypatch.setattr(index_config, '_INDEXED', {})
     primary, shadow = SimStore(CustomerData(), namespace=NAMESPACE), Shadow()
     mirror = DualStore(primary, shadow, inline=True)
@@ -289,7 +291,7 @@ def test_privacy_purge_reaches_retained_target_with_all_mirror_controls_off(prod
     assert hook.purge_owner(NAMESPACE, uid) >= 1
     assert ('jobs', 'erased') not in shadow.rows and shadow.upserts == []
     assert built == ([] if cached else [NAMESPACE])
-    assert shadow.pool.closed is (not cached)
+    assert not shadow.pool.closed  # cold and cached handles now borrow process-owned pools
     assert any('pg_advisory_xact_lock(hashtextextended' in query for query, _ in shadow.statements)
 
 
@@ -301,9 +303,9 @@ def test_previously_handed_out_index_falls_back_after_production_config_kill(pro
     monkeypatch.setattr(dual_store, '_configured_copy', lambda actual_primary: mirror)
     store = hook.shadow_from_env(primary)
     assert isinstance(store, IndexStore) and store.enabled()
-    assert store.due('leased', 1) == ['primary']  # initial authoritative sweep
-    monkeypatch.setattr(store._index, 'due', lambda *args: ['pg-hint'])
-    assert store.due('leased', 1) == ['pg-hint']
+    assert store.due('leased', 1) == ['primary']
+    monkeypatch.setattr(store._index, 'due', lambda *args: pytest.fail('unproven production coverage'))
+    assert store.due('leased', 1) == ['primary']  # configuration is not complete-query coverage
     monkeypatch.setenv('JOBSTORE_PRODUCTION_MIRROR', 'off')
     assert not store.enabled()
     assert store.due('leased', 1) == ['primary']

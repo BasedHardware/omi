@@ -18,6 +18,7 @@ from google.cloud.firestore_v1.types import (
 )
 from google.rpc.status_pb2 import Status
 
+from database.batch_account_authority_schema import USER_POLICY_FIELDS
 from database import _client, batch_privacy_write_fence as fence, memory_change_head
 from database.batch_pipeline_privacy import privacy_owner_key
 
@@ -343,7 +344,7 @@ def test_flattened_arguments_idempotent_install_and_failed_transport():
 @pytest.mark.parametrize(
     'family,fields',
     [
-        ('users/u', fence._USER_FIELDS),
+        ('users/u', USER_POLICY_FIELDS),
         ('users/u/conversations/c', fence._CONVERSATION_FIELDS),
     ],
 )

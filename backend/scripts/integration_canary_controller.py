@@ -26,6 +26,7 @@ import sys
 import tempfile
 
 if __package__:
+    from .runtime_env_canary_ops import RETIRED_BATCH_ENV
     from .integration_canary_metrics import (
         Clock,
         Metrics,
@@ -41,6 +42,7 @@ if __package__:
         io_budget,
     )
 else:
+    from runtime_env_canary_ops import RETIRED_BATCH_ENV
     from integration_canary_metrics import (
         Clock,
         Metrics,
@@ -66,7 +68,6 @@ QUALITY = {
     'HOME_TRANSCRIPTION_MAX_AGE_SECONDS': '86400',
     'RECORD_SEAL_REPAIR_FRESH_ENABLED': 'true',
 }
-BACKOFF = 'BATCH_PROJECTION_FINISH_BACKOFF_ENABLED'
 PROVIDER = 'BATCH_PIPELINE_PROVIDER_BACKLOG_RELEASE_ENABLED'
 STAMP = 'OMI_BACKEND_RELEASE_SHA'
 DIGEST = re.compile(r'sha256:[0-9a-f]{64}')
@@ -138,14 +139,11 @@ def env_map(entries):
     return result
 
 
-def contract(service, entries):
+def contract(entries):
     env = env_map(entries)
     for name, value in QUALITY.items():
         require(env.get(name) == {'name': name, 'value': value}, 'quality_contract')
-    if service in ('backend-sync', SERVICE):
-        require(env.get(BACKOFF) == {'name': BACKOFF, 'value': 'false'}, 'backoff_contract')
-    else:
-        require(BACKOFF not in env, 'backoff_contract')
+    require(not RETIRED_BATCH_ENV.intersection(env), 'retired_batch_env')
     require(PROVIDER not in env or env[PROVIDER] == {'name': PROVIDER, 'value': 'false'}, 'provider_contract')
     return env
 
@@ -242,8 +240,17 @@ def traffic(entries, spec=False, latest=None):
     return result
 
 
-def expected_traffic(percent, candidate):
-    return {ROLLBACK: 100} if percent == 0 else ({ROLLBACK: 75, candidate: 25} if percent == 25 else {candidate: 100})
+def validate_predecessor(name):
+    require(
+        isinstance(name, str)
+        and len(name) <= 63
+        and re.fullmatch(r'backend-integration-[a-z0-9](?:[a-z0-9-]*[a-z0-9])?', name),
+        'rollback_revision_invalid',
+    )
+
+
+def expected_traffic(percent, candidate, rollback=ROLLBACK):
+    return {rollback: 100} if percent == 0 else ({rollback: 75, candidate: 25} if percent == 25 else {candidate: 100})
 
 
 def check_traffic(doc, expected):
@@ -520,7 +527,7 @@ class Controller:
             (self.state.get('source') == SOURCE or self.state.get('profile') == 'integration-only')
             and self.state.get('project') == PROJECT
             and self.state.get('region') == REGION
-            and self.state.get('rollback') == ROLLBACK,
+            and (self.state.get('rollback') == ROLLBACK or self.state.get('profile') == 'integration-only'),
             'journal_binding',
         )
         require(set(self.state.get('services', {})) == set(self.selected_services()), 'journal_services')
@@ -532,6 +539,24 @@ class Controller:
             require(
                 self.state.get('post_wrap_guard', 'internal') in {'internal', 'external'}, 'post_wrap_guard_invalid'
             )
+        validate_predecessor(self.state['rollback'])
+        saved = self.state['services'][SERVICE]
+        revision = saved['revision']
+        require(revision['metadata'].get('name') == self.state['rollback'], 'journal_rollback_binding')
+        identity(revision, self.state['rollback'])
+        require(
+            revision['metadata']['labels'].get('serving.knative.dev/service') == SERVICE
+            and revision['metadata']['namespace'] == saved['service']['metadata']['namespace'],
+            'journal_rollback_binding',
+        )
+        require(
+            traffic(saved['service']['status']['traffic']) == {self.state['rollback']: 100}
+            and traffic(
+                saved['service']['spec']['traffic'], latest=saved['service']['status'].get('latestReadyRevisionName')
+            )
+            == {self.state['rollback']: 100},
+            'journal_rollback_binding',
+        )
         baseline = self.state['baseline']
         require(self.state['baseline_hash'] == digest_bytes(canonical(baseline).encode()), 'baseline_changed')
         return self.state
@@ -576,8 +601,11 @@ class Controller:
         region=REGION,
         integration_only=False,
         post_wrap_guard='internal',
+        rollback_revision=ROLLBACK,
     ):
         run, attempt = self.bind()
+        validate_predecessor(rollback_revision)
+        require(integration_only or rollback_revision == ROLLBACK, 'rollback_profile_binding')
         require((source == SOURCE or integration_only) and project == PROJECT and region == REGION, 'release_binding')
         require(
             post_wrap_guard in {'internal', 'external'} and (integration_only or post_wrap_guard == 'internal'),
@@ -590,10 +618,13 @@ class Controller:
             # no file or caller-supplied "healthy" switch is accepted here.
             if post_wrap_guard == 'internal':
                 require(self.discovery is not None, 'discovery_reader_not_bound')
-                self.discovery.preflight(source=source, rollback=ROLLBACK)
+                self.discovery.preflight(source=source, rollback=rollback_revision)
         require(self.cloud.head() == source, 'source_checkout_mismatch')
         require(
-            candidate == f'{SERVICE}-{source[:7]}-{run}-{attempt}' and len(candidate) <= 63, 'candidate_name_invalid'
+            candidate == f'{SERVICE}-{source[:7]}-{run}-{attempt}'
+            and len(candidate) <= 63
+            and candidate != rollback_revision,
+            'candidate_name_invalid',
         )
         require(not self.journal.path.exists(), 'journal_already_exists')
         image = (
@@ -617,7 +648,7 @@ class Controller:
             require(len(actual) == 1, 'split_serving_traffic')
             revision_name = next(iter(actual))
             if service == SERVICE:
-                require(revision_name == ROLLBACK, 'rollback_not_serving')
+                require(revision_name == rollback_revision, 'rollback_not_serving')
             revision = self.cloud.read('revisions', revision_name)
             identity(revision, revision_name)
             require(revision['metadata']['labels']['serving.knative.dev/service'] == service, 'revision_owner_mismatch')
@@ -655,7 +686,7 @@ class Controller:
             'project': project,
             'region': region,
             'candidate': candidate,
-            'rollback': ROLLBACK,
+            'rollback': rollback_revision,
             'image': image,
             'services': snapshots,
             'baseline': baseline,
@@ -678,7 +709,7 @@ class Controller:
         require(service_config(doc) == service_config(expected), 'service_config_drift')
 
     def retained(self):
-        revision = self.cloud.read('revisions', ROLLBACK)
+        revision = self.cloud.read('revisions', self.state['rollback'])
         require(revision == self.state['services'][SERVICE]['revision'], 'rollback_revision_drift')
         ready(revision)
         return revision
@@ -698,7 +729,7 @@ class Controller:
             template_config(rev) == template_config(self.state['plan']['spec']['template']), 'candidate_config_drift'
         )
         require(app(rev['spec'])['image'] == self.state['image'], 'candidate_digest_drift')
-        env = contract(SERVICE, app(rev['spec']).get('env', []))
+        env = contract(app(rev['spec']).get('env', []))
         require(env.get(STAMP) == {'name': STAMP, 'value': self.state['source']}, 'candidate_stamp_drift')
         image = (
             self.registry.verify(self.state['image'], self.state['source'], restored_defaults=True)
@@ -721,16 +752,16 @@ class Controller:
                 doc = self.integration()
                 self.verify_config(doc, self.state['plan'])
                 self.verify_revision()
-                check_traffic(doc, {ROLLBACK: 100})
+                check_traffic(doc, {self.state['rollback']: 100})
             raise Refused('candidate_reuse_refused')
         runtime_services = runtime_state.get('services', {})
         require(set(self.selected_services()) <= set(runtime_services), 'runtime_services_missing')
         for service in self.selected_services():
-            contract(service, runtime_services[service]['env'])
+            contract(runtime_services[service]['env'])
         original = self.state['services'][SERVICE]
         doc = self.integration()
         require(doc == original['service'], 'candidate_prepare_drift')
-        old_rev = self.cloud.read('revisions', ROLLBACK)
+        old_rev = self.cloud.read('revisions', self.state['rollback'])
         require(old_rev == original['revision'], 'rollback_revision_drift')
         observed(doc)
         ready(old_rev)
@@ -738,19 +769,20 @@ class Controller:
         result['spec']['template'] = template(old_rev, self.state['candidate'])
         ingress = app(result['spec']['template']['spec'])
         live_env = env_map(ingress.get('env', []))
-        declared = contract(SERVICE, runtime_services[SERVICE]['env'])
+        declared = contract(runtime_services[SERVICE]['env'])
         forbidden = runtime_services[SERVICE].get('forbidden_env', [])
         require(isinstance(forbidden, list) and all(isinstance(k, str) for k in forbidden), 'invalid_forbidden_env')
         require(not set(forbidden) & set(declared), 'forbidden_env_declared')
+        require(RETIRED_BATCH_ENV <= set(forbidden), 'retired_batch_env_not_removed')
         if self.state.get('profile') == 'integration-only':
-            require(set(RESTORED_DEFAULTS) <= set(forbidden), 'restored_defaults_not_removed')
-            expected = {key: value for key, value in live_env.items() if key not in RESTORED_DEFAULTS}
+            removals = set(RESTORED_DEFAULTS) | RETIRED_BATCH_ENV
+            require(removals <= set(forbidden), 'restored_defaults_not_removed')
+            expected = {key: value for key, value in live_env.items() if key not in removals}
             expected.update(
                 {
                     key: {'name': key, 'value': value}
                     for key, value in {
                         **QUALITY,
-                        BACKOFF: 'false',
                         PROVIDER: 'false',
                         STAMP: self.state['source'],
                     }.items()
@@ -761,7 +793,7 @@ class Controller:
         for name, entry in live_env.items():
             protected = 'valueFrom' in entry or 'QUEUE' in name or name.startswith(OPS_PREFIXES)
             named_decision = name in QUALITY or (
-                self.state.get('profile') == 'integration-only' and name in {BACKOFF, PROVIDER, STAMP}
+                self.state.get('profile') == 'integration-only' and name in {PROVIDER, STAMP}
             )
             if protected and not named_decision and name not in forbidden:
                 require(name not in declared or declared[name] == entry, 'serving_ops_env_changed')
@@ -790,7 +822,7 @@ class Controller:
         zero = [copy.deepcopy(t) for t in doc['spec']['traffic'] if t.get('percent', 0) == 0]
         for row in zero:
             require(row.get('revisionName') and not row.get('latestRevision'), 'tag_not_named')
-        targets = expected_traffic(percent, self.state['candidate'])
+        targets = expected_traffic(percent, self.state['candidate'], self.state['rollback'])
         # Preserve tags attached to positive targets by retaining their named zero alias.
         tags = {t.get('tag') for t in zero if t.get('tag')}
         for row in doc['spec']['traffic']:
@@ -826,7 +858,7 @@ class Controller:
         if kind == 'candidate':
             landed = self.integration()
             self.verify_config(landed, after)
-            check_traffic(landed, {ROLLBACK: 100})
+            check_traffic(landed, {self.state['rollback']: 100})
             self.state['known'] = landed
             self.state['intent'] = None
             self.save()
@@ -837,7 +869,7 @@ class Controller:
         if check_generation:
             require(doc['metadata'].get('generation') == expected['metadata'].get('generation'), 'foreign_generation')
         ready(doc, True)
-        check_traffic(doc, expected_traffic(percent, self.state['candidate']))
+        check_traffic(doc, expected_traffic(percent, self.state['candidate'], self.state['rollback']))
         self.retained()
         self.verify_revision()
         require(
@@ -862,12 +894,12 @@ class Controller:
             require(
                 actual
                 in (
-                    expected_traffic(old_percent, self.state['candidate']),
-                    expected_traffic(percent, self.state['candidate']),
+                    expected_traffic(old_percent, self.state['candidate'], self.state['rollback']),
+                    expected_traffic(percent, self.state['candidate'], self.state['rollback']),
                 ),
                 'traffic_convergence_drift',
             )
-            if actual == expected_traffic(percent, self.state['candidate']):
+            if actual == expected_traffic(percent, self.state['candidate'], self.state['rollback']):
                 doc = self.verified(after, percent, check_generation=False)
                 break
             require(self.clock.monotonic() < stop, 'traffic_readback_timeout')
@@ -992,7 +1024,7 @@ class Controller:
                     'sweep_page_rows': 100,
                     'tick_seconds': 20,
                     'provider_release': False,
-                    'rollback_revision': ROLLBACK,
+                    'rollback_revision': self.state['rollback'],
                 },
                 discovery={'state': 'external_pending', 'owner': 'SCA-2015', 'rollback_executor': 'SCA-2283'},
             )
@@ -1087,7 +1119,7 @@ class Controller:
         # is an idempotent no-op; no candidate read should then be required.
         if service_config(doc) == service_config(original['service']):
             observed(doc)
-            check_traffic(doc, {ROLLBACK: 100})
+            check_traffic(doc, {self.state['rollback']: 100})
             self.state.update(phase='rolled_back', intent=None, known=doc)
             self.save()
             return
@@ -1104,10 +1136,11 @@ class Controller:
         require(doc['metadata'].get('generation') in generations, 'rollback_foreign_generation')
         actual = traffic(doc.get('status', {}).get('traffic'))
         require(
-            actual in [expected_traffic(p, self.state['candidate']) for p in (0, 25, 100)], 'rollback_foreign_traffic'
+            actual in [expected_traffic(p, self.state['candidate'], self.state['rollback']) for p in (0, 25, 100)],
+            'rollback_foreign_traffic',
         )
         requested = traffic(doc['spec']['traffic'], True)
-        if requested == actual == {ROLLBACK: 100}:
+        if requested == actual == {self.state['rollback']: 100}:
             # A failed latest candidate can make service Ready=False even while
             # the retained Ready revision serves 100%; this is already restored.
             observed(doc)
@@ -1129,14 +1162,14 @@ class Controller:
             current = self.integration()
             self.verify_config(current, after)
             actual_seen = traffic(current.get('status', {}).get('traffic'))
-            require(actual_seen in (actual, {ROLLBACK: 100}), 'rollback_convergence_drift')
-            if actual_seen == {ROLLBACK: 100}:
+            require(actual_seen in (actual, {self.state['rollback']: 100}), 'rollback_convergence_drift')
+            if actual_seen == {self.state['rollback']: 100}:
                 # Service Ready may describe the failed latest candidate. Prove
                 # the retained revision itself is Ready and the service observed
                 # this generation's exact traffic request.
                 observed(current)
                 self.retained()
-                check_traffic(current, {ROLLBACK: 100})
+                check_traffic(current, {self.state['rollback']: 100})
                 break
             require(self.clock.monotonic() < stop, 'rollback_readback_timeout')
             self.clock.sleep(5)
@@ -1176,6 +1209,7 @@ def main(argv=None):
                 sub.add_argument('--region', default=REGION)
                 sub.add_argument('--integration-only', action='store_true')
                 sub.add_argument('--post-wrap-guard', choices=('internal', 'external'), default='internal')
+                sub.add_argument('--rollback-revision', default=ROLLBACK)
             if name == 'candidate':
                 sub.add_argument('--runtime-state', required=True, type=Path)
         args = parser.parse_args(argv)
@@ -1200,6 +1234,7 @@ def main(argv=None):
                         args.region,
                         integration_only=args.integration_only,
                         post_wrap_guard=args.post_wrap_guard,
+                        rollback_revision=args.rollback_revision,
                     )
                 elif args.step == 'candidate':
                     with args.runtime_state.open('rb') as handle:

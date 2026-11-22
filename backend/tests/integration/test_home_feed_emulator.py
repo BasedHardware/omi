@@ -57,7 +57,7 @@ def drain(client, uid):
     pytest.fail('bounded synthetic preparation did not converge')
 
 
-def seed_group(user, count=2):
+def seed_group(user, count=2, *, composed=True):
     batch = user._client.batch()
     ids = [f'member-{i:03}' for i in range(count)]
     for i, cid in enumerate(ids):
@@ -65,7 +65,12 @@ def seed_group(user, count=2):
         batch.set(user.collection('episode_links').document(cid), {'episode_id': 'episode'})
     batch.set(
         user.collection('episodes').document('episode'),
-        {'started_at': AT, 'status': 'closed', 'conversation_ids': ids},
+        {
+            'started_at': AT,
+            'status': 'closed',
+            'conversation_ids': ids,
+            **({'composed_at': AT} if composed else {}),
+        },
     )
     batch.commit()
     return ids
@@ -146,3 +151,23 @@ def test_dense_episode_remains_grouped_across_bounded_preparation_chunks(world):
     assert len(page['items']) == 1
     assert page['items'][0]['id'] == 'episode:episode'
     assert page['items'][0]['member_count'] == 120
+
+
+def test_ready_member_cards_replace_with_composed_owner_across_real_transactions(world, monkeypatch):
+    client, uid, user = world
+    monkeypatch.setenv('HOME_STEP_PROJECTION', 'on')
+    monkeypatch.setattr(home_feed, 'MEMBERS_PER_PREPARE', 1)
+    ids = seed_group(user, composed=False)
+    drain(client, uid)
+    before = home_feed.feed(uid, firestore_client=client)
+    assert {card['id'] for card in before['items']} == {f'conversation:{cid}' for cid in ids}
+    user.collection('episodes').document('episode').update({'composed_at': AT})
+    with pytest.raises(home_feed.PreparationRequired):
+        home_feed.feed(uid, firestore_client=client)
+    assert home_feed.prepare(uid, firestore_client=client)['ready'] is False
+    with pytest.raises(home_feed.PreparationRequired):
+        home_feed.feed(uid, firestore_client=client)
+    drain(client, uid)
+    after = home_feed.feed(uid, firestore_client=client)
+    assert after['generation'] != before['generation']
+    assert [(card['id'], card['member_count']) for card in after['items']] == [('episode:episode', 2)]

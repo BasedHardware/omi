@@ -67,6 +67,11 @@ if [[ "$SKIP_BACKEND_SECRETS" != "true" ]]; then
     backend/scripts/deploy-backend-secrets.sh
   if [[ "$DRY_RUN" != "true" ]]; then
     sleep 10
+  fi
+fi
+
+# The presence check is read-only and runs even when SKIP_BACKEND_SECRETS skips the shared reapply.
+if [[ "$DRY_RUN" != "true" ]]; then
     # Fail closed before helm rollout if managed Anthropic readiness would 503.
     python3 - "$NAMESPACE" "${ENVIRONMENT}-omi-backend-secrets" <<'PY'
 import base64
@@ -95,7 +100,6 @@ if empty:
     raise SystemExit(1)
 print(f"Gateway credential keys present and non-empty in {secret_name}")
 PY
-  fi
 fi
 
 HELM_ARGS=(

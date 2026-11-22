@@ -4,6 +4,8 @@
 # See README.md for the qualified scope, train order, ramp and rollback.
 schema_version: 2
 environment_shared:
+  conversations_v3_stage: beta
+  conversations_v3_first_app_build: ''
   llm_gateway:
     namespace: '{env}-omi-backend'
     release_name: '{env}-omi-llm-gateway'
@@ -20,13 +22,18 @@ environment_shared:
       - memory.canonical.mutate
       env:
         CONVERSATION_TERMINAL_FAMILY_MODE: {value: 'on', category: ops_kill}
+        BATCH_ACCOUNT_PRIVACY_WRITER_ENABLED: {value: 'true', category: ops_kill}
+        CONVERSATIONS_V3_RECORDING_ROTATION: {value: 'off', category: rollout}
+        CONVERSATIONS_V3_ROTATION_MIN_SECONDS: {value: '180', category: rollout}
+        CONVERSATIONS_V3_ROTATION_MAX_SECONDS: {value: '300', category: rollout}
         HOME_LIVE_MEMBER_NOTES_BOUNDED_ENABLED: {value: 'true', category: ops_kill}
         PROCESSING_ATTENTION_NON_RETRYABLE_EXPIRY_ENABLED: {value: 'true', category: ops_kill}
         LISTEN_PREVIEW_BATCH_CUSTODY_ENABLED: {value: 'true', category: rollout}
         SERVER_BATCH_UNSUPPORTED_LANGUAGES: {value: '', category: ops_kill}
         STALE_IN_PROGRESS_RECOVERY_ENABLED: {value: 'true', category: rollout}
-        STT_CAP_DISPATCH_ENFORCEMENT: {value: 'false', category: rollout}
-        STT_CAP_DISPATCH_COHORT: {value: '', category: rollout}
+        # STT_CAP_DISPATCH_ENFORCEMENT and STT_CAP_DISPATCH_COHORT are per environment:
+        # dev literals (dev overlay), prod Secret Manager references (prod overlay; private
+        # listen values, never in Git).
         STT_CAP_DISPATCH_LANES: {value: 'live', category: rollout}
         UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED: {value: 'false', category: rollout}
         UNLIMITED_V2_BACKFILL_HOURS_CAP_HOURS: {value: '24', category: rollout}
@@ -77,6 +84,7 @@ environment_shared:
         BATCH_HELD_DEAD_LETTER_ENABLED: {value: 'true', category: ops_kill}
         BATCH_INPUT_EXPIRING_ENABLED: {value: 'true', category: ops_kill}
         BATCH_PIPELINE_PROJECTION_GHOST_SETTLE_COHORT: {value: 'g1', category: config}
+        BATCH_PIPELINE_PACKING_SAMPLE_RATE: {value: '0.001', category: ops_kill}
         BATCH_PIPELINE_ENABLED:
           value: 'false'
           category: rollout
@@ -972,6 +980,7 @@ environment_shared:
             version: latest
         env:
           CONVERSATION_TERMINAL_FAMILY_MODE: {value: 'on', category: ops_kill}
+          BATCH_ACCOUNT_PRIVACY_WRITER_ENABLED: {value: 'true', category: ops_kill}
           HOME_LIVE_MEMBER_NOTES_BOUNDED_ENABLED: {value: 'true', category: ops_kill}
           PROCESSING_ATTENTION_NON_RETRYABLE_EXPIRY_ENABLED: {value: 'true', category: ops_kill}
           STT_CAP_DISPATCH_ENFORCEMENT: {value: 'false', category: rollout}
@@ -1011,8 +1020,10 @@ environment_shared:
           BATCH_ADMISSION_PARALLEL_CALLS: {value: 'true', category: rollout}
           BATCH_PIPELINE_IDLE_POLL_MAX_SECONDS: {value: '10', category: rollout}
           BATCH_HELD_DEAD_LETTER_ENABLED: {value: 'true', category: ops_kill}
+          BATCH_ALLOWANCE_INTAKE_PARK_ENABLED: {value: 'false', category: ops_kill}
           BATCH_INPUT_EXPIRING_ENABLED: {value: 'true', category: ops_kill}
           BATCH_PIPELINE_PROJECTION_GHOST_SETTLE_COHORT: {value: 'g1', category: config}
+          BATCH_PIPELINE_PACKING_SAMPLE_RATE: {value: '0.001', category: ops_kill}
           BATCH_PIPELINE_ENABLED:
             value: 'false'
             category: rollout
@@ -1035,6 +1046,7 @@ environment_shared:
             env_var: RECORD_TOKEN_LEASE_DEPLOYED_AT
             default: '0'
             category: rollout
+          BATCH_PROJECTION_OUTBOX: {value: 'true', category: ops_kill}
           BATCH_PIPELINE_SERVING_ENABLED:
             value: 'false'
             category: rollout
@@ -1403,6 +1415,7 @@ environment_shared:
             version: latest
         env:
           CONVERSATION_TERMINAL_FAMILY_MODE: {value: 'on', category: ops_kill}
+          BATCH_ACCOUNT_PRIVACY_WRITER_ENABLED: {value: 'true', category: ops_kill}
           HOME_LIVE_MEMBER_NOTES_BOUNDED_ENABLED: {value: 'true', category: ops_kill}
           PROCESSING_ATTENTION_NON_RETRYABLE_EXPIRY_ENABLED: {value: 'true', category: ops_kill}
           STT_CAP_DISPATCH_ENFORCEMENT: {value: 'false', category: rollout}
@@ -1422,8 +1435,10 @@ environment_shared:
           BATCH_ADMISSION_PARALLEL_CALLS: {value: 'true', category: rollout}
           BATCH_PIPELINE_IDLE_POLL_MAX_SECONDS: {value: '10', category: rollout}
           BATCH_HELD_DEAD_LETTER_ENABLED: {value: 'true', category: ops_kill}
+          BATCH_ALLOWANCE_INTAKE_PARK_ENABLED: {value: 'true', category: ops_kill}
           BATCH_INPUT_EXPIRING_ENABLED: {value: 'true', category: ops_kill}
           BATCH_PIPELINE_PROJECTION_GHOST_SETTLE_COHORT: {value: 'g1', category: config}
+          BATCH_PIPELINE_PACKING_SAMPLE_RATE: {value: '0.001', category: ops_kill}
           BATCH_PIPELINE_ENABLED:
             value: 'false'
             category: rollout
@@ -1446,6 +1461,7 @@ environment_shared:
             env_var: RECORD_TOKEN_LEASE_DEPLOYED_AT
             default: '0'
             category: rollout
+          BATCH_PROJECTION_OUTBOX: {value: 'true', category: ops_kill}
           BATCH_PIPELINE_SERVING_ENABLED:
             value: 'false'
             category: rollout
@@ -1787,6 +1803,7 @@ environment_shared:
             version: latest
         env:
           CONVERSATION_TERMINAL_FAMILY_MODE: {value: 'on', category: ops_kill}
+          BATCH_ACCOUNT_PRIVACY_WRITER_ENABLED: {value: 'true', category: ops_kill}
           HOME_LIVE_MEMBER_NOTES_BOUNDED_ENABLED: {value: 'true', category: ops_kill}
           PROCESSING_ATTENTION_NON_RETRYABLE_EXPIRY_ENABLED: {value: 'true', category: ops_kill}
           STT_CAP_DISPATCH_ENFORCEMENT: {value: 'false', category: rollout}
@@ -1809,8 +1826,10 @@ environment_shared:
           BATCH_ADMISSION_PARALLEL_CALLS: {value: 'true', category: rollout}
           BATCH_PIPELINE_IDLE_POLL_MAX_SECONDS: {value: '10', category: rollout}
           BATCH_HELD_DEAD_LETTER_ENABLED: {value: 'true', category: ops_kill}
+          BATCH_ALLOWANCE_INTAKE_PARK_ENABLED: {value: 'false', category: ops_kill}
           BATCH_INPUT_EXPIRING_ENABLED: {value: 'true', category: ops_kill}
           BATCH_PIPELINE_PROJECTION_GHOST_SETTLE_COHORT: {value: 'g1', category: config}
+          BATCH_PIPELINE_PACKING_SAMPLE_RATE: {value: '0.001', category: ops_kill}
           BATCH_PIPELINE_ENABLED:
             value: 'false'
             category: rollout
@@ -1833,6 +1852,7 @@ environment_shared:
             env_var: RECORD_TOKEN_LEASE_DEPLOYED_AT
             default: '0'
             category: rollout
+          BATCH_PROJECTION_OUTBOX: {value: 'true', category: ops_kill}
           BATCH_PIPELINE_SERVING_ENABLED:
             value: 'false'
             category: rollout
@@ -2153,6 +2173,7 @@ environment_shared:
             version: latest
         env:
           CONVERSATION_TERMINAL_FAMILY_MODE: {value: 'on', category: ops_kill}
+          BATCH_ACCOUNT_PRIVACY_WRITER_ENABLED: {value: 'true', category: ops_kill}
           HOME_LIVE_MEMBER_NOTES_BOUNDED_ENABLED: {value: 'true', category: ops_kill}
           PROCESSING_ATTENTION_NON_RETRYABLE_EXPIRY_ENABLED: {value: 'true', category: ops_kill}
           STT_CAP_DISPATCH_ENFORCEMENT: {value: 'false', category: rollout}
@@ -2171,8 +2192,10 @@ environment_shared:
           BATCH_ADMISSION_PARALLEL_CALLS: {value: 'true', category: rollout}
           BATCH_PIPELINE_IDLE_POLL_MAX_SECONDS: {value: '10', category: rollout}
           BATCH_HELD_DEAD_LETTER_ENABLED: {value: 'true', category: ops_kill}
+          BATCH_ALLOWANCE_INTAKE_PARK_ENABLED: {value: 'true', category: ops_kill}
           BATCH_INPUT_EXPIRING_ENABLED: {value: 'true', category: ops_kill}
           BATCH_PIPELINE_PROJECTION_GHOST_SETTLE_COHORT: {value: 'g1', category: config}
+          BATCH_PIPELINE_PACKING_SAMPLE_RATE: {value: '0.001', category: ops_kill}
           BATCH_PIPELINE_ENABLED:
             value: 'false'
             category: rollout
@@ -2195,6 +2218,7 @@ environment_shared:
             env_var: RECORD_TOKEN_LEASE_DEPLOYED_AT
             default: '0'
             category: rollout
+          BATCH_PROJECTION_OUTBOX: {value: 'true', category: ops_kill}
           BATCH_PIPELINE_SERVING_ENABLED:
             category: rollout
           BATCH_PIPELINE_WORKER_ENABLED:
@@ -2755,140 +2779,148 @@ firestore_read_lever_policy:
     base/gke/backend-listen:
       lifecycle_record_pending_head:
         value: 5
-        expires: '2026-11-17'
+        expires: '2026-11-24'
     base/gke/pusher:
       lifecycle_record_pending_head:
         value: 5
-        expires: '2026-11-17'
+        expires: '2026-11-24'
     base/desktop_backend:
       lifecycle_record_pending_head:
         value: 5
-        expires: '2026-11-17'
+        expires: '2026-11-24'
     base/cloud_run/services/backend:
       lifecycle_record_pending_head:
         value: 5
-        expires: '2026-11-17'
+        expires: '2026-11-24'
     base/cloud_run/services/backend-sync:
       lifecycle_record_pending_head:
         value: 5
-        expires: '2026-11-17'
+        expires: '2026-11-24'
     base/cloud_run/services/backend-sync-backfill:
       lifecycle_record_pending_head:
         value: 5
-        expires: '2026-11-17'
+        expires: '2026-11-24'
     base/cloud_run/services/backend-integration:
       lifecycle_record_pending_head:
         value: 5
-        expires: '2026-11-17'
+        expires: '2026-11-24'
     base/cloud_run/jobs/notifications-job:
       lifecycle_record_pending_head:
         value: 5
-        expires: '2026-11-17'
+        expires: '2026-11-24'
     base/cloud_run/jobs/x-connector-sync-job:
       lifecycle_record_pending_head:
         value: 5
-        expires: '2026-11-17'
+        expires: '2026-11-24'
     base/cloud_run/jobs/frame-request-retention-job:
       lifecycle_record_pending_head:
         value: 5
-        expires: '2026-11-17'
+        expires: '2026-11-24'
     base/cloud_run/jobs/day3-reengagement-email-job:
       lifecycle_record_pending_head:
         value: 5
-        expires: '2026-11-17'
+        expires: '2026-11-24'
     runtime/dev/gke/backend-listen:
       lifecycle_record_pending_head:
         value: 5
-        expires: '2026-11-17'
+        expires: '2026-11-24'
     runtime/dev/gke/pusher:
       lifecycle_record_pending_head:
         value: 5
-        expires: '2026-11-17'
+        expires: '2026-11-24'
     runtime/dev/desktop_backend:
       lifecycle_record_pending_head:
         value: 5
-        expires: '2026-11-17'
+        expires: '2026-11-24'
     runtime/dev/cloud_run/services/backend:
       lifecycle_record_pending_head:
         value: 5
-        expires: '2026-11-17'
+        expires: '2026-11-24'
     runtime/dev/cloud_run/services/backend-sync:
       lifecycle_record_pending_head:
         value: 5
-        expires: '2026-11-17'
+        expires: '2026-11-24'
     runtime/dev/cloud_run/services/backend-sync-backfill:
       lifecycle_record_pending_head:
         value: 5
-        expires: '2026-11-17'
+        expires: '2026-11-24'
     runtime/dev/cloud_run/services/backend-integration:
       lifecycle_record_pending_head:
         value: 5
-        expires: '2026-11-17'
+        expires: '2026-11-24'
     runtime/dev/cloud_run/jobs/notifications-job:
       lifecycle_record_pending_head:
         value: 5
-        expires: '2026-11-17'
+        expires: '2026-11-24'
     runtime/dev/cloud_run/jobs/x-connector-sync-job:
       lifecycle_record_pending_head:
         value: 5
-        expires: '2026-11-17'
+        expires: '2026-11-24'
     runtime/dev/cloud_run/jobs/frame-request-retention-job:
       lifecycle_record_pending_head:
         value: 5
-        expires: '2026-11-17'
+        expires: '2026-11-24'
     runtime/dev/cloud_run/jobs/day3-reengagement-email-job:
       lifecycle_record_pending_head:
         value: 5
-        expires: '2026-11-17'
+        expires: '2026-11-24'
     overlay/prod/cloud_run/services/backend-sync-backfill:
       lifecycle_record_pending_head:
         value: 5
-        expires: '2026-11-17'
+        expires: '2026-11-24'
+      privacy_checks_shadow:
+        value: 10
+        # Margin-40 panel F3: retain excluded backfill/worker shadow scope; no rollout expansion.
+        expires: '2026-11-24'
     runtime/prod/gke/backend-listen:
       lifecycle_record_pending_head:
         value: 5
-        expires: '2026-11-17'
+        expires: '2026-11-24'
     runtime/prod/gke/pusher:
       lifecycle_record_pending_head:
         value: 5
-        expires: '2026-11-17'
+        expires: '2026-11-24'
     runtime/prod/desktop_backend:
       lifecycle_record_pending_head:
         value: 5
-        expires: '2026-11-17'
+        expires: '2026-11-24'
     runtime/prod/cloud_run/services/backend-sync-backfill:
       lifecycle_record_pending_head:
         value: 5
-        expires: '2026-11-17'
+        expires: '2026-11-24'
+      privacy_checks_shadow:
+        value: 10
+        # Margin-40 panel F3: retain excluded backfill/worker shadow scope; no rollout expansion.
+        expires: '2026-11-24'
     runtime/prod/cloud_run/jobs/notifications-job:
       lifecycle_record_pending_head:
         value: 5
-        expires: '2026-11-17'
+        expires: '2026-11-24'
     runtime/prod/cloud_run/jobs/x-connector-sync-job:
       lifecycle_record_pending_head:
         value: 5
-        expires: '2026-11-17'
+        expires: '2026-11-24'
     runtime/prod/cloud_run/jobs/frame-request-retention-job:
       lifecycle_record_pending_head:
         value: 5
-        expires: '2026-11-17'
+        expires: '2026-11-24'
     runtime/prod/cloud_run/jobs/day3-reengagement-email-job:
       lifecycle_record_pending_head:
         value: 5
-        expires: '2026-11-17'
+        expires: '2026-11-24'
     chart/dev/backend-listen:
       lifecycle_record_pending_head:
         value: 5
-        expires: '2026-11-17'
+        expires: '2026-11-24'
     chart/prod/backend-listen:
       lifecycle_record_pending_head:
         value: 5
-        expires: '2026-11-17'
+        expires: '2026-11-24'
     chart/dev/pusher:
       lifecycle_record_pending_head:
         value: 5
-        expires: '2026-11-17'
+        expires: '2026-11-24'
     chart/prod/pusher:
       lifecycle_record_pending_head:
         value: 5
-        expires: '2026-11-17'
+        expires: '2026-11-24'

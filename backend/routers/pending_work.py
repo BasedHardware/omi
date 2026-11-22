@@ -1,6 +1,7 @@
 """Filter-independent processing projection and owner-only recovery endpoints."""
 
 from __future__ import annotations
+from utils.conversations.layer import read_product as read_product_conversation
 
 import hashlib
 import logging
@@ -78,7 +79,7 @@ def _run(uid: str, item_id: str, operation: dict[str, Any], background_tasks: Ba
     from utils.conversations.factory import deserialize_conversation
 
     try:
-        raw = conversations_db.get_conversation(uid, operation['conversation_id'])
+        raw = read_product_conversation(conversations_db.get_conversation, uid, operation['conversation_id'])
         if not raw or conversations_db.is_soft_deleted(raw) or store.generation(raw) != operation['generation']:
             store.finish(uid, operation, 'failed', item_id)
             operation['state'] = 'failed'

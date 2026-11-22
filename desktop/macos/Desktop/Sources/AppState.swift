@@ -750,6 +750,12 @@ class AppState: ObservableObject {
         self?.resetOwnerScopedContent()
       }
     }
+    conversationRepository.activeLocalCaptureIds = { [weak self] in
+      guard let self, self.isLiveCapturing, self.currentSessionId != nil,
+        let id = self.currentBackendConversationId, !id.isEmpty
+      else { return [] }
+      return [id]
+    }
     conversationRepository.onSnapshot = { [weak self] snapshot in
       guard let self else { return }
       self.conversations = snapshot.conversations
@@ -945,8 +951,6 @@ class AppState: ObservableObject {
             finishSession: false
           )
         }
-        // Flush final sync changes before sleep
-        await AgentSyncService.shared.stop()
         self.armDarkWakeCaptureRearm()
       }
     }

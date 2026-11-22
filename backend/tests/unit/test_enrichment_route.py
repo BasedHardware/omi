@@ -17,13 +17,17 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 import pytest
 
+from database import _client as firestore_client
 from database.outbox_firestore import ENRICHMENT_OUTBOX
+from database.summary_processing import EmptyFailureOutcome
+import database.summary_processing as summary_processing
 from routers import enrichment as route
 from tests.unit.test_sync_reprocess_coalesce import state, sweep_query  # noqa: F401
 from utils.enrichment import callback  # noqa: F401 (heavy import at collection time, not in a test call)
 from utils.enrichment import consumer as consumer_module
 from utils.enrichment import custody
 from utils.enrichment import outbox as reprocess
+from utils.sync.assignment_errors import SyncAssignmentConflict, SyncAssignmentConflictReason
 from utils.workers.consumer import run_push
 
 KEY = reprocess.key('u', 'c')
@@ -284,12 +288,75 @@ def test_long_stuck_live_target_polls_hourly_through_the_consumer(rows, monkeypa
     assert state_rows[KEY]['due_at'] == pytest.approx(time.time() + reprocess.STUCK_DEFER_POLL_SECONDS, abs=5)
 
 
-def test_unexpected_errors_stay_5xx_and_keep_the_lease(rows, client, monkeypatch):
-    monkeypatch.setattr(
-        consumer_module.EnrichmentConsumer, '_callback', lambda self: Mock(side_effect=RuntimeError('synthetic'))
+def _v3_custody_conflict():
+    return SyncAssignmentConflict(
+        'explicit redirect would strand v3 custody', subtype=SyncAssignmentConflictReason.V3_CUSTODY
     )
+
+
+def test_v3_custody_conflict_defers_then_parks_without_a_5xx(rows, client, monkeypatch):
+    state_rows, tasks = rows
+    state_rows[KEY]['claim_attempts'] = 99  # Other delivery attempts take none of the custody budget.
+    now = 10_000.0
+    clock = SimpleNamespace(time=lambda: now, monotonic=time.monotonic)
+    monkeypatch.setattr(route, 'time', clock)
+    monkeypatch.setattr(consumer_module, 'time', clock)
+    process = Mock(side_effect=_v3_custody_conflict())
+    monkeypatch.setattr(consumer_module.EnrichmentConsumer, '_callback', lambda self: process)
+
+    def post(token):
+        return client.post('/v2/enrichment/run', json={'kind': 'enrichment', 'key': KEY, 'task_token': token})
+
+    for count in (1, 2):
+        token = state_rows[KEY]['task_token']
+        response = post(token)
+        assert response.status_code == 200
+        assert response.json() == {'status': 'deferred', 'reason': 'v3_custody_conflict'}
+        row = state_rows[KEY]
+        assert row['v3_custody_defers'] == count and row['deferred_reason'] == 'v3_custody_conflict'
+        assert row['lease_until'] == 0 and row['task_token'] != token
+        assert row['due_at'] == now + reprocess.LIVE_DEFER_SECONDS
+        assert tasks[-1]['task_token'] == row['task_token']
+        assert post(token).json()['status'] == 'stale'
+        now = row['due_at']
+
+    token = state_rows[KEY]['task_token']
+    response = post(token)
+    assert response.status_code == 200
+    assert response.json() == {'status': 'discarded', 'reason': 'v3_custody_conflict'}
+    row = state_rows[KEY]
+    assert row['dormant'] and row['held_reason'] == 'v3_custody_conflict'
+    assert row['due_at'] is None and row['lease_until'] == 0 and row['owner'] is None
+    assert row['uid'] == 'u' and row['conversation_id'] == 'c'
+    assert post(token).json()['status'] == 'stale'
+    assert process.call_count == 3 and len(tasks) == 3
+
+    reprocess.mark('u', 'c', 'en', now=now + 1)
+    row = state_rows[KEY]
+    assert not row['dormant'] and 'held_reason' not in row and 'v3_custody_defers' not in row
+
+
+def test_v3_custody_terminal_attempt_keeps_a_concurrent_new_version(rows):
+    state_rows, _tasks = rows
+    state_rows[KEY]['v3_custody_defers'] = reprocess.V3_CUSTODY_MAX_DEFERS
+    token = state_rows[KEY]['task_token']
+
+    def append_then_conflict(*args):
+        reprocess.mark(*args, now=10_001.0)
+        raise _v3_custody_conflict()
+
+    _deliver(rows, append_then_conflict)
+    assert state_rows[KEY]['version'] == 2 and not state_rows[KEY]['dormant']
+    assert state_rows[KEY]['lease_until'] == 0 and state_rows[KEY]['task_token'] != token
+    assert _deliver(rows, lambda *_: SUMMARY, now=20_000.0).outcome == 'done'
+    assert state_rows[KEY]['summary_seen'] and 'v3_custody_defers' not in state_rows[KEY]
+
+
+@pytest.mark.parametrize('error', [RuntimeError('synthetic'), SyncAssignmentConflict('synthetic redirect cycle')])
+def test_unexpected_errors_stay_5xx_and_keep_the_lease(rows, client, monkeypatch, error):
+    monkeypatch.setattr(consumer_module.EnrichmentConsumer, '_callback', lambda self: Mock(side_effect=error))
     token = rows[0][KEY]['task_token']
-    with pytest.raises(RuntimeError):
+    with pytest.raises(type(error), match=str(error)):
         client.post('/v2/enrichment/run', json={'kind': 'enrichment', 'key': KEY, 'task_token': token})
     assert rows[0][KEY]['lease_until'] > 0  # the sweep re-wakes after expiry
 
@@ -924,6 +991,55 @@ def test_empty_output_owner_race_defers_without_burning_callback_attempts(rows, 
     assert pending['deferred_reason'] == 'summary_owner_changed'
     assert pending['summary_empty_failures'] == 2
     assert pending['task_token'] != token and pending['lease_until'] == 0
+
+
+def _empty_output(*_):
+    return SimpleNamespace(structured={'title': 'Synthetic'})
+
+
+def _bounded_empty_failure(rows):
+    """The real strike budget, without a Firestore transaction in a unit test."""
+
+    def record(_client, _collection, document_id, _owner, _token):
+        row = rows[0][document_id]
+        row['summary_empty_failures'] = min(3, row.get('summary_empty_failures', 0) + 1)
+        if row['summary_empty_failures'] >= 3:
+            row.update(dormant=True, due_at=None, lease_until=0, summary_blocked_reason='empty_output_exhausted')
+            return EmptyFailureOutcome.BLOCKED
+        return EmptyFailureOutcome.RETRY
+
+    return record
+
+
+def test_empty_output_then_success_delivers_the_summary(rows, monkeypatch):
+    monkeypatch.setattr(firestore_client, 'get_firestore_client', Mock())
+    monkeypatch.setattr(summary_processing, 'record_empty_failure', _bounded_empty_failure(rows))
+    first = _deliver(rows, _empty_output)
+    assert (first.outcome, first.reason) == ('retry', 'callback_pending')
+    assert rows[0][KEY]['summary_empty_failures'] == 1
+    # The queue retry reclaims the released lease; a real summary then delivers.
+    second = _deliver(rows, lambda *_: SUMMARY)
+    assert second.outcome == 'done'
+    assert rows[0][KEY]['summary_seen']
+
+
+def test_empty_output_twice_records_a_bounded_retry_then_blocks(rows, monkeypatch):
+    monkeypatch.setattr(firestore_client, 'get_firestore_client', Mock())
+    monkeypatch.setattr(summary_processing, 'record_empty_failure', _bounded_empty_failure(rows))
+    for expected in (1, 2):
+        result = _deliver(rows, _empty_output)
+        assert (result.outcome, result.reason) == ('retry', 'callback_pending')
+        assert rows[0][KEY]['summary_empty_failures'] == expected
+    blocked = _deliver(rows, _empty_output)
+    assert (blocked.outcome, blocked.reason) == ('stale', 'empty_output_blocked')
+    assert rows[0][KEY]['dormant'] and rows[0][KEY]['summary_blocked_reason'] == 'empty_output_exhausted'
+
+
+def test_empty_output_on_an_already_enriched_row_acks_instead_of_retrying(rows):
+    """A delivered summary is not a delivery failure: an empty reprocess must not retry forever."""
+    rows[0][KEY]['summary_seen'] = True
+    result = _deliver(rows, _empty_output)
+    assert (result.outcome, result.reason) == ('done', 'processed')
 
 
 def test_transient_fault_on_the_effects_only_path_releases_the_lease(rows, monkeypatch):

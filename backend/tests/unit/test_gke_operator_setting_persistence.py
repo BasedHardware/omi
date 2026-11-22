@@ -1,5 +1,6 @@
 """Production operator pins must survive composition and actual Helm rendering."""
 
+from datetime import date
 from pathlib import Path
 import subprocess
 
@@ -7,6 +8,7 @@ import pytest
 import yaml
 
 ROOT = Path(__file__).resolve().parents[3]
+SAFE_LOADER = getattr(yaml, "CSafeLoader", yaml.SafeLoader)
 PINS = {
     'backend-listen': {
         'MEDIA_NOISE_MODE': 'shadow',
@@ -14,7 +16,7 @@ PINS = {
         'NOTES_SHORT_CLIP_FLOOR': 'true',
     },
     'pusher': {
-        'AUDIO_CUSTODY_PCM_COMPRESSION_ENABLED': 'true',
+        'AUDIO_CUSTODY_PCM_COMPRESSION_ENABLED': 'false',
         'NOTES_SHORT_CLIP_FLOOR': 'true',
     },
 }
@@ -41,14 +43,16 @@ def test_operator_pins_survive_actual_helm_render_and_composition(host):
         capture_output=True,
         text=True,
     )
-    deployment = next(doc for doc in yaml.safe_load_all(result.stdout) if doc and doc['kind'] == 'Deployment')
+    deployment = next(
+        doc for doc in yaml.load_all(result.stdout, Loader=SAFE_LOADER) if doc and doc['kind'] == 'Deployment'
+    )
     entries = deployment['spec']['template']['spec']['containers'][0]['env']
     env = {e['name']: e for e in entries}
     assert len(entries) == len(env), 'Duplicate env entries break Helm strategic merge'
-    registry = yaml.safe_load((ROOT / 'config/feature-flags.yaml').read_text())
-    retired = {row['key'] for row in registry['retired'] if 'David flag docket 2026-11-09' in row.get('reason', '')}
+    registry = yaml.load((ROOT / 'config/feature-flags.yaml').read_text(), Loader=SAFE_LOADER)
+    retired = {row['key'] for row in registry['retired'] if row.get('retired') in ('2026-11-09', date(2026, 11, 9))}
     assert retired.isdisjoint(env), 'A stale production binding must not restore a retired chart control'
-    manifest = yaml.safe_load((ROOT / 'backend/deploy/runtime_env.yaml').read_text())
+    manifest = yaml.load((ROOT / 'backend/deploy/runtime_env.yaml').read_text(), Loader=SAFE_LOADER)
     composed = manifest['environments']['prod']['gke'][host]['env']
     for key, value in PINS[host].items():
         assert env[key]['value'] == value

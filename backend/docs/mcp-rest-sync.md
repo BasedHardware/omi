@@ -81,11 +81,30 @@ sent and clients must not retry:
   item leaves no row and is **not** emitted by the sync feed. Rows that
   persist with `deleted: true` (soft tombstones written by retirement
   flows) are emitted with `deleted: true` so clients can reconcile them.
-- **Conversations / memories**: both models persist soft-delete tombstone
-  rows (discarded/deleted markers), so deletes **are** recorded — but
-  their `updated_since` feeds are unsupported (400) and the plain list
-  cursors already skip tombstones. Clients must re-fetch or reconcile on
-  their own cadence; no deletes are silently claimed covered today.
+- **Conversations**: every user deletion writes a content-free tombstone
+  to `users/{uid}/deleted_conversations` with a real `deleted_at`. The
+  deletion feed serves them in `(deleted_at ASC, id ASC)` order, the same
+  keyset contract as the action-item feed:
+  `GET /v1/mcp/conversations/deleted?deleted_since=<ISO 8601 with offset>`
+  (body: array of `{id, deleted_at}`, paging in `X-Next-Cursor`) and the MCP
+  tool `get_deleted_conversations`. `deleted_since` is inclusive and
+  removal is idempotent. `deleted_at` is stamped when the delete is
+  requested, not when the tombstone commits, so resume from
+  `watermark − 60 seconds` and deduplicate by `id` (the action-item feed's
+  rule). Only a timestamp `deleted_at` is read; tombstones without one
+  predate the feed and are not listed. Edits are still not feedable (see
+  above).
+- **What the conversation feed does not list**: sources absorbed by a
+  user merge (`perform_merge_async`, `delete_merged_source`) are removed
+  without a tombstone, and a sync-merge donor whose tombstone write failed
+  (`delete_conversation_with_sync_sources` logs and continues) is removed
+  without one too. The feed is therefore a fast path, not the whole truth:
+  clients that keep copies also reconcile held ids on their own cadence
+  with `get_conversations_by_ids` (MCP; `not_found` lists ids that are
+  gone) or `GET /v1/mcp/conversations/{id}` (404).
+- **Memories**: historical memory deletes are hard deletes and deletion
+  receipts are deliberately non-enumerable, so there is no memory deletion
+  feed; clients must reconcile on their own cadence.
 
 ## Conversation detail bounds
 

@@ -69,13 +69,23 @@
       "key": "no-uid-literals|prod|gke/pusher/TRANSCRIPTION_SHADOW_UID_ALLOWLIST|uids=1",
       "why": "Cohort UIDs predate this suite; moving cohorts to Firestore is in flight (#22075). Ratchet: no new keys."
     },
+    {"key": "reader-split|prod|helm/batch-pipeline-worker/BATCH_PIPELINE_FOLLOWUP_CLAIMED_SIBLING_SKIP_ENABLED", "why": "Reviewed 2026-11-21 (SCA-3544): only ProjectionFollowups reads it, constructed by Projector.start_followups and ProjectionOutbox on the Cloud Run serving/pump loops; diarizer/ never constructs a Projector or outbox, so the worker never executes it. Cloud Run pins false until David activates #25920."},
+    {"key": "reader-split|prod|helm/batch-pipeline-worker/BATCH_PIPELINE_SERVING_PROJECTION_SWEEP", "why": "Reviewed 2026-11-21 (SCA-3318 step 3): only Serving.reconcile (utils/batch_pipeline/serving.py) and projection_drain in 'serving' mode read it; diarizer/ never constructs Serving or registers a serving recurring sweep, so the GPU worker never executes it. Integration sets 'off' because the projection pump owns the sweep; the pump runs in 'pump' mode, which ignores it."},
     {
       "key": "reader-split|prod|helm/batch-pipeline-worker/BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED",
       "why": "Reviewed 2026-10-18: the worker imports projection only transitively (Pump/Scheduler never call Projection); the flag is not executed there."
     },
     {
       "key": "reader-split|prod|helm/batch-pipeline-worker/BATCH_PIPELINE_MERGE_CATCH_UP_DEPTH",
-      "why": "SCA-2185 persists the serving integration-specific operator override under the rollout lead's four-Cloud-Run-service scope. It is not a shared backend default or a worker rollout; the worker keeps its inherited setting. Remove this exception if the integration override is retired or the worker setting converges through its own rollout."
+      "why": "SCA-2185 records the production backend-integration operator pin. The batch worker keeps its existing merge catch-up depth."
+    },
+    {
+      "key": "staging-mirrors-prod|staging|backend-integration/BATCH_PIPELINE_MERGE_CATCH_UP_DEPTH",
+      "why": "SCA-2185 records a production-only backend-integration operator pin. Staging keeps its existing catch-up depth."
+    },
+    {
+      "key": "staging-mirrors-prod|staging|backend-integration/BATCH_PIPELINE_PROVIDER_MERGE_MEMBERSHIP_ENABLED",
+      "why": "SCA-2185 records the production backend-integration operator pin. Staging continues to use the code default."
     },
     {
       "key": "task-target-retry-semantics|code|account-deletion/routers/users.py:run_account_deletion_wipe/500",
@@ -128,6 +138,14 @@
     {
       "key": "reader-split|prod|helm/batch-pipeline-worker/BATCH_PIPELINE_RECOVERY_DISPATCH_BATCH_SIZE",
       "why": "Reviewed 2026-10-19: only QuarantineRecovery.sweep reads it, and only the integration serving loop (utils/batch_pipeline/serving.py) runs that sweep; the worker imports config transitively and never sweeps."
+    },
+    {
+      "key": "reader-split|prod|helm/batch-pipeline-worker/BATCH_PIPELINE_SERVING_SWEEP_PAGE_ROWS",
+      "why": "Margin-40 PR25539 panel F4 requires integration-only cadence, 2026-11-17: this cadence belongs only to the integration projection sweep/supervisor. The worker entrypoint runs Pump/Scheduler, not Projection.sweep or Serving.supervise; the import-closure inventory over-approximates execution. Retain the excluded worker defaults. The deploy-contract test pins this exact integration/worker distinction; no general reader-split exemption."
+    },
+    {
+      "key": "reader-split|prod|helm/batch-pipeline-worker/BATCH_PIPELINE_SERVING_TICK_SECONDS",
+      "why": "Margin-40 PR25539 panel F4 requires integration-only cadence, 2026-11-17: this cadence belongs only to the integration projection sweep/supervisor. The worker entrypoint runs Pump/Scheduler, not Projection.sweep or Serving.supervise; the import-closure inventory over-approximates execution. Retain the excluded worker defaults. The deploy-contract test pins this exact integration/worker distinction; no general reader-split exemption."
     }
   ]
 }

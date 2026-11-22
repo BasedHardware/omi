@@ -18,10 +18,11 @@ import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/sync_provider.dart';
 import 'package:omi/providers/user_provider.dart';
 import 'package:omi/services/wals/wal.dart';
+import 'package:omi/services/wals/wal_derived_sync_views.dart';
 import 'package:omi/ui/ui.dart';
 import '../helpers/sfpro_font_fixtures.dart';
 
-class _Sync extends ChangeNotifier implements SyncProvider {
+class _Sync extends ChangeNotifier with WalDerivedSyncViews implements SyncProvider {
   _Sync(this.wals);
   final List<Wal> wals;
   @override
@@ -53,6 +54,8 @@ class _Sync extends ChangeNotifier implements SyncProvider {
   int get needsAttentionWalsCount => wals.where((w) => w.status == WalStatus.corrupted).length;
   @override
   int get clearableWalsCount => 0;
+  @override
+  List<Wal> get retryableAttentionWals => derivedWals.retryable;
   @override
   bool get syncCompleted => false;
   @override
@@ -190,6 +193,72 @@ void main() {
     await _capture(tester, '003-mobile-ios-sync-needs-attention.png');
   });
 
+  for (final legacy in [false, true]) {
+    testWidgets('expired upload cannot hide ready Sync action (legacy=$legacy)', (tester) async {
+      final stale = Wal(
+          timerStart: 1700000000,
+          codec: BleAudioCodec.opus,
+          seconds: 120,
+          status: WalStatus.uploaded,
+          storage: WalStorage.disk);
+      final ready = Wal(
+          timerStart: DateTime.now().millisecondsSinceEpoch ~/ 1000,
+          codec: BleAudioCodec.opus,
+          seconds: 60,
+          status: WalStatus.miss,
+          storage: WalStorage.disk);
+      await _pump(tester, legacy ? const SyncPage() : const AutoSyncPage(), WalStatus.miss, recordings: [stale, ready]);
+      final l = AppLocalizations.of(tester.element(find.byType(legacy ? SyncPage : AutoSyncPage)));
+      expect(find.text(l.syncCardReadyAmount(OmiDuration.compact(60, l))), findsOneWidget);
+      expect(find.text(l.sync), findsOneWidget);
+      expect(stale.status, WalStatus.uploaded);
+      expect(ready.status, WalStatus.miss);
+      expect(tester.takeException(), isNull);
+      await _capture(
+          tester,
+          legacy
+              ? '006-mobile-ios-legacy-ready-with-stalled-upload.png'
+              : '005-mobile-ios-sync-ready-with-stalled-upload.png');
+    });
+
+    testWidgets('expired uploads wait on the server calmly, without a processing spinner (legacy=$legacy)',
+        (tester) async {
+      final wal = Wal(
+          timerStart: DateTime.now().subtract(const Duration(days: 40)).millisecondsSinceEpoch ~/ 1000,
+          codec: BleAudioCodec.opus,
+          seconds: 120,
+          status: WalStatus.uploaded,
+          storage: WalStorage.disk);
+      await _pump(tester, legacy ? const SyncPage() : const AutoSyncPage(), WalStatus.uploaded, recordings: [wal]);
+      // Card header and per-row label share one predicate (stalledUploadsAt), so they share one meaning.
+      expect(find.text('Uploads waiting on the server'), findsOneWidget);
+      expect(find.text('Uploaded, awaiting server'), findsWidgets);
+      expect(find.text('Transcription unavailable'), findsNothing);
+      expect(find.byType(OmiSpinner), findsNothing);
+      expect(find.textContaining('Turning'), findsNothing);
+      expect(wal.status, WalStatus.uploaded);
+      expect(walDeletionAllowed(wal), isFalse);
+    });
+  }
+
+  testWidgets('an expired upload cannot hide another recording Retry action', (tester) async {
+    final stale = Wal(
+        timerStart: 1700000000,
+        codec: BleAudioCodec.opus,
+        seconds: 120,
+        status: WalStatus.uploaded,
+        storage: WalStorage.disk);
+    final failed = Wal(
+        timerStart: 1700001000,
+        codec: BleAudioCodec.opus,
+        seconds: 30,
+        status: WalStatus.miss,
+        storage: WalStorage.disk,
+        retryCount: walMaxAutoRetries);
+    await _pump(tester, const AutoSyncPage(), WalStatus.uploaded, recordings: [stale, failed]);
+    expect(find.byKey(const Key('offline_sync_card_retry_attention')), findsOneWidget);
+  });
+
   testWidgets('Auto Sync reports processing without inventing a conversation result', (tester) async {
     await _pump(tester, const AutoSyncPage(), WalStatus.synced);
     await tester.tap(find.text('Synced'));
@@ -210,12 +279,13 @@ void main() {
             codec: BleAudioCodec.opus,
             seconds: 10,
             status: WalStatus.uploaded,
+            uploadedAt: DateTime.now().millisecondsSinceEpoch ~/ 1000,
             storage: WalStorage.disk,
             device: 'pendant')
           ..jobId = 'job-$i',
     ]);
     final l = AppLocalizations.of(tester.element(find.byType(AutoSyncPage)));
-    expect(find.text(l.syncCardTranscribingAmount(OmiDuration.compact(1270, l))), findsOneWidget);
+    expect(find.text('${l.syncDetailsTranscribing} · ${OmiDuration.compact(1270, l)}'), findsOneWidget);
     expect(find.text('All recordings synced'), findsNothing);
     expect(find.text('All caught up'), findsNothing);
     expect(find.text('Conversation created'), findsNothing);

@@ -8,6 +8,7 @@ import pycountry
 import stripe
 
 from database import redis_db
+from utils.trial_reminder import checkout_trial_terms
 import logging
 
 logger = logging.getLogger(__name__)
@@ -18,6 +19,18 @@ connect_secret = os.getenv('STRIPE_CONNECT_WEBHOOK_SECRET')
 base_url = os.getenv('BASE_API_URL')
 if base_url and not base_url.startswith(('http://', 'https://')):
     base_url = 'https://' + base_url
+
+# Checkout's own price line must render the same currency string the app shows.
+# The app formats every purchase amount as an explicit, locale-independent
+# "US$269.91" (app/lib/utils/billing_price.dart). Stripe renders the same USD
+# amount differently per session locale: 'en' -> "$269.91", 'de' -> "269,91 $",
+# 'en-GB' -> "US$269.91". With 'auto' the cart followed the buyer's browser
+# language, so a reviewer comparing the offer page against the cart saw a
+# currency difference; Google Play rejected Android 1.0.587 (code 1560) for
+# exactly that ("Currency differences with prominent display price"). Pinning
+# the locale makes the cart deterministic and identical to the app. Verified
+# against live Checkout renders for en, en-GB and de on 2026-11-16.
+CHECKOUT_LOCALE = 'en-GB'
 
 
 def create_product(name: str, description: str, image: str):
@@ -242,8 +255,9 @@ def create_subscription_checkout_session(
             ],
             'mode': 'subscription',
             'currency': currency,
-            # Language only; this does not choose or convert the currency.
-            'locale': 'auto',
+            # Pinned, not 'auto': the cart must render the same currency string
+            # the app shows (see CHECKOUT_LOCALE). Language follows the pin.
+            'locale': CHECKOUT_LOCALE,
             'success_url': success_url,
             'cancel_url': cancel_url,
             'metadata': dict(metadata),
@@ -256,13 +270,25 @@ def create_subscription_checkout_session(
             'adaptive_pricing': {'enabled': False},
         }
 
+        submit_lines = []
+        if trial_period_days:
+            session_params['subscription_data']['trial_period_days'] = trial_period_days
+            # The first charge is the most-disputed moment: say when and how much, above the button.
+            recurring = getattr(price, 'recurring', None)
+            submit_lines.append(
+                checkout_trial_terms(
+                    trial_period_days,
+                    getattr(price, 'unit_amount', None),
+                    currency,
+                    recurring.get('interval') if recurring else None,
+                )
+            )
         if currency == 'usd':
             # Stripe owns its currency glyphs. Keep USD explicit even where its
             # hosted template uses a dollar glyph rather than the app's US$.
-            session_params['custom_text'] = {'submit': {'message': 'All amounts are in USD (US dollars).'}}
-
-        if trial_period_days:
-            session_params['subscription_data']['trial_period_days'] = trial_period_days
+            submit_lines.append('All amounts are in USD (US dollars).')
+        if submit_lines:
+            session_params['custom_text'] = {'submit': {'message': ' '.join(submit_lines)}}
 
         if promotion_code_id:
             session_params['discounts'] = [{'promotion_code': promotion_code_id}]

@@ -272,3 +272,20 @@ async def test_terminal_byok_failure_keeps_the_warning_downclass(monkeypatch, in
     assert records, 'expected a pusher finalization failure record'
     assert all(r.levelno == logging.WARNING for r in records)
     assert all('terminal=True' in r.getMessage() for r in records)
+
+
+@pytest.mark.anyio
+async def test_retired_go_job_refusal_is_terminal(monkeypatch, inline_run_blocking):
+    monkeypatch.setattr(
+        jobs_db, 'claim_finalization_job', MagicMock(return_value={'status': 'finalization_owned_elsewhere'})
+    )
+    finalize = AsyncMock()
+    monkeypatch.setattr(pusher_finalization, 'finalize_persisted_conversation', finalize)
+    websocket = _PusherWebSocket()
+    await pusher_finalization.process_conversation_task(
+        'uid-1', 'conversation-1', 'en', websocket, finalization_job_id='old-go-job', dispatch_generation=1
+    )
+    finalize.assert_not_awaited()
+    assert len(websocket.sent) == 1
+    assert b'job_finalization_owned_elsewhere' in websocket.sent[0]
+    assert b'"terminal":true' in websocket.sent[0].replace(b' ', b'')

@@ -14,6 +14,7 @@ from tests.support.batch_coalescing_scan import scanner
 
 from config import batch_pipeline_coalescing as config
 from database import batch_pipeline_coalescing as rows
+from database.batch_pipeline_coalescing_identity import digest
 from database.batch_pipeline_staging import reap_one
 from tests.unit.test_batch_pipeline_scheduler import MemoryStore, MemoryTransaction, item
 
@@ -29,9 +30,18 @@ def store():
     return result
 
 
+@pytest.fixture
+def serving_module():
+    # Shared import setup is excluded from the per-test call-phase CPU budget.
+    from utils.batch_pipeline import serving
+
+    return serving
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize('pump', ['true', 'false'])
-async def test_supervisor_drains_existing_holds_while_producer_off(monkeypatch, pump):
+async def test_supervisor_drains_existing_holds_while_producer_off(monkeypatch, pump, serving_module):
+    serving = serving_module
     monkeypatch.setenv('BATCH_PIPELINE_UPLOAD_COALESCING_ENABLED', 'false')
     monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_PUMP_ENABLED', pump)
     monkeypatch.setenv('BATCH_PIPELINE_SERVING_ENABLED', 'true')
@@ -193,7 +203,7 @@ def test_off_restart_keeps_individual_mode_even_if_enabled_again():
 def test_off_after_merged_admission_never_splits_immutable_units():
     s = store()
     rows.enqueue(s, member('first'), 'key', 10)
-    merged_id = 'bp_' + rows.digest([group(s)['id'], 'merged'])
+    merged_id = 'bp_' + digest([group(s)['id'], 'merged'])
     s.rows['intakes', merged_id] = {'owner_id': 'owner', 'segment_ids': ['persisted-unit']}
     claimed = rows.claim(s, group(s)['id'], 11, producer_enabled=False)
     assert claimed['mode'] == 'merged'

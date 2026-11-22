@@ -407,7 +407,7 @@ def test_gpu_unavailability_fires_overflow_to_modulate_and_releases_when_capacit
     answers = [answer for _, answer in world.overflow_answers]
     assert True in answers and answers[-1] is False  # latched, then released
     assert overflow_decisions() > before
-    assert metrics.GPU_OVERFLOW_ACTIVE._value.get() == 0
+    assert metrics.GPU_OVERFLOW_ACTIVE.labels(priority='fresh')._value.get() == 0
 
 
 def test_overflow_kill_switch_keeps_every_capable_unit_on_gpu_through_the_outage(monkeypatch):

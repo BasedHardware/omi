@@ -780,6 +780,8 @@ JOB_STATES = tuple(entry.state for entry in JOB_ENTRIES)
 # state) payload sites that do not target a job document. A mutated job literal
 # is a new, unexcluded value and still fails the census guard.
 JOB_STATE_MODULES = (
+    'database/batch_pipeline_source_fallback.py',
+    'database/batch_pipeline_source_reuse.py',
     'database/batch_pipeline_allowance_hold.py',
     'utils/batch_pipeline/scheduler.py',
     'utils/batch_pipeline/live.py',
@@ -830,6 +832,7 @@ NON_JOB_STATE_SITES: dict[str, tuple[tuple[str, str], ...]] = {
 # classified. Collection-scoped result and request-lane documents stay out of
 # the job census entirely.
 NON_JOB_STATE_MODULES = {
+    'utils/batch_pipeline/backlog_heartbeat.py': 'fenced backlog release control gate; never a jobs document',
     'database/batch_pipeline_coalescing.py': 'request-lane intake coalescing, not a pipeline stock',
     'database/batch_pipeline_shadow.py': 'shadow-lane documents',
     'database/batch_pipeline_projection.py': 'result documents',
@@ -840,6 +843,7 @@ NON_JOB_STATE_MODULES = {
 }
 
 PROJECTION_STATE_MODULES = (
+    'database/batch_pipeline_source_fallback.py',
     'database/batch_pipeline_projection.py',
     'database/batch_pipeline_projection_privacy.py',
     'database/batch_pipeline_projection_release.py',

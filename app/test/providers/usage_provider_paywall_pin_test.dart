@@ -9,7 +9,10 @@ import 'package:omi/models/custom_stt_config.dart';
 import 'package:omi/models/stt_provider.dart';
 import 'package:omi/models/subscription.dart';
 import 'package:omi/models/transcription_allowance.dart';
+import 'package:omi/services/capture/on_device_stt_preparer.dart';
+import 'package:omi/services/capture/phone_transcription_choice.dart';
 import 'package:omi/services/capture/transcription_allowance_cache.dart';
+import 'package:omi/services/sockets/apple_speech_readiness.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/services/freemium_transcription_service.dart';
 
@@ -153,17 +156,17 @@ void main() {
     expect(after.sttConfigId, ownChoice.sttConfigId);
   });
   for (final throws in [false, true]) {
-    test('failed refresh releases a pin from the last managed server answer (throws=$throws)', () async {
+    test('failed refresh with no known plan keeps the phone choice (throws=$throws)', () async {
       TranscriptionAllowanceCache.replace(
           const TranscriptionAllowanceSnapshot(mode: 'managed', reason: 'plan_unlimited'));
-      await _switchToFreeFromPaywall();
+      final pinned = await _switchToFreeFromPaywall();
       final provider = UsageProvider(subscriptionRequest: () async {
         if (throws) throw StateError('offline');
         return null;
       });
       await provider.fetchSubscription();
-      expect(SharedPreferencesUtil().customSttConfig.isEnabled, false);
-      expect(SharedPreferencesUtil().paywallOnDeviceSttConfigId, isEmpty);
+      expect(SharedPreferencesUtil().customSttConfig.sttConfigId, pinned.sttConfigId);
+      expect(SharedPreferencesUtil().paywallOnDeviceSttConfigId, pinned.sttConfigId);
       expect(provider.isLoading, false);
     });
   }
@@ -188,10 +191,100 @@ void main() {
     provider.dispose();
   });
 
-  test('managed allowance releases the pin even on the Free plan', () async {
-    await _switchToFreeFromPaywall();
+  test('the monthly reset keeps a Free plan on the phone: the choice is permanent', () async {
+    final pinned = await _switchToFreeFromPaywall();
     await UsageProvider(subscriptionRequest: () async => _subscription(PlanType.basic)).fetchSubscription();
-    expect(SharedPreferencesUtil().customSttConfig.isEnabled, false);
+    expect(SharedPreferencesUtil().customSttConfig.sttConfigId, pinned.sttConfigId);
+    expect(SharedPreferencesUtil().paywallOnDeviceSttConfigId, pinned.sttConfigId);
+  });
+
+  test('a paid plan releases the phone choice and tells capture to reconnect', () async {
+    await _switchToFreeFromPaywall();
+    var released = 0;
+    final provider = UsageProvider(subscriptionRequest: () async => _subscription(PlanType.unlimitedV2));
+    addTearDown(provider.dispose);
+    provider.onPhoneChoiceChanged = () => released++;
+    await provider.fetchSubscription();
+    expect(SharedPreferencesUtil().customSttConfig.isEnabled, isFalse);
+    expect(released, 1);
+  });
+
+  test('sign-out releases the phone choice so the next account starts on Omi', () async {
+    await _switchToFreeFromPaywall();
+    SharedPreferencesUtil().phoneModelOnWifiPending = 'pin';
+    final provider = UsageProvider(subscriptionRequest: () async => null);
+    addTearDown(provider.dispose);
+    provider.clearUserData();
+    await pumpEventQueue();
+    expect(SharedPreferencesUtil().customSttConfig.isEnabled, isFalse);
     expect(SharedPreferencesUtil().paywallOnDeviceSttConfigId, isEmpty);
+    expect(SharedPreferencesUtil().phoneModelOnWifiPending, isEmpty);
+  });
+
+  group('Android "On Wi-Fi later"', () {
+    var prepared = 0;
+    setUp(() {
+      prepared = 0;
+      final freemium = FreemiumTranscriptionService()
+        ..iosOverride = true
+        ..appleReadinessReader = (_) async => const AppleSpeechReadiness('fake', 'ready');
+      OnDeviceSttPreparer.debugOverride = ({String? language}) async {
+        prepared++;
+        await freemium.checkReadiness();
+      };
+    });
+    tearDown(() {
+      OnDeviceSttPreparer.debugOverride = null;
+      FreemiumTranscriptionService()
+        ..iosOverride = null
+        ..appleReadinessReader = null
+        ..reset();
+    });
+
+    Future<int> finish(PlanType plan, {String mode = 'on_device'}) async {
+      var changed = 0;
+      final provider = UsageProvider(subscriptionRequest: () async => _subscription(plan, mode: mode))
+        ..onPhoneChoiceChanged = () => changed++;
+      addTearDown(provider.dispose);
+      await provider.fetchSubscription();
+      // The completion runs beside the refresh; let it land.
+      for (var i = 0; i < 5; i++) {
+        await Future<void>.delayed(Duration.zero);
+      }
+      return changed;
+    }
+
+    test('a free plan\'s choice is pinned once the model is ready, and capture is told', () async {
+      SharedPreferencesUtil().phoneModelOnWifiPending = 'pin';
+      expect(await finish(PlanType.basic), 1);
+      expect(PhoneTranscriptionChoice.isPinned(SharedPreferencesUtil()), isTrue);
+      expect(SharedPreferencesUtil().customSttConfig.sendRawAudioToOmi, isFalse);
+      expect(SharedPreferencesUtil().phoneModelOnWifiPending, isEmpty);
+    });
+
+    test('upgraded while the model downloaded: the choice is kept unpinned', () async {
+      SharedPreferencesUtil().phoneModelOnWifiPending = 'pin';
+      await finish(PlanType.unlimited, mode: 'managed');
+      expect(SharedPreferencesUtil().customSttConfig.provider, SttProvider.onDeviceWhisper);
+      expect(PhoneTranscriptionChoice.isPinned(SharedPreferencesUtil()), isFalse);
+    });
+
+    test('a Custom STT chosen since is never overridden', () async {
+      const own = CustomSttConfig(provider: SttProvider.deepgramLive, apiKey: 'k');
+      await SharedPreferencesUtil().saveCustomSttConfig(own);
+      SharedPreferencesUtil().phoneModelOnWifiPending = 'pin';
+      expect(await finish(PlanType.basic), 0);
+      expect(prepared, 0);
+      expect(SharedPreferencesUtil().customSttConfig.provider, SttProvider.deepgramLive);
+      expect(SharedPreferencesUtil().phoneModelOnWifiPending, isEmpty);
+    });
+
+    test('not ready yet: the choice stays pending', () async {
+      FreemiumTranscriptionService().appleReadinessReader = (_) async => const AppleSpeechReadiness('fake', 'no_wifi');
+      SharedPreferencesUtil().phoneModelOnWifiPending = 'pin';
+      expect(await finish(PlanType.basic), 0);
+      expect(SharedPreferencesUtil().phoneModelOnWifiPending, 'pin');
+      expect(SharedPreferencesUtil().customSttConfig.isEnabled, isFalse);
+    });
   });
 }

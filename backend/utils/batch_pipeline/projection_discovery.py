@@ -22,8 +22,12 @@ MAIN_RESTART_HEAD_SHARE = 0.125
 
 
 class ProjectionDiscovery:
-    def __init__(self, store, *, states: tuple[str, ...] | None = None, recent: bool = False):
+    def __init__(
+        self, store, *, states: tuple[str, ...] | None = None, recent: bool = False, on_page=None, outbox_coverage=None
+    ):
         self.store = store
+        self.on_page = on_page
+        self.outbox_coverage = outbox_coverage
         self.after = None
         # Assignment discovery opts in to a second, stateless read of the newest commits.
         # It shares each page with the main cursor, so the page holds no more rows.
@@ -36,33 +40,52 @@ class ProjectionDiscovery:
         self.states = states
         self.stripe = projection_discovery_stripe()
         self.seeded = False
-        # The finish page's dark backoff adds a range filter, which moves the
-        # ordering (and therefore the cursor) to the row's next-attempt clock.
+        # Clock-filtered pages use a different order and cursor shape.
         self.due_mode = False
+        self.clock_mode = None
 
-    def next(self, limit: int = 100, due_before: float | None = None) -> list[str]:
-        due_mode = due_before is not None
-        if due_mode != self.due_mode:
+    def next(
+        self,
+        limit: int = 100,
+        due_before: float | None = None,
+        *,
+        exclude_async: bool = False,
+        followup_due_before: float | None = None
+    ) -> list[str]:
+        if due_before is not None and followup_due_before is not None:
+            raise ValueError('finish and follow-up discovery clocks cannot be combined')
+        clock_mode = 'followup' if followup_due_before is not None else 'finish' if due_before is not None else None
+        due_mode = clock_mode is not None
+        cutoff = followup_due_before if followup_due_before is not None else due_before
+        if clock_mode != self.clock_mode:
             # A cursor from one ordering is meaningless in the other.
-            self.due_mode, self.after, self.seeded = due_mode, None, False
+            self.clock_mode, self.due_mode, self.after, self.seeded = clock_mode, due_mode, None, False
         scope: dict[str, object] = {} if self.states is None else {'states': self.states}
         if due_mode:
-            scope['due_before'] = due_before
+            scope['followup_due_before' if clock_mode == 'followup' else 'due_before'] = cutoff
+        if exclude_async:
+            scope['exclude_async'] = True
         if not projection_pagination_enabled():
             self.after = None
             self.seeded = True
             if scope:
-                return self.store.projection_page(limit=limit, after=None, **scope)[0]
-            return self.store.projection_pending(limit=limit)
+                return self.read_page(limit=limit, after=None, **scope)[0]
+            rows = self.store.projection_pending(limit=limit)
+            self.observe(rows, scope)
+            return rows
+        if self.outbox_coverage is not None and self.outbox_coverage() is True:
+            scope['include_outbox'] = True
         striped = projection_striping_enabled()
         after = self.after
         seeding = not self.seeded and after is None and striped
         if seeding:
-            _, head = self.store.projection_page(limit=1, after=None, **scope)
+            _, head, _ = self.read_page(limit=1, after=None, **scope)
             if head is not None:
                 oldest = float(head[0])
                 # A timestamp-only cursor includes every tie at the lower bound.
-                ceiling = float(due_before) if due_mode else time.time()
+                ceiling = float(cutoff) if cutoff is not None else time.time()
+                if clock_mode == 'finish':
+                    ceiling = min(ceiling, time.time())
                 offset = oldest + max(0.0, ceiling - oldest) * self.stripe / PROJECTION_DISCOVERY_STRIPES
                 after = (offset,) if due_mode else (offset, '')
         recent_on = self.recent and not due_mode and projection_recent_discovery_seconds() > 0
@@ -76,14 +99,14 @@ class ProjectionDiscovery:
             head = self.random() < MAIN_RESTART_HEAD_SHARE
             self.stripe = 0 if head else self.random() * PROJECTION_DISCOVERY_STRIPES
             self.after, self.seeded, self.pass_started = None, False, time.time()
-            return self.next(limit, due_before)
+            return self.next(limit, due_before, exclude_async=exclude_async, followup_due_before=followup_due_before)
         newest, read = self.recent_page(limit, scope) if recent_on else ([], 0)
         if read:
             limit = max(1, limit - read)
-        segments, after = self.store.projection_page(limit=limit, after=after, **scope)
-        if not segments and seeding:
+        segments, after, read = self.read_page(limit=limit, after=after, **scope)
+        if not read and seeding:
             # Sparse/short collections or clock skew: do not waste a sweep tick.
-            segments, after = self.store.projection_page(limit=limit, after=None, **scope)
+            segments, after, _ = self.read_page(limit=limit, after=None, **scope)
         # Commit the hint only after a successful query. Errors retry this page.
         self.after = after
         self.seeded = True
@@ -96,6 +119,24 @@ class ProjectionDiscovery:
             seen = set(newest)
             return newest + [segment for segment in segments if segment not in seen]
         return segments
+
+    def observe(self, rows: list[str], scope: dict) -> None:
+        if self.on_page is not None:
+            # This is diagnostic only. A failed observer cannot alter discovery or its cursor.
+            try:
+                self.on_page(rows, 'due' if 'followup_due_before' in scope else 'legacy')
+            except Exception:
+                logger.debug('Projection discovery observer failed; page and cursor unchanged')
+
+    def read_page(self, **scope):
+        if scope.pop('include_outbox', False):
+            page = self.store.projection_page_with_outbox(**scope)
+        else:
+            page = self.store.projection_page(**scope)
+        rows, cursor = page[:2]
+        self.observe(rows, scope)
+        visible = [sid for sid in rows if sid not in page[2]] if len(page) == 3 else rows
+        return visible, cursor, len(rows)
 
     def recent_page(self, limit: int, scope: dict) -> tuple[list[str], int]:
         """Rows from the newest commits this process has not offered yet, and rows read.
@@ -114,7 +155,7 @@ class ProjectionDiscovery:
             self.offered = {name: at for name, at in self.offered.items() if now - at <= 2 * window}
         try:
             start = now - window + window * self.random()
-            segments, _ = self.store.projection_page(limit=limit // 2, after=(start, ''), **scope)
+            segments, _, read = self.read_page(limit=limit // 2, after=(start, ''), **scope)
         except Exception:
             # The main cursor still reads this tick; record that the newest-commits read did not.
             record_fallback(
@@ -128,6 +169,4 @@ class ProjectionDiscovery:
             return [], 0
         # Kept for two windows: a commit stamp up to one window ahead of this clock cannot
         # bring a row back after its entry has gone.
-        return [name for name in segments if name not in self.offered or now - self.offered[name] > 2 * window], len(
-            segments
-        )
+        return [name for name in segments if name not in self.offered or now - self.offered[name] > 2 * window], read

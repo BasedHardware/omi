@@ -10,7 +10,7 @@ class OmiBleConnectionPolicyTest < Minitest::Test
   def test_saved_reconnect_manager_callbacks_with_suspended_timers
     manager = File.read(File.join(IOS_ROOT, 'Runner/Ble/OmiBleManager.swift'))
     signatures = [
-      'private func scheduleSavedRetry(', 'private func setupRetryRemaining(',
+      'private func hasEverConnected(', 'private func scheduleSavedRetry(', 'private func setupRetryRemaining(',
       'private func issueConnect(', 'private func reconcileSavedReconnect(',
       'private func runSavedScanWindow(', 'private func endSavedScan(',
       'private func updateReconnectScan(', 'private func reportDiscoveryFailure(',
@@ -40,7 +40,8 @@ class OmiBleConnectionPolicyTest < Minitest::Test
       File.write(source, harness)
       stdout, stderr, compile = Open3.capture3('swiftc', '-parse-as-library', POLICY_SOURCE,
         File.join(IOS_ROOT, 'Runner/SafeFoundationSinks.swift'),
-        File.join(IOS_ROOT, 'Runner/Ble/OmiCaptureHealth.swift'), source, '-o', binary)
+        File.join(IOS_ROOT, 'Runner/Ble/OmiCaptureHealth.swift'),
+        File.join(IOS_ROOT, 'Runner/Ble/OmiDeviceHealthStore.swift'), source, '-o', binary)
       assert compile.success?, "manager harness compile failed:\n#{stdout}\n#{stderr}"
       stdout, stderr, run = Open3.capture3(binary)
       assert run.success?, "manager callback assertions failed:\n#{stdout}\n#{stderr}"

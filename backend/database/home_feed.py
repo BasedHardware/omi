@@ -15,7 +15,8 @@ import hashlib
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 from google.cloud.firestore_v1.types import Write
-from config.episodes import home_hide_below_floor_rows_enabled
+from config.episodes import home_hide_below_floor_rows_enabled, home_step_projection_enabled
+from config import episode_live_members as live_members
 from prometheus_client import Counter, Histogram
 
 from database._client import get_firestore_client, run_transactional
@@ -23,7 +24,7 @@ from database import conversations
 from database.account_deletion_policy import account_deletion_marker_blocks_access
 from utils.conversations import transcribing_hold
 from utils.conversations.fragment_visibility import SETTLING_FIELDS, is_relevance_discarded
-from utils.conversations.home_titles import SUMMARY_DEBT_FIELDS
+from utils.conversations.home_titles import SUMMARY_DEBT_FIELDS, display_title
 from database.home_feed_writer import CONTROL, SCHEMA
 from database.home_feed_queries import EPISODES, CONVERSATIONS, STANDALONE
 from utils.encryption import ENCRYPTION_SECRET, decrypt
@@ -49,6 +50,8 @@ FEED_FIELDS = [
     'home_sources',
     'home_status',
     'home_step',
+    'record_projection_revision',
+    'user_title',
     'home_starred',
     'home_is_locked',
     'home_has_tasks',
@@ -56,6 +59,9 @@ FEED_FIELDS = [
     'home_started_at',
 ]
 CONVERSATION_FIELDS = [
+    'v3_derived',
+    'recording',
+    'home_hidden',
     'id',
     'started_at',
     'created_at',
@@ -81,6 +87,10 @@ CONVERSATION_FIELDS = [
     'sync_processing_hold',
     'bridge_pending',
     'record_projection_revision',
+    'record_lane_owner',
+    'sync_live_target',
+    'record_audio_closed',
+    'server_batch_audio_closed',
     'record_phase',
     'finalization_status',
     'summary_retryable',
@@ -120,6 +130,7 @@ EPISODE_FIELDS = [
     'content',
     'composed_at',
     'composed_member_ids',
+    'compose_excluded_live_member_ids',
     'composed_membership',
     'summary_needs_regeneration',
     'home_content_member_versions',
@@ -157,8 +168,18 @@ def _control(user):
 
 
 def _visible(row, *, episode_member=False):
-    if not row or row.get('_home_deleted') or is_relevance_discarded(row) or row.get('sync_merged_into'):
+    if (
+        not row
+        or row.get('recording')
+        or row.get('home_hidden')
+        or row.get('_home_deleted')
+        or is_relevance_discarded(row)
+        or row.get('sync_merged_into')
+    ):
         return False
+    if row.get('v3_derived'):
+        # The v3 planner owns Home visibility; failed tiles remain recoverable rows.
+        return conversations.is_visible_conversation(row, presentation=True)
     if episode_member:
         # Existing episode Home rows preserve failed transcription recovery.
         visibility = {**row, 'status': 'completed'} if row.get('status') == 'failed' else row
@@ -297,10 +318,12 @@ def prepare(uid: str, *, firestore_client: Any = None) -> dict[str, Any]:
         snapshot = get(control_ref)
         state = snapshot.to_dict() or {}
         phase = state.get('phase', 'conversations')
-        rebuild_all = state.get('rebuild_all', False)
-        if state.get('policy_dirty'):
+        ready_members = home_step_projection_enabled()
+        policy_changed = state.get('schema') == SCHEMA and state.get('ready_members') != ready_members
+        rebuild_all = state.get('rebuild_all', False) or policy_changed
+        if state.get('policy_dirty') or policy_changed:
             phase, rebuild_all = 'conversations', True
-        cursor = None if state.get('policy_dirty') else state.get('cursor')
+        cursor = None if state.get('policy_dirty') or policy_changed else state.get('cursor')
         if state.get('schema') != SCHEMA:
             phase, cursor = 'conversations', None
         generation = state.get('generation', '')
@@ -401,6 +424,9 @@ def prepare(uid: str, *, firestore_client: Any = None) -> dict[str, Any]:
             row = dict(doc.to_dict() or {}, id=eid)
             row['created_at'] = utc(row.get('created_at')) or getattr(doc, 'create_time', None)
             ids = _retained(row)
+            excluded_live_ids = (
+                set(row.get('compose_excluded_live_member_ids') or []) if live_members.enabled() else set()
+            )
             membership = hashlib.sha256(json.dumps(ids, separators=(',', ':')).encode()).hexdigest()
             staged: dict[str, Any] = row.get('home_prepare_state') or {}
             if (
@@ -408,9 +434,11 @@ def prepare(uid: str, *, firestore_client: Any = None) -> dict[str, Any]:
                 or staged.get('epoch') != row.get('home_content_epoch', '')
                 or staged.get('policy_epoch') != policy_epoch
                 or staged.get('membership') != membership
+                or staged.get('ready_members') != ready_members
             ):
                 staged = {
                     'epoch': row.get('home_content_epoch', ''),
+                    'ready_members': ready_members,
                     'policy_epoch': policy_epoch,
                     'membership': membership,
                     'offset': 0,
@@ -422,7 +450,7 @@ def prepare(uid: str, *, firestore_client: Any = None) -> dict[str, Any]:
                     'display': None,
                     'certified': True,
                     'legacy_valid': bool(utc(row.get('composed_at')))
-                    and set(row.get('composed_member_ids') or []) == set(ids)
+                    and (set(row.get('composed_member_ids') or []) | excluded_live_ids) == set(ids)
                     and (row.get('composed_membership') is None or set(row['composed_membership']) == set(ids))
                     and not row.get('summary_needs_regeneration'),
                     'member_versions': {},
@@ -435,6 +463,9 @@ def prepare(uid: str, *, firestore_client: Any = None) -> dict[str, Any]:
                 continue
             offset = int(staged['offset'])
             oversized = len(ids) > MAX_MEMBERS
+            # Until composition, the compact recording cards are the actual
+            # readable notes and pending units. No member wire/hydration on GET.
+            member_cards = ready_members and (row.get('status') == 'live' or not utc(row.get('composed_at')))
             proof = row.get('home_content_member_versions') or {}
             for cid in ids[offset:]:
                 if counts['members'] >= MEMBERS_PER_PREPARE or not available(3) or counts['bytes'] >= MAX_PREPARE_BYTES:
@@ -454,7 +485,7 @@ def prepare(uid: str, *, firestore_client: Any = None) -> dict[str, Any]:
                     visible = belongs and _visible(raw, episode_member=True)
                     projection = _conversation_projection(uid, raw)
                     if belongs:
-                        projection['home_standalone'] = oversized
+                        projection['home_standalone'] = oversized or member_cards
                         if owner is None:
                             projection['home_compat_owner'] = eid
                         source_updates[cid] = projection
@@ -469,11 +500,11 @@ def prepare(uid: str, *, firestore_client: Any = None) -> dict[str, Any]:
                             staged['sources'] = sorted(set(staged['sources']) | {str(raw['source'])[:64]})[:16]
                         if staged['display'] is None:
                             staged['display'] = seal_display(uid, content(raw, 'conversation'))
+                    excluded_live = cid in excluded_live_ids and live_members.capturing(raw)
                     staged['certified'] = (
                         staged['certified']
                         and belongs
-                        and bool(proof.get(cid))
-                        and proof.get(cid) == _member_home_version(raw)
+                        and (excluded_live or (bool(proof.get(cid)) and proof.get(cid) == _member_home_version(raw)))
                         and not tombstoned
                     )
                     original = utc(raw.get('home_legacy_source_updated_at')) or utc(raw['_home_snapshot_updated_at'])
@@ -485,7 +516,7 @@ def prepare(uid: str, *, firestore_client: Any = None) -> dict[str, Any]:
                         and not raw.get('home_content_invalidated')
                         and original is not None
                         and composed is not None
-                        and original <= composed
+                        and (excluded_live or original <= composed)
                     )
                     staged.setdefault('member_versions', {})[cid] = _member_home_version(raw)
                 else:
@@ -514,6 +545,7 @@ def prepare(uid: str, *, firestore_client: Any = None) -> dict[str, Any]:
                     home_display=seal_display(uid, compact),
                     home_visible=bool(staged['visible'])
                     and not oversized
+                    and not member_cards
                     and not bool(row.get('recorded_merged_into')),
                     home_member_count=staged['visible'],
                     home_sources=staged['sources'],
@@ -553,6 +585,7 @@ def prepare(uid: str, *, firestore_client: Any = None) -> dict[str, Any]:
                 'phase': phase,
                 'cursor': cursor,
                 'ready': ready,
+                'ready_members': ready_members,
                 'policy_dirty': False,
                 'rebuild_all': rebuild_all and not ready,
             },
@@ -593,7 +626,11 @@ def feed(
     authority_version = _revision(authority)
     state_doc = _control(user).get()
     control = state_doc.to_dict() or {}
-    if control.get('schema') != SCHEMA or control.get('ready') is not True:
+    if (
+        control.get('schema') != SCHEMA
+        or control.get('ready') is not True
+        or control.get('ready_members') != home_step_projection_enabled()
+    ):
         raise PreparationRequired('home_feed_preparation_required')
     generation = control.get('generation', '')
     policy = f'home:{SCHEMA}:{int(episodes_admitted)}'
@@ -621,6 +658,19 @@ def feed(
         if display is None or row.get('home_projection_schema') != SCHEMA:
             raise PreparationRequired('home_feed_preparation_required')
         locked = bool(row.get('home_is_locked'))
+        title = display.get('title', '')
+        if kind == 'conversation' and not conversations.effective_user_title(row.get('user_title')):
+            ready_receipt = bool(
+                home_step_projection_enabled()
+                and row.get('home_step') == home_step.READY
+                and row.get('record_projection_revision')
+            )
+            pending = display.get('notes_pending')
+            # Old encrypted cards did not record whether notes live outside the
+            # preview. Keep their headline on ready receipt-bearing rows until
+            # a normal source write or prepare refreshes the display metadata.
+            if pending is True or (pending is not False and not ready_receipt):
+                title = display_title(title, display.get('preview', ''), label_recording=ready_receipt)
         return {
             'id': f'{kind}:{row["id"]}',
             'kind': kind,
@@ -628,7 +678,7 @@ def feed(
             'sort_at': row['home_sort_at'],
             'started_at': row.get('home_started_at'),
             'finished_at': row.get('home_finished_at'),
-            'title': '' if locked else display.get('title', ''),
+            'title': '' if locked else title,
             'emoji': '' if locked else display.get('emoji', ''),
             'preview': '' if locked else display.get('preview', ''),
             'status': row.get('home_status') or 'completed',

@@ -14,7 +14,7 @@ from typing import Any, get_args
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
-from utils.conversations import transcribing_hold
+from utils.conversations import transcribing_hold, legacy_empty_wire, empty_capture
 from utils.conversations import home_step as home_step_projection
 from utils.conversations import phase_shadow
 
@@ -107,6 +107,8 @@ def wire_episode(episode: dict[str, Any] | None) -> dict[str, Any] | None:
 
 
 MEMBER_FIELDS = [
+    'recording',
+    'home_hidden',
     'structured',
     'user_title',
     'data_protection_level',
@@ -130,6 +132,7 @@ MEMBER_FIELDS = [
     'episode_transcription_deadline_at',
     'server_batch_audio_start',
     'server_batch_audio_end',
+    *transcribing_hold.READ_FIELDS,
     *SETTLING_FIELDS,
     *SUMMARY_DEBT_FIELDS,
 ]
@@ -434,6 +437,8 @@ def _too_short_for_a_home_row(row: dict[str, Any]) -> bool:
 
     List only: search, a direct link and Show discarded still reach it, and nothing is stored.
     """
+    if empty_capture.applies(row):
+        return True
     if not home_hide_below_floor_rows_enabled():
         return False
     return is_completed_below_floor(row)
@@ -449,6 +454,11 @@ def project_episode(
     if episode is None:
         return None
     by_id = members if members is not None else _read_members(uid, [episode])
+    # Read-only evidence for legacy dangling references; never put it on the wire.
+    episode.pop('_member_absent_ids', None)
+    absent = [cid for cid in episode.get('conversation_ids') or [] if cid not in by_id]
+    if absent:
+        episode['_member_absent_ids'] = absent
     # Private read observation only; never persisted or included in the wire projection.
     episode.pop('_member_transcript_updated_at', None)
     episode.pop('_member_transcript_updates', None)
@@ -492,14 +502,17 @@ def project_episode(
 
         # Classify on the stored read copy, before the presentation rewrite below.
         step = home_step_projection.classify(row)
+        empty_placeholder = empty_capture.applies(row, now=now)
         row = neutralize_minimum_title(row, tz_name_provider=zone)
+        row = legacy_empty_wire.project(row, noise=step == home_step_projection.NOISE)
+        row = empty_capture.project(row, now=now)
         structured: dict[str, Any] = row.get('structured') or {}
         title = structured.get('title') or ''
         status = row.get('status') or 'completed'
         started = row.get('started_at') or row.get('created_at') or episode['started_at']
         finished = row.get('finished_at')
         deadline = utc(row.get('episode_transcription_deadline_at'))
-        if deadline is not None and not row.get('record_projection_revision'):
+        if deadline is not None and not row.get('record_projection_revision') and not empty_placeholder:
             deadline = transcribing_hold.deadline(row, prefix='episode_transcription')
             overdue = now >= deadline
             title, status = transcribing_hold.transcription_presentation(

@@ -31,6 +31,16 @@ CaptureTransition _reduceSilenceResume(CaptureCoordinatorState state, CaptureEnv
   if (!env.silencePaused || state.phoneOwns || state.callActive) {
     return CaptureTransition(state, const []);
   }
+  final grace = state.pendantSuspension;
+  if (grace?.reason == SuspendReason.reconnect) {
+    // Charging/foreground can clear an old automatic pause between device
+    // publication and start. Keep the reconnect identity and manual mute;
+    // only DeviceStartRequested may consume this suspension.
+    return CaptureTransition(state, [
+      const RunStage(SilencePauseMarkerStage(false)),
+      if (grace!.wasPaused != env.policyMuted) PolicyWrite(grace.wasPaused, unlessCallActive: true),
+    ]);
+  }
   final device = state.connectedDevice;
   if (device == null) {
     // Link reconnect remains immediate and will start capture under this intent.
@@ -59,6 +69,7 @@ CaptureTransition _reduceSilenceResume(CaptureCoordinatorState state, CaptureEnv
 }
 
 CaptureTransition _reduceDevicePause(CaptureCoordinatorState state, CaptureEnvironment env) {
+  if (state.pendantSuspension?.reason == SuspendReason.reconnect) return _reducePause(state, env);
   if (env.silencePaused) {
     return _reducePause(state, env);
   }

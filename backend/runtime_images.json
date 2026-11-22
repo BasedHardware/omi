@@ -210,6 +210,34 @@
   },
   "images": [
     {
+      "name": "omi-pager",
+      "dockerfile": "backend/paging/Dockerfile",
+      "deployment_workflows": [],
+      "build_only": true,
+      "build_context": ".",
+      "source_root": "backend",
+      "workdir": "/app",
+      "entrypoints": ["paging.run"],
+      "image_import_smoke": true,
+      "dependency_probe_smoke": true,
+      "pull_request_smoke": true,
+      "outside_role_split": "Standalone operations pager with its own lock and release manifest."
+    },
+    {
+      "name": "omi-redis-serving-probe",
+      "dockerfile": "backend/paging/redis_probe/Dockerfile",
+      "deployment_workflows": [],
+      "build_only": true,
+      "build_context": ".",
+      "source_root": "backend/paging/redis_probe",
+      "workdir": "/app",
+      "entrypoints": ["probe"],
+      "image_import_smoke": true,
+      "dependency_probe_smoke": true,
+      "pull_request_smoke": true,
+      "outside_role_split": "Standalone Redis PING-only monitor with a separately approved GKE placement."
+    },
+    {
       "name": "backend-sync-backfill-worker",
       "dockerfile": "backend/Dockerfile.roles",
       "target": "sync-backfill-worker",

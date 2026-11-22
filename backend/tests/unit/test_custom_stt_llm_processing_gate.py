@@ -20,6 +20,7 @@ from testing.import_isolation import load_module_fresh, stub_modules
 
 _BACKEND = Path(__file__).resolve().parents[2]
 BASIC_CAP = 18_000
+PAST_CAP_ENV = 'CONVERSATION_PROCESSING_PAST_CAP_ENABLED'
 
 
 @pytest.fixture(scope='module')
@@ -48,8 +49,13 @@ def _situate_processing(
     llm_byok_header: bool = False,
     reviewer: bool = False,
     usage_record=None,
+    past_cap: str | None = None,
 ) -> None:
     monkeypatch.setenv('MARKETPLACE_APP_REVIEWERS', 'uid' if reviewer else 'someone-else')
+    if past_cap is None:
+        monkeypatch.delenv(PAST_CAP_ENV, raising=False)
+    else:
+        monkeypatch.setenv(PAST_CAP_ENV, past_cap)
     monkeypatch.setattr(sub.users_db, 'is_byok_active', lambda uid: byok_enrolled, raising=False)
     monkeypatch.setattr(sub, '_request_has_llm_byok_key', lambda: llm_byok_header)
     monkeypatch.setattr(
@@ -77,7 +83,7 @@ def test_custom_stt_within_budget_still_runs_llm(monkeypatch, sub) -> None:
 
 
 def test_custom_stt_exhausted_budget_hits_llm_gate(monkeypatch, sub) -> None:
-    _situate_processing(monkeypatch, sub, plan=PlanType.basic, used_speech_seconds=BASIC_CAP)
+    _situate_processing(monkeypatch, sub, plan=PlanType.basic, used_speech_seconds=BASIC_CAP, past_cap='false')
     assert sub.has_conversation_processing_credits('uid') is False
     assert sub.should_skip_omi_paid_postprocessing('uid', uses_custom_stt=True) is True
 
@@ -110,6 +116,7 @@ def test_deepgram_only_byok_does_not_exempt_llm_gate(monkeypatch, sub) -> None:
         used_speech_seconds=BASIC_CAP,
         byok_enrolled=True,
         llm_byok_header=False,
+        past_cap='false',
     )
     assert sub.has_conversation_processing_credits('uid') is False
     assert sub.should_skip_omi_paid_postprocessing('uid', uses_custom_stt=True) is True
@@ -125,6 +132,7 @@ def test_byok_enrolled_without_request_uid_falls_through_to_plan_check(monkeypat
     """
     assert sub.get_byok_uid() is None
     monkeypatch.setenv('MARKETPLACE_APP_REVIEWERS', 'someone-else')
+    monkeypatch.setenv(PAST_CAP_ENV, 'false')
     monkeypatch.setattr(sub.users_db, 'is_byok_active', lambda uid: True, raising=False)
     monkeypatch.setattr(
         sub.users_db,
@@ -175,3 +183,45 @@ def test_lookup_failure_fails_open_for_paid_use(monkeypatch, sub) -> None:
     assert allowance.allowed is True
     assert allowance.reason == 'allowance_unavailable'
     assert sub.should_skip_omi_paid_postprocessing('uid', uses_custom_stt=True) is False
+
+
+# --- past the cap: summaries stay on by default (David 2026-11-16) ---------------------------
+
+
+@pytest.mark.parametrize('plan', [PlanType.basic, PlanType.plus])
+def test_exhausted_budget_keeps_processing_on_by_default(monkeypatch, sub, plan) -> None:
+    _situate_processing(monkeypatch, sub, plan=plan, used_speech_seconds=BASIC_CAP * 10)
+    allowance = sub.resolve_conversation_processing_allowance('uid')
+    assert allowance.allowed is True
+    assert allowance.reason == 'plan_allowance_exhausted_kept_on'
+    assert allowance.remaining_seconds is None
+    assert sub.should_skip_omi_paid_postprocessing('uid', uses_custom_stt=True) is False
+
+
+@pytest.mark.parametrize('raw', ['false', '0', 'off', 'no', ' FALSE '])
+def test_kill_switch_restores_the_cap(monkeypatch, sub, raw) -> None:
+    _situate_processing(monkeypatch, sub, plan=PlanType.basic, used_speech_seconds=BASIC_CAP, past_cap=raw)
+    allowance = sub.resolve_conversation_processing_allowance('uid')
+    assert allowance.allowed is False
+    assert allowance.reason == 'plan_allowance_exhausted'
+    assert sub.should_skip_omi_paid_postprocessing('uid', uses_custom_stt=True) is True
+
+
+@pytest.mark.parametrize('raw', ['true', '1', 'on', 'garbage'])
+def test_switch_values_other_than_false_words_stay_on(monkeypatch, sub, raw) -> None:
+    _situate_processing(monkeypatch, sub, plan=PlanType.basic, used_speech_seconds=BASIC_CAP, past_cap=raw)
+    assert sub.resolve_conversation_processing_allowance('uid').reason == 'plan_allowance_exhausted_kept_on'
+
+
+def test_switch_does_not_open_inactive_subscriptions(monkeypatch, sub) -> None:
+    _situate_processing(monkeypatch, sub, plan=None)
+    allowance = sub.resolve_conversation_processing_allowance('uid')
+    assert allowance.reason == 'subscription_inactive'
+    assert allowance.allowed is False
+
+
+def test_switch_leaves_within_allowance_answer_unchanged(monkeypatch, sub) -> None:
+    _situate_processing(monkeypatch, sub, plan=PlanType.basic, used_speech_seconds=60)
+    allowance = sub.resolve_conversation_processing_allowance('uid')
+    assert allowance.reason == 'plan_within_allowance'
+    assert allowance.remaining_seconds == BASIC_CAP - 60

@@ -15,6 +15,7 @@ from utils.stt_cap_dispatch import LiveAdmission, current_live_admission, suppre
 from utils.manual_speaker_assignments import acknowledged_teaching, manual_rejected_speakers
 from utils.other.live_audio_archive import LiveAudioArchive
 from utils.sync.live_cap_hold import LiveHeldAudio
+from utils.sync.live_cap_capacity import StorageQuotaExceeded
 from utils.sync.cap_hold_lifecycle import SHUTDOWN_DELIVERY_SECONDS
 from contextlib import nullcontext
 from collections import OrderedDict, deque
@@ -155,6 +156,7 @@ from utils.stt.streaming import (
 )
 from routers.listen.stt_callbacks import attach_legacy_capture_window, build_stt_callbacks
 from utils.stt.speaker_identity import SpeakerProviderEpoch
+from utils.stt.speech_clock import SpeechClock
 from utils.stt.vad_gate import GatedSTTSocket, VADStreamingGate, VAD_GATE_MODE, is_gate_enabled
 from utils.stt import edge_shadow
 from utils.transcribe_decisions import (
@@ -289,7 +291,7 @@ def _strip_capture_word_ranges(segments: List[Dict[str, Any]]) -> None:
 
 class ListenReceiver(ReplayFilterMixin):
     def __init__(self, host: Any, channel_configs: List[ChannelConfig], channel_id_to_index: Dict[int, int]):
-        self.soniox_idle_budget = SonioxIdleBudget(uid_provider=lambda: host.request.uid)
+        self.soniox_idle_budget = SonioxIdleBudget()
         self.host = host
         self.cap_admission: LiveAdmission | None = None
         if stt_cap_dispatch_configured() and not host.use_custom_stt:
@@ -349,6 +351,9 @@ class ListenReceiver(ReplayFilterMixin):
         self.aac_decoder: Any = None
         self.lc3_decoder: Any = None
         self.vad_gate: Any = None
+        # Batch-only sockets have no transcript; this is their lifecycle's speech signal.
+        self.speech_clock: Optional[SpeechClock] = None
+        self._opened_at = time.time()
         self.edge_shadow: Optional[edge_shadow.EdgeShadowMirror] = None  # D2; edge_shadow.session_mirror
         self.image_chunks: OrderedDict[str, Dict[str, Any]] = OrderedDict()
         self.last_image_chunk_cleanup = 0.0
@@ -2721,6 +2726,10 @@ class ListenReceiver(ReplayFilterMixin):
                             continue
                         self._note_audio_activity()
                         self._mark_first_audio(now)
+                        if getattr(self.host, 'server_batch_only', False) is True:
+                            if self.speech_clock is None:
+                                self.speech_clock = SpeechClock(request.sample_rate, opened_at=self._opened_at)
+                            self.speech_clock.accept(decoded, now)
                         decoded_audio_bytes += len(decoded)
                         telemetry_call(
                             self.host, 'demand_telemetry', 'capture', len(decoded) / (2 * request.sample_rate)
@@ -2821,6 +2830,10 @@ class ListenReceiver(ReplayFilterMixin):
                     await self._handle_text(message['text'])
         except WebSocketDisconnect as error:
             note_ws_close(self.host.state, 'client', error.code)
+        except StorageQuotaExceeded:
+            # Stop ingress at the existing custody boundary and run final flush
+            # and archive close. The held writer already recorded the refusal.
+            mark_listen_internal_error(self.host.state)
         except Exception as error:
             logger.error('Listen receive failure type=%s', type(error).__name__)
             mark_listen_internal_error(self.host.state)
@@ -2855,7 +2868,8 @@ class ListenReceiver(ReplayFilterMixin):
                         self.live_hold.finish_updates(cap_updates, self._cap_hold_stop), name='stt_cap_live_final_flush'
                     )
                     try:
-                        await asyncio.shield(custody)
+                        if await asyncio.shield(custody) is False:
+                            mark_listen_internal_error(self.host.state)
                     except asyncio.CancelledError:
                         self.stt_drain_complete.set()
                         self.host.state.active = False
@@ -2998,7 +3012,10 @@ class ListenReceiver(ReplayFilterMixin):
                     },
                 )
         if not self.host.use_custom_stt:
-            await self._flush_stt_buffer(buffer, force=True)
+            try:
+                await self._flush_stt_buffer(buffer, force=True)
+            except StorageQuotaExceeded:
+                mark_listen_internal_error(self.host.state)
         await self._drain_stt_sockets()
         note_deferred_stream_closed(self)  # After the final flush, which can itself open the stream.
         if self.recovery is not None and self._replay_tail_bytes:

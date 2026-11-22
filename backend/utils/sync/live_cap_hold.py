@@ -22,9 +22,15 @@ from google.cloud import firestore
 from database._client import get_firestore_client, run_transactional, is_retryable_firestore_transaction_error
 from database.legal_holds import external_write_fence
 from utils.executors import db_executor, storage_executor, run_blocking
-from utils.observability.held_content import record_capture, record_staging_retry, PCM_CUSTODY_SECONDS
+from utils.observability.held_content import (
+    PCM_CUSTODY_SECONDS,
+    record_capture,
+    record_live_storage_quota_refusal,
+    record_staging_retry,
+)
 from utils.sync import cap_hold, live_cap_manifest, live_cap_capacity, live_cap_codec
 from utils.sync import live_cap_staging, live_cap_upload, live_cap_journal
+from utils.sync.live_cap_capacity import StorageQuotaExceeded
 from utils.sync.live_cap_publication import Publication
 from utils.sync.live_cap_tail import TailGrace
 from utils.sync.live_cap_capture import OrderedCapture
@@ -168,7 +174,7 @@ def reserve(
             or source_bytes > MAX_MONTHLY_BYTES
             or source_chunks > MAX_MONTHLY_CHUNKS
         ):
-            raise RuntimeError('live held audio storage capacity reached')
+            raise StorageQuotaExceeded('live held audio storage capacity reached')
         tx.set(ref, {'bytes': used, 'chunks': count, 'source_bytes': source_bytes, 'source_chunks': source_chunks})
         if receipt is not None:
             tx.create(receipt, {'bytes': size})
@@ -199,6 +205,7 @@ class LiveHeldAudio:
         self.buffers = {}
         self.capacity: live_cap_capacity.Capacity | None = None
         self.capacity_identity: str | None = None
+        self._quota_refusal_recorded = False
         self._summary_ready = False
         self._charged: set[str] = set()
         self._publications: dict[str, Publication] = {}
@@ -224,6 +231,8 @@ class LiveHeldAudio:
 
     def _observe_flush(self, task: asyncio.Task) -> None:
         if not task.cancelled() and (error := task.exception()) is not None:
+            if isinstance(error, StorageQuotaExceeded):
+                return  # Counted at the reservation boundary.
             # Observe failures even when the socket waiter was cancelled,
             # without duplicating an ERROR every updater tick. The non-final
             # flush boundary separately counts each volatile retention attempt.
@@ -344,6 +353,8 @@ class LiveHeldAudio:
         custody.add_done_callback(self._observe_flush)
         try:
             await asyncio.shield(custody)
+        except StorageQuotaExceeded:
+            raise  # Keep bounded PCM for the next attempt or final close.
         except StagingDeferred as error:
             if final:
                 raise  # At close/bound, no more volatile custody is safe.
@@ -391,13 +402,20 @@ class LiveHeldAudio:
 
             # Preserve the acquisition key across an ambiguous transaction reply.
             self.capacity_identity = self.capacity_identity or uuid4().hex
-            self.capacity = await run_blocking(
-                db_executor,
-                live_cap_capacity.acquire,
-                self.host.request.uid,
-                month,
-                self.capacity_identity,
-            )
+            try:
+                self.capacity = await run_blocking(
+                    db_executor,
+                    live_cap_capacity.acquire,
+                    self.host.request.uid,
+                    month,
+                    self.capacity_identity,
+                )
+            except StorageQuotaExceeded:
+                if not self._quota_refusal_recorded:
+                    self._quota_refusal_recorded = True
+                    record_live_storage_quota_refusal()
+                    logger.warning('event=stt_cap_live_held outcome=storage_quota_refused')
+                raise
             self.capacity_identity = None
 
     async def _flush(self, *, force: bool = False, seal: bool = True, final: bool = False) -> None:
@@ -646,21 +664,24 @@ class LiveHeldAudio:
                 if self.paused and not receiver.cap_admission.funded_paused and not receiver.cap_paused:
                     await self.flush(force=True)
                     await self.notice(paused=False)
+            except StorageQuotaExceeded:
+                continue  # The receive and final flush paths retain the same bounded PCM.
             except Exception as error:
                 # Updater errors cannot escape to the WS lifetime supervisor.
                 # PCM stays in this sink; receive/close retry the same identity.
                 self._warn_deferred('update_deferred', error)
 
-    async def finish_updates(self, updates: asyncio.Task | None, stop: asyncio.Event) -> None:
+    async def finish_updates(self, updates: asyncio.Task | None, stop: asyncio.Event) -> bool:
         try:
             async with asyncio.timeout(SHUTDOWN_DELIVERY_SECONDS):
-                await self._finish_updates(updates, stop)
+                return await self._finish_updates(updates, stop)
         except TimeoutError:
             if self.buffered_seconds():
                 raise
             _ACTIVE.discard(self)
+            return True
 
-    async def _finish_updates(self, updates: asyncio.Task | None, stop: asyncio.Event) -> None:
+    async def _finish_updates(self, updates: asyncio.Task | None, stop: asyncio.Event) -> bool:
         stop.set()
         if updates is not None:
             try:
@@ -669,19 +690,21 @@ class LiveHeldAudio:
                 pass
             except Exception as error:
                 logger.warning('event=stt_cap_live_held outcome=update_failed exception_type=%s', type(error).__name__)
-        await self.close()
+        return await self.close()
 
-    async def close(self) -> None:
+    async def close(self) -> bool:
+        """Return false if the final flush reached the storage quota with PCM still pending."""
         try:
             async with asyncio.timeout(SHUTDOWN_DELIVERY_SECONDS):
-                await self._close()
+                return await self._close()
         except TimeoutError:
             if self.buffered_seconds():
                 raise
             # A slow refund/seal/notice cannot revoke already durable custody.
             _ACTIVE.discard(self)
+            return True
 
-    async def _close(self) -> None:
+    async def _close(self) -> bool:
         try:
             await self.flush(force=True, final=True)
             if self.capacity is not None and not self._capacity_uncertain:
@@ -696,6 +719,11 @@ class LiveHeldAudio:
                     )
             await self.notice()
             _ACTIVE.discard(self)
+            return True
+        except StorageQuotaExceeded:
+            # There is no durable held receipt for this PCM. Preserve existing
+            # volatile custody and let the loss signal below account for it.
+            return False
         finally:
             if self.pending_bytes > 0:
                 record_capture('lost')

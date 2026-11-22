@@ -18,6 +18,30 @@ SORTED_PATHS = [f'tests/unit/test_{index:02d}.py' for index in range(13)]
 GUARD_ENV_LINE = 'test:0.1:1.0:1:not integration and not slow:auto:auto'
 
 
+def test_real_file_runner_propagates_selected_portable_test_failure(tmp_path):
+    failing = tmp_path / 'test_jobstore_operator_failure.py'
+    failing.write_text('def test_portable_failure():\n    assert False, "portable-negative-discriminator"\n')
+    selected = tmp_path / 'selected.txt'
+    selected.write_text(bash_path(failing, cwd=REPO_ROOT) + '\n')
+    environment = os.environ | {
+        'PYTHON': bash_path(Path(sys.executable), cwd=REPO_ROOT),
+        'BACKEND_UNIT_TEST_FILE_LIST': bash_path(selected, cwd=REPO_ROOT),
+        'BACKEND_PYTEST_FILE_ISOLATION': '1',
+        'BACKEND_PYTEST_WORKERS': '1',
+    }
+    result = subprocess.run(
+        bash_command(REPO_ROOT / 'backend/test.sh', cwd=REPO_ROOT),
+        cwd=REPO_ROOT,
+        env=environment,
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert 'portable-negative-discriminator' in result.stdout
+    assert 'Backend unit test file failed:' in result.stdout
+
+
 @pytest.fixture(autouse=True)
 def isolated_worker_setting(monkeypatch):
     monkeypatch.delenv('BACKEND_PYTEST_WORKERS', raising=False)
@@ -354,3 +378,61 @@ def test_empty_shard_selection_runs_preflight_but_only_shard_one_typechecks(tmp_
         else:
             assert 'Skipping backend type check on shard' in result.stdout
         assert log_path.read_text(encoding='utf-8').splitlines() == expected_log
+
+
+def test_rotation_reaches_the_selector_and_forced_typecheck_bypasses_the_predicate(tmp_path):
+    backend, runner = _sharded_fixture(tmp_path)
+    args_log = tmp_path / 'selector-args.txt'
+    _write_executable(
+        backend / 'scripts' / 'select_backend_unit_tests.py',
+        f'''
+from pathlib import Path
+import os
+import sys
+
+args = sys.argv[1:]
+Path({str(args_log)!r}).write_text(' '.join(args), encoding='utf-8')
+Path(args[args.index('--output') + 1]).write_text(os.environ['FIXTURE_SELECTION'], encoding='utf-8')
+Path(args[args.index('--reason-output') + 1]).write_text('fixture selection\\n', encoding='utf-8')
+with open(os.environ['RUNNER_LOG'], 'a', encoding='utf-8') as log:
+    log.write('select\\n')
+'''.lstrip(),
+    )
+    # A chart-only diff does not need Pyright on its own.
+    changed_files = tmp_path / 'changed-files.txt'
+    changed_files.write_text('backend/charts/pusher/values.yaml\n', encoding='utf-8', newline='\n')
+    shell_python = bash_path(Path(sys.executable), cwd=REPO_ROOT)
+
+    for force, typecheck_expected in (('0', False), ('1', True)):
+        log_path = tmp_path / f'runner-rotation-{force}.log'
+        environment = os.environ | {
+            'PYTHON': shell_python,
+            'RUNNER_LOG': str(log_path),
+            'RUNNER_SHELL_LOG': bash_path(log_path, cwd=REPO_ROOT),
+            'TESTS_OUT': bash_path(tmp_path / f'tests-rotation-{force}.txt', cwd=REPO_ROOT),
+            'FIXTURE_SELECTION': ''.join(f'{path}\n' for path in SORTED_PATHS),
+            'BACKEND_UNIT_FORCE_TYPECHECK': force,
+        }
+        result = subprocess.run(
+            bash_command(
+                runner, '--changed-files', changed_files, '--rotation', '3/8', '--shard', '2/1', cwd=REPO_ROOT
+            ),
+            cwd=backend,
+            env=environment,
+            check=False,
+            text=True,
+            capture_output=True,
+        )
+        assert result.returncode == 0, result.stdout + result.stderr
+        assert '--rotation 3/8' in args_log.read_text(encoding='utf-8')
+        assert (f'typecheck:{shell_python}' in log_path.read_text(encoding='utf-8').splitlines()) is typecheck_expected
+
+
+@pytest.mark.parametrize('arguments', [['--all', '--rotation', '1/8'], ['--rotation', 'x/8', '--all']])
+def test_rotation_requires_a_changed_files_selection(tmp_path, arguments):
+    backend, runner = _sharded_fixture(tmp_path)
+    result = subprocess.run(
+        bash_command(runner, *arguments, cwd=REPO_ROOT), cwd=backend, check=False, text=True, capture_output=True
+    )
+    assert result.returncode == 2
+    assert 'usage' in result.stderr

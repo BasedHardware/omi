@@ -54,6 +54,15 @@ UNRESOLVED_NOTES = [
     'documented as 0 in runtime_env/README.md but _base.yaml carries 100. Neither source is selected as authority; '
     'human ruling required.',
 ]
+# SCA-3548 preserves the production worker's live read policy for the depth-only roll.
+# This data is a strict expected projection, not permission to ignore divergence.
+PROD_WORKER_RETAINED_LEVERS = {
+    'usage_month_cache': 0,
+    'usage_month_total': 0,
+    'bpp_decision_cache': 0,
+    'privacy_checks_shadow': 0,
+    'bpp_owner_memo_enforce': 0,
+}
 README_TRAIN_LEVERS = ('memory_list_index_window', 'people_scan_dedupe', 'finjob_candidate_queries')
 README_TRIPLE_NOTE_PREFIX = 'UNRESOLVED: README-vs-base triple:'
 
@@ -238,7 +247,8 @@ def parity_errors(sources: dict[str, dict[str, int]], expected: dict[str, dict[s
             ):
                 errors.append(f'{surface}: missing reviewed UNRESOLVED inheritance annotation')
         else:
-            # The prod worker shares integration's map except its monthly readers stay off.
+            # The worker retains its separately admitted monthly/privacy scope.
+            # O2b (2026-11-17) is API-only; never inherit that enforcement into a worker train.
             target = (
                 'runtime/prod/cloud_run/services/backend-integration'
                 if surface == 'chart/prod/batch-pipeline-worker'
@@ -246,7 +256,7 @@ def parity_errors(sources: dict[str, dict[str, int]], expected: dict[str, dict[s
             )
             target_values = dict(expected.get(target, {}))
             if surface == 'chart/prod/batch-pipeline-worker':
-                target_values.update(usage_month_cache=0, usage_month_total=0)
+                target_values.update(PROD_WORKER_RETAINED_LEVERS)
             if target not in expected or effective_levers(explicit) != effective_levers(target_values):
                 errors.append(f'{surface}: effective levers differ from {target}')
     return errors

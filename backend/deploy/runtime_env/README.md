@@ -2,6 +2,9 @@
 
 Edit `_base.yaml` and the environment overlays, then regenerate
 `backend/deploy/runtime_env.yaml` with `backend/deploy/compose_runtime_env.py`.
+Production Cloud Run settings under `service_only_env` apply to the named
+service after derived services are composed. Staging composes the shared
+`overlay` and does not inherit these service-specific settings.
 
 Pre-recorded Modulate credit/breaker failover to Soniox is declared on every
 runtime host beside `STT_PRERECORDED_MODEL`. `PRERECORDED_SONIOX_FAILOVER_ENABLED`
@@ -14,14 +17,34 @@ Keep it out of deployment defaults and use the
 one-time zero seed, controller/guard cutover and rollback. Existing env values
 are fallback only, never evidence of effective admission after that seed.
 
-SCA-2185 persists integration's production merge catch-up depth 1, provider
-merge membership on, and contained donor merge off across service rolls.
-Rollback uses the same overlay; provider membership accepts `false` and donor
-merge remains `off`. The separately reviewed Train 1 Firestore lever literals
-remain authoritative; a pre-Train 1 serving read must not overwrite them with
-reset values. Finish-backoff configuration and its renderer contract are owned
-by PR #25307 for Train 2, with the flag on for prod sync and integration only
-(SCA-2270). Keep that policy in its reviewed change rather than duplicating it.
+## Live-only values are a debt with a due date
+
+A value that exists only on a serving host is not configuration: it is an
+unreviewed change that the next listen/pusher Helm roll deletes (Helm replaces
+the env list) and the next Cloud Run train preserves invisibly (the train folds
+live values back). Do not change production env with `kubectl set env` or
+`gcloud run services update --update-env-vars` as a shortcut. The sanctioned
+paths are:
+
+- **Reviewed Git** (this manifest and the charts): the default for every public
+  value, including kill switches flipped in an incident. Open the PR in the same
+  task; the next deploy applies it.
+- **Runtime-owned** (batch ramp percent, `rollout_cohorts/*` documents):
+  deliberately absent from this manifest, changed through their own tools and
+  never expected to match Git.
+- **Private values** (uid-bearing cohorts, tokens): names in Git, values in
+  Secret Manager. On backend-listen the chart's `privateSecretEnv` declares the
+  names and the `LISTEN_PRIVATE_ENV` document holds the values; a value change
+  is a new version, force-sync and rollout restart
+  ([runbook](../../docs/runbooks/listen-private-env.md)), never a code deploy.
+  The retired `LISTEN_PRIVATE_VALUES_YAML` privateEnv overlay is refused by the
+  chart.
+
+If an incident truly needs a live edit before a PR can land, it is a loan: record
+it in the meta repo's drift ledger (`infra/rollout/bin/drift_ledger.py add` with
+owner, ruling and expiry, scoped to one target) and open the fold-back PR in the
+same task. The train's drift gate refuses a live-only key nobody owns; a
+refusal is a finding, not an obstacle.
 
 Version 2 requires the backend voice route's staging bucket as an explicit
 literal: `syncing-local-development` in dev and `syncing-local` in prod. Normal
@@ -124,13 +147,11 @@ establishes no realized savings.
 
 Batch worker control-loop settings are declared in the worker chart (including
 explicit prod values): candidate fanout 16, parallel admission true, idle max 10s,
-and `firestoreReadLevers: '{}'` outside prod. Prod uses backend-integration's
-complete lever map except `usage_month_cache:0` and `usage_month_total:0`,
-including `bpp_decision_cache:100` and `batch_timeliness_leader:100`, and enables held-poll
-skip; its kill switch is setting `heldPollSkipEnabled` to false.
-Projection finish backoff remains at its code default, off (SCA-2024).
-The three control knobs
-also have matching base declarations on serving batch hosts; pusher does not run
+and `firestoreReadLevers: '{}'` outside prod. Prod keeps integration's non-privacy map except `usage_month_cache:0` and
+`usage_month_total:0`. The API-only O2b admission below does not move the worker:
+its source retains `bpp_decision_cache:100`, `privacy_checks_shadow:10` and
+`bpp_owner_memo_enforce:0`, plus `batch_timeliness_leader:100`. The offline parity check requires
+that role split. The three control knobs also have matching base declarations on serving batch hosts; pusher does not run
 the batch scheduler/pump and the co-host contract classifies them listen-only.
 The retired WQ12 privacy lever is absent from worker and serving-role literals.
 Worker rollback: 64 / false / 2 / `{}` respectively. See
@@ -151,23 +172,33 @@ The existing backend unit selector runs these checks when any source changes.
 
 `firestore_read_lever_policy.lever_expiry` in `_base.yaml` is a surface-keyed
 map: each partial `(surface, lever)` entry binds the exact `value` to an ISO UTC
-`expires` date. Dates must be today through seven days out. Current approvals
-end on 2026-11-17; this is an expiry deadline, not permission to expand the rollout.
+`expires` date. Dates must be today through seven days out. The lifecycle
+`lifecycle_record_pending_head:5` approvals ended on 2026-11-17 with no owner decision and
+started failing every backend PR; they were renewed unchanged through 2026-11-24 on 2026-11-18
+(value and admission unchanged) so the owning lane can decide 0, 100 or another renewal. The three retained prod backfill/worker shadow-10 entries
+are renewed through 2026-11-24 under the margin lead's panel F3 disposition to
+retain their excluded scope; percentages and runtime admission do not change.
+An expiry deadline is not permission to expand the rollout.
 Renewal requires an explicit reviewed source change. `base/` and `overlay/`
 identify raw input paths; `runtime/<env>/` identifies both the generated and
 in-memory composed surface; `chart/<env>/` includes Helm default inheritance;
 `code/defaults` covers partial defaults even if an explicit literal overrides them.
 No broad exception grants expiry coverage to another surface or percentage.
 
-RESOLVED (SCA-2173, 2026-11-14): the prod worker and the prod Cloud Run
-services pin `batch_timeliness_leader:100` and `lifecycle_record_pending_head:100`,
-and set `privacy_checks_shadow:0`; `backend-sync-backfill` keeps its ec191a row 3
-pins (`batch_timeliness_leader:0`, `privacy_checks_shadow:100`,
-`lifecycle_record_pending_head:5`). `privacy_ttl60` remains 0. Integration, sync
-and backend pin both `usage_month_cache` and `usage_month_total` to 100 (SCA-2222
-Train 1); backfill and the worker keep both at 0. Every other lever and epoch is
-unchanged.
-These source values ride each surface's next train; no worker roll is requested.
+Current source supersedes the 2026-11-14 privacy comparison pins: prod Cloud
+Run backend, sync and integration use owner enforcement 100/shadow 0/decision
+cache 0 under the API admission below. Backfill retains enforcement 0/shadow 10
+with decision cache 0; the prod worker retains enforcement 0/shadow 10/decision
+cache 100. Staging retains its prior enforcement 0/shadow 10/decision cache 100
+on all four Cloud Run services. Its explicit maps preserve that independent
+scope; `staging-mirrors-prod` checks those exact three retained values and strict
+parity of every other JSON key. No worker roll or staging privacy activation is
+requested. `privacy_ttl60` remains 0 everywhere.
+Prod worker and the three API services still pin `batch_timeliness_leader:100`
+and `lifecycle_record_pending_head:100`; backfill retains its separate row-3
+pins. Backend, sync and integration keep both monthly-reader levers at 100;
+backfill and the worker keep both at 0. Every other lever and epoch is unchanged.
+These source values ride each surface's next train.
 The generator's `REVIEWED_INHERITANCE` constant preserves `{}` on default/dev
 worker surfaces and enumerates the remaining unresolved inherited differences.
 The pending 5% monthly-reader proposal is not a compose input; its refreshed
@@ -183,50 +214,39 @@ extracts each historical train claim and compares it with every base declaration
 It rejects missing or ambiguous claims, agreement with a stale UNRESOLVED note,
 and a missing note while the sources disagree.
 
-## SCA-2185 GKE operator settings
+## API owner-memo source carry (O2b, 2026-11-17)
 
-The prod listen and pusher chart values and prod runtime overlay carry the
-public operator settings observed on 2026-11-15. They preserve each host's
-existing scope. Rollback
-changes these same pins rather than removing them from the chart.
+The margin lead's stage-2 order and Release's completed 5xx qualification/apply
+admit owner-memo enforcement only on prod Cloud Run `backend`, `backend-sync`
+and `backend-integration`. Their canonical `prod.overlay.yaml` maps now carry
+`bpp_owner_memo_enforce:100`, `privacy_checks_shadow:0`, `bpp_decision_cache:0`,
+`privacy_negative_lookup_cache:0` and `privacy_ttl60:0`. All unrelated entries
+are preserved. The restored integration200/10/class16 values are pinned in both ops and
+prod/staging runtime overlays so full deploys cannot reintroduce the inverse;
+Release still owns application and separate runtime admission.
 
-Listen's nonempty `MEDIA_NOISE_MODE_SERVE_UID_SHA256S` cohort must be supplied
-through `LISTEN_PRIVATE_VALUES_YAML` under `privateEnv`. Its payload must never
-enter this repository. Before admitting a Helm apply, the deploy owner must
-confirm that the protected input contains the existing cohort and compare the
-final private/runtime-overridden render with the serving ReplicaSets. The
-public chart alone cannot prove preservation of that private binding.
+Backfill is excluded: its existing O4 decision-cache OFF state is now durable
+with enforcement 0 and shadow 10. The worker chart, GKE, jobs, desktop and dev
+source remain unchanged. This supersedes the older shadow/negative-cache values
+in the historical SCA-2173 paragraph above, without widening its monthly readers.
+The six obsolete API shadow-10 expiry entries are removed. The three retained
+backfill/worker shadow-10 entries are renewed through 2026-11-24 by the margin
+lead's panel F3 disposition; no percentage changes and expiry never authorizes
+a rollout. The later04:56 privacy incident supersedes the earlier source GO;
+current lead/runtime reconciliation and explicit Release admission remain HOLD.
 
-The source epoch remains `c2fs_20261026_r1` on prod listen and pusher, as required
-by SCA-1750's allowance-watch contract, although the observed serving epoch is
-`v1` on both. This discrepancy requires the rollout/usage owner to reconcile;
-copying the older epoch into source would reverse that reviewed contract. The
-five explicit pusher bindings already present in source (Soniox failover and
-four token-lease keys) stay declared. Their absence from the serving spec is
-a live/source discrepancy, not permission to delete their declarations.
+These complete literals are source replacements, not live-map patches. Edit the
+prod overlay and run both canonical generators; never run the one-time source
+splitter or hand-edit the derived runtime/read-lever manifests. The normal
+renderer must preserve each literal, and Release reads back each actual receiver.
+The integration canary can preserve an authenticated live map instead of the
+source map, so its output is not proof that source values were deployed.
 
-This contribution does not authorize deployment. Keep GKE changes image-only
-until a fresh ro-prod comparison against main proves the required agreement.
-
-Ten baseline live-only keys are retired under David's 2026-11-09 ruling:
-`SPEAKER_MATCH_SCORES_ENABLED`, `FIRST_SUMMARY_DEADLINE_ENABLED`,
-`FIRST_SUMMARY_DEADLINE_PERCENT`, `AUDIO_ARCHIVE_COALESCE_ENABLED`,
-`AUDIO_ARCHIVE_UID_ALLOWLIST`, `SPEAKER_GROUPING_MODE`, and
-`SYNC_EMPTY_MULTILINGUAL_RECOVERY_ENABLED`, `LIVE_CAPTURE_WINDOW_RETENTION`,
-`LIVE_CAPTURE_WINDOW_STRICT_PROJECTION`, and `REPEAT_WORK_LLM_VERSION`.
-They remain absent from source; the registry and graduation tests continue to
-reject their reintroduction. The rollout owner must dispose of those stale
-production entries before claiming literal environment agreement.
-
-Release's 2026-11-15 14:23:17Z pusher-only activation under SCA-2304 supersedes
-the captain's 02:55Z compression-off contingency. Prod pusher explicitly pins
-`AUDIO_CUSTODY_PCM_COMPRESSION_ENABLED=true`, matching runtime generation 3309
-on source `afa75349` / image digest prefix `055d316`. All other settings and
-listen's default-on behavior are preserved. Ready enabled serving and the full
-canary remain pending; this config audit records the activation without granting
-acceptance or deployment permission.
-
-Rollback inverse: set only this pusher binding to `false` in both the production
-chart and runtime overlay, then regenerate `runtime_env.yaml` and the flag catalog.
-This disables optional compression while preserving PCM custody and existing
-FLAC readers. Release owns any guard rollback and its matching disposition here.
+Runtime rollback remains Release's current-map change to enforcement 0/shadow 10
+or the existing `ops_kill_switches/privacy_decision_cache` kill path. Reconcile
+source before a later train after an inverse; a source revert alone neither
+changes serving config nor restores a deleted predecessor. With shadow 0 there
+is no mismatch stream: the lead's guard is a manual-trip backstop, while existing
+per-decision transactional token checks remain the privacy fence. Source checks
+do not prove guard acceptance, writer coverage, a clean post-overlap hour,
+causal savings or settled/all-in billing. The existing lead retains measurement.

@@ -38,6 +38,18 @@ def test_dry_run_reports_counts_and_the_runtime_digest(runtime, capsys):
     assert runtime.deleted == []
 
 
+def test_pending_count_excludes_readiness_control_metadata(runtime, capsys):
+
+    runtime.client.collection.return_value.select.return_value.stream.return_value = [
+        SimpleNamespace(id='a' * 64),
+        SimpleNamespace(id='_owner_scan_v1_readiness'),
+        SimpleNamespace(id='b' * 64),
+    ]
+    assert cleanup.main([]) == 0
+    assert 'batch_purge_obligations_pending=2' in capsys.readouterr().out
+    assert runtime.deleted == []
+
+
 def test_execute_refuses_a_standalone_project_scan(runtime, monkeypatch):
     standalone = MagicMock()
     monkeypatch.setattr(cleanup.firestore, 'Client', standalone)

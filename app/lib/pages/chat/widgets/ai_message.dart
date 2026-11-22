@@ -256,7 +256,9 @@ class _AIMessageState extends State<AIMessage> {
 
   @override
   Widget build(BuildContext context) {
-    if (widget.replyFailed) return ChatReplyError(failure: widget.replyFailure, onRetry: widget.onRetry);
+    final error = widget.replyFailed ? ChatReplyError(failure: widget.replyFailure, onRetry: widget.onRetry) : null;
+    // A reply cut off mid-stream keeps what was already shown; the error goes under it (H2).
+    if (error != null && widget.message.text.trim().isEmpty) return error;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -287,6 +289,10 @@ class _AIMessageState extends State<AIMessage> {
               ),
             ],
           ),
+        ],
+        if (error != null) ...[
+          const SizedBox(height: OmiSpacing.xs),
+          error,
         ],
       ],
     );
@@ -849,7 +855,11 @@ class _MemoriesMessageWidgetState extends State<MemoriesMessageWidget> {
 
     if (!mounted) return;
     if (conversation == null) {
-      OmiFeedback.info(context, context.l10n.conversationNotFoundOrDeleted);
+      // Deleted, locked or unreachable look the same from here; say it could not open, and offer
+      // Try Again rather than claiming it was deleted (ux-contract §17.8).
+      OmiMissingTarget.conversation.show(context, onRetry: () {
+        if (mounted) _openCitedConversation(index, citation);
+      });
       return;
     }
 

@@ -407,9 +407,9 @@ def test_prod_deploy_invokes_legacy_binding_migration_before_deploy() -> None:
     text = backend_deploy_contract_text('gcp_backend.yml')
 
     assert 'preflight-cloud-run-deploy.py' in text
-    assert text.count('--migrate-legacy-public-binding') == 4
-    for service in ('backend', 'backend-sync', 'backend-sync-backfill', 'backend-integration'):
-        assert f'--migrate-legacy-public-binding {service}' in text
+    assert 'for service in $SELECTED_CLOUD_RUN_SERVICES' in text
+    assert '--migrate-legacy-public-binding "$service"' in text
+    assert 'SELECTED_CLOUD_RUN_SERVICES=backend backend-sync backend-sync-backfill backend-integration' in text
     assert text.index('migrate-legacy-public-binding') < text.index('Deploy ${{ inputs.service }} to Cloud Run')
 
 
@@ -419,9 +419,9 @@ def test_dev_deploy_invokes_legacy_binding_migration_only_for_dev_services() -> 
 
     assert 'environment: development' in text
     assert 'preflight-cloud-run-deploy.py' in text
-    assert text.count('--migrate-legacy-public-binding') == 4
-    for service in ('backend', 'backend-sync', 'backend-sync-backfill', 'backend-integration'):
-        assert f'--migrate-legacy-public-binding {service}' in text
+    assert 'for service in $SELECTED_CLOUD_RUN_SERVICES' in text
+    assert '--migrate-legacy-public-binding "$service"' in text
+    assert 'SELECTED_CLOUD_RUN_SERVICES=backend backend-sync backend-sync-backfill backend-integration' in text
     assert text.index('migrate-legacy-public-binding') < text.index('Deploy ${{ inputs.service }} to Cloud Run')
     assert '--check-runtime-bindings' in text
     assert text.index('migrate-legacy-public-binding') < text.index('--check-runtime-bindings')
@@ -468,7 +468,10 @@ def test_static_backend_deploys_only_check_the_serving_firestore_schema() -> Non
         assert 'service_account: omi-ci-index-check@based-hardware.iam.gserviceaccount.com' in text
         assert 'workloadIdentityPools/omi-gha-deploy-' in text
         assert 'GCP_FIRESTORE_READONLY_CREDENTIALS' not in text
-        assert 'needs: firestore_readiness' in text
+        assert re.search(
+            r"(?m)^    needs: (?:firestore_readiness|\[[^\]\n]*\bfirestore_readiness\b[^\]\n]*\])$",
+            text,
+        )
 
 
 def test_dev_firestore_readiness_requires_read_only_credentials_for_the_runtime_project() -> None:

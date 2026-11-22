@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/services/wals/sync_wake_scope.dart';
 import 'package:omi/services/wals/upload_trace.dart';
+import 'package:omi/services/wals/ring_drain_policy.dart';
 
 /// The event that made another recording-transfer pass worthwhile.
 ///
@@ -130,7 +131,8 @@ class RecordingTransferCoordinator {
         fencedPassTimeLimit = defaultFencedPassTimeLimit,
         watchdogInterval = defaultWatchdogInterval;
 
-  /// Hard limit on one pass. A pendant storage pull of a full ring is ~50 min.
+  /// No-progress limit on an ordinary pass. Radio DATA renews this deadline;
+  /// the pendant reader itself has much shorter first-data/silence deadlines.
   static const defaultPassTimeLimit = Duration(minutes: 60);
 
   /// Hard limit on a pass that fences live capture (OS-granted periodic window).
@@ -189,6 +191,14 @@ class RecordingTransferCoordinator {
   int _periodicGeneration = 0;
   bool _periodicDrainInFlight = false;
   int _passGeneration = 0;
+  int _deviceProgress = 0;
+
+  /// Called for nonempty ring DATA at admission, before disk work can queue.
+  /// Control notifications and elapsed wall time cannot keep a read alive.
+  void noteDeviceProgress() {
+    if (_inFlight != null) _deviceProgress++;
+  }
+
   Future<void>? _abandonedPass;
 
   /// Retire an expired OS window before any further discovery/upload stage.
@@ -423,7 +433,8 @@ class RecordingTransferCoordinator {
     // fence or `_inFlight` (which every later wake joins) past it.
     final generation = ++_passGeneration;
     Future<void>? running;
-    Future<void> body() => _limitedPass(limit, running = _runPassBody(trigger, generation));
+    Future<void> body() => _limitedPass(limit, running = _runPassBody(trigger, generation),
+        progressBased: ringDrainRecoveryEnabled && !fenced);
     try {
       if (fenced) {
         await SyncWakeScope.run(body);
@@ -449,14 +460,35 @@ class RecordingTransferCoordinator {
 
   /// Races [work] against [limit]. Tests inject [_scheduleTimeout] so the limit
   /// fires at a chosen point instead of on the host's wall clock.
-  Future<void> _limitedPass(Duration limit, Future<void> work) {
+  Future<void> _limitedPass(Duration limit, Future<void> work, {bool progressBased = false}) {
     final scheduler = _scheduleTimeout;
-    if (scheduler == null) return work.timeout(limit);
+    if (!progressBased && scheduler == null) return work.timeout(limit);
     final expired = Completer<void>();
-    scheduler(limit, () {
-      if (!expired.isCompleted) expired.completeError(TimeoutException('pass time limit', limit));
+    var active = true;
+    Timer? timer;
+    void arm() {
+      final observed = _deviceProgress;
+      void check() {
+        if (!active) return;
+        if (progressBased && observed != _deviceProgress) {
+          arm();
+        } else if (!expired.isCompleted) {
+          expired.completeError(TimeoutException('pass no-progress limit', limit));
+        }
+      }
+
+      if (scheduler != null) {
+        scheduler(limit, check);
+      } else {
+        timer = Timer(limit, check);
+      }
+    }
+
+    arm();
+    return Future.any<void>([work, expired.future]).whenComplete(() {
+      active = false;
+      timer?.cancel();
     });
-    return Future.any<void>([work, expired.future]);
   }
 
   Future<void> _holdAbandonedPass(Future<void> abandoned) async {

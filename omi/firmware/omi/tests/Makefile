@@ -1,6 +1,8 @@
 CC ?= cc
-CFLAGS ?= -std=c99 -Wall -Wextra -Werror -I../src/lib/core
-SD_CFLAGS ?= -std=c99 -Wall -Wextra -Werror -Istubs -I../src -I../src/lib/core -Wno-unused-parameter -Wno-unused-variable
+# -iquote, not -I: src/lib/core/features.h must not shadow the C library's
+# <features.h>, which glibc's own headers include.
+CFLAGS ?= -std=c99 -Wall -Wextra -Werror -iquote ../src/lib/core
+SD_CFLAGS ?= -std=c99 -Wall -Wextra -Werror -Istubs -iquote ../src -iquote ../src/lib/core -Wno-unused-parameter -Wno-unused-variable
 STUB_HEADERS := $(wildcard stubs/*.h stubs/*/*.h stubs/*/*/*.h stubs/*/*/*/*.h)
 CUSTODY_SRC := ../src/lib/core/custody.c ../src/lib/core/custody.h
 

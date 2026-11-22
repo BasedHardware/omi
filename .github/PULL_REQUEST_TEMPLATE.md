@@ -48,6 +48,8 @@
          Failure-Class: none
      `scripts/failure-class prepare` lists the classes whose scope_hints overlap your
      change (add --all-candidates for the whole registry); `explain <id>` prints one.
+     Every class has a contract `family`; `explain` lists the family's open classes.
+     Declare an existing class when its family's contract fits; `new` only when none does.
      `harden:` commits may cite a class but do not need a declaration. -->
 
 Failure-Class: none

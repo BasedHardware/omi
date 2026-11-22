@@ -991,7 +991,7 @@ def owns_record(uid, cid, *, shard, shards):
     return int(record_identity(uid, cid)[1], 16) % shards == shard
 
 
-def run(*, progress=lambda _: None, shard=0, shards=1, deadline=None, before=lambda: None):
+def run(*, progress=lambda _: None, shard=0, shards=1, deadline=None, before=lambda: None, phase_progress=None):
     validate_partition(shard, shards)
 
     def execute():
@@ -1003,6 +1003,7 @@ def run(*, progress=lambda _: None, shard=0, shards=1, deadline=None, before=lam
                 shard=shard,
                 shards=shards,
                 **({'deadline': deadline} if deadline is not None else {}),
+                **({'phase_progress': phase_progress} if phase_progress is not None else {}),
             )
         finally:
             discovery_progress.flush()
@@ -1028,9 +1029,10 @@ def run(*, progress=lambda _: None, shard=0, shards=1, deadline=None, before=lam
             lease.release()
 
 
-def _run(*, progress, shard, shards, deadline=None):
+def _run(*, progress, shard, shards, deadline=None, phase_progress=lambda _: None):
     if not config.enabled():
         return {'event': 'record_seal_repair', 'outcome': 'disabled'}
+    phase_progress('discovery')
     workers, row_seconds, run_seconds, mode = config.settings()
     fresh_slots = workers // 2 if config.jobs_enabled() and config.fresh_enabled() and workers > 1 else 0
     # Fresh borrows ordinary execution capacity; it never shrinks either
@@ -1178,17 +1180,6 @@ def _run(*, progress, shard, shards, deadline=None):
             progress({'event': 'record_custody_receipts_expiry', 'outcome': 'budget_exhausted'})
         except Exception:
             progress({'event': 'record_custody_receipts_expiry', 'outcome': 'error'})
-    last_attempted, last_job_attempted, last_urgent_attempted = None, None, None
-
-    def attempted(path):
-        nonlocal last_attempted, last_job_attempted, last_urgent_attempted
-        if path in urgent_cursors:
-            last_urgent_attempted = urgent_cursors[path]
-        elif path in job_cursors:
-            last_job_attempted = job_cursors[path]
-        elif path in selected_cursors:
-            last_attempted = selected_cursors[path]
-
     from utils.batch_pipeline.record_seal_backlog import BacklogLane
 
     backlog = (
@@ -1203,8 +1194,22 @@ def _run(*, progress, shard, shards, deadline=None):
         if config.jobs_enabled()
         else None
     )
+    last_attempted, last_job_attempted, last_urgent_attempted = None, None, None
+
+    def attempted(path):
+        nonlocal last_attempted, last_job_attempted, last_urgent_attempted
+        if path in urgent_cursors:
+            last_urgent_attempted = urgent_cursors[path]
+        elif path in job_cursors:
+            last_job_attempted = job_cursors[path]
+        elif path in selected_cursors:
+            last_attempted = selected_cursors[path]
+        elif backlog is not None:
+            backlog.attempted(path)
+
     if deadline is not None:
         run_seconds = max(0, min(run_seconds, deadline - time.monotonic() - 30))
+    phase_progress('rows')
     report = coordinate(
         rows,
         workers=workers,
@@ -1218,23 +1223,33 @@ def _run(*, progress, shard, shards, deadline=None):
         bootstrap_rows=min(workers, len(rows)),
         backlog=backlog,
     )
+    phase_progress('checkpoint')
     report['invalid_clock_rows'] = report.get('invalid_clock_rows', 0) + invalid_clock_counts['invalid_clock_rows']
-    if mode == 'apply' and (last_attempted or last_job_attempted or last_urgent_attempted):
-        # Preserve exact Firestore nanoseconds, not an age reconstructed clock.
-        # The second point write (lead ruling 4cbd2a) advances past ALL attempts,
-        # never past a deferred row. Initial checkpoint survives interruption;
-        # end-of-pass wrap revisits even the oldest chronic/interrupted row.
+    if mode == 'apply' and (
+        last_attempted or last_job_attempted or last_urgent_attempted or (backlog and backlog.last_attempted)
+    ):
+        # Preserve the exact query position, including Firestore nanoseconds.
+        # Checkpoint attempts and leave deferred rows for the next run.
+        # On interruption the previous checkpoint still holds; wrap revisits
+        # chronic and interrupted rows.
         budget = SweepBudget(30)
-        with silent_dependencies(), budget.interrupt_io():
-            if last_attempted:
-                frontier.write(last_attempted, budget)
-            if last_job_attempted and jobs_frontier is not None:
-                jobs_frontier.write(last_job_attempted, budget)
-            if last_urgent_attempted and urgent_frontier is not None:
-                urgent_frontier.write(last_urgent_attempted, budget)
+        try:
+            with silent_dependencies(), budget.interrupt_io():
+                if last_attempted:
+                    frontier.write(last_attempted, budget)
+                if last_job_attempted and jobs_frontier is not None:
+                    jobs_frontier.write(last_job_attempted, budget)
+                if last_urgent_attempted and urgent_frontier is not None:
+                    urgent_frontier.write(last_urgent_attempted, budget)
+                if backlog is not None:
+                    backlog.checkpoint_attempted(budget)
+        except BudgetExhausted:
+            report['cursor_checkpoint_outcome'] = 'budget_exhausted'
+            report['work_incomplete'] = True
+            progress({'event': 'record_seal_repair_checkpoint', 'outcome': 'budget_exhausted'})
     return {
         'event': 'record_seal_repair',
-        'outcome': 'ok',
+        'outcome': 'budget_exhausted' if report.get('cursor_checkpoint_outcome') == 'budget_exhausted' else 'ok',
         'mode': mode,
         'discovery_saturated': saturated,
         'shard': shard,
