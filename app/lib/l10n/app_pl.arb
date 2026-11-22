@@ -4772,5 +4772,8 @@
     "writingSummaryStatus": "Pisanie podsumowania…",
     "stillWorkingOnIt": "Nadal pracujemy nad tym.",
     "firmwareUpdateFirmwareTooOld": "Oprogramowanie układowe Twojego urządzenia jest zbyt stare dla tej aktualizacji. Skontaktuj się z pomocą techniczną, aby uzyskać pomoc w aktualizacji urządzenia.",
-    "firmwareUpdateAppRequired": "Ta aktualizacja oprogramowania układowego wymaga nowszej aplikacji Omi. Zaktualizuj aplikację w sklepie z aplikacjami, a następnie sprawdź ponownie."
+    "firmwareUpdateAppRequired": "Ta aktualizacja oprogramowania układowego wymaga nowszej aplikacji Omi. Zaktualizuj aplikację w sklepie z aplikacjami, a następnie sprawdź ponownie.",
+    "quietPayerTitle": "Brak nagrań od 5 dni",
+    "quietPayerMessage": "Sprawdź swoje Omi.",
+    "quietPayerCheck": "Sprawdź"
 }

@@ -4779,5 +4779,8 @@
     "writingSummaryStatus": "Skriver opsummering…",
     "stillWorkingOnIt": "Vi arbejder stadig på det.",
     "firmwareUpdateFirmwareTooOld": "Din enheds firmware er for gammel til denne opdatering. Kontakt support for at få hjælp til at opdatere din enhed.",
-    "firmwareUpdateAppRequired": "Denne firmwareopdatering kræver en nyere version af Omi-appen. Opdater appen fra din appbutik, og søg derefter efter opdateringer igen."
+    "firmwareUpdateAppRequired": "Denne firmwareopdatering kræver en nyere version af Omi-appen. Opdater appen fra din appbutik, og søg derefter efter opdateringer igen.",
+    "quietPayerTitle": "Ingen optagelser i 5 dage",
+    "quietPayerMessage": "Tjek din Omi.",
+    "quietPayerCheck": "Tjek"
 }

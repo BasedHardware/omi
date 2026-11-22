@@ -15640,4 +15640,13 @@ class AppLocalizationsAr extends AppLocalizations {
   @override
   String get firmwareUpdateAppRequired =>
       'يتطلب تحديث البرنامج الثابت هذا إصدارًا أحدث من تطبيق Omi. حدّث التطبيق من متجر التطبيقات لديك، ثم تحقّق مرة أخرى.';
+
+  @override
+  String get quietPayerTitle => 'لا توجد تسجيلات منذ 5 أيام';
+
+  @override
+  String get quietPayerMessage => 'تحقّق من Omi.';
+
+  @override
+  String get quietPayerCheck => 'تحقّق';
 }

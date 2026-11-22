@@ -15779,4 +15779,13 @@ class AppLocalizationsKn extends AppLocalizations {
   @override
   String get firmwareUpdateAppRequired =>
       'ಈ ಫರ್ಮ್‌ವೇರ್ ನವೀಕರಣಕ್ಕೆ Omi ಆ್ಯಪ್‌ನ ಹೊಸ ಆವೃತ್ತಿ ಅಗತ್ಯವಿದೆ. ನಿಮ್ಮ ಆ್ಯಪ್ ಸ್ಟೋರ್‌ನಿಂದ ಆ್ಯಪ್ ಅನ್ನು ನವೀಕರಿಸಿ, ನಂತರ ಮತ್ತೆ ಪರಿಶೀಲಿಸಿ.';
+
+  @override
+  String get quietPayerTitle => '5 ದಿನಗಳಿಂದ ಯಾವುದೇ ರೆಕಾರ್ಡಿಂಗ್ ಇಲ್ಲ';
+
+  @override
+  String get quietPayerMessage => 'ನಿಮ್ಮ Omi ಪರಿಶೀಲಿಸಿ.';
+
+  @override
+  String get quietPayerCheck => 'ಪರಿಶೀಲಿಸಿ';
 }

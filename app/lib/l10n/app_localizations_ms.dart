@@ -15764,4 +15764,13 @@ class AppLocalizationsMs extends AppLocalizations {
   @override
   String get firmwareUpdateAppRequired =>
       'Kemas kini perisian tegar ini memerlukan versi apl Omi yang lebih baharu. Kemas kini apl daripada gedung aplikasi anda, kemudian semak semula.';
+
+  @override
+  String get quietPayerTitle => 'Tiada rakaman dalam 5 hari';
+
+  @override
+  String get quietPayerMessage => 'Semak Omi anda.';
+
+  @override
+  String get quietPayerCheck => 'Semak';
 }

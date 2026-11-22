@@ -15830,4 +15830,13 @@ class AppLocalizationsEl extends AppLocalizations {
   @override
   String get firmwareUpdateAppRequired =>
       'Αυτή η ενημέρωση υλικολογισμικού απαιτεί νεότερη έκδοση της εφαρμογής Omi. Ενημερώστε την εφαρμογή από το κατάστημα εφαρμογών σας και ελέγξτε ξανά.';
+
+  @override
+  String get quietPayerTitle => 'Καμία ηχογράφηση εδώ και 5 ημέρες';
+
+  @override
+  String get quietPayerMessage => 'Έλεγξε το Omi σου.';
+
+  @override
+  String get quietPayerCheck => 'Έλεγχος';
 }

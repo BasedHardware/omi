@@ -15761,4 +15761,13 @@ class AppLocalizationsUk extends AppLocalizations {
   @override
   String get firmwareUpdateAppRequired =>
       'Для цього оновлення прошивки потрібна новіша версія застосунку Omi. Оновіть застосунок у магазині застосунків, а потім перевірте ще раз.';
+
+  @override
+  String get quietPayerTitle => 'Немає записів 5 днів';
+
+  @override
+  String get quietPayerMessage => 'Перевірте свій Omi.';
+
+  @override
+  String get quietPayerCheck => 'Перевірити';
 }

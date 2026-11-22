@@ -4772,5 +4772,8 @@
     "writingSummaryStatus": "Özet yazılıyor…",
     "stillWorkingOnIt": "Hâlâ üzerinde çalışılıyor.",
     "firmwareUpdateFirmwareTooOld": "Cihazınızın donanım yazılımı bu güncelleme için çok eski. Cihazınızı güncelleme konusunda yardım almak için destek ekibiyle iletişime geçin.",
-    "firmwareUpdateAppRequired": "Bu donanım yazılımı güncellemesi için Omi uygulamasının daha yeni bir sürümü gerekiyor. Uygulamayı uygulama mağazanızdan güncelleyin, ardından yeniden kontrol edin."
+    "firmwareUpdateAppRequired": "Bu donanım yazılımı güncellemesi için Omi uygulamasının daha yeni bir sürümü gerekiyor. Uygulamayı uygulama mağazanızdan güncelleyin, ardından yeniden kontrol edin.",
+    "quietPayerTitle": "5 gündür kayıt yok",
+    "quietPayerMessage": "Omi'ni kontrol et.",
+    "quietPayerCheck": "Kontrol Et"
 }

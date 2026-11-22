@@ -4772,5 +4772,8 @@
     "writingSummaryStatus": "Escrevendo o resumo…",
     "stillWorkingOnIt": "Ainda estamos trabalhando nisso.",
     "firmwareUpdateFirmwareTooOld": "O firmware do seu dispositivo é antigo demais para esta atualização. Entre em contato com o suporte para obter ajuda para atualizar o dispositivo.",
-    "firmwareUpdateAppRequired": "Esta atualização de firmware precisa de uma versão mais recente do app Omi. Atualize o app pela sua loja de aplicativos e verifique novamente."
+    "firmwareUpdateAppRequired": "Esta atualização de firmware precisa de uma versão mais recente do app Omi. Atualize o app pela sua loja de aplicativos e verifique novamente.",
+    "quietPayerTitle": "Sem gravações há 5 dias",
+    "quietPayerMessage": "Verifique seu Omi.",
+    "quietPayerCheck": "Verificar"
 }

@@ -15729,4 +15729,13 @@ class AppLocalizationsVi extends AppLocalizations {
   @override
   String get firmwareUpdateAppRequired =>
       'Bản cập nhật firmware này yêu cầu phiên bản ứng dụng Omi mới hơn. Hãy cập nhật ứng dụng từ cửa hàng ứng dụng của bạn, rồi kiểm tra lại.';
+
+  @override
+  String get quietPayerTitle => 'Không có bản ghi nào trong 5 ngày';
+
+  @override
+  String get quietPayerMessage => 'Hãy kiểm tra Omi của bạn.';
+
+  @override
+  String get quietPayerCheck => 'Kiểm tra';
 }

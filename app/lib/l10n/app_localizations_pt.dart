@@ -15756,4 +15756,13 @@ class AppLocalizationsPt extends AppLocalizations {
   @override
   String get firmwareUpdateAppRequired =>
       'Esta atualização de firmware precisa de uma versão mais recente do app Omi. Atualize o app pela sua loja de aplicativos e verifique novamente.';
+
+  @override
+  String get quietPayerTitle => 'Sem gravações há 5 dias';
+
+  @override
+  String get quietPayerMessage => 'Verifique seu Omi.';
+
+  @override
+  String get quietPayerCheck => 'Verificar';
 }

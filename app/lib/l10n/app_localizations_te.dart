@@ -15790,4 +15790,13 @@ class AppLocalizationsTe extends AppLocalizations {
   @override
   String get firmwareUpdateAppRequired =>
       'ఈ ఫర్మ్‌వేర్ నవీకరణకు కొత్త వెర్షన్ Omi యాప్ అవసరం. మీ యాప్ స్టోర్ నుండి యాప్‌ను నవీకరించి, మళ్లీ తనిఖీ చేయండి.';
+
+  @override
+  String get quietPayerTitle => '5 రోజులుగా రికార్డింగ్‌లు లేవు';
+
+  @override
+  String get quietPayerMessage => 'మీ Omiని తనిఖీ చేయండి.';
+
+  @override
+  String get quietPayerCheck => 'తనిఖీ';
 }

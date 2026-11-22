@@ -15733,4 +15733,13 @@ class AppLocalizationsFi extends AppLocalizations {
   @override
   String get firmwareUpdateAppRequired =>
       'Tämä laiteohjelmistopäivitys tarvitsee Omi-sovelluksen uudemman version. Päivitä sovellus sovelluskaupastasi ja tarkista sitten uudelleen.';
+
+  @override
+  String get quietPayerTitle => 'Ei tallenteita 5 päivään';
+
+  @override
+  String get quietPayerMessage => 'Tarkista Omisi.';
+
+  @override
+  String get quietPayerCheck => 'Tarkista';
 }

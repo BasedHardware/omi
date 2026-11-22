@@ -15793,4 +15793,13 @@ class AppLocalizationsRo extends AppLocalizations {
   @override
   String get firmwareUpdateAppRequired =>
       'Această actualizare de firmware necesită o versiune mai nouă a aplicației Omi. Actualizează aplicația din magazinul de aplicații, apoi verifică din nou.';
+
+  @override
+  String get quietPayerTitle => 'Nicio înregistrare de 5 zile';
+
+  @override
+  String get quietPayerMessage => 'Verifică-ți Omi.';
+
+  @override
+  String get quietPayerCheck => 'Verifică';
 }

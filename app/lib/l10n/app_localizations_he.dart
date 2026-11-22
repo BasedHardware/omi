@@ -15615,4 +15615,13 @@ class AppLocalizationsHe extends AppLocalizations {
   @override
   String get firmwareUpdateAppRequired =>
       'עדכון הקושחה הזה דורש גרסה חדשה יותר של אפליקציית Omi. יש לעדכן את האפליקציה מחנות האפליקציות שלך, ואז לבדוק שוב.';
+
+  @override
+  String get quietPayerTitle => 'אין הקלטות כבר 5 ימים';
+
+  @override
+  String get quietPayerMessage => 'בדקו את ה-Omi שלכם.';
+
+  @override
+  String get quietPayerCheck => 'בדיקה';
 }

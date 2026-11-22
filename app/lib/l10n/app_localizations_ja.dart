@@ -15498,4 +15498,13 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get firmwareUpdateAppRequired => 'このファームウェアの更新には、新しいバージョンのOmiアプリが必要です。アプリストアからアプリを更新してから、もう一度確認してください。';
+
+  @override
+  String get quietPayerTitle => '5日間録音がありません';
+
+  @override
+  String get quietPayerMessage => 'Omiを確認してください。';
+
+  @override
+  String get quietPayerCheck => '確認';
 }

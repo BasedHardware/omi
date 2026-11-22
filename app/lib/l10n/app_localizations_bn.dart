@@ -15722,4 +15722,13 @@ class AppLocalizationsBn extends AppLocalizations {
   @override
   String get firmwareUpdateAppRequired =>
       'এই ফার্মওয়্যার আপডেটের জন্য Omi অ্যাপের আরও নতুন সংস্করণ প্রয়োজন। আপনার অ্যাপ স্টোর থেকে অ্যাপটি আপডেট করুন, তারপর আবার পরীক্ষা করুন।';
+
+  @override
+  String get quietPayerTitle => '৫ দিন ধরে কোনো রেকর্ডিং নেই';
+
+  @override
+  String get quietPayerMessage => 'আপনার Omi দেখে নিন।';
+
+  @override
+  String get quietPayerCheck => 'দেখুন';
 }

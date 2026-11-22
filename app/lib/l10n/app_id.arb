@@ -4772,5 +4772,8 @@
     "writingSummaryStatus": "Menulis ringkasan…",
     "stillWorkingOnIt": "Masih dikerjakan.",
     "firmwareUpdateFirmwareTooOld": "Firmware perangkat Anda terlalu lama untuk pembaruan ini. Hubungi dukungan untuk bantuan memperbarui perangkat Anda.",
-    "firmwareUpdateAppRequired": "Pembaruan firmware ini memerlukan aplikasi Omi versi lebih baru. Perbarui aplikasi dari toko aplikasi Anda, lalu periksa lagi."
+    "firmwareUpdateAppRequired": "Pembaruan firmware ini memerlukan aplikasi Omi versi lebih baru. Perbarui aplikasi dari toko aplikasi Anda, lalu periksa lagi.",
+    "quietPayerTitle": "Tidak ada rekaman dalam 5 hari",
+    "quietPayerMessage": "Periksa Omi Anda.",
+    "quietPayerCheck": "Periksa"
 }

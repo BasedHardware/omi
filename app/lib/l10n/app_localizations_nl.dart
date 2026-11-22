@@ -15768,4 +15768,13 @@ class AppLocalizationsNl extends AppLocalizations {
   @override
   String get firmwareUpdateAppRequired =>
       'Voor deze firmware-update is een nieuwere Omi-app nodig. Werk de app bij via je appwinkel en controleer daarna opnieuw.';
+
+  @override
+  String get quietPayerTitle => 'Al 5 dagen geen opnames';
+
+  @override
+  String get quietPayerMessage => 'Controleer je Omi.';
+
+  @override
+  String get quietPayerCheck => 'Controleren';
 }

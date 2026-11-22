@@ -15763,4 +15763,13 @@ class AppLocalizationsBe extends AppLocalizations {
   @override
   String get firmwareUpdateAppRequired =>
       'Для гэтага абнаўлення прашыўкі патрэбна навейшая версія праграмы Omi. Абнавіце праграму ў краме праграм, затым праверце яшчэ раз.';
+
+  @override
+  String get quietPayerTitle => 'Няма запісаў 5 дзён';
+
+  @override
+  String get quietPayerMessage => 'Праверце свой Omi.';
+
+  @override
+  String get quietPayerCheck => 'Праверыць';
 }

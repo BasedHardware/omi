@@ -19226,5 +19226,17 @@
     "firmwareUpdateAppRequired": "This firmware update needs a newer Omi app. Update the app from your app store, then check again.",
     "@firmwareUpdateAppRequired": {
         "description": "Firmware update unavailable because the installed Omi app does not meet the release app version or build requirement."
+    },
+    "quietPayerTitle": "No recordings in 5 days",
+    "@quietPayerTitle": {
+        "description": "Home row title for a paying monthly subscriber whose Omi has recorded nothing for 5 days"
+    },
+    "quietPayerMessage": "Check your Omi.",
+    "@quietPayerMessage": {
+        "description": "Home row line under quietPayerTitle"
+    },
+    "quietPayerCheck": "Check",
+    "@quietPayerCheck": {
+        "description": "Button on the quiet Home row; opens the Omi device page"
     }
 }

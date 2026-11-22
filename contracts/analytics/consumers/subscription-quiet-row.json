@@ -1,0 +1,17 @@
+{
+  "id": "subscription-quiet-row",
+  "kind": "question",
+  "owner": "Subscription",
+  "question": "How many paying monthly readers with a paired Omi see the Home row that says nothing was recorded in 5 days, and how many tap Check, per namespace and build? Shown emits once per app session when the row first appears, not on rebuilds. Tapped emits when Check opens the device page. Neither proves the Omi recorded again or the reader renewed; read those from conversations and Stripe. Names contain Subscription to match the ingestion keep rule.",
+  "query": "contracts/analytics/consumers/subscription-quiet-row.sql",
+  "events": [
+    "subscriptionQuietRowShown",
+    "subscriptionQuietRowTapped"
+  ],
+  "namespace_property": "$app_namespace",
+  "dimensions": [
+    "git_sha",
+    "build_number"
+  ],
+  "zero_policy": "Zero is expected before this build, and when no monthly payer with a paired Omi has gone 5 days without a conversation while the Omi is disconnected."
+}
