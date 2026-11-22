@@ -112,27 +112,26 @@ extension _CaptureConversationCustody on CaptureController {
   void _onConversationProcessingStarted(String id) {
     if (_seenConversationCloses.contains(id)) return;
     _rememberConversationClose(id);
-    final process = _processClose;
+    final processes = _pendingProcessCloses.where(_closeStoreIsCurrent).toList();
+    final sameWindow = processes
+        .where((process) =>
+            process.windowRevision == _conversationWindowRevision && process.recordingId == activeRecordingId)
+        .toList();
     // A server close during Process Now's drain adopts that exact cut. Its revision guard then
     // returns without issuing a second process request or abandoning the reserved audio.
-    final close = process != null &&
-            process.windowRevision == _conversationWindowRevision &&
-            process.recordingId == activeRecordingId &&
-            _closeStoreIsCurrent(process)
-        ? process
-        : _admitConversationClose();
-    if (!identical(close, process) &&
-        process != null &&
-        !process.decision.isCompleted &&
-        _closeStoreIsCurrent(process)) {
-      // The process response is the only exact link between its cut and the server ID. Hold an
-      // intervening event's cut until then; never guess that it is the previous or next window.
-      close.evidenceAuthority = process.decision.future.then((processedId) {
-        if (processedId == id) {
+    // An older unresolved request makes even the currently draining window ambiguous.
+    final adopted = sameWindow.isNotEmpty && processes.length == 1 ? sameWindow.first : null;
+    final close = adopted ?? _admitConversationClose();
+    if (adopted == null && processes.isNotEmpty) {
+      // Several Process Now requests can be awaiting HTTP at once. Only their exact response IDs
+      // can disambiguate an intervening server close; the newest request alone is not authority.
+      close.evidenceAuthority = Future.wait(processes.map((process) => process.decision.future)).then((ids) {
+        final matched = ids.indexOf(id);
+        if (matched >= 0) {
           close.bind(null); // Intervening audio stays unlinked and recoverable.
-          return process;
+          return processes[matched];
         }
-        if (processedId == null) {
+        if (ids.contains(null)) {
           close.bind(null);
           return null;
         }
@@ -177,7 +176,7 @@ extension _CaptureConversationCustody on CaptureController {
       }
       _admittedConversationCloses.clear();
       _seenConversationCloses.clear();
-      _processClose = null;
+      _pendingProcessCloses.clear();
       // Retired-account I/O must not block the next account's chain.
       _pendingFinalizeAndStamp = null;
     }

@@ -1030,7 +1030,7 @@ class CaptureController extends ChangeNotifier
   final Map<String, _ConversationClose> _pendingConversationCloses = {};
   final Set<String> _seenConversationCloses = {};
   final Set<_ConversationClose> _admittedConversationCloses = {};
-  _ConversationClose? _processClose;
+  final Set<_ConversationClose> _pendingProcessCloses = {};
   int _conversationCustodyEpoch = 0;
   bool _lastPublishedSocketCustomStt = false;
 
@@ -4354,7 +4354,7 @@ class CaptureController extends ChangeNotifier
     final recordingSessionId = activeRecordingId;
     final conversationRevision = _systemSurfaceConversationRevision;
     final close = _admitConversationClose(processNow: true);
-    _processClose = close;
+    _pendingProcessCloses.add(close);
     final placeholderOwner = ++_processingPlaceholderOwner;
     var requestAdmitted = false;
     try {
@@ -4391,7 +4391,7 @@ class CaptureController extends ChangeNotifier
         // Bind before any asynchronous publication and before awaiting the ordered stamp slot.
         final conversationId = outcome.response?.conversation?.id;
         close.bind(conversationId);
-        if (identical(_processClose, close)) _processClose = null;
+        _pendingProcessCloses.remove(close);
         if (!_closeStoreIsCurrent(close) || _captureControllerDisposed) return;
         if (conversationId != null) _rememberConversationClose(conversationId);
         await OptimisticProcessingPlaceholder.applyProcessResult(
@@ -4413,7 +4413,7 @@ class CaptureController extends ChangeNotifier
         }
       }).catchError((Object error, StackTrace stack) async {
         close.bind(null);
-        if (identical(_processClose, close)) _processClose = null;
+        _pendingProcessCloses.remove(close);
         if (!_closeStoreIsCurrent(close) || _captureControllerDisposed) return;
         await OptimisticProcessingPlaceholder.handleFailure(
           actions: externalActions,
@@ -4427,7 +4427,7 @@ class CaptureController extends ChangeNotifier
       close.bind(null);
       rethrow;
     } finally {
-      if (!requestAdmitted && identical(_processClose, close)) _processClose = null;
+      if (!requestAdmitted) _pendingProcessCloses.remove(close);
     }
   }
 

@@ -326,6 +326,79 @@ void main() {
     expect(world.uploads.attempts, isEmpty);
   });
 
+  test('pendant: concurrent Process Now responses preserve both original cuts and the intervening ambiguity', () async {
+    world.autoUploadAllowed = false;
+    final firstResponse = Completer<InProgressProcessOutcome>();
+    final secondResponse = Completer<InProgressProcessOutcome>();
+    var requests = 0;
+    world.processOutcome = () {
+      requests++;
+      if (requests == 1) return firstResponse.future;
+      if (requests == 2) return secondResponse.future;
+      throw StateError('unexpected third Process Now request');
+    };
+    addTearDown(() {
+      for (final pending in [firstResponse, secondResponse]) {
+        if (!pending.isCompleted) pending.complete(const InProgressProcessOutcome(absence: ProcessAbsence.transport));
+      }
+    });
+    final link = await connectPendant();
+    final firstOrigin = world.clock.now();
+    await streamPendant(link, 20);
+    await world.controller.forceProcessingCurrentConversation();
+    final firstFiles =
+        filesOf(await walsReach('first reserved Process Now cut persisted', (wals) => framesOf(wals) == 2000));
+
+    final secondOrigin = world.clock.now();
+    await streamPendant(link, 20);
+    await world.controller.forceProcessingCurrentConversation();
+    final firstTwo =
+        await walsReach('both Process Now cuts persisted before their responses', (wals) => framesOf(wals) == 4000);
+    final secondFiles = filesOf(firstTwo).difference(firstFiles);
+    expect(secondFiles, isNotEmpty);
+    expect(requests, 2, reason: 'both HTTP requests must be pending when the server event arrives');
+
+    await streamPendant(link, 20);
+    final firstSaved = conversation('process-a', firstOrigin, end: 20);
+    world.controller.onMessageEventReceived(ConversationProcessingStartedEvent(memory: firstSaved));
+    world.controller.onMessageEventReceived(ConversationEvent(memory: firstSaved, messages: []));
+    secondResponse.complete(InProgressProcessOutcome(
+        response:
+            CreateConversationResponse(messages: [], conversation: conversation('process-b', secondOrigin, end: 20))));
+    // Let B's response handler run while A is unresolved. Durable outcomes below, rather than this
+    // scheduling step, establish that the server event did not forget A or adopt the newer cut.
+    await world.settle();
+    firstResponse.complete(
+        InProgressProcessOutcome(response: CreateConversationResponse(messages: [], conversation: firstSaved)));
+
+    await confirmed('process-a', frames: 2000);
+    await confirmed('process-b', frames: 2000);
+    final resolved = await walsReach('matching older response leaves only the intervening cut unlinked', (wals) {
+      final intervening = wals.where((wal) => wal.conversationId == null);
+      return framesOf(wals) == 6000 && framesOf(intervening) == 2000 && intervening.every((wal) => !retained(wal));
+    });
+    final interveningFiles = filesOf(resolved.where((wal) => wal.conversationId == null));
+    expect(filesOf(resolved.where((wal) => wal.conversationId == 'process-a')), firstFiles);
+    expect(filesOf(resolved.where((wal) => wal.conversationId == 'process-b')), secondFiles);
+    expect(interveningFiles.intersection({...firstFiles, ...secondFiles}), isEmpty);
+
+    final nextOrigin = world.clock.now();
+    await streamPendant(link, 20);
+    await serverCloses(conversation('c', nextOrigin, end: 20), frames: 2000);
+    final finalWals = await world.wal.syncs.phone.getAllWals();
+    expect(framesOf(finalWals), 8000);
+    expect(filesOf(finalWals.where((wal) => wal.conversationId == 'process-a')), firstFiles);
+    expect(filesOf(finalWals.where((wal) => wal.conversationId == 'process-b')), secondFiles);
+    expect(filesOf(finalWals.where((wal) => wal.conversationId == null)), interveningFiles);
+    expect(
+        filesOf(finalWals.where((wal) => wal.conversationId == 'c'))
+            .intersection({...firstFiles, ...secondFiles, ...interveningFiles}),
+        isEmpty);
+    expect(filesExist(filesOf(finalWals)), isTrue);
+    await recoveryPass();
+    expect(world.uploads.attempts, isEmpty);
+  });
+
   for (final throwsRequest in [false, true]) {
     test(
         'pendant: pending Process Now ${throwsRequest ? 'exception' : 'transport absence'} preserves ambiguous cuts and unblocks the next close',
@@ -431,6 +504,82 @@ void main() {
     expect(framesOf(wals.where((wal) => wal.conversationId == 'c2')), 2000);
     expect(wals.where((wal) => wal.conversationId == null), isEmpty);
     expect(filesExist(filesOf(wals)), isTrue);
+  });
+
+  test('pendant: older Process Now event during a second blocked drain cannot adopt the second reservation', () async {
+    final firstResponse = Completer<InProgressProcessOutcome>();
+    final writeEntered = Completer<void>();
+    final releaseWrite = Completer<void>();
+    var blockWrites = false;
+    var heldWrite = false;
+    Future<void>? secondProcess;
+    addTearDown(() async {
+      if (!releaseWrite.isCompleted) releaseWrite.complete();
+      if (!firstResponse.isCompleted) {
+        firstResponse.complete(const InProgressProcessOutcome(absence: ProcessAbsence.transport));
+      }
+      await secondProcess;
+    });
+    await world.dispose();
+    world = await CaptureReplayWorld.boot(
+      tempDir: directory,
+      pendantCodec: BleAudioCodec.opus,
+      initialPrefs: {'conversationSilenceDuration': -1, 'uid': 'owner-a'},
+      phonePersistWals: (wals) async {
+        if (blockWrites && !heldWrite) {
+          heldWrite = true;
+          writeEntered.complete();
+          await releaseWrite.future;
+        }
+        if (!await WalFileManager.saveWals(wals)) throw StateError('test WAL index write failed');
+      },
+    );
+    await setRefactorFlags({'custody_capture_committed_release': false});
+    world.autoUploadAllowed = false;
+    world.processOutcome = () => firstResponse.future;
+    final link = await connectPendant();
+    final firstOrigin = world.clock.now();
+    await streamPendant(link, 20);
+    await world.controller.forceProcessingCurrentConversation();
+    final firstFiles = filesOf(await walsReach('first Process Now cut persisted', (wals) => framesOf(wals) == 2000));
+
+    await streamPendant(link, 20);
+    for (var i = 0; i < 100; i++) {
+      link.emitAudio();
+    }
+    blockWrites = true;
+    secondProcess = world.controller.forceProcessingCurrentConversation();
+    await writeEntered.future.timeout(const Duration(seconds: 2));
+    final firstSaved = conversation('process-a', firstOrigin, end: 20);
+    world.controller.onMessageEventReceived(ConversationProcessingStartedEvent(memory: firstSaved));
+    world.controller.onMessageEventReceived(ConversationEvent(memory: firstSaved, messages: []));
+    releaseWrite.complete();
+    await secondProcess;
+    expect(world.processCalls, 1, reason: 'the server close supersedes the second request during its drain');
+    firstResponse.complete(
+        InProgressProcessOutcome(response: CreateConversationResponse(messages: [], conversation: firstSaved)));
+
+    await confirmed('process-a', frames: 2000);
+    final afterResponse =
+        await walsReach('second reserved cut stays recoverable after the older matching response', (wals) {
+      final unresolved = wals.where((wal) => wal.conversationId == null);
+      return framesOf(wals) == 4100 && framesOf(unresolved) == 2100 && unresolved.every((wal) => !retained(wal));
+    });
+    final secondFiles = filesOf(afterResponse.where((wal) => wal.conversationId == null));
+    expect(filesOf(afterResponse.where((wal) => wal.conversationId == 'process-a')), firstFiles);
+
+    final nextOrigin = world.clock.now();
+    await streamPendant(link, 20);
+    await serverCloses(conversation('c', nextOrigin, end: 20), frames: 2000);
+    final finalWals = await world.wal.syncs.phone.getAllWals();
+    expect(framesOf(finalWals), 6100);
+    expect(filesOf(finalWals.where((wal) => wal.conversationId == 'process-a')), firstFiles);
+    expect(filesOf(finalWals.where((wal) => wal.conversationId == null)), secondFiles);
+    expect(filesOf(finalWals.where((wal) => wal.conversationId == 'c')).intersection({...firstFiles, ...secondFiles}),
+        isEmpty);
+    expect(filesExist(filesOf(finalWals)), isTrue);
+    await recoveryPass();
+    expect(world.uploads.attempts, isEmpty);
   });
 
   test('pendant: an uncertain Process Now response cannot attach its audio to c2', () async {
