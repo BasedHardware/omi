@@ -36,6 +36,13 @@ if "fastapi" not in sys.modules:
             def __init__(self, *args, **kwargs):
                 pass
 
+        class Depends:
+            def __init__(self, dependency=None, *args, **kwargs):
+                self.dependency = dependency
+
+        class Request:
+            pass
+
         class FastAPI:
             def __init__(self, *args, **kwargs):
                 pass
@@ -51,6 +58,8 @@ if "fastapi" not in sys.modules:
         fastapi.APIRouter = APIRouter
         fastapi.FastAPI = FastAPI
         fastapi.Query = Query
+        fastapi.Depends = Depends
+        fastapi.Request = Request
         fastapi.HTTPException = HTTPException
         sys.modules["fastapi"] = fastapi
 
