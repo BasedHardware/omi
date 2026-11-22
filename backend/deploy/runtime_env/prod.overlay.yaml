@@ -637,7 +637,7 @@ overlay:
           # Silent read skipping on (SCA-1824 canary READBACK -13.5% reads); kill switch: set false.
           BATCH_PIPELINE_SILENCE_READ_SKIP_ENABLED: {value: 'true', category: ops_kill}
           # SCA-3555: main reads an absent claimed-sibling skip as ON; the key stays explicit on every role.
-          # until David's activation (SCA-3508). Activated by David 2026-11-22 on every role (SCA-3544); rollback is 'false'.
+          # Activated by David 2026-11-22 on every role (SCA-3544); rollback is 'false'.
           BATCH_PIPELINE_FOLLOWUP_CLAIMED_SIBLING_SKIP_ENABLED: {value: 'true', category: ops_kill}
           PUSHER_RECORD_CLOSE_NOTIFY_ENABLED: {value: 'false', category: rollout}
           PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_PERCENT: {value: '100', category: rollout}
@@ -1042,7 +1042,7 @@ overlay:
           # Silent read skipping on (SCA-1824 canary READBACK -13.5% reads); kill switch: set false.
           BATCH_PIPELINE_SILENCE_READ_SKIP_ENABLED: {value: 'true', category: ops_kill}
           # SCA-3555: main reads an absent claimed-sibling skip as ON; the key stays explicit on every role.
-          # until David's activation (SCA-3508). Activated by David 2026-11-22 on every role (SCA-3544); rollback is 'false'.
+          # Activated by David 2026-11-22 on every role (SCA-3544); rollback is 'false'.
           BATCH_PIPELINE_FOLLOWUP_CLAIMED_SIBLING_SKIP_ENABLED: {value: 'true', category: ops_kill}
           PUSHER_RECORD_CLOSE_NOTIFY_ENABLED: {value: 'false', category: rollout}
           PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_PERCENT: {value: '100', category: rollout}
