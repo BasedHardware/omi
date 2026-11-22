@@ -1160,11 +1160,21 @@ class _ConversationsPageState extends State<ConversationsPage>
         final preservedConversationIds = {
           ...projectedProcessingIds,
           ...snapshot.processingConversations.map((conversation) => conversation.id),
+          // v3 keeps its live row and the rows still transcribing or writing in view.
+          if (v3LiveShown) v3Live.id,
+          for (final list in conversationsForRows.values)
+            for (final conversation in list)
+              if (ConversationsV3Provider.anyMidPipeline([conversation])) conversation.id,
         };
+        // v3 Home draws an earlier day's header as a summary link with no collapse toggle, so such a
+        // day is never collapsed: a day collapsed in another layout would otherwise stay hidden here.
+        bool summaryHeaderDay(DateTime day) =>
+            v3Home && day != unknownCardDay && day.isBefore(localHomeDay(clock.now()));
         final collapsibleDays = {
           for (final day in mergedDates)
-            if ((conversationsForRows[day] ?? const <ServerConversation>[])
-                .any((conversation) => !preservedConversationIds.contains(conversation.id)))
+            if (!summaryHeaderDay(day) &&
+                (conversationsForRows[day] ?? const <ServerConversation>[])
+                    .any((conversation) => !preservedConversationIds.contains(conversation.id)))
               DateUtils.dateOnly(day),
         };
         final collapsedDays = _collapsedConversationDays.intersection(collapsibleDays);
@@ -1491,7 +1501,7 @@ class _ConversationsPageState extends State<ConversationsPage>
                           more: row.conversationIndex == heldRecordings.length - 1 ? heldMore : 0,
                         );
                       case _ConversationListRowKind.dateHeader:
-                        if (v3Home && row.date != unknownCardDay && row.date.isBefore(localHomeDay(clock.now()))) {
+                        if (summaryHeaderDay(row.date)) {
                           return DaySummaryHeader(
                             key: ValueKey('date_${row.date.toIso8601String()}'),
                             date: row.date,
