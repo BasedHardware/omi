@@ -746,14 +746,32 @@ def _module_collections(tree: ast.AST) -> dict[str, tuple[str, ...]]:
 
 def _extract_helpers(
     tree: ast.AST, collections: dict[str, tuple[str, ...]]
-) -> dict[str, tuple[set[str], set[str]]]:
-    """Extract grammar (truthy, compared) for wrapper functions like _default_on/default_on."""
-    helpers: dict[str, tuple[set[str], set[str]]] = {}
+) -> dict[str, tuple[set[str], set[str], str | None]]:
+    """Extract grammar (truthy, compared, default) for wrapper functions like _default_on/default_on."""
+    helpers: dict[str, tuple[set[str], set[str], str | None]] = {}
     for node in ast.walk(tree):
-        if isinstance(node, ast.FunctionDef) and node.name in {'_default_on', 'default_on', 'modes_default_on', 'rollout_default_on'}:
+        if isinstance(node, ast.FunctionDef) and (
+            'default_on' in node.name
+            or 'default_off' in node.name
+            or node.name in {
+                '_default_on',
+                'default_on',
+                'modes_default_on',
+                'rollout_default_on',
+                '_default_off',
+                'default_off',
+                'modes_default_off',
+                'rollout_default_off',
+            }
+        ):
             truthy: set[str] = set()
             compared: set[str] = set()
+            default: str | None = None
             for child in ast.walk(node):
+                if isinstance(child, ast.Call):
+                    child_default = _default_of(child)
+                    if child_default is not None:
+                        default = child_default
                 if isinstance(child, ast.Compare) and len(child.ops) == 1:
                     op = child.ops[0]
                     comparator = child.comparators[0]
@@ -772,8 +790,13 @@ def _extract_helpers(
                             else:
                                 truthy |= toks
                                 compared |= toks | {'0', 'false', 'off', 'no'}
-            if truthy or compared:
-                helpers[node.name] = (truthy, compared)
+            if default is None:
+                if 'default_off' in node.name:
+                    default = 'false'
+                else:
+                    default = 'true'
+            if truthy or compared or default is not None:
+                helpers[node.name] = (truthy, compared, default)
     return helpers
 
 
@@ -783,7 +806,7 @@ class _ModuleIndex:
     collections: dict[str, tuple[str, ...]]  # named string sets: _TRUTHY, _FALSY, mode enums
     candidates: list[ast.AST]  # the only node shapes the env-read scan inspects
     imports: list[ast.Import | ast.ImportFrom]
-    helpers: dict[str, tuple[set[str], set[str]]]
+    helpers: dict[str, tuple[set[str], set[str], str | None]]
 
 
 _INDEX_CACHE: dict[str, _ModuleIndex | None] = {}
@@ -827,7 +850,7 @@ def scan_env_reads(source: Source, module_paths: list[str]) -> dict[str, EnvRead
     for index in indexes.values():
         for name, members in index.collections.items():
             shared_collections.setdefault(name, members)  # named sets (_TRUTHY et al.) resolve by name too
-    shared_helpers: dict[str, tuple[set[str], set[str]]] = {}
+    shared_helpers: dict[str, tuple[set[str], set[str], str | None]] = {}
     for index in indexes.values():
         for name, grammar in index.helpers.items():
             shared_helpers.setdefault(name, grammar)
@@ -849,7 +872,7 @@ def scan_env_reads(source: Source, module_paths: list[str]) -> dict[str, EnvRead
                 read = reads.setdefault(key, EnvRead())
                 read.modules.add(rel)
                 default = _default_of(node)
-                is_default_on = False
+                wrapper_name: str | None = None
                 if isinstance(node, ast.Call):
                     func = node.func
                     name = (
@@ -859,15 +882,33 @@ def scan_env_reads(source: Source, module_paths: list[str]) -> dict[str, EnvRead
                         if isinstance(func, ast.Name)
                         else ''
                     )
-                    if name in {'_default_on', 'default_on', 'modes_default_on', 'rollout_default_on'}:
-                        is_default_on = True
-                if is_default_on:
-                    read.defaults.add('true')
-                    if name in helpers:
-                        h_truthy, h_compared = helpers[name]
+                    if (
+                        name in helpers
+                        or 'default_on' in name
+                        or 'default_off' in name
+                        or name in {
+                            '_default_on',
+                            'default_on',
+                            'modes_default_on',
+                            'rollout_default_on',
+                            '_default_off',
+                            'default_off',
+                            'modes_default_off',
+                            'rollout_default_off',
+                        }
+                    ):
+                        wrapper_name = name
+                if wrapper_name:
+                    if wrapper_name in helpers:
+                        h_truthy, h_compared, h_default = helpers[wrapper_name]
                         read.truthy |= h_truthy
                         read.compared |= h_compared
+                        if h_default is not None:
+                            read.defaults.add(h_default)
+                        else:
+                            read.defaults.add('false' if 'default_off' in wrapper_name else 'true')
                     else:
+                        read.defaults.add('false' if 'default_off' in wrapper_name else 'true')
                         read.truthy.add('true')
                         read.compared |= {'true', 'false', '0', 'off'}
                 else:
