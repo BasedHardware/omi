@@ -1077,7 +1077,7 @@ async def run_pass(
                 prescan = await asyncio.wait_for(run_blocking(db_executor, dream_prescan.scan, uid), timeout=5.0)
                 pass_levers['prescan'] = {'arm': prescan_arm, 'targets': len(prescan['refs']), **prescan['counts']}
                 # Serve only hunts: a pass admitted for dirty work keeps its targets first, and an
-                # owner parked as an empty-bucket idle pass is never woken into a model session.
+                # empty-bucket idle pass never reaches a model session.
                 served = 0
                 if prescan_arm == 'serve' and lease.get('hunt') and limits.bucket != 'empty':
                     served = dream_prescan.serve_targets(seed, prescan['refs'], limits)

@@ -548,7 +548,7 @@ def test_hunt_backoff_serve_delays_the_next_hunt_and_shadow_only_records(queue, 
     assert lease['hunt'] and lease['backoff_would_defer'] is True
 
 
-def test_finish_without_parking_keeps_the_timed_hunt(queue):
+def test_finish_without_outcomes_keeps_the_timed_hunt(queue):
     lease = dream_store.acquire(QUEUE_UID, Caps(), now=NOW)
     dream_store.finish(QUEUE_UID, lease, {'tokens': 5}, success=True, now=NOW)
     assert ('dream_due', QUEUE_UID) in queue.rows

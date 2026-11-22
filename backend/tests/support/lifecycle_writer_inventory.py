@@ -3436,7 +3436,6 @@ FIELD_SITES = {
                 'usage_unknown',
             ),
         ),
-        ('run_pass', 'status', "'not_admitted'", ('levers', 'reason', 'status', 'trigger')),
         ('run_pass', 'status', "'not_admitted'", ('reason', 'status')),
         ('run_pass', 'status', "'not_admitted'", ('reason', 'status')),
         ('run_pass', 'status', "'not_admitted'", ('reason', 'status')),
