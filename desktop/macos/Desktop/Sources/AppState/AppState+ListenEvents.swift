@@ -521,7 +521,11 @@ extension AppState {
       }
 
     case "speaker_label_suggestion":
-      applyRefactorSpeakerEvent(event.raw)
+      if let speakerID = event.raw["speaker_id"] as? Int, speakerID >= 0,
+        let personID = event.raw["person_id"] as? String
+      {
+        liveSpeakerPersonMap[speakerID] = personID
+      }
 
     case "segments_deleted":
       if let segmentIds = event.raw["segment_ids"] as? [String] {

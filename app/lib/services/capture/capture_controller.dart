@@ -73,7 +73,6 @@ import 'package:omi/services/capture/live_finalize_gate.dart';
 import 'package:omi/services/capture/optimistic_processing.dart';
 import 'package:omi/services/capture/speaker_suggestions.dart';
 import 'package:omi/backend/schema/capture_committed_event.dart';
-import 'package:omi/services/experiments/client_refactor_flags.dart';
 import 'package:omi/services/capture/manual_live_labels.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/services/sync_health_watchdog.dart';

@@ -6,29 +6,10 @@ extension TranscriptionStorage {
   func updateLiveSpeakerAssignment(
     sessionId: Int64,
     speakerId: Int,
-    personId: String,
-    isUser: Bool? = nil,
-    retracted: Bool = false,
-    automatic: Bool = false,
-    useExplicitOwner: Bool? = nil
+    personId: String
   ) async throws -> Int {
     let db = try await ensureInitialized()
-    let serving = if let useExplicitOwner { useExplicitOwner } else { await ClientRefactorFlags.serving }
-    let label = ResolvedSpeakerLabel(personID: personId, isUser: isUser, retracted: retracted)
     return try await db.write { database -> Int in
-      if serving {
-        try database.execute(
-          sql: """
-            UPDATE transcription_segments SET isUser = ?, personId = ?, speakerLabelSource = ?
-            WHERE sessionId = ? AND speaker = ? AND (? = 0 OR COALESCE(speakerLabelSource, '') != 'manual')
-            """,
-          arguments: [
-            label.isUser, label.personID, retracted ? nil : automatic ? "auto" : "manual",
-            sessionId, speakerId, automatic,
-          ])
-        return database.changesCount
-      }
-      // refactor: superseded by ResolvedSpeakerLabel when clients_refactor=serve
       try database.execute(
         sql: """
           UPDATE transcription_segments
@@ -48,13 +29,11 @@ extension TranscriptionStorage {
     _ conversation: ServerConversation,
     sessionId: Int64,
     cacheScope: ConversationCacheWriteScope? = nil,
-    cacheGeneration: Int? = nil,
-    useSegmentIdentity: Bool? = nil
+    cacheGeneration: Int? = nil
   ) async throws {
     guard !conversation.transcriptSegments.isEmpty else { return }
 
     let db = try await ensureInitialized()
-    let serving = if let useSegmentIdentity { useSegmentIdentity } else { await ClientRefactorFlags.serving }
 
     try await db.write { database in
       try withConversationCacheScope(cacheScope, generation: cacheGeneration) {
@@ -84,16 +63,7 @@ extension TranscriptionStorage {
         for (index, segment) in conversation.transcriptSegments.enumerated() {
           var record = TranscriptionSegmentRecord.from(segment, sessionId: sessionId, segmentOrder: index)
           let exact = segment.backendId.flatMap { existingBySegmentId[$0] }
-          let proposed = ServerSegmentLabelMerge.merge(record, existing: exact)
-          let legacy = exact ?? existingByOrder[index]
-          let agrees =
-            !((legacy?.hasSpeakerAssignment == true)
-            && (proposed.isUser != legacy?.isUser || proposed.personId != legacy?.personId))
-          if !agrees { log("event=refactor_shadow lane=L5 check=label_graft outcome=disagree") }
-          if serving {
-            record = proposed
-            // refactor: superseded by ServerSegmentLabelMerge when clients_refactor=serve
-          } else if let existing = exact ?? existingByOrder[index], existing.hasSpeakerAssignment {
+          if let existing = exact ?? existingByOrder[index], existing.hasSpeakerAssignment {
             record.isUser = existing.isUser
             record.personId = existing.personId
           }
