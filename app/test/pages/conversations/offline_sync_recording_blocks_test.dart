@@ -100,7 +100,7 @@ class _Sync extends ChangeNotifier with WalDerivedSyncViews implements SyncProvi
   @override
   bool canPlayOrShareWal(Wal wal) => wal.filePath != null;
   @override
-  Future<void> shareRecordingAsWav(List<Wal> wals, {bool Function()? canShare}) async {
+  Future<void> shareRecordingAsWav(List<Wal> wals) async {
     if (failShare) throw StateError('Recording changed');
     shared.add(wals);
   }
@@ -141,25 +141,22 @@ class _Sync extends ChangeNotifier with WalDerivedSyncViews implements SyncProvi
   }
 
   @override
-  Future<void> deleteAllClearableWals({Map<Wal, WalFileIdentity> exportOffered = const {}}) async {
+  Future<void> deleteAllClearableWals({Map<Wal, WalOfferedAudio> exportOffered = const {}}) async {
     for (final wal in List<Wal>.of(wals)) {
       if (wal.status != WalStatus.outsideRecoveryWindow || exportOffered.containsKey(wal)) await deleteWal(wal);
     }
   }
 
   @override
-  ({
-    List<Wal> targets,
-    List<Wal> tooOld,
-    Future<void> Function() clear,
-    Future<void> Function(List<Wal>) share,
-  }) prepareClearAllWals() {
+  Future<WalClearAllOffer> prepareClearAllWals() async {
     final targets = List<Wal>.of(wals);
     final tooOld = targets.where((wal) => wal.status == WalStatus.outsideRecoveryWindow).toList();
     return (
       targets: targets,
       tooOld: tooOld,
-      clear: () => deleteAllClearableWals(exportOffered: {for (final wal in tooOld) wal: wal.fileIdentity}),
+      clear: () => deleteAllClearableWals(
+            exportOffered: {for (final wal in tooOld) wal: (identity: wal.fileIdentity, sha256: 'test-digest')},
+          ),
       share: shareRecordingAsWav,
     );
   }

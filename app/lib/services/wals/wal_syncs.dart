@@ -262,7 +262,7 @@ class WalSyncs implements IWalSync {
 
   /// Terminal corruption is produced by the phone-local WAL owner. Device
   /// stores keep their existing pending-deletion semantics.
-  Future<void> deleteAllCorruptedWals({Map<Wal, WalFileIdentity> exportOffered = const {}}) =>
+  Future<void> deleteAllCorruptedWals({Map<Wal, WalOfferedAudio> exportOffered = const {}}) =>
       _phoneSync.deleteAllCorruptedWals(exportOffered: exportOffered);
 
   /// Bounded phone-only drain used while iOS/Android grants background time.

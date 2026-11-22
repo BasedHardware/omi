@@ -300,14 +300,17 @@ void main() {
     test('guarded export checks source bytes instead of reusing an earlier playback WAV', () async {
       final wal = await pcmFile(2410, [1, 2, 3, 4]);
       final source = File('${dir.path}/${wal.filePath}');
-      wal.fileSha256 = sha256.convert(await source.readAsBytes()).toString();
+      final digest = sha256.convert(await source.readAsBytes()).toString();
+      expect(wal.fileSha256, isNull);
+      final sourceDigests = {wal: digest};
       expect(await player.ensureAudioFileExists(wal), isNotNull);
 
-      await player.shareRecordingAsAudio([wal], canShare: () => true);
+      await player.shareRecordingAsAudio([wal], canShare: () => true, sourceDigests: sourceDigests);
       expect(shares, hasLength(1));
 
       await pcmFile(2410, [5, 6, 7, 8]);
-      await expectLater(player.shareRecordingAsAudio([wal], canShare: () => true), throwsStateError);
+      await expectLater(
+          player.shareRecordingAsAudio([wal], canShare: () => true, sourceDigests: sourceDigests), throwsStateError);
       expect(shares, hasLength(1), reason: 'replaced bytes must never reach the native share sheet');
     });
 
@@ -315,7 +318,12 @@ void main() {
       final wal = await pcmFile(2420, [1, 2, 3, 4]);
       final before = await dir.list().map((item) => item.path).toSet();
 
-      await expectLater(player.shareRecordingAsAudio([wal], canShare: () => false), throwsStateError);
+      final source = File('${dir.path}/${wal.filePath}');
+      final digest = sha256.convert(await source.readAsBytes()).toString();
+      await expectLater(
+        player.shareRecordingAsAudio([wal], canShare: () => false, sourceDigests: {wal: digest}),
+        throwsStateError,
+      );
 
       expect(shares, isEmpty);
       expect(await dir.list().map((item) => item.path).toSet(), before);

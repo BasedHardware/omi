@@ -2041,7 +2041,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
 
   /// A Too old file can be bulk-deleted only after it was offered for export.
   @override
-  Future<void> deleteAllCorruptedWals({Map<Wal, WalFileIdentity> exportOffered = const {}}) async {
+  Future<void> deleteAllCorruptedWals({Map<Wal, WalOfferedAudio> exportOffered = const {}}) async {
     final generation = _sessionGeneration;
     final corruptedWals = _wals
         .where(
@@ -2054,7 +2054,12 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
         .toList();
     for (final wal in corruptedWals) {
       if (!_isCurrent(generation)) break;
-      await _deleteWal(wal, generation: generation, exportOffered: exportOffered);
+      if (exportOffered.containsKey(wal)) {
+        // Serialize the verified unlink with writes of phone and device WAL files.
+        await _enqueueBuffer(() => _deleteWal(wal, generation: generation, exportOffered: exportOffered));
+      } else {
+        await _deleteWal(wal, generation: generation, exportOffered: exportOffered);
+      }
     }
     await _saveWalsToFile(generation);
     _notifyUpdated(generation);

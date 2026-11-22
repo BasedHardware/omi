@@ -34,7 +34,7 @@ class _LocalSyncs {
 
   Future<void> deleteAllPendingWals() => phone.deleteAllPendingWals();
 
-  Future<void> deleteAllCorruptedWals({Map<Wal, WalFileIdentity> exportOffered = const {}}) =>
+  Future<void> deleteAllCorruptedWals({Map<Wal, WalOfferedAudio> exportOffered = const {}}) =>
       phone.deleteAllCorruptedWals(exportOffered: exportOffered);
 
   void clearUserData() => phone.clearUserData();
@@ -213,7 +213,8 @@ void main() {
     await syncProvider.deleteAllClearableWals();
     expect(syncProvider.allWals, [tooOld], reason: 'Bulk deletion without an export offer preserves Too old audio');
 
-    await syncProvider.prepareClearAllWals().clear();
+    await File('${tempDir.path}/${tooOld.filePath}').writeAsBytes([1, 2]);
+    await (await syncProvider.prepareClearAllWals()).clear();
     expect(syncProvider.allWals, isEmpty, reason: 'An explicit clear can remove offered audio');
   });
 
@@ -232,7 +233,7 @@ void main() {
     );
     provider = syncProvider;
     await syncProvider.initialized;
-    final intent = syncProvider.prepareClearAllWals();
+    final intent = await syncProvider.prepareClearAllWals();
     expect(intent.tooOld, [removed, replaced]);
 
     final replacement = _wal(timerStart: replaced.timerStart, filePath: replaced.filePath)..markOutsideRecoveryWindow();
@@ -245,6 +246,33 @@ void main() {
     expect(await File('${tempDir.path}/offered.bin').exists(), isFalse);
     expect(await File('${tempDir.path}/replacement.bin').readAsBytes(), [1, 2]);
     expect(await File('${tempDir.path}/newly-old.bin').readAsBytes(), [1, 2]);
+  });
+
+  test('a same-path replacement at the Clear all deletion boundary is preserved', () async {
+    final wal = _wal(timerStart: 1000, filePath: 'offered.bin')..markOutsideRecoveryWindow();
+    final file = await File('${tempDir.path}/${wal.filePath}').writeAsBytes([1, 2]);
+    localSync.testWals = [wal];
+    final syncProvider = SyncProvider(
+      walService: _WalService(_LocalSyncs(localSync)),
+      uploadGate: _offlineGate(),
+      startBackgroundSync: false,
+    );
+    provider = syncProvider;
+    await syncProvider.initialized;
+    final intent = await syncProvider.prepareClearAllWals();
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
+      const MethodChannel('plugins.flutter.io/path_provider'),
+      (call) async {
+        if (call.method != 'getApplicationDocumentsDirectory') return null;
+        await file.writeAsBytes([3, 4]);
+        return tempDir.path;
+      },
+    );
+
+    await expectLater(intent.clear(), throwsStateError);
+
+    expect(await file.readAsBytes(), [3, 4]);
+    expect(syncProvider.allWals, [wal]);
   });
 
   test('unoffered audio becoming Too old during path lookup stays on disk', () async {
@@ -278,7 +306,7 @@ void main() {
     );
     provider = syncProvider;
     await syncProvider.initialized;
-    final intent = syncProvider.prepareClearAllWals();
+    final intent = await syncProvider.prepareClearAllWals();
 
     syncProvider.clearUserData();
 

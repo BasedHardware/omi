@@ -407,7 +407,7 @@ class _SyncPageState extends State<SyncPage> {
   }
 
   Future<void> _showManageStorageSheet(BuildContext context, SyncProvider provider) async {
-    final offer = await showOmiSheet<WalClearAllOffer>(
+    final pendingOffer = await showOmiSheet<Future<WalClearAllOffer>>(
       context: context,
       title: context.l10n.manageStorage,
       padding: const EdgeInsets.fromLTRB(OmiSpacing.xl, OmiSpacing.xs, OmiSpacing.xl, OmiSpacing.xl),
@@ -450,6 +450,7 @@ class _SyncPageState extends State<SyncPage> {
         onClearAll: () => Navigator.of(sheetContext).pop(provider.prepareClearAllWals()),
       ),
     );
+    final offer = await pendingOffer;
     if (offer == null || !context.mounted) return;
     final confirmed = await confirmClearAllRecordings(context, tooOld: offer.tooOld, share: offer.share);
     if (!confirmed || !context.mounted) return;

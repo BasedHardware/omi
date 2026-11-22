@@ -62,6 +62,8 @@ enum WalStatus {
 enum WalStorage { mem, disk, sdcard, flashPage }
 
 /// Exact file metadata paired with the tracked WAL instance for bulk deletion.
+typedef WalOfferedAudio = ({WalFileIdentity identity, String sha256});
+
 typedef WalFileIdentity = ({String? path, String? sha256, String? ownerUid, String? sessionId, WalStorage storage});
 
 enum SyncMethod { ble }

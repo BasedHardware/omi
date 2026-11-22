@@ -206,16 +206,22 @@ class AudioPlayerUtils extends ChangeNotifier {
   /// Per-file decode and WAV combination run in a background isolate so multi-hour recordings do
   /// not block the UI isolate; the caller opens the share sheet on the main isolate.
   @visibleForTesting
-  Future<File?> writeRecordingWav(List<Wal> wals, {required String outputPath, bool verifySource = false}) async {
+  Future<File?> writeRecordingWav(
+    List<Wal> wals, {
+    required String outputPath,
+    Map<Wal, String>? sourceDigests,
+  }) async {
     final sorted = [...wals]..sort((a, b) => a.timerStart.compareTo(b.timerStart));
     final playable = sorted.where(canPlayOrShare).toList();
-    if (verifySource && playable.length != sorted.length) throw StateError('Recording file unavailable');
+    if (sourceDigests != null && playable.length != sorted.length) throw StateError('Recording file unavailable');
     if (playable.isEmpty) return null;
 
     final tempDir = await getTemporaryDirectory();
     final items = <WalWavWorkItem>[];
     for (final wal in playable) {
-      final item = await _prepareWalWavWorkItem(wal, tempDir: tempDir, forSharing: true, verifySource: verifySource);
+      final digest = sourceDigests?[wal];
+      if (sourceDigests != null && digest == null) throw StateError('Recording identity unavailable');
+      final item = await _prepareWalWavWorkItem(wal, tempDir: tempDir, forSharing: true, sourceDigest: digest);
       if (item != null) items.add(item);
     }
     if (items.isEmpty) return null;
@@ -229,7 +235,11 @@ class AudioPlayerUtils extends ChangeNotifier {
     return result.path == null ? null : File(result.path!);
   }
 
-  Future<void> shareRecordingAsAudio(List<Wal> wals, {bool Function()? canShare}) async {
+  Future<void> shareRecordingAsAudio(
+    List<Wal> wals, {
+    bool Function()? canShare,
+    Map<Wal, String>? sourceDigests,
+  }) async {
     final start = wals.map((w) => w.timerStart).reduce((a, b) => a < b ? a : b);
     final tempDir = await getTemporaryDirectory();
     final shareDir = await tempDir.createTemp('omi-recording-');
@@ -238,7 +248,7 @@ class AudioPlayerUtils extends ChangeNotifier {
       file = await writeRecordingWav(
         wals,
         outputPath: '${shareDir.path}/omi_recording_$start.wav',
-        verifySource: canShare != null,
+        sourceDigests: sourceDigests,
       );
     } catch (_) {
       await shareDir.delete(recursive: true);
@@ -263,7 +273,7 @@ class AudioPlayerUtils extends ChangeNotifier {
     Wal wal, {
     required Directory tempDir,
     bool forSharing = false,
-    bool verifySource = false,
+    String? sourceDigest,
   }) async {
     final cacheKey = forSharing ? '${wal.id}_share' : wal.id;
 
@@ -276,7 +286,7 @@ class AudioPlayerUtils extends ChangeNotifier {
 
     // Sharing reuses the already-decoded playback file (e.g. the one produced when
     // the waveform loaded) instead of decoding the whole recording again.
-    if (forSharing && !verifySource) {
+    if (forSharing && sourceDigest == null) {
       final playbackCached = _audioFileCache[wal.id];
       if (playbackCached != null && await File(playbackCached).exists()) {
         return WalWavWorkItem.cached(walId: wal.id, cachedWavPath: playbackCached);
@@ -289,7 +299,7 @@ class AudioPlayerUtils extends ChangeNotifier {
       final path = await Wal.getFilePath(wal.filePath);
       if (path != null && await File(path).exists()) audioFilePath = path;
     }
-    if (verifySource && audioFilePath == null) throw StateError('Recording file unavailable');
+    if (sourceDigest != null && audioFilePath == null) throw StateError('Recording file unavailable');
     if (audioFilePath == null && wal.data.isEmpty) return null;
 
     final isOpus = wal.codec.isOpusSupported();
@@ -305,7 +315,7 @@ class AudioPlayerUtils extends ChangeNotifier {
       channels: wal.channel,
       bitsPerSample: bitsPerSample,
       opusFrameDecoder: debugOpusFrameDecoder,
-      expectedInputSha256: verifySource ? wal.fileSha256 : null,
+      expectedInputSha256: sourceDigest,
     );
   }
 

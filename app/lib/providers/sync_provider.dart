@@ -829,15 +829,20 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
   }
 
   /// Capture the rows in the confirmation and the session that owns them.
-  WalClearAllOffer prepareClearAllWals() {
+  Future<WalClearAllOffer> prepareClearAllWals() async {
     final generation = _sessionGeneration;
     final LocalWalSyncImpl phone = _walService.getSyncs().phone;
     final phoneGeneration = phone.sessionGeneration;
     final targets = List<Wal>.unmodifiable(allWals);
     final tooOld = List<Wal>.unmodifiable(targets.where((wal) => wal.status == WalStatus.outsideRecoveryWindow));
-    final exportOffered = Map<Wal, WalFileIdentity>.identity();
+    final identities = Map<Wal, WalFileIdentity>.identity();
     for (final wal in tooOld) {
-      exportOffered[wal] = wal.fileIdentity;
+      identities[wal] = wal.fileIdentity;
+    }
+    final exportOffered = Map<Wal, WalOfferedAudio>.identity();
+    for (final entry in identities.entries) {
+      final audio = await phone.snapshotOfferedAudio(entry.key, entry.value, phoneGeneration);
+      if (audio != null) exportOffered[entry.key] = audio;
     }
     return (
       targets: targets,
@@ -853,16 +858,20 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
         bool stillOffered() =>
             _isCurrent(generation) &&
             wals.every((wal) {
-              final identity = exportOffered[wal];
-              return identity != null && phone.ownsOfferedAudio(wal, identity, phoneGeneration);
+              final audio = exportOffered[wal];
+              return audio != null && phone.ownsOfferedAudio(wal, audio.identity, phoneGeneration);
             });
         if (!stillOffered()) throw StateError('Recording changed');
-        await shareRecordingAsWav(wals, canShare: stillOffered);
+        await _audioPlayerUtils.shareRecordingAsAudio(
+          wals,
+          canShare: stillOffered,
+          sourceDigests: {for (final wal in wals) wal: exportOffered[wal]!.sha256},
+        );
       },
     );
   }
 
-  Future<void> deleteAllClearableWals({Map<Wal, WalFileIdentity> exportOffered = const {}}) async {
+  Future<void> deleteAllClearableWals({Map<Wal, WalOfferedAudio> exportOffered = const {}}) async {
     final generation = _sessionGeneration;
     final syncs = _walService.getSyncs();
     try {
@@ -1228,8 +1237,7 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
     await _audioPlayerUtils.shareAsAudio(wal);
   }
 
-  Future<void> shareRecordingAsWav(List<Wal> wals, {bool Function()? canShare}) =>
-      _audioPlayerUtils.shareRecordingAsAudio(wals, canShare: canShare);
+  Future<void> shareRecordingAsWav(List<Wal> wals) => _audioPlayerUtils.shareRecordingAsAudio(wals);
 
   Future<void> seekToPosition(Duration position) async {
     await _audioPlayerUtils.seekToPosition(position);

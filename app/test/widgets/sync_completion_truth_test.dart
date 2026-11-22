@@ -84,12 +84,7 @@ class _Sync extends ChangeNotifier with WalDerivedSyncViews implements SyncProvi
   Future<void> discoverDeviceWals({String? firmwareVersion}) async {}
 
   @override
-  ({
-    List<Wal> targets,
-    List<Wal> tooOld,
-    Future<void> Function() clear,
-    Future<void> Function(List<Wal>) share,
-  }) prepareClearAllWals() {
+  Future<WalClearAllOffer> prepareClearAllWals() async {
     final targets = List<Wal>.of(wals);
     return (
       targets: targets,

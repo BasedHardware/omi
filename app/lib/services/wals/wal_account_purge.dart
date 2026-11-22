@@ -21,14 +21,15 @@ extension _WalAccountPurge on LocalWalSyncImpl {
   Future<bool> _deleteWal(
     Wal wal, {
     required int generation,
-    Map<Wal, WalFileIdentity>? exportOffered,
+    Map<Wal, WalOfferedAudio>? exportOffered,
   }) async {
+    final offered = exportOffered?[wal];
     bool canDelete() =>
         _isCurrent(generation) &&
         _isTrackedWal(wal) &&
-        (exportOffered == null ||
-            wal.status != WalStatus.outsideRecoveryWindow ||
-            exportOffered[wal] == wal.fileIdentity);
+        (offered != null
+            ? ownsOfferedAudio(wal, offered.identity, generation)
+            : exportOffered == null || wal.status != WalStatus.outsideRecoveryWindow);
 
     if (!canDelete()) return false;
     final filePath = wal.filePath;
@@ -39,7 +40,19 @@ extension _WalAccountPurge on LocalWalSyncImpl {
         if (!canDelete() || (exportOffered != null && wal.filePath != filePath)) return false;
         final type = await FileSystemEntity.type(fullPath, followLinks: false);
         if (!canDelete() || (exportOffered != null && wal.filePath != filePath)) return false;
-        if (type == FileSystemEntityType.file || type == FileSystemEntityType.link) {
+        if (offered != null) {
+          if (type != FileSystemEntityType.file) return false;
+          final file = File(fullPath);
+          final digest = (await sha256.bind(file.openRead()).first).toString();
+          if (digest != offered.sha256 || !canDelete()) return false;
+          if (await FileSystemEntity.type(fullPath, followLinks: false) != FileSystemEntityType.file || !canDelete()) {
+            return false;
+          }
+          await file.delete();
+          final sidecar = File(nativeBatchGeolocationSidecarPath(fullPath));
+          if (await sidecar.exists()) await sidecar.delete();
+          if (!_isCurrent(generation)) return false;
+        } else if (type == FileSystemEntityType.file || type == FileSystemEntityType.link) {
           if (!_fileReferencedByOtherWal(wal, fullPath.split('/').last)) {
             await File(fullPath).delete();
             final sidecar = File(nativeBatchGeolocationSidecarPath(fullPath));
@@ -186,4 +199,26 @@ extension _WalAccountPurge on LocalWalSyncImpl {
     if (!_isCurrent(generation) || uid != SharedPreferencesUtil().uid) return;
     await _reconcileAndPersistCurrentOwner();
   }
+}
+
+/// Snapshot a recording for the Offline Sync export offer.
+extension WalOfferedAudioSnapshot on LocalWalSyncImpl {
+  /// Resolve the original file identity before showing the destructive offer.
+  /// The same bytes must later reach the encoder or pass the delete check.
+  Future<WalOfferedAudio?> snapshotOfferedAudio(Wal wal, WalFileIdentity identity, int generation) =>
+      _enqueueBuffer(() async {
+        if (!ownsOfferedAudio(wal, identity, generation)) return null;
+        try {
+          final path = await Wal.getFilePath(identity.path);
+          if (path == null || await FileSystemEntity.type(path, followLinks: false) != FileSystemEntityType.file) {
+            return null;
+          }
+          final digest = identity.sha256 ?? (await sha256.bind(File(path).openRead()).first).toString();
+          if (!ownsOfferedAudio(wal, identity, generation)) return null;
+          return (identity: identity, sha256: digest);
+        } on Exception catch (error) {
+          Logger.debug('Could not verify offered audio: ${error.runtimeType}');
+          return null;
+        }
+      });
 }

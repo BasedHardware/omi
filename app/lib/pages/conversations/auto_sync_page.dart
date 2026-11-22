@@ -1071,7 +1071,7 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
       clearPending: provider.deleteAllPendingWals,
       refreshDeviceStorage: context.read<DeviceProvider>().refreshRingStorageStatus,
     );
-    final offer = await showOmiSheet<WalClearAllOffer>(
+    final pendingOffer = await showOmiSheet<Future<WalClearAllOffer>>(
       context: context,
       title: context.l10n.manageStorage,
       padding: const EdgeInsets.fromLTRB(OmiSpacing.xl, OmiSpacing.xs, OmiSpacing.xl, OmiSpacing.xl),
@@ -1117,6 +1117,7 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
         },
       ),
     );
+    final offer = await pendingOffer;
     if (offer == null || !context.mounted) return;
     final confirmed = await confirmClearAllRecordings(context, tooOld: offer.tooOld, share: offer.share);
     if (!confirmed || !context.mounted) return;
