@@ -66,6 +66,16 @@ def _initial_state(args, now: datetime) -> dict:
     }
 
 
+def _can_resume(state: dict, phase: str, cutoff: datetime) -> bool:
+    return (
+        phase in {'canary', 'apply'}
+        and state['applying']
+        and state['canary_verified'] == (phase == 'apply')
+        and not state['unfinished_transaction']
+        and state['cutoff'] == cutoff.isoformat()
+    )
+
+
 def _page(client, state: dict, limit: int):
     query = (
         client.collection_group('conversations')
@@ -107,8 +117,8 @@ def run_pass(client, path: Path, state: dict, phase: str) -> str:
     cutoff = datetime.fromisoformat(state['cutoff'])
     write_limit = CANARY_SIZE if canary else MAX_BATCH_WRITES
     processed = 0
-    written = 0
     counts = Counter(state['counts'])
+    written = counts['written'] if canary else 0
     while not state['exhausted'] and state['scanned'] < MAX_SCAN:
         if apply and (written >= write_limit or (not canary and processed >= MAX_BATCH_WRITES)):
             return 'canary_paused' if canary else 'batch_limit'
@@ -210,14 +220,8 @@ def main() -> int:
                 state['cursor'] = None
                 state['counts'] = {}
                 state['unfinished_transaction'] = False
-            elif (
-                args.phase != 'apply'
-                or not state['applying']
-                or not state['canary_verified']
-                or state['unfinished_transaction']
-                or state['cutoff'] != args.cutoff.isoformat()
-            ):
-                parser.error('checkpoint does not match a fully verified, resumable canary')
+            elif not _can_resume(state, args.phase, args.cutoff):
+                parser.error('checkpoint does not match a clean canary or verified apply pass')
         else:
             state = _initial_state(args, now)
         if state['utc_day'] != now.date().isoformat():
@@ -226,7 +230,8 @@ def main() -> int:
         client = firestore.Client(project=PROJECT)
         try:
             stop = run_pass(client, args.checkpoint, state, args.phase)
-            if args.phase == 'canary' and stop in {'canary_paused', 'exhausted'} and state['counts'].get('written'):
+            canary_writes = state['counts'].get('written', 0)
+            if args.phase == 'canary' and (canary_writes == CANARY_SIZE or (stop == 'exhausted' and canary_writes)):
                 state['canary_verified'] = True
                 _save(args.checkpoint, state)
         except Exception as error:

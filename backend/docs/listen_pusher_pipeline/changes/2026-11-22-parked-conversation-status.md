@@ -23,10 +23,11 @@ UTC cutoff and private checkpoints. Run one `dry-run` with `ro-prod` before appl
 After the compatible revision is serving and the full migration review is clear,
 run `canary` with `prod-operator` and a separate checkpoint. Review its exact
 status-only readback before running `apply --accept-canary` with that same apply
-checkpoint. Each apply call visits at most 2,000 rows. Clean batch stops can
-resume. An uncertain write or incomplete readback leaves the checkpoint blocked
-until the operator reconciles the affected range. Disable the writer switch and stop invocation of the runner
-to halt the rollout.
+checkpoint. Each canary or apply call visits at most 2,000 rows. Clean stops can
+resume on the same UTC day. A resumed canary counts all its prior writes toward
+the 50-write limit. An uncertain write or incomplete readback leaves the
+checkpoint blocked until the operator reconciles the affected range. Disable
+the writer switch and stop invocation of the runner to halt the rollout.
 
 The runner reads projected status and custody metadata. It checks the scanned
 row revision and authoritative job, outbox, and tombstone state in the same
