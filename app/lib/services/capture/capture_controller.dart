@@ -128,6 +128,7 @@ part 'capture_live_recovery.dart';
 part 'capture_continuity_watch.dart';
 part 'capture_phone_discard.dart';
 part 'capture_voice_questions.dart';
+part 'capture_conversation_custody.dart';
 
 enum _VoiceCommandTrigger { toggle, legacyLongPress }
 
@@ -847,21 +848,12 @@ class CaptureController extends ChangeNotifier
   /// Used to scope WAL queries to only this session's audio.
   int _sessionStartSeconds = 0;
 
-  /// Conversation/WAL-window identity for the active live capture.
-  ///
-  /// Unlike a transcript segment ID, this does not change when the backend
-  /// revises or deletes segments during the capture. It is derived from
-  /// [_sessionStartSeconds], which [_resetStateVariables] clears on
-  /// conversation-created / force-process paths and at device-recording start.
-  /// Phone-mic stop/next-start keeps the previous value so a late
-  /// ConversationEvent can still stamp that session's WALs. Sequential
-  /// phone-mic live captures can therefore report the same id.
-  ///
-  /// Per-recording identity is [activeRecordingId] (and the native mic session
-  /// id). Downstream semantic controls must use that fresh identity, not this
-  /// getter, as the authoritative live capture session.
+  /// A factual clock anchor plus a sequence: several conversations can close in one second.
+  /// This identifies a conversation window, while [activeRecordingId] identifies its source.
+  int _conversationWindowRevision = 0;
   @override
-  String? get activeCaptureSessionId => _sessionStartSeconds == 0 ? null : 'live-$_sessionStartSeconds';
+  String? get activeCaptureSessionId =>
+      _sessionStartSeconds == 0 ? null : 'live-$_sessionStartSeconds-$_conversationWindowRevision';
 
   /// Client-minted UUID shared by capture, `/v4/listen`, and the resulting
   /// conversation so the pipeline can be joined without timing heuristics.
@@ -1035,33 +1027,19 @@ class CaptureController extends ChangeNotifier
     notifyListeners();
   }
 
-  /// Preserved session start for auto-sync after socket-driven conversation completion.
-  /// Set before _resetStateVariables() clears _sessionStartSeconds, consumed on ConversationEvent.
-  int _pendingAutoSyncSessionStart = 0;
-
-  /// Fallback timer that fires if ConversationEvent doesn't arrive within 30s.
-  Timer? _autoSyncFallbackTimer;
-
-  /// The conversation ID from ConversationProcessingStartedEvent, kept for fallback sync.
-  String? _pendingAutoSyncConversationId;
-
-  /// True when the just-finished session crossed a socket interruption. A
-  /// later transcript proves the repaired socket worked, but not that audio
-  /// from before the reconnect arrived, so its WAL must still drain.
-  bool _pendingAutoSyncNeedsRepair = false, _pendingAutoSyncCustomStt = false;
+  final Map<String, _ConversationClose> _pendingConversationCloses = {};
+  final Set<String> _seenConversationCloses = {};
+  final Set<_ConversationClose> _admittedConversationCloses = {};
+  _ConversationClose? _processClose;
+  int _conversationCustodyEpoch = 0;
   bool _lastPublishedSocketCustomStt = false;
 
-  /// Future tracking the in-progress _finalizeAndStampSession(), so the next
-  /// coordinated transfer wake cannot run before the durable stamp is ready.
+  /// Only durable stamping is ordered here; confirmation/recovery runs outside the chain.
   Future<void>? _pendingFinalizeAndStamp;
 
   /// When each live segment of the open conversation last arrived, in phone seconds. The saved
   /// transcript counts from the server's start, so these anchor it to the phone's own clock.
   final Map<String, int> _segmentArrivals = {};
-
-  /// [_segmentArrivals] of each conversation whose processing started, by id, until its ConversationEvent
-  /// arrives. The next conversation can close before that event does, so each close keeps its own.
-  final Map<String, Map<String, int>> _closingSegmentArrivals = {};
 
   /// Set in onClosed() when the socket drops during active device recording.
   /// Consumed in _initiateWebsocket() to trigger onNetworkSocketReconnected()
@@ -1515,7 +1493,7 @@ class CaptureController extends ChangeNotifier
     unawaited(_dispatchLogged(DeviceUpdated(device, reconnectDeviceId: reconnectDeviceId)));
   }
 
-  Future _resetStateVariables() async {
+  Future _resetStateVariables({bool rearmLive = false}) async {
     _systemSurfaceConversationRevision++;
     _stopInProgressConversationRefresh();
     segments = [];
@@ -1528,7 +1506,8 @@ class CaptureController extends ChangeNotifier
     _conversation = null;
     taggingSegmentIds = [];
     liveHeldAudio.reset();
-    _sessionStartSeconds = 0;
+    _sessionStartSeconds = rearmLive ? _nowSeconds : 0;
+    _conversationWindowRevision++;
     _endOfflineSession();
     notifyListeners();
   }
@@ -3050,6 +3029,10 @@ class CaptureController extends ChangeNotifier
   }
 
   void clearUserData() {
+    _retireConversationClosures(accountChanged: true);
+    _sessionStartSeconds = 0;
+    _conversationWindowRevision++;
+    _segmentArrivals.clear();
     _liveSocketIdentity = null;
     if (_captureInstance != null) unawaited(_dispatchLogged(const CaptureIdentityChanged()));
     _mobileStandardBatchAllowed = false;
@@ -3128,6 +3111,7 @@ class CaptureController extends ChangeNotifier
     _clearIngressByteObserver();
     _uplinkSilence.cancel();
     _captureControllerDisposed = true;
+    _retireConversationClosures(accountChanged: false);
     _reconnectGraceTimer?.cancel();
     _reconnectGraceTimer = null;
     _captureHealthTimer?.cancel();
@@ -4223,6 +4207,7 @@ class CaptureController extends ChangeNotifier
 
   @override
   void onMessageEventReceived(MessageEvent event) {
+    if (_captureControllerDisposed) return;
     if (event is ConversationSessionEvent) {
       notifyListeners();
       return;
@@ -4231,43 +4216,14 @@ class CaptureController extends ChangeNotifier
     if (event is ConversationProcessingStartedEvent) {
       _lastServerClose =
           (id: event.memory.id, at: DateTime.now(), previewWords: _previewWords, previewSession: _previewSession);
-      _closingSegmentArrivals[event.memory.id] = Map.of(_segmentArrivals);
-      // An event that never arrives leaves its entry behind, and a few closes back are plenty.
-      if (_closingSegmentArrivals.length > 8) _closingSegmentArrivals.remove(_closingSegmentArrivals.keys.first);
-      // Replace the optimistic Process Now placeholder once the server confirms
-      // a real processing row, so timeout/retry apply to the confirmed id.
+      // Keep the placeholder transition idempotent even when this ID was returned by Process Now.
       externalActions.removeProcessingConversation(OptimisticProcessingPlaceholder.id);
       externalActions.addProcessingConversation(event.memory);
-      _pendingAutoSyncSessionStart = _sessionStartSeconds;
-      _pendingAutoSyncConversationId = event.memory.id;
-      _pendingAutoSyncNeedsRepair = _sessionTransportInterrupted;
-      _pendingAutoSyncCustomStt = _socket?.customSttMode ?? _lastPublishedSocketCustomStt;
-      _sessionTransportInterrupted = false;
-      // Force-drain tail buffer, stamp WALs with conversation ID, then clear state.
-      // Store the future so the coordinated transfer wake waits for the stamp.
-      _pendingFinalizeAndStamp = _finalizeAndStampSession(_sessionStartSeconds, event.memory.id);
-      _resetStateVariables();
-      // Start 30s fallback timer in case ConversationEvent never arrives (WS disconnect)
-      _autoSyncFallbackTimer?.cancel();
-      _autoSyncFallbackTimer = _scheduling.once(const Duration(seconds: 30), () {
-        if (_pendingAutoSyncSessionStart > 0 && _pendingAutoSyncConversationId != null) {
-          final sessionStart = _pendingAutoSyncSessionStart;
-          final convId = _pendingAutoSyncConversationId!;
-          final needsRepair = _pendingAutoSyncNeedsRepair;
-          _pendingAutoSyncSessionStart = 0;
-          _pendingAutoSyncConversationId = null;
-          _pendingAutoSyncNeedsRepair = _pendingAutoSyncCustomStt = false;
-          Logger.debug(
-            'Auto-sync fallback timer fired — syncing WALs to conversation $convId (needsRepair=$needsRepair)',
-          );
-          unawaited(_confirmSessionWalsRetained(sessionStart, convId, failClosedReason: 'missing_conversation_event'));
-        }
-      });
+      _onConversationProcessingStarted(event.memory.id);
       return;
     }
 
     if (event is ConversationEvent) {
-      final segmentArrivals = _closingSegmentArrivals.remove(event.memory.id) ?? const <String, int>{};
       event.memory.isNew = true;
       externalActions.removeProcessingConversation(OptimisticProcessingPlaceholder.id);
       try {
@@ -4279,16 +4235,10 @@ class CaptureController extends ChangeNotifier
       } catch (_) {}
       externalActions.removeProcessingConversation(event.memory.id);
       _processConversationCreated(event.memory, event.messages.cast<ServerMessage>());
-      if (_pendingAutoSyncSessionStart > 0 && _pendingAutoSyncConversationId == event.memory.id) {
-        _autoSyncFallbackTimer?.cancel();
-        final sessionStart = _pendingAutoSyncSessionStart;
-        final (needsRepair, customStt) = (_pendingAutoSyncNeedsRepair, _pendingAutoSyncCustomStt);
-        _pendingAutoSyncSessionStart = 0;
-        _pendingAutoSyncConversationId = null;
-        _pendingAutoSyncNeedsRepair = _pendingAutoSyncCustomStt = false;
-        Logger.debug('Conversation ${event.memory.id} closed — confirming WAL retention (needsRepair=$needsRepair)');
-        unawaited(_confirmSessionTranscript(sessionStart, event.memory, segmentArrivals,
-            needsRepair: needsRepair, allowTranscriptCoverageFallback: customStt));
+      final close = _pendingConversationCloses.remove(event.memory.id);
+      if (close != null) {
+        close.fallback?.cancel();
+        unawaited(_confirmClosedConversation(close, event.memory));
       }
       return;
     }
@@ -4401,84 +4351,91 @@ class CaptureController extends ChangeNotifier
   }
 
   Future<void> forceProcessingCurrentConversation() async {
-    final sessionStart = _sessionStartSeconds;
     final recordingSessionId = activeRecordingId;
     final conversationRevision = _systemSurfaceConversationRevision;
-    final phoneSync = _wal.getSyncs().phone;
-    // Show the Conversations-tab skeleton before the WAL drain. Awaiting
-    // finalizeCurrentSession first is the 30–60s dead window users hit today.
-    // Add the placeholder before reset so a concurrent rebuild cannot drop it.
+    final close = _admitConversationClose(processNow: true);
+    _processClose = close;
     final placeholderOwner = ++_processingPlaceholderOwner;
-    externalActions.addProcessingConversation(
-      OptimisticProcessingPlaceholder.conversation(targetConversationId: _conversation?.id),
-    );
-    _finalizeGate.markFinalized();
-    externalActions.onLiveFinalized(); // The live episode closes; the next counts from now.
-    await phoneSync.finalizeCurrentSession();
-    if (lifetime.isClosed ||
-        recordingSessionId != activeRecordingId ||
-        conversationRevision != _systemSurfaceConversationRevision) {
-      // Another path finished this conversation during the drain; never reset
-      // the next one, and never leave the skeleton stranded. A newer request that
-      // showed the same row since then still needs it.
-      if (placeholderOwner == _processingPlaceholderOwner) {
-        externalActions.removeProcessingConversation(OptimisticProcessingPlaceholder.id);
-      }
-      return;
-    }
-    _clearSessionLocation();
-    // Teardown can clear the socket; use its recorded mode, never current preferences.
-    final (segmentArrivals, needsRepair, customStt) = (
-      Map<String, int>.of(_segmentArrivals),
-      _sessionTransportInterrupted,
-      _socket?.customSttMode ?? _lastPublishedSocketCustomStt
-    );
-    _sessionTransportInterrupted = false;
-    _resetStateVariables();
-    final confirmedProcessing = _firstCaptureProcess;
-    final Future<InProgressProcessOutcome> request = _processInProgressOutcomeOverride != null
-        ? _processInProgressOutcomeOverride!()
-        : _processInProgressConversationOverride != null
-            ? _processInProgressConversationOverride!().then((result) =>
-                InProgressProcessOutcome(response: result, absence: result == null ? ProcessAbsence.transport : null))
-            : processInProgressConversationOutcome();
-    if (confirmedProcessing) _lastProcessRequest = request;
-    _processInFlight = request.then((_) {}, onError: (_) {});
-    request.then<void>((outcome) async {
-      final conversationId = await OptimisticProcessingPlaceholder.applyProcessResult(
-        result: outcome.response,
-        absence: outcome.absence,
-        actions: externalActions,
-        onCreated: _processConversationCreated,
-        onNoConversation: _onProcessProducedNoConversation,
-        removePlaceholder: placeholderOwner == _processingPlaceholderOwner,
+    var requestAdmitted = false;
+    try {
+      // Publish the skeleton before waiting for disk, preserving immediate Process Now feedback.
+      externalActions.addProcessingConversation(
+        OptimisticProcessingPlaceholder.conversation(targetConversationId: _conversation?.id),
       );
-      if (sessionStart > 0 && conversationId != null) {
-        if (phoneSync is LocalWalSyncImpl) phoneSync.prepareConversationStamp(recordingSessionId);
-        await phoneSync.stampConversationId(sessionStart, conversationId);
-        final saved = outcome.response?.conversation;
-        if (saved != null && phoneSync is LocalWalSyncImpl) {
-          await _confirmSessionTranscript(sessionStart, saved, segmentArrivals,
-              needsRepair: needsRepair, allowTranscriptCoverageFallback: customStt);
-        } else {
-          _autoSyncSessionWals();
+      _finalizeGate.markFinalized();
+      externalActions.onLiveFinalized();
+      await close.snapshot;
+      if (lifetime.isClosed ||
+          !_closeStoreIsCurrent(close) ||
+          recordingSessionId != activeRecordingId ||
+          conversationRevision != _systemSurfaceConversationRevision) {
+        // A matching server close may already have bound this cut during the drain.
+        close.bind(null);
+        if (placeholderOwner == _processingPlaceholderOwner) {
+          externalActions.removeProcessingConversation(OptimisticProcessingPlaceholder.id);
         }
+        return;
       }
-    }).catchError((Object error, StackTrace stack) => OptimisticProcessingPlaceholder.handleFailure(
+      _resetLiveConversationWindow();
+      final confirmedProcessing = _firstCaptureProcess;
+      final Future<InProgressProcessOutcome> request = _processInProgressOutcomeOverride != null
+          ? _processInProgressOutcomeOverride!()
+          : _processInProgressConversationOverride != null
+              ? _processInProgressConversationOverride!().then((result) =>
+                  InProgressProcessOutcome(response: result, absence: result == null ? ProcessAbsence.transport : null))
+              : processInProgressConversationOutcome();
+      requestAdmitted = true;
+      if (confirmedProcessing) _lastProcessRequest = request;
+      _processInFlight = request.then((_) {}, onError: (_) {});
+      request.then<void>((outcome) async {
+        // Bind before any asynchronous publication and before awaiting the ordered stamp slot.
+        final conversationId = outcome.response?.conversation?.id;
+        close.bind(conversationId);
+        if (identical(_processClose, close)) _processClose = null;
+        if (!_closeStoreIsCurrent(close) || _captureControllerDisposed) return;
+        if (conversationId != null) _rememberConversationClose(conversationId);
+        await OptimisticProcessingPlaceholder.applyProcessResult(
+          result: outcome.response,
+          absence: outcome.absence,
+          actions: externalActions,
+          onCreated: _processConversationCreated,
+          onNoConversation: _onProcessProducedNoConversation,
+          removePlaceholder: placeholderOwner == _processingPlaceholderOwner,
+        );
+        if (close.sessionStartSeconds > 0 && conversationId != null) {
+          final saved = outcome.response?.conversation;
+          if (saved != null && close.phone is LocalWalSyncImpl) {
+            await _confirmSessionTranscript(close.sessionStartSeconds, saved, close.segmentArrivals,
+                close: close, needsRepair: close.needsRepair, allowTranscriptCoverageFallback: close.customStt);
+          } else {
+            unawaited(_autoSyncSessionWals());
+          }
+        }
+      }).catchError((Object error, StackTrace stack) async {
+        close.bind(null);
+        if (identical(_processClose, close)) _processClose = null;
+        if (!_closeStoreIsCurrent(close) || _captureControllerDisposed) return;
+        await OptimisticProcessingPlaceholder.handleFailure(
           actions: externalActions,
           removePlaceholder: placeholderOwner == _processingPlaceholderOwner,
           error: error,
           stack: stack,
           report: (message, trace) => PlatformManager.instance.crashReporter.reportCrash(message, trace),
-        ));
+        );
+      });
+    } catch (_) {
+      close.bind(null);
+      rethrow;
+    } finally {
+      if (!requestAdmitted && identical(_processClose, close)) _processClose = null;
+    }
   }
 
   Future<void> _reportDetachedCaptureError(String operation, Object error, StackTrace stack) =>
       OptimisticProcessingPlaceholder.reportDetachedFailure(operation, error, stack,
           (message, trace) => PlatformManager.instance.crashReporter.reportCrash(message, trace));
 
-  /// Force-drain tail buffer and stamp all session WALs with conversation ID.
-  /// Called from synchronous onMessageEventReceived — fire-and-forget async.
+  /// Bind newly captured safety copies to the source recording before any conversation closes.
   void _bindSafetyWalRecordingSession() {
     final phone = _wal.getSyncs().phone;
     // Test doubles implement a narrower phone sync. Production phone storage
@@ -4487,133 +4444,15 @@ class CaptureController extends ChangeNotifier
     phone.setActiveRecordingSessionId(activeRecordingId);
   }
 
-  Future<void> _finalizeAndStampSession(int sessionStartSeconds, String conversationId) async {
-    final ownerToken = _sessionOwner?.token;
-    final locationGeneration = _sessionGeolocationGeneration;
-    // Capture before the flush. A device update can roll the session while
-    // finalize awaits disk, and the rolled session must not cancel this stamp —
-    // only an account/generation roll on the WAL store itself does.
-    final recordingSessionId = activeRecordingId;
-    try {
-      final phoneSync = _wal.getSyncs().phone;
-      final walGeneration = phoneSync is LocalWalSync ? phoneSync.sessionGeneration : null;
-      await phoneSync.finalizeCurrentSession();
-      if (sessionStartSeconds > 0 &&
-          (walGeneration == null || (phoneSync is LocalWalSync && phoneSync.sessionGeneration == walGeneration))) {
-        if (phoneSync is LocalWalSyncImpl) {
-          phoneSync.prepareConversationStamp(recordingSessionId);
-        }
-        await phoneSync.stampConversationId(sessionStartSeconds, conversationId);
-      }
-    } catch (e) {
-      Logger.debug('_finalizeAndStampSession error: $e');
-    } finally {
-      if (_captureSessionIsCurrent(ownerToken) && locationGeneration == _sessionGeolocationGeneration) {
-        _clearSessionLocation();
-      }
-    }
-  }
-
-  /// Moves the safety copies [conversation]'s saved transcript covers into synced retention, and
-  /// uploads the uncovered rest so the server can transcribe what it lost. When coverage cannot be
-  /// judged — an interrupted session, an empty or unusable transcript, or no anchor — confirmation
-  /// passes no spans and fails closed: every eligible stamped copy is kept for repair.
-  Future<void> _confirmSessionTranscript(
-    int sessionStartSeconds,
-    ServerConversation conversation,
-    Map<String, int> segmentArrivals, {
-    bool needsRepair = false,
-    bool allowTranscriptCoverageFallback = false,
-  }) {
-    List<(int, int)>? spans;
-    int? origin;
-    String? failClosedReason;
-    final saved = conversation.transcriptSegments;
-    if (needsRepair) {
-      failClosedReason = 'needs_repair';
-    } else if (saved.isEmpty) {
-      failClosedReason = 'empty_transcript';
-    } else {
-      final valid = [
-        for (final segment in saved)
-          if (segment.start.isFinite && segment.end.isFinite && segment.end > segment.start) segment,
-      ];
-      if (valid.isEmpty) {
-        failClosedReason = 'no_spans';
-      } else {
-        // Live segment times are seconds from the conversation's start on the server's clock, while
-        // the copies carry the phone's. Anchor that start to the phone through the moments the live
-        // segments arrived; without any, use the server's start, or this session's when the row has
-        // none.
-        final startedAt = conversation.startedAt;
-        final anchor =
-            transcriptStartOnDevice([for (final segment in valid) (segment.id, segment.end)], segmentArrivals) ??
-                (startedAt != null
-                    ? startedAt.millisecondsSinceEpoch ~/ 1000
-                    : (sessionStartSeconds > 0 ? sessionStartSeconds : null));
-        if (anchor == null || anchor <= 0) {
-          failClosedReason = 'anchor_unavailable';
-        } else {
-          origin = anchor;
-          spans = [for (final segment in valid) (anchor + segment.start.floor(), anchor + segment.end.ceil())];
-        }
-      }
-    }
-    return _confirmSessionWalsRetained(sessionStartSeconds, conversation.id,
-        transcriptSpans: spans,
-        conversationStartSeconds: origin,
-        failClosedReason: failClosedReason,
-        allowTranscriptCoverageFallback: allowTranscriptCoverageFallback);
-  }
-
-  Future<void> _confirmSessionWalsRetained(
-    int sessionStartSeconds,
-    String conversationId, {
-    List<(int, int)>? transcriptSpans,
-    int? conversationStartSeconds,
-    String? failClosedReason,
-    bool allowTranscriptCoverageFallback = false,
-  }) async {
-    final token = _sessionOwner?.token;
-    final phone = _wal.getSyncs().phone;
-    final walGeneration = phone is LocalWalSync ? phone.sessionGeneration : null;
-    final pending = _pendingFinalizeAndStamp;
-    if (pending != null) {
-      await pending;
-      if (identical(_pendingFinalizeAndStamp, pending)) _pendingFinalizeAndStamp = null;
-    }
-    bool stillCurrent() =>
-        _captureSessionIsCurrent(token) &&
-        (walGeneration == null || phone is! LocalWalSync || phone.sessionGeneration == walGeneration);
-    if (!stillCurrent()) return;
-    var kept = 0;
-    if (phone is LocalWalSyncImpl) {
-      try {
-        final outcome = await phone.confirmSessionTranscription(sessionStartSeconds, conversationId,
-            transcriptSpans: transcriptSpans,
-            conversationStartSeconds: conversationStartSeconds,
-            failClosedReason: failClosedReason,
-            allowTranscriptCoverageFallback: allowTranscriptCoverageFallback);
-        kept = outcome.kept;
-      } catch (e) {
-        Logger.debug('_confirmSessionWalsRetained error: $e');
-        kept = 1;
-      }
-    }
-    if (!stillCurrent()) return;
-    if (kept > 0 || phone is! LocalWalSyncImpl) {
-      _autoSyncSessionWals(trigger: WakeTrigger.dataStalled);
-    }
-  }
-
   Future<void> _autoSyncSessionWals({WakeTrigger trigger = WakeTrigger.cooldownElapsed}) async {
     final token = _sessionOwner?.token;
-    // Wait for finalize+stamp to complete so tail buffer WALs are on disk before querying.
-    final pending = _pendingFinalizeAndStamp;
-    if (pending != null) {
-      await pending;
-      if (identical(_pendingFinalizeAndStamp, pending)) _pendingFinalizeAndStamp = null;
+    // Follow new slots admitted while a prior one was settling. No stamp closure calls this.
+    while (true) {
+      final pending = _pendingFinalizeAndStamp;
+      if (pending != null) await pending;
+      if (identical(pending, _pendingFinalizeAndStamp)) break;
     }
+    if (_captureControllerDisposed) return;
     if (!_captureSessionIsCurrent(token)) return;
     final owner = _sessionOwner;
     if (owner != null) {
