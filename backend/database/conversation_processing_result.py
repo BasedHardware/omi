@@ -3,8 +3,6 @@
 from collections.abc import Mapping
 from typing import Any
 
-from google.cloud.firestore_v1.field_path import FieldPath
-
 from models.conversation import ConversationStatus
 from utils.conversations.summary_delivery import present
 from utils.conversations.v3 import policy as v3_policy
@@ -50,6 +48,8 @@ def update_fields(data: Mapping[str, Any]) -> dict:
     Empty maps replace that map; arrays and scalars are leaves. FieldPath quotes
     literal dotted/backtick keys rather than treating them as update paths.
     """
+    from google.cloud.firestore_v1.field_path import FieldPath
+
     fields = {}
 
     def visit(value, path):
