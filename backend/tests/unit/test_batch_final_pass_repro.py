@@ -17,7 +17,7 @@ from testing.owner_lab import final_pass_repro as lab
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 from tests.unit.test_batch_final_pass import prod_shaped, UID, wav  # noqa: F401
 from utils.conversations import final_pass_batch as batch, final_pass_pyannote as final
-from utils.stt.vad_compaction import diarize_with_speech_compaction
+from utils.stt.diarization import diarize
 
 
 @pytest.fixture
@@ -149,7 +149,7 @@ def multi_unit(prod_shaped, monkeypatch):
             load_result=lambda item, *a, **kw: deepcopy(payloads[item.segment_id]), fetch_audio=fetch
         ),
     )
-    monkeypatch.setattr(final, 'diarize_with_speech_compaction', diarize_with_speech_compaction)
+    monkeypatch.setattr(final, 'diarize', diarize)
     before = deepcopy(client.rows)
     try:
         yield SimpleNamespace(lane=lane, client=client, store=store, payloads=payloads, timer=timer, before=before)
@@ -295,7 +295,7 @@ def test_unknown_error_has_innermost_backend_location_without_private_message(mu
     def private_failure(*a, **kw):
         raise AttributeError('PRIVATE transcript or uid must never be logged')
 
-    monkeypatch.setattr(final, 'diarize_with_speech_compaction', private_failure)
+    monkeypatch.setattr(final, 'diarize', private_failure)
     caplog.set_level(logging.INFO)
     result = replay(multi_unit)
     assert result['exception_type'] == 'AttributeError' and result['message'] == 'unclassified'

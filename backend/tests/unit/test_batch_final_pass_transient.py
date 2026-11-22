@@ -44,7 +44,7 @@ def inject(monkeypatch, lane, factory, phase):
     elif phase == 'audio':
         monkeypatch.setattr(lane.artifacts, 'fetch_audio', fail)
     elif phase == 'diarizer':
-        monkeypatch.setattr(final, 'diarize_with_speech_compaction', fail)
+        monkeypatch.setattr(final, 'diarize', fail)
     elif phase == 'revalidation':
         reference = batch.load_reference
         calls = []

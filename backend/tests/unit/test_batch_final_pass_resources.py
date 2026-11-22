@@ -368,7 +368,7 @@ def test_two_hour_maximum_reconstruction_peak_below_288_mib(prod_shaped, monkeyp
         )
 
     monkeypatch.setenv('HOSTED_DIARIZATION_API_URL', 'https://synthetic.invalid')
-    monkeypatch.setattr(final, 'diarize_with_speech_compaction', diarize)
+    monkeypatch.setattr(final, 'diarize', diarize)
     monkeypatch.setattr(diarization.httpx, 'post', post)
     tracemalloc.start()
     try:

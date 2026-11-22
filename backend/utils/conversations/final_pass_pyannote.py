@@ -7,11 +7,9 @@ from models.diarization import OMI_EMBEDDING_SPACE
 from utils.stt.speaker_identity import OMI_SPEAKER_ID_SENTINEL
 from models.speaker_label_provenance import project_source
 from utils.observability.fallback import record_fallback
-from utils.stt.diarization import get_diarizer_backend, LegacyAHC
+from utils.stt.diarization import get_diarizer_backend, LegacyAHC, diarize
 from utils.stt.diarization_eval import score_words
 from utils.stt.diarization_turns import exclusive_from_activity
-from utils.stt.local_vad import offline_pcm_speech_segments
-from utils.stt.vad_compaction import diarize_with_speech_compaction
 
 import httpx
 from prometheus_client import Counter, Histogram
@@ -52,10 +50,9 @@ def run_final_pass(
     try:
         skipped = skip_single_speaker(resolution)
         backend = LegacyAHC() if skipped else (diarizer_backend or get_diarizer_backend())
-        output = diarize_with_speech_compaction(
+        output = diarize(
             pcm,
             backend,
-            offline_pcm_speech_segments,
             deadline=deadline,
             segments=segments,
             vectors=vectors or {},

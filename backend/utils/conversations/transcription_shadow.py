@@ -45,8 +45,6 @@ from utils.executors import start_background_task
 from utils.other.audio_chunks import iter_audio_chunk_pcm
 from utils.speaker_tag_prompts.clips import pcm_to_wav, trim_pcm16
 from utils.stt.conversation_speakers import resolve_conversation_speakers
-from utils.stt.local_vad import offline_pcm_speech_segments
-from utils.stt.vad_compaction import transcribe_with_speech_compaction
 from utils.stt.pre_recorded import parakeet_prerecorded_from_bytes, postprocess_words
 from utils.stt.parakeet_request_metrics import parakeet_caller
 from utils.stt.speaker_embedding import extract_embedding_from_bytes, speaker_embedding_configured
@@ -324,11 +322,7 @@ def _make_pass(
                 raise TimeoutError('shadow deadline')
             part = pcm[offset:end]
             part_start = chunk_start + offset / 32000
-            words = transcribe_with_speech_compaction(
-                part,
-                _shadow_parakeet,
-                offline_pcm_speech_segments,
-            )
+            words = _shadow_parakeet(part)
             if isinstance(words, tuple):
                 words = words[0]
             # A forced cut re-posts context so TDT can recover the utterance

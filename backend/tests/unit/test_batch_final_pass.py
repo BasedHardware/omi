@@ -142,7 +142,7 @@ def lane(monkeypatch):
             'provenance': {'backend': 'pyannote'},
         }
 
-    monkeypatch.setattr(final, 'diarize_with_speech_compaction', diarize)
+    monkeypatch.setattr(final, 'diarize', diarize)
     return SimpleNamespace(
         conversation=conversation,
         items=items,
@@ -297,7 +297,7 @@ def test_diarizer_error_falls_back_to_current_resolver(lane, monkeypatch):
         lane.gpu.append('attempt')
         raise RuntimeError('synthetic diarizer failure')
 
-    monkeypatch.setattr(final, 'diarize_with_speech_compaction', failed)
+    monkeypatch.setattr(final, 'diarize', failed)
     assert all(s.person_id == 'resolver-person' for s in resolve(lane))
     assert lane.gpu == ['attempt']
     assert any(f['from_mode'] == 'whole_conversation_diarizer' for f in lane.fallbacks)
@@ -313,14 +313,14 @@ def test_revocation_during_gpu_does_not_publish(lane, monkeypatch):
 
 
 def test_gap_words_abstain_whole_segment(lane, monkeypatch):
-    original = final.diarize_with_speech_compaction
+    original = final.diarize
 
     def gap(*args, **kwargs):
         output = original(*args, **kwargs)
         output['turns'][0]['start'] = 4
         return output
 
-    monkeypatch.setattr(final, 'diarize_with_speech_compaction', gap)
+    monkeypatch.setattr(final, 'diarize', gap)
     segments = resolve(lane)
     assert segments[0].person_id == 'resolver-person'
     assert segments[1].is_user
@@ -469,14 +469,14 @@ def test_identity_only_retry_keeps_its_budget_without_whole_pass(lane):
 
 
 def test_incompatible_final_embedding_space_keeps_resolver_labels(lane, monkeypatch):
-    original = final.diarize_with_speech_compaction
+    original = final.diarize
 
     def incompatible(*args, **kwargs):
         output = original(*args, **kwargs)
         output['embedding_space'] = 'incompatible'
         return output
 
-    monkeypatch.setattr(final, 'diarize_with_speech_compaction', incompatible)
+    monkeypatch.setattr(final, 'diarize', incompatible)
     assert all(s.person_id == 'resolver-person' for s in resolve(lane))
     assert lane.gpu and lane.fallbacks
 
@@ -546,7 +546,6 @@ def test_each_http_retry_is_charged_before_request(lane, monkeypatch, limited_by
     else:
         monkeypatch.setenv('BATCH_FINAL_PASS_' + limited_by.upper() + '_AUDIO_HOURS', str(16 * allowed_attempts / 3600))
     monkeypatch.setenv('HOSTED_DIARIZATION_API_URL', 'http://synthetic.invalid')
-    monkeypatch.setenv('TRANSCRIPTION_FINAL_PASS_VAD_COMPACTION_ENABLED', 'false')
     calls = []
 
     def post(url, **kwargs):
@@ -567,9 +566,7 @@ def test_each_http_retry_is_charged_before_request(lane, monkeypatch, limited_by
 
     monkeypatch.setattr(httpx, 'post', post)
     # Exercise the real HTTP adapter rather than the lane's fake diarizer.
-    monkeypatch.setattr(
-        final, 'diarize_with_speech_compaction', lambda pcm, backend, *a, **kw: backend.diarize(pcm, **kw).model_dump()
-    )
+    monkeypatch.setattr(final, 'diarize', lambda pcm, backend, *a, **kw: backend.diarize(pcm, **kw).model_dump())
     segments = resolve(lane)
     assert len(calls) == allowed_attempts
     assert all(s.is_user for s in segments) == (allowed_attempts == 2)
@@ -631,7 +628,7 @@ def test_failed_pass_never_publishes_recurring_profile(lane, monkeypatch, failur
         def fail(*a, **kw):
             raise RuntimeError('synthetic failure')
 
-        monkeypatch.setattr(final, 'diarize_with_speech_compaction', fail)
+        monkeypatch.setattr(final, 'diarize', fail)
     elif failure == 'revoked':
         original = batch.load_reference
 
@@ -788,7 +785,7 @@ def prod_shaped(monkeypatch):
     monkeypatch.setattr(batch, 'record_fallback', lambda **kw: fallbacks.append(kw))
     monkeypatch.setattr(batch.recurring_voices, 'checkpoint', lambda *a, **kw: None)
     monkeypatch.setattr(final, 'record_fallback', lambda **kw: fallbacks.append(kw))
-    monkeypatch.setattr(final, 'diarize_with_speech_compaction', diarize)
+    monkeypatch.setattr(final, 'diarize', diarize)
     monkeypatch.setattr(batch, 'emit_product_event', lambda **kw: None)
     return lane
 
@@ -1044,20 +1041,20 @@ def test_exactly_one_terminal_outcome_per_conversation(prod_shaped, monkeypatch,
     second.start, second.end = 908.2, 913.8
     lane.conversation.transcript_segments.append(second)
     if failure == 'unassigned':
-        original = final.diarize_with_speech_compaction
+        original = final.diarize
 
         def gap(*args, **kwargs):
             result = original(*args, **kwargs)
             result['turns'] = []
             return result
 
-        monkeypatch.setattr(final, 'diarize_with_speech_compaction', gap)
+        monkeypatch.setattr(final, 'diarize', gap)
     elif failure == 'budget':
         monkeypatch.setattr(batch, '_reserve_budget', lambda _: False)
     elif failure == 'diarizer':
         monkeypatch.setattr(
             final,
-            'diarize_with_speech_compaction',
+            'diarize',
             lambda *a, **kw: (_ for _ in ()).throw(ValueError('synthetic PRIVATE text')),
         )
     before = batch_outcome_counts()
@@ -1089,11 +1086,11 @@ def test_owner_lab_stub_runs_real_units_assembly_and_runner(prod_shaped, monkeyp
         return original(*args, **kwargs)
 
     monkeypatch.setattr(batch, 'run_final_pass', runner)
-    # The lane fixture replaces compaction; restore the production path so the
-    # lab's DiarizerBackend is actually consumed by the shared runner.
-    from utils.stt.vad_compaction import diarize_with_speech_compaction
+    # The lane fixture replaces the diarizer seam; restore the production path
+    # so the lab's DiarizerBackend is actually consumed by the shared runner.
+    from utils.stt.diarization import diarize
 
-    monkeypatch.setattr(final, 'diarize_with_speech_compaction', diarize_with_speech_compaction)
+    monkeypatch.setattr(final, 'diarize', diarize)
     monkeypatch.setattr(batch.recurring_voices, 'checkpoint', lambda *a, **kw: ('synthetic',))
     result = lab.reproduce(UID, lane.conversation, {}, load_prints=lambda *a, **kw: {})
     assert result['outcome'] == 'success'
@@ -1106,10 +1103,9 @@ def test_owner_lab_stub_runs_real_units_assembly_and_runner(prod_shaped, monkeyp
 
 def test_owner_lab_http_uses_real_http_diarizer_and_captures_learning(prod_shaped, monkeypatch, tmp_path):
     from testing.owner_lab import final_pass_repro as lab
-    from utils.stt.vad_compaction import diarize_with_speech_compaction
+    from utils.stt.diarization import diarize
 
-    monkeypatch.setattr(final, 'diarize_with_speech_compaction', diarize_with_speech_compaction)
-    monkeypatch.setenv('TRANSCRIPTION_FINAL_PASS_VAD_COMPACTION_ENABLED', 'false')
+    monkeypatch.setattr(final, 'diarize', diarize)
     monkeypatch.setenv('HOSTED_DIARIZATION_API_URL', 'http://synthetic.invalid')
     monkeypatch.setattr(batch.recurring_voices, 'checkpoint', lambda *a, **kw: ('synthetic',))
     monkeypatch.setattr(batch.recurring_voices, 'learn', lambda *a, **kw: pytest.fail('real learning called'))
@@ -1175,7 +1171,7 @@ def test_owner_lab_cli_outputs_cases_and_success_rate_without_private_logs(prod_
     from types import ModuleType
     from testing.owner_lab import final_pass_repro as lab
     from database import conversations as db
-    from utils.stt.vad_compaction import diarize_with_speech_compaction
+    from utils.stt.diarization import diarize
 
     guard = ModuleType('testing.owner_lab.guard')
     reads = []
@@ -1192,7 +1188,7 @@ def test_owner_lab_cli_outputs_cases_and_success_rate_without_private_logs(prod_
     monkeypatch.setattr(db, 'get_conversation', get)
     monkeypatch.setattr(db, 'get_manual_speaker_receipt', lambda *a: {})
     monkeypatch.setattr(stage, 'load_voiceprints_for_resolution', lambda *a, **kw: {})
-    monkeypatch.setattr(final, 'diarize_with_speech_compaction', diarize_with_speech_compaction)
+    monkeypatch.setattr(final, 'diarize', diarize)
     with monkeypatch.context() as context:
         # main is a CLI process; restore its global logging suppression in this test process.
         import logging
@@ -1262,7 +1258,7 @@ def test_shared_unit_never_reads_or_diarizes_other_conversation_audio(
 
 
 def test_centroid_without_conversation_assignments_is_never_learned(prod_shaped, monkeypatch):
-    original = final.diarize_with_speech_compaction
+    original = final.diarize
 
     def diarize(*args, **kwargs):
         output = original(*args, **kwargs)
@@ -1271,7 +1267,7 @@ def test_centroid_without_conversation_assignments_is_never_learned(prod_shaped,
         return output
 
     learned = []
-    monkeypatch.setattr(final, 'diarize_with_speech_compaction', diarize)
+    monkeypatch.setattr(final, 'diarize', diarize)
     monkeypatch.setattr(batch.recurring_voices, 'checkpoint', lambda *a, **kw: ('synthetic',))
     monkeypatch.setattr(
         batch.recurring_voices, 'learn', lambda uid, c, centroids, *a, **kw: learned.append(centroids) or {}
@@ -1299,9 +1295,9 @@ def test_owner_lab_reproduce_does_not_change_default_registry(prod_shaped, monke
     from prometheus_client import REGISTRY
     from testing.owner_lab import final_pass_repro as lab
     from utils.observability.fallback import record_fallback
-    from utils.stt.vad_compaction import diarize_with_speech_compaction
+    from utils.stt.diarization import diarize
 
-    monkeypatch.setattr(final, 'diarize_with_speech_compaction', diarize_with_speech_compaction)
+    monkeypatch.setattr(final, 'diarize', diarize)
     # Exercise real fallback metrics too, rather than the fixture's telemetry spy.
     monkeypatch.setattr(batch, 'record_fallback', record_fallback)
     monkeypatch.setattr(final, 'record_fallback', record_fallback)
