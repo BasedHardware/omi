@@ -3924,12 +3924,6 @@ FIELD_SITES = {
             "{'type': 'string', 'enum': ['created', 'duplicate', 'error']}",
             ('error', 'index', 'memory_id', 'status'),
         ),
-        (
-            '<module>',
-            'status',
-            "{'type': 'string'}",
-            ('has_more', 'promoted', 'ready', 'retry_after_seconds', 'status'),
-        ),
         # The conversation card's output schema (a JSON Schema, not a payload).
         (
             '<module>',
