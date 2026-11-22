@@ -16,10 +16,7 @@ from utils.stt.speaker_identity import canonical_speaker_label
 from pydantic import BaseModel, Field, StrictStr
 
 from config.live_capture import capture_window_reason
-from config.audio_timeline import (
-    live_capture_window_merge_preservation_enabled,
-    live_capture_window_merge_union_enabled,
-)
+from config.audio_timeline import live_capture_window_merge_union_enabled
 from models.capture_window_proof import CaptureWindowProof
 from database.read_boundary import parse_payload_strict
 from models.speaker_exclusion import receipt_rejected_speakers
@@ -552,7 +549,6 @@ def merge_live_segments(
         incoming,
         protected_segment_ids=covered,
         speaker_bound_ids=speaker_bound,
-        preserve_capture_windows=live_capture_window_merge_preservation_enabled(),
     )
     kept = persisted[:anchor] + persisted[anchor:][1:]
     result = kept + [segment.model_dump() for segment in combined.segments]

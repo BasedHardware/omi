@@ -88,10 +88,8 @@ async def test_retention_never_turns_failed_send_into_capture_proof(monkeypatch,
     assert 'audio_capture_start' not in stored and 'audio_capture_end' not in stored
 
 
-@pytest.mark.parametrize('enabled', [False])
 @pytest.mark.parametrize('loss', ['gap', 'unknown_side', 'partial_backward', 'partial_forward'])
-async def test_preserve_provider_pieces_instead_of_discarding_known_windows(monkeypatch, enabled, loss):
-    monkeypatch.setenv('LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION', 'true' if enabled else 'false')
+async def test_text_repair_does_not_attribute_unproven_windows(monkeypatch, loss):
     receiver, callback, epoch, sender = setup(monkeypatch, False, 'modulate')
     pcm = b'\0\0' * (4 * RATE)
     first, _, _ = receiver.capture_timeline.accept(pcm, T0 + 4, 4)
@@ -110,14 +108,7 @@ async def test_preserve_provider_pieces_instead_of_discarding_known_windows(monk
         b.update(text='a much longer continuation.', speaker='SPEAKER_01')
     callback([a, b])
     stored = await drain(monkeypatch, receiver)
-    if enabled:
-        assert [s['text'] for s in stored] == [a['text'], b['text']]
-        assert [s['id'] for s in stored] == ['a', 'b']
-        assert sum('audio_capture_start' in s for s in stored) == (1 if loss == 'unknown_side' else 2)
-        assert stored[-1]['audio_capture_start'] == pytest.approx(T0 + (8.1 if loss == 'gap' else 4.1))
-        assert stored[-1]['audio_capture_end'] == pytest.approx(T0 + (11.9 if loss == 'gap' else 7.9))
-    else:
-        assert all('audio_capture_start' not in s for s in stored)
+    assert all('audio_capture_start' not in s for s in stored)
 
 
 @pytest.mark.parametrize('enabled,frames', [(False, 2)])

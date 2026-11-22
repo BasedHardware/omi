@@ -29,7 +29,6 @@ def raw(sid, text, start, end, speaker='SPEAKER_00'):
 
 def harness(monkeypatch, enabled, provider='modulate'):
     monkeypatch.setenv(FLAG, 'true' if enabled else 'false')
-    monkeypatch.setenv('LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION', 'false')
     monkeypatch.setenv('LIVE_CAPTURE_WINDOW_STRICT_PROJECTION', 'false')
     receiver, callback, epoch, sender = setup(monkeypatch, False, provider)
     store = StrictFirestore()

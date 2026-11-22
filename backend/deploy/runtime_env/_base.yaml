@@ -163,9 +163,6 @@ environment_shared:
         AUDIO_MERGE_WORKER_URL:
           value: ''
           category: rollout
-        LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION:
-          value: 'false'
-          category: rollout
         LIVE_CAPTURE_WINDOW_MERGE_UNION:
           category: rollout
         LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS:
@@ -666,9 +663,6 @@ environment_shared:
         AUDIO_MERGE_WORKER_URL:
           value: ''
           category: rollout
-        LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION:
-          value: 'false'
-          category: rollout
         LIVE_CAPTURE_WINDOW_MERGE_UNION:
           category: rollout
         LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS:
@@ -1147,9 +1141,6 @@ environment_shared:
           OMI_VERTEX_RESERVATION_PROJECT:
             value: '{compute_project}'
             category: runtime_identity
-          LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION:
-            value: 'false'
-            category: rollout
           LIVE_CAPTURE_WINDOW_MERGE_UNION:
             value: 'false'
             category: rollout
@@ -1570,9 +1561,6 @@ environment_shared:
           TRANSLATION_NEGATIVE_CACHE_TTL:
             value: '21600'
             category: rollout
-          LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION:
-            value: 'false'
-            category: rollout
           LIVE_CAPTURE_WINDOW_MERGE_UNION:
             value: 'false'
             category: rollout
@@ -1957,9 +1945,6 @@ environment_shared:
           TRANSLATION_NEGATIVE_CACHE_TTL:
             value: '21600'
             category: rollout
-          LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION:
-            value: 'false'
-            category: rollout
           LIVE_CAPTURE_WINDOW_MERGE_UNION:
             value: 'false'
             category: rollout
@@ -2321,9 +2306,6 @@ environment_shared:
             category: rollout
           TRANSLATION_NEGATIVE_CACHE_TTL:
             value: '21600'
-            category: rollout
-          LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION:
-            value: 'false'
             category: rollout
           LIVE_CAPTURE_WINDOW_MERGE_UNION:
             value: 'false'

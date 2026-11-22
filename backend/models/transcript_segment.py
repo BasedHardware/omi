@@ -394,7 +394,6 @@ class TranscriptSegment(BaseModel):
         *,
         protected_segment_ids: Optional[set[str]] = None,
         speaker_bound_ids: Optional[set[int]] = None,
-        preserve_capture_windows: bool = False,
     ) -> CombineSegmentsResult:
         if not new_segments or len(new_segments) == 0:
             return CombineSegmentsResult(segments, [], [], {})
@@ -568,15 +567,6 @@ class TranscriptSegment(BaseModel):
                 return a, b
             if b.audio_capture_run != a.audio_capture_run:
                 return a, b
-            preserve_known_window = preserve_capture_windows and (
-                a.capture_window_bounds() is not None or b.capture_window_bounds() is not None
-            )
-            if preserve_known_window:
-                left, right = a.capture_window_bounds(), b.capture_window_bounds()
-                if left is None or right is None or max(left[0], right[0]) > min(left[1], right[1]):
-                    # Keep provider text/window pairs intact, rather than clear
-                    # proof while absorbing an unknown or disjoint contributor.
-                    return a, b
             if speaker_bound_ids and a.speaker_id in speaker_bound_ids:
                 return _append_decided_speaker(a, b)
 
@@ -591,8 +581,6 @@ class TranscriptSegment(BaseModel):
                 if last_incomplete:
                     first_sentence, rest = _split_first_sentence(b.text)
                     if _can_backward_merge_first_sentence(first_sentence, rest, last_incomplete):
-                        if preserve_known_window:
-                            return a, b
                         a.text = f'{a.text} {first_sentence}'.strip()
                         b.text = rest
                         a._clear_audio_evidence()
@@ -605,8 +593,6 @@ class TranscriptSegment(BaseModel):
                         _absorb(b, a)
                         return a, None
                 if last_incomplete and len(last_incomplete) < len(b.text.strip()):
-                    if prefix and preserve_known_window:
-                        return a, b
                     b.text = f'{last_incomplete} {b.text}'.strip()
                     if prefix:
                         a.text = prefix

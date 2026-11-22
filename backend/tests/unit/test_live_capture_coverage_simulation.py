@@ -99,7 +99,7 @@ def sticky_merge():
     return dict(known=known_versions, versions=versions, distinct_stored_ids=len(persisted))
 
 
-def test_simulated_coverage_under_fixed_retention_limits(monkeypatch):
+def test_simulated_coverage_under_fixed_retention_limits():
     # LIVE_CAPTURE_WINDOW_RETENTION was retired off (2026-11-09 docket): the existing
     # 64-anchor / 4096-send-span limits are fixed, so pressure-evicted finals stay unknown.
     report = {
@@ -112,9 +112,6 @@ def test_simulated_coverage_under_fixed_retention_limits(monkeypatch):
     }
     assert report['retention_fixed']['anchor_pressure_delayed_finals']['known'] == 0
     assert report['retention_fixed']['send_map_pressure_delayed_finals']['known'] == 0
-    monkeypatch.setenv('LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION', 'true')
-    report['merge_preservation_on'] = sticky_merge()
-    assert report['merge_preservation_on'] == dict(known=119, versions=119, distinct_stored_ids=60)
     print('SIMULATION ' + json.dumps(report, sort_keys=True))
     if os.environ.get('CAPTURE_SIMULATION_OUTPUT'):
         Path(os.environ['CAPTURE_SIMULATION_OUTPUT']).write_text(json.dumps(report, sort_keys=True, indent=2) + '\n')

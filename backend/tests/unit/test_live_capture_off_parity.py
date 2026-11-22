@@ -24,7 +24,6 @@ def counters():
 
 
 async def test_off_payload_and_existing_metric_parity(monkeypatch):
-    monkeypatch.setenv('LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION', 'false')
     monkeypatch.setenv('LIVE_CAPTURE_WINDOW_STRICT_PROJECTION', 'false')
     output = []
     before = counters()
