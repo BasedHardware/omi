@@ -1,0 +1,40 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-trial-paywall-light.png",
+      "platform": "mobile-ios",
+      "description": "Trial paywall, light, default text: main vs this change. Legal line added under the button, one dated timeline row, one carousel title, grey cancel note; header, headline, carousel and code hint unmoved.",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "002-mobile-ios-trial-paywall-largest-text.png",
+      "platform": "mobile-ios",
+      "description": "Largest accessibility text (3.12x): main fills the screen with the footer and Restore overlaps Omi Pro; this change shows header without overlap, price line, button and legal links without scrolling.",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "003-mobile-ios-trial-paywall-dark.png",
+      "platform": "mobile-ios",
+      "description": "Dark mode: main shows white status bar icons on the light paper; this change shows dark icons.",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "004-mobile-ios-trial-paywall-legal-links.png",
+      "platform": "mobile-ios",
+      "description": "Terms of Use and Privacy Policy tapped: omi.me Terms of Service and OMI Privacy Policy open in the in-app browser (newsletter popup dismissed).",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "005-mobile-ios-trial-paywall-timeline.png",
+      "platform": "mobile-ios",
+      "description": "Scrolled: main has two rows dated Nov 29, 2026; this change has one dated charge row. Plan cards and prices unchanged.",
+      "captured_by": "agent",
+      "source": "screencapture"
+    }
+  ]
+}

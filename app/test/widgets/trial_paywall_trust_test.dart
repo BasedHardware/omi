@@ -174,6 +174,18 @@ void main() {
     expect(noteStyle.fontWeight, FontWeight.w400);
   });
 
+  testWidgets('at accessibility text sizes the cancel note and code hint scroll with the page', (tester) async {
+    await _pump(tester, textScale: _largeText);
+    final list = find.byType(ListView);
+    await tester.scrollUntilVisible(find.byKey(const Key('trial_paywall_code_hint')), 200,
+        scrollable: find.descendant(of: list, matching: find.byType(Scrollable)).first);
+    await tester.pumpAndSettle();
+    // The timeline's date chip (unchanged here) overflows in the wide test font once scrolled into view.
+    tester.takeException();
+    expect(find.descendant(of: list, matching: find.byKey(const Key('trial_paywall_code_hint'))), findsOneWidget);
+    expect(find.descendant(of: list, matching: find.text('Cancel anytime. No fees, no penalties.')), findsOneWidget);
+  });
+
   testWidgets('the button still opens the yearly trial checkout for the same plan', (tester) async {
     final (_, calls) = await _pump(tester);
     await tester.tap(find.byKey(const Key('trial_paywall_cta')));
