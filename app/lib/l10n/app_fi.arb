@@ -4735,5 +4735,7 @@
     "conversationLiveNoEdits": "Odota, että se päättyy, ennen kuin muutat sitä.",
     "finishedSummaryReady": "Tiivistelmä valmis",
     "writingSummaryStatus": "Kirjoitetaan tiivistelmää…",
-    "stillWorkingOnIt": "Yhä työn alla."
+    "stillWorkingOnIt": "Yhä työn alla.",
+    "firmwareUpdateFirmwareTooOld": "Laitteesi laiteohjelmisto on liian vanha tätä päivitystä varten. Ota yhteyttä tukeen saadaksesi apua laitteen päivittämiseen.",
+    "firmwareUpdateAppRequired": "Tämä laiteohjelmistopäivitys tarvitsee Omi-sovelluksen uudemman version. Päivitä sovellus sovelluskaupastasi ja tarkista sitten uudelleen."
 }

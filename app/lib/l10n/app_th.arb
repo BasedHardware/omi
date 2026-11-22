@@ -4735,5 +4735,7 @@
     "conversationLiveNoEdits": "รอให้จบก่อนจึงจะเปลี่ยนได้",
     "finishedSummaryReady": "สรุปพร้อมแล้ว",
     "writingSummaryStatus": "กำลังเขียนสรุป…",
-    "stillWorkingOnIt": "ยังดำเนินการอยู่"
+    "stillWorkingOnIt": "ยังดำเนินการอยู่",
+    "firmwareUpdateFirmwareTooOld": "เฟิร์มแวร์ของอุปกรณ์คุณเก่าเกินไปสำหรับการอัปเดตนี้ ติดต่อฝ่ายสนับสนุนเพื่อขอความช่วยเหลือในการอัปเดตอุปกรณ์",
+    "firmwareUpdateAppRequired": "การอัปเดตเฟิร์มแวร์นี้ต้องใช้แอป Omi เวอร์ชันใหม่กว่า อัปเดตแอปจากร้านค้าแอปของคุณ แล้วตรวจสอบอีกครั้ง"
 }

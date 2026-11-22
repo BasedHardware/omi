@@ -15715,4 +15715,12 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get stillWorkingOnIt => 'Ešte sa na tom pracuje.';
+
+  @override
+  String get firmwareUpdateFirmwareTooOld =>
+      'Firmvér vášho zariadenia je pre túto aktualizáciu príliš starý. Obráťte sa na podporu, ktorá vám pomôže aktualizovať zariadenie.';
+
+  @override
+  String get firmwareUpdateAppRequired =>
+      'Táto aktualizácia firmvéru vyžaduje novšiu aplikáciu Omi. Aktualizujte aplikáciu v obchode s aplikáciami a potom znova skontrolujte aktualizácie.';
 }

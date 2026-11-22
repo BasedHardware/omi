@@ -12292,5 +12292,7 @@
     "conversationLiveNoEdits": "تبدیلی کے لیے اس کے ختم ہونے تک انتظار کریں۔",
     "finishedSummaryReady": "خلاصہ تیار ہے",
     "writingSummaryStatus": "خلاصہ لکھا جا رہا ہے…",
-    "stillWorkingOnIt": "ابھی کام جاری ہے۔"
+    "stillWorkingOnIt": "ابھی کام جاری ہے۔",
+    "firmwareUpdateFirmwareTooOld": "آپ کے آلے کا فرم ویئر اس اپ ڈیٹ کے لیے بہت پرانا ہے۔ آلے کو اپ ڈیٹ کرنے میں مدد کے لیے سپورٹ سے رابطہ کریں۔",
+    "firmwareUpdateAppRequired": "اس فرم ویئر اپ ڈیٹ کے لیے Omi ایپ کا نیا ورژن درکار ہے۔ اپنے ایپ اسٹور سے ایپ کو اپ ڈیٹ کریں، پھر دوبارہ چیک کریں۔"
 }

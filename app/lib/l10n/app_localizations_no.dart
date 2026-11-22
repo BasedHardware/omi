@@ -15724,4 +15724,12 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get stillWorkingOnIt => 'Jobber fortsatt med det.';
+
+  @override
+  String get firmwareUpdateFirmwareTooOld =>
+      'Fastvaren på enheten din er for gammel for denne oppdateringen. Kontakt kundestøtte for hjelp med å oppdatere enheten.';
+
+  @override
+  String get firmwareUpdateAppRequired =>
+      'Denne fastvareoppdateringen krever en nyere Omi-app. Oppdater appen fra appbutikken din, og se etter oppdateringer på nytt.';
 }

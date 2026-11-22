@@ -15731,4 +15731,12 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get stillWorkingOnIt => 'ابھی کام جاری ہے۔';
+
+  @override
+  String get firmwareUpdateFirmwareTooOld =>
+      'آپ کے آلے کا فرم ویئر اس اپ ڈیٹ کے لیے بہت پرانا ہے۔ آلے کو اپ ڈیٹ کرنے میں مدد کے لیے سپورٹ سے رابطہ کریں۔';
+
+  @override
+  String get firmwareUpdateAppRequired =>
+      'اس فرم ویئر اپ ڈیٹ کے لیے Omi ایپ کا نیا ورژن درکار ہے۔ اپنے ایپ اسٹور سے ایپ کو اپ ڈیٹ کریں، پھر دوبارہ چیک کریں۔';
 }

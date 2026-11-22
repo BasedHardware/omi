@@ -15712,4 +15712,12 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get stillWorkingOnIt => 'هنوز روی آن کار می‌کنیم.';
+
+  @override
+  String get firmwareUpdateFirmwareTooOld =>
+      'میان‌افزار دستگاه شما برای این به‌روزرسانی خیلی قدیمی است. برای دریافت کمک در به‌روزرسانی دستگاه با پشتیبانی تماس بگیرید.';
+
+  @override
+  String get firmwareUpdateAppRequired =>
+      'این به‌روزرسانی میان‌افزار به نسخه جدیدتری از برنامه Omi نیاز دارد. برنامه را از فروشگاه برنامه خود به‌روزرسانی کنید، سپس دوباره بررسی کنید.';
 }

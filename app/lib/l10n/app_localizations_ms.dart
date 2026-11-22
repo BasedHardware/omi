@@ -15756,4 +15756,12 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get stillWorkingOnIt => 'Masih memprosesnya.';
+
+  @override
+  String get firmwareUpdateFirmwareTooOld =>
+      'Perisian tegar peranti anda terlalu lama untuk kemas kini ini. Hubungi sokongan untuk mendapatkan bantuan mengemas kini peranti anda.';
+
+  @override
+  String get firmwareUpdateAppRequired =>
+      'Kemas kini perisian tegar ini memerlukan versi apl Omi yang lebih baharu. Kemas kini apl daripada gedung aplikasi anda, kemudian semak semula.';
 }

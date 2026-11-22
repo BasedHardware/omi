@@ -15755,4 +15755,12 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get stillWorkingOnIt => 'Vēl tiek pie tā strādāts.';
+
+  @override
+  String get firmwareUpdateFirmwareTooOld =>
+      'Jūsu ierīces aparātprogrammatūra ir pārāk veca šim atjauninājumam. Sazinieties ar atbalsta dienestu, lai saņemtu palīdzību ierīces atjaunināšanā.';
+
+  @override
+  String get firmwareUpdateAppRequired =>
+      'Šim aparātprogrammatūras atjauninājumam nepieciešama jaunāka Omi lietotnes versija. Atjauniniet lietotni savā lietotņu veikalā un pēc tam pārbaudiet vēlreiz.';
 }
