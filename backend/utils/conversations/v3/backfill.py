@@ -372,6 +372,7 @@ async def run_step(uid, run_id, index, phase):
             rederive=run.get('mode') == 'rederive',
             live=run.get('mode') == LIVE_MODE,
             historical_timing=historical_timing,
+            internal_start=index > 0,
             internal_end=index + 1 < len(partitions),
             report=report,
         )
@@ -589,7 +590,9 @@ def classify_live_window(meta):
     return counts
 
 
-def estimate_live_partition(uid, partition, run_id, *, now=None, historical_sitdown=False, internal_end=False):
+def estimate_live_partition(
+    uid, partition, run_id, *, now=None, historical_sitdown=False, internal_start=False, internal_end=False
+):
     """Read-only preview of one live re-derive partition. Writes nothing and calls no model.
 
     Before counts are exact. After counts come from the real planner with one window per stretch
@@ -601,7 +604,14 @@ def estimate_live_partition(uid, partition, run_id, *, now=None, historical_sitd
     """
     now = now or datetime.now(timezone.utc)
     recordings, existing, _cache, counts = rederive_store.load_live_rederive(
-        uid, since=partition['since'], until=partition['until'], run_id=run_id, historical_sitdown=historical_sitdown
+        uid,
+        since=partition['since'],
+        until=partition['until'],
+        run_id=run_id,
+        historical_sitdown=historical_sitdown,
+        internal_start=internal_start,
+        internal_end=internal_end,
+        now=now,
     )
     eligible = [r for r in recordings.values() if policy.builder_eligible(r)]
     if historical_sitdown:

@@ -78,6 +78,7 @@ BLOCKED = frozenset(
         'backfill_source_unreadable',
         'rederive_live_open',
         'rederive_live_boundary',
+        'rederive_live_edge_closure',
         'rederive_live_outline_failed',
         'rederive_live_coverage',
         'rederive_live_donor_tasks',
@@ -223,6 +224,7 @@ async def reconcile(
     rederive=False,
     live=False,
     historical_timing=None,
+    internal_start=False,
     internal_end=False,
     report=None,
     _pass=0,
@@ -275,6 +277,8 @@ async def reconcile(
                 until=until,
                 run_id=run_id,
                 historical_sitdown=historical_timing is not None,
+                internal_start=internal_start,
+                internal_end=internal_end,
             )
             report.update(skipped)
         elif derive:

@@ -79,6 +79,11 @@ def entries():
             'database.conversations_v3_rederive.load_live_rederive',
             base={'uid': SHAPE_UID, 'since': FROZEN_NOW, 'until': FROZEN_LATER, 'run_id': 'shape-run'},
             domains={'historical_sitdown': [False, True]},
+            neutrals={
+                'internal_start': (False, 'custody validation after range and closure reads'),
+                'internal_end': (False, 'custody validation after range and closure reads'),
+                'now': (None, 'settlement validation after range and closure reads'),
+            },
         ),
         DriverEntry(
             'database.conversations_v3.backfill_window_metadata',

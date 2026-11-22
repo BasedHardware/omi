@@ -9,6 +9,7 @@ database/conversations_v3.py (commit_projection's ``retire``). Runbook: docs/run
 
 import hashlib
 import json
+import zlib
 from datetime import datetime, timezone
 
 from google.cloud import firestore
@@ -21,6 +22,7 @@ from database import conversations_v3_leases as leases
 from database.account_deletion_marker import account_deletion_document
 from database.account_deletion_policy import account_deletion_marker_blocks_access
 from database.conversations import ACTION_ITEMS_EDIT_REVISION, EVENTS_EDIT_REVISION, has_created_calendar_events
+from database.conversations_v3_historical import historical_exclusions
 from database.conversations_v3_undo_removals import removal_ref
 from database.home_feed_fields import COMMIT_STAMPED_FIELDS
 from database.recurring_voice_privacy import filter_processing_write
@@ -64,7 +66,7 @@ OWNER_EDIT_FIELDS = (
 )
 
 
-def live_row_protection(raw, *, since, until, run_id=None):
+def live_row_protection(raw, *, since, until, run_id=None, historical_sitdown=False, decoded=None):
     """Why a live v3 row must stay exactly as it is during a re-derive (None: it may be rebuilt)."""
     if raw.get('deleted') or raw.get('sync_merged_into'):
         return 'deleted'
@@ -82,7 +84,17 @@ def live_row_protection(raw, *, since, until, run_id=None):
     visibility = raw.get('visibility')
     if visibility not in (None, 'private'):
         return 'shared'
-    if any(raw.get(field) for field in OWNER_EDIT_FIELDS) or summary_edited(raw):
+    if historical_sitdown:
+        corrections = raw.get('user_corrections')
+        if raw.get('user_corrections_compressed'):
+            # Hydration uses the historical byte budget. Only a successful decode of [] clears protection.
+            if decoded is None or decoded.get('user_corrections') != []:
+                return 'edited'
+        elif corrections is not None and corrections != []:
+            return 'edited'
+    if any(
+        raw.get(field) for field in OWNER_EDIT_FIELDS if field != 'user_corrections' or not historical_sitdown
+    ) or summary_edited(raw):
         return 'edited'
     structured = raw.get('structured')
     if isinstance(structured, dict) and structured.get('action_items'):
@@ -154,7 +166,18 @@ def _rederive_live_prior(row, raw):
     }
 
 
-def load_live_rederive(uid, *, since, until, run_id, historical_sitdown=False, firestore_client=None):
+def load_live_rederive(
+    uid,
+    *,
+    since,
+    until,
+    run_id,
+    historical_sitdown=False,
+    internal_start=False,
+    internal_end=False,
+    now=None,
+    firestore_client=None,
+):
     """One live re-derive partition: sealed sources, their rows and every row their claims name.
 
     Returns (recordings, existing, cache, counts). ``existing`` holds eligible rows as open priors
@@ -284,22 +307,49 @@ def load_live_rederive(uid, *, since, until, run_id, historical_sitdown=False, f
                 blocked.add(rid)
                 count('sources_blocked_open_window')
 
+    excluded = {}
+    if historical_sitdown:
+        excluded = historical_exclusions(
+            {rid: raws[rid] for rid in sources},
+            recordings,
+            {cid: named_sources(raws[cid]) for cid in rows},
+            since=since,
+            until=until,
+            now=now or datetime.now(timezone.utc),
+            internal_start=internal_start,
+            internal_end=internal_end,
+        )
+        for rid in sources.keys() & excluded.keys():
+            if rid in recordings:
+                recordings.pop(rid)
+                count('sources_blocked_' + excluded[rid])
+            blocked.add(rid)
+        if any(row.get('_v3_landing_provenance') for row in recordings.values()):
+            counts['sources_legacy_landing_completed_snapshot_update_time'] = sum(
+                bool(row.get('_v3_landing_provenance')) for row in recordings.values()
+            )
+
     existing = {}
     for cid, snapshot in rows.items():
         raw = raws[cid]
-        reason = live_row_protection(raw, since=since, until=until, run_id=run_id)
-        # A deleted row is offered too: until its claims are released they still fence its speech.
-        if reason is None and named_sources(raw) & blocked:
-            reason = 'source_blocked'
-        if reason is None and not (named_sources(raw) and named_sources(raw) <= recordings.keys()):
-            # Speech a row cannot be rebuilt from stays in that row.
-            reason = 'source_missing'
         try:
             row = decode(store.decode_row, snapshot)
         except DecodeBudgetExceeded:
             raise Conflict('rederive_live_decoded_bytes') from None
+        except zlib.error:
+            if not historical_sitdown:
+                raise
+            row = None
         except (ValueError, TypeError, FileNotFoundError, TranscriptBlobAbsent, TranscriptShredded, Conflict):
             row = None
+        reason = excluded.get(cid) or live_row_protection(
+            raw, since=since, until=until, run_id=run_id, historical_sitdown=historical_sitdown, decoded=row
+        )
+        # A deleted row is offered too: until its claims are released they still fence its speech.
+        if reason is None and named_sources(raw) & blocked:
+            reason = 'source_blocked'
+        if reason is None and not (named_sources(raw) and named_sources(raw) <= recordings.keys()):
+            reason = 'source_missing'
         if row is None:
             # Undecodable: kept as it is, and its claims still fence the replan.
             row = {**raw, 'id': cid, 'transcript_segments': [], '_v3_revision': snapshot.update_time}

@@ -108,6 +108,7 @@ def plan_owner(uid: str, label: str, since: datetime, until: datetime, mode: str
                 run_id='dry-run',
                 now=now,
                 historical_sitdown=historical_sitdown,
+                internal_start=index > 0,
                 internal_end=index + 1 < len(partitions),
             )
         else:

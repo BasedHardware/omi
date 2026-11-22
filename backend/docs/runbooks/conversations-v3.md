@@ -410,6 +410,14 @@ PYTHONPATH=backend backend/.venv/bin/python $S run --owners-file $O --since 2026
   These are partition limits. The Lab reader must also enforce its approved cumulative
   Firestore and object-read caps. The preview reports a model-free final-batch write estimate.
   Apply still validates the actual projection against the existing write and transaction size limits.
+  At each requested outer edge, protect the full stretch connected to the 900-second
+  edge band, including loaded source-to-row claim connections. Unresolved edge closure
+  aborts planning. Interior boundaries still require decoded silence. A sealed, completed
+  legacy source with no landing field can use its exact Firestore snapshot update time if
+  that revision is at or after the decoded speech end and at least 3,600 seconds old. The
+  preview counts those sources as `sources_legacy_landing_completed_snapshot_update_time`.
+  Unknown or unsettled legacy landing protects the connected stretch. A compressed
+  correction history counts as empty only when bounded hydration decodes it to an empty list.
   - Never touched: open windows and every source they hold, rows that overlap `since` or `until`,
     sources that are pending, unsealed, still transcribing, failed, purge-pending, private, deleted,
     legacy backfill donors or within a claims update of Firestore's 1 MiB document limit

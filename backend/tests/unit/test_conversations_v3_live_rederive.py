@@ -29,6 +29,7 @@ from models.conversation import SetConversationEventsStateRequest
 from routers import conversations as conversation_routes
 from scripts import conversations_v3_backfill as script
 from services import conversation_frame_evidence
+from utils import encryption
 from utils.conversations import merge_conversations
 from utils.conversations.v3 import Conflict, backfill, service
 from utils.other import lake_wipe
@@ -1847,10 +1848,108 @@ def test_historical_estimate_uses_the_landing_clock_and_checks_speech_at_seam(ow
     owner(first)
     with pytest.raises(Conflict, match='rederive_live_boundary'):
         backfill.estimate_live_partition(UID, partition, 'dry-run', now=settled, **options)
+    first['transcript_segments'][0]['end'] -= 1
     del first['v3_speech_landed_at']
     owner(first)
-    with pytest.raises(Conflict, match='rederive_live_landing_unknown'):
-        backfill.estimate_live_partition(UID, partition, 'dry-run', now=settled, **options)
+    skipped = backfill.estimate_live_partition(UID, partition, 'dry-run', now=settled, **options)
+    assert skipped['stretches'] == 0 and skipped['sources_blocked_landing_unknown'] == 1
+    assert not strict.transactions
+
+
+def test_historical_legacy_landing_requires_the_completed_snapshot_revision(owner, strict):
+    revised = AT + timedelta(minutes=30)
+    src = source('r', AT, _test_revision=revised, record_sealed_at=AT.timestamp())
+    row = fragment('c', src)
+    owner(src, row)
+    options = {'since': SINCE, 'until': UNTIL, 'run_id': RUN, 'historical_sitdown': True}
+    _, existing, _, counts = rederive_store.load_live_rederive(UID, now=revised + timedelta(seconds=3599), **options)
+    assert counts['sources_blocked_landing_unsettled'] == 1
+    assert existing['c']['_v3_protected'] == 'landing_unsettled'
+    recordings, existing, _, counts = rederive_store.load_live_rederive(
+        UID, now=revised + timedelta(seconds=3600), **options
+    )
+    assert counts['sources_legacy_landing_completed_snapshot_update_time'] == 1
+    assert recordings['r']['_v3_revision'] == recordings['r']['v3_speech_landed_at'] == revised
+    assert not existing['c'].get('_v3_protected')
+    src['_test_revision'] = AT
+    owner(src)
+    _, _, _, counts = rederive_store.load_live_rederive(UID, now=revised + timedelta(hours=2), **options)
+    assert counts['sources_blocked_landing_unknown'] == 1
+
+
+@pytest.mark.parametrize('stored,edited', [(b'[]', False), (b'[{"edit":true}]', True), (b'{}', True), (None, True)])
+@pytest.mark.parametrize('enhanced', [False, True])
+def test_historical_correction_protection_uses_the_bounded_codec(owner, monkeypatch, stored, edited, enhanced):
+    monkeypatch.setattr(store, 'decode_row', REAL_DECODE_ROW)
+    src = source('r', AT, v3_speech_landed_at=AT + timedelta(minutes=1))
+    encoded = zlib.compress(stored) if stored is not None else b'invalid'
+    row = fragment(
+        'c',
+        src,
+        data_protection_level='enhanced' if enhanced else 'standard',
+        user_corrections=encryption.encrypt(encoded.hex(), UID) if enhanced else encoded,
+        user_corrections_compressed=True,
+    )
+    owner(src, row)
+    _, existing, _, counts = rederive_store.load_live_rederive(
+        UID, since=SINCE, until=UNTIL, run_id=RUN, historical_sitdown=True
+    )
+    assert (existing['c'].get('_v3_protected') == 'edited') is edited
+    assert counts['visible_before'] == (0 if edited else 1)
+    if stored is not None:
+        _, ordinary, _, _ = rederive_store.load_live_rederive(UID, since=SINCE, until=UNTIL, run_id=RUN)
+        assert ordinary['c']['_v3_protected'] == 'edited'
+
+
+@pytest.mark.asyncio
+async def test_historical_outer_edges_are_preserved_and_midnight_is_inside_scope(owner, strict, monkeypatch):
+    since = datetime(2026, 11, 18, 17, tzinfo=timezone.utc)
+    midnight = since + timedelta(days=1)
+    until = midnight + timedelta(days=1)
+    starts = (
+        since + timedelta(seconds=5),
+        since + timedelta(minutes=5),
+        midnight - timedelta(minutes=1),
+        midnight + timedelta(minutes=2),
+        until - timedelta(minutes=5),
+        until - timedelta(seconds=10),
+    )
+    sources = [
+        source(f'r{i}', start, words=310, v3_speech_landed_at=start + timedelta(minutes=2))
+        for i, start in enumerate(starts)
+    ]
+    sources[0]['transcript_segments'][0]['start'] = -60
+    rows = [fragment(f'c{i}', src) for i, src in enumerate(sources)]
+    owner(*sources, *rows)
+    before = conversations(strict)
+    estimate = backfill.estimate_live_partition(
+        UID, {'since': since, 'until': until}, RUN, historical_sitdown=True, now=until + timedelta(hours=2)
+    )
+    assert estimate['stretches'] == 1 and estimate['visible_before'] == 2
+    assert estimate['protected_outer_edge'] == estimate['sources_blocked_outer_edge'] == 4
+    monkeypatch.setenv('CONVERSATIONS_V3_SILENCE_GAP_SECONDS', '900')
+    monkeypatch.setenv('CONVERSATIONS_V3_LOCK_SECONDS', '3600')
+    monkeypatch.setenv('CONVERSATIONS_V3_STRETCH_COHESION', 'on')
+    report = {}
+    outcome = await service.reconcile(
+        UID, derive=True, live=True, since=since, until=until, run_id=RUN, historical_timing=[900, 3600], report=report
+    )
+    assert outcome == 'committed'
+    after = conversations(strict)
+    assert after['c3']['sync_merged_into'] == 'c2'
+    assert report['protected_outer_edge'] == 4
+    for prefix in ('r', 'c'):
+        for index in (0, 1, 4, 5):
+            cid = f'{prefix}{index}'
+            assert after[cid] == before[cid]
+
+
+def test_historical_outer_edge_with_unknown_claimant_fails_closed(owner, strict):
+    src = source('r', SINCE + timedelta(minutes=1))
+    src['claims'] = [{'conversation_id': 'missing', 'start': SINCE, 'end': SINCE + timedelta(minutes=2)}]
+    owner(src)
+    with pytest.raises(Conflict, match='rederive_live_edge_closure'):
+        rederive_store.load_live_rederive(UID, since=SINCE, until=UNTIL, run_id=RUN, historical_sitdown=True)
     assert not strict.transactions
 
 

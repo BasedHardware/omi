@@ -13,6 +13,14 @@ decoding. Overflow stops the partition. The preview reports a model-free
 write estimate. Apply still checks the actual plan against existing custody,
 commit write-count, document-size, and transaction-size limits.
 
+Historical re-derive may use the exact Firestore update time of a sealed,
+completed legacy source that lacks a landing field. The revision must be at
+or after the decoded speech end and at least 3,600 seconds old. A stretch with
+uncertain legacy landing stays protected. An outer edge with uncertain context
+protects the entire connected stretch and its claimants. Unresolved edge
+closure aborts planning. Bounded decoding distinguishes an empty compressed
+correction history from edited or unreadable data.
+
 ## Rollout and rollback
 
 The larger limits apply only to explicit historical sit-down runs. Keep the
