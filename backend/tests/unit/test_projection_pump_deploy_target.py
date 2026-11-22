@@ -218,7 +218,7 @@ def test_prod_pump_is_integration_plus_the_dark_overrides():
     assert pump['forbidden_env'] == integration['forbidden_env']
     assert pump['service_account'] == integration['service_account']
     train_pins = {'BATCH_ACCOUNT_PRIVACY_WRITER_ENABLED', 'BATCH_PROJECTION_OUTBOX'}
-    # The one-key activation keeps the dark successor's silence-skip value (SCA-3318).
+    # The dark pump keeps the dark successor's silence-skip value (SCA-3318).
     overridden = (
         set(ACTIVE_OVERRIDES)
         | {
@@ -702,9 +702,7 @@ def test_shape_readback_cli_exit_codes(tmp_path, prod_state):
     (tmp_path / 'state.json').write_text(json.dumps(state))
     (tmp_path / 'iam.json').write_text(json.dumps(PRIVATE))
     # The rendered manifest keeps the pump dark (SCA-3318 2026-11-22), so the matching live candidate is dark.
-    (tmp_path / 'service.json').write_text(
-        json.dumps(_live(m=_set_env('BATCH_PIPELINE_PROJECTION_PUMP_ENABLED', 'false')))
-    )
+    (tmp_path / 'service.json').write_text(json.dumps(_live()))
     argv = [
         '--service',
         str(tmp_path / 'service.json'),
@@ -716,6 +714,12 @@ def test_shape_readback_cli_exit_codes(tmp_path, prod_state):
         str(tmp_path / 'state.json'),
     ]
     assert shape.main(argv) == 0
+    # An activated live pump does not match the dark rendered state.
+    (tmp_path / 'service.json').write_text(
+        json.dumps(_live(m=_set_env('BATCH_PIPELINE_PROJECTION_PUMP_ENABLED', 'true')))
+    )
+    assert shape.main(argv) == 1
+    (tmp_path / 'service.json').write_text(json.dumps(_live()))
     (tmp_path / 'iam.json').write_text(json.dumps({'bindings': [{'role': 'r', 'members': ['allUsers']}]}))
     assert shape.main(argv) == 1
     (tmp_path / 'state.json').write_text('{}')
