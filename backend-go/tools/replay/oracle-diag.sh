@@ -30,7 +30,9 @@ if [[ -e $output ]]; then
 fi
 mkdir -p "$(dirname "$output")"
 
-temporary=$(mktemp -d "${TMPDIR:-/tmp}/omi-oracle-diag.XXXXXXXX")
+worktree_root=${OMI_WORKTREES:-/Volumes/scratch/worktrees}
+mkdir -p "$worktree_root"
+temporary=$(mktemp -d "$worktree_root/omi-oracle-diag.XXXXXXXX")
 worker_tree="$temporary/workerd"
 cleanup() {
     git -C "$repo" worktree remove --force "$worker_tree" >/dev/null 2>&1 || true

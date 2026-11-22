@@ -61,6 +61,9 @@ make oracle-diag WORKERD_REF=<full-workerd-commit-sha> \
   ORACLE_DIAG_OUTPUT=../ordinary-sync-report.json
 ```
 
+The default linked-checkout root is `/Volumes/scratch/worktrees`; set `OMI_WORKTREES`
+when the machine uses another managed Git-worktree root.
+
 This target builds the opt-in test binary from `WORKERD_REF`, runs the separate
 `ordinary_sync_diag.py` adapter, and compares its row-level observations with the same
 oracle comparator. The report is value-free and records each difference's family, path,
