@@ -561,11 +561,11 @@ class AppLocalizationsFa extends AppLocalizations {
   String get hardwareSection => 'سخت‌افزار';
 
   @override
-  String get v2Undetected => 'V2 شناسایی نشد';
+  String get v2Undetected => 'همگام‌سازی آفلاین در دسترس نیست';
 
   @override
   String get v2UndetectedMessage =>
-      'ما می‌بینیم که شما یک دستگاه V1 دارید یا دستگاه شما متصل نیست. عملکرد کارت SD فقط برای دستگاه‌های V2 دردسترس است.';
+      'برای Offline Sync به یک دستگاه Omi متصل با حافظه SD نیاز است. دستگاه فعلی شما از آن پشتیبانی نمی‌کند.';
 
   @override
   String get endConversation => 'پایان‌دادن به گفتگو';

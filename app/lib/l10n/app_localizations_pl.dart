@@ -560,11 +560,11 @@ class AppLocalizationsPl extends AppLocalizations {
   String get hardwareSection => 'Sprzęt';
 
   @override
-  String get v2Undetected => 'Nie wykryto V2';
+  String get v2Undetected => 'Synchronizacja offline jest niedostępna';
 
   @override
   String get v2UndetectedMessage =>
-      'Widzimy, że masz urządzenie V1 lub Twoje urządzenie nie jest podłączone. Funkcja karty SD jest dostępna tylko dla urządzeń V2.';
+      'Synchronizacja offline wymaga połączonego urządzenia Omi z pamięcią na karcie SD. Twoje obecne urządzenie tego nie obsługuje.';
 
   @override
   String get endConversation => 'Zakończ rozmowę';

@@ -717,11 +717,11 @@
     "@hardwareSection": {
         "description": "Hardware section header"
     },
-    "v2Undetected": "V2 شناسایی نشد",
+    "v2Undetected": "همگام‌سازی آفلاین در دسترس نیست",
     "@v2Undetected": {
         "description": "V2 device undeteced dialog title"
     },
-    "v2UndetectedMessage": "ما می‌بینیم که شما یک دستگاه V1 دارید یا دستگاه شما متصل نیست. عملکرد کارت SD فقط برای دستگاه‌های V2 دردسترس است.",
+    "v2UndetectedMessage": "برای Offline Sync به یک دستگاه Omi متصل با حافظه SD نیاز است. دستگاه فعلی شما از آن پشتیبانی نمی‌کند.",
     "@v2UndetectedMessage": {
         "description": "V2 device undeteced dialog message"
     },

@@ -560,11 +560,11 @@ class AppLocalizationsUr extends AppLocalizations {
   String get hardwareSection => 'ہارڈ ویئر';
 
   @override
-  String get v2Undetected => 'V2 شناخت نہیں';
+  String get v2Undetected => 'آف لائن سنک دستیاب نہیں ہے';
 
   @override
   String get v2UndetectedMessage =>
-      'ہمیں لگتا ہے کہ آپ کے پاس ایک V1 ڈیوائس ہے یا آپ کا ڈیوائس متصل نہیں ہے۔ SD کارڈ کی فعالیت صرف V2 ڈیوائسز کے لیے دستیاب ہے۔';
+      'آف لائن سنک کے لیے SD کارڈ اسٹوریج والے منسلک Omi ڈیوائس کی ضرورت ہے۔ آپ کا موجودہ ڈیوائس اسے سپورٹ نہیں کرتا۔';
 
   @override
   String get endConversation => 'بات چیت ختم کریں';

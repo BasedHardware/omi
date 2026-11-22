@@ -717,11 +717,11 @@
     "@hardwareSection": {
         "description": "Hardware section header"
     },
-    "v2Undetected": "V2 గుర్తించబడలేదు",
+    "v2Undetected": "ఆఫ్‌లైన్ సింక్ అందుబాటులో లేదు",
     "@v2Undetected": {
         "description": "V2 device undeteced dialog title"
     },
-    "v2UndetectedMessage": "V1 డివైస్ ఉందని లేదా మీ డివైస్ కనెక్ట్ చేయబడలేదని మేము చూస్తున్నాము. SD కార్డ్ కార్యకలాపం V2 డివైసెస్‌కు మాత్రమే అందుబాటులో ఉంది.",
+    "v2UndetectedMessage": "ఆఫ్‌లైన్ సింక్ కోసం SD కార్డ్ స్టోరేజ్ ఉన్న కనెక్ట్ చేయబడిన Omi పరికరం అవసరం. మీ ప్రస్తుత పరికరం దీనికి మద్దతు ఇవ్వదు.",
     "@v2UndetectedMessage": {
         "description": "V2 device undeteced dialog message"
     },

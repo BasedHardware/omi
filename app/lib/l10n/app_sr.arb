@@ -717,11 +717,11 @@
     "@hardwareSection": {
         "description": "Hardware section header"
     },
-    "v2Undetected": "V2 није детектован",
+    "v2Undetected": "Офлајн синхронизација није доступна",
     "@v2Undetected": {
         "description": "V2 device undeteced dialog title"
     },
-    "v2UndetectedMessage": "Видимо да имате V1 уређај или ваш уређај није повезан. Функционалност SD картице је доступна само за V2 уређаје.",
+    "v2UndetectedMessage": "Offline синхронизација захтева повезан Omi уређај са SD картицом. Ваш тренутни уређај га не подржава.",
     "@v2UndetectedMessage": {
         "description": "V2 device undeteced dialog message"
     },

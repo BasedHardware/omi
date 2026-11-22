@@ -24297,7 +24297,7 @@ abstract class AppLocalizations {
   /// **'Retry all'**
   String get activityRetryAll;
 
-  /// Activity capture attention row title when the free-space probe itself failed (reason disk_space_unknown); the disk may not actually be full.
+  /// Title for an unresolved storage check in capture attention or Offline Sync.
   ///
   /// In en, this message translates to:
   /// **'Can\'t check storage'**
