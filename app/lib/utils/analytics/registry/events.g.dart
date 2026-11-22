@@ -3586,6 +3586,22 @@ final class SubscriptionPaymentIssueMonthlyFailed extends RegisteredEvent {
   Map<String, Object> get properties => {"reason": reason.wireName};
 }
 
+final class SubscriptionQuietRowShown extends RegisteredEvent {
+  const SubscriptionQuietRowShown();
+  @override
+  String get wireName => "Subscription Quiet Row Shown";
+  @override
+  Map<String, Object> get properties => {};
+}
+
+final class SubscriptionQuietRowTapped extends RegisteredEvent {
+  const SubscriptionQuietRowTapped();
+  @override
+  String get wireName => "Subscription Quiet Row Tapped";
+  @override
+  Map<String, Object> get properties => {};
+}
+
 final class MobileDeviceHealthDailyRingRead extends RegisteredEvent {
   const MobileDeviceHealthDailyRingRead({required this.disconnectsDuringRingRead, required this.disconnectsWithRingReadState, required this.rssiBelowMinus90, required this.rssiMinus90ToMinus80, required this.rssiMinus80ToMinus60, required this.rssiAtLeastMinus60, required this.rssiUnknown});
   final int disconnectsDuringRingRead;

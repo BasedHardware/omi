@@ -15752,4 +15752,13 @@ class AppLocalizationsLt extends AppLocalizations {
   @override
   String get firmwareUpdateAppRequired =>
       'Šiam programinės aparatinės įrangos naujinimui reikia naujesnės „Omi“ programėlės versijos. Atnaujinkite programėlę savo programėlių parduotuvėje ir patikrinkite dar kartą.';
+
+  @override
+  String get quietPayerTitle => '5 dienas nėra įrašų';
+
+  @override
+  String get quietPayerMessage => 'Patikrinkite savo Omi.';
+
+  @override
+  String get quietPayerCheck => 'Patikrinti';
 }

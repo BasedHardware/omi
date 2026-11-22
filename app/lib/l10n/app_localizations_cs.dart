@@ -15727,4 +15727,13 @@ class AppLocalizationsCs extends AppLocalizations {
   @override
   String get firmwareUpdateAppRequired =>
       'Tato aktualizace firmwaru vyžaduje novější verzi aplikace Omi. Aktualizujte aplikaci v obchodě s aplikacemi a poté proveďte kontrolu znovu.';
+
+  @override
+  String get quietPayerTitle => 'Žádné nahrávky za 5 dní';
+
+  @override
+  String get quietPayerMessage => 'Zkontrolujte svůj Omi.';
+
+  @override
+  String get quietPayerCheck => 'Zkontrolovat';
 }

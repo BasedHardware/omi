@@ -15786,4 +15786,13 @@ class AppLocalizationsHu extends AppLocalizations {
   @override
   String get firmwareUpdateAppRequired =>
       'Ehhez a firmware-frissítéshez az Omi alkalmazás újabb verziója szükséges. Frissítse az alkalmazást az alkalmazásboltban, majd ellenőrizze újra.';
+
+  @override
+  String get quietPayerTitle => '5 napja nincs felvétel';
+
+  @override
+  String get quietPayerMessage => 'Nézd meg az Omidat.';
+
+  @override
+  String get quietPayerCheck => 'Megnézem';
 }

@@ -15773,4 +15773,13 @@ class AppLocalizationsPl extends AppLocalizations {
   @override
   String get firmwareUpdateAppRequired =>
       'Ta aktualizacja oprogramowania układowego wymaga nowszej aplikacji Omi. Zaktualizuj aplikację w sklepie z aplikacjami, a następnie sprawdź ponownie.';
+
+  @override
+  String get quietPayerTitle => 'Brak nagrań od 5 dni';
+
+  @override
+  String get quietPayerMessage => 'Sprawdź swoje Omi.';
+
+  @override
+  String get quietPayerCheck => 'Sprawdź';
 }

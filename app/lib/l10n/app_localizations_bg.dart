@@ -15779,4 +15779,13 @@ class AppLocalizationsBg extends AppLocalizations {
   @override
   String get firmwareUpdateAppRequired =>
       'Тази актуализация на фърмуера изисква по-нова версия на приложението Omi. Актуализирайте приложението от магазина си за приложения и проверете отново.';
+
+  @override
+  String get quietPayerTitle => 'Няма записи от 5 дни';
+
+  @override
+  String get quietPayerMessage => 'Проверете своя Omi.';
+
+  @override
+  String get quietPayerCheck => 'Провери';
 }

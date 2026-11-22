@@ -15858,4 +15858,13 @@ class AppLocalizationsFr extends AppLocalizations {
   @override
   String get firmwareUpdateAppRequired =>
       'Cette mise à jour du micrologiciel nécessite une version plus récente de l\'application Omi. Mettez l\'application à jour depuis votre boutique d\'applications, puis vérifiez à nouveau.';
+
+  @override
+  String get quietPayerTitle => 'Aucun enregistrement depuis 5 jours';
+
+  @override
+  String get quietPayerMessage => 'Vérifiez votre Omi.';
+
+  @override
+  String get quietPayerCheck => 'Vérifier';
 }

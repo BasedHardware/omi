@@ -15806,4 +15806,13 @@ class AppLocalizationsCa extends AppLocalizations {
   @override
   String get firmwareUpdateAppRequired =>
       'Aquesta actualització del microprogramari necessita una versió més nova de l\'aplicació Omi. Actualitza l\'aplicació des de la botiga d\'aplicacions i torna-ho a comprovar.';
+
+  @override
+  String get quietPayerTitle => 'Cap gravació en 5 dies';
+
+  @override
+  String get quietPayerMessage => 'Comprova el teu Omi.';
+
+  @override
+  String get quietPayerCheck => 'Comprova';
 }

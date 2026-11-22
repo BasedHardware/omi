@@ -5325,6 +5325,32 @@
       "correlation": null
     },
     {
+      "id": "subscriptionQuietRowShown",
+      "wire_name": "Subscription Quiet Row Shown",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {},
+      "consumers": [
+        "subscription-quiet-row"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "subscriptionQuietRowTapped",
+      "wire_name": "Subscription Quiet Row Tapped",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {},
+      "consumers": [
+        "subscription-quiet-row"
+      ],
+      "correlation": null
+    },
+    {
       "id": "mobileDeviceHealthDailyRingRead",
       "wire_name": "Mobile Device Health Daily",
       "status": "active",

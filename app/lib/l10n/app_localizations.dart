@@ -27614,6 +27614,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'This firmware update needs a newer Omi app. Update the app from your app store, then check again.'**
   String get firmwareUpdateAppRequired;
+
+  /// Home row title for a paying monthly subscriber whose Omi has recorded nothing for 5 days
+  ///
+  /// In en, this message translates to:
+  /// **'No recordings in 5 days'**
+  String get quietPayerTitle;
+
+  /// Home row line under quietPayerTitle
+  ///
+  /// In en, this message translates to:
+  /// **'Check your Omi.'**
+  String get quietPayerMessage;
+
+  /// Button on the quiet Home row; opens the Omi device page
+  ///
+  /// In en, this message translates to:
+  /// **'Check'**
+  String get quietPayerCheck;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

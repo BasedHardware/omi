@@ -15720,4 +15720,13 @@ class AppLocalizationsEt extends AppLocalizations {
   @override
   String get firmwareUpdateAppRequired =>
       'See püsivara värskendus vajab Omi rakenduse uuemat versiooni. Värskendage rakendust oma rakenduste poes ja kontrollige seejärel uuesti.';
+
+  @override
+  String get quietPayerTitle => '5 päeva pole salvestisi';
+
+  @override
+  String get quietPayerMessage => 'Kontrolli oma Omit.';
+
+  @override
+  String get quietPayerCheck => 'Kontrolli';
 }

@@ -15732,4 +15732,13 @@ class AppLocalizationsNo extends AppLocalizations {
   @override
   String get firmwareUpdateAppRequired =>
       'Denne fastvareoppdateringen krever en nyere Omi-app. Oppdater appen fra appbutikken din, og se etter oppdateringer på nytt.';
+
+  @override
+  String get quietPayerTitle => 'Ingen opptak på 5 dager';
+
+  @override
+  String get quietPayerMessage => 'Sjekk Omi-en din.';
+
+  @override
+  String get quietPayerCheck => 'Sjekk';
 }

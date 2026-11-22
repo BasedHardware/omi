@@ -15739,4 +15739,13 @@ class AppLocalizationsUr extends AppLocalizations {
   @override
   String get firmwareUpdateAppRequired =>
       'اس فرم ویئر اپ ڈیٹ کے لیے Omi ایپ کا نیا ورژن درکار ہے۔ اپنے ایپ اسٹور سے ایپ کو اپ ڈیٹ کریں، پھر دوبارہ چیک کریں۔';
+
+  @override
+  String get quietPayerTitle => '5 دن سے کوئی ریکارڈنگ نہیں';
+
+  @override
+  String get quietPayerMessage => 'اپنا Omi چیک کریں۔';
+
+  @override
+  String get quietPayerCheck => 'چیک کریں';
 }

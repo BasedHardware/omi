@@ -4737,5 +4737,8 @@
     "writingSummaryStatus": "Rašoma santrauka…",
     "stillWorkingOnIt": "Vis dar dirbama.",
     "firmwareUpdateFirmwareTooOld": "Jūsų įrenginio programinė aparatinė įranga per sena šiam naujinimui. Kreipkitės į palaikymo tarnybą, kad padėtų atnaujinti įrenginį.",
-    "firmwareUpdateAppRequired": "Šiam programinės aparatinės įrangos naujinimui reikia naujesnės „Omi“ programėlės versijos. Atnaujinkite programėlę savo programėlių parduotuvėje ir patikrinkite dar kartą."
+    "firmwareUpdateAppRequired": "Šiam programinės aparatinės įrangos naujinimui reikia naujesnės „Omi“ programėlės versijos. Atnaujinkite programėlę savo programėlių parduotuvėje ir patikrinkite dar kartą.",
+    "quietPayerTitle": "5 dienas nėra įrašų",
+    "quietPayerMessage": "Patikrinkite savo Omi.",
+    "quietPayerCheck": "Patikrinti"
 }

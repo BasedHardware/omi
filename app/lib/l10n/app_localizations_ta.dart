@@ -15833,4 +15833,13 @@ class AppLocalizationsTa extends AppLocalizations {
   @override
   String get firmwareUpdateAppRequired =>
       'இந்த ஃபர்ம்வேர் புதுப்பிப்புக்கு Omi ஆப்பின் புதிய பதிப்பு தேவை. உங்கள் ஆப் ஸ்டோரிலிருந்து ஆப்பைப் புதுப்பித்து, மீண்டும் சரிபார்க்கவும்.';
+
+  @override
+  String get quietPayerTitle => '5 நாட்களாக பதிவுகள் இல்லை';
+
+  @override
+  String get quietPayerMessage => 'உங்கள் Omi-ஐ சரிபார்க்கவும்.';
+
+  @override
+  String get quietPayerCheck => 'சரிபார்';
 }

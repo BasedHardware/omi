@@ -15653,4 +15653,13 @@ class AppLocalizationsTh extends AppLocalizations {
   @override
   String get firmwareUpdateAppRequired =>
       'การอัปเดตเฟิร์มแวร์นี้ต้องใช้แอป Omi เวอร์ชันใหม่กว่า อัปเดตแอปจากร้านค้าแอปของคุณ แล้วตรวจสอบอีกครั้ง';
+
+  @override
+  String get quietPayerTitle => 'ไม่มีการบันทึกมา 5 วัน';
+
+  @override
+  String get quietPayerMessage => 'ตรวจสอบ Omi ของคุณ';
+
+  @override
+  String get quietPayerCheck => 'ตรวจสอบ';
 }

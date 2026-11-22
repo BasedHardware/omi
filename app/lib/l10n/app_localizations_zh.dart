@@ -15474,4 +15474,13 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get firmwareUpdateAppRequired => '此固件更新需要更新版本的 Omi 应用。请前往应用商店更新应用，然后重新检查。';
+
+  @override
+  String get quietPayerTitle => '5 天没有录音';
+
+  @override
+  String get quietPayerMessage => '请检查你的 Omi。';
+
+  @override
+  String get quietPayerCheck => '检查';
 }

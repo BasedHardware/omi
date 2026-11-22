@@ -15764,4 +15764,13 @@ class AppLocalizationsHr extends AppLocalizations {
   @override
   String get firmwareUpdateAppRequired =>
       'Ovo ažuriranje firmvera zahtijeva noviju verziju aplikacije Omi. Ažurirajte aplikaciju iz svoje trgovine aplikacija, a zatim ponovno provjerite.';
+
+  @override
+  String get quietPayerTitle => 'Nema snimki 5 dana';
+
+  @override
+  String get quietPayerMessage => 'Provjerite svoj Omi.';
+
+  @override
+  String get quietPayerCheck => 'Provjeri';
 }

@@ -15763,4 +15763,13 @@ class AppLocalizationsLv extends AppLocalizations {
   @override
   String get firmwareUpdateAppRequired =>
       'Šim aparātprogrammatūras atjauninājumam nepieciešama jaunāka Omi lietotnes versija. Atjauniniet lietotni savā lietotņu veikalā un pēc tam pārbaudiet vēlreiz.';
+
+  @override
+  String get quietPayerTitle => '5 dienas nav ierakstu';
+
+  @override
+  String get quietPayerMessage => 'Pārbaudiet savu Omi.';
+
+  @override
+  String get quietPayerCheck => 'Pārbaudīt';
 }

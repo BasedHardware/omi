@@ -15738,4 +15738,13 @@ class AppLocalizationsTr extends AppLocalizations {
   @override
   String get firmwareUpdateAppRequired =>
       'Bu donanım yazılımı güncellemesi için Omi uygulamasının daha yeni bir sürümü gerekiyor. Uygulamayı uygulama mağazanızdan güncelleyin, ardından yeniden kontrol edin.';
+
+  @override
+  String get quietPayerTitle => '5 gündür kayıt yok';
+
+  @override
+  String get quietPayerMessage => 'Omi\'ni kontrol et.';
+
+  @override
+  String get quietPayerCheck => 'Kontrol Et';
 }
