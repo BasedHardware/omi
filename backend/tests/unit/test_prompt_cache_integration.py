@@ -718,10 +718,10 @@ def test_static_prefix_exceeds_minimum_cache_tokens():
 # ---------------------------------------------------------------------------
 
 
-def test_core_tools_has_31_tools():
-    """The stable core tool set excludes retired on-demand ledger and frame tools."""
+def test_core_tools_has_30_tools():
+    """The stable core tool set excludes retired ledger, frame, and demand-processing tools."""
     agentic_mod = _get_agentic_module()
-    assert len(agentic_mod.CORE_TOOLS) == 31, f"CORE_TOOLS has {len(agentic_mod.CORE_TOOLS)} tools, expected 31"
+    assert len(agentic_mod.CORE_TOOLS) == 30, f"CORE_TOOLS has {len(agentic_mod.CORE_TOOLS)} tools, expected 30"
 
 
 def test_core_tools_list_creates_independent_copy():
@@ -744,9 +744,9 @@ def test_core_tools_list_creates_independent_copy():
     mock_app_tool.name = "custom_app_tool"
     tools_a.append(mock_app_tool)
 
-    assert len(tools_a) == 32
-    assert len(tools_b) == 31
-    assert len(agentic_mod.CORE_TOOLS) == 31, "CORE_TOOLS was mutated!"
+    assert len(tools_a) == 31
+    assert len(tools_b) == 30
+    assert len(agentic_mod.CORE_TOOLS) == 30, "CORE_TOOLS was mutated!"
 
 
 def test_core_tools_order_matches_exports():
