@@ -289,7 +289,7 @@ def release_for_open(store, uid, job_id, now):
     return store.run(commit)
 
 
-def checkpoint_completion(store, intake, result, now):
+def checkpoint_completion(store, intake, result, now, *, completed_at=None):
     """Arm replay/metadata TTL only after authoritative group completion."""
 
     def commit(tx):
@@ -304,6 +304,8 @@ def checkpoint_completion(store, intake, result, now):
         expires = datetime.fromtimestamp(now, timezone.utc) + timedelta(days=45)
         current['expires_at'] = expires
         content.update(status='completed', result=result, expires_at=expires)
+        if completed_at is not None:
+            content['completed_at'] = completed_at
         tx.put('intakes', intake['job_id'], current)
         tx.put('content', content_key, content)
 
