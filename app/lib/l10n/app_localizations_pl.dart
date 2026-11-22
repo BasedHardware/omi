@@ -15765,4 +15765,12 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get stillWorkingOnIt => 'Nadal pracujemy nad tym.';
+
+  @override
+  String get firmwareUpdateFirmwareTooOld =>
+      'Oprogramowanie układowe Twojego urządzenia jest zbyt stare dla tej aktualizacji. Skontaktuj się z pomocą techniczną, aby uzyskać pomoc w aktualizacji urządzenia.';
+
+  @override
+  String get firmwareUpdateAppRequired =>
+      'Ta aktualizacja oprogramowania układowego wymaga nowszej aplikacji Omi. Zaktualizuj aplikację w sklepie z aplikacjami, a następnie sprawdź ponownie.';
 }

@@ -43,6 +43,7 @@ environments:
           UNLIMITED_V2_BACKFILL_HOURS_CAP_HOURS: {value: '24', category: rollout}
           PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
           SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
+          SYNC_POLL_BACKOFF_PERCENT: {value: '0', category: rollout}
           SYNC_RECORD_COVERAGE_WAIT_MEMO:
             value: 'true'
             category: ops_kill
@@ -216,7 +217,6 @@ environments:
           DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED: {value: 'false', category: rollout}
           DEMAND_PROCESSING_UID_ALLOWLIST: {value: '', category: rollout}
           DEMAND_PROCESSING_PERCENT: {value: '0', category: rollout}
-          STT_RESILIENT_RECONNECT: {value: 'false', category: rollout}
           STT_LIVE_DEMAND_ENABLED: {category: rollout, value: 'false'}
           STT_LIVE_DEMAND_PERCENT: {value: '0', category: rollout}
           STT_LIVE_DEMAND_UID_ALLOWLIST: {category: rollout, value: ''}
@@ -232,10 +232,11 @@ environments:
           STT_NO_TEXT_SECONDS: {value: '30', category: rollout}
           STT_LEARNED_LANGUAGE_PROFILE: {value: 'true', category: rollout}
           STT_NON_EN_MULTI_PREFER_HINTABLE_PERCENT: {value: '100', category: rollout}
-          PARAKEET_WINDOW_ALLOCATION_PERCENT: {category: rollout, value: '1'}
+          PARAKEET_WINDOW_ALLOCATION_PERCENT:
+            category: ops_kill
+            value: '1'
           PARAKEET_WINDOW_MAX_SESSIONS: {category: rollout, value: '1'}
           PARAKEET_WINDOW_POST_TIMEOUT_SECONDS: {value: '8', category: rollout}
-          PARAKEET_WINDOW_DIARIZATION: {value: 'false', category: rollout}
           PARAKEET_WINDOW_DEADLINE_CUT_POST_LATENCY_SECONDS:
             value: '1.2'
             category: reliability
@@ -489,7 +490,9 @@ environments:
           PARAKEET_STREAM_CAPACITY:
             value: '25'
             category: reliability
-          PARAKEET_STREAM_ALLOCATION_PERCENT: {value: '100', category: rollout}
+          PARAKEET_STREAM_ALLOCATION_PERCENT:
+            value: '100'
+            category: ops_kill
         values_file: backend/charts/parakeet/dev_omi_parakeet_values.yaml
       pusher:
         capabilities:
@@ -551,6 +554,7 @@ environments:
           BATCH_PIPELINE_LIVE_ADMISSION_ENABLED: {value: 'false', category: rollout}
           PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
           SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
+          SYNC_POLL_BACKOFF_PERCENT: {value: '0', category: rollout}
           SYNC_RECORD_COVERAGE_WAIT_MEMO:
             value: 'true'
             category: ops_kill
@@ -1073,6 +1077,7 @@ environments:
               provisional: true
             PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
             SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
+            SYNC_POLL_BACKOFF_PERCENT: {value: '0', category: rollout}
             SYNC_RECORD_COVERAGE_WAIT_MEMO:
               value: 'true'
               category: ops_kill
@@ -1488,6 +1493,7 @@ environments:
             UNLIMITED_V2_BACKFILL_HOURS_CAP_HOURS: {value: '24', category: rollout}
             PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
             SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
+            SYNC_POLL_BACKOFF_PERCENT: {value: '0', category: rollout}
             SYNC_RECORD_COVERAGE_WAIT_MEMO:
               value: 'true'
               category: ops_kill
@@ -1920,6 +1926,7 @@ environments:
               category: reliability
             PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
             SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
+            SYNC_POLL_BACKOFF_PERCENT: {value: '0', category: rollout}
             SYNC_RECORD_COVERAGE_WAIT_MEMO:
               value: 'true'
               category: ops_kill
@@ -2324,6 +2331,7 @@ environments:
             UNLIMITED_V2_BACKFILL_HOURS_CAP_HOURS: {value: '24', category: rollout}
             PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
             SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
+            SYNC_POLL_BACKOFF_PERCENT: {value: '0', category: rollout}
             SYNC_RECORD_COVERAGE_WAIT_MEMO:
               value: 'true'
               category: ops_kill
@@ -2988,7 +2996,8 @@ environments:
           UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED: {value: 'false', category: rollout}
           UNLIMITED_V2_BACKFILL_HOURS_CAP_HOURS: {value: '24', category: rollout}
           PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
-          SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
+          SYNC_POLL_BACKOFF_ENABLED: {value: 'true', category: rollout}
+          SYNC_POLL_BACKOFF_PERCENT: {value: '5', category: rollout}
           SYNC_RECORD_COVERAGE_WAIT_MEMO:
             value: 'true'
             category: ops_kill
@@ -3162,7 +3171,6 @@ environments:
           DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED: {value: 'false', category: rollout}
           DEMAND_PROCESSING_UID_ALLOWLIST: {value: '', category: rollout}
           DEMAND_PROCESSING_PERCENT: {value: '0', category: rollout}
-          STT_RESILIENT_RECONNECT: {value: 'false', category: rollout}
           STT_LIVE_DEMAND_ENABLED: {category: rollout, value: 'true'}
           STT_LIVE_DEMAND_PERCENT: {value: '0', category: rollout}
           STT_LIVE_DEMAND_UID_ALLOWLIST: {category: rollout, value: vi7SA9ckQCe4ccobWNxlbdcNdC23}
@@ -3178,10 +3186,11 @@ environments:
           STT_NO_TEXT_SECONDS: {value: '30', category: rollout}
           STT_LEARNED_LANGUAGE_PROFILE: {value: 'true', category: rollout}
           STT_NON_EN_MULTI_PREFER_HINTABLE_PERCENT: {value: '0', category: rollout}
-          PARAKEET_WINDOW_ALLOCATION_PERCENT: {category: rollout, value: '100'}
+          PARAKEET_WINDOW_ALLOCATION_PERCENT:
+            category: ops_kill
+            value: '100'
           PARAKEET_WINDOW_MAX_SESSIONS: {category: rollout, value: '16'}
           PARAKEET_WINDOW_POST_TIMEOUT_SECONDS: {value: '8', category: rollout}
-          PARAKEET_WINDOW_DIARIZATION: {value: 'false', category: rollout}
           PARAKEET_WINDOW_DEADLINE_CUT_POST_LATENCY_SECONDS:
             value: '1.2'
             category: reliability
@@ -3413,7 +3422,7 @@ environments:
           HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED:
             value: 'true'
             category: ops_kill
-          SYNC_FUTURE_CAPTURE_CLAMP_ENABLED: {value: 'false', category: rollout}
+          SYNC_FUTURE_CAPTURE_CLAMP_ENABLED: {value: 'true', category: rollout}
           RECORD_SEAL_REPAIR_FRESH_ENABLED:
             value: 'true'
             category: ops_kill
@@ -3561,7 +3570,9 @@ environments:
           PARAKEET_STREAM_CAPACITY:
             value: '25'
             category: reliability
-          PARAKEET_STREAM_ALLOCATION_PERCENT: {value: '100', category: rollout}
+          PARAKEET_STREAM_ALLOCATION_PERCENT:
+            value: '100'
+            category: ops_kill
         values_file: backend/charts/parakeet/prod_omi_parakeet_values.yaml
       pusher:
         capabilities:
@@ -3622,7 +3633,8 @@ environments:
           BATCH_LIVE_STT_RETIRE_PERCENT: {value: '0', category: rollout}
           BATCH_PIPELINE_LIVE_ADMISSION_ENABLED: {value: 'false', category: rollout}
           PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
-          SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
+          SYNC_POLL_BACKOFF_ENABLED: {value: 'true', category: rollout}
+          SYNC_POLL_BACKOFF_PERCENT: {value: '5', category: rollout}
           SYNC_RECORD_COVERAGE_WAIT_MEMO:
             value: 'true'
             category: ops_kill
@@ -4073,6 +4085,7 @@ environments:
           forbidden_env:
           - BATCH_HELD_POLL_SKIP_ENABLED
           - BATCH_PROJECTION_FINISH_BACKOFF_ENABLED
+          - DREAM_AGENT_PAID_PERCENT
           - DEEPGRAM_SELF_HOSTED_ENABLED
           - DEEPGRAM_SELF_HOSTED_URL
           - DEEPGRAM_API_KEY
@@ -4183,7 +4196,8 @@ environments:
               env_var: LADDER_V1_ARCHITECT_YEAR_PRICE_ID
               provisional: true
             PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
-            SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
+            SYNC_POLL_BACKOFF_ENABLED: {value: 'true', category: rollout}
+            SYNC_POLL_BACKOFF_PERCENT: {value: '5', category: rollout}
             SYNC_RECORD_COVERAGE_WAIT_MEMO:
               value: 'true'
               category: ops_kill
@@ -4450,7 +4464,7 @@ environments:
               value: 'true'
               category: ops_kill
             BATCH_PIPELINE_FOLLOWUP_CLAIMED_SIBLING_SKIP_ENABLED:
-              value: 'false'
+              value: 'true'
               category: ops_kill
             PUSHER_RECORD_CLOSE_NOTIFY_ENABLED: {value: 'false', category: rollout}
             PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_PERCENT: {value: '100', category: rollout}
@@ -4519,7 +4533,7 @@ environments:
             HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED:
               value: 'true'
               category: ops_kill
-            SYNC_FUTURE_CAPTURE_CLAMP_ENABLED: {value: 'false', category: rollout}
+            SYNC_FUTURE_CAPTURE_CLAMP_ENABLED: {value: 'true', category: rollout}
             RECORD_SEAL_REPAIR_FRESH_ENABLED:
               value: 'true'
               category: ops_kill
@@ -4591,7 +4605,6 @@ environments:
             OMI_MESSAGING_LINK_TARGETS: {value: '{"telegram":{"provider":"telegram","address":"omi_chat_bot","deep_link_template":"https://t.me/{address}?start={proof}"},"imessage":{"provider":"keiki","address":"+14155252967","lines":[{"address":"+14155252967","started":"2026-10-30"}]}}',
               category: rollout}
             DREAM_AGENT_ENABLED: {value: 'true', category: rollout}
-            DREAM_AGENT_PAID_PERCENT: {value: '100', category: rollout}
             DREAM_AGENT_CONCURRENCY:
               value: '8'
               category: reliability
@@ -4747,7 +4760,8 @@ environments:
             UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED: {value: 'true', category: rollout}
             UNLIMITED_V2_BACKFILL_HOURS_CAP_HOURS: {value: '24', category: rollout}
             PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
-            SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
+            SYNC_POLL_BACKOFF_ENABLED: {value: 'true', category: rollout}
+            SYNC_POLL_BACKOFF_PERCENT: {value: '5', category: rollout}
             SYNC_RECORD_COVERAGE_WAIT_MEMO:
               value: 'true'
               category: ops_kill
@@ -5026,7 +5040,7 @@ environments:
               value: 'true'
               category: ops_kill
             BATCH_PIPELINE_FOLLOWUP_CLAIMED_SIBLING_SKIP_ENABLED:
-              value: 'false'
+              value: 'true'
               category: ops_kill
             PUSHER_RECORD_CLOSE_NOTIFY_ENABLED: {value: 'false', category: rollout}
             PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_PERCENT: {value: '100', category: rollout}
@@ -5092,7 +5106,7 @@ environments:
             HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED:
               value: 'true'
               category: ops_kill
-            SYNC_FUTURE_CAPTURE_CLAMP_ENABLED: {value: 'false', category: rollout}
+            SYNC_FUTURE_CAPTURE_CLAMP_ENABLED: {value: 'true', category: rollout}
             RECORD_SEAL_REPAIR_FRESH_ENABLED:
               value: 'true'
               category: ops_kill
@@ -5168,7 +5182,6 @@ environments:
             TRANSCRIPTION_SYNC_FINAL_PASS_HOURLY_REQUESTS: {value: '15000', category: rollout}
             OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
             DREAM_AGENT_ENABLED: {value: 'true', category: rollout}
-            DREAM_AGENT_PAID_PERCENT: {value: '100', category: rollout}
             DREAM_AGENT_CONCURRENCY:
               value: '8'
               category: reliability
@@ -5280,6 +5293,7 @@ environments:
           forbidden_env:
           - BATCH_HELD_POLL_SKIP_ENABLED
           - BATCH_PROJECTION_FINISH_BACKOFF_ENABLED
+          - DREAM_AGENT_PAID_PERCENT
           - DEEPGRAM_SELF_HOSTED_ENABLED
           - DEEPGRAM_SELF_HOSTED_URL
           - DEEPGRAM_API_KEY
@@ -5336,7 +5350,8 @@ environments:
               value: '8'
               category: reliability
             PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
-            SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
+            SYNC_POLL_BACKOFF_ENABLED: {value: 'true', category: rollout}
+            SYNC_POLL_BACKOFF_PERCENT: {value: '5', category: rollout}
             SYNC_RECORD_COVERAGE_WAIT_MEMO:
               value: 'true'
               category: ops_kill
@@ -5656,7 +5671,7 @@ environments:
             HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED:
               value: 'true'
               category: ops_kill
-            SYNC_FUTURE_CAPTURE_CLAMP_ENABLED: {value: 'false', category: rollout}
+            SYNC_FUTURE_CAPTURE_CLAMP_ENABLED: {value: 'true', category: rollout}
             RECORD_SEAL_REPAIR_FRESH_ENABLED:
               value: 'true'
               category: ops_kill
@@ -5715,7 +5730,6 @@ environments:
             TRANSCRIPTION_SYNC_FINAL_PASS_HOURLY_REQUESTS: {value: '15000', category: rollout}
             OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
             DREAM_AGENT_ENABLED: {value: 'true', category: rollout}
-            DREAM_AGENT_PAID_PERCENT: {value: '100', category: rollout}
             DREAM_AGENT_CONCURRENCY:
               value: '8'
               category: reliability
@@ -5821,6 +5835,7 @@ environments:
           forbidden_env:
           - BATCH_HELD_POLL_SKIP_ENABLED
           - BATCH_PROJECTION_FINISH_BACKOFF_ENABLED
+          - DREAM_AGENT_PAID_PERCENT
           - DEEPGRAM_SELF_HOSTED_ENABLED
           - DEEPGRAM_SELF_HOSTED_URL
           - DEEPGRAM_API_KEY
@@ -5873,7 +5888,8 @@ environments:
             UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED: {value: 'true', category: rollout}
             UNLIMITED_V2_BACKFILL_HOURS_CAP_HOURS: {value: '24', category: rollout}
             PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
-            SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
+            SYNC_POLL_BACKOFF_ENABLED: {value: 'true', category: rollout}
+            SYNC_POLL_BACKOFF_PERCENT: {value: '5', category: rollout}
             SYNC_RECORD_COVERAGE_WAIT_MEMO:
               value: 'true'
               category: ops_kill
@@ -6094,10 +6110,10 @@ environments:
             BATCH_PIPELINE_SERVING_TICK_SECONDS: {value: '10', category: rollout}
             BATCH_PROJECTION_FINISH_CLASSIFY_PAGE_LIMIT: {value: '16', category: rollout}
             BATCH_PIPELINE_FOLLOWUP_CLAIMED_SIBLING_SKIP_ENABLED:
-              value: 'false'
+              value: 'true'
               category: ops_kill
             BATCH_PIPELINE_SERVING_PROJECTION_SWEEP:
-              value: 'off'
+              value: 'true'
               category: ops_kill
             BATCH_PIPELINE_SILENCE_READ_SKIP_ENABLED:
               value: 'true'
@@ -6173,7 +6189,7 @@ environments:
             HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED:
               value: 'true'
               category: ops_kill
-            SYNC_FUTURE_CAPTURE_CLAMP_ENABLED: {value: 'false', category: rollout}
+            SYNC_FUTURE_CAPTURE_CLAMP_ENABLED: {value: 'true', category: rollout}
             RECORD_SEAL_REPAIR_FRESH_ENABLED:
               value: 'true'
               category: ops_kill
@@ -6249,7 +6265,6 @@ environments:
               category: reliability
             OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
             DREAM_AGENT_ENABLED: {value: 'true', category: rollout}
-            DREAM_AGENT_PAID_PERCENT: {value: '100', category: rollout}
             DREAM_AGENT_CONCURRENCY:
               value: '8'
               category: reliability
@@ -6314,6 +6329,7 @@ environments:
           forbidden_env:
           - BATCH_HELD_POLL_SKIP_ENABLED
           - BATCH_PROJECTION_FINISH_BACKOFF_ENABLED
+          - DREAM_AGENT_PAID_PERCENT
           - DEEPGRAM_SELF_HOSTED_ENABLED
           - DEEPGRAM_SELF_HOSTED_URL
           - DEEPGRAM_API_KEY
@@ -6366,7 +6382,8 @@ environments:
             UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED: {value: 'true', category: rollout}
             UNLIMITED_V2_BACKFILL_HOURS_CAP_HOURS: {value: '24', category: rollout}
             PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
-            SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
+            SYNC_POLL_BACKOFF_ENABLED: {value: 'true', category: rollout}
+            SYNC_POLL_BACKOFF_PERCENT: {value: '5', category: rollout}
             SYNC_RECORD_COVERAGE_WAIT_MEMO:
               value: 'true'
               category: ops_kill
@@ -6587,7 +6604,7 @@ environments:
             BATCH_PIPELINE_SERVING_TICK_SECONDS: {value: '10', category: rollout}
             BATCH_PROJECTION_FINISH_CLASSIFY_PAGE_LIMIT: {value: '16', category: rollout}
             BATCH_PIPELINE_FOLLOWUP_CLAIMED_SIBLING_SKIP_ENABLED:
-              value: 'false'
+              value: 'true'
               category: ops_kill
             BATCH_PIPELINE_SERVING_PROJECTION_SWEEP:
               value: 'true'
@@ -6666,7 +6683,7 @@ environments:
             HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED:
               value: 'true'
               category: ops_kill
-            SYNC_FUTURE_CAPTURE_CLAMP_ENABLED: {value: 'false', category: rollout}
+            SYNC_FUTURE_CAPTURE_CLAMP_ENABLED: {value: 'true', category: rollout}
             RECORD_SEAL_REPAIR_FRESH_ENABLED:
               value: 'true'
               category: ops_kill
@@ -6742,7 +6759,6 @@ environments:
               category: reliability
             OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
             DREAM_AGENT_ENABLED: {value: 'true', category: rollout}
-            DREAM_AGENT_PAID_PERCENT: {value: '100', category: rollout}
             DREAM_AGENT_CONCURRENCY:
               value: '8'
               category: reliability
@@ -6793,7 +6809,7 @@ environments:
             SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED: {value: 'true', category: rollout}
             OMI_PROCESS_ROLE:
               value: projection_pump
-            BATCH_PIPELINE_PROJECTION_PUMP_ENABLED: {value: 'true', category: rollout}
+            BATCH_PIPELINE_PROJECTION_PUMP_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_PUMP_SWEEP_PAGES: {value: '1', category: rollout}
             BATCH_PIPELINE_PUMP_TICK_SECONDS: {value: '2', category: rollout}
             BATCH_PIPELINE_MAX_OWNER_DRAINS: {value: '8', category: rollout}
@@ -6813,6 +6829,7 @@ environments:
           forbidden_env:
           - BATCH_HELD_POLL_SKIP_ENABLED
           - BATCH_PROJECTION_FINISH_BACKOFF_ENABLED
+          - DREAM_AGENT_PAID_PERCENT
           - DEEPGRAM_SELF_HOSTED_ENABLED
           - DEEPGRAM_SELF_HOSTED_URL
           - DEEPGRAM_API_KEY

@@ -228,6 +228,10 @@ async def _episode_after_absorb(uid: str, donor_id: str, trigger: ProcessingTrig
         logger.warning('event=episode_finalize outcome=error exception_type=%s', type(error).__name__)
 
 
+class ServerBatchArchiveNotClosed(RuntimeError):
+    """The batch producer has not published the archive-close barrier."""
+
+
 class ConversationFinalizationError(RuntimeError):
     """A persisted-conversation failure classified by its owning entrypoint.
 
@@ -324,7 +328,7 @@ async def finalize_persisted_conversation(
             return ConversationFinalizationDisposition.discarded
         if not server_batch_has_audio(conversation_data):
             if not conversation_data.get('server_batch_audio_closed'):
-                raise RuntimeError('server batch archive is not closed')
+                raise ServerBatchArchiveNotClosed('server batch archive is not closed')
             if not await run_blocking(
                 db_executor,
                 lifecycle_service.delete_empty_recording_conversation,

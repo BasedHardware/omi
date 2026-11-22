@@ -15822,4 +15822,12 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get stillWorkingOnIt => 'Εξακολουθούμε να δουλεύουμε πάνω σε αυτό.';
+
+  @override
+  String get firmwareUpdateFirmwareTooOld =>
+      'Το υλικολογισμικό της συσκευής σας είναι πολύ παλιό για αυτήν την ενημέρωση. Επικοινωνήστε με την υποστήριξη για βοήθεια με την ενημέρωση της συσκευής σας.';
+
+  @override
+  String get firmwareUpdateAppRequired =>
+      'Αυτή η ενημέρωση υλικολογισμικού απαιτεί νεότερη έκδοση της εφαρμογής Omi. Ενημερώστε την εφαρμογή από το κατάστημα εφαρμογών σας και ελέγξτε ξανά.';
 }

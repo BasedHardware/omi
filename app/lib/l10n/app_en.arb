@@ -19218,5 +19218,13 @@
     "stillWorkingOnIt": "Still working on it.",
     "@stillWorkingOnIt": {
         "description": "Quiet notice on a conversation page when the app stopped checking a conversation that is still being transcribed or summarized. Shown with a Try Again button."
+    },
+    "firmwareUpdateFirmwareTooOld": "Your device's firmware is too old for this update. Contact support for help updating your device.",
+    "@firmwareUpdateFirmwareTooOld": {
+        "description": "Firmware update unavailable because the device is below the release minimum firmware version."
+    },
+    "firmwareUpdateAppRequired": "This firmware update needs a newer Omi app. Update the app from your app store, then check again.",
+    "@firmwareUpdateAppRequired": {
+        "description": "Firmware update unavailable because the installed Omi app does not meet the release app version or build requirement."
     }
 }

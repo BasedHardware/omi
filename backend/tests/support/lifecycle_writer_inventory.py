@@ -362,14 +362,22 @@ FIELD_SITES = {
         ('settle_billed.commit', 'status', "'settled'", ('expires_at', 'months', 'status')),
     ],
     'database/batch_pipeline_coalescing_completion.py': [
-        ('write', 'status', "'completed'", ('expires_at', 'result', 'status', 'updated_at')),
+        ('write', 'status', "'completed'", ('completed_at', 'expires_at', 'result', 'status', 'updated_at')),
     ],
     'utils/batch_pipeline/upload_coalescing.py': [
         (
             'member_status',
             'status',
             "'completed'",
-            ('poll_after_ms', 'processed_segments', 'result', 'status', 'successful_segments', 'total_segments'),
+            (
+                'completed_at',
+                'poll_after_ms',
+                'processed_segments',
+                'result',
+                'status',
+                'successful_segments',
+                'total_segments',
+            ),
         ),
         (
             'queued',
@@ -2740,7 +2748,12 @@ FIELD_SITES = {
         ('mark_job_queued_for_retry', 'status', "'queued'", ('attempt', 'last_error', 'status')),
     ],
     'database/sync_ledger.py': [
-        ('_mark_completed_transaction', 'status', "'completed'", ('expires_at', 'result', 'status', 'updated_at')),
+        (
+            '_mark_completed_transaction',
+            'status',
+            "'completed'",
+            ('completed_at', 'expires_at', 'result', 'status', 'updated_at'),
+        ),
         (
             '_processing_claim_updates',
             'status',
@@ -2769,7 +2782,7 @@ FIELD_SITES = {
             'complete_batch_projection_in_transaction',
             'status',
             "'completed'",
-            ('expires_at', 'result', 'status', 'updated_at'),
+            ('completed_at', 'expires_at', 'result', 'status', 'updated_at'),
         ),
     ],
     'database/sync_redrive.py': [
@@ -2976,6 +2989,7 @@ FIELD_SITES = {
             'status',
             "'completed'",
             (
+                'completed_at',
                 'errors',
                 'failed_segments',
                 'job_id',
@@ -3070,6 +3084,7 @@ FIELD_SITES = {
             'status',
             "status; literal aliases=[('status', ('completed', 'failed', 'processing', " "'queued'))]",
             (
+                'completed_at',
                 'errors',
                 'failed_segments',
                 'job_id',
@@ -4571,6 +4586,7 @@ FIELD_SITES = {
             'status',
             "'completed'",
             (
+                'completed_at',
                 'failed_segments',
                 'job_id',
                 'lane',

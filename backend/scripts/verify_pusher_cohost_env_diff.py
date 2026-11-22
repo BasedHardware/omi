@@ -193,7 +193,6 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
             "PARAKEET_BATCH_PRESSURE_MIN_REPLICAS",
             "PARAKEET_BATCH_PRESSURE_POOL_HOST",
             "PARAKEET_WINDOW_ALLOCATION_PERCENT",
-            "PARAKEET_WINDOW_DIARIZATION",
             # Pusher never creates a window decoder or owns its delivery deadline.
             "PARAKEET_WINDOW_DEADLINE_CUT_POST_LATENCY_SECONDS",
             "PARAKEET_WINDOW_MAX_SESSIONS",
@@ -205,7 +204,6 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
             "STT_ACCOUNT_CIRCUIT_COOLDOWN_SECONDS",
             "STT_CIRCUIT_HALF_OPEN_PROBES",
             "STT_SHED_CONNECT_FAILURES",
-            "STT_RESILIENT_RECONNECT",
             "STT_FAILOVER_RECOVERY_ENABLED",
             "STT_LEARNED_LANGUAGE_PROFILE",
             "STT_NON_EN_MULTI_PREFER_HINTABLE_PERCENT",
@@ -321,7 +319,6 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
             "PARAKEET_BATCH_PRESSURE_MIN_REPLICAS",
             "PARAKEET_BATCH_PRESSURE_POOL_HOST",
             "PARAKEET_WINDOW_ALLOCATION_PERCENT",
-            "PARAKEET_WINDOW_DIARIZATION",
             # Pusher never creates a window decoder or owns its delivery deadline.
             "PARAKEET_WINDOW_DEADLINE_CUT_POST_LATENCY_SECONDS",
             "PARAKEET_WINDOW_MAX_SESSIONS",
@@ -338,7 +335,6 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
             "STT_ACCOUNT_CIRCUIT_COOLDOWN_SECONDS",
             "STT_CIRCUIT_HALF_OPEN_PROBES",
             "STT_SHED_CONNECT_FAILURES",
-            "STT_RESILIENT_RECONNECT",
             "STT_FAILOVER_RECOVERY_ENABLED",
             "STT_NO_TEXT_RESCUE_ENABLED",
             "STT_LEARNED_LANGUAGE_PROFILE",

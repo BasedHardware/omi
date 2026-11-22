@@ -4735,5 +4735,7 @@
     "conversationLiveNoEdits": "Așteaptă să se încheie pentru a o modifica.",
     "finishedSummaryReady": "Rezumat gata",
     "writingSummaryStatus": "Se scrie rezumatul…",
-    "stillWorkingOnIt": "Încă lucrăm la asta."
+    "stillWorkingOnIt": "Încă lucrăm la asta.",
+    "firmwareUpdateFirmwareTooOld": "Firmware-ul dispozitivului tău este prea vechi pentru această actualizare. Contactează echipa de asistență pentru ajutor la actualizarea dispozitivului.",
+    "firmwareUpdateAppRequired": "Această actualizare de firmware necesită o versiune mai nouă a aplicației Omi. Actualizează aplicația din magazinul de aplicații, apoi verifică din nou."
 }

@@ -300,7 +300,6 @@ def test_window_successor_replay_wall_expiry_is_replay_send_stalled():
             ((0, b'\x01\x00' * 160),),
             source=ring,
             provider='soniox',
-            soniox=None,
             deadline=resilient_stream.clock() - 1.0,  # the prefix wall has already passed
         )
 

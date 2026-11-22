@@ -15778,4 +15778,12 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get stillWorkingOnIt => 'Még dolgozunk rajta.';
+
+  @override
+  String get firmwareUpdateFirmwareTooOld =>
+      'Az eszköz firmware-e túl régi ehhez a frissítéshez. Az eszköz frissítéséhez kérjen segítséget az ügyfélszolgálattól.';
+
+  @override
+  String get firmwareUpdateAppRequired =>
+      'Ehhez a firmware-frissítéshez az Omi alkalmazás újabb verziója szükséges. Frissítse az alkalmazást az alkalmazásboltban, majd ellenőrizze újra.';
 }

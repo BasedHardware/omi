@@ -15721,4 +15721,12 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get stillWorkingOnIt => 'Vẫn đang xử lý.';
+
+  @override
+  String get firmwareUpdateFirmwareTooOld =>
+      'Firmware trên thiết bị của bạn quá cũ để cài đặt bản cập nhật này. Hãy liên hệ bộ phận hỗ trợ để được giúp cập nhật thiết bị.';
+
+  @override
+  String get firmwareUpdateAppRequired =>
+      'Bản cập nhật firmware này yêu cầu phiên bản ứng dụng Omi mới hơn. Hãy cập nhật ứng dụng từ cửa hàng ứng dụng của bạn, rồi kiểm tra lại.';
 }

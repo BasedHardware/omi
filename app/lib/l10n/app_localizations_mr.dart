@@ -15728,4 +15728,12 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String get stillWorkingOnIt => 'अजून त्यावर काम सुरू आहे.';
+
+  @override
+  String get firmwareUpdateFirmwareTooOld =>
+      'या अपडेटसाठी तुमच्या डिव्हाइसचे फर्मवेअर खूप जुने आहे. डिव्हाइस अपडेट करण्यासाठी मदत हवी असल्यास सपोर्टशी संपर्क साधा.';
+
+  @override
+  String get firmwareUpdateAppRequired =>
+      'या फर्मवेअर अपडेटसाठी Omi ॲपची नवीन आवृत्ती आवश्यक आहे. तुमच्या ॲप स्टोअरमधून ॲप अपडेट करा, नंतर पुन्हा तपासा.';
 }

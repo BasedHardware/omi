@@ -673,3 +673,16 @@ def test_strict_pcm_vad_invalid_probability_is_failure_not_silence(monkeypatch, 
     monkeypatch.setattr(local_vad, 'run_vad_window', lambda audio, state, context: (probability, state, context))
     with pytest.raises(VADProcessingError):
         local_vad.offline_pcm_speech_segments(b'\0' * 1024)
+
+
+def test_offline_detector_keeps_final_partial_window(monkeypatch):
+    observed = []
+
+    def detect(samples):
+        observed.append(len(samples))
+        return [{'start': 0, 'end': len(samples) / 16000, 'duration': len(samples) / 16000}]
+
+    monkeypatch.setattr(local_vad, 'segments_from_16khz_samples', detect)
+    result = local_vad.offline_pcm_speech_segments(b'\x00\x00' * 513)
+    assert observed == [1024]
+    assert result == [{'start': 0, 'end': 513 / 16000, 'duration': 513 / 16000}]

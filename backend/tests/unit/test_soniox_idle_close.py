@@ -659,11 +659,8 @@ def test_replayed_preroll_is_not_delivered_twice(monkeypatch):
     assert spans == ((40, 2),)
 
 
-@pytest.mark.parametrize('elapsed', ['off', 'on', 'shadow'])
-def test_capture_and_wall_continuity_with_socket_reset(monkeypatch, elapsed):
+def test_capture_and_wall_continuity_with_socket_reset(monkeypatch):
     from utils.audio_timeline import CaptureTimeline, ProviderEpochTranslator
-
-    monkeypatch.setenv('SONIOX_ELAPSED_AXIS', elapsed)
 
     async def run():
         socket, idle, gate, _, seen, tick = build(monkeypatch)

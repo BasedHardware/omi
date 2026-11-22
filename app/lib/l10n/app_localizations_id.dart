@@ -15734,4 +15734,12 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get stillWorkingOnIt => 'Masih dikerjakan.';
+
+  @override
+  String get firmwareUpdateFirmwareTooOld =>
+      'Firmware perangkat Anda terlalu lama untuk pembaruan ini. Hubungi dukungan untuk bantuan memperbarui perangkat Anda.';
+
+  @override
+  String get firmwareUpdateAppRequired =>
+      'Pembaruan firmware ini memerlukan aplikasi Omi versi lebih baru. Perbarui aplikasi dari toko aplikasi Anda, lalu periksa lagi.';
 }

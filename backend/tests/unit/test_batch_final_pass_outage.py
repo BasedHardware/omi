@@ -17,7 +17,7 @@ from tests.unit.test_batch_final_pass import prod_shaped, UID, run_prod, batch_o
 from tests.unit.test_batch_final_pass_retry import ready, next_wake  # noqa: F401
 from utils.conversations import final_pass_retry as retry, final_pass_pyannote as final
 from utils.conversations.final_pass_dependencies import transient_cause
-from utils.stt import diarization, vad_compaction
+from utils.stt import diarization
 
 
 @pytest.mark.parametrize('edge', ['enrichment', 'sync'])
@@ -242,8 +242,7 @@ def test_tls_is_not_immediately_retried_by_real_http_adapter(monkeypatch):
 @pytest.mark.parametrize('attempt', ['initial', 'retry'])
 def test_real_http_status_classification_after_immediate_retry(ready, monkeypatch, status, attempt):
     monkeypatch.setenv('HOSTED_DIARIZATION_API_URL', 'https://synthetic.invalid')
-    monkeypatch.setattr(vad_compaction, 'final_pass_vad_compaction_enabled', lambda: False)
-    monkeypatch.setattr(final, 'diarize_with_speech_compaction', vad_compaction.diarize_with_speech_compaction)
+    monkeypatch.setattr(final, 'diarize', diarization.diarize)
     calls = []
 
     def response(*args, **kwargs):
