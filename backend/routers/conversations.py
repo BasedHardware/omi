@@ -395,14 +395,27 @@ def _enrich_deferred_conversation(uid: str, conversation: dict, *, include_disca
                     conversation_id,
                 )
 
+    def _rearm_cancelled_enrichment(work: Future[None]) -> None:
+        if work.cancelled():
+            try:
+                lifecycle_service.recover_deferred_processing_failure(
+                    uid, conversation_id, expected_admitted_at=admitted_at
+                )
+            except Exception as error:
+                logger.error('cancelled lazy enrich recovery failed error_type=%s', type(error).__name__)
+
     try:
-        submit_with_context(postprocess_executor, _run_enrichment)
+        work = submit_with_context(postprocess_executor, _run_enrichment)
     except Exception as error:
         # A pool can enqueue a callback and then fail to start a worker. The
         # rejected callback must never enrich after this claim is released.
         submission_accepted.set_result(False)
         logger.error('lazy enrich submission failed error_type=%s', type(error).__name__)
         lifecycle_service.recover_deferred_processing_failure(uid, conversation_id, expected_admitted_at=admitted_at)
+        return _current_detail()
+    work.add_done_callback(_rearm_cancelled_enrichment)
+    if work.cancelled():
+        submission_accepted.set_result(False)
         return _current_detail()
     # The claim may have reopened a completed/deferred row. Return the admitted
     # processing state so the client follows it through enrichment or retry.

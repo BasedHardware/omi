@@ -6,6 +6,7 @@ the durable finalization job worker instead; its terminal failure is covered
 by the worker and lifecycle contracts.
 """
 
+from concurrent.futures import Future
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
@@ -496,9 +497,40 @@ def test_deferred_submission_rejection_rearms_without_starting_work(monkeypatch,
     assert _lazy_metric('enrich_started') == started_before
     process.assert_not_called()
 
-    accept = MagicMock()
+    accept = MagicMock(return_value=Future())
     monkeypatch.setattr(conversations_router, 'submit_with_context', accept)
     reopened = conversations_router._enrich_deferred_conversation('uid1', dict(stored))
     accept.assert_called_once()
     assert reopened['status'] == 'processing'
     assert reopened['deferred'] is False
+
+
+@pytest.mark.parametrize('cancel_before_response', [False, True])
+def test_cancelled_queued_enrichment_rearms_only_its_admission(monkeypatch, cancel_before_response):
+    parked = {'id': 'deferred-cancelled', 'status': 'completed', 'deferred': True}
+    acquire = MagicMock(return_value=True)
+    recover = MagicMock(return_value=True)
+    read = MagicMock(return_value=dict(parked))
+    process = MagicMock()
+    work = Future()
+    if cancel_before_response:
+        work.cancel()
+    monkeypatch.setattr(lifecycle_service, 'reacquire_deferred_processing', acquire)
+    monkeypatch.setattr(lifecycle_service, 'recover_deferred_processing_failure', recover)
+    monkeypatch.setattr(conversations_router, '_get_valid_conversation_by_id', read)
+    monkeypatch.setattr(conversations_router, 'process_conversation', process)
+    monkeypatch.setattr(conversations_router, 'submit_with_context', lambda *_: work)
+    started_before = _lazy_metric('enrich_started')
+
+    result = conversations_router._enrich_deferred_conversation('uid1', dict(parked))
+    if cancel_before_response:
+        assert result == parked
+        read.assert_called_once_with('uid1', parked['id'], follow_sync_bridge=True)
+    else:
+        assert result['status'] == 'processing'
+        recover.assert_not_called()
+        assert work.cancel()
+
+    recover.assert_called_once_with('uid1', parked['id'], expected_admitted_at=acquire.call_args.args[2])
+    assert _lazy_metric('enrich_started') == started_before
+    process.assert_not_called()

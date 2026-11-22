@@ -178,6 +178,8 @@ def test_valid_explicit_selection_reaches_processing_with_explicit_attribution()
 
 
 def test_lazy_enrichment_uses_non_user_usage_attribution(monkeypatch):
+    from concurrent.futures import Future
+
     conversation = {'id': 'c1', 'deferred': True, 'status': 'completed'}
     model = SimpleNamespace(language='en', deferred=True)
     monkeypatch.setattr(conv_router.lifecycle_service, 'reacquire_deferred_processing', lambda *_args: True)
@@ -186,7 +188,12 @@ def test_lazy_enrichment_uses_non_user_usage_attribution(monkeypatch):
     )
     monkeypatch.setattr(conv_router, 'deserialize_conversation', lambda _conversation: model)
     callbacks = []
-    monkeypatch.setattr(conv_router, 'submit_with_context', lambda _executor, function: callbacks.append(function))
+
+    def submit(_executor, function):
+        callbacks.append(function)
+        return Future()
+
+    monkeypatch.setattr(conv_router, 'submit_with_context', submit)
     with patch.object(conv_router, 'process_conversation', return_value=model) as process:
         result = conv_router._enrich_deferred_conversation('u1', conversation)
         callbacks[0]()
