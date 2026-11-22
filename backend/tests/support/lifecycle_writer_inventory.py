@@ -278,6 +278,13 @@ FIELD_SITES = {
                 'v3_rederive_live_run',
             ),
         ),
+        # Unmatched revoked native windows retire with their pending summary debt cleared.
+        (
+            'reconcile',
+            'summary_due_at',
+            'None',
+            ('deleted', 'home_hidden', 'summary_due_at', 'sync_content_revision', 'v3_derived', 'v3_process_pending'),
+        ),
         ('reconcile.plan', 'status', "'in_progress'", ('status',)),
         ('reconcile.plan', 'status', "prior['status']", ('status',)),
         ('recording_short_path.guarded', 'status', 'ConversationStatus.completed', ('status',)),
