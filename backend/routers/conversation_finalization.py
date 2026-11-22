@@ -30,6 +30,7 @@ from utils.conversations.recovery import RecoveryStructureUnavailableError, reco
 from utils.conversations.finalizer import (
     ConversationFinalizationDisposition,
     ConversationFinalizationError,
+    ServerBatchArchiveNotClosed,
     finalize_persisted_conversation,
 )
 from utils.executors import db_executor, postprocess_executor, run_blocking
@@ -387,10 +388,12 @@ async def run_listen_finalization_job(
         raise
     except Exception as error:
         logger.warning(
-            'listen finalization worker failed stage=handler exception_type=%s job_hash=%s dispatch_generation=%s',
+            'listen finalization worker failed stage=handler exception_type=%s job_hash=%s dispatch_generation=%s '
+            'reason=%s',
             type(error).__name__,
             finalization_diagnostic_id(job_id),
             dispatch_generation,
+            'server_batch_archive_not_closed' if isinstance(error, ServerBatchArchiveNotClosed) else 'worker_failed',
         )
         if claimed_lease_epoch is not None:
             try:
