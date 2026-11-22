@@ -249,7 +249,9 @@ env:
   - name: PLAYBACK_ON_DEMAND_ENABLED
     value: "true"
   - name: SYNC_POLL_BACKOFF_ENABLED
-    value: "false"
+    value: "true"
+  - name: SYNC_POLL_BACKOFF_PERCENT
+    value: "5"
   - name: AUDIO_ARCHIVE_LIVE_ENABLED
     value: "true"
   - name: AUDIO_ARCHIVE_READ_ENABLED

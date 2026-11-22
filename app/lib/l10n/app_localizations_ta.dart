@@ -15825,4 +15825,12 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get stillWorkingOnIt => 'இன்னும் அதில் வேலை செய்யப்படுகிறது.';
+
+  @override
+  String get firmwareUpdateFirmwareTooOld =>
+      'உங்கள் சாதனத்தின் ஃபர்ம்வேர் இந்தப் புதுப்பிப்புக்கு மிகவும் பழையதாக உள்ளது. சாதனத்தைப் புதுப்பிக்க உதவி பெற ஆதரவைத் தொடர்புகொள்ளவும்.';
+
+  @override
+  String get firmwareUpdateAppRequired =>
+      'இந்த ஃபர்ம்வேர் புதுப்பிப்புக்கு Omi ஆப்பின் புதிய பதிப்பு தேவை. உங்கள் ஆப் ஸ்டோரிலிருந்து ஆப்பைப் புதுப்பித்து, மீண்டும் சரிபார்க்கவும்.';
 }

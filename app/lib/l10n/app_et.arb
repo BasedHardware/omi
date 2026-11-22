@@ -4735,5 +4735,7 @@
     "conversationLiveNoEdits": "Oota, kuni see lõpeb, et seda muuta.",
     "finishedSummaryReady": "Kokkuvõte on valmis",
     "writingSummaryStatus": "Kirjutan kokkuvõtet…",
-    "stillWorkingOnIt": "Töötame veel selle kallal."
+    "stillWorkingOnIt": "Töötame veel selle kallal.",
+    "firmwareUpdateFirmwareTooOld": "Teie seadme püsivara on selle värskenduse jaoks liiga vana. Seadme värskendamiseks abi saamiseks võtke ühendust klienditoega.",
+    "firmwareUpdateAppRequired": "See püsivara värskendus vajab Omi rakenduse uuemat versiooni. Värskendage rakendust oma rakenduste poes ja kontrollige seejärel uuesti."
 }

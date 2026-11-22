@@ -61,7 +61,6 @@ from database.firestore_read_metrics import FirestoreReadSite
 from database.legal_holds import DestructiveOperationInProgress, LegalHoldActive, LegalHoldAuthorityUnavailable
 from database.sync_bridges import mark_sync_bridge_cleaned
 from utils.cloud_tasks import is_audio_merge_dispatch_enabled
-from utils.episodes.boundaries import merge_allowed
 from utils.conversations.action_item_refresh import transfer_donor
 from utils.sync import processing_hold
 from utils.enrichment import outbox as enrichment_outbox
@@ -458,9 +457,6 @@ def _decide(
         return None
     survivor = dict(survivor, id=survivor_id)
     survivor_segments = _segments(survivor)
-    if not merge_allowed(uid, survivor, new_row):
-        _skip(mode, 'boundary', uid, conversation_id)
-        return None
     if smart_merge_db.has_intervening_discarded(uid, survivor, new_row):
         _skip(mode, SkipReason.INTERVENING_DISCARDED, uid, conversation_id)
         return None

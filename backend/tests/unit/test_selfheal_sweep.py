@@ -322,6 +322,30 @@ def test_noop_route_from_admission_counts_as_refused(capsys):
     assert refused_events[0]['reason'] == 'refused_not_stale'
 
 
+def test_sweep_revisits_archive_after_late_close(capsys):
+    data = _eligible_data(
+        record_lane_owner='batch_live_v1',
+        server_batch_only=True,
+        server_batch_audio_received=True,
+        has_content=False,
+        audio_files=[{'id': 'retained-audio'}],
+    )
+    state, kwargs = _harness([_row('u1', 'c1', data)], mode='heal')
+
+    assert sweep.run_selfheal_tick(**kwargs)['enqueued'] == 0
+    assert state['finalization_calls'] == []
+    assert any(
+        event.get('reason') == 'server_batch_archive_unready' and event.get('outcome') == 'skipped'
+        for event in _stdout_events(capsys)
+    )
+
+    data.update(
+        has_content=True, server_batch_audio_start=1000, server_batch_audio_end=1002, server_batch_audio_closed=True
+    )
+    assert sweep.run_selfheal_tick(**kwargs)['enqueued'] == 1
+    assert len(state['finalization_calls']) == 1
+
+
 def test_dispatch_unavailable_is_a_refusal_not_an_enqueue():
     rows = [_row('u1', 'c1', _eligible_data())]
     state, kwargs = _harness(rows, mode='heal')

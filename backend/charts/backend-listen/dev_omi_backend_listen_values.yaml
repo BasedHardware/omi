@@ -269,6 +269,8 @@ env:
     value: "300"
   - name: SYNC_POLL_BACKOFF_ENABLED
     value: "false"
+  - name: SYNC_POLL_BACKOFF_PERCENT
+    value: "0"
   - name: BATCH_PIPELINE_AUTHORITATIVE_LABELS_ENABLED
     value: "false"
   - name: BATCH_PIPELINE_LIVE_ADMISSION_ENABLED
@@ -577,8 +579,6 @@ env:
     value: "parakeet,modulate-velma-2"
   - name: PRERECORDED_SONIOX_FAILOVER_ENABLED
     value: "true"
-  - name: STT_RESILIENT_RECONNECT
-    value: "false"
   - name: STT_LIVE_DEMAND_ENABLED
     value: "false"
   - name: STT_LIVE_DEMAND_PERCENT
@@ -615,8 +615,6 @@ env:
     value: "1"
   - name: PARAKEET_WINDOW_POST_TIMEOUT_SECONDS
     value: "8"
-  - name: PARAKEET_WINDOW_DIARIZATION
-    value: "false"
   - name: PARAKEET_WINDOW_DEADLINE_CUT_POST_LATENCY_SECONDS
     value: "1.2"
   - name: PARAKEET_WINDOW_PACE_SECONDS

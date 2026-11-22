@@ -4777,5 +4777,7 @@
     "conversationLiveNoEdits": "Vent til den er slut, før du ændrer den.",
     "finishedSummaryReady": "Opsummering klar",
     "writingSummaryStatus": "Skriver opsummering…",
-    "stillWorkingOnIt": "Vi arbejder stadig på det."
+    "stillWorkingOnIt": "Vi arbejder stadig på det.",
+    "firmwareUpdateFirmwareTooOld": "Din enheds firmware er for gammel til denne opdatering. Kontakt support for at få hjælp til at opdatere din enhed.",
+    "firmwareUpdateAppRequired": "Denne firmwareopdatering kræver en nyere version af Omi-appen. Opdater appen fra din appbutik, og søg derefter efter opdateringer igen."
 }

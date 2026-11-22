@@ -24,28 +24,13 @@ DECISIONS = {"pending", "graduate", "ship", "kill", "kill_after_readout", "keep"
 TERMINALS = {"on", "off", "keep", "undecided"}
 REVIEW_GRACE_DAYS = 7
 RAMP_REQUIRED_FROM = date(2026, 10, 21)
-# Temporary migration debt; relabel these opt-in controls in the registry sweep.
-OPS_KILL_DEFAULT_OFF_ALLOWLIST_EXPIRES = date(2026, 11, 29)
-OPS_KILL_DEFAULT_OFF_ALLOWLIST = {
-    "BATCH_FINAL_PASS_PERCENT",
-    "BATCH_PIPELINE_PROJECTION_GHOST_SETTLE_ENABLED",
-    "BATCH_PIPELINE_PROJECTION_RESTORABLE_CAP_EXPIRY_ENABLED",
-    "BATCH_PIPELINE_WORKER_ENABLED",
-    "CAP_HOLD_DURABLE_REDRIVE_ENABLED",
-    "CAP_HOLD_FLEET_SNAPSHOT_ENABLED",
-    "CAP_HOLD_LIVE_FRAGMENT_ENABLED",
-    "CAP_HOLD_REDRIVE_PARALLEL_DRAIN_ENABLED",
-    "EPISODE_F_JOIN_ENABLED",
-    "EPISODE_F_JOIN_PERCENT",
-    "FAIR_USE_ENABLED",
-    "MEMORY_ENABLED",
+# DEC-BTR-001 keeps these two fail-closed allocation controls as permanent
+# ops_kill flags: production declares 100 explicitly and zero withdraws the leg.
+OPS_KILL_DEFAULT_OFF_ALLOWLIST = frozenset({
     "PARAKEET_STREAM_ALLOCATION_PERCENT",
     "PARAKEET_WINDOW_ALLOCATION_PERCENT",
-    "PLAYBACK_MANIFEST_RECOVERY_ENABLED",
-    "RECORD_GAP_FILL",
-    "STT_GPU_FLEET_OFF",
-    "STT_STREAMING_PARAKEET_SLOT_ENABLED",
-}
+})
+
 
 POSTHOG_ROLES = {"enable", "kill", "exposure", "payload"}
 FLAG_SUFFIX = re.compile(r"(?:_ENABLED|_MODE|_KILL_SWITCH|_COHORT|_PERCENT|_PAUSED|_STOP|_SHADOW(?:_[A-Z0-9]+)?)$")
@@ -268,10 +253,6 @@ def validate_registry(
                     if key not in OPS_KILL_DEFAULT_OFF_ALLOWLIST:
                         errors.append(
                             f"{key}: ops_kill must default on (off is the kill); use rollout or config_switch"
-                        )
-                    elif current_date > OPS_KILL_DEFAULT_OFF_ALLOWLIST_EXPIRES:
-                        errors.append(
-                            f"ops_kill default-off exception expired {OPS_KILL_DEFAULT_OFF_ALLOWLIST_EXPIRES}: {key}"
                         )
                 if _ramp_applies_to(entry) and "ramp" not in entry:
                     try:

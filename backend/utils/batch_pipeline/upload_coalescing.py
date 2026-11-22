@@ -66,6 +66,7 @@ def member_status(store, uid, intake, read_status):
             **queued(intake),
             'status': 'completed',
             'result': content['result'],
+            'completed_at': content.get('completed_at'),
             'total_segments': intake['original_units'],
             'processed_segments': intake['original_units'],
             'successful_segments': intake['original_units'],
@@ -82,7 +83,7 @@ def member_status(store, uid, intake, read_status):
     result = status.get('result') if complete else None
     if result is not None:
         result = {**result, 'total_segments': intake['original_units']}
-        rows.checkpoint_completion(store, intake, result, time.time())
+        rows.checkpoint_completion(store, intake, result, time.time(), completed_at=status.get('completed_at'))
     return {
         **status,
         'job_id': intake['job_id'],

@@ -268,6 +268,7 @@ def with_memory_env(payload: str) -> str:
         {"name": "PLAYBACK_ON_DEMAND_ENABLED", "value": "true"},
         {"name": "REPEAT_WORK_LLM_VERSION", "value": "2026-10-16-v1"},
         {"name": "SYNC_POLL_BACKOFF_ENABLED", "value": "false"},
+        {"name": "SYNC_POLL_BACKOFF_PERCENT", "value": "0"},
         {"name": "SYNC_RECORD_COVERAGE_WAIT_MEMO", "value": "true"},
         {"name": "SYNC_RECORD_WAIT_MEMO_FIRST", "value": "true"},
         {"name": "SYNC_RECORD_DECODE_FAILURE_MEMO", "value": "true"},
@@ -4227,23 +4228,26 @@ def test_cloud_run_runtime_rejects_missing_listener_close_binding(tmp_path, key,
     }
 
 
-@pytest.mark.parametrize('environment', ['dev', 'prod'])
-def test_future_capture_admissions_default_off_until_reader_rollout(environment):
+@pytest.mark.parametrize(('environment', 'enabled'), [('dev', 'false'), ('prod', 'true')])
+def test_future_capture_clamp_respects_backend_preservation_pin(environment, enabled):
     config = yaml.safe_load((ROOT / 'deploy/runtime_env.yaml').read_text())['environments'][environment]
-    expected = {'value': 'false', 'category': 'rollout'}
-    hosts = [config['gke']['backend-listen'], *config['cloud_run']['services'].values()]
+    hosts = {'backend-listen': config['gke']['backend-listen'], **config['cloud_run']['services']}
     # SCA-3120: prod adds the derived projection pump as a sixth reader.
     assert len(hosts) == (6 if environment == 'prod' else 5)
     renderer = runpy.run_path(str(RENDERER_SCRIPT), run_name='future_capture_staged_renderer')
-    for host in hosts:
-        assert host['env']['SYNC_FUTURE_CAPTURE_CLAMP_ENABLED'] == expected
-        assert renderer['_render_env_entries']({'SYNC_FUTURE_CAPTURE_CLAMP_ENABLED': expected}) == [
-            {'name': 'SYNC_FUTURE_CAPTURE_CLAMP_ENABLED', 'value': 'false'}
+    for name, host in hosts.items():
+        # SCA-3555: backend keeps the live value until its SCA-3501 activation step.
+        host_value = 'false' if name == 'backend' else enabled
+        assert host['env']['SYNC_FUTURE_CAPTURE_CLAMP_ENABLED'] == {'value': host_value, 'category': 'rollout'}
+        # Render this host's own manifest entry (not the expected literal).
+        entry = {'SYNC_FUTURE_CAPTURE_CLAMP_ENABLED': host['env']['SYNC_FUTURE_CAPTURE_CLAMP_ENABLED']}
+        assert renderer['_render_env_entries'](entry) == [
+            {'name': 'SYNC_FUTURE_CAPTURE_CLAMP_ENABLED', 'value': host_value}
         ]
     values = yaml.safe_load((ROOT.parent / config['gke']['backend-listen']['values_file']).read_text())
     assert {entry['name']: entry.get('value') for entry in values['env']}[
         'SYNC_FUTURE_CAPTURE_CLAMP_ENABLED'
-    ] == 'false'
+    ] == enabled
 
 
 @pytest.mark.parametrize('service', ['all', 'backend-sync'])

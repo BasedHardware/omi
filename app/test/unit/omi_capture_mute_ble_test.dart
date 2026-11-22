@@ -1,9 +1,14 @@
+import 'package:flutter/foundation.dart';
+
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
+import 'package:omi/gen/pigeon_communicator.g.dart';
+import 'package:omi/services/bridges/ble_bridge.dart';
 import 'package:omi/services/devices.dart';
 import 'package:omi/services/devices/connectors/omi_connection.dart';
 import 'package:omi/services/devices/transports/device_transport.dart';
+import 'package:omi/services/devices/transports/native_ble_transport.dart';
 
 class _MuteTransport extends DeviceTransport {
   _MuteTransport({this.features = OmiFeatures.captureMute, this.muteValue = const [1]});
@@ -14,6 +19,8 @@ class _MuteTransport extends DeviceTransport {
   Object? featureReadError;
   bool acceptWrite = true;
   bool malformedFeatures = false;
+  int featureReadFailures = 0;
+  int featureReads = 0;
   final List<(String, String, List<int>)> writes = [];
 
   @override
@@ -37,6 +44,11 @@ class _MuteTransport extends DeviceTransport {
   @override
   Future<List<int>> readCharacteristic(String serviceUuid, String characteristicUuid) async {
     if (characteristicUuid == OmiDeviceConnection.featuresCharacteristicUuid) {
+      featureReads++;
+      if (featureReadFailures > 0) {
+        featureReadFailures--;
+        return [];
+      }
       if (featureReadError != null) throw featureReadError!;
       if (malformedFeatures) return [];
       return [
@@ -66,7 +78,27 @@ class _MuteTransport extends DeviceTransport {
   Future<void> dispose() async {}
 }
 
-OmiDeviceConnection _connection(_MuteTransport transport) {
+class _HostApi extends BleHostApi {
+  int reads = 0;
+  final writes = <String>[];
+
+  @override
+  Future<Uint8List> readCharacteristic(String peripheralUuid, String serviceUuid, String characteristicUuid) async {
+    reads++;
+    return Uint8List(0);
+  }
+
+  @override
+  Future<void> writeCharacteristic(
+      String peripheralUuid, String serviceUuid, String characteristicUuid, Uint8List value) async {
+    writes.add(characteristicUuid);
+  }
+
+  @override
+  Future<void> unsubscribeCharacteristic(String peripheralUuid, String serviceUuid, String characteristicUuid) async {}
+}
+
+OmiDeviceConnection _connection(DeviceTransport transport) {
   return OmiDeviceConnection(
     BtDevice(id: transport.deviceId, name: 'Omi', type: DeviceType.omi, rssi: -40),
     transport,
@@ -74,6 +106,7 @@ OmiDeviceConnection _connection(_MuteTransport transport) {
 }
 
 void main() {
+  setUp(() => OmiDeviceConnection.captureMuteRetryDelay = Duration.zero);
   test('capture mute owns 19B10015 / feature bit 10, not the device-name slot', () {
     // #13704 allocated 19B10014 / bit 9 for device name first. Mute must not
     // collide (BasedHardware/omi#14293 vs #13704).
@@ -134,5 +167,53 @@ void main() {
     await connection.setCaptureMuted(true);
     expect(transport.writes, isEmpty);
     expect(await connection.getCaptureMuted(), isNull);
+  });
+
+  test('a features read that fails once is retried before the pause is written', () async {
+    final transport = _MuteTransport()..featureReadFailures = 1;
+
+    await _connection(transport).setCaptureMuted(true);
+
+    expect(transport.featureReads, 2);
+    expect(transport.writes.single.$3, [1]);
+  });
+
+  test('a features read that fails twice still reaches the caller', () async {
+    final transport = _MuteTransport()..featureReadFailures = 2;
+
+    await expectLater(_connection(transport).setCaptureMuted(true), throwsStateError);
+    expect(transport.featureReads, 2);
+    expect(transport.writes, isEmpty);
+  });
+
+  group('native transport', () {
+    const uuid = 'AA:BB:CC:DD:EE:01';
+    late _HostApi host;
+    late NativeBleTransport transport;
+
+    setUp(() {
+      host = _HostApi();
+      transport = NativeBleTransport(uuid, hostApi: host);
+    });
+    tearDown(() => transport.dispose());
+
+    test('a discovered pendant without the features characteristic is legacy: no write, no error', () async {
+      BleBridge.instance.onDeviceReady(uuid, [
+        BleService(
+          uuid: OmiDeviceConnection.settingsServiceUuid,
+          characteristicUuids: [OmiDeviceConnection.settingsMuteCharacteristicUuid],
+        ),
+      ]);
+
+      await _connection(transport).setCaptureMuted(true);
+
+      expect(host.reads, 0);
+      expect(host.writes, isEmpty);
+    });
+
+    test('before discovery a missing characteristic is not mistaken for legacy firmware', () async {
+      await expectLater(_connection(transport).setCaptureMuted(true), throwsStateError);
+      expect(host.writes, isEmpty);
+    });
   });
 }

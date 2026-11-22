@@ -151,17 +151,6 @@ def _install_memory_change_heads() -> None:
 _install_memory_change_heads()
 
 
-def _install_list_projection_writer() -> None:
-    try:
-        from database.list_projection import install_list_projection_writer
-    except ImportError:
-        return
-    install_list_projection_writer()
-
-
-_install_list_projection_writer()
-
-
 def _install_batch_privacy_write_fence() -> None:
     # Legacy bare-Python hygiene runners replace Firestore with a file-less
     # ModuleType stub (there is no real SDK/write surface to fence there).

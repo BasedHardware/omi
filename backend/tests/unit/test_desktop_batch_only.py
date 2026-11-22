@@ -409,7 +409,10 @@ async def test_first_audio_marker_failure_keeps_buffered_original_for_shutdown_c
     ],
 )
 @pytest.mark.parametrize('status', [ConversationStatus.processing, ConversationStatus.completed])
-async def test_zero_preview_finalizer_registers_exact_language_bounds_before_completion(monkeypatch, trigger, status):
+@pytest.mark.parametrize('archive_closed', [False, True])
+async def test_zero_preview_finalizer_registers_exact_language_bounds_before_completion(
+    monkeypatch, trigger, status, archive_closed
+):
     row = capture()
     row.update(
         status=status.value,
@@ -421,6 +424,7 @@ async def test_zero_preview_finalizer_registers_exact_language_bounds_before_com
         has_content=True,
         server_batch_audio_start=1000,
         server_batch_audio_end=1002,
+        server_batch_audio_closed=archive_closed,
     )
     store = MemoryStore()
     model = SimpleNamespace(status=status, transcript_segments=[])

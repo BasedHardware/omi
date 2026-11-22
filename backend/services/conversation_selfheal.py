@@ -79,6 +79,7 @@ _ADMISSION_REFUSAL_REASONS = frozenset(
         'refused_account_deleting',
         'refused_recording_lease_unknown',
         'refused_no_content',
+        f'refused_{jobs_db.SERVER_BATCH_ARCHIVE_UNREADY}',
         'refused_oversized_audio_files',
     }
 )
