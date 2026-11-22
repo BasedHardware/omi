@@ -74,6 +74,7 @@ from models.conversation_enums import ConversationSource, ConversationStatus
 from models.structured import Structured
 from models.transcript_segment import TranscriptSegment
 from testing.import_isolation import AutoMockModule, load_module_fresh, stub_modules
+from tests.unit.memory_import_isolation import make_database_client_stub
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 from tests.support.dream_firestore import DreamFirestore
 from tests.support.transcript_correction_store import install_store, target_updates, read
@@ -106,10 +107,7 @@ def _build_fakes() -> dict[str, ModuleType]:
     database_pkg.__path__ = [str(_BACKEND / 'database')]  # type: ignore[attr-defined]
     add('database', database_pkg)
 
-    client_mod = ModuleType('database._client')
-    client_mod.db = MagicMock(name='db')
-    client_mod.get_firestore_client = lambda: client_mod.db
-    client_mod.get_data_plane_firestore_client = lambda: client_mod.db
+    client_mod = make_database_client_stub()
     client_mod.document_id_from_seed = lambda seed: 'seed-id'
     client_mod.run_transactional = MagicMock()
     add('database._client', client_mod)

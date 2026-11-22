@@ -33,6 +33,7 @@ from models.conversation_enums import ConversationSource, ConversationStatus
 from models.structured import Structured
 from models.transcript_segment import TranscriptSegment
 from testing.import_isolation import AutoMockModule, load_module_fresh, stub_modules
+from tests.unit.memory_import_isolation import make_database_client_stub
 
 BACKEND_DIR = Path(__file__).resolve().parent.parent.parent
 
@@ -51,9 +52,6 @@ def _build_fakes() -> dict[str, ModuleType]:
     because they are not exercised by the tracking-context logic under test. ``models.*`` and
     ``fastapi`` stay real (they are import-pure Pydantic schemas / the framework).
     """
-    import hashlib
-    import uuid
-
     fakes: dict[str, ModuleType] = {}
 
     def add(name: str, mod: ModuleType) -> ModuleType:
@@ -69,16 +67,7 @@ def _build_fakes() -> dict[str, ModuleType]:
     database_pkg.__path__ = [str(BACKEND_DIR / "database")]  # type: ignore[attr-defined]
     add("database", database_pkg)
 
-    client_mod = ModuleType("database._client")
-    client_mod.db = MagicMock(name="db")
-    client_mod.get_firestore_client = lambda: client_mod.db
-    client_mod.get_data_plane_firestore_client = lambda: client_mod.db
-
-    def _document_id_from_seed(seed: str) -> str:
-        seed_hash = hashlib.sha256(seed.encode("utf-8")).digest()
-        return str(uuid.UUID(bytes=seed_hash[:16], version=4))
-
-    client_mod.document_id_from_seed = _document_id_from_seed
+    client_mod = make_database_client_stub()
     client_mod.run_transactional = MagicMock()
     add("database._client", client_mod)
 
