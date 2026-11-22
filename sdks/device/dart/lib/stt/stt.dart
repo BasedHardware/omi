@@ -56,7 +56,8 @@ class DeepgramTranscriber implements StreamingTranscriber {
     this.drainTimeout = const Duration(seconds: 5),
     WebSocketChannel? channel,
   }) {
-    _channel = channel ??
+    _channel =
+        channel ??
         IOWebSocketChannel.connect(
           Uri.parse(deepgramWsUrl(sampleRate: sampleRate)),
           headers: {'Authorization': 'Token $apiKey'},
