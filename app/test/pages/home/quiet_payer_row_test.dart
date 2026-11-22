@@ -11,12 +11,19 @@ import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/gen/payments_wire.g.dart' as wire;
 import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/l10n/app_localizations.dart';
+import 'package:omi/models/local_recording.dart';
 import 'package:omi/models/subscription.dart';
 import 'package:omi/pages/home/widgets/quiet_payer_row.dart';
+import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/device_provider.dart';
+import 'package:omi/providers/local_recordings_provider.dart';
+import 'package:omi/providers/sync_provider.dart';
+import 'package:omi/services/wals/wal.dart';
+import 'package:omi/ui/ui.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/utils/analytics/analytics_manager.dart';
+import 'package:omi/utils/enums.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 
 import '../../spine/c7_registry_test.dart' show RecordingAdapter;
@@ -70,12 +77,50 @@ class _FakeDevice extends ChangeNotifier implements DeviceProvider {
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
+/// Only what the in-flight gate reads; the real providers need the capture and WAL service stacks.
+class _FakeCapture extends ChangeNotifier implements CaptureProvider {
+  @override
+  RecordingState recordingState = RecordingState.stop;
+  @override
+  String? liveCaptureSource;
+  @override
+  bool isPhoneMicBatchRecording = false;
+  @override
+  bool get isPhoneMicPaused => false;
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+class _FakeRecordings extends ChangeNotifier implements LocalRecordingsProvider {
+  @override
+  List<LocalRecording> recordings = [];
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+class _FakeSync extends ChangeNotifier implements SyncProvider {
+  @override
+  List<Wal> missingWalsOnDevice = [];
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+class _FakeRecording extends Fake implements LocalRecording {}
+
+class _FakeWal extends Fake implements Wal {}
+
 class _World {
   _World(UserSubscriptionResponse response) : usage = UsageProvider(subscriptionRequest: () async => response);
 
   final UsageProvider usage;
   final conversations = ConversationProvider(isSignedIn: () => false);
   final device = _FakeDevice();
+  final capture = _FakeCapture();
+  final held = _FakeRecordings();
+  final sync = _FakeSync();
   int monthlyReads = 0;
 }
 
@@ -88,6 +133,7 @@ Future<_World> _pump(
   BtDevice? remembered,
   BtDevice? connected,
   double textScale = 1,
+  void Function(_World)? before,
 }) async {
   final world = _World(response ?? _response());
   addTearDown(world.usage.dispose);
@@ -95,6 +141,7 @@ Future<_World> _pump(
   world.conversations.conversations = conversations ?? [_conversation('old', const Duration(days: 6))];
   world.device.pairedDevice = paired ?? _omi;
   world.device.connectedDevice = connected;
+  before?.call(world);
   final row = QuietPayerRow(
     loadMonthlyPayer: () async {
       world.monthlyReads++;
@@ -109,6 +156,9 @@ Future<_World> _pump(
         ChangeNotifierProvider<UsageProvider>.value(value: world.usage),
         ChangeNotifierProvider<ConversationProvider>.value(value: world.conversations),
         ChangeNotifierProvider<DeviceProvider>.value(value: world.device),
+        ChangeNotifierProvider<CaptureProvider>.value(value: world.capture),
+        ChangeNotifierProvider<LocalRecordingsProvider>.value(value: world.held),
+        ChangeNotifierProvider<SyncProvider>.value(value: world.sync),
       ],
       child: MaterialApp(
         localizationsDelegates: AppLocalizations.localizationsDelegates,
@@ -121,6 +171,7 @@ Future<_World> _pump(
       ),
     ),
   );
+  await tester.pump();
   await tester.pump();
   return world;
 }
@@ -232,6 +283,57 @@ void main() {
     expect(check.right, lessThanOrEqualTo(402));
   });
 
+  group('shows nothing while something is being recorded or is on its way', () {
+    final signals = <String, void Function(_World)>{
+      'a phone-mic capture is live': (w) => w.capture.recordingState = RecordingState.record,
+      'a pendant or call capture is live': (w) => w.capture.liveCaptureSource = 'call',
+      'a phone-mic batch recording is running': (w) => w.capture.isPhoneMicBatchRecording = true,
+      'a conversation is processing': (w) =>
+          w.conversations.processingConversations = [_conversation('processing', const Duration(minutes: 1))],
+      'a held recording exists': (w) => w.held.recordings = [_FakeRecording()],
+      'pendant audio is waiting to sync': (w) => w.sync.missingWalsOnDevice = [_FakeWal()],
+    };
+    for (final entry in signals.entries) {
+      testWidgets('when ${entry.key}, and the plan is not read', (tester) async {
+        final world = await _pump(tester, before: entry.value);
+        expect(_row, findsNothing);
+        expect(world.monthlyReads, 0);
+      });
+      testWidgets('the row leaves when ${entry.key}', (tester) async {
+        final world = await _pump(tester);
+        expect(_row, findsOneWidget);
+        await _rebuild(tester, () {
+          entry.value(world);
+          world.capture.notifyListeners();
+          world.conversations.notifyListeners();
+          world.held.notifyListeners();
+          world.sync.notifyListeners();
+        });
+        expect(_row, findsNothing);
+      });
+    }
+  });
+
+  testWidgets('a refresh in flight keeps the row; a first load with no answer shows nothing', (tester) async {
+    final world = await _pump(tester);
+    expect(_row, findsOneWidget);
+    await _rebuild(tester, () => world.conversations.setLoadingConversations(true));
+    expect(_row, findsOneWidget);
+    await _rebuild(tester, () => world.conversations.setLoadingConversations(false));
+    expect(_row, findsOneWidget);
+
+    QuietPayerRow.resetSession();
+    await tester.pumpWidget(const SizedBox());
+    await _pump(tester, before: (w) => w.conversations.setLoadingConversations(true));
+    expect(_row, findsNothing);
+  });
+
+  testWidgets('Check is a secondary action, not the primary pill', (tester) async {
+    await _pump(tester);
+    final check = tester.widget<OmiButton>(find.byKey(const ValueKey('quiet_payer_check')));
+    expect(check.variant, OmiButtonVariant.secondary);
+  });
+
   group('shows nothing', () {
     final cases = <String, Future<void> Function(WidgetTester)>{
       'for a yearly payer': (t) => _pump(t, monthly: false),
@@ -259,12 +361,9 @@ void main() {
       });
     }
 
-    testWidgets('while the conversation list is loading or failed', (tester) async {
+    testWidgets('when the conversation list failed to load', (tester) async {
       final world = await _pump(tester);
-      await _rebuild(tester, () => world.conversations.setLoadingConversations(true));
-      expect(_row, findsNothing);
       await _rebuild(tester, () {
-        world.conversations.setLoadingConversations(false);
         world.conversations.conversationsLoadFailed = true;
         world.conversations.notifyListeners();
       });
