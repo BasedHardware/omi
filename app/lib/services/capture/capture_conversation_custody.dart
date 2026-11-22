@@ -86,6 +86,8 @@ extension _CaptureConversationCustody on CaptureController {
           await phone.stampConversationId(start, id);
         }
       } catch (error, stack) {
+        // Observing a failed snapshot must not detach this slot from earlier admitted stamps.
+        if (predecessor != null) await predecessor;
         // A failed write leaves recoverable audio and must not poison later close slots.
         Logger.debug('Conversation WAL close failed: ${error.runtimeType}');
         await _reportDetachedCaptureError(
