@@ -2,18 +2,13 @@
 
 from __future__ import annotations
 
-import os
-import asyncio
-import time
 from collections import deque
 from typing import Any, Callable, Literal, cast
 
 from config.live_stt_recovery import recovery_enabled as _env_recovery_enabled
 from config.live_stt_recovery import session_recovery_enabled
-from config.stt_provider_policy import provider_for_service
 
 from utils.stt.live_metrics import (
-    RECONNECT,
     REPLAY_SECONDS,
     WINDOW_REPLAY_SAFE_TRIMS,
     REPLAY_WALL,
@@ -28,27 +23,14 @@ from utils.stt.replay_delivery import (
     REPLAY_PACKET_BYTES,
     family,
     clock,
-    abort_replay_socket,
     await_frozen_writes,
-    bounded_snapshot,
-    socket_replay_limits,
 )
-from utils.stt.provider_resilience import fallback_socket_is_serving
-from utils.stt.live_failure import PendingLiveFailover, settle_terminal_socket
 from utils.stt.live_reason import LOCAL_DELIVERY_REPLAY_SEND_STALLED
-from utils.stt.socket import release_live_stt_socket
 
 RING_SECONDS = 15
 RECOVERY_CAPTURE_SECONDS = 150
 # Keep a full default replay horizon of recent VAD-negative capture, not just pre-roll.
 WINDOW_SILENCE_TAIL_SECONDS = 15
-MAX_RECONNECTS = 3
-MAX_RECONNECTS_PER_MINUTE = 2
-MAX_REPLAY_SECONDS = 30
-
-
-def enabled() -> bool:
-    return os.getenv('STT_RESILIENT_RECONNECT', 'false').lower() == 'true'
 
 
 class ResilientAudio:
@@ -67,9 +49,6 @@ class ResilientAudio:
         self._chunks: deque[tuple[int, bytes]] = deque()
         self._end_sample = 0
         self.finalized_sample = 0
-        self._attempts: deque[float] = deque()
-        self._total_attempts = 0
-        self._replayed_samples = 0
         self.on_cut: Callable[[int], None] | None = None
         self._recovery_enabled = recovery_enabled if recovery_enabled is not None else _env_recovery_enabled()
 
@@ -160,26 +139,7 @@ class ResilientAudio:
     def snapshot(self) -> tuple[tuple[int, bytes], ...]:
         return tuple(self._chunks)
 
-    def admit(self, provider: str, reason: str, *, samples: int | None = None) -> bool:
-        now = time.monotonic()
-        while self._attempts and now - self._attempts[0] >= 60:
-            self._attempts.popleft()
-        if samples is None:
-            samples = sum(len(data) // 2 for _, data in self._chunks)
-        if (
-            self._total_attempts >= MAX_RECONNECTS
-            or len(self._attempts) >= MAX_RECONNECTS_PER_MINUTE
-            or self._replayed_samples + samples > MAX_REPLAY_SECONDS * self.sample_rate
-        ):
-            RECONNECT.labels(provider=provider, reason=reason, outcome='limited').inc()
-            return False
-        self._total_attempts += 1
-        self._attempts.append(now)
-        RECONNECT.labels(provider=provider, reason=reason, outcome='attempt').inc()
-        return True
-
     def record_replay(self, provider: str, samples: int) -> None:
-        self._replayed_samples += samples
         REPLAY_SECONDS.labels(provider=provider).inc(samples / self.sample_rate)
 
     def close(self) -> None:
@@ -277,26 +237,6 @@ def window_replay_action(
     return 'failover'
 
 
-def filter_replayed_segments(
-    segments: list[dict[str, Any]],
-    provider: str | None,
-    *,
-    soniox: ResilientAudio | None,
-    cutoff: int,
-) -> list[dict[str, Any]]:
-    if soniox is None or provider != 'soniox':
-        return segments
-    kept = []
-    for segment in segments:
-        end = segment.get('_capture_end_sample')
-        if isinstance(end, int) and end <= cutoff:
-            continue
-        if isinstance(end, int):
-            soniox.finalize_through(end)
-        kept.append(segment)
-    return kept
-
-
 class ReplayFilterMixin:
     host: Any
 
@@ -320,13 +260,8 @@ class ReplayFilterMixin:
                     if ring.finalize_through(end):
                         WINDOW_REPLAY_SAFE_TRIMS.inc()
                 kept.append(segment)
-            segments = kept
-        return filter_replayed_segments(
-            segments,
-            provider,
-            soniox=getattr(self, '_resilient_audio', None),
-            cutoff=getattr(self, '_replay_cutoff_sample', 0),
-        )
+            return kept
+        return segments
 
 
 def socket_is_finishing(socket: Any, *, include_unmanaged_finishing: bool = False) -> bool:
@@ -363,134 +298,12 @@ def retire_window_replay_socket(receiver: Any, socket: Any) -> None:
         retire()
 
 
-async def reconnect_live_stt_socket(receiver: Any) -> bool:
-    """Use the complete window obligation, with the existing reconnect budget."""
-    ring = receiver._resilient_audio
-    socket = receiver.stt_socket
-    if (
-        ring is None
-        or socket is None
-        or provider_for_service(receiver.host.stt_service) != 'soniox'
-        or receiver.host.is_multi_channel
-        or receiver.host.use_custom_stt
-        or not receiver.host.state.active
-        or receiver.host.state.stt_terminal_failure
-        or receiver._stt_rebuild is None
-        or getattr(receiver, '_resilient_closing', False)
-        or socket_is_finishing(socket)
-    ):
-        return False
-    reason = getattr(socket, 'typed_death_reason', None)
-    if reason not in {'soniox_rotation', 'provider_5xx', 'connection_lost'}:
-        return False
-    if reason == 'connection_lost' and not str(getattr(socket, 'death_reason', '')).startswith('ws '):
-        return False
-    replay_ring = receiver._window_ring() or ring
-    identity = getattr(socket, 'routing_target', None) or 'soniox'
-    if not receiver.recovery.grant_soniox_reentry(identity):
-        RECONNECT.labels(provider='soniox', reason=reason, outcome='limited').inc()
-        return False
-    RECONNECT.labels(provider='soniox', reason=reason, outcome='attempt').inc()
-    receiver._settle_pending_live_failover_failure(continuing=True)
-    hop = PendingLiveFailover.from_socket(socket, 'soniox', 'soniox')
-    retire_window_replay_socket(receiver, socket)
-    try:
-        await abort_replay_socket(socket)
-    except Exception:
-        pass
-    finally:
-        # Direct sockets carry a lease here; managed sockets release their
-        # own gauge in finish(), and release_live_stt_socket is idempotent.
-        release_live_stt_socket(socket)
-    await asyncio.sleep(0)  # deliver the dead socket's last finalized callback
-    if not receiver.host.state.active or receiver.host.state.stt_terminal_failure:
-        hop.note_failure(None)
-        RECONNECT.labels(provider='soniox', reason=reason, outcome='teardown').inc()
-        return False
-    receiver._replay_ingesting = True
-    limits = socket_replay_limits(socket)
-    replay = bounded_snapshot(replay_ring, 'soniox', 'soniox', rate=limits.rate, birth=receiver._live_birth)
-    for packet in receiver._replay_live_tail:
-        receiver._live_birth.note(packet.start, packet.start + len(packet.data) // 2, packet.received)
-    receiver._replay_live_tail.clear()
-    receiver._replay_tail_bytes = 0
-    receiver._window_replay_cutoff_sample = replay_ring.finalized_sample
-    receiver._replay_cutoff_sample = replay_ring.finalized_sample
-    parakeet_callback, modulate_callback, epoch = receiver._stt_rebuild[0]()
-    if epoch is not None:
-        epoch.replay_origin_sample = replay[0][0] if replay else replay_ring.finalized_sample
-    raw = None
-    try:
-        try:
-            async with asyncio.timeout(max(0.0, receiver.recovery.dial_budget())):
-                raw = await receiver._create_stt_socket(
-                    parakeet_callback,
-                    receiver._stt_rebuild[1],
-                    modulate_callback=modulate_callback,
-                    epoch=epoch,
-                    same_provider=True,
-                    replay_start_sample=replay[0][0] if replay else replay_ring.finalized_sample,
-                )
-                serving = raw is not None and await fallback_socket_is_serving(raw)
-        except TimeoutError:
-            serving = False
-        if not serving:
-            if raw is not None:
-                retire_window_replay_socket(receiver, raw)
-                if receiver.host.state.active and not receiver.host.state.stt_terminal_failure:
-                    settle_terminal_socket(raw, 'soniox', 'connection_lost')
-                await abort_replay_socket(raw)
-            raise RuntimeError('Soniox reconnect refused')
-        adopted = await receiver._pump_replacement(
-            raw,
-            epoch,
-            hop,
-            replay,
-            replay_ring,
-            None,
-            sample_rate=receiver._stt_rebuild[1],
-            limits=socket_replay_limits(raw),
-            dead_provider='soniox',
-            meter_source=ring,
-        )
-        if not adopted:
-            if (
-                receiver.recovery.client_has_left()
-                or not receiver.host.state.active
-                or receiver.host.state.stt_terminal_failure
-            ):
-                retire_window_replay_socket(receiver, raw)
-                await abort_replay_socket(raw)
-                hop.note_failure(None, continuing=True)
-                RECONNECT.labels(provider='soniox', reason=reason, outcome='teardown').inc()
-                return False
-            raise RuntimeError('Soniox replay send failed')
-    except asyncio.CancelledError:
-        hop.note_failure(None)
-        if raw is not None:
-            retire_window_replay_socket(receiver, raw)
-            await abort_replay_socket(raw)
-        raise
-    except Exception:
-        if raw is not None:
-            retire_window_replay_socket(receiver, raw)
-            if receiver.host.state.active and not receiver.host.state.stt_terminal_failure:
-                settle_terminal_socket(raw, 'soniox', 'send_failed')
-            await abort_replay_socket(raw)
-        hop.note_failure(None, continuing=True)
-        RECONNECT.labels(provider='soniox', reason=reason, outcome='failed').inc()
-        return False
-    RECONNECT.labels(provider='soniox', reason=reason, outcome='connected').inc()
-    return True
-
-
 async def replay_chunks(
     socket: Any,
     chunks: tuple[tuple[int, bytes], ...],
     *,
     source: ResilientAudio | None,
     provider: str,
-    soniox: ResilientAudio | None,
     is_active: Callable[[], bool] = lambda: True,
     pacer: ReplayPacer | None = None,
     deadline: float | None = None,
@@ -519,7 +332,6 @@ async def replay_chunks(
         else min(deadline, began + _replay_delivery.REPLAY_PREFIX_SECONDS)
     )
     pacer.deadline = end
-    accepted_chunks: list[tuple[int, bytes]] = []
     position = chunks[0][0] if chunks else source.finalized_sample
     expired = False
     try:
@@ -532,8 +344,6 @@ async def replay_chunks(
                 break
             if not await pacer.send(socket, data, start, is_active, replay=True):
                 return start
-            if soniox is not None:
-                accepted_chunks.append((start, data))
             source.record_replay(provider, len(data) // 2)
             REPLAY_AUDIO.labels(**labels).inc(len(data) / (2 * source.sample_rate))
         if not expired and await_writes and not await await_frozen_writes(socket, end):
@@ -549,9 +359,6 @@ async def replay_chunks(
                 if callable(mark):
                     mark('replay wall budget exhausted', typed_reason=LOCAL_DELIVERY_REPLAY_SEND_STALLED)
             return position
-        if soniox is not None:
-            for start, data in accepted_chunks:
-                soniox.append(data, start)
         return None
     finally:
         pacer.deadline = None

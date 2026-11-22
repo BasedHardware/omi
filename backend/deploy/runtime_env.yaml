@@ -217,7 +217,6 @@ environments:
           DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED: {value: 'false', category: rollout}
           DEMAND_PROCESSING_UID_ALLOWLIST: {value: '', category: rollout}
           DEMAND_PROCESSING_PERCENT: {value: '0', category: rollout}
-          STT_RESILIENT_RECONNECT: {value: 'false', category: rollout}
           STT_LIVE_DEMAND_ENABLED: {category: rollout, value: 'false'}
           STT_LIVE_DEMAND_PERCENT: {value: '0', category: rollout}
           STT_LIVE_DEMAND_UID_ALLOWLIST: {category: rollout, value: ''}
@@ -238,7 +237,6 @@ environments:
             value: '1'
           PARAKEET_WINDOW_MAX_SESSIONS: {category: rollout, value: '1'}
           PARAKEET_WINDOW_POST_TIMEOUT_SECONDS: {value: '8', category: rollout}
-          PARAKEET_WINDOW_DIARIZATION: {value: 'false', category: rollout}
           PARAKEET_WINDOW_DEADLINE_CUT_POST_LATENCY_SECONDS:
             value: '1.2'
             category: reliability
@@ -3173,7 +3171,6 @@ environments:
           DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED: {value: 'false', category: rollout}
           DEMAND_PROCESSING_UID_ALLOWLIST: {value: '', category: rollout}
           DEMAND_PROCESSING_PERCENT: {value: '0', category: rollout}
-          STT_RESILIENT_RECONNECT: {value: 'false', category: rollout}
           STT_LIVE_DEMAND_ENABLED: {category: rollout, value: 'true'}
           STT_LIVE_DEMAND_PERCENT: {value: '0', category: rollout}
           STT_LIVE_DEMAND_UID_ALLOWLIST: {category: rollout, value: vi7SA9ckQCe4ccobWNxlbdcNdC23}
@@ -3194,7 +3191,6 @@ environments:
             value: '100'
           PARAKEET_WINDOW_MAX_SESSIONS: {category: rollout, value: '16'}
           PARAKEET_WINDOW_POST_TIMEOUT_SECONDS: {value: '8', category: rollout}
-          PARAKEET_WINDOW_DIARIZATION: {value: 'false', category: rollout}
           PARAKEET_WINDOW_DEADLINE_CUT_POST_LATENCY_SECONDS:
             value: '1.2'
             category: reliability

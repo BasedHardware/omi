@@ -104,6 +104,24 @@ def test_shape_session_assignment_survives_window_replacement():
     assert a._shape_route is b._shape_route
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize('legacy_diarization', ['0', '1'])
+async def test_only_offline_window_qualification_uses_speaker_embedding(monkeypatch, legacy_diarization):
+    monkeypatch.setenv('HOSTED_SPEAKER_EMBEDDING_API_URL', 'http://embeddings.invalid')
+    monkeypatch.setenv('PARAKEET_DIARIZATION', legacy_diarization)
+    embed = AsyncMock(return_value=np.array([1.0, 0.0]))
+    monkeypatch.setattr(st, 'async_extract_embedding_from_bytes', embed)
+    live = window.WindowedParakeetSocket(lambda _: None, 'http://tdt.invalid', 16000, lambda: None)
+    offline = window.WindowedParakeetSocket(
+        lambda _: None, 'http://tdt.invalid', 16000, lambda: None, qualification_diarization=True
+    )
+    pcm = b'\x01\x00' * 16000
+    await live._assign_speaker(pcm)
+    embed.assert_not_awaited()
+    await offline._assign_speaker(pcm)
+    embed.assert_awaited_once()
+
+
 def _mock_post_pacing(monkeypatch, sleep):
     if sleep is _REAL_SLEEP:
         monkeypatch.setattr(window, 'wait_for_event', _REAL_WAIT_FOR_EVENT)

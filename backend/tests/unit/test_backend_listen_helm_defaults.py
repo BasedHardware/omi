@@ -282,7 +282,6 @@ def test_windowed_live_rollout_is_prod_canary_and_bounded():
     assert _env_value(prod, 'PARAKEET_WINDOW_MAX_EMPTY_STREAK') == '4'
     assert _env_value(dev, 'PARAKEET_WINDOW_MAX_SESSIONS') == '1'
     for values in (prod, dev):
-        assert _env_value(values, 'PARAKEET_WINDOW_DIARIZATION') == 'false'
         assert _env_value(values, 'PARAKEET_WINDOW_PACE_SECONDS') == '6'
         assert _env_value(values, 'PARAKEET_WINDOW_MAX_CONTEXT_SECONDS') == '24'
         assert _env_value(values, 'STT_CIRCUIT_HALF_OPEN_PROBES') == '1'

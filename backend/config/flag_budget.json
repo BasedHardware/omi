@@ -24,7 +24,7 @@
     "config/batch_language_recovery.py": "planscost"
   },
   "seed_review_by": "2026-11-15",
-  "budget": 161,
+  "budget": 159,
   "names": {
     "BATCH_ACCOUNT_PRIVACY_WRITER_ENABLED": {
       "owner": "batch-custody / lead2",
@@ -849,9 +849,6 @@
     "PARAKEET_WINDOW_ALLOCATION_PERCENT": {
       "seeded": "2026-10-25"
     },
-    "PARAKEET_WINDOW_DIARIZATION": {
-      "seeded": "2026-10-25"
-    },
     "PARAKEET_WINDOW_FIRST_TEXT_CUT_ENABLED": {
       "owner": "dazheng (live STT / rollout lead)",
       "review_by": "2026-12-14"
@@ -1073,9 +1070,6 @@
       "seeded": "2026-10-25"
     },
     "STT_PRERECORDED_VENDOR_FAIL_FAST": {
-      "seeded": "2026-10-25"
-    },
-    "STT_RESILIENT_RECONNECT": {
       "seeded": "2026-10-25"
     },
     "STT_ROUTING_DISRUPTION_GATE": {
@@ -1314,6 +1308,14 @@
     },
     "BATCH_PIPELINE_PROVIDER_STT_SWEEP_MAX_AGE_DAYS": {
       "on": "2026-11-16",
+      "replaced_by": null
+    },
+    "PARAKEET_WINDOW_DIARIZATION": {
+      "on": "2026-11-22",
+      "replaced_by": null
+    },
+    "STT_RESILIENT_RECONNECT": {
+      "on": "2026-11-22",
       "replaced_by": null
     }
   }
