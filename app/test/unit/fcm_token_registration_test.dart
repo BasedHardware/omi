@@ -32,7 +32,7 @@ void main() {
   FcmTokenRegistration registrar({
     Future<String?> Function()? apnsRead,
     Future<String?> Function()? tokenRead,
-    Future<bool> Function(String, String, AuthSessionSnapshot)? persist,
+    FcmTokenPersistence? persist,
     bool requiresApns = true,
     void Function(PushRegistrationStage, PushRegistrationResult)? diagnostic,
   }) =>
@@ -47,7 +47,7 @@ void main() {
             },
         readTimeZone: () async => zone,
         persist: persist ??
-            (value, timeZone, snapshot) async {
+            (value, timeZone, snapshot, _) async {
               saves.add((value, timeZone, snapshot.ownerUid));
               return accept;
             },
@@ -222,7 +222,7 @@ void main() {
 
   test('rotation arriving during a save is persisted after that save', () async {
     final pending = Completer<bool>();
-    final service = registrar(persist: (value, timeZone, snapshot) {
+    final service = registrar(persist: (value, timeZone, snapshot, _) {
       saves.add((value, timeZone, snapshot.ownerUid));
       return saves.length == 1 ? pending.future : Future.value(true);
     });

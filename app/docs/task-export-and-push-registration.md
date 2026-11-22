@@ -102,13 +102,16 @@ request/response body or SDK exception text is included. These records are local
 they do not enable logging or introduce a new remote telemetry stream.
 
 A diagnostic write/observer failure cannot change registration, retries or auth
-ownership. Cancellation of an old owner does not emit a new SDK failure. The
-retry schedule, accepted-receipt cache and server contract remain unchanged.
+ownership. A local ordering or HTTP result that arrives after the registration
+deadline or an account change is excluded from the export. The retry schedule,
+accepted-receipt cache and server contract remain unchanged.
 Diagnostics locate failures; their release is not proof of restored push delivery.
 
 Verification for this addition:
 - [x] Registrar success/failure/retry/deadline/cancellation regressions.
 - [x] Default reporter -> real temporary log file -> developer export, including
-      credential/error-text exclusion and existing logging opt-out/write failures.
-- [ ] Component suite and repository preflight for the final diff.
+      credential/error-text exclusion, logging opt-out and write failures, and
+      late HTTP results after timeout or account replacement.
+- [x] Focused Flutter tests and local repository preflight.
+- Full component suite results are recorded in the [PR checks](https://github.com/BasedHardware/omi/pull/25873/checks).
 - [ ] Release followed by account registration and background delivery evidence.

@@ -13,6 +13,9 @@ enum PushRegistrationStage { session, apns, token, timeZone, persistence, localO
 
 enum PushRegistrationResult { unavailable, exception, timeout, declined, accepted, exhausted, invalidResponse }
 
+typedef FcmTokenPersistence = Future<bool> Function(
+    String token, String zone, AuthSessionSnapshot owner, bool Function() canLogDiagnostic);
+
 Future<void> logPushRegistration(
   PushRegistrationStage stage,
   PushRegistrationResult result, {
@@ -71,7 +74,7 @@ class FcmTokenRegistration {
   final Future<String?> Function() readApns;
   final Future<String?> Function() readToken;
   final Future<String> Function() readTimeZone;
-  final Future<bool> Function(String token, String zone, AuthSessionSnapshot owner) persist;
+  final FcmTokenPersistence persist;
   final bool requiresApns;
   final void Function(PushRegistrationStage, PushRegistrationResult)? onDiagnostic;
   final Duration deadline;
@@ -141,11 +144,12 @@ class FcmTokenRegistration {
 
   bool _current(AuthSessionSnapshot owner, int epoch) => !_disposed && epoch == _epoch && isCurrent(owner);
 
-  Future<T> _bounded<T>(Future<T> Function() operation) async {
-    final read = ConnectionRead<Object?>(operation, deadline);
+  Future<T> _bounded<T>(Future<T> Function() operation) => _trackRead(ConnectionRead<T>(operation, deadline));
+
+  Future<T> _trackRead<T>(ConnectionRead<T> read) async {
     _read = read;
     try {
-      return await read.future as T;
+      return await read.future;
     } finally {
       if (identical(_read, read)) _read = null;
     }
@@ -195,7 +199,10 @@ class FcmTokenRegistration {
         return true;
       }
       stage = PushRegistrationStage.persistence;
-      final accepted = await _bounded(() => persist(token, zone, owner));
+      final accepted = await _trackRead(ConnectionRead<bool>.withLifetime(
+        (isPending) => persist(token, zone, owner, () => isPending() && _current(owner, epoch)),
+        deadline,
+      ));
       if (!_current(owner, epoch)) return false;
       if (!accepted) {
         _record(stage, PushRegistrationResult.declined);

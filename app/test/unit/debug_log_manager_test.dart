@@ -1,11 +1,15 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
 import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:omi/backend/http/api/notifications.dart';
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/env/env.dart';
 import 'package:omi/utils/debug_log_manager.dart';
 import 'package:omi/services/auth/auth_token_result.dart';
 import 'package:omi/services/notifications/fcm_token_registration.dart';
@@ -126,7 +130,7 @@ void main() {
       readApns: () async => 'private-apns-token',
       readToken: () async => throw StateError('private-fcm-token and private-account'),
       readTimeZone: () async => 'private-time-zone',
-      persist: (_, __, ___) async => true,
+      persist: (_, __, ___, ____) async => true,
       requiresApns: true,
       retryDelays: const [],
     );
@@ -154,4 +158,72 @@ void main() {
       await DebugLogManager.clear();
     }
   });
+
+  for (final switchAccount in [false, true]) {
+    test('late HTTP acknowledgement stays out of the export after ${switchAccount ? 'account switch' : 'timeout'}',
+        () async {
+      Env.overrideApiBaseUrl('http://127.0.0.1/');
+      addTearDown(Env.clearApiBaseUrlOverride);
+      var owner = const AuthSessionSnapshot(ownerUid: 'first', generation: 1);
+      final firstSendStarted = Completer<void>();
+      final lateResponse = Completer<http.Response>();
+      late Future<bool> firstPersistence;
+      var attempts = 0;
+      final registrar = FcmTokenRegistration(
+        capture: () => owner,
+        isCurrent: (snapshot) => snapshot == owner,
+        readApns: () async => 'synthetic-apns',
+        readToken: () async => 'synthetic-fcm',
+        readTimeZone: () async => 'UTC',
+        persist: (token, zone, snapshot, canLogDiagnostic) {
+          final isFirst = attempts++ == 0;
+          final result = saveFcmTokenServer(
+            token: token,
+            timeZone: zone,
+            canSend: () => snapshot == owner,
+            canLogDiagnostic: canLogDiagnostic,
+            send: ({required url, required headers, required method, required body, canSend, signOutOn401 = true}) {
+              if (!isFirst) return Future.value(http.Response('{"status":"Ok"}', 200));
+              firstSendStarted.complete();
+              return lateResponse.future;
+            },
+          );
+          if (isFirst) firstPersistence = result;
+          return result;
+        },
+        requiresApns: true,
+        deadline: const Duration(seconds: 1),
+        retryDelays: const [],
+      );
+      addTearDown(registrar.dispose);
+      addTearDown(DebugLogManager.clear);
+
+      final firstAttempt = registrar.refresh();
+      await firstSendStarted.future.timeout(const Duration(seconds: 5));
+      if (switchAccount) {
+        owner = const AuthSessionSnapshot(ownerUid: 'second', generation: 2);
+        await registrar.refresh();
+        await firstAttempt;
+      } else {
+        await firstAttempt;
+        await registrar.refresh();
+      }
+      lateResponse.complete(http.Response('', 503));
+      expect(await firstPersistence, isFalse);
+
+      // Wait for the production log queue to finish before reading the export.
+      await DebugLogManager.logEvent('test_barrier', {});
+      final file = (await DebugLogManager.listLogFiles()).first;
+      final rows = (await file.readAsLines()).map((line) => jsonDecode(line) as Map<String, dynamic>);
+      final registration = rows.where((row) => row['type'] == 'push_registration').toList();
+      expect(
+        registration.map((row) => (row['stage'], row['result'], row['http_status'])),
+        [
+          if (!switchAccount) ...[('persistence', 'timeout', null), ('retry', 'exhausted', null)],
+          ('http', 'accepted', 200),
+          ('persistence', 'accepted', null),
+        ],
+      );
+    });
+  }
 }
