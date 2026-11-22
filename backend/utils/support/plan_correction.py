@@ -221,7 +221,9 @@ class PlanCorrection:
             return {'status': problem}
         profile = snapshot.to_dict() or {}
         sub = profile.get('subscription')
-        plan = sub.get('plan') if isinstance(sub, dict) else None
+        if not isinstance(sub, dict):
+            return {'status': 'billing_unknown'}
+        plan = sub.get('plan')
         if not isinstance(plan, str):
             return {'status': 'billing_unknown'}
         if plan in {BASIC, 'free'} and not rollback:
@@ -241,8 +243,10 @@ class PlanCorrection:
         state_digest = digest([customer, sub])
         if proof and not rollback and (proof['before'] != plan or proof['state_digest'] != state_digest):
             return {**row, 'status': 'state_changed'}
+        if rollback and proof is None:
+            return {**row, 'status': 'rollback_conflict'}
         original_ref = None
-        if rollback and proof:
+        if rollback and proof is not None:
             original_ref = self.client.collection(support_actions.SUPPORT_ACTIONS_COLLECTION).document(proof['action'])
             row['after'] = proof['before']
         problem = self.billing.guard(uid, customer, stripe_sub, self.since, int(datetime.now(timezone.utc).timestamp()))
@@ -263,7 +267,7 @@ class PlanCorrection:
                 return problem
             if current.to_dict() != profile:
                 return 'state_changed'
-            if original_ref is not None:
+            if original_ref is not None and proof is not None:
                 original = self._read(original_ref, txn).to_dict() or {}
                 if (
                     original.get('command') != BILLING_ROUTE
