@@ -9,6 +9,7 @@ import threading
 import time
 from collections import OrderedDict
 from datetime import datetime, timezone
+from functools import partial
 from typing import Any
 
 from config.repeat_work import poll_backoff_cohort
@@ -28,9 +29,6 @@ _ACTIVE_UIDS: OrderedDict[bytes, tuple[float, str]] = OrderedDict()
 _ACTIVE_UID_COUNTS = {'in': 0, 'out': 0}
 _TERMINAL_JOBS: OrderedDict[bytes, float] = OrderedDict()
 
-for _cohort in ('in', 'out'):
-    OMI_SYNC_JOB_POLL_ACTIVE_UPLOADERS.labels(cohort=_cohort).set(0)
-
 
 def record_sync_job_poll_request(uid: str | None) -> str:
     """Count one status request and return its low-cardinality cohort label."""
@@ -40,10 +38,10 @@ def record_sync_job_poll_request(uid: str | None) -> str:
 
 
 def record_active_sync_uploader(uid: str | None, status: dict[str, Any]) -> None:
-    """Update the bounded active-uploader gauge from a returned nonterminal job."""
-    now = time.monotonic()
+    """Record a returned nonterminal job in the bounded active-uploader window."""
     is_active = bool(uid) and status.get('status') not in {'completed', 'partial_failure', 'failed'}
     with _LOCK:
+        now = time.monotonic()
         _prune_active_uids(now)
         if is_active and uid:
             cohort = poll_backoff_cohort(uid)
@@ -59,8 +57,6 @@ def record_active_sync_uploader(uid: str | None, status: dict[str, Any]) -> None
         while len(_ACTIVE_UIDS) > MAX_ACTIVE_UIDS_PER_PROCESS:
             _, (_, evicted_cohort) = _ACTIVE_UIDS.popitem(last=False)
             _ACTIVE_UID_COUNTS[evicted_cohort] -= 1
-        for label, count in _ACTIVE_UID_COUNTS.items():
-            OMI_SYNC_JOB_POLL_ACTIVE_UPLOADERS.labels(cohort=label).set(count)
 
 
 def _prune_active_uids(now: float) -> None:
@@ -70,6 +66,16 @@ def _prune_active_uids(now: float) -> None:
             break
         _ACTIVE_UIDS.popitem(last=False)
         _ACTIVE_UID_COUNTS[cohort] -= 1
+
+
+def _active_uploader_count(cohort: str) -> int:
+    with _LOCK:
+        _prune_active_uids(time.monotonic())
+        return _ACTIVE_UID_COUNTS[cohort]
+
+
+for _cohort in _ACTIVE_UID_COUNTS:
+    OMI_SYNC_JOB_POLL_ACTIVE_UPLOADERS.labels(cohort=_cohort).set_function(partial(_active_uploader_count, _cohort))
 
 
 def record_first_terminal_read(uid: str | None, status: dict[str, Any]) -> None:

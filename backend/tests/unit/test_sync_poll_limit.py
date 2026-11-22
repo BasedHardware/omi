@@ -1,8 +1,10 @@
 """HTTP cap and wire contract; isolate the unchanged Redis Lua transport."""
 
 import time
+from collections import OrderedDict
 from collections.abc import Iterator
 from datetime import datetime, timezone
+from types import SimpleNamespace
 from unittest.mock import MagicMock
 from uuid import uuid4
 
@@ -19,7 +21,7 @@ from utils.metrics import (
     OMI_SYNC_JOB_POLL_ACTIVE_UPLOADERS,
     OMI_SYNC_JOB_POLL_COHORT_REQUESTS_TOTAL,
 )
-from utils.sync import poll_limit
+from utils.sync import poll_limit, poll_metrics
 
 
 @pytest.fixture
@@ -151,6 +153,11 @@ def test_server_backoff_http_wire_and_open_surface(poll_client, monkeypatch):
     assert poll_client.get('/v2/sync-local-files/j').json()['poll_after_ms'] == 0
 
 
+def _active_uploaders() -> dict[str, float]:
+    (metric,) = OMI_SYNC_JOB_POLL_ACTIVE_UPLOADERS.collect()
+    return {sample.labels['cohort']: sample.value for sample in metric.samples}
+
+
 def test_partial_backoff_http_uses_uid_and_reports_rollout_metrics(poll_client, monkeypatch):
     monkeypatch.setenv('SYNC_POLL_BACKOFF_ENABLED', 'true')
     monkeypatch.setenv('SYNC_POLL_BACKOFF_PERCENT', '5')
@@ -170,8 +177,7 @@ def test_partial_backoff_http_uses_uid_and_reports_rollout_metrics(poll_client, 
 
     requests_in = OMI_SYNC_JOB_POLL_COHORT_REQUESTS_TOTAL.labels(cohort='in')._value.get()
     requests_out = OMI_SYNC_JOB_POLL_COHORT_REQUESTS_TOTAL.labels(cohort='out')._value.get()
-    active_in = OMI_SYNC_JOB_POLL_ACTIVE_UPLOADERS.labels(cohort='in')._value.get()
-    active_out = OMI_SYNC_JOB_POLL_ACTIVE_UPLOADERS.labels(cohort='out')._value.get()
+    before_active = _active_uploaders()
 
     excluded = poll_client.get('/v2/sync-local-files/excluded')
     assert excluded.status_code == 200 and 'poll_after_ms' not in excluded.json()
@@ -180,8 +186,7 @@ def test_partial_backoff_http_uses_uid_and_reports_rollout_metrics(poll_client, 
     assert admitted.status_code == 200 and admitted.json()['poll_after_ms'] == 60000
     assert OMI_SYNC_JOB_POLL_COHORT_REQUESTS_TOTAL.labels(cohort='in')._value.get() == requests_in + 1
     assert OMI_SYNC_JOB_POLL_COHORT_REQUESTS_TOTAL.labels(cohort='out')._value.get() == requests_out + 1
-    assert OMI_SYNC_JOB_POLL_ACTIVE_UPLOADERS.labels(cohort='in')._value.get() == active_in + 1
-    assert OMI_SYNC_JOB_POLL_ACTIVE_UPLOADERS.labels(cohort='out')._value.get() == active_out + 1
+    assert _active_uploaders() == {'in': before_active['in'] + 1, 'out': before_active['out'] + 1}
 
     terminal_job_id = f'terminal-{uuid4().hex}'
     completed_at = datetime.fromtimestamp(time.time() - 10, timezone.utc)
@@ -201,6 +206,20 @@ def test_partial_backoff_http_uses_uid_and_reports_rollout_metrics(poll_client, 
     assert first_read_sum >= before + 9
     assert poll_client.get(f'/v2/sync-local-files/{terminal_job_id}').json()['poll_after_ms'] == 0
     assert histogram._sum.get() == first_read_sum
+
+
+def test_active_uploader_scrape_expires_uids_without_another_poll(monkeypatch):
+    monotonic = MagicMock(return_value=1000.0)
+    monkeypatch.setattr(poll_metrics, 'time', SimpleNamespace(monotonic=monotonic))
+    monkeypatch.setattr(poll_metrics, '_ACTIVE_UIDS', OrderedDict())
+    monkeypatch.setattr(poll_metrics, '_ACTIVE_UID_COUNTS', {'in': 0, 'out': 0})
+    monkeypatch.setenv('SYNC_POLL_BACKOFF_ENABLED', 'true')
+    monkeypatch.setenv('SYNC_POLL_BACKOFF_PERCENT', '100')
+
+    poll_metrics.record_active_sync_uploader('owner', {'status': 'queued'})
+    assert _active_uploaders() == {'in': 1, 'out': 0}
+    monotonic.return_value += poll_metrics.ACTIVE_UID_WINDOW_SECONDS + 1
+    assert _active_uploaders() == {'in': 0, 'out': 0}
 
 
 @pytest.mark.parametrize('surface_open', [False, True])
