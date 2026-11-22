@@ -150,7 +150,7 @@ def test_hold_before_write_is_checked_again_in_transaction(monkeypatch, apply):
     monkeypatch.setattr(repair, 'append_receipt', lambda f, row: prepared.append(row))
 
     result = operator.process(OWNER, None, None, rollback=False)
-    assert result['status'] == ('legal_hold' if apply else 'ready')
+    assert result['outcome'] == ('legal_hold' if apply else 'ready')
     assert store.rows[('users', OWNER)] == PROFILE
     assert not any(ref[0] == 'support_actions' for ref in store.rows)
     assert len(prepared) == int(apply)
@@ -173,7 +173,7 @@ def test_audit_fields_are_content_free_and_plan_write_is_narrow(monkeypatch):
     monkeypatch.setattr(operator, '_read', read)
     monkeypatch.setattr(repair, 'append_receipt', lambda *_: None)
     result = operator.process(OWNER, None, None, rollback=False)
-    assert result['status'] == 'corrected'
+    assert result['outcome'] == 'corrected'
     assert txn.updates == [(('users', OWNER), {'subscription.plan': 'basic'})]
     ((path, audit),) = txn.creates
     assert path == ('support_actions', result['action'])
@@ -190,7 +190,7 @@ def test_audit_fields_are_content_free_and_plan_write_is_narrow(monkeypatch):
         return snapshot
 
     monkeypatch.setattr(operator, '_read', changed_version)
-    assert operator.process(OWNER, None, result, rollback=True)['status'] == 'rollback_conflict'
+    assert operator.process(OWNER, None, result, rollback=True)['outcome'] == 'rollback_conflict'
     assert not txn.updates and not txn.creates
 
 

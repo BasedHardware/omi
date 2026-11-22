@@ -218,18 +218,18 @@ class PlanCorrection:
         user_ref = self.client.collection('users').document(uid)
         problem, snapshot = self._state(uid, user_ref)
         if problem:
-            return {'status': problem}
+            return {'outcome': problem}
         profile = snapshot.to_dict() or {}
         sub = profile.get('subscription')
         if not isinstance(sub, dict):
-            return {'status': 'billing_unknown'}
+            return {'outcome': 'billing_unknown'}
         plan = sub.get('plan')
         if not isinstance(plan, str):
-            return {'status': 'billing_unknown'}
+            return {'outcome': 'billing_unknown'}
         if plan in {BASIC, 'free'} and not rollback:
-            return {'status': 'already_basic'}
+            return {'outcome': 'already_basic'}
         if (not rollback and plan not in PAID_PLANS) or (rollback and plan != BASIC):
-            return {'status': 'billing_unknown'}
+            return {'outcome': 'billing_unknown'}
         customer, stripe_sub = profile.get('stripe_customer_id'), sub.get('stripe_subscription_id')
         if not (
             isinstance(customer, str)
@@ -238,26 +238,26 @@ class PlanCorrection:
             and re.fullmatch(r'sub_[A-Za-z0-9]+', stripe_sub)
             and sub.get('status') == 'active'
         ):
-            return {'status': 'billing_unknown'}
+            return {'outcome': 'billing_unknown'}
         row: dict[str, Any] = {'before': plan, 'after': BASIC}
         state_digest = digest([customer, sub])
         if proof and not rollback and (proof['before'] != plan or proof['state_digest'] != state_digest):
-            return {**row, 'status': 'state_changed'}
+            return {**row, 'outcome': 'state_changed'}
         if rollback and proof is None:
-            return {**row, 'status': 'rollback_conflict'}
+            return {**row, 'outcome': 'rollback_conflict'}
         original_ref = None
         if rollback and proof is not None:
             original_ref = self.client.collection(support_actions.SUPPORT_ACTIONS_COLLECTION).document(proof['action'])
             row['after'] = proof['before']
         problem = self.billing.guard(uid, customer, stripe_sub, self.since, int(datetime.now(timezone.utc).timestamp()))
         if problem:
-            return {**row, 'status': problem}
+            return {**row, 'outcome': problem}
         if not self.ctx.apply and not rollback:
-            return {**row, 'status': 'ready', 'state_digest': state_digest}
+            return {**row, 'outcome': 'ready', 'state_digest': state_digest}
 
         action_ref = self.client.collection(support_actions.SUPPORT_ACTIONS_COLLECTION).document(uuid4().hex)
         if self.ctx.apply:
-            append_receipt(receipt, {'owner': uid, **row, 'action': action_ref.id, 'status': 'prepared'})
+            append_receipt(receipt, {'owner': uid, **row, 'action': action_ref.id, 'outcome': 'prepared'})
         transaction = self.client.transaction(max_attempts=1, read_only=not self.ctx.apply)
 
         @firestore.transactional
@@ -288,9 +288,9 @@ class PlanCorrection:
 
         problem = change(transaction)
         if problem:
-            return {**row, 'status': problem}
+            return {**row, 'outcome': problem}
         if not self.ctx.apply:
-            return {**row, 'status': 'ready', 'state_digest': state_digest}
+            return {**row, 'outcome': 'ready', 'state_digest': state_digest}
         version = _version(transaction.write_results[0].update_time)
         result = {**row, 'action': action_ref.id, 'version': version}
         current = self._read(user_ref, field_paths=['subscription'])
@@ -302,8 +302,8 @@ class PlanCorrection:
             or audit.get('args_digest') != digest([action_ref.id, uid])
             or audit.get('after_digest') != digest({**sub, 'plan': row['after']})
         ):
-            return {**result, 'status': 'readback_failed'}
-        return {**result, 'status': 'rolled_back' if rollback else 'corrected'}
+            return {**result, 'outcome': 'readback_failed'}
+        return {**result, 'outcome': 'rolled_back' if rollback else 'corrected'}
 
 
 def _version(timestamp) -> str:
@@ -336,7 +336,7 @@ def _inputs(args: argparse.Namespace, ctx: ActionContext, packet: PrivatePacket,
         raise EvidenceUnavailable()
     if mode == 'apply' and not 0 <= (now - datetime.fromisoformat(header['created_at'])).total_seconds() <= 86400:
         raise EvidenceUnavailable()
-    eligible = {row['owner']: row for row in entries if row.get('status') == status}
+    eligible = {row['owner']: row for row in entries if row.get('outcome', row.get('status')) == status}
     if any(trailer['counts'].get(reason, 0) for reason in ('failed', 'billing_unknown')) and mode == 'apply':
         raise EvidenceUnavailable()
     if not set(owners) <= eligible.keys():
@@ -379,12 +379,14 @@ def run(args: argparse.Namespace, ctx: ActionContext, *, firestore_client=None) 
                     try:
                         row = operator.process(uid, f, proofs.get(uid), rollback=mode == 'rollback')
                     except EvidenceUnavailable:
-                        row = {'status': 'billing_unknown'}
+                        row = {'outcome': 'billing_unknown'}
                     except Exception:
-                        row = {'status': 'failed'}
+                        row = {'outcome': 'failed'}
                     append_receipt(f, {'owner': uid, **row})
-                    counts[row['status']] += 1
-                    if ctx.apply and (row['status'] in STOP_REASONS or row['status'] in {'failed', 'readback_failed'}):
+                    counts[row['outcome']] += 1
+                    if ctx.apply and (
+                        row['outcome'] in STOP_REASONS or row['outcome'] in {'failed', 'readback_failed'}
+                    ):
                         break
             finally:
                 reads = operator.reads
