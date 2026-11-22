@@ -106,7 +106,7 @@ def _pass_report(**extra):
             {'key': 'k2', 'kind': 'spelling', 'status': 'verifier_disagree'},
         ],
         'timing': {'wait_ms': 1500, 'waits': 2},
-        'levers': {'idle_skip': {'arm': 'shadow', 'would_skip': True}},
+        'levers': {'verify_hold': {'arm': 'serve', 'verify_used': 42}},
         'defect_reports': {'attempt': 1, 'rejected_feedback_input_overlap': 1},
         **extra,
     }
@@ -126,7 +126,7 @@ def test_pass_record_carries_counts_and_never_free_text(caplog):
     assert payload['reason'] == 'other' and payload['error_type'] == 'other' and payload['stop_reason'] == 'other'
     assert payload['applied'] == {'retire_memory': 1}
     assert payload['outcomes'] == {'applied': 1, 'verifier_disagree': 1}
-    assert payload['wait_ms'] == 1500 and payload['levers']['idle_skip'] == {'arm': 'shadow', 'would_skip': True}
+    assert payload['wait_ms'] == 1500 and payload['levers']['verify_hold'] == {'arm': 'serve', 'verify_used': 42}
     assert 'jane' not in caplog.text and 'abc123' not in caplog.text
 
 
@@ -168,7 +168,7 @@ def test_telemetry_kill_switch_and_errors_never_raise(monkeypatch, caplog):
 
 def test_sweep_record_counts_owners_not_retry_attempts(caplog):
     done = {'status': 'complete', 'outcomes': [{'status': 'applied', 'kind': 'spelling'}], 'tokens': 10}
-    idle = {'status': 'not_admitted', 'reason': 'idle_no_material'}
+    idle = {'status': 'not_admitted', 'reason': 'ineligible'}
     starved = {'status': 'waiting', 'reason': 'reserved_capacity'}
     reports = [
         {'status': 'waiting', 'reason': 'reserved_capacity'},
@@ -191,7 +191,7 @@ def test_sweep_record_counts_owners_not_retry_attempts(caplog):
     payload = json.loads(caplog.records[-1].getMessage())
     assert payload['attempts'] == 5
     assert payload['final_status'] == {'complete': 1, 'not_admitted': 1, 'waiting': 1}
-    assert payload['not_admitted'] == {'idle_no_material': 1}
+    assert payload['not_admitted'] == {'ineligible': 1}
     assert payload['waiting_attempts'] == {'reserved_capacity': 3}
     assert payload['applied'] == 1 and payload['owners_unreached'] == 2
     assert payload['scheduled_at'] == '2026-10-28T09:00:00+00:00'

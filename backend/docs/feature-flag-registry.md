@@ -1669,6 +1669,8 @@ admission.
 
 | Key | Retired | Reason |
 | --- | --- | --- |
+| `DREAM_IDLE_SKIP_MODE` | 2026-11-22 | SCA-3686: idle-skip was off on the serving fleet and defaults off. |
+| `DREAM_IDLE_SKIP_MODE_SERVE_PERCENT` | 2026-11-22 | SCA-3686: idle-skip was off on the serving fleet and defaults off. |
 | `AUDIO_ARCHIVE_UID_ALLOWLIST` | 2026-11-09 | David flag docket 2026-11-09 (ruling 2): retire ; prod nonempty one-member allowlist (moved to injected cohort) on every reader at 2026-11-09 03:20Z |
 | `AUDIO_CANONICAL_PACKING_ENABLED` | 2026-11-09 | David flag docket 2026-11-09 (ruling 2): retire ; prod unset (code default) on every reader at 2026-11-09 03:20Z |
 | `BATCH_PIPELINE_SHADOW_LANGUAGE_ONLY` | 2026-11-09 | David flag docket 2026-11-09 (ruling 2): retire ; prod false on every reader at 2026-11-09 03:20Z |

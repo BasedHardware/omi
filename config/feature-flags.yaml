@@ -889,6 +889,8 @@ ignore:
 
 
 retired:
+  - {"key":"DREAM_IDLE_SKIP_MODE","aliases":[],"kind":"env","retired":"2026-11-22","reason":"SCA-3686: idle-skip was off on the serving fleet and defaults off."}
+  - {"key":"DREAM_IDLE_SKIP_MODE_SERVE_PERCENT","aliases":[],"kind":"env","retired":"2026-11-22","reason":"SCA-3686: idle-skip was off on the serving fleet and defaults off."}
   - {"key":"AUDIO_ARCHIVE_UID_ALLOWLIST","aliases":[],"kind":"env","retired":"2026-11-09","reason":"David flag docket 2026-11-09 (ruling 2): retire ; prod nonempty one-member allowlist (moved to injected cohort) on every reader at 2026-11-09 03:20Z"}
   - {"key":"AUDIO_CANONICAL_PACKING_ENABLED","aliases":[],"kind":"env","retired":"2026-11-09","reason":"David flag docket 2026-11-09 (ruling 2): retire ; prod unset (code default) on every reader at 2026-11-09 03:20Z"}
   - {"key":"BATCH_PIPELINE_SHADOW_LANGUAGE_ONLY","aliases":[],"kind":"env","retired":"2026-11-09","reason":"David flag docket 2026-11-09 (ruling 2): retire ; prod false on every reader at 2026-11-09 03:20Z"}
