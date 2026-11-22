@@ -12,8 +12,8 @@ ladder, the failover drills and the guard interlocks. Numbers marked
 
 | Setting | Where | Owner | Rollback |
 | --- | --- | --- | --- |
-| GPU floor (HPA min and baseline) | `charts/batch-pipeline-worker/prod_omi_batch-pipeline-worker_values.yaml` `replicaCount` + `autoscaling.minReplicas` | Release, live HPA patch plus the next worker Helm roll | floor 4 (both values) |
-| L4 node pool minimum | GKE `batch-pipeline-pool` total minimum (operator-managed, not in this repo) | Release / op1 | `--total-min-nodes 0` (no minimum, the state before 2026-11-20) |
+| GPU floor (HPA min and baseline) | `charts/batch-pipeline-worker/prod_omi_batch-pipeline-worker_values.yaml` `replicaCount` + `autoscaling.minReplicas` | Release, live HPA patch plus the next worker Helm roll | Keep 6 for tuning rollbacks |
+| L4 node pool minimum | GKE `batch-pipeline-pool` total minimum (operator-managed, not in this repo) | Release / op1 | Keep 6 for tuning rollbacks |
 | Worker roll strategy | `templates/deployment.yaml` (RollingUpdate, `maxSurge: 0`) + `rollout.maxUnavailable` | Release, live Deployment patch plus the next worker Helm roll | `rollout.maxUnavailable: 100%`; Recreate only by reverting the chart change |
 | GPU floor share of routed units | route table `gpu_floor_percent`, cohort `batch-vendor-gpu-floor` | lead, runtime config (slice B) | 0 |
 | `provider-stt` queue size | `deploy/ops/prod.yaml` `cloud_tasks.provider-stt` | lead, config-train | previous size |
@@ -23,6 +23,11 @@ All of these are config, not code constants. Changing one is a values or
 config-train change, never a code change.
 
 ## GPU floor
+
+The pre-November 20 settings were HPA/baseline 4 and node minimum 0
+(`--total-min-nodes 0`). Release may restore those settings only as part of an
+explicit rollback of #25842’s capacity policy approved by the Pipeline owner.
+That rollback removes the six-node stockout protection.
 
 **Current bounds (2026-11-20, David, superseding D4's floor 4 of 2026-11-06):
 baseline/min 6, max 16, and a `batch-pipeline-pool` node minimum of 6.** Over the

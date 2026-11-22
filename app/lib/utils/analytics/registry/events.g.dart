@@ -2561,7 +2561,9 @@ enum PaywallOpenedSource {
   onboarding("onboarding"),
   ahaFirstSummary("aha_first_summary"),
   freeCap("free_cap"),
-  onPhoneBanner("on_phone_banner");
+  onPhoneBanner("on_phone_banner"),
+  heldRecording("held_recording"),
+  heldRecordingDetail("held_recording_detail");
   const PaywallOpenedSource(this.wireName);
   final String wireName;
 }
@@ -2651,7 +2653,9 @@ enum UpgradePlanSelectedSource {
   onboarding("onboarding"),
   ahaFirstSummary("aha_first_summary"),
   freeCap("free_cap"),
-  onPhoneBanner("on_phone_banner");
+  onPhoneBanner("on_phone_banner"),
+  heldRecording("held_recording"),
+  heldRecordingDetail("held_recording_detail");
   const UpgradePlanSelectedSource(this.wireName);
   final String wireName;
 }
@@ -3126,7 +3130,9 @@ enum PaywallVariantShownSource {
   onboarding("onboarding"),
   ahaFirstSummary("aha_first_summary"),
   freeCap("free_cap"),
-  onPhoneBanner("on_phone_banner");
+  onPhoneBanner("on_phone_banner"),
+  heldRecording("held_recording"),
+  heldRecordingDetail("held_recording_detail");
   const PaywallVariantShownSource(this.wireName);
   final String wireName;
 }

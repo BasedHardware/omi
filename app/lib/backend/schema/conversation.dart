@@ -430,6 +430,10 @@ class ServerConversation {
   /// 'writing_notes' or 'failed'. Null on finished rows and from older servers.
   final String? homeStep;
 
+  /// Server-authored read projection: 'overdue' when the transcription wait ran out with no failure
+  /// receipt, so the audio is kept and still waiting. Null on every other row and from older servers.
+  final String? transcriptionWait;
+
   /// Authoritative episode membership, including before the episode list arrives.
   final String? episodeId;
 
@@ -489,6 +493,7 @@ class ServerConversation {
     this.captureCoverage,
     this.excludedSpeakers,
     this.homeStep,
+    this.transcriptionWait,
     this.episodeId,
     this.v3,
   });
@@ -545,6 +550,7 @@ class ServerConversation {
         processingDeferred: processingDeferred,
         captureCoverage: captureCoverage,
         homeStep: homeStep ?? this.homeStep,
+        transcriptionWait: transcriptionWait,
         episodeId: episodeId,
         v3: v3,
       )..isNew = isNew;
@@ -589,6 +595,7 @@ class ServerConversation {
       matchSnippets: snippets,
       processingDeferred: json['processing_deferred'] == true,
       homeStep: json['home_step'] is String ? json['home_step'] as String : null,
+      transcriptionWait: json['transcription_wait'] is String ? json['transcription_wait'] as String : null,
       onDeviceProvenance:
           json['on_device_provenance'] is Map ? Map<String, dynamic>.from(json['on_device_provenance']) : null,
       clientProcessing: json['client_processing'] is Map ? Map<String, dynamic>.from(json['client_processing']) : null,
@@ -608,6 +615,7 @@ class ServerConversation {
     Map<String, dynamic>? onDeviceProvenance,
     Map<String, dynamic>? clientProcessing,
     String? homeStep,
+    String? transcriptionWait,
     ConversationV3Fields? v3,
   }) {
     final snippets = matchSnippets ?? const <TranscriptMatchSnippet>[];
@@ -658,6 +666,7 @@ class ServerConversation {
       captureCoverage: generated.captureCoverage,
       excludedSpeakers: generated.excludedSpeakers,
       homeStep: homeStep,
+      transcriptionWait: transcriptionWait,
       episodeId: generated.episodeId,
       v3: v3,
     );
