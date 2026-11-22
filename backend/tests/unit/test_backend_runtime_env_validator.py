@@ -3847,11 +3847,12 @@ def test_generated_read_lever_manifest_is_current_and_records_unresolved_sources
         integration['explicit'],
         usage_month_cache=0,
         usage_month_total=0,
-        bpp_decision_cache=100,
-        privacy_checks_shadow=10,
+        bpp_decision_cache=0,
+        privacy_checks_shadow=0,
         bpp_owner_memo_enforce=0,
     )
-    assert prod_worker['effective']['bpp_decision_cache'] == 100
+    assert prod_worker['effective']['bpp_decision_cache'] == 0
+    assert prod_worker['effective']['privacy_checks_shadow'] == 0
     assert prod_worker['effective']['batch_timeliness_leader'] == 100
     for service in ('backend', 'backend-sync', 'backend-sync-backfill', 'backend-integration'):
         surface = generated['surfaces'][f'runtime/prod/cloud_run/services/{service}']
@@ -4227,23 +4228,27 @@ def test_cloud_run_runtime_rejects_missing_listener_close_binding(tmp_path, key,
     }
 
 
-@pytest.mark.parametrize('environment', ['dev', 'prod'])
-def test_future_capture_admissions_default_off_until_reader_rollout(environment):
+@pytest.mark.parametrize(('environment', 'enabled'), [('dev', 'false'), ('prod', 'true')])
+def test_future_capture_clamp_is_on_for_every_prod_reader_and_off_in_dev(environment, enabled):
+    # SCA-3501: prod turns the clamp on in one change once every reader and admitter serves the clamp
+    # code (listen 96f0631 and the Cloud Run readers, verified on SCA-3501). Dev stays off.
     config = yaml.safe_load((ROOT / 'deploy/runtime_env.yaml').read_text())['environments'][environment]
-    expected = {'value': 'false', 'category': 'rollout'}
+    expected = {'value': enabled, 'category': 'rollout'}
     hosts = [config['gke']['backend-listen'], *config['cloud_run']['services'].values()]
     # SCA-3120: prod adds the derived projection pump as a sixth reader.
     assert len(hosts) == (6 if environment == 'prod' else 5)
     renderer = runpy.run_path(str(RENDERER_SCRIPT), run_name='future_capture_staged_renderer')
     for host in hosts:
         assert host['env']['SYNC_FUTURE_CAPTURE_CLAMP_ENABLED'] == expected
-        assert renderer['_render_env_entries']({'SYNC_FUTURE_CAPTURE_CLAMP_ENABLED': expected}) == [
-            {'name': 'SYNC_FUTURE_CAPTURE_CLAMP_ENABLED', 'value': 'false'}
+        # Render this host's own manifest entry (not the expected literal).
+        entry = {'SYNC_FUTURE_CAPTURE_CLAMP_ENABLED': host['env']['SYNC_FUTURE_CAPTURE_CLAMP_ENABLED']}
+        assert renderer['_render_env_entries'](entry) == [
+            {'name': 'SYNC_FUTURE_CAPTURE_CLAMP_ENABLED', 'value': enabled}
         ]
     values = yaml.safe_load((ROOT.parent / config['gke']['backend-listen']['values_file']).read_text())
     assert {entry['name']: entry.get('value') for entry in values['env']}[
         'SYNC_FUTURE_CAPTURE_CLAMP_ENABLED'
-    ] == 'false'
+    ] == enabled
 
 
 @pytest.mark.parametrize('service', ['all', 'backend-sync'])
@@ -4284,15 +4289,15 @@ def test_control_sync_routing_validates_deployed_values_without_changing_manifes
     )[0].message == ('sync routing overlay outside selected service scope')
 
 
-@pytest.mark.parametrize('lever', ['bpp_decision_cache', 'privacy_checks_shadow', 'bpp_owner_memo_enforce'])
-def test_read_lever_parity_rejects_worker_inheriting_api_privacy_scope(read_lever_sources, lever):
-    """API-only admission must not flow through the integration comparison into a worker train."""
+@pytest.mark.parametrize(
+    ('lever', 'drift'), [('bpp_decision_cache', 100), ('privacy_checks_shadow', 10), ('bpp_owner_memo_enforce', 100)]
+)
+def test_read_lever_parity_rejects_unapproved_worker_privacy_values(read_lever_sources, lever, drift):
     policy, sources, expected = read_lever_sources
     changed = copy.deepcopy(sources)
     worker = 'chart/prod/batch-pipeline-worker'
-    integration = 'runtime/prod/cloud_run/services/backend-integration'
-    assert changed[worker][lever] != expected[integration][lever]
-    changed[worker][lever] = expected[integration][lever]
+    assert changed[worker][lever] == 0
+    changed[worker][lever] = drift
     assert any(worker in error for error in read_lever_manifest.parity_errors(changed, expected, policy))
 
 

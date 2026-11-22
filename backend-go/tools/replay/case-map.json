@@ -1,0 +1,508 @@
+{
+  "version": 1,
+  "active_floor": 50,
+  "active_case_count": 50,
+  "held_out_case_count": 4,
+  "oracle_drivable_rules": {
+    "F01": "Selected trigger and end reason are accepted and carried into a job.",
+    "F02": "Completed, failed, discarded and missing admissions, deterministic binding, and sequential duplicate request.",
+    "F04": "Own-key admission parks and resumes with the replay-only key.",
+    "F08": "Worker fences a missing conversation and covers simple discard/empty admission paths.",
+    "F14": "Integration success and final delivery attempt behavior.",
+    "F17": "Malformed enhanced transcript yields typed transcript_unreadable and a dead-letter outcome.",
+    "F32": "Post-finalization account erasure removes the owner document and queue rows (not the deletion-marker race).",
+    "F09": "Single-revision transcript read, notes generation and persistence; no concurrent revision race."
+  },
+  "not_oracle_drivable_rules": {
+    "F03": "Recovery cutoff, recording lease, backfill inflight and concurrent deletion races.",
+    "F05": "Task envelope parsing, quiet/merge routes, priority and run-lock checks.",
+    "F06": "Worker epoch takeover, crash budgets and stale-generation delivery.",
+    "F07": "Reconciler cursor, due-marker repair and bounded redispatch.",
+    "F10": "Input-hash dedupe and recovery empty-structure policy.",
+    "F11": "Concurrent fanout ownership races and stale rows.",
+    "F12": "Smart-merge snapshot race and embedding failure semantics.",
+    "F13": "Lazy/suppressed processing, receipt and keyframe gates.",
+    "F15": "Crash between committed fanout and terminal job closure.",
+    "F16": "Transport/durable retry budget, exhaustion and delayed requeue policy.",
+    "F18": "Quiet-check arming and deadline clamping.",
+    "F19": "Quiet-check wake, stale generation and empty-custody cleanup.",
+    "F20": "Document-size recovery hold and bounded refusal.",
+    "F21": "Smart-merge decision thresholds and shadow policy.",
+    "F22": "Serve-absorb transaction, rollback and refresh checkpoints.",
+    "F23": "Explicit merge source-set admission and lease.",
+    "F24": "Merge recovery across irreversible cleanup phase.",
+    "F25": "Live episode close and member eligibility.",
+    "F26": "Episode reconciliation and committed fanout independence.",
+    "F27": "Summary debt creation and repair policy.",
+    "F28": "Summary repair outbox, revision resets and BYOK policy.",
+    "F29": "Folder assignment gates and failure behavior.",
+    "F30": "Task replacement, reminder reconciliation and export.",
+    "F31": "Goal progress lock, idempotency and event identity.",
+    "F33": "Socket teardown and capture-mode lifecycle branches.",
+    "F34": "Enrichment envelope routing on the worker endpoint.",
+    "F35": "Fake-clock retry boundaries and manual redrive semantics.",
+    "F36": "Merge-worker rollback and post-seal cleanup durability.",
+    "F37": "Episode receipt identity, activity and idle-close race.",
+    "F38": "Terminal outcome projection-shard counters and legacy denominator."
+  },
+  "cases": [
+    {
+      "name": "completed-capture",
+      "corpus": "admission-parity.json",
+      "rules": [
+        "F01",
+        "F02"
+      ],
+      "held_out": false
+    },
+    {
+      "name": "completed-explicit",
+      "corpus": "admission-parity.json",
+      "rules": [
+        "F01",
+        "F02"
+      ],
+      "held_out": false
+    },
+    {
+      "name": "failed-after-disconnect",
+      "corpus": "admission-parity.json",
+      "rules": [
+        "F02"
+      ],
+      "held_out": false
+    },
+    {
+      "name": "failed-client-retry",
+      "corpus": "admission-parity.json",
+      "rules": [
+        "F02"
+      ],
+      "held_out": false
+    },
+    {
+      "name": "discarded-before-end",
+      "corpus": "admission-parity.json",
+      "rules": [
+        "F02",
+        "F08"
+      ],
+      "held_out": false
+    },
+    {
+      "name": "discarded-after-summary",
+      "corpus": "admission-parity.json",
+      "rules": [
+        "F02",
+        "F08"
+      ],
+      "held_out": false
+    },
+    {
+      "name": "missing-capture",
+      "corpus": "admission-parity.json",
+      "rules": [
+        "F01",
+        "F02"
+      ],
+      "held_out": false
+    },
+    {
+      "name": "missing-explicit",
+      "corpus": "admission-parity.json",
+      "rules": [
+        "F01",
+        "F02"
+      ],
+      "held_out": false
+    },
+    {
+      "name": "missing-recovery",
+      "corpus": "admission-parity.json",
+      "rules": [
+        "F01",
+        "F02"
+      ],
+      "held_out": false
+    },
+    {
+      "name": "missing-reprocess",
+      "corpus": "admission-parity.json",
+      "rules": [
+        "F01",
+        "F02"
+      ],
+      "held_out": false
+    },
+    {
+      "name": "kept-with-effects",
+      "corpus": "conformance-gaps.json",
+      "rules": [
+        "F02",
+        "F09",
+        "F14"
+      ],
+      "held_out": false
+    },
+    {
+      "name": "word-floor",
+      "corpus": "conformance-gaps.json",
+      "rules": [
+        "F09"
+      ],
+      "held_out": false
+    },
+    {
+      "name": "empty-capture",
+      "corpus": "conformance-gaps.json",
+      "rules": [
+        "F09"
+      ],
+      "held_out": false
+    },
+    {
+      "name": "unicode-transcript",
+      "corpus": "conformance-gaps.json",
+      "rules": [
+        "F09"
+      ],
+      "held_out": false
+    },
+    {
+      "name": "compressed-standard",
+      "corpus": "conformance-gaps.json",
+      "rules": [
+        "F09"
+      ],
+      "held_out": false
+    },
+    {
+      "name": "enhanced-compressed",
+      "corpus": "conformance-gaps.json",
+      "rules": [
+        "F09"
+      ],
+      "held_out": false
+    },
+    {
+      "name": "own-key-resume",
+      "corpus": "conformance-gaps.json",
+      "rules": [
+        "F04"
+      ],
+      "held_out": false
+    },
+    {
+      "name": "last-attempt-webhook",
+      "corpus": "conformance-gaps.json",
+      "rules": [
+        "F09",
+        "F14"
+      ],
+      "held_out": false
+    },
+    {
+      "name": "trigger-capture-end",
+      "corpus": "conformance-gaps.json",
+      "rules": [
+        "F01"
+      ],
+      "held_out": false
+    },
+    {
+      "name": "trigger-client-finalize",
+      "corpus": "conformance-gaps.json",
+      "rules": [
+        "F01"
+      ],
+      "held_out": false
+    },
+    {
+      "name": "trigger-server-recovery",
+      "corpus": "conformance-gaps.json",
+      "rules": [
+        "F01"
+      ],
+      "held_out": false
+    },
+    {
+      "name": "trigger-user-reprocess",
+      "corpus": "conformance-gaps.json",
+      "rules": [
+        "F01"
+      ],
+      "held_out": false
+    },
+    {
+      "name": "end-reason-disconnect",
+      "corpus": "conformance-gaps.json",
+      "rules": [
+        "F01"
+      ],
+      "held_out": false
+    },
+    {
+      "name": "end-reason-silence",
+      "corpus": "conformance-gaps.json",
+      "rules": [
+        "F01"
+      ],
+      "held_out": false
+    },
+    {
+      "name": "end-reason-timeout",
+      "corpus": "conformance-gaps.json",
+      "rules": [
+        "F01"
+      ],
+      "held_out": false
+    },
+    {
+      "name": "end-reason-server-shutdown",
+      "corpus": "conformance-gaps.json",
+      "rules": [
+        "F01"
+      ],
+      "held_out": false
+    },
+    {
+      "name": "end-reason-unknown",
+      "corpus": "conformance-gaps.json",
+      "rules": [
+        "F01"
+      ],
+      "held_out": false
+    },
+    {
+      "name": "repeated-admission-1",
+      "corpus": "conformance-gaps.json",
+      "rules": [
+        "F02"
+      ],
+      "held_out": false
+    },
+    {
+      "name": "repeated-admission-2",
+      "corpus": "conformance-gaps.json",
+      "rules": [
+        "F02"
+      ],
+      "held_out": false
+    },
+    {
+      "name": "repeated-admission-3",
+      "corpus": "conformance-gaps.json",
+      "rules": [
+        "F02"
+      ],
+      "held_out": false
+    },
+    {
+      "name": "repeated-admission-4",
+      "corpus": "conformance-gaps.json",
+      "rules": [
+        "F02"
+      ],
+      "held_out": false
+    },
+    {
+      "name": "byok-resume-1",
+      "corpus": "conformance-gaps.json",
+      "rules": [
+        "F04"
+      ],
+      "held_out": false
+    },
+    {
+      "name": "byok-resume-2",
+      "corpus": "conformance-gaps.json",
+      "rules": [
+        "F04"
+      ],
+      "held_out": false
+    },
+    {
+      "name": "byok-resume-3",
+      "corpus": "conformance-gaps.json",
+      "rules": [
+        "F04"
+      ],
+      "held_out": false
+    },
+    {
+      "name": "byok-resume-4",
+      "corpus": "conformance-gaps.json",
+      "rules": [
+        "F04"
+      ],
+      "held_out": false
+    },
+    {
+      "name": "integration-one-success",
+      "corpus": "conformance-gaps.json",
+      "rules": [
+        "F09",
+        "F14"
+      ],
+      "held_out": false
+    },
+    {
+      "name": "integration-two-success",
+      "corpus": "conformance-gaps.json",
+      "rules": [
+        "F09",
+        "F14"
+      ],
+      "held_out": false
+    },
+    {
+      "name": "integration-final-drop-one",
+      "corpus": "conformance-gaps.json",
+      "rules": [
+        "F09",
+        "F14"
+      ],
+      "held_out": false
+    },
+    {
+      "name": "integration-final-drop-two",
+      "corpus": "conformance-gaps.json",
+      "rules": [
+        "F09",
+        "F14"
+      ],
+      "held_out": false
+    },
+    {
+      "name": "integration-final-drop-three",
+      "corpus": "conformance-gaps.json",
+      "rules": [
+        "F09",
+        "F14"
+      ],
+      "held_out": false
+    },
+    {
+      "name": "multisegment-ascii",
+      "corpus": "conformance-gaps.json",
+      "rules": [
+        "F09"
+      ],
+      "held_out": false
+    },
+    {
+      "name": "multisegment-unicode",
+      "corpus": "conformance-gaps.json",
+      "rules": [
+        "F09"
+      ],
+      "held_out": false
+    },
+    {
+      "name": "transcript-whitespace",
+      "corpus": "conformance-gaps.json",
+      "rules": [
+        "F09"
+      ],
+      "held_out": false
+    },
+    {
+      "name": "transcript-punctuation",
+      "corpus": "conformance-gaps.json",
+      "rules": [
+        "F09"
+      ],
+      "held_out": false
+    },
+    {
+      "name": "transcript-empty-text",
+      "corpus": "conformance-gaps.json",
+      "rules": [
+        "F09"
+      ],
+      "held_out": false
+    },
+    {
+      "name": "transcript-stored-segments",
+      "corpus": "conformance-gaps.json",
+      "rules": [
+        "F09"
+      ],
+      "held_out": false
+    },
+    {
+      "name": "transcript-standard-protection",
+      "corpus": "conformance-gaps.json",
+      "rules": [
+        "F09"
+      ],
+      "held_out": false
+    },
+    {
+      "name": "worker-missing-row-fence",
+      "corpus": "conformance-gaps.json",
+      "rules": [
+        "F02",
+        "F08"
+      ],
+      "held_out": false
+    },
+    {
+      "name": "unreadable-ciphertext-dead-letters",
+      "corpus": "conformance-gaps.json",
+      "rules": [
+        "F17"
+      ],
+      "held_out": false
+    },
+    {
+      "name": "erase-removes-owner-and-jobs",
+      "corpus": "conformance-gaps.json",
+      "rules": [
+        "F32"
+      ],
+      "held_out": false
+    },
+    {
+      "name": "heldout-concurrent-lost-response",
+      "corpus": "held-out.json",
+      "rules": [
+        "F02"
+      ],
+      "held_out": true
+    },
+    {
+      "name": "heldout-expired-worker-epoch",
+      "corpus": "held-out.json",
+      "rules": [
+        "F06"
+      ],
+      "held_out": true
+    },
+    {
+      "name": "heldout-embedding-failure",
+      "corpus": "held-out.json",
+      "rules": [
+        "F12"
+      ],
+      "held_out": true
+    },
+    {
+      "name": "heldout-revision-race",
+      "corpus": "held-out.json",
+      "rules": [
+        "F09"
+      ],
+      "held_out": true
+    }
+  ],
+  "partial_rule_gaps": {
+    "F01": "Trigger and end-reason values are accepted and recorded; recovery cutoff, quiet eligibility and policy side effects are not driven.",
+    "F02": "Sequential duplicate request and terminal input states are covered; concurrent admission races, lost responses and pre-existing-job reattachment are not.",
+    "F04": "Active own-key resume is covered; due reblocking, secret exclusion and 14-day abandonment are not.",
+    "F08": "The missing-worker-row fence and simple discarded/empty paths are covered; batch custody and open/closed empty archive distinctions are not.",
+    "F09": "Only one-revision transcript read and persistence are covered; meeting waits, concurrent edits and stale revision refusal are not.",
+    "F14": "Ordinary integration delivery and final-attempt drop are covered; created-webhook merge-observer deferral and retry progress after process loss are not.",
+    "F32": "Post-finalization erase purge is covered; blocking deletion marker and cutover fence races are not."
+  }
+}

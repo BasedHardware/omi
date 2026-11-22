@@ -5,6 +5,10 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
+import 'package:omi/models/custom_stt_config.dart';
+import 'package:omi/models/stt_provider.dart';
+import 'package:omi/services/devices/connectors/limitless_connection.dart';
+import 'package:omi/services/devices/connectors/limitless_realtime_health.dart';
 import 'package:omi/services/sockets/pure_socket.dart';
 import 'package:omi/services/capture/capture_coordinator.dart';
 import 'package:omi/services/wals/wal.dart';
@@ -82,6 +86,39 @@ void main() {
     expect(world.controller.isPaused, false);
     expect(world.socket!.status, PureSocketStatus.connected);
     expect(world.deviceConnection!.openAudioSubscriptions, 1);
+  });
+
+  test('Android Limitless watchdog keeps the admitted owner through device metadata refresh', () async {
+    world.controller.updateRecordingDevice(null);
+    await world.settle();
+    SharedPreferencesUtil().uid = 'capture-test-owner';
+    await SharedPreferencesUtil().saveCustomSttConfig(
+      const CustomSttConfig(provider: SttProvider.customLive, url: 'wss://local-stt.example.test'),
+    );
+    final device = BtDevice(id: 'limitless-1', name: 'Limitless', type: DeviceType.limitless, rssi: -40);
+    final connection = _WatchedLimitlessConnection();
+    world.deviceConnection = connection;
+    await world.controller.streamDeviceRecording(device: device);
+    await world.settle();
+
+    final admitted = connection.captureIsCurrent;
+    final recording = world.controller.activeRecordingId;
+    expect(recording, isNotNull);
+    expect(admitted?.call(), isTrue);
+
+    // Mirrors the second update in DeviceProvider._onDeviceConnected after
+    // getDeviceInfo: same capture and physical link, fresh device metadata.
+    world.controller.updateRecordingDevice(device.copyWith(firmwareRevision: '1.0.0'));
+    await world.settle();
+
+    expect(world.controller.activeRecordingId, recording);
+    expect(connection.captureIsCurrent, same(admitted));
+    expect(admitted?.call(), isTrue);
+
+    SharedPreferencesUtil().uid = 'replaced-test-owner';
+    expect(admitted?.call(), isFalse);
+    await world.controller.pauseCapture();
+    expect(connection.captureIsCurrent, isNull);
   });
 
   test('queued silence event cannot change ownership or run pause effects', () {
@@ -277,4 +314,27 @@ void main() {
     await world.settle();
     expect(world.controller.isPaused, true);
   });
+}
+
+class _WatchedLimitlessConnection extends ScriptedDeviceConnection implements LimitlessDeviceConnection {
+  bool Function()? captureIsCurrent;
+
+  @override
+  bool get supportsCustomLiveRecovery => true;
+
+  @override
+  Future<Map<String, String>> getDeviceInfo() async => {};
+
+  @override
+  void watchCustomLiveAudio({
+    required bool Function() captureIsCurrent,
+    required void Function() onEnabled,
+    required void Function(LimitlessRealtimeHealthOutcome) report,
+  }) {
+    this.captureIsCurrent = captureIsCurrent;
+    onEnabled();
+  }
+
+  @override
+  void stopCustomLiveAudioWatch() => captureIsCurrent = null;
 }

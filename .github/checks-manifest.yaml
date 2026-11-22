@@ -1319,6 +1319,11 @@ checks:
     triggers: [".github/scripts/resolve-desktop-changelog-sync.py", ".github/scripts/test_resolve_desktop_changelog_sync.py", ".github/workflows/desktop_auto_release.yml", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "issue #11936: squash/orphan changelog recovery must not hard-fail every hourly retry or scan main history O(n)"
+  - id: desktop-changelog-approval-wait
+    command: ["python3", ".github/scripts/test_wait_for_changelog_approval.py"]
+    triggers: [".github/scripts/wait-for-changelog-approval.py", ".github/scripts/test_wait_for_changelog_approval.py", ".github/workflows/desktop_auto_release.yml", ".github/workflows/ui-author-approval.yml", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "SCA-3432: the hourly candidate planner must wait for the asynchronous UI author approval status on the exact changelog PR head and fail closed before any merge or tag on timeout, rejection, an unreadable status or a changed head"
   - id: desktop-candidate-source-gate
     command: ["python3", ".github/scripts/test_plan_desktop_release.py"]
     triggers: [".github/scripts/plan-desktop-release.py", ".github/scripts/test_plan_desktop_release.py", ".github/workflows/desktop_auto_release.yml", ".github/checks-manifest.yaml"]

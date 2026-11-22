@@ -3348,7 +3348,7 @@ environments:
           MEDIA_NOISE_MODE_SERVE_PERCENT: {value: '0', category: rollout}
           NOTES_SHORT_CLIP_FLOOR: {value: 'true', category: rollout}
           BATCH_PIPELINE_SILENCE_READ_SKIP_ENABLED:
-            value: 'true'
+            value: 'false'
             category: ops_kill
           PUSHER_RECORD_CLOSE_NOTIFY_ENABLED: {value: 'false', category: rollout}
           PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_PERCENT: {value: '100', category: rollout}
@@ -3412,7 +3412,7 @@ environments:
           HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED:
             value: 'true'
             category: ops_kill
-          SYNC_FUTURE_CAPTURE_CLAMP_ENABLED: {value: 'false', category: rollout}
+          SYNC_FUTURE_CAPTURE_CLAMP_ENABLED: {value: 'true', category: rollout}
           RECORD_SEAL_REPAIR_FRESH_ENABLED:
             value: 'true'
             category: ops_kill
@@ -4071,6 +4071,7 @@ environments:
           forbidden_env:
           - BATCH_HELD_POLL_SKIP_ENABLED
           - BATCH_PROJECTION_FINISH_BACKOFF_ENABLED
+          - DREAM_AGENT_PAID_PERCENT
           - DEEPGRAM_SELF_HOSTED_ENABLED
           - DEEPGRAM_SELF_HOSTED_URL
           - DEEPGRAM_API_KEY
@@ -4447,7 +4448,7 @@ environments:
               value: 'true'
               category: ops_kill
             BATCH_PIPELINE_FOLLOWUP_CLAIMED_SIBLING_SKIP_ENABLED:
-              value: 'false'
+              value: 'true'
               category: ops_kill
             PUSHER_RECORD_CLOSE_NOTIFY_ENABLED: {value: 'false', category: rollout}
             PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_PERCENT: {value: '100', category: rollout}
@@ -4516,7 +4517,7 @@ environments:
             HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED:
               value: 'true'
               category: ops_kill
-            SYNC_FUTURE_CAPTURE_CLAMP_ENABLED: {value: 'false', category: rollout}
+            SYNC_FUTURE_CAPTURE_CLAMP_ENABLED: {value: 'true', category: rollout}
             RECORD_SEAL_REPAIR_FRESH_ENABLED:
               value: 'true'
               category: ops_kill
@@ -4588,7 +4589,6 @@ environments:
             OMI_MESSAGING_LINK_TARGETS: {value: '{"telegram":{"provider":"telegram","address":"omi_chat_bot","deep_link_template":"https://t.me/{address}?start={proof}"},"imessage":{"provider":"keiki","address":"+14155252967","lines":[{"address":"+14155252967","started":"2026-10-30"}]}}',
               category: rollout}
             DREAM_AGENT_ENABLED: {value: 'true', category: rollout}
-            DREAM_AGENT_PAID_PERCENT: {value: '100', category: rollout}
             DREAM_AGENT_CONCURRENCY:
               value: '8'
               category: reliability
@@ -5022,7 +5022,7 @@ environments:
               value: 'true'
               category: ops_kill
             BATCH_PIPELINE_FOLLOWUP_CLAIMED_SIBLING_SKIP_ENABLED:
-              value: 'false'
+              value: 'true'
               category: ops_kill
             PUSHER_RECORD_CLOSE_NOTIFY_ENABLED: {value: 'false', category: rollout}
             PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_PERCENT: {value: '100', category: rollout}
@@ -5088,7 +5088,7 @@ environments:
             HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED:
               value: 'true'
               category: ops_kill
-            SYNC_FUTURE_CAPTURE_CLAMP_ENABLED: {value: 'false', category: rollout}
+            SYNC_FUTURE_CAPTURE_CLAMP_ENABLED: {value: 'true', category: rollout}
             RECORD_SEAL_REPAIR_FRESH_ENABLED:
               value: 'true'
               category: ops_kill
@@ -5164,7 +5164,6 @@ environments:
             TRANSCRIPTION_SYNC_FINAL_PASS_HOURLY_REQUESTS: {value: '15000', category: rollout}
             OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
             DREAM_AGENT_ENABLED: {value: 'true', category: rollout}
-            DREAM_AGENT_PAID_PERCENT: {value: '100', category: rollout}
             DREAM_AGENT_CONCURRENCY:
               value: '8'
               category: reliability
@@ -5276,6 +5275,7 @@ environments:
           forbidden_env:
           - BATCH_HELD_POLL_SKIP_ENABLED
           - BATCH_PROJECTION_FINISH_BACKOFF_ENABLED
+          - DREAM_AGENT_PAID_PERCENT
           - DEEPGRAM_SELF_HOSTED_ENABLED
           - DEEPGRAM_SELF_HOSTED_URL
           - DEEPGRAM_API_KEY
@@ -5651,7 +5651,7 @@ environments:
             HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED:
               value: 'true'
               category: ops_kill
-            SYNC_FUTURE_CAPTURE_CLAMP_ENABLED: {value: 'false', category: rollout}
+            SYNC_FUTURE_CAPTURE_CLAMP_ENABLED: {value: 'true', category: rollout}
             RECORD_SEAL_REPAIR_FRESH_ENABLED:
               value: 'true'
               category: ops_kill
@@ -5710,7 +5710,6 @@ environments:
             TRANSCRIPTION_SYNC_FINAL_PASS_HOURLY_REQUESTS: {value: '15000', category: rollout}
             OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
             DREAM_AGENT_ENABLED: {value: 'true', category: rollout}
-            DREAM_AGENT_PAID_PERCENT: {value: '100', category: rollout}
             DREAM_AGENT_CONCURRENCY:
               value: '8'
               category: reliability
@@ -5816,6 +5815,7 @@ environments:
           forbidden_env:
           - BATCH_HELD_POLL_SKIP_ENABLED
           - BATCH_PROJECTION_FINISH_BACKOFF_ENABLED
+          - DREAM_AGENT_PAID_PERCENT
           - DEEPGRAM_SELF_HOSTED_ENABLED
           - DEEPGRAM_SELF_HOSTED_URL
           - DEEPGRAM_API_KEY
@@ -6088,7 +6088,10 @@ environments:
             BATCH_PIPELINE_SERVING_TICK_SECONDS: {value: '10', category: rollout}
             BATCH_PROJECTION_FINISH_CLASSIFY_PAGE_LIMIT: {value: '16', category: rollout}
             BATCH_PIPELINE_FOLLOWUP_CLAIMED_SIBLING_SKIP_ENABLED:
-              value: 'false'
+              value: 'true'
+              category: ops_kill
+            BATCH_PIPELINE_SERVING_PROJECTION_SWEEP:
+              value: 'true'
               category: ops_kill
             BATCH_PIPELINE_SILENCE_READ_SKIP_ENABLED:
               value: 'true'
@@ -6164,7 +6167,7 @@ environments:
             HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED:
               value: 'true'
               category: ops_kill
-            SYNC_FUTURE_CAPTURE_CLAMP_ENABLED: {value: 'false', category: rollout}
+            SYNC_FUTURE_CAPTURE_CLAMP_ENABLED: {value: 'true', category: rollout}
             RECORD_SEAL_REPAIR_FRESH_ENABLED:
               value: 'true'
               category: ops_kill
@@ -6240,7 +6243,6 @@ environments:
               category: reliability
             OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
             DREAM_AGENT_ENABLED: {value: 'true', category: rollout}
-            DREAM_AGENT_PAID_PERCENT: {value: '100', category: rollout}
             DREAM_AGENT_CONCURRENCY:
               value: '8'
               category: reliability
@@ -6305,6 +6307,7 @@ environments:
           forbidden_env:
           - BATCH_HELD_POLL_SKIP_ENABLED
           - BATCH_PROJECTION_FINISH_BACKOFF_ENABLED
+          - DREAM_AGENT_PAID_PERCENT
           - DEEPGRAM_SELF_HOSTED_ENABLED
           - DEEPGRAM_SELF_HOSTED_URL
           - DEEPGRAM_API_KEY
@@ -6577,7 +6580,10 @@ environments:
             BATCH_PIPELINE_SERVING_TICK_SECONDS: {value: '10', category: rollout}
             BATCH_PROJECTION_FINISH_CLASSIFY_PAGE_LIMIT: {value: '16', category: rollout}
             BATCH_PIPELINE_FOLLOWUP_CLAIMED_SIBLING_SKIP_ENABLED:
-              value: 'false'
+              value: 'true'
+              category: ops_kill
+            BATCH_PIPELINE_SERVING_PROJECTION_SWEEP:
+              value: 'true'
               category: ops_kill
             BATCH_PIPELINE_SILENCE_READ_SKIP_ENABLED:
               value: 'false'
@@ -6653,7 +6659,7 @@ environments:
             HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED:
               value: 'true'
               category: ops_kill
-            SYNC_FUTURE_CAPTURE_CLAMP_ENABLED: {value: 'false', category: rollout}
+            SYNC_FUTURE_CAPTURE_CLAMP_ENABLED: {value: 'true', category: rollout}
             RECORD_SEAL_REPAIR_FRESH_ENABLED:
               value: 'true'
               category: ops_kill
@@ -6729,7 +6735,6 @@ environments:
               category: reliability
             OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
             DREAM_AGENT_ENABLED: {value: 'true', category: rollout}
-            DREAM_AGENT_PAID_PERCENT: {value: '100', category: rollout}
             DREAM_AGENT_CONCURRENCY:
               value: '8'
               category: reliability
@@ -6780,7 +6785,7 @@ environments:
             SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED: {value: 'true', category: rollout}
             OMI_PROCESS_ROLE:
               value: projection_pump
-            BATCH_PIPELINE_PROJECTION_PUMP_ENABLED: {value: 'true', category: rollout}
+            BATCH_PIPELINE_PROJECTION_PUMP_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_PUMP_SWEEP_PAGES: {value: '1', category: rollout}
             BATCH_PIPELINE_PUMP_TICK_SECONDS: {value: '2', category: rollout}
             BATCH_PIPELINE_MAX_OWNER_DRAINS: {value: '8', category: rollout}
@@ -6800,6 +6805,7 @@ environments:
           forbidden_env:
           - BATCH_HELD_POLL_SKIP_ENABLED
           - BATCH_PROJECTION_FINISH_BACKOFF_ENABLED
+          - DREAM_AGENT_PAID_PERCENT
           - DEEPGRAM_SELF_HOSTED_ENABLED
           - DEEPGRAM_SELF_HOSTED_URL
           - DEEPGRAM_API_KEY

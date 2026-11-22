@@ -189,7 +189,7 @@ env:
   - name: HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED
     value: "true"
   - name: SYNC_FUTURE_CAPTURE_CLAMP_ENABLED
-    value: 'false'
+    value: 'true'
   - name: HOME_TRANSCRIPTION_MAX_AGE_SECONDS
     value: "86400"
   - name: HOME_LIVE_MEMBER_NOTES_BOUNDED_ENABLED
@@ -264,9 +264,10 @@ env:
   # Separate listen roll after mobile batch-only 100; lead expands by 2026-11-03.
   - name: RECORD_SEAL_OVERLAP_TRIM_ENABLED
     value: "true"
-  # Shared backend routes: silent read skipping on (SCA-1824 READBACK); kill switch: set "false".
+  # Pinned false on listen (SCA-3516): the listen roll preserves live behaviour. Activation is its own
+  # one-key step with a scoped go, guard and readback.
   - name: BATCH_PIPELINE_SILENCE_READ_SKIP_ENABLED
-    value: "true"
+    value: "false"
   - name: BATCH_PIPELINE_SERVING_ENABLED
     value: "false"
   - name: BATCH_PIPELINE_WORKER_ENABLED

@@ -26,6 +26,7 @@ from database import conversations_v3_rederive as rederive_store
 from utils.cloud_tasks import enqueue_named_task
 from utils.conversations.v3 import Conflict, outline, planner, policy, service, visibility
 from utils.conversations.v3.triggers import task_base
+from utils.conversations.v3.word_floor import MIN_TASK_WORDS
 from utils.executors import db_executor, run_blocking
 
 logger = logging.getLogger(__name__)
@@ -193,17 +194,17 @@ def estimate_partition(uid, partition, run_id, *, rederive=False, now=None):
         'usd': 0.0,
     }
     for group in groups:
-        words = sum(len(line['text'].split()) for line in group['lines'])
+        words = planner.word_count(group['lines'])
         est['words'] += words
         est['usd'] += _usd(OUTLINE_TOKENS['in'] + words * TOKENS_PER_WORD, OUTLINE_TOKENS['out'])
-        if words >= 300 or (group.get('manual_end') and words > 0):
+        if words >= visibility.MIN_HOME_WORDS or (group.get('manual_end') and words > 0):
             est['notes_calls'] += 1
-            if words >= AGENT_MIN_WORDS:
+            if sum(len(line['text'].split()) for line in group['lines']) >= AGENT_MIN_WORDS:
                 est['agent_notes'] += 1
                 est['usd'] += AGENT_MAX_USD
             else:
                 est['usd'] += _usd(NOTES_TOKENS['in'] + words * TOKENS_PER_WORD, NOTES_TOKENS['out'])
-        elif words >= 20:
+        elif words >= MIN_TASK_WORDS:
             est['short_task_calls'] += 1
             est['usd'] += _usd(SHORT_TASKS_TOKENS['in'] + words * TOKENS_PER_WORD, SHORT_TASKS_TOKENS['out'])
         else:
@@ -669,23 +670,23 @@ def estimate_live_partition(uid, partition, run_id, *, now=None, historical_sitd
         if key.startswith(('protected_', 'sources_', 'skipped_')):
             est[key] = value
     for group in groups:
-        words = sum(len(line['text'].split()) for line in group['lines'])
+        words = planner.word_count(group['lines'])
         est['words'] += words
         est['usd'] += _usd(OUTLINE_TOKENS['in'] + words * TOKENS_PER_WORD, OUTLINE_TOKENS['out'])
     for window in fresh:
-        words = window.get('_stretch_words', planner.word_count(window['lines']))
+        own = planner.word_count(window['lines'])
+        words = window.get('_stretch_words', own)
         manual = bool(window.get('manual_end'))
         hidden = window['finished'] and not manual and words < visibility.MIN_HOME_WORDS
         est['visible_after'] += 0 if hidden else 1
-        own = planner.word_count(window['lines'])
         if own >= visibility.MIN_HOME_WORDS or (manual and own > 0):
             est['notes_calls'] += 1
-            if own >= AGENT_MIN_WORDS:
+            if sum(len(line['text'].split()) for line in window['lines']) >= AGENT_MIN_WORDS:
                 est['agent_notes'] += 1
                 est['usd'] += AGENT_MAX_USD
             else:
                 est['usd'] += _usd(NOTES_TOKENS['in'] + own * TOKENS_PER_WORD, NOTES_TOKENS['out'])
-        elif own >= 20:
+        elif own >= MIN_TASK_WORDS:
             est['short_task_calls'] += 1
             est['usd'] += _usd(SHORT_TASKS_TOKENS['in'] + own * TOKENS_PER_WORD, SHORT_TASKS_TOKENS['out'])
     return est

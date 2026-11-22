@@ -2,10 +2,13 @@
 
 from contextlib import nullcontext
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
+import re
 from types import SimpleNamespace
 from unittest.mock import Mock
 
 import pytest
+import yaml
 
 from database import conversations_v3 as store, conversations_v3_leases as leases
 from database import conversations_v3_processing as writers
@@ -97,6 +100,37 @@ def test_short_path_settle_writes_no_notes_and_owes_nothing(strict):
     strict.rows[C] = derived()
     assert settle(strict, notes=False) is False
     assert 'v3_notes_written' not in strict.rows[C] and 'v3_created_pending' not in strict.rows[C]
+
+
+def test_completed_word_floor_is_observed_once_on_settlement(strict, monkeypatch):
+    strict.rows[C] = derived(v3_process_pending=True)
+    observe = Mock()
+    monkeypatch.setattr(writers.metrics, 'observe_word_floor', observe)
+    token = leases.acquire('synthetic', 'summary-c', firestore_client=strict)
+    for _ in range(2):
+        writers.settle_processing(
+            'synthetic', 'c', token, 1, AT, word_floor_outcomes=(True, False), firestore_client=strict
+        )
+    observe.assert_called_once_with(True, False)
+
+
+def test_cloud_run_sync_scrapes_both_word_floor_outcomes():
+    profile = Path(__file__).resolve().parents[2] / 'deploy' / 'cloud_run_gmp_sync.yaml'
+    rules = yaml.safe_load(profile.read_text())['spec']['endpoints'][0]['metricRelabeling']
+    (rule,) = [r for r in rules if r['action'] == 'keep' and r['sourceLabels'] == ['__name__']]
+    samples = [
+        sample
+        for family in writers.metrics.WORD_FLOOR_COMPLETIONS.collect()
+        for sample in family.samples
+        if sample.name.endswith('_total')
+    ]
+    assert {(s.labels['method'], s.labels['floor']) for s in samples} == {
+        ('legacy', 'below'),
+        ('legacy', 'met'),
+        ('script_aware', 'below'),
+        ('script_aware', 'met'),
+    }
+    assert all(re.fullmatch(rule['regex'], sample.name) for sample in samples)
 
 
 def test_discovery_skips_parked_deliveries_without_hiding_python_work(monkeypatch):
@@ -299,6 +333,29 @@ def test_explicit_retry_settle_wakes_the_owner_to_deliver(monkeypatch):
     assert processing.run_external(fn, 'u', 'en', conversation) is result
     assert settles[0]['notes'] is True
     assert len(wakes) == 1 and wakes[0][0] == 'u'
+
+
+def test_exhausted_row_settles_as_a_no_op_instead_of_raising(monkeypatch):
+    monkeypatch.setattr(processing.leases, 'acquire', lambda *a: 'token')
+    monkeypatch.setattr(processing.leases, 'keepalive', lambda *a: nullcontext())
+    monkeypatch.setattr(processing.leases, 'release', lambda *a: None)
+    monkeypatch.setattr(processing.fence, 'writer', lambda *a: nullcontext())
+    monkeypatch.setattr(processing.writers, 'begin_processing', lambda *a, **kw: writers.TERMINAL)
+    conversation = SimpleNamespace(id='c', is_locked=False, model_dump=lambda: {'id': 'c'})
+    assert (
+        processing.run_external(lambda *a, **kw: pytest.fail('paid work ran'), 'u', 'en', conversation) is conversation
+    )
+
+
+def test_unavailable_row_still_raises(monkeypatch):
+    monkeypatch.setattr(processing.leases, 'acquire', lambda *a: 'token')
+    monkeypatch.setattr(processing.leases, 'keepalive', lambda *a: nullcontext())
+    monkeypatch.setattr(processing.leases, 'release', lambda *a: None)
+    monkeypatch.setattr(processing.fence, 'writer', lambda *a: nullcontext())
+    monkeypatch.setattr(processing.writers, 'begin_processing', lambda *a, **kw: False)
+    conversation = SimpleNamespace(id='c', is_locked=False, model_dump=lambda: {'id': 'c'})
+    with pytest.raises(RuntimeError, match='v3_processing_unavailable'):
+        processing.run_external(lambda *a, **kw: pytest.fail('paid work ran'), 'u', 'en', conversation)
 
 
 @pytest.mark.asyncio

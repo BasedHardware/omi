@@ -15,6 +15,7 @@ from utils.stt_cap_dispatch import LiveAdmission, current_live_admission, suppre
 from utils.manual_speaker_assignments import acknowledged_teaching, manual_rejected_speakers
 from utils.other.live_audio_archive import LiveAudioArchive
 from utils.sync.live_cap_hold import LiveHeldAudio
+from utils.sync.live_cap_capacity import StorageQuotaExceeded
 from utils.sync.cap_hold_lifecycle import SHUTDOWN_DELIVERY_SECONDS
 from contextlib import nullcontext
 from collections import OrderedDict, deque
@@ -2829,6 +2830,10 @@ class ListenReceiver(ReplayFilterMixin):
                     await self._handle_text(message['text'])
         except WebSocketDisconnect as error:
             note_ws_close(self.host.state, 'client', error.code)
+        except StorageQuotaExceeded:
+            # Stop ingress at the existing custody boundary and run final flush
+            # and archive close. The held writer already recorded the refusal.
+            mark_listen_internal_error(self.host.state)
         except Exception as error:
             logger.error('Listen receive failure type=%s', type(error).__name__)
             mark_listen_internal_error(self.host.state)
@@ -2863,7 +2868,8 @@ class ListenReceiver(ReplayFilterMixin):
                         self.live_hold.finish_updates(cap_updates, self._cap_hold_stop), name='stt_cap_live_final_flush'
                     )
                     try:
-                        await asyncio.shield(custody)
+                        if await asyncio.shield(custody) is False:
+                            mark_listen_internal_error(self.host.state)
                     except asyncio.CancelledError:
                         self.stt_drain_complete.set()
                         self.host.state.active = False
@@ -3006,7 +3012,10 @@ class ListenReceiver(ReplayFilterMixin):
                     },
                 )
         if not self.host.use_custom_stt:
-            await self._flush_stt_buffer(buffer, force=True)
+            try:
+                await self._flush_stt_buffer(buffer, force=True)
+            except StorageQuotaExceeded:
+                mark_listen_internal_error(self.host.state)
         await self._drain_stt_sockets()
         note_deferred_stream_closed(self)  # After the final flush, which can itself open the stream.
         if self.recovery is not None and self._replay_tail_bytes:
