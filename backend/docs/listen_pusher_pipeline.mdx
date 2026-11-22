@@ -7055,13 +7055,14 @@ running inference. `BATCH_PIPELINE_POOL_KIND` and `BATCH_PIPELINE_UNIT_SECONDS`
 bound worker units independently of durable conversation identity. The local
 multi-model worker factory rejects live co-location.
 
-Stored-audio shadow ASR and the shared pyannote final pass run whole-unit on
-original audio; word, turn, overlap and legacy/single-speaker resolution clocks
-stay on the original timeline. `TRANSCRIPTION_FINAL_PASS_VAD_COMPACTION_ENABLED`,
-the optional local VAD compaction read, served off on every surface and was
-retired 2026-11-22. The sync final-pass adapter receives existing words and does
-not add an STT request. No Nemotron cascade is routed. WAL pre-STT proof
-matching is unchanged; bounded coverage outcome/reason diagnostics now explain
+Stored-audio shadow ASR transcribes each bounded audio window and the shared
+pyannote final pass diarizes the complete original PCM; word, turn, overlap and
+legacy/single-speaker resolution clocks stay on the original timeline.
+`TRANSCRIPTION_FINAL_PASS_VAD_COMPACTION_ENABLED`, the optional local VAD
+compaction read, served off on every surface and was retired 2026-11-22. The
+sync final-pass adapter receives existing words and does not add an STT
+request. No Nemotron cascade is routed. WAL pre-STT proof matching is
+unchanged; bounded coverage outcome/reason diagnostics now explain
 conservative abstention.
 
 ### Repeat-work cuts (plan v3, default off)

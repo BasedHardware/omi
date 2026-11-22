@@ -185,10 +185,10 @@ must not launch a second chain on a live GPU. A's scheduler pool capacity gate
 and these worker limits both apply; durable conversation identity need not
 change when an integration layer introduces bounded compute pieces.
 
-The stored-audio path runs whole-unit: shadow ASR transcribes each audio window
-and the shared pyannote final-pass seam diarizes the complete original PCM, so
-word, turn, overlap and embedding clocks stay on the original timeline. The
-optional local VAD compaction wrapper
+The stored-audio path stays on original audio: shadow ASR transcribes each
+bounded audio window and the shared pyannote final-pass seam diarizes the
+complete original PCM, so word, turn, overlap and embedding clocks stay on the
+original timeline. The optional local VAD compaction wrapper
 (`TRANSCRIPTION_FINAL_PASS_VAD_COMPACTION_ENABLED`) served off on every surface
 and was retired 2026-11-22.
 
