@@ -20,6 +20,7 @@ from pydantic import BaseModel
 
 from models import conversation_continuity  # noqa: F401 - retain pure policy across the legacy models package stub
 from models.transcript_segment import SpeakerIdentityStatus
+from tests.unit.memory_import_isolation import make_database_client_stub
 from utils.capture import coverage  # noqa: F401 - retain lazy ledger authority before database stubs
 from utils.stt import transcript_admission  # noqa: F401 - retain pure admission contract before enum/package stubs
 from utils.speakers import context  # noqa: F401 - retain speaker metric owner before package stubs
@@ -793,7 +794,7 @@ class TestProcessSegmentReal:
         sys.modules['models.geolocation'].Geolocation = _Geolocation
 
         sys.modules['database.redis_db'].r = MagicMock()
-        sys.modules['database._client'].db = MagicMock()
+        sys.modules['database._client'] = make_database_client_stub()
         sys.modules['database._client'].get_firestore_client = MagicMock(
             side_effect=AssertionError('flag-off segment processing must not claim a first-summary owner')
         )
