@@ -202,12 +202,12 @@ def test_captures_in_different_groups_are_not_bridged(store):
     assert store.rows == before and first != second
 
 
-@pytest.mark.parametrize('change', ['discarded', 'processing', 'deleted', 'missing', 'window'])
+@pytest.mark.parametrize('change', ['discarded', 'deferred', 'processing', 'deleted', 'missing', 'window'])
 def test_ineligible_or_changed_captures_are_fenced(store, change):
     store.rows.update({path('pendant'): row('pendant', 'omi'), path('desktop'): row('desktop', 'desktop', 100, 590)})
     target = store.rows[path('desktop')]
-    if change == 'discarded':
-        target['discarded'] = True
+    if change in {'discarded', 'deferred'}:
+        target[change] = True
     elif change == 'processing':
         target['status'] = 'processing'
     elif change == 'deleted':

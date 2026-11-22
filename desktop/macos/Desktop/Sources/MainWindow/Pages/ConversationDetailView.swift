@@ -406,42 +406,31 @@ struct ConversationDetailView: View {
       guard isCurrentDetailRequest(requestGeneration) else { return }
       AnalyticsManager.shared.conversationDetailOpened(conversationId: requestedConversation.id)
 
-      // All detail reads go through the repository. It can paint a complete
-      // cached detail immediately, but always revalidates server-owned fields.
-      if requestedConversation.needsProcessingDetailRefresh {
-        isEnrichingDeferred = true
-        // Keep following the row for as long as it is open. A bounded loop
-        // that silently stops leaves the banner promising a summary that no
-        // fetch will ever deliver; the backoff caps the cost instead.
-        var attempts = 0
-        while true {
-          guard isCurrentDetailRequest(requestGeneration), let appState = AppState.current else { break }
-          let fetched = await appState.loadConversationDetail(requestedConversation) { cached in
-            guard isCurrentDetailRequest(requestGeneration) else { return }
-            applyLoadedConversation(cached)
-          }
+      // Cache rows may drop the deferred flag. Use the initial row for
+      // loading presentation, then follow the server's actual admission.
+      isEnrichingDeferred = requestedConversation.needsProcessingDetailRefresh
+      isLoadingConversation = !isEnrichingDeferred
+      var attempts = 0
+      while isCurrentDetailRequest(requestGeneration), let appState = AppState.current {
+        let fetched = await appState.loadConversationDetail(requestedConversation) { cached in
           guard isCurrentDetailRequest(requestGeneration) else { return }
-          applyLoadedConversation(fetched)
-          if fetched.homeStep == "failed" || fetched.status != .processing { break }
-          let delay = ProcessingConversationWatcher.pollDelay(attempt: attempts)
-          attempts += 1
-          try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+          applyLoadedConversation(cached)
         }
         guard isCurrentDetailRequest(requestGeneration) else { return }
-        isEnrichingDeferred = false
-      } else {
-        isLoadingConversation = true
-        if let appState = AppState.current {
-          let fetched = await appState.loadConversationDetail(requestedConversation) { cached in
-            guard isCurrentDetailRequest(requestGeneration) else { return }
-            applyLoadedConversation(cached)
-          }
-          guard isCurrentDetailRequest(requestGeneration) else { return }
-          applyLoadedConversation(fetched)
-        }
-        guard isCurrentDetailRequest(requestGeneration) else { return }
+        applyLoadedConversation(fetched)
         isLoadingConversation = false
+        if fetched.homeStep == "failed" || fetched.status != .processing { break }
+
+        // Continue only while this detail stays open. Backoff bounds the
+        // cost without abandoning a first-open enrichment already in flight.
+        isEnrichingDeferred = true
+        let delay = ProcessingConversationWatcher.pollDelay(attempt: attempts)
+        attempts += 1
+        try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
       }
+      guard isCurrentDetailRequest(requestGeneration) else { return }
+      isEnrichingDeferred = false
+      isLoadingConversation = false
 
       guard isCurrentDetailRequest(requestGeneration) else { return }
       detailReadyConversationID = requestedConversation.id

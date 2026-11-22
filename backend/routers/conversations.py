@@ -332,6 +332,7 @@ def _enrich_deferred_conversation(uid: str, conversation: dict) -> dict:
         try:
             conv_obj = deserialize_conversation(conversation)
             conv_obj.deferred = False
+            conv_obj.status = ConversationStatus.processing
             with lifecycle_service.processing_admission_guard(uid, conversation_id, rollback_on_failure=False):
                 enriched = process_conversation(
                     uid,
@@ -373,7 +374,9 @@ def _enrich_deferred_conversation(uid: str, conversation: dict) -> dict:
                 )
 
     submit_with_context(postprocess_executor, _run_enrichment)
-    # Return immediately — still status=processing, no summary yet; the client polls for completion.
+    # The claim may have reopened a completed/deferred row. Return the admitted
+    # processing state so the client follows it through enrichment or retry.
+    conversation['status'] = 'processing'
     conversation['deferred'] = False
     return conversation
 

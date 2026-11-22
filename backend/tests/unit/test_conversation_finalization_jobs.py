@@ -2019,10 +2019,12 @@ def test_reacquire_deferred_processing_reopens_a_failed_retry_terminal():
     retryable = _Ref('retryable', {'status': 'completed', 'deferred': True})
     discarded = _Ref('discarded', {'status': 'completed', 'deferred': True, 'discarded': True})
     failed = _Ref('failed', {'status': 'failed', 'deferred': True})
+    deleted = _Ref('deleted', {'status': 'completed', 'deferred': True, 'deleted': True})
 
     assert jobs._reacquire_deferred_processing_txn(transaction, retryable, now) is True
     assert jobs._reacquire_deferred_processing_txn(transaction, discarded, now) is False
     assert jobs._reacquire_deferred_processing_txn(transaction, failed, now) is False
+    assert jobs._reacquire_deferred_processing_txn(transaction, deleted, now) is False
     assert transaction.updates == [
         (retryable, {'status': 'processing', 'deferred': False, 'processing_admitted_at': now})
     ]

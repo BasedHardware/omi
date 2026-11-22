@@ -3244,6 +3244,7 @@ def _reacquire_deferred_processing_txn(transaction: Any, conversation_ref: Any, 
         not python_owns_finalization(data)
         or data.get('status') not in {'processing', 'completed'}
         or data.get('discarded')
+        or data.get('deleted')
         or data.get('deferred') is not True
     ):
         return False

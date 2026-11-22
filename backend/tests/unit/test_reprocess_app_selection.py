@@ -178,7 +178,7 @@ def test_valid_explicit_selection_reaches_processing_with_explicit_attribution()
 
 
 def test_lazy_enrichment_uses_non_user_usage_attribution(monkeypatch):
-    conversation = {'id': 'c1', 'deferred': True}
+    conversation = {'id': 'c1', 'deferred': True, 'status': 'completed'}
     model = SimpleNamespace(language='en', deferred=True)
     monkeypatch.setattr(conv_router.lifecycle_service, 'reacquire_deferred_processing', lambda *_args: True)
     monkeypatch.setattr(
@@ -190,6 +190,7 @@ def test_lazy_enrichment_uses_non_user_usage_attribution(monkeypatch):
         result = conv_router._enrich_deferred_conversation('u1', conversation)
 
     assert result['deferred'] is False
+    assert result['status'] == model.status == 'processing'
     assert process.call_args.kwargs['trigger'] is conv_router.ProcessingTrigger.FIRST_OPEN
     assert process.call_args.kwargs['app_usage_attribution'] is AppUsageAttribution.NON_USER_REPROCESS
 

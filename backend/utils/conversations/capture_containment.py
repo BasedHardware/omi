@@ -155,7 +155,7 @@ def _field(row: Any, name: str) -> Any:
 
 
 def _window(row: Any) -> tuple[datetime, datetime, str, Any] | None:
-    if _field(row, 'discarded') or _field(row, 'deleted'):
+    if any(_field(row, key) for key in ('discarded', 'deleted', 'deferred')):
         return None
     status = getattr(_field(row, 'status'), 'value', _field(row, 'status'))
     if status != 'completed':

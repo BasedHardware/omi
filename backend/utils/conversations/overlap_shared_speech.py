@@ -106,7 +106,7 @@ def _number(value: Any) -> bool:
 
 
 def _window(row: Any) -> tuple[float, float]:
-    if any(field(row, k) for k in ('deleted', 'discarded', 'capture_group_closed')):
+    if any(field(row, k) for k in ('deleted', 'discarded', 'deferred', 'capture_group_closed')):
         raise _Rejected('ineligible')
     if field(row, 'status') != 'completed' or not field(row, 'source'):
         raise _Rejected('ineligible')
