@@ -210,7 +210,7 @@ class _TrialPaywallPageState extends State<TrialPaywallPage> {
       Text(
         l10n.paywallTrialCancelNote,
         textAlign: TextAlign.center,
-        style: _Paper.label(size: 13, color: _Paper.textSecondary, weight: FontWeight.w400),
+        style: _Paper.label(size: 13, color: _Paper.success, weight: FontWeight.w600),
       ),
       const SizedBox(height: 4),
       // Shopify buyers with an included year land here, not on the plans sheet with
@@ -403,8 +403,9 @@ class _TrialPaywallPageState extends State<TrialPaywallPage> {
                           busy: _busy,
                           onPressed: offer == null || _busy ? null : () => _checkout(offer),
                         ),
-                        const _LegalLinks(),
-                        if (!notesScroll) ...notes,
+                        if (!notesScroll) ...[const SizedBox(height: 10), ...notes],
+                        // Like the plan cards: nothing on the page reacts while a checkout or restore runs.
+                        IgnorePointer(ignoring: _locked, child: const _LegalLinks()),
                       ],
                     ),
                   ),
@@ -497,14 +498,16 @@ class _Header extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
-    // Equal side slots keep the brand centred; at large text sizes the brand ellipsizes and the
-    // Restore label shrinks to its slot instead of running into the brand.
+    // Equal side slots keep the brand centred. Each side is 3/8 of the width, so a long Restore label
+    // ("Wiederherstellen") keeps its full size at the default text size; at large text sizes the brand
+    // ellipsizes and the Restore label shrinks to its slot instead of running into the brand.
     return ConstrainedBox(
       constraints: const BoxConstraints(minHeight: 44),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Expanded(
+            flex: 3,
             child: Padding(
               padding: const EdgeInsets.only(left: 8),
               child: Align(
@@ -535,6 +538,7 @@ class _Header extends StatelessWidget {
             ),
           ),
           Expanded(
+            flex: 3,
             child: Padding(
               padding: const EdgeInsets.only(right: 16),
               child: Align(
@@ -594,7 +598,7 @@ class _LegalLinks extends StatelessWidget {
       crossAxisAlignment: WrapCrossAlignment.center,
       children: [
         link(const Key('trial_paywall_terms'), l10n.termsOfUse, (auth) => auth.openTermsOfService()),
-        Text(' · ', style: style),
+        ExcludeSemantics(child: Text(' · ', style: style)),
         link(const Key('trial_paywall_privacy'), l10n.privacyPolicy, (auth) => auth.openPrivacyPolicy()),
       ],
     );

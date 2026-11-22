@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
@@ -54,7 +56,8 @@ class _Auth extends AuthenticationProvider {
 
 typedef _Call = ({String priceId, String interval, int amountMinor, String tierId});
 
-Future<(_Auth, List<_Call>)> _pump(WidgetTester tester, {double textScale = 1}) async {
+Future<(_Auth, List<_Call>)> _pump(WidgetTester tester,
+    {double textScale = 1, Future<PaywallCheckoutOutcome> Function()? checkout}) async {
   tester.view.physicalSize = _phone * 3;
   tester.view.devicePixelRatio = 3;
   tester.view.padding = const FakeViewPadding(top: 62 * 3, bottom: 34 * 3);
@@ -81,6 +84,7 @@ Future<(_Auth, List<_Call>)> _pump(WidgetTester tester, {double textScale = 1}) 
           checkout: (_, price, tierId) async {
             calls.add(
                 (priceId: price.priceId, interval: price.interval, amountMinor: price.amountMinor, tierId: tierId));
+            if (checkout != null) return checkout();
             return PaywallCheckoutOutcome.failed;
           },
         ),
@@ -100,17 +104,18 @@ void _expectOnScreen(WidgetTester tester, Finder finder, String what) {
 }
 
 void main() {
-  testWidgets('Terms of Use and Privacy Policy sit under the button and open their pages', (tester) async {
+  testWidgets('Terms of Use and Privacy Policy sit at the bottom, under the code hint, and open their pages',
+      (tester) async {
     final (auth, _) = await _pump(tester);
     expect(tester.takeException(), isNull);
     final terms = find.byKey(const Key('trial_paywall_terms'));
     final privacy = find.byKey(const Key('trial_paywall_privacy'));
     expect(find.text('Terms of Use'), findsOneWidget);
     expect(find.text('Privacy Policy'), findsOneWidget);
-    final cta = tester.getRect(find.byKey(const Key('trial_paywall_cta')));
+    final hint = tester.getRect(find.byKey(const Key('trial_paywall_code_hint')));
     for (final link in [terms, privacy]) {
       final rect = tester.getRect(link);
-      expect(rect.top, greaterThanOrEqualTo(cta.bottom), reason: 'legal line is under the button');
+      expect(rect.top, greaterThanOrEqualTo(hint.bottom), reason: 'legal line is last, under the code hint');
       expect(rect.height, greaterThanOrEqualTo(44), reason: '44pt target');
       expect(rect.width, greaterThanOrEqualTo(44), reason: '44pt target');
     }
@@ -161,17 +166,35 @@ void main() {
     expect(priceTop, greaterThan(_phone.height * 0.3), reason: 'the pinned footer leaves the page room');
   });
 
-  testWidgets('at the default text size the cancel note and code hint stay pinned under the button', (tester) async {
+  testWidgets('at the default text size the footer keeps main\'s order: button, cancel note, code hint',
+      (tester) async {
     await _pump(tester);
-    final legal = tester.getRect(find.byKey(const Key('trial_paywall_privacy')));
+    final cta = tester.getRect(find.byKey(const Key('trial_paywall_cta')));
     final note = tester.getRect(find.text('Cancel anytime. No fees, no penalties.'));
     final hint = tester.getRect(find.byKey(const Key('trial_paywall_code_hint')));
-    expect(note.top, greaterThanOrEqualTo(legal.bottom));
+    final legal = tester.getRect(find.byKey(const Key('trial_paywall_privacy')));
+    expect(note.top, greaterThanOrEqualTo(cta.bottom));
     expect(hint.top, greaterThanOrEqualTo(note.bottom));
-    expect(hint.bottom, lessThanOrEqualTo(_phone.height - 34));
+    expect(legal.top, greaterThanOrEqualTo(hint.bottom));
+    expect(legal.bottom, lessThanOrEqualTo(_phone.height - 34));
     final noteStyle = tester.widget<Text>(find.text('Cancel anytime. No fees, no penalties.')).style!;
-    expect(noteStyle.color, const Color(0xFF6E6E73), reason: 'secondary grey, not green');
-    expect(noteStyle.fontWeight, FontWeight.w400);
+    expect(noteStyle.color, const Color(0xFF2E9E4F), reason: 'unchanged from main: green');
+    expect(noteStyle.fontWeight, FontWeight.w600);
+  });
+
+  testWidgets('the legal links ignore taps while a checkout is pending', (tester) async {
+    final pending = Completer<PaywallCheckoutOutcome>();
+    final (auth, calls) = await _pump(tester, checkout: () => pending.future);
+    await tester.tap(find.byKey(const Key('trial_paywall_cta')));
+    await tester.pump();
+    expect(calls, hasLength(1));
+    await tester.tap(find.byKey(const Key('trial_paywall_terms')), warnIfMissed: false);
+    await tester.tap(find.byKey(const Key('trial_paywall_privacy')), warnIfMissed: false);
+    expect(auth.opened, isEmpty);
+    pending.complete(PaywallCheckoutOutcome.failed);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('trial_paywall_terms')));
+    expect(auth.opened, ['terms']);
   });
 
   testWidgets('at accessibility text sizes the cancel note and code hint scroll with the page', (tester) async {
