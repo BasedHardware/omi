@@ -583,9 +583,7 @@ async def test_soniox_warning_path_redacts_payload(caplog):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('resilient,expected_reason', [('false', 'connection_lost'), ('true', 'provider_5xx')])
-async def test_soniox_arbitrary_error_type_stays_typed_and_bounded(monkeypatch, caplog, resilient, expected_reason):
-    monkeypatch.setenv('STT_RESILIENT_RECONNECT', resilient)
+async def test_soniox_arbitrary_error_type_stays_typed_and_bounded(caplog):
     frame = {
         'error_code': 500,
         'error_type': f'unexpected_vendor_shape {SENTINEL}',
@@ -593,7 +591,7 @@ async def test_soniox_arbitrary_error_type_stays_typed_and_bounded(monkeypatch, 
     }
     with caplog.at_level(logging.WARNING, logger='utils.stt.soniox'):
         sock = await _drive(soniox.SafeSonioxSocket, [frame])
-    assert sock.typed_death_reason == expected_reason
+    assert sock.typed_death_reason == 'connection_lost'
     warnings = [r for r in caplog.records if 'Soniox stream closed:' in r.getMessage()]
     assert warnings
     assert 'code=500' in warnings[0].getMessage()

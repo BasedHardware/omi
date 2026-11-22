@@ -3,7 +3,6 @@
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
-from unittest.mock import Mock
 
 import pytest
 from fastapi import FastAPI
@@ -170,16 +169,17 @@ def test_list_and_detail_wire_serialization(api, overdue):
         assert wire['structured']['title'] == expected
         assert wire['status'] == ('completed' if overdue else 'processing')
         assert 'home_transcription_deadline_at' not in wire  # Server-owned clock.
+        # An expired wait with no failure receipt says so; a young wait carries nothing new.
+        assert wire.get('transcription_wait') == ('overdue' if overdue else None)
     assert row['status'] == 'completed' and row['structured']['title'] == ''
 
 
-def test_gate_disables_writer_only_conditional_get_before_query(api, monkeypatch):
-    client, _ = api
-    start = Mock(wraps=routes.ListVersionCheck.start)
-    monkeypatch.setattr(routes.ListVersionCheck, 'start', start)
-    response = client.get('/v1/conversations', headers={'If-None-Match': 'old-writer-version'})
+def test_conditional_list_fetch_keeps_transcribing_presentation(api):
+    client, row = api
+    row['home_transcription_deadline_at'] = NOW + timedelta(seconds=7200)
+    response = client.get('/v1/conversations', headers={'If-None-Match': 'W/"lp1-retired-validator"'})
     assert response.status_code == 200
-    assert start.call_args.args[0] is None
+    assert response.json()[0]['status'] == 'processing'
     assert 'etag' not in response.headers
 
 
@@ -501,3 +501,23 @@ def test_later_upload_revision_restarts_a_bounded_server_wait(prefix):
     # Only a writer admitting a new wait can stamp a new 24h window.
     row.update({f'{prefix}_pending_at': NOW, f'{prefix}_deadline_at': NOW + timedelta(hours=2)})
     assert transcribing_hold.deadline(row, prefix=prefix) == NOW + timedelta(hours=24)
+
+
+def test_overdue_wait_without_failure_receipt_is_marked_waiting():
+    row = capture(finished_at=NOW)
+    wire = transcribing_hold.project(row, now=NOW + timedelta(hours=25))
+    assert wire['structured']['title'] == "Couldn't transcribe"
+    assert wire['transcription_wait'] == 'overdue'
+    assert 'transcription_wait' not in transcribing_hold.project(row, now=NOW)
+
+
+@pytest.mark.parametrize(
+    'failure', [{'record_upload_failed': True}, {'finalization_status': 'dead_letter'}, {'status': 'failed'}]
+)
+def test_failure_receipt_is_never_marked_waiting(failure):
+    row = capture(finished_at=NOW, **failure)
+    for elapsed in (0, 25 * 3600):
+        wire = transcribing_hold.project(row, now=NOW + timedelta(seconds=elapsed))
+        if wire is not row:
+            assert wire['structured']['title'] == "Couldn't transcribe"
+        assert 'transcription_wait' not in wire

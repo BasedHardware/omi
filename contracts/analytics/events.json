@@ -36,6 +36,43 @@
       "correlation": null
     },
     {
+      "id": "walWriteReceipt",
+      "wire_name": "WAL Write Receipt",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "result": {
+          "type": "enum",
+          "wire_name": "result",
+          "values": [
+            "replay",
+            "invalid",
+            "deleted_owner",
+            "missing_audio",
+            "content_mismatch",
+            "budget_exhausted",
+            "scan_unavailable",
+            "index_unavailable",
+            "publish_failed"
+          ]
+        },
+        "recovered": {
+          "type": "int",
+          "wire_name": "recovered"
+        },
+        "withheld": {
+          "type": "int",
+          "wire_name": "withheld"
+        }
+      },
+      "consumers": [
+        "wal-write-receipt"
+      ],
+      "correlation": null
+    },
+    {
       "id": "savedPendantReconnectObserved",
       "wire_name": "Saved Pendant Reconnect",
       "status": "active",
@@ -3875,7 +3912,9 @@
             "onboarding",
             "aha_first_summary",
             "free_cap",
-            "on_phone_banner"
+            "on_phone_banner",
+            "held_recording",
+            "held_recording_detail"
           ]
         },
         "currentPlan": {
@@ -3979,7 +4018,9 @@
             "onboarding",
             "aha_first_summary",
             "free_cap",
-            "on_phone_banner"
+            "on_phone_banner",
+            "held_recording",
+            "held_recording_detail"
           ]
         }
       },
@@ -4619,7 +4660,9 @@
             "onboarding",
             "aha_first_summary",
             "free_cap",
-            "on_phone_banner"
+            "on_phone_banner",
+            "held_recording",
+            "held_recording_detail"
           ]
         }
       },

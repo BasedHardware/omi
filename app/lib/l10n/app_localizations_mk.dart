@@ -15784,4 +15784,12 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String get stillWorkingOnIt => 'Сè уште се работи на тоа.';
+
+  @override
+  String get firmwareUpdateFirmwareTooOld =>
+      'Фирмверот на вашиот уред е премногу стар за ова ажурирање. Контактирајте со поддршката за помош при ажурирањето на уредот.';
+
+  @override
+  String get firmwareUpdateAppRequired =>
+      'Ова ажурирање на фирмверот бара понова верзија на апликацијата Omi. Ажурирајте ја апликацијата од вашата продавница за апликации, па проверете повторно.';
 }

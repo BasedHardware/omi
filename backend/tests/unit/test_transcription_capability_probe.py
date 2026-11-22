@@ -1,8 +1,14 @@
 import hashlib
+import http.client
 import importlib.util
+import io
 import json
 import sys
+from email.message import Message
 from pathlib import Path
+from urllib.response import addinfourl
+
+import pytest
 
 
 def _load_module():
@@ -196,6 +202,64 @@ def test_auth_failure_from_candidate_is_redacted_and_fails_closed(monkeypatch, t
     assert report['status'] == 'FAIL'
     assert report['checks'][0]['details']['http_status'] == 401
     assert 'never expose this' not in json.dumps(report)
+
+
+@pytest.mark.parametrize(
+    ('failure', 'error_kind'),
+    [(TimeoutError(), 'network_error'), (http.client.IncompleteRead(b''), 'invalid_response')],
+)
+def test_failure_after_http_headers_preserves_status(monkeypatch, tmp_path, failure, error_kind):
+    module = _load_module()
+
+    class InterruptedResponse(_Response):
+        def read(self, _size=-1):
+            raise failure
+
+    fake_urlopen, _ = _urlopen_responses(InterruptedResponse(200, b''))
+    monkeypatch.setattr(module.urllib.request, 'urlopen', fake_urlopen)
+
+    report = module.build_report(_config(module, tmp_path))
+
+    assert report['status'] == 'FAIL'
+    assert report['checks'][0]['details']['error_kind'] == error_kind
+    assert report['checks'][0]['details']['http_status'] == 200
+
+
+def test_network_error_before_http_headers_has_no_status(monkeypatch, tmp_path):
+    module = _load_module()
+
+    def time_out(_request, *, timeout):
+        raise TimeoutError()
+
+    monkeypatch.setattr(module.urllib.request, 'urlopen', time_out)
+    report = module.build_report(_config(module, tmp_path))
+
+    assert report['status'] == 'FAIL'
+    assert report['checks'][0]['details']['error_kind'] == 'network_error'
+    assert 'http_status' not in report['checks'][0]['details']
+
+
+def test_redirect_is_a_hard_failure_when_following_redirects_is_disabled(monkeypatch, tmp_path):
+    module = _load_module()
+    real_build_opener = module.urllib.request.build_opener
+
+    class RedirectingHandler(module.urllib.request.HTTPSHandler):
+        def https_open(self, request):
+            assert request.full_url.endswith('/v2/voice-message/transcribe')
+            headers = Message()
+            headers['Location'] = 'https://candidate.invalid/other'
+            response = addinfourl(io.BytesIO(), headers, request.full_url, code=302)
+            response.msg = 'Found'
+            return response
+
+    def build_opener(*handlers):
+        return real_build_opener(module.urllib.request.ProxyHandler({}), RedirectingHandler(), *handlers)
+
+    monkeypatch.setattr(module.urllib.request, 'build_opener', build_opener)
+    report = module.build_report(_config(module, tmp_path, follow_redirects=False))
+
+    assert report['status'] == 'FAIL'
+    assert report['checks'][0]['details']['http_status'] == 302
 
 
 def test_token_file_must_not_be_group_or_world_readable(tmp_path):

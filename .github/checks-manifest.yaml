@@ -1374,9 +1374,14 @@ checks:
     triggers: [".github/scripts/dispatch_mobile_internal_builds.py", ".github/scripts/test_dispatch_mobile_internal_builds.py", ".github/workflows/mobile_internal_build.yml", "codemagic.yaml", "app/scripts/checkout_release_source_pin.sh", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "internal mobile builds are dispatched on a cadence, so who gets an instant build and when the batch fires must stay pinned rather than drift back to build-per-merge"
+  - id: play-internal-publish-contract
+    command: ["python3", "app/scripts/play_internal_publish_test.py"]
+    triggers: ["app/scripts/play_internal_publish.py", "app/scripts/play_internal_publish_test.py", "codemagic.yaml", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "Play flipped changesNotSentForReview five times by 2026-11-21; android-internal-auto publishes without it and retries held only on Play's held instruction, recording the mode for the dispatcher"
   - id: mobile-distribution-contract
     command: ["python3", ".github/scripts/test_mobile_distribution.py"]
-    triggers: [".github/scripts/mobile_distribution.py", ".github/scripts/test_mobile_distribution.py", ".github/scripts/dispatch_mobile_internal_builds.py", ".github/scripts/test_dispatch_mobile_internal_builds.py", ".github/checks-manifest.yaml"]
+    triggers: [".github/scripts/mobile_distribution.py", ".github/scripts/test_mobile_distribution.py", ".github/scripts/dispatch_mobile_internal_builds.py", ".github/scripts/test_dispatch_mobile_internal_builds.py", "codemagic.yaml", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "mobile Codemagic distribution evidence must be explicit, platform-specific, source-bound, and fail closed when post-publish state is missing or unknown"
   - id: mobile-release-identity

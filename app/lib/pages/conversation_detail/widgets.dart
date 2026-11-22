@@ -11,6 +11,9 @@ import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/pages/apps/app_detail/app_detail.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
+import 'package:omi/pages/held_audio/held_audio_views.dart';
+import 'package:omi/providers/usage_provider.dart';
+import 'package:omi/widgets/freemium_switch_dialog.dart';
 import 'package:omi/pages/conversations/home_rows.dart';
 import 'package:omi/pages/conversation_detail/conversation_summary_selection.dart';
 import 'package:omi/pages/conversation_detail/widgets/conversation_markdown_widget.dart';
@@ -251,12 +254,15 @@ class SummaryRetryWidget extends StatelessWidget {
   }
 }
 
-/// A centred status with no action: the server is still transcribing, so there is nothing to retry.
+/// A centred status: the server is still transcribing, so there is nothing to retry. A recording
+/// held by the free allowance adds its one action (Upgrade).
 class _SummaryWaitingNotice extends StatelessWidget {
-  const _SummaryWaitingNotice({super.key, required this.title, required this.body});
+  const _SummaryWaitingNotice({super.key, required this.title, required this.body, this.actionLabel, this.onAction});
 
   final String title;
   final String body;
+  final String? actionLabel;
+  final Future<void> Function()? onAction;
 
   @override
   Widget build(BuildContext context) {
@@ -271,6 +277,10 @@ class _SummaryWaitingNotice extends StatelessWidget {
             style: OmiType.subhead.copyWith(color: OmiColors.textSecondary),
             textAlign: TextAlign.center,
           ),
+          if (actionLabel != null && onAction != null) ...[
+            const SizedBox(height: OmiSpacing.xl),
+            OmiButton.secondary(label: actionLabel!, onPressed: onAction),
+          ],
         ],
       ),
     );
@@ -526,6 +536,21 @@ class GetAppsWidgets extends StatelessWidget {
           if (selection.kind == ConversationSummaryKind.empty) {
             if (failure != null) return SliverToBoxAdapter(child: SummaryFailureCard(failure: failure));
             final conversation = provider.conversation;
+            // Held by the free plan's monthly minutes: a retry cannot transcribe it, Upgrade can.
+            final usage = context.watch<UsageProvider?>();
+            if (heldByFreeAllowance(conversation, usage)) {
+              final l = context.l10n;
+              return SliverToBoxAdapter(
+                child: _SummaryWaitingNotice(
+                  key: const Key('conversation_detail_held_recording'),
+                  title: l.summaryTranscriptionPendingTitle,
+                  body: l.freeCapTitle(((usage?.subscription?.transcriptionSecondsLimit ?? 0) / 60).round()),
+                  actionLabel: l.upgrade,
+                  onAction: () =>
+                      FreemiumSwitchHandler.openHeldRecordingUpgrade(context, source: 'held_recording_detail'),
+                ),
+              );
+            }
             // A failed processing pass can be retried the same way as a failed summary.
             if (summaryRetrySlotApplies(conversation)) {
               return const SliverToBoxAdapter(child: SummaryRetryWidget());

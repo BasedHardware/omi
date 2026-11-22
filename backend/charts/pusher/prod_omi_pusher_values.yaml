@@ -249,7 +249,9 @@ env:
   - name: PLAYBACK_ON_DEMAND_ENABLED
     value: "true"
   - name: SYNC_POLL_BACKOFF_ENABLED
-    value: "false"
+    value: "true"
+  - name: SYNC_POLL_BACKOFF_PERCENT
+    value: "5"
   - name: AUDIO_ARCHIVE_LIVE_ENABLED
     value: "true"
   - name: AUDIO_ARCHIVE_READ_ENABLED
@@ -260,8 +262,6 @@ env:
     value: "false"
   - name: AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED
     value: "false"
-  - name: AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED
-    value: "false"
   - name: AUDIO_ARCHIVE_PERCENT
     value: "100"
   - name: AUDIO_ARCHIVE_STOP_PCM_PERCENT
@@ -271,8 +271,6 @@ env:
   - name: AUDIO_ARCHIVE_REGIONAL_CHUNKS_PERCENT
     value: "0"
   - name: BUCKET_AUDIO_DERIVED
-    value: ""
-  - name: AUDIO_MERGE_WORKER_URL
     value: ""
   # Bounded, process-local late identity repair coalescing; rollback with false.
   - name: OWNER_IDENTITY_RETRY_COALESCE_ENABLED
@@ -389,8 +387,6 @@ env:
   # existing v1 sessions and resumed v1 conversations are unaffected.
   - name: AUDIO_TIMELINE_V2
     value: "false"
-  - name: LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION
-    value: 'false'
   - name: LIVE_CAPTURE_WINDOW_MERGE_UNION
     value: 'true'
   - name: LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS

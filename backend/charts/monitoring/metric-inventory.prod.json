@@ -1249,7 +1249,6 @@
     "omi_audio_timeline_callback_errors_total",
     "omi_audio_timeline_chunks_written_total",
     "omi_audio_timeline_coverage_total",
-    "omi_audio_timeline_elapsed_shadow_errors_total",
     "omi_audio_timeline_elapsed_validation_detail_total",
     "omi_audio_timeline_elapsed_validation_total",
     "omi_audio_timeline_mapped_total",

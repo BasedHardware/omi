@@ -604,3 +604,22 @@ def test_opus_fs320_claim_maps_320_sample_frames(monkeypatch, tmp_path):
     )
     assert maps[str(wav_path)]['offsets'] == [0, 320, 640, 960]
     assert maps[str(wav_path)]['incomplete'] is False
+
+
+def test_abstention_labels_are_bounded(monkeypatch):
+    from utils.sync import wal_audio_coverage_metrics as coverage_metrics
+
+    observed = []
+
+    class Counter:
+        def labels(self, **labels):
+            observed.append(labels)
+            return self
+
+        def inc(self):
+            pass
+
+    monkeypatch.setattr(coverage_metrics, 'COVERAGE', Counter())
+    coverage_metrics.record_coverage_outcome('abstained', 'evidence')
+    coverage_metrics.record_coverage_outcome('abstained', 'uid-sensitive-random')
+    assert observed == [{'outcome': 'abstained', 'reason': 'evidence'}, {'outcome': 'abstained', 'reason': 'other'}]

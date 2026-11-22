@@ -578,6 +578,9 @@ class Conversation(BaseModel):
     # Server-authored Home row contract on list reads (utils/conversations/home_step.py):
     # ready | transcribing | writing_notes | failed | noise. Omitted when unset.
     home_step: SkipJsonSchema[Optional[Literal['ready', 'transcribing', 'writing_notes', 'failed', 'noise']]] = None
+    # Read-time projection (utils/conversations/transcribing_hold.py): the transcription wait ran out
+    # with no failure receipt, so the audio is still waiting. Omitted when unset.
+    transcription_wait: SkipJsonSchema[Optional[Literal['overdue']]] = None
     transcript_segments: List[TranscriptSegment] = []
     transcript_segments_compressed: Optional[bool] = False
     geolocation: Optional[Geolocation] = None
@@ -677,8 +680,9 @@ class Conversation(BaseModel):
             data.pop('processing_deferred', None)
         if self.live_summary is None:
             data.pop('live_summary', None)
-        if self.home_step is None:
-            data.pop('home_step', None)
+        for name in ('home_step', 'transcription_wait'):
+            if getattr(self, name) is None:
+                data.pop(name, None)
         for name in ('processing_tier', 'summary_on_open'):
             if getattr(self, name) is None:
                 data.pop(name, None)

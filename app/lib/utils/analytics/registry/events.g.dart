@@ -25,6 +25,31 @@ final class OnDeviceTranscriptionUsed extends RegisteredEvent {
   Map<String, Object> get properties => {"route": route.wireName, "audio_ms": audioMs, "segment_count": segmentCount};
 }
 
+enum WalWriteReceiptResult {
+  replay("replay"),
+  invalid("invalid"),
+  deletedOwner("deleted_owner"),
+  missingAudio("missing_audio"),
+  contentMismatch("content_mismatch"),
+  budgetExhausted("budget_exhausted"),
+  scanUnavailable("scan_unavailable"),
+  indexUnavailable("index_unavailable"),
+  publishFailed("publish_failed");
+  const WalWriteReceiptResult(this.wireName);
+  final String wireName;
+}
+
+final class WalWriteReceipt extends RegisteredEvent {
+  const WalWriteReceipt({required this.result, required this.recovered, required this.withheld});
+  final WalWriteReceiptResult result;
+  final int recovered;
+  final int withheld;
+  @override
+  String get wireName => "WAL Write Receipt";
+  @override
+  Map<String, Object> get properties => {"result": result.wireName, "recovered": recovered, "withheld": withheld};
+}
+
 enum SavedPendantReconnectObservedTrigger {
   launch("launch"),
   resume("resume"),
@@ -2536,7 +2561,9 @@ enum PaywallOpenedSource {
   onboarding("onboarding"),
   ahaFirstSummary("aha_first_summary"),
   freeCap("free_cap"),
-  onPhoneBanner("on_phone_banner");
+  onPhoneBanner("on_phone_banner"),
+  heldRecording("held_recording"),
+  heldRecordingDetail("held_recording_detail");
   const PaywallOpenedSource(this.wireName);
   final String wireName;
 }
@@ -2626,7 +2653,9 @@ enum UpgradePlanSelectedSource {
   onboarding("onboarding"),
   ahaFirstSummary("aha_first_summary"),
   freeCap("free_cap"),
-  onPhoneBanner("on_phone_banner");
+  onPhoneBanner("on_phone_banner"),
+  heldRecording("held_recording"),
+  heldRecordingDetail("held_recording_detail");
   const UpgradePlanSelectedSource(this.wireName);
   final String wireName;
 }
@@ -3101,7 +3130,9 @@ enum PaywallVariantShownSource {
   onboarding("onboarding"),
   ahaFirstSummary("aha_first_summary"),
   freeCap("free_cap"),
-  onPhoneBanner("on_phone_banner");
+  onPhoneBanner("on_phone_banner"),
+  heldRecording("held_recording"),
+  heldRecordingDetail("held_recording_detail");
   const PaywallVariantShownSource(this.wireName);
   final String wireName;
 }

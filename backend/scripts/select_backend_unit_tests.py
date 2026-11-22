@@ -394,6 +394,14 @@ AREA_TESTS = (
             'tests/unit/test_streaming_gpu_teardown.py',
         ),
     ),
+    (
+        ('backend/charts/monitoring/prometheus-adapter/prod_omi_prometheus_adapter.yaml',),
+        (),
+        (
+            'tests/unit/test_batch_pipeline_hpa_retune_replay.py',
+            'tests/unit/test_batch_pipeline_hpa_capacity_replay.py',
+        ),
+    ),
     (('backend/config/flag_budget.json',), (), FLAG_BUDGET_TESTS),
     (
         # Task-target routes whose expected retries must stay 409 (contract (d)). #22431 moved

@@ -37,7 +37,6 @@ import database.daily_summaries as daily_summaries_db
 from database._client import db
 from database import conversation_tombstones
 from database.firestore_read_metrics import FirestoreReadSite
-from utils.list_version_check import ListVersionCheck
 
 from models.calendar_context import DevCalendarMeetingContext
 from models.folder import Folder
@@ -875,16 +874,9 @@ def get_action_items(
     # oversized limit cannot stream the whole collection. Mirrors the GET /v3/memories hardening.
     offset, limit = external_lists.clamp_list_page(offset, limit, 1000)
     observe_action_items_page(limit, offset)
-    version_check = ListVersionCheck.start(request, uid, 'action_items')
-    if version_check.not_modified is not None:
-        return version_check.not_modified
     with read_component(ReadComponent.OTHER):
         budget = list_read_budget_for_request(request, route='developer-action-items', owner_uid=uid, context=auth)
-        cached = (
-            external_lists.cached_external_list(request, response, auth, locals())
-            if not (version_check.active and 'lp1-' in request.headers.get('if-none-match', ''))
-            else None
-        )
+        cached = external_lists.cached_external_list(request, response, auth, locals())
         observe_action_items_shape(
             conversation_id is not None, start_date is not None or end_date is not None, completed, cached is not None
         )
@@ -905,7 +897,6 @@ def get_action_items(
     valid_action_items = external_lists.validate_developer_action_items(action_items, ActionItemResponse, uid, logger)
     observe_action_items_rows('returned', len(valid_action_items))
     finish_list_budget(response, budget)
-    version_check.finish(response, truncated=budget.truncated)
     return valid_action_items
 
 

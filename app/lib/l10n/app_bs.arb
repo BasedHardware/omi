@@ -12292,5 +12292,7 @@
     "conversationLiveNoEdits": "Sačekajte da se završi da biste ga promijenili.",
     "finishedSummaryReady": "Sažetak je spreman",
     "writingSummaryStatus": "Pišemo sažetak…",
-    "stillWorkingOnIt": "Još radimo na tome."
+    "stillWorkingOnIt": "Još radimo na tome.",
+    "firmwareUpdateFirmwareTooOld": "Firmver vašeg uređaja je prestar za ovo ažuriranje. Obratite se podršci za pomoć pri ažuriranju uređaja.",
+    "firmwareUpdateAppRequired": "Ovo ažuriranje firmvera zahtijeva noviju verziju aplikacije Omi. Ažurirajte aplikaciju iz svoje prodavnice aplikacija, a zatim provjerite ponovo."
 }

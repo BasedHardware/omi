@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/message.dart';
+import 'package:omi/backend/schema/message_event.dart';
 import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/services/capture/capture_external_actions.dart';
@@ -385,6 +386,52 @@ void main() {
     });
 
     expect(phone.stampCalls, 1);
+    expect(outcome.harnessError, isNull);
+    expect(outcome.unhandled, isEmpty);
+    _expectSingleReport('capture_process_now: StateError');
+  });
+
+  test('a failed middle drain cannot let a later server close bypass an unresolved predecessor', () async {
+    final sentinel = StateError('middle-drain-boom');
+    late _GatedPhoneSync phone;
+    late int stampsBeforeFirstDrain;
+    final outcome = await _runInGuardedZone(() async {
+      final firstDrain = Completer<void>();
+      final secondDrain = Completer<void>();
+      final thirdDrain = Completer<void>()..complete();
+      phone = _GatedPhoneSync(firstDrain, laterFinalizeGates: [secondDrain, thirdDrain]);
+      final provider = _provider(
+        actions: _RecordingActions(),
+        finalizeGate: firstDrain,
+        phone: phone,
+        process: () async => null,
+      );
+      try {
+        provider.testSessionStartSeconds = 777;
+        provider.onMessageEventReceived(ConversationProcessingStartedEvent(memory: _conversation(id: 'a')));
+
+        provider.testSessionStartSeconds = 778;
+        final second = provider.forceProcessingCurrentConversation();
+        final expectedFailure = expectLater(second, throwsA(same(sentinel)));
+        secondDrain.completeError(sentinel, StackTrace.fromString('#0      _fail (package:omi/fake.dart:1:1)'));
+        await expectedFailure;
+
+        provider.testSessionStartSeconds = 779;
+        provider.onMessageEventReceived(ConversationProcessingStartedEvent(memory: _conversation(id: 'c')));
+        await _flushEventQueue();
+        stampsBeforeFirstDrain = phone.stampCalls;
+
+        firstDrain.complete();
+        await _flushEventQueue();
+      } finally {
+        if (!firstDrain.isCompleted) firstDrain.complete();
+        if (!secondDrain.isCompleted) secondDrain.complete();
+        provider.dispose();
+      }
+    });
+
+    expect(stampsBeforeFirstDrain, 0, reason: 'the failed middle slot must retain the first close as its predecessor');
+    expect(phone.stampCalls, 2, reason: 'both valid closes stamp after the first drain completes');
     expect(outcome.harnessError, isNull);
     expect(outcome.unhandled, isEmpty);
     _expectSingleReport('capture_process_now: StateError');

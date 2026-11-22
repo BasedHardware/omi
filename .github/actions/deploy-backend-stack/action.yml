@@ -1781,6 +1781,7 @@ runs:
       env:
         PROBE_SECRET_PROJECT: ${{ inputs.project_id }}
         FIREBASE_AUTH_PROJECT_ID: based-hardware
+        SMOKE_CLOUD_RUN_SERVICE: ${{ inputs.cloud_run_service }}
       run: |
         set -euo pipefail
         umask 077
@@ -1790,14 +1791,85 @@ runs:
           --secret-project "$PROBE_SECRET_PROJECT" \
           --firebase-project "$FIREBASE_AUTH_PROJECT_ID" \
           --token-output "$token_file"
+        reservation_timeouts=()
+        if [[ "$SMOKE_CLOUD_RUN_SERVICE" == backend ]]; then
+          reservation_timeouts=(--connect-timeout 5 --max-time 10)
+        fi
         reservation_status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
+          "${reservation_timeouts[@]}" \
           --request POST https://api.omi.me/v2/desktop/beta/candidates/reserve \
           --header 'Content-Type: application/json' --data '{"tag":"v0.0.0+1-macos"}')"
         # A schema-valid inert tag reaches the authorization wall without reserving a real candidate.
         test "$reservation_status" = 401
-        python3 "$DEPLOY_CONTROL_SCRIPTS/transcription_capability_probe.py" \
-          --candidate-api-url https://api.omi.me \
-          --bearer-token-file "$token_file" --json-only
+        if [[ "$SMOKE_CLOUD_RUN_SERVICE" != backend ]]; then
+          python3 "$DEPLOY_CONTROL_SCRIPTS/transcription_capability_probe.py" \
+            --candidate-api-url https://api.omi.me \
+            --bearer-token-file "$token_file" --json-only
+          exit
+        fi
+
+        # Replace the shell so the runner's cancellation signal reaches the retry delay.
+        exec python3 -I - "$DEPLOY_CONTROL_SCRIPTS" "$token_file" <<'PY'
+        import json
+        from pathlib import Path
+        import signal
+        import subprocess
+        import sys
+        import time
+
+        token_file = Path(sys.argv[2])
+        command = [
+            sys.executable, "-I", str(Path(sys.argv[1]) / "transcription_capability_probe.py"),
+            "--candidate-api-url", "https://api.omi.me",
+            "--bearer-token-file", str(token_file),
+            "--timeout-seconds", "30",
+            "--no-redirects", "--json-only",
+        ]
+
+        def stop(signum, _frame):
+            raise SystemExit(128 + signum)
+
+        try:
+            signal.signal(signal.SIGTERM, stop)
+            deadline = time.monotonic() + 65
+            for attempt in (1, 2):
+                started = time.monotonic()
+                remaining = deadline - started
+                if remaining <= 0:
+                    sys.exit("Transcription smoke exceeded its 65-second deadline")
+                try:
+                    probe = subprocess.run(
+                        command, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, timeout=remaining,
+                    )
+                except subprocess.TimeoutExpired:
+                    sys.exit(f"Transcription smoke attempt {attempt} exceeded the 65-second deadline")
+                if probe.returncode not in (0, 1):
+                    sys.exit(f"Transcription probe exited with status {probe.returncode}")
+                try:
+                    report = json.loads(probe.stdout)
+                    status = report["status"]
+                    details = report["checks"][0]["details"]
+                except (ValueError, KeyError, IndexError, TypeError):
+                    sys.exit("Transcription probe did not emit its redacted result")
+                print(json.dumps({
+                    **report,
+                    "attempt": attempt,
+                    "elapsed_seconds": round(time.monotonic() - started, 3),
+                }), flush=True)
+                if probe.returncode == 0 and status == "PASS":
+                    sys.exit(0)
+                if (
+                    probe.returncode != 1 or status != "FAIL" or attempt == 2
+                    or details.get("error_kind") != "network_error" or "http_status" in details
+                ):
+                    sys.exit(1)
+                if deadline - time.monotonic() <= 5:
+                    sys.exit("Transcription smoke has no time for its retry")
+                print("Retrying transcription smoke in 5 seconds after a transport failure", flush=True)
+                time.sleep(5)
+        finally:
+            token_file.unlink(missing_ok=True)
+        PY
 
     - name: Smoke What Matters Now datastore query
       id: smoke-what-matters-now-datastore-query
