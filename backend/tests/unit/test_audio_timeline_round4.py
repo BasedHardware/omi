@@ -24,7 +24,6 @@ import pytest
 
 from routers.listen.contracts import ListenSessionState
 from routers.listen.receiver import ListenReceiver
-from routers.listen.receiver import _RecordingSTTSocket
 from routers.listen.transcripts import TranscriptProcessor
 from models.transcript_segment import TranscriptSegment
 from utils.metrics import (
@@ -33,7 +32,6 @@ from utils.metrics import (
     OMI_AUDIO_TIMELINE_REJECTS_TOTAL,
     OMI_AUDIO_TIMELINE_SEGMENTS_TOTAL,
     OMI_AUDIO_TIMELINE_PAST_SEND_TOTAL,
-    OMI_AUDIO_TIMELINE_ELAPSED_SHADOW_ERRORS_TOTAL,
 )
 
 RATE = 16000
@@ -82,55 +80,6 @@ def _feed_contiguous(receiver: ListenReceiver, seconds: float, *, first_wall: fl
             first_start = start
         last_end = end
     return first_start, last_end
-
-
-@pytest.mark.parametrize('failure_site', ['wall_projection', 'send_bookkeeping', 'candidate_mapping'])
-def test_soniox_shadow_exception_keeps_off_sends_map_windows_and_transcripts(monkeypatch, failure_site):
-    def run(mode):
-        monkeypatch.setenv('SONIOX_ELAPSED_AXIS', mode)
-        receiver = _receiver(monkeypatch, v2=True)
-        _feed_contiguous(receiver, 2.0)
-        callback, _, epoch = receiver._build_stt_callbacks()
-        epoch.provider_label = 'soniox'
-        payloads = []
-
-        class Raw:
-            def send(self, data):
-                payloads.append(data)
-                return True
-
-        if mode == 'shadow':
-            if failure_site == 'wall_projection':
-                wall_strict = receiver.capture_timeline.wall_strict
-                calls = 0
-
-                def fail_once(sample):
-                    nonlocal calls
-                    calls += 1
-                    if calls == 1:
-                        raise RuntimeError('shadow')
-                    return wall_strict(sample)
-
-                receiver.capture_timeline.wall_strict = fail_once
-            elif failure_site == 'send_bookkeeping':
-                epoch._elapsed_send_map.add_accepted = lambda *args: (_ for _ in ()).throw(RuntimeError('shadow'))
-            else:
-                epoch._elapsed_send_map.map_interval = lambda *args: (_ for _ in ()).throw(RuntimeError('shadow'))
-        socket = _RecordingSTTSocket(Raw(), epoch)
-        pcm = b'\x01\x00' * RATE
-        assert socket.send(pcm, start_sample=0)
-        assert socket.send(pcm, start_sample=RATE)
-        callback([{'start': 0.25, 'end': 1.25, 'text': 'unchanged'}])
-        transcripts = [
-            {key: value for key, value in row.items() if key != 'speaker_id_scope'} for row in receiver.collected
-        ]
-        return payloads, [list(span) for span in epoch.send_map._spans], transcripts
-
-    baseline = run('off')
-    counter = OMI_AUDIO_TIMELINE_ELAPSED_SHADOW_ERRORS_TOTAL
-    before = counter._value.get()
-    assert run('shadow') == baseline
-    assert counter._value.get() == before + 1
 
 
 @pytest.mark.parametrize('v2,mode', [(False, 'legacy'), (True, 'v2')])

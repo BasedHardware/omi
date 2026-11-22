@@ -333,6 +333,12 @@ class EnrichmentConsumer:
                 )
             if empty_outcome is EmptyFailureOutcome.RETRY:
                 return _callback_pending('empty_output', now)
+            if empty_outcome is EmptyFailureOutcome.UNAVAILABLE:
+                # The strike write could not land, so nothing was recorded. Release the
+                # lease for a bounded retry instead of failing the request; the row keeps
+                # its debt and the next attempt records the strike.
+                logger.warning('event=enrichment_consumer outcome=retry reason=empty_output_unavailable')
+                return Result(Outcome.RETRY, RetryReason.DEPENDENCY_WARMING, available_at=now)
             record_delivery('summary', 'failed')
             empty_blocked = True
         finally:

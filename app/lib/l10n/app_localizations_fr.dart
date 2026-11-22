@@ -15850,4 +15850,12 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get stillWorkingOnIt => 'Toujours en cours.';
+
+  @override
+  String get firmwareUpdateFirmwareTooOld =>
+      'Le micrologiciel de votre appareil est trop ancien pour cette mise à jour. Contactez l\'assistance pour obtenir de l\'aide afin de mettre à jour votre appareil.';
+
+  @override
+  String get firmwareUpdateAppRequired =>
+      'Cette mise à jour du micrologiciel nécessite une version plus récente de l\'application Omi. Mettez l\'application à jour depuis votre boutique d\'applications, puis vérifiez à nouveau.';
 }
