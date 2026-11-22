@@ -3,8 +3,7 @@ import 'package:flutter/widgets.dart';
 /// What the user can see of a live capture, reported to `/v4/listen` as
 /// `{"type": "client_state", "foreground": bool, "transcript_visible": bool}`.
 ///
-/// The backend uses it to measure how much live time anyone actually watches in
-/// real time (routers/listen/realtime_demand.py). It never changes routing here.
+/// The backend uses it for live visibility telemetry and STT routing.
 @immutable
 class ListenClientStateSnapshot {
   const ListenClientStateSnapshot({required this.foreground, required this.transcriptVisible});

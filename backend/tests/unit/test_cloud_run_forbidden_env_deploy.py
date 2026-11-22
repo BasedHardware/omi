@@ -189,6 +189,25 @@ def test_desktop_backend_removes_retired_demand_env(workflow):
     assert RETIRED_DEMAND_ENV.isdisjoint(line.split('=', 1)[0] for line in deploy['with']['env_vars'].splitlines())
 
 
+@pytest.mark.parametrize(('deploy_environment', 'stage'), [('development', 'dev'), ('prod', 'prod')])
+def test_notifications_job_removes_retired_demand_env(deploy_environment, stage):
+    workflow = yaml.load(
+        (ROOT / '.github/workflows/gcp_notifications_job.yml').read_text(), Loader=yaml.CBaseLoader
+    )
+    assert deploy_environment in workflow['on']['workflow_dispatch']['inputs']['environment']['options']
+    assert workflow['env']['SERVICE'] == 'notifications-job'
+    deploy = next(step for step in workflow['jobs']['deploy']['steps'] if step.get('id') == 'deploy')
+    assert deploy['uses'].startswith('google-github-actions/deploy-cloudrun@')
+    assert deploy['with']['job'] == '${{ env.SERVICE }}'
+    assert RETIRED_DEMAND_ENV <= set(_removals(deploy['with']['flags']))
+
+    manifest = yaml.load((ROOT / 'backend/deploy/runtime_env.yaml').read_text(), Loader=yaml.CSafeLoader)
+    job = manifest['environments'][stage]['cloud_run']['jobs']['notifications-job']
+    assert RETIRED_DEMAND_ENV <= set(job['forbidden_env'])
+    assert RETIRED_DEMAND_ENV.isdisjoint(job['env'])
+    assert RETIRED_DEMAND_ENV.isdisjoint(job['secrets'])
+
+
 def _removals(flags):
     # gcloud rejects --remove-env-vars when it names a key twice ("cannot be specified multiple times").
     value = next(word.split('=', 1)[1] for word in flags.split() if word.startswith('--remove-env-vars='))

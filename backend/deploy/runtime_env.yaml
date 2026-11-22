@@ -2717,6 +2717,12 @@ environments:
               category: config
           forbidden_env:
           - HOSTED_PUSHER_API_URL
+          - DEMAND_PROCESSING_ENABLED
+          - DEMAND_PROCESSING_LAZY_ENABLED
+          - DEMAND_PROCESSING_PERCENT
+          - DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED
+          - DEMAND_PROCESSING_TOOL_ENABLED
+          - DEMAND_PROCESSING_UID_ALLOWLIST
         x-connector-sync-job:
           flags:
             --task-timeout: 3600s
@@ -6863,6 +6869,13 @@ environments:
             CONVERSATIONS_V3_FIRST_APP_BUILD:
               value: ''
               category: config
+          forbidden_env:
+          - DEMAND_PROCESSING_ENABLED
+          - DEMAND_PROCESSING_LAZY_ENABLED
+          - DEMAND_PROCESSING_PERCENT
+          - DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED
+          - DEMAND_PROCESSING_TOOL_ENABLED
+          - DEMAND_PROCESSING_UID_ALLOWLIST
         x-connector-sync-job:
           flags:
             --task-timeout: 3600s

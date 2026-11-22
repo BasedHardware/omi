@@ -2186,6 +2186,13 @@ overlay:
             value: memories-backend
           OMI_CUSTOMER_DATA_PROJECT:
             value: based-hardware
+        forbidden_env:
+        - DEMAND_PROCESSING_ENABLED
+        - DEMAND_PROCESSING_LAZY_ENABLED
+        - DEMAND_PROCESSING_PERCENT
+        - DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED
+        - DEMAND_PROCESSING_TOOL_ENABLED
+        - DEMAND_PROCESSING_UID_ALLOWLIST
       x-connector-sync-job:
         flags:
           --service-account: backend-runtime@based-hardware.iam.gserviceaccount.com
