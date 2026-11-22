@@ -43,6 +43,7 @@ from __future__ import annotations
 import json
 import logging
 from datetime import date, datetime, timezone
+from time import monotonic
 from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence, Tuple
 from zoneinfo import ZoneInfo
 
@@ -71,8 +72,10 @@ SKIPPED_ALREADY_RAN = 'skipped_already_ran'
 SKIPPED_CLAIMED = 'skipped_claimed'
 SKIPPED_NO_SIGNAL = 'skipped_no_signal'
 
-# Leave room for two requests and non-model work in the default 45s dispatcher budget.
-_MODEL_REQUEST_TIMEOUT_SECONDS = 15.0
+# Keep the existing 30s model window inside the default 45s dispatcher budget.
+# Give the primary request more time and let a retry use the remaining window.
+_MODEL_BUDGET_SECONDS = 30
+_MODEL_REQUEST_TIMEOUT_SECONDS = 25
 
 # The model may decide exactly these statuses (the offline-validated set).
 DECIDABLE_STATUSES = frozenset({'opened', 'progressing', 'stale', 'due_soon', 'resolved'})
@@ -504,9 +507,18 @@ def _run_claimed_pass(
         {'role': 'user', 'content': user_content},
     ]
     with track_usage(uid, Features.OPEN_LOOP_DAILY):
+        started = monotonic()
         try:
             response = model.invoke(messages)
         except APITimeoutError:
+            if llm is None:
+                # Round down to stay within budget and bound the cached client variants.
+                remaining = int(_MODEL_BUDGET_SECONDS - (monotonic() - started))
+                if remaining <= 0:
+                    raise
+                timeout = min(_MODEL_REQUEST_TIMEOUT_SECONDS, remaining)
+                if timeout < _MODEL_REQUEST_TIMEOUT_SECONDS:
+                    model = get_llm('open_loop_daily', request_timeout=timeout, max_retries=0)
             response = model.invoke(messages)
     parsed = parse_model_output(response) or {}
     raw_loops = parsed.get('loops')
