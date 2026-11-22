@@ -889,6 +889,7 @@ ignore:
 
 
 retired:
+  - {"key":"clients_refactor","aliases":[],"kind":"posthog","retired":"2026-11-22","reason":"SCA-3689 retires the dormant client speaker experiment. The released speaker-assignment path is retained.","posthog":{"row":"delete"}}
   - {"key":"clients_boundary_evidence","aliases":[],"kind":"posthog","retired":"2026-11-22","reason":"SCA-3689 retires the dormant macOS meeting boundary evidence producer. The server intake is retained for released builds.","posthog":{"row":"delete"}}
   - {"key":"AUDIO_ARCHIVE_UID_ALLOWLIST","aliases":[],"kind":"env","retired":"2026-11-09","reason":"David flag docket 2026-11-09 (ruling 2): retire ; prod nonempty one-member allowlist (moved to injected cohort) on every reader at 2026-11-09 03:20Z"}
   - {"key":"AUDIO_CANONICAL_PACKING_ENABLED","aliases":[],"kind":"env","retired":"2026-11-09","reason":"David flag docket 2026-11-09 (ruling 2): retire ; prod unset (code default) on every reader at 2026-11-09 03:20Z"}

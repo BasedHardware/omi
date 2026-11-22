@@ -1670,6 +1670,7 @@ admission.
 
 | Key | Retired | Reason |
 | --- | --- | --- |
+| `clients_refactor` | 2026-11-22 | SCA-3689 retires the dormant client speaker experiment. The released speaker-assignment path is retained. |
 | `clients_boundary_evidence` | 2026-11-22 | SCA-3689 retires the dormant macOS meeting boundary evidence producer. The server intake is retained for released builds. |
 | `AUDIO_ARCHIVE_UID_ALLOWLIST` | 2026-11-09 | David flag docket 2026-11-09 (ruling 2): retire ; prod nonempty one-member allowlist (moved to injected cohort) on every reader at 2026-11-09 03:20Z |
 | `AUDIO_CANONICAL_PACKING_ENABLED` | 2026-11-09 | David flag docket 2026-11-09 (ruling 2): retire ; prod unset (code default) on every reader at 2026-11-09 03:20Z |
