@@ -2185,15 +2185,13 @@ overlay:
           # reconcilers off. Never unset here while the service runs (unset = full startup).
           OMI_PROCESS_ROLE:
             value: projection_pump
-          # Kill switches stay off on first deploy. Enable the pump on this service only,
-          # never on backend-integration (the selector is service-wide). Rollback: 'false'.
+          # SCA-3318: keep the projection pump dark. The selector is service-wide.
           BATCH_PIPELINE_SERVING_ENABLED: {value: 'false', category: rollout}
-          BATCH_PIPELINE_PROJECTION_PUMP_ENABLED: {value: 'true', category: rollout}
+          BATCH_PIPELINE_PROJECTION_PUMP_ENABLED: {value: 'false', category: rollout}
           # The pump's loop runs in 'pump' mode, which ignores this switch (projection_drain.py); pin the
           # inherited value back to the default so the pump's env keeps its meaning.
           BATCH_PIPELINE_SERVING_PROJECTION_SWEEP: {value: 'true', category: ops_kill}
-          # SCA-3318 one-key activation: keep the serving dark successor's silence-skip value (false);
-          # widening the skip to the pump is a separate later change. Rollback for the pump key: 'false'.
+          # Keep the pump's silence-skip value pinned to the dark successor's false.
           BATCH_PIPELINE_SILENCE_READ_SKIP_ENABLED: {value: 'false', category: ops_kill}
           # Bundle (ii) safe start: one page per tick, 2 s post-work sleep, 8 owner drains.
           BATCH_PIPELINE_PUMP_SWEEP_PAGES: {value: '1', category: rollout}
