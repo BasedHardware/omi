@@ -1,6 +1,7 @@
 {
   "schema_version": 1,
   "id": "FC-generated-presentation-contract-bypass",
+  "family": "cross-boundary-contract",
   "violated_contract": "User-visible model output must not be persisted or rendered merely because it parsed against the response schema. Internal evidence identifiers, diarization placeholders, and unsafe Markdown destinations can all be schema-valid while violating the presentation contract and exposing implementation details as clickable prose.",
   "canonical_prevention": "At the model boundary, apply a deterministic presentation-contract gate after schema parsing: recover only unambiguous citations into typed evidence fields, validate identifiers against authoritative input, allow one bounded correction pass for ambiguous leakage, and scrub the violation if that pass fails. Apply the conservative deterministic recovery at read time for historical records, and pin both writer and reader behavior with tests.",
   "canonical_prevention_artifact": [

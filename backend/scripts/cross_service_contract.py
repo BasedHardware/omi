@@ -199,6 +199,11 @@ COUPLED_FLAGS: tuple[tuple[str, tuple[str, ...]], ...] = (
 READER_SPLIT_SCOPES: dict[str, tuple[str, ...]] = {
     'helm/batch-pipeline-worker': ('BATCH_PIPELINE_', 'STT_CAP_', 'PARAKEET_'),
 }
+# Backend hosts whose overrides are role-local by design, so they never define the fleet value a
+# reader-split compares against. SCA-3120: the projection pump derives integration's env and then
+# pins its own tick cadence and keeps recovery and serving off; the worker must still match the
+# serving fleet, not the pump.
+READER_SPLIT_ROLE_LOCAL: frozenset[str] = frozenset({'cloud_run/backend-projection-pump'})
 
 # Charts rendered with ``helm template`` exactly like their deploy workflow does. Values files are
 # ``{env}_omi_{name}_values.yaml``; ``image_set`` is the workflow's --set-string image argument.
@@ -1198,7 +1203,11 @@ def check_reader_split(ctx: Context) -> list[Violation]:
     never set on the separately deployed worker that also reads it)."""
     out: list[Violation] = []
     for model in ctx.models.values():
-        backend = [d for d in model.deployments.values() if d.entrypoint == BACKEND_ENTRYPOINT]
+        backend = [
+            d
+            for d in model.deployments.values()
+            if d.entrypoint == BACKEND_ENTRYPOINT and d.id not in READER_SPLIT_ROLE_LOCAL
+        ]
         for process in model.deployments.values():
             prefixes = READER_SPLIT_SCOPES.get(process.id)
             if not prefixes or process.entrypoint in (None, BACKEND_ENTRYPOINT):

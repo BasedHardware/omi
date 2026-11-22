@@ -84,6 +84,8 @@ MODES = {
     },
 }
 FIXED_SWITCHES = {
+    # This benchmark models projection throughput, not async finish classification.
+    'BATCH_PROJECTION_FINISH_ASYNC_SKIP_ENABLED': 'false',
     'BATCH_PIPELINE_SWEEP_OWNER_CHAIN_ENABLED': 'true',
     'BATCH_PIPELINE_PROJECTION_PENDING_PAGE_ENABLED': 'true',
     'BATCH_PIPELINE_PROJECTION_TIMING_ENABLED': 'false',
@@ -191,16 +193,40 @@ class ChainLog:
         serialized_item = item.to_dict()
         self.jobs[segment] = {**serialized_item, 'requires_compute_admission': True, 'policy_parts': self.policy_parts}
 
+    def projection_finish_backfill_complete(self):
+        # This model has no finish-clock backfill or stamped result clocks.
+        return False
+
     # --- FirestoreStore facade ------------------------------------------------
-    def projection_page(self, limit=100, *, after=None, states=('pending', 'persisted', 'ready')):
+    def projection_page(
+        self,
+        limit=100,
+        *,
+        after=None,
+        states=('pending', 'persisted', 'ready'),
+        due_before=None,
+        exclude_async=False,
+        followup_due_before=None,
+    ):
         self.lanes.spend('page_query')
+        if due_before is not None and followup_due_before is not None:
+            raise ValueError('finish and follow-up discovery clocks cannot be combined')
+        cutoff = followup_due_before if followup_due_before is not None else due_before
+        clock_field = 'projection_followup_due_at' if followup_due_before is not None else 'projection_finish_due_at'
         rows = sorted(
-            (row['committed_at'], sid) for sid, row in self.results.items() if row['projection_state'] in states
+            (row['committed_at'], sid) if cutoff is None else (row[clock_field], row['committed_at'], sid)
+            for sid, row in self.results.items()
+            if row['projection_state'] in states
+            and (not exclude_async or due_before is None or row.get('projection_finish_due_at', -1) >= 0)
+            and (cutoff is None or clock_field in row and row[clock_field] <= cutoff)
         )
         if after is not None:
-            rows = [row for row in rows if row > after]
+            if cutoff is not None and len(after) != 3 or cutoff is None and after[1] == '':
+                rows = [row for row in rows if row[0] >= after[0]]
+            else:
+                rows = [row for row in rows if row > after]
         page = rows[:limit]
-        return [sid for _, sid in page], (page[-1] if len(page) == limit else None)
+        return [row[-1] for row in page], (page[-1] if len(page) == limit else None)
 
     def projection_successor(self, key, previous):
         self.lanes.spend('successor_query')
@@ -247,19 +273,19 @@ class Session:
     def validate_plan(self, transaction, planned):
         pass
 
-    def persist(self, transaction, planned=None, **_):
+    def persist(self, transaction, planned=None, *, silence=False, **_):
         assigned = planned[0] if planned else {}
-        receipt = {'state': 'persisted', 'conversation_id': assigned.get('id')}
+        receipt = {'state': 'ready' if silence else 'persisted', 'conversation_id': assigned.get('id')}
         row = self.log.results[self.segment_id]
-        row.update(projection=receipt, projection_state='persisted')
+        row.update(projection=receipt, projection_state=receipt['state'])
         self.log.owners.setdefault(row['owner_key'], {})['projection_watermark'] = self.segment_id
         self.log.persist_order.append(self.segment_id)
         return receipt
 
-    def persist_empty(self, **_):
+    def persist_empty(self, **options):
         self.log.lanes.spend('assignment_transaction')
         self.prepare(None)
-        return self.persist(None)
+        return self.persist(None, **options)
 
 
 class Conversations:

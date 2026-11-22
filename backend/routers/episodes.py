@@ -26,11 +26,14 @@ from models.recording_speakers import (
     RecordingSpeakerLimit,
 )
 
-from fastapi import BackgroundTasks, APIRouter, Depends, Header, HTTPException, Query
+from fastapi import BackgroundTasks, APIRouter, Depends, Header, HTTPException, Query, Request
 
 from config.app_channel import APP_CHANNEL_HEADER, app_channel
+from config.home_feed import home_feed_enabled
 from config.episodes import client_channel_admitted, episodes_enabled_for
 from utils.episodes import home_read
+from database import home_feed as compact_home
+from models.home_feed import HomeFeedResponse, HomeFeedPreparationResponse
 from models.episode import (
     EpisodeListResponse,
     Episode,
@@ -41,19 +44,58 @@ from models.episode import (
 from utils.episodes import client_gate, metrics, service
 from utils.other import endpoints as auth
 
-router = APIRouter(tags=['episodes'])
+from config.conversations_v3 import conversations_v3_enabled, episode_build_bucket
+
+from utils.conversations.v3 import metrics as v3_metrics
 
 
-def _admitted(uid: str, channel: Optional[str]) -> bool:
+def _v3_request_admission(
+    uid: str = Depends(auth.get_current_user_uid),
+    channel: Optional[str] = Header(None, alias=APP_CHANNEL_HEADER),
+) -> bool:
+    if app_channel(channel) == 'beta':
+        client_gate.note_client_seen(uid)
+    return conversations_v3_enabled(uid)
+
+
+def _record_episode_request(
+    request: Request,
+    uid: str = Depends(auth.get_current_user_uid),
+    channel: Optional[str] = Header(None, alias=APP_CHANNEL_HEADER),
+    v3_enabled: bool = Depends(_v3_request_admission),
+):
+    if not request.url.path.startswith('/v1/episodes'):
+        return
+    label = app_channel(channel)
+    version = episode_build_bucket(request.headers.get('X-App-Build', '').strip())
+    endpoint = getattr(request.scope.get('route'), 'path', 'unknown')
+    v3_metrics.EPISODE_CALLS.labels(
+        endpoint,
+        label,
+        version,
+        str(v3_enabled).lower(),
+    ).inc()
+
+
+router = APIRouter(tags=['episodes'], dependencies=[Depends(_record_episode_request)])
+
+
+def _admitted(uid: str, channel: Optional[str], *, v3_enabled=None) -> bool:
     """Cohort and client channel, then the capability marker (sync routes run off the loop)."""
     label = app_channel(channel)
+    if not isinstance(v3_enabled, bool):
+        v3_enabled = _v3_request_admission(uid, channel)
+    if v3_enabled:
+        metrics.record_client_request(label, 'not_admitted')
+        return False
     if not episodes_enabled_for(uid):
         metrics.record_client_request(label, 'not_admitted')
         return False
     if not client_channel_admitted(channel):
         metrics.record_client_request(label, 'channel_closed')
         return False
-    client_gate.note_client_seen(uid)
+    if label == 'beta':
+        client_gate.note_client_seen(uid)
     metrics.record_client_request(label, 'admitted')
     return True
 
@@ -66,8 +108,9 @@ def list_episodes(
     cursor: Optional[str] = Query(None, max_length=200, pattern=r'^[A-Za-z0-9_-]+$'),
     uid: str = Depends(auth.get_current_user_uid),
     channel: Optional[str] = Header(None, alias=APP_CHANNEL_HEADER),
+    v3_enabled: bool = Depends(_v3_request_admission),
 ):
-    if not _admitted(uid, channel):
+    if not _admitted(uid, channel, v3_enabled=v3_enabled):
         return {'enabled': False}
     if start.tzinfo is None or end.tzinfo is None or start > end:
         raise HTTPException(status_code=422, detail='Expected an ordered, timezone-aware window')
@@ -86,8 +129,9 @@ def list_episodes(
 def get_live_episode(
     uid: str = Depends(auth.get_current_user_uid),
     channel: Optional[str] = Header(None, alias=APP_CHANNEL_HEADER),
+    v3_enabled: bool = Depends(_v3_request_admission),
 ):
-    if not _admitted(uid, channel):
+    if not _admitted(uid, channel, v3_enabled=v3_enabled):
         return {'enabled': False, 'episode': None}
     episode = service.live_episode(uid)
     response = {
@@ -107,8 +151,9 @@ def get_episode_for_conversation(
     conversation_id: str,
     uid: str = Depends(auth.get_current_user_uid),
     channel: Optional[str] = Header(None, alias=APP_CHANNEL_HEADER),
+    v3_enabled: bool = Depends(_v3_request_admission),
 ):
-    if not _admitted(uid, channel):
+    if not _admitted(uid, channel, v3_enabled=v3_enabled):
         return {'enabled': False, 'episode': None}
     return {
         'enabled': True,
@@ -116,8 +161,8 @@ def get_episode_for_conversation(
     }
 
 
-def _require(uid: str, channel: Optional[str]) -> None:
-    if not _admitted(uid, channel):
+def _require(uid: str, channel: Optional[str], *, v3_enabled=None) -> None:
+    if not _admitted(uid, channel, v3_enabled=v3_enabled):
         raise HTTPException(status_code=404, detail='Episodes are not available')
 
 
@@ -126,8 +171,9 @@ def get_episode(
     episode_id: str,
     uid: str = Depends(auth.get_current_user_uid),
     channel: Optional[str] = Header(None, alias=APP_CHANNEL_HEADER),
+    v3_enabled: bool = Depends(_v3_request_admission),
 ):
-    _require(uid, channel)
+    _require(uid, channel, v3_enabled=v3_enabled)
     episode = service.episode_by_id(uid, episode_id)
     if episode is None:
         raise HTTPException(status_code=404, detail='Episode not found')
@@ -145,8 +191,9 @@ def wrap_up_episode(
     body: Optional[EpisodeWrapUpRequest] = None,
     uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, 'episodes:write')),
     channel: Optional[str] = Header(None, alias=APP_CHANNEL_HEADER),
+    v3_enabled: bool = Depends(_v3_request_admission),
 ):
-    _require(uid, channel)
+    _require(uid, channel, v3_enabled=v3_enabled)
     episode = service.wrap_up(uid, episode_id, conversation_id=body.conversation_id if body else None)
     if episode is None:
         raise HTTPException(status_code=404, detail='Episode not found')
@@ -159,8 +206,9 @@ def dismiss_episode_item(
     item_id: str,
     uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, 'episodes:write')),
     channel: Optional[str] = Header(None, alias=APP_CHANNEL_HEADER),
+    v3_enabled: bool = Depends(_v3_request_admission),
 ):
-    _require(uid, channel)
+    _require(uid, channel, v3_enabled=v3_enabled)
     episode = service.dismiss_item(uid, episode_id, item_id)
     if episode is None:
         raise HTTPException(status_code=404, detail='Episode not found')
@@ -181,8 +229,9 @@ def assign_episode_speaker(
     background_tasks: BackgroundTasks,
     uid: str = Depends(auth.get_current_user_uid),
     channel: Optional[str] = Header(None, alias=APP_CHANNEL_HEADER),
+    v3_enabled: bool = Depends(_v3_request_admission),
 ):
-    _require(uid, channel)
+    _require(uid, channel, v3_enabled=v3_enabled)
     from routers.recording_speakers import edit
 
     episode = service.episode_by_id(uid, episode_id)
@@ -190,3 +239,43 @@ def assign_episode_speaker(
         raise HTTPException(status_code=404, detail='Episode not found')
     anchor = body.selections[0].conversation_id if body.selections else episode['conversation_ids'][0]
     return edit(uid, anchor, body, background_tasks, episode_id=episode_id)
+
+
+@router.get('/v1/home/feed', response_model=HomeFeedResponse, tags=['home'])
+def get_home_feed(
+    limit: int = Query(50, ge=1, le=100),
+    cursor: Optional[str] = Query(None, max_length=4096),
+    uid: str = Depends(auth.get_current_user_uid),
+    channel: Optional[str] = Header(None, alias=APP_CHANNEL_HEADER),
+    v3_enabled: bool = Depends(_v3_request_admission),
+):
+    if not home_feed_enabled():
+        raise HTTPException(status_code=404, detail='Home feed is unavailable')
+    try:
+        return compact_home.feed(
+            uid, limit=limit, cursor=cursor, episodes_admitted=_admitted(uid, channel, v3_enabled=v3_enabled)
+        )
+    except compact_home.AccountUnavailable as error:
+        compact_home.FEED_OUTCOME.labels(outcome='denied').inc()
+        raise HTTPException(status_code=403, detail='Home feed account unavailable') from error
+    except compact_home.PreparationRequired as error:
+        compact_home.FEED_OUTCOME.labels(outcome='preparation_required').inc()
+        raise HTTPException(status_code=409, detail='home_feed_preparation_required') from error
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail='Invalid Home feed cursor') from error
+
+
+@router.post('/v1/home/feed/prepare', response_model=HomeFeedPreparationResponse, tags=['home'])
+def prepare_home_feed(
+    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, 'home:prepare')),
+):
+    if not home_feed_enabled():
+        raise HTTPException(status_code=404, detail='Home feed is unavailable')
+    try:
+        return compact_home.prepare(uid)
+    except compact_home.AccountUnavailable as error:
+        raise HTTPException(status_code=403, detail='Home feed account unavailable') from error
+    except compact_home.PreparationTooLarge as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
+    except compact_home.PreparationRequired as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error

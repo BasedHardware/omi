@@ -39,6 +39,9 @@ CAPACITY_FIELDS = {
     "maxInFlightRequests": "--max-in-flight-requests",
 }
 BALANCING_MODES = {"IN_FLIGHT", "RATE", "CONNECTION"}
+# Deadlines for each kubectl/gcloud call, so a stalled API call fails the deploy instead of hanging it.
+READ_TIMEOUT_SECONDS = 120
+ATTACH_TIMEOUT_SECONDS = 600
 
 
 class ReconcileError(Exception):
@@ -53,6 +56,18 @@ def _parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--backend-service", required=True, help="Global Compute backend service name")
     parser.add_argument(
         "--dry-run", action="store_true", help="Read current state and report changes without attaching NEGs"
+    )
+    parser.add_argument(
+        "--read-timeout",
+        type=float,
+        default=READ_TIMEOUT_SECONDS,
+        help="Seconds to wait for each kubectl/gcloud read",
+    )
+    parser.add_argument(
+        "--attach-timeout",
+        type=float,
+        default=ATTACH_TIMEOUT_SECONDS,
+        help="Seconds to wait for each gcloud add-backend call",
     )
     return parser.parse_args(argv)
 
@@ -97,9 +112,11 @@ def _permission_denial_details(stderr: str) -> tuple[str | None, str | None]:
     return permission_match.group(1) if permission_match else None, resource
 
 
-def _run_json(command: Sequence[str], *, operation: str, permission: str | None = None) -> Any:
+def _run_json(command: Sequence[str], *, operation: str, timeout: float, permission: str | None = None) -> Any:
     try:
-        result = subprocess.run(command, check=False, capture_output=True, text=True)
+        result = subprocess.run(command, check=False, capture_output=True, text=True, timeout=timeout)
+    except subprocess.TimeoutExpired:
+        raise ReconcileError(f"{operation} timed out after {timeout:g}s; retry the deploy") from None
     except OSError:
         raise ReconcileError(f"{operation} could not start") from None
     if result.returncode != 0:
@@ -307,6 +324,7 @@ def reconcile(args: argparse.Namespace) -> None:
     service = _run_json(
         ["kubectl", "--namespace", args.namespace, "get", "service", args.service, "--output=json"],
         operation="listen Service lookup",
+        timeout=args.read_timeout,
     )
     neg_name, declared_zones = _neg_status_from_service(service)
 
@@ -321,6 +339,7 @@ def reconcile(args: argparse.Namespace) -> None:
             f"--project={args.project}",
         ],
         operation="NEG listing",
+        timeout=args.read_timeout,
         permission="compute.networkEndpointGroups.list",
     )
     zones, owned_extra = _neg_zones(
@@ -348,6 +367,7 @@ def reconcile(args: argparse.Namespace) -> None:
             f"--project={args.project}",
         ],
         operation="backend service read",
+        timeout=args.read_timeout,
         permission="compute.backendServices.get",
     )
     if not isinstance(backend_service, dict):
@@ -388,7 +408,11 @@ def reconcile(args: argparse.Namespace) -> None:
             traffic_duration=traffic_duration,
         )
         try:
-            result = subprocess.run(command, check=False, capture_output=True, text=True)
+            result = subprocess.run(command, check=False, capture_output=True, text=True, timeout=args.attach_timeout)
+        except subprocess.TimeoutExpired:
+            raise ReconcileError(
+                f"failed to attach zone {zone}: gcloud timed out after {args.attach_timeout:g}s; retry the deploy"
+            ) from None
         except OSError:
             raise ReconcileError(f"failed to attach zone {zone}: gcloud could not start") from None
         if result.returncode != 0:

@@ -26,6 +26,13 @@ _BATCH_PIPELINE_INDEXES = tuple(
             'merge_fresh',
             (_asc('owner_key'), _asc('merge_pending'), _asc('fresh_capture'), _asc('capture_at'), _asc('segment_id')),
         ),
+        (
+            'merge_fresh_ready',
+            tuple(
+                _asc(field)
+                for field in ('owner_key', 'merge_pending', 'fresh_capture', 'state', 'capture_at', 'segment_id')
+            ),
+        ),
         ('recovery', (_asc('owner_id'), _asc('recovery_state'))),
         ('lease', (_asc('state'), _asc('lease_until'))),
         ('retry', (_asc('state'), _asc('available_at'))),
@@ -46,9 +53,8 @@ _BATCH_PROJECTION_INDEXES = tuple(
     for namespace in ('batch_pipeline_prod', 'batch_pipeline_dev')
 )
 
-# Dark finish backoff: the finish page ranges over the row's next-attempt clock,
-# which therefore leads the ordering (Firestore serves a range filter on the
-# first ordered field only), then the committed log and the key.
+# Async finish discovery ranges over the shared finish clock, ahead of the
+# committed log and document key in the index order.
 _BATCH_PROJECTION_FINISH_INDEXES = tuple(
     FirestoreIndexRequirement(
         f'{namespace}_projection_finish',

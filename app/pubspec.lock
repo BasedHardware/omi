@@ -591,12 +591,11 @@ packages:
     source: hosted
     version: "6.3.0"
   flutter_background_service_ios:
-    dependency: transitive
+    dependency: "direct overridden"
     description:
-      name: flutter_background_service_ios
-      sha256: "6037ffd45c4d019dab0975c7feb1d31012dd697e25edc05505a4a9b0c7dc9fba"
-      url: "https://pub.dev"
-    source: hosted
+      path: "packages/flutter_background_service_ios"
+      relative: true
+    source: path
     version: "5.0.3"
   flutter_background_service_platform_interface:
     dependency: "direct main"

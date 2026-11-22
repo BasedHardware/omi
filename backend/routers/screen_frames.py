@@ -8,6 +8,7 @@ bucket. There is no client-supplied verdict anywhere in this router.
 """
 
 from __future__ import annotations
+from utils.conversations.layer import read_product as read_product_conversation
 
 import hashlib
 import json
@@ -70,7 +71,7 @@ EMPTY_FRAME_SET = ConversationScreenFrameSet(revision=0, banner=None, strip=[])
 
 
 def _get_owned_conversation(uid: str, conversation_id: str) -> Dict[str, Any]:
-    conversation = conversations_db.get_conversation(uid, conversation_id)
+    conversation = read_product_conversation(conversations_db.get_conversation, uid, conversation_id)
     if conversation is None or conversations_db.is_soft_deleted(conversation):
         raise HTTPException(status_code=404, detail="Conversation not found")
     return conversation
@@ -419,7 +420,7 @@ def get_shared_conversation_screenshots(conversation_id: str):
         return EMPTY_FRAME_SET
 
     try:
-        conversation = conversations_db.get_conversation(uid, conversation_id)
+        conversation = read_product_conversation(conversations_db.get_conversation, uid, conversation_id)
     except Exception as exc:
         raise HTTPException(status_code=503, detail='Shared conversation unavailable') from exc
     if conversation is None or conversations_db.is_soft_deleted(conversation):

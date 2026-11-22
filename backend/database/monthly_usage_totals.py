@@ -123,7 +123,14 @@ def verified_transcription_seconds(data: Any, now: datetime) -> float:
     if data is None or isinstance(data, dict) and data.get('ready') is not True:
         raise UsageBaselineNotReady('unverified monthly usage')
     epoch = _epoch()
-    if not epoch or not isinstance(data, dict) or not _ready(data, epoch, now):
+    if not epoch or not isinstance(data, dict):
+        raise ValueError('unverified monthly usage')
+    if not _ready(data, epoch, now):
+        other = data.get('epoch')
+        if isinstance(other, str) and other != epoch and _ready(data, other, now):
+            # Ready under another service's epoch: the fenced source scan can
+            # re-prove it under ours, so this is a missing baseline, not corruption.
+            raise UsageBaselineNotReady('monthly usage ready under another epoch')
         raise ValueError('unverified monthly usage')
     value = data['totals'].get('transcription_seconds')
     if type(value) not in (int, float) or not math.isfinite(value) or value < 0:
@@ -210,20 +217,30 @@ def _rebuild(transaction: Any, user_ref: Any, date: datetime, epoch: str, *, fir
 
 @read_origin('job:usage_month_total_read')
 def read_monthly_totals(
-    uid: str, date: datetime, *, firestore_client: Any = None, start_date: datetime | None = None
+    uid: str,
+    date: datetime,
+    *,
+    firestore_client: Any = None,
+    start_date: datetime | None = None,
+    ready_only: bool = False,
 ) -> dict | None:
     """One warm document read, including arbitrary day-cutoff and late updates.
 
     None requests the unchanged hourly query. Redis and reader cohort selection
-    do not participate in accounting or maintenance.
+    do not participate in accounting or maintenance. A speculative intake read
+    uses only an already-verified document and leaves misses to the spend gate.
     """
     if not lever_enabled('usage_month_total', uid) or not (epoch := _epoch()):
         return None
     try:
         firestore_client = firestore_client if firestore_client is not None else get_firestore_client()
         user_ref = firestore_client.collection('users').document(uid)
-        data = month_ref(user_ref, date).get().to_dict() or {}
+        ref = month_ref(user_ref, date)
+        options = {'timeout': 1, 'retry': None} if ready_only else {}
+        data = ref.get(**options).to_dict() or {}
         if not _ready(data, epoch, date):
+            if ready_only:
+                return None
             data = _rebuild(firestore_client.transaction(), user_ref, date, epoch, firestore_client=firestore_client)
         if data is not None:
             if start_date is None or (start_date.year, start_date.month) < (date.year, date.month):
@@ -238,6 +255,8 @@ def read_monthly_totals(
     except Exception:
         # Do not retain a stale total on transaction/read failure.
         pass
+    if ready_only:
+        return None
     record_fallback(
         component='firestore_read',
         from_mode='monthly_total',

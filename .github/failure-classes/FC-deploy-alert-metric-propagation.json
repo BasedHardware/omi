@@ -1,6 +1,7 @@
 {
   "schema_version": 1,
   "id": "FC-deploy-alert-metric-propagation",
+  "family": "deploy-prerequisite",
   "violated_contract": "Sync-backfill alert provisioning must converge managed policies to the deployment's declared configuration while preserving policy identity, condition, enabled state, and exact notification routing. Cloud Monitoring metric propagation delays and stale routing must not strand valid deployments or be hidden by a weakened verifier.",
   "canonical_prevention": "Retry only the documented metric-not-yet-visible response for the exact newly created metric and re-list the exact policy name before each create attempt. For existing managed policies, validate display name, condition, filter, duration, and enabled state before updating only notification channels to the deployment's declared set. Read back and run the strict full verifier. Bound retries and fail all other drift immediately.",
   "canonical_prevention_artifact": [

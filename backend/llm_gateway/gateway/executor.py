@@ -30,7 +30,11 @@ from llm_gateway.gateway.errors import (
     GatewayProviderFailureError,
     GatewayProviderRequestRejectedError,
 )
-from llm_gateway.gateway.metrics import FLEX_FIRST_TOTAL, LUNA_UNSUPPORTED_PARAMS_DROPPED_TOTAL
+from llm_gateway.gateway.metrics import (
+    FLEX_FIRST_TOTAL,
+    KEYED_PROVIDER_ATTEMPTS_TOTAL,
+    LUNA_UNSUPPORTED_PARAMS_DROPPED_TOTAL,
+)
 from llm_gateway.gateway.providers import (
     ChatCompletionProvider,
     EXPOSE_PROVIDER_ERROR_DETAILS_ENV_VAR,
@@ -481,7 +485,9 @@ PROVIDER_429_BACKOFF_CAP_SECONDS = 60.0
 # almost none of that. Kill switch: LLM_GATEWAY_FLEX_FIRST_LANES=off.
 FLEX_FIRST_LANES_ENV_VAR = 'LLM_GATEWAY_FLEX_FIRST_LANES'
 FLEX_FIRST_TIMEOUT_MS_ENV_VAR = 'LLM_GATEWAY_FLEX_FIRST_TIMEOUT_MS'
-DEFAULT_FLEX_FIRST_LANES = frozenset({'omi:auto:conv-structure', 'omi:auto:memory-l1'})
+DEFAULT_FLEX_FIRST_LANES = frozenset(
+    {'omi:auto:conv-structure', 'omi:auto:memory-l1', 'omi:auto:conversation-v3-summary'}
+)
 DEFAULT_FLEX_FIRST_TIMEOUT_MS = 10_000
 FLEX_FIRST_LANE_TIMEOUT_MS = {'omi:auto:conv-structure': 15_000, 'omi:auto:memory-l1': 10_000}
 
@@ -712,6 +718,11 @@ async def _attempt_provider(
         except GatewayError as exc:
             return None, exc
     max_attempts = 1 if route.lane_id in DREAM_LANES else max(route.retry.max_attempts, 1)
+    if max_provider_attempts is not None:
+        attempted = len(attempt_trace.attempts) if attempt_trace is not None else 0
+        max_attempts = min(max_attempts, max_provider_attempts - attempted)
+        if max_attempts <= 0:
+            return None, GatewayInvalidRequestError('provider attempt budget exhausted')
     # The Flex attempt is extra: Standard keeps every configured attempt. A
     # request already on a fallback (LKG or next provider) goes straight to Standard.
     flex_offset = (
@@ -723,12 +734,6 @@ async def _attempt_provider(
     error: GatewayError | None = None
     for retry_ordinal in range(1, max_attempts + flex_offset + 1):
         flex_attempt = flex_offset == 1 and retry_ordinal == 1
-        if (
-            max_provider_attempts is not None
-            and attempt_trace is not None
-            and len(attempt_trace.attempts) >= max_provider_attempts
-        ):
-            return None, GatewayInvalidRequestError('provider attempt budget exhausted')
         provider_request = _provider_request(resolved_route, provider_ref, route=route)
         timeout_ms = int((deadline_monotonic - monotonic()) * 1000)
         if timeout_ms <= 0:
@@ -739,6 +744,8 @@ async def _attempt_provider(
         if flex_attempt:
             provider_request['service_tier'] = 'flex'
             timeout_ms = flex_first_timeout_ms(route.lane_id, timeout_ms)
+        if attempt_trace is not None and attempt_trace.keyed:
+            KEYED_PROVIDER_ATTEMPTS_TOTAL.inc()
         try:
             response = await provider.create_chat_completion(
                 provider_request,

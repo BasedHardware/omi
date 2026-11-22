@@ -327,6 +327,14 @@ def test_codemagic_workflow_contract_accepts_current_production_configuration():
     assert GUARDS.check_codemagic_release_publishers() == []
 
 
+def test_release_notes_require_verified_runtime_receipt():
+    document = yaml.safe_load((REPO_ROOT / "codemagic.yaml").read_text())
+    publication = next(step["script"] for step in document["workflows"]["omi-desktop-swift-release"]["scripts"] if step.get("name") == "Create GitHub release")
+    notes_command = next(line for line in publication.splitlines() if line.startswith("CHANGELOG_MD="))
+    assert '--runtime-smoke-result "$BUILD_DIR/desktop-smoke-result.json"' in notes_command
+    assert "||" not in notes_command
+
+
 def _module_bool_constant(path: Path, name: str) -> bool:
     for node in ast.parse(path.read_text(encoding="utf-8")).body:
         if isinstance(node, ast.Assign) and any(isinstance(t, ast.Name) and t.id == name for t in node.targets):
@@ -338,7 +346,11 @@ def _module_bool_constant(path: Path, name: str) -> bool:
 def test_play_held_changes_flags_agree():
     # 2026-10-28 -> 11-01: the Play commit flag and both Codemagic blocks were
     # held, but the dispatcher's ANDROID_HELD_CHANGES_MODE stayed False, so the
-    # held Android distribution stalled with no reminder. All four move together.
+    # held Android distribution stalled with no reminder. The dispatcher moves
+    # with the android-internal-auto block it reports on; the scripts' commit
+    # flag moves with the tag lane, whose alpha promotion commits through it.
+    # Since 2026-11-21 internal publishing is unheld while the production
+    # scripts stay held until that flip is reviewed separately.
     promote = _module_bool_constant(REPO_ROOT / "app/scripts/mobile_store_promote.py", "CHANGES_NOT_SENT_FOR_REVIEW")
     dispatcher = _module_bool_constant(
         REPO_ROOT / ".github/scripts/mobile_distribution.py", "ANDROID_HELD_CHANGES_MODE"
@@ -348,8 +360,8 @@ def test_play_held_changes_flags_agree():
         name: bool(workflows[name]["publishing"]["google_play"].get("changes_not_sent_for_review", False))
         for name in ("android-internal-auto", "android-prod-internal")
     }
-    assert dispatcher == promote, (dispatcher, promote)
-    assert set(codemagic.values()) == {promote}, (codemagic, promote)
+    assert dispatcher == codemagic["android-internal-auto"], (dispatcher, codemagic)
+    assert codemagic["android-prod-internal"] == promote, (codemagic, promote)
 
 
 def test_android_internal_publishers_hold_changes_for_console_review():
@@ -358,10 +370,9 @@ def test_android_internal_publishers_hold_changes_for_console_review():
     workflow = document["workflows"]["android-prod-internal"]
     publisher = workflow["publishing"]
 
-    # The 2026-10-28 android-internal-auto uploads failed at Publishing:
-    # "Changes cannot be sent for review automatically." Keep both Play
-    # publishing blocks held until the Console review submission.
-    assert auto_publisher["changes_not_sent_for_review"] is True
+    # 2026-11-21: Play auto-sends for review again and rejects the parameter
+    # on internal publishing (6b0160b66230fe1ed3aee673, 6b018d6dd4b9891201ed4caa).
+    assert "changes_not_sent_for_review" not in auto_publisher
     assert publisher["google_play"]["track"] == "internal"
     assert publisher["google_play"]["changes_not_sent_for_review"] is True
     assert publisher["google_play"]["release_name"] == "$CM_TAG [$CM_BUILD_ID]"

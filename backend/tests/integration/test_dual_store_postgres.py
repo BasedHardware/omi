@@ -65,6 +65,7 @@ def test_golden_through_dual_store(name, pg_pool, monkeypatch):
 
     monkeypatch.delenv('JOBSTORE_SHADOW_WRITES', raising=False)
     namespace, _ = _new_ids()
+    monkeypatch.setenv('JOBSTORE_SHADOW_NAMESPACES', namespace)
     shadows: list[PostgresStore] = []
     duals: list[DualStore] = []
 
@@ -75,6 +76,9 @@ def test_golden_through_dual_store(name, pg_pool, monkeypatch):
 
         def run(self, body):
             return SimStore.run(self.store, body)
+
+        def acquire_pull_claim(self, shard, token, now, ttl):
+            return SimStore.acquire_pull_claim(self.store, shard, token, now, ttl)
 
     class ShadowedSimStore(SimStore):
         def __init__(self, customer):
@@ -87,6 +91,9 @@ def test_golden_through_dual_store(name, pg_pool, monkeypatch):
 
         def run(self, body):
             return self.dual.run(body)
+
+        def acquire_pull_claim(self, shard, token, now, ttl):
+            return self.dual.acquire_pull_claim(shard, token, now, ttl)
 
     shadowed: dict = {}
     monkeypatch.setattr(dual_store, '_SHADOWED', shadowed)

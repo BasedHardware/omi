@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import base64
+import google_crc32c
 import fcntl
 import uuid
 from dataclasses import dataclass
@@ -13,7 +15,9 @@ import threading
 from pathlib import Path, PurePosixPath
 from typing import Any, Callable, Iterable
 from urllib.parse import quote
+from config.record_wal_storage import private_archive_bucket
 from utils.other.owned_paths import owned_scratch_path
+from utils.other.private_sync_get_metrics import instrument_storage_session
 
 from google.cloud import storage
 from google.cloud.exceptions import NotFound
@@ -88,6 +92,13 @@ class LocalBlob:
     @property
     def size(self) -> int | None:
         return self.path.stat().st_size if self.path.is_file() else None
+
+    @property
+    def crc32c(self) -> str | None:
+        if not self.path.is_file():
+            return None
+        checksum = google_crc32c.value(self.path.read_bytes())
+        return base64.b64encode(checksum.to_bytes(4, 'big')).decode()
 
     @property
     def public_url(self) -> str:
@@ -352,10 +363,21 @@ def create_storage_client():
     if os.environ.get('SERVICE_ACCOUNT_JSON'):
         service_account_info = json.loads(os.environ['SERVICE_ACCOUNT_JSON'])
         credentials = service_account.Credentials.from_service_account_info(service_account_info)  # type: ignore[reportUnknownMemberType]  # google.oauth2 partial stubs
-        return _size_http_pool(storage.Client(credentials=credentials))
+        return _configure_storage_transport(storage.Client(credentials=credentials))
     project = storage_client_project()
     client = storage.Client(project=project) if project else storage.Client()
-    return _size_http_pool(client)
+    return _configure_storage_transport(client)
+
+
+def _configure_storage_transport(client):
+    _size_http_pool(client)
+    try:
+        instrument_storage_session(client._http, private_archive_bucket())
+    except Exception as error:
+        logging.getLogger(__name__).warning(
+            'event=private_sync_get_metrics outcome=unavailable exception_type=%s', type(error).__name__
+        )
+    return client
 
 
 def gcs_http_pool_maxsize() -> int:

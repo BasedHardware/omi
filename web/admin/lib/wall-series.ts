@@ -117,8 +117,8 @@ export interface SeriesPayload {
   gaps: Record<string, string>;
   /** Headline only: oldest leg's data-through day across all series. */
   status?: { through: string | null; text: string } | null;
-  /** When the oldest value in this body turns 24h old; the stats proxy never
-   * serves the body as last-good past it. */
+  /** Earliest expiry of a served value (24h for history, 3h for the meter);
+   * the stats proxy never serves the body as last-good past it. */
   staleUntil: string | null;
 }
 
@@ -268,6 +268,11 @@ export interface Legs {
 type LegName = Exclude<keyof Legs, "live" | "meter">;
 /** The meter headline is shown only while its newest hourly row is this fresh. */
 export const METER_FRESH_MS = 3 * 3_600_000;
+
+function freshMeterExpiry(meter: MeterTile | null | undefined, now: Date) {
+  const expiry = meter ? Date.parse(meter.asOf) + METER_FRESH_MS : NaN;
+  return Number.isFinite(expiry) && now.getTime() < expiry ? expiry : null;
+}
 
 const LEGS_FOR: Record<SeriesName, LegName[]> = {
   // The headline's Cost / user is the health series' cost-per-user point, so it
@@ -1112,16 +1117,11 @@ export function healthFrames(
   }
   const marginByPlan = marginFrames(legs, days, now);
   // Variable margin over the spliced days: settled through D−2, live (est.)
-  // for D−1 and today. A live day with no book snapshot takes the latest book
-  // on or before now, labelled est.; a settled day never borrows a book.
-  let latestBook: number | null = null;
-  for (let k = 0; k < 7 && latestBook == null; k++)
-    latestBook = finopsMrr(legs.finops, shiftDay(utcDay(now), -k));
+  // for D−1 and today. Every day needs its own book snapshot; a missing book
+  // stays unavailable. The independent fresh hourly meter can still headline.
   const variable = variableMarginSeries(
     spliced,
-    (d) =>
-      finopsMrr(legs.finops, new Date(ts(d))) ??
-      (d > settledEnd ? latestBook : null),
+    (d) => finopsMrr(legs.finops, new Date(ts(d))),
     { feesCash: vendor.infraStripeFeesCash }
   );
   const liveSeries = variable;
@@ -1150,12 +1150,10 @@ export function healthFrames(
   );
   // The headline is the margin meter's newest hourly row while it is fresh
   // (David 2026-11-13). A stale or missing row never shows as a number: the
-  // headline falls back to the metered live day when there is one, else no
-  // value, and the disclosure names the meter's age.
+  // headline falls back to the metered live day when there is one, else the
+  // latest settled day. The visible source label names the mode and date.
   const meter = legs.meter ?? null;
-  const meterAgeMs = meter ? now.getTime() - Date.parse(meter.asOf) : null;
-  const meterFresh =
-    meter != null && meterAgeMs != null && meterAgeMs < METER_FRESH_MS;
+  const meterFresh = freshMeterExpiry(meter, now) != null;
   const meterStatus = meterFresh
     ? `Headline: margin meter hour ${meter!.asOf
         .slice(0, 16)
@@ -1169,6 +1167,15 @@ export function healthFrames(
         METER_FRESH_MS / 3_600_000
       } h old): no meter headline`
     : "Margin meter row unavailable";
+  const marginSource = meterFresh
+    ? `Hourly meter · ${meter!.asOf.slice(5, 16).replace("T", " ")}Z`
+    : !liveHead
+    ? "No complete cost window"
+    : liveHead.mrr == null
+    ? `No MRR book · ${shortDay(liveHead.date)}`
+    : `${liveHead.date > settledEnd ? "Live estimate" : "Settled"} · ${shortDay(
+        liveHead.date
+      )}${meter ? " · meter stale" : ""}`;
   const marginLiveStatus =
     (liveDayCount === 0
       ? "Live estimate unavailable: no fresh metered day"
@@ -1207,30 +1214,48 @@ export function healthFrames(
     // fees), trailing-7-day run rate against that day's book. MRR comes from
     // the day's own snapshot — a day without one keeps its cost point and
     // nulls the margin, never borrowing a neighbour's book.
-    // The headline is live only when a live day sits after the cutoff. Otherwise
-    // the last point is a settled value and is shown as no value, never as live.
-    variableMargin: variable.map((p, i, all) => ({
-      date: ts(p.date),
-      marginPct:
-        i === all.length - 1 && meterFresh
-          ? round(meter!.variableMarginPct, 1)
-          : i === all.length - 1 && !(liveHead && liveHead.date > settledEnd)
-          ? null
-          : round(p.marginPct, 1),
-      // 1 for a live (metered, estimated) day or the meter headline; settled days are 0.
-      live: p.date > settledEnd || (i === all.length - 1 && meterFresh) ? 1 : 0,
-      costPerMonth: round(p.costPerMonth, 0),
-      mrr: p.mrr == null ? null : round(p.mrr, 0),
-      goalCost: round(p.goalCost, 0),
-      gcpPerMonth: round(p.gcpPerMonth, 0),
-      vertexReservedPerMonth: round(p.vertexReservedPerMonth, 0),
-      pineconePerMonth: round(p.pineconePerMonth, 0),
-      openaiPerMonth: round(p.openaiPerMonth, 0),
-      sonioxPerMonth: round(p.sonioxPerMonth, 0),
-      modulatePerMonth: round(p.modulatePerMonth, 0),
-      feesPerMonth: round(p.feesPerMonth, 0),
-      missing: p.missing.length ? p.missing.join("+") : null,
-    })),
+    // A fresh meter wins; otherwise show this day's live or settled margin.
+    // The separate visible source label names the mode and date. Never skip
+    // a missing latest-day book to borrow an older non-null point.
+    variableMargin: variable
+      .map<Row>((p, i, all) => ({
+        date: ts(p.date),
+        marginPct:
+          i === all.length - 1 && meterFresh
+            ? round(meter!.variableMarginPct, 1)
+            : round(p.marginPct, 1),
+        // 1 for a live (metered, estimated) day or the meter headline; settled days are 0.
+        live:
+          p.date > settledEnd || (i === all.length - 1 && meterFresh) ? 1 : 0,
+        costPerMonth: round(p.costPerMonth, 0),
+        mrr: p.mrr == null ? null : round(p.mrr, 0),
+        goalCost: round(p.goalCost, 0),
+        gcpPerMonth: round(p.gcpPerMonth, 0),
+        vertexReservedPerMonth: round(p.vertexReservedPerMonth, 0),
+        pineconePerMonth: round(p.pineconePerMonth, 0),
+        openaiPerMonth: round(p.openaiPerMonth, 0),
+        sonioxPerMonth: round(p.sonioxPerMonth, 0),
+        modulatePerMonth: round(p.modulatePerMonth, 0),
+        feesPerMonth: round(p.feesPerMonth, 0),
+        missing: p.missing.length ? p.missing.join("+") : null,
+      }))
+      .concat(
+        // The hourly meter is independent of daily cost coverage. Do not hide
+        // its fresh headline when no complete daily window can be rendered.
+        !variable.length && meterFresh
+          ? [
+              {
+                date: meter!.asOf,
+                marginPct: round(meter!.variableMarginPct, 1),
+                live: 1,
+                costPerMonth: null,
+                mrr: null,
+                goalCost: null,
+              },
+            ]
+          : []
+      ),
+    variableMarginSource: [{ text: marginSource }],
     marginLive: liveHead
       ? [
           {
@@ -1444,7 +1469,9 @@ export function headlineDelta(key: string, rows: Row[]) {
   const text = missing
     ? "—"
     : shown == null
-    ? "no prior"
+    ? prior == null && (key === "mrr" || key === "arpmau")
+      ? "history gap"
+      : "no prior"
     : // Non-breaking spaces: a narrow stat must not wrap the glyph apart.
       `${shown > 0 ? "▲" : shown < 0 ? "▼" : "■"}\u00a0${Math.abs(
         shown
@@ -2161,6 +2188,10 @@ export async function seriesPayload(
       sources.meter ? sources.meter() : Promise.resolve(null),
       COLD_STORE_WAIT
     ).catch(() => null);
+    // The proxy must expire a meter headline at the same instant as the
+    // renderer, even when its historical legs remain usable for 24 hours.
+    const meterExpiry = freshMeterExpiry(legs.meter, now);
+    if (meterExpiry != null) staleUntil = Math.min(staleUntil, meterExpiry);
   }
   const frames = assembleSeries(name, legs, wall, now);
   let status: SeriesPayload["status"] = null;

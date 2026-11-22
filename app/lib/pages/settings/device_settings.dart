@@ -311,11 +311,16 @@ class _DeviceSettingsState extends State<DeviceSettings> {
   }
 
   void _openOfflineSync(DeviceProvider provider) {
-    if (!provider.isDeviceStorageSupport) {
-      showOmiAlert(context, title: context.l10n.v2Undetected, message: context.l10n.v2UndetectedMessage);
-      return;
+    switch (offlineSyncEntry(
+        connected: provider.connectedDevice != null, storageSupported: provider.isDeviceStorageSupport)) {
+      case OfflineSyncEntry.connectFirst:
+        // Disconnected is not "unsupported": the app cannot ask the device until it is back (D4).
+        OmiFeedback.info(context, context.l10n.connectDeviceForOfflineSync);
+      case OfflineSyncEntry.unsupported:
+        showOmiAlert(context, title: context.l10n.v2Undetected, message: context.l10n.v2UndetectedMessage);
+      case OfflineSyncEntry.open:
+        routeToPage(context, provider.supportsMultiFileSync ? const AutoSyncPage() : const SyncPage());
     }
-    routeToPage(context, provider.supportsMultiFileSync ? const AutoSyncPage() : const SyncPage());
   }
 
   Future<void> _openChargingHelp(DeviceProvider provider) async {
@@ -647,7 +652,6 @@ class _DeviceSettingsState extends State<DeviceSettings> {
             batteryLevel: connected == null ? 0 : provider.batteryLevel,
             isCharging: connected != null && provider.isCharging,
           ),
-          DeviceRecentlyGroup(load: provider.disconnectHistory),
           if (deviceStreaming && canPause) ...[
             DeviceControlsGroup(paused: devicePaused, onToggle: () => _togglePause(capture)),
             gap,
@@ -697,7 +701,8 @@ extension _DeviceLiveSections on _DeviceSettingsState {
       // flag and status line select on their own.
       final l10n = context.l10n;
       final local = context.select<SyncProvider?, DeviceCatchUpLocal>(
-          (s) => deviceCatchUpLocal(s?.pendingWorkWals ?? const [], alreadyCollapsed: true));
+        (s) => deviceCatchUpLocal(s?.derivedWals.pendingWork ?? const [], alreadyCollapsed: true),
+      );
       final serverProcessing = context.select<SyncProvider?, bool>((s) => s?.syncState.isProcessing ?? false);
       // The status line reads sync state only; whether server jobs exist comes
       // from the memoized snapshot, so a progress tick never rescans the inventory.
@@ -720,7 +725,9 @@ extension _DeviceLiveSections on _DeviceSettingsState {
             builder: (context, _) {
               final catchUp =
                   _catchUp(context, local: local, serverProcessing: serverProcessing, syncStatus: syncStatus);
-              if (!connected && catchUp == null) return const SizedBox.shrink();
+              if (!connected && catchUp == null) {
+                return const SizedBox.shrink();
+              }
               final online = context.select<ConnectivityProvider?, bool>((c) => c?.isConnected ?? true);
               return Column(children: [
                 Builder(
@@ -893,4 +900,13 @@ class _PendingSyncChip extends StatelessWidget {
       ),
     );
   }
+}
+
+/// What tapping Offline Sync does. A disconnected device has not said whether it stores audio, so it
+/// is never reported as unsupported.
+enum OfflineSyncEntry { connectFirst, unsupported, open }
+
+OfflineSyncEntry offlineSyncEntry({required bool connected, required bool storageSupported}) {
+  if (!connected) return OfflineSyncEntry.connectFirst;
+  return storageSupported ? OfflineSyncEntry.open : OfflineSyncEntry.unsupported;
 }

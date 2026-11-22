@@ -596,6 +596,180 @@ Background callers use the gateway for latency-insensitive structured decisions 
 
 The default provider registry includes the OpenAI-compatible adapter for the checked-in `openai` provider route. It is cached per process, closed during FastAPI lifespan shutdown, uses `OPENAI_API_KEY`, optional `OPENAI_BASE_URL`, and optional `OPENAI_MAX_RESPONSE_BYTES`, posts to `/chat/completions` with `httpx.AsyncClient`, and fails closed with `invalid_route_config` when the managed key is absent or rejected. Tests can still override the registry with fake providers.
 
+## Keyed Chat Completions
+
+Finalization sends a canonical lowercase UUID in `Idempotency-Key` to
+`POST /v1/chat/completions/operations`. This route requires a key and older
+gateway versions return 404 without dispatching. Gateway versions that implement
+this contract reject a key on the ordinary `POST /v1/chat/completions` URL before
+dispatch. Keyed callers use the existing service bearer
+and caller headers and must supply `X-Omi-User-Uid`. The gateway scopes each
+key to the authenticated service caller, user, and optional
+`X-Omi-Tenant-Id`. It compares the canonical JSON body and forwarded
+credential context. The order of names inside each structured-output schema's
+`properties` is significant. Other JSON object keys remain order-independent.
+The request limit is 1 MiB.
+
+Keyed calls support OpenAI, OpenRouter, and Anthropic serving routes with
+`stream` absent or set to the JSON boolean `false`. Proactivity feature and
+identity headers are rejected before claim or replay. The gateway commits a claim before a single provider dispatch and
+disables route fallback and retries for that request. Unkeyed calls follow
+the usual routing policy.
+
+| Condition | Gateway behavior |
+| --- | --- |
+| First successful request | Commits the encrypted response before returning it and echoes the key in `X-Omi-Idempotency-Key` |
+| Matching POST after commit | Returns the same status and body, including a committed deterministic rejection |
+| Matching POST or lookup during the five-minute pending window | HTTP 409 `idempotency_pending`, with `Retry-After: 2` |
+| Same key with different JSON or credentials | HTTP 409 `idempotency_conflict` |
+| Possible provider submission without a committed result | Keeps the claim fenced. HTTP 409 `idempotency_indeterminate` on later requests |
+| Result expired | HTTP 410 `idempotency_expired`. The claim still fences the key |
+| Claim TTL elapsed and the document still exists | HTTP 410 `idempotency_expired`. The gateway does not renew the claim |
+| Storage unavailable or feature disabled | HTTP 503. The operation cannot start without a durable claim |
+| Keyed storage saturated | HTTP 503 `idempotency_store_busy` with `Retry-After: 2` before claim or dispatch |
+
+`GET /v1/chat/completions/operations/{key}` uses the same auth and scope and
+returns only a committed successful completion. A missing result returns 404.
+Lookup never calls a provider. A timeout or a crash after submission can
+leave an operation indeterminate for the rest of its claim lifetime. A response larger than
+256 KiB is fenced as indeterminate and never returned as a successful result.
+
+The customer Firestore stores the claim in
+`users/{uid}/llm_gateway_idempotency_claims` and the authenticated-encrypted
+response in `users/{uid}/llm_gateway_idempotency_results`. The response is
+readable for 24 hours after commit, capped by the claim expiry. The claim has a
+fixed 30-day TTL from the initial claim, and replay and lookup leave it unchanged.
+The claim fences the key after result expiry. After Firestore deletes the claim,
+the gateway has no record of the previous use. Callers must end all keyed retries
+and redrives before the 30-day horizon. Claim, settlement and lookup
+transactions read the account deletion marker. The existing recursive account
+wipe removes both subcollections. A first successful request adds four reads
+and three writes, plus two eventual TTL deletes. Replay and lookup add up to
+three reads and no writes. Transaction retries can increase the read count.
+
+The keyed protocol defaults on. Set `LLM_GATEWAY_IDEMPOTENCY_ENABLED=off`
+on every gateway replica to refuse keyed calls while keeping unkeyed traffic
+available. Before pointing Go workers at the gateway, verify all replicas
+serve the keyed protocol and enable Firestore TTL on the `expires_at` field
+for both collection groups. The gateway requires
+`LLM_GATEWAY_IDEMPOTENCY_CUSTOMER_PROJECT` for keyed storage and uses the same
+customer project and database for claims, responses, and deletion-marker reads.
+Verify the gateway runtime identity has access there. Development compute
+and the customer project intentionally differ. This pin applies only to
+keyed storage. The claim and lookup executor admits eight running and eight
+queued transactions per replica. A keyed POST must reserve one of eight separate
+settlement slots before reading the body or creating a claim. Claim and lookup
+contention cannot take those slots. A canceled HTTP request releases an unused
+slot. Once settlement has been submitted, the worker keeps the slot and can
+commit the result even if the HTTP request is canceled before the worker starts.
+Unkeyed work and accounting use their existing pool.'"
+
+The Helm values accept a gateway-only Kubernetes secret named
+`<stage>-omi-llm-gateway-idempotency-keys` in the gateway namespace. Its optional entries use the same names as the gateway environment settings
+`LLM_GATEWAY_IDEMPOTENCY_ENCRYPTION_SECRET` and
+`LLM_GATEWAY_IDEMPOTENCY_SECONDARY_ENCRYPTION_SECRET`. Until an active key is
+provided, the gateway uses `ENCRYPTION_SECRET`. Use cryptographically
+random secrets of at least 32 bytes. Claims record the version used for the
+fingerprint and response encryption. For rotation, first distribute the next
+secret as secondary on every replica. Then promote it to active and keep the
+former active secret as secondary across all replicas. Retain the previous key
+for at least 30 days after the last replica using it for new claims has drained.
+An unavailable recorded version fails closed. Remove the previous key only
+after that window, then stage the next rotation. Roll gateway replicas after each
+change to the secret. Leave the shared application encryption secret in place. Unkeyed calls and startup do not
+require either key.
+
+Use the repository's scoped TTL helper with
+`--policy backend/deploy/llm-gateway/retention.json --project <customer-project>`
+to print the plan. An authorized operator applies it with `--apply` and
+verifies that both TTL policies are active. Keyed clients must always use the
+dedicated operations URL, including during a rollback.
+
+### Rollout readback
+
+Measure excess provider attempts per 1,000 keyed POSTs over a settled window
+that contains replay traffic. The first production readback uses only
+`prod`. The dev and prod charts set `LLM_GATEWAY_IDEMPOTENCY_ENVIRONMENT`
+explicitly. It stamps new claims, keyed ledger rows and the keyed POST counter.
+Use `sum(increase(llm_gateway_keyed_posts_total{environment="prod"}[<window>]))`
+as the denominator, evaluated at the window end. Collect the read-only inputs
+before claim TTL or account erasure can remove cohort records.
+
+- `claims` projects the customer Firestore claim document ID as `scope`, plus
+  `state`, `started_at` and `environment`. Extract the chosen environment and
+  `window_start <= started_at < window_end` from the
+  `llm_gateway_idempotency_claims` collection group. If the range index is
+  unavailable, scan those projected fields during the bounded rollout and
+  apply the same filters in the extract.
+- `attempts` projects `idempotency_scope AS scope`, `attempt_id`,
+  `occurred_at` as a timestamp, and `idempotency_environment AS environment`
+  from the participating replicas' `llm_gateway_attempts` ledgers. Extract
+  rows in the chosen environment for each cohort scope, including late rows
+  after window end, and all scoped ledger rows occurring within the window.
+  Keep `user_uid` for the next lookup only.
+- `claim_lookup` contains point reads in customer Firestore for every
+  in-window ledger scope absent from the claim cohort. Read
+  `users/{user_uid}/llm_gateway_idempotency_claims/{scope}` and project
+  `scope`, `started_at` and `environment` for found documents. Only a
+  matching-environment claim confirmed outside the window excludes a
+  ledger-only scope. Missing claims, mismatched stamps, and found claims
+  that should have been in the extract leave coverage unknown. Treat lookup
+  errors as an incomplete measurement.
+
+Run the query with `@environment = 'prod'`, `@window_start` and
+`@window_end` matching the scrape window, and `@keyed_posts` set to the
+environment-filtered denominator. A committed pre-dispatch rejection with
+no ledger row is conservatively unknown as well.
+
+```sql
+WITH cohort AS (
+  SELECT scope, state
+  FROM claims
+  WHERE environment = @environment
+    AND started_at >= @window_start AND started_at < @window_end
+), by_scope AS (
+  SELECT scope, COUNT(DISTINCT attempt_id) AS attempts,
+         MAX(CASE WHEN occurred_at >= @window_start AND occurred_at < @window_end
+                  THEN 1 ELSE 0 END) AS in_window
+  FROM attempts
+  WHERE environment = @environment
+  GROUP BY scope
+), scoped AS (
+  SELECT c.scope, c.state, COALESCE(a.attempts, 0) AS attempts, 1 AS has_claim
+  FROM cohort AS c LEFT JOIN by_scope AS a ON c.scope = a.scope
+  UNION ALL
+  SELECT a.scope, NULL AS state, a.attempts, 0 AS has_claim
+  FROM by_scope AS a
+  WHERE a.in_window = 1
+    AND NOT EXISTS (SELECT 1 FROM cohort AS c WHERE c.scope = a.scope)
+    AND NOT EXISTS (
+      SELECT 1 FROM claim_lookup AS l
+      WHERE l.scope = a.scope AND l.environment = @environment
+        AND (l.started_at < @window_start OR l.started_at >= @window_end)
+    )
+), coverage AS (
+  SELECT
+    COALESCE(SUM(CASE WHEN attempts > 1 THEN attempts - 1 ELSE 0 END), 0) AS observed_excess,
+    COALESCE(SUM(CASE WHEN state = 'committed' AND attempts > 0 THEN 0 ELSE 1 END), 0)
+      AS unknown_scopes,
+    COALESCE(SUM(has_claim), 0) AS claims
+  FROM scoped
+)
+SELECT observed_excess, unknown_scopes, claims,
+       CASE WHEN unknown_scopes = 0 AND claims > 0
+            THEN 1000.0 * observed_excess / NULLIF(@keyed_posts, 0)
+       END AS excess_per_1000_keyed_posts
+FROM coverage;
+```
+
+Require complete claim and ledger extracts. Independently compare the keyed
+provider-attempt and accounting-delivery counter deltas from the same
+environment's scrape targets. A known extract or counter gap makes coverage
+unknown. Accept the zero target only with a nonempty cohort, replay traffic,
+and complete coverage. A claim removed by TTL or erasure makes the affected
+window incomplete. Track replay, conflict, pending, indeterminate,
+saturation and storage errors in `llm_gateway_idempotency_outcomes_total`.
+
 ## Provider Execution
 
 Implemented executor behavior is non-streaming only:

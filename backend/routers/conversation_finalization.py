@@ -12,6 +12,7 @@ from fastapi.responses import JSONResponse
 from config.conversation_processing_retry import DETERMINISTIC_PROCESSING_FAILURE, PROCESSING_BURST_ATTEMPTS
 from config.listen_finalization import durable_attempt_cap_enabled as _durable_attempt_cap_enabled
 
+from models.finalization_owner import REFUSAL as FINALIZATION_OWNER_REFUSAL, python_owns_finalization
 from database import conversation_finalization_jobs as jobs_db
 from database.account_deletion_marker import account_deletion_blocks_user_work
 from database.sync_jobs import release_job_run_lock, try_acquire_job_run_lock
@@ -165,6 +166,8 @@ async def run_listen_finalization_job(
     # Read the owner and marker before admitting a lease. The transaction in
     # claim_finalization_job repeats this fence to close the race with deletion.
     pending_job = await run_blocking(db_executor, jobs_db.get_finalization_job, job_id)
+    if pending_job is not None and not python_owns_finalization(pending_job):
+        return JSONResponse(status_code=200, content={'status': 'dropped', 'reason': FINALIZATION_OWNER_REFUSAL})
     if pending_job and isinstance(pending_job.get('uid'), str):
         if await run_blocking(db_executor, account_deletion_blocks_user_work, pending_job['uid']):
             return retry_response(RetryReason.PERSISTENCE_FENCED)

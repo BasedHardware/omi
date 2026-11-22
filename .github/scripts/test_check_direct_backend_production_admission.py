@@ -39,6 +39,58 @@ class DirectBackendProductionAdmissionTests(unittest.TestCase):
                 CHECKER.validate(root),
             )
 
+    def test_evidence_source_cannot_use_mutable_or_candidate_controls(self):
+        for old, new in ((CHECKER.LISTEN_PINNED_CHECKOUT, CHECKER.LISTEN_PINNED_CHECKOUT.replace('inputs.expected_sha', 'inputs.branch')),
+                         (CHECKER.LISTEN_EVIDENCE_CONTROL, CHECKER.LISTEN_EVIDENCE_CONTROL.replace('github.workflow_sha', 'inputs.expected_sha')),
+                         (CHECKER.LISTEN_EVIDENCE_CONTROL, CHECKER.LISTEN_EVIDENCE_CONTROL.replace('.github/listen-evidence-control', '.'))):
+            with self.subTest(new=new), tempfile.TemporaryDirectory() as directory:
+                root=Path(directory)
+                for relative in CHECKER.WORKFLOWS:
+                    target=root/relative; target.parent.mkdir(parents=True,exist_ok=True)
+                    shutil.copy2(ROOT/relative,target)
+                target=root/CHECKER.LISTEN_WORKFLOW
+                text=target.read_text(); self.assertIn(old,text)
+                target.write_text(text.replace(old,new,1))
+                self.assertTrue(CHECKER.validate(root))
+
+    def test_listen_rejects_missing_or_weakened_exact_control_guard(self) -> None:
+        text = (ROOT / CHECKER.LISTEN_WORKFLOW).read_text(encoding="utf-8")
+        pin = CHECKER.LISTEN_PINNED_CHECKOUT
+        step = CHECKER.LISTEN_EXACT_CONTROL_STEP
+        mutations = (
+            (pin, pin.replace("github.sha", "inputs.control_sha")),
+            (pin, pin.replace("github.sha", "'main'")),
+            (step, "name: Bypass control verification\n        run: true"),
+            (step, step.replace("        shell: bash", "        continue-on-error: true\n        shell: bash")),
+            (step, step.replace(' || "$CONTROL_SHA" != "$(git rev-parse HEAD)"', "")),
+            (step, step.replace('"$CONTROL_SHA" != "$GITHUB_SHA" || ', "")),
+            (step, "name: Authenticate before guard\n        run: true\n      - " + step),
+        )
+        for old, new in mutations:
+            with self.subTest(replacement=new):
+                self.assertIn(old, text)
+                self.assertNotEqual(old, new)
+                self.assertIn(
+                    f"{CHECKER.LISTEN_WORKFLOW} must pin the dispatch checkout and verify exact control before deployment",
+                    CHECKER.validate_listen_control_admission(text.replace(old, new, 1)),
+                )
+
+    def test_listen_preserves_legacy_checkout_and_containment(self) -> None:
+        text = (ROOT / CHECKER.LISTEN_WORKFLOW).read_text(encoding="utf-8")
+        for old, new, diagnostic in (
+            ("      control_sha:\n", "      renamed_control_sha:\n", "must expose the optional control_sha string input"),
+            (CHECKER.LISTEN_PINNED_CHECKOUT, CHECKER.LISTEN_PINNED_CHECKOUT.replace("'main'", "github.sha"),
+             "must pin the dispatch checkout and verify exact control before deployment"),
+            (CHECKER.LISTEN_LEGACY_ANCESTRY, 'if [[ "$EXPECTED_SHA" != "$CHECKED_OUT_SHA" ]]; then',
+             "must retain expected_sha containment for legacy admission"),
+        ):
+            with self.subTest(diagnostic=diagnostic):
+                self.assertIn(old, text)
+                self.assertIn(
+                    f"{CHECKER.LISTEN_WORKFLOW} {diagnostic}",
+                    CHECKER.validate_listen_control_admission(text.replace(old, new, 1)),
+                )
+
     def test_each_direct_writer_rejects_each_source_admission_mutation_in_a_fresh_fixture(self) -> None:
         mutations = {
             "caller_ref": (CHECKER.CHECKOUT, "ref: ${{ github.event.inputs.branch }}"),
@@ -67,6 +119,10 @@ class DirectBackendProductionAdmissionTests(unittest.TestCase):
                         shutil.copy2(source, target)
                     target = root / relative
                     text = target.read_text(encoding="utf-8")
+                    if name == "caller_ref" and relative == CHECKER.PUSHER_WORKFLOW:
+                        expected = CHECKER.PUSHER_CHECKOUT
+                    if name == "caller_ref" and relative == CHECKER.LISTEN_WORKFLOW:
+                        expected = CHECKER.LISTEN_PINNED_CHECKOUT
                     self.assertIn(expected, text)
                     if name in replace_all:
                         target.write_text(text.replace(expected, replacement), encoding="utf-8")

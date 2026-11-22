@@ -61,9 +61,12 @@ def promtool():
 
 
 def main():
-    script = Path(__file__).resolve().parents[1] / 'tests/promql/record_token_lease.py'
-    sys.argv = [str(script), '--promtool', str(promtool())]
-    runpy.run_path(str(script), run_name='__main__')
+    backend = Path(__file__).resolve().parents[1]
+    binary = promtool()
+    for filename in ('tests/promql/record_token_lease.py', 'tests/promql/firestore_cost_budget.py'):
+        script = backend / filename
+        sys.argv = [str(script), '--promtool', str(binary)]
+        runpy.run_path(str(script), run_name='__main__')
 
 
 if __name__ == '__main__':

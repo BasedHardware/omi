@@ -19,6 +19,7 @@ from utils.batch_pipeline.correctness_metrics import record as record_correctnes
 from utils.batch_pipeline.contracts import WorkResult, held_vad_census, held_silence_allowed, held_result_allowed
 from utils.batch_pipeline.scheduler import Scheduler, owner_key
 from utils.batch_pipeline.input_retention import held_input_leg, staged_at, staged_enqueue, TERMINAL_SECONDS
+from utils.batch_pipeline.held_terminal import RETAINED_DIGEST_CHANGED, retained_digest_changed_held
 from config.batch_pipeline import batch_held_dead_letter_enabled, HELD_DEAD_LETTER_SECONDS
 
 # A receipt proves words existed, but deliberately contains no transcript.
@@ -81,6 +82,10 @@ class RecoveryStore(RecoveryFence):
                     or expired_at >= dead_before
                 ):
                     return None
+            if dead_before is not None and retained_digest_changed_held(job):
+                # A repeatedly disagreeing pinned source can never satisfy its
+                # manifest; nightly maintenance must not spend a requeue on it.
+                return None
             return Scheduler.requeue_quarantined_in_transaction(tx, job, now, account=expected_job is None)
 
         outcome = self.store.run(commit)
@@ -358,10 +363,23 @@ class RecoveryStore(RecoveryFence):
         return self.store.run(commit)
 
     def hold_invalid_manifest(self, segment_id, token, now, *, audio_uri):
-        """Retain a unit whose stored manifest can never materialize, without a paid intent.
+        return self._hold_unrecoverable_input(
+            segment_id, token, now, audio_uri=audio_uri, reason='invalid_retained_manifest'
+        )
+
+    def hold_input_missing(self, segment_id, token, now, *, audio_uri):
+        return self._hold_unrecoverable_input(segment_id, token, now, audio_uri=audio_uri, reason='input_missing')
+
+    def hold_retained_digest_changed(self, segment_id, token, now, *, audio_uri):
+        return self._hold_unrecoverable_input(
+            segment_id, token, now, audio_uri=audio_uri, reason=RETAINED_DIGEST_CHANGED
+        )
+
+    def _hold_unrecoverable_input(self, segment_id, token, now, *, audio_uri, reason):
+        """Retain an unrecoverable input without starting a paid intent.
 
         failed_held leaves the recovery candidate set, so neither a task retry nor
-        the sweep re-reads it. The manifest and its sources stay in place."""
+        the sweep re-reads it. No input or unit data is deleted."""
 
         def commit(tx):
             job, _ = self.checked(tx, segment_id)
@@ -383,7 +401,7 @@ class RecoveryStore(RecoveryFence):
             job['recovery_state'] = 'failed_held'
             if batch_held_dead_letter_enabled():
                 job['held_deadline_at'] = now + HELD_DEAD_LETTER_SECONDS
-            job['recovery'].update(settled_at=now, refusal={'reason': 'invalid_retained_manifest'})
+            job['recovery'].update(settled_at=now, refusal={'reason': reason})
             tx.put('jobs', segment_id, job)
             return True
 

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
-import { StickyNote, Inbox } from 'lucide-react'
+import { StickyNote, Inbox, Calendar } from 'lucide-react'
+import { GoogleCalendarSelectionPanel } from '../GoogleCalendarSelectionPanel'
 import { toast } from '../../../lib/toast'
 import { readAndExtractStickyNotes, importStickyMemories } from '../../../lib/stickyNotesImport'
 import { toastImportTally } from '../../../lib/importToast'
@@ -128,6 +129,14 @@ export function IntegrationsTab(): React.JSX.Element {
 
   return (
     <>
+      <SettingRow
+        icon={Calendar}
+        title="Google Calendar"
+        subtitle="Choose which connected calendars Omi reads and uses for meeting context."
+        keywords="calendar selection integration"
+      >
+        <GoogleCalendarSelectionPanel />
+      </SettingRow>
       <SettingRow
         icon={StickyNote}
         title="Windows Sticky Notes"

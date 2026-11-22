@@ -1,4 +1,10 @@
-{{- if .Values.podMonitoring.enabled }}
+{{- /*
+The release that owns the shared ServiceAccount also owns the collector's read grant on
+metrics-scrape-token. An isolated prod canary (serviceAccount.create=false) borrows that release's
+identity, and the shared Role already covers the same collector and secret in this namespace; the CI
+deployer cannot create RBAC, so a per-canary Role would fail every prod Pusher promotion.
+*/}}
+{{- if and .Values.podMonitoring.enabled .Values.serviceAccount.create }}
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:

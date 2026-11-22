@@ -54,6 +54,9 @@ WAVE2_COHORT_SALT = 'capture-speaker-notes:wave2'
 
 # Typed bindings make the generic cohort reader visible to registry validation.
 CONVERSATION_TERMINAL_FAMILY_MODE_ENV = 'CONVERSATION_TERMINAL_FAMILY_MODE'
+PUSHER_RECORD_CLOSE_NOTIFY_ENV = 'PUSHER_RECORD_CLOSE_NOTIFY_ENABLED'
+PUSHER_RECORD_CLOSE_NOTIFY_SERVE_PERCENT_ENV = 'PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_PERCENT'
+PUSHER_RECORD_CLOSE_NOTIFY_SERVE_UID_SHA256S_ENV = 'PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_UID_SHA256S'
 RECORD_TOKEN_LEASE_MODE_ENV = 'RECORD_TOKEN_LEASE_MODE'
 RECORD_TOKEN_LEASE_SERVE_PERCENT_ENV = 'RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT'
 RECORD_TOKEN_LEASE_SERVE_UID_SHA256S_ENV = 'RECORD_TOKEN_LEASE_MODE_SERVE_UID_SHA256S'
@@ -67,6 +70,10 @@ ACTION_ITEMS_V2_SERVE_UID_SHA256S_ENV = 'ACTION_ITEMS_V2_MODE_SERVE_UID_SHA256S'
 STT_VOCAB_SERVE_PERCENT_ENV = 'STT_VOCAB_MODE_SERVE_PERCENT'
 STT_VOCAB_SERVE_UID_SHA256S_ENV = 'STT_VOCAB_MODE_SERVE_UID_SHA256S'
 _COHORT_ENVS = {
+    PUSHER_RECORD_CLOSE_NOTIFY_ENV: (
+        PUSHER_RECORD_CLOSE_NOTIFY_SERVE_PERCENT_ENV,
+        PUSHER_RECORD_CLOSE_NOTIFY_SERVE_UID_SHA256S_ENV,
+    ),
     RECORD_TOKEN_LEASE_MODE_ENV: (RECORD_TOKEN_LEASE_SERVE_PERCENT_ENV, RECORD_TOKEN_LEASE_SERVE_UID_SHA256S_ENV),
     'CALLS_RECAP_MODE': (CALLS_RECAP_SERVE_PERCENT_ENV, CALLS_RECAP_SERVE_UID_SHA256S_ENV),
     'ACTION_ITEMS_V2_MODE': (ACTION_ITEMS_V2_SERVE_PERCENT_ENV, ACTION_ITEMS_V2_SERVE_UID_SHA256S_ENV),
@@ -147,6 +154,19 @@ def no_speech_terminal_enabled() -> bool:
 def record_seal_repair_age_order() -> bool:
     """Prefer near-dead-letter records, then newest; off restores the name-ordered jobs scan."""
     return default_on('RECORD_SEAL_REPAIR_AGE_ORDER')
+
+
+def raw_live_gapped_packs_enabled() -> bool:
+    """Read gapped, unframed raw-live packs through their custody manifest.
+
+    Off restores the pre-existing skip: a pack without a declared frame schema
+    and a nonzero ``gap_count`` is not listed and cannot be decoded.
+    """
+    return default_on('RAW_LIVE_GAPPED_PACKS_ENABLED')
+
+
+def inventory_manifest_body_cache_enabled() -> bool:
+    return default_on('PRIVATE_SYNC_INVENTORY_MANIFEST_BODY_CACHE_ENABLED')
 
 
 def batch_input_expiring_enabled() -> bool:

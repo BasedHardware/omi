@@ -18,6 +18,7 @@ from google.cloud.firestore_v1.types import (
 )
 from google.rpc.status_pb2 import Status
 
+from database.batch_account_authority_schema import USER_POLICY_FIELDS
 from database import _client, batch_privacy_write_fence as fence, memory_change_head
 from database.batch_pipeline_privacy import privacy_owner_key
 
@@ -71,8 +72,21 @@ def test_all_authority_shapes_share_one_atomic_commit(authority, operation):
         assert CommitRequest.serialize(request) == before
         return
     prepared, count = fence.augment_commit(request)
-    assert count == 1 and len(prepared.writes) == 2
-    assert prepared.writes[0] == write
+    home_writes = 0
+    if authority == 'users/u' and operation in {'set', 'transform'}:
+        home_writes = 1  # combined policy/coverage control
+    elif authority == 'users/u/conversations/c':
+        home_writes = 3 if operation == 'transform' else 2  # source metadata folds into ordinary writes
+    elif authority == 'users/u/deleted_conversations/c':
+        home_writes = 2
+    assert count == 1 and len(prepared.writes) == 2 + home_writes
+    original = prepared.writes[0]
+    assert original.current_document == write.current_document
+    assert original.delete == write.delete and original.transform == write.transform
+    assert original.update.name == write.update.name
+    assert all(original.update.fields[k] == value for k, value in write.update.fields.items())
+    assert original.update_transforms == write.update_transforms
+    assert set(write.update_mask.field_paths).issubset(original.update_mask.field_paths)
     assert prepared.transaction == b'attempt'
     assert CommitRequest.serialize(request) == before
     assert prepared.writes[-1].update.name == TOKEN
@@ -90,7 +104,7 @@ def test_one_token_per_plane_and_owner_and_random_on_every_retry():
     )
     first, count = fence.augment_commit({'writes': source})
     second, _ = fence.augment_commit({'writes': source})
-    assert count == 12 and len(first.writes) == 15
+    assert count == 12 and len(first.writes) == 26  # ten Home receipts plus one control, three privacy tokens
     assert len({w.update.name for w in first.writes[-3:]}) == 3
     assert first.writes[-1] != second.writes[-1]
 
@@ -103,8 +117,9 @@ def test_metadata_only_conversation_creation_always_rotates(operation):
     elif operation == 'merge_upsert':
         write.update_mask = {'field_paths': ['title']}
     prepared, _ = fence.augment_commit({'writes': [write]})
-    assert prepared.writes[0] == write
-    assert prepared.writes[1].update.name == TOKEN
+    assert prepared.writes[0].current_document == write.current_document
+    assert prepared.writes[0].update.fields['title'] == write.update.fields['title']
+    assert prepared.writes[-1].update.name == TOKEN
 
 
 @pytest.mark.asyncio
@@ -198,7 +213,7 @@ def test_unrelated_writes_are_byte_identical_and_expanded_batches_never_drop_fen
     assert fence.augment_commit(request)[0] is request
     source = [Write(delete=f'{ROOT}/users/u/conversations/{i}') for i in range(500)]
     prepared, count = fence.augment_commit({'writes': source})
-    assert count == 500 and len(prepared.writes) == 501
+    assert count == 500 and len(prepared.writes) == 1002  # source + 500 dirty receipts + control + token
     assert prepared.writes[-1].update.name == TOKEN
     assert len(source) == 500
 
@@ -269,12 +284,14 @@ async def test_bulk_uses_atomic_source_token_pairs_and_preserves_partial_status(
     calls = []
 
     def commit(client, request=None, **kwargs):
-        assert len(request.writes) == 2
+        assert len(request.writes) == 4  # source, Home receipt/control, privacy token
         assert request.writes[-1].update.name == TOKEN
         calls.append(('atomic', request))
         if request.writes[0].delete.endswith('/bad'):
             raise FailedPrecondition('synthetic CAS conflict')
-        return CommitResponse(write_results=[WriteResult(update_time={'seconds': 101}), WriteResult()])
+        return CommitResponse(
+            write_results=[WriteResult(update_time={'seconds': 101}), WriteResult(), WriteResult(), WriteResult()]
+        )
 
     def bulk(client, request=None, **kwargs):
         calls.append(('bulk', request))
@@ -327,7 +344,7 @@ def test_flattened_arguments_idempotent_install_and_failed_transport():
 @pytest.mark.parametrize(
     'family,fields',
     [
-        ('users/u', fence._USER_FIELDS),
+        ('users/u', USER_POLICY_FIELDS),
         ('users/u/conversations/c', fence._CONVERSATION_FIELDS),
     ],
 )
@@ -404,3 +421,49 @@ def test_installer_only_skips_fileless_sdk_stubs_and_propagates_real_import_fail
         _client._install_batch_privacy_write_fence()
     monkeypatch.setattr(_client.firestore, '__file__', None)
     _client._install_batch_privacy_write_fence()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('asynchronous', [False, True])
+async def test_mixed_account_bulk_erasure_never_recreates_erased_subtree(asynchronous):
+    captured = []
+    other_plane = ROOT.replace('projects/demo/', 'projects/demo-other/')
+    sources = [
+        Write(delete=f'{ROOT}/users/u/conversations/erased'),
+        Write(delete=f'{ROOT}/users/u'),
+        Write(delete=f'{ROOT}/users/v/conversations/retained'),
+        Write(delete=f'{other_plane}/users/u/conversations/retained'),
+    ]
+
+    def commit(client, request=None, **kwargs):
+        captured.append(CommitRequest(request))
+        return CommitResponse(
+            write_results=[WriteResult(update_time={'seconds': len(captured)}) for _ in request.writes]
+        )
+
+    def bulk(client, request=None, **kwargs):
+        raise AssertionError('all canonical mutations require atomic Commit')
+
+    client = SimpleNamespace()
+    if asynchronous:
+
+        async def acommit(client, request=None, **kwargs):
+            return commit(client, request, **kwargs)
+
+        async def abulk(client, request=None, **kwargs):
+            return bulk(client, request, **kwargs)
+
+        client.commit = lambda **kwargs: fence._wrap_commit(acommit)(client, **kwargs)
+        result = await fence._wrap_bulk(abulk)(client, request={'database': 'db', 'writes': sources})
+    else:
+        client.commit = lambda **kwargs: fence._wrap_commit(commit)(client, **kwargs)
+        result = fence._wrap_bulk(bulk)(client, request={'database': 'db', 'writes': sources})
+    assert len(result.status) == len(result.write_results) == len(sources)
+    assert [r.update_time.timestamp() for r in result.write_results] == [1, 2, 3, 4]
+    assert all(status.code == 0 for status in result.status)
+    assert all(not w.update.name.startswith(f'{ROOT}/users/u/') for request in captured for w in request.writes)
+    assert any(w.update.name == f'{ROOT}/users/v/episode_links/home_feed_control' for w in captured[2].writes)
+    assert any(w.update.name == f'{other_plane}/users/u/episode_links/home_feed_control' for w in captured[3].writes)
+    # The ContextVar scope must reset after the batch, even for the same uid.
+    restored, _ = fence.augment_commit({'writes': [sources[0]]})
+    assert any(w.update.name == f'{ROOT}/users/u/episode_links/home_feed_control' for w in restored.writes)

@@ -16,6 +16,10 @@ MAX_MONTHLY_BYTES = 8 * 1024**3
 MAX_MONTHLY_GROUPS = 100_000
 
 
+class StorageQuotaExceeded(RuntimeError):
+    """A monthly held-audio reservation would exceed the configured quota."""
+
+
 @dataclass
 class Capacity:
     uid: str
@@ -50,7 +54,7 @@ def acquire(uid: str, month: str, identity: str | None = None) -> Capacity:
         row = (snapshot.to_dict() or {}) if snapshot.exists else {}
         size, groups = row.get('bytes', 0) + BLOCK_BYTES, row.get('chunks', 0) + BLOCK_GROUPS
         if size > MAX_MONTHLY_BYTES or groups > MAX_MONTHLY_GROUPS:
-            raise RuntimeError('live held audio storage capacity reached')
+            raise StorageQuotaExceeded('live held audio storage capacity reached')
         tx.set(quota, {'bytes': size, 'chunks': groups}, merge=True)
         tx.create(lease, {'groups': BLOCK_GROUPS, 'bytes': BLOCK_BYTES, 'closed': False})
 

@@ -634,7 +634,7 @@ def _assert_projection_on_reread(store: dict[str, Any]) -> None:
 
 def _prepare_durable_finalize(monkeypatch: pytest.MonkeyPatch, conv: Any, conversation: Conversation) -> dict[str, Any]:
     captured: dict[str, Any] = {'doc': {}}
-    monkeypatch.setattr(conv, '_get_valid_conversation_by_id', lambda uid, cid: {'id': cid})
+    monkeypatch.setattr(conv, '_get_valid_conversation_by_id', lambda uid, cid, **_kw: {'id': cid})
     monkeypatch.setattr(conv, 'deserialize_conversation', lambda data: conversation)
     monkeypatch.setattr(conv.byok, 'has_byok_keys', lambda: False)
 
@@ -1370,7 +1370,7 @@ def test_segment_assign_route_invalidates_projection(monkeypatch, stack) -> None
     _pc, conv = stack
     conversation = _assignable_conversation()
     captured = _capture_segment_write(monkeypatch, conv)
-    monkeypatch.setattr(conv, '_get_valid_conversation_by_id', lambda uid, cid: {'id': cid})
+    monkeypatch.setattr(conv, '_get_valid_conversation_by_id', lambda uid, cid, **_kw: {'id': cid})
     monkeypatch.setattr(conv, 'deserialize_conversation', lambda data: conversation)
     handler = _route_endpoint(conv, '/v1/conversations/{conversation_id}/segments/{segment_idx}/assign')
 
@@ -1387,7 +1387,7 @@ def test_assign_speaker_route_invalidates_projection(monkeypatch, stack) -> None
     _pc, conv = stack
     conversation = _assignable_conversation()
     captured = _capture_segment_write(monkeypatch, conv)
-    monkeypatch.setattr(conv, '_get_valid_conversation_by_id', lambda uid, cid: {'id': cid})
+    monkeypatch.setattr(conv, '_get_valid_conversation_by_id', lambda uid, cid, **_kw: {'id': cid})
     monkeypatch.setattr(conv, 'deserialize_conversation', lambda data: conversation)
 
     result = conv.set_assignee_conversation_speaker(_CONV_ID, 0, 'person_id', value='person-9', uid=_UID)
@@ -1403,7 +1403,7 @@ def test_bulk_assign_route_invalidates_projection(monkeypatch, stack) -> None:
     _pc, conv = stack
     conversation = _assignable_conversation()
     captured = _capture_segment_write(monkeypatch, conv)
-    monkeypatch.setattr(conv, '_get_valid_conversation_by_id', lambda uid, cid: {'id': cid})
+    monkeypatch.setattr(conv, '_get_valid_conversation_by_id', lambda uid, cid, **_kw: {'id': cid})
     monkeypatch.setattr(conv, 'deserialize_conversation', lambda data: conversation)
     data = conv.BulkAssignSegmentsRequest(segment_ids=['seg-0'], assign_type='is_user', value='true')
 
@@ -1420,7 +1420,7 @@ def test_assign_without_projection_is_unaffected(monkeypatch, stack) -> None:
     _pc, conv = stack
     conversation = _assignable_conversation(with_projection=False)
     captured = _capture_segment_write(monkeypatch, conv)
-    monkeypatch.setattr(conv, '_get_valid_conversation_by_id', lambda uid, cid: {'id': cid})
+    monkeypatch.setattr(conv, '_get_valid_conversation_by_id', lambda uid, cid, **_kw: {'id': cid})
     monkeypatch.setattr(conv, 'deserialize_conversation', lambda data: conversation)
 
     result = conv.set_assignee_conversation_segment(_CONV_ID, 0, 'is_user', value='true', uid=_UID)
@@ -1513,7 +1513,7 @@ def _prepare_finalize_loser(
 
     monkeypatch.setattr(conv, 'retrieve_in_progress_conversation', lambda uid: {'id': redis_conversation.id})
     monkeypatch.setattr(conv, 'deserialize_conversation', deserialize)
-    monkeypatch.setattr(conv, '_get_valid_conversation_by_id', lambda uid, cid: {'id': cid, '_which': 'latest'})
+    monkeypatch.setattr(conv, '_get_valid_conversation_by_id', lambda uid, cid, **_kw: {'id': cid, '_which': 'latest'})
     monkeypatch.setattr(conv.redis_db, 'get_cached_user_geolocation', lambda uid: None)
     monkeypatch.setattr(conv.lifecycle_service, 'admit_processing', lambda *_args, **_kwargs: False)
     monkeypatch.setattr(conv, 'process_conversation', MagicMock(name='process_conversation'))
@@ -1635,7 +1635,7 @@ def _prepare_winner_loser_interleave(
         return winner
 
     monkeypatch.setattr(conv, 'deserialize_conversation', deserialize)
-    monkeypatch.setattr(conv, '_get_valid_conversation_by_id', lambda uid, cid: {'id': cid, '_which': 'latest'})
+    monkeypatch.setattr(conv, '_get_valid_conversation_by_id', lambda uid, cid, **_kw: {'id': cid, '_which': 'latest'})
 
     original_process = conv.process_conversation
 

@@ -57,8 +57,12 @@ def test_provider_minimum_without_the_server_floor_decision_keeps_its_obligation
         write.pop('relevance_decision')
     else:
         write['relevance_decision'].update(change)
-    with pytest.raises(delivery.SummaryOutputUnavailable):
-        delivery.merge_result(existing, write, 'synthetic-account', now=150)
+    token = delivery.PROCESS_CONTEXT.set({'owner': 'worker', 'claimed': False})
+    try:
+        with pytest.raises(delivery.SummaryOutputUnavailable):
+            delivery.merge_result(existing, write, 'synthetic-account', now=150)
+    finally:
+        delivery.PROCESS_CONTEXT.reset(token)
 
 
 def test_floor_does_not_overwrite_a_banked_summary():

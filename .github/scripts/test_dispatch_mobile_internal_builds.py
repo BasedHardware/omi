@@ -346,18 +346,18 @@ class TestHeldChangesReminder(unittest.TestCase):
         return captured.getvalue()
 
     def test_no_held_line_while_the_mode_is_off(self):
-        # With held-changes mode off (Play auto-sends changes for review) a
-        # settled Android publish is tester-visible distribution, so scheduled
-        # runs stay silent about held changes.
-        with patch.object(mod, "ANDROID_HELD_CHANGES_MODE", False):
-            self.assertNotIn("held-changes-mode", self._schedule_dry_run())
+        # Held-changes mode is off since 2026-11-21 (Play auto-sends changes
+        # for review): a settled Android publish is tester-visible
+        # distribution, so scheduled runs stay silent. No patch: this pins
+        # the shipped default.
+        self.assertNotIn("held-changes-mode", self._schedule_dry_run())
 
     def test_a_schedule_run_names_the_held_android_distribution(self):
-        # Held-changes mode is on since 2026-10-28: a settled Android publish
-        # is not tester-visible distribution, so every scheduled run must say
-        # so instead of stalling silently on an advanced baseline. No patch:
-        # this pins the shipped default.
-        captured = self._schedule_dry_run()
+        # In held-changes mode a settled Android publish is not tester-visible
+        # distribution, so every scheduled run must say so instead of stalling
+        # silently on an advanced baseline.
+        with patch.object(mod, "ANDROID_HELD_CHANGES_MODE", True):
+            captured = self._schedule_dry_run()
         self.assertIn("android_distribution=held-changes-mode", captured)
         self.assertIn("Send for review", captured)
 

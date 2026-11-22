@@ -1,10 +1,13 @@
 """Pointer-mode domain refusals, reader surfaces and C1 review follow-ups."""
 
+import base64
 from copy import deepcopy
 from datetime import datetime, timezone, timedelta
+from functools import lru_cache
 import hashlib
 import inspect
 import json
+import random
 from types import SimpleNamespace
 from unittest.mock import Mock
 import zlib
@@ -114,9 +117,39 @@ def test_public_chat_rejects_pointer_and_wire_model_fails_loud(lake_world):
     assert lake_world.calls['get'] == 0
 
 
-def test_oversize_inline_transcript_fits_after_offload(lake_world):
-    segments = speech(1100000)
+@pytest.fixture
+def oversized_transcript():
+    # Random base64 is denser than random hex: cross the real compressed-document
+    # boundary without making the codec repeatedly process twice as much text.
+    segments = speech(1)
+    segments[0]['text'] = base64.b64encode(random.Random(71).randbytes(930000)).decode('ascii')
     assert len(zlib.compress(json.dumps(segments).encode())) > 900 * 1024
+    return segments
+
+
+@pytest.fixture
+def document_limit_transcript(monkeypatch, level):
+    monkeypatch.setattr(db.encryption, 'encrypt', lambda value, uid: 'encrypted:' + value)
+    segments = speech(1)
+    segments[0]['text'] = base64.b64encode(
+        random.Random(71).randbytes(1040000 if level == 'standard' else 525000)
+    ).decode('ascii')
+    # Compression is pure setup, not the transaction/offload contract under test.
+    # Cache the real codec's exact bytes for this input (including the lake's
+    # explicit level=6 call); changed inputs still run the real compressor.
+    compress = lru_cache(maxsize=8)(zlib.compress)
+    monkeypatch.setattr(zlib, 'compress', compress)
+    compress(json.dumps(segments).encode(), level=6)
+    inline = db._protect_json_value(segments, UID, level)
+    # The production 1 MiB bound stays unchanged, for both protection levels.
+    assert estimate_firestore_document_bytes({'transcript_segments': inline}, '/'.join(PATH)) > (
+        FIRESTORE_MAX_DOCUMENT_BYTES
+    )
+    return segments
+
+
+def test_oversize_inline_transcript_fits_after_offload(lake_world, oversized_transcript):
+    segments = oversized_transcript
     doc = encode(segments)
     assert isinstance(doc['transcript_segments'], dict)
     assert len(json.dumps(doc)) < 1024
@@ -125,10 +158,11 @@ def test_oversize_inline_transcript_fits_after_offload(lake_world):
 
 @pytest.mark.parametrize('admitted', [False, True])
 @pytest.mark.parametrize('level', ['standard', 'enhanced'])
-def test_live_in_progress_transcript_crosses_document_limit(lake_world, monkeypatch, admitted, level):
+def test_live_in_progress_transcript_crosses_document_limit(
+    lake_world, monkeypatch, admitted, level, document_limit_transcript
+):
     monkeypatch.setenv('OBJECT_LAKE_WRITE_ENABLED', str(admitted).lower())
-    monkeypatch.setattr(db.encryption, 'encrypt', lambda value, uid: 'encrypted:' + value)
-    segments = speech(1100000)
+    segments = document_limit_transcript
     doc = {
         'id': CID,
         'status': 'in_progress',
@@ -137,10 +171,6 @@ def test_live_in_progress_transcript_crosses_document_limit(lake_world, monkeypa
         'visibility': 'shared',
     }
     lake_world.store.rows[PATH] = deepcopy(doc)
-    inline = db._protect_json_value(segments, UID, level)
-    assert estimate_firestore_document_bytes({**doc, 'transcript_segments': inline}, '/'.join(PATH)) > (
-        FIRESTORE_MAX_DOCUMENT_BYTES
-    )
     original_update = StrictFirestoreTransaction.update
     writes = []
 
@@ -766,6 +796,7 @@ def test_level_migration_keeps_lake_envelope_without_fetch(lake_world, monkeypat
     monkeypatch.setattr(StrictFirestoreDocument, 'collection', collection)
     monkeypatch.setattr(db, 'db', lake_world.store)
     monkeypatch.setattr(db, '_sync_conversation_search_index', lambda *args: None)
+    monkeypatch.setattr(db.conversations_v3_backfill_runs, '_live_run_ids', lambda *a, **kw: [])
     db.migrate_conversations_level_batch(UID, [CID], 'enhanced')
     assert lake_world.store.rows[PATH]['transcript_segments'] == doc['transcript_segments']
     assert lake_world.store.rows[PATH]['data_protection_level'] == 'enhanced'

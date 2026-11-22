@@ -1,13 +1,16 @@
 """Backend-only spend policy RPC. GPU images must not import Redis/provider code."""
 
-from utils.observability.stt_cap_dispatch import DispatchPath, DispatchReason, record_decision
+from utils.observability.stt_cap_dispatch import (
+    BATCH_ADMISSION_STAGE_SECONDS,
+    DispatchPath,
+    DispatchReason,
+    record_decision,
+)
 
 import asyncio
 import logging
 import math
 import time
-
-from prometheus_client import Histogram
 
 from config.stt_cap_dispatch import offline_admission_enabled as cap_dispatch_enabled
 from config.sync_telemetry import bounded_exception_class
@@ -25,12 +28,6 @@ AUTHORIZE_SECONDS = 4.0
 # A worker that advertises a longer client timeout (X-Omi-Admission-Seconds)
 # gets up to this deadline; workers that send nothing keep AUTHORIZE_SECONDS.
 MAX_AUTHORIZE_SECONDS = 8.0
-STAGE_SECONDS = Histogram(
-    'omi_batch_compute_admission_stage_seconds',
-    'Admission substage wall time including executor wait; bounded stages, no identifiers',
-    ['stage'],
-    buckets=(0.01, 0.05, 0.1, 0.25, 0.5, 1, 2, 4, 8),
-)
 
 
 def admitted_as_byok(job: object) -> bool:
@@ -83,7 +80,7 @@ async def authorize(store, leases: list[dict], *, now: float | None = None, budg
                 raise TimeoutError('admission deadline')
             return fn(*args, **kwargs)
 
-        with STAGE_SECONDS.labels(stage=name).time():
+        with BATCH_ADMISSION_STAGE_SECONDS.labels(stage=name).time():
             remaining = deadline - time.monotonic()
             if remaining <= 0:
                 raise TimeoutError('admission deadline')
@@ -105,7 +102,11 @@ async def authorize(store, leases: list[dict], *, now: float | None = None, budg
                     return None
                 tx.check_privacy(
                     job['owner_id'],
-                    (job['conversation_id'],) if job.get('conversation_id') else (),
+                    tuple(
+                        value
+                        for value in (job.get('conversation_id'), job.get('capture_source_conversation_id'))
+                        if value
+                    ),
                     job.get('privacy_generation'),
                 )
                 binding = job.get('projection_binding') or {}
@@ -122,6 +123,8 @@ async def authorize(store, leases: list[dict], *, now: float | None = None, budg
             # outcome, at} so an outside reader can tell an exhausted-owner
             # hold from a wedge without inventing an age TTL.
             allow_reason = 'scope_disabled'
+            # The unlimited_v2 backfill day cap is enforced only at sync upload
+            # admission, so a batch unit never parks on it in staging.
             if await stage('scope', cap_dispatch_enabled, job['owner_id'], 'batch'):
                 permitted, reason = await stage(
                     'funding',

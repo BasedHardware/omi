@@ -45,6 +45,20 @@ function createMockProcess() {
   return proc;
 }
 
+function createStubbornProcess(mode: "ignore-term" | "ignore-all") {
+  const proc = Object.assign(new EventEmitter(), {
+    stdin: new PassThrough(),
+    stdout: new PassThrough(),
+    stderr: new PassThrough(),
+    kill: vi.fn((signal?: NodeJS.Signals) => {
+      if (mode === "ignore-all") return;
+      if (signal === "SIGKILL") proc.emit("exit", 0);
+    }),
+    pid: undefined,
+  });
+  return proc;
+}
+
 function fakeAdapter(adapterId = "fake"): RuntimeAdapter {
   return {
     adapterId,
@@ -525,6 +539,171 @@ describe("AcpRuntimeAdapter bindings", () => {
       method: "session/cancel",
       params: { sessionId: "native-hermes-session" },
     }));
+  });
+});
+
+describe("AcpRuntimeAdapter attempt isolation", () => {
+  beforeEach(() => {
+    // The no-progress test enables fake timers; this block relies on the real
+    // bounded stop escalation timers.
+    vi.useRealTimers();
+    vi.mocked(spawn).mockReset();
+  });
+
+  function attemptContext(name: string, attemptId: string): AdapterAttemptContext {
+    return {
+      sessionId: `omi-${name}`,
+      ownerId: "owner-1",
+      requestId: `request-${name}`,
+      clientId: "client-1",
+      runId: `run-${name}`,
+      attemptId,
+      binding: {
+        sessionId: `omi-${name}`,
+        adapterId: "acp",
+        adapterNativeSessionId: `native-${name}`,
+        resumeFidelity: "native",
+        cwd: "/tmp/work",
+      },
+      prompt: [{ type: "text", text: "hello" }],
+      mode: "ask",
+      tools: [],
+    };
+  }
+
+  it("does not let a late abandoned attempt restore over the newer attempt's handler", async () => {
+    const adapter = new AcpRuntimeAdapter({ adapterId: "acp", noProgressTimeoutMs: 0 });
+    const pendingPrompts: Array<(value: unknown) => void> = [];
+    vi.spyOn(adapter, "request").mockImplementation((method) => {
+      if (method !== "session/prompt") return Promise.resolve({});
+      return new Promise((resolve) => pendingPrompts.push(resolve));
+    });
+
+    const sinkA = vi.fn();
+    const sinkB = vi.fn();
+    const outerHandler = vi.fn();
+    adapter.setNotificationHandler(outerHandler);
+    const controllerA = new AbortController();
+    const abandoned = adapter.executeAttempt(
+      attemptContext("a", "attempt-a"),
+      sinkA,
+      controllerA.signal,
+    );
+    // The deadline aborts the abandoned attempt, then a follow-up takes over the
+    // shared adapter before the abandoned prompt settles.
+    controllerA.abort();
+    const followUp = adapter.executeAttempt(
+      attemptContext("b", "attempt-b"),
+      sinkB,
+      new AbortController().signal,
+    );
+    await Promise.resolve();
+
+    const deliver = (text: string): void => {
+      (adapter as any).notificationHandler("session/update", {
+        sessionId: "native-b",
+        update: {
+          sessionUpdate: "agent_message_chunk",
+          content: { type: "text", text },
+        },
+      });
+    };
+
+    deliver("before-late-completion");
+    expect(sinkB).toHaveBeenCalled();
+
+    // The abandoned prompt now settles; its `finally` must not mute the live
+    // attempt's notification handler.
+    pendingPrompts[0]!({ usage: {} });
+    await expect(abandoned).resolves.toMatchObject({ terminalStatus: "cancelled" });
+
+    sinkB.mockClear();
+    outerHandler.mockClear();
+    deliver("after-late-completion");
+    expect(sinkB).toHaveBeenCalled();
+    expect(outerHandler).toHaveBeenCalled();
+
+    pendingPrompts[1]!({ usage: {} });
+    await expect(followUp).resolves.toMatchObject({ terminalStatus: "succeeded" });
+  });
+
+  it("escalates a SIGTERM-ignoring subprocess to SIGKILL and starts fresh afterwards", async () => {
+    vi.mocked(spawn).mockReset();
+    const stubborn = createStubbornProcess("ignore-term");
+    vi.mocked(spawn).mockReturnValue(stubborn as any);
+    const adapter = new AcpRuntimeAdapter({
+      adapterId: "acp",
+      nodeBin: "/node",
+      acpEntry: "/acp-entry.mjs",
+      stopGraceTimeoutMs: 20,
+    });
+    stubborn.stdin.on("data", () => {});
+    await adapter.start();
+
+    await adapter.stop();
+
+    expect(stubborn.kill).toHaveBeenCalledWith("SIGTERM");
+    expect(stubborn.kill).toHaveBeenCalledWith("SIGKILL");
+
+    // The stopped instance must not be adopted by the next start.
+    const replacement = createMockProcess();
+    vi.mocked(spawn).mockReturnValue(replacement as any);
+    replacement.stdin.on("data", () => {});
+    await adapter.start();
+    expect(vi.mocked(spawn)).toHaveBeenCalledTimes(2);
+    await adapter.stop();
+  });
+
+  it("detaches a process that survives SIGKILL so a later start spawns its own", async () => {
+    vi.mocked(spawn).mockReset();
+    const unkillable = createStubbornProcess("ignore-all");
+    vi.mocked(spawn).mockReturnValue(unkillable as any);
+    const adapter = new AcpRuntimeAdapter({
+      adapterId: "acp",
+      nodeBin: "/node",
+      acpEntry: "/acp-entry.mjs",
+      stopGraceTimeoutMs: 20,
+    });
+    unkillable.stdin.on("data", () => {});
+    await adapter.start();
+
+    await expect(adapter.stop()).rejects.toThrow(/did not exit after SIGKILL/);
+    expect(unkillable.kill).toHaveBeenCalledWith("SIGKILL");
+
+    const replacement = createMockProcess();
+    vi.mocked(spawn).mockReturnValue(replacement as any);
+    replacement.stdin.on("data", () => {});
+    await adapter.start();
+    expect(vi.mocked(spawn)).toHaveBeenCalledTimes(2);
+    await adapter.stop();
+  });
+
+  it("restarts on a fresh child after bounded stop has to detach the old process", async () => {
+    vi.useFakeTimers();
+    try {
+      vi.mocked(spawn).mockReset();
+      const unkillable = createStubbornProcess("ignore-all");
+      const replacement = createMockProcess();
+      vi.mocked(spawn).mockReturnValueOnce(unkillable as any).mockReturnValueOnce(replacement as any);
+      const adapter = new AcpRuntimeAdapter({
+        nodeBin: "/node",
+        acpEntry: "/acp-entry.mjs",
+        stopGraceTimeoutMs: 20,
+      });
+      await adapter.start();
+      const restarting = adapter.restart();
+      await vi.runAllTimersAsync();
+      await expect(restarting).resolves.toBeUndefined();
+      expect(unkillable.kill).toHaveBeenCalledWith("SIGKILL");
+      expect(vi.mocked(spawn)).toHaveBeenCalledTimes(2);
+      // An old exit must not tear down the newly spawned process.
+      unkillable.emit("exit", 0);
+      await adapter.start();
+      expect(vi.mocked(spawn)).toHaveBeenCalledTimes(2);
+      await adapter.stop();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 

@@ -1,0 +1,36 @@
+{{- if not (kindIs "bool" .Values.migration.enabled) }}
+{{- fail "migration.enabled: expected a boolean" }}
+{{- end }}
+{{- if .Values.migration.enabled }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ .Release.Name }}-migrate
+spec:
+  activeDeadlineSeconds: 120
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 600
+  template:
+    spec:
+      restartPolicy: Never
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: migrate
+          image: {{ include "workerd.image" . | quote }}
+          args: ["migrate"]
+          securityContext:
+            {{- include "workerd.securityContext" . | nindent 12 }}
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ printf "%s-omi-workerd-migrator" .Values.environment }}
+                  key: DATABASE_URL
+          resources:
+            requests: {cpu: 100m, memory: 64Mi}
+            limits: {memory: 256Mi}
+{{- end }}

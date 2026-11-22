@@ -1,6 +1,7 @@
 {
   "schema_version": 1,
   "id": "FC-owner-repair-success-without-identity-evidence",
+  "family": "observability-gap",
   "violated_contract": "A late owner repair must acquire measured evidence when only legacy grouping vectors exist, and a committed-repair counter must describe the identity actually stored. Treating a grouping cache hit as completed evidence starves recognition, while counting unchanged speculative identities hides that starvation.",
   "canonical_prevention": "Refresh missing or invalid measured evidence only from proven PCM under existing budgets, preserve legacy grouping without inventing evidence, and observe decoded transaction-current and final-write identities once after successful CAS. Normalize legacy ids and suppress unchanged identity outcomes.",
   "canonical_prevention_artifact": [

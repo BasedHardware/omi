@@ -102,6 +102,11 @@ def _is_transaction_contention(error: BaseException) -> bool:
     return False
 
 
+def is_expired_transaction(error: BaseException) -> bool:
+    """True when ``error`` itself (not its causes) reports a retired transaction chain."""
+    return _is_expired_transaction(error)
+
+
 _retry_deadline: ContextVar[float | None] = ContextVar("firestore_transaction_retry_deadline", default=None)
 
 

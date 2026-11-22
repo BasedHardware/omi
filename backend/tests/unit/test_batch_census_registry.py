@@ -30,6 +30,8 @@ from config.batch_census import (
 from tests.support.lifecycle_ast import constant_names, literal_key
 from tests.support.lifecycle_state_table import STATES
 from tests.support.lifecycle_writer_inventory import FIELD_SITES
+from tests.support.batch_census_sql_selectors import RecordingConnection, RecordingPool, source_sites, state_page
+from tests.support.firestore_serving_query_inventory import serving_function_body_digest
 
 BACKEND = Path(__file__).resolve().parents[2]
 ROOT = BACKEND.parent
@@ -39,6 +41,96 @@ BATCH_SCOPE = ('database/batch_pipeline', 'utils/batch_pipeline/', 'database/rec
 
 def _in_batch_scope(module: str) -> bool:
     return module.startswith(BATCH_SCOPE)
+
+
+def test_postgres_batch_selector_contract():
+    from datetime import datetime, timezone
+
+    from config.batch_census_selectors import SQL_EXCEPTIONS
+    from database.jobstore.outbox_pg import PostgresOutbox
+    from database.jobstore.postgres_store import PostgresStore, PostgresTransaction
+    from database.outbox import OutboxKind
+
+    connection = RecordingConnection()
+    store = PostgresStore('batch_pipeline_test_census', pool=RecordingPool(connection), customer_client=None)
+    tx = PostgresTransaction(store, connection)
+    outbox = PostgresOutbox(OutboxKind.PROVIDER_STT, store, create_wake=lambda *args: None)
+    owner, segment, now = 'synthetic-owner', 'synthetic-segment', 10.0
+    profiles = {
+        store.packing_candidates: [((owner,), {})],
+        store.allowance_owners: [((now, 20), {})],
+        store.allowance_page: [((owner, (0, segment), 100), {}), ((None, None, 100), {})],
+        store.due: [((state, now), {}) for state in ('leased', 'retry', 'result_ready', 'record_pending')],
+        store.protected_page_in: [
+            ((connection, 'ready', now, 8), {'owner_key': owner, 'priority': 1}),
+            ((connection, 'retry', now, 100), {'after': (0, segment)}),
+        ],
+        store.oldest: [((0,), {'ready_only': ready}) for ready in (True, False)],
+        store.ready_for_capacity: [((0, now), {})],
+        store.oldest_admissible_ready: [((0, now), {})],
+        store.longest_ready_pending: [((owner,), {})],
+        store.fresh_pending: [((owner, 32), {})],
+        store.ready_pending: [((owner, 160), {'after': after}) for after in (None, (0, segment))],
+        store.ready_owners: [((None, 100), {}), ((owner, 100), {'ceiling_owner_key': 'z'})],
+        store.held_merge_owners: [((100,), {'after': owner})],
+        store.oldest_retry: [((0,), {})],
+        store._projection_page: [
+            ((), {}),
+            ((), {'include_outbox': True}),
+            ((), {'due_before': now}),
+            ((), {'followup_due_before': now, 'after': (0, 0, segment)}),
+        ],
+        store.first_pending_in: [((connection, owner), {'result_ready': ready}) for ready in (True, False)],
+        store.pending_page_in: [((connection, owner, 160), {})],
+        tx._fresh_first: [((owner,), {'ready': ready}) for ready in (True, False)],
+        tx.ready_predecessor: [((owner, 0, segment), {})],
+        outbox._enqueue: [((connection, segment, owner, {}, now, None, 'max', now), {})],
+        outbox.claim: [((10, 60), {'now': now})],
+        outbox.claim_key: [(('1', 'synthetic-token', 60), {'now': now})],
+        outbox.wake: [(('1', 'synthetic-token'), {})],
+        outbox.sweep: [((), {'now': now})],
+    }
+    discovered = {
+        '.'.join((*path.relative_to(BACKEND).with_suffix('').parts, name))
+        for path in (BACKEND / 'database' / 'jobstore').rglob('*.py')
+        for name in source_sites(path.read_text())
+    }
+    keys = {f'{fn.__module__}.{fn.__qualname__}' for fn in profiles}
+    assert discovered == keys, f'Add executable SQL selector profiles for {discovered - keys}'
+
+    needed = set()
+    for fn, variants in profiles.items():
+        key = f'{fn.__module__}.{fn.__qualname__}'
+        for args, kwargs in variants:
+            connection.statements.clear()
+            fn(*args, **kwargs)
+            assert connection.statements, f'{key} profile did not execute SQL'
+            for statement, parameters in connection.statements:
+                uncovered, limit = state_page(statement, parameters)
+                if uncovered:
+                    needed.add(key)
+                    entry = SQL_EXCEPTIONS.get(key)
+                    assert entry, f'{key} has no actionable due bound or reviewed exception'
+                    assert type(limit) is int and 0 < limit <= entry.max_rows, (key, limit)
+
+    assert needed == set(SQL_EXCEPTIONS), f'Remove unused SQL selector exceptions: {set(SQL_EXCEPTIONS) - needed}'
+    for key, entry in SQL_EXCEPTIONS.items():
+        assert entry.expiry >= datetime.now(timezone.utc).date(), f'{key} expired on {entry.expiry}'
+        assert entry.owner and entry.reason and entry.cadence and entry.removal
+        assert entry.body_digest == serving_function_body_digest(key), key
+
+
+def test_postgres_cursor_and_enqueue_time_do_not_prove_due_selection():
+    enqueued = 'SELECT key FROM jobs WHERE state=%s AND enqueued_at<=%s ORDER BY enqueued_at LIMIT %s'
+    assert state_page(enqueued, ('ready', 10, 20)) == (True, 20)
+    assert state_page(enqueued.replace('enqueued_at', 'available_at'), ('ready', 10, 20)) == (False, None)
+    assert state_page('SELECT key FROM jobs WHERE state=%s AND key>%s ORDER BY key', ('ready', 'cursor')) == (
+        True,
+        None,
+    )
+    assert list(source_sites('class Store:\n def new(self):\n  sql = "SELECT doc FROM jobs WHERE state=%s"\n')) == [
+        'Store.new'
+    ]
 
 
 @lru_cache(maxsize=None)
@@ -287,12 +379,11 @@ def test_memory_outbox_states_match_the_model():
 def test_collection_names_match_code():
     from database.outbox_provider_stt import collection_name as provider_outbox_name
 
-    assert batch_census.COLLECTIONS['provider_outbox'] == (
-        provider_outbox_name('prod'),
-        provider_outbox_name('dev'),
-    )
-    assert batch_census.COLLECTIONS['jobs'] == ('batch_pipeline_prod_jobs', 'batch_pipeline_dev_jobs')
-    assert batch_census.COLLECTIONS['results'] == ('batch_pipeline_prod_results', 'batch_pipeline_dev_results')
+    # Production census scope: one collection per stock, dev excluded.
+    assert batch_census.COLLECTIONS['provider_outbox'] == (provider_outbox_name('prod'),)
+    assert batch_census.COLLECTIONS['jobs'] == ('batch_pipeline_prod_jobs',)
+    assert batch_census.COLLECTIONS['results'] == ('batch_pipeline_prod_results',)
+    assert batch_census.COLLECTIONS['speaker_outbox'] == ('batch_pipeline_prod_speaker_final_pass_outbox',)
 
 
 # --- registry shape ---------------------------------------------------------
@@ -304,8 +395,12 @@ def test_registry_keys_are_unique_and_scoped():
     for entry in ENTRIES:
         assert entry.scope in {COLLECTION, COLLECTION_GROUP}
         assert entry.collection in batch_census.COLLECTIONS
-        assert entry.field in STATE_FIELDS
-        assert entry.filters and entry.filters[0][0] == entry.field
+        # ``field`` names what identifies the stock. Lifecycle stocks filter on a
+        # state field; whole-collection and derived stocks may filter on nothing
+        # or on several fields, so a declared identity must appear in its filters.
+        if entry.filters:
+            assert entry.field in {field for field, _operator, _value in entry.filters}
+        assert entry.field
 
 
 def test_custody_assumptions_are_marked():
@@ -362,11 +457,17 @@ def test_census_guard_runs_for_writer_and_vocabulary_changes(path):
     assert guard <= set(selected), reason
 
 
-def test_unmapped_census_neighbours_keep_their_full_fallback():
+def test_unmapped_census_registry_selects_the_guard_and_its_importers(monkeypatch):
+    monkeypatch.setenv('BACKEND_UNIT_GRAPH_SELECTION', '1')
     selector = runpy.run_path(str(BACKEND / 'scripts/select_backend_unit_tests.py'))
     all_tests = selector['discover_all_tests']()
-    # The registry is not otherwise mapped to a narrow area, so its edit must
-    # still select the full suite while the guard runs.
+    # The registry is not mapped to a narrow area. Its edit selects the tests
+    # that import it through the import graph, and always runs the guard.
+    selected, reason = selector['tests_for_changed_paths'](['backend/config/batch_census.py'], all_tests)
+    assert 'tests/unit/test_batch_census_registry.py' in selected
+    assert 'import graph' in reason
+    # With graph selection switched off the unmapped full-suite fallback returns.
+    monkeypatch.setenv('BACKEND_UNIT_GRAPH_SELECTION', '0')
     selected, _reason = selector['tests_for_changed_paths'](['backend/config/batch_census.py'], all_tests)
     assert set(selected) == set(all_tests)
 
@@ -416,16 +517,13 @@ def _signatures():
     'collection,scope,fields',
     [
         ('batch_pipeline_prod_jobs', COLLECTION, ('state', 'provider_intent.settled_at', '__name__')),
-        ('batch_pipeline_dev_jobs', COLLECTION, ('state', 'provider_intent.settled_at', '__name__')),
         ('batch_pipeline_prod_jobs', COLLECTION, ('state', 'fresh_capture', 'enqueued_at', '__name__')),
-        ('batch_pipeline_dev_jobs', COLLECTION, ('state', 'fresh_capture', 'enqueued_at', '__name__')),
         ('batch_pipeline_prod_provider_stt_outbox', COLLECTION, ('state', 'created_at', '__name__')),
-        ('batch_pipeline_dev_provider_stt_outbox', COLLECTION, ('state', 'created_at', '__name__')),
         ('batch_pipeline_prod_provider_stt_outbox', COLLECTION, ('state', 'due_at', '__name__')),
-        ('batch_pipeline_dev_provider_stt_outbox', COLLECTION, ('state', 'due_at', '__name__')),
-        ('batch_pipeline_prod_results', COLLECTION, ('projection_state', 'held_deadline_at', '__name__')),
-        ('batch_pipeline_dev_results', COLLECTION, ('projection_state', 'held_deadline_at', '__name__')),
-        ('memory_outbox', COLLECTION_GROUP, ('status', 'available_at', '__name__')),
+        ('batch_pipeline_prod_results', COLLECTION, ('projection_state', 'committed_at', '__name__')),
+        # Memory count is a group read filtered by status; the group field
+        # requirement serves it, with no available_at ordering any more.
+        ('memory_outbox', COLLECTION, ('status', 'available_at', '__name__')),
     ],
 )
 def test_census_indexes_are_declared_with_expected_scope(collection, scope, fields):
@@ -433,11 +531,17 @@ def test_census_indexes_are_declared_with_expected_scope(collection, scope, fiel
     assert signature in _signatures()
 
 
-def test_memory_outbox_keeps_both_scopes():
+def test_memory_outbox_census_uses_the_group_status_field_index():
     signatures = _signatures()
     fields = (('status', 'ASCENDING'), ('available_at', 'ASCENDING'), ('__name__', 'ASCENDING'))
+    # The per-user worker page keeps its collection-scoped composite.
     assert ('memory_outbox', COLLECTION, fields) in signatures
-    assert ('memory_outbox', COLLECTION_GROUP, fields) in signatures
+    # The fleet count over the collection group needs only a group status field
+    # index; it must not keep an available_at composite that nobody orders by.
+    assert ('memory_outbox', COLLECTION_GROUP, fields) not in signatures
+    data = json.loads((ROOT / 'firestore.indexes.json').read_text(encoding='utf-8'))
+    overrides = {(entry['collectionGroup'], entry['fieldPath']) for entry in data.get('fieldOverrides', [])}
+    assert ('memory_outbox', 'status') in overrides
 
 
 def test_conversations_and_cap_hold_indexes_stay_collection_scoped():
@@ -454,13 +558,27 @@ def test_conversations_and_cap_hold_indexes_stay_collection_scoped():
         COLLECTION,
         (('state', 'ASCENDING'), ('listed_at', 'DESCENDING'), ('__name__', 'DESCENDING')),
     ) in signatures
-    # This PR's census declarations add no conversations or cap-hold index; their
-    # existing scoped twins predate this change and are not duplicated here.
+    # Census declarations also add the per-clock composites the exporter's
+    # oldest-age reads need, the allowance-hold composite, the two stage-scoped
+    # speaker outbox composites, the enrichment outbox sub-stocks and the
+    # pipeline-ledger group index. No conversations or stt_cap_holds index is
+    # duplicated here; their scoped twins predate this change.
     census = [
         requirement
         for requirement in BATCH_PIPELINE_INDEX_REQUIREMENTS
         if '_batch_census_' in requirement.identifier
-        or requirement.identifier == 'memory_outbox_group_status_available_at'
+        or requirement.identifier
+        in {
+            'enrichment_outbox_parked',
+            'enrichment_outbox_sync_hold',
+            'pipeline_ledger_group_stage_admitted_at',
+        }
     ]
-    assert len(census) == 11
+    assert len(census) == 12
     assert not {requirement.collection_group for requirement in census} & {'conversations', 'stt_cap_holds'}
+    assert {requirement.collection_group for requirement in census} >= {
+        'batch_pipeline_prod_jobs',
+        'sync_reprocess_outbox',
+        'pipeline_ledger',
+    }
+    assert all('dev' not in requirement.collection_group for requirement in census)

@@ -128,6 +128,10 @@ def test_existing_retained_families_still_survive():
         'omi_summary_terminal_total',
         'omi_live_session_transcript_outcome_total',
         'omi_batch_projection_drains_skipped_total',
+        'omi_batch_projection_finish_reads_total',
+        'omi_batch_projection_finish_completed_total',
+        'omi_batch_projection_finish_classified_total',
+        'omi_batch_projection_finish_classification_failures_total',
     ):
         assert _kept(name, relabels), name
 

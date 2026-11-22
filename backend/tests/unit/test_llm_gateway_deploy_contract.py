@@ -688,3 +688,33 @@ def test_gateway_env_validator_requires_vertex_runtime_configuration_not_gemini_
     assert 'gateway must enable LLM_GATEWAY_ACCOUNTING_ENABLED=true' in result.stdout
     assert 'gateway has no LLM_GATEWAY_ACCOUNTING_WRITE_TIMEOUT_SECONDS env' in result.stdout
     assert 'gateway has no LLM_GATEWAY_ACCOUNTING_MAX_PENDING_TRACES env' in result.stdout
+
+
+def test_skipping_shared_secret_reapply_keeps_the_gateway_credential_check():
+    """A gateway-only release may skip the shared secret write, never the read-only presence check."""
+    helper_lines = (BACKEND_ROOT / 'scripts/deploy-llm-gateway.sh').read_text(encoding='utf-8').splitlines()
+    workflow = yaml.safe_load((REPOSITORY_ROOT / '.github/workflows/gcp_llm_gateway.yml').read_text(encoding='utf-8'))
+
+    skip_open = helper_lines.index('if [[ "$SKIP_BACKEND_SECRETS" != "true" ]]; then')
+    skip_close = next(i for i in range(skip_open + 1, len(helper_lines)) if helper_lines[i] == 'fi')
+    reapply = next(i for i, line in enumerate(helper_lines) if 'backend/scripts/deploy-backend-secrets.sh' in line)
+    check = next(i for i, line in enumerate(helper_lines) if 'missing key(s)' in line)
+    assert skip_open < reapply < skip_close, 'only the shared reapply belongs under the skip branch'
+    assert check > skip_close, 'the credential presence check must run when the reapply is skipped'
+
+    inputs = workflow[True]['workflow_dispatch']['inputs']
+    assert inputs['skip_backend_secrets'] == {
+        'description': inputs['skip_backend_secrets']['description'],
+        'required': False,
+        'default': False,
+        'type': 'boolean',
+    }
+    deploy = next(
+        step
+        for job in workflow['jobs'].values()
+        for step in job.get('steps', [])
+        if 'deploy-llm-gateway.sh' in str(step.get('run', ''))
+    )
+    assert deploy['env']['SKIP_BACKEND_SECRETS'] == (
+        "${{ github.event.inputs.skip_backend_secrets == 'true' && 'true' || 'false' }}"
+    )

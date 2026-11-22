@@ -17,6 +17,8 @@ import time
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
 
+from config import enrichment as enrichment_config
+from utils.enrichment import fresh_demotion
 from utils.executors import db_executor, postprocess_executor, run_blocking
 from utils.observability.reasons import RetryReason
 from utils.workers.consumer import http_response, run_push
@@ -62,6 +64,12 @@ def verify_enrichment_task(request: Request) -> int:
 
     invoker = os.getenv('ENRICHMENT_TASKS_INVOKER_SA', '').strip() or os.getenv('SYNC_TASKS_INVOKER_SA', '').strip()
     return verify_configured_cloud_tasks_oidc(request, audience=_audience(), invoker_sa=invoker)
+
+
+def _from_fresh_queue(request: Request) -> bool:
+    """Cloud Tasks names the delivering queue; only fresh-queue deliveries pay the demotion read."""
+    fresh = enrichment_config.fresh_queue()
+    return bool(fresh) and request.headers.get('X-CloudTasks-QueueName', '').strip() == fresh
 
 
 def _task(payload: object) -> tuple[str, str] | None:
@@ -140,6 +148,18 @@ async def run_enrichment_task(request: Request, _retry_count: int = Depends(veri
             if not transient_dependency(error):
                 raise
             return retry_response(RetryReason.DEPENDENCY_WARMING)
+    if _from_fresh_queue(request):
+        # The reserved fresh lane is for fresh work: move an aged first summary to the primary
+        # queue instead of running it on a fresh slot (prod 2026-11-16 fresh backlog).
+        try:
+            if await run_blocking(db_executor, fresh_demotion.demote_if_stale, *task):
+                return JSONResponse(status_code=200, content={'status': 'deferred', 'reason': 'fresh_demoted'})
+        except Exception as error:
+            from utils.enrichment.consumer import transient_dependency
+
+            if not transient_dependency(error):
+                raise
+            return retry_response(RetryReason.DEPENDENCY_WARMING)
     budget = _delivery_budget()
     if budget <= 0:  # Kill switch: 0 restores the middleware-only cut.
         return http_response(await run_blocking(postprocess_executor, consume, *task, time.monotonic()))
@@ -171,6 +191,14 @@ def maintain(now: float) -> dict[str, int]:
         final_pass_retry.sweep(now=now)
     except Exception as error:
         logger.error('event=batch_final_pass_retry outcome=sweep_failed exception_type=%s', type(error).__name__)
+    from database.owner_identity_availability import refresh
+
+    try:
+        refresh(now)
+    except Exception as error:
+        logger.warning(
+            'event=owner_identity_availability outcome=refresh_unavailable exception_type=%s', type(error).__name__
+        )
     swept = ENRICHMENT_OUTBOX.sweep(now=now)
     counts = {
         'rewoken': swept.rewoken,

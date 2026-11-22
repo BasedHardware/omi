@@ -35,9 +35,15 @@ stackdriver:
       # Shared timeliness leader: batch-timeliness, held-backlog and drain alerts,
       # plus over-SLA counts and staged-input clock diagnostics.
       - 'prometheus.googleapis.com/omi_batch_timeliness_'
+      - 'prometheus.googleapis.com/omi_batch_allowance_held_units/'
       - 'prometheus.googleapis.com/omi_batch_held_oldest_age_seconds/'
       - 'prometheus.googleapis.com/omi_batch_projection_drain_oldest_age_seconds/'
       - 'prometheus.googleapis.com/omi_batch_staged_input_clock_invalid_total/'
+      # Projection finish guard (SCA-1799): OmiBatchProjectionFinishReadsPerCompletion
+      # is a PrometheusRule evaluated by the in-cluster Prometheus, which sees
+      # backend-integration only through this bridge. Both counters are required.
+      - 'prometheus.googleapis.com/omi_batch_projection_finish_reads_total/'
+      - 'prometheus.googleapis.com/omi_batch_projection_finish_completed_total/'
       - 'prometheus.googleapis.com/omi_finalization_pair_'
       - 'prometheus.googleapis.com/omi_enrichment_summary_repair_'
       # WP-C lifecycle dwell and observer health (closed labels).
@@ -82,6 +88,11 @@ stackdriver:
       - 'prometheus.googleapis.com/omi_held_content_'
       - 'prometheus.googleapis.com/omi_stt_cap_recovery_reconciliation_total/'
       - 'prometheus.googleapis.com/omi_queue_oldest_ready_'
+      # Stuck-state census (SCA-2119): every registered batch stock's exact count and
+      # oldest-age reading, plus the census's own snapshot and per-stock freshness
+      # clocks. Consumers: the per-state age alarms and the omi-batch-stuck-census
+      # dashboard. One scheduled pass on backend-sync publishes them.
+      - 'prometheus.googleapis.com/omi_batch_pipeline_census_'
     filters:
       - 'prometheus.googleapis.com/omi_:resource.labels.cluster="__run__" AND resource.labels.namespace=one_of("backend-sync","backend-sync-backfill","backend-integration")'
     interval: '10m'

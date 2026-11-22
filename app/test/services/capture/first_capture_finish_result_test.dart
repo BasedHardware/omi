@@ -29,7 +29,7 @@ void main() {
       world.emitNativeState(PhoneMicCaptureState.running);
       await world.settle();
       expect(world.controller.liveCaptureSource, 'phone');
-      final result = await world.controller.finishCaptureWithResult();
+      final result = (await world.controller.finishCaptureWithOutcome()).response;
       expect(world.processCalls, 1);
       expect(result, isNull);
       expect(world.controller.liveCaptureSource, isNull);

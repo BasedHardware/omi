@@ -12,6 +12,9 @@ class ChunkSpan(BaseModel):
 
 
 class AudioFile(BaseModel):
+    recording_id: Optional[str] = None
+    recording_file_id: Optional[str] = None
+
     id: str = Field(description="Unique identifier for the audio file")
     source_fingerprint: Optional[str] = None
     uid: str = Field(description="User ID who owns this audio file")

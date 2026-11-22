@@ -162,7 +162,7 @@ void main() {
     // a successful free-space probe, engaging the separate storage latch.
     final obstruction = await Directory('${directory.path}/${buffered.getFileName()}').create();
     addTearDown(() => obstruction.delete());
-    await sync.stop();
+    await sync.onAudioCodecChanged(BleAudioCodec.opus);
     expect(sync.retentionRisk?.reason, 'count_cap');
     expect(buffered.storage, WalStorage.mem);
     expect(buffered.data, hasLength(2000));
@@ -184,14 +184,14 @@ void main() {
       sync.onFrameCaptured(frame(i));
     }
     expect(events, isEmpty);
-    await sync.stop();
+    await sync.onAudioCodecChanged(BleAudioCodec.opus);
     expect(events.whereType<PendantFramesDropped>().map((e) => e.properties), [
       {'count': 3, 'reason': 'disk_reserve'},
     ]);
     expect(sync.testWals.single.storage, WalStorage.mem);
     expect(sync.testWals.single.totalFrames, 2000);
     sync.onFrameCaptured(frame(2003));
-    await sync.stop();
+    await sync.onAudioCodecChanged(BleAudioCodec.opus);
     expect(events.whereType<PendantFramesDropped>().last.properties, {'count': 1, 'reason': 'disk_reserve'});
     expect(events.whereType<PendantFramesDropped>(), hasLength(2));
   });

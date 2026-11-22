@@ -1012,6 +1012,26 @@ def claim_payment_recovery_notification(uid: str, invoice_id: str) -> bool:
     )
 
 
+TRIAL_ENDING_NOTIFICATION_TTL_SECONDS = 60 * 24 * 60 * 60
+
+
+def claim_trial_ending_notification(uid: str, subscription_id: str, trial_end: int) -> bool:
+    """Atomically claim one trial-ending reminder per subscription and trial end.
+
+    Stripe retries and replays of the same `trial_will_end` event send nothing twice; an
+    extended trial (new `trial_end`) earns its own reminder. Redis errors propagate so the
+    webhook stays retryable and never sends without a confirmed claim.
+    """
+    return bool(
+        r.set(
+            f'users:{uid}:trial_ending_notification:{subscription_id}:{trial_end}',
+            '1',
+            nx=True,
+            ex=TRIAL_ENDING_NOTIFICATION_TTL_SECONDS,
+        )
+    )
+
+
 # ******************************************************
 # ******* IMPORTANT CONVERSATION NOTIFICATIONS *********
 # ******************************************************
@@ -1404,6 +1424,22 @@ def try_acquire_daily_summary_lock(uid: str, date: str, ttl: int = 60 * 60 * 2) 
     """Atomically acquire lock BEFORE expensive LLM work. Returns True if acquired, False if another job instance already holds it."""
     result = r.set(f'users:{uid}:daily_summary_lock:{date}', '1', ex=ttl, nx=True)
     return result is not None
+
+
+def try_acquire_ai_profile_refresh_lock(uid: str, ttl: int = 10 * 60) -> bool:
+    """Exclusive in-progress AI-profile refresh for one owner; released when the run ends."""
+    result = r.set(f'users:{uid}:ai_profile_refresh_lock', '1', ex=ttl, nx=True)
+    return result is not None
+
+
+def try_acquire_ai_profile_auto_cooldown(uid: str, ttl: int = 60 * 60) -> bool:
+    """At most one automatic AI-profile refresh attempt per owner per ``ttl``."""
+    result = r.set(f'users:{uid}:ai_profile_auto_cooldown', '1', ex=ttl, nx=True)
+    return result is not None
+
+
+def release_ai_profile_refresh_lock(uid: str) -> None:
+    r.delete(f'users:{uid}:ai_profile_refresh_lock')
 
 
 def try_acquire_daily_wear_lock(uid: str, date: str, ttl: int = 60 * 60 * 24) -> bool:

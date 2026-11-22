@@ -237,7 +237,7 @@ void main() {
     expect(rows.single.conversation.structured.title, 'Finishing up…');
     expect(rows.single.episode!.members.length, 2);
   });
-  test('ready and locked rows break Processing runs and remain ordinary; in-flight rows join them', () {
+  test('ready and locked rows remain ordinary outside the single processing aggregate', () {
     final ready = conversation('ready');
     final locked = waiting('locked', 2, locked: true);
     final pending = waiting('pending', 3, status: ConversationStatus.processing);
@@ -298,14 +298,14 @@ void main() {
       expect(homeStepOf(done), isNull);
     });
 
-    test('projected failures remain separate terminal rows between processing runs', () {
+    test('projected failures remain separate terminal rows outside the processing aggregate', () {
       final rows = home([
         provisional('p', 0),
         provisional('f1', -10, step: 'failed'),
         provisional('f2', -20, step: 'failed'),
         provisional('p2', -30),
       ]);
-      expect(rows.map((r) => r.isProcessing), [true, false, false, true]);
+      expect(rows.map((r) => r.isProcessing), [true, false, false]);
       expect(rows.map((r) => r.conversation.id), containsAll(['f1', 'f2']));
     });
 
@@ -367,9 +367,11 @@ void main() {
       expect(home([today, yesterday]).length, 2);
     });
 
-    test('a finished row between unfinished ones keeps them as two runs', () {
+    test('unfinished rows across a finished row share one aggregate at the top', () {
       final rows = home([provisional('a', 0), conversation('done', hours: -1), provisional('b', -180)]);
-      expect(rows.map((r) => r.isProcessing), [true, false, true]);
+      expect(rows.map((r) => r.isProcessing), [true, false]);
+      expect(rows.first.count, 2);
+      expect(rows.first.episodeConversationIds, {'a', 'b'});
     });
 
     test('an episode still finishing joins an adjacent Processing run', () {
