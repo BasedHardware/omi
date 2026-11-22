@@ -13,6 +13,7 @@ from database import processing_attention as attention_db
 from database.firestore_read_metrics import FirestoreReadSite
 from database.screen_frames import get_conversation_screenshot_sharing_enabled
 from models.calendar_context import CalendarMeetingContext
+from models.finalization_owner import ENGINE_FIELD, EPOCH_FIELD, FinalizationOwnedElsewhere, python_owns_finalization
 from utils.conversations.capture_group_meeting_context import (
     NOTES_REVISION_FIELD,
     capture_group_primary_notes_enabled,
@@ -35,7 +36,16 @@ logger = logging.getLogger(__name__)
 MAX_REFRESHES_PER_GROUP = 3
 # The notes prompt includes the primary's frames plus at most these member
 # frame sets. Eligibility uses the same bounded member set.
-_PRIMARY_META_FIELDS = ['id', 'capture_group', 'external_data', 'deleted', 'discarded', 'status']
+_PRIMARY_META_FIELDS = [
+    'id',
+    'capture_group',
+    'external_data',
+    'deleted',
+    'discarded',
+    'status',
+    ENGINE_FIELD,
+    EPOCH_FIELD,
+]
 
 
 def _meta_row(uid: str, conversation_id: str) -> Optional[Mapping[str, Any]]:
@@ -43,7 +53,13 @@ def _meta_row(uid: str, conversation_id: str) -> Optional[Mapping[str, Any]]:
 
 
 def _eligible_primary_row(row: Any) -> bool:
-    return bool(row) and not row.get('deleted') and not row.get('discarded') and row.get('status') == 'completed'
+    return (
+        bool(row)
+        and python_owns_finalization(row)
+        and not row.get('deleted')
+        and not row.get('discarded')
+        and row.get('status') == 'completed'
+    )
 
 
 def _meeting_evidence_fingerprints(
@@ -227,7 +243,7 @@ def refresh_primary_notes(uid: str, conversation_id: str) -> bool:
     except attention_db.ClaimRejected:
         return False
     except Exception as exc:  # noqa: BLE001 - this step may never fail finalization
-        if isinstance(exc, member_notes.LiveMemberNotesDeferred):
+        if isinstance(exc, (member_notes.LiveMemberNotesDeferred, FinalizationOwnedElsewhere)):
             logger.info('event=capture_group_notes_refresh outcome=deferred')
         else:
             logger.warning('event=capture_group_notes_refresh outcome=error exception_type=%s', type(exc).__name__)

@@ -299,15 +299,21 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
       return;
     }
     if (_socket.status != PureSocketStatus.connected) return;
-    _socket.send(jsonEncode({
+    final evidence = jsonEncode({
       'type': 'capture_evidence_frame',
       'version': 1,
       'capture_root': root,
       'clock_epoch': epoch,
       'source_frame': ordinal,
       'byte_length': frame.payload.length,
-    }));
-    _socket.send(frame.payload);
+    });
+    final socket = _socket;
+    if (socket is CompositeTranscriptionSocket) {
+      socket.sendEvidenceAudioFrame(evidence, frame.payload);
+    } else {
+      socket.send(evidence);
+      socket.send(frame.payload);
+    }
     if (_socket.status == PureSocketStatus.connected) {
       _binaryAudioBytesSent += frame.payload.length;
     }

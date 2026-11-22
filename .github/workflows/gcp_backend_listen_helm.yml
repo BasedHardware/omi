@@ -28,6 +28,11 @@ on:
         required: false
         default: ''
         type: string
+      control_sha:
+        description: 'Exact admitted workflow and checkout SHA for a direct production deploy (blank keeps legacy checkout behavior)'
+        required: false
+        default: ''
+        type: string
       mode:
         description: 'deploy applies the chart; rollback restores an earlier Helm revision; private-env-migrate copies the retired private overlay into Secret Manager (prod, no roll)'
         required: true
@@ -153,8 +158,24 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
         with:
-          ref: ${{ inputs.mode == 'evidence' && inputs.expected_sha || (github.event.inputs.environment == 'prod' && 'main' || github.event.inputs.branch) }}
+          ref: ${{ inputs.control_sha != '' && github.sha || (inputs.mode == 'evidence' && inputs.expected_sha || (github.event.inputs.environment == 'prod' && 'main' || github.event.inputs.branch)) }}
           fetch-depth: 0
+
+      - name: Verify exact listen control SHA
+        if: ${{ inputs.control_sha != '' }}
+        shell: bash
+        env:
+          CONTROL_SHA: ${{ inputs.control_sha }}
+          DEPLOY_ENV: ${{ inputs.environment }}
+          DEPLOY_MODE: ${{ inputs.mode }}
+        run: |
+          set -euo pipefail
+          if [[ "$GITHUB_EVENT_NAME" != workflow_dispatch || "$DEPLOY_ENV" != prod || "$DEPLOY_MODE" != deploy ||
+                ! "$CONTROL_SHA" =~ ^[0-9a-f]{40}$ || "$CONTROL_SHA" == 0000000000000000000000000000000000000000 ||
+                "$CONTROL_SHA" != "$GITHUB_SHA" || "$CONTROL_SHA" != "$(git rev-parse HEAD)" ]]; then
+            echo "::error title=Listen control mismatch::The production workflow and checkout must match the admitted control SHA."
+            exit 1
+          fi
 
       - name: Bind shared record token lease rollout inputs
         if: ${{ inputs.mode != 'evidence' && ((github.event.inputs.mode || 'deploy') == 'deploy') }}

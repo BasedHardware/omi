@@ -720,13 +720,10 @@ def test_fresh_pending_returns_the_earliest_fresh_rows_in_any_state(h):
     assert [row['segment_id'] for row in h.store.fresh_pending(key, 10)] == ['b', 'e', 'a']
 
 
-@pytest.mark.parametrize('enabled', [False, True])
-def test_terminal_poll_filter_preserves_nonterminal_heads_and_fresh_wait(h, monkeypatch, enabled):
-    from config.batch_pipeline import MERGE_POLL_TERMINAL_STATES
+def test_merge_poll_preserves_capture_order_and_fresh_wait(h):
     from utils.batch_pipeline.merge import _fresh_pick
 
-    monkeypatch.setenv('BATCH_HELD_POLL_SKIP_ENABLED', str(enabled).lower())
-    terminals = MERGE_POLL_TERMINAL_STATES
+    terminals = ('committed', 'dead', 'quarantined', 'privacy_blocked', 'partial_retired', 'provider_superseded')
     nonterminal = (
         'ready',
         'leased',
@@ -743,7 +740,7 @@ def test_terminal_poll_filter_preserves_nonterminal_heads_and_fresh_wait(h, monk
         put_all(h, [_pending(h, state, capture_at=0.0 if state in terminals else 1.0, fresh_capture=True, state=state)])
     key = owner_key(h.uid('o'))
     rows = h.store.fresh_pending(key, 32)
-    expected = set(nonterminal) | (set() if enabled else set(terminals))
+    expected = set(nonterminal) | set(terminals)
     assert {r['state'] for r in rows} == expected
     assert h.store.run(lambda tx: tx.first_pending(key))['state'] == rows[0]['state']
 
@@ -777,14 +774,12 @@ def test_terminal_poll_filter_preserves_nonterminal_heads_and_fresh_wait(h, monk
     assert _fresh_pick(rows, 311, 300)[1]['segment_ids'] == ['waiting']
 
 
-@pytest.mark.parametrize('enabled', [False, True])
-def test_poll_filter_never_skips_recovery_or_durable_terminal_transitions(h, monkeypatch, enabled):
+def test_merge_poll_preserves_recovery_and_durable_terminal_transitions(h, monkeypatch):
     monkeypatch.setenv('BATCH_ALLOWANCE_PARK_ENABLED', 'off')  # Legacy retry behavior under rollback.
     from utils.batch_pipeline.contracts import WorkResult
     from utils.batch_pipeline.merge import OrderedMerge
     from utils.batch_pipeline.retry_policy import quarantine_job
 
-    monkeypatch.setenv('BATCH_HELD_POLL_SKIP_ENABLED', str(enabled).lower())
     queue = Scheduler(h.store)
     uid = h.uid('o')
     assert queue.enqueue(WorkItem('recover-me', uid, 1, 'gs://synthetic/input', 30, Priority.FRESH), 100)
@@ -828,12 +823,10 @@ def test_poll_filter_never_skips_recovery_or_durable_terminal_transitions(h, mon
     fenced = h.store.run(lambda tx: tx.get('jobs', 'fenced'))
     assert fenced['state'] == 'privacy_blocked' and fenced['merge_pending'] is True
     pending = h.store.run(lambda tx: tx.first_pending(fenced['owner_key']))
-    assert (pending is None) if enabled else pending['segment_id'] == 'fenced'
+    assert pending['segment_id'] == 'fenced'
 
 
-@pytest.mark.parametrize('enabled', [False, True])
-def test_held_merge_owners_rotates_markers_and_resolves_the_owner_from_pending_work(h, monkeypatch, enabled):
-    monkeypatch.setenv('BATCH_HELD_POLL_SKIP_ENABLED', str(enabled).lower())
+def test_held_merge_owners_rotates_markers_and_resolves_the_owner_from_pending_work(h):
     held = owner_key(h.uid('o'))
     put_all(
         h,
@@ -1136,12 +1129,10 @@ def test_concurrent_schedulers_lease_every_job_exactly_once(h):
     assert sorted(leased) == sorted(expected)
 
 
-@pytest.mark.parametrize('enabled', [False, True])
-def test_ordered_merge_retained_terminal_head_and_later_result(h, monkeypatch, enabled):
+def test_ordered_merge_retained_terminal_head_and_later_result(h):
     from utils.batch_pipeline.contracts import WorkResult
     from utils.batch_pipeline.merge import OrderedMerge
 
-    monkeypatch.setenv('BATCH_HELD_POLL_SKIP_ENABLED', str(enabled).lower())
     uid = h.uid('o')
     queue = Scheduler(h.store)
     for segment, capture in [('terminal', 1), ('later', 2)]:
@@ -1159,26 +1150,14 @@ def test_ordered_merge_retained_terminal_head_and_later_result(h, monkeypatch, e
     merge = OrderedMerge(h.store, head_wait_seconds=0, catch_up_depth=0)
     entry = merge.commit_next(uid, 103)
     assert h.store.run(lambda tx: tx.get('jobs', 'terminal')) == terminal
-    if not enabled:
-        assert entry is None
-        assert h.store.run(lambda tx: tx.get('results', 'later')) == {}
-        return
-    assert entry['segment_id'] == 'later' and entry['previous_segment_id'] is None and entry['log_sequence'] == 1
-    assert h.store.run(lambda tx: queue.redrive_in_transaction(tx, tx.get('jobs', 'terminal'), 104, operator=True))
-    lease = queue.pull(105)[0]
-    assert lease.item.segment_id == 'terminal'
-    assert queue.complete(WorkResult('terminal', 'gs://synthetic/recovered'), lease.token, 106)
-    recovered = merge.commit_next(uid, 107)
-    assert recovered['segment_id'] == 'terminal' and recovered['late_capture'] is True
-    assert recovered['previous_segment_id'] == 'later' and recovered['log_sequence'] == 2
+    assert entry is None
+    assert h.store.run(lambda tx: tx.get('results', 'later')) == {}
 
 
-@pytest.mark.parametrize('enabled', [False, True])
 @pytest.mark.parametrize('head_state', ['dead', 'future_state'])
-def test_head_priority_never_promotes_past_a_terminal_or_unknown_predecessor(h, monkeypatch, enabled, head_state):
+def test_head_priority_never_promotes_past_a_terminal_or_unknown_predecessor(h, head_state):
     from utils.batch_pipeline.scheduler import _prefer_merge_head
 
-    monkeypatch.setenv('BATCH_HELD_POLL_SKIP_ENABLED', str(enabled).lower())
     put_all(
         h,
         [
@@ -1203,20 +1182,18 @@ def test_head_priority_never_promotes_past_a_terminal_or_unknown_predecessor(h, 
 
     assert h.store.run(pick)['segment_id'] == 'selected'
     assert h.store.run(lambda tx: tx.get('jobs', 'head'))['state'] == head_state
-    assert observations == ([('ready_age', 9), ('head_not_found', None)] if enabled and head_state == 'dead' else [])
+    assert observations == []
 
 
-@pytest.mark.parametrize('enabled', [False, True])
 @pytest.mark.parametrize('state', ['missing', None])
-def test_missing_and_null_pending_state_match_firestore_negative_filter(h, monkeypatch, enabled, state):
-    monkeypatch.setenv('BATCH_HELD_POLL_SKIP_ENABLED', str(enabled).lower())
+def test_missing_and_null_pending_state_stays_visible(h, state):
     legacy = job(h, 'legacy', state=state, merge_pending=True, fresh_capture=True, privacy_generation=0)
     if state == 'missing':
         del legacy['state']
     put_all(h, [('jobs', 'legacy', legacy)])
     key = owner_key(h.uid('o'))
-    assert h.store.fresh_pending(key, 32) == ([] if enabled else [legacy])
-    assert h.store.run(lambda tx: tx.first_pending(key)) == (None if enabled else legacy)
+    assert h.store.fresh_pending(key, 32) == [legacy]
+    assert h.store.run(lambda tx: tx.first_pending(key)) == legacy
     assert h.store.run(lambda tx: tx.get('jobs', 'legacy')) == legacy
 
 

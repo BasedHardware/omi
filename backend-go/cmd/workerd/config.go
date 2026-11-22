@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"fmt"
+	"math"
 	"net"
 	"net/url"
 	"regexp"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/BasedHardware/omi/backend-go/internal/adapters/llmgateway"
 	"github.com/BasedHardware/omi/backend-go/internal/platform/crypt"
 	"github.com/BasedHardware/omi/backend-go/internal/queue"
 )
@@ -19,14 +21,23 @@ import (
 const gateAbandoned queue.Cause = "gate_abandoned"
 
 type config struct {
-	policy           queue.Config
-	erase            eraseConfig
-	databaseURL      string
-	firestoreProject string
-	encryptionSecret string
-	healthPort       int
-	metricsPort      int
-	stopTimeout      time.Duration
+	policy                                     queue.Config
+	erase                                      eraseConfig
+	gateway                                    llmgateway.Config
+	databaseURL                                string
+	firestoreProject                           string
+	encryptionSecret                           string
+	healthPort                                 int
+	metricsPort                                int
+	stopTimeout                                time.Duration
+	quietRecovery                              bool
+	summaryRepair                              bool
+	notesDedupe                                bool
+	summaryMaxAge                              time.Duration
+	privateArchive, derivedArchive             string
+	objectBucket, objectKMSKey                 string
+	retractionOrigin, retractionAudience       string
+	episodeIntakeAudience, episodeIntakeCaller string
 }
 
 type lookupEnv func(string) (string, bool)
@@ -68,6 +79,116 @@ func (c *config) readWorkerConfig(lookup lookupEnv) error {
 	}
 	if c.healthPort == c.metricsPort {
 		return errors.New("HEALTH_PORT and METRICS_PORT must differ")
+	}
+	if err := c.readSummaryRepair(lookup); err != nil {
+		return err
+	}
+	c.episodeIntakeAudience, _ = lookup("WORKER_EPISODE_INTAKE_AUDIENCE")
+	c.episodeIntakeCaller, _ = lookup("WORKER_EPISODE_INTAKE_CALLER")
+	c.episodeIntakeAudience = strings.TrimSpace(c.episodeIntakeAudience)
+	c.episodeIntakeCaller = strings.TrimSpace(c.episodeIntakeCaller)
+	if (c.episodeIntakeAudience == "") != (c.episodeIntakeCaller == "") ||
+		(c.episodeIntakeCaller != "" && !strings.HasSuffix(c.episodeIntakeCaller, ".iam.gserviceaccount.com")) {
+		return errors.New("episode intake requires an OIDC audience and service account email")
+	}
+	if err := c.readFinalizationGateway(lookup); err != nil {
+		return err
+	}
+	return c.readFinalizationAdapters(lookup)
+}
+
+func (c *config) readFinalizationAdapters(lookup lookupEnv) error {
+	if raw, set := lookup("WORKER_QUIET_RECOVERY_ENABLED"); set {
+		enabled, err := strconv.ParseBool(raw)
+		if err != nil {
+			return errors.New("WORKER_QUIET_RECOVERY_ENABLED must be a boolean")
+		}
+		c.quietRecovery = enabled
+	}
+	value, _ := lookup("CONVERSATION_LLM_INPUT_DEDUPE_ENABLED")
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "0", "false", "off", "no":
+		c.notesDedupe = false
+	default:
+		c.notesDedupe = true
+	}
+	archiveEnabled := false
+	if raw, set := lookup("WORKER_FINALIZATION_ARCHIVE_ENABLED"); set {
+		enabled, err := strconv.ParseBool(raw)
+		if err != nil {
+			return errors.New("WORKER_FINALIZATION_ARCHIVE_ENABLED must be a boolean")
+		}
+		archiveEnabled = enabled
+	}
+	if archiveEnabled || c.quietRecovery {
+		private, _ := lookup("BUCKET_PRIVATE_CLOUD_SYNC")
+		derived, _ := lookup("BUCKET_AUDIO_DERIVED")
+		c.privateArchive, c.derivedArchive = strings.TrimSpace(private), strings.TrimSpace(derived)
+		if c.privateArchive == "" {
+			return errors.New("recording archive requires BUCKET_PRIVATE_CLOUD_SYNC")
+		}
+	}
+	if err := c.readObjectLake(lookup); err != nil {
+		return err
+	}
+	raw, set := lookup("WORKER_MERGE_RETRACTION_ENABLED")
+	if !set {
+		return nil
+	}
+	enabled, err := strconv.ParseBool(raw)
+	if err != nil {
+		return errors.New("WORKER_MERGE_RETRACTION_ENABLED must be a boolean")
+	}
+	if !enabled {
+		return nil
+	}
+	origin, _ := lookup("WORKER_MERGE_RETRACTION_ORIGIN")
+	u, err := url.Parse(origin)
+	if err != nil || u.Scheme != "https" || u.Hostname() == "" || u.User != nil ||
+		u.RawQuery != "" || u.ForceQuery || u.Fragment != "" || (u.Path != "" && u.Path != "/") {
+		return errors.New("WORKER_MERGE_RETRACTION_ORIGIN must be an HTTPS origin")
+	}
+	audience, _ := lookup("LISTEN_FINALIZATION_TASKS_OIDC_AUDIENCE")
+	if audience == "" {
+		audience, _ = lookup("LISTEN_FINALIZATION_TASKS_HANDLER_URL")
+	}
+	if strings.TrimSpace(audience) == "" {
+		return errors.New("merge retraction requires a listen finalization OIDC audience")
+	}
+	c.retractionOrigin, c.retractionAudience = origin, audience
+	return nil
+}
+
+func (c *config) readObjectLake(lookup lookupEnv) error {
+	if enabled, set := lookup("OBJECT_LAKE_READ_ENABLED"); set && !strings.EqualFold(enabled, "true") {
+		return nil
+	}
+	bucket, _ := lookup("BUCKET_OBJECT_LAKE")
+	key, _ := lookup("OBJECT_LAKE_KMS_KEY")
+	if (bucket == "") != (key == "") {
+		return errors.New("object-lake reads require BUCKET_OBJECT_LAKE and OBJECT_LAKE_KMS_KEY")
+	}
+	c.objectBucket, c.objectKMSKey = bucket, key
+	return nil
+}
+
+func (c *config) readSummaryRepair(lookup lookupEnv) error {
+	c.summaryMaxAge = 72 * time.Hour
+	raw, set := lookup("WORKER_SUMMARY_REPAIR_ENABLED")
+	if !set || raw == "" {
+		return nil
+	}
+	enabled, err := strconv.ParseBool(raw)
+	if err != nil {
+		return errors.New("WORKER_SUMMARY_REPAIR_ENABLED must be a boolean")
+	}
+	c.summaryRepair = enabled
+	if age, configured := lookup("ENRICHMENT_MAX_AGE_HOURS"); configured {
+		hours, parseErr := strconv.ParseFloat(strings.TrimSpace(age), 64)
+		nanos := hours * float64(time.Hour)
+		if parseErr == nil && !math.IsNaN(nanos) && nanos >= 0 && nanos < float64(math.MaxInt64) {
+			c.summaryMaxAge = time.Duration(nanos)
+		}
 	}
 	return nil
 }

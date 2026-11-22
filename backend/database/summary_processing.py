@@ -11,6 +11,7 @@ from typing import Any
 from google.api_core.exceptions import FailedPrecondition, NotFound
 from google.cloud import firestore
 
+from models.finalization_owner import python_owns_finalization
 from utils.conversations.summary_delivery import (
     PROCESS_CONTEXT,
     MAX_EMPTY_REARMS,
@@ -29,6 +30,8 @@ class EmptyFailureOutcome(Enum):
 
 
 def claim_from_snapshot(client: Any, uid: str, conversation_id: str, row: dict[str, Any]) -> bool:
+    if not python_owns_finalization(row):
+        return False
     context = PROCESS_CONTEXT.get()
     if context is None or row.get('summary_completed_at'):
         return True
@@ -67,6 +70,8 @@ def record_empty_failure(client: Any, collection: str, document_id: str, owner: 
             client.collection('users').document(old['uid']).collection('conversations').document(old['conversation_id'])
         )
         conversation = reference.get(transaction=transaction).to_dict() or {}
+        if not python_owns_finalization(conversation):
+            return EmptyFailureOutcome.OWNER_MISMATCH
         enriched = bool(conversation.get('summary_output_present') or conversation.get('summary_completed_at'))
         if not enriched and conversation.get('summary_processing_owner') != owner:
             # This worker still owns the outbox, but lost the content fence.

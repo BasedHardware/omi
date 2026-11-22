@@ -53,7 +53,12 @@ class ActivityBellButton extends StatelessWidget {
       listenable: Listenable.merge(
           [state.hasNew, store.hasUnseenAttention, monitor.hasUnseenCaptureAttention, store.failedConversationsSeen]),
       builder: (context, child) {
-        final failedUnseen = v3 && failedIds.isNotEmpty && store.hasUnseenFailedConversation(failedIds.split(','));
+        // Activity lists these under their attention row, or not at all once dismissed: either way it
+        // never shows them as failed rows, so they must not keep the dot lit.
+        final hidden = failedIds.isEmpty ? const <String>{} : store.attentionConversationIds;
+        final failedUnseen = v3 &&
+            failedIds.isNotEmpty &&
+            store.hasUnseenFailedConversation(failedIds.split(',').where((id) => !hidden.contains(id)));
         final attention = store.hasUnseenAttention.value || monitor.hasUnseenCaptureAttention.value || failedUnseen;
         final hasNew = (state.hasNew.value && state.describesCurrentOwner) || attention;
         final button = HeaderCircleButton(

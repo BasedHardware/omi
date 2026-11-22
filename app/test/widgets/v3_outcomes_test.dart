@@ -200,6 +200,43 @@ void main() {
     });
   });
 
+  testWidgets('a dismissed Needs attention conversation that is still failed does not light the bell', (tester) async {
+    final conversations = ConversationProvider(isSignedIn: () => false)..conversations = [_decoded('failed')];
+    final store = PendingWorkStore(
+      loadPending: () async => const ApiSuccess(PendingWorkSnapshot.disabled),
+      loadAttention: () async => const ApiSuccess(AttentionItemsPage(
+          enabled: true,
+          items: [
+            AttentionItem(
+                id: 'a1',
+                kind: 'conversation_summary_failed',
+                conversationId: 'c1',
+                retryable: true,
+                seen: true,
+                retryState: AttentionRetryState.none),
+          ],
+          unseenCount: 0)),
+      dismiss: (_) async => const ApiSuccess(null),
+      loadDismissed: (_) => const [],
+      saveDismissed: (_, __) {},
+    );
+    await store.refresh();
+    await tester.pumpWidget(_app(
+      Scaffold(body: Center(child: ActivityBellButton(pendingWork: store))),
+      providers: [
+        ChangeNotifierProvider<ConversationProvider>.value(value: conversations),
+        ChangeNotifierProvider<ConversationsV3Provider>.value(value: _v3(true)),
+      ],
+    ));
+    // Listed under its attention row in Activity, never as a failed row: no dot owed for it.
+    expect(find.byKey(const ValueKey('home_activity_attention_dot')), findsNothing);
+    await store.dismiss(store.attention.single);
+    await tester.pump();
+    expect(find.byKey(const ValueKey('home_activity_attention_dot')), findsNothing);
+    await tester.pumpWidget(const SizedBox());
+    conversations.dispose();
+  });
+
   test('X17: a failed pending-work read keeps the last good answer', () async {
     var fail = false;
     final store = _store(

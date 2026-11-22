@@ -58,6 +58,7 @@ from utils.screen_frames.store import delete_conversation_screen_frames
 from models.calendar_context import CalendarMeetingContext
 from utils.free_tier_processing_policy import client_summaries_at_cap_enabled
 from models.client_processing import PROJECTION_FAMILY_FIELDS, ClientProcessing
+from models.finalization_owner import python_owns_finalization
 from models.conversation import (
     ProcessConversationRequest,
     BulkAssignSegmentsRequest,
@@ -936,6 +937,8 @@ def reprocess_conversation(
     # on the raw doc because the Conversation model does not carry `deleted`.
     if conversations_db.is_soft_deleted(conversation):
         raise HTTPException(status_code=404, detail="Conversation not found")
+    if not python_owns_finalization(conversation):
+        raise HTTPException(status_code=409, detail='Conversation finalization is in progress')
     if app_id and historical_tier.is_historical(conversation):
         raise HTTPException(status_code=400, detail='Historical conversations can only be reprocessed with Omi notes')
     if transcribing_hold.retry_pending(conversation):

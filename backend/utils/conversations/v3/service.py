@@ -21,6 +21,7 @@ import re
 import time
 from datetime import datetime, timedelta, timezone
 from functools import wraps
+from typing import Any
 from uuid import NAMESPACE_URL, uuid5
 
 from google.cloud.firestore_v1 import FieldFilter
@@ -37,6 +38,7 @@ from utils.conversations.v3.renewal import renew_until_done, leased_work
 from database import conversations as conversations_db, conversations_v3 as store, conversations_v3_fence as fence
 from models.conversation import Conversation
 from models.conversation_enums import ConversationStatus
+from models.finalization_owner import FinalizationOwnedElsewhere, python_owns_finalization
 from utils.conversations.v3 import (
     Conflict,
     outline,
@@ -48,6 +50,7 @@ from utils.conversations.v3 import (
     context,
 )
 from utils.conversations.v3 import refinement, preview_wakes
+from utils.conversations.v3.word_floor import MIN_TASK_WORDS, has_unspaced_script, text_word_count
 from utils.conversations.processing_trigger import ProcessingTrigger
 from utils.executors import run_blocking, db_executor, llm_executor, postprocess_executor, storage_executor
 
@@ -126,6 +129,8 @@ async def _drain_blocked(uid, reason):
 def recording_short_path(fn):
     @wraps(fn)
     def guarded(uid, language_code, conversation, *args, **kwargs):
+        if isinstance(conversation, Conversation) and not conversation.python_finalization_owned:
+            raise FinalizationOwnedElsewhere()
         if not policy.flag(conversation, 'recording'):
             if policy.flag(conversation, 'v3_derived') and not fence.current():
                 from utils.conversations.v3.processing import run_external
@@ -142,6 +147,8 @@ def recording_short_path(fn):
 
         persisted = lifecycle.complete(uid, conversation.id)
         current = conversations_db.get_conversation(uid, conversation.id)
+        if current is not None and not python_owns_finalization(current):
+            raise FinalizationOwnedElsewhere()
         if current and current.get('status') == 'completed':
             persisted = True
         if persisted:
@@ -1034,7 +1041,7 @@ async def _process_leased(uid, row, token):
 async def drain_processing(uid):
     rows = await run_blocking(db_executor, pending_processing, uid)
     for row in rows:
-        if row is None:
+        if row is None or not python_owns_finalization(row):
             continue
         token = await run_blocking(db_executor, leases.acquire, uid, 'summary-' + row['id'])
         if token is None:
@@ -1042,6 +1049,8 @@ async def drain_processing(uid):
             continue
         try:
             await _process_leased(uid, row, token)
+        except FinalizationOwnedElsewhere:
+            continue
         finally:
             await run_blocking(db_executor, leases.release, uid, 'summary-' + row['id'], token)
     # Settled notes arm the conversation-created obligation; deliver after every summary lease is released.
@@ -1067,7 +1076,7 @@ def _process(uid, row, token):
     from utils.conversations import lifecycle
     from utils.conversations.process_conversation import process_conversation
 
-    if not row:
+    if not row or not python_owns_finalization(row):
         return
     if row.get('deleted') or row.get('is_locked'):
         writers.settle_processing(uid, row['id'], token, row.get('sync_content_revision'), None, skipped=True)
@@ -1084,9 +1093,13 @@ def _process(uid, row, token):
         return
     if not writers.begin_processing(uid, row, token):
         return
-    words = sum(len(s.get('text', '').split()) for s in row.get('transcript_segments') or [])
+    texts = [s.get('text') or '' for s in row.get('transcript_segments') or []]
+    words = sum(map(text_word_count, texts))
+    below_minimum = words < MIN_TASK_WORDS
+    passive = row.get('kind') in {'media', 'background'}
+    manual = policy.manual_intent(row)
     notes = False
-    if row.get('kind') in {'media', 'background'} or (not policy.manual_intent(row) and words < 20):
+    if passive or (not manual and below_minimum):
         lifecycle.complete(uid, row['id'])
     else:
         notes = True
@@ -1110,6 +1123,12 @@ def _process(uid, row, token):
             raise RuntimeError('v3_processing_not_completed')
         metrics.SUMMARY_WRITES.labels('rewrite' if row.get('v3_rewrites') else 'first').inc()
     metrics.SUMMARY_LATENCY.observe(max(0, (datetime.now(timezone.utc) - row['finished_at']).total_seconds()))
+    word_floor_outcomes = None
+    if not (passive or manual or row.get('backfilled') or row.get('v3_rewrites')) and any(
+        map(has_unspaced_script, texts)
+    ):
+        legacy_below = sum(len(text.split()) for text in texts) < MIN_TASK_WORDS
+        word_floor_outcomes = (legacy_below, below_minimum)
     writers.settle_processing(
         uid,
         row['id'],
@@ -1118,6 +1137,7 @@ def _process(uid, row, token):
         row['finished_at'],
         notes=notes,
         content_hash=writers.processing_hash(row),
+        word_floor_outcomes=word_floor_outcomes,
     )
 
 
@@ -1162,6 +1182,8 @@ async def sweep():
             query = query.start_after(cursor)
         processing = await run_blocking(db_executor, lambda: list(query.stream()))
         for doc in processing:
+            if not python_owns_finalization(doc.to_dict() or {}):
+                continue
             parts = doc.reference.path.split('/')
             if len(parts) == 4 and parts[0] == 'users' and parts[1] not in users:
                 users.add(parts[1])
@@ -1220,16 +1242,37 @@ async def sweep():
 
 BACKFILL_NOTES_CONCURRENCY = 4
 BACKFILL_NOTES_ATTEMPTS = 3
+BACKFILL_SCAN_MAX_PAGES = 8
 
 
-async def drain_backfill(uid, *, deadline, keep_going=None, concurrency=BACKFILL_NOTES_CONCURRENCY):
+async def drain_backfill(uid, *, deadline, after=None, keep_going=None, concurrency=BACKFILL_NOTES_CONCURRENCY):
     """Notes for backfilled rows, through the same _process as live, a few at a time until deadline.
 
     Returns counts; ``remaining`` > 0 asks the caller for a continuation task. ``keep_going`` is
     checked before each chunk so an undo stops new notes work.
     """
-    rows = [row for row in await run_blocking(db_executor, store.pending_backfill_processing, uid) if row]
-    counts = {'processed': 0, 'failed': 0, 'retry': 0, 'busy': 0, 'remaining': 0}
+    counts: dict[str, Any] = {'processed': 0, 'failed': 0, 'retry': 0, 'busy': 0, 'remaining': 0}
+    pages_left = BACKFILL_SCAN_MAX_PAGES
+
+    async def scan(cursor):
+        nonlocal pages_left
+        foreign = 0
+        while pages_left and time.monotonic() < deadline:
+            pages_left -= 1
+            page = await run_blocking(
+                db_executor, store.pending_backfill_processing, uid, after=cursor, deadline=deadline
+            )
+            if page is None:
+                break
+            pending, next_cursor = page
+            rows = [row for row in pending if python_owns_finalization(row)]
+            foreign += len(pending) - len(rows)
+            if rows or not pending or next_cursor is None:
+                return rows, cursor, foreign, False
+            cursor = next_cursor
+        return [], cursor, foreign, True
+
+    rows, cursor, foreign, paused = await scan(after)
 
     async def one(row):
         token = await run_blocking(db_executor, leases.acquire, uid, 'summary-' + row['id'])
@@ -1260,8 +1303,21 @@ async def drain_backfill(uid, *, deadline, keep_going=None, concurrency=BACKFILL
         if time.monotonic() >= deadline or (keep_going is not None and not await keep_going()):
             break
         await asyncio.gather(*(one(row) for row in rows[start : start + concurrency]))
-    left = await run_blocking(db_executor, store.pending_backfill_processing, uid)
-    counts['remaining'] = len([row for row in left if row])
+    if rows:
+        pending, tail_cursor, tail_foreign, paused = await scan(cursor)
+        # Earlier skipped rows still owe notes. A rescan of the actionable
+        # page may see the same foreign rows, so combine counts conservatively.
+        foreign = max(foreign, tail_foreign) if cursor != after else tail_foreign
+        rows, cursor = pending, tail_cursor
+    # A suffix scan cannot certify that the skipped prefix is empty. At the
+    # end of the suffix, wrap to the head on the delayed continuation.
+    foreign = max(foreign, int(cursor is not None))
+    counts['remaining'] = max(len(rows) + foreign, int(paused))
+    counts['ownership_blocked'] = foreign
+    counts['scan_pending'] = paused
+    next_cursor = cursor if paused or rows else None
+    if next_cursor != after:
+        counts['scan_after'] = next_cursor
     return counts
 
 

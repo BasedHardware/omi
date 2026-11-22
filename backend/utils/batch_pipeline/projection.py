@@ -44,7 +44,7 @@ from database.batch_pipeline_projection_protocol import normalized_binding
 from database.batch_pipeline_quarantine_recovery import held_candidates
 from database.batch_pipeline_store import PROJECTION_ASSIGNMENT_STATES, PROJECTION_FINISH_STATES, FirestoreStore
 from utils.batch_pipeline.projection_discovery import ProjectionDiscovery
-from utils.batch_pipeline.projection_finish_backoff import FinishBackoff
+from utils.batch_pipeline.projection_finish_page import FinishPage
 from utils.batch_pipeline.projection_disposition import persist_disposition, mirror_assignment
 from utils.batch_pipeline.projection_prefetch import NativeAudioPending
 from utils.batch_pipeline.projection_privacy import PRIVACY_HELD, settle_refusals
@@ -433,7 +433,7 @@ class Projector:
         self.outbox_coverage: Callable[[], bool] | None = None
         self.outbox_followup_slots: Semaphore | None = None
         self.discovery = ProjectionDiscovery(store, outbox_coverage=self.has_outbox_coverage)
-        self.finish_backoff = FinishBackoff(self)
+        self.finish_page = FinishPage(self)
         # Pending-page mode: assignment never spends page slots on rows it can
         # only replay, and persisted/ready rows advance on their own cursor.
         self.assignment_discovery = ProjectionDiscovery(
@@ -1292,6 +1292,7 @@ class Projector:
                         binding.owner_id,
                         receipt['conversation_id'],
                         silent=receipt.get('silent_redrive') is True,
+                        require_python_owner=True,
                     )
                 )
             outputs = receipt.get('size_rollover_outputs') or [{'conversation_id': canonical}]
@@ -1874,26 +1875,21 @@ class Projector:
         Async rows belong to the follow-up drain; seeing one keeps it scheduled.
         Synchronous-policy rows replay assignment and finish exactly as the
         mixed page did, so no persisted or ready obligation loses its retry.
-        FinishBackoff owns async discovery hints and synchronous deferral; see
-        utils/batch_pipeline/projection_finish_backoff.py.
         """
         from database.batch_pipeline_privacy import BatchPrivacyBlocked
 
         contention = False
-        for segment_id in self.finish_backoff.page(size):
+        for segment_id in self.finish_page.page(size):
             if segment_id in touched:
                 continue
             PROJECTION_FINISH_READS.inc()
             entry = None
-            result = None
-            defer = True
             try:
                 job, entry, binding = self.store.read(segment_id)
                 policy = ProjectionPolicy.from_dict(job['policy_parts']['projection'])
                 contention = contention or policy.projection_contention
                 if policy.async_projection:
-                    self.finish_backoff.observed_async(segment_id, entry)
-                    defer = False
+                    self.finish_page.observed_async(segment_id, entry)
                     continue
                 result = self._project_read(segment_id, job, entry, binding)
                 counts['completed' if result is not None else 'waiting'] += 1
@@ -1908,15 +1904,4 @@ class Projector:
                     error_type(error),
                     error_site_field(error),
                 )
-            finally:
-                if defer:
-                    # A failed deferral leaves the row due for the next page.
-                    try:
-                        self.finish_backoff.settled(segment_id, entry, result)
-                    except Exception as error:
-                        logger.error(
-                            'event=batch_projection action=sweep outcome=defer_error exception_type=%s%s',
-                            error_type(error),
-                            error_site_field(error),
-                        )
         return contention

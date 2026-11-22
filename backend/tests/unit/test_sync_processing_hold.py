@@ -667,3 +667,110 @@ def test_explicit_rollback_only_settles_existing_hold_metadata(monkeypatch):
     )
     complete.assert_not_called()
     assert hold.FIELD not in world.raw('parent')
+
+
+@pytest.mark.parametrize('claimed', [False, True])
+@pytest.mark.parametrize('stage', ['source', 'redirect', 'bridge', 'discard_transaction'])
+def test_default_consumer_defers_foreign_finalization(state, monkeypatch, claimed, stage):
+    from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
+
+    rows, tasks = state
+    outbox.mark('u', 'c', 'en', now=100)
+    key = outbox.key('u', 'c')
+    if not claimed:
+        rows[key]['summary_seen'] = True
+    monkeypatch.setattr(custody, 'discard_blocked', lambda _: False)
+
+    source = {'id': 'c', 'status': 'completed', 'sync_relevance': 'review', 'sync_content_revision': 7}
+    foreign = {'finalization_engine': 'pending' if stage == 'source' else 'go', 'finalization_owner_epoch': 1}
+    destination = {**source, **foreign, 'id': 'parent'}
+    source_path = ('users', 'u', 'conversations', 'c')
+    destination_path = ('users', 'u', 'conversations', 'parent')
+    if stage == 'source':
+        source.update(foreign)
+    elif stage == 'redirect':
+        source.update(deleted=True, sync_merged_into='parent')
+    elif stage == 'bridge':
+        source[callback.bridge_pending.FIELD] = {'target_id': 'parent'}
+
+    stored_source = {**source, **foreign} if stage == 'discard_transaction' else source
+    donor_path = (outbox.COLLECTION, key)
+    store = StrictFirestore(
+        {('users', 'u'): {}, source_path: stored_source, destination_path: destination, donor_path: rows[key]}
+    )
+    monkeypatch.setattr(callback.conversations_db, 'db', store)
+    monkeypatch.setattr(callback.conversations_db, 'get_firestore_client', lambda: store)
+    monkeypatch.setattr(outbox, 'get_firestore_client', lambda: store)
+    monkeypatch.setattr(callback, 'occasion_relevance_enabled', lambda: False)
+    monkeypatch.setattr(callback, 'fragment_rule', lambda _: ('discard', 'filler_only'))
+
+    def read_source(uid, conversation_id):
+        assert (uid, conversation_id) == ('u', 'c')
+        assert (PROCESS_CONTEXT.get() is not None) is claimed
+        return source
+
+    read = Mock(side_effect=read_source)
+    monkeypatch.setattr(callback.conversations_db, 'get_conversation', read)
+    processor = Mock()
+    index = Mock()
+    quiet_stop = Mock()
+    monkeypatch.setattr(callback, 'process_conversation', processor)
+    monkeypatch.setattr(callback.conversations_db, '_sync_conversation_search_index', index)
+    monkeypatch.setattr(callback.conversations_db, 'stop_quiet_check_for_conversation', quiet_stop)
+
+    if stage == 'redirect':
+        # The strict store backs redirect resolution and the custody transaction.
+        # Keep its copy of the donor claim in sync with the in-memory outbox lease.
+        transfer = custody.transfer_redirect
+
+        def transfer_claim(document, token, owner, canonical, *, now):
+            store.rows[donor_path]['owner'] = owner
+            return transfer(document, token, owner, canonical, now=now)
+
+        monkeypatch.setattr(custody, 'transfer_redirect', transfer_claim)
+        monkeypatch.setattr(callback.conversations_db, 'get_sync_redirected_conversation', lambda *_: destination)
+    elif stage == 'bridge':
+        monkeypatch.setattr(callback.bridge, 'sync_finalize_target_recovery_enabled', lambda: True)
+        bridge_read = Mock(side_effect=[{**source, 'sync_merged_into': 'parent'}, destination])
+        monkeypatch.setattr(callback.bridge, 'read_metadata', bridge_read)
+
+    wake = tasks[-1]['task_token']
+    result = run_push(EnrichmentConsumer(ENRICHMENT_OUTBOX), ENRICHMENT_OUTBOX, key, wake, now=700)
+
+    assert result.outcome == 'deferred'
+    assert rows[key]['deferred_reason'] == 'finalization_owned_elsewhere'
+    assert rows[key]['due_at'] > 700 and rows[key]['lease_until'] == 0
+    assert rows[key]['task_token'] == wake and outbox.ownership_parked(rows[key])
+    assert len(tasks) == 1
+    assert not any(transaction.has_written for transaction in store.transactions)
+    assert not store.rows[source_path].get('discarded')
+    assert not store.rows[destination_path].get('discarded')
+    assert (outbox.COLLECTION, outbox.key('u', 'parent')) not in store.rows
+    read.assert_called_once_with('u', 'c')
+    processor.assert_not_called()
+    index.assert_not_called()
+    quiet_stop.assert_not_called()
+
+
+def test_default_consumer_defers_a_processor_ownership_refusal(state, monkeypatch):
+    from types import SimpleNamespace
+
+    from models.finalization_owner import FinalizationOwnedElsewhere
+
+    rows, tasks = state
+    outbox.mark('u', 'c', 'en', now=100)
+    key = outbox.key('u', 'c')
+    rows[key]['summary_seen'] = True  # No PROCESS_CONTEXT for a follow-up.
+    monkeypatch.setattr(custody, 'discard_blocked', lambda _: False)
+    monkeypatch.setattr(callback.conversations_db, 'get_conversation', lambda *_: {'id': 'c'})
+    monkeypatch.setattr(callback, 'deserialize_conversation', lambda _: SimpleNamespace(discarded=False))
+    monkeypatch.setattr(callback, 'episodes_enabled_for', lambda _: False)
+    processor = Mock(side_effect=FinalizationOwnedElsewhere)
+    monkeypatch.setattr(callback, 'process_conversation', processor)
+
+    result = run_push(EnrichmentConsumer(ENRICHMENT_OUTBOX), ENRICHMENT_OUTBOX, key, tasks[-1]['task_token'], now=700)
+
+    assert result.outcome == 'deferred'
+    assert rows[key]['deferred_reason'] == 'finalization_owned_elsewhere'
+    assert rows[key]['lease_until'] == 0
+    processor.assert_called_once()

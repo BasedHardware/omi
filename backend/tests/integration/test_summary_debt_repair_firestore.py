@@ -76,6 +76,21 @@ def test_lost_enqueue_ack_and_expired_lease_preserve_deadline(debt_store, monkey
     assert reprocess.run(outbox.id, first['task_token'], lambda *_: output, now=300) == 'processed'
 
 
+@pytest.mark.parametrize('terminal', [False, True])
+def test_repair_preserves_v3_custody_settlement(debt_store, terminal):
+    client, uid, tasks, _ref, _row = debt_store
+    assert repair.redrive(client, uid, 'c', now=220)
+    outbox = client.collection(reprocess.COLLECTION).document(reprocess.key(uid, 'c'))
+    if terminal:
+        outbox.update({'dormant': True, 'due_at': None, 'held_reason': 'v3_custody_conflict'})
+    else:
+        outbox.update({'due_at': 400, 'deferred_reason': 'v3_custody_conflict'})
+    settled = outbox.get()
+    assert not repair.redrive(client, uid, 'c', now=300)
+    assert outbox.get().update_time == settled.update_time
+    assert len(tasks) == 1
+
+
 @pytest.mark.parametrize(
     'field,value',
     [

@@ -291,7 +291,10 @@ exception applies only to complete-census, entirely unreferenced audio with both
 clocks older than 67 days (`orphanReclaimAgeSeconds`), under David’s explicit ruling.
 
 The ledger's explicit foreground resume/15-minute recovery pass runs only after
-startup admission finishes; headless workers skip it. The shared read-only
+startup admission finishes; headless workers skip it. While live audio is arriving
+(a frame in the last minute) the pass runs at most every two hours instead, because
+its census walks every Documents file on the UI isolate (`orphanRecoveryDue`); it
+still runs, and the delay only defers adoption, never audio retention. The shared read-only
 inventory census runs outside the capture queue and includes active, retired,
 foreign, main, backup, temporary and quarantined rows, batch journals, native
 owner receipts, legacy jobs/preferences, ring checkpoint/download refs and

@@ -35,6 +35,7 @@ func finalizationFields(row map[string]any, patch Finalization) (map[string]any,
 	if patch.Overview != nil {
 		fields["structured.overview"] = effectiveOverview(row, *patch.Overview)
 	}
+	stageNotesFields(fields, patch)
 	return fields, refused
 }
 

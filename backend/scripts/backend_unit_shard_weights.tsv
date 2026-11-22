@@ -1825,9 +1825,7 @@ tests/unit/test_soniox_batch_async.py	2.7
 tests/unit/test_soniox_capture_axis_r10.py	12.7
 tests/unit/test_soniox_capture_axis_r11.py	16.7
 tests/unit/test_soniox_finalize_padding.py	12.7
-tests/unit/test_soniox_idle_arm.py	2.7
 tests/unit/test_soniox_idle_close.py	7.7
-tests/unit/test_soniox_idle_cohort.py	2.7
 tests/unit/test_soniox_idle_cost_reselect.py	11.7
 tests/unit/test_soniox_idle_reopen_capture.py	12.7
 tests/unit/test_soniox_language_hint_vocabulary.py	5.7

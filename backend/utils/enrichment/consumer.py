@@ -11,6 +11,7 @@ Mirrors ``utils.enrichment.outbox.run`` outcome for outcome, with every settleme
 | deferred (live target, missing) | DEFERRED not_due | ``defer`` at +120s |
 | redirected | STALE redirected | consumer: ``custody.transfer_redirect`` moved the obligation |
 | blocked (empty budget spent) | STALE empty_output_blocked | consumer: ``record_empty_failure`` retired it |
+| v3 custody conflict | DEFERRED / DISCARDED v3_custody_conflict | ``defer`` twice, then ``ack`` holds the row |
 | callback pending / empty output | RETRY callback_pending | ``release``: 409, the queue retry claims again |
 | transient Firestore / gateway fault | RETRY dependency_warming | ``release``: 409, the queue retry claims again |
 
@@ -32,9 +33,11 @@ from typing import Any, Callable, ClassVar, Iterator
 from fastapi import HTTPException
 
 from database.outbox import Claim, OutboxKind, Outcome
+from utils.enrichment.outbox import LIVE_DEFER_SECONDS, V3_CUSTODY_MAX_DEFERS
 from utils.observability.reasons import ConsumerReason, RetryReason
 from utils.workers.consumer import Result, Role
 from utils.sync import processing_hold
+from utils.sync.assignment_errors import SyncAssignmentConflict, SyncAssignmentConflictReason
 from utils.enrichment import early_abort
 
 logger = logging.getLogger(__name__)
@@ -184,6 +187,11 @@ class EnrichmentConsumer:
         try:
             return self._deliver(claim, heartbeat)
         except Exception as error:
+            if isinstance(error, SyncAssignmentConflict) and error.subtype == SyncAssignmentConflictReason.V3_CUSTODY:
+                reason = ConsumerReason.V3_CUSTODY_CONFLICT
+                if (claim.payload.get('v3_custody_defers') or 0) >= V3_CUSTODY_MAX_DEFERS:
+                    return Result(Outcome.DISCARDED, reason)
+                return Result(Outcome.DEFERRED, reason, available_at=time.time() + LIVE_DEFER_SECONDS)
             if not _transient_dependency(error):
                 raise
             logger.warning(
@@ -212,6 +220,13 @@ class EnrichmentConsumer:
                 try:
                     enrich_settled(uid, conversation_id, language)
                 except processing_hold.ProcessingDeferred as error:
+                    if error.reason == rows.FINALIZATION_OWNER_REFUSAL:
+                        return Result(
+                            Outcome.DEFERRED,
+                            ConsumerReason.NOT_DUE,
+                            available_at=error.available_at,
+                            defer_cause=error.reason,
+                        )
                     return Result(Outcome.DEFERRED, ConsumerReason.NOT_DUE, available_at=error.available_at)
             if lost.is_set():
                 return Result(Outcome.STALE, ConsumerReason.STALE_TOKEN)
@@ -263,7 +278,9 @@ class EnrichmentConsumer:
                     if output is not None and not summary_seen and not discarded and not blocked:
                         raise summary_delivery.SummaryOutputUnavailable('first-summary output is empty')
         except processing_hold.ProcessingDeferred as error:
-            return Result(Outcome.DEFERRED, ConsumerReason.NOT_DUE, available_at=error.available_at)
+            return Result(
+                Outcome.DEFERRED, ConsumerReason.NOT_DUE, available_at=error.available_at, defer_cause=error.reason
+            )
         except rows.FirstSummaryCallbackPending as error:
             return _callback_pending(_cause(error), now)
         except HTTPException as error:
@@ -335,6 +352,10 @@ class EnrichmentConsumer:
             try:
                 pending = transfer_redirect(
                     claim.row_id, claim.wake_token, claim.lease_token, str(context['redirect_to']), now=now
+                )
+            except processing_hold.ProcessingDeferred as error:
+                return Result(
+                    Outcome.DEFERRED, ConsumerReason.NOT_DUE, available_at=error.available_at, defer_cause=error.reason
                 )
             except rows.FirstSummaryCallbackPending as error:
                 return _callback_pending('redirect_' + _cause(error), now)

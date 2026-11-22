@@ -34,10 +34,6 @@
       "why": "Dispatch mode is set only on the running service (gcloud keeps undeclared env across deploys); declare it in the manifest to make this hop verifiable."
     },
     {
-      "key": "no-uid-literals|prod|helm/batch-pipeline-worker/BATCH_PIPELINE_MERGE_STALE_HEAD_UID_ALLOWLIST|uids=1",
-      "why": "Reviewed exception, owner's order 2026-11-18: the GPU pump is the other merge writer and carries the same canary uid as backend-integration (#25673; that one is bound on the service at deploy time, not in git). Delete when the worker chart drops mergeStaleHeadUidAllowlist, the skip ramps fleet-wide, or at its 2026-12-18 review."
-    },
-    {
       "key": "no-uid-literals|prod|cloud_run/backend/OMI_REFERRAL_CAMPAIGN_PREVIEW_UIDS|uids=3",
       "why": "Reviewed exception, Nik's order 2026-11-05: his own three accounts preview the read-only referral campaign on TestFlight against prod. Delete with the key once the TestFlight-channel preview gate ships."
     },
@@ -73,9 +69,15 @@
       "key": "no-uid-literals|prod|gke/pusher/TRANSCRIPTION_SHADOW_UID_ALLOWLIST|uids=1",
       "why": "Cohort UIDs predate this suite; moving cohorts to Firestore is in flight (#22075). Ratchet: no new keys."
     },
+    {"key": "reader-split|prod|helm/batch-pipeline-worker/BATCH_PIPELINE_FOLLOWUP_CLAIMED_SIBLING_SKIP_ENABLED", "why": "Reviewed 2026-11-21 (SCA-3544): only ProjectionFollowups reads it, constructed by Projector.start_followups and ProjectionOutbox on the Cloud Run serving/pump loops; diarizer/ never constructs a Projector or outbox, so the worker never executes it. Cloud Run pins false until David activates #25920."},
+    {"key": "reader-split|prod|helm/batch-pipeline-worker/BATCH_PIPELINE_SERVING_PROJECTION_SWEEP", "why": "Reviewed 2026-11-21 (SCA-3318 step 3): only Serving.reconcile (utils/batch_pipeline/serving.py) and projection_drain in 'serving' mode read it; diarizer/ never constructs Serving or registers a serving recurring sweep, so the GPU worker never executes it. Integration sets 'off' because the projection pump owns the sweep; the pump runs in 'pump' mode, which ignores it."},
     {
       "key": "reader-split|prod|helm/batch-pipeline-worker/BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED",
       "why": "Reviewed 2026-10-18: the worker imports projection only transitively (Pump/Scheduler never call Projection); the flag is not executed there."
+    },
+    {
+      "key": "reader-split|prod|helm/batch-pipeline-worker/BATCH_PIPELINE_PACKING_SAMPLE_RATE",
+      "why": "SCA-3548: preserve the live GPU worker's unset sampling rate on the depth-only roll. Cloud Run's sampling policy remains independent."
     },
     {
       "key": "task-target-retry-semantics|code|account-deletion/routers/users.py:run_account_deletion_wipe/500",

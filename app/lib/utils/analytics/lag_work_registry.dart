@@ -1,7 +1,7 @@
 import 'dart:developer' show Timeline;
 
 /// Code-owned labels only; never put recording IDs, paths or user content here.
-enum LagWork { sync, syncDownload, syncUpload, reconcilePoll, upload, walLoad, indexSave, indexFlush }
+enum LagWork { sync, syncDownload, syncUpload, reconcilePoll, upload, walLoad, indexSave, indexFlush, orphanCensus }
 
 final lagWork = LagWorkRegistry();
 

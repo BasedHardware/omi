@@ -842,6 +842,12 @@ checks:
     lanes: ["local", "ci"]
     platforms: ["linux", "macos"]
     reason: "Ray-Ban DAT launch collision requires the Meta and mcumgr SwiftProtobuf copies to remain in mutually exclusive iOS pod graphs"
+  - id: ios-bgtask-launch-registration
+    command: ["ruby", "app/ios/test/bgtask_launch_registration_test.rb"]
+    triggers: ["app/ios/Runner/AppDelegate.swift", "app/ios/Runner/OnDeviceOverflowPlugin.swift", "app/packages/flutter_background_service_ios/**", "app/pubspec.yaml", "app/ios/test/bgtask_launch_registration_test.rb", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    platforms: ["linux", "macos"]
+    reason: "Crashlytics 6c17570d/84b41824: every BGTask launch handler is registered once, from didFinishLaunching, even when the UIScene fallback resends didFinishLaunching to plugins"
   - id: ios-rayban-audio-capture
     command: ["ruby", "app/ios/test/rayban_audio_capture_test.rb"]
     triggers: ["app/ios/Runner/RayBanMeta/RayBanMetaAudioCapture.swift", "app/ios/test/rayban_audio_capture_test.rb", "app/ios/test/rayban_audio_capture_test.swift", "app/ios/test/fixtures/rayban_audio_avfoundation.swift", ".github/checks-manifest.yaml"]
@@ -1313,6 +1319,11 @@ checks:
     triggers: [".github/scripts/resolve-desktop-changelog-sync.py", ".github/scripts/test_resolve_desktop_changelog_sync.py", ".github/workflows/desktop_auto_release.yml", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "issue #11936: squash/orphan changelog recovery must not hard-fail every hourly retry or scan main history O(n)"
+  - id: desktop-changelog-approval-wait
+    command: ["python3", ".github/scripts/test_wait_for_changelog_approval.py"]
+    triggers: [".github/scripts/wait-for-changelog-approval.py", ".github/scripts/test_wait_for_changelog_approval.py", ".github/workflows/desktop_auto_release.yml", ".github/workflows/ui-author-approval.yml", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "SCA-3432: the hourly candidate planner must wait for the asynchronous UI author approval status on the exact changelog PR head and fail closed before any merge or tag on timeout, rejection, an unreadable status or a changed head"
   - id: desktop-candidate-source-gate
     command: ["python3", ".github/scripts/test_plan_desktop_release.py"]
     triggers: [".github/scripts/plan-desktop-release.py", ".github/scripts/test_plan_desktop_release.py", ".github/workflows/desktop_auto_release.yml", ".github/checks-manifest.yaml"]

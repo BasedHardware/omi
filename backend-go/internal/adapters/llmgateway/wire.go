@@ -80,7 +80,7 @@ func (c *client) request(ctx context.Context, g queue.Guarded, in Request) (*htt
 	req.GetBody = nil
 	req.Header.Set("Content-Type", "application/json")
 	c.authorize(req, g.Tenant())
-	key := requestID(g.Operation(in.Step))
+	key := OperationID(g, in.Step)
 	req.Header.Set(idempotencyHeader, key)
 	req.Header.Set("X-Omi-Request-Id", key)
 	req.Header.Set("X-Omi-LLM-Feature", string(payloadFeature(in)))
@@ -178,6 +178,11 @@ func setBYOK(req *http.Request, in Request) error {
 		return nil
 	}
 	return classify(CauseBYOK, 0, 0)
+}
+
+// OperationID returns the same UUID used by submission and recovery.
+func OperationID(g queue.Guarded, step string) string {
+	return requestID(g.Operation(step))
 }
 
 // The gateway replaces the queue's op_ form with a random ID. Use a stable RFC 9562

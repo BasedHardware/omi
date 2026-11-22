@@ -62,11 +62,15 @@ def list_runs(uid, *, firestore_client=None):
     ]
 
 
-def update_run(uid, run_id, *, status=None, partition=None, patch=None, expect=None, firestore_client=None):
+def update_run(
+    uid, run_id, *, status=None, partition=None, patch=None, expect=None, expected_drain_seq=None, firestore_client=None
+):
     """Record one step. `partition` is (index, fields) merged into that partition's counts.
 
     `expect` refuses the write unless the run is in one of those states, so a stopped run (undoing,
     undone, blocked) cannot be advanced by a late task.
+    `expected_drain_seq` also requires the partition to still be in notes at the observed sequence.
+    Use it for every notes continuation and commit, even when the scan cursor did not move.
     """
     client = firestore_client or get_firestore_client()
     ref = run_ref(client, uid, run_id)
@@ -85,7 +89,12 @@ def update_run(uid, run_id, *, status=None, partition=None, patch=None, expect=N
         if partition is not None:
             index, fields = partition
             partitions = [dict(p) for p in run.get('partitions') or []]
-            partitions[index] = {**partitions[index], **fields}
+            current = partitions[index]
+            if expected_drain_seq is not None and (
+                current.get('status') != 'notes' or int(current.get('drain_seq') or 0) != expected_drain_seq
+            ):
+                return None
+            partitions[index] = {**current, **fields}
             changes['partitions'] = partitions
         tx.update(ref, changes)
         return {**run, **changes}

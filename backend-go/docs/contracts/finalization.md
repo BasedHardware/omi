@@ -88,3 +88,25 @@ Types below are the Python wire types. Optional fields may be absent on legacy r
 ## What the source cannot establish
 
 The repository does not establish live task backoff settings, receiver compliance with integration idempotency, eventual delivery of executor-submitted tasks/webhooks after process loss, or retention of top-level job documents by infrastructure outside account-wipe code. Ordinary finalization has no observed job-lease renewal analogous to explicit merge renewal. An epoch guards against takeover; the Python status/generation/epoch predicate alone does not check elapsed wall time. Flag-dependent outcomes above require paired fixtures. No deployed configuration or customer data is required for these comparisons.
+
+## Ordinary sync ownership marker
+
+Python treats a row with neither `finalization_engine` nor `finalization_owner_epoch`
+as permanently Python-owned. An explicit `python` marker requires a positive
+integer epoch. Python declines finalization for every other marked row based on
+the conversation and job snapshots it already reads. The marker is internal and
+is excluded from the conversation API model and processor write payloads.
+
+The future sync admission transaction may select Go only for a canonical document
+that was created with the `pending` marker. It must never promote a legacy or
+Python-owned row. A producer that sees `pending` must return to the transactional
+owner decision even if its local allowlist is stale or its preceding RPC
+timed out. Either decision pins an engine. Handback increments the epoch and
+records Python ownership with durable Python retry debt. Retired Go job documents
+retain their `go` marker so that a delayed Python delivery cannot claim one.
+Deploy Python readers to every writer before creating any `pending` document.
+
+The empty-cohort Python path reads and writes the same Firestore documents as
+before. This change adds no Firestore queries, calls, or persisted fields to that
+path. Sync source assignment and intake episode attachment remain separate from
+finalization.

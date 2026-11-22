@@ -994,3 +994,20 @@ def test_quiet_empty_storage_proof_reads_archive_and_raw(store, monkeypatch, obj
     listing.assert_called_once_with(
         'synthetic', 'old', max_count=4096, require_archive=True, include_raw=True, source_metadata=True
     )
+
+
+def test_foreign_conversation_retires_python_quiet_check(store, monkeypatch):
+    quiet.arm('synthetic', 'old', 120, firestore_client=store)
+    store.rows[ROW].update(finalization_engine='go', finalization_owner_epoch=1)
+    before = dict(store.rows[ROW])
+    _advance(monkeypatch, 361)
+    job_id = checks.quiet_check_id('synthetic', 'old')
+
+    assert checks.evaluate_quiet_check(job_id, 1, firestore_client=store) == {
+        'status': 'done',
+        'reason': 'finalization_owned_elsewhere',
+    }
+    assert _job(store)['status'] == 'quiet_done'
+    assert _job(store)['dispatch_generation'] == 1
+    assert _job(store)['reconcile_after_at'] == firestore.DELETE_FIELD
+    assert store.rows[ROW] == before

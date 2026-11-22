@@ -10,6 +10,7 @@
 #                        listen-only fix without a full backend train. The push runs
 #                        in the same GitHub Environment as deploy, so the prod
 #                        registry keeps the prod approval and WIF binding.
+#   workerd-image-only  Publish only the admitted prod workerd image.
 #   repair-traffic-only  Restore Cloud Run traffic to the serving revisions.
 #   recover-pump-cap    SCA-3318 one-time service-level cap correction on the dark pump.
 
@@ -63,6 +64,7 @@ on:
         options:
           - deploy
           - build-only
+          - workerd-image-only
           - repair-traffic-only
           - operator-qualify-publish
           - recover-pump-cap
@@ -193,6 +195,7 @@ jobs:
     if: >-
       github.event.inputs.mode == 'deploy' ||
       github.event.inputs.mode == 'build-only' ||
+      github.event.inputs.mode == 'workerd-image-only' ||
       github.event.inputs.mode == 'recover-pump-cap'
     runs-on: ubuntu-latest
     steps:
@@ -243,6 +246,12 @@ jobs:
                 '{dispatch_control: $control, requested_source: $source, release_disposition: $disposition}'
               echo '```'
             } >> "$GITHUB_STEP_SUMMARY"
+          fi
+          if [[ "$WORKFLOW_MODE" == workerd-image-only ]]; then
+            if [[ "$DEPLOY_ENVIRONMENT" != prod || "$SKIP_ELIGIBILITY" == true || "$BREAK_GLASS_LOCK" == true ]]; then
+              echo 'workerd-image-only requires prod and normal release admission.' >&2
+              exit 1
+            fi
           fi
           INTEGRATION_ONLY=false
           INTEGRATION_IMAGE=''
@@ -438,13 +447,13 @@ jobs:
             --cloud-run-service backend-sync-backfill \
             --cloud-run-service backend-integration || true
 
-  # Source admission is shared by deploy and build-only so both modes enforce the
+  # Source admission is shared by deploy and image-only modes so they enforce the
   # one Release Eligibility proof (and break-glass audit) for the exact SHA.
   firestore_readiness:
     needs: validate-production-boundary
     if: >-
       github.ref == 'refs/heads/main' &&
-      (github.event.inputs.mode == 'deploy' || github.event.inputs.mode == 'build-only')
+      (github.event.inputs.mode == 'deploy' || github.event.inputs.mode == 'build-only' || github.event.inputs.mode == 'workerd-image-only')
     environment: ${{ github.event.inputs.environment == 'prod' && 'prod' || 'development' }}
     permissions:
       actions: 'read'
@@ -775,6 +784,73 @@ jobs:
             echo "Nothing was deployed. Roll backend-listen to this image with:"
             echo ""
             echo "\`gh workflow run gcp_backend_listen_helm.yml --ref main -f environment=${DEPLOY_ENVIRONMENT} -f branch=main -f mode=deploy -f image_tag=${SHORT_SHA}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  publish-workerd:
+    name: Build and publish workerd production image
+    needs: [validate-production-boundary, firestore_readiness]
+    if: >-
+      github.ref == 'refs/heads/main' &&
+      inputs.mode == 'workerd-image-only' &&
+      inputs.environment == 'prod' &&
+      needs.firestore_readiness.outputs.break_glass == 'false'
+    environment: prod
+    permissions:
+      contents: 'read'
+      id-token: 'write'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout admitted workerd source
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.firestore_readiness.outputs.admitted_sha }}
+          persist-credentials: false
+
+      - name: Google Auth (WIF)
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: projects/208440318997/locations/global/workloadIdentityPools/omi-gha-deploy-prod/providers/github
+          service_account: omi-ci-deployer-prod@based-hardware.iam.gserviceaccount.com
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v3
+        with:
+          project_id: ${{ vars.GCP_PROJECT_ID }}
+
+      - name: Configure Docker for GCR
+        run: gcloud auth configure-docker --quiet
+
+      - name: Publish admitted workerd image
+        env:
+          ADMITTED_SHA: ${{ needs.firestore_readiness.outputs.admitted_sha }}
+        run: |
+          set -euo pipefail
+          [[ "$ADMITTED_SHA" =~ ^[a-f0-9]{40}$ && "$(git rev-parse HEAD)" == "$ADMITTED_SHA" ]]
+          repository="gcr.io/based-hardware/workerd"
+          image="$repository:${ADMITTED_SHA:0:7}"
+
+          if digest="$(gcloud container images describe "$image" --format='value(image_summary.digest)' 2>"$RUNNER_TEMP/workerd-describe.err")"; then
+            [[ "$digest" =~ ^sha256:[a-f0-9]{64}$ ]]
+            revision="$(docker buildx imagetools inspect "$repository@$digest" --format '{{ index .Image.Config.Labels "org.opencontainers.image.revision" }}')"
+            if [[ "$revision" != "$ADMITTED_SHA" ]]; then
+              echo "::error::Existing workerd tag has a different source revision."
+              exit 1
+            fi
+          elif grep -qF "[${image}] is not found or is not a valid name" "$RUNNER_TEMP/workerd-describe.err"; then
+            docker build --platform linux/amd64 --label "org.opencontainers.image.revision=$ADMITTED_SHA" \
+              --tag "$image" --file backend-go/Dockerfile backend-go
+            docker push "$image"
+            digest="$(gcloud container images describe "$image" --format='value(image_summary.digest)')"
+            [[ "$digest" =~ ^sha256:[a-f0-9]{64}$ ]]
+          else
+            cat "$RUNNER_TEMP/workerd-describe.err" >&2
+            exit 1
+          fi
+
+          {
+            echo "### Workerd production image published"
+            echo "- Source SHA: \`$ADMITTED_SHA\`"
+            echo "- Image: \`$repository@$digest\`"
           } >> "$GITHUB_STEP_SUMMARY"
 
   # Plan B B2 release train: build-only also publishes every role image

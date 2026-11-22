@@ -27,6 +27,7 @@ from utils.enrichment import callback  # noqa: F401 (heavy import at collection 
 from utils.enrichment import consumer as consumer_module
 from utils.enrichment import custody
 from utils.enrichment import outbox as reprocess
+from utils.sync.assignment_errors import SyncAssignmentConflict, SyncAssignmentConflictReason
 from utils.workers.consumer import run_push
 
 KEY = reprocess.key('u', 'c')
@@ -287,12 +288,75 @@ def test_long_stuck_live_target_polls_hourly_through_the_consumer(rows, monkeypa
     assert state_rows[KEY]['due_at'] == pytest.approx(time.time() + reprocess.STUCK_DEFER_POLL_SECONDS, abs=5)
 
 
-def test_unexpected_errors_stay_5xx_and_keep_the_lease(rows, client, monkeypatch):
-    monkeypatch.setattr(
-        consumer_module.EnrichmentConsumer, '_callback', lambda self: Mock(side_effect=RuntimeError('synthetic'))
+def _v3_custody_conflict():
+    return SyncAssignmentConflict(
+        'explicit redirect would strand v3 custody', subtype=SyncAssignmentConflictReason.V3_CUSTODY
     )
+
+
+def test_v3_custody_conflict_defers_then_parks_without_a_5xx(rows, client, monkeypatch):
+    state_rows, tasks = rows
+    state_rows[KEY]['claim_attempts'] = 99  # Other delivery attempts take none of the custody budget.
+    now = 10_000.0
+    clock = SimpleNamespace(time=lambda: now, monotonic=time.monotonic)
+    monkeypatch.setattr(route, 'time', clock)
+    monkeypatch.setattr(consumer_module, 'time', clock)
+    process = Mock(side_effect=_v3_custody_conflict())
+    monkeypatch.setattr(consumer_module.EnrichmentConsumer, '_callback', lambda self: process)
+
+    def post(token):
+        return client.post('/v2/enrichment/run', json={'kind': 'enrichment', 'key': KEY, 'task_token': token})
+
+    for count in (1, 2):
+        token = state_rows[KEY]['task_token']
+        response = post(token)
+        assert response.status_code == 200
+        assert response.json() == {'status': 'deferred', 'reason': 'v3_custody_conflict'}
+        row = state_rows[KEY]
+        assert row['v3_custody_defers'] == count and row['deferred_reason'] == 'v3_custody_conflict'
+        assert row['lease_until'] == 0 and row['task_token'] != token
+        assert row['due_at'] == now + reprocess.LIVE_DEFER_SECONDS
+        assert tasks[-1]['task_token'] == row['task_token']
+        assert post(token).json()['status'] == 'stale'
+        now = row['due_at']
+
+    token = state_rows[KEY]['task_token']
+    response = post(token)
+    assert response.status_code == 200
+    assert response.json() == {'status': 'discarded', 'reason': 'v3_custody_conflict'}
+    row = state_rows[KEY]
+    assert row['dormant'] and row['held_reason'] == 'v3_custody_conflict'
+    assert row['due_at'] is None and row['lease_until'] == 0 and row['owner'] is None
+    assert row['uid'] == 'u' and row['conversation_id'] == 'c'
+    assert post(token).json()['status'] == 'stale'
+    assert process.call_count == 3 and len(tasks) == 3
+
+    reprocess.mark('u', 'c', 'en', now=now + 1)
+    row = state_rows[KEY]
+    assert not row['dormant'] and 'held_reason' not in row and 'v3_custody_defers' not in row
+
+
+def test_v3_custody_terminal_attempt_keeps_a_concurrent_new_version(rows):
+    state_rows, _tasks = rows
+    state_rows[KEY]['v3_custody_defers'] = reprocess.V3_CUSTODY_MAX_DEFERS
+    token = state_rows[KEY]['task_token']
+
+    def append_then_conflict(*args):
+        reprocess.mark(*args, now=10_001.0)
+        raise _v3_custody_conflict()
+
+    _deliver(rows, append_then_conflict)
+    assert state_rows[KEY]['version'] == 2 and not state_rows[KEY]['dormant']
+    assert state_rows[KEY]['lease_until'] == 0 and state_rows[KEY]['task_token'] != token
+    assert _deliver(rows, lambda *_: SUMMARY, now=20_000.0).outcome == 'done'
+    assert state_rows[KEY]['summary_seen'] and 'v3_custody_defers' not in state_rows[KEY]
+
+
+@pytest.mark.parametrize('error', [RuntimeError('synthetic'), SyncAssignmentConflict('synthetic redirect cycle')])
+def test_unexpected_errors_stay_5xx_and_keep_the_lease(rows, client, monkeypatch, error):
+    monkeypatch.setattr(consumer_module.EnrichmentConsumer, '_callback', lambda self: Mock(side_effect=error))
     token = rows[0][KEY]['task_token']
-    with pytest.raises(RuntimeError):
+    with pytest.raises(type(error), match=str(error)):
         client.post('/v2/enrichment/run', json={'kind': 'enrichment', 'key': KEY, 'task_token': token})
     assert rows[0][KEY]['lease_until'] > 0  # the sweep re-wakes after expiry
 

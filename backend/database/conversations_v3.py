@@ -7,10 +7,11 @@ codec; cached outlines are encrypted. Nothing is cleared after a lost race.
 import json
 import logging
 import os
+import time
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from google.api_core.exceptions import InvalidArgument
+from google.api_core.exceptions import DeadlineExceeded, InvalidArgument
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
@@ -21,6 +22,7 @@ from database.conversations_v3_undo_removals import removal_ref
 from database.home_feed_fields import COMMIT_STAMPED_FIELDS
 from database.account_deletion_marker import account_deletion_blocks_user_work, account_deletion_document
 from database.account_deletion_policy import account_deletion_marker_blocks_access
+from models.finalization_owner import ENGINE_FIELD, EPOCH_FIELD, python_owns_finalization
 from utils.encryption import encrypt, decrypt
 from config.conversations_v3 import boundary_seconds, stretch_cohesion_enabled
 from utils.conversations.v3 import Conflict, policy, preview_wakes
@@ -83,8 +85,8 @@ def merge_donors_have_tasks(uid, donor_ids, *, firestore_client=None, transactio
     return False
 
 
-def decode_row(uid, snapshot) -> dict[str, Any] | None:
-    data = snapshot.to_dict() or {}
+def decode_row(uid, snapshot, *, data=None) -> dict[str, Any] | None:
+    data = (snapshot.to_dict() or {}) if data is None else data
     if not snapshot.exists:
         return None
     data.setdefault('id', snapshot.id)
@@ -1181,16 +1183,38 @@ def backfill_window_metadata(uid, since, until, *, firestore_client=None):
     return [{**(snapshot.to_dict() or {}), 'id': snapshot.id} for snapshot in snapshots]
 
 
-def pending_backfill_processing(uid, *, firestore_client=None):
-    """Backfilled rows whose notes are owed; the live sweep and live drain never read this marker."""
+def pending_backfill_processing(uid, *, after=None, deadline=float('inf'), firestore_client=None):
+    """Read one backfill page and its next cursor. None means the budget expired."""
+    if time.monotonic() >= deadline:
+        return None
     client = firestore_client or get_firestore_client()
-    return [
-        decode_row(uid, doc)
-        for doc in user_conversations(client, uid)
-        .where(filter=FieldFilter('v3_backfill_process_pending', '==', True))
-        .limit(LIMIT)
-        .stream()
-    ]
+    conversations = user_conversations(client, uid)
+    query = conversations.where(filter=FieldFilter('v3_backfill_process_pending', '==', True))
+    if after is not None:
+        query = query.order_by('__name__').start_after({'__name__': conversations.document(after)})
+    timeout = min(60.0, deadline - time.monotonic())
+    if timeout <= 0:
+        return None
+    rows = []
+    tail = None
+    size = 0
+    try:
+        for snapshot in query.limit(LIMIT).stream(timeout=timeout, retry=None):
+            if time.monotonic() >= deadline:
+                return None
+            raw = snapshot.to_dict() or {}
+            if python_owns_finalization(raw):
+                row = decode_row(uid, snapshot, data=raw)
+            else:
+                # Foreign debt only needs an ownership marker for discovery.
+                row = {key: raw[key] for key in (ENGINE_FIELD, EPOCH_FIELD) if key in raw}
+            if row:
+                rows.append(row)
+            tail = snapshot.id
+            size += 1
+    except DeadlineExceeded:
+        return None
+    return rows, tail if size == LIMIT else None
 
 
 def backfill_run_documents(uid, run_id, *, firestore_client=None):

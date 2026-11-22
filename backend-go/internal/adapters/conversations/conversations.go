@@ -10,6 +10,7 @@ import (
 
 	"github.com/BasedHardware/omi/backend-go/internal/platform/crypt"
 	"github.com/BasedHardware/omi/backend-go/internal/platform/docstore"
+	"github.com/BasedHardware/omi/backend-go/internal/platform/objectlake"
 	"github.com/BasedHardware/omi/backend-go/internal/queue"
 )
 
@@ -51,39 +52,49 @@ const (
 
 // Conversation is the stored conversation view for finalization.
 type Conversation struct {
-	Revision             Revision
-	Status               Status
-	FinalizationStatus   FinalizationStatus
-	FinalizationJobID    string
-	FinalizationRevision int64
-	SyncContentRevision  int64
-	ProtectionLevel      string
-	Discarded            bool
-	Title                string
-	Overview             string
-	CreatedAt            time.Time
-	StartedAt            time.Time
-	FinishedAt           time.Time
-	SummaryCoversThrough time.Time
-	Transcript           []json.RawMessage
+	Revision                        Revision
+	Status                          Status
+	FinalizationStatus              FinalizationStatus
+	FinalizationJobID               string
+	FinalizationRevision            int64
+	SyncContentRevision             int64
+	ProtectionLevel                 string
+	Discarded                       bool
+	Title                           string
+	Overview                        string
+	Sections                        []string
+	NotesInputHash, NotesOutputHash string
+	CreatedAt                       time.Time
+	StartedAt                       time.Time
+	FinishedAt                      time.Time
+	SummaryCoversThrough            time.Time
+	Transcript                      []json.RawMessage
 }
 
 // Finalization is a partial update. Nil fields leave the corresponding Firestore fields alone.
 type Finalization struct {
-	Status               *Status
-	FinalizationStatus   *FinalizationStatus
-	Discarded            *bool
-	Title                *string
-	Overview             *string
-	FinishedAt           *time.Time
-	SummaryCoversThrough *time.Time
+	Status                          *Status
+	FinalizationStatus              *FinalizationStatus
+	Discarded                       *bool
+	Title                           *string
+	Overview                        *string
+	Sections                        *[]string
+	NotesInputHash, NotesOutputHash *string
+	FinishedAt                      *time.Time
+	SummaryCoversThrough            *time.Time
+}
+
+// TranscriptReader resolves a transcript pointer under the original read guard.
+type TranscriptReader interface {
+	Read(ctx context.Context, live docstore.Live, owner, conversation string, pointer map[string]any) ([]json.RawMessage, error)
 }
 
 // Store implements guarded Load and ApplyFinalization ports. A consumer defines the
 // interface alongside its other ports.
 type Store struct {
-	Docs  *docstore.Store
-	Codec crypt.Codec
+	Docs    *docstore.Store
+	Codec   crypt.Codec
+	Offload TranscriptReader
 }
 
 // Load reads an existing, readable conversation for the guarded owner.
@@ -95,13 +106,13 @@ func (s Store) Load(ctx context.Context, g queue.Guarded, ref Ref) (Conversation
 	var row map[string]any
 	err = s.Docs.Fenced(ctx, g, ref.Owner, func(tx *docstore.Tx) error {
 		var getErr error
-		row, getErr = get(tx, path)
+		row, getErr = get(tx, ref, path)
 		return getErr
 	})
 	if err != nil {
 		return Conversation{}, classify(err)
 	}
-	result, err := s.decode(ref, row)
+	result, err := s.decode(ctx, g, ref, row)
 	if err != nil {
 		return Conversation{}, classify(err)
 	}
@@ -109,6 +120,26 @@ func (s Store) Load(ctx context.Context, g queue.Guarded, ref Ref) (Conversation
 		return Conversation{}, err
 	}
 	return result, nil
+}
+
+// CheckLive rechecks the primary row and deletion intent before a gateway call.
+func (s Store) CheckLive(ctx context.Context, g queue.Guarded, ref Ref, jobID string, revision int64) error {
+	path, err := docstore.Doc("users", ref.Owner, "conversations", ref.ID)
+	if err != nil {
+		return classify(err)
+	}
+	return classify(s.Docs.Fenced(ctx, g, ref.Owner, func(tx *docstore.Tx) error {
+		row, err := get(tx, ref, path)
+		if err != nil {
+			return err
+		}
+		status := Status(field[string](row, "status"))
+		if (status != Processing && status != Completed) || field[bool](row, "discarded") ||
+			field[string](row, "finalization_job_id") != jobID || field[int64](row, "finalization_revision") != revision {
+			return docstore.ErrMissing
+		}
+		return nil
+	}))
 }
 
 // ApplyFinalization updates the existing conversation if its stored contents still match
@@ -123,7 +154,7 @@ func (s Store) ApplyFinalization(ctx context.Context, g queue.Guarded, revision 
 	}
 	var refused bool
 	err = s.Docs.Fenced(ctx, g, ref.Owner, func(tx *docstore.Tx) error {
-		row, getErr := get(tx, path)
+		row, getErr := get(tx, ref, path)
 		if getErr != nil {
 			return getErr
 		}
@@ -150,13 +181,25 @@ func (s Store) ApplyFinalization(ctx context.Context, g queue.Guarded, revision 
 	return classify(err)
 }
 
-func get(tx *docstore.Tx, path docstore.Ref) (map[string]any, error) {
+func get(tx *docstore.Tx, ref Ref, path docstore.Ref) (map[string]any, error) {
+	tombstone, err := docstore.Doc("users", ref.Owner, "deleted_conversations", ref.ID)
+	if err != nil {
+		return nil, err
+	}
+	var marker map[string]any
+	deleted, err := tx.Get(tombstone, &marker)
+	if err != nil {
+		return nil, err
+	}
+	if deleted {
+		return nil, docstore.ErrMissing
+	}
 	var row map[string]any
 	found, err := tx.Get(path, &row)
 	if err != nil {
 		return nil, err
 	}
-	if !found || field[bool](row, "deleted") {
+	if !found || field[bool](row, "deleted") || field[bool](row, "is_deleted") {
 		return nil, docstore.ErrMissing
 	}
 	if field[bool](row, "is_locked") || field[string](row, "data_protection_level") == "private" {
@@ -212,15 +255,16 @@ func classify(err error) error {
 		return queue.Classify(err, queue.Hold(CauseOwnerDeleting, time.Minute))
 	case errors.Is(err, docstore.ErrMissing):
 		return queue.Classify(err, queue.Fail(CauseMissing))
-	case errors.Is(err, ErrChanged):
+	case errors.Is(err, ErrChanged), errors.Is(err, objectlake.ErrChanged):
 		return queue.Classify(err, queue.Retry(CauseChanged, 0))
 	case errors.Is(err, ErrPointer):
 		return queue.Classify(err, queue.Fail(CausePointer))
-	case errors.Is(err, ErrRestricted):
+	case errors.Is(err, ErrRestricted), errors.Is(err, objectlake.ErrRestricted):
 		return queue.Classify(err, queue.Fail(CauseRestricted))
-	case errors.Is(err, crypt.ErrUnreadable), errors.Is(err, ErrUndecodable):
+	case errors.Is(err, crypt.ErrUnreadable), errors.Is(err, ErrUndecodable), errors.Is(err, objectlake.ErrCorrupt),
+		errors.Is(err, objectlake.ErrAbsent), errors.Is(err, objectlake.ErrShredded):
 		return queue.Classify(err, queue.Fail(CauseUnreadable))
-	case errors.Is(err, docstore.ErrExists), errors.Is(err, context.DeadlineExceeded),
+	case errors.Is(err, docstore.ErrExists), errors.Is(err, context.DeadlineExceeded), errors.Is(err, objectlake.ErrUnavailable),
 		errors.As(err, &fault) && fault.Kind == docstore.KindTransient:
 		return queue.Classify(err, queue.Retry(CauseUnavailable, 0))
 	default:

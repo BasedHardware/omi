@@ -1432,6 +1432,8 @@ FIELD_SITES = {
                 'updated_at',
             ),
         ),
+        ('_record_meeting_receipt_txn', 'status', "'fenced'", ('status',)),
+        ('_record_meeting_receipt_txn', 'status', "'fenced'", ('status',)),
         ('_record_meeting_receipt_txn', 'status', "'identity_mismatch'", ('status',)),
         ('_record_meeting_receipt_txn', 'status', "'missing'", ('status',)),
         ('_record_meeting_receipt_txn', 'status', "'recorded'", ('job_id', 'status')),
@@ -1654,6 +1656,7 @@ FIELD_SITES = {
         # Dark quiet-check retirement names the orphan-repair exit; it does
         # not terminalize the capture or create another arm site.
         ('_evaluate_quiet_check.evaluate', 'status', "'done'", ('exit', 'reason', 'status')),
+        ('_evaluate_quiet_check.evaluate', 'status', "'done'", ('reason', 'status')),
         ('_evaluate_quiet_check.evaluate', 'status', "'done'", ('reason', 'status')),
         ('_evaluate_quiet_check.evaluate', 'status', "'done'", ('reason', 'status')),
         ('_evaluate_quiet_check.evaluate', 'status', "'done'", ('status',)),

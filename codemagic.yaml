@@ -387,12 +387,8 @@ workflows:
         credentials: $GCLOUD_SERVICE_ACCOUNT_CREDENTIALS
         track: "internal"
         submit_as_draft: false
-        # Codemagic android-internal-auto builds on 2026-10-28 at 03:18Z,
-        # 05:55Z and 06:24Z uploaded bundles but failed at Publishing:
-        # "Changes cannot be sent for review automatically. Please set the
-        # query parameter changesNotSentForReview to true." Hold for the
-        # required Play Console Send changes for review press.
-        changes_not_sent_for_review: true
+        # No changes_not_sent_for_review: since 2026-11-21 Play auto-sends
+        # changes for review and rejects the parameter ("must not be set").
 
   # ============================================
   # PRODUCTION RELEASE WORKFLOWS (Triggered by tags)

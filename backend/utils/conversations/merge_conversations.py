@@ -31,6 +31,7 @@ from database.vector_db import delete_action_item_vectors_batch, delete_vector
 from models.audio_file import AudioFile
 from models.conversation import Conversation
 from models.conversation_enums import ConversationStatus
+from models.finalization_owner import FinalizationOwnedElsewhere, python_owns_finalization
 from models.structured import Structured
 from utils.memory.memory_service import MemoryService
 from utils.metrics import OMI_SYNC_BRIDGE_AUDIO_COPY_TOTAL
@@ -255,6 +256,8 @@ def perform_merge_async(
         for conv_id in conversation_ids:
             conv = read_product_conversation(conversations_db.get_conversation, uid, conv_id)
             if conv:
+                if not python_owns_finalization(conv):
+                    raise FinalizationOwnedElsewhere()
                 conversations.append(conv)
 
         if len(conversations) < 2:
@@ -451,6 +454,8 @@ def perform_merge_async(
                         trigger=ProcessingTrigger.MERGE,
                         created_webhook_observer=created_webhook_sends.append,
                     )
+            except FinalizationOwnedElsewhere:
+                raise
             except Exception as e:
                 logger.error(f"Error processing merged conversation: {e}")
                 # Even if processing fails, continue with cleanup
@@ -520,6 +525,12 @@ def perform_merge_async(
 
         return True if merge_job_id else None
 
+    except FinalizationOwnedElsewhere:
+        logger.info('event=conversation_merge outcome=deferred reason=finalization_owned_elsewhere')
+        if merge_job_id is not None:
+            return False  # Durable recovery owns release of the source claims.
+        _handle_merge_failure(uid, conversation_ids)
+        return None
     except Exception as e:
         if merge_job_id is not None:
             # Recovery alone owns rollback of durable claims. A stale worker

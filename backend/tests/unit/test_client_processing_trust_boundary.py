@@ -643,6 +643,9 @@ PINNED_CONVERSATION_FIELDS: FrozenSet[str] = frozenset(
         'uses_custom_stt',
         # Server-only route arbitration metadata; Conversation marks it excluded from dumps.
         'record_lane_owner',
+        # Server-only finalization ownership. Both fields are excluded from dumps and wire schemas.
+        'finalization_engine',
+        'finalization_owner_epoch',
         # Server-authored partial audio proof metadata, not client display text.
         'record_audio_partial',
         'structured',

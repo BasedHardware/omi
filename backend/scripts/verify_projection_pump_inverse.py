@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Verify the live dark projection-pump revision before using it as an inverse."""
+"""Verify the live projection-pump revision before using it as an inverse (dark, or activated once pinned)."""
 
 from __future__ import annotations
 
@@ -21,6 +21,20 @@ DARK_ENV = {
     'FIRESTORE_READ_LEDGER_SERVICE': SERVICE,
     'OMI_PROCESS_ROLE': PROCESS_ROLE,
 }
+PUMP_FLAG = 'BATCH_PIPELINE_PROJECTION_PUMP_ENABLED'
+# SCA-3318: after step 2 the pinned, routed inverse is the activated pump. Only its pump flag may
+# differ from DARK_ENV, and only as the exact literal 'true'. A base before its first pin and a new
+# create stay dark.
+ACTIVE_ENV = {**DARK_ENV, PUMP_FLAG: 'true'}
+
+
+def expected_routed_env(app: Mapping[str, Any], *, pinned_disposition: bool) -> Mapping[str, str]:
+    if not pinned_disposition:
+        return DARK_ENV
+    flags = [e for e in app.get('env', []) if e.get('name') == PUMP_FLAG]
+    if len(flags) == 1 and 'valueFrom' not in flags[0] and flags[0].get('value') == 'true':
+        return ACTIVE_ENV
+    return DARK_ENV
 
 
 @dataclass(frozen=True)
@@ -79,7 +93,7 @@ def verify(
         status.get('latestReadyRevisionName') != expected.revision
         or status.get('latestCreatedRevisionName') != expected.revision
     ):
-        raise ValueError('LATEST does not resolve to the newly created base')
+        raise ValueError('LATEST does not resolve to the expected base revision')
 
     metadata = revision.get('metadata', {})
     if (
@@ -108,7 +122,7 @@ def verify(
         service,
         iam_policy,
         revision=expected.revision,
-        manifest_env=DARK_ENV,
+        manifest_env=expected_routed_env(app, pinned_disposition=bool(expected.disposition) and not before_first_pin),
         revision_document=revision,
     )
     if errors:
@@ -134,14 +148,16 @@ def main() -> int:
     parser.add_argument('--before-first-pin', action='store_true')
     parser.add_argument('--snapshot', type=Path, help='Capture the exact verified traffic readback for restoration')
     args = parser.parse_args()
-    if args.before_first_pin and (not args.new_base or args.snapshot):
-        parser.error('LATEST is allowed only when verifying a newly created base before its pin')
+    if args.before_first_pin and args.snapshot:
+        parser.error('LATEST is allowed only when verifying a base before its pin')
     try:
         expected = (
             ExpectedInverse(*args.new_base) if args.new_base else ExpectedInverse.from_disposition(args.disposition)
         )
-        if args.new_base and not expected.revision.endswith('-base'):
-            raise ValueError('expected the newly created base revision')
+        if (args.new_base or args.before_first_pin) and not expected.revision.endswith('-base'):
+            # A pre-pin check (a new create, or an existing service still routed via LATEST,
+            # SCA-3318) is only ever for the dark base revision.
+            raise ValueError('expected the base revision before its pin')
         service = _read(args.project, args.region, 'services', 'describe', SERVICE)
         revision = _read(args.project, args.region, 'revisions', 'describe', expected.revision)
         iam = _read(args.project, args.region, 'services', 'get-iam-policy', SERVICE)
@@ -160,7 +176,7 @@ def main() -> int:
         print('Stop and record a Release disposition before recovering an existing pump service.', file=sys.stderr)
         return 1
 
-    print(f'Verified dark serving revision {expected.revision}, source {expected.source}, image {expected.image}.')
+    print(f'Verified serving pump inverse {expected.revision}, source {expected.source}, image {expected.image}.')
     if expected.disposition:
         print(f'Release disposition (operator-supplied): {expected.disposition}')
     return 0

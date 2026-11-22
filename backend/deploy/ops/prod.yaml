@@ -1,13 +1,14 @@
 # Production ops values (B4). Applied only by the config-train
 # (.github/workflows/config_train.yml -> backend/scripts/ops_train.py).
 #
-# Ownership: every value here is `owner: ops`. A backend train must not
-# change it, and an out-of-band edit is break-glass followed by a same-day PR
+# Ownership: every value here is `owner: ops`. A backend train must honor
+# these values, and an out-of-band edit is break-glass followed by a same-day PR
 # to this file. Cohorts, percents and allowlists never live here; they live in
 # Firestore `rollout_cohorts` (ruling #8).
 #
 # Schema (validated by ops_train.py; unknown keys are rejected):
 #   cloud_run.<service>.env.<KEY>: string        ops-owned env value on the serving revision
+#   cloud_run.<service>.memory: Mi or Gi limit    ingress container memory
 #   cloud_run.<service>.max_instances: int        service-level run.googleapis.com/maxScale
 #     or {owner: <controller>, floor: int, ceiling: int}
 #                                                 a live controller owns the value; the
@@ -19,7 +20,7 @@
 #     Omitted fields are not managed. enabled: false declares a queue that the
 #     config-train must neither create nor update yet.
 #
-# Every env change creates a revision from the service template and routes 100%
+# Every env or memory change creates a revision from the service template and routes 100%
 # of traffic to that named revision explicitly: backend-sync-backfill pins
 # traffic to a named revision, so an unrouted env update never serves (10-19
 # 04:52Z). The config-train refuses when the template differs from the serving
@@ -37,6 +38,7 @@ region: us-central1
 # live_only.yaml instead; they belong in runtime_env.
 cloud_run:
   backend:
+    memory: 3Gi
     env:
       # live-only, 2026-10-20 inventory
       AUDIO_MERGE_DISPATCH_MODE: cloud_tasks
@@ -52,6 +54,7 @@ cloud_run:
       OMI_LANGSMITH_PROMPT_CACHE_TTL_SECONDS: '3600'
       TYPESENSE_HOST_PORT: '443'
   backend-sync:
+    memory: 3Gi
     env:
       # 10-18 18:59Z stall: sync-jobs went into Cloud Tasks system backoff after
       # fast 500s. Root fix is the 409 retry contract (#22371).

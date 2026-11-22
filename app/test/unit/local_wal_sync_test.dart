@@ -253,6 +253,13 @@ void main() {
   });
 
   group('onFrameCaptured', () {
+    test('a captured frame backs the orphan census off to its streaming interval', () {
+      sync.testLastOrphanRecoveryWake = DateTime.now().subtract(const Duration(minutes: 20));
+      expect(sync.orphanRecoveryDueNow, isTrue, reason: 'idle: the 15-minute census is due');
+      sync.onFrameCaptured(WalFrame(payload: [0xAA], syncKey: FrameSyncKey([1])));
+      expect(sync.orphanRecoveryDueNow, isFalse, reason: 'live audio arriving: at most every two hours');
+    });
+
     test('adds frame with synced=false', () {
       final frame = WalFrame(payload: [0xAA, 0xBB], syncKey: FrameSyncKey([1]));
 
