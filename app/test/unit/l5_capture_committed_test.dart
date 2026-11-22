@@ -52,12 +52,12 @@ void main() {
     AnalyticsManager.resetForTesting();
     await directory.delete(recursive: true);
   });
-  test('cached serving and deleting opt-ins fail closed across an identity change', () async {
-    final adapter = await setRefactorFlags({'clients_refactor': true});
-    expect(AnalyticsManager().refactorClientsEnabled('clients_refactor'), isTrue);
-    adapter.onCachedRead = () => AnalyticsManager().bindIdentity('successor');
-    expect(AnalyticsManager().refactorClientsEnabled('clients_refactor'), isFalse);
-    expect(await AnalyticsManager().isBooleanFeatureEnabled('custody_capture_committed_release'), isFalse);
+  test('a custody opt-in fails closed after an identity change', () async {
+    const flag = 'custody_capture_committed_release';
+    await setRefactorFlags({flag: true});
+    expect(await AnalyticsManager().isBooleanFeatureEnabled(flag), isTrue);
+    AnalyticsManager().bindIdentity('successor');
+    expect(await AnalyticsManager().isBooleanFeatureEnabled(flag), isFalse);
   });
   test('socket parser validates ranges and preserves source identity', () {
     final event = MessageEvent.fromJson(receipt(0, 100).toJson());

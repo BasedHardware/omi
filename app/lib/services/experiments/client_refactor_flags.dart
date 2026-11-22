@@ -3,7 +3,6 @@ import 'package:omi/utils/logger.dart';
 
 /// PostHog owns the cohort. Unknown values keep the old serving behavior.
 abstract final class ClientRefactorFlags {
-  static bool get serving => AnalyticsManager().refactorClientsEnabled(_ClientProjection.enabledFlag);
   static Future<bool> chunkUploads() => AnalyticsManager().isBooleanFeatureEnabled(_SegmentChunks.enabledFlag);
   // Data release is an opt-in, never a default-on kill switch.
   static Future<bool> custodyRelease() => AnalyticsManager().isBooleanFeatureEnabled(_CustodyRelease.enabledFlag);
@@ -14,10 +13,6 @@ abstract final class ClientRefactorFlags {
 }
 
 // Named enable keys keep the repository flag inventory mechanically discoverable.
-abstract final class _ClientProjection {
-  static const enabledFlag = 'clients_refactor';
-}
-
 abstract final class _SegmentChunks {
   static const enabledFlag = 'clients_from_segments_chunks';
 }

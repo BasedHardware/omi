@@ -1,43 +1,9 @@
 import Foundation
-import GRDB
 import XCTest
 
 @testable import Omi_Computer
 
 final class ClientCaptureRefactorTests: XCTestCase {
-  func testExplicitOwnerAndRetractionWithLegacyFallback() {
-    XCTAssertEqual(ResolvedSpeakerLabel(personID: nil, isUser: true, retracted: false).liveMapValue, "user")
-    XCTAssertFalse(ResolvedSpeakerLabel(personID: "user", isUser: false, retracted: false).isUser)
-    let retracted = ResolvedSpeakerLabel(personID: "", isUser: true, retracted: true)
-    XCTAssertNil(retracted.liveMapValue)
-    XCTAssertFalse(retracted.isUser)
-    let segment = SpeakerSegment(segmentId: "s", speaker: 1, text: "synthetic", start: 0, end: 1)
-    let owner = ResolvedSpeakerLabel(personID: "user", isUser: nil, retracted: false).apply(to: segment)
-    XCTAssertEqual(
-      SpeakerLabelFormatter(names: [:]).label(isUser: owner.isUser, personId: owner.personId, speakerId: 1), "You")
-    let explicitOther = ResolvedSpeakerLabel(personID: "user", isUser: false, retracted: false).apply(to: owner)
-    XCTAssertEqual(
-      SpeakerLabelFormatter(names: [:]).label(
-        isUser: explicitOther.isUser,
-        personId: explicitOther.personId, speakerId: 1), "Speaker 2")
-    let cleared = retracted.apply(to: owner)
-    XCTAssertFalse(cleared.isUser)
-    XCTAssertNil(cleared.personId)
-  }
-
-  func testLabelsJoinOnlyOnSegmentIdentityAndServerResolutionWinsAutomatic() {
-    var local = record(id: "old", isUser: true)
-    var incoming = record(id: "new", person: "resolved")
-    XCTAssertEqual(ServerSegmentLabelMerge.merge(incoming, existing: local).personId, "resolved")
-    incoming.segmentId = "old"
-    XCTAssertFalse(ServerSegmentLabelMerge.merge(incoming, existing: local).isUser)
-    local.speakerLabelSource = "manual"
-    XCTAssertTrue(ServerSegmentLabelMerge.merge(incoming, existing: local).isUser)
-    local.segmentId = nil
-    incoming.segmentId = nil
-    XCTAssertEqual(ServerSegmentLabelMerge.merge(incoming, existing: local).personId, "resolved")
-  }
-
   func testContinuationPreservesEveryAlternatingSpeakerAndWireSessionIdentity() throws {
     let segments = (0..<1201).map { index in
       APIClient.UploadSegment(
@@ -84,12 +50,6 @@ final class ClientCaptureRefactorTests: XCTestCase {
         segmentEnds: [3]), start.addingTimeInterval(5))
     XCTAssertNil(SegmentContinuationUpload.finishedAt(startedAt: start, finishedAt: nil, segmentEnds: []))
   }
-
-  private func record(id: String, isUser: Bool = false, person: String? = nil) -> TranscriptionSegmentRecord {
-    TranscriptionSegmentRecord(
-      sessionId: 1, speaker: 0, text: "synthetic", startTime: 0, endTime: 1,
-      segmentOrder: 0, segmentId: id, isUser: isUser, personId: person)
-  }
 }
 
 final class ClientCaptureRefactorStorageTests: XCTestCase {
@@ -111,7 +71,7 @@ final class ClientCaptureRefactorStorageTests: XCTestCase {
       .appendingPathComponent("Omi").appendingPathComponent(owner)
     try? FileManager.default.removeItem(at: root)
   }
-  func testStoredRefreshNeverGraftsByPositionAndServerReplacesAutomaticLabels() async throws {
+  func testStoredRefreshPreservesTheLegacyPositionFallback() async throws {
     let storage = TranscriptionStorage.shared
     let session = try await storage.startSession(source: "desktop")
     func segment(_ key: String, person: String?) -> TranscriptSegment {
@@ -128,67 +88,16 @@ final class ClientCaptureRefactorStorageTests: XCTestCase {
         starred: false, folderId: nil, inputDeviceName: nil, deferred: false)
     }
     try await storage.upsertSegmentsFromServerConversation(
-      conversation(segment("old", person: nil)),
-      sessionId: session, useSegmentIdentity: true)
-    _ = try await storage.updateLiveSpeakerAssignment(
-      sessionId: session, speakerId: 1, personId: "user", useExplicitOwner: true)
-    try await storage.upsertSegmentsFromServerConversation(
-      conversation(segment("new", person: "resolved")),
-      sessionId: session, useSegmentIdentity: true)
+      conversation(segment("old", person: nil)), sessionId: session)
+    try await storage.updateLiveSpeakerAssignment(sessionId: session, speakerId: 1, personId: "manual-person")
     var rows = try await storage.getSegments(sessionId: session)
-    XCTAssertFalse(rows[0].isUser)
-    XCTAssertEqual(rows[0].personId, "resolved")
-    _ = try await storage.updateLiveSpeakerAssignment(
-      sessionId: session, speakerId: 1, personId: "user",
-      automatic: true, useExplicitOwner: true)
-    try await storage.upsertSegmentsFromServerConversation(
-      conversation(segment("new", person: "corrected")),
-      sessionId: session, useSegmentIdentity: true)
-    rows = try await storage.getSegments(sessionId: session)
-    XCTAssertFalse(rows[0].isUser)
-    XCTAssertEqual(rows[0].personId, "corrected")
-    _ = try await storage.updateLiveSpeakerAssignment(
-      sessionId: session, speakerId: 1, personId: "user", useExplicitOwner: true)
-    try await storage.upsertSegmentsFromServerConversation(
-      conversation(segment("new", person: "corrected")),
-      sessionId: session, useSegmentIdentity: true)
-    rows = try await storage.getSegments(sessionId: session)
-    XCTAssertTrue(rows[0].isUser)
-    XCTAssertEqual(rows[0].speakerLabelSource, "manual")
-  }
+    XCTAssertEqual(rows.first?.personId, "manual-person")
+    XCTAssertEqual(rows.first?.speakerLabelSource, "manual")
 
-  func testLiveOwnerPersistsAndRetractionClearsAutomaticButNotManual() async throws {
-    let storage = TranscriptionStorage.shared
-    let id = try await storage.startSession(source: "desktop")
-    guard let db = await RewindDatabase.shared.getDatabaseQueue() else { return XCTFail("missing database") }
-    try await db.write { database in
-      let automatic = TranscriptionSegmentRecord(
-        sessionId: id, speaker: 1, text: "synthetic", startTime: 0,
-        endTime: 1, segmentOrder: 0, segmentId: "auto")
-      var manual = TranscriptionSegmentRecord(
-        sessionId: id, speaker: 1, text: "synthetic", startTime: 1,
-        endTime: 2, segmentOrder: 1, segmentId: "manual", personId: "manual-person")
-      manual.speakerLabelSource = "manual"
-      try automatic.insert(database)
-      try manual.insert(database)
-    }
-    _ = try await storage.updateLiveSpeakerAssignment(
-      sessionId: id, speakerId: 1, personId: "", isUser: true,
-      automatic: true, useExplicitOwner: true)
-    var rows = try await storage.getSegments(sessionId: id)
-    XCTAssertTrue(rows[0].isUser)
-    XCTAssertNil(rows[0].personId)
-    XCTAssertEqual(rows[1].personId, "manual-person")
-    _ = try await storage.updateLiveSpeakerAssignment(
-      sessionId: id, speakerId: 1, personId: "", isUser: false,
-      retracted: true, automatic: true, useExplicitOwner: true)
-    rows = try await storage.getSegments(sessionId: id)
-    XCTAssertFalse(rows[0].isUser)
-    XCTAssertNil(rows[0].personId)
-    XCTAssertEqual(rows[1].personId, "manual-person")
-    _ = try await storage.updateLiveSpeakerAssignment(
-      sessionId: id, speakerId: 1, personId: "user", useExplicitOwner: true)
-    rows = try await storage.getSegments(sessionId: id)
-    XCTAssertTrue(rows.allSatisfy(\.isUser))
+    try await storage.upsertSegmentsFromServerConversation(
+      conversation(segment("new", person: "resolved")), sessionId: session)
+    rows = try await storage.getSegments(sessionId: session)
+    XCTAssertEqual(rows.first?.segmentId, "new")
+    XCTAssertEqual(rows.first?.personId, "manual-person")
   }
 }

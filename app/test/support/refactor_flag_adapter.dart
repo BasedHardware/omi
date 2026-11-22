@@ -7,7 +7,6 @@ class RefactorFlagAdapter
   RefactorFlagAdapter(this.flags);
   final Map<String, bool> flags;
   bool initialized = false;
-  void Function()? onCachedRead;
   @override
   bool get isInitialized => initialized;
   @override
@@ -19,7 +18,6 @@ class RefactorFlagAdapter
   Future<String> settleIdentity(String? identity, {required bool reset}) async => identity ?? 'synthetic-owner';
   @override
   bool isBooleanFeatureEnabledCached(String key) {
-    onCachedRead?.call();
     return flags[key] == true;
   }
 
