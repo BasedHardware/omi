@@ -7,6 +7,8 @@ These aliases preserve stored work at deploy and rollback, not older semantics.
 
 LEGACY_DEPENDENCY_VERSIONS = (('pydantic', '2.11.10'), ('langchain-core', '1.3.3'))
 LEGACY_ROUTING = 'f2b6c4c57af68c1e606b96e001a69919a5e34fb642126273209dff3d39ecb7b6'
+# Source-hashed checkpoint from main before the dormant action-item paths were removed.
+PRE_ACTION_ITEM_RETIREMENT_IMPLEMENTATION = '2e6603edc9ea38c8b506889cfa0377eb97c3f40f31a52d67f750d6af0f29f5f7'
 LEGACY_IMPLEMENTATIONS = {
     'notes': (
         '0d4859354aa486e18abc84e9587db7954bce1f2df4a0d4418ac0440164819db6',

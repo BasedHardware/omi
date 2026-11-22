@@ -116,9 +116,7 @@ def test_langchain_tool_uses_the_same_source_boundary(store, monkeypatch):
     store[2].assert_not_called()
 
 
-@pytest.mark.parametrize('mode', ['off', 'shadow', 'serve'])
-def test_automatic_missing_source_raises_before_replacement_or_capture(store, monkeypatch, mode):
-    monkeypatch.setenv('ACTION_ITEMS_V2_MODE', mode)
+def test_automatic_missing_source_raises_before_replacement_or_capture(store):
     conv = SimpleNamespace(id=None, structured=SimpleNamespace(action_items=[]))
     with pytest.raises(ValueError, match='provenance'):
         extraction.action_items_for_write('owner', conv, datetime.now(timezone.utc), lambda *_: {})

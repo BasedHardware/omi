@@ -37,8 +37,6 @@ LANE = 'omi:auto:conv-structure'
 PINNED_DEFAULTS = {
     'NOTES_PACKET_V2_MODE': 'shadow',
     'NOTES_PACKET_V2_MODE_SERVE_PERCENT': '0',
-    'ACTION_ITEMS_V2_MODE': 'shadow',
-    'ACTION_ITEMS_V2_MODE_SERVE_PERCENT': '0',
 }
 BASE_ENV = {
     'CONVERSATION_NOTES_AGENT_ENABLED': 'true',

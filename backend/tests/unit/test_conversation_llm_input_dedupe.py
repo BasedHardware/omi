@@ -574,9 +574,22 @@ def test_key_modes_do_not_read_dependency_metadata_per_call(enabled, monkeypatch
 
 
 @pytest.mark.parametrize(
-    'version,words', [('notes-3', 200), ('notes-4', 200), ('notes-4', 6000), ('notes-8', 200), ('notes-8', 6000)]
+    'version,words,source_hashed',
+    [
+        ('notes-3', 200, False),
+        ('notes-4', 200, False),
+        ('notes-4', 6000, False),
+        ('notes-8', 200, False),
+        ('notes-8', 6000, False),
+        ('notes-9', 200, False),
+        ('notes-9', 6000, False),
+        ('notes-9', 200, True),
+        ('notes-9', 6000, True),
+    ],
 )
-def test_quality_contract_reuses_clean_old_checkpoint_without_a_paid_call(enabled, monkeypatch, version, words):
+def test_quality_contract_reuses_clean_old_checkpoint_without_a_paid_call(
+    enabled, monkeypatch, version, words, source_hashed
+):
     from models.structured import Structured
     from copy import deepcopy
 
@@ -599,6 +612,12 @@ def test_quality_contract_reuses_clean_old_checkpoint_without_a_paid_call(enable
     if 'scaled_detail' in old_inputs:
         old_inputs['scaled_detail']['version'] = version
     old_version = version + ':' + dedupe.stable_implementation('notes').split(':', 1)[1]
+    if version == 'notes-9':
+        # Before retirement the deployed selector contributed False to the key.
+        assert old_inputs['action_items_v2'] is False
+    if source_hashed:
+        monkeypatch.setattr(dedupe, 'INSTALLED_DEPENDENCY_VERSIONS', dedupe.LEGACY_DEPENDENCY_VERSIONS)
+        old_version = dedupe.PRE_ACTION_ITEM_RETIREMENT_IMPLEMENTATION
     row = {
         **hashes,
         dedupe.NOTES_HASH: dedupe._fingerprint('notes', old_inputs, old_version),

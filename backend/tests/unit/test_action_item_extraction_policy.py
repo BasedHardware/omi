@@ -165,8 +165,6 @@ def test_first_processing_writer_uses_the_same_guards(monkeypatch):
 
 @pytest.mark.parametrize('cited', [False, True])
 def test_refresh_keeps_context_grounded_reference_after_canonical_projection(world, monkeypatch, cited):
-    monkeypatch.setenv('ACTION_ITEM_VALIDITY_MODE', 'serve')
-    monkeypatch.setenv('ACTION_ITEMS_V2_MODE', 'serve')
     monkeypatch.setattr(extraction, 'get_user_full_name', lambda *_: 'Riley Chen')
     monkeypatch.setattr(
         pc.conversation_capture,

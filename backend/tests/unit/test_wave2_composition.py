@@ -7,6 +7,7 @@ from types import SimpleNamespace
 import pytest
 
 from models.boundary_evidence import BoundarySignal
+from utils.llm.conversation_notes_prompts import ACTION_ITEM_EXTRACTION_RULES
 from utils.episodes.boundaries import context_signal
 from utils.conversations.call_metadata import call_fields
 from utils.daily_summary_read_contract import summary_read_payload
@@ -56,11 +57,7 @@ def test_v4_persisted_stub_round_trips_through_mcp_adapter(status):
     assert response['status'] == status and response['generated_at'] is None
 
 
-@pytest.mark.parametrize('mode', ['off', 'shadow', 'serve'])
-def test_one_shot_prompt_applies_v4_rules_only_for_serving_owner(monkeypatch, mode):
-    monkeypatch.setenv('ACTION_ITEMS_V2_MODE', mode)
-    monkeypatch.setenv('ACTION_ITEMS_V2_MODE_SERVE_PERCENT', '0')
-    monkeypatch.delenv('ACTION_ITEMS_V2_MODE_SERVE_UID_SHA256S', raising=False)
+def test_one_shot_prompt_uses_incumbent_action_item_rules(monkeypatch):
     monkeypatch.setenv('NOTES_PACKET_V2_MODE', 'off')
     monkeypatch.setattr(notes, 'agentic_notes_payload', lambda **kw: None)
     seen = []
@@ -90,14 +87,10 @@ def test_one_shot_prompt_applies_v4_rules_only_for_serving_owner(monkeypatch, mo
         rich_context_enabled=False,
     )
     assert len(seen) == 1
-    assert ('explicit offers/promises by another person to the owner' in seen[0]) == (mode == 'serve')
+    assert ACTION_ITEM_EXTRACTION_RULES in seen[0]
 
 
-@pytest.mark.parametrize('mode', ['off', 'shadow', 'serve'])
-def test_agentic_prompt_applies_v4_rules_only_for_authenticated_owner(monkeypatch, mode):
-    monkeypatch.setenv('ACTION_ITEMS_V2_MODE', mode)
-    monkeypatch.setenv('ACTION_ITEMS_V2_MODE_SERVE_PERCENT', '0')
-    monkeypatch.delenv('ACTION_ITEMS_V2_MODE_SERVE_UID_SHA256S', raising=False)
+def test_agentic_prompt_uses_incumbent_action_item_rules(monkeypatch):
     seen = []
 
     async def loop(mount, *a, **kw):
@@ -105,9 +98,9 @@ def test_agentic_prompt_applies_v4_rules_only_for_authenticated_owner(monkeypatc
         return shaped_agent.LoopResult(value=None, reason='stopped', turns=1, tool_calls=0)
 
     monkeypatch.setattr(agent, 'run_loop', loop)
-    run_agent(ScriptedModel(), policy.NotesAgentBudget(max_turns=2, max_tool_calls=1), uid=OWNER)
+    run_agent(ScriptedModel(), policy.NotesAgentBudget(max_turns=2, max_tool_calls=1))
     assert len(seen) == 1
-    assert ('explicit offers/promises by another person to the owner' in seen[0]) == (mode == 'serve')
+    assert ACTION_ITEM_EXTRACTION_RULES in seen[0]
 
 
 def test_media_only_day_has_recordings_without_a_generated_recap(producer, monkeypatch):

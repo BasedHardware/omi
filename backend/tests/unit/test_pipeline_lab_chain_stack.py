@@ -212,7 +212,7 @@ def test_clock_rejects_naive_instants_and_double_install():
 def test_overlay_pins_cohorts_through_digest_lists():
     overlay = Overlay.from_mapping(
         {
-            'serving': {'NOTES_PACKET_V2_MODE': True, 'ACTION_ITEMS_V2_MODE': False},
+            'serving': {'NOTES_PACKET_V2_MODE': True, 'LIFECYCLE_V2_MODE': False},
             'env': {'NOTES_PACKET_V2_MODE': 'shadow'},
         }
     )
@@ -220,12 +220,12 @@ def test_overlay_pins_cohorts_through_digest_lists():
     digest = hashlib.sha256(LAB_UID.encode()).hexdigest()
     assert env['NOTES_PACKET_V2_MODE_SERVE_UID_SHA256S'] == digest
     assert env['NOTES_PACKET_V2_MODE_SERVE_PERCENT'] == '0'
-    assert env['ACTION_ITEMS_V2_MODE_SERVE_UID_SHA256S'] == ''
+    assert env['LIFECYCLE_V2_MODE_SERVE_UID_SHA256S'] == ''
     assert env['LISTEN_FINALIZATION_DISPATCH_MODE'] == 'inline'
     from config import refactor_modes
 
     assert refactor_modes.serving_for('NOTES_PACKET_V2_MODE', LAB_UID, environ=env) is True
-    assert refactor_modes.serving_for('ACTION_ITEMS_V2_MODE', LAB_UID, environ=env) is False
+    assert refactor_modes.serving_for('LIFECYCLE_V2_MODE', LAB_UID, environ=env) is False
 
 
 def test_overlay_rejects_raw_cohort_env_and_unknown_keys():

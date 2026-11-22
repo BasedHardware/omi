@@ -14,7 +14,6 @@ from config.action_item_extraction_policy import (
 )
 from database.auth import get_user_full_name
 from utils.metrics import OMI_ACTION_ITEM_EXTRACTION_DROPPED_TOTAL
-from utils.conversations.action_item_validity import select_valid_items
 
 logger = logging.getLogger(__name__)
 
@@ -23,12 +22,11 @@ def _field(item: Any, name: str) -> Any:
     return item.get(name) if isinstance(item, Mapping) else getattr(item, name, None)
 
 
-def filter_extracted_items(uid: str, items: Sequence[Any], *, conversation: Any = None) -> list[Any]:
+def filter_extracted_items(uid: str, items: Sequence[Any]) -> list[Any]:
     reminders = [item for item in items if _field(item, 'reminder_intent') is not None]
     items = [item for item in items if _field(item, 'reminder_intent') is None]
     named = any(normalized_name(_field(item, 'owner_name')) not in UNKNOWN_OWNERS | OWNER_ALIASES for item in items)
     profile_name = get_user_full_name(uid) if named else None
-    # refactor: superseded by utils.llm.action_item_v2 when ACTION_ITEMS_V2_MODE=serve
     kept = []
     counts = {'other_owner': 0, 'status_statement': 0}
     for item in items:
@@ -42,12 +40,7 @@ def filter_extracted_items(uid: str, items: Sequence[Any], *, conversation: Any 
         if count:
             OMI_ACTION_ITEM_EXTRACTION_DROPPED_TOTAL.labels(reason=reason).inc(count)
             logger.info('event=action_item_extraction_dropped reason=%s count=%d', reason, count)
-    from utils.llm.action_item_v2 import select_items
-
-    segments = getattr(conversation, 'transcript_segments', ()) or ()
-    return reminders + select_valid_items(
-        uid, select_items(uid, items, kept, profile_name), transcript_segments=segments
-    )
+    return reminders + kept
 
 
 def action_items_for_write(
@@ -72,6 +65,6 @@ def action_items_for_write(
             **canonical_fields(action_item, conversation),
             'conversation_id': conversation.id,
         }
-        for action_item in filter_extracted_items(uid, conversation.structured.action_items, conversation=conversation)
+        for action_item in filter_extracted_items(uid, conversation.structured.action_items)
         if _field(action_item, 'reminder_intent') is None
     ]

@@ -485,9 +485,6 @@ def _get_shaped_conversation_notes(
     if not prefix.has_usable_content and not frames:
         return Structured()
     mount = notes_mount()
-    from utils.llm.action_item_v2 import instructions_for
-
-    mount = replace(mount, instructions=instructions_for(uid, mount.instructions))
     if kwargs.get('task_intelligence_capture'):
         mount = replace(mount, instructions=reminder_policy.instructions(mount.instructions))
     if open_loops_enabled():

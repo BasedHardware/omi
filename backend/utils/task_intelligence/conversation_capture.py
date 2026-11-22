@@ -289,7 +289,7 @@ def process_conversation_before_legacy(
         raise ValueError('extracted action items require conversation provenance')
     # Revalidate exact source/identity at ingress, including cached notes and retries.
     items = []
-    for item in filter_extracted_items(uid, conversation.structured.action_items, conversation=conversation):
+    for item in filter_extracted_items(uid, conversation.structured.action_items):
         prepared = reminder_policy.prepare_reminder(
             item, conversation=conversation, extracted_at=datetime.now().astimezone()
         )

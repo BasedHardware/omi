@@ -6,7 +6,6 @@ objects fail closed instead of silently stringifying two distinct inputs alike.
 
 from __future__ import annotations
 
-from config.refactor_modes import serving_for
 from config.llm_input_versions import NOTES_UNSCALED_PREVIOUS_VERSION, NOTES_REUSABLE_PREVIOUS_VERSIONS, prompt_version
 from config.memory_l1_admission import noise_skip_enabled
 from config.llm_input_legacy import (
@@ -14,6 +13,7 @@ from config.llm_input_legacy import (
     LEGACY_IMPLEMENTATIONS,
     LEGACY_ROUTING,
     LEGACY_PROMPT_VERSIONS,
+    PRE_ACTION_ITEM_RETIREMENT_IMPLEMENTATION,
 )
 
 import dataclasses
@@ -113,7 +113,6 @@ def _legacy_implementation_digest(feature: str) -> str:
         'llm/conversation_processing.py',
         'llm/conversation_notes_prompts.py',
         'llm/notes_packet.py',
-        'llm/action_item_v2.py',
         'llm/notes_output.py',
         'llm/notes_lengths.py',
         'llm/notes_effort.py',
@@ -189,11 +188,12 @@ def _matches(saved: str | None, feature: str, inputs: Any, digest: str) -> bool:
         # restamped with the current digest. This never schedules any work.
         suffix = stable_implementation(feature).split(':', 1)[1]
         implementations.add(f'{NOTES_UNSCALED_PREVIOUS_VERSION}:{suffix}')
-    if (
-        INSTALLED_DEPENDENCY_VERSIONS == LEGACY_DEPENDENCY_VERSIONS
-        and routing_digest() == LEGACY_ROUTING
-        and compatibility_version in LEGACY_PROMPT_VERSIONS[feature]
-    ):
+    legacy_environment = (
+        INSTALLED_DEPENDENCY_VERSIONS == LEGACY_DEPENDENCY_VERSIONS and routing_digest() == LEGACY_ROUTING
+    )
+    if legacy_environment and feature == 'l1':
+        implementations.add(PRE_ACTION_ITEM_RETIREMENT_IMPLEMENTATION)
+    if legacy_environment and compatibility_version in LEGACY_PROMPT_VERSIONS[feature]:
         implementations.update(LEGACY_IMPLEMENTATIONS[feature])
         implementations.update(f'{version}:{routing_digest()}' for version in LEGACY_PROMPT_VERSIONS[feature])
         dependencies = '|'.join(f'{name}:{version}' for name, version in INSTALLED_DEPENDENCY_VERSIONS)
@@ -208,6 +208,9 @@ def _matches(saved: str | None, feature: str, inputs: Any, digest: str) -> bool:
             old_implementation = version + ':' + stable_implementation(feature).split(':', 1)[1]
             if saved == _fingerprint(feature, old_inputs, old_implementation):
                 return True
+            if version == 'notes-9' and legacy_environment:
+                if saved == _fingerprint(feature, old_inputs, PRE_ACTION_ITEM_RETIREMENT_IMPLEMENTATION):
+                    return True
     return bool(saved) and any(saved == _fingerprint(feature, inputs, item) for item in implementations)
 
 
@@ -260,7 +263,8 @@ def notes(uid: str, conversation: Any, prefix: Any, generate, hashes: dict[str, 
         **({}),
         'arguments': kwargs,
         'notes_packet': _notes_packet_identity(uid),
-        'action_items_v2': serving_for('ACTION_ITEMS_V2_MODE', uid),
+        # Retain the incumbent input field for persisted notes and quality-repair keys.
+        'action_items_v2': False,
         'tier_escalation': os.getenv('NOTES_TIER_ESCALATION_ENABLED', ''),
         'shaped_notes_mode': os.getenv('OMI_SHAPED_AGENT_MODE', 'off'),
         'notes_agent': os.getenv('CONVERSATION_NOTES_AGENT_ENABLED', 'true').strip().lower(),

@@ -52,7 +52,6 @@ tests/unit/test_action_item_reminder_state_notifications.py	7.7
 tests/unit/test_action_item_sync_batch_reminder.py	7.7
 tests/unit/test_action_item_tool_result_bound.py	9.7
 tests/unit/test_action_item_tools_sanitization.py	10.7
-tests/unit/test_action_item_validity.py	3.7
 tests/unit/test_action_item_vector_best_effort.py	7.7
 tests/unit/test_action_items_batch_chunking.py	3.7
 tests/unit/test_action_items_bounded_scan.py	3.7
@@ -2206,7 +2205,6 @@ tests/unit/test_wake_word.py	8.7
 tests/unit/test_wake_word_adjudication_failsafe.py	7.7
 tests/unit/test_wal_audio_coverage.py	3.7
 tests/unit/test_wal_audio_coverage_pipeline.py	45.7
-tests/unit/test_wave2_action_items.py	2.7
 tests/unit/test_wave2_call_metadata.py	3.7
 tests/unit/test_wave2_composition.py	8.7
 tests/unit/test_wave2_daily_recap.py	8.7

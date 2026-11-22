@@ -216,14 +216,10 @@ async def run_notes_agent(
     clock: Callable[[], float] = time.monotonic,
     contract_v2: bool = False,
     transcript_segment_ids: Sequence[str] = (),
-    uid: str | None = None,
     identity: NotesIdentity | None = None,
 ) -> NotesAgentResult:
     started = clock()
     mount = notes_agent_mount(budget, owner, getattr(toolbox, 'window', None))
-    from utils.llm.action_item_v2 import instructions_for
-
-    mount = replace(mount, instructions=instructions_for(uid, mount.instructions))
     if task_intelligence_capture:
         mount = replace(mount, instructions=reminder_instructions(mount.instructions))
     if contract_v2:

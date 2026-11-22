@@ -3867,14 +3867,6 @@ FIELD_SITES = {
             ),
         )
     ],
-    'utils/llm/action_item_v2.py': [
-        (
-            'contradicted_capture',
-            'status',
-            "'cancelled'",
-            ('stale', 'stale_evidence_conversation_id', 'stale_reason', 'status'),
-        )
-    ],
     'utils/llm/goals.py': [
         ('extract_and_update_goal_progress', 'status', "'error'", ('message', 'status')),
         ('extract_and_update_goal_progress', 'status', "'no_update'", ('message', 'status')),
