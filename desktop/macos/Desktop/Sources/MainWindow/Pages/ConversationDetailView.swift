@@ -152,6 +152,7 @@ struct ConversationDetailView: View {
   // Full conversation loaded from API (with transcript segments)
   @State private var loadedConversation: ServerConversation?
   @State private var isLoadingConversation = false
+  @State private var detailOpenAdmission = ConversationDetailOpenAdmission()
   // True while a lazily-deferred conversation is being enriched (polled) on first open.
   @State private var isEnrichingDeferred = false
 
@@ -374,6 +375,7 @@ struct ConversationDetailView: View {
     }
     .onDisappear {
       detailLoadGeneration &+= 1
+      detailOpenAdmission = ConversationDetailOpenAdmission()
       retrySpeakerAssignment = nil
       speakerAssignmentTail = nil
       captureFocusGeneration &+= 1
@@ -413,7 +415,8 @@ struct ConversationDetailView: View {
       await ProcessingConversationWatcher.followDetail(
         fetch: { polling in
           guard isCurrentDetailRequest(requestGeneration), let appState = AppState.current else { return nil }
-          let fetched = await appState.loadConversationDetail(requestedConversation, polling: polling) { cached in
+          let readOnly = polling || detailOpenAdmission.isReadOnly(for: requestedConversation.id)
+          let fetched = await appState.loadConversationDetail(requestedConversation, polling: readOnly) { cached in
             guard isCurrentDetailRequest(requestGeneration) else { return }
             applyLoadedConversation(cached)
           }

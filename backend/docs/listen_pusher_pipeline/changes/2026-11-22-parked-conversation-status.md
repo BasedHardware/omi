@@ -6,8 +6,9 @@ Opening claims the flag and returns processing while enrichment runs. A failed
 attempt re-arms the same completed/deferred state so the next open can retry.
 Desktop detail follows each server response, including the first response after
 a cold cache open that discarded the deferred flag. Polls from desktop do not
-claim enrichment, so a failed attempt can show its completed/deferred state
-and retry on a later open.
+claim enrichment. A list refresh can restart the detail task on the same
+panel, and that restart is also read-only. A failed attempt can show its
+completed/deferred state and retry on a later open.
 An accepted deletion settles a previously processing row in its existing
 tombstone transaction. The status changes preserve the discard and deletion
 flags and the existing restore and erasure contracts.
