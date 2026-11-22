@@ -4071,6 +4071,7 @@ environments:
           forbidden_env:
           - BATCH_HELD_POLL_SKIP_ENABLED
           - BATCH_PROJECTION_FINISH_BACKOFF_ENABLED
+          - DREAM_AGENT_PAID_PERCENT
           - DEEPGRAM_SELF_HOSTED_ENABLED
           - DEEPGRAM_SELF_HOSTED_URL
           - DEEPGRAM_API_KEY
@@ -5274,6 +5275,7 @@ environments:
           forbidden_env:
           - BATCH_HELD_POLL_SKIP_ENABLED
           - BATCH_PROJECTION_FINISH_BACKOFF_ENABLED
+          - DREAM_AGENT_PAID_PERCENT
           - DEEPGRAM_SELF_HOSTED_ENABLED
           - DEEPGRAM_SELF_HOSTED_URL
           - DEEPGRAM_API_KEY
@@ -5813,6 +5815,7 @@ environments:
           forbidden_env:
           - BATCH_HELD_POLL_SKIP_ENABLED
           - BATCH_PROJECTION_FINISH_BACKOFF_ENABLED
+          - DREAM_AGENT_PAID_PERCENT
           - DEEPGRAM_SELF_HOSTED_ENABLED
           - DEEPGRAM_SELF_HOSTED_URL
           - DEEPGRAM_API_KEY
@@ -6304,6 +6307,7 @@ environments:
           forbidden_env:
           - BATCH_HELD_POLL_SKIP_ENABLED
           - BATCH_PROJECTION_FINISH_BACKOFF_ENABLED
+          - DREAM_AGENT_PAID_PERCENT
           - DEEPGRAM_SELF_HOSTED_ENABLED
           - DEEPGRAM_SELF_HOSTED_URL
           - DEEPGRAM_API_KEY
@@ -6801,6 +6805,7 @@ environments:
           forbidden_env:
           - BATCH_HELD_POLL_SKIP_ENABLED
           - BATCH_PROJECTION_FINISH_BACKOFF_ENABLED
+          - DREAM_AGENT_PAID_PERCENT
           - DEEPGRAM_SELF_HOSTED_ENABLED
           - DEEPGRAM_SELF_HOSTED_URL
           - DEEPGRAM_API_KEY
