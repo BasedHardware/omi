@@ -180,7 +180,7 @@ void main() {
 
     expect(transcript.reads, lessThan(transcript.length * 3),
         reason: 'each segment event must not walk the whole transcript on the UI isolate');
-    final saved = await LocalSegmentStore.at(dir).loadSession('live-1700000200');
+    final saved = await LocalSegmentStore.at(dir).loadSession(capture.activeCaptureSessionId!);
     expect(saved.length, 450, reason: 'the coalesced write still lands the latest transcript');
   });
 }

@@ -70,12 +70,8 @@ def enabled() -> bool:
     )
 
 
-def _head(client: Any, uid: str, budget: Any, *, conversations: bool = False) -> tuple[str, int, str] | None:
-    path = (
-        f'users/{uid}/list_serving_versions/conversations'
-        if conversations
-        else f'users/{uid}/memory_state/{HEAD_DOCUMENT}'
-    )
+def _head(client: Any, uid: str, budget: Any) -> tuple[str, int, str] | None:
+    path = f'users/{uid}/memory_state/{HEAD_DOCUMENT}'
     with read_origin('job:released_memory_projection'):
         reference = client.document(path)
         snap = (
@@ -87,12 +83,11 @@ def _head(client: Any, uid: str, budget: Any, *, conversations: bool = False) ->
     if not isinstance(data, dict) or data.get('blocked') is not None:
         return None
     generation = data.get('commit_generation')
-    # A saturated increment can no longer invalidate; unknown/old writers and
-    # legacy P1 heads must keep the source path rather than grant cache reuse.
+    # A saturated increment can no longer invalidate; use the source path.
     if data.get('schema') != HEAD_SCHEMA or type(generation) is not int or not 0 < generation < MAX_COMMIT_GENERATION:
         return None
-    token = data.get('version' if conversations else 'token')
-    if not isinstance(token, str) or not token or (conversations and len(token) != 32):
+    token = data.get('token')
+    if not isinstance(token, str) or not token:
         return None
     # Generation forces a real metadata change on each Commit application.
     # The server revision also distinguishes head deletion/recreation, even
@@ -169,21 +164,10 @@ def projected_stream_list(query: Any, budget: Any = None, *, surface: str, _sour
     try:
         client = query._client
         parent = list(query._parent._path)
-        conversations = len(parent) == 3 and parent[2] == 'conversations' and surface == 'mcp_cards'
-        card_epoch = os.environ.get('OMI_LIST_VERSION_EPOCH', '').strip()
-        card_coverage = (
-            card_epoch.startswith('v2:')
-            and bool(card_epoch[3:].strip())
-            and os.environ.get('OMI_LIST_PROJECTION_WRITER_ENABLED', 'true').strip().lower()
-            not in {'0', 'false', 'off'}
-        )
         eligible = (
             len(parent) == 3
             and parent[0] == 'users'
-            and (
-                parent[2] in {'memories', 'memory_items', 'memory_historical_overrides'}
-                or (conversations and card_coverage)
-            )
+            and parent[2] in {'memories', 'memory_items', 'memory_historical_overrides'}
         )
         shape = None
         if eligible:
@@ -193,7 +177,6 @@ def projected_stream_list(query: Any, budget: Any = None, *, surface: str, _sour
                 id(client),
                 client._database_string,
                 os.environ.get('MEMORY_RELEASED_WRITERS_COVERED'),
-                os.environ.get('OMI_LIST_VERSION_EPOCH') if conversations else None,
                 '/'.join(parent),
                 hashlib.sha256(query_bytes).digest(),
             )
@@ -210,7 +193,7 @@ def projected_stream_list(query: Any, budget: Any = None, *, surface: str, _sour
         return source(query, budget)
     try:
         uid = parent[1]
-        before = _head(client, uid, budget, conversations=conversations)
+        before = _head(client, uid, budget)
     except ListReadBudgetExhausted:
         raise
     except Exception:
@@ -230,7 +213,7 @@ def projected_stream_list(query: Any, budget: Any = None, *, surface: str, _sour
             _entries.move_to_end(key)
     if cached is not None:
         try:
-            if _head(client, uid, budget, conversations=conversations) == before:
+            if _head(client, uid, budget) == before:
                 EVENTS.labels(surface=surface, outcome='hit', origin=current_read_origin()).inc()
                 return _unpack(client, cached)
         except ListReadBudgetExhausted:
@@ -253,7 +236,7 @@ def projected_stream_list(query: Any, budget: Any = None, *, surface: str, _sour
                 _small_queries.popitem(last=False)
         return snapshots
     try:
-        if _head(client, uid, budget, conversations=conversations) != before:
+        if _head(client, uid, budget) != before:
             EVENTS.labels(surface=surface, outcome='changed', origin=current_read_origin()).inc()
             return snapshots
         records = _pack(snapshots)

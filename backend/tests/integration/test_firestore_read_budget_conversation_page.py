@@ -64,11 +64,16 @@ def test_conversation_list_page_read_budget(monkeypatch):
     with TestClient(app) as http:
         before = snapshot_reads()
         with request_read_trace() as trace:
-            response = http.get('/v1/conversations', params={'limit': _PAGE_LIMIT})
+            response = http.get(
+                '/v1/conversations',
+                params={'limit': _PAGE_LIMIT},
+                headers={'If-None-Match': 'W/"lp1-retired-validator"'},
+            )
         delta = delta_reads(before)
 
     assert response.status_code == 200, response.text
     assert len(response.json()) == _PAGE_LIMIT
+    assert 'etag' not in response.headers
     assert trace.reads > 0, 'read-budget harness bug: conversation request recorded zero Firestore reads'
     assert delta.reads > 0, 'read-budget harness bug: counter delta recorded zero Firestore reads'
 

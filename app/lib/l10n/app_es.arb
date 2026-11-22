@@ -4735,5 +4735,7 @@
     "conversationLiveNoEdits": "Espera a que termine para cambiarlo.",
     "finishedSummaryReady": "Resumen listo",
     "writingSummaryStatus": "Escribiendo el resumen…",
-    "stillWorkingOnIt": "Sigue trabajando en ello."
+    "stillWorkingOnIt": "Sigue trabajando en ello.",
+    "firmwareUpdateFirmwareTooOld": "El firmware de tu dispositivo es demasiado antiguo para esta actualización. Contacta con el soporte para que te ayude a actualizar el dispositivo.",
+    "firmwareUpdateAppRequired": "Esta actualización del firmware necesita una versión más reciente de la app Omi. Actualiza la app desde tu tienda de aplicaciones y vuelve a comprobarlo."
 }

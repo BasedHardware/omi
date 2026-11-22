@@ -53,6 +53,31 @@ over a day requires a new token. Firebase account creation bounds mapped
 starts. Failed account/anchor reads or transactions return 503 with
 `Retry-After: 30` before any job admission or successful ACK.
 
+## Offset recovery readback
+
+`omi_sync_future_capture_recovery_total{outcome}` is enabled whenever
+`receipt_clock_offsets` runs. The unit is one call attempt, including retries.
+Each classified call increments one outcome even when a call handles several files or scopes.
+
+| Outcome | Meaning |
+| --- | --- |
+| `anchored` | Usable offsets returned for the whole call, including reused frozen anchors. |
+| `anchor_pending` | A frozen mapping ends in the future and must wait for server time. |
+| `identity_required` | Required identity or receipt context is missing or invalid within the offset call. |
+| `anchor_error` | The account or anchor read or transaction failed and the call returned an unavailable-anchor retry. |
+| `refused` | The offset call refused the input or mapped range with `invalid_capture_time`. |
+
+The counter measures offset availability before batch admission. The router's
+earlier provenance lookup and request preflight, and later batch cohort,
+language, and capacity decisions, fall outside this boundary. An outcome series
+first appears when that outcome has been observed in the process.
+
+For SCA-3501, confirm the counter is exported for the serving backend-sync
+revision and aggregate its increases over the observation window by `outcome`
+across that revision's instances. Report future-recovery-specific durable batch
+admissions separately using post-commit evidence or an equivalent cohort-scoped
+aggregate. Roll back the counter by reverting the instrumentation change.
+
 ## Fences and response
 
 The dedicated decoder validates strict future frame counts/full decoded durations
@@ -119,7 +144,7 @@ APIs and workers, so no service may be assumed reader-only.
 
 Owner: **quality lead**. Target: **the same day as image rollout**. Once every
 reachable reader and admitter serves an image containing this change, enable
-**everyone in one config change** setting all twelve bindings true, regenerate
+**everyone in one config change** setting the prod bindings true (as shipped 2026-11-22 in #26025: the five prod overlay services and the prod listen chart; dev stays off), regenerate
 the runtime manifest and verify serving env/release readback. Do not leave a
 David-only cohort or an unexpanded default-off gate overnight.
 
@@ -189,3 +214,8 @@ A future explicit, owner-scoped import-session container could reference these
 unchanged source rows without merging trusted chronology or audio. It needs a
 stable session identity across requests and Home rendering support; no such
 container or app UI is built here, pending the lead's go.
+
+
+## 2026-11-22: prod enablement
+
+Prod turned on in one config change (#26025, SCA-3501), after every reader and admitter was confirmed serving clamp code. That covered the five Cloud Run sources (each containing #25401) and listen `96f0631`. The provider-STT queue was inventoried in full, with every task aimed at backend-integration and no URI override. The pre-clamp epoch-3 redrive stays dormant under a relaunch restriction. Dev and the code default stay off, so dev keeps exercising the refusal path. Rollback: `false` on the same prod lines.

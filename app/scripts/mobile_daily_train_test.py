@@ -859,9 +859,13 @@ class AndroidTests(unittest.TestCase):
         self.assertEqual(candidate, train.PlayCandidate("internal", "1.0.554", "1340"))
 
     def test_live_or_older_versions_and_drafts_are_ignored(self):
-        self.production["releases"][0]["name"] = "1.0.554 (1340)"
         self.internal["releases"].append({"name": "1.0.555 (1350)", "versionCodes": ["1350"], "status": "draft"})
-        self.assertIsNone(train.pick_play_candidate({"internal": self.internal, "alpha": self.alpha}, self.production))
+        for live_name in ("1.0.554 (1340)", "1340 (1.0.554)"):
+            with self.subTest(live_name=live_name):
+                self.production["releases"][0].update(name=live_name, versionCodes=["1340"])
+                self.assertIsNone(
+                    train.pick_play_candidate({"internal": self.internal, "alpha": self.alpha}, self.production)
+                )
 
     def test_staged_rollout_written_from_the_source_track_and_haltable(self):
         client = Mock()
@@ -917,6 +921,27 @@ class AndroidTests(unittest.TestCase):
         ), patch.object(promote, "play_track", side_effect=lambda c, e, name: tracks[name]):
             summary = train.run_android(dry_run=False, release_date="2026-10-06")
         self.assertEqual(summary, "android=staged 1.0.554 1340 @5% parked (held-changes mode; manual review submission)")
+        client.edits().tracks().update.assert_not_called()
+        client.edits().commit.assert_not_called()
+
+    def test_advance_only_reads_the_play_default_name_and_parks_at_the_current_fraction(self):
+        client = Mock()
+        staged = {"name": "1605 (1.0.595)", "versionCodes": ["1605"], "status": "inProgress", "userFraction": 0.01}
+        tracks = {
+            "internal": self.internal,
+            "alpha": self.alpha,
+            "production": {"track": "production", "releases": [staged]},
+        }
+        with (
+            patch.object(promote, "CHANGES_NOT_SENT_FOR_REVIEW", True),
+            patch.object(promote, "play_edit", return_value=(client, "edit")),
+            patch.object(promote, "play_track", side_effect=lambda c, e, name: tracks[name]),
+        ):
+            summary = train.run_android(dry_run=False, release_date="2026-11-22", advance_only=True)
+            staged["versionCodes"] = ["1604"]
+            with self.assertRaisesRegex(train.TrainError, "no readable identity"):
+                train.run_android(dry_run=False, release_date="2026-11-22", advance_only=True)
+        self.assertEqual(summary, "android=staged 1.0.595 1605 @1% parked (held-changes mode; manual review submission)")
         client.edits().tracks().update.assert_not_called()
         client.edits().commit.assert_not_called()
 

@@ -164,7 +164,6 @@ async def switch_live_demand(receiver, lane: str) -> bool:
                 sample_rate=host.request.sample_rate,
                 limits=limits,
                 dead_provider=old_selection[0].value,
-                soniox=receiver._resilient_audio if selected[0].value == 'soniox' else None,
             ):
                 return True
             # Replay failed after the fence. The ring still owns unanswered

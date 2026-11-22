@@ -15753,4 +15753,12 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get stillWorkingOnIt => 'Ще працюємо над цим.';
+
+  @override
+  String get firmwareUpdateFirmwareTooOld =>
+      'Прошивка вашого пристрою застаріла для цього оновлення. Зверніться до служби підтримки по допомогу з оновленням пристрою.';
+
+  @override
+  String get firmwareUpdateAppRequired =>
+      'Для цього оновлення прошивки потрібна новіша версія застосунку Omi. Оновіть застосунок у магазині застосунків, а потім перевірте ще раз.';
 }

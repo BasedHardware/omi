@@ -20,6 +20,7 @@ from pydantic import BaseModel
 
 from models import conversation_continuity  # noqa: F401 - retain pure policy across the legacy models package stub
 from models.transcript_segment import SpeakerIdentityStatus
+from tests.unit.memory_import_isolation import make_database_client_stub
 from utils.capture import coverage  # noqa: F401 - retain lazy ledger authority before database stubs
 from utils.stt import transcript_admission  # noqa: F401 - retain pure admission contract before enum/package stubs
 from utils.speakers import context  # noqa: F401 - retain speaker metric owner before package stubs
@@ -793,7 +794,7 @@ class TestProcessSegmentReal:
         sys.modules['models.geolocation'].Geolocation = _Geolocation
 
         sys.modules['database.redis_db'].r = MagicMock()
-        sys.modules['database._client'].db = MagicMock()
+        sys.modules['database._client'] = make_database_client_stub()
         sys.modules['database._client'].get_firestore_client = MagicMock(
             side_effect=AssertionError('flag-off segment processing must not claim a first-summary owner')
         )
@@ -812,6 +813,13 @@ class TestProcessSegmentReal:
         sys.modules['database._client'].FIRESTORE_DOCUMENT_KINDS = frozenset({'none'})
         sys.modules['database._client'].firestore_document_kind = lambda error: 'none'
         sys.modules['database._client'].firestore_error_document_path = lambda error: None
+        # The real summary fence imports these helpers; this flag-off fixture
+        # permits classification but must never execute a Firestore transaction.
+        sys.modules['database._client'].firestore_failure_reason = lambda error: 'unknown'
+        sys.modules['database._client'].is_retryable_firestore_transaction_error = lambda error: False
+        sys.modules['database._client'].run_transactional = MagicMock(
+            side_effect=AssertionError('flag-off segment processing must not run a summary transaction')
+        )
         sys.modules['database.auth'].get_user_name = MagicMock(return_value='User')
         sys.modules['utils.speaker_learning_jobs'].schedule_person_voice_learning_retries = MagicMock()
         _mock_conv_db = sys.modules['database.conversations']
@@ -1724,6 +1732,8 @@ class TestVoiceMessageRuntimeErrorHandling:
 
         from utils.stt.outcomes import TranscriptionFailure
 
+        register_answer = MagicMock()
+
         async def run():
             async def _run_inline(_executor, fn, *args, **kwargs):
                 return fn(*args, **kwargs)
@@ -1732,11 +1742,14 @@ class TestVoiceMessageRuntimeErrorHandling:
                 'utils.chat.prerecorded',
                 side_effect=RuntimeError('Deepgram transcription failed after 2 attempts: timeout'),
             ):
-                async for _chunk in self._process_stream_fn('/tmp/test.wav', 'uid', language='en'):
+                async for _chunk in self._process_stream_fn(
+                    '/tmp/test.wav', 'uid', language='en', register_answer=register_answer
+                ):
                     pass
 
         with pytest.raises(TranscriptionFailure):
             asyncio.run(run())
+        register_answer.assert_not_called()
 
 
 class TestVoiceMessageRuntimeErrorTeardown:
