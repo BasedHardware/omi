@@ -92,7 +92,7 @@ class CaptureHarness:
             result = fn(*args, firestore_client=self.store, **kwargs)
             self.rows[cid] = deepcopy(self.store.rows[('users', uid, 'conversations', cid)])
             return result
-        if fn.__module__ in {'utils.episodes.boundaries', 'utils.episodes.boundary_runtime'}:
+        if fn.__module__ == 'utils.episodes.boundaries':
             return fn(*args, firestore_client=self.store, **kwargs)
         if name == 'arm':
             return fn(*args, firestore_client=self.store, **kwargs)

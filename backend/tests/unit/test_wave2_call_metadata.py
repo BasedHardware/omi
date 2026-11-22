@@ -199,8 +199,6 @@ def test_v4_never_writes_boundary_inputs_outside_its_serve_cohort(monkeypatch, m
 
     monkeypatch.setenv(calls.FLAG, mode)
     monkeypatch.setenv(calls.FLAG + '_SERVE_UID_SHA256S', uid_digest('other-cohort'))
-    # A fully serving episode authority must not admit new V4 inputs for this user.
-    monkeypatch.setenv('EPISODE_BOUNDARIES_MODE', 'serve')
     phone_write, context_write = Mock(), Mock()
     monkeypatch.setattr(boundary_store, 'record', phone_write)
     monkeypatch.setattr(boundary_store, 'record_context', context_write)

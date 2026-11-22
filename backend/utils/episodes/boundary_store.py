@@ -15,8 +15,7 @@ from typing import Any
 
 from google.cloud import firestore
 
-from config.occasion_conversations import EPISODE_BOUNDARIES_MODE_ENV
-from config.refactor_modes import shadow_or_serve, serving_for, shadow_sampled
+from config.policy.batch import cohort_bucket
 from database._client import get_firestore_client
 from database.account_deletion_marker import account_deletion_document
 from database.account_deletion_policy import account_deletion_blocks_access, normalize_account_deletion_status
@@ -25,11 +24,16 @@ from utils.encryption import encrypt, decrypt
 
 MAX_SIGNALS = 128
 RETENTION = timedelta(days=7)
-SHADOW_SAMPLE_PERCENT = 5.0
-# Shadow observations may lag one calendar-poll period; serving always reads fresh.
-_shadow_windows: TTLCache = TTLCache(maxsize=1024, ttl=60)
+EVIDENCE_SAMPLE_PERCENT = 5.0
+# Keep the original bucket assignments for shared evidence writers.
+_EVIDENCE_SAMPLE_SALT = 'episode_boundaries_mode:shadow'
+_recent_windows: TTLCache = TTLCache(maxsize=1024, ttl=60)
 _seen_contexts: TTLCache = TTLCache(maxsize=2048, ttl=60)
 _cache_lock = RLock()
+
+
+def _sampled(uid: str) -> bool:
+    return bool(uid) and cohort_bucket(uid, _EVIDENCE_SAMPLE_SALT) < EVIDENCE_SAMPLE_PERCENT
 
 
 class BoundaryCapacityError(ValueError):
@@ -49,7 +53,7 @@ def _refs(uid: str, client: Any):
 def record(
     uid: str, signals: list[BoundarySignal], *, firestore_client: Any = None, allow_reschedule: bool = True
 ) -> int:
-    if not shadow_sampled(EPISODE_BOUNDARIES_MODE_ENV, uid, SHADOW_SAMPLE_PERCENT):
+    if not _sampled(uid):
         return 0
     client = firestore_client if firestore_client is not None else get_firestore_client()
     records, state_ref = _refs(uid, client)
@@ -113,46 +117,38 @@ def record(
     written = write(client.transaction())
     if written:
         with _cache_lock:
-            _shadow_windows.pop((uid, id(client)), None)
+            _recent_windows.pop((uid, id(client)), None)
     return written
 
 
 def record_context(
     uid: str, signal: BoundarySignal, *, firestore_client: Any = None, allow_reschedule: bool = False
 ) -> None:
-    """In shadow, ingest an unchanged row context at most once per minute."""
-    if not shadow_sampled(EPISODE_BOUNDARIES_MODE_ENV, uid, SHADOW_SAMPLE_PERCENT):
+    """Ingest an unchanged row context at most once per minute."""
+    if not _sampled(uid):
         return
     client = firestore_client if firestore_client is not None else get_firestore_client()
-    shadow = not serving_for(EPISODE_BOUNDARIES_MODE_ENV, uid)
     key = (uid, id(client), hashlib.sha256(signal.model_dump_json().encode()).hexdigest(), allow_reschedule)
-    if shadow:
-        with _cache_lock:
-            if _seen_contexts.get(key) is client:
-                return
+    with _cache_lock:
+        if _seen_contexts.get(key) is client:
+            return
     record(uid, [signal], firestore_client=client, allow_reschedule=allow_reschedule)
-    if shadow:
-        with _cache_lock:
-            # Holding the bounded client reference prevents object-id reuse.
-            _seen_contexts[key] = client
+    with _cache_lock:
+        # Holding the bounded client reference prevents object-id reuse.
+        _seen_contexts[key] = client
 
 
 def windows(uid: str, *, firestore_client: Any = None) -> dict[str, dict]:
-    if not shadow_or_serve(EPISODE_BOUNDARIES_MODE_ENV):
-        return {}
     client = firestore_client if firestore_client is not None else get_firestore_client()
     key = (uid, id(client))
-    shadow = not serving_for(EPISODE_BOUNDARIES_MODE_ENV, uid)
-    if shadow:
-        with _cache_lock:
-            cached = _shadow_windows.get(key)
-            if cached is not None and cached[0] is client:
-                return {k: dict(v) for k, v in cached[1].items()}
+    with _cache_lock:
+        cached = _recent_windows.get(key)
+        if cached is not None and cached[0] is client:
+            return {k: dict(v) for k, v in cached[1].items()}
     _, ref = _refs(uid, client)
     result = (ref.get().to_dict() or {}).get('entries') or {}
-    if shadow:
-        with _cache_lock:
-            _shadow_windows[key] = (client, result)
+    with _cache_lock:
+        _recent_windows[key] = (client, result)
     return {k: dict(v) for k, v in result.items()}
 
 
@@ -165,11 +161,3 @@ def load(uid: str, keys: list[str], *, firestore_client: Any = None) -> list[Bou
         if data.get('content'):
             result.append(BoundarySignal.model_validate_json(decrypt(data['content'], uid)))
     return result
-
-
-def end_at(uid: str, keys: list[str], ended_at: datetime, *, firestore_client: Any = None) -> None:
-    """A server quiet/window-close decision terminalizes the same evidence identity."""
-    signals = load(uid, keys, firestore_client=firestore_client)
-    ended = [s.model_copy(update={'ended_at': ended_at}) for s in signals if s.started_at <= ended_at]
-    if ended:
-        record(uid, ended, firestore_client=firestore_client)

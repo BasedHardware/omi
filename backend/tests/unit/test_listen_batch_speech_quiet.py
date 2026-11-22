@@ -121,7 +121,6 @@ async def _one_pass(monkeypatch, row, speech_clock):
     )
     controller = LiveConversationController(host, clock=lambda: NOW)
     monkeypatch.setattr(conversation_module, 'poll_calendar', AsyncMock())
-    monkeypatch.setattr(conversation_module, 'conversation_action', AsyncMock(return_value=None))
     controller._finalize_isolated = AsyncMock()
     controller.create_new_in_progress_conversation = AsyncMock()
     await asyncio.wait_for(controller.lifecycle_loop(), 1)
@@ -204,7 +203,7 @@ def _v3_row(age_seconds, **changes):
     return row
 
 
-async def _rotation_pass(monkeypatch, row, speech_clock, *, successor='next', create_error=None, boundary=None):
+async def _rotation_pass(monkeypatch, row, speech_clock, *, successor='next', create_error=None):
     """One lifecycle tick. Returns (stages finalized, creates, controller)."""
     state = SimpleNamespace(
         active=True, current_conversation_id='current', last_audio_received_time=NOW.timestamp() - 1
@@ -223,7 +222,6 @@ async def _rotation_pass(monkeypatch, row, speech_clock, *, successor='next', cr
     )
     controller = LiveConversationController(host, clock=lambda: NOW)
     monkeypatch.setattr(conversation_module, 'poll_calendar', AsyncMock())
-    monkeypatch.setattr(conversation_module, 'conversation_action', AsyncMock(return_value=boundary))
     stages = []
 
     async def finalize(fn, conversation_id, *, stage):
@@ -376,7 +374,6 @@ async def test_a_refused_seal_does_not_loop(monkeypatch, rotation_on):
     )
     controller = LiveConversationController(host, clock=lambda: NOW)
     monkeypatch.setattr(conversation_module, 'poll_calendar', AsyncMock())
-    monkeypatch.setattr(conversation_module, 'conversation_action', AsyncMock(return_value=None))
     controller.process_conversation = AsyncMock(return_value=False)
     fresh = _v3_row(5)
 
@@ -418,12 +415,6 @@ async def test_a_quiet_seal_tick_wins_over_rotation(monkeypatch, rotation_on):
     # Quiet already closes the row through the existing path; rotation never runs on the same tick.
     stages, creates, _ = await _rotation_pass(monkeypatch, _v3_row(300), _speaking(150))
     assert (stages, creates) == (['lifecycle_rollover'], 1)
-
-
-@pytest.mark.asyncio
-async def test_episode_hold_blocks_rotation(monkeypatch, rotation_on):
-    stages, creates, _ = await _rotation_pass(monkeypatch, _v3_row(300), _speaking(2), boundary='hold')
-    assert (stages, creates) == ([], 0)
 
 
 @pytest.mark.asyncio
