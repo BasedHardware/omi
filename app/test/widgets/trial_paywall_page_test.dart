@@ -38,6 +38,10 @@ void main() {
     testWidgets('every carousel slide fits at ${size.width.toInt()}pt', (tester) async {
       await _pump(tester, size);
       expect(tester.takeException(), isNull);
+      // On the smallest phone the pinned footer leaves room for only the header; scroll to the carousel.
+      final vertical = find.byWidgetPredicate((w) => w is Scrollable && w.axisDirection == AxisDirection.down);
+      await tester.scrollUntilVisible(find.byType(PageView), 100, scrollable: vertical.first);
+      await tester.pumpAndSettle();
       final pageView = find.byType(PageView);
       for (var i = 0; i < 4; i++) {
         await tester.drag(pageView, const Offset(-400, 0));
