@@ -24,7 +24,7 @@ PAID_PLANS = frozenset({'architect', 'plus', 'pro', 'unlimited', 'unlimited_v2'}
 TERMINAL_SUBSCRIPTIONS = frozenset({'canceled', 'incomplete_expired'})
 BILLING_ROUTE = 'account correct-plan'
 MAX_PAGES = 10
-MAX_STRIPE_CUSTOMERS = 5
+MAX_STRIPE_CUSTOMERS = 10
 MAX_DRY_RUN_OWNERS = 100
 MAX_APPLY_OWNERS = 10
 STOP_REASONS = frozenset({'pending_checkout', 'billing_unknown', 'state_changed', 'rollback_conflict'})
@@ -182,6 +182,7 @@ def _write_audit(
             'before_digest': digest(old),
             'after_digest': digest(new),
             'outcome': 'succeeded',
+            'started_at': firestore.SERVER_TIMESTAMP,
             'finished_at': firestore.SERVER_TIMESTAMP,
             'summary': {'before_plan': row['before'], 'after_plan': row['after'], 'rollback_of': rollback},
         },
@@ -373,6 +374,8 @@ def run(args: argparse.Namespace, ctx: ActionContext, *, firestore_client=None) 
                 for uid in owners:
                     try:
                         row = operator.process(uid, f, proofs.get(uid), rollback=mode == 'rollback')
+                    except EvidenceUnavailable:
+                        row = {'status': 'billing_unknown'}
                     except Exception:
                         row = {'status': 'failed'}
                     append_receipt(f, {'owner': uid, **row})

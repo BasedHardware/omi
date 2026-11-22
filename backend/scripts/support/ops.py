@@ -75,7 +75,7 @@ class _PrivateArgumentsParser(argparse.ArgumentParser):
 def build_parser(*, private_arguments: bool = False) -> argparse.ArgumentParser:
     parser_type = _PrivateArgumentsParser if private_arguments else argparse.ArgumentParser
     parser = parser_type(prog="omi-support-ops", description=__doc__.split("\n\n")[0])
-    parser.add_argument("--ticket", required=True, help="Intercom conversation id the action serves")
+    parser.add_argument("--ticket", required=True, help="Intercom conversation ID or issue reference")
     parser.add_argument("--actor", required=True, help="the human who asked for this action")
     parser.add_argument("--reason", required=True, help="why, in one line (no customer content)")
     parser.add_argument("--agent", default=None, help="operator identity that runs it (default SUPPORT_AGENT_ID)")
