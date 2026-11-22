@@ -73,7 +73,7 @@ compacted/windowed candidate measured .002470 RTF but WER **24.83%**, versus
 safely. Compact whole-file also worsened WER (29.79% versus 28.44%).
 
 **`TRANSCRIPTION_FINAL_PASS_VAD_COMPACTION_ENABLED` was retired 2026-11-22**
-after serving off on every surface; the benchmark verdict below is why it never
+after serving off on every surface; the benchmark verdict above is why it never
 shipped. The implemented wrapper abstains to original audio on VAD/mapping
 failure; these unguarded candidate scores are not its post-fallback output. On
 this corpus, mapping abstention can cause an extra ASR request, so no
