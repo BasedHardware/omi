@@ -61,3 +61,20 @@ def test_verified_discard_deletion_checkpoint_cannot_authorize_all_scope():
     del state['scope']
     assert not runner._can_resume(state, 'apply', cutoff, scope)
     assert not runner._can_resume(state, 'apply', cutoff, 'all')
+
+
+def test_narrow_scan_does_not_join_custody_for_a_deferred_row(tmp_path, monkeypatch):
+    now = datetime.now(timezone.utc)
+    cutoff = now - timedelta(hours=6)
+    args = SimpleNamespace(phase='canary', cutoff=cutoff, scope=runner.DISCARD_DELETION_SCOPE)
+    state = runner._initial_state(args, now)
+    snapshot = Mock()
+    snapshot.reference.path = 'users/test/conversations/test'
+    snapshot.to_dict.return_value = {'status': 'processing', 'deleted': True, 'deferred': True}
+    snapshot.get.return_value = cutoff
+    monkeypatch.setattr(runner, '_page', Mock(return_value=[snapshot]))
+    client = Mock()
+
+    assert runner.run_pass(client, tmp_path / 'canary.json', state, 'canary') == 'exhausted'
+    assert state['counts'] == {'deferred_excluded': 1}
+    client.transaction.assert_not_called()

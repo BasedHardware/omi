@@ -11,6 +11,7 @@ from database.batch_account_authority_schema import ACCOUNT_DELETION_COLLECTION
 from database.conversation_finalization_schema import FINALIZATION_JOBS_COLLECTION
 from database.conversation_tombstones import COLLECTION as TOMBSTONES
 from models.finalization_owner import python_owns_finalization
+from utils.conversations.terminal_relevance import valid_decision
 from utils.enrichment import outbox
 
 OWNERSHIP_FIELDS = (
@@ -35,6 +36,9 @@ ROW_FIELDS = (
     'discarded',
     'deferred',
     'relevance_decision.verdict',
+    'relevance_decision.decided_by',
+    'relevance_decision.reason',
+    'relevance_decision.trigger',
     'sync_relevance_user_kept',
     'finalization_id',
     'finalization_engine',
@@ -72,7 +76,7 @@ def classify(row: Mapping[str, Any], *, cutoff: datetime, discard_deletion_only:
         return 'deleted'
     if row.get('discarded') is True:
         decision = row.get('relevance_decision')
-        if (isinstance(decision, dict) and decision.get('verdict') == 'discard') or row.get('finalization_job_id'):
+        if isinstance(decision, Mapping) and valid_decision(decision) and decision.get('verdict') == 'discard':
             return 'discarded'
         return 'discard_unproven'
     if deferred is True and row.get('source') == 'desktop':

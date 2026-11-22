@@ -12,6 +12,7 @@ from database import conversation_parked_status as parked, conversations
 from utils.conversations import capture_group_notes_refresh, summary_delivery
 
 CUTOFF = datetime(2026, 11, 21, tzinfo=timezone.utc)
+DISCARD = {'verdict': 'discard', 'decided_by': 'rule', 'reason': 'filler_only', 'trigger': 'capture_end'}
 
 
 @pytest.mark.parametrize(
@@ -26,8 +27,10 @@ CUTOFF = datetime(2026, 11, 21, tzinfo=timezone.utc)
             'recent_or_unknown_admission',
         ),
         ({'discarded': True}, 'discard_unproven'),
+        ({'discarded': True, 'finalization_job_id': 'job'}, 'discard_unproven'),
+        ({'discarded': True, 'relevance_decision': {'verdict': 'discard'}}, 'discard_unproven'),
         ({'discarded': True, 'sync_relevance_user_kept': True}, 'other_owner'),
-        ({'discarded': True, 'relevance_decision': {'verdict': 'discard'}}, 'discarded'),
+        ({'discarded': True, 'relevance_decision': DISCARD}, 'discarded'),
         ({'deleted': True}, 'deleted'),
         ({'deleted': True, 'v3_derived': True}, 'other_owner'),
         ({'status': 'completed', 'deleted': True}, 'changed'),
@@ -132,7 +135,7 @@ def test_discard_deletion_scope_refuses_deferred_markers_before_custody_reads(di
         'status': 'processing',
         disposition: True,
         'deferred': deferred,
-        'relevance_decision': {'verdict': 'discard'},
+        'relevance_decision': DISCARD,
     }
     assert parked.classify(row, cutoff=CUTOFF, discard_deletion_only=True) == 'deferred_excluded'
 
@@ -140,7 +143,7 @@ def test_discard_deletion_scope_refuses_deferred_markers_before_custody_reads(di
 @pytest.mark.parametrize(('revision', 'expected'), [(1, 'deferred_excluded'), (2, 'changed')])
 def test_discard_deletion_transaction_refuses_deferred_added_after_scan(revision, expected):
     ref = _Ref('users/owner/conversations/c1')
-    row = {'status': 'processing', 'discarded': True, 'relevance_decision': {'verdict': 'discard'}}
+    row = {'status': 'processing', 'discarded': True, 'relevance_decision': DISCARD}
     scanned = _snapshot(ref, row, 1, scan=True)
     latest = _snapshot(ref, {**row, 'deferred': True}, revision)
     client = SimpleNamespace(collection=_Ref, get_all=Mock(return_value=[latest]))
@@ -160,7 +163,7 @@ def test_discard_deletion_scope_preserves_visibility_and_notes_refusals(disposit
         'status': 'processing',
         disposition: True,
         'deferred': False,
-        'relevance_decision': {'verdict': 'discard'},
+        'relevance_decision': DISCARD,
     }
     current = {ref.path: _snapshot(ref, row, 1)}
     if disposition == 'deleted':
