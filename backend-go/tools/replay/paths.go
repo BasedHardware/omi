@@ -147,6 +147,21 @@ func loadCorpus(path string) (data []byte, err error) {
 	return data, err
 }
 
+func loadObservationFile(path string) ([]byte, error) {
+	canonical, err := filepath.EvalSymlinks(path)
+	if err != nil {
+		return nil, fmt.Errorf("resolve diagnostic observations: %w", err)
+	}
+	canonical, err = filepath.Abs(canonical)
+	if err != nil {
+		return nil, fmt.Errorf("resolve diagnostic observation path: %w", err)
+	}
+	if _, err := outsideWorktree(canonical); err != nil {
+		return nil, errors.New("diagnostic observations must be outside Git worktrees")
+	}
+	return loadCorpus(canonical)
+}
+
 func validateCorpusLocation(backend, corpus, testKey string, includeValues bool, data []byte) error {
 	hostname, err := os.Hostname()
 	if err != nil {

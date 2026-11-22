@@ -50,6 +50,31 @@ The first command primes the tokenizer dependency cache before network isolation
 existing Backend Go Checks workflow installs locked Python dependencies, primes the cache,
 and runs the replay test against its Postgres 16 service and Firestore emulator.
 
+### Workerd diagnostic (not the gate)
+
+The gate remains `test.sh` and its `cmd/jobd` driver. To measure the same pinned 41-case
+synthetic corpus against a draft that contains the ordinary-sync replay seam, run from the
+repo root with local Postgres 16, Java 21 and Firebase CLI available:
+
+```sh
+make oracle-diag WORKERD_REF=<full-workerd-commit-sha> \
+  ORACLE_DIAG_OUTPUT=../ordinary-sync-report.json
+```
+
+This target builds the opt-in test binary from `WORKERD_REF`, runs the separate
+`ordinary_sync_diag.py` adapter, and compares its row-level observations with the same
+oracle comparator. The report is value-free and records each difference's family, path,
+kind and approved reason. Family attribution uses this precedence: goals; apps and
+webhooks; memory source and metering; digest, minimum and relevance; other. The family
+table counts unexplained and allowed rows separately. A nonzero unexplained count is a
+measurement, not a gate failure.
+
+The seam admits each fixture as one `sync_update` over a stored completed row. It does not
+exercise per-case trigger behavior, repeat-admission, final-attempt handling,
+`delete_before_worker_read`, or `erase_after`; those are listed in the report and remain
+uncovered until the real driver swap. Missing rows are materialized from their synthetic
+recording for this diagnostic. The target does not change `test.sh` or the cohort gate.
+
 To examine the active corpus interactively:
 
 ```sh
@@ -177,13 +202,13 @@ not fetch conversations or read production keys.
 
 The ten-case admission corpus is a zero-difference gate. The 41-case active-finalizer corpus
 is an interim measurement against `cmd/jobd`; its unexplained-difference count is expected to
-be non-zero. The gate records that count per commit, with no expected-drift signature pin,
+be nonzero. The gate records that count per commit, with no expected-drift signature pin,
 and preserves reasons on allowlisted differences. CI verifies the count against the observed
 unexplained paths and requires zero execution errors. This is the lane 6 worklist, not the
 final cohort gate. `test.sh` also mutates the recorded fence outcome and duplicates a paid
-model call, then verifies each mutation is rejected. After the lane 6 handler lands, switch
-the driver to `cmd/workerd` and run the same mutations against the worker before requiring
-zero unexplained differences over the active floor.
+model call, then verifies each mutation is rejected. The workerd diagnostic target above is
+for draft-to-draft measurement only. After the lane 6 handler lands and the driver swap is
+approved, the cohort gate must run the full corpus and both mutations against the worker.
 
 The oracle does not cover Redis cache or suppression keys, mixed-version ownership handback,
 or rollback durability; the shadow plan covers these behaviors. Separate cases assert that
