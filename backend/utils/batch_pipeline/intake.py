@@ -51,6 +51,8 @@ from utils.batch_pipeline.artifact_policy import artifacts_for
 from utils.batch_pipeline.audio import with_context
 from utils.batch_pipeline.capture_decode import decode_units, is_deterministic_decode_failure
 from utils.batch_pipeline.future_capture_decode import decode_future_units
+from utils.sync import future_capture_request
+from utils.sync.future_capture_request import Outcome as FutureCaptureOutcome
 from utils.sync.receipt_clock import (
     POLICY as FUTURE_CLOCK_POLICY,
     ESTIMATED_POLICY,
@@ -607,9 +609,11 @@ async def accept_upload(
             },
         )
         if refused is not None:
+            future_capture_request.mark(FutureCaptureOutcome.PREFLIGHT_REFUSED)
             return refused
         if previous.get('dispatch_protocol') == 'batch_v1':
             status = await run_blocking(db_executor, durable_status, store, uid, previous['job_id'])
+            future_capture_request.mark(FutureCaptureOutcome.PRIOR_CUSTODY)
             return start_response(status) if status else sync_content_in_progress_response(previous['job_id'])
         if previous.get('status') == 'completed':
             try:
@@ -640,11 +644,13 @@ async def accept_upload(
                 total = await run_blocking(db_executor, store.run, lambda tx: _only_deleted_total(tx, uid, content_id))
                 if total is None:
                     raise error
+                future_capture_request.mark(FutureCaptureOutcome.PRIOR_CUSTODY)
                 logger.info('event=batch_intake outcome=conversation_deleted_terminal')
                 return JSONResponse(status_code=200, content=deleted_conversation_result(total))
             if cached:
                 status = await run_blocking(db_executor, durable_status, store, uid, public_job_id)
                 if status:
+                    future_capture_request.mark(FutureCaptureOutcome.PRIOR_CUSTODY)
                     return start_response(status)
         phase = 'ownership_fence'
         mode = await run_blocking(db_executor, legacy_dark.current_mode, uid)
@@ -653,6 +659,7 @@ async def accept_upload(
             if mode is LegacySyncMode.ON:
                 # Existing legacy ownership includes capped/retryable/missing-Redis
                 # recovery. Its original claimant remains the sole authority.
+                future_capture_request.mark(FutureCaptureOutcome.PRIOR_CUSTODY)
                 return None
             # Contract (h) invariant 4: legacy-owned content is acknowledged, never
             # re-admitted; only a row legacy can no longer finish is adopted, by a
@@ -664,12 +671,14 @@ async def accept_upload(
                 previous, mode, owner_job_present=owner_job_present, batch_adopts_stranded=True
             )
             if decision.action is not legacy_dark.FenceAction.ADMIT_BATCH:
+                future_capture_request.mark(FutureCaptureOutcome.PRIOR_CUSTODY)
                 return legacy_dark.fence_response(decision, total_files=len(paths), lane=lane)
             adopt = stranded_adopter(previous, owner_job_present=owner_job_present)
         if not policy.batch_enabled:
             # Main's owner-load filter (ramp narrowing) applies only after durable
             # dispatch ownership checks; accepted batch receipts above always drain.
             if mode is LegacySyncMode.ON:
+                future_capture_request.mark(FutureCaptureOutcome.ROUTE_DECLINED)
                 return None
             # Legacy draining/dark cannot take a narrowed owner back (contract (h)),
             # so the upload stays on batch rather than being refused.
@@ -698,6 +707,7 @@ async def accept_upload(
         # native owner here without adding an ownership-discovery read to dark
         # uploads, or accidentally admitting a second GPU job.
         if target.get('record_lane_owner') == 'batch_live_v1':
+            future_capture_request.mark(FutureCaptureOutcome.PRIOR_CUSTODY)
             phase = 'record_routing'
             if record_router is None:
                 OMI_PIPELINE_RECORD_WAIT_ANSWERS_TOTAL.labels(reason='record_router_missing').inc()
@@ -740,6 +750,7 @@ async def accept_upload(
                 )
                 if evidence is not None:
                     evidence.language_excluded = True
+                future_capture_request.mark(FutureCaptureOutcome.ROUTE_DECLINED)
                 return None
         fresh = seed.priority == Priority.FRESH
         if (
@@ -759,9 +770,11 @@ async def accept_upload(
                 reason='capacity_full',
                 outcome='recovered',
             )
+            future_capture_request.mark(FutureCaptureOutcome.ROUTE_DECLINED)
             return None
         if isinstance(conversation_id, str) and target.get('record_lane_owner') == 'legacy_final_pass_v1':
             if mode is LegacySyncMode.ON:
+                future_capture_request.mark(FutureCaptureOutcome.PRIOR_CUSTODY)
                 return None
             # Legacy can no longer serve this conversation: move its route to batch
             # (the same revision-fenced CAS as every owner transition) and admit
@@ -771,6 +784,7 @@ async def accept_upload(
 
             rehome = await run_blocking(db_executor, final_pass_rehome.upload_rehome, mode, uid, conversation_id)
             if not final_pass_rehome.rehomes_to_batch(rehome):
+                future_capture_request.mark(FutureCaptureOutcome.PRIOR_CUSTODY)
                 return legacy_dark.fence_response(
                     legacy_dark.FenceDecision(
                         legacy_dark.FenceAction.ACK,
@@ -812,6 +826,7 @@ async def accept_upload(
             )
             if evidence is not None:
                 evidence.language_excluded = True
+            future_capture_request.mark(FutureCaptureOutcome.ROUTE_DECLINED)
             return None
         if (
             mode is LegacySyncMode.ON
@@ -828,6 +843,7 @@ async def accept_upload(
             logger.info('event=batch_language_eligibility outcome=legacy reason=known_unsupported_language')
             if evidence is not None:
                 evidence.language_excluded = True
+            future_capture_request.mark(FutureCaptureOutcome.ROUTE_DECLINED)
             return None
         if inherited:
             input_language = inherited
@@ -871,6 +887,7 @@ async def accept_upload(
             record_fallback(
                 component='stt_selection', from_mode='none', to_mode='none', reason='other', outcome='recovered'
             )
+            future_capture_request.mark(FutureCaptureOutcome.ROUTE_DECLINED)
             return None
         record_origin = bool(
             not provider
@@ -932,6 +949,7 @@ async def accept_upload(
             raise ValueError('serving intake requires a dedicated batch GPU pool')
         deterministic_key, memo_hit = await _cached_decode_refusal(uid, content_id, paths, decode)
         if memo_hit:
+            future_capture_request.mark(FutureCaptureOutcome.DECODE_MEMO_HIT)
             return _sync_unavailable_response()
         # A sampled upload is held whole before staging, so no single unit may exceed the hold bound.
         max_unit_seconds = min(config.max_unit_seconds, SAMPLE_SCAN_SECONDS) if sampled else config.max_unit_seconds
@@ -1001,6 +1019,7 @@ async def accept_upload(
                 iterator, unit_item, store, input_language, uid, target, user, evidence, set_sample_phase
             )
             if sample is None:
+                future_capture_request.mark(FutureCaptureOutcome.ROUTE_DECLINED)
                 return None
             queue, decisions = sample
         # A missing-input repair replays these exact decisions; it never probes again.
@@ -1179,6 +1198,7 @@ async def accept_upload(
             return start_response(status) if status else sync_content_in_progress_response(outcome['job_id'])
         return sync_content_in_progress_response(outcome.get('job_id'))
     except BatchPrivacyBlocked:
+        future_capture_request.mark(FutureCaptureOutcome.PREFLIGHT_REFUSED)
         return privacy_blocked_response()
     except Exception as error:
         if isinstance(error, (FutureCaptureRefused, FutureCaptureRetry)):

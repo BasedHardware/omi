@@ -11,6 +11,7 @@ from tests.unit.test_sync_cross_job_assignment import intake as assign, conversa
 from utils.batch_pipeline import artifact_reupload, projection
 from utils.batch_pipeline.contracts import WorkItem, Priority, ProjectionBinding
 from utils.batch_pipeline.projection_parts import split_result
+from utils.sync import future_capture_request
 from utils.sync.receipt_clock import POLICY
 
 
@@ -96,19 +97,30 @@ async def test_missing_recovered_audio_repair_decodes_original_receipt_clock(anc
         return 'gs://restored/audio'
 
     monkeypatch.setattr(artifact_reupload, '_commit_restore', lambda *a: 'job')
-    result = await artifact_reupload.restore_upload(
-        object(),
-        'synthetic',
-        'content',
-        [str(path)],
-        source='omi',
-        should_lock=False,
-        conversation_id=None,
-        client_device_id=None,
-        client_platform=None,
-        intake_context={},
-        artifacts=SimpleNamespace(stage_audio=stage),
-    )
+
+    @future_capture_request.observe_upload
+    async def repair_request():
+        future_capture_request.classify_upload([path.name], RECEIVED)
+        result = await artifact_reupload.restore_upload(
+            object(),
+            'synthetic',
+            'content',
+            [str(path)],
+            source='omi',
+            should_lock=False,
+            conversation_id=None,
+            client_device_id=None,
+            client_platform=None,
+            intake_context={},
+            artifacts=SimpleNamespace(stage_audio=stage),
+        )
+        future_capture_request.mark(future_capture_request.Outcome.PRIOR_CUSTODY)
+        return result
+
+    reached = future_capture_request._OUTCOMES.labels(outcome='reached_offsets')
+    before = reached._value.get()
+    result = await repair_request()
+    assert reached._value.get() == before + 1
     assert result == 'job' and len(staged) == 1
     assert staged[0].capture_at == original.stored_capture_at
     assert staged[0].conversation_id == original.recovery_id
