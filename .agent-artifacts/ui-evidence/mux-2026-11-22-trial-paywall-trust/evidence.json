@@ -4,21 +4,21 @@
     {
       "file": "001-mobile-ios-trial-paywall-light.png",
       "platform": "mobile-ios",
-      "description": "Trial paywall, light, default text: main vs this change. Legal line added under the button, one dated timeline row, one carousel title, grey cancel note; header, headline, carousel and code hint unmoved.",
+      "description": "Trial paywall, light, default text: main vs this change. Differences: one carousel title, the '+ 7 days free' row removed, Terms of Use and Privacy Policy as the last line. The cancel note stays green and bold under the button with the code hint under it, as on main; the header is unchanged.",
       "captured_by": "agent",
       "source": "screencapture"
     },
     {
       "file": "002-mobile-ios-trial-paywall-largest-text.png",
       "platform": "mobile-ios",
-      "description": "Largest accessibility text (3.12x): main fills the screen with the footer and Restore overlaps Omi Pro; this change shows header without overlap, price line, button and legal links without scrolling.",
+      "description": "Largest accessibility text (3.12x): main fills the screen with the footer and Restore overlaps Omi Pro; this change shows Restore at full size beside the brand, the headline, the price line, the button and the legal links without scrolling.",
       "captured_by": "agent",
       "source": "screencapture"
     },
     {
       "file": "003-mobile-ios-trial-paywall-dark.png",
       "platform": "mobile-ios",
-      "description": "Dark mode: main shows white status bar icons on the light paper; this change shows dark icons.",
+      "description": "Dark mode: main shows white status bar icons on the light paper; this change shows dark icons. The rest matches 001.",
       "captured_by": "agent",
       "source": "screencapture"
     },
@@ -33,6 +33,13 @@
       "file": "005-mobile-ios-trial-paywall-timeline.png",
       "platform": "mobile-ios",
       "description": "Scrolled: main has two rows dated Nov 29, 2026; this change has one dated charge row. Plan cards and prices unchanged.",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "006-mobile-ios-trial-paywall-header-de-ru.png",
+      "platform": "mobile-ios",
+      "description": "German and Russian app language, default text: 'Wiederherstellen' and '\u0412\u043e\u0441\u0441\u0442\u0430\u043d\u043e\u0432\u0438\u0442\u044c' at full size, brand centred, no overlap.",
       "captured_by": "agent",
       "source": "screencapture"
     }
