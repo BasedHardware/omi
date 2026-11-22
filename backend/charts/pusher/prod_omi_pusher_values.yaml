@@ -115,6 +115,11 @@ envFrom:
 runtimeConfigMapName: prod-omi-backend-config
 
 env:
+  # SCA-2304: preserve the rollback after the pusher latency breaches.
+  - name: AUDIO_CUSTODY_PCM_COMPRESSION_ENABLED
+    value: "false"
+  - name: NOTES_SHORT_CLIP_FLOOR
+    value: "true"
   - name: PUSHER_RECORD_CLOSE_NOTIFY_ENABLED
     value: "false"
   - name: PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_PERCENT

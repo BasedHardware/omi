@@ -292,7 +292,6 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
             # lead2 f9bdc4). They equal the code defaults, so pusher, which leaves them unset, behaves the same.
             "MEDIA_NOISE_MODE",
             "MEDIA_NOISE_MODE_SERVE_PERCENT",
-            "NOTES_SHORT_CLIP_FLOOR",
             # Prod holds CPU projection off; pusher never constructs Projector.
             "BATCH_PIPELINE_SILENCE_READ_SKIP_ENABLED",
             # Occasion stitching runs only in the /v4/listen session (routers/listen/runtime.py);
@@ -481,7 +480,9 @@ PUSHER_ONLY_ALLOWED: dict[str, frozenset[str]] = {
             "STT_CAP_DISPATCH_COHORT",
         }
     )
-    | frozenset(PROD_FINAL_PASS_SHADOW_VALUES),
+    | frozenset(PROD_FINAL_PASS_SHADOW_VALUES)
+    # SCA-2304 rolled back pusher compression. Listen keeps the code default.
+    | frozenset({"AUDIO_CUSTODY_PCM_COMPRESSION_ENABLED"}),
 }
 
 # Queue-age publishing is active only on backend-listen. Pusher may omit the

@@ -190,6 +190,13 @@ def _compose_environment(
 
     env_config = cast(ConfigDict, merged)
     _resolve_derived_services(env_config)
+    # Apply production service-local overrides after resolving inheritance. Staging
+    # composes only the shared service settings under overlay.
+    service_env = _as_config_dict(overlay_doc.get('service_only_env')) or {}
+    if service_env:
+        services = env_config['cloud_run']['services']
+        for service, entries in service_env.items():
+            services[service]['env'] = _deep_merge(services[service].get('env', {}), entries)
     _apply_conversations_v3_stage(env_config)
     _apply_go_queue_erase_setting(env_config)
     env_config['compute_project'] = compute_project

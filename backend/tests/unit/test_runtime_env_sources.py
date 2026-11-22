@@ -17,6 +17,24 @@ def test_checked_in_manifest_matches_sources():
     assert COMPOSER['compose_manifest']() == manifest
 
 
+def test_prod_merge_operator_pins_apply_only_to_integration():
+    prod = COMPOSER['compose_environment']('prod')['cloud_run']['services']
+    staging = COMPOSER['compose_staging'](inputs={'STAGING_REDIS_HOST': '10.0.0.7'})['cloud_run']['services']
+    pins = {
+        'BATCH_PIPELINE_MERGE_CATCH_UP_DEPTH': '1',
+        'BATCH_PIPELINE_PROVIDER_MERGE_MEMBERSHIP_ENABLED': 'true',
+    }
+    integration = prod['backend-integration']['env']
+    for key, value in pins.items():
+        assert integration[key]['value'] == value
+    assert integration['SYNC_BRIDGE_CONTAINED_DONOR_MERGE_ENABLED']['value'] == 'off'
+    for name, service in prod.items():
+        if name != 'backend-integration':
+            assert pins.keys().isdisjoint(service['env'])
+    for service in staging.values():
+        assert pins.keys().isdisjoint(service['env'])
+
+
 def test_docket_retirements_have_no_source_bindings():
     registry = yaml.load((ROOT / 'config/feature-flags.yaml').read_text(), Loader=SAFE_LOADER)
     retired = {row['key'] for row in registry['retired'] if 'David flag docket 2026-11-09' in row.get('reason', '')}

@@ -76,8 +76,16 @@
       "why": "Reviewed 2026-10-18: the worker imports projection only transitively (Pump/Scheduler never call Projection); the flag is not executed there."
     },
     {
-      "key": "reader-split|prod|helm/batch-pipeline-worker/BATCH_PIPELINE_PACKING_SAMPLE_RATE",
-      "why": "SCA-3548: preserve the live GPU worker's unset sampling rate on the depth-only roll. Cloud Run's sampling policy remains independent."
+      "key": "reader-split|prod|helm/batch-pipeline-worker/BATCH_PIPELINE_MERGE_CATCH_UP_DEPTH",
+      "why": "SCA-2185 records the production backend-integration operator pin. The batch worker keeps its existing merge catch-up depth."
+    },
+    {
+      "key": "staging-mirrors-prod|staging|backend-integration/BATCH_PIPELINE_MERGE_CATCH_UP_DEPTH",
+      "why": "SCA-2185 records a production-only backend-integration operator pin. Staging keeps its existing catch-up depth."
+    },
+    {
+      "key": "staging-mirrors-prod|staging|backend-integration/BATCH_PIPELINE_PROVIDER_MERGE_MEMBERSHIP_ENABLED",
+      "why": "SCA-2185 records the production backend-integration operator pin. Staging continues to use the code default."
     },
     {
       "key": "task-target-retry-semantics|code|account-deletion/routers/users.py:run_account_deletion_wipe/500",

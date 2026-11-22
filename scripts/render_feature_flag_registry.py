@@ -123,6 +123,10 @@ def _manifest_envs(path: Path) -> dict[str, dict[str, str]]:
         if isinstance(jobs, dict):
             for name in jobs:
                 grab(jobs, name, f"job/{name}")
+    for name, entries in (tree.get("service_only_env") or {}).items():
+        hosts.setdefault(f"cloud_run/{name}", {}).update(
+            {key: _env_token(entry) for key, entry in entries.items()}
+        )
     return hosts
 
 

@@ -2,6 +2,9 @@
 
 Edit `_base.yaml` and the environment overlays, then regenerate
 `backend/deploy/runtime_env.yaml` with `backend/deploy/compose_runtime_env.py`.
+Production Cloud Run settings under `service_only_env` apply to the named
+service after derived services are composed. Staging composes the shared
+`overlay` and does not inherit these service-specific settings.
 
 Pre-recorded Modulate credit/breaker failover to Soniox is declared on every
 runtime host beside `STT_PRERECORDED_MODEL`. `PRERECORDED_SONIOX_FAILOVER_ENABLED`
