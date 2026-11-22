@@ -333,7 +333,7 @@ def _enrich_deferred_conversation(uid: str, conversation: dict, *, include_disca
         # Another opener can already be enriching this row. Read its state
         # before replying so a stale completed snapshot cannot stop polling.
         record_lazy_desktop_deferral(event='enrich_lost_ownership')
-        current = _get_valid_conversation_by_id(uid, conversation_id)
+        current = _get_valid_conversation_by_id(uid, conversation_id, follow_sync_bridge=True)
         _assert_detail_visible(current, include_discarded)
         return current
 
@@ -1383,6 +1383,8 @@ def get_conversation_by_id(
     polling = request is not None and request.query_params.get('status_poll') == '1'
     if not polling and conversation.get('deferred') and not conversation.get('processing_deferred'):
         conversation = _enrich_deferred_conversation(uid, conversation, include_discarded=include_discarded)
+        if source is not None and conversation.get('source') != source:
+            raise HTTPException(status_code=404, detail="Conversation not found")
     if include_translations is True:
         try:
             conversation, translation_status, next_cursor = translate_open_page(uid, conversation, translation_cursor)

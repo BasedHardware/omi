@@ -207,7 +207,7 @@ def test_losing_first_open_returns_authoritative_status_without_enqueuing(monkey
         result = conv_router._enrich_deferred_conversation('u1', stale)
 
     assert result is current
-    reread.assert_called_once_with('u1', 'c1')
+    reread.assert_called_once_with('u1', 'c1', follow_sync_bridge=True)
     submit.assert_not_called()
 
 
@@ -215,12 +215,26 @@ def test_losing_first_open_reapplies_discard_visibility(monkeypatch):
     stale = {'id': 'c1', 'status': 'completed', 'deferred': True}
     current = {**stale, 'discarded': True}
     monkeypatch.setattr(conv_router.lifecycle_service, 'reacquire_deferred_processing', lambda *_args: False)
-    monkeypatch.setattr(conv_router, '_get_valid_conversation_by_id', lambda *_args: current)
+    monkeypatch.setattr(conv_router, '_get_valid_conversation_by_id', lambda *_args, **_kwargs: current)
 
     with pytest.raises(HTTPException) as error:
         conv_router._enrich_deferred_conversation('u1', stale, include_discarded=False)
 
     assert error.value.status_code == 404
+
+
+def test_redirect_during_deferred_admission_reapplies_source_constraint(monkeypatch):
+    donor = {'id': 'c1', 'source': 'omi', 'status': 'completed', 'deferred': True}
+    target = {'id': 'c2', 'source': 'desktop', 'status': 'completed'}
+    monkeypatch.setattr(conv_router.lifecycle_service, 'reacquire_deferred_processing', lambda *_args: False)
+    with patch.object(conv_router, '_get_valid_conversation_by_id', side_effect=[donor, target]) as read:
+        with pytest.raises(HTTPException) as error:
+            conv_router.get_conversation_by_id(
+                'c1', source='omi', include_discarded=None, uid='u1', include_translations=False
+            )
+
+    assert error.value.status_code == 404
+    assert [call.kwargs for call in read.call_args_list] == [{'follow_sync_bridge': True}] * 2
 
 
 @pytest.mark.parametrize('polling', [False, True])
