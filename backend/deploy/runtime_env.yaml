@@ -6091,7 +6091,7 @@ environments:
               value: 'true'
               category: ops_kill
             BATCH_PIPELINE_SERVING_PROJECTION_SWEEP:
-              value: 'off'
+              value: 'true'
               category: ops_kill
             BATCH_PIPELINE_SILENCE_READ_SKIP_ENABLED:
               value: 'true'
@@ -6786,7 +6786,7 @@ environments:
             SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED: {value: 'true', category: rollout}
             OMI_PROCESS_ROLE:
               value: projection_pump
-            BATCH_PIPELINE_PROJECTION_PUMP_ENABLED: {value: 'true', category: rollout}
+            BATCH_PIPELINE_PROJECTION_PUMP_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_PUMP_SWEEP_PAGES: {value: '1', category: rollout}
             BATCH_PIPELINE_PUMP_TICK_SECONDS: {value: '2', category: rollout}
             BATCH_PIPELINE_MAX_OWNER_DRAINS: {value: '8', category: rollout}
