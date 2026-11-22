@@ -16,6 +16,7 @@ from unittest.mock import MagicMock
 import numpy as np
 import pytest
 
+from routers import conversations as conversations_router
 import routers.listen.speakers as speakers_mod
 from routers.listen import speaker_audio
 import utils.conversations.process_conversation as process_conversation_mod
@@ -764,12 +765,28 @@ def _stub_completed_reprocess(monkeypatch):
     monkeypatch.setattr(module.conversations_db, 'update_conversation', MagicMock())
 
 
-def test_deferred_desktop_projection_counts_on_first_completed_reprocess(monkeypatch):
+@pytest.mark.parametrize(
+    ('switch_value', 'intake_status'),
+    [(None, ConversationStatus.completed), ('off', ConversationStatus.processing)],
+)
+def test_deferred_desktop_projection_counts_on_first_completed_reprocess(monkeypatch, switch_value, intake_status):
     module = process_conversation_mod
+    if switch_value is None:
+        monkeypatch.delenv('CONVERSATION_PARKED_TERMINAL_STATUS_ENABLED', raising=False)
+    else:
+        monkeypatch.setenv('CONVERSATION_PARKED_TERMINAL_STATUS_ENABLED', switch_value)
     _stub_desktop_terminal(monkeypatch)
     _stub_completed_reprocess(monkeypatch)
     monkeypatch.setattr(module, 'should_defer_desktop_processing', lambda uid: True)
     monkeypatch.setattr(module.lifecycle_service, 'create_processing_conversation', lambda *args, **kwargs: True)
+    persisted_row = {}
+
+    def persist_row(_uid, payload):
+        persisted_row.update(deepcopy(payload))
+        return True
+
+    persist = MagicMock(return_value=False)
+    monkeypatch.setattr(module.lifecycle_service, 'persist_processed_conversation', persist)
     before = _conversation_total()
     deferred = module.process_conversation(
         'uid',
@@ -777,7 +794,7 @@ def test_deferred_desktop_projection_counts_on_first_completed_reprocess(monkeyp
         _desktop_capture(),
         client_projection=_desktop_projection(),
     )
-    assert deferred.status == ConversationStatus.processing
+    assert deferred.status == intake_status
     assert deferred.deferred is True
     assert deferred.client_processing is not None
     assert deferred.processing_state is None
@@ -791,11 +808,31 @@ def test_deferred_desktop_projection_counts_on_first_completed_reprocess(monkeyp
         is False
     )
     assert _conversation_total() == pytest.approx(before)
+    persisted_row.update(deferred.model_dump())
+    refused = module.process_conversation(
+        'uid', 'en', deferred.model_copy(deep=True), trigger=ProcessingTrigger.USER_REPROCESS
+    )
+    assert refused.deferred is True
+    assert persisted_row['deferred'] is True
+    assert _conversation_total() == pytest.approx(before)
+    persist.side_effect = persist_row
     stored = module.process_conversation('uid', 'en', deferred, trigger=ProcessingTrigger.USER_REPROCESS)
     assert stored.status == ConversationStatus.completed
+    assert stored.deferred is False
+    assert persisted_row['deferred'] is False
     assert _conversation_total() == pytest.approx(before + 1)
     module.process_conversation('uid', 'en', stored, trigger=ProcessingTrigger.USER_REPROCESS)
     assert _conversation_total() == pytest.approx(before + 1)
+
+    claim = MagicMock()
+    monkeypatch.setattr(conversations_router, '_enrich_deferred_conversation', claim)
+    monkeypatch.setattr(conversations_router, '_get_valid_conversation_by_id', lambda *a, **k: deepcopy(persisted_row))
+    monkeypatch.setattr(conversations_router, 'live_recap_enabled', lambda _uid: False)
+    result = conversations_router.get_conversation_by_id(
+        stored.id, source=None, include_discarded=None, uid='uid', include_translations=False
+    )
+    assert result['status'] == ConversationStatus.completed
+    claim.assert_not_called()
 
 
 def test_observer_failure_cannot_skip_persistence_callbacks(monkeypatch):

@@ -2745,6 +2745,7 @@ def process_conversation(
     backlog_authorized = trigger is ProcessingTrigger.BACKLOG_CHOICE
     mode = PROCESSING_MODES[trigger]
     force_process, is_reprocess = mode.run_now, mode.reprocess
+    settle_manual_deferral = trigger is ProcessingTrigger.USER_REPROCESS and getattr(conversation, 'deferred', False)
     # Snapshot before this call replaces structured or status. Sync intake's
     # completed status is not an observation; see owner_recognition_already_observed.
     already_observed = owner_recognition_already_observed(
@@ -3056,6 +3057,8 @@ def process_conversation(
     conversation.status = ConversationStatus.completed
     content_excluded = exclude_from_derived(uid, conversation, consumer='notes')
     payload = _normal_persist_payload(conversation, clear_terminal_marker=clear_stale_terminal_marker)
+    if settle_manual_deferral:
+        payload['deferred'] = False
     if user_kept and not conversation.discarded:
         # Commit restore authority before derived work can fail. A discarded row being
         # restored stays hidden here: visibility waits for the router's restore, which
@@ -3105,6 +3108,8 @@ def process_conversation(
         persisted = lifecycle_service.create_completed_conversation(uid, payload, idempotent=True)
     else:
         persisted = persist_with_fences(payload)
+    if persisted and settle_manual_deferral:
+        conversation.deferred = False
     if recovery_minimum_fallback or historical or content_excluded or empty_structure_minimum_applied:
         report_persistence(
             persisted,
