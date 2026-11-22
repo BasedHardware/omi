@@ -890,6 +890,7 @@ ignore:
 
 
 retired:
+  - {"key":"TRANSCRIPTION_FINAL_PASS_VAD_COMPACTION_ENABLED","aliases":[],"kind":"env","retired":"2026-11-22","reason":"SCA-3682 pipeline docket 2026-11-22: kill at its kill value; prod unset (off) on every reader since 2026-10-15 creation"}
   - {"key":"AUDIO_ARCHIVE_UID_ALLOWLIST","aliases":[],"kind":"env","retired":"2026-11-09","reason":"David flag docket 2026-11-09 (ruling 2): retire ; prod nonempty one-member allowlist (moved to injected cohort) on every reader at 2026-11-09 03:20Z"}
   - {"key":"AUDIO_CANONICAL_PACKING_ENABLED","aliases":[],"kind":"env","retired":"2026-11-09","reason":"David flag docket 2026-11-09 (ruling 2): retire ; prod unset (code default) on every reader at 2026-11-09 03:20Z"}
   - {"key":"BATCH_PIPELINE_SHADOW_LANGUAGE_ONLY","aliases":[],"kind":"env","retired":"2026-11-09","reason":"David flag docket 2026-11-09 (ruling 2): retire ; prod false on every reader at 2026-11-09 03:20Z"}

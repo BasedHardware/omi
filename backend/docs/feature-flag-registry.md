@@ -1673,6 +1673,7 @@ admission.
 
 | Key | Retired | Reason |
 | --- | --- | --- |
+| `TRANSCRIPTION_FINAL_PASS_VAD_COMPACTION_ENABLED` | 2026-11-22 | SCA-3682 pipeline docket 2026-11-22: kill at its kill value; prod unset (off) on every reader since 2026-10-15 creation |
 | `AUDIO_ARCHIVE_UID_ALLOWLIST` | 2026-11-09 | David flag docket 2026-11-09 (ruling 2): retire ; prod nonempty one-member allowlist (moved to injected cohort) on every reader at 2026-11-09 03:20Z |
 | `AUDIO_CANONICAL_PACKING_ENABLED` | 2026-11-09 | David flag docket 2026-11-09 (ruling 2): retire ; prod unset (code default) on every reader at 2026-11-09 03:20Z |
 | `BATCH_PIPELINE_SHADOW_LANGUAGE_ONLY` | 2026-11-09 | David flag docket 2026-11-09 (ruling 2): retire ; prod false on every reader at 2026-11-09 03:20Z |
