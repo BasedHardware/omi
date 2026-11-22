@@ -191,9 +191,7 @@ def test_desktop_backend_removes_retired_demand_env(workflow):
 
 @pytest.mark.parametrize(('deploy_environment', 'stage'), [('development', 'dev'), ('prod', 'prod')])
 def test_notifications_job_removes_retired_demand_env(deploy_environment, stage):
-    workflow = yaml.load(
-        (ROOT / '.github/workflows/gcp_notifications_job.yml').read_text(), Loader=yaml.CBaseLoader
-    )
+    workflow = yaml.load((ROOT / '.github/workflows/gcp_notifications_job.yml').read_text(), Loader=yaml.CBaseLoader)
     assert deploy_environment in workflow['on']['workflow_dispatch']['inputs']['environment']['options']
     assert workflow['env']['SERVICE'] == 'notifications-job'
     deploy = next(step for step in workflow['jobs']['deploy']['steps'] if step.get('id') == 'deploy')

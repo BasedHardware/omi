@@ -196,10 +196,17 @@ def test_early_placement_and_coverage_implementations_are_main_bytes():
                 # process_segment lost the backfill day cap (#25677).
                 # The legacy reprocess callback runs after placement and has
                 # its own body parity check in test_enrichment_callback_parity.
+                # Merged-conversation reprocessing also runs after placement
+                # and is covered by test_sync_reprocess_coalesce.
                 names = (
                     {'apply_wal_audio_coverage'}
                     if path.endswith('/wal_audio_coverage.py')
-                    else {'_retrieve_file_paths_v2', 'process_segment', '_reprocess_conversation_after_update'}
+                    else {
+                        '_retrieve_file_paths_v2',
+                        'process_segment',
+                        '_reprocess_conversation_after_update',
+                        '_reprocess_merged_conversations',
+                    }
                 )
                 lines = text.splitlines(keepends=True)
                 for node in sorted(

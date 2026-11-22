@@ -47,7 +47,7 @@ from utils.capture_evidence import SourcePositionMap, parse_live_frame
 from utils.stt.committed_words import CAPTURE_WORD_RANGES_KEY
 from utils.translation_demand import TranslationDemand
 from utils.translation_core.metrics import get_translation_metrics
-from utils.executors import db_executor, run_blocking, start_background_task
+from utils.executors import start_background_task
 
 lc3: Any = None
 lc3_import_error: Optional[BaseException] = None
