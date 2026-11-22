@@ -30,11 +30,18 @@ that outcome and close the pass. An uncertain write or incomplete readback
 blocks the checkpoint until the operator reconciles the affected range. Disable
 the writer switch and stop invocation of the runner to halt the rollout.
 
+The operator can select `--scope discard-deletion` for a separately approved
+pass that excludes deferred rows. Dry-run, canary and apply use the same scope
+and fixed cutoff. An apply checkpoint must match its canary's scope. Both
+scopes share the daily dry-run and apply limits. Keep the production forward
+writer switch off while Release qualifies the readers for deferred rows.
+
 The runner reads projected status and custody metadata. It checks the scanned
 row revision and authoritative job, outbox, and tombstone state in the same
 transaction that writes the status. Missing binding evidence leaves the affected
 rows for their current owner. No transcript or audio is read or changed. The
 canary writes at most 50 statuses. Each pass is capped at 450,000 inspected rows
-and reserves at most 3.5M document reads including the canary readback. Record
-the scanned, written, and fenced counts on SCA-3590 and compare the bounded
-processing-older-than-six-hours count against the stored baseline after apply.
+and 3,499,000 document reads including the canary readback. The remaining daily
+read allowance covers bounded aggregates. Record scanned, written and fenced
+counts on SCA-3590. After apply, compare the bounded processing-older-than-six-hours
+count against the stored baseline.

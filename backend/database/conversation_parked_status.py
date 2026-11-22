@@ -49,9 +49,12 @@ ROW_FIELDS = (
 )
 
 
-def classify(row: Mapping[str, Any], *, cutoff: datetime) -> str:
+def classify(row: Mapping[str, Any], *, cutoff: datetime, discard_deletion_only: bool = False) -> str:
     if row.get('status') != 'processing':
         return 'changed'
+    deferred = row.get('deferred')
+    if discard_deletion_only and 'deferred' in row and deferred is not False:
+        return 'deferred_excluded'
     if not python_owns_finalization(row) or any(row.get(field) for field in OWNERSHIP_FIELDS):
         return 'other_owner'
     admitted_at = row.get('processing_admitted_at')
@@ -72,7 +75,7 @@ def classify(row: Mapping[str, Any], *, cutoff: datetime) -> str:
         if (isinstance(decision, dict) and decision.get('verdict') == 'discard') or row.get('finalization_job_id'):
             return 'discarded'
         return 'discard_unproven'
-    if row.get('deferred') is True and row.get('source') == 'desktop':
+    if deferred is True and row.get('source') == 'desktop':
         return 'deferred'
     return 'unclassified'
 
@@ -116,7 +119,13 @@ def _revision(value: object) -> Timestamp | None:
 
 
 def settle_in_transaction(
-    transaction: Any, client: Any, snapshots: list, *, cutoff: datetime, apply: bool
+    transaction: Any,
+    client: Any,
+    snapshots: list,
+    *,
+    cutoff: datetime,
+    apply: bool,
+    discard_deletion_only: bool = False,
 ) -> list[str]:
     """Revalidate the original row and its keyed custody in one transaction.
 
@@ -136,7 +145,7 @@ def settle_in_transaction(
         if not snapshot.exists or scanned_revision is None or scanned_revision != _revision(snapshot.update_time):
             continue
         row = snapshot.to_dict() or {}
-        disposition = classify(row, cutoff=cutoff)
+        disposition = classify(row, cutoff=cutoff, discard_deletion_only=discard_deletion_only)
         results[ref.path] = disposition
         if disposition not in CANDIDATES:
             continue

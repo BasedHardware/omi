@@ -31,10 +31,11 @@ PAGE = 200
 TX_SIZE = 100
 CANARY_SIZE = 50
 MAX_BATCH_WRITES = 2_000
-# Two full passes together, including the canary and its exact readback,
-# must stay under the issue's 7M read limit even when every row is eligible.
-MAX_PASS_READS = 3_500_000
+# The canary's point confirmations count against the pass. Keep 2,000
+# further read units across the two daily passes for bounded aggregates.
+MAX_PASS_READS = 3_499_000
 PROJECT = 'based-hardware'
+DISCARD_DELETION_SCOPE = 'discard-deletion'
 
 
 def _save(path: Path, state: dict) -> None:
@@ -50,6 +51,7 @@ def _save(path: Path, state: dict) -> None:
 def _initial_state(args, now: datetime) -> dict:
     return {
         'cutoff': args.cutoff.isoformat(),
+        'scope': args.scope,
         'utc_day': now.date().isoformat(),
         'applying': args.phase == 'canary',
         'cursor': None,
@@ -63,9 +65,10 @@ def _initial_state(args, now: datetime) -> dict:
     }
 
 
-def _can_resume(state: dict, phase: str, cutoff: datetime) -> bool:
+def _can_resume(state: dict, phase: str, cutoff: datetime, scope: str) -> bool:
     return (
         phase in {'canary', 'apply'}
+        and state.get('scope') == scope
         and state['applying']
         and state['canary_verified'] == (phase == 'apply')
         and not state['unfinished_transaction']
@@ -111,6 +114,7 @@ def _validate_canary(candidates, statuses) -> None:
 def run_pass(client, path: Path, state: dict, phase: str) -> str:
     apply = phase != 'dry-run'
     canary = phase == 'canary'
+    discard_deletion_only = state['scope'] == DISCARD_DELETION_SCOPE
     cutoff = datetime.fromisoformat(state['cutoff'])
     write_limit = CANARY_SIZE if canary else MAX_BATCH_WRITES
     processed = 0
@@ -147,7 +151,9 @@ def run_pass(client, path: Path, state: dict, phase: str) -> str:
                 if len(parts) != 4 or parts[0] != 'users':
                     counts['other_collection'] += 1
                     continue
-                disposition = parked.classify(snapshot.to_dict(), cutoff=cutoff)
+                disposition = parked.classify(
+                    snapshot.to_dict(), cutoff=cutoff, discard_deletion_only=discard_deletion_only
+                )
                 if disposition in parked.CANDIDATES:
                     candidates.append(snapshot)
                 else:
@@ -158,7 +164,7 @@ def run_pass(client, path: Path, state: dict, phase: str) -> str:
             _save(path, state)
             transaction = client.transaction(max_attempts=1, read_only=not apply)
             statuses = firestore.transactional(parked.settle_in_transaction)(
-                transaction, client, candidates, cutoff=cutoff, apply=apply
+                transaction, client, candidates, cutoff=cutoff, apply=apply, discard_deletion_only=discard_deletion_only
             )
             if canary:
                 _validate_canary(candidates, statuses)
@@ -179,6 +185,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('phase', choices=['dry-run', 'canary', 'apply'])
     parser.add_argument('--cutoff', required=True, type=datetime.fromisoformat)
+    parser.add_argument('--scope', choices=['all', DISCARD_DELETION_SCOPE], default='all')
     parser.add_argument('--checkpoint', required=True, type=Path)
     parser.add_argument('--accept-canary', action='store_true')
     parser.add_argument('--restart-dry-run', action='store_true', help='restart a failed dry-run, retaining its budget')
@@ -213,6 +220,7 @@ def main() -> int:
                 and not state['applying']
                 and state['unfinished_transaction']
                 and state['cutoff'] == args.cutoff.isoformat()
+                and state.get('scope') == args.scope
             ):
                 # Discard unusable classification counts after a corrected
                 # reader, while retaining every scanned row and reserved read.
@@ -220,8 +228,8 @@ def main() -> int:
                 state['cursor'] = None
                 state['counts'] = {}
                 state['unfinished_transaction'] = False
-            elif not _can_resume(state, args.phase, args.cutoff):
-                parser.error('checkpoint does not match a clean canary or verified apply pass')
+            elif not _can_resume(state, args.phase, args.cutoff, args.scope):
+                parser.error('checkpoint does not match this scope, cutoff or resumable phase')
         else:
             if args.phase == 'apply':
                 parser.error('apply requires a verified canary checkpoint')
@@ -244,6 +252,7 @@ def main() -> int:
             json.dumps(
                 {
                     'phase': args.phase,
+                    'scope': args.scope,
                     'stop': stop,
                     'rows_scanned': state['scanned'],
                     'prior_dry_run_rows': state.get('prior_dry_run_rows', 0),

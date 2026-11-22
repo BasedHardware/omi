@@ -9,7 +9,7 @@ from scripts import settle_parked_conversations as runner
 def test_canary_resumes_from_scan_cap_with_one_cumulative_write_cap(tmp_path, monkeypatch):
     now = datetime.now(timezone.utc)
     cutoff = now - timedelta(hours=6)
-    state = runner._initial_state(SimpleNamespace(phase='canary', cutoff=cutoff), now)
+    state = runner._initial_state(SimpleNamespace(phase='canary', cutoff=cutoff, scope='all'), now)
     checkpoint = tmp_path / 'canary.json'
     candidate = Mock()
     candidate.reference.path = 'users/test/conversations/test'
@@ -30,8 +30,8 @@ def test_canary_resumes_from_scan_cap_with_one_cumulative_write_cap(tmp_path, mo
     assert runner.run_pass(client, checkpoint, state, 'canary') == 'canary_scan_cap'
     state = json.loads(checkpoint.read_text())
     assert state['counts']['written'] == 1
-    assert runner._can_resume(state, 'canary', cutoff)
-    assert not runner._can_resume(state, 'apply', cutoff)
+    assert runner._can_resume(state, 'canary', cutoff, 'all')
+    assert not runner._can_resume(state, 'apply', cutoff, 'all')
 
     assert runner.run_pass(client, checkpoint, state, 'canary') == 'canary_paused'
     assert [call.args[2] for call in page.call_args_list] == [2, 1, 1]
@@ -42,8 +42,22 @@ def test_canary_resumes_from_scan_cap_with_one_cumulative_write_cap(tmp_path, mo
 def test_resume_refuses_a_canary_with_unreconciled_writes():
     now = datetime.now(timezone.utc)
     cutoff = now - timedelta(hours=6)
-    state = runner._initial_state(SimpleNamespace(phase='canary', cutoff=cutoff), now)
+    state = runner._initial_state(SimpleNamespace(phase='canary', cutoff=cutoff, scope='all'), now)
     state['unfinished_transaction'] = True
 
-    assert not runner._can_resume(state, 'canary', cutoff)
-    assert not runner._can_resume(state, 'apply', cutoff)
+    assert not runner._can_resume(state, 'canary', cutoff, 'all')
+    assert not runner._can_resume(state, 'apply', cutoff, 'all')
+
+
+def test_verified_discard_deletion_checkpoint_cannot_authorize_all_scope():
+    now = datetime.now(timezone.utc)
+    cutoff = now - timedelta(hours=6)
+    scope = runner.DISCARD_DELETION_SCOPE
+    state = runner._initial_state(SimpleNamespace(phase='canary', cutoff=cutoff, scope=scope), now)
+    state['canary_verified'] = True
+
+    assert runner._can_resume(state, 'apply', cutoff, scope)
+    assert not runner._can_resume(state, 'apply', cutoff, 'all')
+    del state['scope']
+    assert not runner._can_resume(state, 'apply', cutoff, scope)
+    assert not runner._can_resume(state, 'apply', cutoff, 'all')

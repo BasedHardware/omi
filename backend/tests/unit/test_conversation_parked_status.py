@@ -8,7 +8,8 @@ import pytest
 from google.protobuf.timestamp_pb2 import Timestamp
 from proto.datetime_helpers import DatetimeWithNanoseconds
 
-from database import conversation_parked_status as parked
+from database import conversation_parked_status as parked, conversations
+from utils.conversations import capture_group_notes_refresh, summary_delivery
 
 CUTOFF = datetime(2026, 11, 21, tzinfo=timezone.utc)
 
@@ -122,3 +123,62 @@ def test_status_write_refuses_conflicting_custody(fields, metadata_path, expecte
         transaction, client, [_snapshot(ref, row, 1, scan=True)], cutoff=CUTOFF, apply=True
     ) == [expected]
     transaction.update.assert_not_called()
+
+
+@pytest.mark.parametrize('disposition', ['deleted', 'discarded'])
+@pytest.mark.parametrize('deferred', [True, None, 'false', 0])
+def test_discard_deletion_scope_refuses_deferred_markers_before_custody_reads(disposition, deferred):
+    row = {
+        'status': 'processing',
+        disposition: True,
+        'deferred': deferred,
+        'relevance_decision': {'verdict': 'discard'},
+    }
+    assert parked.classify(row, cutoff=CUTOFF, discard_deletion_only=True) == 'deferred_excluded'
+
+
+@pytest.mark.parametrize(('revision', 'expected'), [(1, 'deferred_excluded'), (2, 'changed')])
+def test_discard_deletion_transaction_refuses_deferred_added_after_scan(revision, expected):
+    ref = _Ref('users/owner/conversations/c1')
+    row = {'status': 'processing', 'discarded': True, 'relevance_decision': {'verdict': 'discard'}}
+    scanned = _snapshot(ref, row, 1, scan=True)
+    latest = _snapshot(ref, {**row, 'deferred': True}, revision)
+    client = SimpleNamespace(collection=_Ref, get_all=Mock(return_value=[latest]))
+    transaction = Mock()
+
+    assert parked.settle_in_transaction(
+        transaction, client, [scanned], cutoff=CUTOFF, apply=True, discard_deletion_only=True
+    ) == [expected]
+    assert client.get_all.call_count == 1
+    assert not transaction.mock_calls
+
+
+@pytest.mark.parametrize('disposition', ['deleted', 'discarded'])
+def test_discard_deletion_scope_preserves_visibility_and_notes_refusals(disposition):
+    ref = _Ref('users/owner/conversations/c1')
+    row = {
+        'status': 'processing',
+        disposition: True,
+        'deferred': False,
+        'relevance_decision': {'verdict': 'discard'},
+    }
+    current = {ref.path: _snapshot(ref, row, 1)}
+    if disposition == 'deleted':
+        tombstone = _Ref(f'users/owner/{parked.TOMBSTONES}/c1')
+        current[tombstone.path] = _snapshot(tombstone, {}, 1)
+    client = SimpleNamespace(
+        collection=_Ref,
+        get_all=lambda refs, **kwargs: [current.get(item.path, _snapshot(item, None, None)) for item in refs],
+    )
+    transaction = Mock()
+
+    assert parked.settle_in_transaction(
+        transaction, client, [_snapshot(ref, row, 1, scan=True)], cutoff=CUTOFF, apply=True, discard_deletion_only=True
+    ) == [disposition]
+    transaction.update.assert_called_once_with(ref, {'status': 'completed'})
+    assert len(transaction.mock_calls) == 1
+    settled = {**row, **transaction.update.call_args.args[1]}
+    assert not conversations.is_visible_conversation(settled)
+    assert conversations.is_visible_conversation(settled, include_discarded=True) == (disposition == 'discarded')
+    assert summary_delivery.refusal(settled) == 'lifecycle'
+    assert not capture_group_notes_refresh._eligible_primary_row(settled)
