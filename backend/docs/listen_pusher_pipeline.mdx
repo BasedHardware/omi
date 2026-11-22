@@ -4353,32 +4353,10 @@ There is no expected reduction in `wire=past` or
 provider-only padding. R12's finalize-suppression drift-collapse criterion is
 superseded. No production cohort or enablement is established by local tests.
 
-`SONIOX_ELAPSED_AXIS=off|shadow|on` defaults to `shadow`. In shadow, Soniox
-keeps the compact send axis for all placement and speaker windows, exactly as
-`off` does. A separate elapsed-axis map supplies metrics only; it never gates
-window attachment, changes provider PCM, or changes transcript fields. `on`
-selects the unverified elapsed axis; operators must require a live timing probe
-and validation before selecting it;
-`off` disables the candidate map. Each Soniox candidate and mapped Modulate
-control segment increments `omi_audio_timeline_elapsed_validation_total` by
-`provider` and `outcome=on_speech|on_silence|partial|unknown`. The comparison
-uses bounded raw VAD decisions by capture sample, not the provider send map;
-missing/evicted decisions or unmappable candidates count as `unknown`. Speech
-decisions are stored by input chunk; if a chunk contains both speech and silence
-VAD windows, any overlapping candidate counts as `partial` rather than claiming
-speech for the whole chunk. Buffered VAD windows can straddle input chunks or
-cover only part of one, while the Boolean result is assigned to the whole
-chunk. Thus `on_speech` and `on_silence` can disagree with the exact samples
-of a candidate, even when `partial` is not reported. Also, a positive provider
-interval starting exactly at the latest accepted send's end can receive a
-one-sample tail if its final arrives before the next send; a later send can
-reveal a capture gap and make that same start unplaceable. This boundary
-placement depends on callback order. A shadow calculation failure disables
-validation for that provider epoch and increments
-`omi_audio_timeline_elapsed_shadow_errors_total` once; compact placement and
-accepted sends continue. VAD can
-misclassify speech, so the metric is independent placement evidence rather
-than a substitute for a provider pause/finalize/keepalive timing probe.
+Soniox uses its compact send map for placement. The managed Soniox capture-axis
+probe measures provider timing independently of placement. Mapped Modulate
+control segments still contribute to `omi_audio_timeline_elapsed_validation_total`
+by speech outcome using bounded raw VAD decisions.
 
 V2 keeps every emitted provider segment as text. Intervals crossing a VAD
 discontinuity, missing their owner, or arriving after owner closure are retained

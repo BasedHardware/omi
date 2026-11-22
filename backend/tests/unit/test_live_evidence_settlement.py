@@ -11,13 +11,12 @@ from tests.unit.test_live_cost_router import controls, MemoryRedis
 from tests.unit.test_live_health_reason_reconciliation import ServingSocket, serving_leg, observed
 from tests.unit.test_live_early_provider_deaths import managed_leg, ProviderWebSocket
 from tests.unit.test_stt_session_failover import _receiver_with_dead_socket, FakeSocket
-from tests.unit.test_live_stt_resilient_stream import receiver as make_receiver
 from utils.metrics import OMI_FALLBACK_TOTAL
-from utils.stt import live_chain, live_failure, live_health, live_session, resilient_stream, streaming as st
+from utils.stt import live_chain, live_failure, live_health, live_session, streaming as st
 from config import live_stt_state
 from config.live_stt_registry import DEFAULT_TARGETS
 from utils.stt.live_gate import GateState, transition, HEALTHY_USERS, FAILURE_RESERVE
-from utils.stt.live_metrics import COST_SETTLEMENTS, COST_EVIDENCE_ERRORS, COST_EMISSION_ACK_ERRORS, RECONNECT
+from utils.stt.live_metrics import COST_SETTLEMENTS, COST_EVIDENCE_ERRORS, COST_EMISSION_ACK_ERRORS
 from utils.stt.soniox import SafeSonioxSocket
 
 SONIOX = next(t for t in DEFAULT_TARGETS if t.id == 'soniox')
@@ -275,80 +274,6 @@ async def test_local_queue_full_is_a_local_bound_not_provider_fault(monkeypatch,
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('failure_point', ['liveness', 'replay'])
-async def test_same_provider_reconnect_settles_rejected_successor(monkeypatch, failure_point):
-
-    listener = make_receiver(monkeypatch)
-    old = serving_leg(family='soniox')
-    old.raw.die('soniox_rotation')
-    listener.stt_socket = old
-    listener._resilient_audio.append(b'\x00\x00', 0)
-    listener._stt_rebuild = (lambda: (lambda _: None, lambda _: None, None), 2)
-    new = serving_leg(family='soniox')
-    new.raw.die('provider_5xx')
-    listener._create_stt_socket = AsyncMock(return_value=new)
-    monkeypatch.setattr(
-        resilient_stream, 'fallback_socket_is_serving', AsyncMock(return_value=failure_point == 'replay')
-    )
-    before = observed('soniox', 'provider_failure', 'provider_5xx')
-    assert not await resilient_stream.reconnect_live_stt_socket(listener)
-    assert new.leg_outcome.settled
-    new.finish()
-    assert observed('soniox', 'provider_failure', 'provider_5xx') == before + 1
-
-
-@pytest.mark.asyncio
-async def test_cancelled_liveness_probe_closes_the_unadopted_raw_leg(monkeypatch):
-    """Cancellation while vetting the fresh leg must not leak it (review P2)."""
-
-    listener = make_receiver(monkeypatch)
-    old = serving_leg(family='soniox')
-    old.raw.die('soniox_rotation')
-    listener.stt_socket = old
-    listener._resilient_audio.append(b'\x00\x00', 0)
-    listener._stt_rebuild = (lambda: (lambda _: None, lambda _: None, None), 2)
-    new = serving_leg(family='soniox')
-
-    async def vetting_hang(raw):
-        raise asyncio.CancelledError()
-
-    listener._create_stt_socket = AsyncMock(return_value=new)
-    monkeypatch.setattr(resilient_stream, 'fallback_socket_is_serving', vetting_hang)
-    with pytest.raises(asyncio.CancelledError):
-        await resilient_stream.reconnect_live_stt_socket(listener)
-    assert new.leg_outcome.settled, 'unadopted raw leg must be closed on cancellation'
-
-
-@pytest.mark.asyncio
-async def test_owner_teardown_during_replay_is_classified_as_teardown(monkeypatch):
-    """A replay rejection caused by owner teardown is not a provider send failure."""
-
-    listener = make_receiver(monkeypatch)
-    old = serving_leg(family='soniox')
-    old.raw.die('soniox_rotation')
-    listener.stt_socket = old
-    listener._resilient_audio.append(b'\x00\x00', 0)
-    listener._stt_rebuild = (lambda: (lambda _: None, lambda _: None, None), 2)
-    new = serving_leg(family='soniox')
-    listener._create_stt_socket = AsyncMock(return_value=new)
-    monkeypatch.setattr(resilient_stream, 'fallback_socket_is_serving', AsyncMock(return_value=True))
-
-    async def teardown_mid_replay(*args, **kwargs):
-        listener.host.state.active = False  # owner departs while replay is paced
-        return False
-
-    monkeypatch.setattr(listener, '_pump_replacement', teardown_mid_replay)
-    reason = 'soniox_rotation'
-    reconnect = RECONNECT.labels(provider='soniox', reason=reason, outcome='teardown')
-    failed = RECONNECT.labels(provider='soniox', reason=reason, outcome='failed')
-    reconnect_before, failed_before = reconnect._value.get(), failed._value.get()
-    assert not await resilient_stream.reconnect_live_stt_socket(listener)
-    assert reconnect._value.get() == reconnect_before + 1
-    assert failed._value.get() == failed_before, 'teardown must not be recorded as a failed reconnect'
-    assert new.leg_outcome.settled
-
-
-@pytest.mark.asyncio
 async def test_teardown_tail_send_cannot_recover_or_open_provider_circuit(monkeypatch):
     leg = serving_leg(family='soniox')
     leg.leg_outcome.owner_closing = True
@@ -403,40 +328,6 @@ def test_out_of_order_writer_cannot_rewind_the_healthy_user_budget():
     for now in (1000, 1300) * 23:
         assert transition(state, True, now, witness='a' * 16) == state
     assert state.n == 3 and state.healthy_window == 4
-
-
-@pytest.mark.asyncio
-async def test_monitor_survives_retiring_a_claimed_leg_during_reconnect(monkeypatch):
-    from utils.stt import resilient_stream
-
-    listener = make_receiver(monkeypatch)
-    old, new = serving_leg(family='soniox'), serving_leg(family='soniox')
-    old.raw.die('soniox_rotation')
-    listener.stt_socket = old
-    listener._resilient_audio.append(b'\x00\x00', 0)
-    listener._stt_rebuild = (lambda: (lambda _: None, lambda _: None, None), 2)
-    listener._wrap_legacy_stt_socket = lambda raw, epoch: raw
-    listener.host.wait = AsyncMock(return_value=True)
-    connecting, proceed = asyncio.Event(), asyncio.Event()
-
-    async def connect(*args, **kwargs):
-        connecting.set()
-        await proceed.wait()
-        return new
-
-    listener._create_stt_socket = connect
-    monkeypatch.setattr(resilient_stream, 'fallback_socket_is_serving', AsyncMock(return_value=True))
-    replacement = asyncio.create_task(listener._failover_stt_socket())
-    await connecting.wait()
-    assert old.leg_outcome.claimed and not old.leg_outcome.owner_closing
-    monitor = asyncio.create_task(listener._monitor_stt_death())
-    await asyncio.sleep(0)
-    proceed.set()
-    assert await replacement
-    await monitor
-    listener.host.wait.assert_awaited_once()  # The monitor followed the replacement.
-    listener._settle_pending_live_failover_failure()
-    new.finish()
 
 
 @pytest.mark.asyncio

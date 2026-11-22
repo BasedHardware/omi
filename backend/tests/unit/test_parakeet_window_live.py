@@ -104,6 +104,17 @@ def test_shape_session_assignment_survives_window_replacement():
     assert a._shape_route is b._shape_route
 
 
+def test_window_speaker_embedding_is_available_to_offline_qualification(monkeypatch):
+    monkeypatch.setenv('HOSTED_SPEAKER_EMBEDDING_API_URL', 'http://embeddings.invalid')
+    monkeypatch.delenv('PARAKEET_DIARIZATION', raising=False)
+    live = window.WindowedParakeetSocket(lambda _: None, 'http://tdt.invalid', 16000, lambda: None)
+    offline = window.WindowedParakeetSocket(
+        lambda _: None, 'http://tdt.invalid', 16000, lambda: None, qualification_diarization=True
+    )
+    assert not live._diarize
+    assert offline._diarize
+
+
 def _mock_post_pacing(monkeypatch, sleep):
     if sleep is _REAL_SLEEP:
         monkeypatch.setattr(window, 'wait_for_event', _REAL_WAIT_FOR_EVENT)

@@ -37,8 +37,6 @@ async def failover_stt_socket(self: Any) -> bool:
             return False
         if self.stt_socket is not None and not owner.live_stt_socket_is_dead(self.stt_socket):
             return True
-        if await self._reconnect_stt_socket_locked():
-            return True
         recovered = await self._rebuild_stt_socket_locked()
         self._stt_recovery_exhausted = not recovered
         return recovered
@@ -121,7 +119,6 @@ async def rebuild_stt_socket_locked(self: Any) -> bool:
         replay,
         source=window_ring,
         provider=dead_provider or 'parakeet',
-        soniox=self._resilient_audio if self.host.stt_service == owner.STTService.soniox else None,
     )
     if rejected_sample is not None and window_ring is not None:
         # Accepted bytes have not necessarily produced text. The next
@@ -237,8 +234,6 @@ async def flush_stt_buffer(self: Any, buffer: bytearray, *, force: bool = False)
             start_sample=self._stt_buffer_start_sample,
         )
         if sent:
-            if self._resilient_audio is not None and self.host.stt_service == owner.STTService.soniox:
-                self._resilient_audio.append(outbound_audio, outbound_start_sample)
             if (ring := self._window_ring()) is not None:
                 ring.append(outbound_audio, outbound_start_sample)
             self._capture('capture_outbound_stt', outbound_audio)
