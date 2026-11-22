@@ -151,6 +151,9 @@ class OnDeviceRunner with WidgetsBindingObserver {
       final pending = all
           .where((w) =>
               w.onDeviceOnly &&
+              // A receipt-replayed recording needs per-recording consent.
+              // The scheduled and bulk manual runs share this queue.
+              !(w.holdForUser && w.liveFileWriteId != null) &&
               w.storage == WalStorage.disk &&
               w.status == WalStatus.miss &&
               w.onDeviceConversation == null)
