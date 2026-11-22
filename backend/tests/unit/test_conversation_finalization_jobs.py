@@ -2049,6 +2049,21 @@ def test_recover_deferred_processing_failure_atomically_rearms_retry():
     assert len(transaction.updates) == 2
 
 
+def test_rejected_deferred_submissions_rearm_only_the_same_live_claim():
+    transaction = _Transaction()
+    admitted_at = _now()
+    claimed = {'status': 'processing', 'deferred': False, 'processing_admitted_at': admitted_at}
+    original = _Ref('original', claimed)
+    deleted = _Ref('deleted', {**claimed, 'deleted': True})
+    newer = _Ref('newer', {**claimed, 'processing_admitted_at': admitted_at + timedelta(seconds=1)})
+    completed = _Ref('completed', {**claimed, 'status': 'completed'})
+
+    assert terminal_title.recover_deferred_processing_failure_txn(transaction, original, admitted_at)
+    for fenced in (deleted, newer, completed):
+        assert not terminal_title.recover_deferred_processing_failure_txn(transaction, fenced, admitted_at)
+    assert [ref for ref, _ in transaction.updates] == [original]
+
+
 def test_advance_cursor_succeeds_when_generation_matches():
     """CAS cursor advance: a writer holding the current generation commits and bumps it."""
     transaction = _Transaction()

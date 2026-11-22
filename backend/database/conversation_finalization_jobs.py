@@ -3255,20 +3255,24 @@ def _reacquire_deferred_processing_txn(transaction: Any, conversation_ref: Any, 
     return True
 
 
-def reacquire_deferred_processing(uid: str, conversation_id: str, *, firestore_client: Any = None) -> bool:
+def reacquire_deferred_processing(
+    uid: str, conversation_id: str, *, admitted_at: datetime | None = None, firestore_client: Any = None
+) -> bool:
     """Atomically claim deferred ownership and renew the lease in one transaction."""
     client = _client(firestore_client)
     transaction = client.transaction()
     transactional = firestore.transactional(_reacquire_deferred_processing_txn)
-    return transactional(transaction, _conversation_ref(client, uid, conversation_id), _now())
+    return transactional(transaction, _conversation_ref(client, uid, conversation_id), admitted_at or _now())
 
 
-def recover_deferred_processing_failure(uid: str, conversation_id: str, *, firestore_client: Any = None) -> bool:
+def recover_deferred_processing_failure(
+    uid: str, conversation_id: str, *, expected_admitted_at: datetime | None = None, firestore_client: Any = None
+) -> bool:
     """Atomically re-arm deferred enrichment without exposing a stuck processing row."""
     client = _client(firestore_client)
     transaction = client.transaction()
     transactional = firestore.transactional(recover_deferred_processing_failure_txn)
-    completed = transactional(transaction, _conversation_ref(client, uid, conversation_id))
+    completed = transactional(transaction, _conversation_ref(client, uid, conversation_id), expected_admitted_at)
     if completed:
         stop_quiet_check_for_conversation(uid, conversation_id, firestore_client=client)
     return completed

@@ -629,24 +629,26 @@ def fail_and_discard_processing(uid: str, conversation_id: str) -> bool:
     return claimed
 
 
-def reacquire_deferred_processing(uid: str, conversation_id: str) -> bool:
+def reacquire_deferred_processing(uid: str, conversation_id: str, admitted_at: datetime | None = None) -> bool:
     """Atomically claim deferred ownership and renew the admission lease.
 
     ``deferred=True`` is also the ownership fence, so two concurrent first
     opens cannot both launch enrichment. A completed deferred row is an
     explicit failed-attempt terminal and may be reopened for retry.
     """
-    return jobs_db.reacquire_deferred_processing(uid, conversation_id)
+    return jobs_db.reacquire_deferred_processing(uid, conversation_id, admitted_at=admitted_at)
 
 
-def recover_deferred_processing_failure(uid: str, conversation_id: str) -> bool:
+def recover_deferred_processing_failure(
+    uid: str, conversation_id: str, *, expected_admitted_at: datetime | None = None
+) -> bool:
     """Atomically re-arm deferred enrichment and expose a non-spinning terminal.
 
     The paired status/flag mutation belongs here rather than in a router so a
     partial recovery write cannot strand a row in ``processing`` while the
     stale sweep intentionally excludes deferred conversations.
     """
-    return jobs_db.recover_deferred_processing_failure(uid, conversation_id)
+    return jobs_db.recover_deferred_processing_failure(uid, conversation_id, expected_admitted_at=expected_admitted_at)
 
 
 def begin_merge(uid: str, conversation_id: str) -> bool:

@@ -185,9 +185,11 @@ def test_lazy_enrichment_uses_non_user_usage_attribution(monkeypatch):
         conv_router.lifecycle_service, 'processing_admission_guard', lambda *_args, **_kwargs: nullcontext()
     )
     monkeypatch.setattr(conv_router, 'deserialize_conversation', lambda _conversation: model)
-    monkeypatch.setattr(conv_router, 'submit_with_context', lambda _executor, function: function())
+    callbacks = []
+    monkeypatch.setattr(conv_router, 'submit_with_context', lambda _executor, function: callbacks.append(function))
     with patch.object(conv_router, 'process_conversation', return_value=model) as process:
         result = conv_router._enrich_deferred_conversation('u1', conversation)
+        callbacks[0]()
 
     assert result['deferred'] is False
     assert result['status'] == model.status == 'processing'

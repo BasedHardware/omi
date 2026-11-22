@@ -9,6 +9,9 @@ a cold cache open that discarded the deferred flag. Polls from desktop do not
 claim enrichment. A list refresh can restart the detail task on the same
 panel, and that restart is also read-only. A failed attempt can show its
 completed/deferred state and retry on a later open.
+If the executor rejects the first-open submission, the route re-arms only
+the still-current admission and reads back the visible row. A callback queued
+before rejection exits before starting enrichment.
 An accepted deletion settles a previously processing row in its existing
 tombstone transaction. The status changes preserve the discard and deletion
 flags and the existing restore and erasure contracts.

@@ -190,7 +190,7 @@ def test_deferred_enrichment_atomically_reacquires_ownership_before_processing(m
 
     reacquired = threading.Event()
 
-    def fake_reacquire(_uid, _conversation_id):
+    def fake_reacquire(_uid, _conversation_id, _admitted_at):
         reacquired.set()
         return True
 
@@ -226,6 +226,11 @@ def test_deferred_enrichment_skips_when_reacquisition_fails(monkeypatch):
     import time
 
     monkeypatch.setattr(lifecycle_service, 'reacquire_deferred_processing', lambda *_args: False)
+    monkeypatch.setattr(
+        conversations_router,
+        '_get_valid_conversation_by_id',
+        lambda *_args, **_kwargs: {'id': 'deferred-conv-1', 'status': 'processing'},
+    )
     process_called = MagicMock()
     monkeypatch.setattr(conversations_router, 'process_conversation', process_called)
 
@@ -411,6 +416,11 @@ def test_deferred_enrichment_counts_failed_and_lost_ownership(monkeypatch):
 
     # Reacquisition loss is counted separately and never as a start.
     monkeypatch.setattr(lifecycle_service, 'reacquire_deferred_processing', lambda *_args: False)
+    monkeypatch.setattr(
+        conversations_router,
+        '_get_valid_conversation_by_id',
+        lambda *_args, **_kwargs: {'id': 'deferred-conv-lost', 'status': 'processing'},
+    )
     started_before = _lazy_metric('enrich_started')
     conversations_router._enrich_deferred_conversation(
         'uid1', {'id': 'deferred-conv-lost', 'status': 'processing', 'deferred': True, 'language': 'en'}
@@ -446,28 +456,49 @@ def test_deferred_enrichment_reacquire_exception_is_counted_apart_from_lost_owne
     process_called.assert_not_called()
 
 
-def test_deferred_enrichment_start_is_counted_inside_the_worker(monkeypatch):
-    """`enrich_started` must be recorded by the worker, not before the submit: a
-    submit rejected by a shut-down pool (deploy) would otherwise leave a start
-    with no terminal event and inflate the started-vs-complete gap."""
-    monkeypatch.setattr(lifecycle_service, 'reacquire_deferred_processing', lambda *_args: True)
-    monkeypatch.setattr(
-        conversations_router,
-        'submit_with_context',
-        MagicMock(side_effect=RuntimeError('executor shut down')),
-    )
-    monkeypatch.setattr(
-        conversations_router,
-        'deserialize_conversation',
-        lambda _data: SimpleNamespace(id='deferred-conv-submit-fail', language='en', deferred=False),
-    )
+@pytest.mark.parametrize('enqueued_before_rejection', [False, True])
+def test_deferred_submission_rejection_rearms_without_starting_work(monkeypatch, enqueued_before_rejection):
+    cid = 'deferred-conv-submit-fail'
+    stored = {'id': cid, 'status': 'completed', 'deferred': True, 'language': 'en'}
+    queued = []
 
+    def acquire(uid, conversation_id, admitted_at):
+        assert (uid, conversation_id) == ('uid1', cid)
+        assert stored['deferred'] is True
+        stored.update(status='processing', deferred=False, processing_admitted_at=admitted_at)
+        return True
+
+    def recover(uid, conversation_id, *, expected_admitted_at):
+        assert (uid, conversation_id) == ('uid1', cid)
+        assert stored['processing_admitted_at'] == expected_admitted_at
+        stored.update(status='completed', deferred=True)
+        return True
+
+    def reject(_executor, callback):
+        if enqueued_before_rejection:
+            queued.append(callback)
+        raise RuntimeError('executor rejected submission')
+
+    monkeypatch.setattr(lifecycle_service, 'reacquire_deferred_processing', acquire)
+    monkeypatch.setattr(lifecycle_service, 'recover_deferred_processing_failure', recover)
+    monkeypatch.setattr(conversations_router, '_get_valid_conversation_by_id', lambda *_args, **_kwargs: dict(stored))
+    monkeypatch.setattr(conversations_router, 'submit_with_context', reject)
+    process = MagicMock()
+    monkeypatch.setattr(conversations_router, 'process_conversation', process)
     started_before = _lazy_metric('enrich_started')
 
-    with pytest.raises(RuntimeError, match='executor shut down'):
-        conversations_router._enrich_deferred_conversation(
-            'uid1',
-            {'id': 'deferred-conv-submit-fail', 'status': 'processing', 'deferred': True, 'language': 'en'},
-        )
+    result = conversations_router._enrich_deferred_conversation('uid1', dict(stored))
+    assert result['status'] == 'completed'
+    assert result['deferred'] is True
+    for callback in queued:
+        callback()
 
     assert _lazy_metric('enrich_started') == started_before
+    process.assert_not_called()
+
+    accept = MagicMock()
+    monkeypatch.setattr(conversations_router, 'submit_with_context', accept)
+    reopened = conversations_router._enrich_deferred_conversation('uid1', dict(stored))
+    accept.assert_called_once()
+    assert reopened['status'] == 'processing'
+    assert reopened['deferred'] is False

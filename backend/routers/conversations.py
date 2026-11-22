@@ -10,6 +10,7 @@ from utils.generated_compute import require_generated_compute, generated_compute
 import asyncio
 import hashlib
 import os
+from concurrent.futures import Future
 from contextlib import ExitStack, nullcontext
 
 from fastapi.responses import StreamingResponse
@@ -320,8 +321,15 @@ def _enrich_deferred_conversation(uid: str, conversation: dict, *, include_disca
     and first heartbeat. On enrichment failure the flag is re-armed and status reset to completed
     so the next open retries cleanly instead of spinning."""
     conversation_id = conversation.get('id')
+    admitted_at = datetime.now(timezone.utc)
+
+    def _current_detail() -> dict:
+        current = _get_valid_conversation_by_id(uid, conversation_id, follow_sync_bridge=True)
+        _assert_detail_visible(current, include_discarded)
+        return current
+
     try:
-        reacquired = lifecycle_service.reacquire_deferred_processing(uid, conversation_id)
+        reacquired = lifecycle_service.reacquire_deferred_processing(uid, conversation_id, admitted_at)
     except Exception as e:
         logger.error(f"lazy enrich reacquire failed uid={uid} conv={conversation_id}: {e}")
         # A reacquire that RAISED is a broken dependency, not a lost fence.
@@ -333,11 +341,13 @@ def _enrich_deferred_conversation(uid: str, conversation: dict, *, include_disca
         # Another opener can already be enriching this row. Read its state
         # before replying so a stale completed snapshot cannot stop polling.
         record_lazy_desktop_deferral(event='enrich_lost_ownership')
-        current = _get_valid_conversation_by_id(uid, conversation_id, follow_sync_bridge=True)
-        _assert_detail_visible(current, include_discarded)
-        return current
+        return _current_detail()
+
+    submission_accepted: Future[bool] = Future()
 
     def _run_enrichment():
+        if not submission_accepted.result():
+            return
         # Counted here, not before the submit: a rejected submit (shut-down
         # pool during a deploy) would otherwise leave a start with no terminal.
         record_lazy_desktop_deferral(event='enrich_started')
@@ -385,11 +395,20 @@ def _enrich_deferred_conversation(uid: str, conversation: dict, *, include_disca
                     conversation_id,
                 )
 
-    submit_with_context(postprocess_executor, _run_enrichment)
+    try:
+        submit_with_context(postprocess_executor, _run_enrichment)
+    except Exception as error:
+        # A pool can enqueue a callback and then fail to start a worker. The
+        # rejected callback must never enrich after this claim is released.
+        submission_accepted.set_result(False)
+        logger.error('lazy enrich submission failed error_type=%s', type(error).__name__)
+        lifecycle_service.recover_deferred_processing_failure(uid, conversation_id, expected_admitted_at=admitted_at)
+        return _current_detail()
     # The claim may have reopened a completed/deferred row. Return the admitted
     # processing state so the client follows it through enrichment or retry.
     conversation['status'] = 'processing'
     conversation['deferred'] = False
+    submission_accepted.set_result(True)
     return conversation
 
 
