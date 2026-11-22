@@ -439,10 +439,16 @@ class _SyncPageState extends State<SyncPage> {
             destructive: true,
           );
           if (!confirmed || !context.mounted) return;
-          final targets = provider.pendingDeletableWals.map((wal) => (wal.id, wal.storage)).toSet();
+          // Ring discovery rebuilds its virtual WAL with a new display timestamp.
+          (WalStorage, bool, String) pendingIdentity(Wal wal) {
+            final ring = wal.storage == WalStorage.sdcard && wal.fileNum == -1;
+            return (wal.storage, ring, ring ? wal.device : wal.id);
+          }
+
+          final targets = provider.pendingDeletableWals.map(pendingIdentity).toSet();
           if (targets.isEmpty) return;
           final uid = SharedPreferencesUtil().uid;
-          final hasDeviceRows = targets.any((row) => row.$2 != WalStorage.disk && row.$2 != WalStorage.mem);
+          final hasDeviceRows = targets.any((row) => row.$1 != WalStorage.disk && row.$1 != WalStorage.mem);
           final firmware = hasDeviceRows ? context.read<DeviceProvider>().currentFirmwareVersion : null;
           var failed = false;
           try {
@@ -455,7 +461,7 @@ class _SyncPageState extends State<SyncPage> {
             Logger.debug('Sync clear pending failed: ${error.runtimeType}');
           }
           if (!context.mounted || uid != SharedPreferencesUtil().uid) return;
-          final retained = provider.allWals.any((wal) => targets.contains((wal.id, wal.storage)));
+          final retained = provider.allWals.any((wal) => targets.contains(pendingIdentity(wal)));
           if (failed || retained) {
             OmiFeedback.error(context, context.l10n.failedToDeleteSomeItems);
           } else {
