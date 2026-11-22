@@ -12,7 +12,6 @@ import 'package:omi/utils/analytics/intercom.dart';
 import 'package:omi/utils/device.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/firmware_update_battery.dart';
-import 'package:omi/utils/firmware_install_verification.dart';
 import 'firmware_update_dialog.dart';
 
 class FirmwareUpdate extends StatefulWidget {
@@ -63,11 +62,11 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
       final answered = await _answered(() => getStableVersion(deviceModelNumber: device.modelNumber));
       if (!answered) return _failCheck();
       final stableVersion = latestFirmwareDetails['version']?.toString();
-      final alreadyStable =
-          isKnownFirmwareVersion(device.firmwareRevision) && device.firmwareRevision.trim() == stableVersion?.trim();
+      final alreadyStable = DeviceUtils.isValidFirmwareVersion(device.firmwareRevision) &&
+          device.firmwareRevision.trim() == stableVersion?.trim();
       if (mounted) {
         setState(() {
-          shouldUpdate = isKnownFirmwareVersion(stableVersion) && !alreadyStable;
+          shouldUpdate = DeviceUtils.isValidFirmwareVersion(stableVersion) && !alreadyStable;
           isConfirmedCurrent = alreadyStable;
           updateMessage = alreadyStable
               ? context.l10n.alreadyOnStableFirmware
@@ -78,6 +77,17 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
         });
       }
     } else {
+      // The API rejects an unreadable revision. Explain the device-side failure before requesting;
+      // repeating that request cannot recover the BLE revision read.
+      if (!DeviceUtils.isValidFirmwareVersion(device.firmwareRevision)) {
+        if (!mounted) return;
+        setState(() {
+          shouldUpdate = false;
+          updateMessage = context.l10n.unableToDetermineFirmwareVersion;
+          isLoading = false;
+        });
+        return;
+      }
       final answered = await _answered(() => getLatestVersion(
             deviceModelNumber: device.modelNumber,
             firmwareRevision: device.firmwareRevision,

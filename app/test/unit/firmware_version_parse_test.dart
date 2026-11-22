@@ -92,6 +92,9 @@ void main() {
     ('draft release', {...valid, 'draft': true}, FirmwareUpdateCheck.releaseUnavailable),
     ('missing minimum version', {...valid, 'min_version': null}, FirmwareUpdateCheck.releaseUnavailable),
     ('unparsable latest version', {...valid, 'version': 'x'}, FirmwareUpdateCheck.releaseUnavailable),
+    ('non-string latest version', {...valid, 'version': 123}, FirmwareUpdateCheck.releaseUnavailable),
+    ('unparsable app floor', {...valid, 'min_app_version': 'x'}, FirmwareUpdateCheck.releaseUnavailable),
+    ('unparsable build floor', {...valid, 'min_app_version_code': 'x'}, FirmwareUpdateCheck.releaseUnavailable),
     ('below minimum version', {...valid, 'min_version': '1.8.0'}, FirmwareUpdateCheck.notConfirmed),
     (
       'newer app required',
@@ -115,4 +118,30 @@ void main() {
     final result = await DeviceUtils.checkFirmwareUpdate(currentFirmware: '2.0.0', latestFirmwareDetails: valid);
     expect(result.status, FirmwareUpdateCheck.upToDate);
   });
+
+  // firmware_release.yml exposes each app minimum independently (blank = omit).
+  for (final (name, version, build) in [
+    ('version-only floor', '99.0.0', null),
+    ('build-only floor', null, '999999'),
+    ('older app with a sufficient build', '99.0.0', '1'),
+    ('newer app with an insufficient build', '8.0.0', '999999'),
+  ]) {
+    test('$name does not offer incompatible firmware', () async {
+      final result = await DeviceUtils.checkFirmwareUpdate(
+        currentFirmware: '1.5.0',
+        latestFirmwareDetails: {...valid, 'min_app_version': version, 'min_app_version_code': build},
+      );
+      expect(result.status, FirmwareUpdateCheck.notConfirmed);
+    });
+  }
+
+  for (final details in [
+    {'version': '2.0.0', 'min_version': '1.0.0'},
+    {...valid, 'min_app_version': '8.0.0', 'min_app_version_code': '1'},
+  ]) {
+    test('legacy or satisfied app minima retain an eligible offer: $details', () async {
+      final result = await DeviceUtils.checkFirmwareUpdate(currentFirmware: '1.5.0', latestFirmwareDetails: details);
+      expect(result.status, FirmwareUpdateCheck.updateAvailable);
+    });
+  }
 }

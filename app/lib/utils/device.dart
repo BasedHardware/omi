@@ -55,6 +55,8 @@ class DeviceUtils {
     }
   }
 
+  static bool isValidFirmwareVersion(Object? value) => _tryParseVersion(value) != null;
+
   static Future<(String, bool, String)> shouldUpdateFirmware({
     required String currentFirmware,
     required Map latestFirmwareDetails,
@@ -89,12 +91,13 @@ class DeviceUtils {
       return (status: releaseUnavailable, message: 'Latest Version Not Available', version: '');
     }
 
-    String latestVersionStr = latestFirmwareDetails['version'];
-    Version? latestVersion = _tryParseVersion(latestVersionStr);
+    final latestVersionValue = latestFirmwareDetails['version'];
+    Version? latestVersion = _tryParseVersion(latestVersionValue);
     Version? minVersion = _tryParseVersion(latestFirmwareDetails['min_version']);
     if (latestVersion == null || minVersion == null) {
       return (status: releaseUnavailable, message: 'Latest Version Not Available', version: '');
     }
+    final latestVersionStr = latestVersionValue as String;
 
     if (currentVersion < minVersion) {
       return (
@@ -109,12 +112,15 @@ class DeviceUtils {
         final minAppVersion = _tryParseVersion(latestFirmwareDetails['min_app_version']);
         final buildNumber = int.tryParse(packageInfo.buildNumber);
         final minBuildNumber = int.tryParse('${latestFirmwareDetails['min_app_version_code']}');
-        if (appVersion != null &&
-            minAppVersion != null &&
-            buildNumber != null &&
-            minBuildNumber != null &&
-            appVersion <= minAppVersion &&
-            buildNumber < minBuildNumber) {
+        // The release workflow permits either floor independently; absent floors keep legacy
+        // releases eligible, while a declared but unreadable requirement is inconclusive.
+        final hasVersionFloor = latestFirmwareDetails['min_app_version'] != null;
+        final hasBuildFloor = latestFirmwareDetails['min_app_version_code'] != null;
+        if ((hasVersionFloor && minAppVersion == null) || (hasBuildFloor && minBuildNumber == null)) {
+          return (status: releaseUnavailable, message: 'Latest Version Not Available', version: '');
+        }
+        if ((hasVersionFloor && (appVersion == null || appVersion < minAppVersion!)) ||
+            (hasBuildFloor && (buildNumber == null || buildNumber < minBuildNumber!))) {
           return (
             status: FirmwareUpdateCheck.notConfirmed,
             message:

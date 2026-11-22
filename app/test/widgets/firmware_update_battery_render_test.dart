@@ -32,6 +32,7 @@ import '../helpers/sfpro_font_fixtures.dart';
 bool _offerZip = false;
 void Function()? _onDownload;
 Map<String, dynamic> _lookupBody = const {};
+int _lookupRequests = 0;
 
 class _EnvFields implements EnvFields {
   const _EnvFields();
@@ -106,6 +107,7 @@ void main() {
     _offerZip = false;
     _onDownload = null;
     _lookupBody = const {};
+    _lookupRequests = 0;
   });
 
   Future<void> pumpPage(WidgetTester tester, _DeviceProvider provider,
@@ -283,7 +285,7 @@ void main() {
 
   // A non-empty but unparsable revision (e.g. the 'Unknown' sentinel after a failed BLE read) is a
   // device-side failure, so the page must say the version is unknown, not report it as up to date.
-  for (final revision in ['Unknown', 'not-a-version']) {
+  for (final revision in ['', 'Unknown', 'not-a-version']) {
     testWidgets('unparsable firmware revision "$revision" is reported as unknown version', (tester) async {
       await pumpPage(tester, _DeviceProvider(batteryLevel: 80), firmwareVersion: revision, expectOffer: false);
       expect(find.text(en.yourDeviceIsUpToDate), findsNothing);
@@ -291,6 +293,7 @@ void main() {
       // Re-running the server lookup cannot fix a revision that failed to read over BLE, so the
       // failed-check state and its Try Again are not shown for this outcome.
       expect(find.byKey(const Key('firmware_check_failed')), findsNothing);
+      expect(_lookupRequests, 0, reason: 'A server retry cannot repair a failed device revision read');
       debugDefaultTargetPlatformOverride = null;
     });
   }
@@ -306,6 +309,14 @@ void main() {
 
   testWidgets('rollback with no usable stable version is not reported as already stable', (tester) async {
     _lookupBody = <String, dynamic>{'version': null};
+    await pumpPage(tester, _DeviceProvider(batteryLevel: 80), rollback: true, expectOffer: false);
+    expect(find.text(en.alreadyOnStableFirmware), findsNothing);
+    expect(find.text(en.noStableFirmwareFound), findsOneWidget);
+    debugDefaultTargetPlatformOverride = null;
+  });
+
+  testWidgets('rollback with an unparsable stable version does not offer installation', (tester) async {
+    _lookupBody = <String, dynamic>{'version': 'not-a-version'};
     await pumpPage(tester, _DeviceProvider(batteryLevel: 80), rollback: true, expectOffer: false);
     expect(find.text(en.alreadyOnStableFirmware), findsNothing);
     expect(find.text(en.noStableFirmwareFound), findsOneWidget);
@@ -566,6 +577,9 @@ class _FirmwareHttpClient implements HttpClient {
   Future<HttpClientRequest> openUrl(String method, Uri url) async {
     expect(method, 'GET');
     expect(url.path, anyOf('/v2/firmware/latest', '/v2/firmware/stable', '/firmware.zip'));
+    if (url.path.startsWith('/v2/firmware/')) {
+      _lookupRequests++;
+    }
     return _FirmwareRequest(url);
   }
 
