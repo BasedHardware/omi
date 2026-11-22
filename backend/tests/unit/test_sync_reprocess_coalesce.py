@@ -283,34 +283,6 @@ def test_sweep_reports_repair_errors_without_failing_successful_retirement(
     }
 
 
-def test_lazy_mark_blind_write_preserves_live_lease(monkeypatch):
-    client, ref = Mock(), Mock()
-    client.collection.return_value.document.return_value = ref
-    monkeypatch.setattr(reprocess, 'owns_runtime', lambda: True)
-    monkeypatch.setattr(reprocess, 'get_firestore_client', lambda: client)
-    monkeypatch.setattr(
-        reprocess,
-        '_effects_binding',
-        lambda: {
-            'queue': 'existing',
-            'handler': 'https://worker.invalid/v2/sync-jobs/run',
-            'audience': 'https://worker.invalid/v2/sync-jobs/run',
-            'invoker_sa': 'worker@example.invalid',
-        },
-    )
-    monkeypatch.setattr(reprocess.time, 'time', lambda: 1000)
-    wake = Mock()
-    monkeypatch.setattr(reprocess, '_enqueue', wake)
-    reprocess.mark_effects('owner', 'conversation', 'en')
-    ref.get.assert_not_called()
-    ref.set.assert_called_once()
-    body = ref.set.call_args.args[0]
-    assert body['effects_only'] is True and 'lease_until' not in body and 'owner' not in body
-    assert body['due_at'] == 4540 and body['task_due_at'] == 4540
-    assert ref.set.call_args.kwargs == {'merge': True}
-    assert wake.call_args.args[0]['document_id'] == reprocess.key('owner', 'conversation\0effects')
-
-
 @pytest.fixture
 def sweep_query(state, monkeypatch):
     rows, _ = state
@@ -403,7 +375,7 @@ def test_ownership_park_releases_only_after_python_decision(state, sweep_query, 
     assert new['first_pending_at'] == original['first_pending_at']
     rows[key] = new
     if effects_only:
-        # mark_effects can blind-merge over the generic defer reason.
+        # Older stored effects rows can be missing the defer reason.
         rows[key]['deferred_reason'] = None
         assert reprocess.ownership_parked(rows[key])
 
@@ -533,24 +505,9 @@ def test_rebind_cas_conflict_rereads_a_new_lease(state, sweep_query, monkeypatch
     assert len(tasks) == 1  # The failed CAS never dispatches its tentative token.
 
 
-def test_lazy_unbound_host_keeps_debt_without_failing_visible_completion(monkeypatch):
-    client, ref = Mock(), Mock()
-    client.collection.return_value.document.return_value = ref
-    monkeypatch.setattr(reprocess, 'owns_runtime', lambda: True)
-    monkeypatch.setattr(reprocess, 'get_firestore_client', lambda: client)
-    monkeypatch.setattr(reprocess, '_effects_binding', lambda: {})
-    wake = Mock()
-    monkeypatch.setattr(reprocess, '_enqueue', wake)
-    reprocess.mark_effects('owner', 'conversation', 'en')
-    ref.set.assert_called_once()
-    ref.get.assert_not_called()
-    wake.assert_not_called()
-
-
 def test_repaired_delivery_token_always_gets_a_new_cloud_task_name(state, monkeypatch):
     from utils import cloud_tasks
 
-    monkeypatch.setenv('DEMAND_PROCESSING_ENABLED', 'false')
     rows, tasks = state
     reprocess.mark('u', 'c', 'en', now=0)
     row = dict(tasks[0], wake_token='obsolete-name')
@@ -597,18 +554,14 @@ def test_first_pending_survives_death_lease_and_empty_output(state, monkeypatch)
     assert reprocess.run(key, retry_token, Mock(), now=2000) == 'stale'
 
 
-def test_first_summary_bypasses_demand_tier_wait_without_extra_reads(state, monkeypatch):
+def test_first_summary_enqueues_at_its_deadline(state, monkeypatch):
     from utils import cloud_tasks
-    from utils.conversations import demand_processing as demand
 
     rows, tasks = state
     reprocess.mark('u', 'c', 'en', now=0)
-    schedule = Mock(side_effect=AssertionError('first summary cannot wait behind demand tiers'))
-    monkeypatch.setattr(demand, 'schedule', schedule)
     enqueue = Mock()
     monkeypatch.setattr(cloud_tasks, 'enqueue_named_task', enqueue)
     _ENQUEUE(tasks[0])
-    schedule.assert_not_called()
     assert enqueue.call_args.kwargs['schedule_at'] == 120
 
 
@@ -923,20 +876,17 @@ def test_invalid_deadline_never_grants_summary_drain_eligibility(monkeypatch, de
     assert summary_guarantee.first_summary_pending(row)
 
 
-def test_preserved_deadline_bypasses_demand_wait_and_repairs_without_rotating_queued_token(state, monkeypatch):
+def test_preserved_deadline_enqueues_and_retains_repair_policy(state, monkeypatch):
     from utils import cloud_tasks
-    from utils.conversations import demand_processing as demand
 
     rows, tasks = state
     monkeypatch.setenv('FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED', 'true')
     reprocess.mark('u', 'c', 'en', now=0)
     key, token = reprocess.key('u', 'c'), tasks[-1]['task_token']
     monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_PERCENT', '100')
-    schedule, enqueue = Mock(), Mock()
-    monkeypatch.setattr(demand, 'schedule', schedule)
+    enqueue = Mock()
     monkeypatch.setattr(cloud_tasks, 'enqueue_named_task', enqueue)
     _ENQUEUE(rows[key])
-    schedule.assert_not_called()
     assert enqueue.call_args.kwargs['schedule_at'] == 120
     query = Mock()
     query.where.return_value = query
@@ -1197,12 +1147,8 @@ def test_episode_schedule_only_for_changed_reprocess_or_unattached(pipeline, mon
     assert features.call_count == (0 if change == 'disabled' else 1)
 
 
-@pytest.mark.parametrize('demand,ceiling', [(False, 4600), (True, 3540)])
-def test_later_revision_retains_settle_and_repeat_work_ceilings(state, monkeypatch, demand, ceiling):
+def test_later_revision_retains_settle_and_repeat_work_ceilings(state):
     rows, tasks = state
-    monkeypatch.setenv('DEMAND_PROCESSING_ENABLED', str(demand).lower())
-    monkeypatch.setenv('DEMAND_PROCESSING_UID_ALLOWLIST', '')
-    monkeypatch.setenv('DEMAND_PROCESSING_PERCENT', '100')
     reprocess.mark('u', 'c', 'en', now=0)
     key = reprocess.key('u', 'c')
     output = SimpleNamespace(discarded=False, structured={'overview': 'Completed first summary'})
@@ -1210,7 +1156,7 @@ def test_later_revision_retains_settle_and_repeat_work_ceilings(state, monkeypat
     assert rows[key]['summary_seen']
     for offset in range(0, 4001, 100):
         reprocess.mark('u', 'c', 'en', now=121 + offset)
-    assert rows[key]['due_at'] == 121 + ceiling
+    assert rows[key]['due_at'] == 121 + 4600
     assert rows[key]['effects_only'] is False
 
 

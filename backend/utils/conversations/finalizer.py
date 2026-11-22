@@ -643,18 +643,6 @@ async def finalize_persisted_conversation(
             or derived_disposition[0] == DerivedEffectsDisposition.TERMINAL_NO_DERIVED_EFFECTS
         )
         stage = 'derived_effects'
-        from utils.conversations.demand_processing import lazy_enrichment_enabled
-
-        lazy_effects = (
-            lazy_enrichment_enabled(uid)
-            and not skip_derived_effects
-            and not conversation.discarded
-            and not is_server_minimum(conversation)
-        )
-        if lazy_effects:
-            from utils.sync.reprocess import mark_effects
-
-            await run_blocking(db_executor, mark_effects, uid, conversation_id, resolved_language)
         # Index enriched notes behind the winning claim, independently of apps.
         # Await fail-soft so worker exit cannot strand an embedding request.
         episode_row = None
@@ -677,7 +665,7 @@ async def finalize_persisted_conversation(
                     'smart_merge'
                 ) != conversation_data.get('smart_merge'):
                     OMI_CONVERSATION_SUMMARY_VECTOR_UPSERTS_TOTAL.labels(outcome='skipped_stale').inc()
-                elif not lazy_effects:
+                else:
                     await run_blocking(lifecycle_executor(uid), _save_summary_vector_fail_soft, uid, latest)
         except Exception as error:
             OMI_CONVERSATION_SUMMARY_VECTOR_UPSERTS_TOTAL.labels(outcome='error').inc()
@@ -698,7 +686,7 @@ async def finalize_persisted_conversation(
             )
         elif derived_effects:
             await run_blocking(lifecycle_executor(uid), derived_effects[0])
-        elif not lazy_effects and not getattr(conversation, 'discarded', False):
+        elif not getattr(conversation, 'discarded', False):
             # A finalization job owns a durable lease. Keep canonical memory
             # extraction inside that lease so a temporary fail-closed gate
             # leaves the job retryable instead of dropping the source.

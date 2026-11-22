@@ -11,7 +11,6 @@ from testing.e2e.test_sync_lifecycle import _drain_background_coroutines, _patch
 def test_watch_process_now_keeps_recovered_speech_visible(client, auth_headers, monkeypatch, live_user):
     import database.conversations as conversations_db
     import utils.conversations.lifecycle as lifecycle
-    import utils.conversations.demand_processing as demand_processing
     import utils.sync.pipeline as pipeline
 
     patch_fresh_sync_lane(monkeypatch)
@@ -34,7 +33,6 @@ def test_watch_process_now_keeps_recovered_speech_visible(client, auth_headers, 
         user_selections=user_selections,
     )
     monkeypatch.setattr(pipeline, 'decode_files_to_wav', real_decode)
-    monkeypatch.setattr(demand_processing, 'promote_conversation_effects', lambda *args: None)
     ingest = lifecycle.ingest_sync_conversation
 
     def retain_discarded_speech(*args, **kwargs):

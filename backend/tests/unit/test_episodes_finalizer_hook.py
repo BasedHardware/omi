@@ -116,7 +116,6 @@ def test_absorb_hook_reads_nothing_when_disabled(monkeypatch):
 def test_live_member_notes_wait_for_close_or_recording_detail(monkeypatch, enabled):
     from unittest.mock import Mock
     from utils.episodes import member_notes
-    from utils.conversations import demand_processing
     from utils.sync.processing_hold import ProcessingDeferred
     from utils.enrichment import outbox
     from types import SimpleNamespace
@@ -132,7 +131,7 @@ def test_live_member_notes_wait_for_close_or_recording_detail(monkeypatch, enabl
     monkeypatch.setattr(member_notes.episodes, 'get_episode_owner_snapshot', read)
     redis = Mock()
     redis.get.return_value = None
-    monkeypatch.setattr(demand_processing, 'client', lambda: redis)
+    monkeypatch.setattr(member_notes, 'create_bounded_redis_client', lambda _timeout: redis)
     mark = Mock()
     monkeypatch.setattr(outbox, 'mark', mark)
     row = {'id': 'c1'}
@@ -157,7 +156,6 @@ def test_live_member_notes_wait_for_close_or_recording_detail(monkeypatch, enabl
 def test_recording_detail_escalates_only_that_recording(monkeypatch, has_existing_notes):
     from unittest.mock import Mock
     from utils.episodes import member_notes
-    from utils.conversations import demand_processing
     from database.outbox_firestore import ENRICHMENT_OUTBOX
 
     monkeypatch.setenv('OMI_ENV_STAGE', 'prod')
@@ -169,7 +167,7 @@ def test_recording_detail_escalates_only_that_recording(monkeypatch, has_existin
     )
     redis = Mock()
     redis.get.return_value = None
-    monkeypatch.setattr(demand_processing, 'client', lambda: redis)
+    monkeypatch.setattr(member_notes, 'create_bounded_redis_client', lambda _timeout: redis)
     enqueue = Mock()
     monkeypatch.setattr(ENRICHMENT_OUTBOX, 'enqueue', enqueue)
     member_notes.open_recording(
@@ -263,7 +261,7 @@ def test_live_detail_dependency_failure_preserves_read_and_retry(monkeypatch, fa
     redis = Mock()
     redis.get.return_value = None
     enqueue = Mock()
-    monkeypatch.setattr(member_notes.demand_processing, 'client', lambda: redis)
+    monkeypatch.setattr(member_notes, 'create_bounded_redis_client', lambda _timeout: redis)
     monkeypatch.setattr(member_notes.ENRICHMENT_OUTBOX, 'enqueue', enqueue)
     {'get': redis.get, 'set': redis.set, 'enqueue': enqueue}[failure].side_effect = TimeoutError('unavailable')
     row = {'id': 'c1', 'status': 'completed', 'transcript_segments': [{'text': 'text'}]}
@@ -331,7 +329,7 @@ def test_detail_intent_survives_quiet_window_and_expiry_restores_wait(monkeypatc
     redis = Mock()
     redis.get.side_effect = lambda key: '1' if leases.get(key, 0) > now[0] else None
     redis.set.side_effect = lambda key, value, ex: leases.__setitem__(key, now[0] + ex)
-    monkeypatch.setattr(member_notes.demand_processing, 'client', lambda: redis)
+    monkeypatch.setattr(member_notes, 'create_bounded_redis_client', lambda _timeout: redis)
     enqueue = Mock()
     monkeypatch.setattr(member_notes.ENRICHMENT_OUTBOX, 'enqueue', enqueue)
     row = {

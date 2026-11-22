@@ -14,7 +14,6 @@ from utils.sync import reprocess
 @pytest.fixture
 def admitted(state, monkeypatch):
     monkeypatch.setenv('FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED', 'true')
-    monkeypatch.setenv('DEMAND_PROCESSING_ENABLED', 'false')
     reprocess.mark('u', 'c', 'en', now=0)
     return state
 

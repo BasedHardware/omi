@@ -172,10 +172,6 @@ async def run_listen_finalization_job(
     if pending_job and isinstance(pending_job.get('uid'), str):
         if await run_blocking(db_executor, account_deletion_blocks_user_work, pending_job['uid']):
             return retry_response(RetryReason.PERSISTENCE_FENCED)
-    from utils.conversations.demand_processing import admit
-
-    if not await run_blocking(db_executor, admit, job_id, token=dispatch_generation):
-        return JSONResponse(status_code=200, content={'status': 'priority_wait'})
     lock_key = f'listen-finalization:{job_id}'
     lock_token = await run_blocking(db_executor, try_acquire_job_run_lock, lock_key)
     if not lock_token:

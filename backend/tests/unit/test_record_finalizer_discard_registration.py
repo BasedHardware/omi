@@ -16,7 +16,6 @@ from models.conversation_enums import ConversationStatus
 from routers import conversation_finalization as finalization_router
 from utils.batch_pipeline import live
 from utils.conversations import finalizer
-from utils.conversations import demand_processing
 from utils.conversations import lifecycle
 from utils.conversations.processing_trigger import ProcessingTrigger
 from tests.unit.test_conversation_smart_merge_finalizer import harness, _Conversation, _JOB, _finalize
@@ -150,7 +149,6 @@ async def test_discarded_server_batch_fast_path_terminalizes_once_without_regist
     monkeypatch.setattr(finalization_router, 'release_job_run_lock', lambda *_: None)
     monkeypatch.setattr(finalization_router, 'account_deletion_blocks_user_work', lambda _: False)
     monkeypatch.setattr(finalization_router, 'should_skip_background_account_mutation', lambda _: False)
-    monkeypatch.setattr(demand_processing, 'admit', lambda *args, **kwargs: True)
     monkeypatch.setattr(jobs_db, 'claim_finalization_job', claim)
     monkeypatch.setattr(jobs_db, 'get_finalization_job', lambda _: job)
     monkeypatch.setattr(finalization_router, 'record_capture_finalization_terminal', terminal)

@@ -21,7 +21,7 @@ from services import conversation_finalization as service
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 from tests.unit.utils.test_listen_pusher_session import make_session
 from utils import pusher_finalization as worker
-from utils.conversations import demand_processing, finalizer, process_conversation as processing, typesense_index
+from utils.conversations import finalizer, process_conversation as processing, typesense_index
 from utils.conversations.processing_retry import (
     DETERMINISTIC_PROCESSING_FAILURE,
     TRANSIENT_PROCESSING_FAILURE,
@@ -161,7 +161,6 @@ def cloud_tasks_route(monkeypatch, durable_loop):
     monkeypatch.setattr(task_route, 'release_job_run_lock', lambda *_: None)
     monkeypatch.setattr(task_route, 'account_deletion_blocks_user_work', lambda *_: False)
     monkeypatch.setattr(task_route, 'should_skip_background_account_mutation', lambda *_: False)
-    monkeypatch.setattr(demand_processing, 'admit', lambda *a, **kw: True)
     monkeypatch.setattr(task_route, 'get_listen_finalization_tasks_max_attempts_for_worker', lambda: 5)
     monkeypatch.setenv('LISTEN_FINALIZATION_DURABLE_ATTEMPT_CAP_ENABLED', 'true')
     terminal = Mock(wraps=jobs.mark_finalization_dead_letter)

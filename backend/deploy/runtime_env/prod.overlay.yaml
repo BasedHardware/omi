@@ -986,21 +986,6 @@ overlay:
           BATCH_PIPELINE_WORKER_ENABLED:
             value: 'false'
             category: ops_kill
-          DEMAND_PROCESSING_ENABLED:
-            value: 'false'
-            category: rollout
-          DEMAND_PROCESSING_LAZY_ENABLED:
-            value: 'false'
-            category: rollout
-          DEMAND_PROCESSING_PERCENT:
-            value: '0'
-            category: rollout
-          DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED:
-            value: 'false'
-            category: rollout
-          DEMAND_PROCESSING_TOOL_ENABLED:
-            value: 'false'
-            category: rollout
           SYNC_DURABLE_STATUS_RECONCILIATION:
             value: 'true'
             category: rollout
@@ -1366,21 +1351,6 @@ overlay:
           BATCH_PIPELINE_WORKER_ENABLED:
             value: 'false'
             category: ops_kill
-          DEMAND_PROCESSING_ENABLED:
-            value: 'false'
-            category: rollout
-          DEMAND_PROCESSING_LAZY_ENABLED:
-            value: 'false'
-            category: rollout
-          DEMAND_PROCESSING_PERCENT:
-            value: '0'
-            category: rollout
-          DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED:
-            value: 'false'
-            category: rollout
-          DEMAND_PROCESSING_TOOL_ENABLED:
-            value: 'false'
-            category: rollout
           FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED:
             value: 'true'
             category: rollout
@@ -1754,21 +1724,6 @@ overlay:
           BATCH_PIPELINE_WORKER_ENABLED:
             value: 'false'
             category: ops_kill
-          DEMAND_PROCESSING_ENABLED:
-            value: 'false'
-            category: rollout
-          DEMAND_PROCESSING_LAZY_ENABLED:
-            value: 'false'
-            category: rollout
-          DEMAND_PROCESSING_PERCENT:
-            value: '0'
-            category: rollout
-          DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED:
-            value: 'false'
-            category: rollout
-          DEMAND_PROCESSING_TOOL_ENABLED:
-            value: 'false'
-            category: rollout
           FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED:
             value: 'true'
             category: rollout
@@ -2146,21 +2101,6 @@ overlay:
           BATCH_PIPELINE_WORKER_ENABLED:
             value: 'false'
             category: ops_kill
-          DEMAND_PROCESSING_ENABLED:
-            value: 'false'
-            category: rollout
-          DEMAND_PROCESSING_LAZY_ENABLED:
-            value: 'false'
-            category: rollout
-          DEMAND_PROCESSING_PERCENT:
-            value: '0'
-            category: rollout
-          DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED:
-            value: 'false'
-            category: rollout
-          DEMAND_PROCESSING_TOOL_ENABLED:
-            value: 'false'
-            category: rollout
           FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED:
             value: 'true'
             category: rollout

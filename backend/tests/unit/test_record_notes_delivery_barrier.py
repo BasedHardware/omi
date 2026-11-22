@@ -14,7 +14,6 @@ import pytest
 from database import pipeline_ledger, record_audio
 from database.outbox_firestore import FirestoreEnrichmentOutbox
 from tests.unit.test_record_complete_notes import recording, NOW, POLICY
-from utils.conversations import demand_processing
 from utils.enrichment import age_gate, callback, consumer
 from utils.sync import processing_hold, reprocess
 from utils.workers.consumer import run_push
@@ -27,10 +26,8 @@ def delivery(recording, monkeypatch, request):
 
 def make_delivery(recording, monkeypatch, adapter_kind):
     f = recording
-    monkeypatch.setenv('DEMAND_PROCESSING_ENABLED', 'false')
     monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', 'off')
     monkeypatch.setattr(age_gate, 'park_if_expired', lambda *a, **k: False)
-    monkeypatch.setattr(demand_processing, 'admit', lambda *a, **k: True)
     adapter = FirestoreEnrichmentOutbox(f.client, privacy_blocked=lambda *_: False, create_wake=Mock())
     key = reprocess.key(f.binding.owner_id, 'capture')
     ref = f.client.collection(reprocess.COLLECTION).document(key)

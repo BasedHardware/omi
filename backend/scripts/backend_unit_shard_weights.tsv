@@ -643,7 +643,6 @@ tests/unit/test_delete_app_logo_bucket_guard.py	3.7
 tests/unit/test_delete_conversation_cancels_task_reminders.py	11.7
 tests/unit/test_delete_conversation_cascade.py	7.7
 tests/unit/test_deletion_wipe_retry_backoff.py	2.7
-tests/unit/test_demand_processing.py	10.7
 tests/unit/test_demand_surface_http.py	13.7
 tests/unit/test_dependency_async_boundaries.py	5.7
 tests/unit/test_deploy_status_report.py	2.7

@@ -3312,16 +3312,6 @@ FIELD_SITES = {
             ('coverage', 'end_time', 'event_id', 'start_time', 'status', 'title'),
         )
     ],
-    'utils/conversations/demand_processing.py': [
-        ('process_recent', 'status', "'disabled'", ('ready', 'status')),
-        ('process_recent', 'status', "'rate_limited'", ('ready', 'retry_after_seconds', 'status')),
-        (
-            'promote',
-            'status',
-            "'processing' if count else 'no_indexed_pending_work'",
-            ('has_more', 'promoted', 'ready', 'status'),
-        ),
-    ],
     'utils/conversations/finalizer.py': [
         ('_load_admitted_conversation', 'status', 'ConversationStatus.processing', ('status',))
     ],

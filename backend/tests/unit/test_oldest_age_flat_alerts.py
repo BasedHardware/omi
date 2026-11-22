@@ -30,7 +30,6 @@ AGES = (
     'omi_batch_projection_obligation_oldest_age_seconds',
     'omi_batch_pipeline_vendor_held_oldest_age_seconds',
     'omi_summary_debt_oldest_age_seconds',
-    'omi_demand_processing_queue_age_seconds',
 )
 FLAT_EXPR = ' + '.join(
     f'(count({m} > 0 and (max_over_time({m}[1h]) - min_over_time({m}[1h]) == 0) '

@@ -482,7 +482,6 @@ def _get_agentic_module():
         "save_user_preference_tool",
         "fetch_url_tool",
         "traverse_knowledge_graph_tool",
-        "process_recent_conversations",
     ]
     for name in tool_names:
         mock_tool = MagicMock()
@@ -788,7 +787,6 @@ def test_core_tools_order_matches_exports():
         "save_user_preference_tool",
         "fetch_url_tool",
         "traverse_knowledge_graph_tool",
-        "process_recent_conversations",
     ]
 
     actual_names = [t.name for t in agentic_mod.CORE_TOOLS]

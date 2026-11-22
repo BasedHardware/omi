@@ -36,7 +36,6 @@ SUMMARY = SimpleNamespace(structured={'overview': 'Synthetic committed summary'}
 
 @pytest.fixture
 def rows(state, monkeypatch):  # noqa: F811
-    monkeypatch.setenv('DEMAND_PROCESSING_ENABLED', 'false')
     monkeypatch.setattr(custody, 'discard_blocked', lambda _row_id: False)
     from database import conversations as conversations_db
 
@@ -465,7 +464,6 @@ def test_new_rows_bind_to_the_enrichment_queue_only_when_routed(rows, monkeypatc
 
 @pytest.fixture
 def split_binding(state, monkeypatch):  # noqa: F811
-    monkeypatch.setenv('DEMAND_PROCESSING_ENABLED', 'false')
     monkeypatch.setenv('ENRICHMENT_ROUTE', 'enrichment_queue')
     monkeypatch.setenv('ENRICHMENT_TASKS_QUEUE', 'enrichment')
     monkeypatch.setenv('ENRICHMENT_TASKS_HANDLER_URL', 'https://workers.invalid/v2/enrichment/run')
@@ -539,7 +537,7 @@ def test_reopened_backfill_receipt_routes_new_background_obligation(split_bindin
 
 
 def test_backfill_effects_use_existing_queue(split_binding):
-    assert reprocess._effects_binding()['queue'] == 'sync-backfill-fresh'
+    assert reprocess.dispatch_binding(backfill=True, effects_only=True)['queue'] == 'sync-backfill-fresh'
 
 
 @pytest.mark.parametrize('lane', ['fresh', 'live', 'batch', 'integration'])
@@ -609,7 +607,7 @@ def test_backfill_fallback_cannot_enter_fresh_queue(split_binding, monkeypatch):
 def test_fresh_lazy_effects_cannot_enter_fresh_queue(split_binding, monkeypatch):
     monkeypatch.setenv('ENRICHMENT_FRESH_TASKS_QUEUE', 'enrichment-fresh')
     monkeypatch.setattr(reprocess.summary_delivery, 'lane', lambda _: 'fresh')
-    assert reprocess._effects_binding()['queue'] == 'enrichment'
+    assert reprocess.dispatch_binding(effects_only=True)['queue'] == 'enrichment'
     reprocess.mark('u', 'c', 'en', now=0, effects_only=True)
     assert split_binding[0][reprocess.key('u', 'c\0effects')]['dispatch']['queue'] == 'enrichment'
 
@@ -771,13 +769,11 @@ def test_priority_sweep_preserves_custody_and_background_work(split_binding, swe
 
 def test_backfill_route_reaches_named_task_creation(split_binding, monkeypatch):
     from utils import cloud_tasks
-    from utils.conversations import demand_processing
     from tests.unit.test_sync_reprocess_coalesce import _ENQUEUE
 
     reprocess.mark('u', 'c', 'en', now=0)
     create = Mock()
     monkeypatch.setattr(cloud_tasks, 'enqueue_named_task', create)
-    monkeypatch.setattr(demand_processing, 'schedule', lambda *_args, **_kwargs: False)
     _ENQUEUE(split_binding[0][KEY])
     assert create.call_args.args[:2] == ('enrichment', 'https://workers.invalid/v2/enrichment/run')
     assert create.call_args.kwargs['audience'] == 'https://workers.invalid/v2/enrichment/run'
@@ -820,29 +816,28 @@ def test_sweep_routes_previously_unbound_backfill_by_summary_state(split_binding
 
 def test_unbound_backfill_effects_keep_lane_for_repair_on_a_fresh_host(split_binding, sweep_query, monkeypatch):
     rows, tasks = split_binding
-    repair_client = reprocess.get_firestore_client()
     effects_key = reprocess.key('u', 'c\0effects')
+    rows[effects_key] = {
+        'document_id': effects_key,
+        'uid': 'u',
+        'conversation_id': 'c',
+        'language': 'en',
+        'effects_only': True,
+        'summary_lane': 'backfill',
+        'task_token': 'a' * 32,
+        'due_at': 3540,
+        'task_due_at': 3540,
+        'dispatch': {},
+        'version': 1,
+    }
+    assert not tasks
 
-    def persist(body, *, merge):
-        assert merge
-        rows[effects_key] = {**body, 'version': 1}
-
-    document = SimpleNamespace(set=persist)
-    client = SimpleNamespace(collection=lambda _: SimpleNamespace(document=lambda _: document))
-    monkeypatch.setattr(reprocess, 'get_firestore_client', lambda: client)
-    monkeypatch.setattr(reprocess, '_effects_binding', lambda: {})
-    monkeypatch.setattr(reprocess.time, 'time', lambda: 0)
-    reprocess.mark_effects('u', 'c', 'en')
-    assert rows[effects_key]['summary_lane'] == 'backfill' and not tasks
-
-    monkeypatch.setattr(reprocess, 'get_firestore_client', lambda: repair_client)
     monkeypatch.setattr(reprocess.summary_delivery, 'lane', lambda _: 'fresh')
     assert reprocess.sweep(now=3600) == {'repaired': 1, 'error': 0}
     assert tasks[-1]['dispatch']['queue'] == 'sync-backfill-fresh'
 
 
 def test_not_due_wake_rearms_and_answers_200_not_due(state, monkeypatch):  # noqa: F811
-    monkeypatch.setenv('DEMAND_PROCESSING_ENABLED', 'false')
     monkeypatch.setattr(custody, 'discard_blocked', lambda _row_id: False)
     reprocess.mark('u', 'c', 'en', now=time.time())  # settles 600s from now
     state_rows, tasks = state

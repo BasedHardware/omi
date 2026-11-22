@@ -56,7 +56,6 @@ def ob(outbox_backend, monkeypatch):  # noqa: F811
     from utils.enrichment import callback  # noqa: F401
 
     outbox_backend.store_harness.seed_user('o')
-    monkeypatch.setenv('DEMAND_PROCESSING_ENABLED', 'false')
     monkeypatch.setenv('ENRICHMENT_MAX_AGE_HOURS', '0')
     monkeypatch.delenv('ENRICHMENT_DELIVERY_BUDGET_SECONDS', raising=False)
     monkeypatch.setattr(enrichment_rows, 'owns_runtime', lambda: True)

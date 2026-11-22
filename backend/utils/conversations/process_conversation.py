@@ -3131,19 +3131,6 @@ def process_conversation(
         for field, value in llm_hashes.items():
             setattr(conversation, field, value)
 
-    from utils.conversations.demand_processing import lazy_enrichment_enabled
-
-    lazy_effects = lazy_enrichment_enabled(uid) and not discarded and not is_server_minimum(conversation)
-    if lazy_effects and not defer_derived_effects:
-        from utils.sync.reprocess import mark_effects
-
-        mark_effects(
-            uid,
-            conversation.id,
-            language_code,
-            immediate=trigger in {ProcessingTrigger.USER_REPROCESS, ProcessingTrigger.FIRST_OPEN},
-        )
-
     if relevance is not None:
         emit_recorded_decision(uid, conversation.id, relevance)
 
@@ -3236,12 +3223,7 @@ def process_conversation(
             }
             conversations_db.update_conversation(uid, conversation.id, app_updates)
             # Durable finalization owns indexing for deferred work and replays.
-            if (
-                not lazy_effects
-                and not defer_derived_effects
-                and not is_reprocess
-                and not is_server_minimum(conversation)
-            ):
+            if not defer_derived_effects and not is_reprocess and not is_server_minimum(conversation):
                 submit_with_context(postprocess_executor, save_structured_vector, uid, conversation)
             effects_transcript = (
                 derived_effects_transcript_digest(conversation.transcript_segments) if is_reprocess else None
@@ -3263,15 +3245,13 @@ def process_conversation(
                     'template-only reprocess: keeping derived effects uid=%s conversation=%s', uid, conversation.id
                 )
             memories_ran = False
-            if not lazy_effects and not defer_memory_extraction and not template_only:
+            if not defer_memory_extraction and not template_only:
                 # Canonical source replacement is universal and intentionally
                 # fail-closed. Do not hide a retryable apply/store failure in an
                 # unobserved future while reporting finalization as successful.
                 _extract_memories(uid, conversation)
                 memories_ran = True
-            if lazy_effects:
-                pass  # Coalesced memory, vector and task work is durably owned above.
-            elif template_only or app_failed:
+            if template_only or app_failed:
                 pass
             elif is_reprocess:
                 # Same fail-closed idea as memory source replacement: a transient

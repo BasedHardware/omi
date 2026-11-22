@@ -349,11 +349,6 @@ def _wake_exists(row: Row) -> bool:
     return named_task_exists(row['dispatch']['queue'], _task_name(row))
 
 
-def effects_may_run_early(row: Any) -> bool:
-    # Explicit demand may skip the idle wait, never a worker's settlement fence.
-    return bool(row.get('effects_only') and not row.get('deferred_reason'))
-
-
 def _enqueue(row: dict[str, Any]) -> None:
     from utils.cloud_tasks import enqueue_named_task
 
@@ -371,27 +366,10 @@ def _enqueue(row: dict[str, Any]) -> None:
         and handler.endswith('/v1/conversation-finalization-jobs/run')
     ):
         raise RuntimeError('sync reprocessing requires the sync worker handler binding')
-    from utils.conversations.demand_processing import schedule
-
     document_id = row.get('document_id') or key(row['uid'], row['conversation_id'])
     payload = {'kind': 'sync_reprocess', 'key': document_id, 'task_token': row['task_token']}
     name = _task_name(row)
 
-    first_summary = first_summary_pending(row)
-    if not first_summary and schedule(
-        row['uid'],
-        document_id,
-        payload,
-        dispatch,
-        name,
-        not_before=row['due_at'],
-        effects_only=effects_may_run_early(row),
-        immediate=bool(row.get('immediate')),
-    ):
-        return
-    from config.demand_processing import enabled
-
-    eager_recovery = effects_may_run_early(row) and enabled(row['uid'])
     enqueue_named_task(
         dispatch['queue'],
         handler,
@@ -399,7 +377,7 @@ def _enqueue(row: dict[str, Any]) -> None:
         payload,
         audience=dispatch['audience'],
         invoker_sa=dispatch['invoker_sa'],
-        schedule_at=math.ceil(time.time() if eager_recovery else row['due_at']),
+        schedule_at=math.ceil(row['due_at']),
     )
 
 
@@ -545,16 +523,6 @@ def mark_update(
                 row['first_pending_at'] + _deadline_seconds(row),
             )
             row['due_at'] = min(row['due_at'], row['summary_deadline_at'])
-        from config.demand_processing import enabled
-
-        demand_enabled = enabled(uid)
-        if demand_enabled:
-            # Keep demand's processing headroom when both policies are enabled;
-            # revision reuse alone retains its upstream one-hour ceiling.
-            row['first_pending_at'] = row.get('first_pending_at', current)
-            ceiling = 3540 if demand_enabled else 3600
-            row['due_at'] = min(row['due_at'], row['first_pending_at'] + ceiling)
-
         if old and not old.get('dormant') and old.get('sync_hold') and not old.get('merge_hold'):
             row['sync_hold_requested'] = True
         if old and old.get('dormant'):
@@ -708,11 +676,6 @@ def _heartbeat(document_id: str, task_token: str, owner: str, context: Row) -> I
 
 def run(document_id: str, task_token: str, process: Callable[[str, str, str], Any], *, now: float | None = None) -> str:
     current = time.time() if now is None else now
-    from utils.conversations.demand_processing import admit
-    from config.demand_processing import enabled
-
-    if not admit(document_id, now=current, token=task_token):
-        return 'priority_wait'
     owner = uuid.uuid4().hex
     cache: dict[str, FirstSummaryPolicy] = {}
     stamps: list[tuple[str, str]] = []
@@ -731,7 +694,7 @@ def run(document_id: str, task_token: str, process: Callable[[str, str, str], An
         stamp_claim_policy(row, cache, stamps)
         if row.get('sync_hold') and not processing_hold.enabled_for(row):
             row['due_at'] = current
-        if row['due_at'] > current and (not effects_may_run_early(row) or not enabled(row['uid'])):
+        if row['due_at'] > current:
             row.update(task_token=uuid.uuid4().hex, task_due_at=row['due_at'])
             return row, ('deferred', row)
 
@@ -1273,53 +1236,3 @@ def due_rows(*, now: float, limit: int, client: Any = None) -> list[tuple[str, R
         if not row.get('dormant') and row.get('lease_until', 0) <= now and row.get('task_token'):
             rows.append((snapshot.id, row))
     return rows
-
-
-def mark_effects(uid: str, conversation_id: str, language: str, *, immediate: bool = False) -> None:
-    """Blind-write lazy debt: no extra Firestore read on visible completion.
-
-    Increment preserves concurrent dirtying; merge preserves an active worker's
-    lease. The existing CAS completion sees that increment and retains the debt.
-    Token changes fence older deliveries; all effects read the settled row.
-    """
-    if not owns_runtime():
-        raise RuntimeError('lazy enrichment requires production or a Firestore emulator')
-    current = time.time()
-    # Preserve the daytime merge window as far as the hard completion ceiling
-    # permits; open/explicit demand still bypasses this closed-surface wait.
-    quiet_seconds = 3540
-    document_id = key(uid, conversation_id + '\0effects')
-    row = dict(
-        document_id=document_id,
-        uid=uid,
-        conversation_id=conversation_id,
-        language=language,
-        effects_only=True,
-        summary_lane=summary_delivery.lane({}),
-        deferred_reason=None,
-        immediate=immediate,
-        task_token=uuid.uuid4().hex,
-        due_at=current + quiet_seconds,
-        task_due_at=current + quiet_seconds,
-        dispatch=_effects_binding(),
-    )
-    get_firestore_client().collection(COLLECTION).document(document_id).set(
-        {**row, 'version': firestore.Increment(1)}, merge=True
-    )
-    if valid_effects_binding(row):
-        _enqueue(row)
-    else:
-        # Match the sync outbox's unbound-host contract: visible work survives,
-        # and the configured sweep CAS-rebinds the durable obligation later.
-        UNBOUND.labels(action='mark').inc()
-
-
-def _effects_binding() -> dict[str, str]:
-    binding = dispatch_binding(backfill=summary_delivery.lane({}) == 'backfill', effects_only=True)
-    if binding is not None:
-        return binding
-    # Listen/pusher already have the durable finalization queue, identity and
-    # worker. Reuse that protected handler for the same sync outbox protocol.
-    from utils.cloud_tasks import listen_finalization_binding
-
-    return listen_finalization_binding()
