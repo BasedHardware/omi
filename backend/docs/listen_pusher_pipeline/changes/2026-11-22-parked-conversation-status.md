@@ -12,6 +12,8 @@ completed/deferred state and retry on a later open.
 If the executor rejects the first-open submission, the route re-arms only
 the still-current admission and reads back the visible row. A callback queued
 before rejection exits before starting enrichment.
+The conversation-created event and shape metrics still wait for first
+enrichment completion.
 An accepted deletion settles a previously processing row in its existing
 tombstone transaction. The status changes preserve the discard and deletion
 flags and the existing restore and erasure contracts.
@@ -41,6 +43,8 @@ scopes share the daily dry-run and apply limits. Keep the production forward
 writer switch off while Release qualifies the readers for deferred rows.
 The operator uses one designated checkpoint location per phase and takes the
 daily slot on SCA-3590 before starting a pass.
+The scan uses the existing `conversations` collection-group index on
+`status`, `finished_at` and document name, all ascending.
 
 The runner reads projected status and custody metadata. It checks the scanned
 row revision and authoritative job, outbox, and tombstone state in the same

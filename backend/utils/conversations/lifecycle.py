@@ -196,7 +196,7 @@ def create_processing_conversation(uid: str, conversation_data: dict[str, Any], 
 
 
 def create_completed_conversation(uid: str, conversation_data: dict[str, Any], *, idempotent: bool = False) -> bool:
-    """Create a fully processed conversation without granting processors recreate authority."""
+    """Create a terminal intake or processing result without granting processors recreate authority."""
     _require_status(conversation_data, ConversationStatus.completed)
     stamp_terminal_decision(
         conversation_data, path='import' if conversation_data.get('imported') else 'lifecycle_terminal'
@@ -206,7 +206,7 @@ def create_completed_conversation(uid: str, conversation_data: dict[str, Any], *
     else:
         conversations_db.upsert_conversation_with_lifecycle(uid, conversation_data)
         created = True
-    if created:
+    if created and not conversation_data.get('deferred'):
         observe_completed_conversation_shape(uid, conversation_data)
     return created
 
@@ -266,7 +266,8 @@ def persist_processed_conversation(
     stamp_terminal_decision(conversation_data, path='lifecycle_terminal')
 
     def _observe_first_completion() -> None:
-        observe_completed_conversation_shape(uid, conversation_data)
+        if not conversation_data.get('deferred'):
+            observe_completed_conversation_shape(uid, conversation_data)
 
     kwargs: dict[str, Any] = {
         'on_first_completion': _observe_first_completion,
