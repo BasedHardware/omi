@@ -1788,7 +1788,10 @@ def linked_conversation_ids(
     linked: set[str] = set()
     # Legacy evidence may be encrypted and Firestore cannot query fields inside arrays of maps.
     for collection, fields in (
-        (user.collection(memories_collection), ('memory_id', 'evidence', 'data_protection_level')),
+        (
+            user.collection(memories_collection),
+            ('memory_id', 'conversation_id', 'evidence', 'data_protection_level'),
+        ),
         (user.collection(short_term_db.short_term_collection), ('evidence',)),
         (firestore_client.collection(canonical.memory_items), ('source_refs', 'evidence')),
         (firestore_client.collection(canonical.memory_evidence), ('conversation_id', 'source_id')),

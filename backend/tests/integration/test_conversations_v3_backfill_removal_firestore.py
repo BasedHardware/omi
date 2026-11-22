@@ -30,13 +30,14 @@ def test_rederive_removes_only_unlinked_rows_and_their_claims(backfill):
     client, user, token = backfill
     coll = user.collection('conversations')
     now = datetime.now(timezone.utc)
-    ids = ('task', 'legacy', 'evidence', 'canonical', 'source-ref', 'unlinked')
+    ids = ('task', 'legacy', 'legacy-conversation', 'evidence', 'canonical', 'source-ref', 'unlinked')
     claims = [{'conversation_id': cid, 'start': now, 'end': now} for cid in ids]
     coll.document('recording').set({'recording': True, 'status': 'completed', 'claims': claims})
     for cid in ids:
         coll.document(cid).set({'v3_derived': True, 'backfilled': True})
     user.collection('action_items').document('task-link').set({'conversation_id': 'task'})
     user.collection('memories').document('legacy-link').set({'memory_id': 'legacy'})
+    user.collection('memories').document('legacy-conversation-link').set({'conversation_id': 'legacy-conversation'})
     user.collection('memories').document('evidence-link').set(
         {
             'data_protection_level': 'enhanced',
