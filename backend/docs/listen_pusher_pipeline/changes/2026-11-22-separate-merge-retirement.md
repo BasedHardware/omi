@@ -8,13 +8,16 @@ uid to the separate worker, and `AUDIO_MERGE_WORKER_URL`, which named that
 worker. The feature flag registry records both as retired names.
 
 Serving behavior does not change. Before this change a task left the default
-handler only when the phase admitted its owner; the flag was `false` on every
-committed serving surface (the composed prod and dev manifest and the prod and
-dev listen and pusher charts), so every merge task already went to
-`AUDIO_MERGE_HANDLER_URL`. The inbound check accepted the handler URL plus the
-worker URL, and the worker URL was empty on all of those surfaces, so it already
-collapsed to the handler URL alone. Audio-merge tasks now always use the
-handler URL as both the dispatch target and the single OIDC audience.
+handler only when the phase admitted its owner, and the enable flag was `false`
+on every committed serving surface (the composed prod and dev manifest and the
+prod and dev listen and pusher charts). That flag was the only gate in prod:
+`AUDIO_ARCHIVE_PERCENT`, which the COALESCE phase pins, is `100` there, so
+setting the flag would have sent every owner to the worker with no ramp. Every
+merge task therefore already went to `AUDIO_MERGE_HANDLER_URL`. The inbound
+check accepted the handler URL plus the worker URL, and the worker URL was
+empty on all of those surfaces, so it already collapsed to the handler URL
+alone. Audio-merge tasks now always use the handler URL as both the dispatch
+target and the single OIDC audience.
 
 Tasks already in the `audio-merge` queue are unaffected: each was enqueued
 with the handler URL as its OIDC audience, so the token Cloud Tasks mints at

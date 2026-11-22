@@ -737,7 +737,7 @@ def verify_audio_merge_cloud_tasks_oidc(request: Request) -> int:
 
     Audience is the merge handler URL so an enqueuer whose SYNC_TASKS_*
     audience names a different service (backend-sync-backfill) can still
-    mint a token the merge worker will accept.
+    mint a token the merge handler will accept.
     """
     return verify_configured_cloud_tasks_oidc(request, audience=_audio_merge_handler_url(), invoker_sa=_invoker_sa())
 
