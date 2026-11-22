@@ -114,6 +114,21 @@ that immutable input instead of running speech recognition again and changing an
 The outbox remains on failure and clears only with the durable conversation result. Flag:
 `clients_from_segments_chunks`; guard: `unit/on_device_runner_test.dart` restart test.
 
+## Exclusive live conversation cuts
+
+A conversation close uses `finalizeAndSnapshotSession` followed by `stampConversationSnapshot`,
+not a later time-range scan. Admission synchronously seals the current frame buffer and reserves
+eligible WAL object identities before queued disk I/O. Reserved memory rows cannot extend with
+subsequent ingress, and unresolved earlier cuts cannot be claimed by a later conversation. Tokens
+are bound to one ledger, owner and account generation; reconstructed rows or another ledger do
+not inherit their authority. Generic lifecycle/checkpoint finalization remains separate.
+
+A stamp establishes lineage, not transcript coverage. Existing coverage/receipt confirmation and
+retention rules still decide whether a copy leaves Pending. Uncertain Process Now results remain
+unlinked and recoverable. `unit/conversation_wal_snapshot_test.dart` covers queue barriers,
+post-cut ingress, same-second cuts, owner changes and durable source coordinates; the capture
+architecture documents the per-conversation close lifecycle.
+
 ## Server contract used
 
 `POST /v2/sync-local-files` with the existing parameters (`conversation_id`,

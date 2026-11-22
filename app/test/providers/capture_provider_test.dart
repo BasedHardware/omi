@@ -861,7 +861,7 @@ void main() {
     final captureIdentity = provider.activeCaptureSessionId;
     provider.onMessageEventReceived(SegmentsDeletedEvent(segmentIds: ['first']));
 
-    expect(captureIdentity, 'live-12345');
+    expect(captureIdentity, startsWith('live-12345-'));
     expect(provider.activeCaptureSessionId, captureIdentity);
     expect(provider.segments.single.id, 'second');
   });

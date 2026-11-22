@@ -215,7 +215,6 @@ environments:
           DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED: {value: 'false', category: rollout}
           DEMAND_PROCESSING_UID_ALLOWLIST: {value: '', category: rollout}
           DEMAND_PROCESSING_PERCENT: {value: '0', category: rollout}
-          STT_RESILIENT_RECONNECT: {value: 'false', category: rollout}
           STT_LIVE_DEMAND_ENABLED: {category: rollout, value: 'false'}
           STT_LIVE_DEMAND_PERCENT: {value: '0', category: rollout}
           STT_LIVE_DEMAND_UID_ALLOWLIST: {category: rollout, value: ''}
@@ -236,7 +235,6 @@ environments:
             value: '1'
           PARAKEET_WINDOW_MAX_SESSIONS: {category: rollout, value: '1'}
           PARAKEET_WINDOW_POST_TIMEOUT_SECONDS: {value: '8', category: rollout}
-          PARAKEET_WINDOW_DIARIZATION: {value: 'false', category: rollout}
           PARAKEET_WINDOW_DEADLINE_CUT_POST_LATENCY_SECONDS:
             value: '1.2'
             category: reliability
@@ -1075,7 +1073,6 @@ environments:
               provisional: true
             PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
             SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
-            SYNC_POLL_BACKOFF_PERCENT: {value: '0', category: rollout}
             SYNC_RECORD_COVERAGE_WAIT_MEMO:
               value: 'true'
               category: ops_kill
@@ -1405,6 +1402,7 @@ environments:
             HOME_PROCESSING_MAX_AGE_SECONDS:
               value: '21600'
               category: config
+            SYNC_POLL_BACKOFF_PERCENT: {value: '0', category: rollout}
             OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
             OMI_CUSTOMER_DATA_PROJECT:
               value: based-hardware
@@ -3159,7 +3157,6 @@ environments:
           DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED: {value: 'false', category: rollout}
           DEMAND_PROCESSING_UID_ALLOWLIST: {value: '', category: rollout}
           DEMAND_PROCESSING_PERCENT: {value: '0', category: rollout}
-          STT_RESILIENT_RECONNECT: {value: 'false', category: rollout}
           STT_LIVE_DEMAND_ENABLED: {category: rollout, value: 'true'}
           STT_LIVE_DEMAND_PERCENT: {value: '0', category: rollout}
           STT_LIVE_DEMAND_UID_ALLOWLIST: {category: rollout, value: vi7SA9ckQCe4ccobWNxlbdcNdC23}
@@ -3180,7 +3177,6 @@ environments:
             value: '100'
           PARAKEET_WINDOW_MAX_SESSIONS: {category: rollout, value: '16'}
           PARAKEET_WINDOW_POST_TIMEOUT_SECONDS: {value: '8', category: rollout}
-          PARAKEET_WINDOW_DIARIZATION: {value: 'false', category: rollout}
           PARAKEET_WINDOW_DEADLINE_CUT_POST_LATENCY_SECONDS:
             value: '1.2'
             category: reliability
@@ -4072,6 +4068,7 @@ environments:
           - BATCH_HELD_POLL_SKIP_ENABLED
           - BATCH_PROJECTION_FINISH_BACKOFF_ENABLED
           - DREAM_AGENT_PAID_PERCENT
+          - SYNC_POLL_BACKOFF_PERCENT
           - DEEPGRAM_SELF_HOSTED_ENABLED
           - DEEPGRAM_SELF_HOSTED_URL
           - DEEPGRAM_API_KEY
@@ -4182,8 +4179,7 @@ environments:
               env_var: LADDER_V1_ARCHITECT_YEAR_PRICE_ID
               provisional: true
             PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
-            SYNC_POLL_BACKOFF_ENABLED: {value: 'true', category: rollout}
-            SYNC_POLL_BACKOFF_PERCENT: {value: '5', category: rollout}
+            SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
             SYNC_RECORD_COVERAGE_WAIT_MEMO:
               value: 'true'
               category: ops_kill
@@ -4444,10 +4440,10 @@ environments:
             BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
             BATCH_PIPELINE_SILENCE_READ_SKIP_ENABLED:
-              value: 'true'
+              value: 'false'
               category: ops_kill
             BATCH_PIPELINE_FOLLOWUP_CLAIMED_SIBLING_SKIP_ENABLED:
-              value: 'true'
+              value: 'false'
               category: ops_kill
             PUSHER_RECORD_CLOSE_NOTIFY_ENABLED: {value: 'false', category: rollout}
             PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_PERCENT: {value: '100', category: rollout}
@@ -4516,7 +4512,7 @@ environments:
             HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED:
               value: 'true'
               category: ops_kill
-            SYNC_FUTURE_CAPTURE_CLAMP_ENABLED: {value: 'true', category: rollout}
+            SYNC_FUTURE_CAPTURE_CLAMP_ENABLED: {value: 'false', category: rollout}
             RECORD_SEAL_REPAIR_FRESH_ENABLED:
               value: 'true'
               category: ops_kill

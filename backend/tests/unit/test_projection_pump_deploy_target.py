@@ -1136,10 +1136,13 @@ def test_cap_recovery_quoted_etag_round_trip(tmp_path, monkeypatch, inverse_read
 
 
 def test_claimed_sibling_skip_is_active_on_every_role():
-    """SCA-3544: David activated #25920 on every role on 2026-11-22; the pump derives from integration."""
+    """SCA-3544 activates the skip across roles; the pump derives from integration."""
     services = _prod_services()
+    # SCA-3555: remove this exception with the backend activation.
+    sca_3555_preservation_pin = {'backend': 'false'}
     for name in ('backend', 'backend-sync', 'backend-integration', PROJECTION_PUMP):
-        assert services[name]['env']['BATCH_PIPELINE_FOLLOWUP_CLAIMED_SIBLING_SKIP_ENABLED']['value'] == 'true', name
+        expected = sca_3555_preservation_pin.get(name, 'true')
+        assert services[name]['env']['BATCH_PIPELINE_FOLLOWUP_CLAIMED_SIBLING_SKIP_ENABLED']['value'] == expected, name
 
 
 def test_pump_is_dark_again_and_keeps_dark_successor_values():
