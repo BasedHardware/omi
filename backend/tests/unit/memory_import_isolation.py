@@ -93,6 +93,23 @@ def make_database_client_stub() -> ModuleType:
     client_mod.run_transactional = run_transactional
     client_mod.transaction_body = transaction_body
     client_mod.in_transaction_body = in_body.get
+
+    # Pure failure-classification helpers. Production modules import these at
+    # module scope (database/summary_processing.py does, and the conversations
+    # chain reaches it through utils/enrichment/consumer.py), so a stub that
+    # omits them turns every such import into an ImportError. The stub's
+    # run_transactional never retries, so nothing is retryable here: an
+    # unexpected error propagates and fails the test instead of being swallowed
+    # as EmptyFailureOutcome.UNAVAILABLE.
+    def firestore_failure_reason(error: BaseException) -> str:
+        return 'other'
+
+    def is_retryable_firestore_transaction_error(error: BaseException) -> bool:
+        return False
+
+    client_mod.firestore_failure_reason = firestore_failure_reason
+    client_mod.is_retryable_firestore_transaction_error = is_retryable_firestore_transaction_error
+
     # The data-plane seam (database/_client.py's get_data_plane_firestore_client()):
     # memory_apply_store and screen/frame sync import
     # `data_plane_db` at their module boundary instead of the shared `db` above.
