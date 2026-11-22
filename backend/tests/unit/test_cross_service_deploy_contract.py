@@ -415,6 +415,16 @@ def test_constant_named_env_reads_are_resolved(results: Results) -> None:
     )
 
 
+def test_parakeet_stream_allocation_has_a_reader_on_each_deployment(results: Results) -> None:
+    key = 'PARAKEET_STREAM_ALLOCATION_PERCENT'
+    for model in results.baseline.models.values():
+        deployment = model.deployments['gke/parakeet']
+        assert deployment.entrypoint == 'parakeet.main'
+        reader = results.baseline.readers.by_entrypoint[deployment.entrypoint][key]
+        assert 'backend/parakeet/admission.py' in reader.modules
+        assert reader.defaults == {None}
+
+
 @pytest.mark.parametrize(
     'key',
     [

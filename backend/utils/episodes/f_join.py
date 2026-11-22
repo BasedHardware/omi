@@ -41,7 +41,7 @@ from database import conversations as conversations_db
 from database import episodes as episodes_db
 from database.episodes import EpisodeConflict
 from utils import omi_flags
-from utils.episodes import boundary_runtime, incremental, metrics, policy, moment_render
+from utils.episodes import incremental, metrics, policy, moment_render
 from utils.episodes.visibility import hidden_member
 from utils.sync.processing_hold import FIELD as HOLD_FIELD
 from utils.observability.fallback import record_fallback
@@ -105,8 +105,6 @@ def uncertain(
     conversation_id: str,
     source: Optional[str],
     started_at: datetime,
-    *,
-    firestore_client: Any = None,
 ) -> Optional[policy.Boundary]:
     """The ambiguous decision for an admitted join to a live owner after a 2 to 30 minute gap, else None."""
     if not owner or not policy.is_live(owner) or not admitted(uid):
@@ -122,9 +120,7 @@ def uncertain(
     legacy = policy.boundary(owner, facts)
     if legacy.action != policy.ASK or (legacy.gap_seconds or 0.0) < CONTINUE_GAP_SECONDS:
         return None
-    # The active meeting authority can keep this join whole; only an ASK it does not override is F's.
-    authoritative = boundary_runtime.decision(uid, owner, facts, legacy, firestore_client=firestore_client)
-    return legacy if authoritative.action == policy.ASK else None
+    return legacy
 
 
 def mark_pending(

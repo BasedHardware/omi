@@ -15719,4 +15719,12 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get stillWorkingOnIt => 'Stále na tom pracujeme.';
+
+  @override
+  String get firmwareUpdateFirmwareTooOld =>
+      'Firmware vašeho zařízení je pro tuto aktualizaci příliš starý. Obraťte se na podporu, která vám s aktualizací zařízení pomůže.';
+
+  @override
+  String get firmwareUpdateAppRequired =>
+      'Tato aktualizace firmwaru vyžaduje novější verzi aplikace Omi. Aktualizujte aplikaci v obchodě s aplikacemi a poté proveďte kontrolu znovu.';
 }

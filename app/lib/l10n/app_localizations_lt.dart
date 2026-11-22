@@ -15744,4 +15744,12 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get stillWorkingOnIt => 'Vis dar dirbama.';
+
+  @override
+  String get firmwareUpdateFirmwareTooOld =>
+      'Jūsų įrenginio programinė aparatinė įranga per sena šiam naujinimui. Kreipkitės į palaikymo tarnybą, kad padėtų atnaujinti įrenginį.';
+
+  @override
+  String get firmwareUpdateAppRequired =>
+      'Šiam programinės aparatinės įrangos naujinimui reikia naujesnės „Omi“ programėlės versijos. Atnaujinkite programėlę savo programėlių parduotuvėje ir patikrinkite dar kartą.';
 }

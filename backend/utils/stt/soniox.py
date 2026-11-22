@@ -52,7 +52,6 @@ from utils.stt.live_reason import (
 from utils.stt.replay_delivery import AudioDeliveryExpired, RecoveryWriteStalled, RecoveryWriterPace, paced_send
 from utils.stt.send_queue import AudioSendQueue
 from utils.observability.demand_cohort import create_connected_meter, create_wire_meter, telemetry_call
-from utils.stt.resilient_stream import enabled as resilient_reconnect_enabled
 from utils.stt.language_policy import LiveLanguageProfile, soniox_hints
 from utils.stt.stream_close import (
     PROVIDER_AUTH_REJECTED,
@@ -147,8 +146,6 @@ def soniox_death_reason(error_code: Any, error_type: Any, error_message: Any = N
     if code == 413:
         # Documented rotation: open a new WebSocket. The failover path does.
         return SONIOX_DEATH_ROTATION
-    if resilient_reconnect_enabled() and code is not None and 500 <= code <= 599:
-        return 'provider_5xx'
     return 'connection_lost'
 
 
@@ -522,8 +519,6 @@ class SafeSonioxSocket(STTSocket):
                 raise RuntimeError('Soniox transport already owns a different ledger')
             return
         self._wire_epoch = epoch
-        # This switch uses the compact axis verified by the controlled probe.
-        epoch.soniox_elapsed_mode = 'off'
         if epoch.wire_audio_samples is None:
             epoch.wire_audio_samples = epoch.send_map.last_provider_sample or 0
         if epoch.wire_provider_samples is None:
@@ -654,14 +649,12 @@ class SafeSonioxSocket(STTSocket):
         except websockets.exceptions.ConnectionClosed as e:
             self._mark_dead(
                 f'ws send closed: {e}',
-                typed_reason='connection_lost' if resilient_reconnect_enabled() else None,
                 transport_error=e,
                 operation='send',
             )
         except Exception as e:
             self._mark_dead(
                 f'ws send error: {e}',
-                typed_reason='connection_lost' if resilient_reconnect_enabled() else None,
                 transport_error=e,
                 operation='send',
             )
@@ -745,7 +738,6 @@ class SafeSonioxSocket(STTSocket):
         except websockets.exceptions.ConnectionClosed as e:
             self._mark_dead(
                 f'ws recv closed: {e}',
-                typed_reason='connection_lost' if resilient_reconnect_enabled() else None,
                 transport_error=e,
                 operation='recv',
             )
@@ -754,7 +746,6 @@ class SafeSonioxSocket(STTSocket):
         except Exception as e:
             self._mark_dead(
                 f'ws recv error: {e}',
-                typed_reason='connection_lost' if resilient_reconnect_enabled() else None,
                 transport_error=e,
                 operation='recv',
             )

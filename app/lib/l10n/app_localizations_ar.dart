@@ -15631,4 +15631,12 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get stillWorkingOnIt => 'ما زلنا نعمل عليه.';
+
+  @override
+  String get firmwareUpdateFirmwareTooOld =>
+      'البرنامج الثابت لجهازك قديم جدًا لهذا التحديث. تواصل مع الدعم للمساعدة في تحديث جهازك.';
+
+  @override
+  String get firmwareUpdateAppRequired =>
+      'يتطلب تحديث البرنامج الثابت هذا إصدارًا أحدث من تطبيق Omi. حدّث التطبيق من متجر التطبيقات لديك، ثم تحقّق مرة أخرى.';
 }

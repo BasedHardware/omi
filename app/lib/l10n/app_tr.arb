@@ -4770,5 +4770,7 @@
     "conversationLiveNoEdits": "Değiştirmek için bitmesini bekleyin.",
     "finishedSummaryReady": "Özet hazır",
     "writingSummaryStatus": "Özet yazılıyor…",
-    "stillWorkingOnIt": "Hâlâ üzerinde çalışılıyor."
+    "stillWorkingOnIt": "Hâlâ üzerinde çalışılıyor.",
+    "firmwareUpdateFirmwareTooOld": "Cihazınızın donanım yazılımı bu güncelleme için çok eski. Cihazınızı güncelleme konusunda yardım almak için destek ekibiyle iletişime geçin.",
+    "firmwareUpdateAppRequired": "Bu donanım yazılımı güncellemesi için Omi uygulamasının daha yeni bir sürümü gerekiyor. Uygulamayı uygulama mağazanızdan güncelleyin, ardından yeniden kontrol edin."
 }

@@ -15607,4 +15607,12 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get stillWorkingOnIt => 'עדיין עובדים על זה.';
+
+  @override
+  String get firmwareUpdateFirmwareTooOld =>
+      'הקושחה של המכשיר שלך ישנה מדי לעדכון הזה. יש לפנות לתמיכה לקבלת עזרה בעדכון המכשיר.';
+
+  @override
+  String get firmwareUpdateAppRequired =>
+      'עדכון הקושחה הזה דורש גרסה חדשה יותר של אפליקציית Omi. יש לעדכן את האפליקציה מחנות האפליקציות שלך, ואז לבדוק שוב.';
 }

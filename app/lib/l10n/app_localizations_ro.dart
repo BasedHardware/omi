@@ -15785,4 +15785,12 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get stillWorkingOnIt => 'Încă lucrăm la asta.';
+
+  @override
+  String get firmwareUpdateFirmwareTooOld =>
+      'Firmware-ul dispozitivului tău este prea vechi pentru această actualizare. Contactează echipa de asistență pentru ajutor la actualizarea dispozitivului.';
+
+  @override
+  String get firmwareUpdateAppRequired =>
+      'Această actualizare de firmware necesită o versiune mai nouă a aplicației Omi. Actualizează aplicația din magazinul de aplicații, apoi verifică din nou.';
 }

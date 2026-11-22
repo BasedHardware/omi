@@ -15798,4 +15798,12 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get stillWorkingOnIt => 'Encara hi estem treballant.';
+
+  @override
+  String get firmwareUpdateFirmwareTooOld =>
+      'El microprogramari del dispositiu és massa antic per a aquesta actualització. Contacta amb el servei d\'assistència perquè t\'ajudi a actualitzar el dispositiu.';
+
+  @override
+  String get firmwareUpdateAppRequired =>
+      'Aquesta actualització del microprogramari necessita una versió més nova de l\'aplicació Omi. Actualitza l\'aplicació des de la botiga d\'aplicacions i torna-ho a comprovar.';
 }

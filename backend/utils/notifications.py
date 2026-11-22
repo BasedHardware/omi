@@ -225,7 +225,7 @@ def _collect_send_results(response: Any, tokens: List[str]) -> Tuple[int, List[s
                 invalid_tokens.append(tokens[idx])
                 logger.error(f'Invalid token removed - Error: {error_code}')
             else:
-                logger.error(f'FCM send failed: {result.exception}({error_code})')
+                logger.error('FCM send failed error_type=%s', type(result.exception).__name__[:64])
 
     return success_count, invalid_tokens
 
@@ -299,7 +299,7 @@ def _send_to_user(
         return success_count
 
     except Exception as e:
-        logger.error(f'FCM batch send error: {e}')
+        logger.error('FCM batch send error_type=%s', type(e).__name__[:64])
         return 0
 
 
@@ -345,6 +345,7 @@ async def _send_to_user_async(
         for token in tokens
     ]
 
+    success_count = 0
     try:
         response = await run_blocking(postprocess_executor, _send_messages, messages)
         success_count, invalid_tokens = _collect_send_results(response, tokens)
@@ -356,8 +357,9 @@ async def _send_to_user_async(
         logger.info(f'FCM batch send: {success_count}/{len(tokens)} successful')
         return success_count
     except Exception as e:
-        logger.error(f'FCM batch send error: {e}')
-        return 0
+        logger.error('FCM batch send error_type=%s', type(e).__name__[:64])
+        # Token cleanup failure must not erase provider receipts already read.
+        return success_count
 
 
 def send_notification(
@@ -442,8 +444,8 @@ async def send_client_displayed_notification_async(
     body: str,
     data: Optional[Dict[str, Any]] = None,
     tokens: Optional[List[str]] = None,
-) -> None:
-    """Async client-displayed boundary for streaming chat so FCM does not block SSE (#4375)."""
+) -> int:
+    """Async chat push boundary; return provider-accepted count, not device display (#4375)."""
     logger.info(f'send_client_displayed_notification to user {user_id}')
     body = to_plain_text(body)
     payload = _stringify_fcm_data(data)
@@ -453,7 +455,7 @@ async def send_client_displayed_notification_async(
     if not payload.get('text'):
         payload['text'] = body
     tag = _generate_tag(f"{user_id}:{title}:{body}:{payload.get('id', '')}")
-    await _send_to_user_async(
+    return await _send_to_user_async(
         user_id,
         tag,
         notification=None,

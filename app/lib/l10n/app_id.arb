@@ -4770,5 +4770,7 @@
     "conversationLiveNoEdits": "Tunggu sampai selesai untuk mengubahnya.",
     "finishedSummaryReady": "Ringkasan siap",
     "writingSummaryStatus": "Menulis ringkasan…",
-    "stillWorkingOnIt": "Masih dikerjakan."
+    "stillWorkingOnIt": "Masih dikerjakan.",
+    "firmwareUpdateFirmwareTooOld": "Firmware perangkat Anda terlalu lama untuk pembaruan ini. Hubungi dukungan untuk bantuan memperbarui perangkat Anda.",
+    "firmwareUpdateAppRequired": "Pembaruan firmware ini memerlukan aplikasi Omi versi lebih baru. Perbarui aplikasi dari toko aplikasi Anda, lalu periksa lagi."
 }

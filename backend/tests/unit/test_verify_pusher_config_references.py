@@ -252,6 +252,7 @@ def test_rendered_dev_pusher_direct_bindings_match_source_contract(preflight: Si
         "DEMAND_PROCESSING_PERCENT": "0",
         "PLAYBACK_ON_DEMAND_ENABLED": "true",
         "SYNC_POLL_BACKOFF_ENABLED": "false",
+        "SYNC_POLL_BACKOFF_PERCENT": "0",
         "AUDIO_ARCHIVE_LIVE_ENABLED": "true",
         "AUDIO_ARCHIVE_READ_ENABLED": "true",
         "AUDIO_ARCHIVE_STOP_PCM_ENABLED": "false",

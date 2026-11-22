@@ -842,7 +842,6 @@ tests/unit/test_file_tools_sanitization.py	2.7
 tests/unit/test_final_pass_assignment.py	3.7
 tests/unit/test_final_pass_promotion.py	4.7
 tests/unit/test_final_pass_rehome.py	4.7
-tests/unit/test_final_pass_vad_compaction.py	2.7
 tests/unit/test_finalization_failure_observability.py	2.7
 tests/unit/test_finalization_replay_exhaustion.py	3.7
 tests/unit/test_finalization_replay_pagination.py	3.7
