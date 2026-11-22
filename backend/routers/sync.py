@@ -1203,6 +1203,7 @@ async def sync_local_files_v2(
                 ),
                 policy=batch_policy,
                 before_coverage=archive_originals,
+                capture_claims=capture_claims,
                 loaded_conversation=record_snapshot if record_snapshot.get('record_lane_owner') else None,
                 # A legacy_final_pass_v1 owner is re-homed once legacy is dark.
                 legacy_mode=legacy_mode,

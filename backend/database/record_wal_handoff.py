@@ -12,7 +12,12 @@ from uuid import uuid4
 from google.cloud import firestore
 
 from database._client import run_transactional, get_data_plane_firestore_client
-from database.batch_pipeline_privacy import assert_batch_write_allowed, BatchPrivacyBlocked, privacy_owner_key
+from database.batch_pipeline_privacy import (
+    assert_batch_write_allowed,
+    BatchPrivacyBlocked,
+    privacy_owner_key,
+    read_batch_owner_snapshot,
+)
 from database.firestore_read_origin import read_origin
 from database.batch_pipeline_store import FirestoreTransaction
 from database import record_wal_capacity as capacity
@@ -51,10 +56,21 @@ def _file_ref(client, namespace, file_id):
     return _ref(client, namespace, 'wal_file_' + file_id)
 
 
-def _authority(client, tx, uid, cid, source, device, expected_generation=None):
+def check_owner_authority(client, tx, uid, cid, source, device, expected_generation=None, *, sampling_read_budget=None):
     snapshots = {}
-    generation = assert_batch_write_allowed(
-        client, tx, uid, conversation_ids=(cid,), expected_generation=expected_generation, snapshots=snapshots
+    check = assert_batch_write_allowed
+    options = {}
+    if sampling_read_budget is not None:
+        check = read_batch_owner_snapshot
+        options['read_budget'] = sampling_read_budget
+    generation = check(
+        client,
+        tx,
+        uid,
+        conversation_ids=(cid,),
+        expected_generation=expected_generation,
+        snapshots=snapshots,
+        **options
     )
     row = snapshots.get('conversations', {}).get(cid) or {}
     user = snapshots.get('user') or {}
@@ -87,7 +103,7 @@ def begin(client, namespace, uid, cid, files, source, device):
 
     @firestore.transactional
     def acquire(tx):
-        generation, protection, row = _authority(client, tx, uid, cid, source, device)
+        generation, protection, row = check_owner_authority(client, tx, uid, cid, source, device)
         previous = ref.get(transaction=tx).to_dict() or {}
         if previous and (previous.get('schema') != SCHEMA or previous.get('version') != VERSION):
             raise HandoffConflict('unsupported custody receipt schema')
@@ -153,7 +169,7 @@ def commit(client, namespace, fence, receipts):
 
     @firestore.transactional
     def finish(tx):
-        _, protection, row = _authority(
+        _, protection, row = check_owner_authority(
             client, tx, uid, cid, fence['source'], fence['client_device_id'], fence['privacy_generation']
         )
         if protection != fence['data_protection_level']:
@@ -242,7 +258,7 @@ def commit(client, namespace, fence, receipts):
 def check_fence(client, namespace, fence):
     @firestore.transactional
     def check(tx):
-        _, protection, _ = _authority(
+        _, protection, _ = check_owner_authority(
             client,
             tx,
             fence['owner_id'],

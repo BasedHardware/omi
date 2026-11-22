@@ -45,7 +45,7 @@ from utils.batch_pipeline.live import OWNER, record_identity
 from utils.batch_pipeline.language_metrics import record_admission_exclusion
 from utils.batch_pipeline.capture_decode import decode_units
 from utils.capture.batch_coverage import covered_response
-from utils.batch_pipeline import record_gap_fill, record_wal_handoff, record_wal_metrics
+from utils.batch_pipeline import record_gap_fill, record_wal_handoff, record_wal_metrics, record_wal_sample
 from config.record_gap_fill import gap_fill_enabled
 from utils.executors import db_executor, storage_executor, run_blocking, sync_executor
 from utils.metrics import OMI_PIPELINE_RECORD_WAIT_ANSWERS_TOTAL, OMI_PIPELINE_RECORD_WAIT_MEMO_HITS_TOTAL
@@ -304,6 +304,7 @@ async def registered_record_response(
     legacy_mode=None,
     evidence: IntakeRouteEvidence | None = None,
     before_coverage=None,
+    capture_claims=None,
 ) -> JSONResponse | RecordUploadRoute | None:
     policy = policy or resolve_batch_policy(uid)
     if not conversation_id and not recording_session_id:
@@ -418,6 +419,38 @@ async def registered_record_response(
                 'detail': 'Capture is unavailable for server processing',
             },
         )
+    response = await _answer_registered_upload(
+        store,
+        uid,
+        conversation_id,
+        content_id,
+        paths,
+        source,
+        client_device_id,
+        row,
+        content,
+        prior,
+        jobs,
+        before_coverage,
+    )
+    await record_wal_sample.observe(
+        store=store,
+        uid=uid,
+        cid=conversation_id,
+        source=source,
+        device=client_device_id,
+        paths=paths,
+        content_id=content_id,
+        claims=capture_claims or {},
+        status_code=response.status_code,
+        has_jobs=bool(jobs or prior or row.get('record_wal_handoff_present')),
+    )
+    return response
+
+
+async def _answer_registered_upload(
+    store, uid, conversation_id, content_id, paths, source, client_device_id, row, content, prior, jobs, before_coverage
+) -> JSONResponse:
     # A prior native alias already has a proven disposition. New originals need
     # their own custody/status handle, never that old job's completed status.
     if not prior and (record_wal_handoff.handoff_enabled() or row.get('record_wal_handoff_present')):
