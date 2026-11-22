@@ -1547,12 +1547,13 @@ runs:
     - name: Accept no-traffic Cloud Run candidate
       id: verify-cloud-run-candidate
       shell: bash
+      # A legitimate receiver URL change fails closed until this pin changes in a reviewed PR.
       run: |
         python3 "$DEPLOY_CONTROL_SCRIPTS/verify_backend_release_vector.py" \
+          ${{ inputs.runtime_env == 'prod' && inputs.integration_only != 'true' && (inputs.cloud_run_service == 'all' || inputs.cloud_run_service == 'backend-sync-backfill') && '--backfill-binding-sha256 3a180b6e241438dbc43a7292b07de3866e95a35af1bb08210be1d05e80017ceb' || '' }} \
           ${{ inputs.integration_only == 'true' && '--integration-only' || '' }} \
           --candidate \
           --cloud-run-only \
-          ${{ inputs.runtime_env == 'prod' && inputs.integration_only != 'true' && (inputs.cloud_run_service == 'all' || inputs.cloud_run_service == 'backend-sync-backfill') && '--backfill-binding-sha256 3a180b6e241438dbc43a7292b07de3866e95a35af1bb08210be1d05e80017ceb' || '' }} \
           --cloud-run-service "${{ inputs.cloud_run_service }}" \
           --commit-sha "${{ inputs.admitted_sha }}" \
           --short-sha "${{ steps.image-tag.outputs.short_sha }}" \

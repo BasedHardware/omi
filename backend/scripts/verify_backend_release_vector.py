@@ -248,15 +248,16 @@ def collect_documents(commands: Mapping[str, Sequence[str]]) -> dict[str, Mappin
                 text=True,
                 timeout=QUERY_TIMEOUT_SECONDS,
             )
-        except subprocess.TimeoutExpired as exc:
-            raise RuntimeError(f'{name} query timed out after {QUERY_TIMEOUT_SECONDS}s') from exc
+        except subprocess.TimeoutExpired:
+            raise RuntimeError(f'{name} query timed out after {QUERY_TIMEOUT_SECONDS}s') from None
+        except OSError:
+            raise RuntimeError(f'{name} query could not start') from None
         if completed.returncode != 0:
-            detail = completed.stderr.strip() or completed.stdout.strip() or f'exit code {completed.returncode}'
-            raise RuntimeError(f'{name} query failed: {detail}')
+            raise RuntimeError(f'{name} query failed: exit status {completed.returncode}')
         try:
             parsed = json.loads(completed.stdout)
-        except json.JSONDecodeError as exc:
-            raise RuntimeError(f'{name} did not return JSON: {exc}') from exc
+        except json.JSONDecodeError:
+            raise RuntimeError(f'{name} did not return JSON') from None
         if not isinstance(parsed, Mapping):
             raise RuntimeError(f'{name} returned a non-object JSON document')
         documents[name] = parsed
@@ -269,6 +270,7 @@ def evaluate(
     *,
     require_serving_traffic: bool = True,
     include_listener: bool = True,
+    verify_backfill_zero_traffic: bool = False,
 ) -> list[str]:
     errors: list[str] = []
     for service, expected_revision in expectation.revisions.items():
@@ -285,6 +287,8 @@ def evaluate(
                     expected_environment=expectation.environment,
                     require_serving_traffic=require_serving_traffic,
                     expected_revision_document=documents.get(f'cloud_run_revision/{service}'),
+                    require_resolved_candidate_traffic=verify_backfill_zero_traffic
+                    and service == 'backend-sync-backfill',
                 )
             )
     if include_listener:
@@ -340,6 +344,40 @@ def evaluate_backfill_candidate_env(
     return errors
 
 
+def evaluate_candidate_zero_traffic(service: str, expected_revision: str, status: Mapping[str, Any]) -> list[str]:
+    traffic = status.get('traffic')
+    if not isinstance(traffic, list) or not traffic:
+        return [f'cloud_run/{service}: serving traffic status is unavailable']
+
+    total = 0
+    errors: list[str] = []
+    for entry in traffic:
+        target = _mapping(entry)
+        revision = target.get('revisionName')
+        latest = target.get('latestRevision', False)
+        if revision is None and latest is True:
+            revision = status.get('latestReadyRevisionName')
+        percent = target.get('percent')
+        # Cloud Run can omit or serialize zero as null for tag-only targets.
+        if percent is None and isinstance(target.get('tag'), str) and target['tag']:
+            percent = 0
+        if (
+            not isinstance(revision, str)
+            or not revision
+            or any(character.isspace() for character in revision)
+            or type(latest) is not bool
+            or type(percent) is not int
+            or not 0 <= percent <= 100
+        ):
+            return [f'cloud_run/{service}: serving traffic target is ambiguous']
+        total += percent
+        if revision == expected_revision and percent > 0:
+            errors.append(f'cloud_run/{service}: expected revision carries traffic before promotion')
+    if total != 100:
+        errors.append(f'cloud_run/{service}: serving traffic allocation is incomplete')
+    return errors
+
+
 def evaluate_cloud_run_service(
     service: str,
     expected_revision: str,
@@ -349,6 +387,7 @@ def evaluate_cloud_run_service(
     expected_environment: str,
     require_serving_traffic: bool = True,
     expected_revision_document: Mapping[str, Any] | None = None,
+    require_resolved_candidate_traffic: bool = False,
 ) -> list[str]:
     status = _mapping(document.get('status'))
     template_spec = _mapping(_mapping(_mapping(document.get('spec')).get('template')).get('spec'))
@@ -377,7 +416,9 @@ def evaluate_cloud_run_service(
         errors.append(f'cloud_run/{service}: template image is not {expected_image}')
     if require_serving_traffic and (not expected_traffic or _mapping(expected_traffic[0]).get('percent') != 100):
         errors.append(f'cloud_run/{service}: expected revision does not receive 100% traffic')
-    if not require_serving_traffic:
+    if not require_serving_traffic and require_resolved_candidate_traffic:
+        errors.extend(evaluate_candidate_zero_traffic(service, expected_revision, status))
+    elif not require_serving_traffic:
         for entry in expected_traffic:
             allocation = _effective_candidate_traffic_percent(_mapping(entry).get('percent'))
             if allocation is None:
@@ -787,6 +828,7 @@ def main() -> int:
             documents,
             require_serving_traffic=require_serving_traffic,
             include_listener=include_listener,
+            verify_backfill_zero_traffic=args.backfill_binding_sha256 is not None,
         )
         if args.backfill_binding_sha256 is not None:
             errors.extend(

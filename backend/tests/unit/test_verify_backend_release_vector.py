@@ -1081,6 +1081,17 @@ def test_collect_documents_fails_closed_when_a_query_stalls(monkeypatch) -> None
         verifier.collect_documents({'cloud_run/backend': ['gcloud', 'run', 'services', 'describe', 'backend']})
 
 
+@pytest.mark.parametrize(('resource', 'check'), [('services', 'cloud_run'), ('revisions', 'cloud_run_revision')])
+def test_collect_documents_reports_only_the_check_and_exit_status(monkeypatch, resource, check) -> None:
+    result = SimpleNamespace(returncode=17, stdout='private stdout', stderr='private stderr')
+    monkeypatch.setattr(verifier.subprocess, 'run', lambda *args, **kwargs: result)
+
+    with pytest.raises(RuntimeError) as error:
+        verifier.collect_documents({f'{check}/backend-sync-backfill': ['gcloud', 'run', resource, 'describe']})
+
+    assert str(error.value) == f'{check}/backend-sync-backfill query failed: exit status 17'
+
+
 def test_latest_ready_poll_refreshes_only_lagging_services_until_convergence() -> None:
     expectation = _expectation()
     converged = _documents(expectation)
@@ -1287,7 +1298,10 @@ def test_candidate_verification_never_polls_the_latest_ready_pointer(tmp_path, m
         ('BATCH_PROJECTION_OUTBOX', [{'valueFrom': {'secretKeyRef': {'name': 'flag'}}}]),
     ],
 )
-def test_prod_backfill_candidate_gate_checks_literal_revision_env(tmp_path, monkeypatch, name, entries) -> None:
+@pytest.mark.parametrize('candidate_state', ['ready', 'not-ready', 'missing-traffic'])
+def test_prod_backfill_candidate_gate_checks_literal_revision_env(
+    tmp_path, monkeypatch, name, entries, candidate_state
+) -> None:
     service = 'backend-sync-backfill'
     expectation = verifier.build_expectation(
         commit_sha='d' * 40,
@@ -1315,6 +1329,10 @@ def test_prod_backfill_candidate_gate_checks_literal_revision_env(tmp_path, monk
     candidate = documents[f'cloud_run_revision/{service}']
     candidate['metadata'] = {'name': revision, 'labels': {'serving.knative.dev/service': service}}
     candidate['spec']['containers'][0].update({'name': 'backend-1', 'env': env})
+    if candidate_state == 'not-ready':
+        candidate['status']['conditions'][0]['status'] = 'False'
+    elif candidate_state == 'missing-traffic':
+        del documents[f'cloud_run/{service}']['status']['traffic']
 
     rc, report, _ = _run_main(
         monkeypatch,
@@ -1331,13 +1349,68 @@ def test_prod_backfill_candidate_gate_checks_literal_revision_env(tmp_path, monk
         ],
     )
 
-    assert rc == (0 if name is None else 1)
     errors = report['errors']
-    if name is None:
-        assert errors == []
-    else:
-        assert len(errors) == 1 and name in errors[0]
-        assert endpoint not in errors[0]
+    expected_errors = {
+        'ready': [],
+        'not-ready': [f'cloud_run/{service}: expected revision is not Ready'],
+        'missing-traffic': [f'cloud_run/{service}: serving traffic status is unavailable'],
+    }[candidate_state]
+    if name is not None:
+        expected_errors.append(f'cloud_run/{service}: {name}')
+    assert rc == int(bool(expected_errors))
+    assert len(errors) == len(expected_errors)
+    assert all(actual.startswith(expected) for actual, expected in zip(errors, expected_errors))
+    assert all(endpoint not in error for error in errors)
+
+
+@pytest.mark.parametrize(
+    ('status', 'message'),
+    [
+        ({}, 'serving traffic status is unavailable'),
+        ({'traffic': []}, 'serving traffic status is unavailable'),
+        ({'traffic': {}}, 'serving traffic status is unavailable'),
+        ({'traffic': ['invalid']}, 'serving traffic target is ambiguous'),
+        ({'traffic': [{'latestRevision': True, 'percent': 100}]}, 'serving traffic target is ambiguous'),
+        ({'traffic': [{'revisionName': 'old', 'percent': '100'}]}, 'serving traffic target is ambiguous'),
+        ({'traffic': [{'revisionName': 'old', 'percent': True}]}, 'serving traffic target is ambiguous'),
+        (
+            {'traffic': [{'revisionName': 'old', 'latestRevision': 'true', 'percent': 100}]},
+            'serving traffic target is ambiguous',
+        ),
+        ({'traffic': [{'revisionName': 'old', 'percent': 90}]}, 'serving traffic allocation is incomplete'),
+        (
+            {'traffic': [{'revisionName': 'old', 'percent': 99}, {'revisionName': 'candidate', 'percent': 1}]},
+            'expected revision carries traffic before promotion',
+        ),
+        (
+            {'traffic': [{'latestRevision': True, 'percent': 100}], 'latestReadyRevisionName': 'candidate'},
+            'expected revision carries traffic before promotion',
+        ),
+        (
+            {'traffic': [{'latestRevision': True, 'percent': 100}], 'latestReadyRevisionName': 'old'},
+            None,
+        ),
+        (
+            {'traffic': [{'revisionName': 'old', 'percent': 100}, {'revisionName': 'candidate', 'tag': 'verify'}]},
+            None,
+        ),
+    ],
+)
+def test_backfill_candidate_requires_resolved_zero_traffic(status, message) -> None:
+    errors = verifier.evaluate_candidate_zero_traffic('backend-sync-backfill', 'candidate', status)
+    assert errors == ([] if message is None else [f'cloud_run/backend-sync-backfill: {message}'])
+
+
+def test_candidate_action_passes_the_pinned_backfill_digest_only_in_production_scope() -> None:
+    action = DEPLOY_BACKEND_STACK_ACTION.read_text(encoding='utf-8')
+    candidate = action.split('id: verify-cloud-run-candidate', 1)[1].split('\n    - name:', 1)[0]
+    pin_lines = [line.strip() for line in candidate.splitlines() if '--backfill-binding-sha256' in line]
+    assert pin_lines == [
+        "${{ inputs.runtime_env == 'prod' && inputs.integration_only != 'true' && "
+        "(inputs.cloud_run_service == 'all' || inputs.cloud_run_service == 'backend-sync-backfill') && "
+        "'--backfill-binding-sha256 3a180b6e241438dbc43a7292b07de3866e95a35af1bb08210be1d05e80017ceb' || '' }} \\"
+    ]
+    assert action.count('--backfill-binding-sha256') == 1
 
 
 def test_main_passes_errors_into_evidence_so_a_successful_check_writes_evidence(tmp_path) -> None:
