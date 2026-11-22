@@ -96,3 +96,29 @@ def test_status_only_after_ownership_validation(apply):
         transaction.update.assert_called_once_with(ref_settled, {'status': 'completed'})
     else:
         transaction.update.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    ('fields', 'metadata_path', 'expected'),
+    [
+        ({'deferred': True}, f'{parked.ACCOUNT_DELETION_COLLECTION}/owner', 'custody_fenced'),
+        ({'deleted': True}, None, 'deletion_fenced'),
+        ({'deferred': True}, f'users/owner/{parked.TOMBSTONES}/c1', 'deletion_fenced'),
+    ],
+)
+def test_status_write_refuses_conflicting_custody(fields, metadata_path, expected):
+    ref = _Ref('users/owner/conversations/c1')
+    row = {'status': 'processing', 'source': 'desktop', **fields}
+    snapshots = {ref.path: _snapshot(ref, row, 1)}
+    if metadata_path:
+        metadata_ref = _Ref(metadata_path)
+        snapshots[metadata_path] = _snapshot(metadata_ref, {}, 1)
+    client = SimpleNamespace(
+        collection=_Ref,
+        get_all=lambda refs, **kwargs: [snapshots.get(item.path, _snapshot(item, None, None)) for item in refs],
+    )
+    transaction = Mock()
+    assert parked.settle_in_transaction(
+        transaction, client, [_snapshot(ref, row, 1, scan=True)], cutoff=CUTOFF, apply=True
+    ) == [expected]
+    transaction.update.assert_not_called()

@@ -163,7 +163,8 @@ actor APIClient {
     customBaseURL: String? = nil,
     includeBYOK: Bool = true,
     expectedOwnerId: String? = nil,
-    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil,
+    extraHeaders: [String: String] = [:]
   ) async throws -> T {
     let authPolicy = try resolvedRequestAuthPolicy(
       expectedOwnerId: expectedOwnerId,
@@ -195,6 +196,9 @@ actor APIClient {
       expectedAuthOwnerId: authOwnerId)
     try validateExpectedOwner(authPolicy)
 
+    for (name, value) in extraHeaders {
+      request.setValue(value, forHTTPHeaderField: name)
+    }
     return try await performRequest(
       request,
       authPolicy: authPolicy)
@@ -937,7 +941,8 @@ extension APIClient {
   func getConversation(
     id: String,
     includeDiscarded: Bool? = nil,
-    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil,
+    polling: Bool = false
   ) async throws -> ServerConversation {
     let queryItems =
       includeDiscarded.map {
@@ -946,7 +951,8 @@ extension APIClient {
     return try await get(
       "v1/conversations/\(id)",
       queryItems: queryItems,
-      authorizationSnapshot: authorizationSnapshot)
+      authorizationSnapshot: authorizationSnapshot,
+      extraHeaders: polling ? ["X-Omi-Conversation-Poll": "1"] : [:])
   }
 
   /// Reads conversation-lifetime photo bytes. Storage-backed photos no longer

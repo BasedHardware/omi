@@ -1380,7 +1380,8 @@ def get_conversation_by_id(
         open_recording(uid, conversation)
     # A desktop conversation stored raw (deferred) for a freemium/Neo user is
     # enriched on first open. Other conversations are returned unchanged.
-    if conversation.get('deferred') and not conversation.get('processing_deferred'):
+    polling = request is not None and request.headers.get('X-Omi-Conversation-Poll') == '1'
+    if not polling and conversation.get('deferred') and not conversation.get('processing_deferred'):
         conversation = _enrich_deferred_conversation(uid, conversation, include_discarded=include_discarded)
     if include_translations is True:
         try:

@@ -58,7 +58,7 @@ final class ProcessingConversationWatcher: ObservableObject {
   /// call site can reference it without an actor hop in a default-argument
   /// position.
   static func fetchDetail(id: String) async throws -> ServerConversation {
-    try await APIClient.shared.getConversation(id: id)
+    try await APIClient.shared.getConversation(id: id, polling: true)
   }
 
   /// Production wiring: real clock, real sleeper, PostHog telemetry.

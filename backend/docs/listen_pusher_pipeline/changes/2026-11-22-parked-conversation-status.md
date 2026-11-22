@@ -5,7 +5,9 @@ existing deferred flag still reserves enrichment for the first detail open.
 Opening claims the flag and returns processing while enrichment runs. A failed
 attempt re-arms the same completed/deferred state so the next open can retry.
 Desktop detail follows each server response, including the first response after
-a cold cache open that discarded the deferred flag.
+a cold cache open that discarded the deferred flag. Polls from desktop do not
+claim enrichment, so a failed attempt can show its completed/deferred state
+and retry on a later open.
 An accepted deletion settles a previously processing row in its existing
 tombstone transaction. The status changes preserve the discard and deletion
 flags and the existing restore and erasure contracts.
@@ -21,9 +23,9 @@ UTC cutoff and private checkpoints. Run one `dry-run` with `ro-prod` before appl
 After the compatible revision is serving and the full migration review is clear,
 run `canary` with `prod-operator` and a separate checkpoint. Review its exact
 status-only readback before running `apply --accept-canary` with that same apply
-checkpoint. Each apply call visits at most 2,000 rows. Stop on any uncertain
-write or incomplete readback. The runner will preserve its checkpoint for
-reconciliation. Disable the writer switch and stop invocation of the runner
+checkpoint. Each apply call visits at most 2,000 rows. Clean batch stops can
+resume. An uncertain write or incomplete readback leaves the checkpoint blocked
+until the operator reconciles the affected range. Disable the writer switch and stop invocation of the runner
 to halt the rollout.
 
 The runner reads projected status and custody metadata. It checks the scanned

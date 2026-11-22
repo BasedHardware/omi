@@ -223,6 +223,35 @@ def test_losing_first_open_reapplies_discard_visibility(monkeypatch):
     assert error.value.status_code == 404
 
 
+@pytest.mark.parametrize('polling', [False, True])
+def test_detail_poll_does_not_claim_rearmed_enrichment(monkeypatch, polling):
+    parked = {
+        'id': 'c1',
+        'source': 'desktop',
+        'status': 'completed',
+        'deferred': True,
+        'structured': {'title': 'Saved'},
+    }
+    admitted = {**parked, 'status': 'processing', 'deferred': False}
+    monkeypatch.setattr(conv_router, '_get_valid_conversation_by_id', lambda *a, **k: dict(parked))
+    monkeypatch.setattr(conv_router, 'live_recap_enabled', lambda *_args: False)
+    headers = {'X-Omi-Conversation-Poll': '1'} if polling else {}
+
+    with patch.object(conv_router, '_enrich_deferred_conversation', return_value=admitted) as enrich:
+        result = conv_router.get_conversation_by_id(
+            'c1',
+            source=None,
+            include_discarded=None,
+            uid='u1',
+            include_translations=False,
+            request=SimpleNamespace(headers=headers),
+        )
+
+    assert result['status'] == ('completed' if polling else 'processing')
+    assert result['deferred'] is polling
+    assert enrich.call_count == (0 if polling else 1)
+
+
 def test_successful_reprocess_schedules_durable_learning():
     model, p1, p2, p3, p4, p5, p6, process_patch = _route_context(
         raw_app=None,

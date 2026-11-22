@@ -222,6 +222,30 @@ def test_detail_http_escalates_only_explicit_opens(monkeypatch, intent):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize('owner', [None, 'batch_live_v1'])
+async def test_parked_replay_fences_only_without_a_record_owner(monkeypatch, owner):
+    from types import SimpleNamespace
+    from unittest.mock import Mock
+
+    row = {'id': 'c1', 'status': 'completed', 'deferred': True, 'record_lane_owner': owner}
+    model = SimpleNamespace(status='completed')
+    reserve = Mock(return_value=owner)
+    calls = []
+    monkeypatch.setattr(finalizer, 'run_blocking', _run_blocking_recorder(calls, {'c1': row}))
+    monkeypatch.setattr(finalizer, 'reserve_recording', reserve)
+    monkeypatch.setattr(finalizer, 'deserialize_conversation', lambda *_args: model)
+
+    result = await finalizer._load_admitted_conversation('u', 'c1', 'job', 2, 3, ProcessingTrigger.CAPTURE_END)
+
+    if owner is None:
+        assert result == (finalizer.ConversationFinalizationDisposition.fenced, None, None)
+        reserve.assert_not_called()
+    else:
+        assert result == (None, row, model)
+        reserve.assert_called_once_with('u', row)
+
+
+@pytest.mark.asyncio
 async def test_live_member_finalization_closes_boundary_before_budget_free_wait(monkeypatch):
     from types import SimpleNamespace
     from unittest.mock import Mock

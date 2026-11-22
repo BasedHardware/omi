@@ -412,7 +412,7 @@ struct ConversationDetailView: View {
       isLoadingConversation = !isEnrichingDeferred
       var attempts = 0
       while isCurrentDetailRequest(requestGeneration), let appState = AppState.current {
-        let fetched = await appState.loadConversationDetail(requestedConversation) { cached in
+        let fetched = await appState.loadConversationDetail(requestedConversation, polling: attempts > 0) { cached in
           guard isCurrentDetailRequest(requestGeneration) else { return }
           applyLoadedConversation(cached)
         }
