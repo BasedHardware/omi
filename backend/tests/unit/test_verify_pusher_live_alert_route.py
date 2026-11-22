@@ -1714,3 +1714,64 @@ def test_scoped_redis_readback_validates_only_pilot_rule_and_contact(verifier, m
     errors = verifier._run_redis_pilot_readback('https://monitor.omi.me', 'fixture', url, ('other-fixture.run.app',))
     assert bool(errors) is (fault is not None)
     assert len(paths) == (3 if fault in (None, 'rule-target', 'other-rule', 'policy') else 1)
+
+
+@pytest.mark.parametrize(
+    ("rule_fields", "expected"),
+    [
+        ({}, "Normal"),
+        ({"state": "firing"}, "Alerting"),
+        ({"state": "pending"}, "Pending"),
+        ({"state": "recovering"}, "Recovering"),
+        ({"health": "nodata"}, "NoData/UNKNOWN"),
+        ({"totals": {"nodata": 1}, "state": "firing"}, "NoData/UNKNOWN"),
+        ({"alerts": [{"state": "Normal (NoData, KeepLast)"}]}, "NoData/UNKNOWN"),
+        ({"alerts": [{"state": "Alerting (Error, KeepLast)"}]}, "Error"),
+        ({"health": "error"}, "Error"),
+        ({"totals": {"error": 1}}, "Error"),
+        ({"lastEvaluation": "0001-01-01T00:00:00Z"}, "NoData/UNKNOWN"),
+        ({"lastEvaluation": "2026-11-22T12:45:00Z"}, "NoData/UNKNOWN"),
+        ({"isPaused": True}, "NoData/UNKNOWN"),
+    ],
+)
+def test_batch_receipt_uses_evaluated_rule_state(verifier, rule_fields, expected):
+    from datetime import datetime, timezone
+
+    uid = verifier.BATCH_PAGER_UIDS[0]
+    rule = {
+        "uid": uid,
+        "isPaused": False,
+        "state": "inactive",
+        "health": "ok",
+        "lastEvaluation": "2026-11-22T12:59:30Z",
+        **rule_fields,
+    }
+    payload = {"status": "success", "data": {"groups": [{"interval": 60, "rules": [rule]}]}}
+    actual = verifier.batch_evaluated_states(payload, datetime(2026, 11, 22, 13, tzinfo=timezone.utc))
+    assert actual == {uid: expected}
+
+
+def test_batch_receipt_output_is_limited_to_nine_uids(verifier, monkeypatch):
+    committed = verifier.load_all_committed_rules()
+    uids = verifier.load_gated_uids(committed)
+    coverage = verifier.classify_fleet_coverage(committed, committed)
+    calls = []
+
+    def request(url, path, token, **kwargs):
+        calls.append(path)
+        if path == verifier.CONTACT_POINTS_PATH:
+            return [{"name": verifier.TELEGRAM_RECEIVER, "type": "telegram", "settings": {"token": "PRIVATE"}}]
+        return {"status": "success", "data": {"groups": []}}
+
+    monkeypatch.setitem(verifier._batch_pager_receipt.__globals__, "_request_json", request)
+    lines, passed = verifier._batch_pager_receipt(
+        "https://monitor.omi.me", "TOKEN", committed, committed, coverage, uids
+    )
+    assert calls[0].split("?", 1)[0] == verifier.BATCH_RUNTIME_PATH
+    assert calls[1:] == [verifier.CONTACT_POINTS_PATH]
+    assert tuple(lines) == tuple(
+        f"{uid} definition={'paused' if committed[uid]['isPaused'] else 'matching'}"
+        " route=verified state=NoData/UNKNOWN"
+        for uid in verifier.BATCH_PAGER_UIDS
+    )
+    assert not passed
