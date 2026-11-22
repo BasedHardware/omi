@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from contextlib import ExitStack, redirect_stdout, redirect_stderr
+from datetime import datetime, timezone
 import json
 import logging
 import os
@@ -14,7 +15,8 @@ from unittest.mock import patch
 from uuid import uuid4
 
 from testing.finalization_replay.candidate import migrate, replay_database, run_candidate
-from testing.finalization_replay.corpus import DEFAULT_TEST_KEY, read_corpus
+from testing.finalization_replay.corpus import DEFAULT_TEST_KEY, pack, read_corpus
+from testing.finalization_replay.metrics import install_firestore_meter, measure
 from testing.finalization_replay.providers import allow_provider_port, provider_server
 from testing.finalization_replay.reference import run_reference
 from testing.finalization_replay.state import CaseState
@@ -26,9 +28,27 @@ def _observe(state, run, output, side):
     try:
         before = state.documents()
         state.start()
-        output[side] = state.observe(run(state), before)
+        with measure(state):
+            status = run(state)
+        output[side] = state.observe(status, before)
     except Exception as error:
         output['errors'][side] = type(error).__name__
+        finished = datetime.now(timezone.utc)
+        output[side] = {
+            'status': 'execution_error',
+            'queue_fanout_key': state.queue_fanout_key,
+            'updated_at_changed': False,
+            'admitted': state.admitted,
+            'started_at': (state.started_at or finished).isoformat(),
+            'finished_at': finished.isoformat(),
+            'provider_calls': sorted(state.provider_calls),
+            'effects': pack(state.effects),
+            'conversation': None,
+            'derived_documents': {},
+            'webhooks': sorted(state.webhooks, key=lambda delivery: delivery['app']),
+            'cost': state.cost(),
+            'go_evidence': state.go_evidence,
+        }
 
 
 def _clear(client):
@@ -71,6 +91,8 @@ def replay(cases, jobd, dsn, key):
     from google.auth.credentials import AnonymousCredentials
     from google.cloud import firestore
     from testing import store_fixtures
+
+    install_firestore_meter()
 
     project = f'demo-replay-{uuid4().hex[:12]}'
     outputs = [{'name': case['name'], 'errors': {}} for case in cases]

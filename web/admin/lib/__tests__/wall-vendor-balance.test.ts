@@ -1,3 +1,4 @@
+import { BigQueryDate } from "@google-cloud/bigquery";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const state = vi.hoisted(() => ({
@@ -11,6 +12,7 @@ vi.mock("@/lib/services/gcp-billing", () => ({
 import {
   darkVendorBalance,
   fetchVendorBalanceHistory,
+  FINOPS_VENDOR_BALANCE_QUERY,
   isVendorBalanceDark,
   VENDOR_BALANCE_DARK_REASON,
 } from "../wall-finops";
@@ -80,9 +82,22 @@ describe("vendor balance dark state: classifier", () => {
   });
 });
 
-describe("vendor balance dark state: production catch path", () => {
+describe("fetchVendorBalanceHistory", () => {
   beforeEach(() => {
     state.query.mockReset();
+  });
+
+  it("uses a 20 MiB cap for the default 62-day query with a 30-second timeout", async () => {
+    state.query.mockResolvedValue([[]]);
+
+    await fetchVendorBalanceHistory("2026-11-08");
+
+    expect(state.query).toHaveBeenCalledExactlyOnceWith({
+      query: FINOPS_VENDOR_BALANCE_QUERY,
+      params: { today: new BigQueryDate("2026-11-08"), days: 62 },
+      maximumBytesBilled: "20971520",
+      jobTimeoutMs: 30_000,
+    });
   });
 
   it("resolves dark when the vendor-balance table does not exist yet", async () => {

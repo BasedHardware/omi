@@ -87,13 +87,34 @@
       "display_name": "check",
       "expected_nightly_runs_per_day": 1,
       "expected_runs_class": "unsampled-pr-sentinel",
-      "expected_runs_per_day": 6,
-      "if": "${{ !cancelled() && (github.event_name != 'push' || inputs.nightly_main_sha != '' || needs.port-tasks.outputs.go_changed == 'true') }}",
+      "expected_runs_per_day": 7,
+      "if": "${{ !cancelled() && (\n  github.event_name == 'workflow_call' ||\n  (github.event_name == 'push' && needs.port-tasks.outputs.go_changed == 'true') ||\n  (github.event_name == 'pull_request' && needs.port-task-tests.outputs.go_changed == 'true')\n) }}",
       "matrix": {},
       "matrix_size": 1,
-      "needs": "port-tasks",
+      "needs": [
+        "port-tasks",
+        "port-task-tests"
+      ],
       "owner": "CI maintainers",
-      "rationale": "SCA-3180: retain a 5-minute Go-check budget, account for the existing pinned nightly, and allow one extra PR run from the port script path. Main pushes select Go checks only when Go paths or the workflow change. Forecast three additional daily PR runs for replay reference changes from 21 first-parent changes to the selected Python sources over seven days.",
+      "rationale": "SCA-3180: retain the pinned nightly and run Go checks for Go sources and every port-map Python source. Main pushes inspect each first-parent merged PR; the separate port-task test job scopes PR paths before make check and replay. Forecast one additional daily check invocation for the widened Go and mapped Python PR paths at the existing 5-minute p50; frequency and timing remain provisional pending CI measurements.",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "backend-go-checks.yml/port-task-tests": {
+      "budget_p50_minutes": 1,
+      "display_name": "port-task-tests",
+      "expected_runs_class": "unsampled-pr-sentinel",
+      "expected_runs_per_day": 4,
+      "if": "github.event_name == 'pull_request'",
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": [],
+      "owner": "CI maintainers",
+      "rationale": "SCA-3180: a read-only, short PR job checks changed paths against port-map.yaml and runs the task generator's unit tests. It has no issue-write token and does not enter the nightly graph.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -102,16 +123,16 @@
       "runs_on": "ubuntu-latest"
     },
     "backend-go-checks.yml/port-tasks": {
-      "budget_p50_minutes": 5,
+      "budget_p50_minutes": 15,
       "display_name": "port-tasks",
       "expected_runs_class": "unsampled-pr-sentinel",
       "expected_runs_per_day": 4,
-      "if": "inputs.nightly_main_sha == ''",
+      "if": "github.event_name == 'push' && inputs.nightly_main_sha == ''",
       "matrix": {},
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "SCA-3180: one forecast PR run per day for a checkout and focused Python tests. Main pushes also inspect merge metadata with read-only access. The job stays off the pinned nightly. Forecast three additional daily PR runs for replay reference changes from 21 first-parent changes to the selected Python sources over seven days.",
+      "rationale": "SCA-3180: main-push port tasks compare emulator replay at each mapped PR's merge and first parent, with SHA reuse within the run. The existing GitHub task route caps new port issues and adds corpus follow-ups to rolling issues. It stays outside the pinned nightly and uses the built-in workflow token with issues:write. P50 is provisional until action runs are measured.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -3732,17 +3753,13 @@
     "backend-go-checks.yml": {
       "name": "Backend Go Checks",
       "owner": "CI maintainers",
-      "rationale": "SCA-3180: path-selected PR validation and read-only port task drafts on main pushes. Replay coverage includes the Python driver and direct finalization and storage entry points.",
+      "rationale": "SCA-3180: validate Go changes and port-map Python behavior, run the replay oracle in PR/main CI, and use a main-only task job to open value-free drift or corpus follow-ups. Nightly stays pinned to one immutable fresh-main SHA.",
       "triggers": {
         "pull_request": {
           "paths": [
             "backend-go/**",
+            "backend/**/*.py",
             "backend/testing/finalization_replay/**",
-            "backend/utils/conversations/finalizer.py",
-            "backend/utils/conversations/process_conversation.py",
-            "backend/utils/conversations/lifecycle.py",
-            "backend/database/conversation_finalization_jobs.py",
-            "backend/database/conversations.py",
             ".github/scripts/go_port_tasks.py",
             ".github/scripts/test_go_port_tasks.py",
             ".github/workflows/backend-go-checks.yml"

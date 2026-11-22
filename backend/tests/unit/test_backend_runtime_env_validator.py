@@ -3847,11 +3847,12 @@ def test_generated_read_lever_manifest_is_current_and_records_unresolved_sources
         integration['explicit'],
         usage_month_cache=0,
         usage_month_total=0,
-        bpp_decision_cache=100,
-        privacy_checks_shadow=10,
+        bpp_decision_cache=0,
+        privacy_checks_shadow=0,
         bpp_owner_memo_enforce=0,
     )
-    assert prod_worker['effective']['bpp_decision_cache'] == 100
+    assert prod_worker['effective']['bpp_decision_cache'] == 0
+    assert prod_worker['effective']['privacy_checks_shadow'] == 0
     assert prod_worker['effective']['batch_timeliness_leader'] == 100
     for service in ('backend', 'backend-sync', 'backend-sync-backfill', 'backend-integration'):
         surface = generated['surfaces'][f'runtime/prod/cloud_run/services/{service}']
@@ -4284,15 +4285,15 @@ def test_control_sync_routing_validates_deployed_values_without_changing_manifes
     )[0].message == ('sync routing overlay outside selected service scope')
 
 
-@pytest.mark.parametrize('lever', ['bpp_decision_cache', 'privacy_checks_shadow', 'bpp_owner_memo_enforce'])
-def test_read_lever_parity_rejects_worker_inheriting_api_privacy_scope(read_lever_sources, lever):
-    """API-only admission must not flow through the integration comparison into a worker train."""
+@pytest.mark.parametrize(
+    ('lever', 'drift'), [('bpp_decision_cache', 100), ('privacy_checks_shadow', 10), ('bpp_owner_memo_enforce', 100)]
+)
+def test_read_lever_parity_rejects_unapproved_worker_privacy_values(read_lever_sources, lever, drift):
     policy, sources, expected = read_lever_sources
     changed = copy.deepcopy(sources)
     worker = 'chart/prod/batch-pipeline-worker'
-    integration = 'runtime/prod/cloud_run/services/backend-integration'
-    assert changed[worker][lever] != expected[integration][lever]
-    changed[worker][lever] = expected[integration][lever]
+    assert changed[worker][lever] == 0
+    changed[worker][lever] = drift
     assert any(worker in error for error in read_lever_manifest.parity_errors(changed, expected, policy))
 
 

@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "id": "FC-audio-health-disarmed-after-first-frame",
+  "family": "resource-lifecycle",
+  "violated_contract": "Realtime Limitless audio may stop while the BLE connection stays ready. The first decoded frame must not permanently disarm capture health for that admitted foreground capture.",
+  "canonical_prevention": "Observe decoded-frame progress within the current capture owner and BLE epoch. Bound firmware reactivation per stall episode, require sustained decoded progress before rearming the recovery budget, and invalidate stale work on stop, suppression or link loss.",
+  "canonical_prevention_artifact": [
+    "app/test/unit/limitless_golden_test.dart",
+    "app/test/unit/limitless_realtime_health_test.dart"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "app/lib/services/devices/connectors/limitless_connection.dart",
+    "app/lib/services/devices/connectors/limitless_realtime_health.dart"
+  ],
+  "status": "open"
+}

@@ -1,0 +1,273 @@
+{
+  "ancestry": {
+    "87e652be9afcfe9173e8d69ff39974ff17b1f409": {
+      "012329830a9ed7b65642401b7f2af827af7cfb2c": true,
+      "0ce396503a5595975055c44994005db986294060": true,
+      "156b50921d7eda7d7ce88b41ff27ded258277271": true,
+      "70f86810a16cbd19815e0bdbd55ea7d0b10b9aa6": true,
+      "c6e0bb6c56a23b58bc930f6b75159637095b0720": true
+    }
+  },
+  "cluster": "prod-omi-gke",
+  "collected_at": "2026-11-19T00:00:00Z",
+  "environment": "prod",
+  "feature": "conversations-v3",
+  "note": "Synthetic correct state: every service serves a tree containing each required commit, env set and equal, queue and jobs present.",
+  "project": "based-hardware",
+  "queues": {
+    "conversations-v3": {
+      "exists": true,
+      "state": "RUNNING"
+    },
+    "conversations-v3-backfill": {
+      "exists": true,
+      "state": "RUNNING"
+    }
+  },
+  "region": "us-central1",
+  "scheduler_jobs": {
+    "conversations-v3-legacy-users": {
+      "exists": true,
+      "state": "ENABLED"
+    },
+    "conversations-v3-sweep": {
+      "exists": true,
+      "state": "ENABLED"
+    }
+  },
+  "schema_version": 1,
+  "services": {
+    "backend": {
+      "kind": "cloud_run",
+      "serving": [
+        {
+          "env": {
+            "CONVERSATIONS_V3": {
+              "value": "on"
+            },
+            "CONVERSATIONS_V3_STAGE": {
+              "value": "beta"
+            },
+            "OMI_LLM_GATEWAY_URL": {
+              "value": "http://llm-gateway.internal:8080"
+            },
+            "SYNC_TASKS_HANDLER_URL": {
+              "value": "https://backend-sync.example.run.app/v2/sync-jobs/run"
+            },
+            "SYNC_TASKS_INVOKER_SA": {
+              "value": "sync-tasks-invoker@based-hardware.iam.gserviceaccount.com"
+            },
+            "SYNC_TASKS_LOCATION": {
+              "value": "us-central1"
+            },
+            "SYNC_TASKS_PROJECT": {
+              "value": "based-hardware"
+            }
+          },
+          "name": "backend-00100-xyz",
+          "percent": 100,
+          "source_sha": "87e652be9afcfe9173e8d69ff39974ff17b1f409"
+        }
+      ]
+    },
+    "backend-integration": {
+      "kind": "cloud_run",
+      "serving": [
+        {
+          "env": {
+            "CONVERSATIONS_V3": {
+              "value": "on"
+            },
+            "CONVERSATIONS_V3_STAGE": {
+              "value": "beta"
+            },
+            "OMI_LLM_GATEWAY_URL": {
+              "value": "http://llm-gateway.internal:8080"
+            },
+            "SYNC_TASKS_HANDLER_URL": {
+              "value": "https://backend-sync.example.run.app/v2/sync-jobs/run"
+            },
+            "SYNC_TASKS_INVOKER_SA": {
+              "value": "sync-tasks-invoker@based-hardware.iam.gserviceaccount.com"
+            },
+            "SYNC_TASKS_LOCATION": {
+              "value": "us-central1"
+            },
+            "SYNC_TASKS_PROJECT": {
+              "value": "based-hardware"
+            }
+          },
+          "name": "backend-integration-00100-xyz",
+          "percent": 100,
+          "source_sha": "87e652be9afcfe9173e8d69ff39974ff17b1f409"
+        }
+      ]
+    },
+    "backend-listen": {
+      "kind": "gke",
+      "serving": [
+        {
+          "env": {
+            "CONVERSATIONS_V3": {
+              "value": "on"
+            },
+            "CONVERSATIONS_V3_STAGE": {
+              "value": "beta"
+            },
+            "OMI_LLM_GATEWAY_URL": {
+              "value": "http://llm-gateway.internal:8080"
+            },
+            "SYNC_TASKS_HANDLER_URL": {
+              "value": "https://backend-sync.example.run.app/v2/sync-jobs/run"
+            },
+            "SYNC_TASKS_INVOKER_SA": {
+              "value": "sync-tasks-invoker@based-hardware.iam.gserviceaccount.com"
+            },
+            "SYNC_TASKS_LOCATION": {
+              "value": "us-central1"
+            },
+            "SYNC_TASKS_PROJECT": {
+              "value": "based-hardware"
+            }
+          },
+          "name": "prod-omi-backend-listen@0f1e2d3c4b5a",
+          "percent": 100,
+          "source_sha": "87e652be9afcfe9173e8d69ff39974ff17b1f409"
+        }
+      ]
+    },
+    "backend-sync": {
+      "kind": "cloud_run",
+      "serving": [
+        {
+          "env": {
+            "CONVERSATIONS_V3": {
+              "value": "on"
+            },
+            "CONVERSATIONS_V3_STAGE": {
+              "value": "beta"
+            },
+            "OMI_LLM_GATEWAY_URL": {
+              "value": "http://llm-gateway.internal:8080"
+            },
+            "SYNC_TASKS_HANDLER_URL": {
+              "value": "https://backend-sync.example.run.app/v2/sync-jobs/run"
+            },
+            "SYNC_TASKS_INVOKER_SA": {
+              "value": "sync-tasks-invoker@based-hardware.iam.gserviceaccount.com"
+            },
+            "SYNC_TASKS_LOCATION": {
+              "value": "us-central1"
+            },
+            "SYNC_TASKS_PROJECT": {
+              "value": "based-hardware"
+            }
+          },
+          "name": "backend-sync-00100-xyz",
+          "percent": 100,
+          "source_sha": "87e652be9afcfe9173e8d69ff39974ff17b1f409"
+        }
+      ]
+    },
+    "backend-sync-backfill": {
+      "kind": "cloud_run",
+      "serving": [
+        {
+          "env": {
+            "CONVERSATIONS_V3": {
+              "value": "on"
+            },
+            "CONVERSATIONS_V3_STAGE": {
+              "value": "beta"
+            },
+            "OMI_LLM_GATEWAY_URL": {
+              "value": "http://llm-gateway.internal:8080"
+            },
+            "SYNC_TASKS_HANDLER_URL": {
+              "value": "https://backend-sync.example.run.app/v2/sync-jobs/run"
+            },
+            "SYNC_TASKS_INVOKER_SA": {
+              "value": "sync-tasks-invoker@based-hardware.iam.gserviceaccount.com"
+            },
+            "SYNC_TASKS_LOCATION": {
+              "value": "us-central1"
+            },
+            "SYNC_TASKS_PROJECT": {
+              "value": "based-hardware"
+            }
+          },
+          "name": "backend-sync-backfill-00100-xyz",
+          "percent": 100,
+          "source_sha": "87e652be9afcfe9173e8d69ff39974ff17b1f409"
+        }
+      ]
+    },
+    "desktop-backend": {
+      "kind": "cloud_run",
+      "serving": [
+        {
+          "env": {
+            "CONVERSATIONS_V3_STAGE": {
+              "value": "beta"
+            }
+          },
+          "name": "desktop-backend-00042-abc",
+          "percent": 100,
+          "source_sha": "87e652be9afcfe9173e8d69ff39974ff17b1f409"
+        }
+      ]
+    },
+    "llm-gateway": {
+      "kind": "gke",
+      "serving": [
+        {
+          "env": {},
+          "lanes": [
+            "omi:auto:chat-agent",
+            "omi:auto:conv-action-items",
+            "omi:auto:public-shared-conversation-chat",
+            "omi:auto:conversation-v3-outline",
+            "omi:auto:conversation-v3-summary",
+            "omi:auto:conversation-v3-summary-open"
+          ],
+          "name": "prod-omi-llm-gateway@1a2b3c4d5e6f",
+          "percent": 100,
+          "source_sha": "87e652be9afcfe9173e8d69ff39974ff17b1f409"
+        }
+      ]
+    },
+    "pusher": {
+      "kind": "gke",
+      "serving": [
+        {
+          "env": {
+            "CONVERSATIONS_V3": {
+              "value": "on"
+            },
+            "CONVERSATIONS_V3_STAGE": {
+              "value": "beta"
+            },
+            "OMI_LLM_GATEWAY_URL": {
+              "value": "http://llm-gateway.internal:8080"
+            },
+            "SYNC_TASKS_HANDLER_URL": {
+              "value": "https://backend-sync.example.run.app/v2/sync-jobs/run"
+            },
+            "SYNC_TASKS_INVOKER_SA": {
+              "value": "sync-tasks-invoker@based-hardware.iam.gserviceaccount.com"
+            },
+            "SYNC_TASKS_LOCATION": {
+              "value": "us-central1"
+            },
+            "SYNC_TASKS_PROJECT": {
+              "value": "based-hardware"
+            }
+          },
+          "name": "prod-omi-pusher@0f1e2d3c4b5a",
+          "percent": 100,
+          "source_sha": "87e652be9afcfe9173e8d69ff39974ff17b1f409"
+        }
+      ]
+    }
+  }
+}

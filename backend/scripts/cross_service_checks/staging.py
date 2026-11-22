@@ -45,6 +45,8 @@ STAGING_DIFF_ALLOWLIST: tuple[str, ...] = (
     'MCP_OAUTH_CLAUDE_CLIENT_*',
     'LADDER_V1_*_PRICE_ID',
     'SYNC_LEDGER_FENCE_MODE',
+    # Staging has no projection pump, so integration keeps the serving sweep that prod hands to the pump.
+    'BATCH_PIPELINE_SERVING_PROJECTION_SWEEP',
     # Independent staging rollout inputs; prod supplies these at deploy time.
     'RECORD_TOKEN_LEASE_MODE',
     'RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT',
