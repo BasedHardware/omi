@@ -12,6 +12,7 @@ import hashlib
 import os
 from concurrent.futures import Future
 from contextlib import ExitStack, nullcontext
+from threading import Lock
 
 from fastapi.responses import StreamingResponse
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, BackgroundTasks, Header
@@ -395,14 +396,25 @@ def _enrich_deferred_conversation(uid: str, conversation: dict, *, include_disca
                     conversation_id,
                 )
 
-    def _rearm_cancelled_enrichment(work: Future[None]) -> None:
-        if work.cancelled():
+    recovery_lock = Lock()
+    cancellation_recovery_attempted = False
+
+    def _rearm_cancelled_enrichment() -> None:
+        nonlocal cancellation_recovery_attempted
+        with recovery_lock:
+            if cancellation_recovery_attempted:
+                return
+            cancellation_recovery_attempted = True
             try:
                 lifecycle_service.recover_deferred_processing_failure(
                     uid, conversation_id, expected_admitted_at=admitted_at
                 )
             except Exception as error:
                 logger.error('cancelled lazy enrich recovery failed error_type=%s', type(error).__name__)
+
+    def _on_enrichment_done(work: Future[None]) -> None:
+        if work.cancelled():
+            _rearm_cancelled_enrichment()
 
     try:
         work = submit_with_context(postprocess_executor, _run_enrichment)
@@ -413,9 +425,11 @@ def _enrich_deferred_conversation(uid: str, conversation: dict, *, include_disca
         logger.error('lazy enrich submission failed error_type=%s', type(error).__name__)
         lifecycle_service.recover_deferred_processing_failure(uid, conversation_id, expected_admitted_at=admitted_at)
         return _current_detail()
-    work.add_done_callback(_rearm_cancelled_enrichment)
+    work.add_done_callback(_on_enrichment_done)
     if work.cancelled():
         submission_accepted.set_result(False)
+        # Cancellation becomes visible before the executor runs its callbacks.
+        _rearm_cancelled_enrichment()
         return _current_detail()
     # The claim may have reopened a completed/deferred row. Return the admitted
     # processing state so the client follows it through enrichment or retry.

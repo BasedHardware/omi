@@ -7,6 +7,7 @@ by the worker and lifecycle contracts.
 """
 
 from concurrent.futures import Future
+from threading import Event, Thread
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
@@ -532,5 +533,54 @@ def test_cancelled_queued_enrichment_rearms_only_its_admission(monkeypatch, canc
         assert work.cancel()
 
     recover.assert_called_once_with('uid1', parked['id'], expected_admitted_at=acquire.call_args.args[2])
+    assert _lazy_metric('enrich_started') == started_before
+    process.assert_not_called()
+
+
+def test_cancellation_visible_before_its_callback_rearms_before_readback(monkeypatch):
+    parked = {'id': 'deferred-cancel-race', 'status': 'completed', 'deferred': True}
+    stored = dict(parked, status='processing', deferred=False)
+    cancel_visible = Event()
+    release_callback = Event()
+
+    class RacingCancellation(Future):
+        def add_done_callback(self, callback):
+            super().add_done_callback(lambda _: cancel_visible.set())
+
+            def callback_after_response(work):
+                if release_callback.wait(timeout=5):
+                    callback(work)
+
+            super().add_done_callback(callback_after_response)
+            canceller.start()
+            assert cancel_visible.wait(timeout=5)
+
+    work = RacingCancellation()
+    canceller = Thread(target=work.cancel)
+
+    def recover_admission(*args, **kwargs):
+        stored.update(parked)
+        return True
+
+    acquire = MagicMock(return_value=True)
+    recover = MagicMock(side_effect=recover_admission)
+    read = MagicMock(side_effect=lambda *args, **kwargs: dict(stored))
+    process = MagicMock()
+    monkeypatch.setattr(lifecycle_service, 'reacquire_deferred_processing', acquire)
+    monkeypatch.setattr(lifecycle_service, 'recover_deferred_processing_failure', recover)
+    monkeypatch.setattr(conversations_router, '_get_valid_conversation_by_id', read)
+    monkeypatch.setattr(conversations_router, 'process_conversation', process)
+    monkeypatch.setattr(conversations_router, 'submit_with_context', lambda *_: work)
+    started_before = _lazy_metric('enrich_started')
+
+    try:
+        assert conversations_router._enrich_deferred_conversation('uid1', dict(parked)) == parked
+    finally:
+        release_callback.set()
+        canceller.join(timeout=5)
+
+    assert not canceller.is_alive()
+    recover.assert_called_once_with('uid1', parked['id'], expected_admitted_at=acquire.call_args.args[2])
+    read.assert_called_once_with('uid1', parked['id'], follow_sync_bridge=True)
     assert _lazy_metric('enrich_started') == started_before
     process.assert_not_called()
