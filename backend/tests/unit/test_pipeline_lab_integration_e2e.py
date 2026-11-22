@@ -6,6 +6,7 @@ not product fidelity (that is ``stack/chain_smoke.py`` on the local stack).
 """
 
 import http.client
+import io
 import json
 import os
 
@@ -14,6 +15,7 @@ import pytest
 from testing.pipeline_lab import cli
 from testing.pipeline_lab.inspector import server
 from testing.pipeline_lab.llm_proxy.fake_upstream import FakeUpstream
+from testing.pipeline_lab.llm_proxy.server import _Handler
 from testing.pipeline_lab.seed.synthetic import SYNTHETIC_SOURCE_UID, write_synthetic_snapshot
 
 DAY = '2026-03-14'
@@ -24,6 +26,22 @@ def lab(tmp_path, monkeypatch):
     root, verdicts = tmp_path / 'store', tmp_path / 'verdicts'
     monkeypatch.setenv('OMI_PIPELINE_LAB_ROOT', str(root))
     monkeypatch.setenv('OMI_PIPELINE_LAB_VERDICTS', str(verdicts))
+
+    handle_post = _Handler.do_POST
+
+    def respond_after_logging(handler):
+        # The fake chain runs in a subprocess. Release its non-streaming HTTP
+        # response only after the proxy handler finishes appending the call.
+        socket_writer = handler.wfile
+        with io.BytesIO() as response:
+            handler.wfile = response
+            try:
+                handle_post(handler)
+            finally:
+                handler.wfile = socket_writer
+            socket_writer.write(response.getvalue())
+
+    monkeypatch.setattr(_Handler, 'do_POST', respond_after_logging)
     upstream = FakeUpstream().start()
     yield {
         'root': root,
@@ -116,8 +134,11 @@ def test_add_day_run_baseline_and_inspector(lab, capsys):
     assert lab['up'].requests and not any(
         k.startswith('x-pipeline-lab-') for r in lab['up'].requests for k in r['headers']
     )
-    conversation = json.loads(next((run_dir / 'conversations').glob('*.json')).read_text())
-    assert conversation['baseline_id'] == conversation['id'] and conversation['llm_call_ids']
+    conversations = list((run_dir / 'conversations').glob('*.json'))
+    assert len(conversations) == len(notes_calls)
+    for path in conversations:
+        conversation = json.loads(path.read_text())
+        assert conversation['baseline_id'] == conversation['id'] and conversation['llm_call_ids']
     baseline = json.loads((run_dir / 'baseline.json').read_text())
     assert sum(baseline['counts'].values()) == 3
     day_file = json.loads((run_dir / 'day.json').read_text())
