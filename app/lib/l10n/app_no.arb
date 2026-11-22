@@ -4686,7 +4686,6 @@
     "onWifiLater": "Senere på Wi-Fi",
     "conversationWritingSummary": "Skriver sammendraget ditt…",
     "onTheWayServerWork": "Arbeid rapportert av serveren",
-    "firmwareUpdateCheckUnavailable": "Kunne ikke bekrefte den nyeste fastvaren for enheten din. Sjekk internettforbindelsen og sørg for at Omi-appen er oppdatert, og prøv deretter på nytt.",
     "finishNothingToProcess": "Ingenting å behandle ennå.",
     "finishStillProcessing": "Behandles fortsatt. Den vises på Hjem.",
     "finishBackToHome": "Tilbake til Hjem",
@@ -4736,5 +4735,7 @@
     "conversationLiveNoEdits": "Vent til den er avsluttet før du endrer den.",
     "finishedSummaryReady": "Oppsummeringen er klar",
     "writingSummaryStatus": "Skriver oppsummering…",
-    "stillWorkingOnIt": "Jobber fortsatt med det."
+    "stillWorkingOnIt": "Jobber fortsatt med det.",
+    "firmwareUpdateFirmwareTooOld": "Fastvaren på enheten din er for gammel for denne oppdateringen. Kontakt kundestøtte for hjelp med å oppdatere enheten.",
+    "firmwareUpdateAppRequired": "Denne fastvareoppdateringen krever en nyere Omi-app. Oppdater appen fra appbutikken din, og se etter oppdateringer på nytt."
 }

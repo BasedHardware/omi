@@ -15571,10 +15571,6 @@ class AppLocalizationsUr extends AppLocalizations {
   String get onTheWayServerWork => 'سرور کی بتائی ہوئی کارروائی';
 
   @override
-  String get firmwareUpdateCheckUnavailable =>
-      'آپ کے آلے کے لیے تازہ ترین فرم ویئر کی تصدیق نہیں ہو سکی۔ اپنا انٹرنیٹ کنکشن چیک کریں اور یقینی بنائیں کہ Omi ایپ اپ ڈیٹ ہے، پھر دوبارہ کوشش کریں۔';
-
-  @override
   String get finishNothingToProcess => 'ابھی پروسیس کرنے کے لیے کچھ نہیں ہے۔';
 
   @override
@@ -15735,4 +15731,12 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get stillWorkingOnIt => 'ابھی کام جاری ہے۔';
+
+  @override
+  String get firmwareUpdateFirmwareTooOld =>
+      'آپ کے آلے کا فرم ویئر اس اپ ڈیٹ کے لیے بہت پرانا ہے۔ آلے کو اپ ڈیٹ کرنے میں مدد کے لیے سپورٹ سے رابطہ کریں۔';
+
+  @override
+  String get firmwareUpdateAppRequired =>
+      'اس فرم ویئر اپ ڈیٹ کے لیے Omi ایپ کا نیا ورژن درکار ہے۔ اپنے ایپ اسٹور سے ایپ کو اپ ڈیٹ کریں، پھر دوبارہ چیک کریں۔';
 }

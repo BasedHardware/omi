@@ -15567,10 +15567,6 @@ class AppLocalizationsMr extends AppLocalizations {
   String get onTheWayServerWork => 'सर्व्हरने नोंदवलेले काम';
 
   @override
-  String get firmwareUpdateCheckUnavailable =>
-      'तुमच्या डिव्हाइससाठी नवीनतम फर्मवेअरची खात्री करता आली नाही. तुमचे इंटरनेट कनेक्शन तपासा आणि Omi अ‍ॅप अद्ययावत असल्याची खात्री करा, नंतर पुन्हा प्रयत्न करा.';
-
-  @override
   String get finishNothingToProcess => 'अजून प्रक्रिया करण्यासाठी काहीही नाही.';
 
   @override
@@ -15732,4 +15728,12 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String get stillWorkingOnIt => 'अजून त्यावर काम सुरू आहे.';
+
+  @override
+  String get firmwareUpdateFirmwareTooOld =>
+      'या अपडेटसाठी तुमच्या डिव्हाइसचे फर्मवेअर खूप जुने आहे. डिव्हाइस अपडेट करण्यासाठी मदत हवी असल्यास सपोर्टशी संपर्क साधा.';
+
+  @override
+  String get firmwareUpdateAppRequired =>
+      'या फर्मवेअर अपडेटसाठी Omi ॲपची नवीन आवृत्ती आवश्यक आहे. तुमच्या ॲप स्टोअरमधून ॲप अपडेट करा, नंतर पुन्हा तपासा.';
 }

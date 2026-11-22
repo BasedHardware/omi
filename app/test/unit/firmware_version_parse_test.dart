@@ -95,11 +95,11 @@ void main() {
     ('non-string latest version', {...valid, 'version': 123}, FirmwareUpdateCheck.releaseUnavailable),
     ('unparsable app floor', {...valid, 'min_app_version': 'x'}, FirmwareUpdateCheck.releaseUnavailable),
     ('unparsable build floor', {...valid, 'min_app_version_code': 'x'}, FirmwareUpdateCheck.releaseUnavailable),
-    ('below minimum version', {...valid, 'min_version': '1.8.0'}, FirmwareUpdateCheck.notConfirmed),
+    ('below minimum version', {...valid, 'min_version': '1.8.0'}, FirmwareUpdateCheck.firmwareTooOld),
     (
       'newer app required',
       {...valid, 'min_app_version': '99.0.0', 'min_app_version_code': '999999'},
-      FirmwareUpdateCheck.notConfirmed
+      FirmwareUpdateCheck.appUpdateRequired
     ),
     ('older device', valid, FirmwareUpdateCheck.updateAvailable),
   ]) {
@@ -131,7 +131,7 @@ void main() {
         currentFirmware: '1.5.0',
         latestFirmwareDetails: {...valid, 'min_app_version': version, 'min_app_version_code': build},
       );
-      expect(result.status, FirmwareUpdateCheck.notConfirmed);
+      expect(result.status, FirmwareUpdateCheck.appUpdateRequired);
     });
   }
 

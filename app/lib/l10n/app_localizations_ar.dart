@@ -15471,10 +15471,6 @@ class AppLocalizationsAr extends AppLocalizations {
   String get onTheWayServerWork => 'عمل أبلغ عنه الخادم';
 
   @override
-  String get firmwareUpdateCheckUnavailable =>
-      'تعذّر التحقق من أحدث برنامج ثابت لجهازك. تحقّق من اتصالك بالإنترنت وتأكّد من تحديث تطبيق Omi، ثم حاول مرة أخرى.';
-
-  @override
   String get finishNothingToProcess => 'لا يوجد شيء لمعالجته بعد.';
 
   @override
@@ -15635,4 +15631,12 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get stillWorkingOnIt => 'ما زلنا نعمل عليه.';
+
+  @override
+  String get firmwareUpdateFirmwareTooOld =>
+      'البرنامج الثابت لجهازك قديم جدًا لهذا التحديث. تواصل مع الدعم للمساعدة في تحديث جهازك.';
+
+  @override
+  String get firmwareUpdateAppRequired =>
+      'يتطلب تحديث البرنامج الثابت هذا إصدارًا أحدث من تطبيق Omi. حدّث التطبيق من متجر التطبيقات لديك، ثم تحقّق مرة أخرى.';
 }

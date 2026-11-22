@@ -4686,7 +4686,6 @@
     "onWifiLater": "Kemudian melalui Wi-Fi",
     "conversationWritingSummary": "Menulis ringkasan anda…",
     "onTheWayServerWork": "Kerja yang dilaporkan pelayan",
-    "firmwareUpdateCheckUnavailable": "Tidak dapat mengesahkan perisian tegar terkini untuk peranti anda. Semak sambungan internet anda dan pastikan apl Omi dikemas kini, kemudian cuba lagi.",
     "finishNothingToProcess": "Belum ada apa-apa untuk diproses.",
     "finishStillProcessing": "Masih diproses. Ia akan muncul di Laman Utama.",
     "finishBackToHome": "Kembali ke Laman Utama",
@@ -4736,5 +4735,7 @@
     "conversationLiveNoEdits": "Tunggu sehingga tamat untuk mengubahnya.",
     "finishedSummaryReady": "Ringkasan sedia",
     "writingSummaryStatus": "Menulis ringkasan…",
-    "stillWorkingOnIt": "Masih memprosesnya."
+    "stillWorkingOnIt": "Masih memprosesnya.",
+    "firmwareUpdateFirmwareTooOld": "Perisian tegar peranti anda terlalu lama untuk kemas kini ini. Hubungi sokongan untuk mendapatkan bantuan mengemas kini peranti anda.",
+    "firmwareUpdateAppRequired": "Kemas kini perisian tegar ini memerlukan versi apl Omi yang lebih baharu. Kemas kini apl daripada gedung aplikasi anda, kemudian semak semula."
 }

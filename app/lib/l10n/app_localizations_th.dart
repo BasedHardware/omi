@@ -15485,10 +15485,6 @@ class AppLocalizationsTh extends AppLocalizations {
   String get onTheWayServerWork => 'งานที่เซิร์ฟเวอร์รายงาน';
 
   @override
-  String get firmwareUpdateCheckUnavailable =>
-      'ไม่สามารถยืนยันเฟิร์มแวร์ล่าสุดสำหรับอุปกรณ์ของคุณได้ ตรวจสอบการเชื่อมต่ออินเทอร์เน็ตและตรวจสอบให้แน่ใจว่าแอป Omi เป็นเวอร์ชันล่าสุด แล้วลองอีกครั้ง';
-
-  @override
   String get finishNothingToProcess => 'ยังไม่มีอะไรให้ประมวลผล';
 
   @override
@@ -15649,4 +15645,12 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get stillWorkingOnIt => 'ยังดำเนินการอยู่';
+
+  @override
+  String get firmwareUpdateFirmwareTooOld =>
+      'เฟิร์มแวร์ของอุปกรณ์คุณเก่าเกินไปสำหรับการอัปเดตนี้ ติดต่อฝ่ายสนับสนุนเพื่อขอความช่วยเหลือในการอัปเดตอุปกรณ์';
+
+  @override
+  String get firmwareUpdateAppRequired =>
+      'การอัปเดตเฟิร์มแวร์นี้ต้องใช้แอป Omi เวอร์ชันใหม่กว่า อัปเดตแอปจากร้านค้าแอปของคุณ แล้วตรวจสอบอีกครั้ง';
 }

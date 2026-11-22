@@ -15618,10 +15618,6 @@ class AppLocalizationsHu extends AppLocalizations {
   String get onTheWayServerWork => 'A szerver által jelzett munka';
 
   @override
-  String get firmwareUpdateCheckUnavailable =>
-      'Nem sikerült ellenőrizni az eszközöd legújabb firmware-ét. Ellenőrizd az internetkapcsolatot, és győződj meg róla, hogy az Omi alkalmazás naprakész, majd próbáld újra.';
-
-  @override
   String get finishNothingToProcess => 'Még nincs mit feldolgozni.';
 
   @override
@@ -15782,4 +15778,12 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get stillWorkingOnIt => 'Még dolgozunk rajta.';
+
+  @override
+  String get firmwareUpdateFirmwareTooOld =>
+      'Az eszköz firmware-e túl régi ehhez a frissítéshez. Az eszköz frissítéséhez kérjen segítséget az ügyfélszolgálattól.';
+
+  @override
+  String get firmwareUpdateAppRequired =>
+      'Ehhez a firmware-frissítéshez az Omi alkalmazás újabb verziója szükséges. Frissítse az alkalmazást az alkalmazásboltban, majd ellenőrizze újra.';
 }

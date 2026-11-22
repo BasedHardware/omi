@@ -15555,10 +15555,6 @@ class AppLocalizationsSk extends AppLocalizations {
   String get onTheWayServerWork => 'Práca hlásená serverom';
 
   @override
-  String get firmwareUpdateCheckUnavailable =>
-      'Nepodarilo sa overiť najnovší firmvér pre vaše zariadenie. Skontrolujte pripojenie na internet a uistite sa, že aplikácia Omi je aktuálna, a potom to skúste znova.';
-
-  @override
   String get finishNothingToProcess => 'Zatiaľ nie je čo spracovať.';
 
   @override
@@ -15719,4 +15715,12 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get stillWorkingOnIt => 'Ešte sa na tom pracuje.';
+
+  @override
+  String get firmwareUpdateFirmwareTooOld =>
+      'Firmvér vášho zariadenia je pre túto aktualizáciu príliš starý. Obráťte sa na podporu, ktorá vám pomôže aktualizovať zariadenie.';
+
+  @override
+  String get firmwareUpdateAppRequired =>
+      'Táto aktualizácia firmvéru vyžaduje novšiu aplikáciu Omi. Aktualizujte aplikáciu v obchode s aplikáciami a potom znova skontrolujte aktualizácie.';
 }

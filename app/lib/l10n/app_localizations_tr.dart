@@ -15570,10 +15570,6 @@ class AppLocalizationsTr extends AppLocalizations {
   String get onTheWayServerWork => 'Sunucunun bildirdiği işler';
 
   @override
-  String get firmwareUpdateCheckUnavailable =>
-      'Cihazınız için en son donanım yazılımı doğrulanamadı. İnternet bağlantınızı kontrol edin ve Omi uygulamasının güncel olduğundan emin olun, ardından tekrar deneyin.';
-
-  @override
   String get finishNothingToProcess => 'Henüz işlenecek bir şey yok.';
 
   @override
@@ -15734,4 +15730,12 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get stillWorkingOnIt => 'Hâlâ üzerinde çalışılıyor.';
+
+  @override
+  String get firmwareUpdateFirmwareTooOld =>
+      'Cihazınızın donanım yazılımı bu güncelleme için çok eski. Cihazınızı güncelleme konusunda yardım almak için destek ekibiyle iletişime geçin.';
+
+  @override
+  String get firmwareUpdateAppRequired =>
+      'Bu donanım yazılımı güncellemesi için Omi uygulamasının daha yeni bir sürümü gerekiyor. Uygulamayı uygulama mağazanızdan güncelleyin, ardından yeniden kontrol edin.';
 }

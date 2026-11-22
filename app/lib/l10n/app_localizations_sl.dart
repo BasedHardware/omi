@@ -15588,10 +15588,6 @@ class AppLocalizationsSl extends AppLocalizations {
   String get onTheWayServerWork => 'Delo, ki ga poroča strežnik';
 
   @override
-  String get firmwareUpdateCheckUnavailable =>
-      'Najnovejše vdelane programske opreme za vašo napravo ni bilo mogoče potrditi. Preverite internetno povezavo in se prepričajte, da je aplikacija Omi posodobljena, nato poskusite znova.';
-
-  @override
   String get finishNothingToProcess => 'Še ni ničesar za obdelavo.';
 
   @override
@@ -15752,4 +15748,12 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get stillWorkingOnIt => 'Še vedno poteka obdelava.';
+
+  @override
+  String get firmwareUpdateFirmwareTooOld =>
+      'Vdelana programska oprema vaše naprave je prestara za to posodobitev. Za pomoč pri posodobitvi naprave se obrnite na podporo.';
+
+  @override
+  String get firmwareUpdateAppRequired =>
+      'Ta posodobitev vdelane programske opreme zahteva novejšo aplikacijo Omi. Posodobite aplikacijo v trgovini z aplikacijami in nato znova preverite.';
 }

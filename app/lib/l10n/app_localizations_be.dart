@@ -15595,10 +15595,6 @@ class AppLocalizationsBe extends AppLocalizations {
   String get onTheWayServerWork => 'Праца паводле сервера';
 
   @override
-  String get firmwareUpdateCheckUnavailable =>
-      'Не ўдалося праверыць апошнюю прашыўку для вашай прылады. Праверце падключэнне да інтэрнэту і пераканайцеся, што праграма Omi абноўлена, затым паспрабуйце яшчэ раз.';
-
-  @override
   String get finishNothingToProcess => 'Пакуль няма чаго апрацоўваць.';
 
   @override
@@ -15759,4 +15755,12 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get stillWorkingOnIt => 'Усё яшчэ працуем над гэтым.';
+
+  @override
+  String get firmwareUpdateFirmwareTooOld =>
+      'Прашыўка вашай прылады занадта старая для гэтага абнаўлення. Звярніцеся ў службу падтрымкі па дапамогу з абнаўленнем прылады.';
+
+  @override
+  String get firmwareUpdateAppRequired =>
+      'Для гэтага абнаўлення прашыўкі патрэбна навейшая версія праграмы Omi. Абнавіце праграму ў краме праграм, затым праверце яшчэ раз.';
 }

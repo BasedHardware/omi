@@ -15624,10 +15624,6 @@ class AppLocalizationsRo extends AppLocalizations {
   String get onTheWayServerWork => 'Activitate raportată de server';
 
   @override
-  String get firmwareUpdateCheckUnavailable =>
-      'Nu am putut confirma cel mai recent firmware pentru dispozitivul tău. Verifică conexiunea la internet și asigură-te că aplicația Omi este actualizată, apoi încearcă din nou.';
-
-  @override
   String get finishNothingToProcess => 'Încă nu este nimic de procesat.';
 
   @override
@@ -15789,4 +15785,12 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get stillWorkingOnIt => 'Încă lucrăm la asta.';
+
+  @override
+  String get firmwareUpdateFirmwareTooOld =>
+      'Firmware-ul dispozitivului tău este prea vechi pentru această actualizare. Contactează echipa de asistență pentru ajutor la actualizarea dispozitivului.';
+
+  @override
+  String get firmwareUpdateAppRequired =>
+      'Această actualizare de firmware necesită o versiune mai nouă a aplicației Omi. Actualizează aplicația din magazinul de aplicații, apoi verifică din nou.';
 }

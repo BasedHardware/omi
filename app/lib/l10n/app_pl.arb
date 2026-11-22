@@ -4721,7 +4721,6 @@
     "onWifiLater": "Później przez Wi-Fi",
     "conversationWritingSummary": "Piszemy podsumowanie…",
     "onTheWayServerWork": "Praca zgłoszona przez serwer",
-    "firmwareUpdateCheckUnavailable": "Nie udało się potwierdzić najnowszego oprogramowania układowego dla Twojego urządzenia. Sprawdź połączenie z internetem i upewnij się, że aplikacja Omi jest aktualna, a następnie spróbuj ponownie.",
     "finishNothingToProcess": "Na razie nie ma czego przetworzyć.",
     "finishStillProcessing": "Nadal trwa przetwarzanie. Pojawi się na ekranie głównym.",
     "finishBackToHome": "Wróć do ekranu głównego",
@@ -4771,5 +4770,7 @@
     "conversationLiveNoEdits": "Poczekaj, aż się zakończy, aby ją zmienić.",
     "finishedSummaryReady": "Podsumowanie gotowe",
     "writingSummaryStatus": "Pisanie podsumowania…",
-    "stillWorkingOnIt": "Nadal pracujemy nad tym."
+    "stillWorkingOnIt": "Nadal pracujemy nad tym.",
+    "firmwareUpdateFirmwareTooOld": "Oprogramowanie układowe Twojego urządzenia jest zbyt stare dla tej aktualizacji. Skontaktuj się z pomocą techniczną, aby uzyskać pomoc w aktualizacji urządzenia.",
+    "firmwareUpdateAppRequired": "Ta aktualizacja oprogramowania układowego wymaga nowszej aplikacji Omi. Zaktualizuj aplikację w sklepie z aplikacjami, a następnie sprawdź ponownie."
 }

@@ -268,16 +268,20 @@ void main() {
 
   // A usable release that can't be offered (device below its minimum, or a newer app needed) is not
   // "up to date" either.
-  for (final (name, body) in [
-    ('below minimum version', <String, dynamic>{'min_version': '2.5.0'}),
-    ('newer app required', <String, dynamic>{'min_app_version': '99.0.0', 'min_app_version_code': '999999'}),
+  for (final (name, body, message) in [
+    ('below minimum version', <String, dynamic>{'min_version': '2.5.0'}, en.firmwareUpdateFirmwareTooOld),
+    (
+      'newer app required',
+      <String, dynamic>{'min_app_version': '99.0.0', 'min_app_version_code': '999999'},
+      en.firmwareUpdateAppRequired,
+    ),
   ]) {
     testWidgets('$name is not reported as up to date', (tester) async {
       _lookupBody = body;
       await pumpPage(tester, _DeviceProvider(batteryLevel: 80), expectOffer: false);
       expect(find.text(en.yourDeviceIsUpToDate), findsNothing);
       expect(find.byKey(const Key('firmware_update_check_not_confirmed')), findsOneWidget);
-      expect(find.text(en.firmwareUpdateCheckUnavailable), findsOneWidget);
+      expect(find.text(message), findsOneWidget);
       if (name == 'below minimum version') await capture(tester, '001-mobile-ios-firmware-below-minimum.png');
       debugDefaultTargetPlatformOverride = null;
     });

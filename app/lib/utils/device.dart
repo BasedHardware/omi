@@ -9,11 +9,18 @@ import 'package:omi/gen/assets.gen.dart';
 /// Outcome of a firmware lookup that got an answer, as far as the firmware update page may claim it.
 ///
 /// [releaseUnavailable]: the answer has no usable release (empty, draft, or a version that does not parse),
-/// so it is as inconclusive as no answer. [notConfirmed]: the release is usable but cannot be offered (the
-/// device is below its minimum version, or it needs a newer app). [currentVersionUnknown] is a device-side
+/// so it is as inconclusive as no answer. [firmwareTooOld] and [appUpdateRequired] distinguish a usable
+/// release's device and app requirements so the page can explain the actual blocker. [currentVersionUnknown] is a device-side
 /// failure: the paired device reported no revision or one that does not parse (e.g. the `Unknown` sentinel
 /// after a failed BLE read), so no lookup can be conclusive.
-enum FirmwareUpdateCheck { updateAvailable, upToDate, releaseUnavailable, notConfirmed, currentVersionUnknown }
+enum FirmwareUpdateCheck {
+  updateAvailable,
+  upToDate,
+  releaseUnavailable,
+  firmwareTooOld,
+  appUpdateRequired,
+  currentVersionUnknown
+}
 
 class DeviceUtils {
   /// Closed, analysis-safe hardware family used by product telemetry.
@@ -101,7 +108,7 @@ class DeviceUtils {
 
     if (currentVersion < minVersion) {
       return (
-        status: FirmwareUpdateCheck.notConfirmed,
+        status: FirmwareUpdateCheck.firmwareTooOld,
         message: 'Current firmware is below the minimum version required for this update',
         version: latestVersionStr,
       );
@@ -122,7 +129,7 @@ class DeviceUtils {
         if ((hasVersionFloor && (appVersion == null || appVersion < minAppVersion!)) ||
             (hasBuildFloor && (buildNumber == null || buildNumber < minBuildNumber!))) {
           return (
-            status: FirmwareUpdateCheck.notConfirmed,
+            status: FirmwareUpdateCheck.appUpdateRequired,
             message:
                 'The latest version of firmware is not compatible with this version of App (${packageInfo.version}+${packageInfo.buildNumber}). Please update the app from ${Platform.isAndroid ? 'Play Store' : 'App Store'}',
             version: latestVersionStr,

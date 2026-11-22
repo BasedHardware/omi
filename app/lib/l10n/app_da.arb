@@ -4728,7 +4728,6 @@
     "onWifiLater": "Senere på Wi-Fi",
     "conversationWritingSummary": "Skriver dit resumé…",
     "onTheWayServerWork": "Arbejde rapporteret af serveren",
-    "firmwareUpdateCheckUnavailable": "Vi kunne ikke bekræfte den nyeste firmware til din enhed. Tjek din internetforbindelse, og sørg for, at Omi-appen er opdateret, og prøv derefter igen.",
     "finishNothingToProcess": "Intet at behandle endnu.",
     "finishStillProcessing": "Behandles stadig. Den vises på Hjem.",
     "finishBackToHome": "Tilbage til Hjem",
@@ -4778,5 +4777,7 @@
     "conversationLiveNoEdits": "Vent til den er slut, før du ændrer den.",
     "finishedSummaryReady": "Opsummering klar",
     "writingSummaryStatus": "Skriver opsummering…",
-    "stillWorkingOnIt": "Vi arbejder stadig på det."
+    "stillWorkingOnIt": "Vi arbejder stadig på det.",
+    "firmwareUpdateFirmwareTooOld": "Din enheds firmware er for gammel til denne opdatering. Kontakt support for at få hjælp til at opdatere din enhed.",
+    "firmwareUpdateAppRequired": "Denne firmwareopdatering kræver en nyere version af Omi-appen. Opdater appen fra din appbutik, og søg derefter efter opdateringer igen."
 }

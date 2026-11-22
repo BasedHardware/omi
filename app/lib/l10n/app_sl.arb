@@ -12243,7 +12243,6 @@
     "onWifiLater": "Pozneje prek Wi-Fi",
     "conversationWritingSummary": "Pišemo vaš povzetek…",
     "onTheWayServerWork": "Delo, ki ga poroča strežnik",
-    "firmwareUpdateCheckUnavailable": "Najnovejše vdelane programske opreme za vašo napravo ni bilo mogoče potrditi. Preverite internetno povezavo in se prepričajte, da je aplikacija Omi posodobljena, nato poskusite znova.",
     "finishNothingToProcess": "Še ni ničesar za obdelavo.",
     "finishStillProcessing": "Še v obdelavi. Prikazalo se bo na začetni strani.",
     "finishBackToHome": "Nazaj na začetno",
@@ -12293,5 +12292,7 @@
     "conversationLiveNoEdits": "Počakajte, da se konča, nato ga spremenite.",
     "finishedSummaryReady": "Povzetek je pripravljen",
     "writingSummaryStatus": "Povzetek se zapisuje…",
-    "stillWorkingOnIt": "Še vedno poteka obdelava."
+    "stillWorkingOnIt": "Še vedno poteka obdelava.",
+    "firmwareUpdateFirmwareTooOld": "Vdelana programska oprema vaše naprave je prestara za to posodobitev. Za pomoč pri posodobitvi naprave se obrnite na podporo.",
+    "firmwareUpdateAppRequired": "Ta posodobitev vdelane programske opreme zahteva novejšo aplikacijo Omi. Posodobite aplikacijo v trgovini z aplikacijami in nato znova preverite."
 }

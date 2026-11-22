@@ -4721,7 +4721,6 @@
     "onWifiLater": "Plus tard en Wi-Fi",
     "conversationWritingSummary": "Rédaction de votre résumé…",
     "onTheWayServerWork": "Traitement signalé par le serveur",
-    "firmwareUpdateCheckUnavailable": "Impossible de confirmer le dernier firmware pour votre appareil. Vérifiez votre connexion Internet et assurez-vous que l'application Omi est à jour, puis réessayez.",
     "finishNothingToProcess": "Rien à traiter pour l'instant.",
     "finishStillProcessing": "Traitement en cours. Elle apparaîtra sur l'accueil.",
     "finishBackToHome": "Retour à l'accueil",
@@ -4771,5 +4770,7 @@
     "conversationLiveNoEdits": "Attendez la fin pour le modifier.",
     "finishedSummaryReady": "Résumé prêt",
     "writingSummaryStatus": "Écriture du résumé…",
-    "stillWorkingOnIt": "Toujours en cours."
+    "stillWorkingOnIt": "Toujours en cours.",
+    "firmwareUpdateFirmwareTooOld": "Le micrologiciel de votre appareil est trop ancien pour cette mise à jour. Contactez l'assistance pour obtenir de l'aide afin de mettre à jour votre appareil.",
+    "firmwareUpdateAppRequired": "Cette mise à jour du micrologiciel nécessite une version plus récente de l'application Omi. Mettez l'application à jour depuis votre boutique d'applications, puis vérifiez à nouveau."
 }

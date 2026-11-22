@@ -4686,7 +4686,6 @@
     "onWifiLater": "Později přes Wi-Fi",
     "conversationWritingSummary": "Píšeme vaše shrnutí…",
     "onTheWayServerWork": "Práce hlášená serverem",
-    "firmwareUpdateCheckUnavailable": "Nepodařilo se ověřit nejnovější firmware pro vaše zařízení. Zkontrolujte připojení k internetu a ujistěte se, že je aplikace Omi aktuální, a zkuste to znovu.",
     "finishNothingToProcess": "Zatím není co zpracovat.",
     "finishStillProcessing": "Stále se zpracovává. Objeví se na domovské stránce.",
     "finishBackToHome": "Zpět domů",
@@ -4736,5 +4735,7 @@
     "conversationLiveNoEdits": "Počkejte s úpravou, až skončí.",
     "finishedSummaryReady": "Shrnutí je připraveno",
     "writingSummaryStatus": "Vytváří se shrnutí…",
-    "stillWorkingOnIt": "Stále na tom pracujeme."
+    "stillWorkingOnIt": "Stále na tom pracujeme.",
+    "firmwareUpdateFirmwareTooOld": "Firmware vašeho zařízení je pro tuto aktualizaci příliš starý. Obraťte se na podporu, která vám s aktualizací zařízení pomůže.",
+    "firmwareUpdateAppRequired": "Tato aktualizace firmwaru vyžaduje novější verzi aplikace Omi. Aktualizujte aplikaci v obchodě s aplikacemi a poté proveďte kontrolu znovu."
 }

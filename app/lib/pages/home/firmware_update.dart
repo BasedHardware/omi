@@ -104,9 +104,15 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
           shouldUpdate = result.status == FirmwareUpdateCheck.updateAvailable;
           isConfirmedCurrent = result.status == FirmwareUpdateCheck.upToDate;
           // An unreadable device revision gets no Try Again: a re-check would reuse the same revision.
-          updateMessage = result.status == FirmwareUpdateCheck.currentVersionUnknown
-              ? context.l10n.unableToDetermineFirmwareVersion
-              : context.l10n.firmwareUpdateCheckUnavailable;
+          updateMessage = switch (result.status) {
+            FirmwareUpdateCheck.currentVersionUnknown => context.l10n.unableToDetermineFirmwareVersion,
+            FirmwareUpdateCheck.firmwareTooOld => context.l10n.firmwareUpdateFirmwareTooOld,
+            FirmwareUpdateCheck.appUpdateRequired => context.l10n.firmwareUpdateAppRequired,
+            FirmwareUpdateCheck.updateAvailable ||
+            FirmwareUpdateCheck.upToDate ||
+            FirmwareUpdateCheck.releaseUnavailable =>
+              '',
+          };
           isLoading = false;
         });
       }

@@ -4686,7 +4686,6 @@
     "onWifiLater": "Més tard amb Wi-Fi",
     "conversationWritingSummary": "Escrivint el teu resum…",
     "onTheWayServerWork": "Feina indicada pel servidor",
-    "firmwareUpdateCheckUnavailable": "No s'ha pogut confirmar el firmware més recent per al teu dispositiu. Comprova la connexió a internet i assegura't que l'app Omi està actualitzada; després torna-ho a provar.",
     "finishNothingToProcess": "Encara no hi ha res per processar.",
     "finishStillProcessing": "Encara s'està processant. Apareixerà a l'inici.",
     "finishBackToHome": "Torna a l'inici",
@@ -4736,5 +4735,7 @@
     "conversationLiveNoEdits": "Espera que acabi per modificar-la.",
     "finishedSummaryReady": "Resum preparat",
     "writingSummaryStatus": "Escrivint el resum…",
-    "stillWorkingOnIt": "Encara hi estem treballant."
+    "stillWorkingOnIt": "Encara hi estem treballant.",
+    "firmwareUpdateFirmwareTooOld": "El microprogramari del dispositiu és massa antic per a aquesta actualització. Contacta amb el servei d'assistència perquè t'ajudi a actualitzar el dispositiu.",
+    "firmwareUpdateAppRequired": "Aquesta actualització del microprogramari necessita una versió més nova de l'aplicació Omi. Actualitza l'aplicació des de la botiga d'aplicacions i torna-ho a comprovar."
 }

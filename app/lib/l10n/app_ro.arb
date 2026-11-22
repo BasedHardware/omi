@@ -4686,7 +4686,6 @@
     "onWifiLater": "Mai târziu pe Wi-Fi",
     "conversationWritingSummary": "Se scrie rezumatul tău…",
     "onTheWayServerWork": "Activitate raportată de server",
-    "firmwareUpdateCheckUnavailable": "Nu am putut confirma cel mai recent firmware pentru dispozitivul tău. Verifică conexiunea la internet și asigură-te că aplicația Omi este actualizată, apoi încearcă din nou.",
     "finishNothingToProcess": "Încă nu este nimic de procesat.",
     "finishStillProcessing": "Încă se procesează. Va apărea pe pagina principală.",
     "finishBackToHome": "Înapoi la pagina principală",
@@ -4736,5 +4735,7 @@
     "conversationLiveNoEdits": "Așteaptă să se încheie pentru a o modifica.",
     "finishedSummaryReady": "Rezumat gata",
     "writingSummaryStatus": "Se scrie rezumatul…",
-    "stillWorkingOnIt": "Încă lucrăm la asta."
+    "stillWorkingOnIt": "Încă lucrăm la asta.",
+    "firmwareUpdateFirmwareTooOld": "Firmware-ul dispozitivului tău este prea vechi pentru această actualizare. Contactează echipa de asistență pentru ajutor la actualizarea dispozitivului.",
+    "firmwareUpdateAppRequired": "Această actualizare de firmware necesită o versiune mai nouă a aplicației Omi. Actualizează aplicația din magazinul de aplicații, apoi verifică din nou."
 }

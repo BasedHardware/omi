@@ -15574,10 +15574,6 @@ class AppLocalizationsId extends AppLocalizations {
   String get onTheWayServerWork => 'Pekerjaan yang dilaporkan server';
 
   @override
-  String get firmwareUpdateCheckUnavailable =>
-      'Tidak dapat memastikan firmware terbaru untuk perangkat Anda. Periksa koneksi internet Anda dan pastikan aplikasi Omi sudah diperbarui, lalu coba lagi.';
-
-  @override
   String get finishNothingToProcess => 'Belum ada yang perlu diproses.';
 
   @override
@@ -15738,4 +15734,12 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get stillWorkingOnIt => 'Masih dikerjakan.';
+
+  @override
+  String get firmwareUpdateFirmwareTooOld =>
+      'Firmware perangkat Anda terlalu lama untuk pembaruan ini. Hubungi dukungan untuk bantuan memperbarui perangkat Anda.';
+
+  @override
+  String get firmwareUpdateAppRequired =>
+      'Pembaruan firmware ini memerlukan aplikasi Omi versi lebih baru. Perbarui aplikasi dari toko aplikasi Anda, lalu periksa lagi.';
 }

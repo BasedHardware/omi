@@ -15332,10 +15332,6 @@ class AppLocalizationsJa extends AppLocalizations {
   String get onTheWayServerWork => 'サーバーが報告した処理';
 
   @override
-  String get firmwareUpdateCheckUnavailable =>
-      'お使いのデバイスの最新ファームウェアを確認できませんでした。インターネット接続を確認し、Omiアプリが最新であることを確かめてから、もう一度お試しください。';
-
-  @override
   String get finishNothingToProcess => 'まだ処理するものがありません。';
 
   @override
@@ -15496,4 +15492,10 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get stillWorkingOnIt => 'まだ処理中です。';
+
+  @override
+  String get firmwareUpdateFirmwareTooOld => 'デバイスのファームウェアが古いため、この更新を適用できません。デバイスの更新についてはサポートにお問い合わせください。';
+
+  @override
+  String get firmwareUpdateAppRequired => 'このファームウェアの更新には、新しいバージョンのOmiアプリが必要です。アプリストアからアプリを更新してから、もう一度確認してください。';
 }

@@ -4686,7 +4686,6 @@
     "onWifiLater": "Hiljem Wi-Fi kaudu",
     "conversationWritingSummary": "Kirjutame sinu kokkuvõtet…",
     "onTheWayServerWork": "Serveri teatatud töö",
-    "firmwareUpdateCheckUnavailable": "Sinu seadme uusimat püsivara ei õnnestunud kinnitada. Kontrolli internetiühendust ja veendu, et Omi rakendus on ajakohane, seejärel proovi uuesti.",
     "finishNothingToProcess": "Veel pole midagi töödelda.",
     "finishStillProcessing": "Veel töödeldakse. See ilmub avalehele.",
     "finishBackToHome": "Tagasi avalehele",
@@ -4736,5 +4735,7 @@
     "conversationLiveNoEdits": "Oota, kuni see lõpeb, et seda muuta.",
     "finishedSummaryReady": "Kokkuvõte on valmis",
     "writingSummaryStatus": "Kirjutan kokkuvõtet…",
-    "stillWorkingOnIt": "Töötame veel selle kallal."
+    "stillWorkingOnIt": "Töötame veel selle kallal.",
+    "firmwareUpdateFirmwareTooOld": "Teie seadme püsivara on selle värskenduse jaoks liiga vana. Seadme värskendamiseks abi saamiseks võtke ühendust klienditoega.",
+    "firmwareUpdateAppRequired": "See püsivara värskendus vajab Omi rakenduse uuemat versiooni. Värskendage rakendust oma rakenduste poes ja kontrollige seejärel uuesti."
 }

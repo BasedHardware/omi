@@ -12243,7 +12243,6 @@
     "onWifiLater": "Касније на Wi-Fi",
     "conversationWritingSummary": "Пишемо ваш сажетак…",
     "onTheWayServerWork": "Рад који је пријавио сервер",
-    "firmwareUpdateCheckUnavailable": "Није могуће потврдити најновији фирмвер за ваш уређај. Проверите интернет везу и уверите се да је апликација Omi ажурирана, а затим покушајте поново.",
     "finishNothingToProcess": "Још нема ничега за обраду.",
     "finishStillProcessing": "Још се обрађује. Појавиће се на почетној.",
     "finishBackToHome": "Назад на почетну",
@@ -12293,5 +12292,7 @@
     "conversationLiveNoEdits": "Сачекајте да се заврши, па га измените.",
     "finishedSummaryReady": "Резиме је спреман",
     "writingSummaryStatus": "Пише се резиме…",
-    "stillWorkingOnIt": "Још увек радимо на томе."
+    "stillWorkingOnIt": "Још увек радимо на томе.",
+    "firmwareUpdateFirmwareTooOld": "Фирмвер вашег уређаја је престар за ово ажурирање. Обратите се подршци за помоћ при ажурирању уређаја.",
+    "firmwareUpdateAppRequired": "Ово ажурирање фирмвера захтева новију апликацију Omi. Ажурирајте апликацију у продавници апликација, па проверите поново."
 }

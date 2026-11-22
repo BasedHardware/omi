@@ -15596,10 +15596,6 @@ class AppLocalizationsMs extends AppLocalizations {
   String get onTheWayServerWork => 'Kerja yang dilaporkan pelayan';
 
   @override
-  String get firmwareUpdateCheckUnavailable =>
-      'Tidak dapat mengesahkan perisian tegar terkini untuk peranti anda. Semak sambungan internet anda dan pastikan apl Omi dikemas kini, kemudian cuba lagi.';
-
-  @override
   String get finishNothingToProcess => 'Belum ada apa-apa untuk diproses.';
 
   @override
@@ -15760,4 +15756,12 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get stillWorkingOnIt => 'Masih memprosesnya.';
+
+  @override
+  String get firmwareUpdateFirmwareTooOld =>
+      'Perisian tegar peranti anda terlalu lama untuk kemas kini ini. Hubungi sokongan untuk mendapatkan bantuan mengemas kini peranti anda.';
+
+  @override
+  String get firmwareUpdateAppRequired =>
+      'Kemas kini perisian tegar ini memerlukan versi apl Omi yang lebih baharu. Kemas kini apl daripada gedung aplikasi anda, kemudian semak semula.';
 }

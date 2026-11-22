@@ -4686,7 +4686,6 @@
     "onWifiLater": "Più tardi su Wi-Fi",
     "conversationWritingSummary": "Sto scrivendo il tuo riepilogo…",
     "onTheWayServerWork": "Lavoro segnalato dal server",
-    "firmwareUpdateCheckUnavailable": "Impossibile confermare il firmware più recente per il tuo dispositivo. Controlla la connessione a Internet e assicurati che l'app Omi sia aggiornata, poi riprova.",
     "finishNothingToProcess": "Ancora niente da elaborare.",
     "finishStillProcessing": "Ancora in elaborazione. Apparirà nella Home.",
     "finishBackToHome": "Torna alla Home",
@@ -4736,5 +4735,7 @@
     "conversationLiveNoEdits": "Attendi la fine per modificarla.",
     "finishedSummaryReady": "Riepilogo pronto",
     "writingSummaryStatus": "Scrittura del riepilogo…",
-    "stillWorkingOnIt": "Ancora al lavoro."
+    "stillWorkingOnIt": "Ancora al lavoro.",
+    "firmwareUpdateFirmwareTooOld": "Il firmware del tuo dispositivo è troppo vecchio per questo aggiornamento. Contatta l'assistenza per ricevere aiuto con l'aggiornamento del dispositivo.",
+    "firmwareUpdateAppRequired": "Questo aggiornamento del firmware richiede una versione più recente dell'app Omi. Aggiorna l'app dal tuo store di applicazioni, poi controlla di nuovo."
 }

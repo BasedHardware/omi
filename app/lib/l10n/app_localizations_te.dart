@@ -15622,10 +15622,6 @@ class AppLocalizationsTe extends AppLocalizations {
   String get onTheWayServerWork => 'సర్వర్ నివేదించిన పని';
 
   @override
-  String get firmwareUpdateCheckUnavailable =>
-      'మీ పరికరానికి తాజా ఫర్మ్‌వేర్‌ను నిర్ధారించలేకపోయాము. మీ ఇంటర్నెట్ కనెక్షన్‌ను తనిఖీ చేసి, Omi యాప్ నవీకరించబడిందని నిర్ధారించుకోండి, ఆపై మళ్లీ ప్రయత్నించండి.';
-
-  @override
   String get finishNothingToProcess => 'ఇంకా ప్రాసెస్ చేయడానికి ఏమీ లేదు.';
 
   @override
@@ -15786,4 +15782,12 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get stillWorkingOnIt => 'ఇంకా పని జరుగుతోంది.';
+
+  @override
+  String get firmwareUpdateFirmwareTooOld =>
+      'ఈ నవీకరణకు మీ పరికరంలోని ఫర్మ్‌వేర్ చాలా పాతది. మీ పరికరాన్ని నవీకరించడంలో సహాయం కోసం సపోర్ట్‌ను సంప్రదించండి.';
+
+  @override
+  String get firmwareUpdateAppRequired =>
+      'ఈ ఫర్మ్‌వేర్ నవీకరణకు కొత్త వెర్షన్ Omi యాప్ అవసరం. మీ యాప్ స్టోర్ నుండి యాప్‌ను నవీకరించి, మళ్లీ తనిఖీ చేయండి.';
 }

@@ -4782,7 +4782,6 @@
     "onWifiLater": "Később Wi-Fin",
     "conversationWritingSummary": "Összefoglaló írása…",
     "onTheWayServerWork": "A szerver által jelzett munka",
-    "firmwareUpdateCheckUnavailable": "Nem sikerült ellenőrizni az eszközöd legújabb firmware-ét. Ellenőrizd az internetkapcsolatot, és győződj meg róla, hogy az Omi alkalmazás naprakész, majd próbáld újra.",
     "finishNothingToProcess": "Még nincs mit feldolgozni.",
     "finishStillProcessing": "Még feldolgozás alatt. Megjelenik a Kezdőlapon.",
     "finishBackToHome": "Vissza a Kezdőlapra",
@@ -4832,5 +4831,7 @@
     "conversationLiveNoEdits": "Módosítás előtt várd meg, míg véget ér.",
     "finishedSummaryReady": "Az összefoglaló kész",
     "writingSummaryStatus": "Összefoglaló írása…",
-    "stillWorkingOnIt": "Még dolgozunk rajta."
+    "stillWorkingOnIt": "Még dolgozunk rajta.",
+    "firmwareUpdateFirmwareTooOld": "Az eszköz firmware-e túl régi ehhez a frissítéshez. Az eszköz frissítéséhez kérjen segítséget az ügyfélszolgálattól.",
+    "firmwareUpdateAppRequired": "Ehhez a firmware-frissítéshez az Omi alkalmazás újabb verziója szükséges. Frissítse az alkalmazást az alkalmazásboltban, majd ellenőrizze újra."
 }

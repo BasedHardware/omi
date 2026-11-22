@@ -15624,10 +15624,6 @@ class AppLocalizationsMk extends AppLocalizations {
   String get onTheWayServerWork => 'Работа пријавена од серверот';
 
   @override
-  String get firmwareUpdateCheckUnavailable =>
-      'Не можевме да го потврдиме најновиот фирмвер за вашиот уред. Проверете ја интернет-врската и уверете се дека апликацијата Omi е ажурирана, а потоа обидете се повторно.';
-
-  @override
   String get finishNothingToProcess => 'Сè уште нема ништо за обработка.';
 
   @override
@@ -15788,4 +15784,12 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String get stillWorkingOnIt => 'Сè уште се работи на тоа.';
+
+  @override
+  String get firmwareUpdateFirmwareTooOld =>
+      'Фирмверот на вашиот уред е премногу стар за ова ажурирање. Контактирајте со поддршката за помош при ажурирањето на уредот.';
+
+  @override
+  String get firmwareUpdateAppRequired =>
+      'Ова ажурирање на фирмверот бара понова верзија на апликацијата Omi. Ажурирајте ја апликацијата од вашата продавница за апликации, па проверете повторно.';
 }

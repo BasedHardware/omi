@@ -27303,12 +27303,6 @@ abstract class AppLocalizations {
   /// **'Server-reported work'**
   String get onTheWayServerWork;
 
-  /// Firmware update page: the server answered but the device cannot be confirmed up to date (its firmware is below the release minimum, or the release needs a newer app), so it is not reported as up to date.
-  ///
-  /// In en, this message translates to:
-  /// **'Couldn\'t confirm the latest firmware for your device. Check your internet connection and make sure the Omi app is up to date, then try again.'**
-  String get firmwareUpdateCheckUnavailable;
-
   /// Brief notice after tapping Finish on the live capture page when nothing was heard since the last conversation, so no conversation is made.
   ///
   /// In en, this message translates to:
@@ -27608,6 +27602,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Still working on it.'**
   String get stillWorkingOnIt;
+
+  /// Firmware update unavailable because the device is below the release minimum firmware version.
+  ///
+  /// In en, this message translates to:
+  /// **'Your device\'s firmware is too old for this update. Contact support for help updating your device.'**
+  String get firmwareUpdateFirmwareTooOld;
+
+  /// Firmware update unavailable because the installed Omi app does not meet the release app version or build requirement.
+  ///
+  /// In en, this message translates to:
+  /// **'This firmware update needs a newer Omi app. Update the app from your app store, then check again.'**
+  String get firmwareUpdateAppRequired;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

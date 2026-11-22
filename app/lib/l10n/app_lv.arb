@@ -4686,7 +4686,6 @@
     "onWifiLater": "Vēlāk ar Wi-Fi",
     "conversationWritingSummary": "Rakstām jūsu kopsavilkumu…",
     "onTheWayServerWork": "Servera ziņotais darbs",
-    "firmwareUpdateCheckUnavailable": "Neizdevās apstiprināt jaunāko programmaparatūru jūsu ierīcei. Pārbaudiet interneta savienojumu un pārliecinieties, ka lietotne Omi ir atjaunināta, pēc tam mēģiniet vēlreiz.",
     "finishNothingToProcess": "Pagaidām nav ko apstrādāt.",
     "finishStillProcessing": "Joprojām tiek apstrādāts. Tas parādīsies sākumlapā.",
     "finishBackToHome": "Atpakaļ uz sākumu",
@@ -4736,5 +4735,7 @@
     "conversationLiveNoEdits": "Uzgaidiet, līdz saruna beidzas, lai to mainītu.",
     "finishedSummaryReady": "Kopsavilkums gatavs",
     "writingSummaryStatus": "Tiek rakstīts kopsavilkums…",
-    "stillWorkingOnIt": "Vēl tiek pie tā strādāts."
+    "stillWorkingOnIt": "Vēl tiek pie tā strādāts.",
+    "firmwareUpdateFirmwareTooOld": "Jūsu ierīces aparātprogrammatūra ir pārāk veca šim atjauninājumam. Sazinieties ar atbalsta dienestu, lai saņemtu palīdzību ierīces atjaunināšanā.",
+    "firmwareUpdateAppRequired": "Šim aparātprogrammatūras atjauninājumam nepieciešama jaunāka Omi lietotnes versija. Atjauniniet lietotni savā lietotņu veikalā un pēc tam pārbaudiet vēlreiz."
 }

@@ -12243,7 +12243,6 @@
     "onWifiLater": "بعد میں Wi-Fi پر",
     "conversationWritingSummary": "آپ کا خلاصہ لکھا جا رہا ہے…",
     "onTheWayServerWork": "سرور کی بتائی ہوئی کارروائی",
-    "firmwareUpdateCheckUnavailable": "آپ کے آلے کے لیے تازہ ترین فرم ویئر کی تصدیق نہیں ہو سکی۔ اپنا انٹرنیٹ کنکشن چیک کریں اور یقینی بنائیں کہ Omi ایپ اپ ڈیٹ ہے، پھر دوبارہ کوشش کریں۔",
     "finishNothingToProcess": "ابھی پروسیس کرنے کے لیے کچھ نہیں ہے۔",
     "finishStillProcessing": "ابھی پروسیس ہو رہا ہے۔ یہ ہوم پر نظر آئے گا۔",
     "finishBackToHome": "ہوم پر واپس جائیں",
@@ -12293,5 +12292,7 @@
     "conversationLiveNoEdits": "تبدیلی کے لیے اس کے ختم ہونے تک انتظار کریں۔",
     "finishedSummaryReady": "خلاصہ تیار ہے",
     "writingSummaryStatus": "خلاصہ لکھا جا رہا ہے…",
-    "stillWorkingOnIt": "ابھی کام جاری ہے۔"
+    "stillWorkingOnIt": "ابھی کام جاری ہے۔",
+    "firmwareUpdateFirmwareTooOld": "آپ کے آلے کا فرم ویئر اس اپ ڈیٹ کے لیے بہت پرانا ہے۔ آلے کو اپ ڈیٹ کرنے میں مدد کے لیے سپورٹ سے رابطہ کریں۔",
+    "firmwareUpdateAppRequired": "اس فرم ویئر اپ ڈیٹ کے لیے Omi ایپ کا نیا ورژن درکار ہے۔ اپنے ایپ اسٹور سے ایپ کو اپ ڈیٹ کریں، پھر دوبارہ چیک کریں۔"
 }

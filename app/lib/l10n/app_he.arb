@@ -12243,7 +12243,6 @@
     "onWifiLater": "מאוחר יותר ב-Wi-Fi",
     "conversationWritingSummary": "כותבים את הסיכום שלך…",
     "onTheWayServerWork": "עבודה שדווחה מהשרת",
-    "firmwareUpdateCheckUnavailable": "לא ניתן היה לאמת את הקושחה העדכנית ביותר למכשיר שלך. בדוק את החיבור לאינטרנט וודא שאפליקציית Omi מעודכנת, ואז נסה שוב.",
     "finishNothingToProcess": "עדיין אין מה לעבד.",
     "finishStillProcessing": "עדיין בעיבוד. זה יופיע במסך הבית.",
     "finishBackToHome": "חזרה למסך הבית",
@@ -12293,5 +12292,7 @@
     "conversationLiveNoEdits": "המתן עד שההקלטה תסתיים כדי לשנות.",
     "finishedSummaryReady": "הסיכום מוכן",
     "writingSummaryStatus": "כותב סיכום…",
-    "stillWorkingOnIt": "עדיין עובדים על זה."
+    "stillWorkingOnIt": "עדיין עובדים על זה.",
+    "firmwareUpdateFirmwareTooOld": "הקושחה של המכשיר שלך ישנה מדי לעדכון הזה. יש לפנות לתמיכה לקבלת עזרה בעדכון המכשיר.",
+    "firmwareUpdateAppRequired": "עדכון הקושחה הזה דורש גרסה חדשה יותר של אפליקציית Omi. יש לעדכן את האפליקציה מחנות האפליקציות שלך, ואז לבדוק שוב."
 }

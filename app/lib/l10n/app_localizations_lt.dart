@@ -15583,10 +15583,6 @@ class AppLocalizationsLt extends AppLocalizations {
   String get onTheWayServerWork => 'Serverio praneštas darbas';
 
   @override
-  String get firmwareUpdateCheckUnavailable =>
-      'Nepavyko patvirtinti naujausios jūsų įrenginio programinės aparatinės įrangos. Patikrinkite interneto ryšį ir įsitikinkite, kad Omi programėlė atnaujinta, tada bandykite dar kartą.';
-
-  @override
   String get finishNothingToProcess => 'Kol kas nėra ką apdoroti.';
 
   @override
@@ -15748,4 +15744,12 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get stillWorkingOnIt => 'Vis dar dirbama.';
+
+  @override
+  String get firmwareUpdateFirmwareTooOld =>
+      'Jūsų įrenginio programinė aparatinė įranga per sena šiam naujinimui. Kreipkitės į palaikymo tarnybą, kad padėtų atnaujinti įrenginį.';
+
+  @override
+  String get firmwareUpdateAppRequired =>
+      'Šiam programinės aparatinės įrangos naujinimui reikia naujesnės „Omi“ programėlės versijos. Atnaujinkite programėlę savo programėlių parduotuvėje ir patikrinkite dar kartą.';
 }

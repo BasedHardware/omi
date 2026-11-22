@@ -15594,10 +15594,6 @@ class AppLocalizationsLv extends AppLocalizations {
   String get onTheWayServerWork => 'Servera ziņotais darbs';
 
   @override
-  String get firmwareUpdateCheckUnavailable =>
-      'Neizdevās apstiprināt jaunāko programmaparatūru jūsu ierīcei. Pārbaudiet interneta savienojumu un pārliecinieties, ka lietotne Omi ir atjaunināta, pēc tam mēģiniet vēlreiz.';
-
-  @override
   String get finishNothingToProcess => 'Pagaidām nav ko apstrādāt.';
 
   @override
@@ -15759,4 +15755,12 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get stillWorkingOnIt => 'Vēl tiek pie tā strādāts.';
+
+  @override
+  String get firmwareUpdateFirmwareTooOld =>
+      'Jūsu ierīces aparātprogrammatūra ir pārāk veca šim atjauninājumam. Sazinieties ar atbalsta dienestu, lai saņemtu palīdzību ierīces atjaunināšanā.';
+
+  @override
+  String get firmwareUpdateAppRequired =>
+      'Šim aparātprogrammatūras atjauninājumam nepieciešama jaunāka Omi lietotnes versija. Atjauniniet lietotni savā lietotņu veikalā un pēc tam pārbaudiet vēlreiz.';
 }

@@ -4686,7 +4686,6 @@
     "onWifiLater": "Vėliau per Wi-Fi",
     "conversationWritingSummary": "Rašoma jūsų santrauka…",
     "onTheWayServerWork": "Serverio praneštas darbas",
-    "firmwareUpdateCheckUnavailable": "Nepavyko patvirtinti naujausios jūsų įrenginio programinės aparatinės įrangos. Patikrinkite interneto ryšį ir įsitikinkite, kad Omi programėlė atnaujinta, tada bandykite dar kartą.",
     "finishNothingToProcess": "Kol kas nėra ką apdoroti.",
     "finishStillProcessing": "Vis dar apdorojama. Tai atsiras pagrindiniame puslapyje.",
     "finishBackToHome": "Grįžti į pagrindinį",
@@ -4736,5 +4735,7 @@
     "conversationLiveNoEdits": "Norėdami pakeisti, palaukite, kol jis baigsis.",
     "finishedSummaryReady": "Santrauka paruošta",
     "writingSummaryStatus": "Rašoma santrauka…",
-    "stillWorkingOnIt": "Vis dar dirbama."
+    "stillWorkingOnIt": "Vis dar dirbama.",
+    "firmwareUpdateFirmwareTooOld": "Jūsų įrenginio programinė aparatinė įranga per sena šiam naujinimui. Kreipkitės į palaikymo tarnybą, kad padėtų atnaujinti įrenginį.",
+    "firmwareUpdateAppRequired": "Šiam programinės aparatinės įrangos naujinimui reikia naujesnės „Omi“ programėlės versijos. Atnaujinkite programėlę savo programėlių parduotuvėje ir patikrinkite dar kartą."
 }

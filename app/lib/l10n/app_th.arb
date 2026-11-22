@@ -4686,7 +4686,6 @@
     "onWifiLater": "ภายหลังผ่าน Wi-Fi",
     "conversationWritingSummary": "กำลังเขียนสรุปของคุณ…",
     "onTheWayServerWork": "งานที่เซิร์ฟเวอร์รายงาน",
-    "firmwareUpdateCheckUnavailable": "ไม่สามารถยืนยันเฟิร์มแวร์ล่าสุดสำหรับอุปกรณ์ของคุณได้ ตรวจสอบการเชื่อมต่ออินเทอร์เน็ตและตรวจสอบให้แน่ใจว่าแอป Omi เป็นเวอร์ชันล่าสุด แล้วลองอีกครั้ง",
     "finishNothingToProcess": "ยังไม่มีอะไรให้ประมวลผล",
     "finishStillProcessing": "ยังประมวลผลอยู่ จะแสดงที่หน้าหลัก",
     "finishBackToHome": "กลับไปหน้าหลัก",
@@ -4736,5 +4735,7 @@
     "conversationLiveNoEdits": "รอให้จบก่อนจึงจะเปลี่ยนได้",
     "finishedSummaryReady": "สรุปพร้อมแล้ว",
     "writingSummaryStatus": "กำลังเขียนสรุป…",
-    "stillWorkingOnIt": "ยังดำเนินการอยู่"
+    "stillWorkingOnIt": "ยังดำเนินการอยู่",
+    "firmwareUpdateFirmwareTooOld": "เฟิร์มแวร์ของอุปกรณ์คุณเก่าเกินไปสำหรับการอัปเดตนี้ ติดต่อฝ่ายสนับสนุนเพื่อขอความช่วยเหลือในการอัปเดตอุปกรณ์",
+    "firmwareUpdateAppRequired": "การอัปเดตเฟิร์มแวร์นี้ต้องใช้แอป Omi เวอร์ชันใหม่กว่า อัปเดตแอปจากร้านค้าแอปของคุณ แล้วตรวจสอบอีกครั้ง"
 }

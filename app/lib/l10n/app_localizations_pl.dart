@@ -15604,10 +15604,6 @@ class AppLocalizationsPl extends AppLocalizations {
   String get onTheWayServerWork => 'Praca zgłoszona przez serwer';
 
   @override
-  String get firmwareUpdateCheckUnavailable =>
-      'Nie udało się potwierdzić najnowszego oprogramowania układowego dla Twojego urządzenia. Sprawdź połączenie z internetem i upewnij się, że aplikacja Omi jest aktualna, a następnie spróbuj ponownie.';
-
-  @override
   String get finishNothingToProcess => 'Na razie nie ma czego przetworzyć.';
 
   @override
@@ -15769,4 +15765,12 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get stillWorkingOnIt => 'Nadal pracujemy nad tym.';
+
+  @override
+  String get firmwareUpdateFirmwareTooOld =>
+      'Oprogramowanie układowe Twojego urządzenia jest zbyt stare dla tej aktualizacji. Skontaktuj się z pomocą techniczną, aby uzyskać pomoc w aktualizacji urządzenia.';
+
+  @override
+  String get firmwareUpdateAppRequired =>
+      'Ta aktualizacja oprogramowania układowego wymaga nowszej aplikacji Omi. Zaktualizuj aplikację w sklepie z aplikacjami, a następnie sprawdź ponownie.';
 }

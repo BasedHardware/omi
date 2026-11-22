@@ -15661,10 +15661,6 @@ class AppLocalizationsEl extends AppLocalizations {
   String get onTheWayServerWork => 'Εργασία που αναφέρει ο διακομιστής';
 
   @override
-  String get firmwareUpdateCheckUnavailable =>
-      'Δεν ήταν δυνατή η επιβεβαίωση του πιο πρόσφατου υλικολογισμικού για τη συσκευή σας. Ελέγξτε τη σύνδεσή σας στο διαδίκτυο και βεβαιωθείτε ότι η εφαρμογή Omi είναι ενημερωμένη και, στη συνέχεια, δοκιμάστε ξανά.';
-
-  @override
   String get finishNothingToProcess => 'Δεν υπάρχει ακόμα κάτι για επεξεργασία.';
 
   @override
@@ -15826,4 +15822,12 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get stillWorkingOnIt => 'Εξακολουθούμε να δουλεύουμε πάνω σε αυτό.';
+
+  @override
+  String get firmwareUpdateFirmwareTooOld =>
+      'Το υλικολογισμικό της συσκευής σας είναι πολύ παλιό για αυτήν την ενημέρωση. Επικοινωνήστε με την υποστήριξη για βοήθεια με την ενημέρωση της συσκευής σας.';
+
+  @override
+  String get firmwareUpdateAppRequired =>
+      'Αυτή η ενημέρωση υλικολογισμικού απαιτεί νεότερη έκδοση της εφαρμογής Omi. Ενημερώστε την εφαρμογή από το κατάστημα εφαρμογών σας και ελέγξτε ξανά.';
 }

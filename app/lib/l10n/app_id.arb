@@ -4721,7 +4721,6 @@
     "onWifiLater": "Nanti via Wi-Fi",
     "conversationWritingSummary": "Menulis ringkasan Anda…",
     "onTheWayServerWork": "Pekerjaan yang dilaporkan server",
-    "firmwareUpdateCheckUnavailable": "Tidak dapat memastikan firmware terbaru untuk perangkat Anda. Periksa koneksi internet Anda dan pastikan aplikasi Omi sudah diperbarui, lalu coba lagi.",
     "finishNothingToProcess": "Belum ada yang perlu diproses.",
     "finishStillProcessing": "Masih diproses. Ini akan muncul di Beranda.",
     "finishBackToHome": "Kembali ke Beranda",
@@ -4771,5 +4770,7 @@
     "conversationLiveNoEdits": "Tunggu sampai selesai untuk mengubahnya.",
     "finishedSummaryReady": "Ringkasan siap",
     "writingSummaryStatus": "Menulis ringkasan…",
-    "stillWorkingOnIt": "Masih dikerjakan."
+    "stillWorkingOnIt": "Masih dikerjakan.",
+    "firmwareUpdateFirmwareTooOld": "Firmware perangkat Anda terlalu lama untuk pembaruan ini. Hubungi dukungan untuk bantuan memperbarui perangkat Anda.",
+    "firmwareUpdateAppRequired": "Pembaruan firmware ini memerlukan aplikasi Omi versi lebih baru. Perbarui aplikasi dari toko aplikasi Anda, lalu periksa lagi."
 }

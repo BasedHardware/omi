@@ -15564,10 +15564,6 @@ class AppLocalizationsFi extends AppLocalizations {
   String get onTheWayServerWork => 'Palvelimen ilmoittama työ';
 
   @override
-  String get firmwareUpdateCheckUnavailable =>
-      'Laitteesi uusinta laiteohjelmistoa ei voitu vahvistaa. Tarkista internetyhteys ja varmista, että Omi-sovellus on ajan tasalla, ja yritä sitten uudelleen.';
-
-  @override
   String get finishNothingToProcess => 'Ei vielä mitään käsiteltävää.';
 
   @override
@@ -15729,4 +15725,12 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get stillWorkingOnIt => 'Yhä työn alla.';
+
+  @override
+  String get firmwareUpdateFirmwareTooOld =>
+      'Laitteesi laiteohjelmisto on liian vanha tätä päivitystä varten. Ota yhteyttä tukeen saadaksesi apua laitteen päivittämiseen.';
+
+  @override
+  String get firmwareUpdateAppRequired =>
+      'Tämä laiteohjelmistopäivitys tarvitsee Omi-sovelluksen uudemman version. Päivitä sovellus sovelluskaupastasi ja tarkista sitten uudelleen.';
 }

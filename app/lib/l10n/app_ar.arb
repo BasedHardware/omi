@@ -4686,7 +4686,6 @@
     "onWifiLater": "لاحقًا عبر Wi-Fi",
     "conversationWritingSummary": "جارٍ كتابة ملخصك…",
     "onTheWayServerWork": "عمل أبلغ عنه الخادم",
-    "firmwareUpdateCheckUnavailable": "تعذّر التحقق من أحدث برنامج ثابت لجهازك. تحقّق من اتصالك بالإنترنت وتأكّد من تحديث تطبيق Omi، ثم حاول مرة أخرى.",
     "finishNothingToProcess": "لا يوجد شيء لمعالجته بعد.",
     "finishStillProcessing": "لا تزال المعالجة جارية. ستظهر على الشاشة الرئيسية.",
     "finishBackToHome": "العودة إلى الرئيسية",
@@ -4736,5 +4735,7 @@
     "conversationLiveNoEdits": "انتظر حتى ينتهي قبل تغييره.",
     "finishedSummaryReady": "الملخص جاهز",
     "writingSummaryStatus": "جارٍ كتابة الملخص…",
-    "stillWorkingOnIt": "ما زلنا نعمل عليه."
+    "stillWorkingOnIt": "ما زلنا نعمل عليه.",
+    "firmwareUpdateFirmwareTooOld": "البرنامج الثابت لجهازك قديم جدًا لهذا التحديث. تواصل مع الدعم للمساعدة في تحديث جهازك.",
+    "firmwareUpdateAppRequired": "يتطلب تحديث البرنامج الثابت هذا إصدارًا أحدث من تطبيق Omi. حدّث التطبيق من متجر التطبيقات لديك، ثم تحقّق مرة أخرى."
 }

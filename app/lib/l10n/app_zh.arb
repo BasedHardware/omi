@@ -4686,7 +4686,6 @@
     "onWifiLater": "稍后通过 Wi-Fi",
     "conversationWritingSummary": "正在撰写你的摘要…",
     "onTheWayServerWork": "服务器报告的任务",
-    "firmwareUpdateCheckUnavailable": "无法确认你的设备的最新固件。请检查网络连接并确保 Omi 应用为最新版本，然后重试。",
     "finishNothingToProcess": "还没有可处理的内容。",
     "finishStillProcessing": "仍在处理中。完成后会显示在首页。",
     "finishBackToHome": "返回首页",
@@ -4736,5 +4735,7 @@
     "conversationLiveNoEdits": "请等它结束后再修改。",
     "finishedSummaryReady": "摘要已生成",
     "writingSummaryStatus": "正在生成摘要…",
-    "stillWorkingOnIt": "仍在处理中。"
+    "stillWorkingOnIt": "仍在处理中。",
+    "firmwareUpdateFirmwareTooOld": "你的设备固件版本太旧，无法安装此更新。请联系支持团队，获取设备更新方面的帮助。",
+    "firmwareUpdateAppRequired": "此固件更新需要更新版本的 Omi 应用。请前往应用商店更新应用，然后重新检查。"
 }

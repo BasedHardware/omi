@@ -19004,10 +19004,6 @@
     "@deleteWhileProcessingMessage": {
         "description": "Delete confirmation for a recording already uploaded whose server job has not finished. Deleting removes the phone copy; the server keeps processing, but if that job fails the app has no local file to re-upload from."
     },
-    "firmwareUpdateCheckUnavailable": "Couldn't confirm the latest firmware for your device. Check your internet connection and make sure the Omi app is up to date, then try again.",
-    "@firmwareUpdateCheckUnavailable": {
-        "description": "Firmware update page: the server answered but the device cannot be confirmed up to date (its firmware is below the release minimum, or the release needs a newer app), so it is not reported as up to date."
-    },
     "finishNothingToProcess": "Nothing to process yet.",
     "@finishNothingToProcess": {
         "description": "Brief notice after tapping Finish on the live capture page when nothing was heard since the last conversation, so no conversation is made."
@@ -19222,5 +19218,13 @@
     "stillWorkingOnIt": "Still working on it.",
     "@stillWorkingOnIt": {
         "description": "Quiet notice on a conversation page when the app stopped checking a conversation that is still being transcribed or summarized. Shown with a Try Again button."
+    },
+    "firmwareUpdateFirmwareTooOld": "Your device's firmware is too old for this update. Contact support for help updating your device.",
+    "@firmwareUpdateFirmwareTooOld": {
+        "description": "Firmware update unavailable because the device is below the release minimum firmware version."
+    },
+    "firmwareUpdateAppRequired": "This firmware update needs a newer Omi app. Update the app from your app store, then check again.",
+    "@firmwareUpdateAppRequired": {
+        "description": "Firmware update unavailable because the installed Omi app does not meet the release app version or build requirement."
     }
 }

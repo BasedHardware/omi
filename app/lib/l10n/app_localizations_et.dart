@@ -15552,10 +15552,6 @@ class AppLocalizationsEt extends AppLocalizations {
   String get onTheWayServerWork => 'Serveri teatatud töö';
 
   @override
-  String get firmwareUpdateCheckUnavailable =>
-      'Sinu seadme uusimat püsivara ei õnnestunud kinnitada. Kontrolli internetiühendust ja veendu, et Omi rakendus on ajakohane, seejärel proovi uuesti.';
-
-  @override
   String get finishNothingToProcess => 'Veel pole midagi töödelda.';
 
   @override
@@ -15716,4 +15712,12 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get stillWorkingOnIt => 'Töötame veel selle kallal.';
+
+  @override
+  String get firmwareUpdateFirmwareTooOld =>
+      'Teie seadme püsivara on selle värskenduse jaoks liiga vana. Seadme värskendamiseks abi saamiseks võtke ühendust klienditoega.';
+
+  @override
+  String get firmwareUpdateAppRequired =>
+      'See püsivara värskendus vajab Omi rakenduse uuemat versiooni. Värskendage rakendust oma rakenduste poes ja kontrollige seejärel uuesti.';
 }
