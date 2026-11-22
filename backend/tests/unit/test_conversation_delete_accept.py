@@ -498,11 +498,16 @@ def test_eraser_owes_merge_donor_audio_recorded_at_acceptance(plane, cascade):
     assert audio.call_args.kwargs['source_ids'] == ['donor-a']
 
 
-@pytest.mark.parametrize('enabled, status', [('true', 'completed'), ('off', 'processing')])
+@pytest.mark.parametrize(
+    'enabled, status', [('true', 'completed'), ('off', 'processing'), (None, 'processing'), ('unknown', 'processing')]
+)
 def test_accept_transaction_reads_before_it_writes_and_keeps_the_first_tombstone(monkeypatch, enabled, status):
     from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 
-    monkeypatch.setenv('CONVERSATION_PARKED_TERMINAL_STATUS_ENABLED', enabled)
+    if enabled is None:
+        monkeypatch.delenv('CONVERSATION_PARKED_TERMINAL_STATUS_ENABLED', raising=False)
+    else:
+        monkeypatch.setenv('CONVERSATION_PARKED_TERMINAL_STATUS_ENABLED', enabled)
     path = ('users', UID, 'conversations', 'c1')
     store = StrictFirestore({path: {'created_at': 'original', 'sync_merged_from': ['donor'], 'status': 'processing'}})
     monkeypatch.setattr(legal_holds, 'assert_account_deletion_permitted', lambda *a, **k: None)

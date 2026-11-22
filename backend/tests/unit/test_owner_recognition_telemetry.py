@@ -767,7 +767,7 @@ def _stub_completed_reprocess(monkeypatch):
 
 @pytest.mark.parametrize(
     ('switch_value', 'intake_status'),
-    [(None, ConversationStatus.completed), ('off', ConversationStatus.processing)],
+    [('on', ConversationStatus.completed), (None, ConversationStatus.processing)],
 )
 def test_deferred_desktop_projection_counts_on_first_completed_reprocess(monkeypatch, switch_value, intake_status):
     module = process_conversation_mod

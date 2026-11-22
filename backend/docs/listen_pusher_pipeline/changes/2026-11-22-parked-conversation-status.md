@@ -18,16 +18,19 @@ An accepted deletion settles a previously processing row in its existing
 tombstone transaction. The status changes preserve the discard and deletion
 flags and the existing restore and erasure contracts.
 
-The default-on `CONVERSATION_PARKED_TERMINAL_STATUS_ENABLED` switch controls new
-parked status writes. Set it to `off` to stop them. First-open still accepts
-either stored status, including rows already migrated.
+`CONVERSATION_PARKED_TERMINAL_STATUS_ENABLED` defaults off. The production
+manifest pins it off on every affected writer while older macOS readers
+qualify under SCA-3756. First-open accepts either stored status. Release
+controls activation through SCA-3757.
 
 ## Historical migration
 
 Use `backend/scripts/settle_parked_conversations.py` with a fixed six-hour-or-older
 UTC cutoff and private checkpoints. Run one `dry-run` with `ro-prod` before apply.
 After the compatible revision is serving and the full migration review is clear,
-run `canary` with `prod-operator` and a separate checkpoint. Review its exact
+run `canary` with `prod-operator` and a separate checkpoint. Explicitly enable
+the switch in the approved operator command's environment for write phases.
+Keep the serving writers off during the narrow rollout. Review the exact
 status-only readback before running `apply --accept-canary` with that same apply
 checkpoint. Each canary or apply call visits at most 2,000 rows. Clean stops can
 resume on the same UTC day. A resumed canary counts all its prior writes toward
@@ -39,9 +42,13 @@ checkpoint stays ineligible for apply. An uncertain write or incomplete readback
 blocks the checkpoint until the operator reconciles the affected range. Disable
 the writer switch and stop invocation of the runner to halt the rollout.
 
-The operator can select `--scope discard-deletion` for a separately approved
-pass that excludes deferred rows. Dry-run, canary and apply use the same scope
-and fixed cutoff. An apply checkpoint must match its canary's scope. Both
+The runner defaults to `--scope discard-deletion`, which excludes deferred
+rows. The held broad scope requires explicit `--scope all --approval-ref
+<comment UUID>` at every invocation. The runner checks the Release owner's
+comment on SCA-3757 for a standalone `PARKED-ALL-APPROVED: <phase> <UTC cutoff>
+<UTC day>` line before it opens a checkpoint. Use `YYYY-MM-DDTHH:MM:SS+00:00`
+for the cutoff and `YYYY-MM-DD` for the approval day. Dry-run, canary and apply
+use the same scope and fixed cutoff. An apply checkpoint must match its canary's scope. Both
 scopes share the daily dry-run and apply limits. Keep the production forward
 writer switch off while Release qualifies the readers for deferred rows.
 The operator uses one designated checkpoint location per phase and takes the

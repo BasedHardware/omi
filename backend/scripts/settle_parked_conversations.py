@@ -12,10 +12,12 @@ import argparse
 import fcntl
 import json
 import os
+import subprocess
 import sys
 from collections import Counter
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from uuid import UUID
 
 from google.api_core.datetime_helpers import DatetimeWithNanoseconds
 from google.cloud import firestore
@@ -36,6 +38,53 @@ MAX_BATCH_WRITES = 2_000
 MAX_PASS_READS = 3_499_000
 PROJECT = 'based-hardware'
 DISCARD_DELETION_SCOPE = 'discard-deletion'
+RELEASE_ISSUE = '01a20270-613b-7ae4-bdca-20025db3b43a'  # SCA-3757
+RELEASE_OWNER = '00b186ff-42a6-4ec7-b244-5dafa60999ac'
+
+
+def _check_all_approval(reference: str, phase: str, cutoff: datetime, now: datetime) -> bool:
+    """Read the approval from the owning Release issue. Fail closed on tracker errors."""
+    try:
+        if str(UUID(reference)) != reference:
+            return False
+        env = {
+            key: value
+            for key, value in os.environ.items()
+            if key.lower() not in {'http_proxy', 'https_proxy', 'all_proxy'}
+        }
+        result = subprocess.run(
+            [
+                'multica',
+                '--profile',
+                'desktop-multica-01.tail76ea03.ts.net',
+                'issue',
+                'comment',
+                'list',
+                RELEASE_ISSUE,
+                '--output',
+                'json',
+            ],
+            env=env,
+            capture_output=True,
+            check=True,
+            timeout=15,
+        )
+        comments = json.loads(result.stdout)
+    except (ValueError, OSError, subprocess.SubprocessError):
+        return False
+    if not isinstance(comments, list):
+        return False
+    approval = f'PARKED-ALL-APPROVED: {phase} {cutoff.astimezone(timezone.utc).isoformat()} {now.date().isoformat()}'
+    return any(
+        isinstance(comment, dict)
+        and comment.get('id') == reference
+        and comment.get('issue_id') == RELEASE_ISSUE
+        and comment.get('author_id') == RELEASE_OWNER
+        and comment.get('author_type') == 'agent'
+        and isinstance(comment.get('content'), str)
+        and approval in comment['content'].splitlines()
+        for comment in comments
+    )
 
 
 def _save(path: Path, state: dict) -> None:
@@ -185,7 +234,8 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('phase', choices=['dry-run', 'canary', 'apply'])
     parser.add_argument('--cutoff', required=True, type=datetime.fromisoformat)
-    parser.add_argument('--scope', choices=['all', DISCARD_DELETION_SCOPE], default='all')
+    parser.add_argument('--scope', choices=[DISCARD_DELETION_SCOPE, 'all'], default=DISCARD_DELETION_SCOPE)
+    parser.add_argument('--approval-ref', help='Release approval comment UUID on SCA-3757, required for --scope all')
     parser.add_argument('--checkpoint', required=True, type=Path)
     parser.add_argument('--accept-canary', action='store_true')
     parser.add_argument('--restart-dry-run', action='store_true', help='restart a failed dry-run, retaining its budget')
@@ -202,6 +252,11 @@ def main() -> int:
         parser.error('review the exact canary receipt and pass --accept-canary')
     if args.restart_dry_run and args.phase != 'dry-run':
         parser.error('only a read-only dry-run can be restarted')
+    if args.scope == 'all':
+        if not args.approval_ref or not _check_all_approval(args.approval_ref, args.phase, args.cutoff, now):
+            parser.error('--scope all requires a verified Release --approval-ref for this phase, cutoff and UTC day')
+    elif args.approval_ref:
+        parser.error('--approval-ref is only used with --scope all')
 
     args.checkpoint.parent.mkdir(parents=True, mode=0o700, exist_ok=True)
     if args.checkpoint.parent.stat().st_mode & 0o077:

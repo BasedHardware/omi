@@ -48,6 +48,9 @@ overlay:
       values_file: backend/charts/parakeet/prod_omi_parakeet_lid_values.yaml
     backend-listen:
       env:
+        CONVERSATION_PARKED_TERMINAL_STATUS_ENABLED:
+          value: 'off'
+          category: rollout
         # Unlimited backfill day cap (retryable 503 backfill_capacity until the next UTC day; David 2026-11-18,
         # support-packet decision 13). Listen also admits sync backfill uploads (/v2/sync-local-files), so this
         # pin leaves listen admission uncapped exactly as it is today: serving image 44d0a4f runs it 'false'.
@@ -326,6 +329,9 @@ overlay:
           category: rollout
     pusher:
       env:
+        CONVERSATION_PARKED_TERMINAL_STATUS_ENABLED:
+          value: 'off'
+          category: rollout
         # The conversations v3 reconcile dispatch (utils/conversations/v3/triggers.py) runs on the
         # recording writes pusher makes. Without this binding each enqueue raised RuntimeError and the
         # owner waited for the 5-minute sweeper (rows pending 10+ minutes). HANDLER_URL/INVOKER_SA come
@@ -630,6 +636,9 @@ overlay:
             secret: MCP_OAUTH_CLIENTS_JSON
             version: latest
         env:
+          CONVERSATION_PARKED_TERMINAL_STATUS_ENABLED:
+            value: 'off'
+            category: rollout
           # Unlimited backfill day cap, enforced only at sync upload (retryable 503 backfill_capacity until the
           # next UTC day). Rollback: 'false' in one config train (David 2026-11-18, support-packet decision 13).
           UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED: {value: 'true', category: rollout}
@@ -1033,6 +1042,9 @@ overlay:
             secret: DREAM_AGENT_FEEDBACK_SALT
             version: latest
         env:
+          CONVERSATION_PARKED_TERMINAL_STATUS_ENABLED:
+            value: 'off'
+            category: rollout
           # Unlimited backfill day cap, enforced only at sync upload (retryable 503 backfill_capacity until the
           # next UTC day). Rollback: 'false' in one config train (David 2026-11-18, support-packet decision 13).
           UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED: {value: 'true', category: rollout}
@@ -1468,6 +1480,9 @@ overlay:
         - SYNC_REPROCESS_COALESCE_ENABLED
         - REPEAT_WORK_REVISION_ENABLED
         env:
+          CONVERSATION_PARKED_TERMINAL_STATUS_ENABLED:
+            value: 'off'
+            category: rollout
           # SCA-2283: retain the behavior of the serving pre-flag image until custody admission.
           BATCH_ACCOUNT_PRIVACY_WRITER_ENABLED: {value: 'false', category: ops_kill}
           BATCH_PROJECTION_OUTBOX: {value: 'false', category: ops_kill}
@@ -1857,6 +1872,9 @@ overlay:
         - REPEAT_WORK_REVISION_ENABLED
         - HOSTED_DIARIZATION_API_URL
         env:
+          CONVERSATION_PARKED_TERMINAL_STATUS_ENABLED:
+            value: 'off'
+            category: rollout
           # Unlimited backfill day cap, enforced only at sync upload (retryable 503 backfill_capacity until the
           # next UTC day). Rollback: 'false' in one config train (David 2026-11-18, support-packet decision 13).
           UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED: {value: 'true', category: rollout}
@@ -2178,6 +2196,9 @@ overlay:
       backend-projection-pump:
         derive_from: backend-integration
         env:
+          CONVERSATION_PARKED_TERMINAL_STATUS_ENABLED:
+            value: 'off'
+            category: rollout
           # The two custody switches (BATCH_ACCOUNT_PRIVACY_WRITER_ENABLED, BATCH_PROJECTION_OUTBOX)
           # are inherited from integration's false pins: David 2026-11-21 ~03:45Z (SCA-3318) keeps
           # both off for the pump split; enabling either is its own custody admission.

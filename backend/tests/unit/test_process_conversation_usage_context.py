@@ -766,6 +766,7 @@ def test_deferred_desktop_filler_is_discarded_by_the_free_rules(monkeypatch):
     """Free-tier desktop never reaches the model, but the rules still run."""
     from models.transcript_segment import TranscriptSegment
 
+    monkeypatch.setenv('CONVERSATION_PARKED_TERMINAL_STATUS_ENABLED', 'on')
     new_request = CreateConversation(
         started_at=datetime(2026, 7, 14, tzinfo=timezone.utc),
         finished_at=datetime(2026, 7, 14, 0, 1, tzinfo=timezone.utc),
