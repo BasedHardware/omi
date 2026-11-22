@@ -263,8 +263,9 @@ def test_helper_kill_switch_budget_entries_match_the_live_registry():
     assert names[pump_name]['owner'] == 'omi-pipeline / lead2'
     assert names[pump_name]['review_by'] == '2026-12-05'
     assert flags[pump_name]['kind'] == 'env'
-    assert flags[pump_name]['lifecycle'] == 'rollout'
-    assert flags[pump_name]['review_by'] == '2026-11-22'
+    assert flags[pump_name]['lifecycle'] == 'config_switch'
+    assert flags[pump_name]['decision'] == 'keep'
+    assert 'review_by' not in flags[pump_name]
     assert flags[pump_name]['fail'] == 'closed'
     sweep_name = 'BATCH_PIPELINE_SERVING_PROJECTION_SWEEP'
     assert names[sweep_name]['owner'] == 'omi-pipeline / lead2'
@@ -276,8 +277,9 @@ def test_helper_kill_switch_budget_entries_match_the_live_registry():
     unsupported = names['SERVER_BATCH_UNSUPPORTED_LANGUAGES']
     assert unsupported['owner'] == 'planscost'
     assert unsupported['review_by'] == '2026-11-30'
-    assert flags['SERVER_BATCH_UNSUPPORTED_LANGUAGES']['lifecycle'] == 'rollout'
-    assert flags['SERVER_BATCH_UNSUPPORTED_LANGUAGES']['review_by'] == '2026-11-22'
+    assert flags['SERVER_BATCH_UNSUPPORTED_LANGUAGES']['lifecycle'] == 'config_switch'
+    assert flags['SERVER_BATCH_UNSUPPORTED_LANGUAGES']['decision'] == 'keep'
+    assert 'review_by' not in flags['SERVER_BATCH_UNSUPPORTED_LANGUAGES']
     assert 'SERVER_BATCH_UNSUPPORTED_LANGUAGES' in set(env_reads((BACKEND_DIR / 'config/server_batch.py').read_text()))
     rollout = flags[rollout_name]
     assert names[rollout_name]['owner'] == rollout['owner'] == 'planscost'
