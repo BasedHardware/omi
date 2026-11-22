@@ -4,6 +4,8 @@
 
 <!-- One or two sentences. Link the issue if there is one. -->
 
+> A change to `.github/workflows/gcp_backend.yml`, `.github/actions/deploy-backend-stack/action.yml`, or `backend/scripts/cloud_run_traffic_snapshot.py` needs a workspace pin re-admission before the next selected deploy.
+
 ## Product invariants affected
 
 <!-- Name locked invariant IDs this PR touches (e.g. INV-CHAT-1), or "none".
