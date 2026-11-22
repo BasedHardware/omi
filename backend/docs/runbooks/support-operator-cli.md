@@ -136,13 +136,14 @@ through the private support workflow.
 
 1. With the `ro-prod` tier, run `account correct-plan` without `--apply`.
    Use a new packet-relative path for `--receipt`. Review the results privately,
-   then commit and push the dry run to the private Forgejo origin.
+   then commit and push the dry run to `main` on the private Forgejo origin.
 2. Use a reviewed, merged CLI and the `prod-operator` tier. Fetch the private
    origin, select the canary, then run with `--apply` and
    `--dry-run-receipt` pointing to the committed dry-run receipt (up to
    24 hours old). Use a distinct `--receipt` for every invocation.
 3. Before the canary, confirm the serving entitlement readers cannot reload
-   the stale paid price. Verify the canary projects Basic with a matching
+   the stale paid price. An already-Basic record with a stored price needs
+   private eligibility review. Verify the canary projects Basic with a matching
    audit, a corrected count of one, and zero failures.
    Apply batches of up to ten ready owners. Stop on any failed batch or any
    newly pending checkout or unclear guard. Commit each receipt to the private

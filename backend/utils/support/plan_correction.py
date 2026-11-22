@@ -30,10 +30,17 @@ MAX_PAGES = 10
 MAX_STRIPE_CUSTOMERS = 10
 MAX_DRY_RUN_OWNERS = 100
 MAX_APPLY_OWNERS = 10
-STOP_REASONS = frozenset({'pending_checkout', 'billing_unknown', 'state_changed', 'rollback_conflict'})
+STOP_REASONS = frozenset(
+    {'pending_checkout', 'billing_unknown', 'basic_with_price', 'state_changed', 'rollback_conflict'}
+)
+UNSAFE_OUTCOMES = (STOP_REASONS - {'pending_checkout'}) | {'failed', 'readback_failed'}
 
 
 class EvidenceUnavailable(ValueError):
+    pass
+
+
+class InvalidReceipt(EvidenceUnavailable):
     pass
 
 
@@ -240,7 +247,8 @@ class PlanCorrection:
         if not isinstance(plan, str):
             return {'outcome': 'billing_unknown'}
         if plan in {BASIC, 'free'} and not rollback:
-            return {'outcome': 'already_basic'}
+            outcome = 'basic_with_price' if sub.get('current_price_id') is not None else 'already_basic'
+            return {'outcome': outcome}
         if (not rollback and plan not in PAID_PLANS) or (rollback and plan != BASIC):
             return {'outcome': 'billing_unknown'}
         customer, stripe_sub = profile.get('stripe_customer_id'), sub.get('stripe_subscription_id')
@@ -337,8 +345,12 @@ class PlanCorrection:
             return {**row, 'outcome': problem}
         if not self.ctx.apply:
             return {**row, 'outcome': 'ready', 'state_digest': state_digest}
-        version = _version(transaction.write_results[0].update_time)
-        result = {**row, 'action': action_ref.id, 'version': version}
+        result = {**row, 'action': action_ref.id}
+        writes = transaction.write_results or ()
+        version = _version(writes[0].update_time) if writes else ''
+        if not version:
+            return {**result, 'outcome': 'readback_failed'}
+        result['version'] = version
         current = self._read(user_ref, field_paths=['subscription'])
         audit = self._read(action_ref).to_dict() or {}
         if (
@@ -374,19 +386,31 @@ def _inputs(args: argparse.Namespace, ctx: ActionContext, packet: PrivatePacket,
         raise EvidenceUnavailable()
     if not proof_path:
         return owners, mode, {}
-    header, *entries, trailer = packet.receipt(proof_path)
-    if header.get('schema') != RECEIPT_SCHEMA or trailer.get('complete') is not True:
-        raise EvidenceUnavailable()
-    expected_mode, status = ('apply', 'corrected') if mode == 'rollback' else ('dry_run', 'ready')
-    if header['mode'] != expected_mode or header['ticket'] != ctx.ticket or header['since'] != args.since.isoformat():
-        raise EvidenceUnavailable()
-    if mode == 'apply' and not 0 <= (now - datetime.fromisoformat(header['created_at'])).total_seconds() <= 86400:
-        raise EvidenceUnavailable()
-    eligible = {row['owner']: row for row in entries if row.get('outcome') == status}
-    if any(trailer['counts'].get(reason, 0) for reason in ('failed', 'billing_unknown')) and mode == 'apply':
-        raise EvidenceUnavailable()
-    if not set(owners) <= eligible.keys():
-        raise EvidenceUnavailable()
+    try:
+        header, *entries, trailer = packet.receipt(proof_path)
+        expected_mode, status = ('apply', 'corrected') if mode == 'rollback' else ('dry_run', 'ready')
+        if header.get('schema') != RECEIPT_SCHEMA or trailer.get('complete') is not True:
+            raise InvalidReceipt()
+        if (
+            header.get('mode') != expected_mode
+            or header.get('ticket') != ctx.ticket
+            or header.get('since') != args.since.isoformat()
+        ):
+            raise InvalidReceipt()
+        eligible = {row['owner']: row for row in entries if row.get('outcome') == status}
+        if mode == 'apply':
+            created_at, counts = header.get('created_at'), trailer.get('counts')
+            if not isinstance(created_at, str) or not isinstance(counts, dict):
+                raise InvalidReceipt()
+            age = now - datetime.fromisoformat(created_at)
+            if not 0 <= age.total_seconds() <= 86400:
+                raise InvalidReceipt()
+            if any(counts.get(reason, 0) for reason in UNSAFE_OUTCOMES):
+                raise InvalidReceipt()
+        if not set(owners) <= eligible.keys():
+            raise InvalidReceipt()
+    except (AttributeError, KeyError, TypeError, ValueError) as exc:
+        raise InvalidReceipt() from exc
     return owners, mode, eligible
 
 
@@ -437,17 +461,15 @@ def run(args: argparse.Namespace, ctx: ActionContext, *, firestore_client=None) 
                         row = {'outcome': 'failed'}
                     append_receipt(f, {'owner': uid, **row})
                     counts[row['outcome']] += 1
-                    if ctx.apply and (
-                        row['outcome'] in STOP_REASONS or row['outcome'] in {'failed', 'readback_failed'}
-                    ):
+                    if ctx.apply and row['outcome'] in STOP_REASONS | UNSAFE_OUTCOMES:
                         break
             finally:
                 reads = operator.reads
             counts['unprocessed'] = len(owners) - sum(counts.values())
             append_receipt(f, {'complete': True, 'document_reads': reads, 'counts': dict(counts)})
+    except InvalidReceipt:
+        return {'document_reads': reads, 'counts': dict(counts), 'error': 'invalid_receipt'}, 1
     except Exception:
         return {'document_reads': reads, 'counts': dict(counts), 'error': 'command_failed'}, 1
-    unsafe = {'failed', 'readback_failed', 'billing_unknown', 'state_changed', 'rollback_conflict'}
-    if ctx.apply:
-        unsafe.add('pending_checkout')
+    unsafe = UNSAFE_OUTCOMES | {'pending_checkout'} if ctx.apply else UNSAFE_OUTCOMES
     return {'document_reads': reads, 'counts': dict(counts)}, int(any(counts[status] for status in unsafe))

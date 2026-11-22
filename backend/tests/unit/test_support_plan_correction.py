@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 from contextlib import contextmanager, nullcontext
+from dataclasses import replace
 from datetime import date, datetime, timedelta, timezone
 from types import SimpleNamespace
 
@@ -240,8 +241,20 @@ def test_apply_and_rollback_write_only_the_verified_subscription_fields(monkeypa
     assert not txn.updates and not txn.creates
 
     txn = StrictFirestore.transaction(store, max_attempts=1)
-    txn.write_results = [SimpleNamespace(update_time=version)]
     monkeypatch.setattr(operator, '_read', read)
+    with monkeypatch.context() as preview:
+        preview.setattr(operator, 'ctx', replace(context, apply=False))
+
+        def preview_transaction(*, max_attempts, read_only):
+            assert read_only and max_attempts == 1
+            return txn
+
+        preview.setattr(store, 'transaction', preview_transaction)
+        assert operator.process(OWNER, None, result, rollback=True)['outcome'] == 'ready'
+    assert not txn.updates and not txn.creates
+
+    txn = StrictFirestore.transaction(store, max_attempts=1)
+    txn.write_results = [SimpleNamespace(update_time=version)]
     assert operator.process(OWNER, None, result, rollback=True)['outcome'] == 'rolled_back'
     assert store.rows[('users', OWNER)] == profile
     ((_, rollback_audit),) = txn.creates
@@ -324,7 +337,7 @@ def test_document_reads_use_the_bounded_firestore_boundary():
     assert operator.reads == 1
 
 
-@pytest.mark.parametrize('outcome', ['billing_unknown', 'failed'])
+@pytest.mark.parametrize('outcome', ['billing_unknown', 'basic_with_price', 'failed'])
 def test_unresolved_dry_run_returns_nonzero_and_counts_only(monkeypatch, outcome):
     monkeypatch.setenv('STRIPE_PLAN_CORRECTION_READ_KEY', 'rk_live_fixture')
     monkeypatch.setenv('OMI_SUPPORT_TRIAGE_ORIGIN', 'ssh://git@fixture.invalid/triage.git')
@@ -336,7 +349,9 @@ def test_unresolved_dry_run_returns_nonzero_and_counts_only(monkeypatch, outcome
     def process(*_, **_kwargs):
         if outcome == 'failed':
             raise RuntimeError(OWNER)
-        raise repair.EvidenceUnavailable()
+        if outcome == 'billing_unknown':
+            raise repair.EvidenceUnavailable()
+        return {'outcome': outcome}
 
     monkeypatch.setattr(repair, 'PlanCorrection', lambda *_: SimpleNamespace(process=process, reads=3))
     args = argparse.Namespace(private_checkout=None, receipt='packets/fixture.jsonl', since=date(2026, 11, 21))
@@ -344,3 +359,50 @@ def test_unresolved_dry_run_returns_nonzero_and_counts_only(monkeypatch, outcome
     result, code = repair.run(args, ctx, firestore_client=object())
     assert (result, code) == ({'document_reads': 3, 'counts': {outcome: 1, 'unprocessed': 0}}, 1)
     assert OWNER not in repr(result)
+
+
+@pytest.mark.parametrize(('price', 'outcome'), [(None, 'already_basic'), ('price_fixture', 'basic_with_price')])
+def test_basic_with_price_needs_review_instead_of_silent_skip(monkeypatch, price, outcome):
+    profile = {**PROFILE, 'subscription': {**PROFILE['subscription'], 'plan': 'basic', 'current_price_id': price}}
+    store = StrictFirestore({('users', OWNER): profile})
+    ctx = support_actions.ActionContext('TICKET', 'operator', 'fixture', 'host')
+    operator = repair.PlanCorrection(store, SimpleNamespace(), SINCE, ctx)
+    monkeypatch.setattr(operator, '_read', lambda ref, transaction=None, field_paths=None: ref.get(transaction))
+    assert operator.process(OWNER, None, None, rollback=False) == {'outcome': outcome}
+    assert not store.transactions
+
+
+def test_rollback_requires_committed_apply_receipt():
+    now = datetime(2026, 11, 22, tzinfo=timezone.utc)
+    since = date(2026, 11, 21)
+    header = {'schema': repair.RECEIPT_SCHEMA, 'mode': 'apply', 'ticket': 'TICKET', 'since': since.isoformat()}
+    row = {'owner': OWNER, 'outcome': 'corrected'}
+    args = argparse.Namespace(
+        owner=OWNER,
+        owners_file=None,
+        since=since,
+        rollback_receipt='packets/apply.jsonl',
+        dry_run_receipt=None,
+    )
+    ctx = support_actions.ActionContext('TICKET', 'operator', 'fixture', 'host')
+    packet = SimpleNamespace(receipt=lambda _: [header, row, {'complete': True}])
+    assert repair._inputs(args, ctx, packet, now) == ([OWNER], 'rollback', {OWNER: row})
+    header['mode'] = 'dry_run'
+    with pytest.raises(repair.InvalidReceipt):
+        repair._inputs(args, ctx, packet, now)
+
+
+def test_missing_commit_version_preserves_apply_action_for_reconciliation(monkeypatch):
+    store = StrictFirestore({('users', OWNER): PROFILE})
+    txn = store.transaction(max_attempts=1)
+    txn.write_results = []
+    monkeypatch.setattr(store, 'transaction', lambda **kwargs: txn)
+    ctx = support_actions.ActionContext('TICKET', 'operator', 'fixture', 'host', True)
+    operator = repair.PlanCorrection(store, SimpleNamespace(guard=lambda *args, **kwargs: None), SINCE, ctx)
+    monkeypatch.setattr(operator, '_read', lambda ref, transaction=None, field_paths=None: ref.get(transaction))
+    monkeypatch.setattr(repair, 'append_receipt', lambda *_: None)
+
+    result = operator.process(OWNER, None, None, rollback=False)
+    assert result['outcome'] == 'readback_failed'
+    assert 'version' not in result
+    assert store.rows[('support_actions', result['action'])]['outcome'] == 'succeeded'
