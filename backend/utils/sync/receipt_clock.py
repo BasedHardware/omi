@@ -3,9 +3,12 @@
 import hashlib
 import json
 import math
+from contextlib import suppress
+from functools import cache
 from time import time
 
 from fastapi import HTTPException
+from prometheus_client import REGISTRY, Counter
 
 from database.sync_capture_clock import CaptureClockRangeError, account_created_at, frozen_offset
 from utils.sync.capture_clock import (
@@ -18,6 +21,21 @@ from utils.sync.files import get_timestamp_from_path
 
 POLICY = 'future_device_offset_v1'
 ESTIMATED_POLICY = 'estimated_source_isolated_v1'
+
+
+@cache
+def _recovery_counter() -> Counter:
+    name = 'omi_sync_future_capture_recovery_total'
+    try:
+        return Counter(name, 'Future capture receipt-clock offset attempts', ['outcome'])
+    except ValueError:
+        return REGISTRY._names_to_collectors[name]  # type: ignore[attr-defined]
+
+
+def _record_recovery_outcome(outcome: str) -> None:
+    # Telemetry cannot change the result or exception of audio recovery.
+    with suppress(Exception):
+        _recovery_counter().labels(outcome=outcome).inc()
 
 
 class FutureCaptureRefused(HTTPException):
@@ -57,6 +75,38 @@ def receipt_clock_offsets(
     retained_offsets: dict[str, float] | None = None,
 ) -> dict[str, float]:
     """Freeze decoded-end offsets before staging or acknowledging any unit."""
+    try:
+        offsets = _resolve_receipt_clock_offsets(
+            spans,
+            uid=uid,
+            device_id=device_id,
+            received_at=received_at,
+            source_ids=source_ids,
+            retained_offsets=retained_offsets,
+        )
+    except FutureCaptureRefused:
+        _record_recovery_outcome('refused')
+        raise
+    except FutureCaptureRetry as error:
+        outcome = {
+            'capture_clock_anchor_pending': 'anchor_pending',
+            'capture_clock_identity_required': 'identity_required',
+        }.get(error.detail['code'], 'anchor_error')
+        _record_recovery_outcome(outcome)
+        raise
+    _record_recovery_outcome('anchored')
+    return offsets
+
+
+def _resolve_receipt_clock_offsets(
+    spans: list[tuple[str, float, float]],
+    *,
+    uid: str,
+    device_id: str | None,
+    received_at: float,
+    source_ids: dict[str, str] | None,
+    retained_offsets: dict[str, float] | None,
+) -> dict[str, float]:
     if not uid or not math.isfinite(received_at):
         raise FutureCaptureRetry('capture_clock_identity_required')
     if not spans:
