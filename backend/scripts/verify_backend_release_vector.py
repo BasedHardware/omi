@@ -15,6 +15,7 @@ the pointer to converge instead of failing the deploy; every other mismatch
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import re
 import subprocess
@@ -302,6 +303,41 @@ def evaluate(
 
 def _latest_ready_error(service: str, expected_revision: str) -> str:
     return f'cloud_run/{service}: latest ready revision is not {expected_revision}'
+
+
+def evaluate_backfill_candidate_env(
+    revision: Mapping[str, Any], expected_revision: str, binding_sha256: str
+) -> list[str]:
+    service = 'backend-sync-backfill'
+    metadata = _mapping(revision.get('metadata'))
+    labels = _mapping(metadata.get('labels'))
+    if metadata.get('name') != expected_revision or labels.get('serving.knative.dev/service') != service:
+        return [f'cloud_run/{service}: candidate revision identity mismatch']
+
+    containers = _list(_mapping(revision.get('spec')).get('containers'))
+    # The GMP attachment names the backfill ingress backend-1.
+    ingress = [_mapping(container) for container in containers if _mapping(container).get('name') == 'backend-1']
+    if len(ingress) != 1:
+        return [f'cloud_run/{service}: candidate ingress container missing or ambiguous']
+    env = _list(ingress[0].get('env'))
+    errors = []
+    for name, expected_value in (
+        ('SYNC_TASKS_HANDLER_URL', binding_sha256),
+        ('SYNC_TASKS_OIDC_AUDIENCE', binding_sha256),
+        ('SYNC_TASKS_QUEUE', 'sync-backfill-fresh'),
+        ('BATCH_ACCOUNT_PRIVACY_WRITER_ENABLED', 'false'),
+        ('BATCH_PROJECTION_OUTBOX', 'false'),
+    ):
+        entries = [_mapping(entry) for entry in env if _mapping(entry).get('name') == name]
+        if len(entries) != 1 or 'valueFrom' in entries[0] or not isinstance(entries[0].get('value'), str):
+            errors.append(f'cloud_run/{service}: {name} must be present as a single literal')
+            continue
+        value = entries[0]['value']
+        if name in ('SYNC_TASKS_HANDLER_URL', 'SYNC_TASKS_OIDC_AUDIENCE'):
+            value = hashlib.sha256(value.encode('utf-8')).hexdigest()
+        if value != expected_value:
+            errors.append(f'cloud_run/{service}: {name} differs from the approved backfill value')
+    return errors
 
 
 def evaluate_cloud_run_service(
@@ -702,6 +738,9 @@ def main() -> int:
     parser.add_argument('--evidence-path', type=Path)
     parser.add_argument('--integration-only', action='store_true')
     parser.add_argument('--cloud-run-service', choices=('all', *SELECTABLE), default='all')
+    parser.add_argument(
+        '--backfill-binding-sha256', help='approved handler URL and OIDC audience hash for prod backfill'
+    )
     args = parser.parse_args()
     try:
         if args.cloud_run_service != 'all' and not args.cloud_run_only:
@@ -727,6 +766,13 @@ def main() -> int:
             integration_only=args.integration_only,
             cloud_run_service=args.cloud_run_service,
         )
+        if args.backfill_binding_sha256 is not None and (
+            not args.candidate
+            or args.environment != 'prod'
+            or 'backend-sync-backfill' not in expectation.revisions
+            or not re.fullmatch(r'[0-9a-f]{64}', args.backfill_binding_sha256)
+        ):
+            raise ValueError('backfill binding hash requires a production backfill candidate and a SHA-256 hex digest')
         commands = build_read_only_commands(
             expectation,
             include_listener=not args.cloud_run_only,
@@ -742,6 +788,14 @@ def main() -> int:
             require_serving_traffic=require_serving_traffic,
             include_listener=include_listener,
         )
+        if args.backfill_binding_sha256 is not None:
+            errors.extend(
+                evaluate_backfill_candidate_env(
+                    documents.get('cloud_run_revision/backend-sync-backfill', {}),
+                    expectation.revisions['backend-sync-backfill'],
+                    args.backfill_binding_sha256,
+                )
+            )
         latest_ready_poll: dict[str, Any] | None = None
         if require_serving_traffic and errors and args.latest_ready_wait_seconds > 0:
             lagging, others = partition_latest_ready_lag(expectation, errors)

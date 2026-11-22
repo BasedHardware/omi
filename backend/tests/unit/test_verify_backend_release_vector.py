@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ast
+import hashlib
 import importlib.util
 import json
 import re
@@ -1271,6 +1272,72 @@ def test_candidate_verification_never_polls_the_latest_ready_pointer(tmp_path, m
     assert rc == 0
     assert len(calls) == 1
     assert 'latest_ready_lag_poll' not in report
+
+
+@pytest.mark.parametrize(
+    ('name', 'entries'),
+    [
+        (None, None),
+        ('SYNC_TASKS_HANDLER_URL', [{'value': 'https://sibling.invalid/v2/sync-jobs/run'}]),
+        ('SYNC_TASKS_OIDC_AUDIENCE', []),
+        ('SYNC_TASKS_QUEUE', [{'value': 'sync-backfill'}]),
+        ('BATCH_ACCOUNT_PRIVACY_WRITER_ENABLED', [{'value': 'true'}]),
+        ('BATCH_PROJECTION_OUTBOX', [{'value': False}]),
+        ('BATCH_PROJECTION_OUTBOX', [{'value': 'false'}, {'value': 'false'}]),
+        ('BATCH_PROJECTION_OUTBOX', [{'valueFrom': {'secretKeyRef': {'name': 'flag'}}}]),
+    ],
+)
+def test_prod_backfill_candidate_gate_checks_literal_revision_env(tmp_path, monkeypatch, name, entries) -> None:
+    service = 'backend-sync-backfill'
+    expectation = verifier.build_expectation(
+        commit_sha='d' * 40,
+        deploy_run_id='123',
+        deploy_run_attempt='1',
+        project='based-hardware',
+        region='us-central1',
+        environment='prod',
+        cloud_run_service=service,
+    )
+    revision = expectation.revisions[service]
+    documents = _documents(expectation)
+    documents[f'cloud_run/{service}']['status']['traffic'] = [{'revisionName': f'{service}-old', 'percent': 100}]
+    endpoint = 'https://backfill.invalid/v2/sync-jobs/run'
+    bindings = {
+        'SYNC_TASKS_HANDLER_URL': endpoint,
+        'SYNC_TASKS_OIDC_AUDIENCE': endpoint,
+        'SYNC_TASKS_QUEUE': 'sync-backfill-fresh',
+        'BATCH_ACCOUNT_PRIVACY_WRITER_ENABLED': 'false',
+        'BATCH_PROJECTION_OUTBOX': 'false',
+    }
+    env = [{'name': key, 'value': value} for key, value in bindings.items() if key != name]
+    if entries is not None:
+        env.extend({'name': name, **entry} for entry in entries)
+    candidate = documents[f'cloud_run_revision/{service}']
+    candidate['metadata'] = {'name': revision, 'labels': {'serving.knative.dev/service': service}}
+    candidate['spec']['containers'][0].update({'name': 'backend-1', 'env': env})
+
+    rc, report, _ = _run_main(
+        monkeypatch,
+        expectation,
+        [documents],
+        tmp_path,
+        [
+            '--candidate',
+            '--cloud-run-only',
+            '--cloud-run-service',
+            service,
+            '--backfill-binding-sha256',
+            hashlib.sha256(endpoint.encode()).hexdigest(),
+        ],
+    )
+
+    assert rc == (0 if name is None else 1)
+    errors = report['errors']
+    if name is None:
+        assert errors == []
+    else:
+        assert len(errors) == 1 and name in errors[0]
+        assert endpoint not in errors[0]
 
 
 def test_main_passes_errors_into_evidence_so_a_successful_check_writes_evidence(tmp_path) -> None:
