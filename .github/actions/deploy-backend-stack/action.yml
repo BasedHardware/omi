@@ -1809,46 +1809,61 @@ runs:
         import json
         from pathlib import Path
         import signal
+        import subprocess
         import sys
         import time
 
         token_file = Path(sys.argv[2])
+        command = [
+            sys.executable, "-I", str(Path(sys.argv[1]) / "transcription_capability_probe.py"),
+            "--candidate-api-url", "https://api.omi.me",
+            "--bearer-token-file", str(token_file),
+            "--timeout-seconds", "30",
+            "--no-redirects", "--json-only",
+        ]
 
         def stop(signum, _frame):
-            if signum == signal.SIGALRM:
-                raise SystemExit("Transcription smoke exceeded its 65-second deadline")
             raise SystemExit(128 + signum)
 
         try:
             signal.signal(signal.SIGTERM, stop)
-            signal.signal(signal.SIGALRM, stop)
-            signal.setitimer(signal.ITIMER_REAL, 65)
-            sys.path.insert(0, sys.argv[1])
-            from transcription_capability_probe import build_report, config_from_args, parse_args
-
-            config = config_from_args(parse_args([
-                "--candidate-api-url", "https://api.omi.me",
-                "--bearer-token-file", str(token_file),
-                "--timeout-seconds", "30",
-                "--no-redirects",
-            ]))
+            deadline = time.monotonic() + 65
             for attempt in (1, 2):
                 started = time.monotonic()
-                report = build_report(config)
+                remaining = deadline - started
+                if remaining <= 0:
+                    sys.exit("Transcription smoke exceeded its 65-second deadline")
+                try:
+                    probe = subprocess.run(
+                        command, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, timeout=remaining,
+                    )
+                except subprocess.TimeoutExpired:
+                    sys.exit(f"Transcription smoke attempt {attempt} exceeded the 65-second deadline")
+                if probe.returncode not in (0, 1):
+                    sys.exit(f"Transcription probe exited with status {probe.returncode}")
+                try:
+                    report = json.loads(probe.stdout)
+                    status = report["status"]
+                    details = report["checks"][0]["details"]
+                except (ValueError, KeyError, IndexError, TypeError):
+                    sys.exit("Transcription probe did not emit its redacted result")
                 print(json.dumps({
                     **report,
                     "attempt": attempt,
                     "elapsed_seconds": round(time.monotonic() - started, 3),
                 }), flush=True)
-                if report["status"] == "PASS":
+                if probe.returncode == 0 and status == "PASS":
                     sys.exit(0)
-                details = report["checks"][0]["details"]
-                if attempt == 2 or details.get("error_kind") != "network_error" or "http_status" in details:
+                if (
+                    probe.returncode != 1 or status != "FAIL" or attempt == 2
+                    or details.get("error_kind") != "network_error" or "http_status" in details
+                ):
                     sys.exit(1)
+                if deadline - time.monotonic() <= 5:
+                    sys.exit("Transcription smoke has no time for its retry")
                 print("Retrying transcription smoke in 5 seconds after a transport failure", flush=True)
                 time.sleep(5)
         finally:
-            signal.setitimer(signal.ITIMER_REAL, 0)
             token_file.unlink(missing_ok=True)
         PY
 
