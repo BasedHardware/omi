@@ -8,7 +8,7 @@ from datetime import date, datetime, time, timezone
 import os
 from pathlib import Path
 import re
-from typing import Any, Iterator, TextIO
+from typing import Any, Iterable, Iterator, TextIO
 from uuid import uuid4
 
 from google.cloud import firestore
@@ -24,6 +24,7 @@ PAID_PLANS = frozenset({'architect', 'plus', 'pro', 'unlimited', 'unlimited_v2'}
 TERMINAL_SUBSCRIPTIONS = frozenset({'canceled', 'incomplete_expired'})
 BILLING_ROUTE = 'account correct-plan'
 MAX_PAGES = 10
+MAX_STRIPE_CUSTOMERS = 5
 MAX_DRY_RUN_OWNERS = 100
 MAX_APPLY_OWNERS = 10
 STOP_REASONS = frozenset({'pending_checkout', 'billing_unknown', 'state_changed', 'rollback_conflict'})
@@ -55,9 +56,10 @@ class StripeBilling:
             params['starting_after'] = data[-1]['id']
         raise EvidenceUnavailable()
 
-    def _other_billing_account(self, uid: str, customer: str) -> bool:
-        # The authoritative list for the stored customer is checked separately.
-        # Search is an additional veto for owner metadata on another customer.
+    def _billing_customers(self, uid: str, customer: str) -> set[str]:
+        # Search only discovers historical customer bindings. Live lists on
+        # each discovered customer supply the actual guard evidence.
+        customers = {customer}
         params = {'query': f"metadata['uid']:'{uid}'", 'limit': '100'}
         for _ in range(MAX_PAGES):
             response = self.client.get('subscriptions/search', params=params)
@@ -68,10 +70,14 @@ class StripeBilling:
             for row in page['data']:
                 if row['livemode'] is not True or row['metadata'].get('uid') != uid:
                     raise EvidenceUnavailable()
-                if row['customer'] != customer:
-                    return True
+                bound = row['customer']
+                if not isinstance(bound, str) or not re.fullmatch(r'cus_[A-Za-z0-9]+', bound):
+                    raise EvidenceUnavailable()
+                customers.add(bound)
+                if len(customers) > MAX_STRIPE_CUSTOMERS:
+                    raise EvidenceUnavailable()
             if page['has_more'] is False:
-                return False
+                return customers
             if page['has_more'] is not True or not page['next_page']:
                 raise EvidenceUnavailable()
             params['page'] = page['next_page']
@@ -80,18 +86,34 @@ class StripeBilling:
     def guard(self, uid: str, customer: str, subscription: str, since: int, now: int) -> str | None:
         rows = list(self._list('subscriptions', customer, status='all'))
         projected = next((row for row in rows if row['id'] == subscription), None)
-        if any(row['status'] == 'incomplete' for row in rows):
-            return 'pending_checkout'
-        if any(row['status'] not in TERMINAL_SUBSCRIPTIONS for row in rows):
-            return 'active_subscription'
+        reason = self._subscription_guard(rows)
+        if reason:
+            return reason
         if not projected or projected['status'] != 'canceled' or projected['metadata'].get('uid') != uid:
             return 'billing_unknown'
         ended_at = projected['ended_at']
         if type(ended_at) is not int or not 0 < ended_at <= now:
             return 'billing_unknown'
-        if self._other_billing_account(uid, customer):
-            return 'billing_unknown'
         cutoff = min(since, ended_at)
+        for other in sorted(self._billing_customers(uid, customer) - {customer}):
+            reason = self._subscription_guard(self._list('subscriptions', other, status='all'))
+            if reason:
+                return reason
+            reason = self._payment_guard(other, cutoff, now)
+            if reason:
+                return reason
+        return self._payment_guard(customer, cutoff, now)
+
+    @staticmethod
+    def _subscription_guard(rows: Iterable[dict[str, Any]]) -> str | None:
+        statuses = {row['status'] for row in rows}
+        if 'incomplete' in statuses:
+            return 'pending_checkout'
+        if statuses - TERMINAL_SUBSCRIPTIONS:
+            return 'active_subscription'
+        return None
+
+    def _payment_guard(self, customer: str, cutoff: int, now: int) -> str | None:
         for invoice in self._list('invoices', customer):
             paid = invoice['amount_paid']
             if type(paid) is not int or paid < 0:
@@ -120,11 +142,11 @@ class StripeBilling:
                     return 'billing_unknown'
                 if charge['created'] >= cutoff or settlement['created'] >= cutoff:
                     return 'recent_payment'
-        if any(self._list('checkout/sessions', customer, status='open')):
-            return 'pending_checkout'
         for session in self._list('checkout/sessions', customer, status='complete', **{'created[gte]': cutoff}):
             if session['mode'] == 'subscription' and session['payment_status'] == 'unpaid':
                 return 'pending_checkout'
+        if any(self._list('checkout/sessions', customer, status='open')):
+            return 'pending_checkout'
         return None
 
 

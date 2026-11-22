@@ -1,3 +1,5 @@
+"""Tests for owner-scoped billing evidence, privacy and the transactional plan audit."""
+
 from __future__ import annotations
 
 from contextlib import contextmanager
@@ -43,14 +45,16 @@ def stripe_fixture(overrides=None):
             assert request.url.params['query'] == "metadata['uid']:'fixture-owner'"
             object_type = 'search_result'
         else:
-            assert request.url.params['customer'] == CUSTOMER
             object_type = 'list'
-        rows = responses[(path, request.url.params.get('status'))]
+        customer = request.url.params.get('customer', CUSTOMER)
+        assert customer in {CUSTOMER, 'cus_other'}
+        status = request.url.params.get('status')
+        rows = responses.get((path, status, customer), responses[(path, status)])
         return httpx.Response(
             200,
             json={
                 'object': object_type,
-                'data': [{'customer': CUSTOMER, 'livemode': True, **r} for r in rows],
+                'data': [{'customer': customer, 'livemode': True, **r} for r in rows],
                 'has_more': False,
             },
         )
@@ -64,12 +68,28 @@ def test_canceled_owner_with_no_other_billing_evidence_is_eligible():
         assert billing.guard(OWNER, CUSTOMER, SUBSCRIPTION, SINCE, NOW) is None
 
 
+def test_historical_customer_without_current_entitlement_is_eligible():
+    overrides = {
+        ('subscriptions/search', None): [{'metadata': {'uid': OWNER}, 'customer': 'cus_other'}],
+        ('subscriptions', 'all', 'cus_other'): [{'status': 'incomplete_expired'}],
+    }
+    with stripe_fixture(overrides) as billing:
+        assert billing.guard(OWNER, CUSTOMER, SUBSCRIPTION, SINCE, NOW) is None
+
+
 @pytest.mark.parametrize(
     ('override', 'reason'),
     [
         ({('subscriptions', 'all'): [{'id': 'sub_replacement', 'status': 'active'}]}, 'active_subscription'),
         ({('subscriptions', 'all'): [{'id': 'sub_replacement', 'status': 'incomplete'}]}, 'pending_checkout'),
-        ({('subscriptions/search', None): [{'metadata': {'uid': OWNER}, 'customer': 'cus_other'}]}, 'billing_unknown'),
+        (
+            {
+                ('subscriptions/search', None): [{'metadata': {'uid': OWNER}, 'customer': 'cus_other'}],
+                ('subscriptions', 'all', 'cus_other'): [{'status': 'incomplete_expired'}],
+                ('checkout/sessions', 'open', 'cus_other'): [{'mode': 'subscription'}],
+            },
+            'pending_checkout',
+        ),
         ({('invoices', None): [{'amount_paid': 50, 'status_transitions': {'paid_at': 220}}]}, 'recent_payment'),
         (
             {
