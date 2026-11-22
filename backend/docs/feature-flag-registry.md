@@ -1661,6 +1661,13 @@ admission.
 
 | Key | Retired | Reason |
 | --- | --- | --- |
+| `EPISODE_BOUNDARIES_MODE` | 2026-11-22 | PR #26010: episode-only boundary selection retired; shared evidence sampling and calendar polling retained. |
+| `EPISODE_BOUNDARIES_MODE_SERVE_PERCENT` | 2026-11-22 | PR #26010: episode-only boundary selection retired; shared evidence sampling and calendar polling retained. |
+| `EPISODE_BOUNDARIES_MODE_SERVE_UID_SHA256S` | 2026-11-22 | PR #26010: episode-only boundary selection retired; shared evidence sampling and calendar polling retained. |
+| `EPISODE_BOUNDARIES_MODE_SHADOW_PERCENT` | 2026-11-22 | PR #26010: episode-only boundary selection retired; shared evidence sampling and calendar polling retained. |
+| `PARAKEET_WINDOW_DIARIZATION` | 2026-11-22 | DEC-BTR-001, PR #26014: live gate removed; offline qualification explicitly selects embeddings. |
+| `SONIOX_ELAPSED_AXIS` | 2026-11-22 | DEC-STT-006, PR #26014: elapsed shadow removed; compact accepted-send placement retained. |
+| `STT_RESILIENT_RECONNECT` | 2026-11-22 | DEC-STT-005, PR #26014: dedicated ring removed; shared replay and recovery retained. |
 | `TRANSCRIPTION_FINAL_PASS_VAD_COMPACTION_ENABLED` | 2026-11-22 | SCA-3682 pipeline docket 2026-11-22: kill at its kill value; prod unset (off) on every reader since 2026-10-15 creation |
 | `AUDIO_ARCHIVE_UID_ALLOWLIST` | 2026-11-09 | David flag docket 2026-11-09 (ruling 2): retire ; prod nonempty one-member allowlist (moved to injected cohort) on every reader at 2026-11-09 03:20Z |
 | `AUDIO_CANONICAL_PACKING_ENABLED` | 2026-11-09 | David flag docket 2026-11-09 (ruling 2): retire ; prod unset (code default) on every reader at 2026-11-09 03:20Z |
