@@ -561,11 +561,11 @@ class AppLocalizationsLt extends AppLocalizations {
   String get hardwareSection => 'Aparatinė įranga';
 
   @override
-  String get v2Undetected => 'V2 neaptiktas';
+  String get v2Undetected => 'Sinchronizavimas neprisijungus nepasiekiamas';
 
   @override
   String get v2UndetectedMessage =>
-      'Matome, kad turite V1 įrenginį arba jūsų įrenginys neprijungtas. SD kortelės funkcija prieinama tik V2 įrenginiams.';
+      'Sinchronizavimui neprisijungus reikalingas prijungtas Omi įrenginys su SD kortelės atmintimi. Jūsų dabartinis įrenginys to nepalaiko.';
 
   @override
   String get endConversation => 'Baigti pokalbį';

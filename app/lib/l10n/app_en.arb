@@ -16488,7 +16488,7 @@
     },
     "activityAttentionStorageUnknownTitle": "Can't check storage",
     "@activityAttentionStorageUnknownTitle": {
-        "description": "Activity capture attention row title when the free-space probe itself failed (reason disk_space_unknown); the disk may not actually be full."
+        "description": "Title for an unresolved storage check in capture attention or Offline Sync."
     },
     "activityAttentionStorageSubtitle": "Recordings paused",
     "@activityAttentionStorageSubtitle": {

@@ -13,17 +13,25 @@ import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/settings/device_settings.dart';
 import 'package:omi/providers/device_provider.dart';
+import 'package:omi/services/devices/connectors/device_connection.dart';
 
 class _StubDeviceProvider extends ChangeNotifier implements DeviceProvider {
-  _StubDeviceProvider({this.device, this.findResult = true, this.findCompleter});
+  _StubDeviceProvider({this.device, this.connected = true, this.findResult = true, this.findCompleter});
 
   final BtDevice? device;
+  final bool connected;
   final bool findResult;
   final Completer<bool>? findCompleter;
   int findCalls = 0;
 
   @override
-  bool get isConnected => true;
+  bool get isConnected => connected;
+
+  @override
+  bool get supportsMultiFileSync => true;
+
+  @override
+  OfflineStorageCapability get offlineStorageCapability => OfflineStorageCapability.unverified;
 
   @override
   bool get isSyncStalled => false; // The watchdog's stall (#15501) is not under test here.
@@ -89,6 +97,37 @@ void main() {
     TestWidgetsFlutterBinding.ensureInitialized();
     SharedPreferences.setMockInitialValues({'doubleTapAction': 1});
     await SharedPreferencesUtil.init();
+  });
+
+  testWidgets('Offline Sync in Device Settings guides disconnected users to connect', (tester) async {
+    final provider = _StubDeviceProvider(connected: false);
+    addTearDown(provider.dispose);
+    await tester.pumpWidget(_app(provider));
+
+    final offlineSync = find.text('Offline Sync');
+    await tester.scrollUntilVisible(offlineSync.hitTestable(), 150);
+    await tester.tap(offlineSync);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Connect your Omi to sync.'), findsOneWidget);
+    expect(find.text('Offline Sync unavailable'), findsNothing);
+  });
+
+  testWidgets('Offline Sync in Device Settings offers verification for an unresolved connected CV1', (tester) async {
+    final provider = _StubDeviceProvider(
+      device: BtDevice(id: 'omi-1', name: 'Omi CV1', type: DeviceType.omi, rssi: -40),
+    );
+    addTearDown(provider.dispose);
+    await tester.pumpWidget(_app(provider));
+
+    final offlineSync = find.text('Offline Sync');
+    await tester.scrollUntilVisible(offlineSync.hitTestable(), 150);
+    await tester.tap(offlineSync);
+    await tester.pumpAndSettle();
+
+    expect(find.text("Can't check storage"), findsOneWidget);
+    expect(find.text('Try Again'), findsOneWidget);
+    expect(find.text('Offline Sync unavailable'), findsNothing);
   });
 
   testWidgets('double-tap action 1 uses mute and unmute terminology', (tester) async {

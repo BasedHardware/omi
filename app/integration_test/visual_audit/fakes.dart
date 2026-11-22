@@ -27,6 +27,7 @@ import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/device_provider.dart';
+import 'package:omi/services/devices/connectors/device_connection.dart';
 import 'package:omi/services/sync_health_watchdog.dart';
 import 'package:omi/providers/folder_provider.dart';
 import 'package:omi/providers/goals_provider.dart';
@@ -152,7 +153,7 @@ class AuditDeviceProvider extends ChangeNotifier implements DeviceProvider {
   @override
   Future<void> refreshRingStorageStatus() async {}
   @override
-  bool get isDeviceStorageSupport => false;
+  OfflineStorageCapability get offlineStorageCapability => OfflineStorageCapability.unverified;
   @override
   bool get isConnecting => false;
   @override

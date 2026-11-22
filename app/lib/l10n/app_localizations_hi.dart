@@ -558,11 +558,11 @@ class AppLocalizationsHi extends AppLocalizations {
   String get hardwareSection => 'हार्डवेयर';
 
   @override
-  String get v2Undetected => 'V2 का पता नहीं चला';
+  String get v2Undetected => 'ऑफ़लाइन सिंक उपलब्ध नहीं है';
 
   @override
   String get v2UndetectedMessage =>
-      'हमें लगता है कि आप V1 डिवाइस का उपयोग कर रहे हैं या यह कनेक्ट नहीं है। SD कार्ड कार्यक्षमता केवल V2 उपकरणों के लिए है।';
+      'ऑफ़लाइन सिंक के लिए SD कार्ड स्टोरेज वाला कनेक्टेड Omi डिवाइस चाहिए। आपका वर्तमान डिवाइस इसका समर्थन नहीं करता।';
 
   @override
   String get endConversation => 'बातचीत समाप्त करें';

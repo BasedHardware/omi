@@ -717,11 +717,11 @@
     "@hardwareSection": {
         "description": "Hardware section header"
     },
-    "v2Undetected": "V2 ni zaznan",
+    "v2Undetected": "Sinhronizacija brez povezave ni na voljo",
     "@v2Undetected": {
         "description": "V2 device undeteced dialog title"
     },
-    "v2UndetectedMessage": "Vidimo, da imate V1 napravo ali pa je vaša naprava nepriključena. Funkcionalnost SD kartice je dostopna samo za naprave V2.",
+    "v2UndetectedMessage": "Sinhronizacija brez povezave zahteva povezano napravo Omi s pomnilnikom na kartici SD. Vaša trenutna naprava tega ne podpira.",
     "@v2UndetectedMessage": {
         "description": "V2 device undeteced dialog message"
     },
