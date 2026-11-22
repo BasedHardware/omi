@@ -78192,7 +78192,7 @@
     },
     "/v1/users/client-state": {
       "post": {
-        "description": "Explicit expiring human-surface intent; no user-document lookup.",
+        "description": "Acknowledge surface reports from released clients without storing intent.",
         "operationId": "report_surface_state_v1_users_client_state_post",
         "parameters": [
           {
