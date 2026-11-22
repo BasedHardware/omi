@@ -1716,11 +1716,13 @@ def test_record_close_notify_renders_on_every_cloud_run_listener(environment, se
         assert [(name, value) for name, value in rendered if name == key] == [(key, expected)]
 
 
-def test_prod_silence_read_skip_is_on_for_every_role_but_the_pump_and_listen_pins():
+def test_prod_silence_read_skip_respects_backend_pump_and_listen_pins():
     key = 'BATCH_PIPELINE_SILENCE_READ_SKIP_ENABLED'
     prod = _MANIFEST['environments']['prod']
-    for name in ('backend', 'backend-sync', 'backend-sync-backfill', 'backend-integration'):
+    for name in ('backend-sync', 'backend-sync-backfill', 'backend-integration'):
         assert prod['cloud_run']['services'][name]['env'][key] == {'value': 'true', 'category': 'ops_kill'}
+    # SCA-3555: keep live backend behavior until the SCA-1824 guard covers first traffic.
+    assert prod['cloud_run']['services']['backend']['env'][key] == {'value': 'false', 'category': 'ops_kill'}
     # SCA-3318: the pump's one-key activation keeps its dark successor's false; widening it is a later change.
     assert prod['cloud_run']['services']['backend-projection-pump']['env'][key] == {
         'value': 'false',
@@ -1731,3 +1733,15 @@ def test_prod_silence_read_skip_is_on_for_every_role_but_the_pump_and_listen_pin
     chart = Path(__file__).resolve().parents[2] / 'charts/backend-listen/prod_omi_backend_listen_values.yaml'
     values = yaml.safe_load(chart.read_text())
     assert [entry['value'] for entry in values['env'] if entry['name'] == key] == ['false']
+
+
+def test_prod_backend_renders_sibling_skip_and_poll_backoff_preservation_pins(monkeypatch):
+    prod = _MANIFEST['environments']['prod']
+    _set_workflow_bound_env(monkeypatch, prod)
+    backend = prod['cloud_run']['services']['backend']
+    rendered = dict(_MODULE['_parse_deploy_cloud_run_env_vars'](_MODULE['_render_env_vars'](backend['env'])))
+
+    assert rendered['BATCH_PIPELINE_FOLLOWUP_CLAIMED_SIBLING_SKIP_ENABLED'] == 'false'
+    assert rendered['SYNC_POLL_BACKOFF_ENABLED'] == 'false'
+    assert 'SYNC_POLL_BACKOFF_PERCENT' not in rendered
+    assert 'SYNC_POLL_BACKOFF_PERCENT' in _MODULE['_remove_env_extra']('backend', backend).split(',')

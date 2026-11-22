@@ -4230,21 +4230,20 @@ def test_cloud_run_runtime_rejects_missing_listener_close_binding(tmp_path, key,
 
 
 @pytest.mark.parametrize(('environment', 'enabled'), [('dev', 'false'), ('prod', 'true')])
-def test_future_capture_clamp_is_on_for_every_prod_reader_and_off_in_dev(environment, enabled):
-    # SCA-3501: prod turns the clamp on in one change once every reader and admitter serves the clamp
-    # code (listen 96f0631 and the Cloud Run readers, verified on SCA-3501). Dev stays off.
+def test_future_capture_clamp_respects_backend_preservation_pin(environment, enabled):
     config = yaml.safe_load((ROOT / 'deploy/runtime_env.yaml').read_text())['environments'][environment]
-    expected = {'value': enabled, 'category': 'rollout'}
-    hosts = [config['gke']['backend-listen'], *config['cloud_run']['services'].values()]
+    hosts = {'backend-listen': config['gke']['backend-listen'], **config['cloud_run']['services']}
     # SCA-3120: prod adds the derived projection pump as a sixth reader.
     assert len(hosts) == (6 if environment == 'prod' else 5)
     renderer = runpy.run_path(str(RENDERER_SCRIPT), run_name='future_capture_staged_renderer')
-    for host in hosts:
-        assert host['env']['SYNC_FUTURE_CAPTURE_CLAMP_ENABLED'] == expected
+    for name, host in hosts.items():
+        # SCA-3555: backend keeps the live value until its SCA-3501 activation step.
+        host_value = 'false' if name == 'backend' else enabled
+        assert host['env']['SYNC_FUTURE_CAPTURE_CLAMP_ENABLED'] == {'value': host_value, 'category': 'rollout'}
         # Render this host's own manifest entry (not the expected literal).
         entry = {'SYNC_FUTURE_CAPTURE_CLAMP_ENABLED': host['env']['SYNC_FUTURE_CAPTURE_CLAMP_ENABLED']}
         assert renderer['_render_env_entries'](entry) == [
-            {'name': 'SYNC_FUTURE_CAPTURE_CLAMP_ENABLED', 'value': enabled}
+            {'name': 'SYNC_FUTURE_CAPTURE_CLAMP_ENABLED', 'value': host_value}
         ]
     values = yaml.safe_load((ROOT.parent / config['gke']['backend-listen']['values_file']).read_text())
     assert {entry['name']: entry.get('value') for entry in values['env']}[
