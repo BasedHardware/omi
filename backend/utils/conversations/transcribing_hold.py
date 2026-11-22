@@ -164,16 +164,21 @@ def project(row: dict[str, Any], *, now: datetime | None = None, home_list: bool
             row, label_recording=home_list and home_step_projection_enabled() and row.get('home_step') == 'ready'
         )
     deadline_at = deadline(row)
+    receipt_failed = failed(row)
     title, status = transcription_presentation(
         deadline_at,
-        failed=failed(row),
+        failed=receipt_failed,
         now=now,
     )
     return {
         **row,
         'status': 'completed' if status == 'failed' else status,
         'structured': {**(row.get('structured') or {}), 'title': title},
-        **({'summary_retryable': False} if home_transcription_queue_hold_enabled() and not failed(row) else {}),
+        **({'summary_retryable': False} if home_transcription_queue_hold_enabled() and not receipt_failed else {}),
+        # The wait ran out with no failure receipt: the audio is kept and still waiting for
+        # transcription (for example held by the free allowance). Clients that know the owner's
+        # allowance is spent say so instead of offering a retry; older clients ignore the field.
+        **({'transcription_wait': 'overdue'} if status == 'failed' and not receipt_failed else {}),
     }
 
 

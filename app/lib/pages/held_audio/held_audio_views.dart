@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import 'package:provider/provider.dart';
 
+import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/models/subscription.dart';
 import 'package:omi/pages/settings/widgets/plans/contextual_plans.dart';
 import 'package:omi/providers/usage_provider.dart';
@@ -19,6 +20,23 @@ bool heldAudioPhoneEligible(OnDeviceTranscriptionController controller) {
 
 void openHeldAudioPlans(BuildContext context) {
   unawaited(openContextualPlans(context, source: 'held_audio', trigger: 'usage_budget'));
+}
+
+/// Allowance answers that mean this month's cloud minutes are spent (`resolve_transcription_allowance`,
+/// the same answer batch admission holds recordings on).
+const _spentAllowanceReasons = {'plan_allowance_exhausted', 'usage_budget_exhausted'};
+
+/// A recording held by the free plan's monthly allowance: the server says its transcription wait ran
+/// out with no failure receipt, and this free plan's cloud minutes are spent. A paid or unknown plan,
+/// an unloaded subscription and an older server (no `transcription_wait`) all answer false and keep
+/// the failed row with Try Again.
+bool heldByFreeAllowance(ServerConversation conversation, UsageProvider? usage) {
+  if (conversation.transcriptionWait != 'overdue' || usage == null || !usage.showSubscriptionUI) return false;
+  final subscription = usage.subscription;
+  final plan = subscription?.subscription.plan;
+  if (subscription == null || plan == null || plan.isPaid || plan.isUnknown) return false;
+  final allowance = subscription.transcriptionAllowance;
+  return allowance != null && !allowance.isManaged && _spentAllowanceReasons.contains(allowance.reason);
 }
 
 /// Recordings still waiting for a plan or an allowance, as locked rows. A running release shows none.
