@@ -3912,7 +3912,9 @@
             "onboarding",
             "aha_first_summary",
             "free_cap",
-            "on_phone_banner"
+            "on_phone_banner",
+            "held_recording",
+            "held_recording_detail"
           ]
         },
         "currentPlan": {
@@ -4016,7 +4018,9 @@
             "onboarding",
             "aha_first_summary",
             "free_cap",
-            "on_phone_banner"
+            "on_phone_banner",
+            "held_recording",
+            "held_recording_detail"
           ]
         }
       },
@@ -4656,7 +4660,9 @@
             "onboarding",
             "aha_first_summary",
             "free_cap",
-            "on_phone_banner"
+            "on_phone_banner",
+            "held_recording",
+            "held_recording_detail"
           ]
         }
       },
