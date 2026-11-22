@@ -87,14 +87,18 @@ class ServiceManager {
     _wal.start();
   }
 
-  void deinit() async {
+  Future<void> deinit() async {
     ConnectivityService().dispose();
-    await _wal.stop();
-    _mic.stop();
-    if (!identical(_phoneMic, _mic)) {
-      _phoneMic.stop();
+    if (!LocalWalSyncImpl.stopTailDrainEnabled) await _wal.stop();
+    try {
+      _mic.stop();
+      if (!identical(_phoneMic, _mic)) {
+        _phoneMic.stop();
+      }
+      await _device.stop();
+    } finally {
+      if (LocalWalSyncImpl.stopTailDrainEnabled) await _wal.stop();
     }
-    await _device.stop();
   }
 }
 
