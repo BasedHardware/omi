@@ -2466,10 +2466,7 @@ actor RewindDatabase {
     SiriMemoryExpirySchema.registerMigration(on: &migrator)
     LocalEmbeddingStore.registerMigration(on: &migrator)
     ProactivityRetirementMigration.registerMigration(on: &migrator)
-    migrator.registerMigration("v20261022_speaker_label_source") { db in
-      try db.alter(table: "transcription_segments") { t in t.add(column: "speakerLabelSource", .text) }
-    }
-    return migrator
+    return addingSpeakerLabelSourceMigration(migrator)
   }
 
   /// Kept as one callable migration boundary so a populated legacy table can be exercised in a
