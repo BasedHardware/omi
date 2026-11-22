@@ -1383,6 +1383,13 @@ def test_prod_backfill_candidate_gate_checks_literal_revision_env(
             'expected revision carries traffic before promotion',
         ),
         (
+            {
+                'traffic': [{'revisionName': 'old', 'latestRevision': True, 'percent': 100}],
+                'latestReadyRevisionName': 'candidate',
+            },
+            'serving traffic target is ambiguous',
+        ),
+        (
             {'traffic': [{'latestRevision': True, 'percent': 100}], 'latestReadyRevisionName': 'candidate'},
             'expected revision carries traffic before promotion',
         ),
@@ -1394,11 +1401,48 @@ def test_prod_backfill_candidate_gate_checks_literal_revision_env(
             {'traffic': [{'revisionName': 'old', 'percent': 100}, {'revisionName': 'candidate', 'tag': 'verify'}]},
             None,
         ),
+        (
+            {
+                'traffic': [
+                    {'revisionName': 'old', 'percent': 100},
+                    {'revisionName': 'candidate', 'tag': 'verify', 'percent': 0},
+                ],
+            },
+            None,
+        ),
     ],
 )
 def test_backfill_candidate_requires_resolved_zero_traffic(status, message) -> None:
     errors = verifier.evaluate_candidate_zero_traffic('backend-sync-backfill', 'candidate', status)
     assert errors == ([] if message is None else [f'cloud_run/backend-sync-backfill: {message}'])
+
+
+@pytest.mark.parametrize(
+    ('configured', 'message'),
+    [
+        ([{'revisionName': 'old', 'percent': 100}], None),
+        ([{'latestRevision': True, 'percent': 100}], 'configured and serving candidate traffic disagree'),
+        ([{'revisionName': 'candidate', 'percent': 100}], 'configured and serving candidate traffic disagree'),
+        ([{'revisionName': 'old', 'latestRevision': True, 'percent': 100}], 'configured traffic target is ambiguous'),
+    ],
+)
+def test_backfill_candidate_cross_checks_configured_traffic(configured, message) -> None:
+    service = 'backend-sync-backfill'
+    document = _cloud_run_document(revision='candidate', image='expected-image', environment='prod')
+    document['status']['traffic'] = [{'revisionName': 'old', 'percent': 100}]
+    document['spec']['traffic'] = configured
+
+    errors = verifier.evaluate_cloud_run_service(
+        service,
+        'candidate',
+        'expected-image',
+        document,
+        expected_environment='prod',
+        require_serving_traffic=False,
+        expected_revision_document=_cloud_run_revision_document(image='expected-image'),
+        require_resolved_candidate_traffic=True,
+    )
+    assert errors == ([] if message is None else [f'cloud_run/{service}: {message}'])
 
 
 def test_candidate_action_passes_the_pinned_backfill_digest_only_in_production_scope() -> None:

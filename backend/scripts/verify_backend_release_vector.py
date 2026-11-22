@@ -344,19 +344,21 @@ def evaluate_backfill_candidate_env(
     return errors
 
 
-def evaluate_candidate_zero_traffic(service: str, expected_revision: str, status: Mapping[str, Any]) -> list[str]:
-    traffic = status.get('traffic')
+def _candidate_traffic_percent(traffic: Any, expected_revision: str, latest_ready: Any) -> int:
     if not isinstance(traffic, list) or not traffic:
-        return [f'cloud_run/{service}: serving traffic status is unavailable']
+        raise ValueError('traffic status is unavailable')
 
     total = 0
-    errors: list[str] = []
+    candidate_percent = 0
     for entry in traffic:
         target = _mapping(entry)
-        revision = target.get('revisionName')
         latest = target.get('latestRevision', False)
-        if revision is None and latest is True:
-            revision = status.get('latestReadyRevisionName')
+        if latest is True:
+            if 'revisionName' in target:
+                raise ValueError('traffic target is ambiguous')
+            revision = latest_ready
+        else:
+            revision = target.get('revisionName')
         percent = target.get('percent')
         # Cloud Run can omit or serialize zero as null for tag-only targets.
         if percent is None and isinstance(target.get('tag'), str) and target['tag']:
@@ -369,12 +371,35 @@ def evaluate_candidate_zero_traffic(service: str, expected_revision: str, status
             or type(percent) is not int
             or not 0 <= percent <= 100
         ):
-            return [f'cloud_run/{service}: serving traffic target is ambiguous']
+            raise ValueError('traffic target is ambiguous')
         total += percent
-        if revision == expected_revision and percent > 0:
-            errors.append(f'cloud_run/{service}: expected revision carries traffic before promotion')
+        if revision == expected_revision:
+            candidate_percent += percent
     if total != 100:
-        errors.append(f'cloud_run/{service}: serving traffic allocation is incomplete')
+        raise ValueError('traffic allocation is incomplete')
+    return candidate_percent
+
+
+def evaluate_candidate_zero_traffic(
+    service: str, expected_revision: str, status: Mapping[str, Any], spec: Mapping[str, Any] | None = None
+) -> list[str]:
+    latest_ready = status.get('latestReadyRevisionName')
+    try:
+        observed_percent = _candidate_traffic_percent(status.get('traffic'), expected_revision, latest_ready)
+    except ValueError as exc:
+        return [f'cloud_run/{service}: serving {exc}']
+
+    errors = []
+    if observed_percent > 0:
+        errors.append(f'cloud_run/{service}: expected revision carries traffic before promotion')
+    if spec is not None and 'traffic' in spec:
+        try:
+            desired_percent = _candidate_traffic_percent(spec['traffic'], expected_revision, latest_ready)
+        except ValueError as exc:
+            errors.append(f'cloud_run/{service}: configured {exc}')
+        else:
+            if desired_percent != observed_percent:
+                errors.append(f'cloud_run/{service}: configured and serving candidate traffic disagree')
     return errors
 
 
@@ -390,7 +415,8 @@ def evaluate_cloud_run_service(
     require_resolved_candidate_traffic: bool = False,
 ) -> list[str]:
     status = _mapping(document.get('status'))
-    template_spec = _mapping(_mapping(_mapping(document.get('spec')).get('template')).get('spec'))
+    spec = _mapping(document.get('spec'))
+    template_spec = _mapping(_mapping(spec.get('template')).get('spec'))
     containers = _list(template_spec.get('containers'))
     image = _mapping(containers[0]).get('image') if containers else None
     traffic = _list(status.get('traffic'))
@@ -417,7 +443,7 @@ def evaluate_cloud_run_service(
     if require_serving_traffic and (not expected_traffic or _mapping(expected_traffic[0]).get('percent') != 100):
         errors.append(f'cloud_run/{service}: expected revision does not receive 100% traffic')
     if not require_serving_traffic and require_resolved_candidate_traffic:
-        errors.extend(evaluate_candidate_zero_traffic(service, expected_revision, status))
+        errors.extend(evaluate_candidate_zero_traffic(service, expected_revision, status, spec))
     elif not require_serving_traffic:
         for entry in expected_traffic:
             allocation = _effective_candidate_traffic_percent(_mapping(entry).get('percent'))
