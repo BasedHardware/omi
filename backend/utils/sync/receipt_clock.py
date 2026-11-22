@@ -6,6 +6,7 @@ import math
 from time import time
 
 from fastapi import HTTPException
+from prometheus_client import Counter
 
 from database.sync_capture_clock import CaptureClockRangeError, account_created_at, frozen_offset
 from utils.sync.capture_clock import (
@@ -18,6 +19,27 @@ from utils.sync.files import get_timestamp_from_path
 
 POLICY = 'future_device_offset_v1'
 ESTIMATED_POLICY = 'estimated_source_isolated_v1'
+
+
+# Labels only; never IDs. Counts each future-capture recovery decision so the
+# clamp readback can tell an applied offset from a retry or a refusal.
+RECOVERY = Counter(
+    'omi_sync_future_capture_recovery_total',
+    'Future-dated sync capture recovery outcomes',
+    ['outcome'],
+)
+_RETRY_OUTCOMES = {
+    'capture_clock_identity_required': 'identity_required',
+    'capture_clock_anchor_pending': 'anchor_pending',
+    'capture_clock_anchor_unavailable': 'anchor_unavailable',
+}
+
+
+def record_recovery(outcome: str) -> None:
+    try:
+        RECOVERY.labels(outcome).inc()
+    except Exception:
+        pass  # Telemetry never changes an upload answer.
 
 
 class FutureCaptureRefused(HTTPException):
@@ -48,6 +70,36 @@ def clock_scope(path: str, device_id: str) -> str:
 
 
 def receipt_clock_offsets(
+    spans: list[tuple[str, float, float]],
+    *,
+    uid: str,
+    device_id: str | None,
+    received_at: float,
+    source_ids: dict[str, str] | None = None,
+    retained_offsets: dict[str, float] | None = None,
+) -> dict[str, float]:
+    """Freeze decoded-end offsets before staging or acknowledging any unit."""
+    try:
+        offsets = _receipt_clock_offsets(
+            spans,
+            uid=uid,
+            device_id=device_id,
+            received_at=received_at,
+            source_ids=source_ids,
+            retained_offsets=retained_offsets,
+        )
+    except FutureCaptureRetry as error:
+        code = error.detail.get('code') if isinstance(error.detail, dict) else None
+        record_recovery(_RETRY_OUTCOMES.get(code, 'retry_other'))
+        raise
+    except FutureCaptureRefused:
+        record_recovery('refused')
+        raise
+    record_recovery('anchored')
+    return offsets
+
+
+def _receipt_clock_offsets(
     spans: list[tuple[str, float, float]],
     *,
     uid: str,

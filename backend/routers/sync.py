@@ -248,6 +248,7 @@ from utils.sync.receipt_clock import (
     POLICY as RECEIPT_CLOCK_POLICY,
     ESTIMATED_POLICY,
     FutureCaptureRefused,
+    record_recovery as record_future_capture_recovery,
     require_future_upload,
     retained_source_offsets,
 )
@@ -1081,6 +1082,7 @@ async def sync_local_files_v2(
                 any(capture_clock_run_from_path(path) for path in future_paths)
                 and not client_device_context.client_device_id
             ):
+                record_future_capture_recovery('identity_required')
                 return JSONResponse(
                     status_code=503,
                     headers={'Retry-After': '30'},
@@ -1294,6 +1296,7 @@ async def sync_local_files_v2(
         if future_capture:
             # A cohort/language/capacity decline retains the phone's files;
             # this policy can never fall through to a legacy reader.
+            record_future_capture_recovery('declined')
             raise FutureCaptureRefused()
 
         if estimated_capture or retained_capture:
