@@ -16,6 +16,7 @@ import 'package:omi/models/subscription.dart';
 import 'package:omi/pages/home/widgets/quiet_payer_row.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
+import 'package:omi/providers/conversations_v3_provider.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/local_recordings_provider.dart';
 import 'package:omi/providers/sync_provider.dart';
@@ -108,6 +109,14 @@ class _FakeSync extends ChangeNotifier implements SyncProvider {
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
+class _FakeV3 extends ChangeNotifier implements ConversationsV3Provider {
+  @override
+  ServerConversation? live;
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
 class _FakeRecording extends Fake implements LocalRecording {}
 
 class _FakeWal extends Fake implements Wal {}
@@ -121,6 +130,7 @@ class _World {
   final capture = _FakeCapture();
   final held = _FakeRecordings();
   final sync = _FakeSync();
+  final v3 = _FakeV3();
   int monthlyReads = 0;
 }
 
@@ -159,6 +169,7 @@ Future<_World> _pump(
         ChangeNotifierProvider<CaptureProvider>.value(value: world.capture),
         ChangeNotifierProvider<LocalRecordingsProvider>.value(value: world.held),
         ChangeNotifierProvider<SyncProvider>.value(value: world.sync),
+        ChangeNotifierProvider<ConversationsV3Provider>.value(value: world.v3),
       ],
       child: MaterialApp(
         localizationsDelegates: AppLocalizations.localizationsDelegates,
@@ -292,6 +303,7 @@ void main() {
           w.conversations.processingConversations = [_conversation('processing', const Duration(minutes: 1))],
       'a held recording exists': (w) => w.held.recordings = [_FakeRecording()],
       'pendant audio is waiting to sync': (w) => w.sync.missingWalsOnDevice = [_FakeWal()],
+      'a v3 live conversation is open': (w) => w.v3.live = _conversation('live', const Duration(minutes: 1)),
     };
     for (final entry in signals.entries) {
       testWidgets('when ${entry.key}, and the plan is not read', (tester) async {
@@ -308,6 +320,7 @@ void main() {
           world.conversations.notifyListeners();
           world.held.notifyListeners();
           world.sync.notifyListeners();
+          world.v3.notifyListeners();
         });
         expect(_row, findsNothing);
       });

@@ -15,6 +15,7 @@ import 'package:omi/pages/settings/device_settings.dart';
 import 'package:omi/pages/settings/widgets/yearly_switch.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
+import 'package:omi/providers/conversations_v3_provider.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/local_recordings_provider.dart';
 import 'package:omi/providers/sync_provider.dart';
@@ -148,7 +149,9 @@ class _NothingInFlight extends StatelessWidget {
     final waitingOnPendant = context.select<SyncProvider?, bool>(
       (sync) => sync == null || sync.missingWalsOnDevice.isNotEmpty,
     );
-    if (capturing || processing || held || waitingOnPendant) return const SizedBox.shrink();
+    // The open v3 conversation is Home's top row and is not in the conversation list.
+    final liveWindow = context.select<ConversationsV3Provider?, bool>((v3) => v3 == null || v3.live != null);
+    if (capturing || processing || held || waitingOnPendant || liveWindow) return const SizedBox.shrink();
     if (QuietPayerRow._monthlyAnswered.containsKey(subscriptionId)) {
       return QuietPayerRow._monthlyAnswered[subscriptionId] == true
           ? _QuietRow(devicePage: devicePage)
