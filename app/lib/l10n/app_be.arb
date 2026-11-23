@@ -8712,6 +8712,12 @@
     "@authUnexpectedError": {
         "description": "Error message for unexpected error during sign-in"
     },
+    "accountSignInMethods": "Спосабы ўваходу",
+    "accountAddSignInMethod": "Дадаць спосаб уваходу",
+    "accountAddSignInMethodDetails": "Дадайце спосаб уваходу ў гэты ўліковы запіс Omi. Ваш тарыфны план, запісы і інтэграцыі застануцца ў гэтым уліковым запісе.",
+    "accountSignInConflictTitle": "Гэты спосаб уваходу звязаны з іншым уліковым запісам",
+    "accountSignInConflictDetails": "Вы па-ранейшаму ўвайшлі ў гэты ўліковы запіс. Кожны ўліковы запіс Omi захоўвае свой тарыфны план, запісы і інтэграцыі.",
+    "accountSignInMethodAdded": "Спосаб уваходу дададзены",
     "authFailedToLinkGoogle": "Не вдалося звязаць з Google, спрабуйце яшчэ раз.",
     "@authFailedToLinkGoogle": {
         "description": "Error message when linking Google account fails"

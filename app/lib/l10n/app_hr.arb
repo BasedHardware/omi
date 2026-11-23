@@ -8712,6 +8712,12 @@
     "@authUnexpectedError": {
         "description": "Error message for unexpected error during sign-in"
     },
+    "accountSignInMethods": "Načini prijave",
+    "accountAddSignInMethod": "Dodaj način prijave",
+    "accountAddSignInMethodDetails": "Dodajte način prijave na ovaj Omi račun. Vaš paket, snimke i integracije ostaju na ovom računu.",
+    "accountSignInConflictTitle": "Ovaj način prijave povezan je s drugim računom",
+    "accountSignInConflictDetails": "I dalje ste prijavljeni na ovaj račun. Svaki Omi račun zadržava svoj paket, snimke i integracije.",
+    "accountSignInMethodAdded": "Način prijave dodan je",
     "authFailedToLinkGoogle": "Povezivanje s Google-om nije uspjelo, molim vas pokušajte ponovno.",
     "@authFailedToLinkGoogle": {
         "description": "Error message when linking Google account fails"

@@ -7091,6 +7091,26 @@ class AppLocalizationsHu extends AppLocalizations {
   String get authUnexpectedError => 'Váratlan hiba a bejelentkezés során, kérjük próbálja újra';
 
   @override
+  String get accountSignInMethods => 'Bejelentkezési módok';
+
+  @override
+  String get accountAddSignInMethod => 'Bejelentkezési mód hozzáadása';
+
+  @override
+  String get accountAddSignInMethodDetails =>
+      'Adj hozzá egy bejelentkezési módot ehhez az Omi-fiókhoz. A csomagod, a felvételeid és az integrációid továbbra is ehhez a fiókhoz tartoznak.';
+
+  @override
+  String get accountSignInConflictTitle => 'Ez a bejelentkezési mód egy másik fiókhoz tartozik';
+
+  @override
+  String get accountSignInConflictDetails =>
+      'Továbbra is ebbe a fiókba vagy bejelentkezve. Minden Omi-fiók megőrzi a saját csomagját, felvételeit és integrációit.';
+
+  @override
+  String get accountSignInMethodAdded => 'Bejelentkezési mód hozzáadva';
+
+  @override
   String get authFailedToLinkGoogle => 'Nem sikerült a Google-lel összekapcsolni, kérjük próbálja újra.';
 
   @override

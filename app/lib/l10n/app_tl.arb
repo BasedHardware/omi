@@ -8712,6 +8712,12 @@
     "@authUnexpectedError": {
         "description": "Error message for unexpected error during sign-in"
     },
+    "accountSignInMethods": "Mga paraan ng pag-sign in",
+    "accountAddSignInMethod": "Magdagdag ng paraan ng pag-sign in",
+    "accountAddSignInMethodDetails": "Magdagdag ng paraan para mag-sign in sa Omi account na ito. Mananatili rito ang iyong plan, mga recording, at integration.",
+    "accountSignInConflictTitle": "Sa ibang account nakaugnay ang paraang ito",
+    "accountSignInConflictDetails": "Naka-sign in ka pa rin sa account na ito. Nananatili sa bawat Omi account ang sarili nitong plan, mga recording, at integration.",
+    "accountSignInMethodAdded": "Naidagdag ang paraan ng pag-sign in",
     "authFailedToLinkGoogle": "Nabigo ang pag-link gamit ang Google, mangyaring subukan ulit.",
     "@authFailedToLinkGoogle": {
         "description": "Error message when linking Google account fails"

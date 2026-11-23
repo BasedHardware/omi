@@ -7072,6 +7072,26 @@ class AppLocalizationsSl extends AppLocalizations {
   String get authUnexpectedError => 'Nepričakana napaka pri prijavi, prosimo, poskusite ponovno';
 
   @override
+  String get accountSignInMethods => 'Načini prijave';
+
+  @override
+  String get accountAddSignInMethod => 'Dodaj način prijave';
+
+  @override
+  String get accountAddSignInMethodDetails =>
+      'Dodajte način prijave v ta račun Omi. Vaš paket, posnetki in integracije ostanejo v tem računu.';
+
+  @override
+  String get accountSignInConflictTitle => 'Ta način prijave pripada drugemu računu';
+
+  @override
+  String get accountSignInConflictDetails =>
+      'Še vedno ste v tem računu. Vsak račun Omi obdrži svoj paket, posnetke in integracije.';
+
+  @override
+  String get accountSignInMethodAdded => 'Način prijave je dodan';
+
+  @override
   String get authFailedToLinkGoogle => 'Povezovanje s Google ni uspelo, prosimo, poskusite ponovno.';
 
   @override

@@ -8712,6 +8712,12 @@
     "@authUnexpectedError": {
         "description": "Error message for unexpected error during sign-in"
     },
+    "accountSignInMethods": "דרכי כניסה",
+    "accountAddSignInMethod": "הוספת דרך כניסה",
+    "accountAddSignInMethodDetails": "אפשר להוסיף דרך כניסה לחשבון Omi הזה. התוכנית, ההקלטות והאינטגרציות יישארו בחשבון הזה.",
+    "accountSignInConflictTitle": "דרך הכניסה הזו משויכת לחשבון אחר",
+    "accountSignInConflictDetails": "החיבור לחשבון הזה נשאר פעיל. כל חשבון Omi שומר על התוכנית, ההקלטות והאינטגרציות שלו.",
+    "accountSignInMethodAdded": "דרך הכניסה נוספה",
     "authFailedToLinkGoogle": "כישלון בקישור עם Google, אנא נסה שוב.",
     "@authFailedToLinkGoogle": {
         "description": "Error message when linking Google account fails"

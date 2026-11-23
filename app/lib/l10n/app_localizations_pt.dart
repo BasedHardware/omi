@@ -7058,6 +7058,26 @@ class AppLocalizationsPt extends AppLocalizations {
   String get authUnexpectedError => 'Erro inesperado ao fazer login, tente novamente';
 
   @override
+  String get accountSignInMethods => 'Métodos de login';
+
+  @override
+  String get accountAddSignInMethod => 'Adicionar método de login';
+
+  @override
+  String get accountAddSignInMethodDetails =>
+      'Adicione uma forma de entrar nesta conta Omi. Seu plano, suas gravações e suas integrações continuam nesta conta.';
+
+  @override
+  String get accountSignInConflictTitle => 'Este login pertence a outra conta';
+
+  @override
+  String get accountSignInConflictDetails =>
+      'Você continua nesta conta. Cada conta Omi mantém seu próprio plano, gravações e integrações.';
+
+  @override
+  String get accountSignInMethodAdded => 'Método de login adicionado';
+
+  @override
   String get authFailedToLinkGoogle => 'Falha ao vincular com o Google, tente novamente.';
 
   @override

@@ -6947,6 +6947,24 @@ class AppLocalizationsZh extends AppLocalizations {
   String get authUnexpectedError => '登录时发生意外错误，请重试';
 
   @override
+  String get accountSignInMethods => '登录方式';
+
+  @override
+  String get accountAddSignInMethod => '添加登录方式';
+
+  @override
+  String get accountAddSignInMethodDetails => '为此 Omi 账号添加一种登录方式。您的订阅套餐、录音和集成仍保留在此账号中。';
+
+  @override
+  String get accountSignInConflictTitle => '此登录方式属于另一个账号';
+
+  @override
+  String get accountSignInConflictDetails => '您仍登录在当前账号。每个 Omi 账号都有各自的订阅套餐、录音和集成。';
+
+  @override
+  String get accountSignInMethodAdded => '已添加登录方式';
+
+  @override
   String get authFailedToLinkGoogle => '与Google关联失败，请重试。';
 
   @override

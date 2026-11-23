@@ -8812,6 +8812,30 @@
     "@authUnexpectedError": {
         "description": "Error message for unexpected error during sign-in"
     },
+    "accountSignInMethods": "Sign-in methods",
+    "@accountSignInMethods": {
+        "description": "Heading for the sign-in methods in Account settings."
+    },
+    "accountAddSignInMethod": "Add sign-in method",
+    "@accountAddSignInMethod": {
+        "description": "Confirmation title shown before opening a provider sign-in."
+    },
+    "accountAddSignInMethodDetails": "Add a way to sign in to this Omi account. Your plan, recordings and integrations stay with this account.",
+    "@accountAddSignInMethodDetails": {
+        "description": "Explains what adding a sign-in method to the current account will do."
+    },
+    "accountSignInConflictTitle": "This sign-in belongs to another account",
+    "@accountSignInConflictTitle": {
+        "description": "Title shown when a sign-in method is already bound to a different account."
+    },
+    "accountSignInConflictDetails": "You’re still signed in here. Each Omi account keeps its plan, recordings and integrations.",
+    "@accountSignInConflictDetails": {
+        "description": "Explains a rejected provider link and how to open the separate account."
+    },
+    "accountSignInMethodAdded": "Sign-in method added",
+    "@accountSignInMethodAdded": {
+        "description": "Confirmation after adding a new sign-in method to the current account."
+    },
     "authFailedToLinkGoogle": "Failed to link with Google, please try again.",
     "@authFailedToLinkGoogle": {
         "description": "Error message when linking Google account fails"

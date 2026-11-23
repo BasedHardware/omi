@@ -6954,6 +6954,24 @@ class AppLocalizationsKo extends AppLocalizations {
   String get authUnexpectedError => '로그인 중 예기치 않은 오류가 발생했습니다. 다시 시도해 주세요';
 
   @override
+  String get accountSignInMethods => '로그인 방법';
+
+  @override
+  String get accountAddSignInMethod => '로그인 방법 추가';
+
+  @override
+  String get accountAddSignInMethodDetails => '이 Omi 계정에 로그인할 방법을 추가하세요. 요금제, 녹음, 연동은 이 계정에 그대로 유지됩니다.';
+
+  @override
+  String get accountSignInConflictTitle => '이 로그인 방법은 다른 계정에 연결되어 있습니다';
+
+  @override
+  String get accountSignInConflictDetails => '현재 계정에 로그인된 상태입니다. 요금제, 녹음, 연동은 각 Omi 계정에 그대로 유지됩니다.';
+
+  @override
+  String get accountSignInMethodAdded => '로그인 방법이 추가되었습니다';
+
+  @override
   String get authFailedToLinkGoogle => 'Google 연결에 실패했습니다. 다시 시도해 주세요.';
 
   @override

@@ -7054,6 +7054,26 @@ class AppLocalizationsEt extends AppLocalizations {
   String get authUnexpectedError => 'Ootamatu viga sisselogimisel, palun proovige uuesti';
 
   @override
+  String get accountSignInMethods => 'Sisselogimisviisid';
+
+  @override
+  String get accountAddSignInMethod => 'Lisa sisselogimisviis';
+
+  @override
+  String get accountAddSignInMethodDetails =>
+      'Lisa sellele Omi kontole sisselogimisviis. Sinu pakett, salvestised ja integratsioonid jäävad sellele kontole.';
+
+  @override
+  String get accountSignInConflictTitle => 'See sisselogimisviis on seotud teise kontoga';
+
+  @override
+  String get accountSignInConflictDetails =>
+      'Oled endiselt sellele kontole sisse logitud. Igal Omi kontol on oma pakett, salvestised ja integratsioonid.';
+
+  @override
+  String get accountSignInMethodAdded => 'Sisselogimisviis lisatud';
+
+  @override
   String get authFailedToLinkGoogle => 'Google\'iga sidumine ebaõnnestus, palun proovige uuesti.';
 
   @override

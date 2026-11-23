@@ -7057,6 +7057,26 @@ class AppLocalizationsFa extends AppLocalizations {
   String get authUnexpectedError => 'خطای غیرمنتظره در ورود، لطفاً دوباره تلاش کنید';
 
   @override
+  String get accountSignInMethods => 'روش‌های ورود';
+
+  @override
+  String get accountAddSignInMethod => 'افزودن روش ورود';
+
+  @override
+  String get accountAddSignInMethodDetails =>
+      'یک روش ورود به این حساب Omi اضافه کنید. طرح، ضبط‌ها و سرویس‌های متصل شما در همین حساب باقی می‌مانند.';
+
+  @override
+  String get accountSignInConflictTitle => 'این روش ورود به حساب دیگری متصل است';
+
+  @override
+  String get accountSignInConflictDetails =>
+      'هنوز وارد همین حساب هستید. هر حساب Omi طرح، ضبط‌ها و سرویس‌های متصل خودش را حفظ می‌کند.';
+
+  @override
+  String get accountSignInMethodAdded => 'روش ورود اضافه شد';
+
+  @override
   String get authFailedToLinkGoogle => 'پیوند با Google ناموفق بود، لطفاً دوباره تلاش کنید.';
 
   @override

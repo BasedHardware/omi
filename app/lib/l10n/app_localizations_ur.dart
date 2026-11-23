@@ -7070,6 +7070,26 @@ class AppLocalizationsUr extends AppLocalizations {
   String get authUnexpectedError => 'سائن ان میں غیر متوقع خرابی، براہ کرم دوبارہ کوشش کریں';
 
   @override
+  String get accountSignInMethods => 'سائن اِن کے طریقے';
+
+  @override
+  String get accountAddSignInMethod => 'سائن اِن کا طریقہ شامل کریں';
+
+  @override
+  String get accountAddSignInMethodDetails =>
+      'اس Omi اکاؤنٹ میں سائن اِن کا ایک طریقہ شامل کریں۔ آپ کا پلان، ریکارڈنگز اور انٹیگریشنز اسی اکاؤنٹ کے ساتھ رہیں گی۔';
+
+  @override
+  String get accountSignInConflictTitle => 'سائن اِن کا یہ طریقہ کسی دوسرے اکاؤنٹ سے منسلک ہے';
+
+  @override
+  String get accountSignInConflictDetails =>
+      'آپ اب بھی اسی اکاؤنٹ میں سائن اِن ہیں۔ ہر Omi اکاؤنٹ کا اپنا پلان، ریکارڈنگز اور انٹیگریشنز برقرار رہتی ہیں۔';
+
+  @override
+  String get accountSignInMethodAdded => 'سائن اِن کا طریقہ شامل ہو گیا';
+
+  @override
   String get authFailedToLinkGoogle => 'Google سے لنک کرنے میں ناکام، براہ کرم دوبارہ کوشش کریں۔';
 
   @override

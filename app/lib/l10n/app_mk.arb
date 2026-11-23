@@ -8712,6 +8712,12 @@
     "@authUnexpectedError": {
         "description": "Error message for unexpected error during sign-in"
     },
+    "accountSignInMethods": "Начини на најавување",
+    "accountAddSignInMethod": "Додај начин на најавување",
+    "accountAddSignInMethodDetails": "Додај начин за најавување на оваа сметка на Omi. Твојот план, снимките и интеграциите остануваат на оваа сметка.",
+    "accountSignInConflictTitle": "Ова најавување е поврзано со друга сметка",
+    "accountSignInConflictDetails": "Сè уште си најавен на оваа сметка. Секоја сметка на Omi ги задржува својот план, снимките и интеграциите.",
+    "accountSignInMethodAdded": "Начинот на најавување е додаден",
     "authFailedToLinkGoogle": "Неуспешно поврзување со Google, ве молиме обидете се повторно.",
     "@authFailedToLinkGoogle": {
         "description": "Error message when linking Google account fails"

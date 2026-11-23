@@ -7056,6 +7056,26 @@ class AppLocalizationsNo extends AppLocalizations {
   String get authUnexpectedError => 'Uventet feil under pålogging, vennligst prøv igjen';
 
   @override
+  String get accountSignInMethods => 'Innloggingsmetoder';
+
+  @override
+  String get accountAddSignInMethod => 'Legg til en innloggingsmetode';
+
+  @override
+  String get accountAddSignInMethodDetails =>
+      'Legg til en måte å logge på denne Omi-kontoen. Abonnementet, opptakene og integrasjonene dine blir værende på denne kontoen.';
+
+  @override
+  String get accountSignInConflictTitle => 'Denne innloggingen tilhører en annen konto';
+
+  @override
+  String get accountSignInConflictDetails =>
+      'Du er fortsatt logget på denne kontoen. Hver Omi-konto beholder sitt eget abonnement, sine opptak og sine integrasjoner.';
+
+  @override
+  String get accountSignInMethodAdded => 'Innloggingsmetoden er lagt til';
+
+  @override
   String get authFailedToLinkGoogle => 'Kunne ikke koble til Google, vennligst prøv igjen.';
 
   @override

@@ -7116,6 +7116,26 @@ class AppLocalizationsTa extends AppLocalizations {
   String get authUnexpectedError => 'உள்நுழைய அப்பாவமற்ற பிழை, மீண்டும் முயற்சிக்கவும்';
 
   @override
+  String get accountSignInMethods => 'உள்நுழைவு முறைகள்';
+
+  @override
+  String get accountAddSignInMethod => 'உள்நுழைவு முறையைச் சேர்';
+
+  @override
+  String get accountAddSignInMethodDetails =>
+      'இந்த Omi கணக்கில் உள்நுழைய மற்றொரு முறையைச் சேர்க்கவும். உங்கள் திட்டம், பதிவுகள் மற்றும் ஒருங்கிணைப்புகள் இந்தக் கணக்கிலேயே இருக்கும்.';
+
+  @override
+  String get accountSignInConflictTitle => 'இந்த உள்நுழைவு முறை வேறொரு கணக்குடன் இணைக்கப்பட்டுள்ளது';
+
+  @override
+  String get accountSignInConflictDetails =>
+      'நீங்கள் இன்னும் இந்தக் கணக்கில்தான் உள்நுழைந்துள்ளீர்கள். ஒவ்வொரு Omi கணக்கிலும் அதற்குரிய திட்டம், பதிவுகள் மற்றும் ஒருங்கிணைப்புகள் இருக்கும்.';
+
+  @override
+  String get accountSignInMethodAdded => 'உள்நுழைவு முறை சேர்க்கப்பட்டது';
+
+  @override
   String get authFailedToLinkGoogle => 'Google உடன் இணைக்க தோல்வியுற்றது, மீண்டும் முயற்சிக்கவும்.';
 
   @override

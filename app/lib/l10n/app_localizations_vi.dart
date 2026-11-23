@@ -7065,6 +7065,26 @@ class AppLocalizationsVi extends AppLocalizations {
   String get authUnexpectedError => 'Lỗi không mong muốn';
 
   @override
+  String get accountSignInMethods => 'Phương thức đăng nhập';
+
+  @override
+  String get accountAddSignInMethod => 'Thêm phương thức đăng nhập';
+
+  @override
+  String get accountAddSignInMethodDetails =>
+      'Thêm cách đăng nhập vào tài khoản Omi này. Gói dịch vụ, bản ghi và các tích hợp của bạn vẫn thuộc tài khoản này.';
+
+  @override
+  String get accountSignInConflictTitle => 'Phương thức đăng nhập này thuộc tài khoản khác';
+
+  @override
+  String get accountSignInConflictDetails =>
+      'Bạn vẫn đang đăng nhập vào tài khoản hiện tại. Mỗi tài khoản Omi giữ gói dịch vụ, bản ghi và các tích hợp riêng.';
+
+  @override
+  String get accountSignInMethodAdded => 'Đã thêm phương thức đăng nhập';
+
+  @override
   String get authFailedToLinkGoogle => 'Không thể liên kết tài khoản Google';
 
   @override

@@ -7092,6 +7092,26 @@ class AppLocalizationsMk extends AppLocalizations {
   String get authUnexpectedError => 'Неочекувана грешка при пријава, ве молиме обидете се повторно';
 
   @override
+  String get accountSignInMethods => 'Начини на најавување';
+
+  @override
+  String get accountAddSignInMethod => 'Додај начин на најавување';
+
+  @override
+  String get accountAddSignInMethodDetails =>
+      'Додај начин за најавување на оваа сметка на Omi. Твојот план, снимките и интеграциите остануваат на оваа сметка.';
+
+  @override
+  String get accountSignInConflictTitle => 'Ова најавување е поврзано со друга сметка';
+
+  @override
+  String get accountSignInConflictDetails =>
+      'Сè уште си најавен на оваа сметка. Секоја сметка на Omi ги задржува својот план, снимките и интеграциите.';
+
+  @override
+  String get accountSignInMethodAdded => 'Начинот на најавување е додаден';
+
+  @override
   String get authFailedToLinkGoogle => 'Неуспешно поврзување со Google, ве молиме обидете се повторно.';
 
   @override

@@ -7101,6 +7101,26 @@ class AppLocalizationsTe extends AppLocalizations {
   String get authUnexpectedError => 'సైన్ ఇన్ చేసేటప్పుడు అనిర్దేశ్య లోపం, దయచేసి ప్రయత్నించండి';
 
   @override
+  String get accountSignInMethods => 'సైన్ ఇన్ పద్ధతులు';
+
+  @override
+  String get accountAddSignInMethod => 'సైన్ ఇన్ పద్ధతిని జోడించండి';
+
+  @override
+  String get accountAddSignInMethodDetails =>
+      'ఈ Omi ఖాతాలోకి సైన్ ఇన్ చేయడానికి మరో పద్ధతిని జోడించండి. మీ ప్లాన్, రికార్డింగ్‌లు, ఇంటిగ్రేషన్‌లు ఈ ఖాతాలోనే ఉంటాయి.';
+
+  @override
+  String get accountSignInConflictTitle => 'ఈ సైన్ ఇన్ పద్ధతి మరో ఖాతాకు చెందినది';
+
+  @override
+  String get accountSignInConflictDetails =>
+      'మీరు ఇంకా ఈ ఖాతాలోనే సైన్ ఇన్ అయి ఉన్నారు. ప్రతి Omi ఖాతాకు దాని ప్లాన్, రికార్డింగ్‌లు, ఇంటిగ్రేషన్‌లు ఉంటాయి.';
+
+  @override
+  String get accountSignInMethodAdded => 'సైన్ ఇన్ పద్ధతి జోడించబడింది';
+
+  @override
   String get authFailedToLinkGoogle => 'Google సાથে లింక్ చేయడానికి విఫలమైంది, దయచేసి ప్రయత్నించండి.';
 
   @override

@@ -7075,6 +7075,26 @@ class AppLocalizationsLv extends AppLocalizations {
   String get authUnexpectedError => 'Neparedzēta kļūda pierakstīšanās laikā, lūdzu, mēģiniet vēlreiz';
 
   @override
+  String get accountSignInMethods => 'Pierakstīšanās veidi';
+
+  @override
+  String get accountAddSignInMethod => 'Pievienot pierakstīšanās veidu';
+
+  @override
+  String get accountAddSignInMethodDetails =>
+      'Pievienojiet jaunu pierakstīšanās veidu šim Omi kontam. Jūsu plāns, ieraksti un integrācijas paliks šajā kontā.';
+
+  @override
+  String get accountSignInConflictTitle => 'Šis pierakstīšanās veids ir saistīts ar citu kontu';
+
+  @override
+  String get accountSignInConflictDetails =>
+      'Jūs joprojām esat pierakstījies šajā kontā. Katrs Omi konts saglabā savu plānu, ierakstus un integrācijas.';
+
+  @override
+  String get accountSignInMethodAdded => 'Pierakstīšanās veids pievienots';
+
+  @override
   String get authFailedToLinkGoogle => 'Neizdevās savienot ar Google, lūdzu, mēģiniet vēlreiz.';
 
   @override
