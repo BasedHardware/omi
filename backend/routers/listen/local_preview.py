@@ -7,8 +7,8 @@ admits it, listen tells the client so on `ready` / `mobile_batch_admission`,
 and defers the cloud provider stream until audio actually reaches the socket.
 Audio the journal refuses still arrives here and gets today's live transcript.
 
-Realtime apps and webhooks degrade for these sessions by ruling (David,
-2026-10-25): integrations do not keep a cloud stream open.
+Sessions that require live STT under the server-batch policy also decline
+local preview so the client continues sending audio to listen.
 """
 
 import logging
@@ -68,6 +68,8 @@ def local_preview_reason(host) -> str:
         return 'not_requested'
     if not local_preview_batch_enabled():
         return 'kill_switch'
+    if getattr(host, 'server_batch_requires_live', False):
+        return 'realtime_consumer'
     if getattr(host, 'use_custom_stt', False):
         return 'custom_stt'
     if getattr(host, 'is_multi_channel', False):

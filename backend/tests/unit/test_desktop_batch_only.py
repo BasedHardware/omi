@@ -15,9 +15,11 @@ from config.batch_live_preview import capture_snapshot
 from database.batch_pipeline_projection import ProjectionStore
 from database import conversations, recording_sessions, server_batch_audio
 from models.conversation_enums import ConversationStatus
+from models.users import WebhookType
 from routers.listen import receiver as receiver_module
 from routers.listen.receiver import ListenReceiver
 from routers.listen.conversations import LiveConversationController
+from routers.listen.runtime import ListenSessionRuntime
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 from tests.unit.test_audio_durable_outbox import remote, Socket, _window_harness, _sent_receipts, host as archive_host
 from tests.unit.test_batch_pipeline_scheduler import MemoryStore
@@ -26,6 +28,7 @@ from utils.conversations import finalizer, lifecycle
 from utils.other import live_audio_archive
 from utils.other.audio_outbox import AudioReceipt, read_pcm
 from utils.other.live_audio_archive import LiveAudioArchive
+from utils.stt import demand_consumers
 import routers.pusher as pusher
 
 from database import llm_usage
@@ -225,6 +228,79 @@ async def test_no_provider_for_whole_session_reinit_reconnect_and_idle_reopen(mo
     reconnect = SimpleNamespace(host=host(capture()), cloud_live_suppressed=False)
     assert await ListenReceiver._initialize_stt(reconnect)
     assert reconnect.host.server_batch_only
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('consumer', ['webhook', 'app', 'none', 'unavailable'])
+async def test_realtime_consumers_keep_live_stt_in_server_batch_cohort(monkeypatch, consumer):
+    monkeypatch.setenv('STT_LIVE_DEMAND_ENABLED', 'false')
+    monkeypatch.setenv('CLOUD_LIVE_STT_MODE', 'stream')
+    monkeypatch.setenv('LOCAL_PREVIEW_BATCH_ENABLED', 'true')
+    monkeypatch.setattr(demand_consumers, 'run_blocking', AsyncMock(side_effect=lambda pool, fn, *args: fn(*args)))
+
+    def available_apps(uid):
+        if consumer == 'unavailable':
+            raise OSError('inventory unavailable')
+        return [
+            SimpleNamespace(
+                enabled=consumer == 'app',
+                triggers_realtime=lambda: True,
+                triggers_realtime_audio_bytes=lambda: False,
+            )
+        ]
+
+    monkeypatch.setattr(demand_consumers, 'get_available_apps', available_apps)
+    monkeypatch.setattr(
+        demand_consumers,
+        'user_webhook_status_db',
+        lambda uid, kind: consumer == 'webhook' and kind == WebhookType.realtime_transcript,
+    )
+    monkeypatch.setattr(demand_consumers, 'get_user_webhook_db', lambda uid, kind: 'https://example.invalid/hook')
+    monkeypatch.setattr(receiver_module, 'capture_batch_preview', Mock())
+    monkeypatch.setattr(receiver_module, 'managed_chain_enabled', lambda _: True)
+    monkeypatch.setattr(receiver_module, 'record_live_connection', Mock())
+
+    row = capture()
+    h = host(row)
+    h.client_conversation_id = None
+    h.server_batch_realtime_bypass = False
+    h.request.local_preview = True
+    h.request.sample_rate = 16000
+    h.spawn = lambda task, **kwargs: task.close()
+    assert server_batch.request_eligible(h)
+    await ListenSessionRuntime._resolve_server_batch_live_requirement(h)
+    expects_batch = consumer == 'none'
+    assert server_batch.request_eligible(h) is expects_batch
+    assert server_batch.capture_compatible(h, row) is expects_batch
+    assert server_batch.owned(row)
+    if not expects_batch:
+        # prepare() rolls an incompatible continuation into a new live capture.
+        h.batch_record_capture = None
+        assert h.server_batch_realtime_bypass is (consumer != 'unavailable')
+    socket = object()
+    fake = SimpleNamespace(
+        host=h,
+        cloud_live_suppressed=False,
+        recovery=None,
+        _telemetry_platform=lambda: 'macos',
+        _build_stt_callbacks=lambda: (Mock(), Mock(), None),
+        _create_stt_socket=AsyncMock(return_value=socket),
+        _wrap_legacy_stt_socket=lambda raw, epoch: raw,
+        _record_selected_epoch=Mock(),
+        _serving_provider=lambda: 'soniox',
+        _monitor_stt_death=AsyncMock(),
+    )
+    # Keep the no-consumer control independent of unrelated mobile rollout flags.
+    if expects_batch:
+        h.request.local_preview = False
+    assert await ListenReceiver._initialize_stt(fake)
+    assert h.server_batch_only is expects_batch
+    if expects_batch:
+        fake._create_stt_socket.assert_not_awaited()
+    else:
+        fake._create_stt_socket.assert_awaited_once()
+        assert fake.stt_socket is socket
+        assert not h.local_preview_batch
 
 
 @pytest.mark.asyncio
@@ -696,7 +772,7 @@ def test_reserved_capture_language_must_match_reconnecting_request():
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('change', ['language', 'byok', 'consent'])
+@pytest.mark.parametrize('change', ['language', 'byok', 'consent', 'realtime_consumer'])
 async def test_legacy_resume_rolls_incompatible_policy_into_fresh_capture(change):
     row = capture()
     if change == 'language':
@@ -706,6 +782,8 @@ async def test_legacy_resume_rolls_incompatible_policy_into_fresh_capture(change
         h.server_batch_byok = True
     elif change == 'consent':
         h.private_cloud_sync_enabled = False
+    elif change == 'realtime_consumer':
+        h.server_batch_requires_live = True
     h.client_conversation_id = None
     h.client_device_context = SimpleNamespace(client_device_id=None)
     h._policy_resume_candidate = row

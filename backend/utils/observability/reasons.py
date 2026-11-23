@@ -47,6 +47,7 @@ class ServerBatchSuppressionReason(StrEnum):
     PUSHER_UNAVAILABLE = 'pusher_unavailable'
     CAPTURE_NOT_OWNED = 'capture_not_owned'
     PLATFORM_UNSELECTED = 'platform_unselected'
+    REALTIME_CONSUMER = 'realtime_consumer'
     NOT_ENABLED = 'not_enabled'
 
 
@@ -777,6 +778,7 @@ class LocalPreviewOutcome(StrEnum):
     PHONE_CALL = 'phone_call'
     PRIVATE_SYNC_OFF = 'private_sync_off'
     NOT_BATCH_LANE = 'not_batch_lane'
+    REALTIME_CONSUMER = 'realtime_consumer'
     POLICY_ERROR = 'policy_error'
 
 

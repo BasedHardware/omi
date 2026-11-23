@@ -141,6 +141,7 @@ class ListenPusherSessionConfig:
     # boundary). The pusher must acknowledge capability before v2 audio is sent.
     audio_timeline_v2: bool = False
     audio_timeline_spans: bool = False
+    realtime_batch_bypass: bool = False
 
 
 @dataclass
@@ -370,6 +371,7 @@ class ListenPusherSession:
                                 {
                                     "segments": list(pending_segments),
                                     "memory_id": self.deps.get_current_conversation_id(),
+                                    "realtime_batch_bypass": self.config.realtime_batch_bypass,
                                 }
                             ),
                             "utf-8",

@@ -196,6 +196,8 @@ def request_reason(host, *, existing_capture: bool = False, capture: Mapping | N
     # Cap-paused bootstrap has no request yet and cannot own batch custody.
     if getattr(host, 'request', None) is None:
         return 'not_enabled'
+    if getattr(host, 'server_batch_requires_live', False):
+        return 'realtime_consumer'
     language = request_language(host)
     profile = getattr(host, 'language_profile', None)
     primary = getattr(profile, 'primary', None)

@@ -220,6 +220,7 @@ class SpeakerSampleRequest(TypedDict):
 class TranscriptQueueItem(TypedDict):
     segments: List[Dict[str, Any]]
     memory_id: Optional[str]
+    realtime_batch_bypass: bool
 
 
 class AudioBytesQueueItem(TypedDict):

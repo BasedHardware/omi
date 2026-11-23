@@ -9,6 +9,7 @@ from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 from weakref import WeakValueDictionary
 
 import httpx
+from prometheus_client import Counter
 
 from database.redis_db import (
     get_user_webhook_db,
@@ -43,6 +44,10 @@ import logging
 logger = logging.getLogger(__name__)
 
 _DEV_WEBHOOK_RETRY_DELAYS = (1.0, 5.0, 30.0)
+_REALTIME_BATCH_BYPASS_DELIVERIES = Counter(
+    'omi_realtime_transcript_webhook_batch_bypass_deliveries_total',
+    'Successful realtime transcript webhook deliveries for sessions eligible for new server-batch admission.',
+)
 
 # Deterministic rejections will not change on a repeat post — retrying a 400
 # can only reproduce it. 408 and 429 are the transient 4xx members and keep
@@ -426,7 +431,9 @@ async def day_summary_webhook(uid, summary: str, summary_json: Optional[dict] = 
         return
 
 
-async def realtime_transcript_webhook(uid, segments: List[dict], *, client_kind: ClientKind = 'unknown'):
+async def realtime_transcript_webhook(
+    uid, segments: List[dict], *, client_kind: ClientKind = 'unknown', realtime_batch_bypass: bool = False
+):
     logger.debug(f"realtime_transcript_webhook {uid}")
     toggled = await run_blocking(db_executor, user_webhook_status_db, uid, WebhookType.realtime_transcript)
 
@@ -452,6 +459,8 @@ async def realtime_transcript_webhook(uid, segments: List[dict], *, client_kind:
                 dlq_uid=uid,
             )
             if response.status_code >= 200 and response.status_code < 300:
+                if realtime_batch_bypass:
+                    _REALTIME_BATCH_BYPASS_DELIVERIES.inc()
                 journey_attempt.succeed()
                 cb.record_success()
                 await run_blocking(db_executor, record_dev_webhook_success, uid, WebhookType.realtime_transcript)
