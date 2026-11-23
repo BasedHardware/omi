@@ -12298,5 +12298,6 @@
     "quietPayerTitle": "Nema snimaka 5 dana",
     "quietPayerMessage": "Provjerite svoj Omi.",
     "quietPayerCheck": "Provjeri",
-    "finishHiddenFromHome": "Processing finished. This recording is hidden from Home."
+    "finishHiddenFromHome": "Processing finished. This recording is hidden from Home.",
+    "finishCheckHome": "Still processing. Check Home for the result."
 }

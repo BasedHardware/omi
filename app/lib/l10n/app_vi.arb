@@ -4741,5 +4741,6 @@
     "quietPayerTitle": "Không có bản ghi nào trong 5 ngày",
     "quietPayerMessage": "Hãy kiểm tra Omi của bạn.",
     "quietPayerCheck": "Kiểm tra",
-    "finishHiddenFromHome": "Processing finished. This recording is hidden from Home."
+    "finishHiddenFromHome": "Processing finished. This recording is hidden from Home.",
+    "finishCheckHome": "Still processing. Check Home for the result."
 }

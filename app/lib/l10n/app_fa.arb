@@ -12298,5 +12298,6 @@
     "quietPayerTitle": "۵ روز است که ضبطی نیست",
     "quietPayerMessage": "Omi خود را بررسی کنید.",
     "quietPayerCheck": "بررسی",
-    "finishHiddenFromHome": "Processing finished. This recording is hidden from Home."
+    "finishHiddenFromHome": "Processing finished. This recording is hidden from Home.",
+    "finishCheckHome": "Still processing. Check Home for the result."
 }

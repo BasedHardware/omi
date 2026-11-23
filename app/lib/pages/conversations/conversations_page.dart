@@ -930,7 +930,7 @@ class _ConversationsPageState extends State<ConversationsPage>
             (ModalRoute.of(context)?.isCurrent ?? true)) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (mounted && v3.takeFinishTimeout()) {
-              OmiFeedback.info(context, context.l10n.finishStillProcessing);
+              OmiFeedback.info(context, context.l10n.finishCheckHome);
             }
           });
         }

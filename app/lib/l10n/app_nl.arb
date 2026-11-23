@@ -4741,5 +4741,6 @@
     "quietPayerTitle": "Al 5 dagen geen opnames",
     "quietPayerMessage": "Controleer je Omi.",
     "quietPayerCheck": "Controleren",
-    "finishHiddenFromHome": "Processing finished. This recording is hidden from Home."
+    "finishHiddenFromHome": "Processing finished. This recording is hidden from Home.",
+    "finishCheckHome": "Still processing. Check Home for the result."
 }

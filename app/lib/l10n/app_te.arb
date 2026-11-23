@@ -12298,5 +12298,6 @@
     "quietPayerTitle": "5 రోజులుగా రికార్డింగ్‌లు లేవు",
     "quietPayerMessage": "మీ Omiని తనిఖీ చేయండి.",
     "quietPayerCheck": "తనిఖీ",
-    "finishHiddenFromHome": "Processing finished. This recording is hidden from Home."
+    "finishHiddenFromHome": "Processing finished. This recording is hidden from Home.",
+    "finishCheckHome": "Still processing. Check Home for the result."
 }

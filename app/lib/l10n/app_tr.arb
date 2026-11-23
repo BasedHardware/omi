@@ -4776,5 +4776,6 @@
     "quietPayerTitle": "5 gündür kayıt yok",
     "quietPayerMessage": "Omi'ni kontrol et.",
     "quietPayerCheck": "Kontrol Et",
-    "finishHiddenFromHome": "Processing finished. This recording is hidden from Home."
+    "finishHiddenFromHome": "Processing finished. This recording is hidden from Home.",
+    "finishCheckHome": "Still processing. Check Home for the result."
 }

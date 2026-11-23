@@ -12298,5 +12298,6 @@
     "quietPayerTitle": "אין הקלטות כבר 5 ימים",
     "quietPayerMessage": "בדקו את ה-Omi שלכם.",
     "quietPayerCheck": "בדיקה",
-    "finishHiddenFromHome": "Processing finished. This recording is hidden from Home."
+    "finishHiddenFromHome": "Processing finished. This recording is hidden from Home.",
+    "finishCheckHome": "Still processing. Check Home for the result."
 }

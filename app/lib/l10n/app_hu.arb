@@ -4837,5 +4837,6 @@
     "quietPayerTitle": "5 napja nincs felvétel",
     "quietPayerMessage": "Nézd meg az Omidat.",
     "quietPayerCheck": "Megnézem",
-    "finishHiddenFromHome": "Processing finished. This recording is hidden from Home."
+    "finishHiddenFromHome": "Processing finished. This recording is hidden from Home.",
+    "finishCheckHome": "Still processing. Check Home for the result."
 }

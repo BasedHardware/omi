@@ -15734,4 +15734,7 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get finishHiddenFromHome => 'Processing finished. This recording is hidden from Home.';
+
+  @override
+  String get finishCheckHome => 'Still processing. Check Home for the result.';
 }

@@ -12298,5 +12298,6 @@
     "quietPayerTitle": "5 நாட்களாக பதிவுகள் இல்லை",
     "quietPayerMessage": "உங்கள் Omi-ஐ சரிபார்க்கவும்.",
     "quietPayerCheck": "சரிபார்",
-    "finishHiddenFromHome": "Processing finished. This recording is hidden from Home."
+    "finishHiddenFromHome": "Processing finished. This recording is hidden from Home.",
+    "finishCheckHome": "Still processing. Check Home for the result."
 }

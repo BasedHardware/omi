@@ -4,6 +4,11 @@
       "key": "finishHiddenFromHome",
       "en": "Processing finished. This recording is hidden from Home.",
       "description": "Informational toast after a manual finish when Home visibility rules hide the resulting conversation."
+    },
+    {
+      "key": "finishCheckHome",
+      "en": "Still processing. Check Home for the result.",
+      "description": "Informational toast when Home stops waiting for a manual finish. Home is the conversation list tab."
     }
   ]
 }

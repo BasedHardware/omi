@@ -4741,5 +4741,6 @@
     "quietPayerTitle": "5日間録音がありません",
     "quietPayerMessage": "Omiを確認してください。",
     "quietPayerCheck": "確認",
-    "finishHiddenFromHome": "Processing finished. This recording is hidden from Home."
+    "finishHiddenFromHome": "Processing finished. This recording is hidden from Home.",
+    "finishCheckHome": "Still processing. Check Home for the result."
 }

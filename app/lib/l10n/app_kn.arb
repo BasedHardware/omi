@@ -12298,5 +12298,6 @@
     "quietPayerTitle": "5 ದಿನಗಳಿಂದ ಯಾವುದೇ ರೆಕಾರ್ಡಿಂಗ್ ಇಲ್ಲ",
     "quietPayerMessage": "ನಿಮ್ಮ Omi ಪರಿಶೀಲಿಸಿ.",
     "quietPayerCheck": "ಪರಿಶೀಲಿಸಿ",
-    "finishHiddenFromHome": "Processing finished. This recording is hidden from Home."
+    "finishHiddenFromHome": "Processing finished. This recording is hidden from Home.",
+    "finishCheckHome": "Still processing. Check Home for the result."
 }

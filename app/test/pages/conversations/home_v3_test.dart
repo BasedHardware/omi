@@ -1390,7 +1390,7 @@ void main() {
       ('failed summary', "Couldn't summarize this conversation", '003-mobile-ios-v3-manual-finish-failed'),
       ('legacy failed projection', "Couldn't summarize this conversation", null),
       ('hidden result', 'Processing finished. This recording is hidden from Home.', '001-mobile-ios-hidden-finish'),
-      ('20-minute deadline', 'Still processing. It will appear on Home.', '002-mobile-ios-finish-deadline'),
+      ('20-minute deadline', 'Still processing. Check Home for the result.', '002-mobile-ios-finish-deadline'),
     ]) {
       testWidgets('a $caseName settles the manual finish and stops list polling', (tester) async {
         await withClock(Clock.fixed(_now), () async {
