@@ -1113,12 +1113,7 @@ def test_non_transient_gateway_status_stays_5xx_and_keeps_the_lease(rows, client
 
 
 def _provider_sweep(monkeypatch, sweep, sweep_running=lambda *, now: (3, 0)):
-    from database import outbox_firestore
-    from types import SimpleNamespace
-
-    monkeypatch.setattr(
-        outbox_firestore, 'provider_stt_outbox', lambda: SimpleNamespace(sweep=sweep, sweep_running=sweep_running)
-    )
+    monkeypatch.setattr(route, 'provider_stt_outbox', lambda: SimpleNamespace(sweep=sweep, sweep_running=sweep_running))
 
 
 @pytest.mark.parametrize('near_expiry', [2, None], ids=['current', 'legacy'])

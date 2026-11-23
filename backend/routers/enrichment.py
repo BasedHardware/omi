@@ -18,6 +18,7 @@ from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
 
 from config import enrichment as enrichment_config
+from database.outbox_firestore import ENRICHMENT_OUTBOX, provider_stt_outbox
 from utils.enrichment import fresh_demotion
 from utils.executors import db_executor, postprocess_executor, run_blocking
 from utils.observability.reasons import RetryReason
@@ -92,7 +93,6 @@ def consume(key: str, token: str, accepted: float | None = None, abandoned: thre
     row under a fresh wake instead of stranding it.
     """
     from database.outbox import Outcome
-    from database.outbox_firestore import ENRICHMENT_OUTBOX
     from utils.enrichment.consumer import EnrichmentConsumer
 
     started = time.monotonic()
@@ -181,7 +181,6 @@ def maintain(now: float) -> dict[str, int]:
     Both halves are safe beside the legacy sequencer sweep: the outbox sweep is per-row CAS and the
     summary-debt tick holds its own cursor lease, so a second owner never double-admits.
     """
-    from database.outbox_firestore import ENRICHMENT_OUTBOX, provider_stt_outbox
     from services import summary_debt_repair
 
     from utils.conversations import final_pass_retry

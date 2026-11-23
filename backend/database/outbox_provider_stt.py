@@ -19,6 +19,9 @@ import re
 import uuid
 from typing import Any, Callable, Literal, Mapping
 
+from google.cloud import firestore
+from google.cloud.firestore_v1 import FieldFilter
+
 from config.policy import sweep_age
 from database.outbox import Claim, EnqueueResult, OutboxKind, Outcome, SweepCounts
 from utils.observability.sweep_age import skip_ancient
@@ -250,8 +253,6 @@ class FirestoreProviderSttOutbox:
 
     def claim(self, n: int, lease_seconds: float, *, now: float) -> list[Claim]:
         """Pull: due, unleased open rows (single-field filter; lease checked by the CAS)."""
-        from google.cloud.firestore_v1 import FieldFilter
-
         query = (
             self._client()
             .collection(self._collection or collection_name())
@@ -317,8 +318,6 @@ class FirestoreProviderSttOutbox:
 
     def sweep(self, *, now: float, limit: int = 100) -> SweepCounts:
         """Re-wake due open rows whose lease is absent or expired; discard privacy-fenced rows."""
-        from google.cloud.firestore_v1 import FieldFilter
-
         rewoken = expired = discarded = errors = 0
         query = (
             self._client()
@@ -367,8 +366,6 @@ class FirestoreProviderSttOutbox:
 
     def sweep_running(self, *, now: float, limit: int = RUNNING_RECOVERY_PAGE_SIZE) -> tuple[int, int]:
         """Recover stale running jobs even when the open-outbox sweep cannot reach them."""
-        from google.cloud.firestore_v1 import FieldFilter
-
         client = self._client()
         namespace = (self._collection or collection_name()).removesuffix(OUTBOX_SUFFIX)
         cutoff = now - sweep_age.PROVIDER_RUNNING_RECOVERY_SECONDS
@@ -397,8 +394,6 @@ class FirestoreProviderSttOutbox:
         return rewoken, errors
 
     def _rearm_running(self, job_ref, cutoff: float, now: float) -> Row | None:
-        from google.cloud import firestore
-
         row_id = job_ref.id
         if not _ROW_ID.fullmatch(row_id):
             raise ValueError('invalid provider-stt job id')
