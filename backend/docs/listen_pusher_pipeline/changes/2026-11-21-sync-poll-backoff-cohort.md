@@ -72,9 +72,18 @@ only the intended flag and percent changes. Before dispatch, render the backend
 inverse with `SYNC_POLL_BACKOFF_ENABLED=false` and verify it leaves the percent at
 `5`. Apply that inverse if a guard trips.
 
-Start the 24-hour soak once production `backend` serves the 5% configuration and
-the authenticated job-status route reports measurable in-cohort traffic. Before
-advancing, require lower polls per active uploader in-cohort and an in-cohort terminal-read
-p50 at most 60 seconds above out-of-cohort, with observation counts in both
-cohorts. Sync 5xx and 429 rates plus support and upload-retry signals must stay
-flat. Require the same readback after the 25% soak before advancing to 100%.
+Use the existing backend release-vector serving receipt to record the expected
+Ready revision, its 100% Cloud Run traffic share and when traffic converged.
+Confirm that revision serves `true` / `5`, and use authenticated job-status
+requests from that revision to corroborate the cohort counter and fresh
+terminal completion sample. The GMP queries above aggregate the service.
+Use query windows wholly after traffic converged. If a window spans a traffic
+split or an unverified revision change, treat its guard readback as inconclusive.
+
+Start the 24-hour soak once the serving revision has the 5% UID configuration
+and a post-convergence query shows measurable in-cohort route traffic. Before
+advancing, require lower polls per active uploader in-cohort and an in-cohort
+terminal-read p50 at most 60 seconds above out-of-cohort, with observation counts
+in both cohorts. Sync 5xx and 429 rates plus support and upload-retry signals
+must stay flat. Require the same readback after the 25% soak before advancing to
+100% of UIDs.
