@@ -361,9 +361,20 @@ def test_lease_expiry_backoff_and_stale_result_fencing():
     second = queue.pull(186)[0]
     assert second.attempt == 2 and second.token != first.token
     assert not queue.complete(WorkResult('a', 'gs://results/stale'), first.token, 187)
+    key = owner_key(second.item.owner_id)
+    before_stage = deepcopy(store.rows.get(('owners', key)))
     assert queue.complete(WorkResult('a', 'gs://results/a'), second.token, 187)
+    staged = deepcopy(store.rows['jobs', 'a'])
+    assert staged['state'] == 'result_ready'
+    assert staged['merge_pending']
+    # A new scheduler can replay a lost GPU completion reply without marking
+    # the staged result as merged or changing its original ready timestamp.
+    queue = Scheduler(store)
     assert queue.complete(WorkResult('a', 'gs://results/a'), second.token, 999)
     assert not queue.complete(WorkResult('a', 'gs://results/changed'), second.token, 999)
+    assert store.rows['jobs', 'a'] == staged
+    assert store.rows.get(('owners', key)) == before_stage
+    assert ('results', 'a') not in store.rows
 
 
 def test_result_receipt_persists_and_optional_receipt_is_rolling_idempotent():
