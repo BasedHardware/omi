@@ -1361,6 +1361,9 @@ async def stripe_webhook(
     return result
 
 
+PLAY_CHECKOUT_REFUSED = 'Checkout refused: Google Play already bills this user.'
+
+
 @fresh_reader
 async def _handle_stripe_event(event: dict, background_tasks: BackgroundTasks | None = None):
     if event['type'] == 'customer.subscription.trial_will_end':
@@ -1429,7 +1432,8 @@ async def _handle_stripe_event(event: dict, background_tasks: BackgroundTasks | 
             # preserve the existing duplicate/replacement decision in pure code.
             existing_subscription = await run_blocking(db_executor, users_db.get_user_valid_subscription, uid)
             if play_stripe_guard.live_play_row(existing_subscription) and session.get('subscription'):
-                return await play_stripe_guard.refuse_stripe_for_play_subscriber(uid, session['subscription'])
+                await play_stripe_guard.refuse_stripe_for_play_subscriber(uid, session['subscription'])
+                return {"status": "success", "message": PLAY_CHECKOUT_REFUSED}
             checkout_decision = transition(
                 existing_subscription,
                 ResolvedStripeEvent(event['type'], session.get('subscription'), None, int(time.time())),
@@ -1553,7 +1557,8 @@ async def _handle_stripe_event(event: dict, background_tasks: BackgroundTasks | 
                         await run_blocking(db_executor, users_db.get_existing_user_subscription, uid)
                     )
                 ):
-                    return await play_stripe_guard.refuse_stripe_for_play_subscriber(uid, subscription_obj['id'])
+                    await play_stripe_guard.refuse_stripe_for_play_subscriber(uid, subscription_obj['id'])
+                    return {"status": "success", "message": PLAY_CHECKOUT_REFUSED}
                 # Resolve prior entitlement before reconciliation; emit only
                 # after the authoritative write so stale deletion is not churn.
                 billing_owner_confirmed = False

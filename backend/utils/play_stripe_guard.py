@@ -34,7 +34,7 @@ def live_play_row(subscription: Subscription | None) -> bool:
     )
 
 
-async def refuse_stripe_for_play_subscriber(uid: str, stripe_subscription_id: str) -> dict:
+async def refuse_stripe_for_play_subscriber(uid: str, stripe_subscription_id: str) -> None:
     """A Stripe subscription appeared for a user Google Play already bills: undo it, never keep both."""
     result = await run_blocking(
         stripe_executor, stripe_utils.cancel_and_refund_checkout_subscription, stripe_subscription_id
@@ -62,4 +62,3 @@ async def refuse_stripe_for_play_subscriber(uid: str, stripe_subscription_id: st
         )
     except Exception:
         logger.warning('play_billing double billing notice not sent for uid=%s', uid)
-    return {"status": "success", "message": "Checkout refused: Google Play already bills this user."}
