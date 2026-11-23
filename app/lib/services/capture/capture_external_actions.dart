@@ -46,8 +46,9 @@ abstract interface class CaptureExternalActions {
 
   void onManualFinishStarted(
     ServerConversation placeholder,
-    String? recordingId,
-  );
+    String? recordingId, {
+    String? liveConversationId,
+  });
 
   void onManualFinishSettled(
     ServerConversation placeholder,
@@ -119,8 +120,9 @@ class NoopCaptureExternalActions implements CaptureExternalActions {
   @override
   void onManualFinishStarted(
     ServerConversation placeholder,
-    String? recordingId,
-  ) {}
+    String? recordingId, {
+    String? liveConversationId,
+  }) {}
 
   @override
   void onManualFinishSettled(

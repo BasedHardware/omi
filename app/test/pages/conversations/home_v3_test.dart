@@ -210,6 +210,7 @@ class _LiveCapture extends CaptureProvider {
 
   /// Taps on End: the pendant double-tap's action, without draining a real capture.
   int endCalls = 0;
+  String? endedLiveId;
 
   /// While set, End's drain has not finished: the segments stay, as during a real WAL drain. Completing
   /// it settles the drain as failed: the capture keeps its segments.
@@ -219,8 +220,9 @@ class _LiveCapture extends CaptureProvider {
   String? verifiedLiveServerRecordingId;
 
   @override
-  Future<void> forceProcessingCurrentConversation() async {
+  Future<void> forceProcessingCurrentConversation({String? liveConversationId}) async {
     endCalls++;
+    endedLiveId = liveConversationId;
     final held = drain;
     if (held != null) return held.future;
     segments = [];
@@ -793,6 +795,7 @@ void main() {
       await tester.pump(const Duration(milliseconds: 500));
       await tester.tap(find.byKey(const Key('live_conversation_end')));
       expect(home.capture.endCalls, 1);
+      expect(home.capture.endedLiveId, 'live-1');
       await _dispose(tester, home);
     });
   });
@@ -1316,7 +1319,7 @@ void main() {
         final home = await _pumpHome(tester, v3: true, boundary: boundary, theme: theme(), size: const Size(393, 852));
         final v3 = home.conversationsV3;
         final pending = OptimisticProcessingPlaceholder.conversation(targetConversationId: 'rec-1');
-        v3.startManualFinish(pending, 'rec-1');
+        v3.startManualFinish(pending, null, liveConversationId: 'live-1');
         await tester.pump();
         expect(find.text('Launch checklist'), findsNothing);
         expect(find.byKey(const Key('home_processing_row')), findsOneWidget);

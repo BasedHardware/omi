@@ -24,7 +24,7 @@ class _RecordingActions extends NoopCaptureExternalActions {
   bool? manualFinishFailed;
 
   @override
-  void onManualFinishStarted(ServerConversation placeholder, String? recordingId) {
+  void onManualFinishStarted(ServerConversation placeholder, String? recordingId, {String? liveConversationId}) {
     manualFinishRow = placeholder;
   }
 

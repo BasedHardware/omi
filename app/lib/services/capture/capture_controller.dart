@@ -4358,7 +4358,7 @@ class CaptureController extends ChangeNotifier
     }
   }
 
-  Future<void> forceProcessingCurrentConversation() async {
+  Future<void> forceProcessingCurrentConversation({String? liveConversationId}) async {
     final recordingSessionId = activeRecordingId;
     final conversationRevision = _systemSurfaceConversationRevision;
     final close = _admitConversationClose(processNow: true);
@@ -4373,7 +4373,7 @@ class CaptureController extends ChangeNotifier
     final sourceId = verifiedLiveServerRecordingId ?? _conversation?.id;
     try {
       // Publish the skeleton before waiting for disk, preserving immediate Process Now feedback.
-      actions.onManualFinishStarted(placeholder, sourceId);
+      actions.onManualFinishStarted(placeholder, sourceId, liveConversationId: liveConversationId);
       actions.addProcessingConversation(placeholder);
       _finalizeGate.markFinalized();
       externalActions.onLiveFinalized();

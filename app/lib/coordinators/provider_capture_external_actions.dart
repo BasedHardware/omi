@@ -121,9 +121,10 @@ class ProviderCaptureExternalActions implements CaptureExternalActions {
   @override
   void onManualFinishStarted(
     ServerConversation placeholder,
-    String? recordingId,
-  ) =>
-      conversationsV3?.startManualFinish(placeholder, recordingId);
+    String? recordingId, {
+    String? liveConversationId,
+  }) =>
+      conversationsV3?.startManualFinish(placeholder, recordingId, liveConversationId: liveConversationId);
 
   @override
   void onManualFinishSettled(

@@ -62,14 +62,17 @@ class ConversationsV3Provider extends ChangeNotifier {
 
   bool get suppressListeningAfterFinish => finishFeedbackEnabled && _suppressListening;
 
-  void startManualFinish(ServerConversation row, String? recordingId) {
+  void startManualFinish(ServerConversation row, String? recordingId, {String? liveConversationId}) {
     if (!finishFeedbackEnabled) return;
     _clearManualFinish();
     _finishRow = row;
     _suppressListening = true;
     _finishRecordingId = recordingId;
     final live = _live;
-    if (live != null && recordingId != null && live.v3?.recordingIds.contains(recordingId) == true) {
+    if (live != null &&
+        (live.id == liveConversationId ||
+            live.id == recordingId ||
+            (recordingId != null && live.v3?.recordingIds.contains(recordingId) == true))) {
       _finishLiveId = live.id;
     }
     _finishExpiry = Timer(OptimisticProcessingPlaceholder.timeout, () {
