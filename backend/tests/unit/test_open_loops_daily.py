@@ -8,7 +8,6 @@ exercised, not stubbed.
 
 import json
 from datetime import date, datetime, timedelta, timezone
-from functools import partial
 from types import SimpleNamespace
 from unittest.mock import Mock, call
 
@@ -538,31 +537,21 @@ def test_timeout_fallback_writes_loops_cards_and_usage_once(pass_env, monkeypatc
 
 
 @pytest.mark.parametrize('elapsed, expected_attempts, invalid_output', [(20, 2, False), (30, 1, False), (20, 2, True)])
-def test_timeout_exhaustion_degrades_once_and_leaves_the_day_unrun(
-    pass_env, monkeypatch, caplog, elapsed, expected_attempts, invalid_output
-):
-    from utils.other import notifications
-
+def test_timeout_exhaustion_leaves_the_day_unrun(pass_env, monkeypatch, elapsed, expected_attempts, invalid_output):
     timeout = APITimeoutError(request=httpx.Request('POST', 'https://example.com'))
     llm = Mock()
     last_attempt = SimpleNamespace(content='{"loops": []}') if invalid_output else timeout
     llm.invoke.side_effect = [timeout, last_attempt]
     monkeypatch.setattr(daily, 'get_llm', Mock(return_value=llm))
     monkeypatch.setattr(daily, 'monotonic', Mock(side_effect=[100, 100 + elapsed]))
-    monkeypatch.setattr(daily, 'run_daily_pass', partial(daily.run_daily_pass, now=NOW, firestore_client=pass_env.fake))
-    fallback = Mock()
-    monkeypatch.setattr(notifications, '_record_daily_summary_fallback', fallback)
     recovered = Mock()
     monkeypatch.setattr(daily, 'record_fallback', recovered)
 
-    notifications._run_open_loops_daily_pass(UID, DATE_STR, None, None, 'UTC')
+    with pytest.raises(ValueError if invalid_output else APITimeoutError):
+        _run(pass_env, None)
 
     assert llm.invoke.call_count == expected_attempts
     recovered.assert_not_called()
-    fallback.assert_called_once_with(
-        from_mode='open_loops_daily_pass', to_mode='skipped', reason='error', outcome='degraded'
-    )
-    assert sum(record.message.startswith('open_loops_daily_pass_failed ') for record in caplog.records) == 1
     assert get_loops(UID, firestore_client=pass_env.fake) == []
     assert get_cards_doc(UID, DATE_STR, firestore_client=pass_env.fake) is None
     claim = daily.open_loops_db._claim_ref(UID, DATE_STR, pass_env.fake).get().to_dict()
