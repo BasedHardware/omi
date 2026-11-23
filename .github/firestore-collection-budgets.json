@@ -269,6 +269,30 @@
       "reviewed": "2026-11-14"
     },
     {
+      "site": "backend/utils/batch_pipeline/parked_sweep.py",
+      "expression": "f'{self.store.namespace}_jobs'",
+      "collection_pattern": "batch_pipeline_*_jobs",
+      "owner": "Goal: Pipeline (SCA-3880)",
+      "unit": "admitted hourly parked GPU page",
+      "reads_per_unit_budget": 200,
+      "reads_per_day_budget": 4800,
+      "basis": "planning-bound",
+      "source": "SCA-3880 DESIGN revision 2. Two indexed metadata pages of 100 rows each. Index-entry billing is separate.",
+      "reviewed": "2026-11-23"
+    },
+    {
+      "site": "backend/utils/batch_pipeline/parked_sweep.py",
+      "expression": "f'{self.store.namespace}_leases'",
+      "collection_pattern": "batch_pipeline_*_leases",
+      "owner": "Goal: Pipeline (SCA-3880)",
+      "unit": "admitted hourly parked GPU page",
+      "reads_per_unit_budget": 2,
+      "reads_per_day_budget": 48,
+      "basis": "planning-bound",
+      "source": "SCA-3880 DESIGN revision 2. One admission read and one cursor checkpoint read per admitted pass. Rejected admission adds one read per competing serving instance per UTC hour.",
+      "reviewed": "2026-11-23"
+    },
+    {
       "site": "backend/database/batch_pipeline_store.py",
       "expression": "f'{self.namespace}_allowance_holds'",
       "collection_pattern": "batch_pipeline_*_allowance_holds",
