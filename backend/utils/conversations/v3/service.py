@@ -363,7 +363,12 @@ async def reconcile(
                 if await run_blocking(db_executor, store.outline_attempt, uid, token, fingerprint, **keyed):
                     metrics.MODEL_CALLS.labels('outline').inc()
                     report['outline_calls'] = report.get('outline_calls', 0) + 1
-                    content = await leased_work(uid, key, token, llm_executor, models.outline, uid, messages)
+                    try:
+                        content = await leased_work(uid, key, token, llm_executor, models.outline, uid, messages)
+                    except RuntimeError as error:
+                        if str(error) != 'v3_lease_lifetime_exhausted':
+                            raise
+                        content = ''
                     try:
                         entries = outline.parse(content, group)
                         if preview_key and not group['locked']:
