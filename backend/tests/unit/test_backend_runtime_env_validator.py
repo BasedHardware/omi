@@ -636,7 +636,8 @@ def with_cloud_run_oauth_secrets(payload: str) -> str:
         payload,
         flags=re.MULTILINE,
     )
-    translation_defaults = {
+    backend_defaults = {
+        'CLIENT_TELEMETRY_DEVICE_SIGNALS_EXPORT': 'off',
         'TRANSLATION_DEMAND_GATE_ENABLED': 'true',
         'TRANSLATION_ONOPEN_ENABLED': 'true',
         'TRANSLATION_ONDEMAND_MAX_SEGMENTS': '50',
@@ -647,7 +648,7 @@ def with_cloud_run_oauth_secrets(payload: str) -> str:
         'TRANSLATION_ONDEMAND_GLOBAL_DAILY_CHARS': '1000000000',
         'TRANSLATION_ONDEMAND_MAX_CATCHUP_PAGES': '4',
     }
-    entries = ',\n'.join('        ' + json.dumps({'name': k, 'value': v}) for k, v in translation_defaults.items())
+    entries = ',\n'.join('        ' + json.dumps({'name': k, 'value': v}) for k, v in backend_defaults.items())
     payload = re.sub(
         r'("backend":\s*\{.*?"env":\s*\[\s*\{"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"\},)',
         lambda match: match.group(1) + '\n' + entries + ',',
