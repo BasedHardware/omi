@@ -332,6 +332,7 @@ def process_key(args: argparse.Namespace, key: state.PartitionKey, db: Any, tran
     atomic_json(journal_path, {**journal, 'status': 'reserved_locally'})
     migration = BoundedMigration(key, transport, firestore_client=db)
     for attempt in range(1, args.max_attempts + 1):
+        receipt = None
         try:
             route = state.get_route(key, firestore_client=db)
             if route.pending_count or route.uncertain_count:
@@ -346,7 +347,10 @@ def process_key(args: argparse.Namespace, key: state.PartitionKey, db: Any, tran
                 route = state.get_route(key, firestore_client=db)
                 if route.mode == desired:
                     after = asdict(route)
-                    atomic_json(journal_path, {**journal, 'status': 'complete', 'after': after})
+                    completed = {**journal, 'status': 'complete', 'after': after}
+                    if receipt is not None:
+                        completed['receipt'] = receipt
+                    atomic_json(journal_path, completed)
                     return {**result, 'status': 'already_complete', 'after': after}
                 unsettled = route.pending_count or route.uncertain_count
             except state.PartitionBusy:

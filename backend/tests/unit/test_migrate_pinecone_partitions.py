@@ -254,6 +254,7 @@ def test_applied_cutover_with_lost_response_is_reported_complete(args, key, monk
     cutover.assert_called_once()
     journal = json.loads((args.output_dir / 'owners' / f'{key.document_id}.json').read_text())
     assert journal['status'] == 'complete'
+    assert journal['receipt'] == receipt
     assert journal['after'] == asdict(after)
 
 
