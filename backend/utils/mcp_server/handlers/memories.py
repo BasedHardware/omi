@@ -414,7 +414,7 @@ def memories_page_core(
             http_status=503,
         )
     if result.get('scan_truncated') and use_keyset:
-        if result.get('next_cursor'):
+        if resume_uml is not None:
             result['coverage'] = (
                 'bounded_scan; continue with next_cursor; candidates beyond the scan budget may be omitted'
             )
