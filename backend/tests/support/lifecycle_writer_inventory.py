@@ -91,6 +91,26 @@ FIELD_SITES = {
             ),
         ),
     ],
+    # Frozen owner-scoped reply nested in the WAL witness; never writes conversation status.
+    'database/record_wal_duplicate.py': [
+        (
+            '_completed_status',
+            'status',
+            "'completed'",
+            (
+                'failed_segments',
+                'job_id',
+                'lane',
+                'poll_after_ms',
+                'processed_segments',
+                'result',
+                'status',
+                'successful_segments',
+                'total_files',
+                'total_segments',
+            ),
+        ),
+    ],
     # Client polling adapter only; never writes conversation lifecycle status.
     'database/record_wal_handoff.py': [
         (

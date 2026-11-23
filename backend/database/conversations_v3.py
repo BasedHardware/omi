@@ -25,6 +25,7 @@ from database.account_deletion_policy import account_deletion_marker_blocks_acce
 from models.finalization_owner import ENGINE_FIELD, EPOCH_FIELD, python_owns_finalization
 from utils.encryption import encrypt, decrypt
 from utils.home_feed.projection import stamp as stamp_home_display
+from config.record_wal_duplicate import has_retained_custody
 from config.conversations_v3 import boundary_seconds, stretch_cohesion_enabled
 from utils.conversations.v3 import Conflict, policy, preview_wakes
 from utils.open_loops.extraction import OPEN_LOOP_EXTRACTIONS_COMPRESSED_FIELD, OPEN_LOOP_EXTRACTIONS_FIELD
@@ -684,6 +685,11 @@ def commit_projection(
                 moved.add(rid)
             observed[rid] = current or {}
         absorbed = {cid: row['id'] for row in batch_rows for cid in row.get('_v3_absorbed', ())}
+        touched = {*(row['id'] for row in batch_rows), *absorbed}
+        if final:
+            touched.update((*retire, *remove))
+        if any(has_retained_custody(observed.get(cid)) for cid in touched):
+            raise Conflict('source_changed')
         if absorbed and merge_donors_have_tasks(uid, absorbed, firestore_client=client, transaction=tx):
             raise Conflict('source_changed')
         if retired and merge_donors_have_tasks(uid, retired, firestore_client=client, transaction=tx):

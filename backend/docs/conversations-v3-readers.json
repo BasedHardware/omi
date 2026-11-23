@@ -259,9 +259,17 @@
     "policy": "storage",
     "reason": "Persistence boundary: user-scoped storage and authoritative lifecycle/privacy/custody metadata. Public-facing methods apply the central visibility predicate."
   },
+  "backend/database/record_wal_duplicate.py:collection": {
+    "policy": "storage",
+    "reason": "Marks settled custody on the owner-scoped donor row in the receipt transaction after rechecking the original processing and privacy authority."
+  },
   "backend/database/record_wal_handoff.py:collection": {
     "policy": "storage",
     "reason": "Persistence boundary: user-scoped storage and authoritative lifecycle/privacy/custody metadata. Public-facing methods apply the central visibility predicate."
+  },
+  "backend/database/record_wal_merge.py:collection": {
+    "policy": "storage",
+    "reason": "Reads bounded owner-scoped retained donors and their erasure fences before publishing the merge binding."
   },
   "backend/database/recording_sessions.py:collection": {
     "policy": "both",
