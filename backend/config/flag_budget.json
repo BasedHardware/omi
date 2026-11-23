@@ -444,7 +444,8 @@
     },
     "BATCH_PIPELINE_UPLOAD_COALESCING_ENABLED": {
       "owner": "margin / SCA-1800",
-      "review_by": "2026-11-26"
+      "review_by": "2026-12-03",
+      "reason": "SCA-1800: retain the rollback switch for upload coalescing on backend-integration and backend-sync. Margin to review Release's effective-setting and safe-drain evidence and identify a permanent budget slot by 2026-12-03."
     },
     "BATCH_PIPELINE_VAD_SEGMENTATION_REUSE_ENABLED": {
       "owner": "planscost / gpu efficiency sprint",
