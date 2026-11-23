@@ -140,7 +140,7 @@ jobs:
             echo "Invalid environment: ${{ github.event.inputs.environment }}. Must be 'development' or 'prod'."
             exit 1
           fi
-          if [[ "$MODE" == worker-depth-only ]]; then
+          if [[ "${MODE:-standard}" == worker-depth-only ]]; then
             [[ "${{ inputs.environment }}" == prod && "$SERVICE" == batch-pipeline-worker \
                && "$GITHUB_REF" == refs/heads/main && "$BREAK_GLASS_LOCK" != true ]] || {
               echo "Worker depth mode requires the main workflow, prod batch-pipeline-worker and the shared lock" >&2
@@ -151,7 +151,7 @@ jobs:
               echo "Worker depth mode cannot be combined with image deploy inputs" >&2
               exit 1
             }
-            [[ "$SOURCE_REF" =~ ^[0-9a-f]{40}$ && "$DEPTH_OPERATION" =~ ^(plan|apply)$ \
+            [[ "$SOURCE_REF" =~ ^[0-9abcdef]{40}$ && "$DEPTH_OPERATION" =~ ^(plan|apply)$ \
                && -n "$TARGET_DEPTH" && -n "$EXPECTED_CURRENT_DEPTH" && -n "$EXPECTED_WORKER_DIGEST" \
                && -n "$EXPECTED_WORKER_UID" && -n "$EXPECTED_WORKER_RESOURCE_VERSION" ]] || {
               echo "Worker depth mode requires a full reviewed branch SHA, operation and all five CAS inputs" >&2
@@ -159,7 +159,7 @@ jobs:
             }
             exit 0
           fi
-          [[ "$MODE" == standard && "$DEPTH_OPERATION" == plan \
+          [[ "${MODE:-standard}" == standard && "${DEPTH_OPERATION:-plan}" == plan \
              && -z "$TARGET_DEPTH$EXPECTED_CURRENT_DEPTH$EXPECTED_WORKER_DIGEST$EXPECTED_WORKER_UID$EXPECTED_WORKER_RESOURCE_VERSION" ]] || {
             echo "Worker depth inputs require worker-depth-only mode" >&2
             exit 1
@@ -199,7 +199,6 @@ jobs:
         with:
           ref: ${{ github.event.inputs.environment == 'prod' && 'main' || github.event.inputs.branch }}
           fetch-depth: 0
-          persist-credentials: ${{ inputs.mode != 'worker-depth-only' }}
 
       - name: Select merged production source and image tag
         id: vars
@@ -227,7 +226,6 @@ jobs:
           echo "source_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
       - name: Checkout immutable Firestore gate controls
-        if: inputs.mode != 'worker-depth-only'
         uses: actions/checkout@v7
         with:
           ref: ${{ github.workflow_sha }}
@@ -251,7 +249,6 @@ jobs:
           sparse-checkout: /.github/scripts/worker_image_only.py
 
       - name: Verify serving Firestore indexes
-        if: inputs.mode != 'worker-depth-only'
         uses: ./.github/firestore-workflow/.github/actions/firestore-readiness
         with:
           source_sha: ${{ steps.vars.outputs.source_sha }}
@@ -260,7 +257,6 @@ jobs:
           service_account: omi-ci-index-check@based-hardware.iam.gserviceaccount.com
 
       - name: Resolve deployment target
-        if: inputs.mode != 'worker-depth-only'
         id: target
         shell: bash
         env:
@@ -403,7 +399,7 @@ jobs:
           project_id: ${{ vars.GCP_PROJECT_ID }}
 
       - name: Rehearse or apply the production worker depth CAS
-        if: inputs.mode == 'worker-depth-only'
+        if: inputs.mode == 'worker-depth-only' && inputs.worker_dry_run != true
         timeout-minutes: 55
         env:
           DEPLOY_ENV: ${{ vars.ENV }}
@@ -420,10 +416,16 @@ jobs:
           # Allow main to advance without changing the reviewed workflow or either control.
           git diff --exit-code --quiet "$GITHUB_WORKFLOW_SHA" "$REVIEWED_SOURCE" -- \
             .github/workflows/gcp_diarizer.yml .github/scripts/worker_depth_only.py .github/scripts/worker_image_only.py \
+            backend/scripts/deploy_status_report.py \
             || { echo "The reviewed worker depth controls differ from the running workflow" >&2; exit 1; }
           python3 .github/scripts/worker_depth_only.py "$DEPTH_OPERATION" \
             --source "$REVIEWED_SOURCE" --current "$EXPECTED_CURRENT_DEPTH" --target "$TARGET_DEPTH" \
             --digest "$EXPECTED_WORKER_DIGEST" --uid "$EXPECTED_WORKER_UID" --version "$EXPECTED_WORKER_RESOURCE_VERSION"
+
+      - name: Verify worker depth apply pod health
+        if: inputs.mode == 'worker-depth-only' && inputs.depth_operation == 'apply' && inputs.worker_dry_run != true
+        timeout-minutes: 3
+        run: timeout 120 python3 backend/scripts/deploy_status_report.py --env prod --include-gke --gke-service batch-pipeline-worker
 
       - name: Deploy Diarizer to GKE cluster using Helm
         if: inputs.mode != 'worker-depth-only' && inputs.preserve_live_worker != true && inputs.worker_dry_run != true

@@ -277,6 +277,24 @@ class WorkerDepthOnlyTest(unittest.TestCase):
 
 
 class WorkflowValidationTest(unittest.TestCase):
+    def test_pod_health_is_a_strict_success_gate_only_for_depth_apply(self):
+        workflow = yaml.load((ROOT / ".github/workflows/gcp_diarizer.yml").read_text(), Loader=yaml.BaseLoader)
+        steps = workflow["jobs"]["deploy"]["steps"]
+        names = [step.get("name") for step in steps]
+        report_index = names.index("Verify worker depth apply pod health")
+        self.assertGreater(report_index, names.index("Rehearse or apply the production worker depth CAS"))
+        report = steps[report_index]
+        self.assertEqual(
+            report["if"],
+            "inputs.mode == 'worker-depth-only' && inputs.depth_operation == 'apply' && inputs.worker_dry_run != true",
+        )
+        self.assertNotIn("continue-on-error", report)
+        self.assertEqual(
+            report["run"].strip(),
+            "timeout 120 python3 backend/scripts/deploy_status_report.py --env prod --include-gke "
+            "--gke-service batch-pipeline-worker",
+        )
+
     def test_dispatch_gate(self):
         workflow = yaml.load((ROOT / ".github/workflows/gcp_diarizer.yml").read_text(), Loader=yaml.BaseLoader)
         self.assertIn("'prod-train'", workflow["concurrency"]["group"])
