@@ -33431,7 +33431,8 @@
       "impact": "infrastructure",
       "tier": "agent",
       "audience": "agent",
-      "owner": "observability"
+      "owner": "margin",
+      "owner_issue": "SCA-3891"
     },
     "isPaused": false,
     "notification_settings": {
@@ -33546,7 +33547,164 @@
       "impact": "infrastructure",
       "tier": "agent",
       "audience": "agent",
-      "owner": "observability"
+      "owner": "margin",
+      "owner_issue": "SCA-3891"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": [
+        "omi-tier-silent"
+      ]
+    },
+    "record": null
+  },
+  {
+    "uid": "omi-firestore-unattributed-absolute",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Firestore Cost",
+    "title": "FirestoreUnattributedReadsAbsolute",
+    "condition": "D",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 1800,
+          "to": 0
+        },
+        "datasourceUid": "gmp-cloud-run",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "gmp-cloud-run"
+          },
+          "expr": "sum(rate(omi_firestore_billed_reads_by_caller_total[30m])) or vector(0)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 1800,
+          "to": 0
+        },
+        "datasourceUid": "gmp-cloud-run",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "gmp-cloud-run"
+          },
+          "expr": "(avg_over_time(sum(firestore_googleapis_com:document_read_count)[30m:1m]) / 60) and ((((count(count by (type) (firestore_googleapis_com:document_read_count{type=~\"LOOKUP|QUERY|NOT_FOUND\"})) == bool 3) or vector(0)) * ((min((max by (type) (time() - timestamp(firestore_googleapis_com:document_read_count{type=~\"LOOKUP|QUERY|NOT_FOUND\"}))) < bool 900)) or vector(0))) == 1)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "B"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "$B - $A",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "math"
+        }
+      },
+      {
+        "refId": "D",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [
+                  579
+                ],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "D"
+                ],
+                "reducer": {
+                  "params": [],
+                  "type": "last"
+                },
+                "type": "query"
+              }
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "C",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "D",
+          "type": "threshold"
+        }
+      }
+    ],
+    "updated": "2026-11-23T00:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "KeepLast",
+    "for": "2h",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "dashboard_url": "https://monitor.omi.me/d/3e7c5f57-a1be-4175-81e6-1f0c7c28b9dd",
+      "summary": "Unattributed Firestore reads exceeded 579 reads/s for two hours.",
+      "threshold": "Billed minus instrumented Firestore reads > 579 reads/s for 2h (about 50M reads/day-rate).",
+      "user_impact": "Unattributed reads increase Firestore spend even when their share of billed reads stays below 3%.",
+      "scope": "Same 30m billed gauge average and attributed counter rate as the ratio rule. Require all expected billed types to be present and fresh. The blind alert owns native telemetry failures.",
+      "verification": "PromQL fixtures cover the threshold boundary, the two-hour dwell, a gap below 3%, and missing or stale billed data.",
+      "evaluated_bad": "Billed 30,000 reads/s and instrumented 29,400 reads/s for 2h fires at a 2% gap.",
+      "evaluated_good": "An excess of at most 579 reads/s stays quiet.",
+      "safe_next_action": "Review SCA-3891 and reconcile native and attributed reads against scheduled operator readers.",
+      "runbook": "backend/docs/firestore-read-attribution.md",
+      "switch": "Revert the PR to roll back. Margin owns this rule through SCA-3891. The hourly reconciler evaluates the read gap independently and reports to the issue. The shared Telegram receiver stays muted."
+    },
+    "labels": {
+      "severity": "warning",
+      "instatus_component": "observability",
+      "alert_identity": "omi-firestore-unattributed-absolute",
+      "component": "firestore",
+      "impact": "infrastructure",
+      "tier": "agent",
+      "audience": "agent",
+      "owner": "margin",
+      "owner_issue": "SCA-3891"
     },
     "isPaused": false,
     "notification_settings": {
@@ -34203,8 +34361,8 @@
       "impact": "infrastructure",
       "tier": "agent",
       "audience": "agent",
-      "owner": "firestore-cost-owner",
-      "owner_issue": "SCA-2173"
+      "owner": "margin",
+      "owner_issue": "SCA-3891"
     },
     "isPaused": false,
     "notification_settings": {
@@ -34360,8 +34518,8 @@
       "impact": "infrastructure",
       "tier": "agent",
       "audience": "agent",
-      "owner": "firestore-cost-owner",
-      "owner_issue": "SCA-2173"
+      "owner": "margin",
+      "owner_issue": "SCA-3891"
     },
     "isPaused": false,
     "notification_settings": {
@@ -34517,8 +34675,8 @@
       "impact": "infrastructure",
       "tier": "agent",
       "audience": "agent",
-      "owner": "firestore-cost-owner",
-      "owner_issue": "SCA-2173"
+      "owner": "margin",
+      "owner_issue": "SCA-3891"
     },
     "isPaused": false,
     "notification_settings": {
