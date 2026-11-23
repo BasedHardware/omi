@@ -279,6 +279,16 @@ void main() {
     expect(offer.yearly!.formatted, 'US\$269.91');
   }, variant: TargetPlatformVariant.only(TargetPlatform.iOS));
 
+  for (final platform in [TargetPlatform.iOS, TargetPlatform.android]) {
+    testWidgets('trial paywall for a Stripe-billed ${platform.name} reader keeps the 7-day timeline', (tester) async {
+      await _pump(tester, [_response(play: null)],
+          child: TrialPaywallPage(source: 'test', now: DateTime(2026, 11, 22)));
+      expect(find.byKey(const Key('trial_paywall_timeline')), findsOneWidget);
+      expect(find.text('In 7 days'), findsOneWidget);
+      expect(find.byKey(const Key('trial_paywall_timeline_pending')), findsNothing);
+    }, variant: TargetPlatformVariant.only(platform));
+  }
+
   testWidgets('trial paywall shows Play prices, hides the Stripe code hint, and buys the Play trial offer',
       (tester) async {
     final world = await _pump(
@@ -334,6 +344,9 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.byKey(const Key('play_plans_error')), findsOneWidget);
       expect(find.textContaining('US\$'), findsNothing);
+      // No trial length, date or timeline in the error state.
+      expect(find.byKey(const Key('trial_paywall_timeline')), findsNothing);
+      expect(find.text('In 7 days'), findsNothing);
     }, variant: TargetPlatformVariant.only(TargetPlatform.android));
   }
 
@@ -534,10 +547,17 @@ void main() {
     ));
     await tester.pump();
     expect(find.byKey(const Key('play_plans_error')), findsNothing);
+    // While Play's offers load: a skeleton, never the constant trial length or its date.
+    expect(find.byKey(const Key('trial_paywall_timeline_pending')), findsOneWidget);
+    expect(find.byKey(const Key('trial_paywall_timeline')), findsNothing);
+    expect(find.text('In 7 days'), findsNothing);
     await tester.pump(playQueryTimeout + const Duration(seconds: 1));
     await tester.pump();
     expect(world.usage.playOffersLoading, isFalse);
     expect(find.byKey(const Key('play_plans_error')), findsOneWidget);
+    expect(find.byKey(const Key('trial_paywall_timeline_pending')), findsNothing);
+    expect(find.byKey(const Key('trial_paywall_timeline')), findsNothing);
+    expect(find.text('In 7 days'), findsNothing);
   }, variant: TargetPlatformVariant.only(TargetPlatform.android));
 
   testWidgets('Restore says when the purchase belongs to another Omi account', (tester) async {

@@ -308,6 +308,9 @@ class _TrialPaywallPageState extends State<TrialPaywallPage> {
               final selected = _yearly ? (yearly ?? monthly) : (monthly ?? yearly);
               // Google Play readers: Play's own trial length for the selected plan, never the constant.
               final trialDays = (usage.playBilledPurchaser ? selected?.trialDays : null) ?? TrialPaywallPage.trialDays;
+              // Until Play's offer has loaded (or when it failed) a Play reader sees no trial length,
+              // date or timeline: there is no Play trial to describe yet.
+              final playTrialUnknown = usage.playBilledPurchaser && selected?.trialDays == null;
               final currency = selected?.currency ?? 'usd';
               final zero = formatBillingPrice(0, currency);
               final yearlySaving = yearly != null && monthly != null && monthly.amountMinor * 12 > yearly.amountMinor
@@ -342,27 +345,37 @@ class _TrialPaywallPageState extends State<TrialPaywallPage> {
                         const SizedBox(height: 14),
                         _Dots(count: slides.length, current: _slide),
                         const SizedBox(height: 22),
-                        _Card(
-                          child: Column(
-                            children: [
-                              _TimelineRow(
-                                icon: Icons.lock_open_rounded,
-                                title: l10n.paywallTrialTodayTitle,
-                                body: l10n.paywallTrialTodayBody,
-                                date: onDay(0),
-                                emphasis: _TimelineEmphasis.first,
-                              ),
-                              _TimelineRow(
-                                icon: Icons.check_circle_outline_rounded,
-                                title: l10n.paywallTrialInDaysTitle(trialDays),
-                                body: selected?.trialLabel(context, trialDays) ?? l10n.paywallTrialEndsBody,
-                                date: onDay(trialDays),
-                                emphasis: _TimelineEmphasis.plain,
-                                last: true,
-                              ),
-                            ],
+                        if (playTrialUnknown)
+                          loading
+                              ? const Padding(
+                                  key: Key('trial_paywall_timeline_pending'),
+                                  padding: EdgeInsets.symmetric(horizontal: 16),
+                                  child: _Skeleton(height: 120),
+                                )
+                              : const SizedBox.shrink()
+                        else
+                          _Card(
+                            key: const Key('trial_paywall_timeline'),
+                            child: Column(
+                              children: [
+                                _TimelineRow(
+                                  icon: Icons.lock_open_rounded,
+                                  title: l10n.paywallTrialTodayTitle,
+                                  body: l10n.paywallTrialTodayBody,
+                                  date: onDay(0),
+                                  emphasis: _TimelineEmphasis.first,
+                                ),
+                                _TimelineRow(
+                                  icon: Icons.check_circle_outline_rounded,
+                                  title: l10n.paywallTrialInDaysTitle(trialDays),
+                                  body: selected?.trialLabel(context, trialDays) ?? l10n.paywallTrialEndsBody,
+                                  date: onDay(trialDays),
+                                  emphasis: _TimelineEmphasis.plain,
+                                  last: true,
+                                ),
+                              ],
+                            ),
                           ),
-                        ),
                         const SizedBox(height: 16),
                         _Card(
                           child: Column(
@@ -921,7 +934,7 @@ class _Dots extends StatelessWidget {
 }
 
 class _Card extends StatelessWidget {
-  const _Card({required this.child});
+  const _Card({super.key, required this.child});
 
   final Widget child;
 

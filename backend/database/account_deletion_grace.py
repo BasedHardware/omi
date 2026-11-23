@@ -158,6 +158,19 @@ def mark_user_deletion_grace_actions_complete(uid: str, wipe_job_id: str) -> boo
     return _mark_user_deletion_grace_actions_complete_txn(client.transaction(), doc_ref, wipe_job_id)
 
 
+@cache_writer('deletion_marker_cache')
+def record_grace_actions_failure(uid: str, attempts: int, overdue: bool) -> None:
+    """Keep a failing grace admission visible on the marker: attempt count, last failure, past its due date."""
+    client = account_deletion_firestore_client()
+    account_deletion_document(uid, firestore_client=client).update(
+        {
+            'grace_actions_failed_attempts': attempts,
+            'grace_actions_last_failed_at': datetime.now(timezone.utc),
+            'grace_actions_overdue': overdue,
+        }
+    )
+
+
 @transactional
 def _restore_user_deletion_txn(transaction, doc_ref, *, operation_id: str) -> str:
     snapshot = doc_ref.get(transaction=transaction)
