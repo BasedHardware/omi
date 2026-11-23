@@ -18,14 +18,20 @@ ROLLOUT_COHORT = 'prepaid-code-redeem'
 SUBSCRIPTION_MARKER = 'prepaid_code_redemption'
 
 
+def mode(environ: Optional[Mapping[str, str]] = None) -> str:
+    """'on', 'cohort' or 'off' (default and any unknown value). An env read only, no I/O."""
+    env = os.environ if environ is None else environ
+    value = (env.get(ENV) or '').strip().lower()
+    return value if value in ('on', 'cohort') else 'off'
+
+
 def enabled_for(uid: Optional[str], environ: Optional[Mapping[str, str]] = None) -> bool:
     if not isinstance(uid, str) or not rollout_cohorts.valid_uid(uid):
         return False
-    env = os.environ if environ is None else environ
-    mode = (env.get(ENV) or '').strip().lower()
-    if mode == 'on':
+    mode_value = mode(environ)
+    if mode_value == 'on':
         return True
-    if mode != 'cohort':
+    if mode_value != 'cohort':
         return False
     try:
         return rollout_cohorts.in_rollout_cohort(uid, ROLLOUT_COHORT)

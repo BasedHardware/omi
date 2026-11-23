@@ -138,32 +138,45 @@ def _classify(promo: dict, uid: str, now: int) -> tuple[dict, int]:
     return monthly, months
 
 
-def _has_live_plan(uid: str, now: int) -> bool:
+def _has_live_plan(uid: str, now: int, own_promotion_code_id: Optional[str] = None) -> bool:
+    """A live Play row, a live paid stored row, or any Stripe subscription that can still bill.
+    With ``own_promotion_code_id`` (a resumed redemption), the prepaid subscription this same code
+    created is not counted, so the reader's own half-finished plan never blocks its resume."""
     current = users_db.get_existing_user_subscription(uid)
     if play_stripe_guard.live_play_row(current):
         return True
-    if (
+    other_open, own_ids = _open_stripe_subscriptions(uid, own_promotion_code_id)
+    if other_open:
+        return True
+    return bool(
         current is not None
         and is_paid_plan(current.plan)
         and current.status == SubscriptionStatus.active
         and (current.current_period_end or 0) >= now
-    ):
-        return True
-    return _has_open_stripe_subscription(uid)
+        and current.stripe_subscription_id not in own_ids
+    )
 
 
-def _has_open_stripe_subscription(uid: str) -> bool:
-    """Any Stripe subscription that can still bill (active, trialing, past_due, unpaid, incomplete, paused):
-    an old one must never keep charging next to a prepaid one."""
+def _open_stripe_subscriptions(uid: str, own_promotion_code_id: Optional[str]) -> tuple[bool, set]:
+    """(any other subscription that can still bill (active, trialing, past_due, unpaid, incomplete, paused),
+    ids of this code's own prepaid subscriptions): an old one must never keep charging next to a prepaid one."""
     customer_id = users_db.get_stripe_customer_id(uid)
     if not customer_id:
-        return False
-    subscriptions = stripe.Subscription.list(customer=customer_id, status='all', limit=100)
-    return any(
-        (sub.get('status') not in stripe_utils.TERMINAL_SUBSCRIPTION_STATUSES)
-        and ((sub.get('metadata') or {}).get('uid') in (None, uid))
-        for sub in subscriptions.auto_paging_iter()
-    )
+        return False, set()
+    other_open, own_ids = False, set()
+    for sub in stripe.Subscription.list(customer=customer_id, status='all', limit=100).auto_paging_iter():
+        metadata = sub.get('metadata') or {}
+        if sub.get('status') in stripe_utils.TERMINAL_SUBSCRIPTION_STATUSES or metadata.get('uid') not in (None, uid):
+            continue
+        if (
+            own_promotion_code_id
+            and prepaid_config.is_prepaid_subscription(sub)
+            and metadata.get('redeemed_promotion_code_id') == own_promotion_code_id
+        ):
+            own_ids.add(sub.get('id'))
+        else:
+            other_open = True
+    return other_open, own_ids
 
 
 def _customer_id(uid: str) -> str:
@@ -216,6 +229,10 @@ def _resume(uid: str, promo: dict, claim: dict) -> dict:
     ends_at, months = claim.get('ends_at'), claim.get('months')
     if not ends_at or not months:
         raise PrepaidCodeError(503, TRY_AGAIN)
+    # The first create may never have reached Stripe, and the reader may have bought a plan since: never put
+    # a prepaid plan next to it. The claim stays with this reader, so a later retry can finish the redemption.
+    if not claim.get('subscription_id') and _has_live_plan(uid, int(time.time()), own_promotion_code_id=promo['id']):
+        raise PrepaidCodeError(409, HAS_PLAN)
     try:
         monthly_price_id, _ = _pro_prices()
         _create_subscription(uid, promo, monthly_price_id, ends_at)
