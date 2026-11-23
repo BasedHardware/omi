@@ -1271,12 +1271,20 @@ def delete_conversation_audio_files(uid: str, conversation_id: str, *, merged_in
     unverified = 0
     for bucket_name in filter(None, bucket_names):
         bucket = _get_storage_client().bucket(bucket_name)
-        for prefix in ('chunks', 'audio', 'merged', 'playback', 'raw-live', 'audio-outbox', 'record-wal'):
+        for prefix in ('chunks', 'audio', 'merged', 'playback', 'raw-live', 'audio-outbox'):
             try:
                 _delete_owner_bucket_prefix(bucket, f'{prefix}/{uid}/{conversation_id}/')
             except StoragePrefixPurgeBlocked as error:
                 blocked.update(error.objects)
                 unverified += error.unverified
+        if not blocked:
+            # Keep the existing fail-fast sweep for original-custody WAL objects.
+            delete_owner_bucket_prefix(
+                bucket,
+                f'record-wal/{uid}/{conversation_id}/',
+                real_gcs=_uses_real_gcs_bucket(bucket),
+                tolerate_object_races=False,
+            )
         if bucket_name == private_cloud_sync_bucket:
             # Original sync files may span conversations; deleting a linked
             # conversation removes the shared original too, so its audio cannot

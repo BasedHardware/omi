@@ -1823,7 +1823,7 @@ def _delete_privacy_audio_after_response(uid: str, conversation_id: str, *, sour
     try:
         delete_privacy_conversation_audio(uid, conversation_id, source_ids=source_ids)
     except StoragePrefixPurgeError as error:
-        logger.warning(
+        logger.error(
             'event=conversation_audio_purge uid=%s conversation_id=%s outcome=%s reason=%s',
             uid,
             conversation_id,

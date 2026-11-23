@@ -65,18 +65,24 @@ def assert_no_protected_object_hold(blob: Any) -> None:
 
 
 def delete_owner_bucket_prefix(
-    bucket: Any, prefix: str, *, real_gcs: bool, account_deletion_uid: str | None = None
+    bucket: Any,
+    prefix: str,
+    *,
+    real_gcs: bool,
+    account_deletion_uid: str | None = None,
+    tolerate_object_races: bool = True,
 ) -> int:
     """Purge and verify owner generations, honoring approved operational holds."""
     listing_kwargs = {'versions': True} if real_gcs else {}
-    if account_deletion_uid is None:
+    if account_deletion_uid is None and tolerate_object_races:
         return _delete_conversation_bucket_prefix(bucket, prefix, real_gcs=real_gcs, listing_kwargs=listing_kwargs)
 
     blobs = list(bucket.list_blobs(prefix=prefix, **listing_kwargs))
     for blob in blobs:
-        assert_no_protected_object_hold(blob)
-        if getattr(blob, 'temporary_hold', None) is True or getattr(bucket, 'name', None) == 'syncing-local':
-            release_operational_hold_for_account_deletion(account_deletion_uid, blob)
+        if account_deletion_uid is not None:
+            assert_no_protected_object_hold(blob)
+            if getattr(blob, 'temporary_hold', None) is True or getattr(bucket, 'name', None) == 'syncing-local':
+                release_operational_hold_for_account_deletion(account_deletion_uid, blob)
         if real_gcs:
             blob.delete(if_generation_match=blob.generation, if_metageneration_match=blob.metageneration)
         else:

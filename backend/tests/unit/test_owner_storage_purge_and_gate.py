@@ -287,7 +287,8 @@ def test_merge_cleanup_preserves_canonical_and_explicit_privacy_calls_erase(monk
 def test_conversation_purge_attempts_other_prefixes_when_some_generations_are_protected(monkeypatch):
     protected = {'chunks/u/c/held', 'raw-live/u/c/held'}
     other = 'playback/u/c/deletable'
-    private = _Bucket(protected | {other})
+    wal = 'record-wal/u/c/original'
+    private = _Bucket(protected | {other, wal})
     private.name = 'private'
     delete = _Blob.delete
 
@@ -307,7 +308,7 @@ def test_conversation_purge_attempts_other_prefixes_when_some_generations_are_pr
         with pytest.raises(account_deletion_operational_holds.StoragePrefixPurgeBlocked) as error:
             storage_mod.delete_privacy_conversation_audio('u', 'c')
         assert error.value.objects == {('private', name, 1): 'objectUnderActiveHold' for name in protected}
-        assert private.names == protected
+        assert private.names == protected | {wal}
 
 
 def _prepare_playback(monkeypatch):

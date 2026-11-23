@@ -242,9 +242,10 @@ def test_background_audio_purge_reports_provider_outcome_once(error, outcome, re
     background_purge('u', 'c', source_ids=['donor'])
 
     purge.assert_called_once_with('u', 'c', source_ids=['donor'])
-    logger.warning.assert_called_once()
-    assert logger.warning.call_args.args[3] == outcome
-    assert reason in logger.warning.call_args.args[4]
+    logger.error.assert_called_once()
+    assert logger.error.call_args.args[3] == outcome
+    assert reason in logger.error.call_args.args[4]
+    logger.warning.assert_not_called()
     logger.exception.assert_not_called()
 
 
