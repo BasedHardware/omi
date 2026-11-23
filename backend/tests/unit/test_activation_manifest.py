@@ -243,6 +243,18 @@ def test_order_defers_the_moving_service_and_later_steps(manifest):
         check.evaluate(manifest, state, 'diarizer')
 
 
+@pytest.mark.parametrize('builder', ['backend', 'backend-sync', 'backend-sync-backfill', 'backend-integration'])
+def test_live_title_lane_must_be_serving_before_builder_rollout(manifest, builder):
+    state = _state('state-ready.json')
+    assert check.evaluate(manifest, state, builder).verdict == check.READY
+
+    lane = 'omi:auto:conversation-v3-live-title'
+    state['services']['llm-gateway']['serving'][0]['lanes'].remove(lane)
+    verdict = check.evaluate(manifest, state, builder)
+    assert verdict.verdict == check.BLOCKED
+    assert f'lane:{lane}' in _by_status(verdict, check.MISSING)
+
+
 def test_infra_before_field(manifest):
     data = copy.deepcopy(manifest)
     data['queues'][0]['before'] = 'backend-listen'

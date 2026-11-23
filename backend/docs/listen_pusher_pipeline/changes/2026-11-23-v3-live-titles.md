@@ -9,9 +9,12 @@ See the [pipeline contract](../../listen_pusher_pipeline.mdx#recording-derived-c
 
 ## Production readback
 
-Verify that the serving gateway has the live-title lane before enabling a
-builder revision with live titles. A missing lane during rollout can consume
-the conversation's single attempt.
+Roll the gateway first. Collect fresh serving state and run
+`activation_check.py --before <builder-service>` with the conversations-v3
+activation manifest before rolling a builder. The check requires the live-title
+lane on the serving gateway. Keep `CONVERSATIONS_V3_LIVE_TITLE=off` on any
+updated builder until that check passes. A missing lane during rollout can
+consume the conversation's single attempt.
 
 - On David's TestFlight build, record a continuous conversation with a
   recognizable topic. Leave it running beyond five minutes of transcribed
