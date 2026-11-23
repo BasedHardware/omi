@@ -1111,6 +1111,7 @@ async def test_flex_fallback_reason_counts_reconcile_for_conv_structure(monkeypa
     assert REGISTRY.get_sample_value('llm_gateway_flex_first_total', fallback_labels) == previous_total + 1
     for bucket, previous in previous_counts.items():
         assert REGISTRY.get_sample_value(reason_metric, {'reason': bucket}) == previous + (bucket == reason)
+    assert REGISTRY.get_sample_value(reason_metric, {'reason': 'unknown'}) is None
 
 
 @pytest.mark.asyncio

@@ -63,6 +63,7 @@ from llm_gateway.gateway.reserved_fallback import can_try_next_provider, record_
 from llm_gateway.gateway.validator import ValidatedChatCompletionRequest
 from utils.llm.model_config import uses_explicit_cache_and_chat_sanitizer
 from utils.log_sanitizer import sanitize
+from utils.observability.reasons import ConvStructureFlexFallbackReason, ReasonFamily, reason_label
 
 logger = logging.getLogger(__name__)
 monotonic = time.monotonic
@@ -793,12 +794,14 @@ async def _attempt_provider(
                 FLEX_FIRST_TOTAL.labels(lane_id=route.lane_id, outcome='fallback_standard').inc()
                 if route.lane_id == 'omi:auto:conv-structure':
                     if exc.failure_class == FailureClass.TIMEOUT_BEFORE_OUTPUT:
-                        reason = 'timeout'
+                        reason = ConvStructureFlexFallbackReason.TIMEOUT
                     elif exc.failure_class == FailureClass.PROVIDER_429_OMI_PAID:
-                        reason = 'http_429'
+                        reason = ConvStructureFlexFallbackReason.HTTP_429
                     else:
-                        reason = 'other'
-                    CONV_STRUCTURE_FLEX_FALLBACK_REASON_TOTAL.labels(reason=reason).inc()
+                        reason = ConvStructureFlexFallbackReason.OTHER
+                    CONV_STRUCTURE_FLEX_FALLBACK_REASON_TOTAL.labels(
+                        reason=reason_label(ReasonFamily.FALLBACK, reason, ConvStructureFlexFallbackReason),
+                    ).inc()
                 continue
             if error.failure_class not in RETRYABLE_PROVIDER_FAILURE_CLASSES:
                 return None, error

@@ -13,6 +13,7 @@ from llm_gateway.gateway.config_loader import GatewayConfig
 from llm_gateway.gateway.errors import GatewayError, GatewayErrorCode, INVALID_REQUEST_REJECTION_CODES
 from llm_gateway.gateway.output_budget import OutputBudgetDecision, output_budget_bucket
 from llm_gateway.gateway.schemas import FailureClass, ProviderRejection, RouteServingClass
+from utils.observability.reasons import ConvStructureFlexFallbackReason
 
 logger = logging.getLogger(__name__)
 
@@ -92,8 +93,9 @@ CONV_STRUCTURE_FLEX_FALLBACK_REASON_TOTAL = Counter(
 )
 
 # Expose zero-count buckets before their first fallback so increase() can see it.
-for _reason in ('timeout', 'http_429', 'other'):
-    CONV_STRUCTURE_FLEX_FALLBACK_REASON_TOTAL.labels(reason=_reason)
+CONV_STRUCTURE_FLEX_FALLBACK_REASON_TOTAL.labels(reason=ConvStructureFlexFallbackReason.TIMEOUT)
+CONV_STRUCTURE_FLEX_FALLBACK_REASON_TOTAL.labels(reason=ConvStructureFlexFallbackReason.HTTP_429)
+CONV_STRUCTURE_FLEX_FALLBACK_REASON_TOTAL.labels(reason=ConvStructureFlexFallbackReason.OTHER)
 
 STREAM_TTFB_SECONDS = Histogram(
     'llm_gateway_stream_ttfb_seconds',
