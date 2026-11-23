@@ -128,7 +128,9 @@ class ConversationsV3Provider extends ChangeNotifier {
       if (row.v3?.recording == true) continue;
       final terminal = switch (row.v3?.tileState) {
         ConversationTileState.done || ConversationTileState.failed => true,
-        null => row.status == ConversationStatus.completed || row.status == ConversationStatus.failed,
+        null => row.status == ConversationStatus.completed ||
+            row.status == ConversationStatus.failed ||
+            row.homeStep == 'failed',
         _ => false,
       };
       if (terminal && _matchesFinishRow(row)) return row;

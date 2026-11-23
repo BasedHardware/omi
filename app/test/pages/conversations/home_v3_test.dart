@@ -276,11 +276,13 @@ final _now = DateTime(2026, 11, 16, 12, 30);
 
 ServerConversation _conversation(String id, DateTime start, String title,
         {ConversationV3Fields? v3,
+        ConversationStatus status = ConversationStatus.completed,
         Duration length = const Duration(minutes: 25),
         DateTime? lastSpeech,
         List<TranscriptSegment> segments = const []}) =>
     ServerConversation(
       id: id,
+      status: status,
       speakerResolution: const ConversationSpeakers(status: 'resolved', participantSpeakerIds: [0]),
       createdAt: start,
       startedAt: start,
@@ -1386,6 +1388,7 @@ void main() {
 
     for (final (caseName, message, image) in [
       ('failed summary', "Couldn't summarize this conversation", '003-mobile-ios-v3-manual-finish-failed'),
+      ('legacy failed projection', "Couldn't summarize this conversation", null),
       ('hidden result', 'Processing finished. This recording is hidden from Home.', '001-mobile-ios-hidden-finish'),
       ('20-minute deadline', 'Still processing. It will appear on Home.', '002-mobile-ios-finish-deadline'),
     ]) {
@@ -1423,6 +1426,12 @@ void main() {
             expect(v3.finishRow, same(pending));
             expect(find.byKey(const Key('home_processing_row')), findsOneWidget);
             await tester.pump(const Duration(seconds: 1));
+          } else if (caseName == 'legacy failed projection') {
+            home.conversations.upsertConversation(
+              _conversation('live-1', home.liveStart, 'Launch checklist', status: ConversationStatus.processing)
+                  .withHomeStep('failed'),
+              preserveHomeStep: false,
+            );
           } else {
             home.conversations.upsertConversation(
               _conversation('live-1', home.liveStart, 'Launch checklist',
@@ -1441,7 +1450,7 @@ void main() {
           expect(find.byKey(const Key('home_processing_row')), findsNothing);
           expect(find.text(message), findsOneWidget);
           expect(find.text('Launch checklist'), findsNothing);
-          await shoot(tester, image);
+          if (image != null) await shoot(tester, image);
 
           await tester.pump(const Duration(minutes: 3));
           final reads = home.conversations.listReads;
