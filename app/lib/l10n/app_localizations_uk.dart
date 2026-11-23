@@ -581,6 +581,27 @@ class AppLocalizationsUk extends AppLocalizations {
   String get doubleTapAction => 'Дія подвійного натискання';
 
   @override
+  String get singlePress => 'Single Press';
+
+  @override
+  String get triplePress => 'Triple Press';
+
+  @override
+  String get longPress => 'Long Press';
+
+  @override
+  String get singlePressAction => 'Single Press Action';
+
+  @override
+  String get triplePressAction => 'Triple Press Action';
+
+  @override
+  String get turnOnOff => 'Увімкнути / Вимкнути';
+
+  @override
+  String get triplePressSubtitle => 'Requires updated firmware';
+
+  @override
   String get endAndProcess => 'Завершити та обробити розмову';
 
   @override

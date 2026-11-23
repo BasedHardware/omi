@@ -1,0 +1,3 @@
+{
+  "change": "Customize single, double, and triple press hardware button actions from device settings; default double press to Mute/Unmute (1) and triple press to End Conversation (0) per #2825 while preserving existing customized doubleTapAction preferences."
+}
