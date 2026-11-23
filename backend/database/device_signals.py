@@ -64,8 +64,8 @@ def plan_hour_writes(
     for hour, signals in sorted(by_hour.items()):
         hour_id = str(int(hour.timestamp()))
         member = client.collection(MEMBERSHIPS).document(f"{owner_hash}-{hour_id}")
-        existing = member.get(transaction=transaction).to_dict() or {}
-        seen = set(existing.get("signals", ()))
+        existing: dict[str, Any] = member.get(transaction=transaction).to_dict() or {}
+        seen: set[str] = set(existing.get("signals", ()))
         added = signals - seen
         if not added:
             continue
@@ -107,7 +107,7 @@ def load_hour_snapshot(client: Any, now: datetime) -> tuple[datetime, int, int, 
     covered = [bucket for bucket in baseline if bucket["heartbeat"]]
     # HogQL groups hours containing the matching event. Keep that median
     # convention while tracking how many historical hours had intake coverage.
-    values = {}
+    values: dict[str, tuple[int, float]] = {}
     for signal in SIGNALS:
         positive = [bucket[signal] for bucket in covered if bucket[signal]]
         values[signal] = (latest[signal], median(positive) if positive else 0.0)

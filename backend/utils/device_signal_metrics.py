@@ -8,6 +8,7 @@ from threading import Lock
 
 from prometheus_client import REGISTRY
 from prometheus_client.core import GaugeMetricFamily, Metric
+from prometheus_client.registry import Collector
 
 from database._client import get_firestore_client
 from database.device_signals import load_hour_snapshot
@@ -15,7 +16,7 @@ from database.device_signals import load_hour_snapshot
 logger = logging.getLogger(__name__)
 
 
-class DeviceSignalCollector:
+class DeviceSignalCollector(Collector):
     def __init__(self) -> None:
         self._lock = Lock()
         self._refresh_after = datetime.min.replace(tzinfo=timezone.utc)
