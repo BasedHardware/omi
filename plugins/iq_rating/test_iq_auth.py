@@ -142,6 +142,23 @@ class TestIqRatingAuth(unittest.TestCase):
             iq_auth.require_iq_rating_auth(req, "alice")
         self.assertEqual(ctx.exception.status_code, 401)
 
+    def test_non_ascii_token_rejected_401_not_500(self):
+        # A non-ASCII bearer token must fail closed with 401, never raise an
+        # unhandled TypeError (which would surface as HTTP 500). This guards
+        # the hmac.compare_digest UTF-8 byte-encoding path.
+        req = _FakeRequest(headers={"Authorization": "Bearer tökén-ünicode-秘密"})
+        with self.assertRaises(iq_auth.HTTPException) as ctx:
+            iq_auth.require_iq_rating_auth(req, "alice")
+        self.assertEqual(ctx.exception.status_code, 401)
+
+    def test_non_ascii_secret_still_matches(self):
+        # A non-ASCII *configured* secret must still authenticate correctly
+        # (byte comparison), proving the fix does not break legitimate use.
+        import os
+        os.environ["IQ_RATING_SECRET"] = "sëcret-秘密-🔒"
+        req = _FakeRequest(headers={"Authorization": "Bearer sëcret-秘密-🔒"})
+        self.assertEqual(iq_auth.require_iq_rating_auth(req, "dave"), "dave")
+
     # --- accepts valid credentials -----------------------------------------
     def test_valid_bearer_header_returns_uid(self):
         req = _FakeRequest(headers={"Authorization": f"Bearer {self.SECRET}"})
