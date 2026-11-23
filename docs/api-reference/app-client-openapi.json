@@ -12591,6 +12591,18 @@
       },
       "CreateCheckoutRequest": {
         "properties": {
+          "currency": {
+            "anyOf": [
+              {
+                "pattern": "^[A-Za-z]{3}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Currency"
+          },
           "price_id": {
             "maxLength": 255,
             "minLength": 1,
@@ -70485,6 +70497,22 @@
           },
           {
             "in": "header",
+            "name": "X-Omi-Storefront-Region",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Omi-Storefront-Region"
+            }
+          },
+          {
+            "in": "header",
             "name": "authorization",
             "required": false,
             "schema": {
@@ -70572,6 +70600,22 @@
             "schema": {
               "title": "X-App-Platform",
               "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Omi-Storefront-Region",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Omi-Storefront-Region"
             }
           },
           {
@@ -89130,6 +89174,22 @@
             "schema": {
               "title": "X-App-Version",
               "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Omi-Storefront-Region",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Omi-Storefront-Region"
             }
           },
           {
