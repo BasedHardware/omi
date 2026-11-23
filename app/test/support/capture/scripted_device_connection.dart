@@ -62,6 +62,15 @@ class ScriptedDeviceConnection implements DeviceConnection {
   @override
   Future<void> onNetworkSocketReconnected() async {}
 
+  /// Haptic levels the controller asked the pendant to play, in order.
+  final List<int> hapticLevels = [];
+
+  @override
+  Future<bool> performPlayToSpeakerHaptic(int level) async {
+    hapticLevels.add(level);
+    return true;
+  }
+
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
