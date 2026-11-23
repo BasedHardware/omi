@@ -24,6 +24,7 @@ from database.account_deletion_marker import account_deletion_blocks_user_work, 
 from database.account_deletion_policy import account_deletion_marker_blocks_access
 from models.finalization_owner import ENGINE_FIELD, EPOCH_FIELD, python_owns_finalization
 from utils.encryption import encrypt, decrypt
+from utils.home_feed.projection import stamp as stamp_home_display
 from config.conversations_v3 import boundary_seconds, stretch_cohesion_enabled
 from utils.conversations.v3 import Conflict, policy, preview_wakes
 from utils.open_loops.extraction import OPEN_LOOP_EXTRACTIONS_COMPRESSED_FIELD, OPEN_LOOP_EXTRACTIONS_FIELD
@@ -1394,3 +1395,39 @@ def outline_attempt(uid, token, fingerprint, *, key='builder', firestore_client=
         return True
 
     return begin(client.transaction())
+
+
+def write_live_title_preview(uid, token, cid, revision, *, title=None, firestore_client=None):
+    """Claim one provider attempt or publish its result, conditional on the same live row."""
+    client = firestore_client or get_firestore_client()
+    ref = user_conversations(client, uid).document(cid)
+    held = leases.lease_ref(client, uid, 'builder')
+    deletion_ref = account_deletion_document(uid, firestore_client=client)
+
+    @firestore.transactional
+    def write(tx):
+        lease = held.get(transaction=tx).to_dict() or {}
+        if lease.get('token') != token or not lease.get('until') or lease['until'] <= datetime.now(timezone.utc):
+            return False
+        deletion = deletion_ref.get(transaction=tx)
+        if account_deletion_marker_blocks_access(
+            marker_exists=deletion.exists, raw_status=(deletion.to_dict() or {}).get('status')
+        ):
+            return False
+        row = ref.get(transaction=tx).to_dict() or {}
+        if row.get('sync_content_revision') != revision or not policy.live_title_candidate(row):
+            return False
+        state = policy.LIVE_TITLE_STATE
+        if title is None and row.get(state) is None:
+            tx.update(ref, {state: 'attempted'})
+            return True
+        if title and row.get(state) == 'attempted':
+            row['structured'] = {**(row.get('structured') or {}), 'title': title}
+            tx.update(
+                ref,
+                {'structured': row['structured'], state: 'published', **stamp_home_display(uid, row, 'conversation')},
+            )
+            return True
+        return False
+
+    return write(client.transaction())

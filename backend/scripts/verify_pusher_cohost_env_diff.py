@@ -119,6 +119,8 @@ _BATCH_PIPELINE_LISTEN_ONLY = frozenset(
         # Held expiry/requeue is owned by main.py maintenance/RPC and GPU workers;
         # pusher does not run the held maintenance loop or worker failure writer.
         'BATCH_HELD_DEAD_LETTER_ENABLED',
+        # The hourly census runs on the same main.py held maintenance lane.
+        'BATCH_PARKED_JOB_SWEEPER_ENABLED',
         # main.py owns the record intake drain; pusher.main never starts it.
         'RECORD_SEAL_REPAIR_FRESH_ENABLED',
         # Only main.py admits native record units; pusher never assigns GPU queue priority.

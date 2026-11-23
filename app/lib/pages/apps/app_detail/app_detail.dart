@@ -8,6 +8,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:collection/collection.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
+import 'package:omi/providers/usage_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:skeletonizer/skeletonizer.dart';
 
@@ -858,6 +859,15 @@ class _AppDetailPageState extends State<AppDetailPage> with WidgetsBindingObserv
     );
   }
 
+  /// Google Play buyers cannot be sent to an app's own payment link. Hosts without plan state never are.
+  bool _playBilledReader() {
+    try {
+      return context.read<UsageProvider>().playBilledPurchaser;
+    } on ProviderNotFoundException {
+      return false;
+    }
+  }
+
   /// Enable (after the data-access question for external apps), Subscribe, or Disable.
   Widget _buildPrimaryAction(AppLocalizations l10n) {
     if (isLoading) {
@@ -872,6 +882,15 @@ class _AppDetailPageState extends State<AppDetailPage> with WidgetsBindingObserv
         onPressed: () {
           _disableApp();
         },
+      );
+    }
+    if (app.isPaid && !app.isUserPaid && _playBilledReader()) {
+      // Its payment link is not Google Play; a Play-billed reader cannot buy it in this app.
+      return OmiButton.secondary(
+        key: const Key('app_detail_paid_unavailable'),
+        label: l10n.playPaidAppUnavailable,
+        size: OmiButtonSize.compact,
+        onPressed: null,
       );
     }
     if (app.isPaid && !app.isUserPaid) {

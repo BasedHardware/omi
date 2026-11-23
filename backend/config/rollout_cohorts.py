@@ -28,6 +28,7 @@ COHORT_ENVS = {
     'transcription-final-pass': lambda: os.getenv('TRANSCRIPTION_FINAL_PASS_UID_ALLOWLIST', ''),
     'transcription-shadow': lambda: os.getenv('TRANSCRIPTION_SHADOW_UID_ALLOWLIST', ''),
     'mobile-standard-batch': lambda: '',
+    'android-play-billing': lambda: '',
     'messaging-telegram': lambda: os.getenv('OMI_MESSAGING_CHANNELS_UIDS', ''),
     'messaging-imessage': lambda: os.getenv('OMI_MESSAGING_CHANNELS_UIDS', ''),
     # Go ordinary-sync finalization (SCA-3883): runtime membership only, no env fallback.
