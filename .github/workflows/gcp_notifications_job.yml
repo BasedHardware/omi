@@ -576,6 +576,23 @@ jobs:
           gh run download "$VALIDATION_RUN" --repo "$GITHUB_REPOSITORY" \
             --name "notifications-image-validation-$attempt" --dir "$RUNNER_TEMP/notifications-validation"
 
+      - name: Free runner disk for the image build
+        if: inputs.mode == 'image-only-validate'
+        run: rm -rf /opt/hostedtoolcache
+
+      - name: Set up Python for deploy controls
+        if: inputs.mode != 'image-only-rollback'
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+
+      - name: Install pinned deploy script dependency
+        if: inputs.mode != 'image-only-rollback'
+        run: |
+          python3 -m pip install --require-hashes --only-binary=:all: --no-deps -r /dev/stdin <<'REQUIREMENTS'
+          PyYAML==6.0.1 --hash=sha256:d2b04aac4d386b172d5b9692e2d2da8de7bfb6c387fa4f801fbf6fb2e6ba4673
+          REQUIREMENTS
+
       - name: Verify serving Firestore indexes
         if: inputs.mode != 'image-only-rollback'
         uses: ./.github/actions/firestore-readiness
@@ -584,10 +601,6 @@ jobs:
           project_id: ${{ vars.RUNTIME_GCP_PROJECT_ID }}
           workload_identity_provider: projects/208440318997/locations/global/workloadIdentityPools/omi-gha-notif-prod/providers/github
           service_account: omi-ci-index-check@based-hardware.iam.gserviceaccount.com
-
-      - name: Free runner disk for the image build
-        if: inputs.mode == 'image-only-validate'
-        run: rm -rf /opt/hostedtoolcache
 
       - name: Checkout admitted image source
         if: inputs.mode == 'image-only-validate'
@@ -645,9 +658,6 @@ jobs:
           docker push "$image"
           docker image inspect "$image" --format '{{range .RepoDigests}}{{println .}}{{end}}' |
             awk -v prefix="$IMAGE_REPOSITORY@" 'index($0, prefix) == 1' > "$RUNNER_TEMP/notifications-pushed-image"
-
-      - name: Install deploy script dependencies
-        run: python3 -m pip install -q pyyaml
 
       - name: Get GKE credentials for gateway serving gate
         if: inputs.mode != 'image-only-rollback'

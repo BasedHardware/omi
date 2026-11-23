@@ -290,17 +290,18 @@ def change_image(request, *, mode, source, generation, candidate, expected_env, 
             continue
         require(live.get('generation') == next_generation, 'Unexpected post-update Cloud Run Job generation')
         assert_projection(live, target)
-        if not live.get('reconciling'):
-            require_live_generation(live, next_generation)
-            break
+        if live.get('observedGeneration') == next_generation and not live.get('reconciling'):
+            state = live.get('terminalCondition', {}).get('state')
+            require(state != 'CONDITION_FAILED', 'Cloud Run Job reconciliation failed')
+            if state == 'CONDITION_SUCCEEDED':
+                require_live_generation(live, next_generation)
+                break
         require(time.monotonic() < deadline, 'Cloud Run Job reconciliation timed out')
         time.sleep(2)
     return {**details, 'applied_generation': live['generation'], 'installed_image': image, 'apply_operation': operation}
 
 
 def main():
-    from render_backend_runtime_env import DEFAULT_MANIFEST, _load_yaml, _render_env_entries
-
     mode = os.environ['MODE']
     require(mode in {'image-only-validate', 'image-only-apply', 'image-only-rollback'}, 'Unknown image-only mode')
     source = os.environ['RELEASE_SHA']
@@ -332,6 +333,8 @@ def main():
 
     expected = None
     if mode != 'image-only-rollback':
+        from render_backend_runtime_env import DEFAULT_MANIFEST, _load_yaml, _render_env_entries
+
         env = _load_yaml(DEFAULT_MANIFEST)['environments']['prod']['cloud_run']['jobs']['notifications-job']['env']
         expected = {
             entry['name']: entry['value']

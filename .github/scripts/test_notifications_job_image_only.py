@@ -5,6 +5,7 @@ import copy
 import sys
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "backend/scripts"))
@@ -194,6 +195,31 @@ class ImageOnlyTest(unittest.TestCase):
         self.assertEqual(result["installed_image"], CANDIDATE)
         self.assertIsNone(result["apply_operation"])
         self.assertEqual(self.api.writes, 1)
+
+    def test_waits_for_observation_and_success_after_apply_and_rollback(self):
+        receipt = self.change()
+        for mode, generation, image in (("apply", "66", CANDIDATE), ("rollback", "67", deploy.ROLLBACK)):
+            with self.subTest(mode=mode):
+                writes_before = self.api.writes
+                lagging_status = iter([
+                    {"observedGeneration": generation, "terminalCondition": {"state": "CONDITION_FAILED"}},
+                    {"terminalCondition": {"state": "CONDITION_PENDING"}},
+                ])
+
+                def request(path, body=None):
+                    result = self.api(path, body)
+                    if path == deploy.JOB and self.api.writes > writes_before:
+                        result.update(next(lagging_status, {}))
+                    return result
+
+                with patch.object(deploy.time, "sleep") as sleep:
+                    result = deploy.change_image(
+                        request, mode=f"image-only-{mode}", source=SOURCE, generation=generation,
+                        candidate=CANDIDATE, expected_env=EXPECTED, receipt=receipt,
+                    )
+                self.assertEqual(sleep.call_count, 2)
+                self.assertEqual(result["installed_image"], image)
+                self.assertEqual(self.api.writes, writes_before + 1)
 
     def test_rollback_rejects_endpoint_drift_without_gateway_probe(self):
         receipt = self.change()
