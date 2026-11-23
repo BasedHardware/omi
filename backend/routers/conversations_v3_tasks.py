@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from utils.cloud_tasks import verify_cloud_tasks_oidc
+from utils.conversations.v3 import RetryCustodyUnavailable
 from utils.conversations.v3 import backfill, service
 from config.conversations_v3 import backfill_enabled
 
@@ -18,7 +19,10 @@ class ReconcileRequest(BaseModel):
 
 @router.post('/v1/conversations-v3/reconcile', include_in_schema=False)
 async def reconcile(body: ReconcileRequest, _retry: int = Depends(verify_cloud_tasks_oidc)):
-    return {'outcome': await service.reconcile(body.uid)}
+    try:
+        return {'outcome': await service.reconcile(body.uid)}
+    except RetryCustodyUnavailable:
+        raise HTTPException(503, 'Reconcile retry successor unconfirmed') from None
 
 
 @router.post('/v1/conversations-v3/sweep', include_in_schema=False)

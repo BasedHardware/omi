@@ -4,8 +4,11 @@ import json
 from datetime import datetime, timedelta, timezone
 
 import pytest
+from fastapi import HTTPException
+from google.api_core.exceptions import NotFound
 
 from database import conversations_v3 as store, conversations_v3_leases as leases
+from routers import conversations_v3_tasks as route
 from utils.conversations.v3 import Conflict, service
 from tests.unit.test_conversations_v3_review import AT, MemoryQuery, builder, source  # noqa: F401
 from tests.unit.test_conversations_v3_transactions import L, R, strict  # noqa: F401
@@ -102,7 +105,7 @@ async def test_live_capture_race_answers_the_task_and_wakes_the_owner_next_minut
     before = datetime.now(timezone.utc)
     assert await service.reconcile('u') == 'raced'
     # One coalesced named wake for a later minute than the executing task's, never a 500 retry.
-    assert len(wakes) == 1 and wakes[0][0] == 'u' and wakes[0][2] == {}
+    assert len(wakes) == 1 and wakes[0][0] == 'u' and wakes[0][2] == {'require_future': True}
     assert int(wakes[0][1].timestamp()) // 60 > int(before.timestamp()) // 60
     assert wakes[0][1] - before <= service.RACE_RETRY + timedelta(seconds=5)
     assert service.metrics.RACES.labels(reason)._value.get() == raced + 1
@@ -123,6 +126,21 @@ async def test_race_without_a_scheduled_wake_still_raises_for_a_task_retry(build
     monkeypatch.setattr(service, 'enqueue', unavailable)
     with pytest.raises(Conflict, match='source_changed'):
         await service.reconcile('u')
+
+
+@pytest.mark.asyncio
+async def test_busy_duplicate_with_unconfirmed_successor_returns_retryable_http_status(builder, monkeypatch):
+    monkeypatch.setattr(leases, 'acquire', lambda *a: None)
+    monkeypatch.setattr(store, 'load', lambda *a, **kw: pytest.fail('busy delivery must not plan'))
+
+    def retained_name(uid, *, at, require_future):
+        assert require_future
+        raise NotFound('synthetic expired wake')
+
+    monkeypatch.setattr(service, 'enqueue', retained_name)
+    with pytest.raises(HTTPException) as error:
+        await route.reconcile(route.ReconcileRequest(uid='synthetic'), 0)
+    assert error.value.status_code == 503
 
 
 @pytest.mark.asyncio

@@ -420,9 +420,12 @@ def enqueue_named_task(
     audience: Optional[str] = None,
     invoker_sa: Optional[str] = None,
     schedule_at: Optional[int] = None,
+    require_future: bool = False,
 ) -> None:
     """Enqueue one named HTTP task. Duplicate names are treated as success —
-    Cloud Tasks deduplicates named tasks. Any other failure raises."""
+    unless the caller requires a confirmed, undispatched future wake."""
+    if require_future and (schedule_at is None or schedule_at <= time.time()):
+        raise ValueError('verified task requires a future schedule')
     project = os.getenv('SYNC_TASKS_PROJECT', '')
     location = os.getenv('SYNC_TASKS_LOCATION', '')
     selected_invoker_sa = invoker_sa or _invoker_sa()
@@ -446,6 +449,22 @@ def enqueue_named_task(
         dispatch_deadline=duration_pb2.Duration(seconds=DISPATCH_DEADLINE_SECONDS),
         schedule_time=timestamp_pb2.Timestamp(seconds=schedule_at) if schedule_at is not None else None,
     )
+    if require_future:
+        try:
+            successor = client.create_task(parent=parent, task=task, retry=None, timeout=3)  # pyright: ignore[reportUnknownMemberType]
+        except AlreadyExists:
+            # Completed tasks retain their name. BASIC metadata proves the task still exists
+            # without requesting its payload. A task already dispatched might be finishing.
+            successor = client.get_task(
+                request=tasks_v2.GetTaskRequest(name=task.name, response_view=tasks_v2.Task.View.BASIC),
+                retry=None,
+                timeout=3,
+            )
+        due = successor.schedule_time
+        if successor.name != task.name or successor.dispatch_count or due is None or due.timestamp() <= time.time():
+            raise RuntimeError('named task has no undispatched future wake')
+        return
+
     try:
         client.create_task(parent=parent, task=task)  # type: ignore[reportUnknownMemberType]  # google.cloud.tasks_v2 partially untyped
     except AlreadyExists:

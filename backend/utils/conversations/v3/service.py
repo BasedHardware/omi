@@ -42,6 +42,7 @@ from models.conversation_enums import ConversationStatus
 from models.finalization_owner import FinalizationOwnedElsewhere, python_owns_finalization
 from utils.conversations.v3 import (
     Conflict,
+    RetryCustodyUnavailable,
     outline,
     planner,
     models,
@@ -127,6 +128,20 @@ async def _drain_blocked(uid, reason):
         await drain_processing(uid)
     except Exception as error:
         logger.warning('v3 reconcile blocked drain failed exception_type=%s', type(error).__name__)
+
+
+async def _handoff_retry(uid, reason):
+    # The successor receives only the owner, so it reloads under a fresh lease even
+    # if this attempt committed a prefix. Do not rewrite any pending markers or clocks.
+    try:
+        await run_blocking(
+            db_executor, enqueue, uid, at=datetime.now(timezone.utc) + RACE_RETRY, require_future=True
+        )
+    except Exception as error:
+        metrics.RECONCILES.labels('dispatch_error').inc()
+        metrics.RECONCILES.labels('error').inc()
+        logger.warning('v3 reconcile race wake unconfirmed exception_type=%s', type(error).__name__)
+        raise RetryCustodyUnavailable(reason) from error
 
 
 def recording_short_path(fn):
@@ -259,6 +274,8 @@ async def reconcile(
             return 'backoff'
     token = await run_blocking(db_executor, leases.acquire, uid, key)
     if token is None:
+        if not on_open and not derive:
+            await _handoff_retry(uid, 'builder_busy')
         metrics.RECONCILES.labels('busy').inc()
         return 'busy'
     try:
@@ -723,7 +740,7 @@ async def reconcile(
             # recordings stay owed. Wake the owner at the next minute instead of an immediate re-pass,
             # which would race the same live recording again.
             metrics.RACES.labels('source_moved').inc()
-            await run_blocking(db_executor, enqueue, uid, at=datetime.now(timezone.utc) + RACE_RETRY)
+            await _handoff_retry(uid, 'source_moved')
         for group in groups if not derive else ():
             if not (group['locked'] if custom_timing else group['finished']):
                 # A different minute than the currently executing task avoids
@@ -747,19 +764,12 @@ async def reconcile(
                     await _maybe_publish_live_title(uid, key, token, row)
         metrics.RECONCILES.labels('committed').inc()
         deferred = preview_wakes(rows, recordings)
+    except RetryCustodyUnavailable:
+        raise
     except Conflict as error:
         reason = str(error)
         if reason in RACES and not derive:
-            # Nothing committed, so every pending marker is still owed. Answer the task and wake the
-            # owner at the next minute: a minute name the executing task cannot already hold, shared
-            # with every other wake for that minute. Without a scheduled wake, fall back to a retry.
-            try:
-                await run_blocking(db_executor, enqueue, uid, at=datetime.now(timezone.utc) + RACE_RETRY)
-            except Exception as dispatch:
-                metrics.RECONCILES.labels('dispatch_error').inc()
-                metrics.RECONCILES.labels('error').inc()
-                logger.warning('v3 reconcile race wake failed exception_type=%s', type(dispatch).__name__)
-                raise error from dispatch
+            await _handoff_retry(uid, reason)
             metrics.RECONCILES.labels('raced').inc()
             metrics.RACES.labels(reason).inc()
             logger.info('v3 reconcile raced reason=%s', reason)

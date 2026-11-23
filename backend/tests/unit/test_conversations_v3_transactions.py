@@ -247,6 +247,13 @@ async def test_two_concurrent_reconciles_publish_one_copy(strict, monkeypatch):
         )
 
     monkeypatch.setattr(service.models, 'outline', outline)
+    wakes = []
+
+    def enqueue(uid, *, at, require_future=False):
+        assert require_future
+        wakes.append(uid)
+
+    monkeypatch.setattr(service, 'enqueue', enqueue)
     first = asyncio.create_task(service.reconcile('synthetic'))
     await entered.wait()
     assert await service.reconcile('synthetic') == 'busy'
@@ -255,6 +262,7 @@ async def test_two_concurrent_reconciles_publish_one_copy(strict, monkeypatch):
     copies = [r for path, r in strict.rows.items() if path[2] == 'conversations' and r.get('v3_derived')]
     assert len(copies) == 1 and len(strict.rows[R]['claims']) == 1
     assert calls == ['synthetic']
+    assert wakes == ['synthetic']
 
 
 def test_delete_during_capture_rearms_purge_at_settlement(strict, monkeypatch):
@@ -363,6 +371,70 @@ def test_projection_partitions_bytes_and_keeps_pending_until_last_batch(strict, 
     assert len(observations) >= 4
     assert all(observations[:-1]) and observations[-1] is False
     assert len(strict.rows[R]['claims']) == 128
+
+
+def test_projection_retry_reloads_committed_prefix_and_keeps_original_debt_age(strict, monkeypatch):
+    strict.rows[R] = {'id': 'r', 'recording': True, 'v3_pending': True, 'v3_pending_since': AT}
+    monkeypatch.setattr(store, 'BATCH_ROW_BYTES', 1)
+    token = leases.acquire('synthetic', 'builder', firestore_client=strict)
+    transactional = store.firestore.transactional
+    batches = 0
+
+    def interrupt_second_batch(body):
+        apply = transactional(body)
+
+        def run(tx, *args):
+            nonlocal batches
+            if body.__name__ == 'commit':
+                batches += 1
+                if batches == 2:
+                    raise store.Conflict('lease_lost')
+            return apply(tx, *args)
+
+        return run
+
+    monkeypatch.setattr(store.firestore, 'transactional', interrupt_second_batch)
+    prefix = (*R[:-1], 'c1')
+    tail = (*R[:-1], 'c2')
+    rows = [
+        {
+            'id': cid,
+            'v3_derived': True,
+            'status': 'processing',
+            'started_at': AT + timedelta(seconds=offset),
+            'finished_at': AT + timedelta(seconds=offset + 1),
+            'v3_recording_ids': ['r'],
+            'v3_process_pending': True,
+        }
+        for cid, offset in [('c1', 0), ('c2', 1)]
+    ]
+
+    def loaded(path):
+        return {**deepcopy(strict.rows[path]), '_v3_revision': 1}
+
+    with pytest.raises(store.Conflict, match='lease_lost'):
+        store.commit_projection('synthetic', token, {'r': loaded(R)}, {}, rows, [], firestore_client=strict)
+    assert tail not in strict.rows
+    assert strict.rows[prefix]['v3_process_pending']
+    assert strict.rows[R]['v3_pending_since'] == AT
+    assert [claim['conversation_id'] for claim in strict.rows[R]['claims']] == ['c1']
+
+    summary_token = leases.acquire('synthetic', 'summary-c1', firestore_client=strict)
+    covered = rows[0]['finished_at']
+    writers.settle_processing('synthetic', 'c1', summary_token, None, covered, notes=True, firestore_client=strict)
+    leases.release('synthetic', 'summary-c1', summary_token, firestore_client=strict)
+    leases.release('synthetic', 'builder', token, firestore_client=strict)
+    next_token = leases.acquire('synthetic', 'builder', firestore_client=strict)
+    assert next_token != token
+    prior = loaded(prefix)
+    store.commit_projection(
+        'synthetic', next_token, {'r': loaded(R)}, {'c1': prior}, [prior, rows[1]], [], firestore_client=strict
+    )
+    assert strict.rows[R]['v3_pending'] is False
+    assert [claim['conversation_id'] for claim in strict.rows[R]['claims']] == ['c1', 'c2']
+    assert strict.rows[prefix]['v3_process_pending'] is False
+    assert strict.rows[prefix]['v3_notes_written'] and strict.rows[prefix]['summary_covers_through'] == covered
+    assert strict.rows[tail]['v3_process_pending']
 
 
 def test_multi_batch_backfill_conversion_is_not_its_own_race_and_keeps_an_obligation(strict, monkeypatch):
