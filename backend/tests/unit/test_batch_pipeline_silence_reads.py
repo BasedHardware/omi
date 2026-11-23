@@ -112,11 +112,11 @@ def assert_silent_read_deltas(before, stages, outcome, *, avoided=0):
     }
     expected = {(SKIP_METRIC, (('outcome', outcome), ('stage', stage))): 1 for stage in stages}
     if avoided:
-        expected[(AVOIDED_METRIC, (('stage', 'completion_entries'),))] = avoided
+        expected[(AVOIDED_METRIC, (('stage', 'completion_snapshot'),))] = avoided
     assert deltas == expected
 
 
-@pytest.mark.parametrize('profile', ['sidecar', 'sync'])
+@pytest.mark.parametrize('profile', ['sidecar', 'sync', 'projection_pump'])
 def test_silent_read_metrics_survive_cloud_run_scrape(profile):
     config = Path(__file__).resolve().parents[2] / 'deploy' / f'cloud_run_gmp_{profile}.yaml'
     rules = yaml.safe_load(config.read_text())['spec']['endpoints'][0]['metricRelabeling']
@@ -208,10 +208,21 @@ def test_completion_silent_read_counters(lane, monkeypatch, enabled, speech_unit
     assert transaction_reads.count(lane.store.ref('results', 'b').path) == (1 if expected == 'skipped' else 3)
     assert_silent_read_deltas(
         before,
-        ['prepare_accounting', 'completion_entries', 'privacy_read'],
+        ['prepare_accounting', 'completion_snapshot', 'privacy_read'],
         expected,
         avoided=2 if expected == 'skipped' else 0,
     )
+
+
+@pytest.mark.parametrize('enabled,expected', [('true', 'not_silent'), ('false', 'disabled')])
+def test_unready_upload_only_records_accounting(lane, monkeypatch, enabled, expected):
+    monkeypatch.setenv('BATCH_PIPELINE_SILENCE_READ_SKIP_ENABLED', enabled)
+    assign(lane, 'a')
+    projector = Projector.__new__(Projector)
+    projector.store, projector.clock = lane.store, lambda: 10000
+    before = silent_read_samples()
+    assert projector.complete_content('a', lane.binding, policy=lane.policy, silence=True) is None
+    assert_silent_read_deltas(before, ['prepare_accounting'], expected)
 
 
 def test_ready_silence_preserves_custody_and_completes_once(lane):

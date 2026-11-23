@@ -790,11 +790,11 @@ class Projector:
                 with projection_phase('completion', policy):
                     result = self.store.complete(segment_id, binding, self.clock(), None, policy=policy)
                 if result is not None:
+                    record_silent_read_skip(SilentReadStage.ACCOUNTING, SilentReadOutcome.SKIPPED)
                     record_silent_completion_reads(SilentReadOutcome.SKIPPED)
                     return self.publish_completion(binding, result, policy=policy)
-        record_silent_completion_reads(
-            SilentReadOutcome.DISABLED if eligible and not skip_enabled else SilentReadOutcome.NOT_SILENT
-        )
+        outcome = SilentReadOutcome.DISABLED if eligible and not skip_enabled else SilentReadOutcome.NOT_SILENT
+        record_silent_read_skip(SilentReadStage.ACCOUNTING, outcome)
         with projection_phase('accounting', policy):
             accounting = (
                 self.store.prepare_accounting(binding, self.clock(), result_entries=entries)
@@ -812,6 +812,8 @@ class Projector:
                 record_speech(binding, accounting, self.clock())
         with projection_phase('completion', policy):
             result = self.store.complete(segment_id, binding, self.clock(), accounting, policy=policy)
+        if result is not None:
+            record_silent_completion_reads(outcome)
         return self.publish_completion(binding, result, policy=policy)
 
     def publish_completion(self, binding, result, *, policy):

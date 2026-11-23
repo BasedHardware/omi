@@ -58,7 +58,7 @@ _SILENT_READ_SKIPS = Counter(
 )
 _SILENT_READS_AVOIDED = Counter(
     'omi_batch_pipeline_silent_read_skip_reads_avoided_total',
-    'Fixed-cost Firestore document lookups avoided by silent projection',
+    'Fixed Firestore document lookups avoided by silent projection. Excludes variable per-sibling speech rechecks.',
     ['stage'],
 )
 
@@ -67,7 +67,7 @@ class SilentReadStage(Enum):
     ASSIGNMENT_PRECHECK = 'projection_session_prepare'
     READY_ACK = 'projection_ready'
     ACCOUNTING = 'prepare_accounting'
-    COMPLETION_ENTRIES = 'completion_entries'
+    COMPLETION_SNAPSHOT = 'completion_snapshot'
     COMPLETION_PRIVACY = 'privacy_read'
 
 
@@ -79,14 +79,13 @@ class SilentReadOutcome(Enum):
 
 def record_silent_read_skip(stage: SilentReadStage, outcome: SilentReadOutcome) -> None:
     _SILENT_READ_SKIPS.labels(stage.value, outcome.value).inc()
-    if stage is SilentReadStage.COMPLETION_ENTRIES and outcome is SilentReadOutcome.SKIPPED:
+    if stage is SilentReadStage.COMPLETION_SNAPSHOT and outcome is SilentReadOutcome.SKIPPED:
         # The completion commit reuses its current unit's job and result snapshots.
         _SILENT_READS_AVOIDED.labels(stage.value).inc(2)
 
 
 def record_silent_completion_reads(outcome: SilentReadOutcome) -> None:
-    record_silent_read_skip(SilentReadStage.ACCOUNTING, outcome)
-    record_silent_read_skip(SilentReadStage.COMPLETION_ENTRIES, outcome)
+    record_silent_read_skip(SilentReadStage.COMPLETION_SNAPSHOT, outcome)
     record_silent_read_skip(SilentReadStage.COMPLETION_PRIVACY, outcome)
 
 
