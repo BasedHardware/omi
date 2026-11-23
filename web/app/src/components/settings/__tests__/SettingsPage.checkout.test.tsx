@@ -77,7 +77,6 @@ describe('SettingsPage checkout', () => {
           plan: 'unlimited_v2',
           billing_interval: 'year',
           source: 'usage_page',
-          launch_result: 'blocked',
         },
       ]);
       fireEvent.focus(window);
@@ -91,7 +90,6 @@ describe('SettingsPage checkout', () => {
         plan: 'unlimited_v2',
         billing_interval: 'year',
         source: 'usage_page',
-        launch_result: 'opened',
       },
     ]);
     expect(mocks.checkout.mock.calls).toEqual([

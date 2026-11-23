@@ -23,12 +23,6 @@ export function openCheckoutWindow(
       // An inaccessible opener does not mean the checkout tab failed to open.
     }
   }
-  const opened = Boolean(checkout);
-  trackUpgradePlanSelected(
-    selection.plan,
-    selection.billingInterval,
-    selection.source,
-    opened ? 'opened' : 'blocked',
-  );
-  return opened;
+  trackUpgradePlanSelected(selection.plan, selection.billingInterval, selection.source);
+  return Boolean(checkout);
 }

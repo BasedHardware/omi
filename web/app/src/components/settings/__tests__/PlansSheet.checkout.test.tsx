@@ -154,7 +154,6 @@ describe('PlansSheet checkout', () => {
           plan: 'unlimited_v2',
           billing_interval: 'month',
           source: 'web_plans',
-          launch_result: 'blocked',
         },
       ],
     ]);
@@ -177,7 +176,6 @@ describe('PlansSheet checkout', () => {
           plan: 'unlimited_v2',
           billing_interval: 'month',
           source: 'web_plans',
-          launch_result: 'blocked',
         },
       ],
       [
@@ -186,7 +184,6 @@ describe('PlansSheet checkout', () => {
           plan: 'unlimited_v2',
           billing_interval: 'month',
           source: 'web_plans',
-          launch_result: 'opened',
         },
       ],
     ]);

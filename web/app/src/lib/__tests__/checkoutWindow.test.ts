@@ -26,7 +26,6 @@ describe('checkout browser launch', () => {
         plan: 'unlimited_v2',
         billing_interval: 'year',
         source: 'web_plans',
-        launch_result: 'blocked',
       });
     },
   );
@@ -45,7 +44,6 @@ describe('checkout browser launch', () => {
       plan: 'unlimited_v2',
       billing_interval: 'year',
       source: 'web_plans',
-      launch_result: 'opened',
     });
   });
 
@@ -60,9 +58,10 @@ describe('checkout browser launch', () => {
       vi.fn(() => checkout),
     );
     expect(openCheckoutWindow(url, selection)).toBe(true);
-    expect(track).toHaveBeenCalledExactlyOnceWith(
-      'Upgrade Plan Selected',
-      expect.objectContaining({ launch_result: 'opened' }),
-    );
+    expect(track).toHaveBeenCalledExactlyOnceWith('Upgrade Plan Selected', {
+      plan: 'unlimited_v2',
+      billing_interval: 'year',
+      source: 'web_plans',
+    });
   });
 });

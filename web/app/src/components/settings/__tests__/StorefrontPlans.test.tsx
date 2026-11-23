@@ -144,7 +144,7 @@ describe('StorefrontPanel purchase routing', () => {
     expect(
       await screen.findByRole('radio', { name: 'Yearly · 2 months free' }),
     ).toHaveAttribute('aria-checked', 'true');
-    expect(selected.mock.calls).toEqual([['plus', 'year', 'web_plans', 'blocked']]);
+    expect(selected.mock.calls).toEqual([['plus', 'year', 'web_plans']]);
     fireEvent.focus(window);
     expect(onUpdate).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole('button', { name: 'Get Plus' }));
@@ -154,8 +154,8 @@ describe('StorefrontPanel purchase routing', () => {
       ['price_plus_year'],
     ]);
     expect(selected.mock.calls).toEqual([
-      ['plus', 'year', 'web_plans', 'blocked'],
-      ['plus', 'year', 'web_plans', 'opened'],
+      ['plus', 'year', 'web_plans'],
+      ['plus', 'year', 'web_plans'],
     ]);
     await waitFor(() => expect(screen.queryByText(CHECKOUT_POPUP_BLOCKED)).toBeNull());
     expect(checkout.opener).toBeNull();
