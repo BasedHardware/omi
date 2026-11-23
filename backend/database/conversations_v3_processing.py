@@ -254,6 +254,23 @@ def settle_processing(
         armed = written and policy.created_eligible(
             {**row, 'v3_notes_written': True, 'v3_process_failed': False, 'v3_process_pending': False}
         )
+        settled = (
+            not skipped
+            and not row.get('deleted')
+            and row.get('status') == 'completed'
+            and row.get('v3_process_pending') is True
+        )
+        manual_visibility = None
+        if (
+            settled
+            and row.get('v3_derived')
+            and row.get('manual_end')
+            and not row.get('backfilled')
+            and not row.get('discarded')
+            and not row.get('v3_manual_end_home_counted')
+        ):
+            visible = conversations.is_visible_conversation(row, hide_home=True, presentation=True)
+            manual_visibility = 'visible' if visible else 'hidden'
         tx.update(
             ref,
             {
@@ -271,24 +288,10 @@ def settle_processing(
                 ),
                 **({'v3_notes_written': True} if written else {}),
                 **({'v3_created_pending': True} if armed else {}),
+                # First settlement only: a late rewrite re-settles the same row and must not count again.
+                **({'v3_manual_end_home_counted': True} if manual_visibility is not None else {}),
             },
         )
-        settled = (
-            not skipped
-            and not row.get('deleted')
-            and row.get('status') == 'completed'
-            and row.get('v3_process_pending') is True
-        )
-        manual_visibility = None
-        if (
-            settled
-            and row.get('v3_derived')
-            and row.get('manual_end')
-            and not row.get('backfilled')
-            and not row.get('discarded')
-        ):
-            visible = conversations.is_visible_conversation(row, hide_home=True, presentation=True)
-            manual_visibility = 'visible' if visible else 'hidden'
         return armed, settled, manual_visibility
 
     armed, settled, manual_visibility = settle(client.transaction())

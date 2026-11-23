@@ -140,6 +140,18 @@ def test_manual_end_visibility_counts_successful_settlements(strict, monkeypatch
         counter.labels.return_value.inc.assert_called_once_with()
 
 
+def test_manual_end_visibility_ignores_late_rewrite_resettlement(strict, monkeypatch):
+    strict.rows[C] = derived(manual_end=True, v3_process_pending=True)
+    counter = Mock()
+    monkeypatch.setattr(writers.metrics, 'MANUAL_END_HOME', counter)
+    settle(strict, notes=False)
+    # Late transcript re-arms the settled row; its rewrite settlement is not a second manual finish.
+    strict.rows[C].update(v3_process_pending=True, summary_covers_through=None)
+    settle(strict, notes=False)
+    counter.labels.assert_called_once_with('visible')
+    assert strict.rows[C]['v3_manual_end_home_counted'] is True
+
+
 @pytest.mark.parametrize(
     'counter,label_keys,outcomes',
     [
