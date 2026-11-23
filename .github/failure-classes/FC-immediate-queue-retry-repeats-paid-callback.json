@@ -1,0 +1,18 @@
+{
+ "schema_version": 1,
+ "id": "FC-immediate-queue-retry-repeats-paid-callback",
+ "family": "retry-classification",
+ "violated_contract": "A retryable outcome that repeats a callback's reads and paid model calls must be spaced by the durable deferral its sibling path already uses, not answered as an immediate queue retry. Cloud Tasks redelivery is recovery for a lost or failed delivery, not a backoff: answering 409 with available_at=now reruns the whole callback at once, so one empty result spends two extra attempts of Firestore reads, compute and LLM calls and inflates the queue's unavailable attempt count. On 2026-11-22 the enrichment push consumer answered an empty first summary this way while the legacy sync handler deferred the same strike by 120s, producing 77,909 unavailable attempts/day on enrichment-fresh and enrichment.",
+ "canonical_prevention": "Return the consumer's DEFERRED outcome with the domain defer cause and a bounded backoff read at the call boundary, so the outbox re-arms the same row and enqueues its own wake; keep a kill switch that restores the immediate retry. Measure the backoff from the moment the callback returned the retryable result, never from the delivery's entry clock, so a slow callback cannot consume its own delay. Fence any strike the retry records to the row version the callback claimed, because an append bumps the version without rotating the task token and an empty output from older content must not spend a strike against newer content.",
+ "canonical_prevention_artifact": [
+  "backend/tests/unit/test_enrichment_route.py"
+ ],
+ "evidence_prs": [
+  26093
+ ],
+ "scope_hints": [
+  "backend/utils/enrichment/consumer.py",
+  "backend/database/summary_processing.py"
+ ],
+ "status": "open"
+}
