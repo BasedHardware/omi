@@ -1,0 +1,167 @@
+"""Hourly parked GPU page census on the held-dead-letter maintenance lane."""
+
+import json
+import logging
+import math
+import os
+import time
+from collections import Counter
+
+from google.cloud import firestore
+
+from database.rpc_deadline import bind_firestore_client, rpc_deadline
+from utils.batch_pipeline.errors import WORKER_VALIDATION_REASONS
+
+CONTROL = 'parked_job_sweep'
+PAGE_SIZE = 100  # Two indexed streams, at most 200 document reads together.
+PASS_SECONDS = 10
+HOUR_SECONDS = 3600
+logger = logging.getLogger(__name__)
+
+
+def enabled():
+    return os.getenv('BATCH_PARKED_JOB_SWEEPER_ENABLED', '').strip().lower() != 'false'
+
+
+def mapping(value):
+    return value if isinstance(value, dict) else {}
+
+
+def reason(job):
+    recovery = mapping(job.get('recovery'))
+    if recovery.get('started_at') and mapping(recovery.get('failure')).get('reason') == 'empty_asr':
+        return 'post_submit_empty_asr'
+    diagnostic = mapping(job.get('quarantine_diagnostic'))
+    if diagnostic.get('exception_class') == 'lease_expired':
+        return 'lease_expired'
+    worker = diagnostic.get('worker_reason')
+    return worker if isinstance(worker, str) and worker in WORKER_VALIDATION_REASONS else 'unknown'
+
+
+def summarize(rows, now):
+    counts, owners = Counter(), set()
+    oldest = None
+    for job in rows:
+        stamp = job.get('quarantined_at')
+        age = None
+        if type(stamp) in (float, int) and 0 < stamp <= now and math.isfinite(stamp):
+            age = now - stamp
+            oldest = age if oldest is None else max(age, oldest)
+        if age is None:
+            bucket = 'unknown'
+        elif age < HOUR_SECONDS:
+            bucket = 'under_1h'
+        elif age < 24 * HOUR_SECONDS:
+            bucket = 'under_24h'
+        else:
+            bucket = 'at_least_24h'
+        counts[(reason(job), bucket)] += 1
+        owner = job.get('owner_key')
+        if isinstance(owner, str) and owner:
+            owners.add(owner)
+    return {
+        'reason_age': [
+            {'reason': why, 'age_bucket': bucket, 'units': count} for (why, bucket), count in sorted(counts.items())
+        ],
+        'oldest_age_seconds': oldest,
+        'distinct_known_owners': len(owners),
+    }
+
+
+class ParkedSweep:
+    def __init__(self, store):
+        self.store = store
+        self.last_attempt_hour = -1
+
+    def tick(self, now):
+        hour = int(now // HOUR_SECONDS)
+        if not enabled() or hour <= self.last_attempt_hour:
+            return
+        self.last_attempt_hour = hour
+        scanned = {'quarantined': 0, 'held_expired': 0}
+        report = None
+        outcome = 'dependency_failure'
+        try:
+            remaining_in_slot = (hour + 1) * HOUR_SECONDS - time.time()
+            with rpc_deadline(time.monotonic() + min(PASS_SECONDS, remaining_in_slot)):
+                client = bind_firestore_client(self.store.client)
+                control = client.collection(f'{self.store.namespace}_leases').document(CONTROL)
+
+                @firestore.transactional
+                def admit(tx):
+                    state = control.get(transaction=tx).to_dict() or {}
+                    if not enabled() or state.get('disabled') is True or state.get('hour', -1) >= hour:
+                        return None
+                    tx.set(control, {'hour': hour}, merge=True)
+                    return mapping(state.get('cursors'))
+
+                # One attempt each for the reservation and checkpoint. Reserve
+                # their document operations before invoking each transaction.
+                cursors = admit(client.transaction(max_attempts=1))
+                if cursors is None:
+                    outcome = 'not_admitted'
+                    return
+                jobs = client.collection(f'{self.store.namespace}_jobs')
+                streams = {
+                    'quarantined': jobs.where('state', '==', 'quarantined'),
+                    'held_expired': jobs.where('state', '==', 'dead').where('dead_letter_reason', '==', 'held_expired'),
+                }
+                next_cursors, coverage, rows = {}, {}, []
+                for name, query in streams.items():
+                    if not enabled():
+                        outcome = 'disabled'
+                        return
+                    after = cursors.get(name)
+                    query = query.order_by('__name__')
+                    if after:
+                        query = query.start_after({'__name__': jobs.document(after)})
+                    last = None
+                    for doc in (
+                        query.select(
+                            [
+                                'owner_key',
+                                'quarantined_at',
+                                'quarantine_diagnostic',
+                                'recovery.started_at',
+                                'recovery.failure.reason',
+                            ]
+                        )
+                        .limit(PAGE_SIZE)
+                        .stream(retry=None)
+                    ):
+                        scanned[name] += 1
+                        last = doc.id
+                        rows.append(doc.to_dict() or {})
+                    wrapped = scanned[name] < PAGE_SIZE
+                    next_cursors[name] = None if wrapped else last
+                    coverage[name] = {'started_at_head': not after, 'reached_end': wrapped}
+
+                sample = {
+                    **summarize(rows, now),
+                    'coverage': coverage,
+                    'scanned': scanned,
+                    'sampled_at': now,
+                    'expires_at': (hour + 1) * HOUR_SECONDS,
+                }
+
+                @firestore.transactional
+                def checkpoint(tx):
+                    state = control.get(transaction=tx).to_dict() or {}
+                    if not enabled() or state.get('disabled') is True or state.get('hour') != hour:
+                        return False
+                    tx.set(control, {'cursors': next_cursors, 'latest_page_sample': sample}, merge=True)
+                    return True
+
+                if checkpoint(client.transaction(max_attempts=1)):
+                    report = sample
+                    outcome = 'sampled'
+                else:
+                    outcome = 'checkpoint_refused'
+        finally:
+            logger.info(
+                'event=batch_parked_gpu_page hour=%d outcome=%s scanned=%s sample=%s',
+                hour,
+                outcome,
+                json.dumps(scanned, sort_keys=True),
+                json.dumps(report, sort_keys=True),
+            )
