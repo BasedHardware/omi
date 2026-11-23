@@ -7052,6 +7052,26 @@ class AppLocalizationsEn extends AppLocalizations {
   String get authUnexpectedError => 'Unexpected error signing in, please try again';
 
   @override
+  String get accountSignInMethods => 'Sign-in methods';
+
+  @override
+  String get accountAddSignInMethod => 'Add sign-in method';
+
+  @override
+  String get accountAddSignInMethodDetails =>
+      'Add a way to sign in to this Omi account. Your plan, recordings and integrations stay with this account.';
+
+  @override
+  String get accountSignInConflictTitle => 'This sign-in belongs to another account';
+
+  @override
+  String get accountSignInConflictDetails =>
+      'You’re still signed in here. Each Omi account keeps its plan, recordings and integrations.';
+
+  @override
+  String get accountSignInMethodAdded => 'Sign-in method added';
+
+  @override
   String get authFailedToLinkGoogle => 'Failed to link with Google, please try again.';
 
   @override

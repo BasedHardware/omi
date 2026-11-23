@@ -7073,6 +7073,26 @@ class AppLocalizationsNl extends AppLocalizations {
   String get authUnexpectedError => 'Onverwachte fout bij aanmelden, probeer het opnieuw';
 
   @override
+  String get accountSignInMethods => 'Inlogmethoden';
+
+  @override
+  String get accountAddSignInMethod => 'Inlogmethode toevoegen';
+
+  @override
+  String get accountAddSignInMethodDetails =>
+      'Voeg een manier toe om in te loggen op dit Omi-account. Je abonnement, opnamen en koppelingen blijven bij dit account.';
+
+  @override
+  String get accountSignInConflictTitle => 'Deze inlogmethode hoort bij een ander account';
+
+  @override
+  String get accountSignInConflictDetails =>
+      'Je bent nog steeds ingelogd op dit account. Elk Omi-account behoudt zijn eigen abonnement, opnamen en koppelingen.';
+
+  @override
+  String get accountSignInMethodAdded => 'Inlogmethode toegevoegd';
+
+  @override
   String get authFailedToLinkGoogle => 'Koppelen met Google mislukt, probeer het opnieuw.';
 
   @override

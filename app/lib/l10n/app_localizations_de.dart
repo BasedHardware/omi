@@ -7112,6 +7112,26 @@ class AppLocalizationsDe extends AppLocalizations {
   String get authUnexpectedError => 'Unerwarteter Fehler bei der Anmeldung, bitte versuchen Sie es erneut';
 
   @override
+  String get accountSignInMethods => 'Anmeldemethoden';
+
+  @override
+  String get accountAddSignInMethod => 'Anmeldemethode hinzufügen';
+
+  @override
+  String get accountAddSignInMethodDetails =>
+      'Füge eine Anmeldemethode für dieses Omi-Konto hinzu. Dein Tarif, deine Aufnahmen und deine Integrationen bleiben bei diesem Konto.';
+
+  @override
+  String get accountSignInConflictTitle => 'Diese Anmeldemethode ist mit einem anderen Konto verknüpft';
+
+  @override
+  String get accountSignInConflictDetails =>
+      'Du bist weiterhin bei diesem Konto angemeldet. Jedes Omi-Konto behält seinen Tarif, seine Aufnahmen und seine Integrationen.';
+
+  @override
+  String get accountSignInMethodAdded => 'Anmeldemethode hinzugefügt';
+
+  @override
   String get authFailedToLinkGoogle => 'Verknüpfung mit Google fehlgeschlagen, bitte versuchen Sie es erneut.';
 
   @override

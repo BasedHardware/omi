@@ -8712,6 +8712,12 @@
     "@authUnexpectedError": {
         "description": "Error message for unexpected error during sign-in"
     },
+    "accountSignInMethods": "روش‌های ورود",
+    "accountAddSignInMethod": "افزودن روش ورود",
+    "accountAddSignInMethodDetails": "یک روش ورود به این حساب Omi اضافه کنید. طرح، ضبط‌ها و سرویس‌های متصل شما در همین حساب باقی می‌مانند.",
+    "accountSignInConflictTitle": "این روش ورود به حساب دیگری متصل است",
+    "accountSignInConflictDetails": "هنوز وارد همین حساب هستید. هر حساب Omi طرح، ضبط‌ها و سرویس‌های متصل خودش را حفظ می‌کند.",
+    "accountSignInMethodAdded": "روش ورود اضافه شد",
     "authFailedToLinkGoogle": "پیوند با Google ناموفق بود، لطفاً دوباره تلاش کنید.",
     "@authFailedToLinkGoogle": {
         "description": "Error message when linking Google account fails"

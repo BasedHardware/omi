@@ -7120,6 +7120,26 @@ class AppLocalizationsTl extends AppLocalizations {
   String get authUnexpectedError => 'Unexpected error sa pag-sign in, mangyaring subukan ulit';
 
   @override
+  String get accountSignInMethods => 'Mga paraan ng pag-sign in';
+
+  @override
+  String get accountAddSignInMethod => 'Magdagdag ng paraan ng pag-sign in';
+
+  @override
+  String get accountAddSignInMethodDetails =>
+      'Magdagdag ng paraan para mag-sign in sa Omi account na ito. Mananatili rito ang iyong plan, mga recording, at integration.';
+
+  @override
+  String get accountSignInConflictTitle => 'Sa ibang account nakaugnay ang paraang ito';
+
+  @override
+  String get accountSignInConflictDetails =>
+      'Naka-sign in ka pa rin sa account na ito. Nananatili sa bawat Omi account ang sarili nitong plan, mga recording, at integration.';
+
+  @override
+  String get accountSignInMethodAdded => 'Naidagdag ang paraan ng pag-sign in';
+
+  @override
   String get authFailedToLinkGoogle => 'Nabigo ang pag-link gamit ang Google, mangyaring subukan ulit.';
 
   @override

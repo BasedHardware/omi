@@ -7070,6 +7070,26 @@ class AppLocalizationsPl extends AppLocalizations {
   String get authUnexpectedError => 'Nieoczekiwany błąd podczas logowania, spróbuj ponownie';
 
   @override
+  String get accountSignInMethods => 'Metody logowania';
+
+  @override
+  String get accountAddSignInMethod => 'Dodaj metodę logowania';
+
+  @override
+  String get accountAddSignInMethodDetails =>
+      'Dodaj sposób logowania do tego konta Omi. Twój plan, nagrania i integracje pozostaną na tym koncie.';
+
+  @override
+  String get accountSignInConflictTitle => 'Ta metoda logowania należy do innego konta';
+
+  @override
+  String get accountSignInConflictDetails =>
+      'Nadal korzystasz z bieżącego konta. Każde konto Omi zachowuje swój plan, nagrania i integracje.';
+
+  @override
+  String get accountSignInMethodAdded => 'Dodano metodę logowania';
+
+  @override
   String get authFailedToLinkGoogle => 'Nie udało się połączyć z Google, spróbuj ponownie.';
 
   @override

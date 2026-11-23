@@ -6953,6 +6953,24 @@ class AppLocalizationsJa extends AppLocalizations {
   String get authUnexpectedError => 'サインイン中に予期しないエラーが発生しました。もう一度お試しください';
 
   @override
+  String get accountSignInMethods => 'サインイン方法';
+
+  @override
+  String get accountAddSignInMethod => 'サインイン方法を追加';
+
+  @override
+  String get accountAddSignInMethodDetails => 'このOmiアカウントにサインインする方法を追加できます。プラン、録音、連携は引き続きこのアカウントに紐づきます。';
+
+  @override
+  String get accountSignInConflictTitle => 'このサインイン方法は別のアカウントに紐づいています';
+
+  @override
+  String get accountSignInConflictDetails => '現在のアカウントにサインインしたままです。プラン、録音、連携はそれぞれのOmiアカウントに紐づきます。';
+
+  @override
+  String get accountSignInMethodAdded => 'サインイン方法を追加しました';
+
+  @override
   String get authFailedToLinkGoogle => 'Googleとの連携に失敗しました。もう一度お試しください。';
 
   @override

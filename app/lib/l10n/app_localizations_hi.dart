@@ -7036,6 +7036,26 @@ class AppLocalizationsHi extends AppLocalizations {
   String get authUnexpectedError => 'साइन इन करते समय अप्रत्याशित त्रुटि, कृपया पुनः प्रयास करें';
 
   @override
+  String get accountSignInMethods => 'साइन इन करने के तरीके';
+
+  @override
+  String get accountAddSignInMethod => 'साइन इन का तरीका जोड़ें';
+
+  @override
+  String get accountAddSignInMethodDetails =>
+      'इस Omi खाते में साइन इन करने का एक तरीका जोड़ें। आपका प्लान, रिकॉर्डिंग और इंटीग्रेशन इसी खाते में बने रहेंगे।';
+
+  @override
+  String get accountSignInConflictTitle => 'साइन इन का यह तरीका किसी दूसरे खाते से जुड़ा है';
+
+  @override
+  String get accountSignInConflictDetails =>
+      'आप अभी भी इसी खाते में साइन इन हैं। हर Omi खाते का प्लान, रिकॉर्डिंग और इंटीग्रेशन उसी खाते में रहते हैं।';
+
+  @override
+  String get accountSignInMethodAdded => 'साइन इन का तरीका जोड़ दिया गया';
+
+  @override
   String get authFailedToLinkGoogle => 'Google से लिंक करने में विफल, कृपया पुनः प्रयास करें।';
 
   @override

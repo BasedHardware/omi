@@ -7061,6 +7061,26 @@ class AppLocalizationsLt extends AppLocalizations {
   String get authUnexpectedError => 'Netikėta klaida prisijungiant, bandykite dar kartą';
 
   @override
+  String get accountSignInMethods => 'Prisijungimo būdai';
+
+  @override
+  String get accountAddSignInMethod => 'Pridėti prisijungimo būdą';
+
+  @override
+  String get accountAddSignInMethodDetails =>
+      'Pridėkite prisijungimo prie šios Omi paskyros būdą. Jūsų planas, įrašai ir integracijos liks šioje paskyroje.';
+
+  @override
+  String get accountSignInConflictTitle => 'Šis prisijungimo būdas susietas su kita paskyra';
+
+  @override
+  String get accountSignInConflictDetails =>
+      'Vis dar esate prisijungę prie šios paskyros. Kiekvienoje Omi paskyroje lieka jos planas, įrašai ir integracijos.';
+
+  @override
+  String get accountSignInMethodAdded => 'Prisijungimo būdas pridėtas';
+
+  @override
   String get authFailedToLinkGoogle => 'Nepavyko susieti su Google, bandykite dar kartą.';
 
   @override

@@ -7065,6 +7065,26 @@ class AppLocalizationsId extends AppLocalizations {
   String get authUnexpectedError => 'Terjadi kesalahan tak terduga saat masuk. Silakan coba lagi.';
 
   @override
+  String get accountSignInMethods => 'Metode masuk';
+
+  @override
+  String get accountAddSignInMethod => 'Tambahkan metode masuk';
+
+  @override
+  String get accountAddSignInMethodDetails =>
+      'Tambahkan cara untuk masuk ke akun Omi ini. Paket, rekaman, dan integrasi Anda tetap tersimpan di akun ini.';
+
+  @override
+  String get accountSignInConflictTitle => 'Metode masuk ini tertaut ke akun lain';
+
+  @override
+  String get accountSignInConflictDetails =>
+      'Anda masih masuk ke akun ini. Setiap akun Omi memiliki paket, rekaman, dan integrasinya sendiri.';
+
+  @override
+  String get accountSignInMethodAdded => 'Metode masuk ditambahkan';
+
+  @override
   String get authFailedToLinkGoogle => 'Gagal menautkan akun Google. Silakan coba lagi.';
 
   @override

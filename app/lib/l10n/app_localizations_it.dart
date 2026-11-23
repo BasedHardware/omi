@@ -7095,6 +7095,26 @@ class AppLocalizationsIt extends AppLocalizations {
   String get authUnexpectedError => 'Errore imprevisto durante l\'accesso, riprova';
 
   @override
+  String get accountSignInMethods => 'Metodi di accesso';
+
+  @override
+  String get accountAddSignInMethod => 'Aggiungi un metodo di accesso';
+
+  @override
+  String get accountAddSignInMethodDetails =>
+      'Aggiungi un modo per accedere a questo account Omi. Il tuo piano, le registrazioni e le integrazioni restano associati a questo account.';
+
+  @override
+  String get accountSignInConflictTitle => 'Questo metodo di accesso è associato a un altro account';
+
+  @override
+  String get accountSignInConflictDetails =>
+      'Sei ancora connesso a questo account. Ogni account Omi conserva il suo piano, le sue registrazioni e le sue integrazioni.';
+
+  @override
+  String get accountSignInMethodAdded => 'Metodo di accesso aggiunto';
+
+  @override
   String get authFailedToLinkGoogle => 'Collegamento con Google non riuscito, riprova.';
 
   @override

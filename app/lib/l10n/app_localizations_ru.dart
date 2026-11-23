@@ -7078,6 +7078,26 @@ class AppLocalizationsRu extends AppLocalizations {
   String get authUnexpectedError => 'Непредвиденная ошибка при входе, пожалуйста, попробуйте снова';
 
   @override
+  String get accountSignInMethods => 'Способы входа';
+
+  @override
+  String get accountAddSignInMethod => 'Добавить способ входа';
+
+  @override
+  String get accountAddSignInMethodDetails =>
+      'Добавьте способ входа в этот аккаунт Omi. Ваш тариф, записи и интеграции останутся в этом аккаунте.';
+
+  @override
+  String get accountSignInConflictTitle => 'Этот способ входа привязан к другому аккаунту';
+
+  @override
+  String get accountSignInConflictDetails =>
+      'Вы по-прежнему в этом аккаунте. У каждого аккаунта Omi остаются свои тариф, записи и интеграции.';
+
+  @override
+  String get accountSignInMethodAdded => 'Способ входа добавлен';
+
+  @override
   String get authFailedToLinkGoogle => 'Не удалось связать с Google, пожалуйста, попробуйте снова.';
 
   @override

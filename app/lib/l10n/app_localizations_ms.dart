@@ -7074,6 +7074,26 @@ class AppLocalizationsMs extends AppLocalizations {
   String get authUnexpectedError => 'Ralat tidak dijangka semasa log masuk, sila cuba lagi';
 
   @override
+  String get accountSignInMethods => 'Kaedah log masuk';
+
+  @override
+  String get accountAddSignInMethod => 'Tambah kaedah log masuk';
+
+  @override
+  String get accountAddSignInMethodDetails =>
+      'Tambah cara untuk log masuk ke akaun Omi ini. Pelan, rakaman dan penyepaduan anda kekal dalam akaun ini.';
+
+  @override
+  String get accountSignInConflictTitle => 'Kaedah log masuk ini milik akaun lain';
+
+  @override
+  String get accountSignInConflictDetails =>
+      'Anda masih dilog masuk ke akaun ini. Setiap akaun Omi mengekalkan pelan, rakaman dan penyepaduannya sendiri.';
+
+  @override
+  String get accountSignInMethodAdded => 'Kaedah log masuk ditambah';
+
+  @override
   String get authFailedToLinkGoogle => 'Gagal memautkan dengan Google, sila cuba lagi.';
 
   @override

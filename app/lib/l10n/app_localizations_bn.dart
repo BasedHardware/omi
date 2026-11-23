@@ -7067,6 +7067,26 @@ class AppLocalizationsBn extends AppLocalizations {
   String get authUnexpectedError => 'সাইন ইন করতে অপ্রত্যাশিত ত্রুটি, দয়া করে আবার চেষ্টা করুন';
 
   @override
+  String get accountSignInMethods => 'সাইন-ইন পদ্ধতি';
+
+  @override
+  String get accountAddSignInMethod => 'সাইন-ইন পদ্ধতি যোগ করুন';
+
+  @override
+  String get accountAddSignInMethodDetails =>
+      'এই Omi অ্যাকাউন্টে সাইন ইন করার একটি পদ্ধতি যোগ করুন। আপনার প্ল্যান, রেকর্ডিং এবং ইন্টিগ্রেশন এই অ্যাকাউন্টেই থাকবে।';
+
+  @override
+  String get accountSignInConflictTitle => 'এই সাইন-ইন পদ্ধতিটি অন্য একটি অ্যাকাউন্টের সঙ্গে যুক্ত';
+
+  @override
+  String get accountSignInConflictDetails =>
+      'আপনি এখনও এই অ্যাকাউন্টে সাইন ইন আছেন। প্রতিটি Omi অ্যাকাউন্টের প্ল্যান, রেকর্ডিং ও ইন্টিগ্রেশন সেই অ্যাকাউন্টেই থাকে।';
+
+  @override
+  String get accountSignInMethodAdded => 'সাইন-ইন পদ্ধতি যোগ করা হয়েছে';
+
+  @override
   String get authFailedToLinkGoogle => 'Google এর সাথে লিঙ্ক করতে ব্যর্থ, দয়া করে আবার চেষ্টা করুন।';
 
   @override

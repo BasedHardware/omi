@@ -7042,6 +7042,26 @@ class AppLocalizationsDa extends AppLocalizations {
   String get authUnexpectedError => 'Uventet fejl under login, prøv venligst igen';
 
   @override
+  String get accountSignInMethods => 'Loginmetoder';
+
+  @override
+  String get accountAddSignInMethod => 'Tilføj loginmetode';
+
+  @override
+  String get accountAddSignInMethodDetails =>
+      'Tilføj en måde at logge ind på denne Omi-konto. Dit abonnement, dine optagelser og dine integrationer bliver på denne konto.';
+
+  @override
+  String get accountSignInConflictTitle => 'Denne loginmetode er knyttet til en anden konto';
+
+  @override
+  String get accountSignInConflictDetails =>
+      'Du er stadig logget ind på denne konto. Hver Omi-konto beholder sit abonnement, sine optagelser og sine integrationer.';
+
+  @override
+  String get accountSignInMethodAdded => 'Loginmetode tilføjet';
+
+  @override
   String get authFailedToLinkGoogle => 'Kunne ikke forbinde med Google, prøv venligst igen.';
 
   @override

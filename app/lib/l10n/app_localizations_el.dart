@@ -7106,6 +7106,26 @@ class AppLocalizationsEl extends AppLocalizations {
   String get authUnexpectedError => 'Απρόσμενο σφάλμα κατά τη σύνδεση, παρακαλώ δοκιμάστε ξανά';
 
   @override
+  String get accountSignInMethods => 'Τρόποι σύνδεσης';
+
+  @override
+  String get accountAddSignInMethod => 'Προσθήκη τρόπου σύνδεσης';
+
+  @override
+  String get accountAddSignInMethodDetails =>
+      'Προσθέστε έναν τρόπο σύνδεσης σε αυτόν τον λογαριασμό Omi. Το πρόγραμμά σας, οι εγγραφές και οι συνδέσεις με άλλες υπηρεσίες παραμένουν σε αυτόν τον λογαριασμό.';
+
+  @override
+  String get accountSignInConflictTitle => 'Αυτός ο τρόπος σύνδεσης είναι συνδεδεμένος με άλλον λογαριασμό';
+
+  @override
+  String get accountSignInConflictDetails =>
+      'Παραμένετε συνδεδεμένοι σε αυτόν τον λογαριασμό. Κάθε λογαριασμός Omi διατηρεί το δικό του πρόγραμμα, τις εγγραφές και τις συνδέσεις του με άλλες υπηρεσίες.';
+
+  @override
+  String get accountSignInMethodAdded => 'Ο τρόπος σύνδεσης προστέθηκε';
+
+  @override
   String get authFailedToLinkGoogle => 'Αποτυχία σύνδεσης με Google, παρακαλώ δοκιμάστε ξανά.';
 
   @override

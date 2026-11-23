@@ -7051,6 +7051,26 @@ class AppLocalizationsCs extends AppLocalizations {
   String get authUnexpectedError => 'Neočekávaná chyba při přihlašování, zkuste to prosím znovu';
 
   @override
+  String get accountSignInMethods => 'Způsoby přihlášení';
+
+  @override
+  String get accountAddSignInMethod => 'Přidat způsob přihlášení';
+
+  @override
+  String get accountAddSignInMethodDetails =>
+      'Přidejte způsob přihlášení k tomuto účtu Omi. Tarif, nahrávky a integrace zůstanou u tohoto účtu.';
+
+  @override
+  String get accountSignInConflictTitle => 'Tento způsob přihlášení je spojen s jiným účtem';
+
+  @override
+  String get accountSignInConflictDetails =>
+      'Stále jste přihlášeni k tomuto účtu. Každý účet Omi si zachovává svůj tarif, nahrávky a integrace.';
+
+  @override
+  String get accountSignInMethodAdded => 'Způsob přihlášení byl přidán';
+
+  @override
   String get authFailedToLinkGoogle => 'Propojení s Google se nezdařilo, zkuste to prosím znovu.';
 
   @override

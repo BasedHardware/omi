@@ -7096,6 +7096,26 @@ class AppLocalizationsCa extends AppLocalizations {
   String get authUnexpectedError => 'Error inesperat en iniciar sessió, si us plau torneu-ho a provar';
 
   @override
+  String get accountSignInMethods => 'Mètodes d’inici de sessió';
+
+  @override
+  String get accountAddSignInMethod => 'Afegeix un mètode d’inici de sessió';
+
+  @override
+  String get accountAddSignInMethodDetails =>
+      'Afegeix una manera d’iniciar sessió en aquest compte d’Omi. El teu pla, les gravacions i les integracions es mantenen en aquest compte.';
+
+  @override
+  String get accountSignInConflictTitle => 'Aquest mètode d’inici de sessió està vinculat a un altre compte';
+
+  @override
+  String get accountSignInConflictDetails =>
+      'La sessió d’aquest compte continua oberta. Cada compte d’Omi conserva el seu pla, les seves gravacions i les seves integracions.';
+
+  @override
+  String get accountSignInMethodAdded => 'S’ha afegit el mètode d’inici de sessió';
+
+  @override
   String get authFailedToLinkGoogle => 'No s\'ha pogut vincular amb Google, si us plau torneu-ho a provar.';
 
   @override

@@ -7059,6 +7059,26 @@ class AppLocalizationsFi extends AppLocalizations {
   String get authUnexpectedError => 'Odottamaton virhe kirjautuessa, yritä uudelleen';
 
   @override
+  String get accountSignInMethods => 'Kirjautumistavat';
+
+  @override
+  String get accountAddSignInMethod => 'Lisää kirjautumistapa';
+
+  @override
+  String get accountAddSignInMethodDetails =>
+      'Lisää tälle Omi-tilille kirjautumistapa. Tilauksesi, tallenteesi ja integraatiosi säilyvät tällä tilillä.';
+
+  @override
+  String get accountSignInConflictTitle => 'Tämä kirjautumistapa on liitetty toiseen tiliin';
+
+  @override
+  String get accountSignInConflictDetails =>
+      'Olet yhä kirjautuneena tälle tilille. Jokaisella Omi-tilillä on oma tilauksensa, tallenteensa ja integraationsa.';
+
+  @override
+  String get accountSignInMethodAdded => 'Kirjautumistapa lisätty';
+
+  @override
   String get authFailedToLinkGoogle => 'Googleen linkittäminen epäonnistui, yritä uudelleen.';
 
   @override
