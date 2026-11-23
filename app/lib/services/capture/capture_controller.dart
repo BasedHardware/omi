@@ -2740,7 +2740,6 @@ class CaptureController extends ChangeNotifier
   void _refreshLimitlessCustomLiveWatch() {
     final connection = _limitlessAudioConnection;
     if (connection == null) return;
-    connection.stopCustomLiveAudioWatch();
     final device = _recordingDevice;
     final session = _capture.stagedReadModel.state.active;
     final recordingId = session?.recordingId;
@@ -2754,6 +2753,7 @@ class CaptureController extends ChangeNotifier
         accountId.isEmpty ||
         !config.isEnabled ||
         config.provider != SttProvider.customLive) {
+      connection.stopCustomLiveAudioWatch();
       return;
     }
     final configId = config.sttConfigId;
@@ -2782,9 +2782,13 @@ class CaptureController extends ChangeNotifier
       return _preferences.customSttConfig.sttConfigId == configId;
     }
 
-    if (!isCurrent()) return;
+    if (!isCurrent()) {
+      connection.stopCustomLiveAudioWatch();
+      return;
+    }
     _recordingTelemetry.observeCustomLiveAudioEligibility();
     if (_customLiveAudioRecoveryKilled) {
+      connection.stopCustomLiveAudioWatch();
       _recordingTelemetry.observeCustomLiveAudioDetection(enabled: false);
       return;
     }
