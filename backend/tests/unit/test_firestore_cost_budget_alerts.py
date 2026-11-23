@@ -110,6 +110,7 @@ def test_rules_are_enabled_production_only_and_owned_by_margin(uid):
     assert {node["datasourceUid"] for node in rule["data"] if "expr" in node["model"]} == {"gmp-cloud-run"}
     if uid in {RATIO, NO_OUTPUT, STEP}:
         assert rule["annotations"]["severity"] == "ticket"
+        assert rule["labels"]["owner_issue"] in rule["annotations"]["safe_next_action"]
     verifier = runpy.run_path(str(REPO / "backend/scripts/verify_pusher_live_alert_route.py"))
     assert uid in json.loads((MONITORING / "live-alert-gate.json").read_text())["uids"]
     assert uid in verifier["load_live_stt_import_rules"](production=True)
