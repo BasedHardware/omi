@@ -338,7 +338,7 @@ def _completed_status(view, request, canonical, intake, job, segments, generatio
     }
 
 
-def reconcile(store, reads, request, *, files=None, expected=None, placements=None, commit=False):
+def reconcile(store, reads, request, *, files=None, expected=None, placements=None, commit=False, before_commit=None):
     """Return a qualified view or atomically settle an already proved view."""
 
     def read(view):
@@ -423,8 +423,9 @@ def reconcile(store, reads, request, *, files=None, expected=None, placements=No
         state.receipt_writes += 1
         return state
 
-    runner = write_snapshot if commit else read_snapshot
-    return runner(store, read, reads, on_rpc=reads.transaction_rpc)
+    if commit:
+        return write_snapshot(store, read, reads, on_rpc=reads.transaction_rpc, before_commit=before_commit)
+    return read_snapshot(store, read, reads, on_rpc=reads.transaction_rpc)
 
 
 def terminal_status(store, uid, job):

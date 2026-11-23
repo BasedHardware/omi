@@ -40,6 +40,8 @@ def plan_retention(sources):
         if len(original_ids) > MAX_RETAINED_DONORS:
             raise RetainedMergeDeferred('retained donor limit')
         plans[cid] = {'keep': keep, 'inherited': sorted(inherited)}
+    if plans and any(row.get('uses_custom_stt') for row in sources.values()):
+        raise RetainedMergeDeferred('retained merge cannot inherit custom STT')
     return plans
 
 

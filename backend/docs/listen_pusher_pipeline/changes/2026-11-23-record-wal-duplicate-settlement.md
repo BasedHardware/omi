@@ -20,9 +20,10 @@ Retain receipt readers on rollback. Merge cleanup marks the source row before
 removing backing audio, and retained-donor erasure requires its tombstone. A
 failed fence leaves prefix cleanup pending. A canonical revision change refuses replay
 until equivalence is established.
-Expected failures in optional proof reads, including an oversized inventory,
-continue through the existing upload coverage path. Once a settlement CAS is
-dispatched, an uncertain result holds for exact replay.
+Expected optional proof failures continue through the existing upload coverage
+path, including during the final snapshot's reads and revalidation. Fallback
+closes the commit fence before the worker can dispatch. Once the commit RPC
+has begun, an uncertain result holds for exact replay.
 The legacy coverage transaction preserves a concurrent settlement receipt and
 leaves its status to exact replay.
 
@@ -59,6 +60,8 @@ transaction. This bounds a successor to 16 retained original donors. A merge
 above the bound defers before retraction. Exact replay allows one redirect
 and up to 56 point reads. Explicit deletion of either record defeats replay;
 successor deletion uses its existing persisted source-deletion lineage.
+Admission defers a retained-donor merge before claiming sources if any input
+uses custom speech recognition.
 
 Post-publication donor cleanup retracts derived state and preserves original
 custody, canonical obligations and aliases. Smart merge, automatic sync

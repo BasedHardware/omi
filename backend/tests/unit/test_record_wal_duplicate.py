@@ -22,7 +22,7 @@ def frames(*values, root='device-root', first=0, begin=48000):
     return [Packet(str(value), 960, begin + 960 * i, 4, (root, 7, first + i)) for i, value in enumerate(values)]
 
 
-def prove(runs, wal=None, covered=None, claims=None, capture_sessions=None):
+def prove(runs, wal=None, covered=None, claims=None, capture_sessions=None, *, shadow=True):
     wal = wal if wal is not None else frames(1, 2, 3, 4)
     claims = (
         claims
@@ -51,7 +51,7 @@ def prove(runs, wal=None, covered=None, claims=None, capture_sessions=None):
             capture_sessions or ('archive-session',) * len(runs),
         ),
         ArtifactReadBudget(time.monotonic() + 2, 0, 0),
-        True,
+        shadow,
     )
 
 
@@ -63,6 +63,14 @@ def test_requires_every_frame_and_both_algorithms_agree():
     assert proof == [None]
     proof, _ = prove([frames(1, 2, 3, 4)], wal=frames(1, 2, 3, 4, 5))
     assert proof == [None]
+
+
+def test_active_proof_uses_anchored_decision_without_shadow_oracle(monkeypatch):
+    oracle = Mock(side_effect=AssertionError('shadow oracle ran on active settlement'))
+    monkeypatch.setattr(duplicate, '_oracle', oracle)
+    proof, disagreement = prove([frames(1, 2, 3, 4)], shadow=False)
+    assert proof[0] and not disagreement
+    oracle.assert_not_called()
 
 
 @pytest.mark.parametrize(
@@ -176,6 +184,21 @@ def test_lifecycle_rpc_observes_successful_commit(snapshot_rpc):
     assert len(commit['request']['writes']) == 1
     assert commit['timeout'] == 1 and commit['retry'] is None
     assert case.events == [('begin', 'attempt'), ('begin', 'success'), ('commit', 'attempt'), ('commit', 'success')]
+
+
+def test_lifecycle_fence_can_refuse_dispatch_after_staging(snapshot_rpc):
+    case = snapshot_rpc
+
+    def refuse():
+        assert case.api.begin_transaction.called
+        assert not case.api.commit.called
+        raise ArtifactReadLimit('already falling back')
+
+    with pytest.raises(ArtifactReadLimit, match='already falling back'):
+        write_snapshot(case.store, _stage_intake, case.budget, on_rpc=case.observe, before_commit=refuse)
+    case.api.commit.assert_not_called()
+    case.api.rollback.assert_called_once()
+    assert ('commit', 'attempt') not in case.events
 
 
 @pytest.mark.parametrize(

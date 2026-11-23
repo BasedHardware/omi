@@ -11,6 +11,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
 import google_crc32c
+from cryptography.exceptions import InvalidTag
 from google.api_core.exceptions import PreconditionFailed, ServiceUnavailable
 from google.cloud.exceptions import NotFound
 import pytest
@@ -151,8 +152,20 @@ def world(monkeypatch, tmp_path):
     return SimpleNamespace(client=client, store=store, bucket=bucket, paths=paths, upload=upload, rows=rows)
 
 
-@pytest.mark.parametrize('failure_at', ('inventory', 'commit'))
-async def test_duplicate_settlement_only_falls_back_before_commit(world, monkeypatch, failure_at):
+@pytest.mark.parametrize(
+    'failure_at, failure',
+    [
+        ('inventory', ArtifactReadLimit('archive count limit')),
+        ('inventory', KeyError('missing manifest')),
+        ('inventory', InvalidTag()),
+        ('parse', struct.error('truncated WAL')),
+        ('revalidate', ServiceUnavailable('final snapshot read failed')),
+        ('commit', ServiceUnavailable('uncertain CAS')),
+        ('timeout_before_commit', None),
+        ('timeout_after_commit', None),
+    ],
+)
+async def test_duplicate_settlement_only_falls_back_before_commit(world, monkeypatch, failure_at, failure):
     from config.record_audio import record_identity
     from utils.batch_pipeline import record_wal_duplicate as duplicate
 
@@ -162,29 +175,65 @@ async def test_duplicate_settlement_only_falls_back_before_commit(world, monkeyp
     monkeypatch.setattr(duplicate, 'select', lambda *_: ('settle', None))
 
     def staged(paths, budget, *, descriptors):
+        if failure_at == 'parse':
+            raise failure
         descriptors['wal'] = {}
         return [('wal', 1, [])]
 
     monkeypatch.setattr(duplicate.sample, 'read_staged_packets', staged)
     prepared = SimpleNamespace(prior=None, scope=SimpleNamespace(source={}))
-    reconcile = Mock(side_effect=[prepared, ServiceUnavailable('uncertain synthetic CAS')])
+    late_dispatch = []
+
+    def reconcile_snapshot(*args, commit=False, before_commit=None, **kwargs):
+        if not commit:
+            return prepared
+        if failure_at == 'commit':
+            before_commit()
+        else:
+            late_dispatch.append(before_commit)
+        raise failure
+
+    reconcile = Mock(side_effect=reconcile_snapshot)
     monkeypatch.setattr(duplicate.ledger, 'reconcile', reconcile)
-    inventory = Mock(side_effect=ArtifactReadLimit('archive count limit') if failure_at == 'inventory' else None)
+    inventory = Mock(side_effect=failure if failure_at == 'inventory' else None)
     monkeypatch.setattr(duplicate, '_inventory', inventory)
     monkeypatch.setattr(duplicate, '_placements', lambda *_: (['proved'], False))
     monkeypatch.setattr(duplicate, '_recheck', lambda *_: None)
     legacy = AsyncMock(return_value=live_upload.JSONResponse(status_code=202, content={'job_id': job}))
     monkeypatch.setattr(live_upload, '_answer_registered_upload', legacy)
 
+    if failure is None:
+        timeout = asyncio.timeout(None)
+        monkeypatch.setattr(duplicate.asyncio, 'timeout', lambda _: timeout)
+
+        async def offload(executor, body, *args, **kwargs):
+            if kwargs.get('commit'):
+                if failure_at == 'timeout_after_commit':
+                    kwargs['before_commit']()
+                else:
+                    late_dispatch.append(kwargs['before_commit'])
+                timeout.reschedule(asyncio.get_running_loop().time())
+                await asyncio.Future()
+            return body(*args, **kwargs)
+
+        monkeypatch.setattr(duplicate, 'run_blocking', offload)
+
     response = await world.upload(upload_paths=world.paths[:1], capture_claims={'wal': {}})
-    if failure_at == 'inventory':
-        assert response.status_code == 202
-        legacy.assert_awaited_once()
-        assert reconcile.call_count == 1
-    else:
+    if failure_at in ('commit', 'timeout_after_commit'):
         assert response.status_code == 503
         legacy.assert_not_awaited()
-        assert reconcile.call_count == 2 and reconcile.call_args.kwargs['commit'] is True
+        if failure_at == 'commit':
+            assert reconcile.call_count == 2 and reconcile.call_args.kwargs['commit'] is True
+    else:
+        assert response.status_code == 202
+        legacy.assert_awaited_once()
+        assert (
+            reconcile.call_count
+            == {'parse': 0, 'inventory': 1, 'revalidate': 2, 'timeout_before_commit': 1}[failure_at]
+        )
+        if late_dispatch:
+            with pytest.raises(ArtifactReadLimit, match='cancelled before dispatch'):
+                late_dispatch[0]()
 
 
 async def test_legacy_coverage_cannot_replace_a_concurrently_settled_alias(world, monkeypatch):

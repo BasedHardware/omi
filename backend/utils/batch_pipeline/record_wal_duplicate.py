@@ -4,9 +4,11 @@ import asyncio
 from collections import Counter, defaultdict
 from dataclasses import dataclass
 import hashlib
+import struct
 import threading
 import time
 
+from cryptography.exceptions import InvalidTag
 from google.api_core.exceptions import GoogleAPICallError
 from prometheus_client import Counter as Metric
 
@@ -180,8 +182,8 @@ def _placements(layout, descriptors, claims, inventory, budget, shadow):
         matches = overlap(wal, runs, index, budget.timeout)
         proved = _qualify(matches, wal, claim, inventory, source_counts)
         # An anchored refusal can conservatively hold real duplicates. The
-        # independent check is required on every positive; negative decisions
-        # cannot create a receipt.
+        # Shadow checks each anchored positive with the independent oracle.
+        # Active settlement uses the qualified anchored decision.
         if proved and positions is not None:
             disagreements |= proved != _oracle(wal, claim, inventory, positions, source_counts, budget)
         results.append(proved)
@@ -238,7 +240,7 @@ async def evaluate(store, uid, cid, source, device, content_id, session, paths, 
     outcome = 'hold'
     counted = False
     proof_started = False
-    committing = False
+    commit_fence = CommitFence() if current == 'settle' else None
     try:
         async with asyncio.timeout(ATTEMPT_SECONDS):
             prepare, finish = await run_blocking(sync_executor, _views, budget, current)
@@ -279,7 +281,6 @@ async def evaluate(store, uid, cid, source, device, content_id, session, paths, 
             await run_blocking(storage_executor, _recheck, data, budget)
             if select(uid, content_id)[0] != current:
                 return None
-            committing = current == 'settle'
             settled = await run_blocking(
                 db_executor,
                 ledger.reconcile,
@@ -289,7 +290,8 @@ async def evaluate(store, uid, cid, source, device, content_id, session, paths, 
                 files=entries,
                 expected=before.scope,
                 placements=placements,
-                commit=committing,
+                commit=commit_fence is not None,
+                before_commit=commit_fence.begin if commit_fence is not None else None,
             )
             if settled is None:
                 return None
@@ -303,11 +305,11 @@ async def evaluate(store, uid, cid, source, device, content_id, session, paths, 
                     proof_io.labels(current, 'receipt_writes').inc(settled.receipt_writes)
                     proof_io.labels(current, 'donor_writes').inc(int(not settled.marked))
             return settled.reply if current == 'settle' else None
-    except (ArtifactReadLimit, GoogleAPICallError, OSError, ValueError):
+    except (ArtifactReadLimit, GoogleAPICallError, OSError, ValueError, KeyError, TypeError, InvalidTag, struct.error):
         outcome = 'unavailable'
         # Proof reads are optional to legacy coverage. An in-flight CAS may
         # already own the result, so only an exact retry can resolve its reply.
-        if committing:
+        if commit_fence is not None and not commit_fence.cancel():
             raise
         return None
     except Exception:
@@ -316,9 +318,33 @@ async def evaluate(store, uid, cid, source, device, content_id, session, paths, 
             raise
         return None
     finally:
+        if commit_fence is not None:
+            commit_fence.cancel()
         if proof_started and prepare is not None and finish is not None:
             proof_io.labels(current, 'point_reads').inc(prepare.issued + finish.issued)
             proof_io.labels(current, 'gcs_requests').inc(budget.objects)
             proof_io.labels(current, 'manifest_bytes').inc(budget.received_bytes)
         if counted:
             decisions.labels(current, outcome).inc()
+
+
+class CommitFence:
+    """Serialize the RPC boundary with fallback after an executor wait ends."""
+
+    def __init__(self):
+        self._lock = threading.Lock()
+        self._started = False
+        self._cancelled = False
+
+    def begin(self):
+        with self._lock:
+            if self._cancelled:
+                raise ArtifactReadLimit('duplicate WAL commit cancelled before dispatch')
+            self._started = True
+
+    def cancel(self):
+        with self._lock:
+            if self._started:
+                return False
+            self._cancelled = True
+            return True

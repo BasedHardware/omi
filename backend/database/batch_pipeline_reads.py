@@ -38,9 +38,9 @@ def read_snapshot(store, body, budget, *, on_rpc=None):
     return _snapshot(store, body, budget, write=False, on_rpc=on_rpc)
 
 
-def write_snapshot(store, body, budget, *, on_rpc=None):
+def write_snapshot(store, body, budget, *, on_rpc=None, before_commit=None):
     """Single bounded CAS. An uncertain commit is resolved by the next caller."""
-    return _snapshot(store, body, budget, write=True, on_rpc=on_rpc)
+    return _snapshot(store, body, budget, write=True, on_rpc=on_rpc, before_commit=before_commit)
 
 
 @contextmanager
@@ -64,7 +64,7 @@ def observe_rpc(on_rpc, stage):
         on_rpc(stage, 'success')
 
 
-def _snapshot(store, body, budget, *, write, on_rpc):
+def _snapshot(store, body, budget, *, write, on_rpc, before_commit=None):
     client = store.client
     transaction = BudgetedSnapshot(client, max_attempts=1, read_only=not write)
     try:
@@ -85,6 +85,8 @@ def _snapshot(store, body, budget, *, write, on_rpc):
         if write and (view.writes or view.patches or view.external):
             view.flush()
             timeout = budget.timeout(10)
+            if before_commit is not None:
+                before_commit()
             with observe_rpc(on_rpc, 'commit'):
                 transaction.commit_snapshot(client, timeout)
             return result

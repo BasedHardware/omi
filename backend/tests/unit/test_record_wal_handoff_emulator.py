@@ -9,9 +9,9 @@ import struct
 import time
 from types import SimpleNamespace
 from uuid import uuid4
-from unittest.mock import Mock
+from unittest.mock import AsyncMock, Mock
 
-from google.api_core.exceptions import ServiceUnavailable
+from google.api_core.exceptions import Aborted, ServiceUnavailable
 from google.auth.credentials import AnonymousCredentials
 from google.cloud import firestore
 import pytest
@@ -670,6 +670,72 @@ async def test_duplicate_replay_route_never_calls_legacy_status_or_archive(
     archive.assert_not_called()
 
 
+@pytest.mark.asyncio
+async def test_legacy_alias_transaction_retries_after_settlement_wins(duplicate_world, monkeypatch):
+    from config.record_wal_duplicate import RECEIPT_FIELD
+    from database.batch_pipeline_store import FirestoreTransaction
+    from utils.batch_pipeline import record_lease_append
+    from utils.sync.stage import collection_name
+
+    case = duplicate_world
+    request = case.request('legacy-loses')
+    alias = case.user.collection(collection_name('sync_content_ledger')).document(request.content_id)
+    client = case.store.client
+    api = client._firestore_api
+    commit_rpc = api.commit
+    winner = {'dispatch_protocol': 'batch_v1', 'job_id': case.canonical, RECEIPT_FIELD: {'scope': 'synthetic'}}
+    aborted, observed = [], []
+    original_get = FirestoreTransaction.get
+
+    def get(view, table, key):
+        row = original_get(view, table, key)
+        if (table, key) == ('content', f'{request.uid}/{request.content_id}'):
+            observed.append(row)
+        return row
+
+    def interleave(*args, **kwargs):
+        rpc = kwargs.get('request') or args[0]
+        if not aborted and any(write.update.name.endswith('/' + alias.path) for write in rpc['writes']):
+            assert observed == [{}, {}]
+            # The emulator uses read locks. Release the losing transaction
+            # before committing the competing write and reporting contention.
+            api.rollback(
+                request={'database': rpc['database'], 'transaction': rpc['transaction']},
+                metadata=kwargs.get('metadata', ()),
+                timeout=2,
+                retry=None,
+            )
+            aborted.append(True)
+            alias.set(winner)
+            raise Aborted('synthetic competing settlement')
+        return commit_rpc(*args, **kwargs)
+
+    monkeypatch.setattr(FirestoreTransaction, 'get', get)
+    monkeypatch.setattr(api, 'commit', interleave)
+    monkeypatch.setattr(live_upload, 'FirestoreStore', lambda *_: case.store)
+    monkeypatch.setenv('RECORD_WAL_HANDOFF_ENABLED', 'false')
+    monkeypatch.setattr(live_upload, 'coverage_wait_memo_enabled', lambda: False)
+    monkeypatch.setattr(record_lease_append, 'retain_upload', AsyncMock())
+    monkeypatch.setattr(live_upload, 'artifacts_for', lambda _: object())
+    monkeypatch.setattr(live_upload, '_covered', lambda *_: True)
+    legacy = Mock(side_effect=AssertionError('legacy status must not redrive a settled alias'))
+    monkeypatch.setattr(live_upload, 'durable_status', legacy)
+    response = await live_upload.registered_record_response(
+        uid=request.uid,
+        conversation_id=request.cid,
+        content_id=request.content_id,
+        paths=['synthetic'],
+        source=request.source,
+        client_device_id=request.device,
+        loaded_conversation=case.conversation.get().to_dict(),
+    )
+    assert aborted == [True]
+    assert observed == [{}, {}, winner]
+    assert response.status_code == 503
+    assert alias.get().to_dict() == winner
+    legacy.assert_not_called()
+
+
 def test_merge_removal_cannot_use_missing_source_as_durable_fence(duplicate_world):
     from google.api_core.exceptions import NotFound
     from database.record_audio import fence_record_audio_removal
@@ -825,6 +891,20 @@ def test_retained_merge_admit_defers_above_limit_without_changing_donors(duplica
     target = _publish_retained_merge(case, claimed)
     row = case.user.collection('conversations').document(target).get().to_dict()
     assert row['sync_merged_from'] == [ref.id for ref in refs[:16]]
+
+
+def test_retained_merge_with_custom_stt_defers_before_claiming_sources(duplicate_world):
+    from config.record_wal_duplicate import SETTLED_FIELD
+    from database import conversation_merge_jobs as jobs
+
+    case = duplicate_world
+    request = case.request('custom-stt')
+    case.conversation.update({SETTLED_FIELD: True})
+    custom = case.user.collection('conversations').document('custom')
+    custom.set({'status': 'completed', 'uses_custom_stt': True})
+    before = [ref.get().to_dict() for ref in (case.conversation, custom)]
+    assert jobs.admit(request.uid, [case.cid, custom.id], False, firestore_client=case.store.client) is None
+    assert [ref.get().to_dict() for ref in (case.conversation, custom)] == before
 
 
 def test_merge_preparation_wins_against_uncommitted_settlement(duplicate_world, monkeypatch):
