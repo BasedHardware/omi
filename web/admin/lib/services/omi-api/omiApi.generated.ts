@@ -4326,6 +4326,7 @@ export interface PlanIdentitySubscription {
   features?: Array<string>;
   limits?: PlanLimits;
   plan?: PlanType;
+  provider?: "play" | null;
   status?: SubscriptionStatus;
   stripe_subscription_id?: string | null;
 }
@@ -4344,6 +4345,7 @@ export interface PlanIdentityUserSubscriptionResponse {
   insights_gained_used: number;
   payment_issue?: PaymentIssue | null;
   phone_call_quota?: PhoneCallQuota | null;
+  play_billing?: PlayBillingConfig | null;
   processing_backlog?: ProcessingBacklog | null;
   show_subscription_ui?: boolean;
   subscription: PlanIdentitySubscription;
@@ -4368,6 +4370,33 @@ export type PlanType = "basic" | "unlimited" | "architect" | "operator" | "plus"
 export interface PlatformMinimumBuild {
   minimum_supported_build: number;
   platform: string;
+}
+
+export interface PlayBasePlan {
+  id: string;
+  interval: "month" | "year";
+}
+
+export interface PlayBillingConfig {
+  base_plans: Array<PlayBasePlan>;
+  obfuscated_account_id: string;
+  product_id: string;
+  trial_offer_id: string;
+}
+
+export interface PlayBillingErrorResponse {
+  detail: string;
+  message: string;
+}
+
+export interface PlayPurchaseRequest {
+  product_id: string;
+  purchase_token: string;
+}
+
+export interface PlayPurchaseResponse {
+  status: "active" | "pending" | "inactive";
+  subscription?: Subscription | null;
 }
 
 export interface PluginResult {
@@ -5792,6 +5821,7 @@ export interface Subscription {
   features?: Array<string>;
   limits?: PlanLimits;
   plan?: PlanType;
+  provider?: "play" | null;
   status?: SubscriptionStatus;
   stripe_subscription_id?: string | null;
 }
@@ -6545,6 +6575,7 @@ export interface UserSubscriptionResponse {
   insights_gained_used: number;
   payment_issue?: PaymentIssue | null;
   phone_call_quota?: PhoneCallQuota | null;
+  play_billing?: PlayBillingConfig | null;
   processing_backlog?: ProcessingBacklog | null;
   show_subscription_ui?: boolean;
   subscription: Subscription;
@@ -7367,6 +7398,11 @@ export interface OmiApiSchemas {
   "PlanLimits": PlanLimits;
   "PlanType": PlanType;
   "PlatformMinimumBuild": PlatformMinimumBuild;
+  "PlayBasePlan": PlayBasePlan;
+  "PlayBillingConfig": PlayBillingConfig;
+  "PlayBillingErrorResponse": PlayBillingErrorResponse;
+  "PlayPurchaseRequest": PlayPurchaseRequest;
+  "PlayPurchaseResponse": PlayPurchaseResponse;
   "PluginResult": PluginResult;
   "PricingOption": PricingOption;
   "PrivateCloudSyncResponse": PrivateCloudSyncResponse;
@@ -10976,6 +11012,18 @@ export interface OmiApiPaths {
       responses: {
         "200": PaymentStatusMessageResponse;
         "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/payments/play/purchases": {
+    post: {
+      operationId: "verify_play_purchase_v1_payments_play_purchases_post";
+      responses: {
+        "200": PlayPurchaseResponse;
+        "400": PlayBillingErrorResponse;
+        "401": void;
+        "409": PlayBillingErrorResponse;
         "422": HTTPValidationError;
       };
     };
@@ -19659,6 +19707,27 @@ export async function payment_issue_monthly_switch_endpoint_v1_payments_payment_
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
+export async function verify_play_purchase_v1_payments_play_purchases_post(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: PlayPurchaseRequest, init?: OmiApiClientInit): Promise<PlayPurchaseResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/payments/play/purchases`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "POST",
+    headers: {
+      ...(body ? { 'Content-Type': 'application/json' } : {}),
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
 export async function redeem_code_endpoint_v1_payments_redeem_code_post(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: RedeemCodeRequest, init?: OmiApiClientInit): Promise<RedeemCodeResponse> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/payments/redeem-code`;
@@ -22012,7 +22081,7 @@ export async function claim_referral_v1_users_me_referral_claim_post(header: { a
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-export async function get_user_subscription_endpoint_v1_users_me_subscription_get(header: { X_App_Platform?: string, X_App_Version?: string, authorization?: string, X_Device_Id_Hash?: string, X_Omi_Plan_Identity?: string }, init?: OmiApiClientInit): Promise<UserSubscriptionResponse> {
+export async function get_user_subscription_endpoint_v1_users_me_subscription_get(header: { X_App_Platform?: string, X_App_Version?: string, X_App_Build?: string | null, authorization?: string, X_Device_Id_Hash?: string, X_Omi_Plan_Identity?: string }, init?: OmiApiClientInit): Promise<UserSubscriptionResponse> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/users/me/subscription`;
   const _search = "";
@@ -22023,6 +22092,7 @@ export async function get_user_subscription_endpoint_v1_users_me_subscription_ge
       ...init?.headers,
       ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
       ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+      ...(header.X_App_Build !== undefined ? { "X-App-Build": String(header.X_App_Build) } : {}),
       ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
       ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
       ...(header.X_Omi_Plan_Identity !== undefined ? { "X-Omi-Plan-Identity": String(header.X_Omi_Plan_Identity) } : {}),
@@ -24440,4 +24510,4 @@ export async function get_speech_profile_v4_speech_profile_get(header: { authori
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-// Total: 557 client methods generated.
+// Total: 558 client methods generated.
