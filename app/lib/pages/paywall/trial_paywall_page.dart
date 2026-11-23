@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/pages/paywall/paywall_checkout.dart';
 import 'package:omi/pages/settings/widgets/plans/play_plans_content.dart';
+import 'package:omi/pages/settings/widgets/plans/prepaid_code_sheet.dart';
 import 'package:omi/pages/paywall/paywall_pacing.dart';
 import 'package:omi/providers/auth_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
@@ -227,6 +228,7 @@ class _TrialPaywallPageState extends State<TrialPaywallPage> {
     // At accessibility text sizes the pinned footer would fill the screen, so the cancel note and the
     // code hint scroll with the page there; at every other size they stay pinned under the button.
     final notesScroll = MediaQuery.textScalerOf(context).scale(1) >= 1.6;
+    final canRedeemCode = context.select<UsageProvider, bool>((usage) => usage.canRedeemPrepaidCode);
     final playBilled = context.select<UsageProvider, bool>((usage) => usage.playBilledPurchaser);
     final notes = [
       // Google Play readers: renewal at the shown price, managed and cancelled in Google Play (Terms and
@@ -242,7 +244,20 @@ class _TrialPaywallPageState extends State<TrialPaywallPage> {
       const SizedBox(height: 4),
       // Shopify buyers with an included year land here, not on the plans sheet with
       // its code field; their code goes in Stripe Checkout's promotion code box (not on Google Play).
-      if (!playBilled)
+      // Server switch on: redeem a prepaid code right here, no card. Never for a Play-billed reader.
+      if (canRedeemCode)
+        PrepaidCodeEntry(
+          source: PrepaidCodeSource.paywall,
+          center: true,
+          style: _Paper.label(size: 13, color: _Paper.textSecondary),
+          // Redeemed: the reader is Pro now, so close the paywall the way a restored purchase does.
+          onRedeemed: () {
+            if (!mounted || _dismissed) return;
+            _dismissed = true;
+            Navigator.of(context).pop(true);
+          },
+        )
+      else if (!playBilled)
         Text(
           l10n.paywallTrialCodeHint,
           key: const Key('trial_paywall_code_hint'),

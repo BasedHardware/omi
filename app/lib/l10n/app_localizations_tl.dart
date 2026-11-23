@@ -15894,4 +15894,37 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get shopOrderPlacedCheckEmail => 'Naipadala na ang order. Tingnan ang email mo para sa kumpirmasyon.';
+
+  @override
+  String get prepaidCodeEntry => 'May code ka?';
+
+  @override
+  String get prepaidCodeTitle => 'I-redeem ang code';
+
+  @override
+  String get prepaidCodeFieldHint => 'Ilagay ang iyong code';
+
+  @override
+  String get prepaidCodeRedeem => 'I-redeem';
+
+  @override
+  String get prepaidCodeRedeemed => 'Na-redeem ang code';
+
+  @override
+  String prepaidCodeResult(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'invalid': 'Hindi valid ang code na ito. Suriin ito at subukang muli.',
+        'used': 'Nagamit na ang code na ito.',
+        'expired': 'Nag-expire na ang code na ito.',
+        'hasPlan': 'May plan ka na. Hindi nagamit ang iyong code.',
+        'notPrepaid': 'Hindi ma-redeem dito ang code na ito. Gamitin ito kapag pumili ka ng plan.',
+        'notEligible': 'Hindi magagamit ang code na ito sa account na ito.',
+        'rateLimited': 'Masyadong maraming pagsubok. Subukang muli mamaya.',
+        'other': 'May nangyaring mali. Pakisubukang muli.',
+      },
+    );
+    return '$_temp0';
+  }
 }

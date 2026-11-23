@@ -4460,6 +4460,7 @@ FIELD_SITES = {
     'utils/processing_backlog.py': [
         ('allowance_increased.limit', 'status', "'active'", ('current_period_end', 'status'))
     ],
+    'utils/prepaid_code_redemption.py': [('_result', 'status', "'redeemed'", ('ends_at', 'months', 'plan', 'status'))],
     'utils/promotion_redemption.py': [
         (
             'redeem_promotion_code',

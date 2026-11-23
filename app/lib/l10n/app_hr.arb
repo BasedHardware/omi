@@ -12307,5 +12307,11 @@
     "playRenewalTerms": "Automatski se obnavlja po prikazanoj cijeni dok ne otkažete. Upravljajte ili otkažite bilo kada na Google Playu.",
     "playPaidAppUnavailable": "Nije dostupno na Androidu",
     "pageNotAvailableInApp": "Ova stranica nije dostupna u aplikaciji.",
-    "shopOrderPlacedCheckEmail": "Narudžba je poslana. Potvrdu potražite u e-pošti."
+    "shopOrderPlacedCheckEmail": "Narudžba je poslana. Potvrdu potražite u e-pošti.",
+    "prepaidCodeEntry": "Imate kôd?",
+    "prepaidCodeTitle": "Iskoristite kôd",
+    "prepaidCodeFieldHint": "Unesite svoj kôd",
+    "prepaidCodeRedeem": "Iskoristi",
+    "prepaidCodeRedeemed": "Kôd je iskorišten",
+    "prepaidCodeResult": "{reason, select, invalid{Ovaj kôd nije valjan. Provjerite ga i pokušajte ponovno.} used{Ovaj kôd je već iskorišten.} expired{Ovaj kôd je istekao.} hasPlan{Već imate plan. Vaš kôd nije iskorišten.} notPrepaid{Ovaj kôd ne može se iskoristiti ovdje. Iskoristite ga kada odaberete plan.} notEligible{Ovaj kôd ne može se koristiti na ovom računu.} rateLimited{Previše pokušaja. Pokušajte kasnije.} other{Nešto nije u redu. Pokušajte ponovno.}}"
 }

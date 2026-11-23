@@ -15760,4 +15760,37 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get shopOrderPlacedCheckEmail => 'سفارش ثبت شد. ایمیل خود را برای تأییدیه بررسی کنید.';
+
+  @override
+  String get prepaidCodeEntry => 'کد دارید؟';
+
+  @override
+  String get prepaidCodeTitle => 'استفاده از کد';
+
+  @override
+  String get prepaidCodeFieldHint => 'کد خود را وارد کنید';
+
+  @override
+  String get prepaidCodeRedeem => 'استفاده';
+
+  @override
+  String get prepaidCodeRedeemed => 'کد اعمال شد';
+
+  @override
+  String prepaidCodeResult(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'invalid': 'این کد معتبر نیست. آن را بررسی کنید و دوباره امتحان کنید.',
+        'used': 'این کد قبلاً استفاده شده است.',
+        'expired': 'این کد منقضی شده است.',
+        'hasPlan': 'شما از قبل یک طرح دارید. کد شما استفاده نشد.',
+        'notPrepaid': 'این کد اینجا قابل استفاده نیست. هنگام انتخاب طرح از آن استفاده کنید.',
+        'notEligible': 'این کد در این حساب قابل استفاده نیست.',
+        'rateLimited': 'تلاش‌های زیادی انجام شد. بعداً دوباره امتحان کنید.',
+        'other': 'مشکلی پیش آمد. لطفاً دوباره امتحان کنید.',
+      },
+    );
+    return '$_temp0';
+  }
 }

@@ -15803,4 +15803,37 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get shopOrderPlacedCheckEmail => 'Заказ аформлены. Пацвярджэнне прыйдзе на вашу пошту.';
+
+  @override
+  String get prepaidCodeEntry => 'Ёсць код?';
+
+  @override
+  String get prepaidCodeTitle => 'Актываваць код';
+
+  @override
+  String get prepaidCodeFieldHint => 'Увядзіце ваш код';
+
+  @override
+  String get prepaidCodeRedeem => 'Актываваць';
+
+  @override
+  String get prepaidCodeRedeemed => 'Код актываваны';
+
+  @override
+  String prepaidCodeResult(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'invalid': 'Гэты код несапраўдны. Праверце яго і паспрабуйце зноў.',
+        'used': 'Гэты код ужо выкарыстаны.',
+        'expired': 'Тэрмін дзеяння гэтага кода скончыўся.',
+        'hasPlan': 'У вас ужо ёсць план. Ваш код не выкарыстаны.',
+        'notPrepaid': 'Гэты код нельга актываваць тут. Выкарыстайце яго пры выбары плана.',
+        'notEligible': 'Гэты код нельга выкарыстаць на гэтым акаўнце.',
+        'rateLimited': 'Занадта шмат спроб. Паспрабуйце пазней.',
+        'other': 'Нешта пайшло не так. Паспрабуйце зноў.',
+      },
+    );
+    return '$_temp0';
+  }
 }

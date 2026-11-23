@@ -15833,4 +15833,37 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String get shopOrderPlacedCheckEmail => 'Нарачката е направена. Потврдата ќе ја најдете во е-поштата.';
+
+  @override
+  String get prepaidCodeEntry => 'Имате код?';
+
+  @override
+  String get prepaidCodeTitle => 'Искористете код';
+
+  @override
+  String get prepaidCodeFieldHint => 'Внесете го вашиот код';
+
+  @override
+  String get prepaidCodeRedeem => 'Искористи';
+
+  @override
+  String get prepaidCodeRedeemed => 'Кодот е искористен';
+
+  @override
+  String prepaidCodeResult(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'invalid': 'Овој код не е важечки. Проверете го и обидете се повторно.',
+        'used': 'Овој код е веќе искористен.',
+        'expired': 'Овој код е истечен.',
+        'hasPlan': 'Веќе имате план. Вашиот код не е искористен.',
+        'notPrepaid': 'Овој код не може да се искористи тука. Искористете го кога ќе изберете план.',
+        'notEligible': 'Овој код не може да се користи на оваа сметка.',
+        'rateLimited': 'Премногу обиди. Обидете се подоцна.',
+        'other': 'Нешто тргна наопаку. Обидете се повторно.',
+      },
+    );
+    return '$_temp0';
+  }
 }
