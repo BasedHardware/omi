@@ -37,6 +37,8 @@ from utils.byok import (
 )
 from utils.executors import ExecutorSaturatedError, critical_executor, db_executor, run_blocking
 from utils.rate_limit_config import RATE_POLICIES, RATE_LIMIT_SHADOW, get_effective_limit
+from utils.other.raise_site import tag_raise_site
+from utils.other.request_deadline import request_deadline_exceeded
 from database.fsr_read_cache import request_read_scope
 
 logger = logging.getLogger(__name__)
@@ -55,8 +57,9 @@ def _resolve_request_plane_or_503(uid, *, request=None, signup_platform=None, si
             return
         directory_router.resolve(uid, signup_platform=signup_platform, signup_os=signup_os)
     except (directory_router.DirectoryRoutingUnavailable, ValueError) as exc:
-        raise HTTPException(
-            status_code=503, detail={'code': 'directory_routing_unavailable', 'retryable': True}
+        raise tag_raise_site(
+            HTTPException(status_code=503, detail={'code': 'directory_routing_unavailable', 'retryable': True}),
+            'directory_routing_unavailable',
         ) from exc
 
 
@@ -69,10 +72,13 @@ def _resolve_request_plane_ws(uid: str) -> None:
 
 def _executor_saturated_http_exception(error: ExecutorSaturatedError) -> HTTPException:
     """Return the retryable HTTP response for bounded critical-work overload."""
-    return HTTPException(
-        status_code=503,
-        detail='Service temporarily unavailable. Try again shortly.',
-        headers={'Retry-After': '1'},
+    return tag_raise_site(
+        HTTPException(
+            status_code=503,
+            detail='Service temporarily unavailable. Try again shortly.',
+            headers={'Retry-After': '1'},
+        ),
+        'executor_saturated',
     )
 
 
@@ -98,9 +104,12 @@ def _account_deletion_status(uid: str) -> str | None:
             'Account-deletion auth fence unavailable error_type=%s',
             type(error).__name__,
         )
-        raise HTTPException(
-            status_code=503,
-            detail={'code': 'account_deletion_state_unavailable', 'retryable': True},
+        raise tag_raise_site(
+            HTTPException(
+                status_code=503,
+                detail={'code': 'account_deletion_state_unavailable', 'retryable': True},
+            ),
+            'account_deletion_state_unavailable',
         ) from error
 
 
@@ -254,6 +263,27 @@ def _recover_locked_content_if_request(uid: str, request: Request | None) -> Non
         recover_locked_content(uid)
 
 
+def _enforce_auth_deadline() -> None:
+    """Answer a retryable 503 once the request's auth budget is spent.
+
+    Only the from-segments route sets a budget (``utils.other.request_deadline``);
+    every other caller is a no-op. The check runs between auth steps, so a chain
+    of slow Firestore reads cannot hold the request past the client's own pool
+    deadline. A single hung provider call is still bounded by the Firestore
+    client's own deadline.
+    """
+    if not request_deadline_exceeded():
+        return
+    raise tag_raise_site(
+        HTTPException(
+            status_code=503,
+            detail={'code': 'auth_deadline_exceeded', 'retryable': True},
+            headers={'Retry-After': '1'},
+        ),
+        'auth_deadline_exceeded',
+    )
+
+
 def get_current_user_uid_readonly(
     authorization: str = Header(None),
     request: Request = None,  # pyright: ignore[reportArgumentType]  # FastAPI injects Request
@@ -295,6 +325,7 @@ def get_current_user_uid(
     enforce_account_deletion_http_access(uid)
     _enforce_cutover_http_if_request(uid, request)
     _resolve_request_plane_or_503(uid, request=request, signup_platform=x_app_platform)
+    _enforce_auth_deadline()
 
     # Content-free telemetry and surface intent avoid customer-store
     # registration/recovery writes; security fences above and BYOK still apply.
@@ -328,6 +359,7 @@ def get_current_user_uid(
     _recover_locked_content_if_request(uid, request)
 
     load_rollout_cohorts(uid)
+    _enforce_auth_deadline()
     return uid
 
 
@@ -684,7 +716,9 @@ def _enforce_rate_limit(key: str, policy_name: str, *, fail_closed: bool = False
     except redis_pkg.exceptions.RedisError as e:  # type: ignore[reportAttributeAccessIssue]  # redis pkg exposes exceptions at runtime
         logger.error(f"Rate limit Redis error policy={policy_name} key={key}: {e}")
         if fail_closed:
-            raise HTTPException(status_code=503, detail="Rate limiter unavailable")
+            raise tag_raise_site(
+                HTTPException(status_code=503, detail="Rate limiter unavailable"), 'rate_limiter_unavailable'
+            )
         return
 
     if not allowed:

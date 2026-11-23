@@ -15,8 +15,10 @@ Controls (read per call, never at import):
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Optional
+
+from utils.other.request_deadline import capped_deadline_seconds
 
 FLAG = 'CONVERSATION_NOTES_AGENT_ENABLED'
 LOOKUP_EFFICIENCY = 'CONVERSATION_NOTES_AGENT_LOOKUP_EFFICIENCY_ENABLED'
@@ -83,6 +85,24 @@ def budget_for_words(words: int) -> NotesAgentBudget:
     return NotesAgentBudget(max_turns=5, max_tool_calls=6, min_tool_calls=2)
 
 
+def _capped_budget(budget: NotesAgentBudget) -> NotesAgentBudget:
+    """Cap the agentic deadline to the request budget, when one is set.
+
+    The from-segments route sets a request deadline so a failing notes step
+    answers a retryable 503 inside the client's own 30 s pool deadline. The
+    force-submit point moves with it, so a capped run still submits before the
+    deadline instead of being cancelled mid-investigation.
+    """
+    deadline = capped_deadline_seconds(budget.deadline_seconds)
+    if deadline == budget.deadline_seconds:
+        return budget
+    return replace(
+        budget,
+        deadline_seconds=deadline,
+        force_submit_after_seconds=min(budget.force_submit_after_seconds, deadline * 0.6),
+    )
+
+
 def plan_notes_agent(
     *,
     uid: Optional[str],
@@ -112,7 +132,7 @@ def plan_notes_agent(
         return NotesAgentDecision(False, 'below_threshold')
     if not in_cohort(uid, conversation_id):
         return NotesAgentDecision(False, 'cohort')
-    return NotesAgentDecision(True, reason, budget_for_words(words))
+    return NotesAgentDecision(True, reason, _capped_budget(budget_for_words(words)))
 
 
 def estimate_cost_usd(prompt_tokens: int, cached_tokens: int, completion_tokens: int) -> float:

@@ -73,6 +73,7 @@ from config.refactor_modes import serving_for
 from config.open_loops import open_loops_enabled
 from utils.llm.notes_packet import PACKET_RULES, select_notes_packet, _local_started_at_iso
 from utils.llm.notes_output_contract import finish_notes_contract, OUTPUT_RULES
+from utils.other.request_deadline import capped_deadline_seconds
 from utils.llm.notes_identity import notes_identity, screen_speaker_bindings
 from utils.llm.notes_output import NotesOutput, OpenLoopNotesOutput
 from utils.llm.notes_observability import current_run, observe_notes
@@ -319,6 +320,11 @@ CONVERSATION_STRUCTURE_TIMEOUT_SECONDS = FOREGROUND_REQUEST_TIMEOUT_SECONDS
 # deadline cancelled the viable retry in its final stretch, so the mount sizes
 # at two attempts plus one inter-attempt delay bound (3x).
 NOTES_LOOP_DEADLINE_SECONDS = 3 * CONVERSATION_STRUCTURE_TIMEOUT_SECONDS
+# One route caps this per request: the synchronous from-segments ingest sets a
+# request deadline (utils.other.request_deadline) so a failing notes step answers
+# a retryable 503 inside the client's own 30 s pool deadline instead of holding
+# the request for the full recovery budget. Every other caller keeps the constant
+# above unchanged; the cap is a request-scoped ceiling, not a smaller default.
 # Screen-OCR rows already parsed from the context are a follow-up; this gate counts frames only.
 # The gate counts approved frames available (`screen_frame_count` from the wiring),
 # never the attached-image budget: MAX_NOTES_FRAME_IMAGES caps attached images at
@@ -432,7 +438,7 @@ person. Attribute speech only from the original speaker map or direct evidence.
 Do not infer attendance, absence, or a no-show from either listing.
 """ + '\n\n' + ACTION_ITEM_EXTRACTION_RULES,
         schema=StructuredExtraction,
-        budget=Budget(turns=1, tool_calls=0, deadline_seconds=NOTES_LOOP_DEADLINE_SECONDS),
+        budget=Budget(turns=1, tool_calls=0, deadline_seconds=capped_deadline_seconds(NOTES_LOOP_DEADLINE_SECONDS)),
     )
 
 

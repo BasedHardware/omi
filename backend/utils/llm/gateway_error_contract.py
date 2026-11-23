@@ -13,6 +13,7 @@ from fastapi import HTTPException
 from utils.byok import get_byok_key, has_validated_byok_keys
 from utils.conversations.processing_metrics import record_retryable_processing_response
 from utils.conversations.processing_retry import retryable_provider_failure_class
+from utils.other.raise_site import tag_raise_site
 
 BYOK_RATE_LIMIT_FAILURE_CLASS = 'byok_rate_limit'
 BYOK_QUOTA_FAILURE_CLASS = 'byok_quota'
@@ -400,10 +401,13 @@ def conversation_processing_http_exception(
             failure_class,
             route,
         )
-        return HTTPException(
-            status_code=503,
-            detail=RETRYABLE_CONVERSATION_PROCESSING_ERROR_DETAIL,
-            headers={'Retry-After': RETRYABLE_CONVERSATION_PROCESSING_RETRY_AFTER_SECONDS},
+        return tag_raise_site(
+            HTTPException(
+                status_code=503,
+                detail=RETRYABLE_CONVERSATION_PROCESSING_ERROR_DETAIL,
+                headers={'Retry-After': RETRYABLE_CONVERSATION_PROCESSING_RETRY_AFTER_SECONDS},
+            ),
+            'conversation_processing_retryable',
         )
     logger.error('Conversation processing failed: %s', type(error).__name__)
     return HTTPException(status_code=500, detail=GENERIC_CONVERSATION_PROCESSING_ERROR_DETAIL)
