@@ -288,6 +288,18 @@ class FutureCaptureRecoveryOutcome(StrEnum):
     REFUSED = 'refused'
 
 
+class FutureCaptureRequestOutcome(StrEnum):
+    UNKNOWN = 'unknown'
+    PREFLIGHT_REFUSED = 'preflight_refused'
+    IDENTITY_REQUIRED = 'identity_required'
+    ROUTE_DECLINED = 'route_declined'
+    PRIOR_CUSTODY = 'prior_custody'
+    DECODE_MEMO_HIT = 'decode_memo_hit'
+    DECODE_FAILED = 'decode_failed'
+    PRE_OFFSET_ERROR = 'pre_offset_error'
+    REACHED_OFFSETS = 'reached_offsets'
+
+
 class ListenSessionTranscriptOutcome(StrEnum):
     """One listen session's headline transcript outcome (``ListenSessionRuntime._session_transcript_outcome``)."""
 

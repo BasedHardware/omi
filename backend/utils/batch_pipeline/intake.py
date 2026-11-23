@@ -1201,38 +1201,51 @@ async def accept_upload(
         future_capture_request.mark(FutureCaptureOutcome.PREFLIGHT_REFUSED)
         return privacy_blocked_response()
     except Exception as error:
-        if isinstance(error, (FutureCaptureRefused, FutureCaptureRetry)):
-            return JSONResponse(status_code=error.status_code, headers=error.headers, content=error.detail)
-        # A transaction may have committed even when its reply was lost. Keep
-        # the staging outbox for reconciliation; never release/re-route content.
-        deterministic = phase == 'decode' and decode is None and is_deterministic_decode_failure(error)
-        if deterministic and decode_failure_memo_enabled():
-            # These bytes cannot decode however often they are retried. Remember
-            # the proven failure so the next retry answers the same 503 without
-            # decoding or staging again. The response never changes.
-            try:
-                key = deterministic_key or await run_blocking(
-                    sync_executor, _decode_failure_key, uid, content_id, paths
-                )
-                if key:
-                    await run_blocking(db_executor, remember_decode_failure, key)
-                    logger.info('event=batch_intake_decode_memo outcome=stored')
-            except Exception:
-                # A memo is an optimization: never let it replace the 503.
-                logger.info('event=batch_intake_decode_memo outcome=degraded')
-        logger.error(
-            'event=batch_intake outcome=retry exception_type=%s phase=%s deterministic=%s elapsed_ms=%d',
-            type(error).__name__,
-            phase,
-            'yes' if deterministic else 'no',
-            round((time.monotonic() - started) * 1000),
+        return await _upload_failure_response(
+            error, phase, started, decode is None, deterministic_key, uid, content_id, paths
         )
-        return _sync_unavailable_response()
     finally:
         if iterator is not None:
             await run_blocking(sync_executor, iterator.close)
         if sample_directory is not None:
             await run_blocking(sync_executor, shutil.rmtree, sample_directory, True)
+
+
+async def _upload_failure_response(
+    error: Exception,
+    phase: str,
+    started: float,
+    uses_wal_decoder: bool,
+    deterministic_key: str | None,
+    uid: str,
+    content_id: str,
+    paths: list[str],
+) -> JSONResponse:
+    if isinstance(error, (FutureCaptureRefused, FutureCaptureRetry)):
+        return JSONResponse(status_code=error.status_code, headers=error.headers, content=error.detail)
+    # A transaction may have committed even when its reply was lost. Keep
+    # the staging outbox for reconciliation; never release/re-route content.
+    deterministic = phase == 'decode' and uses_wal_decoder and is_deterministic_decode_failure(error)
+    if deterministic and decode_failure_memo_enabled():
+        # These bytes cannot decode however often they are retried. Remember
+        # the proven failure so the next retry answers the same 503 without
+        # decoding or staging again. The response never changes.
+        try:
+            key = deterministic_key or await run_blocking(sync_executor, _decode_failure_key, uid, content_id, paths)
+            if key:
+                await run_blocking(db_executor, remember_decode_failure, key)
+                logger.info('event=batch_intake_decode_memo outcome=stored')
+        except Exception:
+            # A memo is an optimization: never let it replace the 503.
+            logger.info('event=batch_intake_decode_memo outcome=degraded')
+    logger.error(
+        'event=batch_intake outcome=retry exception_type=%s phase=%s deterministic=%s elapsed_ms=%d',
+        type(error).__name__,
+        phase,
+        'yes' if deterministic else 'no',
+        round((time.monotonic() - started) * 1000),
+    )
+    return _sync_unavailable_response()
 
 
 async def _sample_language_units(
