@@ -279,6 +279,15 @@ class SyncProcessingHoldOutcome(StrEnum):
     LATE_CAP = 'late_cap'
 
 
+class FutureCaptureRecoveryOutcome(StrEnum):
+    UNKNOWN = 'unknown'
+    ANCHORED = 'anchored'
+    ANCHOR_PENDING = 'anchor_pending'
+    IDENTITY_REQUIRED = 'identity_required'
+    ANCHOR_ERROR = 'anchor_error'
+    REFUSED = 'refused'
+
+
 class ListenSessionTranscriptOutcome(StrEnum):
     """One listen session's headline transcript outcome (``ListenSessionRuntime._session_transcript_outcome``)."""
 
@@ -374,6 +383,7 @@ class ConsumerReason(StrEnum):
     STALE_TOKEN = 'stale_token'
     LEASE_HELD = 'lease_held'
     EMPTY_OUTPUT_BLOCKED = 'empty_output_blocked'
+    V3_CUSTODY_CONFLICT = 'v3_custody_conflict'
 
 
 class RampReason(StrEnum):

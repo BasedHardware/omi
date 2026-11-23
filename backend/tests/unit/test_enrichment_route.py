@@ -27,6 +27,7 @@ from utils.enrichment import callback  # noqa: F401 (heavy import at collection 
 from utils.enrichment import consumer as consumer_module
 from utils.enrichment import custody
 from utils.enrichment import outbox as reprocess
+from utils.sync.assignment_errors import SyncAssignmentConflict, SyncAssignmentConflictReason
 from utils.workers.consumer import run_push
 
 KEY = reprocess.key('u', 'c')
@@ -287,12 +288,75 @@ def test_long_stuck_live_target_polls_hourly_through_the_consumer(rows, monkeypa
     assert state_rows[KEY]['due_at'] == pytest.approx(time.time() + reprocess.STUCK_DEFER_POLL_SECONDS, abs=5)
 
 
-def test_unexpected_errors_stay_5xx_and_keep_the_lease(rows, client, monkeypatch):
-    monkeypatch.setattr(
-        consumer_module.EnrichmentConsumer, '_callback', lambda self: Mock(side_effect=RuntimeError('synthetic'))
+def _v3_custody_conflict():
+    return SyncAssignmentConflict(
+        'explicit redirect would strand v3 custody', subtype=SyncAssignmentConflictReason.V3_CUSTODY
     )
+
+
+def test_v3_custody_conflict_defers_then_parks_without_a_5xx(rows, client, monkeypatch):
+    state_rows, tasks = rows
+    state_rows[KEY]['claim_attempts'] = 99  # Other delivery attempts take none of the custody budget.
+    now = 10_000.0
+    clock = SimpleNamespace(time=lambda: now, monotonic=time.monotonic)
+    monkeypatch.setattr(route, 'time', clock)
+    monkeypatch.setattr(consumer_module, 'time', clock)
+    process = Mock(side_effect=_v3_custody_conflict())
+    monkeypatch.setattr(consumer_module.EnrichmentConsumer, '_callback', lambda self: process)
+
+    def post(token):
+        return client.post('/v2/enrichment/run', json={'kind': 'enrichment', 'key': KEY, 'task_token': token})
+
+    for count in (1, 2):
+        token = state_rows[KEY]['task_token']
+        response = post(token)
+        assert response.status_code == 200
+        assert response.json() == {'status': 'deferred', 'reason': 'v3_custody_conflict'}
+        row = state_rows[KEY]
+        assert row['v3_custody_defers'] == count and row['deferred_reason'] == 'v3_custody_conflict'
+        assert row['lease_until'] == 0 and row['task_token'] != token
+        assert row['due_at'] == now + reprocess.LIVE_DEFER_SECONDS
+        assert tasks[-1]['task_token'] == row['task_token']
+        assert post(token).json()['status'] == 'stale'
+        now = row['due_at']
+
+    token = state_rows[KEY]['task_token']
+    response = post(token)
+    assert response.status_code == 200
+    assert response.json() == {'status': 'discarded', 'reason': 'v3_custody_conflict'}
+    row = state_rows[KEY]
+    assert row['dormant'] and row['held_reason'] == 'v3_custody_conflict'
+    assert row['due_at'] is None and row['lease_until'] == 0 and row['owner'] is None
+    assert row['uid'] == 'u' and row['conversation_id'] == 'c'
+    assert post(token).json()['status'] == 'stale'
+    assert process.call_count == 3 and len(tasks) == 3
+
+    reprocess.mark('u', 'c', 'en', now=now + 1)
+    row = state_rows[KEY]
+    assert not row['dormant'] and 'held_reason' not in row and 'v3_custody_defers' not in row
+
+
+def test_v3_custody_terminal_attempt_keeps_a_concurrent_new_version(rows):
+    state_rows, _tasks = rows
+    state_rows[KEY]['v3_custody_defers'] = reprocess.V3_CUSTODY_MAX_DEFERS
+    token = state_rows[KEY]['task_token']
+
+    def append_then_conflict(*args):
+        reprocess.mark(*args, now=10_001.0)
+        raise _v3_custody_conflict()
+
+    _deliver(rows, append_then_conflict)
+    assert state_rows[KEY]['version'] == 2 and not state_rows[KEY]['dormant']
+    assert state_rows[KEY]['lease_until'] == 0 and state_rows[KEY]['task_token'] != token
+    assert _deliver(rows, lambda *_: SUMMARY, now=20_000.0).outcome == 'done'
+    assert state_rows[KEY]['summary_seen'] and 'v3_custody_defers' not in state_rows[KEY]
+
+
+@pytest.mark.parametrize('error', [RuntimeError('synthetic'), SyncAssignmentConflict('synthetic redirect cycle')])
+def test_unexpected_errors_stay_5xx_and_keep_the_lease(rows, client, monkeypatch, error):
+    monkeypatch.setattr(consumer_module.EnrichmentConsumer, '_callback', lambda self: Mock(side_effect=error))
     token = rows[0][KEY]['task_token']
-    with pytest.raises(RuntimeError):
+    with pytest.raises(type(error), match=str(error)):
         client.post('/v2/enrichment/run', json={'kind': 'enrichment', 'key': KEY, 'task_token': token})
     assert rows[0][KEY]['lease_until'] > 0  # the sweep re-wakes after expiry
 
@@ -848,6 +912,33 @@ def test_consumer_retries_a_processing_dependency_failure_and_keeps_the_wake(row
     assert rows[0][KEY]['lease_until'] == 0 and rows[0][KEY]['task_token'] == token
 
 
+@pytest.mark.asyncio
+async def test_legacy_handler_records_an_empty_first_summary_instead_of_answering_500(rows, monkeypatch):
+    """SCA-2865: an empty kept output is a bounded retry, never an unhandled ``SummaryOutputUnavailable``.
+
+    The consumer path already records the strike (``test_empty_output_twice_records_a_bounded_retry_then_blocks``);
+    the legacy ``sync_handler`` route used to re-raise on the same strike and answer 500.
+    """
+    from routers import batch_pipeline
+
+    monkeypatch.delenv('ENRICHMENT_ROUTE', raising=False)
+    monkeypatch.setattr(reprocess, 'owns_runtime', lambda: True)
+    monkeypatch.setattr(callback, 'enrich_conversation', lambda *_: SimpleNamespace(discarded=False, structured={}))
+
+    async def run(_executor, func, *args):
+        return func(*args)
+
+    monkeypatch.setattr(batch_pipeline, 'run_blocking', run)
+    state_rows, _tasks = rows
+    token = state_rows[KEY]['task_token']
+    response = await batch_pipeline.enrichment_response({'kind': 'sync_reprocess', 'key': KEY, 'task_token': token})
+    assert response.status_code == 200
+    assert json.loads(response.body) == {'status': 'deferred'}
+    assert state_rows[KEY]['summary_empty_failures'] == 1
+    assert state_rows[KEY]['deferred_reason'] == reprocess.EMPTY_OUTPUT_DEFER_REASON
+    assert state_rows[KEY]['due_at'] is not None and state_rows[KEY]['lease_until'] == 0
+
+
 def _gateway_status(status):
     import httpx
 
@@ -906,6 +997,25 @@ def test_transient_fault_in_the_empty_output_strike_releases_the_lease(rows, mon
     token = rows[0][KEY]['task_token']
     result = _deliver(rows, lambda *_: SimpleNamespace(structured={'title': 'Synthetic'}))
     assert (result.outcome, result.reason) == ('retry', 'dependency_warming')
+    assert rows[0][KEY]['lease_until'] == 0 and rows[0][KEY]['task_token'] == token
+
+
+def test_unavailable_empty_output_strike_answers_409_instead_of_500(rows, client, monkeypatch):
+    """SCA-2865: an expired strike transaction is a bounded retry, never an unhandled 500."""
+    import database._client as firestore_client
+    import database.summary_processing as summary_processing
+
+    monkeypatch.setattr(firestore_client, 'get_firestore_client', Mock())
+    monkeypatch.setattr(consumer_module.EnrichmentConsumer, '_callback', lambda self: _empty_output)
+    monkeypatch.setattr(
+        summary_processing,
+        'record_empty_failure',
+        Mock(return_value=summary_processing.EmptyFailureOutcome.UNAVAILABLE),
+    )
+    token = rows[0][KEY]['task_token']
+    response = client.post('/v2/enrichment/run', json={'kind': 'enrichment', 'key': KEY, 'task_token': token})
+    assert response.status_code == 409
+    assert response.json() == {'status': 'retry', 'reason': 'dependency_warming'}
     assert rows[0][KEY]['lease_until'] == 0 and rows[0][KEY]['task_token'] == token
 
 

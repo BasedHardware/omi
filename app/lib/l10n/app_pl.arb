@@ -178,8 +178,8 @@
     "deviceInfoSection": "Informacje o urządzeniu",
     "customizationSection": "Personalizacja",
     "hardwareSection": "Sprzęt",
-    "v2Undetected": "Nie wykryto V2",
-    "v2UndetectedMessage": "Widzimy, że masz urządzenie V1 lub Twoje urządzenie nie jest podłączone. Funkcja karty SD jest dostępna tylko dla urządzeń V2.",
+    "v2Undetected": "Synchronizacja offline jest niedostępna",
+    "v2UndetectedMessage": "Synchronizacja offline wymaga połączonego urządzenia Omi z pamięcią na karcie SD. Twoje obecne urządzenie tego nie obsługuje.",
     "endConversation": "Zakończ rozmowę",
     "pauseResume": "Wstrzymaj/Wznów",
     "starConversation": "Oznacz rozmowę gwiazdką",
@@ -4771,5 +4771,10 @@
     "finishedSummaryReady": "Podsumowanie gotowe",
     "writingSummaryStatus": "Pisanie podsumowania…",
     "stillWorkingOnIt": "Nadal pracujemy nad tym.",
-    "deviceReadyToUse": "Gotowe do użycia"
+    "deviceReadyToUse": "Gotowe do użycia",
+    "firmwareUpdateFirmwareTooOld": "Oprogramowanie układowe Twojego urządzenia jest zbyt stare dla tej aktualizacji. Skontaktuj się z pomocą techniczną, aby uzyskać pomoc w aktualizacji urządzenia.",
+    "firmwareUpdateAppRequired": "Ta aktualizacja oprogramowania układowego wymaga nowszej aplikacji Omi. Zaktualizuj aplikację w sklepie z aplikacjami, a następnie sprawdź ponownie.",
+    "quietPayerTitle": "Brak nagrań od 5 dni",
+    "quietPayerMessage": "Sprawdź swoje Omi.",
+    "quietPayerCheck": "Sprawdź"
 }

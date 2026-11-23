@@ -8,6 +8,7 @@ import time
 from utils.sync import processing_hold
 
 from database import conversations as conversations_db
+from models.finalization_owner import REFUSAL as FINALIZATION_OWNER_REFUSAL, python_owns_finalization
 from utils.conversations.factory import deserialize_conversation
 from utils.conversations.silent_redrive import is_silent_redrive
 
@@ -27,6 +28,8 @@ def enrich_settled(uid: str, conversation_id: str, language: str) -> None:
     row = read_product_conversation(conversations_db.get_conversation, uid, conversation_id)
     if not row or row.get('deleted') or row.get('discarded') or is_silent_redrive(row):
         return
+    if not python_owns_finalization(row):
+        raise processing_hold.ProcessingDeferred(FINALIZATION_OWNER_REFUSAL, time.time() + 120)
     # Active capture and a smart-merge donor never own final enrichment.
     if row.get('status') != 'completed':
         raise RuntimeError('conversation has not settled')

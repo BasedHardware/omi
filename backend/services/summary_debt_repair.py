@@ -73,6 +73,9 @@ def redrive(client: Any, uid: str, conversation_id: str, *, now: float) -> bool:
 
             if old and parked(old):
                 return {}, True
+            if old and reprocess.V3_CUSTODY_DEFER_REASON in (old.get('deferred_reason'), old.get('held_reason')):
+                # The outbox owns the custody backoff and retains the terminal receipt.
+                return {}, True
             if old and (old.get('lease_until', 0) > now or old.get('summary_seen')):
                 return {}, True
             if old and old.get('summary_blocked_reason') == 'empty_output_exhausted':

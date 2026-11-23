@@ -36,6 +36,7 @@ class ReasonFamily(StrEnum):
     NOTES_QUALITY_REPAIR = 'notes_quality_repair'
     SYNC_DISPATCH = 'sync_dispatch'
     SYNC_CAPTURE_TIME = 'sync_capture_time'
+    SYNC_FUTURE_CAPTURE_RECOVERY = 'sync_future_capture_recovery'
     SYNC_BRIDGE_CONTAINMENT = 'sync_bridge_containment'
     SYNC_PROCESSING_HOLD = 'sync_processing_hold'
     APP_REVIEW_CONFIG = 'app_review_config'

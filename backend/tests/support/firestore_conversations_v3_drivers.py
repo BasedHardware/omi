@@ -99,7 +99,12 @@ def entries():
             base={'uid': SHAPE_UID, 'donor_ids': ['donor-one', 'donor-two']},
             domains={'transaction': [None, ref_transaction()]},
         ),
-        DriverEntry('database.conversations_v3.pending_backfill_processing', base={'uid': SHAPE_UID}),
+        DriverEntry(
+            'database.conversations_v3.pending_backfill_processing',
+            base={'uid': SHAPE_UID},
+            domains={'after': [None, 'last-foreign']},
+            neutrals={'deadline': (float('inf'), 'RPC deadline only; an expired budget issues no query')},
+        ),
         DriverEntry('database.conversations_v3.backfill_run_documents', base={'uid': SHAPE_UID, 'run_id': 'shape-run'}),
         DriverEntry('database.conversations_v3_backfill_runs.list_runs', base={'uid': SHAPE_UID}),
         DriverEntry(

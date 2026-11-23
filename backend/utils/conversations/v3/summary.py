@@ -19,7 +19,7 @@ from fastapi import HTTPException
 from config.conversations_v3 import live_recap_enabled
 from database import conversations_v3 as store
 from models.conversation import Conversation
-from utils.conversations.v3 import models, policy, recap_telemetry
+from utils.conversations.v3 import models, planner, policy, recap_telemetry, visibility
 from utils.conversations.v3.triggers import enqueue
 from utils.observability.fallback import record_fallback
 from utils.executors import run_blocking, db_executor, llm_executor
@@ -43,7 +43,7 @@ def summary_eligible(row):
         row.get('kind') not in {'media', 'background'}
         and (
             policy.manual_intent(row)
-            or sum(len(s.get('text', '').split()) for s in row.get('transcript_segments') or []) >= 300
+            or planner.word_count(row.get('transcript_segments') or []) >= visibility.MIN_HOME_WORDS
         )
     )
 

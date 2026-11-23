@@ -144,6 +144,8 @@ class ConversationsV3Provider extends ChangeNotifier {
     return a.id == b.id &&
         a.structured.title == b.structured.title &&
         a.v3?.tileState == b.v3?.tileState &&
+        a.v3?.homeHidden == b.v3?.homeHidden &&
+        a.startedAt == b.startedAt &&
         a.finishedAt == b.finishedAt &&
         a.transcriptSegments.length == b.transcriptSegments.length;
   }

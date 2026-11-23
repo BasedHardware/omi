@@ -1,6 +1,7 @@
 # Rendering defaults creates no resources. Enabling this release only drains
 # durable admitted work; the lead separately controls backend admission cohorts.
 enabled: false
+audioDerivedBucket: ""
 # Part A only. All repair children inherit a stable release epoch; 0 is
 # dormant while off. The release owner pins the epoch with the shadow flip,
 # then retains it across restarts and later ramp steps.
@@ -35,6 +36,9 @@ replicaCount: 1
 # replacement still keeps its node).
 rollout:
   maxUnavailable: 50%
+  # Read-only, redacted carrier report. Use helm template --dry-run=server --show-only
+  # templates/primary-only-preview.yaml against the three existing Deployments.
+  primaryOnlyPreview: false
 # Operator-managed L4 (g2-standard-8) pool; never share the live diarizer pool.
 nodeSelector:
   cloud.google.com/gke-nodepool: batch-pipeline-pool
@@ -80,6 +84,10 @@ worker:
   admissionParallelCalls: true
   idlePollMaxSeconds: 10
   firestoreReadLevers: '{}'
+  uidAllowlist:
+    # A new deployment can use a Secret reference. Existing private bindings
+    # stay on the live Deployment and are carried by the primary-only patch.
+    value: ""
   # Fenced per-shard pulls and worker affinity; false restores legacy selection.
   shardSpreadEnabled: true
   # One shard transaction leases up to the pull batch; false leases one per transaction.
@@ -202,7 +210,7 @@ autoscaling:
   # The original deployment name stays on OD; a -spot deployment shares its
   # queue metric scope but has a distinct pod selector and PodMonitoring.
   # Superseded as the cutover shape 10-28 (lead f05065): the qualified path is
-  # a single OD-pinned HPA (prod 4/16); balanced stays machinery-only.
+  # a single OD-pinned HPA (prod 6/16); balanced stays machinery-only.
   balancedPools:
     enabled: false
     onDemandNodePool: batch-pipeline-pool
@@ -215,9 +223,9 @@ autoscaling:
   # not double-count time waiting for that slot. Keep stage profiling enabled.
   # Frontier: 41 is the largest integer ready target passing the unchanged
   # sustained-step wait bound; 42 fails. 0.56 preserves zero starvation in the
-  # older 24h replay; 0.561 already starves. With the stockout policy below,
-  # current 3h replay mean/max = 4.34/5 (no hot minutes); synthetic 3.7x volume
-  # = 11.46/16 with 6 hot minutes, so full-volume capacity remains unqualified.
+  # older 24h replay; 0.561 already starves. The 3h replay at prod 6/16
+  # has mean/max 6.0/6 and zero hot minutes. The historical 4/16 synthetic
+  # 3.7x replay has mean/max 11.46/16 and six hot minutes.
   # See docs/batch-pipeline-hpa-frontier.md; the reverted 40/0.6 starved 35 min.
   targetQueuedUnitsPerWorker: 41
   targetChainBusyPerWorker: "0.56"
@@ -252,7 +260,9 @@ recordSealRepair:
   suspend: true
   runtimeEnabled: true
   jobsDiscovery: "on"
-  # Shared by repair, CPU seal worker and every GPU Deployment variant.
+  # Used by the repair CronJob and by the CPU seal worker and GPU variants
+  # when their live fresh-repair binding is not being preserved.
+  # The production depth-only overlay preserves that binding or its absence.
   # Serving hosts also need the matching runtime-env/listen overlay switch.
   freshEnabled: true
   # Forbid still prevents overlap; minute ticks bound restart gaps after a 25m run.

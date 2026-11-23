@@ -123,12 +123,18 @@ class FreemiumSwitchHandler {
     final month = '${now.year}-${now.month}';
     if (prefs.getString(monthKey) == month) return true;
     if (!context.mounted) return true;
-    final limit = usage.subscription?.transcriptionSecondsLimit ?? 0;
     // Marked only now, with the sheet about to open in this frame: nothing above can burn the month.
     unawaited(prefs.saveString(monthKey, month));
+    await _showFreeCapSheet(context, usage, source: 'free_cap');
+    return true;
+  }
+
+  /// The free-cap sheet and what its choice opens, for the at-cap prompt and a held recording's Upgrade.
+  static Future<void> _showFreeCapSheet(BuildContext context, UsageProvider usage, {required String source}) async {
+    final limit = usage.subscription?.transcriptionSecondsLimit ?? 0;
     PaywallPacing.markShown();
     PlatformManager.instance.analytics
-        .paywallOpened('free_cap', currentPlan: usage.subscription?.subscription.plan.wireName ?? 'unknown');
+        .paywallOpened(source, currentPlan: usage.subscription?.subscription.plan.wireName ?? 'unknown');
     final choice = await showFreeCapSheet(context, capMinutes: (limit / 60).round());
     const TypedEvents().emit(FreeCapSheetChoice(
       choice: switch (choice) {
@@ -137,17 +143,32 @@ class FreemiumSwitchHandler {
         null => FreeCapSheetChoiceChoice.dismissed,
       },
     ));
-    if (!context.mounted || choice == null) return true;
+    if (!context.mounted || choice == null) return;
     switch (choice) {
       case FreeCapChoice.upgrade:
         // The sheet already counted this open; the plans it hands off to don't count it again.
-        if (await PaywallRouter.openVariant(context, source: 'free_cap', trackOpen: false)) return true;
-        if (!context.mounted) return true;
-        await showPlansSheetPrompt(context, source: 'free_cap', trackOpen: false);
+        if (await PaywallRouter.openVariant(context, source: source, trackOpen: false)) return;
+        if (!context.mounted) return;
+        await showPlansSheetPrompt(context, source: source, trackOpen: false);
       case FreeCapChoice.transcribeOnPhone:
         await routeToPage(context, const TranscriptionSettingsPage(choosePhone: true));
     }
-    return true;
+  }
+
+  /// Upgrade on a recording held by the free plan's monthly allowance. The reader asked, so no
+  /// pacing or once-a-month gate: the free-cap sheet where it applies (Omi Pro first, this phone
+  /// second), else the paywall the router picks, else the plans sheet.
+  static Future<void> openHeldRecordingUpgrade(BuildContext context, {required String source}) async {
+    final usage = context.read<UsageProvider>();
+    if (!usage.showSubscriptionUI) return;
+    if (freeCapEligible(usage) && !await FreeTierOnDeviceSttFlag.killed()) {
+      if (context.mounted) await _showFreeCapSheet(context, usage, source: source);
+      return;
+    }
+    if (!context.mounted) return;
+    if (await PaywallRouter.openVariant(context, source: source)) return;
+    if (!context.mounted) return;
+    await showPlansSheetPrompt(context, source: source);
   }
 
   /// With the on-device flag on and this month's usage limit reached, offers transcribing on this phone before

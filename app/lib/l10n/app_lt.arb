@@ -2135,8 +2135,8 @@
     "userInformation": "Vartotojo informacija",
     "usersPayToUse": "Vartotojai moka, kad naudotų jūsų programėlę",
     "usingNativeIosSpeech": "Naudojamas vietinis iOS kalbos atpažinimas",
-    "v2Undetected": "V2 neaptiktas",
-    "v2UndetectedMessage": "Matome, kad turite V1 įrenginį arba jūsų įrenginys neprijungtas. SD kortelės funkcija prieinama tik V2 įrenginiams.",
+    "v2Undetected": "Sinchronizavimas neprisijungus nepasiekiamas",
+    "v2UndetectedMessage": "Sinchronizavimui neprisijungus reikalingas prijungtas Omi įrenginys su SD kortelės atmintimi. Jūsų dabartinis įrenginys to nepalaiko.",
     "validPortRequired": "Reikalingas tinkamas prievadas",
     "validWebsocketUrlRequired": "Reikalingas tinkamas WebSocket URL (wss://)",
     "viewPlansAndUsage": "Peržiūrėti Planus ir Naudojimą",
@@ -4736,5 +4736,10 @@
     "finishedSummaryReady": "Santrauka paruošta",
     "writingSummaryStatus": "Rašoma santrauka…",
     "stillWorkingOnIt": "Vis dar dirbama.",
-    "deviceReadyToUse": "Paruošta naudoti"
+    "deviceReadyToUse": "Paruošta naudoti",
+    "firmwareUpdateFirmwareTooOld": "Jūsų įrenginio programinė aparatinė įranga per sena šiam naujinimui. Kreipkitės į palaikymo tarnybą, kad padėtų atnaujinti įrenginį.",
+    "firmwareUpdateAppRequired": "Šiam programinės aparatinės įrangos naujinimui reikia naujesnės „Omi“ programėlės versijos. Atnaujinkite programėlę savo programėlių parduotuvėje ir patikrinkite dar kartą.",
+    "quietPayerTitle": "5 dienas nėra įrašų",
+    "quietPayerMessage": "Patikrinkite savo Omi.",
+    "quietPayerCheck": "Patikrinti"
 }

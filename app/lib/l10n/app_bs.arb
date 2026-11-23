@@ -717,11 +717,11 @@
     "@hardwareSection": {
         "description": "Hardware section header"
     },
-    "v2Undetected": "V2 nije detektovano",
+    "v2Undetected": "Offline sinhronizacija nije dostupna",
     "@v2Undetected": {
         "description": "V2 device undeteced dialog title"
     },
-    "v2UndetectedMessage": "Vidimo da imate V1 uređaj ili vaš uređaj nije povezan. Funkcionalnost SD kartice dostupna je samo za V2 uređaje.",
+    "v2UndetectedMessage": "Offline sinhronizacija zahtijeva povezani Omi uređaj sa SD karticom za pohranu. Vaš trenutni uređaj to ne podržava.",
     "@v2UndetectedMessage": {
         "description": "V2 device undeteced dialog message"
     },
@@ -12293,5 +12293,10 @@
     "finishedSummaryReady": "Sažetak je spreman",
     "writingSummaryStatus": "Pišemo sažetak…",
     "stillWorkingOnIt": "Još radimo na tome.",
-    "deviceReadyToUse": "Spremno za korištenje"
+    "deviceReadyToUse": "Spremno za korištenje",
+    "firmwareUpdateFirmwareTooOld": "Firmver vašeg uređaja je prestar za ovo ažuriranje. Obratite se podršci za pomoć pri ažuriranju uređaja.",
+    "firmwareUpdateAppRequired": "Ovo ažuriranje firmvera zahtijeva noviju verziju aplikacije Omi. Ažurirajte aplikaciju iz svoje prodavnice aplikacija, a zatim provjerite ponovo.",
+    "quietPayerTitle": "Nema snimaka 5 dana",
+    "quietPayerMessage": "Provjerite svoj Omi.",
+    "quietPayerCheck": "Provjeri"
 }

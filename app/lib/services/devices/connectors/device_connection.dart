@@ -22,6 +22,8 @@ import 'package:omi/services/devices/transports/rayban_meta_transport.dart';
 import 'package:omi/services/devices/transports/watch_transport.dart';
 import 'package:omi/utils/logger.dart';
 
+enum OfflineStorageCapability { unverified, supported, unsupported }
+
 /// Status of the device's offline storage (new multi-file firmware protocol).
 class StorageStatus {
   final int totalUsedBytes;
@@ -596,6 +598,23 @@ abstract class DeviceConnection {
 
   Future<bool> performClearRing() async {
     return false;
+  }
+
+  /// A readable status confirms support. Only known transport capabilities or
+  /// completed GATT discovery can prove that this connection lacks storage.
+  Future<OfflineStorageCapability> probeOfflineStorageCapability() async {
+    if (!await isConnected()) return OfflineStorageCapability.unverified;
+    final link = transport;
+    if (link is WatchTransport || link is RayBanMetaTransport) {
+      return OfflineStorageCapability.unsupported;
+    }
+    if (link is NativeBleTransport &&
+        link.servicesDiscovered &&
+        !link.hasCharacteristic(storageDataStreamServiceUuid, storageReadControlCharacteristicUuid)) {
+      return OfflineStorageCapability.unsupported;
+    }
+    final storage = await performGetStorageList();
+    return storage.isNotEmpty ? OfflineStorageCapability.supported : OfflineStorageCapability.unverified;
   }
 
   // --- Legacy storage protocol ---

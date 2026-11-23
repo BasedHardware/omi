@@ -62,7 +62,9 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
 
   bool isConnecting = false;
   bool isConnected = false;
-  bool isDeviceStorageSupport = false;
+  OfflineStorageCapability _offlineStorageCapability = OfflineStorageCapability.unverified;
+  OfflineStorageCapability get offlineStorageCapability => _offlineStorageCapability;
+  Future<void>? _offlineStorageCheck;
   bool supportsMultiFileSync = SharedPreferencesUtil().deviceSupportsMultiFileSync;
 
   // Latest on-device ring-buffer storage snapshot (firmware 3.0.20+ only).
@@ -306,6 +308,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     _latestStableFirmwareVersion = '';
     _latestOmiGlassFirmwareDetails = {};
     _ringStatus = null;
+    _resetOfflineStorageCapability();
     isConnecting = false;
     _detachAccountOwnedDeviceBindings();
     notifyListeners();
@@ -390,7 +393,10 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     final endedSessionWasIntentional =
         endedDevice != null && _intentionalDisconnectDevices.remove(endedDevice.id.toUpperCase());
     final isNewConnection = device != null && connectedDevice?.id != device.id;
-    if (isNewConnection || device == null) _resetBatteryState();
+    if (isNewConnection || device == null) {
+      _resetBatteryState();
+      _resetOfflineStorageCapability();
+    }
     connectedDevice = device;
     pairedDevice = device;
     _beginFirstChargeCheck();
@@ -628,14 +634,6 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
       Logger.debug('Initial battery read failed: $e');
       return -1;
     }
-  }
-
-  Future<List<int>> _getStorageList(String deviceId) async {
-    var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
-    if (connection == null) {
-      return [];
-    }
-    return connection.getStorageList();
   }
 
   Future<void> initiateBleBatteryListener() async {
@@ -1069,7 +1067,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
       if (connection != null) {
         await setConnectedDevice(connection.device);
         if (!_isCurrent(generation)) return;
-        await setisDeviceStorageSupport();
+        await refreshOfflineStorageCapability();
         if (!_isCurrent(generation)) return;
         SharedPreferencesUtil().deviceName = connection.device.name;
         setIsConnected(true);
@@ -1095,6 +1093,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     if (!value) {
       _admittedLink = null;
       _resetBatteryState();
+      _resetOfflineStorageCapability();
     }
     if (isConnected) {
       _discoveryTimer?.cancel();
@@ -1145,7 +1144,6 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     if (!captureLinkAlreadyHandled) _notifyCaptureLinkLost(disconnectedDeviceId);
     BatteryWidgetService().updateChargingState(false);
     unawaited(setConnectedDevice(null));
-    unawaited(setisDeviceStorageSupport());
     setIsConnected(false);
     updateConnectingStatus(false);
 
@@ -1286,7 +1284,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
       captureProvider?.updateRecordingDevice(normalizedDevice);
     }
 
-    await setisDeviceStorageSupport();
+    await refreshOfflineStorageCapability();
     if (!_isCurrentBatterySession(generation, batterySession, device.id)) return;
     setIsConnected(true);
     // A live link is sync-activity evidence for the stall watchdog: the
@@ -1772,18 +1770,38 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     });
   }
 
-  Future setisDeviceStorageSupport() async {
-    final generation = _sessionGeneration;
-    if (connectedDevice == null) {
-      if (!_isCurrent(generation)) return;
-      isDeviceStorageSupport = false;
-    } else {
-      var storageFiles = await _getStorageList(connectedDevice!.id);
-      if (!_isCurrent(generation)) return;
-      isDeviceStorageSupport = storageFiles.isNotEmpty;
+  void _resetOfflineStorageCapability() {
+    _offlineStorageCheck = null;
+    _offlineStorageCapability = OfflineStorageCapability.unverified;
+  }
+
+  Future<OfflineStorageCapability> _readOfflineStorageCapability(String deviceId) async {
+    try {
+      final connection = await _deviceInfoConnectionLoader(deviceId);
+      return await connection?.probeOfflineStorageCapability() ?? OfflineStorageCapability.unverified;
+    } catch (error) {
+      Logger.debug('Device storage check failed: $error');
+      return OfflineStorageCapability.unverified;
     }
-    if (!_isCurrent(generation)) return;
-    notifyListeners();
+  }
+
+  Future<void> refreshOfflineStorageCapability() {
+    final device = connectedDevice;
+    if (_isDisposed || device == null) return Future<void>.value();
+    final activeCheck = _offlineStorageCheck;
+    if (activeCheck != null) return activeCheck;
+
+    // Link and account resets retire the pending check, even on reconnect to
+    // the same device. Concurrent consumers share the one characteristic read.
+    late final Future<void> check;
+    check = _readOfflineStorageCapability(device.id).then((capability) {
+      if (!identical(_offlineStorageCheck, check)) return;
+      _offlineStorageCheck = null;
+      if (_isDisposed || connectedDevice?.id != device.id) return;
+      _offlineStorageCapability = capability;
+      notifyListeners();
+    });
+    return _offlineStorageCheck = check;
   }
 
   /// Readopts a service link native already holds while the mirror shows the
@@ -1835,6 +1853,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
           _notifyCaptureLinkLost(deviceId);
           // Invalidate immediately, before disconnect UI/capture work is debounced.
           _resetBatteryState();
+          _resetOfflineStorageCapability();
           notifyListeners();
           _disconnectDebouncer.run(() {
             if (!_isCurrent(generation)) return;

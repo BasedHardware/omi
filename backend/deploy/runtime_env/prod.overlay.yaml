@@ -48,10 +48,18 @@ overlay:
       values_file: backend/charts/parakeet/prod_omi_parakeet_lid_values.yaml
     backend-listen:
       env:
-        # Unlimited backfill day cap, enforced only at sync upload (retryable 503 backfill_capacity until the
-        # next UTC day). Rollback: 'false' in one config train (David 2026-11-18, support-packet decision 13).
-        UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED: {value: 'true', category: rollout}
+        # Unlimited backfill day cap (retryable 503 backfill_capacity until the next UTC day; David 2026-11-18,
+        # support-packet decision 13). Listen also admits sync backfill uploads (/v2/sync-local-files), so this
+        # pin leaves listen admission uncapped exactly as it is today: serving image 44d0a4f runs it 'false'.
+        # Listen roll SCA-3516 preserves live behaviour (Shipping ruling 2026-11-21 13:25Z); turning it on for
+        # listen is the follow-up config change after that roll. Rollback of this pin: set 'true'.
+        UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED: {value: 'false', category: rollout}
         UNLIMITED_V2_BACKFILL_HOURS_CAP_HOURS: {value: '24', category: rollout}
+        # Pinned off for the listen roll (SCA-3516): image 44d0a4f has neither the account privacy
+        # writer nor packing observation, so off reproduces today's behaviour. A first activation of
+        # the privacy writer on listen is a custody decision (David). Rollback: revert the pinning PR.
+        BATCH_ACCOUNT_PRIVACY_WRITER_ENABLED: {value: 'false', category: ops_kill}
+        BATCH_PIPELINE_PACKING_SAMPLE_RATE: {value: '0', category: ops_kill}
         # Mirrors the listen chart (2026-11-18 fold of live values).
         # Private: names only; values are the Secret Manager document LISTEN_PRIVATE_ENV
         # synced by the backend-secrets chart (listen chart privateSecretEnv). Enforcement
@@ -71,7 +79,7 @@ overlay:
         MEDIA_NOISE_MODE: {value: shadow, category: rollout}
         MEDIA_NOISE_MODE_SERVE_PERCENT: {value: '0', category: rollout}
         NOTES_SHORT_CLIP_FLOOR: {value: 'true', category: rollout}
-        # Shared backend routes: keep the silence kill switch off on listen too.
+        # Pinned false on listen (SCA-3516): the listen roll preserves live behaviour; activation is its own one-key step.
         BATCH_PIPELINE_SILENCE_READ_SKIP_ENABLED: {value: 'false', category: ops_kill}
         PUSHER_RECORD_CLOSE_NOTIFY_ENABLED: {value: 'false', category: rollout}
         PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_PERCENT: {value: '100', category: rollout}
@@ -104,7 +112,7 @@ overlay:
         HOME_TRANSCRIPTION_PRESENTATION_GATE: {value: 'true', category: ops_kill}
         HOME_TRANSCRIPTION_DEADLINE_SECONDS: {value: '7200', category: config}
         HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED: {value: 'true', category: ops_kill}
-        SYNC_FUTURE_CAPTURE_CLAMP_ENABLED: {value: 'false', category: rollout}
+        SYNC_FUTURE_CAPTURE_CLAMP_ENABLED: {value: 'true', category: rollout}
         RECORD_SEAL_REPAIR_FRESH_ENABLED: {value: 'true', category: ops_kill}
         RECORD_INTAKE_AGE_PRIORITY_ENABLED: {value: 'true', category: ops_kill}
         HOME_TRANSCRIPTION_MAX_AGE_SECONDS: {value: '86400', category: config}
@@ -120,6 +128,8 @@ overlay:
         SERVER_BATCH_UNSUPPORTED_LANGUAGES: {value: 'af,ar,az,be,bn,bs,ca,cy,eu,fa,gl,gu,he,hi,id,kk,kn,ko,mk,ml,mr,ms,no,pa,sq,sr,sw,ta,te,th,tl,tr,ur,vi,zh', category: ops_kill}
         STT_NON_EN_MULTI_PREFER_HINTABLE_PERCENT: {value: '0', category: rollout}
         PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
+        SYNC_POLL_BACKOFF_ENABLED: {value: 'true', category: rollout}
+        SYNC_POLL_BACKOFF_PERCENT: {value: '5', category: rollout}
         # Replay uses the existing singleton loop; live admission stays inline.
         LISTEN_FINALIZATION_REPLAY_ENABLED:
           value: 'true'
@@ -176,16 +186,6 @@ overlay:
           value: '100'
         PARAKEET_WINDOW_MAX_SESSIONS:
           value: '16'
-        # Soniox idle-close treatment values (the speech gate); the cohort percent lives in the listen chart only.
-        SONIOX_IDLE_COHORT_CLOSE_SECONDS:
-          value: '10'
-          category: rollout
-        SONIOX_IDLE_COHORT_REARM_SECONDS:
-          value: '2'
-          category: rollout
-        SONIOX_IDLE_COHORT_MAX_CLOSES_PER_HOUR:
-          value: '120'
-          category: rollout
         # Keep off until deadline-capped POST timeouts are censored as first-text deadlines.
         PARAKEET_WINDOW_REPLICA_RECOVERY_ENABLED:
           value: 'false'
@@ -374,6 +374,8 @@ overlay:
         # artifacts on open/play/download only. Kill switch: set false.
         STT_GPU_FLEET_OFF: {value: 'true', category: ops_kill}
         PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
+        SYNC_POLL_BACKOFF_ENABLED: {value: 'true', category: rollout}
+        SYNC_POLL_BACKOFF_PERCENT: {value: '5', category: rollout}
         OMI_FLAGS_FIRESTORE_PROJECT: {value: based-hardware, category: service_discovery}
         OMI_FLAGS_FIRESTORE_DATABASE: {value: omi-flags, category: service_discovery}
         OMI_FLAGS_SOURCE: {value: dual, category: rollout}
@@ -580,6 +582,12 @@ overlay:
     services:
       backend:
         forbidden_env:
+        # Cloud Run preserves omitted env entries. Remove the retired rollout keys.
+        - BATCH_HELD_POLL_SKIP_ENABLED
+        - BATCH_PROJECTION_FINISH_BACKOFF_ENABLED
+        - DREAM_AGENT_PAID_PERCENT
+        # SCA-3555 preserves the serving revision, where poll backoff has no percent key.
+        - SYNC_POLL_BACKOFF_PERCENT
         - DEEPGRAM_SELF_HOSTED_ENABLED
         - DEEPGRAM_SELF_HOSTED_URL
         - DEEPGRAM_API_KEY
@@ -591,10 +599,6 @@ overlay:
         # removes live leftovers so the env never restates the default.
         - CONVERSATION_LLM_INPUT_DEDUPE_ENABLED
         - REPEAT_WORK_REVISION_ENABLED
-        # Finish backoff is declared only where the finish sweep can run (backend-integration,
-        # backend-sync). A hand-set true was left on this service on 2026-11-13; deploy removes it
-        # (SCA-2283).
-        - BATCH_PROJECTION_FINISH_BACKOFF_ENABLED
         secrets:
           CONVERSATIONS_V3_LIVE_RECAP_COHORT:
             secret: CONVERSATIONS_V3_LIVE_RECAP_COHORT
@@ -637,13 +641,15 @@ overlay:
           # next UTC day). Rollback: 'false' in one config train (David 2026-11-18, support-packet decision 13).
           UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED: {value: 'true', category: rollout}
           UNLIMITED_V2_BACKFILL_HOURS_CAP_HOURS: {value: '24', category: rollout}
-          # Hold silent read skipping until the release-owner canary (review F1).
+          # Silent read skipping on (SCA-1824 canary READBACK -13.5% reads); kill switch: set false.
           BATCH_PIPELINE_SILENCE_READ_SKIP_ENABLED: {value: 'false', category: ops_kill}
+          # SCA-3555: main reads an absent claimed-sibling skip as ON; the key stays explicit on every role.
+          # Activated by David 2026-11-22 on every role (SCA-3544); rollback is 'false'.
+          BATCH_PIPELINE_FOLLOWUP_CLAIMED_SIBLING_SKIP_ENABLED: {value: 'false', category: ops_kill}
           PUSHER_RECORD_CLOSE_NOTIFY_ENABLED: {value: 'false', category: rollout}
           PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_PERCENT: {value: '100', category: rollout}
           PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_UID_SHA256S: {value: '', category: rollout}
           PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED: {value: 'true', category: ops_kill}
-          # Kill switch: set BATCH_HELD_POLL_SKIP_ENABLED=false.
           EPISODE_COMPOSER_DEFAULT_CONTEXT_ENABLED: {value: 'true', category: ops_kill}
           EPISODE_COMPOSER_CONTEXT_ENABLED: {value: 'true', category: ops_kill}
           EPISODE_COMPOSER_DETAIL_ENABLED: {value: 'true', category: ops_kill}
@@ -663,7 +669,6 @@ overlay:
           RECORD_NOTES_EAGER_ENABLED: {value: 'false', category: ops_kill}
           RECORD_FOLLOWUP_WAKE_ENABLED: {value: 'true', category: ops_kill}
           RECORD_SEAL_WAKE_PRESERVED_ENABLED: {value: 'true', category: ops_kill}
-          BATCH_HELD_POLL_SKIP_ENABLED: {value: 'false', category: ops_kill}
           # Quiet-check empty exit (David 0192a6, lead2 9b4ffd); evaluated on backend-sync. Kill switch: false.
           QUIET_EMPTY_EXIT_ENABLED: {value: 'true', category: rollout}
           BATCH_INPUT_EXPIRING_ENABLED: {value: 'true', category: ops_kill}
@@ -691,6 +696,7 @@ overlay:
           # Graduation of the David-approved on-demand playback (DEC-BTR-004): build playback
           # artifacts on open/play/download only. Kill switch: set false.
           PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
+          SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
           # Read-only referral campaign preview for Nik's three accounts (#24560). Claims, attribution and
           # grants stay off until OMI_REFERRAL_CAMPAIGN_ENABLED. Rollback: drop this key.
           OMI_REFERRAL_CAMPAIGN_PREVIEW_UIDS:
@@ -818,9 +824,6 @@ overlay:
             category: rollout
           DREAM_AGENT_ELIGIBILITY:
             value: paid
-            category: rollout
-          DREAM_AGENT_PAID_PERCENT:
-            value: '100'
             category: rollout
           DREAM_AGENT_CONCURRENCY:
             value: '8'
@@ -1014,6 +1017,10 @@ overlay:
         flags:
           --timeout: 3600s
         forbidden_env:
+        # Cloud Run preserves omitted env entries. Remove the retired rollout keys.
+        - BATCH_HELD_POLL_SKIP_ENABLED
+        - BATCH_PROJECTION_FINISH_BACKOFF_ENABLED
+        - DREAM_AGENT_PAID_PERCENT
         - DEEPGRAM_SELF_HOSTED_ENABLED
         - DEEPGRAM_SELF_HOSTED_URL
         - DEEPGRAM_API_KEY
@@ -1038,13 +1045,15 @@ overlay:
           UNLIMITED_V2_BACKFILL_HOURS_CAP_HOURS: {value: '24', category: rollout}
           # Operator-only per-owner v3 backfill/repair route (scripts/conversations_v3_backfill.py); off = route 404s.
           CONVERSATIONS_V3_BACKFILL: {value: 'on', category: ops_kill}
-          # Hold silent read skipping until the release-owner canary (review F1).
-          BATCH_PIPELINE_SILENCE_READ_SKIP_ENABLED: {value: 'false', category: ops_kill}
+          # Silent read skipping on (SCA-1824 canary READBACK -13.5% reads); kill switch: set false.
+          BATCH_PIPELINE_SILENCE_READ_SKIP_ENABLED: {value: 'true', category: ops_kill}
+          # SCA-3555: main reads an absent claimed-sibling skip as ON; the key stays explicit on every role.
+          # Activated by David 2026-11-22 on every role (SCA-3544); rollback is 'false'.
+          BATCH_PIPELINE_FOLLOWUP_CLAIMED_SIBLING_SKIP_ENABLED: {value: 'true', category: ops_kill}
           PUSHER_RECORD_CLOSE_NOTIFY_ENABLED: {value: 'false', category: rollout}
           PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_PERCENT: {value: '100', category: rollout}
           PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_UID_SHA256S: {value: '', category: rollout}
           PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED: {value: 'true', category: ops_kill}
-          # Kill switch: set BATCH_HELD_POLL_SKIP_ENABLED=false.
           EPISODE_COMPOSER_DEFAULT_CONTEXT_ENABLED: {value: 'true', category: ops_kill}
           EPISODE_COMPOSER_CONTEXT_ENABLED: {value: 'true', category: ops_kill}
           EPISODE_COMPOSER_DETAIL_ENABLED: {value: 'true', category: ops_kill}
@@ -1061,20 +1070,15 @@ overlay:
           RECORD_NOTES_EAGER_ENABLED: {value: 'false', category: ops_kill}
           RECORD_FOLLOWUP_WAKE_ENABLED: {value: 'true', category: ops_kill}
           RECORD_SEAL_WAKE_PRESERVED_ENABLED: {value: 'true', category: ops_kill}
-          BATCH_HELD_POLL_SKIP_ENABLED: {value: 'false', category: ops_kill}
           # Kill switch: set BATCH_PIPELINE_UPLOAD_COALESCING_ENABLED=false.
           BATCH_PIPELINE_UPLOAD_COALESCING_ENABLED: {value: 'true', category: ops_kill}
-          # Projection finish backoff: backend-sync can run the same sweep through its authenticated
-          # /v2/batch-pipeline/reconcile and batch /metrics routes, so it carries the same value as
-          # backend-integration (SCA-2173, review SCA-2270). Off since 2026-11-14 19:41Z (SCA-2283).
-          BATCH_PROJECTION_FINISH_BACKOFF_ENABLED: {value: 'false', category: rollout}
           # Quiet-check empty exit (David 0192a6, lead2 9b4ffd); evaluated on backend-sync. Kill switch: false.
           QUIET_EMPTY_EXIT_ENABLED: {value: 'true', category: rollout}
           BATCH_INPUT_EXPIRING_ENABLED: {value: 'true', category: ops_kill}
           HOME_TRANSCRIPTION_PRESENTATION_GATE: {value: 'true', category: ops_kill}
           HOME_TRANSCRIPTION_DEADLINE_SECONDS: {value: '7200', category: config}
           HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED: {value: 'true', category: ops_kill}
-          SYNC_FUTURE_CAPTURE_CLAMP_ENABLED: {value: 'false', category: rollout}
+          SYNC_FUTURE_CAPTURE_CLAMP_ENABLED: {value: 'true', category: rollout}
           RECORD_SEAL_REPAIR_FRESH_ENABLED: {value: 'true', category: ops_kill}
           RECORD_INTAKE_AGE_PRIORITY_ENABLED: {value: 'true', category: ops_kill}
           HOME_TRANSCRIPTION_MAX_AGE_SECONDS: {value: '86400', category: config}
@@ -1115,6 +1119,8 @@ overlay:
           # Graduation of the David-approved on-demand playback (DEC-BTR-004): build playback
           # artifacts on open/play/download only. Kill switch: set false.
           PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
+          SYNC_POLL_BACKOFF_ENABLED: {value: 'true', category: rollout}
+          SYNC_POLL_BACKOFF_PERCENT: {value: '5', category: rollout}
           OMI_FLAGS_FIRESTORE_PROJECT: {value: based-hardware, category: service_discovery}
           OMI_FLAGS_FIRESTORE_DATABASE: {value: omi-flags, category: service_discovery}
           OMI_FLAGS_SOURCE: {value: dual, category: rollout}
@@ -1214,9 +1220,6 @@ overlay:
             category: rollout
           DREAM_AGENT_ELIGIBILITY:
             value: paid
-            category: rollout
-          DREAM_AGENT_PAID_PERCENT:
-            value: '100'
             category: rollout
           DREAM_AGENT_CONCURRENCY:
             value: '8'
@@ -1456,6 +1459,10 @@ overlay:
             secret: SONIOX_API_KEY
             version: latest
         forbidden_env:
+        # Cloud Run preserves omitted env entries. Remove the retired rollout keys.
+        - BATCH_HELD_POLL_SKIP_ENABLED
+        - BATCH_PROJECTION_FINISH_BACKOFF_ENABLED
+        - DREAM_AGENT_PAID_PERCENT
         - DEEPGRAM_SELF_HOSTED_ENABLED
         - DEEPGRAM_SELF_HOSTED_URL
         - DEEPGRAM_API_KEY
@@ -1466,10 +1473,6 @@ overlay:
         - CONVERSATION_LLM_INPUT_DEDUPE_ENABLED
         - SYNC_REPROCESS_COALESCE_ENABLED
         - REPEAT_WORK_REVISION_ENABLED
-        # Finish backoff is declared only where the finish sweep can run (backend-integration,
-        # backend-sync). A hand-set true was left on this service on 2026-11-13; deploy removes it
-        # (SCA-2283).
-        - BATCH_PROJECTION_FINISH_BACKOFF_ENABLED
         env:
           # SCA-2283: retain the behavior of the serving pre-flag image until custody admission.
           BATCH_ACCOUNT_PRIVACY_WRITER_ENABLED: {value: 'false', category: ops_kill}
@@ -1478,13 +1481,12 @@ overlay:
           # next UTC day). Rollback: 'false' in one config train (David 2026-11-18, support-packet decision 13).
           UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED: {value: 'true', category: rollout}
           UNLIMITED_V2_BACKFILL_HOURS_CAP_HOURS: {value: '24', category: rollout}
-          # Hold silent read skipping until the release-owner canary (review F1).
-          BATCH_PIPELINE_SILENCE_READ_SKIP_ENABLED: {value: 'false', category: ops_kill}
+          # Silent read skipping on (SCA-1824 canary READBACK -13.5% reads); kill switch: set false.
+          BATCH_PIPELINE_SILENCE_READ_SKIP_ENABLED: {value: 'true', category: ops_kill}
           PUSHER_RECORD_CLOSE_NOTIFY_ENABLED: {value: 'false', category: rollout}
           PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_PERCENT: {value: '100', category: rollout}
           PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_UID_SHA256S: {value: '', category: rollout}
           PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED: {value: 'true', category: ops_kill}
-          # Kill switch: set BATCH_HELD_POLL_SKIP_ENABLED=false.
           EPISODE_COMPOSER_DEFAULT_CONTEXT_ENABLED: {value: 'true', category: ops_kill}
           EPISODE_COMPOSER_CONTEXT_ENABLED: {value: 'true', category: ops_kill}
           EPISODE_COMPOSER_DETAIL_ENABLED: {value: 'true', category: ops_kill}
@@ -1501,7 +1503,6 @@ overlay:
           RECORD_NOTES_EAGER_ENABLED: {value: 'false', category: ops_kill}
           RECORD_FOLLOWUP_WAKE_ENABLED: {value: 'true', category: ops_kill}
           RECORD_SEAL_WAKE_PRESERVED_ENABLED: {value: 'true', category: ops_kill}
-          BATCH_HELD_POLL_SKIP_ENABLED: {value: 'false', category: ops_kill}
           # Quiet-check empty exit (David 0192a6, lead2 9b4ffd); evaluated on backend-sync. Kill switch: false.
           QUIET_EMPTY_EXIT_ENABLED: {value: 'true', category: rollout}
           BATCH_INPUT_EXPIRING_ENABLED: {value: 'true', category: ops_kill}
@@ -1511,7 +1512,7 @@ overlay:
           HOME_TRANSCRIPTION_PRESENTATION_GATE: {value: 'true', category: ops_kill}
           HOME_TRANSCRIPTION_DEADLINE_SECONDS: {value: '7200', category: config}
           HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED: {value: 'true', category: ops_kill}
-          SYNC_FUTURE_CAPTURE_CLAMP_ENABLED: {value: 'false', category: rollout}
+          SYNC_FUTURE_CAPTURE_CLAMP_ENABLED: {value: 'true', category: rollout}
           RECORD_SEAL_REPAIR_FRESH_ENABLED: {value: 'true', category: ops_kill}
           RECORD_INTAKE_AGE_PRIORITY_ENABLED: {value: 'true', category: ops_kill}
           HOME_TRANSCRIPTION_MAX_AGE_SECONDS: {value: '86400', category: config}
@@ -1547,6 +1548,8 @@ overlay:
           # Graduation of the David-approved on-demand playback (DEC-BTR-004): build playback
           # artifacts on open/play/download only. Kill switch: set false.
           PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
+          SYNC_POLL_BACKOFF_ENABLED: {value: 'true', category: rollout}
+          SYNC_POLL_BACKOFF_PERCENT: {value: '5', category: rollout}
           # O4 excluded consumer: preserve decision cache 0, owner enforcement 0,
           # shadow 10, negative/TTL60 caches 0 (Release 2026-11-17 reconciliation).
           # This does not admit backfill enforcement when the shared kill switch clears.
@@ -1634,9 +1637,6 @@ overlay:
             category: rollout
           DREAM_AGENT_ELIGIBILITY:
             value: paid
-            category: rollout
-          DREAM_AGENT_PAID_PERCENT:
-            value: '100'
             category: rollout
           DREAM_AGENT_CONCURRENCY:
             value: '8'
@@ -1848,6 +1848,10 @@ overlay:
             secret: SONIOX_API_KEY
             version: latest
         forbidden_env:
+        # Cloud Run preserves omitted env entries. Remove the retired rollout keys.
+        - BATCH_HELD_POLL_SKIP_ENABLED
+        - BATCH_PROJECTION_FINISH_BACKOFF_ENABLED
+        - DREAM_AGENT_PAID_PERCENT
         - DEEPGRAM_SELF_HOSTED_ENABLED
         - DEEPGRAM_SELF_HOSTED_URL
         - DEEPGRAM_API_KEY
@@ -1870,15 +1874,23 @@ overlay:
           # SCA-2283: retain the behavior of the serving pre-flag image until custody admission.
           BATCH_ACCOUNT_PRIVACY_WRITER_ENABLED: {value: 'false', category: ops_kill}
           BATCH_PROJECTION_OUTBOX: {value: 'false', category: ops_kill}
+          # SCA-3544: #25920's claimed-sibling skip; the pump derives this value from integration.
+          # Rolled back 2026-11-22T16:16Z and closed by Shipping at 16:44Z (no third attempt): reads per completion
+          # moved -1.5% with privacy+prepare flat. Literal 'false' because Cloud Run merges env and main reads an
+          # absent key as ON. Re-enable only with a code change on SCA-3508.
+          BATCH_PIPELINE_FOLLOWUP_CLAIMED_SIBLING_SKIP_ENABLED: {value: 'false', category: ops_kill}
+          # SCA-3318 (2026-11-22): integration keeps its serving sweep. The step-3 sweep-off tripped the pump
+          # floor (completions 34k/h -> 20k/h) and was rolled back; the pump is dark again. Explicit 'true'
+          # because Cloud Run merges env (deleting the key would leave 'off'). Only the literal 'off' disables it.
+          BATCH_PIPELINE_SERVING_PROJECTION_SWEEP: {value: 'true', category: ops_kill}
           # BATCH_PIPELINE_MERGE_STALE_HEAD_UID_ALLOWLIST (#25673 canary) is a private uid binding:
           # it is omitted here so deploys keep the live value; set it on the service at deploy time.
-          # Hold silent read skipping until the release-owner canary (review F1).
-          BATCH_PIPELINE_SILENCE_READ_SKIP_ENABLED: {value: 'false', category: ops_kill}
+          # Silent read skipping on (SCA-1824 canary READBACK -13.5% reads); kill switch: set false.
+          BATCH_PIPELINE_SILENCE_READ_SKIP_ENABLED: {value: 'true', category: ops_kill}
           PUSHER_RECORD_CLOSE_NOTIFY_ENABLED: {value: 'false', category: rollout}
           PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_PERCENT: {value: '100', category: rollout}
           PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_UID_SHA256S: {value: '', category: rollout}
           PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED: {value: 'true', category: ops_kill}
-          # Kill switch: set BATCH_HELD_POLL_SKIP_ENABLED=false.
           EPISODE_COMPOSER_DEFAULT_CONTEXT_ENABLED: {value: 'true', category: ops_kill}
           EPISODE_COMPOSER_CONTEXT_ENABLED: {value: 'true', category: ops_kill}
           EPISODE_COMPOSER_DETAIL_ENABLED: {value: 'true', category: ops_kill}
@@ -1895,13 +1907,8 @@ overlay:
           RECORD_NOTES_EAGER_ENABLED: {value: 'false', category: ops_kill}
           RECORD_FOLLOWUP_WAKE_ENABLED: {value: 'true', category: ops_kill}
           RECORD_SEAL_WAKE_PRESERVED_ENABLED: {value: 'true', category: ops_kill}
-          BATCH_HELD_POLL_SKIP_ENABLED: {value: 'false', category: ops_kill}
           # Kill switch: set BATCH_PIPELINE_UPLOAD_COALESCING_ENABLED=false.
           BATCH_PIPELINE_UPLOAD_COALESCING_ENABLED: {value: 'true', category: ops_kill}
-          # Projection finish backoff. Off: turned off in production on 2026-11-14 19:41Z on a 5xx
-          # trigger and kept off by ruling (SCA-2173, SCA-2283). It saved nothing while on, because
-          # async-policy finish rows are never deferred; #25314 is the fix for those reads.
-          BATCH_PROJECTION_FINISH_BACKOFF_ENABLED: {value: 'false', category: rollout}
           # Quiet-check empty exit (David 0192a6, lead2 9b4ffd); evaluated on backend-sync. Kill switch: false.
           QUIET_EMPTY_EXIT_ENABLED: {value: 'true', category: rollout}
           BATCH_INPUT_EXPIRING_ENABLED: {value: 'true', category: ops_kill}
@@ -1911,7 +1918,7 @@ overlay:
           HOME_TRANSCRIPTION_PRESENTATION_GATE: {value: 'true', category: ops_kill}
           HOME_TRANSCRIPTION_DEADLINE_SECONDS: {value: '7200', category: config}
           HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED: {value: 'true', category: ops_kill}
-          SYNC_FUTURE_CAPTURE_CLAMP_ENABLED: {value: 'false', category: rollout}
+          SYNC_FUTURE_CAPTURE_CLAMP_ENABLED: {value: 'true', category: rollout}
           RECORD_SEAL_REPAIR_FRESH_ENABLED: {value: 'true', category: ops_kill}
           RECORD_INTAKE_AGE_PRIORITY_ENABLED: {value: 'true', category: ops_kill}
           HOME_TRANSCRIPTION_MAX_AGE_SECONDS: {value: '86400', category: config}
@@ -1960,6 +1967,8 @@ overlay:
           # Graduation of the David-approved on-demand playback (DEC-BTR-004): build playback
           # artifacts on open/play/download only. Kill switch: set false.
           PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
+          SYNC_POLL_BACKOFF_ENABLED: {value: 'true', category: rollout}
+          SYNC_POLL_BACKOFF_PERCENT: {value: '5', category: rollout}
           # Margin-40 O2b stage 2, 2026-11-17: API owner-memo enforcement 100,
           # shadow 0; decision/negative/TTL60 caches 0. Preserve all other map entries.
           # Runtime inverse: enforce 0 + shadow 10 via the existing Release route,
@@ -2040,9 +2049,6 @@ overlay:
             category: rollout
           DREAM_AGENT_ELIGIBILITY:
             value: paid
-            category: rollout
-          DREAM_AGENT_PAID_PERCENT:
-            value: '100'
             category: rollout
           DREAM_AGENT_CONCURRENCY:
             value: '8'
@@ -2180,17 +2186,27 @@ overlay:
       backend-projection-pump:
         derive_from: backend-integration
         env:
-          # The train pin on integration does not apply to the separately admitted pump.
-          BATCH_ACCOUNT_PRIVACY_WRITER_ENABLED: {value: 'true', category: ops_kill}
-          BATCH_PROJECTION_OUTBOX: {value: 'true', category: ops_kill}
+          # The two custody switches (BATCH_ACCOUNT_PRIVACY_WRITER_ENABLED, BATCH_PROJECTION_OUTBOX)
+          # are inherited from integration's false pins: David 2026-11-21 ~03:45Z (SCA-3318) keeps
+          # both off for the pump split; enabling either is its own custody admission.
           # Startup isolation, independent of the pump flag: stopping the pump keeps the
           # reconcilers off. Never unset here while the service runs (unset = full startup).
           OMI_PROCESS_ROLE:
             value: projection_pump
           # Kill switches stay off on first deploy. Enable the pump on this service only,
           # never on backend-integration (the selector is service-wide). Rollback: 'false'.
+          # SCA-3318 (2026-11-22): back to dark. Four replicas could not carry the sweep (14k/h vs ~500/h)
+          # and integration's sweep does the work, so the pump only added reads. Dark = no loops start.
+          # Rollback: set only this flag back to 'true'. Keep integration's sweep 'true' (a full revert
+          # would restore sweep-off on integration, the state that cut completions by ~14k/h).
           BATCH_PIPELINE_SERVING_ENABLED: {value: 'false', category: rollout}
           BATCH_PIPELINE_PROJECTION_PUMP_ENABLED: {value: 'false', category: rollout}
+          # The pump's loop runs in 'pump' mode, which ignores this switch (projection_drain.py); pin the
+          # inherited value back to the default so the pump's env keeps its meaning.
+          BATCH_PIPELINE_SERVING_PROJECTION_SWEEP: {value: 'true', category: ops_kill}
+          # SCA-3318 one-key activation: keep the serving dark successor's silence-skip value (false);
+          # widening the skip to the pump is a separate later change. Rollback for the pump key: 'false'.
+          BATCH_PIPELINE_SILENCE_READ_SKIP_ENABLED: {value: 'false', category: ops_kill}
           # Bundle (ii) safe start: one page per tick, 2 s post-work sleep, 8 owner drains.
           BATCH_PIPELINE_PUMP_SWEEP_PAGES: {value: '1', category: rollout}
           BATCH_PIPELINE_PUMP_TICK_SECONDS: {value: '2', category: rollout}

@@ -2,6 +2,27 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.578",
+      "date": "2026-11-22",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.577",
+      "date": "2026-11-21",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.576",
+      "date": "2026-11-21",
+      "changes": [
+        "Fixed Chat Prompt Lab failures by using the same active Claude model as chat"
+      ]
+    },
+    {
       "version": "0.12.575",
       "date": "2026-11-20",
       "changes": [

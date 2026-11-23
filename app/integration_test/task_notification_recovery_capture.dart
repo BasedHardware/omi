@@ -113,8 +113,11 @@ Future<void> main() async {
     readApns: () async => apnsReady ? 'synthetic-apns' : null,
     readToken: () async => 'synthetic-fcm',
     readTimeZone: () async => 'Asia/Kolkata',
-    persist: (token, zone, owner) => saveFcmTokenServer(
-        token: token, timeZone: zone, canSend: () => AuthService.instance.isSessionSnapshotCurrent(owner)),
+    persist: (token, zone, owner, canLogDiagnostic) => saveFcmTokenServer(
+        token: token,
+        timeZone: zone,
+        canSend: () => AuthService.instance.isSessionSnapshotCurrent(owner),
+        canLogDiagnostic: canLogDiagnostic),
   );
   OmiColors.active = OmiPalette.dark;
   runApp(MultiProvider(

@@ -558,11 +558,11 @@ class AppLocalizationsHi extends AppLocalizations {
   String get hardwareSection => 'हार्डवेयर';
 
   @override
-  String get v2Undetected => 'V2 का पता नहीं चला';
+  String get v2Undetected => 'ऑफ़लाइन सिंक उपलब्ध नहीं है';
 
   @override
   String get v2UndetectedMessage =>
-      'हमें लगता है कि आप V1 डिवाइस का उपयोग कर रहे हैं या यह कनेक्ट नहीं है। SD कार्ड कार्यक्षमता केवल V2 उपकरणों के लिए है।';
+      'ऑफ़लाइन सिंक के लिए SD कार्ड स्टोरेज वाला कनेक्टेड Omi डिवाइस चाहिए। आपका वर्तमान डिवाइस इसका समर्थन नहीं करता।';
 
   @override
   String get endConversation => 'बातचीत समाप्त करें';
@@ -15705,4 +15705,21 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get deviceReadyToUse => 'उपयोग के लिए तैयार';
+
+  @override
+  String get firmwareUpdateFirmwareTooOld =>
+      'इस अपडेट के लिए आपके डिवाइस का फ़र्मवेयर बहुत पुराना है। डिवाइस अपडेट करने में मदद के लिए सहायता टीम से संपर्क करें।';
+
+  @override
+  String get firmwareUpdateAppRequired =>
+      'इस फ़र्मवेयर अपडेट के लिए Omi ऐप के नए संस्करण की ज़रूरत है। अपने ऐप स्टोर से ऐप अपडेट करें, फिर दोबारा जाँचें।';
+
+  @override
+  String get quietPayerTitle => '5 दिनों से कोई रिकॉर्डिंग नहीं';
+
+  @override
+  String get quietPayerMessage => 'अपना Omi जांचें।';
+
+  @override
+  String get quietPayerCheck => 'जांचें';
 }

@@ -28,6 +28,7 @@ from types import SimpleNamespace
 from typing import Any, Callable, Mapping
 
 from database import conversations as conversations_db
+from models.finalization_owner import python_owns_finalization
 from database._client import transaction_body
 from database.conversation_terminal_effects import stage_terminal_visibility_refresh
 from utils.conversations.deterministic_minimum import deterministic_minimum_title
@@ -397,6 +398,8 @@ def recover_deferred_processing_failure_txn(transaction: Any, conversation_ref: 
     if not getattr(snapshot, 'exists', False):
         return False
     data = snapshot.to_dict() or {}
+    if not python_owns_finalization(data):
+        return False
     if (
         data.get('status') not in {'processing', 'completed'}
         or data.get('discarded')

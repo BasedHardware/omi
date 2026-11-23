@@ -71,8 +71,8 @@ def stats(s, c):
     }
 
 
-def evaluate(ready, busy, stab):
-    c = dict(cfg, ready_target=ready, chain_target=busy, down_stab=stab)
+def evaluate(base_config, ready, busy, stab):
+    c = dict(base_config, ready_target=ready, chain_target=busy, down_stab=stab)
     a = stats(series, c)
     f = stats(full, c)
     mx = max_stats(c)
@@ -110,8 +110,17 @@ def evaluate(ready, busy, stab):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--grid', choices=['coarse', 'refined', 'all'])
+    parser.add_argument(
+        '--min-replicas',
+        type=int,
+        default=cfg['min_replicas'],
+        help='Override the production floor for offline replay',
+    )
     parser.add_argument('--output', type=Path, required=True)
     args = parser.parse_args()
+    if not 1 <= args.min_replicas <= cfg['max_replicas']:
+        parser.error(f"--min-replicas must be between 1 and {cfg['max_replicas']}")
+    replay_config = dict(cfg, min_replicas=args.min_replicas)
     candidates = set()
     if args.grid in ('coarse', 'all'):
         candidates.update(
@@ -133,7 +142,7 @@ def main():
     candidates.update(
         [(32, 0.5, 1800), (40, 0.6, 1800), (41, 0.56, 1800), (41, 0.56, 60), (41, 0.561, 1800), (42, 0.56, 1800)]
     )
-    results = [evaluate(*candidate) for candidate in sorted(candidates)]
+    results = [evaluate(replay_config, *candidate) for candidate in sorted(candidates)]
     # Policy sensitivity is only a 3h diagnostic. The unchanged 24h model and
     # chart tests do not qualify alternate policies. Restore model constants.
     sensitivity = []
@@ -141,7 +150,7 @@ def main():
     try:
         for pods, period in [(1, 60), (1, 300), (1, 600), (1, 1200), (2, 600)]:
             r.DOWN_PODS, r.DOWN_PERIOD = pods, period
-            result = evaluate(41, 0.56, 60)
+            result = evaluate(replay_config, 41, 0.56, 60)
             sensitivity.append(
                 {
                     'pods': pods,
@@ -154,6 +163,8 @@ def main():
     finally:
         r.DOWN_PODS, r.DOWN_PERIOD = original_policy
     payload = {
+        'min_replicas': replay_config['min_replicas'],
+        'max_replicas': replay_config['max_replicas'],
         'synthetic_full_volume_scale': FULL_VOLUME_SCALE,
         'candidates': results,
         'policy_sensitivity_3h_only': sensitivity,
@@ -167,8 +178,8 @@ def main():
             {
                 'searched': len(results),
                 'model_pass': len(good),
-                'lowest_model_mean': min(good, key=order),
-                'lowest_with_stockout_window_and_full_hot_budget': min(eligible, key=order),
+                'lowest_model_mean': min(good, key=order, default=None),
+                'lowest_with_stockout_window_and_full_hot_budget': min(eligible, key=order, default=None),
             },
             indent=2,
         )

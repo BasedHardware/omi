@@ -643,6 +643,9 @@ PINNED_CONVERSATION_FIELDS: FrozenSet[str] = frozenset(
         'uses_custom_stt',
         # Server-only route arbitration metadata; Conversation marks it excluded from dumps.
         'record_lane_owner',
+        # Server-only finalization ownership. Both fields are excluded from dumps and wire schemas.
+        'finalization_engine',
+        'finalization_owner_epoch',
         # Server-authored partial audio proof metadata, not client display text.
         'record_audio_partial',
         'structured',
@@ -768,6 +771,11 @@ PINNED_CONVERSATION_FIELDS: FrozenSet[str] = frozenset(
         # projection-family — it must survive the integration redactor so
         # clients receive it; the model serializer omits it when unset.
         'home_step',
+        # Server read projection (utils/conversations/transcribing_hold.py): the
+        # transcription wait ran out with no failure receipt. Never stored and
+        # never client-authored; NOT projection-family, clients need it to tell a
+        # held recording from a failed one. Omitted when unset.
+        'transcription_wait',
         # Recordings and conversations (v3): written only by the server-side builder,
         # planner and processing settle (utils/conversations/v3/), never client-authored.
         # NOT projection-family: clients need them (Home visibility and tile state).

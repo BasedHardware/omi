@@ -178,8 +178,8 @@
     "deviceInfoSection": "Cihaz Bilgileri",
     "customizationSection": "Özelleştirme",
     "hardwareSection": "Donanım",
-    "v2Undetected": "V2 algılanamadı",
-    "v2UndetectedMessage": "V1 cihazınız olduğunu veya cihazınızın bağlı olmadığını görüyoruz. SD Kart işlevi yalnızca V2 cihazlar için mevcuttur.",
+    "v2Undetected": "Çevrimdışı Senkronizasyon Kullanılamıyor",
+    "v2UndetectedMessage": "Çevrimdışı Senkronizasyon için SD kart depolamasına sahip bağlı bir Omi cihazı gerekir. Mevcut cihazınız bunu desteklemiyor.",
     "endConversation": "Konuşmayı Sonlandır",
     "pauseResume": "Duraklat/Devam Et",
     "starConversation": "Konuşmayı Favorilere Ekle",
@@ -4771,5 +4771,10 @@
     "finishedSummaryReady": "Özet hazır",
     "writingSummaryStatus": "Özet yazılıyor…",
     "stillWorkingOnIt": "Hâlâ üzerinde çalışılıyor.",
-    "deviceReadyToUse": "Kullanıma hazır"
+    "deviceReadyToUse": "Kullanıma hazır",
+    "firmwareUpdateFirmwareTooOld": "Cihazınızın donanım yazılımı bu güncelleme için çok eski. Cihazınızı güncelleme konusunda yardım almak için destek ekibiyle iletişime geçin.",
+    "firmwareUpdateAppRequired": "Bu donanım yazılımı güncellemesi için Omi uygulamasının daha yeni bir sürümü gerekiyor. Uygulamayı uygulama mağazanızdan güncelleyin, ardından yeniden kontrol edin.",
+    "quietPayerTitle": "5 gündür kayıt yok",
+    "quietPayerMessage": "Omi'ni kontrol et.",
+    "quietPayerCheck": "Kontrol Et"
 }

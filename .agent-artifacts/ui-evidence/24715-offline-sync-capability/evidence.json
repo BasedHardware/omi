@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-disconnected-de.png",
+      "platform": "mobile-ios",
+      "description": "On the Way shows German connection guidance after opening details with a disconnected CV1.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "002-mobile-ios-storage-check-en.png",
+      "platform": "mobile-ios",
+      "description": "On the Way shows the English storage-check retry dialog for an unverified connection.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "003-mobile-ios-unsupported-de.png",
+      "platform": "mobile-ios",
+      "description": "On the Way shows the German storage explanation for a connected unsupported device.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ]
+}

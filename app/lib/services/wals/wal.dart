@@ -682,6 +682,14 @@ class Wal {
     _changed();
   }
 
+  String? _liveFileWriteId;
+  String? get liveFileWriteId => _liveFileWriteId;
+  set liveFileWriteId(String? value) {
+    if (_liveFileWriteId == value) return;
+    _liveFileWriteId = value;
+    _changed();
+  }
+
   /// SHA-256 of the immutable fsynced file, using the upload manifest digest.
   /// Absent on legacy indexes: they cannot supply pendant reclaim authority.
   String? _fileSha256;
@@ -1016,6 +1024,7 @@ class Wal {
     int? downloadSeqEnd,
     int? downloadFileBytes,
     String? fileSha256,
+    String? liveFileWriteId,
     Geolocation? geolocation,
     int retryCount = 0,
     int lastRetryAt = 0,
@@ -1069,6 +1078,7 @@ class Wal {
         _downloadSeqEnd = downloadSeqEnd,
         _downloadFileBytes = downloadFileBytes,
         _fileSha256 = fileSha256,
+        _liveFileWriteId = liveFileWriteId,
         _geolocation = geolocation,
         _retryCount = retryCount,
         _lastRetryAt = lastRetryAt,
@@ -1133,6 +1143,7 @@ class Wal {
       downloadSeqEnd: json['download_seq_end'],
       downloadFileBytes: json['download_file_bytes'],
       fileSha256: json['file_sha256'],
+      liveFileWriteId: json['live_file_write_id'],
       geolocation: json['geolocation'] is Map<String, dynamic>
           ? Geolocation.fromJson(json['geolocation'] as Map<String, dynamic>)
           : null,
@@ -1199,6 +1210,7 @@ class Wal {
       if (downloadSeqEnd != null) 'download_seq_end': downloadSeqEnd,
       if (downloadFileBytes != null) 'download_file_bytes': downloadFileBytes,
       if (fileSha256 != null) 'file_sha256': fileSha256,
+      if (liveFileWriteId != null) 'live_file_write_id': liveFileWriteId,
       'geolocation': geolocation?.toJson(),
       'retry_count': retryCount,
       'last_retry_at': lastRetryAt,
@@ -1268,6 +1280,7 @@ class Wal {
     h = _mixFingerprint(h, downloadSeqEnd ?? -1);
     h = _mixFingerprint(h, downloadFileBytes ?? -1);
     h = _mixFingerprint(h, fileSha256?.hashCode ?? 0);
+    h = _mixFingerprint(h, liveFileWriteId?.hashCode ?? 0);
     h = _mixFingerprint(h, identityHashCode(geolocation));
     h = _mixFingerprint(h, retryCount);
     h = _mixFingerprint(h, lastRetryAt);

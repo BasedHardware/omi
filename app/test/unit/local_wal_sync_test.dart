@@ -26,6 +26,8 @@ import 'package:omi/utils/debug_log_manager.dart';
 import 'package:omi/utils/wal_file_manager.dart';
 import 'package:omi/services/wals/deleted_account_uids.dart';
 
+import '../support/capture/virtual_capture_time.dart';
+
 /// Minimal listener for testing — records calls without side effects.
 class _MockListener implements IWalSyncListener {
   int walUpdatedCount = 0;
@@ -253,6 +255,13 @@ void main() {
   });
 
   group('onFrameCaptured', () {
+    test('a captured frame backs the orphan census off to its streaming interval', () {
+      sync.testLastOrphanRecoveryWake = DateTime.now().subtract(const Duration(minutes: 20));
+      expect(sync.orphanRecoveryDueNow, isTrue, reason: 'idle: the 15-minute census is due');
+      sync.onFrameCaptured(WalFrame(payload: [0xAA], syncKey: FrameSyncKey([1])));
+      expect(sync.orphanRecoveryDueNow, isFalse, reason: 'live audio arriving: at most every two hours');
+    });
+
     test('adds frame with synced=false', () {
       final frame = WalFrame(payload: [0xAA, 0xBB], syncKey: FrameSyncKey([1]));
 
@@ -3070,6 +3079,16 @@ void main() {
   });
 
   group('capture evidence run construction', () {
+    late ManualScheduler scheduler;
+    setUp(() => scheduler = ManualScheduler(clock: VirtualClock(DateTime.utc(2026))));
+
+    Future<void> persistPeriodicChunk() async {
+      // Exercise the ordinary delayed chunk boundary and its subsequent disk
+      // flush. Shutdown also retains the frames after that boundary.
+      scheduler.elapse(const Duration(seconds: flushIntervalInSeconds + newFrameSyncDelaySeconds));
+      await scheduler.waitForCallbackIo();
+    }
+
     const rootA = '12345678-1234-4234-8234-123456789abc';
     const rootB = 'aaaaaaaa-1111-4111-8111-aaaaaaaaaaaa';
 
@@ -3198,6 +3217,7 @@ void main() {
       final uploads = <(List<String>, String?)>[];
       final local = LocalWalSyncImpl(
         _MockListener(),
+        periodic: scheduler.periodic,
         now: () => DateTime.fromMillisecondsSinceEpoch((timerStart + 16) * 1000),
         persistWals: (wals) async {},
         loadWals: () async => [oldWal],
@@ -3220,6 +3240,7 @@ void main() {
           fairUseStatusLoader: () async => null,
         ),
       );
+      addTearDown(local.stop);
       local.start();
       await local.walReady;
 
@@ -3229,7 +3250,7 @@ void main() {
           captureRoot: rootB,
         );
       }
-      await local.stop();
+      await persistPeriodicChunk();
 
       expect(local.testWals, hasLength(2), reason: 'the non-contiguous run must not extend the rooted WAL');
       expect(
@@ -3263,6 +3284,7 @@ void main() {
       );
       final local = LocalWalSyncImpl(
         _MockListener(),
+        periodic: scheduler.periodic,
         now: () => DateTime.fromMillisecondsSinceEpoch((timerStart + 16) * 1000),
         persistWals: (wals) async {},
         loadWals: () async => [oldWal],
@@ -3284,13 +3306,14 @@ void main() {
           fairUseStatusLoader: () async => null,
         ),
       );
+      addTearDown(local.stop);
       local.start();
       await local.walReady;
 
       for (var i = 0; i < 1600; i++) {
         local.onFrameCaptured(WalFrame(payload: [i & 0xFF], syncKey: FrameSyncKey.fromIndex(i)));
       }
-      await local.stop();
+      await persistPeriodicChunk();
 
       expect(local.testWals, hasLength(1), reason: 'a legacy selection keeps the original in-place extension');
       expect(oldWal.captureRoot, isNull);
@@ -3317,6 +3340,7 @@ void main() {
       SharedPreferencesUtil().unlimitedLocalStorageEnabled = true;
       final local = LocalWalSyncImpl(
         _MockListener(),
+        periodic: scheduler.periodic,
         now: () => DateTime.fromMillisecondsSinceEpoch((timerStart + 16) * 1000),
         persistWals: (wals) async {},
         loadWals: () async => <Wal>[],
@@ -3338,6 +3362,7 @@ void main() {
           fairUseStatusLoader: () async => null,
         ),
       );
+      addTearDown(local.stop);
       local.start();
       await local.walReady;
       await local.onAudioCodecChanged(BleAudioCodec.pcm8);
@@ -3348,7 +3373,7 @@ void main() {
           captureRoot: rootA,
         );
       }
-      await local.stop();
+      await persistPeriodicChunk();
 
       expect(local.testWals, hasLength(1), reason: 'an unsupported codec never enters the run partitioner');
       expect(local.testWals.single.totalFrames, 100);
@@ -3360,6 +3385,7 @@ void main() {
 
     LocalWalSyncImpl pinnedSync(Wal prior) => LocalWalSyncImpl(
           _MockListener(),
+          periodic: scheduler.periodic,
           now: () => DateTime.fromMillisecondsSinceEpoch((1700000000 + 16) * 1000),
           persistWals: (wals) async {},
           loadWals: () async => [prior],
@@ -3399,6 +3425,7 @@ void main() {
 
     Future<LocalWalSyncImpl> extendOnce(Wal prior, {required int syncedCount}) async {
       final local = pinnedSync(prior);
+      addTearDown(local.stop);
       local.start();
       await local.walReady;
       for (var i = 0; i < 1600; i++) {
@@ -3408,7 +3435,7 @@ void main() {
         );
         if (i < syncedCount) local.markFrameSynced(frame.syncKey);
       }
-      await local.stop();
+      await persistPeriodicChunk();
       return local;
     }
 
@@ -3476,6 +3503,7 @@ void main() {
       );
       final local = LocalWalSyncImpl(
         _MockListener(),
+        periodic: scheduler.periodic,
         now: () => DateTime.fromMillisecondsSinceEpoch((timerStart + 16) * 1000),
         persistWals: (wals) async {},
         loadWals: () async => [walA, walB],
@@ -3497,6 +3525,7 @@ void main() {
           fairUseStatusLoader: () async => null,
         ),
       );
+      addTearDown(local.stop);
       local.start();
       await local.walReady;
 
@@ -3506,7 +3535,7 @@ void main() {
           captureRoot: rootB,
         );
       }
-      await local.stop();
+      await persistPeriodicChunk();
 
       expect(local.testWals, hasLength(2), reason: 'the contiguous sibling extends; the mismatching one is untouched');
       expect((walA.captureRoot, walA.sourceFrameStart, walA.totalFrames), (rootA, 0, 60));
@@ -3716,6 +3745,7 @@ void main() {
     LocalWalSyncImpl boundsSync(List<(List<String>, double?, double?)> bounds, DateTime Function() now) =>
         LocalWalSyncImpl(
           _MockListener(),
+          periodic: scheduler.periodic,
           now: now,
           persistWals: (wals) async {},
           loadWals: () async => <Wal>[],
@@ -3778,13 +3808,16 @@ void main() {
       final bounds = <(List<String>, double?, double?)>[];
       final local = boundsSync(bounds, () => DateTime.fromMillisecondsSinceEpoch(t * 1000 + 16200));
 
+      addTearDown(local.stop);
+      local.start();
+      await local.walReady;
       for (var i = 0; i < 1580; i++) {
         local.onFrameCaptured(
           WalFrame(payload: [i & 0xFF], syncKey: FrameSyncKey.fromIndex(i)),
           captureRoot: i < 70 ? rootA : rootB,
         );
       }
-      await local.stop();
+      await persistPeriodicChunk();
 
       await local.syncAll();
       final chunked = local.testWals.where((wal) => wal.captureRoot != null).toList();

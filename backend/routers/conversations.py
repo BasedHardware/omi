@@ -37,9 +37,7 @@ from database.legal_holds import (
 )
 from utils.other.account_gate_http import account_gate_busy_http_exception
 from database.firestore_read_metrics import FirestoreReadSite
-from utils.list_version_check import ListVersionCheck
 from config import historical_tier
-from config.episodes import home_step_projection_enabled, home_transcription_presentation_gate_enabled
 from utils.conversations import historical_projection, home_step, transcribing_hold
 from utils.conversations.list_filters import aware_datetime, reject_oversized_filter
 from database.vector_db import (
@@ -58,6 +56,7 @@ from utils.screen_frames.store import delete_conversation_screen_frames
 from models.calendar_context import CalendarMeetingContext
 from utils.free_tier_processing_policy import client_summaries_at_cap_enabled
 from models.client_processing import PROJECTION_FAMILY_FIELDS, ClientProcessing
+from models.finalization_owner import python_owns_finalization
 from models.conversation import (
     ProcessConversationRequest,
     BulkAssignSegmentsRequest,
@@ -936,6 +935,8 @@ def reprocess_conversation(
     # on the raw doc because the Conversation model does not carry `deleted`.
     if conversations_db.is_soft_deleted(conversation):
         raise HTTPException(status_code=404, detail="Conversation not found")
+    if not python_owns_finalization(conversation):
+        raise HTTPException(status_code=409, detail='Conversation finalization is in progress')
     if app_id and historical_tier.is_historical(conversation):
         raise HTTPException(status_code=400, detail='Historical conversations can only be reprocessed with Omi notes')
     if transcribing_hold.retry_pending(conversation):
@@ -1174,17 +1175,6 @@ def get_conversations(
 
     from utils.episodes import home_membership
 
-    held_request = home_membership.held_for(request)
-    # Reader-enforced expiry changes the body without a writer-version bump.
-    time_dependent = (
-        home_transcription_presentation_gate_enabled()
-        or home_step_projection_enabled()
-        or home_membership.live_suppression_for(uid, request)
-    )
-    version_check = ListVersionCheck.start(None if held_request or time_dependent else request, uid, 'conversations')
-    if version_check.not_modified is not None:
-        return version_check.not_modified
-
     # Request-scoped budget: the server-side offset is charged before the
     # query and the page stream runs under the derived per-RPC timeout, so a
     # deep page cannot consume the whole HTTP_GET_TIMEOUT (#11831).
@@ -1241,13 +1231,6 @@ def get_conversations(
     if budget.truncated and response is not None:
         response.headers[OMI_LIST_TRUNCATED_HEADER] = OMI_LIST_TRUNCATED_VALUE
     budget.observe('truncated' if budget.truncated else 'complete')
-    # Paid lock recovery depends on the current allowance (including rollover)
-    # and must run on every locked-page read, even without a source mutation.
-    version_check.finish(
-        response,
-        truncated=budget.truncated,
-        cacheable=not held_request and not time_dependent and not any(row.get('is_locked') for row in conversations),
-    )
     return conversations
 
 

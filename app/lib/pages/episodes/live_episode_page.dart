@@ -18,12 +18,14 @@ import 'package:omi/pages/episodes/live_episode_clock.dart';
 import 'package:omi/pages/episodes/previous_episode_link.dart';
 import 'package:omi/pages/episodes/live_transcript_view.dart';
 import 'package:omi/providers/capture_provider.dart';
+import 'package:omi/providers/conversations_v3_provider.dart';
 import 'package:omi/providers/episode_provider.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/people_provider.dart';
 import 'package:omi/services/live_preview/live_preview_controller.dart';
 import 'package:omi/services/sockets/listen_client_state.dart';
 import 'package:omi/ui/ui.dart';
+import 'package:omi/utils/conversations/conversation_title.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:omi/widgets/capture_sources.dart';
@@ -35,6 +37,18 @@ void switchHomeToConversationsTab(BuildContext context) {
 }
 
 enum LiveEpisodeTab { summary, transcript }
+
+/// What the episodes-off (and v3) live page shell shows. A record, so the select compares values.
+typedef _LegacyShell = ({
+  bool paused,
+  bool callActive,
+  bool verified,
+  CaptureDisplayState state,
+  Duration? bufferingFor,
+  String? source,
+  bool hasCapture,
+  bool canPause,
+});
 
 /// The one live page, opened from Home's live row, the record button, notifications and the
 /// capture deep link.
@@ -71,6 +85,10 @@ class LiveEpisodePageState extends State<LiveEpisodePage> with SingleTickerProvi
   bool _retryPending = false;
   Timer? _tick;
 
+  /// v3: Home stops re-reading the conversation in progress while this page covers it, so the page
+  /// re-reads it itself; its title lands here when the server names it.
+  Timer? _v3Refresh;
+
   @override
   void initState() {
     super.initState();
@@ -82,11 +100,23 @@ class LiveEpisodePageState extends State<LiveEpisodePage> with SingleTickerProvi
     _tick = Timer.periodic(const Duration(seconds: 30), (_) {
       if (mounted) setState(() {});
     });
+    // Armed for every account: the v3 switch may answer after the page opens. Each tick reads only
+    // for a v3 account, with the app in the foreground and this page on top, as Home's own read does.
+    final v3 = context.read<ConversationsV3Provider?>();
+    if (v3 != null) {
+      _v3Refresh = Timer.periodic(const Duration(seconds: 15), (_) {
+        if (!mounted || !v3.v3 || ModalRoute.of(context)?.isCurrent == false) return;
+        final lifecycle = WidgetsBinding.instance.lifecycleState;
+        if (lifecycle != null && lifecycle != AppLifecycleState.resumed) return;
+        unawaited(v3.refresh());
+      });
+    }
   }
 
   @override
   void dispose() {
     _tick?.cancel();
+    _v3Refresh?.cancel();
     _episodes?.unwatch();
     _tabs.dispose();
     ListenClientState.instance.capturePageClosed();
@@ -160,7 +190,27 @@ class LiveEpisodePageState extends State<LiveEpisodePage> with SingleTickerProvi
   Widget build(BuildContext context) {
     final episodes = context.watch<EpisodeProvider?>();
     if (episodes == null || !episodes.enabled) {
-      return Consumer<CaptureProvider>(builder: (context, provider, child) => _legacyPage(context, provider));
+      // v3 accounts always land here: their EpisodeProvider is suppressed. The shell (app bar,
+      // Pause and Finish) selects only what it shows; the transcript subscribes itself. A
+      // whole-page Consumer rebuilt the Scaffold on every capture notify (ingress health,
+      // metrics, socket state) while a pendant streamed.
+      return Builder(
+        builder: (context) => _legacyPage(
+          context,
+          context.select<CaptureProvider, _LegacyShell>(
+            (c) => (
+              paused: c.isPaused,
+              callActive: c.isCallActive,
+              verified: c.pendantCaptureVerified,
+              state: EpisodePresentation.displayState(c),
+              bufferingFor: c.customSttBufferingDuration,
+              source: c.liveCaptureSource,
+              hasCapture: c.liveCaptureSource != null || c.segments.isNotEmpty || c.photos.isNotEmpty,
+              canPause: EpisodePresentation.canPause(c),
+            ),
+          ),
+        ),
+      );
     }
     // The shell rebuilds only when its own state changes (anything capturing, the listening
     // state, pausability). Segment, photo, metric and progress notifies land in the selects
@@ -178,44 +228,49 @@ class LiveEpisodePageState extends State<LiveEpisodePage> with SingleTickerProvi
 
   // --------------------------------------------------------------------------- episodes off
 
-  Widget _legacyPage(BuildContext context, CaptureProvider provider) {
-    final effectivelyMuted = provider.isPaused || provider.isCallActive;
+  Widget _legacyPage(BuildContext context, _LegacyShell shell) {
+    final effectivelyMuted = shell.paused || shell.callActive;
     return Scaffold(
       backgroundColor: OmiColors.surface0,
       appBar: CaptureWedgeAppBar(
-        showStatus: effectivelyMuted || provider.pendantCaptureVerified,
-        state: EpisodePresentation.displayState(provider),
-        bufferingFor: provider.customSttBufferingDuration,
-        sourceLabel: switch (provider.liveCaptureSource) {
+        showStatus: effectivelyMuted || shell.verified,
+        state: shell.state,
+        bufferingFor: shell.bufferingFor,
+        sourceLabel: switch (shell.source) {
           null => null,
           'phone' => context.l10n.captureSourcePhoneMic,
           final source => CaptureSources.label(context, source),
         },
       ),
-      body: LiveTranscriptView(
-        topConversationId: widget.topConversationId,
-        rejectSpeaker: widget.rejectSpeaker,
-        held: _held,
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const _V3LiveTitle(),
+          Expanded(
+            child: LiveTranscriptView(
+              topConversationId: widget.topConversationId,
+              rejectSpeaker: widget.rejectSpeaker,
+              held: _held,
+            ),
+          ),
+        ],
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
       // Pause/Resume (a pause glyph: mics belong to Ask Omi) and Finish, the one stop.
-      floatingActionButton: (provider.liveCaptureSource != null ||
-              provider.segments.isNotEmpty ||
-              provider.photos.isNotEmpty ||
-              _finishing ||
-              _held != null)
+      floatingActionButton: (shell.hasCapture || _finishing || _held != null)
           ? Row(
               mainAxisSize: MainAxisSize.min,
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                if (EpisodePresentation.canPause(provider)) ...[
+                if (shell.canPause) ...[
                   OmiIconButton.filled(
                     key: const Key('capture_pause_button'),
                     icon: Icon(effectivelyMuted ? Icons.play_arrow_rounded : Icons.pause_rounded, size: 26),
                     label: effectivelyMuted ? context.l10n.resume : context.l10n.pause,
                     diameter: 52,
                     fillColor: OmiColors.surface3,
-                    onPressed: _mutePending || provider.isCallActive ? null : () => _toggleMute(provider),
+                    onPressed:
+                        _mutePending || shell.callActive ? null : () => _toggleMute(context.read<CaptureProvider>()),
                   ),
                   const SizedBox(width: OmiSpacing.sm),
                 ],
@@ -224,7 +279,7 @@ class LiveEpisodePageState extends State<LiveEpisodePage> with SingleTickerProvi
                   label: context.l10n.finish,
                   leading: const Icon(Icons.check_rounded),
                   isLoading: _finishing,
-                  onPressed: () => _stopConversation(provider),
+                  onPressed: () => _stopConversation(context.read<CaptureProvider>()),
                 ),
               ],
             )
@@ -611,6 +666,31 @@ class _SoFarCard extends StatelessWidget {
             Text(l10n.episodeNotesSoon, style: OmiType.subhead.copyWith(color: OmiColors.textSecondary)),
           ],
         ],
+      ),
+    );
+  }
+}
+
+/// v3: the conversation in progress's title over its transcript, "Listening" (Home's live row title)
+/// until the server names it. Nothing for an account off v3.
+class _V3LiveTitle extends StatelessWidget {
+  const _V3LiveTitle();
+
+  @override
+  Widget build(BuildContext context) {
+    final (v3, title) = context.select<ConversationsV3Provider?, (bool, String)>((p) {
+      final live = p?.live;
+      return (p?.v3 ?? false, live == null ? '' : presentableConversationTitle(live));
+    });
+    if (!v3) return const SizedBox.shrink();
+    return Padding(
+      key: const Key('live_page_v3_title'),
+      padding: const EdgeInsetsDirectional.fromSTEB(16, 4, 16, 8),
+      child: Text(
+        title.isEmpty ? context.l10n.listening : title,
+        style: OmiType.title1.copyWith(height: 1.15, letterSpacing: -0.4),
+        maxLines: 2,
+        overflow: TextOverflow.ellipsis,
       ),
     );
   }

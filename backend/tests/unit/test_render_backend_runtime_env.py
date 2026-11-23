@@ -528,9 +528,11 @@ def test_backend_integration_deploy_pins_mcp_serving_capacity():
     assert '--cpu=2' in sync_flags
     # Backend's own prod shape (dev branch empty: dev keeps inheriting).
     assert (
-        "${{ inputs.runtime_env == 'prod' && '--cpu=2 --memory=4Gi --concurrency=20"
+        "${{ inputs.runtime_env == 'prod' && '--cpu=2 --concurrency=20"
         " --min-instances=3 --max-instances=100' || '' }}"
     ) in backend_flags
+    assert "format('--memory={0}', steps.ops-memory.outputs.backend)" in backend_flags
+    assert 'steps.ops-memory.outputs.backend_sync || inputs.backend_sync_memory' in sync_flags
 
 
 VERTEX_PT_CONTRACT = 'Company-paid Gemini text and vision generation may use only the active model'
@@ -1404,36 +1406,14 @@ def test_firestore_cut_switches_preserve_operator_next_roll_policy(environment):
     services = _MANIFEST['environments'][environment]['cloud_run']['services']
     for name, service in services.items():
         env = service['env']
-        # SCA-2173 / SCA-2283 (2026-11-14): finish backoff is declared off for prod backend-integration,
-        # which runs the finish sweep, and for prod backend-sync, which can reach the same sweep through
-        # its reconcile and batch metrics routes (review SCA-2270). It was turned off in production at
-        # 19:41Z and stays off by ruling. No other service or environment declares it (SCA-1993).
-        # SCA-3120: the prod projection pump derives integration's env, so it carries the same values.
-        if environment == 'prod' and name in ('backend-integration', 'backend-sync', 'backend-projection-pump'):
-            assert env['BATCH_PROJECTION_FINISH_BACKOFF_ENABLED'] == {'value': 'false', 'category': 'rollout'}
+        retired = {'BATCH_PROJECTION_FINISH_BACKOFF_ENABLED', 'BATCH_HELD_POLL_SKIP_ENABLED'}
+        assert not retired.intersection(env)
+        assert not retired.intersection(service.get('secrets', {}))
+        assert retired.intersection(service.get('forbidden_env', [])) == (retired if environment == 'prod' else set())
+        if environment == 'prod' and name in ('backend-sync', 'backend-integration', 'backend-projection-pump'):
+            assert env['BATCH_PIPELINE_UPLOAD_COALESCING_ENABLED'] == {'value': 'true', 'category': 'ops_kill'}
         else:
-            assert 'BATCH_PROJECTION_FINISH_BACKOFF_ENABLED' not in env
-        # A hand-set true was left on prod backend and backend-sync-backfill. Deploy merges env, so
-        # leaving the key out would keep it; the removal list is what turns it off there (SCA-2283).
-        removed = 'BATCH_PROJECTION_FINISH_BACKOFF_ENABLED' in service.get('forbidden_env', [])
-        assert removed == (environment == 'prod' and name in ('backend', 'backend-sync-backfill'))
-        expected = {}
-        if environment == 'prod':
-            # 2026-11-18: turned off on all four prod workloads. The registry's enable
-            # gates (replay, integration-first ramp, terminal-loss/SLA/read and D+2
-            # settled-SKU evidence) were never recorded, so the owner kept the
-            # documented default-off rollback. See config/feature-flags.yaml.
-            expected['BATCH_HELD_POLL_SKIP_ENABLED'] = 'false'
-            if name in ('backend-sync', 'backend-integration', 'backend-projection-pump'):
-                expected['BATCH_PIPELINE_UPLOAD_COALESCING_ENABLED'] = 'true'
-        switches = {
-            key: env[key]
-            for key in ('BATCH_HELD_POLL_SKIP_ENABLED', 'BATCH_PIPELINE_UPLOAD_COALESCING_ENABLED')
-            if key in env
-        }
-        assert switches == {key: {'value': value, 'category': 'ops_kill'} for key, value in expected.items()}
-        rendered = {entry['name']: entry['value'] for entry in _MODULE['_render_env_entries'](switches)}
-        assert rendered == expected
+            assert 'BATCH_PIPELINE_UPLOAD_COALESCING_ENABLED' not in env
 
 
 @pytest.mark.parametrize('environment', ['dev', 'prod'])
@@ -1652,6 +1632,10 @@ def test_post_seal_switches_reach_rendered_pods_and_can_be_disabled(environment,
         containers = deployment['spec']['template']['spec']['containers']
         env = {e['name']: e.get('value') for c in containers for e in c.get('env', [])}
         if chart == 'batch-pipeline-worker':
+            if environment == 'prod' and mode == 'staged':
+                # Preserve the live omission and let the runtime default stay off.
+                assert not (set(flags) & env.keys())
+                continue
             assert set(flags) & env.keys() == {'RECORD_FRESH_MERGE_ENABLED'}
             assert env['RECORD_FRESH_MERGE_ENABLED'] == ('true' if mode == 'qualified' else 'false')
             continue
@@ -1732,12 +1716,32 @@ def test_record_close_notify_renders_on_every_cloud_run_listener(environment, se
         assert [(name, value) for name, value in rendered if name == key] == [(key, expected)]
 
 
-def test_prod_silence_read_skip_is_held_off_on_projection_hosts():
+def test_prod_silence_read_skip_respects_backend_pump_and_listen_pins():
     key = 'BATCH_PIPELINE_SILENCE_READ_SKIP_ENABLED'
     prod = _MANIFEST['environments']['prod']
-    for name in ('backend', 'backend-sync', 'backend-sync-backfill', 'backend-integration'):
-        assert prod['cloud_run']['services'][name]['env'][key] == {'value': 'false', 'category': 'ops_kill'}
+    for name in ('backend-sync', 'backend-sync-backfill', 'backend-integration'):
+        assert prod['cloud_run']['services'][name]['env'][key] == {'value': 'true', 'category': 'ops_kill'}
+    # SCA-3555: keep live backend behavior until the SCA-1824 guard covers first traffic.
+    assert prod['cloud_run']['services']['backend']['env'][key] == {'value': 'false', 'category': 'ops_kill'}
+    # SCA-3318: the pump's one-key activation keeps its dark successor's false; widening it is a later change.
+    assert prod['cloud_run']['services']['backend-projection-pump']['env'][key] == {
+        'value': 'false',
+        'category': 'ops_kill',
+    }
+    # SCA-3516: the listen roll preserves live listen behaviour; listen activation is its own one-key step.
     assert prod['gke']['backend-listen']['env'][key] == {'value': 'false', 'category': 'ops_kill'}
     chart = Path(__file__).resolve().parents[2] / 'charts/backend-listen/prod_omi_backend_listen_values.yaml'
     values = yaml.safe_load(chart.read_text())
     assert [entry['value'] for entry in values['env'] if entry['name'] == key] == ['false']
+
+
+def test_prod_backend_renders_sibling_skip_and_poll_backoff_preservation_pins(monkeypatch):
+    prod = _MANIFEST['environments']['prod']
+    _set_workflow_bound_env(monkeypatch, prod)
+    backend = prod['cloud_run']['services']['backend']
+    rendered = dict(_MODULE['_parse_deploy_cloud_run_env_vars'](_MODULE['_render_env_vars'](backend['env'])))
+
+    assert rendered['BATCH_PIPELINE_FOLLOWUP_CLAIMED_SIBLING_SKIP_ENABLED'] == 'false'
+    assert rendered['SYNC_POLL_BACKOFF_ENABLED'] == 'false'
+    assert 'SYNC_POLL_BACKOFF_PERCENT' not in rendered
+    assert 'SYNC_POLL_BACKOFF_PERCENT' in _MODULE['_remove_env_extra']('backend', backend).split(',')

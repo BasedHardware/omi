@@ -150,10 +150,11 @@ def test_v3_short_path_obeys_content_minimum(monkeypatch):
 
 
 @pytest.mark.parametrize(
-    'words,covered,foreground,expect_short',
-    [(299, False, False, True), (300, True, False, False), (599, True, False, False)],
+    'words,covered,expect_short',
+    [(19, False, False), (20, False, True), (299, False, True), (300, True, False), (599, True, False)],
 )
-def test_short_threshold_and_covered_summary(monkeypatch, words, covered, foreground, expect_short):
+@pytest.mark.parametrize('word', ['speech ', '界', 'あ'])
+def test_short_threshold_and_covered_summary(monkeypatch, word, words, covered, expect_short):
     from models.conversation import Conversation
 
     monkeypatch.setattr(process, 'content_minimum', lambda *a, **kw: None)
@@ -173,12 +174,14 @@ def test_short_threshold_and_covered_summary(monkeypatch, words, covered, foregr
         v3_derived=True,
         summary_covers_through=AT if covered else None,
         structured={'title': 'Existing', 'sections': [{'heading': 'Plan', 'body_markdown': 'Real notes.'}]},
-        transcript_segments=[{'text': 'speech ' * words, 'start': 0, 'end': 30, 'is_user': True}],
+        transcript_segments=[{'text': word * words, 'start': 0, 'end': 30, 'is_user': True}],
     )
-    with process.v3_service.models.notes_mode('u', foreground=foreground):
-        structured, _ = process._get_structured('u', 'en', row)
+    with process.v3_service.models.notes_mode('u', foreground=False):
+        structured, discarded = process._get_structured('u', 'en', row)
+    assert discarded is (words < 20)
     assert bool(calls) is expect_short
     assert structured.sections[0].body_markdown == 'Real notes.'
+    assert summary.summary_eligible(row.model_dump()) is (words >= 300)
 
 
 @pytest.mark.asyncio

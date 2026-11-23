@@ -15706,4 +15706,21 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get deviceReadyToUse => 'Ready to use';
+
+  @override
+  String get firmwareUpdateFirmwareTooOld =>
+      'Your device\'s firmware is too old for this update. Contact support for help updating your device.';
+
+  @override
+  String get firmwareUpdateAppRequired =>
+      'This firmware update needs a newer Omi app. Update the app from your app store, then check again.';
+
+  @override
+  String get quietPayerTitle => 'No recordings in 5 days';
+
+  @override
+  String get quietPayerMessage => 'Check your Omi.';
+
+  @override
+  String get quietPayerCheck => 'Check';
 }

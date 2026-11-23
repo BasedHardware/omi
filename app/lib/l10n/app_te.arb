@@ -717,11 +717,11 @@
     "@hardwareSection": {
         "description": "Hardware section header"
     },
-    "v2Undetected": "V2 గుర్తించబడలేదు",
+    "v2Undetected": "ఆఫ్‌లైన్ సింక్ అందుబాటులో లేదు",
     "@v2Undetected": {
         "description": "V2 device undeteced dialog title"
     },
-    "v2UndetectedMessage": "V1 డివైస్ ఉందని లేదా మీ డివైస్ కనెక్ట్ చేయబడలేదని మేము చూస్తున్నాము. SD కార్డ్ కార్యకలాపం V2 డివైసెస్‌కు మాత్రమే అందుబాటులో ఉంది.",
+    "v2UndetectedMessage": "ఆఫ్‌లైన్ సింక్ కోసం SD కార్డ్ స్టోరేజ్ ఉన్న కనెక్ట్ చేయబడిన Omi పరికరం అవసరం. మీ ప్రస్తుత పరికరం దీనికి మద్దతు ఇవ్వదు.",
     "@v2UndetectedMessage": {
         "description": "V2 device undeteced dialog message"
     },
@@ -12293,5 +12293,10 @@
     "finishedSummaryReady": "సారాంశం సిద్ధంగా ఉంది",
     "writingSummaryStatus": "సారాంశం తయారవుతోంది…",
     "stillWorkingOnIt": "ఇంకా పని జరుగుతోంది.",
-    "deviceReadyToUse": "వాడుకకు సిద్ధం"
+    "deviceReadyToUse": "వాడుకకు సిద్ధం",
+    "firmwareUpdateFirmwareTooOld": "ఈ నవీకరణకు మీ పరికరంలోని ఫర్మ్‌వేర్ చాలా పాతది. మీ పరికరాన్ని నవీకరించడంలో సహాయం కోసం సపోర్ట్‌ను సంప్రదించండి.",
+    "firmwareUpdateAppRequired": "ఈ ఫర్మ్‌వేర్ నవీకరణకు కొత్త వెర్షన్ Omi యాప్ అవసరం. మీ యాప్ స్టోర్ నుండి యాప్‌ను నవీకరించి, మళ్లీ తనిఖీ చేయండి.",
+    "quietPayerTitle": "5 రోజులుగా రికార్డింగ్‌లు లేవు",
+    "quietPayerMessage": "మీ Omiని తనిఖీ చేయండి.",
+    "quietPayerCheck": "తనిఖీ"
 }

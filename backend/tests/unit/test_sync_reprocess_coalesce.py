@@ -323,6 +323,106 @@ def sweep_query(state, monkeypatch):
     return query
 
 
+@pytest.mark.parametrize('runner', ['active', 'legacy'])
+@pytest.mark.parametrize('effects_only', [False, True])
+def test_ownership_park_releases_only_after_python_decision(state, sweep_query, monkeypatch, runner, effects_only):
+    from database import conversations
+    from database.outbox_firestore import ENRICHMENT_OUTBOX
+    from utils.conversations import lazy_enrichment, process_conversation
+    from utils.enrichment import custody
+    from utils.enrichment.consumer import EnrichmentConsumer
+    from utils.sync import processing_hold
+    from utils.workers.consumer import run_push
+
+    rows, tasks = state
+    if effects_only:
+        # The effects producer normally blind-writes this separate obligation.
+        ENRICHMENT_OUTBOX.enqueue(
+            reprocess.key('u', 'c\0effects'),
+            'u',
+            {'conversation_id': 'c', 'language': 'en', 'effects_only': True},
+            600,
+            now=0,
+        )
+    else:
+        reprocess.mark('u', 'c', 'en', now=0)
+    key = reprocess.key('u', 'c\0effects' if effects_only else 'c')
+    monkeypatch.setattr(custody, 'discard_blocked', lambda _: False)
+    wake = tasks[-1]['task_token']
+    worlds = {
+        'c': {'status': 'completed', 'sync_bridge_pending': {'target_id': 'target'}},
+        'target': {'finalization_engine': 'go', 'finalization_owner_epoch': 1},
+    }
+    apply_effects = Mock()
+    checkpoint = Mock()
+    if effects_only:
+        worlds['c'].update(finalization_engine='go', finalization_owner_epoch=1)
+        monkeypatch.setattr(conversations, 'get_conversation', lambda uid, cid: worlds[cid])
+        monkeypatch.setattr(conversations, 'record_demand_enrichment_checkpoint', checkpoint)
+        monkeypatch.setattr(lazy_enrichment, 'deserialize_conversation', lambda row: SimpleNamespace(id='c'))
+        monkeypatch.setattr(lazy_enrichment, 'fingerprint', lambda _: 'effects-input')
+        monkeypatch.setattr(process_conversation, 'apply_settled_enrichment', apply_effects)
+    probe = Mock(side_effect=lambda uid, cid, **_: worlds[cid])
+    monkeypatch.setattr(conversations, 'get_conversation_raw_snapshot', probe)
+    monkeypatch.setattr(sweep_query, 'stream', lambda: [SimpleNamespace(id=key, to_dict=lambda: deepcopy(rows[key]))])
+    calls = []
+
+    def process(*_):
+        calls.append('process')
+        if len(calls) == 1:
+            raise processing_hold.finalization_owner_deferral()
+        return SimpleNamespace(structured={'title': 'done', 'overview': 'finished'})
+
+    consumer = EnrichmentConsumer(ENRICHMENT_OUTBOX, process)
+
+    def deliver(token, now):
+        if runner == 'legacy':
+            return reprocess.run(key, token, process, now=now)
+        return run_push(consumer, ENRICHMENT_OUTBOX, key, token, now=now).outcome
+
+    assert deliver(wake, 600) == 'deferred'
+    assert reprocess.ownership_parked(rows[key])
+    assert rows[key]['task_due_at'] is None and rows[key]['task_token'] == wake
+    assert deliver(wake, 700) == 'stale'
+    now = rows[key]['due_at']
+    for _ in range(3):
+        assert reprocess.sweep(now=now)['repaired'] == 0
+        assert reprocess.ownership_parked(rows[key])
+        assert len(tasks) == 1
+        now = rows[key]['due_at']
+    assert calls == ([] if effects_only else ['process'])
+    apply_effects.assert_not_called()
+    checkpoint.assert_not_called()
+
+    original = deepcopy(rows[key])
+    new, (reported, coalesced) = reprocess.mark_update(
+        'u', 'c', 'es', current=now, settle_at=now, effects_only=effects_only, coalesce='max', batch=False
+    )(original)
+    assert coalesced and not reported['_wake']
+    assert new['version'] == original['version'] + 1 and new['language'] == 'es'
+    assert new['first_pending_at'] == original['first_pending_at']
+    rows[key] = new
+    if effects_only:
+        # mark_effects can blind-merge over the generic defer reason.
+        rows[key]['deferred_reason'] = None
+        assert reprocess.ownership_parked(rows[key])
+
+    handed_back = worlds['c' if effects_only else 'target']
+    handed_back.update(finalization_engine='python', finalization_owner_epoch=2)
+    assert reprocess.sweep(now=now)['repaired'] == 1
+    assert not rows[key]['dormant']
+    assert len(tasks) == 2 and tasks[-1]['task_token'] != wake
+    assert deliver(tasks[-1]['task_token'], now) in ('done', 'processed')
+    if effects_only:
+        assert worlds['target']['finalization_engine'] == 'go'
+        assert [call.args for call in probe.call_args_list] == [('u', 'c')] * 4
+        assert deliver(tasks[-1]['task_token'], now + 1) == 'stale'
+        apply_effects.assert_called_once_with('u', SimpleNamespace(id='c'))
+        checkpoint.assert_called_once_with('u', 'c', 'effects-input')
+    else:
+        assert calls == ['process', 'process']
+
+
 @pytest.mark.parametrize('field', ['queue', 'handler', 'audience', 'invoker_sa'])
 def test_sweep_repairs_each_missing_binding_field(state, sweep_query, field):
     rows, _ = state
@@ -479,19 +579,22 @@ def test_first_summary_continuous_appends_cannot_extend_dispatch(state, monkeypa
 
 
 def test_first_pending_survives_death_lease_and_empty_output(state, monkeypatch):
-    from utils.conversations.summary_delivery import SummaryOutputUnavailable
-
     rows, tasks = state
     reprocess.mark('u', 'c', 'en', now=0)
     key, token = reprocess.key('u', 'c'), tasks[-1]['task_token']
-    with pytest.raises(SummaryOutputUnavailable):
-        reprocess.run(key, token, lambda *_: SimpleNamespace(discarded=False, structured={}), now=120)
-    assert reprocess.run(key, token, Mock(), now=121) == 'busy'
-    reprocess.mark('u', 'c', 'en', now=150)
-    assert rows[key]['due_at'] == 120 and rows[key]['first_pending_at'] == 0
+    # An empty kept output records a strike and re-arms the row for its bounded
+    # retry instead of raising out of the request.
+    assert reprocess.run(key, token, lambda *_: SimpleNamespace(discarded=False, structured={}), now=120) == 'deferred'
+    assert rows[key]['summary_empty_failures'] == 1
+    assert rows[key]['first_pending_at'] == 0
+    assert rows[key]['due_at'] == 120 + reprocess.LIVE_DEFER_SECONDS
+    assert rows[key]['lease_until'] == 0 and rows[key]['owner'] is None
+    retry_token = rows[key]['task_token']
+    assert retry_token != token
     output = SimpleNamespace(discarded=False, structured={'overview': 'Recovered'})
-    assert reprocess.run(key, token, lambda *_: output, now=120 + reprocess.LEASE_SECONDS) == 'processed'
-    assert reprocess.run(key, token, Mock(), now=2000) == 'stale'
+    assert reprocess.run(key, retry_token, lambda *_: output, now=120 + reprocess.LIVE_DEFER_SECONDS) == 'processed'
+    assert rows[key]['summary_seen']
+    assert reprocess.run(key, retry_token, Mock(), now=2000) == 'stale'
 
 
 def test_first_summary_bypasses_demand_tier_wait_without_extra_reads(state, monkeypatch):
@@ -594,20 +697,43 @@ def test_live_request_heartbeats_same_owner_token_without_a_replacement_wake(sta
     assert not any(t.name == 'first-summary-heartbeat' and t.is_alive() for t in threading.enumerate())
 
 
-def test_empty_kept_output_has_a_terminal_budget_and_cannot_be_remarked(state, monkeypatch):
-    from utils.conversations.summary_delivery import SummaryOutputUnavailable
+def test_unavailable_empty_output_strike_defers_instead_of_raising(state, monkeypatch):
+    """SCA-2865: a strike write that cannot land re-arms the row instead of answering 500."""
+    from database.summary_processing import EmptyFailureOutcome
 
     rows, tasks = state
     reprocess.mark('u', 'c', 'en', now=0)
-    key, token = reprocess.key('u', 'c'), tasks[0]['task_token']
+    key, token = reprocess.key('u', 'c'), tasks[-1]['task_token']
+    monkeypatch.setattr(reprocess, 'record_empty_failure', lambda *_: EmptyFailureOutcome.UNAVAILABLE)
+
+    def empty(*_):
+        return SimpleNamespace(discarded=False, structured={})
+
+    assert reprocess.run(key, token, empty, now=120) == 'deferred'
+    assert rows[key]['deferred_reason'] == reprocess.EMPTY_OUTPUT_DEFER_REASON
+    assert rows[key]['due_at'] == 120 + reprocess.LIVE_DEFER_SECONDS
+    assert rows[key]['lease_until'] == 0 and rows[key]['owner'] is None
+    assert rows[key].get('summary_empty_failures', 0) == 0
+
+
+def test_empty_kept_output_has_a_terminal_budget_and_cannot_be_remarked(state, monkeypatch):
+    rows, tasks = state
+    reprocess.mark('u', 'c', 'en', now=0)
+    key = reprocess.key('u', 'c')
     empty = lambda *_: SimpleNamespace(discarded=False, structured={})
-    for now in (120, 240):
-        with pytest.raises(SummaryOutputUnavailable):
-            reprocess.run(key, token, empty, now=now)
-    assert reprocess.run(key, token, empty, now=360) == 'blocked'
+    now = 120
+    for expected in (1, 2):
+        token = rows[key]['task_token']
+        assert reprocess.run(key, token, empty, now=now) == 'deferred'
+        assert rows[key]['summary_empty_failures'] == expected
+        assert rows[key]['due_at'] == now + reprocess.LIVE_DEFER_SECONDS
+        now = rows[key]['due_at']
+    token = rows[key]['task_token']
+    assert reprocess.run(key, token, empty, now=now) == 'blocked'
     assert rows[key]['summary_empty_failures'] == 3 and rows[key]['due_at'] is None
+    enqueued = len(tasks)
     reprocess.mark('u', 'c', 'en', now=1000)
-    assert len(tasks) == 1 and rows[key]['due_at'] is None
+    assert len(tasks) == enqueued and rows[key]['due_at'] is None
     process = Mock()
     assert reprocess.run(key, token, process, now=1000) == 'stale'
     process.assert_not_called()
@@ -993,10 +1119,10 @@ def test_later_summary_keeps_legacy_callback_validation_and_completion(state, mo
         assert reprocess.run(key, token, callback, now=120) == 'processed'
         assert rows[key]['dormant'] and rows[key]['summary_seen']
     else:
-        with pytest.raises(reprocess.summary_delivery.SummaryOutputUnavailable):
-            reprocess.run(key, token, callback, now=120)
-        assert not rows[key].get('dormant')
-        assert rows[key]['lease_until'] == 1920
+        # The row already holds a delivered summary, so an empty reprocess output
+        # is not a delivery failure: settle it instead of raising out of the request.
+        assert reprocess.run(key, token, callback, now=120) == 'processed'
+        assert key not in rows
 
 
 @pytest.mark.parametrize(
@@ -1086,3 +1212,21 @@ def test_later_revision_retains_settle_and_repeat_work_ceilings(state, monkeypat
         reprocess.mark('u', 'c', 'en', now=121 + offset)
     assert rows[key]['due_at'] == 121 + ceiling
     assert rows[key]['effects_only'] is False
+
+
+@pytest.mark.parametrize('claimed', [False, True])
+@pytest.mark.parametrize('engine', ['pending', 'go'])
+def test_python_sync_refuses_foreign_finalization_before_processing(pipeline, monkeypatch, claimed, engine):
+    read = Mock(return_value={'id': 'c', 'finalization_engine': engine, 'finalization_owner_epoch': 1})
+    monkeypatch.setattr(pipeline.conversations_db, 'get_conversation', read)
+    processor = Mock()
+    monkeypatch.setattr(pipeline, 'process_conversation', processor)
+    context = {} if claimed else None
+    token = pipeline.PROCESS_CONTEXT.set(context)
+    try:
+        with pytest.raises(pipeline.processing_hold.ProcessingDeferred, match='finalization_owned_elsewhere'):
+            pipeline._reprocess_conversation_after_update('u', 'c', 'en')
+    finally:
+        pipeline.PROCESS_CONTEXT.reset(token)
+    read.assert_called_once_with('u', 'c')
+    processor.assert_not_called()

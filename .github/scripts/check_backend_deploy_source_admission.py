@@ -40,7 +40,7 @@ AUTO_SOURCE_ADMISSION_CONDITION = "\n".join(
 MANUAL_DEPLOY_CONDITION = "\n".join(
     (
         "github.ref == 'refs/heads/main' &&",
-        "(github.event.inputs.mode == 'deploy' || github.event.inputs.mode == 'build-only')",
+        "(github.event.inputs.mode == 'deploy' || github.event.inputs.mode == 'build-only' || github.event.inputs.mode == 'workerd-image-only')",
     )
 )
 MANUAL_TRAFFIC_REPAIR_CONDITION = "\n".join(
@@ -770,6 +770,36 @@ def validate_manual_workflow(text: str, root: Path = ROOT) -> list[str]:
             "projection pump deployment must pass the admitted SHA to its composite action",
         )
     errors.extend(validate_manual_build_only_job(text))
+    errors.extend(validate_workerd_publish_job(text))
+    return errors
+
+
+def validate_workerd_publish_job(text: str) -> list[str]:
+    job = mapping_block(text, "publish-workerd", 2)
+    if job is None:
+        return ["manual backend workflow is missing its workerd image-only job"]
+
+    errors: list[str] = []
+    condition = "\n".join((
+        "github.ref == 'refs/heads/main' &&",
+        "inputs.mode == 'workerd-image-only' &&",
+        "inputs.environment == 'prod' &&",
+        "needs.firestore_readiness.outputs.break_glass == 'false'",
+    ))
+    if folded_job_condition(job) != condition:
+        errors.append("workerd publish must run only for the normal admitted main-ref production image-only mode")
+    for fragment in (
+        "needs: [validate-production-boundary, firestore_readiness]",
+        MANUAL_BUILD_ONLY_ADMITTED_CHECKOUT,
+        f"ADMITTED_SHA: {MANUAL_ADMITTED_SHA}",
+        "environment: prod",
+        'repository="gcr.io/based-hardware/workerd"',
+        "--file backend-go/Dockerfile backend-go",
+    ):
+        require_fragment(errors, job, fragment, f"workerd publish must retain {fragment}")
+    for fragment in MANUAL_BUILD_ONLY_FORBIDDEN:
+        if fragment in job:
+            errors.append(f"workerd publish must not touch a serving surface: {fragment}")
     return errors
 
 

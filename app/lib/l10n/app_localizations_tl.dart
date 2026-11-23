@@ -563,11 +563,11 @@ class AppLocalizationsTl extends AppLocalizations {
   String get hardwareSection => 'Hardware';
 
   @override
-  String get v2Undetected => 'V2 ay hindi na-detect';
+  String get v2Undetected => 'Hindi Available ang Offline Sync';
 
   @override
   String get v2UndetectedMessage =>
-      'Nakita namin na mayroon kang V1 device o ang iyong device ay hindi konektado. Ang SD Card functionality ay available lamang para sa V2 devices.';
+      'Kailangan ng Offline Sync ng nakakonektang Omi device na may SD card storage. Hindi ito sinusuportahan ng iyong kasalukuyang device.';
 
   @override
   String get endConversation => 'Tapusin ang Pag-uusap';
@@ -15847,4 +15847,21 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get deviceReadyToUse => 'Handa nang gamitin';
+
+  @override
+  String get firmwareUpdateFirmwareTooOld =>
+      'Napakaluma na ng firmware ng iyong device para sa update na ito. Makipag-ugnayan sa support para sa tulong sa pag-update ng iyong device.';
+
+  @override
+  String get firmwareUpdateAppRequired =>
+      'Kailangan ng firmware update na ito ng mas bagong Omi app. I-update ang app mula sa iyong app store, pagkatapos ay tingnan muli.';
+
+  @override
+  String get quietPayerTitle => 'Walang recording sa loob ng 5 araw';
+
+  @override
+  String get quietPayerMessage => 'Tingnan ang iyong Omi.';
+
+  @override
+  String get quietPayerCheck => 'Tingnan';
 }

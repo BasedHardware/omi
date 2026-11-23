@@ -202,7 +202,7 @@ class ResultLog:
 
         class Session:
             policy = SimpleNamespace(projection_contention=False, projection_timing=False)
-            # Mirrors ProjectionSession.now for the finish-backoff fields.
+            # Mirrors ProjectionSession.now for the shared finish clock.
             session_now = now
 
             def prepare(self, transaction, **_):
@@ -264,19 +264,6 @@ class ResultLog:
             self.results[sid]['projection_finish_due_at'] = -1.0
             return True
         return False
-
-    def defer_finish(self, sid, state, now):
-        """Mirrors ProjectionStore.defer_finish: fence on the row's own state."""
-        from config.batch_pipeline import projection_finish_backoff_delay
-
-        row = self.results[sid]
-        if row.get('projection_state') != state:
-            return False
-        step = row.get('projection_finish_backoff_step')
-        step = min(step + 1, 2) if isinstance(step, int) and step >= 0 else 0
-        row.update(projection_finish_due_at=now + projection_finish_backoff_delay(step))
-        row['projection_finish_backoff_step'] = step
-        return True
 
     def check(self, session):
         row = self.results[session.segment_id]

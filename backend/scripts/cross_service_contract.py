@@ -213,7 +213,8 @@ HELM_CHARTS: tuple[tuple[str, str, str], ...] = (
 
 # Process entrypoints (module paths under backend/) per deployment kind, for "who reads this flag".
 BACKEND_ENTRYPOINT = 'main'
-GKE_ENTRYPOINTS = {'backend-listen': BACKEND_ENTRYPOINT, 'pusher': 'pusher.main'}
+PARAKEET_ENTRYPOINT = 'parakeet.main'
+GKE_ENTRYPOINTS = {'backend-listen': BACKEND_ENTRYPOINT, 'pusher': 'pusher.main', 'parakeet': PARAKEET_ENTRYPOINT}
 
 # Keys whose literal values must never carry user identifiers in this public repository.
 UID_KEY_PATTERN = re.compile(r'(UID|USER|OWNER)S?_?(ALLOW|DENY)?LIST|_UIDS$|COHORT_UIDS|TEST_UIDS')
@@ -646,7 +647,7 @@ def _literal_key(node: ast.AST, constants: dict[str, str]) -> str | None:
     return None
 
 
-def _is_env_call(node: ast.AST, constants: dict[str, str]) -> str | None:
+def _is_env_call(node: ast.AST, constants: dict[str, str], *, reads_env_mapping: bool = False) -> str | None:
     """Env key for os.getenv(K), os.environ.get(K), os.environ[K], *env*(K) and shared boolean helpers."""
     if isinstance(node, ast.Call) and node.args:
         key = _literal_key(node.args[0], constants)
@@ -657,8 +658,10 @@ def _is_env_call(node: ast.AST, constants: dict[str, str]) -> str | None:
         if name == 'getenv' or (
             name == 'get'
             and isinstance(func, ast.Attribute)
-            and isinstance(func.value, ast.Attribute)
-            and func.value.attr == 'environ'
+            and (
+                (isinstance(func.value, ast.Attribute) and func.value.attr == 'environ')
+                or (reads_env_mapping and isinstance(func.value, ast.Name) and func.value.id == 'env')
+            )
         ):
             return key
         if 'env' in name.lower() or name in {
@@ -807,8 +810,10 @@ def scan_env_reads(source: Source, module_paths: list[str]) -> dict[str, EnvRead
     for rel, index in indexes.items():
         constants = {**shared, **index.constants}
         collections = {**shared_collections, **index.collections}
+        # Parakeet passes its process environment into StreamAdmissionController.from_env.
+        reads_env_mapping = rel == 'backend/parakeet/admission.py'
         for node in index.candidates:
-            key = _is_env_call(node, constants)
+            key = _is_env_call(node, constants, reads_env_mapping=reads_env_mapping)
             if key:
                 read = reads.setdefault(key, EnvRead())
                 read.modules.add(rel)
@@ -841,6 +846,11 @@ def import_closure(source: Source, entrypoint: str) -> list[str]:
     paths: list[str] = []
     while stack:
         module = stack.pop()
+        # The standalone Parakeet image runs from its own source directory.
+        if entrypoint == PARAKEET_ENTRYPOINT and module and not module.startswith('parakeet.'):
+            local_module = f'parakeet.{module}'
+            if _module_path(source, local_module) is not None:
+                module = local_module
         if module in seen:
             continue
         seen.add(module)

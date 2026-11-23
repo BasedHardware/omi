@@ -1,6 +1,7 @@
 import 'package:flutter/widgets.dart';
 
 import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/backend/schema/conversation_v3.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/ui/format/omi_date_format.dart';
 import 'package:omi/utils/analytics/registry/events.g.dart';
@@ -38,6 +39,13 @@ String? transcriptFallbackTitle(ServerConversation conversation) {
   if (boundary <= 0) return String.fromCharCodes(head);
   return String.fromCharCodes(head.sublist(0, boundary)).trimRight();
 }
+
+/// A v3 conversation still in progress with no real title yet: its rows and its detail page read
+/// "Listening", the same title as Home's live placeholder, never a transcript snippet or a recording
+/// date, until the server names it.
+bool awaitsLiveTitle(ServerConversation conversation, {String? title}) =>
+    conversation.v3?.tileState == ConversationTileState.live &&
+    presentableConversationTitle(conversation, title: title).isEmpty;
 
 /// The display title of a kept (not discarded) conversation: its title, else transcript text,
 /// else a localized recording date/time. The last case reports [ConversationUntitledRendered]

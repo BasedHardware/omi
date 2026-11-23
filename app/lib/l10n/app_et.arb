@@ -178,8 +178,8 @@
     "deviceInfoSection": "Seadme teave",
     "customizationSection": "Kohandamine",
     "hardwareSection": "Riistvara",
-    "v2Undetected": "V2 tuvastamata",
-    "v2UndetectedMessage": "Näeme, et teil on kas V1 seade või teie seade pole ühendatud. SD-kaardi funktsioon on saadaval ainult V2 seadmetele.",
+    "v2Undetected": "Võrguühenduseta sünkroonimine pole saadaval",
+    "v2UndetectedMessage": "Võrguühenduseta sünkroonimine vajab SD-kaardi salvestusruumiga ühendatud Omi seadet. Teie praegune seade seda ei toeta.",
     "endConversation": "Lõpeta vestlus",
     "pauseResume": "Peata/jätka",
     "starConversation": "Märgi vestlus tärniga",
@@ -4736,5 +4736,10 @@
     "finishedSummaryReady": "Kokkuvõte on valmis",
     "writingSummaryStatus": "Kirjutan kokkuvõtet…",
     "stillWorkingOnIt": "Töötame veel selle kallal.",
-    "deviceReadyToUse": "Valmis kasutamiseks"
+    "deviceReadyToUse": "Valmis kasutamiseks",
+    "firmwareUpdateFirmwareTooOld": "Teie seadme püsivara on selle värskenduse jaoks liiga vana. Seadme värskendamiseks abi saamiseks võtke ühendust klienditoega.",
+    "firmwareUpdateAppRequired": "See püsivara värskendus vajab Omi rakenduse uuemat versiooni. Värskendage rakendust oma rakenduste poes ja kontrollige seejärel uuesti.",
+    "quietPayerTitle": "5 päeva pole salvestisi",
+    "quietPayerMessage": "Kontrolli oma Omit.",
+    "quietPayerCheck": "Kontrolli"
 }

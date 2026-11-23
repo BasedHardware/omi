@@ -476,3 +476,12 @@ def test_reprocess_of_a_normal_row_takes_no_historical_gate(monkeypatch):
     assert conv_router.reprocess_conversation('c1', uid='u1') is gates.processed
     executed.assert_called_once()
     gates.compute.assert_not_called()
+
+
+def test_foreign_historical_row_defers_without_claiming_a_slot(monkeypatch):
+    gates = Gates(monkeypatch, _row(finalization_engine='go', finalization_owner_epoch=1))
+    error = _refusal()
+    assert error.status_code == 503 and error.detail['code'] == 'historical_summary_retry'
+    assert not gates.reserved
+    gates.claim.assert_not_called()
+    gates.process.assert_not_called()

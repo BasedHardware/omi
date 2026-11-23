@@ -555,3 +555,33 @@ and keepalive ticks.
 Remaining legacy: the staged bodies listed above, plus UI-adjacent controller
 concerns (location capture, metrics, optimistic processing) that never made
 ownership decisions.
+
+## Conversation windows on a continuing live socket (#20365)
+
+A source recording/socket can carry several server conversations. Its recording ID stays stable,
+while each completed conversation rotates a separate window revision with a factual phone-clock
+start. Reset and rearm publish together; stopping/error does not open another window.
+
+`capture_conversation_custody.dart` admits an immutable close before yielding: the WAL owner seals
+an exclusive audio cut, and the close retains its segment arrivals, socket mode, interruption state
+and account generation. Only stamping runs in the ordered tail. Each conversation has its own
+confirmation/fallback; coverage and recovery never run inside that tail. Duplicate processing IDs
+do not rotate the next window. Account clearing retires pending authority and timers, while
+already-admitted writes remain fenced by their original WAL generation.
+
+Process Now reserves the same cut before its disk/HTTP waits. A server close during its drain adopts
+that exact window. After the local window has rotated, an intervening server ID is ambiguous until
+the HTTP result supplies the exact ID: a matching ID confirms the original cut, a different ID owns
+its own cut, and an absent result leaves ambiguous audio unlinked for recovery. Intervening audio
+is never guessed into the earlier conversation. No upload preference or transcript-coverage rule
+changes; the WAL [custody contract](../wals/CUSTODY.md) remains authoritative.
+
+Implementation/verification checklist:
+
+- [x] Rearm sequential windows without reconnecting or inventing future clock timestamps.
+- [x] Seal/reserve exact WAL object identities at close admission, before queued I/O.
+- [x] Keep per-close evidence and handle reversed/duplicate events and Process Now overlap.
+- [x] Preserve partial, interrupted, uncertain and foreign-account audio and upload choices.
+- [x] Exercise real controller/ledger/disk/recovery with synthetic ingress and restart discovery
+  (`capture_next_conversation_window_test.dart`, `conversation_wal_snapshot_test.dart`); these replay
+  tests substitute socket/device boundaries and do not certify native BLE or a physical pendant.

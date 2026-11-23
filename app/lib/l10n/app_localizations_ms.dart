@@ -560,11 +560,11 @@ class AppLocalizationsMs extends AppLocalizations {
   String get hardwareSection => 'Perkakasan';
 
   @override
-  String get v2Undetected => 'V2 tidak dikesan';
+  String get v2Undetected => 'Penyegerakan Luar Talian Tidak Tersedia';
 
   @override
   String get v2UndetectedMessage =>
-      'Kami lihat anda sama ada mempunyai peranti V1 atau peranti anda tidak disambungkan. Fungsi Kad SD hanya tersedia untuk peranti V2.';
+      'Penyegerakan Luar Talian memerlukan peranti Omi yang disambungkan dengan storan kad SD. Peranti semasa anda tidak menyokongnya.';
 
   @override
   String get endConversation => 'Tamatkan Perbualan';
@@ -15759,4 +15759,21 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get deviceReadyToUse => 'Sedia untuk digunakan';
+
+  @override
+  String get firmwareUpdateFirmwareTooOld =>
+      'Perisian tegar peranti anda terlalu lama untuk kemas kini ini. Hubungi sokongan untuk mendapatkan bantuan mengemas kini peranti anda.';
+
+  @override
+  String get firmwareUpdateAppRequired =>
+      'Kemas kini perisian tegar ini memerlukan versi apl Omi yang lebih baharu. Kemas kini apl daripada gedung aplikasi anda, kemudian semak semula.';
+
+  @override
+  String get quietPayerTitle => 'Tiada rakaman dalam 5 hari';
+
+  @override
+  String get quietPayerMessage => 'Semak Omi anda.';
+
+  @override
+  String get quietPayerCheck => 'Semak';
 }

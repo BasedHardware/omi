@@ -58,6 +58,7 @@ import 'package:omi/pages/home/widgets/home_daily_recaps.dart';
 import 'package:omi/pages/home/widgets/home_daily_recaps_setting.dart';
 import 'package:omi/models/subscription.dart';
 import 'package:omi/pages/home/widgets/payment_issue_row.dart';
+import 'package:omi/pages/home/widgets/quiet_payer_row.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
@@ -78,6 +79,7 @@ enum _ConversationListRowKind {
   topSpacer,
   dateHeader,
   liveEpisode,
+  v3LivePlaceholder,
   processing,
   conversation,
   recording,
@@ -433,6 +435,8 @@ class _ConversationsPageState extends State<ConversationsPage>
             _v3Quick = null;
             return;
           }
+          // Covered by another page (the live page re-reads for itself): skip, as the 15 s read does.
+          if (ModalRoute.of(context)?.isCurrent == false) return;
           unawaited(v3.refresh());
         });
       }
@@ -908,6 +912,27 @@ class _ConversationsPageState extends State<ConversationsPage>
             episodeLive && defaultHome ? hiddenLiveConversations(episodes!.liveConversationIds) : const <String>{};
         final v3Home = v3On && defaultHome;
         final v3Live = v3Home ? v3!.live : null;
+        // A streaming capture with no server window to show (none yet, between windows, or one Home
+        // hides) is the live placeholder row: first under Today, the slot the server's live row takes
+        // when it arrives, so the row never jumps sections. An Omi call is shown as the call card
+        // instead; the placeholder never doubles it.
+        final callActive = context.select<PhoneCallProvider?, bool>((p) => switch (p?.callState) {
+              PhoneCallState.active || PhoneCallState.connecting || PhoneCallState.ringing => true,
+              _ => false,
+            });
+        final v3LiveShown = v3Live != null &&
+            v3Live.v3?.homeHidden != true &&
+            !v3Live.discarded &&
+            !convoProvider.memoriesToDelete.containsKey(v3Live.id) &&
+            !SharedPreferencesUtil().isConversationDeleteConfirmed(v3Live.id);
+        // A deleted or discarded live window shows nothing (the owner removed it); only a window Home
+        // hides (still below the word minimum, say) is stood in for by the placeholder.
+        final liveRemoved = v3Live != null &&
+            (v3Live.discarded ||
+                convoProvider.memoriesToDelete.containsKey(v3Live.id) ||
+                SharedPreferencesUtil().isConversationDeleteConfirmed(v3Live.id));
+        final livePlaceholder =
+            v3Home && streaming && (v3Live == null || v3Live.v3?.homeHidden == true) && !liveRemoved && !callActive;
         if (v3Home) {
           final waiting = streaming && v3Live == null;
           final signature =
@@ -981,12 +1006,10 @@ class _ConversationsPageState extends State<ConversationsPage>
                   if (c.id != v3Live?.id && shownOnV3Home(c)) c,
               ],
           };
-          if (v3Live != null &&
-              v3Live.v3?.homeHidden != true &&
-              !v3Live.discarded &&
-              !convoProvider.memoriesToDelete.containsKey(v3Live.id) &&
-              !SharedPreferencesUtil().isConversationDeleteConfirmed(v3Live.id)) {
-            final day = localHomeDay(v3Live.startedAt ?? v3Live.createdAt);
+          if (v3LiveShown) {
+            // The conversation in progress always leads Today, even when it started before midnight:
+            // the live row never sits in an earlier day or above the day list (David, 2026-11-21).
+            final day = localHomeDay(clock.now());
             conversationsByDate[day] = [v3Live, ...?conversationsByDate[day]];
           }
         }
@@ -1133,9 +1156,11 @@ class _ConversationsPageState extends State<ConversationsPage>
         final localToday = localHomeDay(clock.now());
         final withLive = episodeLive
             ? _withTodayRow(builtRows, clock.now(), _ConversationListRowKind.liveEpisode)
-            : v3Live != null
+            : v3LiveShown
                 ? _pinFirstInDay(builtRows, v3Live.id)
-                : builtRows;
+                : livePlaceholder
+                    ? _withTodayRow(builtRows, clock.now(), _ConversationListRowKind.v3LivePlaceholder)
+                    : builtRows;
         // Only the default view: a search or folder shows what it matched.
         // Default Home already projected every local entry together with server
         // rows. A second insertion can resurrect stale ready/noise entries and
@@ -1165,6 +1190,7 @@ class _ConversationsPageState extends State<ConversationsPage>
               .where((row) =>
                   row.kind == _ConversationListRowKind.conversation ||
                   row.kind == _ConversationListRowKind.liveEpisode ||
+                  row.kind == _ConversationListRowKind.v3LivePlaceholder ||
                   row.kind == _ConversationListRowKind.processing ||
                   row.kind == _ConversationListRowKind.recording)
               .length;
@@ -1244,18 +1270,10 @@ class _ConversationsPageState extends State<ConversationsPage>
                 child: ConversationCaptureWidget(
                     showsCall: true, deferStreamingToEpisode: episodeLive || v3Live != null || (v3Home && streaming)),
               ),
-              // An Omi call is shown as the call card above (a call also marks the phone capture
-              // interrupted, which reads as streaming); the placeholder never doubles it.
-              if (v3Home &&
-                  streaming &&
-                  v3Live == null &&
-                  !context.select<PhoneCallProvider?, bool>((p) => switch (p?.callState) {
-                        PhoneCallState.active || PhoneCallState.connecting || PhoneCallState.ringing => true,
-                        _ => false,
-                      }))
-                const SliverToBoxAdapter(child: V3LivePlaceholderRow()),
               // A declined renewal the user can still pay: one row, Update opens Stripe's billing portal.
               const SliverToBoxAdapter(child: PaymentIssueRow()),
+              // A paying monthly reader whose Omi recorded nothing for 5 days: one quiet row, Check opens the device.
+              const SliverToBoxAdapter(child: QuietPayerRow()),
               const SliverToBoxAdapter(child: SpeechProfileCardWidget()),
               const SliverToBoxAdapter(child: UpdateFirmwareCardWidget()),
               // Review absorbs the voice prompts; the old card shows only while Review is off.
@@ -1271,6 +1289,29 @@ class _ConversationsPageState extends State<ConversationsPage>
                           : HomeDailyRecaps(key: _recapsKey, load: widget.loadRecaps!),
                 ),
               ),
+              // With no list rows to sit in (still loading, or nothing listed yet), the live placeholder
+              // opens Today itself, the same Today header and slot it takes in the list.
+              // The list below renders only when there is something to list; otherwise an empty, hero or
+              // status branch takes its place (held recordings alone do not keep the list up).
+              if (livePlaceholder &&
+                  (_isBootstrapping ||
+                      _initialOverlayPending ||
+                      (conversationsByDate.values.every((list) => list.isEmpty) &&
+                          !hasRecordings &&
+                          !hasProcessingConversations) ||
+                      !conversationRows.any((r) => r.kind == _ConversationListRowKind.v3LivePlaceholder)))
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.only(top: 10),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        DateListItem(date: DateUtils.dateOnly(clock.now()), isFirst: true),
+                        const V3LivePlaceholderRow(),
+                      ],
+                    ),
+                  ),
+                ),
               // With no list yet, the live episode opens Today itself.
               if (episodeLive && builtRows.isEmpty)
                 SliverToBoxAdapter(
@@ -1309,7 +1350,8 @@ class _ConversationsPageState extends State<ConversationsPage>
                   hasScrollBody: false,
                   child: Center(child: ConversationApiStatus(provider: convoProvider)),
                 )
-              else if (_nonDiscardedConversationCount(convoProvider) == 0 &&
+              else if (!livePlaceholder &&
+                  _nonDiscardedConversationCount(convoProvider) == 0 &&
                   conversationsByDate.values.every((list) => list.isEmpty) &&
                   !hasProcessingConversations &&
                   !hasRecordings &&
@@ -1330,7 +1372,8 @@ class _ConversationsPageState extends State<ConversationsPage>
                     ),
                   ),
                 )
-              else if (conversationsByDate.values.every((list) => list.isEmpty) &&
+              else if (!livePlaceholder &&
+                  conversationsByDate.values.every((list) => list.isEmpty) &&
                   !hasRecordings &&
                   !hasProcessingConversations &&
                   !isShowingConversationSkeleton)
@@ -1422,6 +1465,15 @@ class _ConversationsPageState extends State<ConversationsPage>
                           children: [
                             if (row.isFirst) DateListItem(date: row.date, isFirst: true),
                             const LiveEpisodeRow(),
+                          ],
+                        );
+                      case _ConversationListRowKind.v3LivePlaceholder:
+                        return Column(
+                          key: const ValueKey('v3_live_placeholder_row'),
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            if (row.isFirst) DateListItem(date: row.date, isFirst: true),
+                            const V3LivePlaceholderRow(),
                           ],
                         );
                       case _ConversationListRowKind.processing:

@@ -29,7 +29,6 @@ from copy import deepcopy
 import hashlib
 from typing import Any, Callable, TypeVar
 
-from config.batch_pipeline import held_poll_skip_enabled, MERGE_POLL_TERMINAL_STATES
 from config import batch_pipeline_packing as batch_packing
 from database import batch_pipeline_projection_outbox as outbox
 from database.batch_pipeline_projection_finish_backfill import BACKFILL_KEY, backfill_marker_complete
@@ -455,21 +454,16 @@ class SimStore:
         return result
 
     def pending_page(self, owner_key: str, limit: int) -> list[dict]:
-        skip = held_poll_skip_enabled()
         rows = sorted(
             (self.rows[('jobs', segment_id)]['capture_at'], segment_id)
             for segment_id in self._pending_by_owner.get(owner_key, ())
-            if not (skip and self.rows[('jobs', segment_id)].get('state') in (None, *MERGE_POLL_TERMINAL_STATES))
         )
         return [deepcopy(self.rows[('jobs', segment_id)]) for _, segment_id in rows[: max(1, min(limit, 160))]]
 
-    def first_pending(self, owner_key: str, *, ready_only: bool = False, skip_terminal: bool = True) -> dict | None:
-        skip = not ready_only and skip_terminal and held_poll_skip_enabled()
+    def first_pending(self, owner_key: str, *, ready_only: bool = False) -> dict | None:
         best = None
         for segment_id in self._pending_by_owner.get(owner_key, ()):
             row = self.rows[('jobs', segment_id)]
-            if skip and row.get('state') in (None, *MERGE_POLL_TERMINAL_STATES):
-                continue
             if ready_only and row.get('state') != 'result_ready':
                 continue
             candidate = (row['capture_at'], segment_id)
@@ -596,12 +590,10 @@ class SimStore:
         return deepcopy(self.rows[('jobs', min(rows)[1])]) if rows else None
 
     def fresh_pending(self, owner_key: str, limit: int) -> list[dict]:
-        skip = held_poll_skip_enabled()
         rows = sorted(
             (row['capture_at'], segment_id)
             for segment_id in self._pending_by_owner.get(owner_key, ())
             if (row := self.rows[('jobs', segment_id)]).get('fresh_capture') is True
-            and (not skip or row.get('state') not in (None, *MERGE_POLL_TERMINAL_STATES))
         )
         return [deepcopy(self.rows[('jobs', segment_id)]) for _, segment_id in rows[:limit]]
 
@@ -639,7 +631,7 @@ class SimStore:
         )
         owners = []
         for key in keys[:limit]:
-            job = self.first_pending(key, skip_terminal=False)
+            job = self.first_pending(key)
             owners.append((key, job['owner_id'] if job else None))
         return owners
 

@@ -351,12 +351,13 @@ def reconcile_listen_finalization_jobs(
             # closes here even if no final worker delivery ever arrives. A
             # committed fanout is success and still converges via replay; a
             # leased row still belongs to a live or expirable worker and is
-            # left to the claim paths.
+            # left to the claim paths. Replay also probes parked survivors.
             if (
                 candidate.get('status') == 'queued'
                 and int(candidate.get('attempt_count') or 0) >= get_listen_finalization_tasks_max_attempts()
                 and int(candidate.get('budget_requeue_count') or 0) >= 1
                 and candidate.get('fanout_status') != 'completed'
+                and not candidate.get('finalization_waiting_on_owner')
             ):
                 try:
                     terminal = jobs_db.terminalize_exhausted_requeued_job(

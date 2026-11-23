@@ -18,7 +18,7 @@ import urllib.error
 import urllib.request
 from typing import Any, Iterable, Optional
 
-from mobile_distribution import ANDROID_HELD_CHANGES_MODE, is_baseline_eligible, normalize_codemagic_build
+from mobile_distribution import PLAY_REVIEW_MODE_KEY, is_baseline_eligible, normalize_codemagic_build
 
 BUILDS_API = "https://api.codemagic.io/builds"
 MOBILE_WORKFLOWS = ("ios-internal-auto", "android-internal-auto")
@@ -100,8 +100,8 @@ def build_sha(build: dict[str, Any]) -> Optional[str]:
     return None
 
 
-def newest_built_sha(builds: Iterable[dict[str, Any]], *, platform: str = "ios") -> Optional[str]:
-    """Commit of the newest build with verified platform distribution.
+def newest_built(builds: Iterable[dict[str, Any]], *, platform: str = "ios") -> Optional[dict[str, Any]]:
+    """Newest build with verified platform distribution.
 
     The API's ordering is not part of any contract we rely on elsewhere, and reading the wrong
     build here would compare against an old commit and dispatch on every scheduled run.  Platform
@@ -110,20 +110,23 @@ def newest_built_sha(builds: Iterable[dict[str, Any]], *, platform: str = "ios")
     without that adapter output remain ineligible rather than being interpreted heuristically.
     """
     candidates = [
-        (str(b.get("createdAt") or ""), sha)
+        (str(b.get("createdAt") or ""), sha, b)
         for b in builds
-        if isinstance(b, dict)
-        and (sha := build_sha(b))
-        and is_baseline_eligible(b, platform=platform)
+        if isinstance(b, dict) and (sha := build_sha(b)) and is_baseline_eligible(b, platform=platform)
     ]
     if not candidates:
         return None
-    return max(candidates, key=lambda item: item[0])[1]
+    return max(candidates, key=lambda item: item[:2])[2]
 
 
-def last_built_sha(
+def newest_built_sha(builds: Iterable[dict[str, Any]], *, platform: str = "ios") -> Optional[str]:
+    newest = newest_built(builds, platform=platform)
+    return build_sha(newest) if newest is not None else None
+
+
+def last_built(
     app_id: str, workflow_id: str, token: str, *, platform: Optional[str] = None
-) -> Optional[str]:
+) -> Optional[dict[str, Any]]:
     payload = _api_get(f"{BUILDS_API}?appId={app_id}&workflowId={workflow_id}", token)
     selected_platform = platform or WORKFLOW_PLATFORMS.get(workflow_id)
     if selected_platform is None:
@@ -142,7 +145,7 @@ def last_built_sha(
         detailed_builds.append(
             normalize_codemagic_build(detail, platform=selected_platform, workflow_id=workflow_id)
         )
-    return newest_built_sha(detailed_builds, platform=selected_platform)
+    return newest_built(detailed_builds, platform=selected_platform)
 
 
 def is_ancestor(sha: str) -> bool:
@@ -231,18 +234,15 @@ def main(argv: Optional[list[str]] = None) -> int:
     # Per workflow: iOS and Android drift apart whenever one is built on its own, and a shared
     # baseline would let the newer platform suppress the other's build.
     pending_by_workflow: dict[str, list[str]] = {}
+    android_review_mode: Optional[str] = None
     if args.event == "schedule":
         if not token:
             raise DispatchError("CODEMAGIC_API_TOKEN is required to read the last built commit")
         for workflow_id in MOBILE_WORKFLOWS:
-            pending_by_workflow[workflow_id] = app_commits_since(
-                last_built_sha(
-                    args.app_id,
-                    workflow_id,
-                    token,
-                    platform=WORKFLOW_PLATFORMS[workflow_id],
-                )
-            )
+            baseline = last_built(args.app_id, workflow_id, token, platform=WORKFLOW_PLATFORMS[workflow_id])
+            pending_by_workflow[workflow_id] = app_commits_since(build_sha(baseline) if baseline else None)
+            if workflow_id == "android-internal-auto" and baseline:
+                android_review_mode = baseline.get(PLAY_REVIEW_MODE_KEY)
 
     should, reason = decide_dispatch(
         event=args.event,
@@ -257,9 +257,9 @@ def main(argv: Optional[list[str]] = None) -> int:
         summary.append(f"{workflow_id}_pending={len(commits)}")
     print(" ".join(summary))
 
-    if ANDROID_HELD_CHANGES_MODE and "android-internal-auto" in pending_by_workflow:
-        # The Android baseline advances on the settled publishing action, which
-        # under held changes only proves the edit committed: testers cannot
+    if android_review_mode == "held":
+        # The newest Android baseline was published held: it proves the edit
+        # committed, but testers cannot
         # install it until the operator presses Send for review in Play
         # Console -> Publishing overview. Say so on every scheduled run so the
         # held distribution cannot stall silently.

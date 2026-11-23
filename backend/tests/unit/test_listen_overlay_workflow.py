@@ -6,9 +6,11 @@ import pytest
 import yaml
 
 ROOT = Path(__file__).resolve().parents[3]
+EXACT_CONTROL = 'Verify exact listen control SHA'
 EXPECTED = [
     'Validate Environment Input',
     'Checkout',
+    EXACT_CONTROL,
     'Bind shared record token lease rollout inputs',
     'Admit checked-out production source and image identity',
     'Install Helm',
@@ -52,6 +54,7 @@ EXPECTED = [
 SAFE = {
     'Validate Environment Input',
     'Checkout',
+    EXACT_CONTROL,
     'Admit checked-out production source and image identity',
     'Install Helm',
     'Google Auth (prod WIF)',
@@ -83,6 +86,9 @@ EVIDENCE = {
 def qualify(doc):
     job = doc['jobs']['helm-upgrade']
     assert [s['name'] for s in job['steps']] == EXPECTED
+    guard = job['steps'][2]
+    assert guard['if'] == "${{ inputs.control_sha != '' }}"
+    assert '"$DEPLOY_MODE" != deploy' in guard['run']
     for step in job['steps']:
         if step['name'] in SAFE:
             continue

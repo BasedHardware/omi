@@ -12,6 +12,7 @@ from google.cloud.firestore_v1 import FieldFilter
 from database import conversations, conversations_v3 as store
 from database.account_deletion_marker import account_deletion_document
 from database.account_deletion_policy import account_deletion_marker_blocks_access
+from models.finalization_owner import python_owns_finalization
 from utils.conversations.v3 import Conflict, policy
 from utils.conversations.summary_delivery import present
 from utils.encryption import encrypt, decrypt
@@ -146,6 +147,7 @@ def store_summary(uid, cid, token, revision, structured, covers, *, live_input=N
         current = snapshot.to_dict() or {}
         if (
             not snapshot.exists
+            or not python_owns_finalization(current)
             or current.get('deleted')
             or current.get('is_locked')
             or lease.get('token') != token
@@ -212,11 +214,24 @@ def store_summary(uid, cid, token, revision, structured, covers, *, live_input=N
 
 
 def settle_processing(
-    uid, cid, token, revision, covers, *, skipped=False, notes=False, content_hash=None, firestore_client=None
+    uid,
+    cid,
+    token,
+    revision,
+    covers,
+    *,
+    skipped=False,
+    notes=False,
+    content_hash=None,
+    word_floor_outcomes: tuple[bool, bool] | None = None,
+    firestore_client=None,
 ):
     """Settle one processing attempt; `notes` marks a completed notes write (arms the created delivery).
 
-    Returns True when this settle armed the conversation-created delivery obligation.
+    A settle is not a failure, so it clears the content-scoped attempt budget: the budget counts
+    consecutive failures, and a later pass on unchanged content must start from zero instead of
+    inheriting attempts that already succeeded. Returns True when this settle armed the
+    conversation-created delivery obligation.
     """
     client = firestore_client or store.get_firestore_client()
     ref = store.user_conversations(client, uid).document(cid)
@@ -229,8 +244,8 @@ def settle_processing(
         lease = held.get(transaction=tx).to_dict() or {}
         if lease.get('token') != token or not lease.get('until') or lease['until'] <= datetime.now(timezone.utc):
             raise Conflict('processing_source_changed')
-        if not row:
-            return False
+        if not row or not python_owns_finalization(row):
+            return False, False
         if not skipped and not row.get('deleted') and row.get('sync_content_revision') != revision:
             decoded = store.decode_row(uid, snapshot)
             if not content_hash or processing_hash(decoded) != content_hash:
@@ -243,6 +258,7 @@ def settle_processing(
             ref,
             {
                 'v3_process_pending': False,
+                'v3_process_attempts': 0,
                 'tile_state': 'done',
                 'v3_process_failed': False,
                 'v3_process_failure_reason': None,
@@ -257,9 +273,18 @@ def settle_processing(
                 **({'v3_created_pending': True} if armed else {}),
             },
         )
-        return armed
+        settled = (
+            not skipped
+            and not row.get('deleted')
+            and row.get('status') == 'completed'
+            and row.get('v3_process_pending') is True
+        )
+        return armed, settled
 
-    return settle(client.transaction())
+    armed, settled = settle(client.transaction())
+    if settled and word_floor_outcomes is not None:
+        metrics.observe_word_floor(*word_floor_outcomes)
+    return armed
 
 
 CREATED_CLAIM = timedelta(minutes=5)
@@ -270,13 +295,17 @@ CREATED_PAGE = 8
 def pending_created(uid, *, firestore_client=None):
     """Owed conversation-created deliveries for one owner (collection-scoped, bounded)."""
     client = firestore_client or store.get_firestore_client()
-    return [
-        snapshot.id
-        for snapshot in store.user_conversations(client, uid)
-        .where(filter=FieldFilter('v3_created_pending', '==', True))
-        .limit(CREATED_PAGE)
-        .stream()
-    ]
+    query = store.user_conversations(client, uid).where(filter=FieldFilter('v3_created_pending', '==', True))
+    ids = []
+    page = query
+    while True:
+        page_size = CREATED_PAGE - len(ids)
+        snapshots = list(page.limit(page_size).stream())
+        ids.extend(snapshot.id for snapshot in snapshots if python_owns_finalization(snapshot.to_dict() or {}))
+        if len(ids) >= CREATED_PAGE or len(snapshots) < page_size:
+            return ids
+        # A full page including parked deliveries can hide Python work behind it.
+        page = query.start_after(snapshots[-1])
 
 
 def claim_created(uid, cid, *, firestore_client=None):
@@ -292,7 +321,7 @@ def claim_created(uid, cid, *, firestore_client=None):
     def claim(tx):
         snapshot = ref.get(transaction=tx)
         row = snapshot.to_dict() or {}
-        if not snapshot.exists or not row.get('v3_created_pending'):
+        if not snapshot.exists or not python_owns_finalization(row) or not row.get('v3_created_pending'):
             return None
         now = datetime.now(timezone.utc)
         if not policy.created_eligible(row):
@@ -324,7 +353,11 @@ def finish_created(uid, cid, attempt, *, delivered, dropped=False, firestore_cli
     def finish(tx):
         snapshot = ref.get(transaction=tx)
         row = snapshot.to_dict() or {}
-        if not snapshot.exists or int(row.get('v3_created_attempts') or 0) != attempt:
+        if (
+            not snapshot.exists
+            or not python_owns_finalization(row)
+            or int(row.get('v3_created_attempts') or 0) != attempt
+        ):
             return False
         if delivered:
             tx.update(
@@ -358,7 +391,27 @@ def processing_hash(row):
     ).hexdigest()
 
 
+class _Terminal:
+    """Falsy outcome: the row's processing obligation is already terminally failed.
+
+    Falsy so a caller that only asks "did this pass begin?" still stops, while the push path can
+    tell a settled terminal row from an unavailable one and acknowledge it instead of raising.
+    """
+
+    def __bool__(self):
+        return False
+
+
+TERMINAL = _Terminal()
+
+
 def begin_processing(uid, row, token, *, force=False, firestore_client=None):
+    """Claim one processing pass: True when it began, TERMINAL when the row is already exhausted.
+
+    False means the row cannot be processed right now (missing, deleted or locked). The budget
+    counts consecutive attempts on one content fingerprint: `settle_processing` clears it on
+    success, so only a run of failures can reach the terminal outcome.
+    """
     client = firestore_client or store.get_firestore_client()
     ref = store.user_conversations(client, uid).document(row['id'])
     held = leases.lease_ref(client, uid, 'summary-' + row['id'])
@@ -372,7 +425,7 @@ def begin_processing(uid, row, token, *, force=False, firestore_client=None):
             timezone.utc
         ):
             raise Conflict('lease_lost')
-        if not current or current.get('deleted') or current.get('is_locked'):
+        if not current or not python_owns_finalization(current) or current.get('deleted') or current.get('is_locked'):
             return False
         attempts = (
             current.get('v3_process_attempts', 0)
@@ -381,7 +434,7 @@ def begin_processing(uid, row, token, *, force=False, firestore_client=None):
         )
         if attempts >= 2:
             tx.update(ref, failure_patch(retryable=bool(row.get('transcript_segments')), reason='attempts_exhausted'))
-            return 'failed' if not current.get('v3_process_failed') else False
+            return 'failed' if not current.get('v3_process_failed') else 'terminal'
         tx.update(
             ref,
             {
@@ -400,6 +453,8 @@ def begin_processing(uid, row, token, *, force=False, firestore_client=None):
     result = begin(client.transaction())
     if result == 'failed':
         metrics.terminal_failure('attempts_exhausted')
+    if result in ('failed', 'terminal'):
+        return TERMINAL
     return result is True
 
 
@@ -426,7 +481,7 @@ def fail_processing(uid, cid, token, revision, *, content_hash=None, retryable=T
         lease = held.get(transaction=tx).to_dict() or {}
         if lease.get('token') != token or not lease.get('until') or lease['until'] <= datetime.now(timezone.utc):
             raise Conflict('lease_lost')
-        if not row or row.get('deleted'):
+        if not row or not python_owns_finalization(row) or row.get('deleted'):
             return False
         if row.get('is_locked'):
             tx.update(ref, {'v3_process_pending': False, 'tile_state': 'done', 'v3_process_failed': False})
@@ -456,7 +511,7 @@ def settle_backfill_processing(uid, cid, *, failed, max_attempts, firestore_clie
     def settle(tx):
         snapshot = ref.get(transaction=tx)
         row = snapshot.to_dict() or {}
-        if not snapshot.exists or not row.get('v3_backfill_process_pending'):
+        if not snapshot.exists or not python_owns_finalization(row) or not row.get('v3_backfill_process_pending'):
             return 'absent'
         if not failed and not row.get('v3_process_pending'):
             tx.update(ref, {'v3_backfill_process_pending': False})

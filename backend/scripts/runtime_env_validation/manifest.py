@@ -661,6 +661,9 @@ def _validate_directory_routing_bindings(env: str, env_config: ConfigDict) -> li
     return errors
 
 
+PUMP_ONLY_SELECTOR = 'backend-projection-pump'
+
+
 def validate_runtime_env(
     *,
     env: str,
@@ -700,7 +703,11 @@ def validate_runtime_env(
     errors.extend(ValidationError(env, error) for error in validate_write_admission(env, env_config))
     errors.extend(_validate_desktop_backend_vertex_pt_contract(env, env_config))
     errors.extend(_validate_proactivity_v2_flag_hosts(env, env_config))
-    errors.extend(_validate_gke(env_config, strict_provisional=strict_provisional))
+    # A pump-only run (the declared selector, never a skip flag) mutates no GKE workload,
+    # so listen chart-vs-manifest drift is not its target's drift (SCA-3318). Every other
+    # selector, including 'all', still checks every GKE workload.
+    if cloud_run_service != PUMP_ONLY_SELECTOR:
+        errors.extend(_validate_gke(env_config, strict_provisional=strict_provisional))
     errors.extend(validate_conversation_finalization_capabilities(env, env_config))
     errors.extend(validate_speaker_embedding_hosts(env, env_config))
     errors.extend(validate_voice_transcription_storage(env, env_config))

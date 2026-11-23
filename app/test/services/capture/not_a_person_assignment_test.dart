@@ -594,7 +594,7 @@ void main() {
     ]);
     // Phone-mic stop/next-start keeps _sessionStartSeconds, so
     // activeCaptureSessionId is unchanged — but the recording rolled.
-    expect(controller.activeCaptureSessionId, 'live-1000');
+    expect(controller.activeCaptureSessionId, startsWith('live-1000-'));
     owner.replaceSession('next-recording');
     await Future<void>.delayed(Duration.zero);
     await Future<void>.delayed(Duration.zero);

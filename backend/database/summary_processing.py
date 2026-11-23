@@ -4,6 +4,7 @@ One conditional claim write, zero extra reads. The request heartbeats its
 outbox lease; only a replacement owner fences the lifecycle writer.
 """
 
+import logging
 import time
 from enum import Enum
 from typing import Any
@@ -11,6 +12,8 @@ from typing import Any
 from google.api_core.exceptions import FailedPrecondition, NotFound
 from google.cloud import firestore
 
+from database._client import firestore_failure_reason, is_retryable_firestore_transaction_error, run_transactional
+from models.finalization_owner import python_owns_finalization
 from utils.conversations.summary_delivery import (
     PROCESS_CONTEXT,
     MAX_EMPTY_REARMS,
@@ -20,15 +23,23 @@ from utils.conversations.summary_delivery import (
 
 MAX_EMPTY_FAILURES = 3
 
+logger = logging.getLogger(__name__)
+
 
 class EmptyFailureOutcome(Enum):
     RETRY = 'retry'
     BLOCKED = 'blocked'
     OWNER_MISMATCH = 'owner_mismatch'
     STALE = 'stale'
+    # The strike write itself could not land (expired transaction id or exhausted
+    # contention). Nothing was recorded, so the caller must re-arm the row for a
+    # bounded retry instead of failing the request.
+    UNAVAILABLE = 'unavailable'
 
 
 def claim_from_snapshot(client: Any, uid: str, conversation_id: str, row: dict[str, Any]) -> bool:
+    if not python_owns_finalization(row):
+        return False
     context = PROCESS_CONTEXT.get()
     if context is None or row.get('summary_completed_at'):
         return True
@@ -67,6 +78,8 @@ def record_empty_failure(client: Any, collection: str, document_id: str, owner: 
             client.collection('users').document(old['uid']).collection('conversations').document(old['conversation_id'])
         )
         conversation = reference.get(transaction=transaction).to_dict() or {}
+        if not python_owns_finalization(conversation):
+            return EmptyFailureOutcome.OWNER_MISMATCH
         enriched = bool(conversation.get('summary_output_present') or conversation.get('summary_completed_at'))
         if not enriched and conversation.get('summary_processing_owner') != owner:
             # This worker still owns the outbox, but lost the content fence.
@@ -101,4 +114,14 @@ def record_empty_failure(client: Any, collection: str, document_id: str, owner: 
         transaction.update(outbox, updates)
         return EmptyFailureOutcome.BLOCKED if blocked else EmptyFailureOutcome.RETRY
 
-    return commit(client.transaction())
+    try:
+        # ``_Transactional`` replays the same transaction id on contention, which cannot
+        # work once Firestore has retired that id; ``run_transactional`` restarts with a
+        # fresh one. A strike that still cannot land must not fail the request: the row
+        # keeps its debt and the caller re-arms it for a bounded retry.
+        return run_transactional(client, commit)
+    except Exception as error:
+        if not is_retryable_firestore_transaction_error(error):
+            raise
+        logger.warning('event=summary_empty_failure outcome=unavailable reason=%s', firestore_failure_reason(error))
+        return EmptyFailureOutcome.UNAVAILABLE

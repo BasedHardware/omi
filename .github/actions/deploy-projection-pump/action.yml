@@ -185,7 +185,9 @@ runs:
 
     # A listing distinguishes a first create from a describe/API failure. For an
     # existing service, verify what is serving before any deploy or probe mutation.
-    - name: Verify existing projection pump before any mutation
+    # The one write allowed here pins an existing LATEST route to the disposition's
+    # verified base by name: the same revision keeps serving (SCA-3318).
+    - name: Verify existing projection pump, pinning a LATEST-routed base, before deploy mutations
       id: pump-service
       shell: bash
       env:
@@ -210,6 +212,25 @@ runs:
             ;;
           1)
             mkdir -p artifacts
+            # An existing service still routed through LATEST (a first create whose pin never
+            # ran, SCA-3318) is pinned here, inside this prod-train run, to the base the
+            # disposition names, after the same pre-pin verification a first create gets.
+            latest="$(gcloud run services describe backend-projection-pump \
+              --project="${{ inputs.project_id }}" --region="${{ inputs.region }}" --format=json \
+              | jq -er '[.status.traffic[] | select((.percent // 0) > 0)]
+                  | if length == 1 and (.[0].latestRevision // false) then "true" else "false" end')"
+            if [[ "$latest" == true ]]; then
+              # The full four-field disposition (Release comment UUID, base revision, source,
+              # digest) is validated by the verifier before any traffic write.
+              python3 "$DEPLOY_CONTROL_SCRIPTS/verify_projection_pump_inverse.py" \
+                --project="${{ inputs.project_id }}" --region="${{ inputs.region }}" \
+                --disposition="$RELEASE_DISPOSITION" \
+                --before-first-pin | tee artifacts/projection-pump-existing-latest-readback.txt
+              read -r _ base _ <<< "$RELEASE_DISPOSITION"
+              gcloud run services update-traffic backend-projection-pump \
+                --project="${{ inputs.project_id }}" --region="${{ inputs.region }}" \
+                --to-revisions="$base=100" --quiet
+            fi
             python3 "$DEPLOY_CONTROL_SCRIPTS/verify_projection_pump_inverse.py" \
               --project="${{ inputs.project_id }}" --region="${{ inputs.region }}" \
               --disposition="$RELEASE_DISPOSITION" | tee artifacts/projection-pump-existing-dark-readback.txt
@@ -681,6 +702,7 @@ runs:
         path: |
           artifacts/projection-pump-deploy-control.txt
           artifacts/projection-pump-existing-dark-readback.txt
+          artifacts/projection-pump-existing-latest-readback.txt
           artifacts/projection-pump-first-dark-readback.txt
           artifacts/projection-pump-inverse-readback.txt
           artifacts/projection-pump-candidate-release-vector.json

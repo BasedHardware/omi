@@ -561,11 +561,11 @@ class AppLocalizationsNo extends AppLocalizations {
   String get hardwareSection => 'Maskinvare';
 
   @override
-  String get v2Undetected => 'V2 ikke oppdaget';
+  String get v2Undetected => 'Frakoblet synkronisering er ikke tilgjengelig';
 
   @override
   String get v2UndetectedMessage =>
-      'Vi ser at du enten har en V1-enhet eller at enheten din ikke er tilkoblet. SD-kortfunksjonalitet er kun tilgjengelig for V2-enheter.';
+      'Frakoblet synkronisering krever en tilkoblet Omi-enhet med SD-kortlagring. Den nåværende enheten din støtter ikke dette.';
 
   @override
   String get endConversation => 'Avslutt samtale';
@@ -15727,4 +15727,21 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get deviceReadyToUse => 'Klar til bruk';
+
+  @override
+  String get firmwareUpdateFirmwareTooOld =>
+      'Fastvaren på enheten din er for gammel for denne oppdateringen. Kontakt kundestøtte for hjelp med å oppdatere enheten.';
+
+  @override
+  String get firmwareUpdateAppRequired =>
+      'Denne fastvareoppdateringen krever en nyere Omi-app. Oppdater appen fra appbutikken din, og se etter oppdateringer på nytt.';
+
+  @override
+  String get quietPayerTitle => 'Ingen opptak på 5 dager';
+
+  @override
+  String get quietPayerMessage => 'Sjekk Omi-en din.';
+
+  @override
+  String get quietPayerCheck => 'Sjekk';
 }

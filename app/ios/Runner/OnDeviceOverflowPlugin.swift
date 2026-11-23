@@ -21,23 +21,42 @@ final class OnDeviceOverflowPlugin {
     private var recognitionTask: SFSpeechRecognitionTask?
     private var finishLegacy: ((Result<[String: Any], Error>) -> Void)?
 
+    static let processingIdentifier = "com.omi.on-device.processing"
+    private static var current: OnDeviceOverflowPlugin?
+
+    /// BGTaskScheduler only accepts handlers before launch finishes, and the plugin is created later
+    /// (scene storyboard). AppDelegate calls this once in didFinishLaunching; the handler only runs a
+    /// task the opt-in flow submitted, so it is inert while the feature is off.
+    static func registerBackgroundTask() {
+        BGTaskScheduler.shared.register(forTaskWithIdentifier: processingIdentifier, using: .main) { task in
+            guard let processing = task as? BGProcessingTask, let plugin = current else {
+                task.setTaskCompleted(success: false)
+                rescheduleBackground()
+                return
+            }
+            plugin.run(processing)
+        }
+        NSLog("[BGTask] registered %@", processingIdentifier)
+    }
+
     init(messenger: FlutterBinaryMessenger) {
         channel = FlutterMethodChannel(name: "com.omi/on_device", binaryMessenger: messenger)
-        BGTaskScheduler.shared.register(forTaskWithIdentifier: "com.omi.on-device.processing", using: .main) { [self] task in
-            guard let processing = task as? BGProcessingTask else { task.setTaskCompleted(success: false); return }
-            backgroundTask = processing
-            processing.expirationHandler = { [weak self] in
-                Task { @MainActor in
-                    self?.work?.cancel()
-                    self?.channel.invokeMethod("backgroundExpired", arguments: nil)
-                    self?.backgroundTask?.setTaskCompleted(success: false)
-                    self?.backgroundTask = nil
-                    self?.rescheduleBackground()
-                }
-            }
-            if backgroundReady { channel.invokeMethod("backgroundRun", arguments: nil) }
-        }
         channel.setMethodCallHandler { [self] call, reply in handle(call, reply: reply) }
+        Self.current = self
+    }
+
+    private func run(_ processing: BGProcessingTask) {
+        backgroundTask = processing
+        processing.expirationHandler = { [weak self] in
+            Task { @MainActor in
+                self?.work?.cancel()
+                self?.channel.invokeMethod("backgroundExpired", arguments: nil)
+                self?.backgroundTask?.setTaskCompleted(success: false)
+                self?.backgroundTask = nil
+                Self.rescheduleBackground()
+            }
+        }
+        if backgroundReady { channel.invokeMethod("backgroundRun", arguments: nil) }
     }
 
     private var directory: URL {
@@ -68,8 +87,8 @@ final class OnDeviceOverflowPlugin {
             return
         }
         if call.method == "scheduleBackground" {
-            BGTaskScheduler.shared.cancel(taskRequestWithIdentifier: "com.omi.on-device.processing")
-            let request = BGProcessingTaskRequest(identifier: "com.omi.on-device.processing")
+            BGTaskScheduler.shared.cancel(taskRequestWithIdentifier: Self.processingIdentifier)
+            let request = BGProcessingTaskRequest(identifier: Self.processingIdentifier)
             request.requiresExternalPower = args["charging"] as? Bool ?? true
             try? SafeDefaults.store(.bool(request.requiresExternalPower), forKey: "omi.on-device.background-charging", in: UserDefaults.standard)
             request.requiresNetworkConnectivity = false
@@ -79,7 +98,7 @@ final class OnDeviceOverflowPlugin {
             return
         }
         if call.method == "backgroundComplete" {
-            backgroundTask?.setTaskCompleted(success: true); backgroundTask = nil; rescheduleBackground(); reply(nil); return
+            backgroundTask?.setTaskCompleted(success: true); backgroundTask = nil; Self.rescheduleBackground(); reply(nil); return
         }
         if call.method == "cancel" {
             work?.cancel()
@@ -183,9 +202,9 @@ final class OnDeviceOverflowPlugin {
         }
     }
 
-    private func rescheduleBackground() {
+    private static func rescheduleBackground() {
         guard UserDefaults.standard.bool(forKey: "flutter.onDeviceOverflowConfigured") else { return }
-        let request = BGProcessingTaskRequest(identifier: "com.omi.on-device.processing")
+        let request = BGProcessingTaskRequest(identifier: processingIdentifier)
         request.requiresExternalPower = UserDefaults.standard.object(forKey: "omi.on-device.background-charging") as? Bool ?? true
         request.requiresNetworkConnectivity = false
         request.earliestBeginDate = Date(timeIntervalSinceNow: 3600)

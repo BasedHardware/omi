@@ -14,7 +14,6 @@ import database.action_items as action_items_db
 import database.conversations as conversations_db
 import database.redis_db as redis_db
 from database.firestore_transaction_retry import FirestoreContentionExhausted
-from utils.list_version_check import ListVersionCheck
 from utils.task_intelligence.task_source_validation import TaskSourceValidationError
 from utils.retrieval.tool_services.action_items import (
     create_action_item as create_task,
@@ -616,25 +615,17 @@ def get_action_items(
     enforce_stale_client_list_refusal(request)
     enforce_hot_client_list_ceiling(uid, request)
 
-    version_check = ListVersionCheck.start(request, uid, 'action_items')
-    if version_check.not_modified is not None:
-        return version_check.not_modified
-
-    cached_response = (
-        _serve_action_items_list_from_cache(
-            uid,
-            request=request,
-            limit=limit,
-            offset=offset,
-            completed=completed,
-            conversation_id=conversation_id,
-            start_date=start_date,
-            end_date=end_date,
-            due_start_date=due_start_date,
-            due_end_date=due_end_date,
-        )
-        if not (version_check.active and 'lp1-' in request.headers.get('if-none-match', ''))
-        else None
+    cached_response = _serve_action_items_list_from_cache(
+        uid,
+        request=request,
+        limit=limit,
+        offset=offset,
+        completed=completed,
+        conversation_id=conversation_id,
+        start_date=start_date,
+        end_date=end_date,
+        due_start_date=due_start_date,
+        due_end_date=due_end_date,
     )
     if cached_response is not None:
         return cached_response
@@ -702,7 +693,6 @@ def get_action_items(
             due_end_date=due_end_date,
         )
 
-    version_check.finish(response, truncated=truncated)
     return result
 
 

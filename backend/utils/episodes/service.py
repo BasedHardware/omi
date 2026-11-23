@@ -78,7 +78,7 @@ from database import episodes as episodes_db
 from database import notifications as notification_db
 from database import users as users_db
 from database.auth import get_user_name
-from utils.episodes import moment_render, boundary_runtime, f_join
+from utils.episodes import moment_render, f_join
 from utils.episodes import output_language as episode_language
 from utils.llm.output_language import dominant_segment_language, languages_match
 from utils.episodes import client_gate, composer, incremental, metrics, policy, recovery
@@ -642,13 +642,7 @@ def _attach_once(
         owner = episode_owning_recorded_time(uid, started_at, firestore_client=c.firestore_client)
         late = is_late((started_at, ended_at or started_at), now)
         if owner or late:
-            uncertain = (
-                None
-                if late
-                else f_join.uncertain(
-                    uid, owner, conversation_id, source, started_at, firestore_client=c.firestore_client
-                )
-            )
+            uncertain = None if late else f_join.uncertain(uid, owner, conversation_id, source, started_at)
             placed = attach_recorded(uid, conversation_id, {'source': source}, started_at, started_at, c)
             if uncertain is not None and owner is not None:
                 f_join.mark_pending(
@@ -676,9 +670,7 @@ def _attach_once(
         calendar_identity=None,
         speakers=frozenset(),
     )
-    decision = boundary_runtime.decision(
-        uid, episode, facts, policy.boundary(episode, facts), firestore_client=c.firestore_client
-    )
+    decision = policy.boundary(episode, facts)
     if decision.action == 'close' and episode:
         metrics.record_boundary('close')
         _close(uid, episode, decision.reason or 'gap', c, now=now)
@@ -775,9 +767,7 @@ def _settle_boundary(
     f_detaches: Optional[set[str]] = None,
 ):
     """Settle provisional joins and keep continuing members with their original owner."""
-    decision = boundary_runtime.decision(
-        uid, episode, facts, policy.boundary(episode, facts), firestore_client=c.firestore_client
-    )
+    decision = policy.boundary(episode, facts)
     pending = _pending(episode).get(moment.conversation_id)
     f_split = False
     if episode and pending is not None and pending.get('variant') == F_JOIN_VARIANT:
@@ -1422,9 +1412,7 @@ def _join_live_synced(
         calendar_identity=_calendar_identity(row),
         speakers=frozenset(),
     )
-    decision = boundary_runtime.decision(
-        uid, episode, facts, policy.boundary(episode, facts), firestore_client=c.firestore_client
-    )
+    decision = policy.boundary(episode, facts)
     if decision.action != policy.CONTINUE:
         # An ambiguous gap, a different calendar event or the hard cap is no basis for a
         # late WAL row to join the occasion: it stays an ordinary Home row.
@@ -1552,7 +1540,7 @@ def _synced_f_verdict(
     ):
         return None
     source = getattr(row.get('source'), 'value', row.get('source')) or None
-    marker = f_join.uncertain(uid, owner, conversation_id, source, started, firestore_client=c.firestore_client)
+    marker = f_join.uncertain(uid, owner, conversation_id, source, started)
     if marker is None:
         return None
     if episodes_db.get_episode_owner_snapshot(uid, conversation_id, firestore_client=c.firestore_client) is not None:
