@@ -73,11 +73,12 @@ class ConversationsV3Provider extends ChangeNotifier {
     _suppressListening = true;
     _finishCaptureId = captureId;
     _finishRecordingId = recordingId;
+    // End supplies the exact ended conversation; infer from the cached live row only without it.
     final live = _live;
-    if (live != null &&
-        (live.id == liveConversationId ||
-            live.id == recordingId ||
-            (recordingId != null && live.v3?.recordingIds.contains(recordingId) == true))) {
+    if (liveConversationId != null) {
+      _finishLiveId = liveConversationId;
+    } else if (live != null &&
+        (live.id == recordingId || (recordingId != null && live.v3?.recordingIds.contains(recordingId) == true))) {
       _finishLiveId = live.id;
     }
     _armFinishExpiry();

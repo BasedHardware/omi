@@ -468,6 +468,28 @@ void main() {
     await tester.pumpWidget(const SizedBox());
   });
 
+  test('End keeps its explicit conversation when Home has no live row cached', () {
+    final v3 = ConversationsV3Provider(uid: () => 'owner', cached: 'owner:1');
+    addTearDown(v3.dispose);
+    ServerConversation window(String id) => _conversation(id, extra: {
+          'kind': 'conversation',
+          'status': 'completed',
+          'tile_state': 'done',
+          'recording_pieces': [
+            {'recording_id': 'rec-1', 'audio_file_id': 'a1', 'start': 0.0, 'end': 600.0},
+          ],
+        });
+    final row = OptimisticProcessingPlaceholder.conversation();
+    // A deep-linked detail ends before Home loads the live row: only End knows the exact window.
+    v3.startManualFinish(row, 'rec-1', liveConversationId: 'window-b');
+    expect(v3.settleManualFinish(row, _recordingDoc('rec-1')), isTrue);
+
+    expect(v3.finishTerminalMatch([window('window-a')]), isNull,
+        reason: 'an older window of the same recording must not clear Processing');
+    expect(v3.finishTerminalMatch([window('window-a'), window('window-b')])?.id, 'window-b');
+    v3.acknowledgeManualFinish(row);
+  });
+
   testWidgets('v3 Wrap Up returns to the published Home processing row', (tester) async {
     final v3 = ConversationsV3Provider(uid: () => 'owner', cached: 'owner:1');
     addTearDown(v3.dispose);
