@@ -16,6 +16,8 @@ from fastapi.testclient import TestClient
 from config.repeat_work import poll_backoff_cohort
 from database import redis_db, sync_jobs
 from routers import sync as sync_router
+from tests.unit.test_batch_pipeline_scheduler import MemoryStore
+from utils.batch_pipeline import intake
 from utils.metrics import (
     OMI_SYNC_JOB_COMPLETION_TO_FIRST_TERMINAL_READ_SECONDS,
     OMI_SYNC_JOB_POLL_ACTIVE_UPLOADERS,
@@ -220,6 +222,67 @@ def test_active_uploader_scrape_expires_uids_without_another_poll(monkeypatch):
     assert _active_uploaders() == {'in': 1, 'out': 0}
     monotonic.return_value += poll_metrics.ACTIVE_UID_WINDOW_SECONDS + 1
     assert _active_uploaders() == {'in': 0, 'out': 0}
+
+
+@pytest.mark.parametrize(
+    'enabled,percent,cohort',
+    [('false', '0', 'out'), ('true', '5', 'out'), ('true', '5', 'in')],
+)
+def test_job_status_poll_observes_durable_completion_in_serving_cohort(
+    poll_client, monkeypatch, enabled, percent, cohort
+):
+    monkeypatch.setenv('SYNC_POLL_BACKOFF_ENABLED', enabled)
+    monkeypatch.setenv('SYNC_POLL_BACKOFF_PERCENT', percent)
+    uid = next(f'owner-{index}' for index in range(1000) if poll_backoff_cohort(f'owner-{index}') == cohort)
+    poll_client.app.dependency_overrides[sync_router.auth.get_current_user_uid] = lambda: uid
+
+    store = MemoryStore()
+    monkeypatch.setattr(intake, 'FirestoreStore', lambda _: store)
+    monkeypatch.setattr(intake, 'shadow_from_env', lambda store: store)
+    job_id = f'bp_{uuid4().hex}'
+    content_key = ('content', f'{uid}/content')
+    store.rows['intakes', job_id] = {
+        'owner_id': uid,
+        'content_id': 'content',
+        'segment_ids': [],
+        'lane': 'backfill',
+        'total_files': 1,
+    }
+    store.rows[content_key] = {
+        'status': 'completed',
+        'result': {
+            'new_memories': [],
+            'updated_memories': [],
+            'failed_segments': 0,
+            'total_segments': 1,
+            'errors': [],
+        },
+    }
+
+    histogram = OMI_SYNC_JOB_COMPLETION_TO_FIRST_TERMINAL_READ_SECONDS
+
+    def counts():
+        return {
+            sample.labels['cohort']: sample.value
+            for metric in histogram.collect()
+            for sample in metric.samples
+            if sample.name == f'{metric.name}_count'
+        }
+
+    before = counts()
+    assert before.keys() == {'in', 'out'}
+    url = f'/v2/sync-local-files/{job_id}'
+    assert poll_client.get(url).json()['status'] == 'completed'
+    assert counts() == before  # Old receipts have no authoritative completion clock.
+
+    store.rows[content_key]['completed_at'] = datetime.fromtimestamp(time.time() - 10, timezone.utc)
+    response = poll_client.get(url)
+    assert response.status_code == 200
+    assert response.json()['poll_after_ms'] == 0
+    assert 'completed_at' not in response.json()
+    assert counts() == {**before, cohort: before[cohort] + 1}
+    assert poll_client.get(url).status_code == 200
+    assert counts() == {**before, cohort: before[cohort] + 1}
 
 
 @pytest.mark.parametrize('surface_open', [False, True])

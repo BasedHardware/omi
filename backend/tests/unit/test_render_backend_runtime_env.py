@@ -1735,13 +1735,30 @@ def test_prod_silence_read_skip_respects_backend_pump_and_listen_pins():
     assert [entry['value'] for entry in values['env'] if entry['name'] == key] == ['false']
 
 
-def test_prod_backend_renders_sibling_skip_and_poll_backoff_preservation_pins(monkeypatch):
+def test_prod_backend_renders_sibling_skip_preservation_pin(monkeypatch):
     prod = _MANIFEST['environments']['prod']
     _set_workflow_bound_env(monkeypatch, prod)
     backend = prod['cloud_run']['services']['backend']
     rendered = dict(_MODULE['_parse_deploy_cloud_run_env_vars'](_MODULE['_render_env_vars'](backend['env'])))
 
     assert rendered['BATCH_PIPELINE_FOLLOWUP_CLAIMED_SIBLING_SKIP_ENABLED'] == 'false'
-    assert rendered['SYNC_POLL_BACKOFF_ENABLED'] == 'false'
-    assert 'SYNC_POLL_BACKOFF_PERCENT' not in rendered
-    assert 'SYNC_POLL_BACKOFF_PERCENT' in _MODULE['_remove_env_extra']('backend', backend).split(',')
+
+
+def test_prod_job_status_poll_cohort_renders_for_client_facing_backend(monkeypatch):
+    # Client GET /v2/sync-local-files/{job_id} goes to backend. The sync worker
+    # processes Cloud Tasks, and keys in its env alone cannot configure client polls.
+    prod = _MANIFEST['environments']['prod']
+    _set_workflow_bound_env(monkeypatch, prod)
+    monkeypatch.setenv('CLOUD_RUN_VPC_NETWORK', 'omi-prod-vpc')
+    monkeypatch.setenv('CLOUD_RUN_VPC_SUBNET', 'omi-prod-subnet')
+    monkeypatch.setattr('sys.argv', ['render_backend_runtime_env.py', '--env', 'prod'])
+
+    assert _MODULE['main']() == 0
+    output = _read_workflow_outputs()
+    block = '\n'.join(_job_env_block(output, 'backend').splitlines()[1:-1])
+    rendered = _MODULE['_parse_deploy_cloud_run_env_vars'](block)
+    assert [value for key, value in rendered if key == 'SYNC_POLL_BACKOFF_ENABLED'] == ['true']
+    assert [value for key, value in rendered if key == 'SYNC_POLL_BACKOFF_PERCENT'] == ['5']
+    service = prod['cloud_run']['services']['backend']
+    removed = _MODULE['_action_removed_env_names']('backend') | set(service.get('forbidden_env', []))
+    assert removed.isdisjoint({'SYNC_POLL_BACKOFF_ENABLED', 'SYNC_POLL_BACKOFF_PERCENT'})
