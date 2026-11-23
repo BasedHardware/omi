@@ -596,6 +596,22 @@ def _byok_detail_code(error: BaseException) -> str | None:
     return None
 
 
+def _transient_provider_failure_class(error: BaseException) -> str | None:
+    """Return the bounded provider/transport class for a background-task failure.
+
+    Lazy import: executors sits below the provider SDKs in the import graph, and
+    the GPU worker runtime image must not pull them in at module load. A
+    transient provider fault is a retryable dependency failure, not an Omi-side
+    crash, so the done callback logs its class at WARNING instead of the
+    provider message at ERROR (which Cloud Error Reporting would group).
+    """
+    try:
+        from utils.conversations.processing_retry import retryable_provider_failure_class
+    except Exception:
+        return None
+    return retryable_provider_failure_class(error)
+
+
 def _log_background_failure(name: str, future: "Future[Any]") -> None:
     if future.cancelled():
         return
@@ -753,6 +769,18 @@ def start_background_task(coro: Coroutine[Any, Any, Any], *, name: str) -> async
             return
         exc = t.exception()
         if exc:
+            # A transient provider/transport fault is a retryable dependency
+            # failure, not an Omi-side crash: log its bounded class at WARNING
+            # so Error Reporting does not group it and the provider body never
+            # reaches logs. The caller still receives the exception.
+            failure_class = _transient_provider_failure_class(exc)
+            if failure_class is not None:
+                logger.warning(
+                    'background_task transient provider failure: %s failure_class=%s',
+                    t.get_name(),
+                    failure_class,
+                )
+                return
             logger.error('background_task failed: %s — %s: %s', t.get_name(), type(exc).__name__, exc)
 
     task.add_done_callback(_done)

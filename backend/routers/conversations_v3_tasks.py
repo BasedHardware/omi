@@ -22,6 +22,11 @@ async def reconcile(body: ReconcileRequest, _retry: int = Depends(verify_cloud_t
     try:
         return {'outcome': await service.reconcile(body.uid)}
     except Exception as error:
+        # The composition boundary may already have answered a provider fault
+        # with the typed retryable contract (and recorded its metric). Re-raise
+        # that answer unchanged instead of remapping its chained cause.
+        if isinstance(error, HTTPException):
+            raise
         # A gateway-first call (the v3 outline) can raise a provider 5xx. Answer
         # the existing retryable contract so Cloud Tasks retries the task instead
         # of the failure surfacing as an unhandled 500; anything else keeps its
@@ -56,7 +61,10 @@ async def run_backfill(body: BackfillRequest, _retry: int = Depends(verify_cloud
         raise HTTPException(503, 'Owner busy; retry')
     except Exception as error:
         # The derive pass runs the same gateway-first outline call; a provider
-        # 5xx answers the retryable contract instead of an unhandled 500.
+        # 5xx answers the retryable contract instead of an unhandled 500. An
+        # already-typed answer from the composition boundary is re-raised as is.
+        if isinstance(error, HTTPException):
+            raise
         retryable = retryable_provider_failure_http_exception(error, route='conversations_v3_backfill')
         if retryable is None:
             raise
