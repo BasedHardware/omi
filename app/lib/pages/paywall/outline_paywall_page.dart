@@ -294,7 +294,7 @@ class _OutlinePaywallPageState extends State<OutlinePaywallPage> with TickerProv
                           ),
                         const SizedBox(height: 8),
                         if (usage.playBilledPurchaser)
-                          PlayBillingDisclosure(color: _Graphite.textTertiary)
+                          const PlayBillingDisclosure(color: _Graphite.textTertiary)
                         else
                           Text(
                             l10n.paywallCancelAnytime,
