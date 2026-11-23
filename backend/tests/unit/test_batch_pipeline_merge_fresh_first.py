@@ -8,13 +8,15 @@ from unittest.mock import AsyncMock, Mock
 
 from google.api_core.exceptions import FailedPrecondition, ServiceUnavailable
 import pytest
+from prometheus_client import CollectorRegistry
 
 from config.batch_pipeline import MERGE_CATCH_UP_DEPTH_DEFAULT, merge_catch_up_depth
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
 from database.batch_pipeline_purge import _write_erased_result
 from tests.unit.test_batch_pipeline_scheduler import MemoryStore, MemoryTransaction, item
 from utils.batch_pipeline.contracts import WorkResult
-from utils.batch_pipeline.merge import OrderedMerge
+from utils.batch_pipeline.merge import GPU_AGED_RELEASE_INTERVAL_SECONDS, GPU_DEPTH_HOLD_AGE_SECONDS, OrderedMerge
+from utils.batch_pipeline.metrics import QueueMetrics
 from utils.batch_pipeline.pump import Pump
 from utils.batch_pipeline.scheduler import Scheduler, owner_key
 from utils.batch_pipeline.serving import Serving
@@ -83,6 +85,32 @@ def test_catch_up_commits_hold_at_the_depth_cap_until_projection_advances():
     assert [e['segment_id'] for e in drain(merge)] == ['c0', 'c1', 'c2', 'c3']
     project_through(store, 'c1')
     assert [e['segment_id'] for e in drain(merge)] == ['c4', 'c5']
+
+
+def test_aged_gpu_depth_hold_releases_in_capture_order_with_durable_cooldown():
+    rows = {'first': (1000, CATCH_UP), 'second': (1010, CATCH_UP), 'fresh': (90_000, FRESH)}
+    store, queue, leases = admitted(rows)
+    store.rows['owners', OWNER]['log_sequence'] = 1800
+    for segment in ('first', 'second'):
+        complete(queue, leases, segment)
+
+    registry = CollectorRegistry()
+    merge = OrderedMerge(store, metrics=QueueMetrics(registry=registry), head_wait_seconds=0, catch_up_depth=16)
+    eligible_at = NOW + GPU_DEPTH_HOLD_AGE_SECONDS
+    assert merge.commit_next('heavy', eligible_at - 1) is None
+    assert registry.get_sample_value('omi_batch_pipeline_gpu_depth_held_age_seconds_count') == 1
+    assert store.rows['merge_holds', OWNER]['held']
+
+    complete(queue, leases, 'fresh', eligible_at)
+    assert merge.commit_next('heavy', eligible_at)['segment_id'] == 'fresh'
+    assert merge.commit_next('heavy', eligible_at)['segment_id'] == 'first'
+    # Another process sees the same cooldown in the owner record.
+    restarted = merge_for(store, depth=16)
+    next_slot = eligible_at + GPU_AGED_RELEASE_INTERVAL_SECONDS
+    assert restarted.commit_next('heavy', next_slot - 1) is None
+    entry = restarted.commit_next('heavy', next_slot)
+    assert entry['segment_id'] == 'second' and entry['previous_segment_id'] == 'first'
+    assert entry['log_sequence'] == 1803
 
 
 def test_fresh_row_passes_a_held_catch_up_backlog_and_lands_near_the_projection_head():

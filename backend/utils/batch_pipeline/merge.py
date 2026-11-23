@@ -63,6 +63,9 @@ STALE_OWNER_TTL_SECONDS = 600.0
 _HEAD_STATES = frozenset({'ready', 'leased', 'retry', 'record_pending', 'privacy_blocked'})
 _FRESH_FIRST_HEAD_STATES = _HEAD_STATES | {'result_ready'}
 _RELEASE_HEAD_STATES = _FRESH_FIRST_HEAD_STATES | {'held'}
+# Aged GPU results may cross the depth cap one at a time per owner.
+GPU_DEPTH_HOLD_AGE_SECONDS = 6 * 3600
+GPU_AGED_RELEASE_INTERVAL_SECONDS = 60
 _WAIT_BUCKETS = (60, 120, 300, 600, 1800)
 
 
@@ -482,6 +485,7 @@ class OrderedMerge:
             exact: str | None = None,
             tx_fresh: bool = False,
             skip_wait: bool = False,
+            allow_aged_gpu: bool = False,
         ):
             blocked.clear()  # Firestore may retry this callback.
             backlog.clear()
@@ -675,11 +679,24 @@ class OrderedMerge:
                     backlog['refusal'] = 'projection'
                     return None
                 backlog['token'] = token
+            aged_gpu_release = False
             if over_cap and not fresh_first and not released.get('recovered') and _catch_up(candidate):
                 # Keep the owner's unprojected log short so a fresh row lands
                 # near the projection head.
-                held['catch_up'] = True
-                return None
+                if (candidate.get('stt_route') or {}).get('stt_route') != 'provider':
+                    since = _ready_since(candidate)
+                    if since is None:
+                        since = candidate.get('enqueued_at')
+                    if since is not None:
+                        held['gpu_age'] = max(0.0, now - since)
+                        held['gpu_eligible'] = (
+                            held['gpu_age'] >= GPU_DEPTH_HOLD_AGE_SECONDS
+                            and now >= owner.get('next_aged_gpu_release_at', 0)
+                        )
+                        aged_gpu_release = allow_aged_gpu and held['gpu_eligible']
+                if not aged_gpu_release:
+                    held['catch_up'] = True
+                    return None
             job = tx.get('jobs', candidate['segment_id'])
             markers = merge_markers(job)
             if markers is None:
@@ -726,6 +743,8 @@ class OrderedMerge:
             tx.put('results', job['segment_id'], entry)
             job.update(state='committed', merge_pending=False)
             tx.put('jobs', job['segment_id'], job)
+            if aged_gpu_release:
+                owner['next_aged_gpu_release_at'] = now + GPU_AGED_RELEASE_INTERVAL_SECONDS
             owner.pop('record_sibling_cursor', None)
             owner.update(
                 watermark=watermark if late else position,
@@ -742,6 +761,8 @@ class OrderedMerge:
         except BatchPrivacyBlocked as error:
             entry, fenced = None, error
         strict_blocked, strict_catch_up = dict(blocked), bool(held.get('catch_up'))
+        strict_gpu_age = held.get('gpu_age')
+        strict_gpu_eligible = held.get('gpu_eligible', False)
         # A held backlog row at or behind the head needs the fresh probe even when the depth
         # hold is switched off: a ready head is refused, and behind an unready one the head
         # wait would pick a held row and commit nothing.
@@ -912,6 +933,13 @@ class OrderedMerge:
                     release.pop(0)
                     entry = None
                     released.clear()
+        if entry is None and strict_gpu_eligible:
+            # Give fresh work and recovery their usual first opportunity. Recheck the
+            # capture-order head and the owner's durable cooldown in the commit transaction.
+            try:
+                entry = self.store.run(lambda tx: commit(tx, allow_aged_gpu=True))
+            except BatchPrivacyBlocked:
+                return None
         if entry is None and strict_blocked and wait > 0:
             # The strict transaction issues no head-wait query. Probe outside
             # it so a blocked owner takes no extra transactional query lock;
@@ -950,13 +978,15 @@ class OrderedMerge:
             if skip_wait and not (strict_blocked.get('starved') and merge_stale_head_skip(owner_id)):
                 return None
             try:
-                entry = self.store.run(lambda tx: commit(tx, waiter, skip_wait=skip_wait))
+                entry = self.store.run(lambda tx: commit(tx, waiter, skip_wait=skip_wait, allow_aged_gpu=True))
             except BatchPrivacyBlocked:
                 # An owner-wide fence (often the reason the head is blocked)
                 # also refuses the successor; strict order commits nothing here.
                 return None
             except HeadWaitUnavailable:
                 return self._head_wait_unavailable()
+            if entry is None and self.metrics and 'gpu_age' in held:
+                self.metrics.gpu_depth_held_age.observe(held['gpu_age'])
             if skip_wait and entry is None:
                 return None  # A refused skip keeps the ordinary wait: no hold or fallback fires early.
             if held and not held.get('backlog'):
@@ -992,6 +1022,8 @@ class OrderedMerge:
                         self.commit_source,
                         type(failure.error).__name__,
                     )
+        if entry is None and self.metrics and strict_gpu_age is not None:
+            self.metrics.gpu_depth_held_age.observe(strict_gpu_age)
         if backlog.get('refusal'):
             backlog_release.REFUSED.labels(backlog['refusal']).inc()
         if entry and entry.get('backlog_release'):
