@@ -13,6 +13,7 @@ from typing import Optional
 
 import stripe
 
+from config import prepaid_code_redeem
 from database import promotion_redemptions as redemptions_db
 from database import users as users_db
 from utils import stripe as stripe_utils
@@ -100,6 +101,9 @@ def redeem_promotion_code(uid: str, code: str) -> dict:
         raise RedemptionError(400, 'Start your plan first, then redeem your code.')
     if subscription.get('discounts') or subscription.get('discount'):
         raise RedemptionError(409, 'A discount is already applied to your plan.')
+    # A prepaid plan made with a "once" code has no discount left after its first invoice.
+    if prepaid_code_redeem.is_prepaid_subscription(subscription):
+        raise RedemptionError(409, 'Your prepaid plan already covers this period. Use this code after it ends.')
 
     promo = _find_promotion_code(code)
     coupon = stripe.Coupon.retrieve(_coupon_id(promo), expand=['applies_to']).to_dict()

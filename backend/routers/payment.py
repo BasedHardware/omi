@@ -1218,16 +1218,16 @@ def cancel_subscription_endpoint(
     if not subscription.stripe_subscription_id:
         raise HTTPException(status_code=400, detail="No active Stripe subscription found.")
 
-    # Store cancellation reason
-    if request.reason:
-        users_db.set_user_cancellation_feedback(uid, request.reason, request.reason_details)
-
     try:
         # First, check if the subscription is managed by a subscription schedule
         stripe_sub = stripe.Subscription.retrieve(subscription.stripe_subscription_id)
         if prepaid_code_config.is_prepaid_subscription(stripe_sub):
             # Cancelling would move its end to this month's end and lose the prepaid months.
             raise HTTPException(status_code=409, detail=PREPAID_PLAN_DETAIL)
+
+        # Store cancellation reason (a refused cancel records nothing)
+        if request.reason:
+            users_db.set_user_cancellation_feedback(uid, request.reason, request.reason_details)
 
         # Look for active subscription schedules for this customer
         customer_id = stripe_sub.get('customer')
@@ -2307,8 +2307,21 @@ def create_customer_portal_endpoint(uid: str = Depends(auth.get_current_user_uid
         raise HTTPException(status_code=400, detail="No Stripe customer found. Please create a subscription first.")
 
     # The stored row gets the prepaid marker only when the webhook lands; Stripe has it from creation.
-    if _customer_has_prepaid_subscription(customer_id):
-        raise HTTPException(status_code=409, detail=PREPAID_PLAN_DETAIL)
+    # A live paid non-prepaid row cannot sit next to a prepaid plan (redeem refuses a live plan), so only
+    # a free, ended or unmarked row can be in that window and needs the Stripe read.
+    live_paid_row = (
+        is_paid_plan(current.plan)
+        and current.status == SubscriptionStatus.active
+        and (current.current_period_end or 0) >= int(time.time())
+    )
+    if not live_paid_row:
+        try:
+            has_prepaid = _customer_has_prepaid_subscription(customer_id)
+        except stripe.error.StripeError as error:
+            logger.error(f"Customer portal: could not read subscriptions for {uid}: {sanitize(str(error))}")
+            raise HTTPException(status_code=503, detail="Could not verify your subscription. Please try again.")
+        if has_prepaid:
+            raise HTTPException(status_code=409, detail=PREPAID_PLAN_DETAIL)
 
     return_url = urljoin(base_url, 'v1/payments/portal-return')
 
