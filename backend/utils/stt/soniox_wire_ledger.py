@@ -267,7 +267,12 @@ class OrderedSonioxProviderClock(SonioxProviderClock):
             self.invalidate()
             return 0
         before = self.samples
-        quantum = 1920  # Probed stt-rt-v5 mono pcm_s16le / 16 kHz only.
+        # Measured on stt-rt-v5 mono pcm_s16le / 16 kHz on 2026-10-06. Re-probed
+        # 2026-11-23 (scripts/soniox_finalize_padding_probe.py): neither v5 nor v6
+        # pads any more; each <fin> reports the exact sent cursor. A prediction
+        # still has to match the reported progress, so a mismatch invalidates
+        # capture instead of placing it. Keep SONIOX_ORDERED_FINALIZE off.
+        quantum = 1920
         self.samples = (before // quantum + 1) * quantum
         self._predictions.append((before, self.samples, self._emitted))
         self._update_state()

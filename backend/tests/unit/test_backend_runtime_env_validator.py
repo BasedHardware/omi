@@ -4227,7 +4227,7 @@ def test_cloud_run_runtime_rejects_missing_listener_close_binding(tmp_path, key,
 
 
 @pytest.mark.parametrize(('environment', 'enabled'), [('dev', 'false'), ('prod', 'true')])
-def test_future_capture_clamp_respects_backend_preservation_pin(environment, enabled):
+def test_future_capture_clamp_respects_backend_and_backfill_preservation_pins(environment, enabled):
     config = yaml.safe_load((ROOT / 'deploy/runtime_env.yaml').read_text())['environments'][environment]
     hosts = {'backend-listen': config['gke']['backend-listen'], **config['cloud_run']['services']}
     # SCA-3120: prod adds the derived projection pump as a sixth reader.
@@ -4235,7 +4235,8 @@ def test_future_capture_clamp_respects_backend_preservation_pin(environment, ena
     renderer = runpy.run_path(str(RENDERER_SCRIPT), run_name='future_capture_staged_renderer')
     for name, host in hosts.items():
         # SCA-3555: backend keeps the live value until its SCA-3501 activation step.
-        host_value = 'false' if name == 'backend' else enabled
+        # SCA-3544: backfill preserves false during its catch-up.
+        host_value = 'false' if name in ('backend', 'backend-sync-backfill') else enabled
         assert host['env']['SYNC_FUTURE_CAPTURE_CLAMP_ENABLED'] == {'value': host_value, 'category': 'rollout'}
         # Render this host's own manifest entry (not the expected literal).
         entry = {'SYNC_FUTURE_CAPTURE_CLAMP_ENABLED': host['env']['SYNC_FUTURE_CAPTURE_CLAMP_ENABLED']}
