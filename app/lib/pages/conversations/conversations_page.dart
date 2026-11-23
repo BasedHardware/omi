@@ -918,7 +918,7 @@ class _ConversationsPageState extends State<ConversationsPage>
         if (manualFinish != null && (finishHandedOff || finishFailed)) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (!mounted) return;
-            if (v3!.acknowledgeManualFinish(manualFinish) && finishFailed) {
+            if (v3.acknowledgeManualFinish(manualFinish) && finishFailed) {
               OmiFeedback.error(context, context.l10n.attentionSummaryFailed);
             }
           });
