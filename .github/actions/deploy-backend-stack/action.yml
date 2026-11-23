@@ -1743,17 +1743,23 @@ runs:
         PROMOTION_INVERSE: ${{ inputs.rollback_revision }}
       run: |
         set -euo pipefail
-        if [[ "${{ inputs.deploy_profile }}" == manual && "${{ inputs.environment }}" == prod && "${{ inputs.cloud_run_service }}" == backend ]]; then
-          test "$SELECTED_CLOUD_RUN_SERVICES" = backend
-          exec python3 "$DEPLOY_CONTROL_SCRIPTS/promote_selected_backend.py" \
-            --project "$PROMOTION_PROJECT" --region "$PROMOTION_REGION" \
-            --candidate "$PROMOTION_CANDIDATE" --inverse "$PROMOTION_INVERSE" \
-            --source "$PROMOTION_SOURCE" --control "$PROMOTION_CONTROL" \
-            --snapshot artifacts/backend-cloud-run-pre-promotion-traffic-snapshot.json \
-            --receipt artifacts/backend-promotion-stages.json
-        fi
         if [[ " $SELECTED_CLOUD_RUN_SERVICES " == *" backend "* ]]; then
-          gcloud run services update-traffic backend --project=${{ inputs.project_id }} --region=${{ inputs.region }} --to-revisions=${{ steps.capture-backend-revision.outputs.revision }}=100 --quiet
+          if [[ "${{ inputs.deploy_profile }}" == manual && "${{ inputs.environment }}" == prod ]]; then
+            promotion_args=(--scope "${{ inputs.cloud_run_service }}")
+            if [[ "${{ inputs.cloud_run_service }}" == backend ]]; then
+              test "$SELECTED_CLOUD_RUN_SERVICES" = backend
+              promotion_args+=(--inverse "$PROMOTION_INVERSE")
+            fi
+            python3 "$DEPLOY_CONTROL_SCRIPTS/promote_selected_backend.py" \
+              "${promotion_args[@]}" \
+              --project "$PROMOTION_PROJECT" --region "$PROMOTION_REGION" \
+              --candidate "$PROMOTION_CANDIDATE" \
+              --source "$PROMOTION_SOURCE" --control "$PROMOTION_CONTROL" \
+              --snapshot artifacts/backend-cloud-run-pre-promotion-traffic-snapshot.json \
+              --receipt artifacts/backend-promotion-stages.json
+          else
+            gcloud run services update-traffic backend --project=${{ inputs.project_id }} --region=${{ inputs.region }} --to-revisions=${{ steps.capture-backend-revision.outputs.revision }}=100 --quiet
+          fi
         fi
         if [[ " $SELECTED_CLOUD_RUN_SERVICES " == *" backend-sync "* ]]; then
           gcloud run services update-traffic backend-sync --project=${{ inputs.project_id }} --region=${{ inputs.region }} --to-revisions=${{ steps.capture-backend-sync-revision.outputs.revision }}=100 --quiet

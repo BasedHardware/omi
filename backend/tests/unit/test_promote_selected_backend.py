@@ -35,9 +35,12 @@ class FakeCloud:
         self.scenario = scenario
         self.clock = clock
         self.metric_batch = None
-        if scenario in ('delayed', 'late'):
-            # Advance the shared clock once for eight overlapping responses.
-            self.metric_batch = Barrier(8, action=lambda: clock.sleep(9 if scenario == 'delayed' else 11))
+        self.batches = 0
+        if scenario in ('delayed', 'late', 'retry'):
+            self.metric_batch = Barrier(8, action=self.finish_batch)
+        if scenario == 'baseline_boundary':
+            clock.sleep(29)
+            self.metric_batch = Barrier(4, action=self.finish_batch)
         self.generation = 1
         self.writes = []
         self.polls = 0
@@ -46,6 +49,10 @@ class FakeCloud:
             {'type': promotion.REVISION, 'revision': OLD, 'tag': 'stable', 'percent': 100},
             {'type': promotion.LATEST, 'tag': 'latest-probe'},
         ]
+
+    def finish_batch(self):
+        self.batches += 1
+        self.clock.sleep(11 if self.scenario == 'late' else 9)
 
     def service(self):
         observed = copy.deepcopy(self.traffic)
@@ -80,8 +87,8 @@ class FakeCloud:
             assert method == 'PATCH'
             assert set(body) == {'etag', 'traffic'}
             assert body['etag'] == f'etag-{self.generation}'
-            if self.metric_batch:
-                self.clock.sleep(15)
+            routing_delay = {'retry': 55, 'delayed': 15, 'late': 15, 'routing_timeout': 121}
+            self.clock.sleep(routing_delay.get(self.scenario, 0))
             self.writes.append(copy.deepcopy(body))
             self.traffic = body['traffic']
             self.generation += 1
@@ -96,7 +103,7 @@ class FakeCloud:
                 doc = {'done': True, 'error': {'code': 9}}
         else:
             assert method == 'GET'
-            if self.writes and self.metric_batch:
+            if self.metric_batch and bool(self.writes) != (self.scenario == 'baseline_boundary'):
                 self.metric_batch.wait(timeout=2)
             query = parse_qs(urlsplit(url).query)
             metric = re.search(
@@ -113,6 +120,8 @@ class FakeCloud:
     def metrics(self, query, metric, candidate, ingress):
         end = query['interval.endTime'][0]
         if candidate and self.scenario == 'missing':
+            return {}
+        if candidate and self.scenario == 'retry' and self.batches == 1 and metric == 'request_count':
             return {}
         if candidate and self.scenario == 'stale':
             end = '2026-11-22T16:00:00Z'
@@ -140,7 +149,7 @@ class FakeCloud:
         }
 
 
-def controller(tmp_path, monkeypatch, scenario):
+def controller(tmp_path, monkeypatch, scenario, *, scope='backend'):
     monkeypatch.setenv('GITHUB_RUN_ID', '42')
     monkeypatch.setenv('GITHUB_RUN_ATTEMPT', '1')
     snapshot = tmp_path / 'snapshot.json'
@@ -165,9 +174,15 @@ def controller(tmp_path, monkeypatch, scenario):
             }
         )
     )
+    if scope == 'all':
+        doc = json.loads(snapshot.read_text())
+        for service in promotion.DEFAULT_SERVICES[1:]:
+            doc['services'][service] = {'service': service}
+        snapshot.write_text(json.dumps(doc))
     args = SimpleNamespace(
         candidate=NEW,
-        inverse=OLD,
+        inverse=OLD if scope == 'backend' else None,
+        scope=scope,
         source='a' * 40,
         control='b' * 40,
         snapshot=snapshot,
@@ -249,6 +264,77 @@ def test_metric_collection_timeout_cannot_advance_stage(tmp_path, monkeypatch):
     assert 'health_verified_at' not in receipt['stages'][0]
 
 
+def test_aligned_convergence_and_one_missing_sample_fit_with_slow_reads(tmp_path, monkeypatch):
+    rollout = controller(tmp_path, monkeypatch, 'retry')
+    rollout.run()
+
+    receipt = json.loads(rollout.path.read_text())
+    first = receipt['stages'][0]
+    assert first['verified_at'] == promotion.iso(1_800_000_060)
+    assert first['health_verified_at'] == promotion.iso(1_800_000_413)
+    assert rollout.transport.batches == 4
+    assert receipt['outcome'] == 'promoted'
+
+
+def test_routing_has_its_own_deadline(tmp_path, monkeypatch):
+    rollout = controller(tmp_path, monkeypatch, 'routing_timeout')
+    with pytest.raises(promotion.Refused, match='io_deadline'):
+        rollout.run()
+    assert len(rollout.transport.writes) == 1
+    assert rollout.transport.polls == 0
+
+
+def test_baseline_selected_before_minute_boundary_survives_collection(tmp_path, monkeypatch):
+    rollout = controller(tmp_path, monkeypatch, 'baseline_boundary')
+    rollout.run()
+
+    receipt = json.loads(rollout.path.read_text())
+    assert receipt['baseline']['sample_end'] == promotion.iso(1_799_999_760)
+    assert receipt['outcome'] == 'promoted'
+
+
+def test_all_service_scope_uses_exact_backend_inverse_from_snapshot(tmp_path, monkeypatch):
+    rollout = controller(tmp_path, monkeypatch, 'pass', scope='all')
+    rollout.run()
+
+    receipt = json.loads(rollout.path.read_text())
+    assert receipt['scope'] == 'all'
+    assert receipt['inverse'] == OLD
+    assert [row['weights'][NEW] for row in receipt['stages']] == [10, 50, 90, 100]
+
+
+def test_all_service_scope_refuses_disagreeing_backend_snapshot_before_write(tmp_path, monkeypatch):
+    rollout = controller(tmp_path, monkeypatch, 'pass', scope='all')
+    doc = json.loads(rollout.snapshot.read_text())
+    doc['services']['backend']['spec']['traffic'][0]['revisionName'] = 'backend-other'
+    rollout.snapshot.write_text(json.dumps(doc))
+
+    with pytest.raises(promotion.Refused, match='snapshot_inverse_mismatch'):
+        rollout.run()
+    assert not rollout.transport.writes
+
+
+def test_unreadable_snapshot_is_a_refusal(tmp_path, monkeypatch):
+    rollout = controller(tmp_path, monkeypatch, 'pass')
+    rollout.snapshot.unlink()
+    with pytest.raises(promotion.Refused, match='snapshot_unreadable'):
+        rollout.run()
+    receipt = json.loads(rollout.path.read_text())
+    assert (receipt['outcome'], receipt['reason']) == ('refused', 'snapshot_unreadable')
+    assert not rollout.transport.writes
+
+
+def test_live_v2_requested_and_observed_traffic_row_shape():
+    row = {
+        'type': 'TRAFFIC_TARGET_ALLOCATION_TYPE_REVISION',
+        'revision': 'backend-0fb4972-45146075887-1',
+        'percent': 100,
+    }
+    for field in ('traffic', 'trafficStatuses'):
+        service = {field: [row]}
+        assert promotion.routing(service[field]) == ({'backend-0fb4972-45146075887-1': 100}, {})
+
+
 def test_cancellation_records_unverified_intent_without_advancing(tmp_path, monkeypatch):
     rollout = controller(tmp_path, monkeypatch, 'cancel')
     with pytest.raises(SystemExit) as exc:
@@ -274,8 +360,8 @@ def test_workflow_keeps_staged_failures_and_cancellation_on_the_snapshot_restore
     workflow = path.read_text()
     shift = workflow.split('id: shift-cloud-run-traffic\n', 1)[1].split('    - name:', 1)[0]
     assert '--snapshot artifacts/backend-cloud-run-pre-promotion-traffic-snapshot.json' in shift
-    assert 'exec python3 "$DEPLOY_CONTROL_SCRIPTS/promote_selected_backend.py"' in shift
-    assert '== manual &&' in shift and '== prod &&' in shift and '== backend ]]' in shift
+    assert 'python3 "$DEPLOY_CONTROL_SCRIPTS/promote_selected_backend.py"' in shift
+    assert '== manual &&' in shift and '== prod ]]' in shift and '== backend ]]' in shift
     restore = workflow.split('    - name: Restore Cloud Run traffic snapshot after failed promotion')[-1]
     assert "steps.shift-cloud-run-traffic.outcome == 'failure'" in restore
     assert "steps.shift-cloud-run-traffic.outcome == 'cancelled'" in restore

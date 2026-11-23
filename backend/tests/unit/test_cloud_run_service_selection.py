@@ -147,19 +147,22 @@ def test_actual_shared_shell_never_targets_omitted_services(tmp_path, service, n
     )
     assert result.returncode == 0, result.stderr
     calls = log.read_text().splitlines() if log.exists() else []
-    if name == 'Shift Cloud Run traffic to validated revisions' and service == 'backend':
-        assert calls == [
-            f'/controls/promote_selected_backend.py --project based-hardware --region us-central1 '
-            f"--candidate backend-new --inverse backend-old --source {'a' * 40} --control {'b' * 40} "
+    staged = name == 'Shift Cloud Run traffic to validated revisions' and service in ('backend', 'all')
+    if staged:
+        inverse = ' --inverse backend-old' if service == 'backend' else ''
+        assert calls[0] == (
+            f'/controls/promote_selected_backend.py --scope {service}{inverse} '
+            '--project based-hardware --region us-central1 '
+            f"--candidate backend-new --source {'a' * 40} --control {'b' * 40} "
             '--snapshot artifacts/backend-cloud-run-pre-promotion-traffic-snapshot.json '
             '--receipt artifacts/backend-promotion-stages.json'
-        ]
-        return
+        )
+        assert not any('update-traffic backend ' in call for call in calls)
     expected = set(selected(service))
     if name == 'Attach Managed Prometheus to sync and integration candidates':
         expected.discard('backend')
     # Identify actual fixed service arguments, not image/secret content.
-    seen = set()
+    seen = {'backend'} if staged else set()
     for line in calls:
         for match in re.finditer(
             r'(?:--service[= ]|--wait-revision-ready |--migrate-legacy-public-binding |update-traffic )(backend(?:-sync(?:-backfill)?|-integration)?)(?=[ =]|$)',
@@ -175,7 +178,9 @@ def test_actual_shared_shell_never_targets_omitted_services(tmp_path, service, n
             assert f'--expected-serving-revision {service}-old' in calls[0]
     if name == 'Shift Cloud Run traffic to validated revisions':
         assert len(calls) == len(expected)
-        assert all('--to-revisions=' + s + '-new=100' in c for s, c in zip(selected(service), calls))
+        direct_services = selected(service)[1:] if staged else selected(service)
+        direct_calls = calls[1:] if staged else calls
+        assert all('--to-revisions=' + s + '-new=100' in c for s, c in zip(direct_services, direct_calls))
 
 
 @pytest.mark.parametrize('service', SERVICES)

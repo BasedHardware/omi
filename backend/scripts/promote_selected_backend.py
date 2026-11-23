@@ -17,7 +17,7 @@ from pathlib import Path
 from urllib.parse import urlencode
 
 if __package__:
-    from .cloud_run_traffic_snapshot import SNAPSHOT_SCHEMA_VERSION, restore_targets
+    from .cloud_run_traffic_snapshot import DEFAULT_SERVICES, SNAPSHOT_SCHEMA_VERSION, restore_targets
     from .integration_canary_metrics import (
         PROJECT,
         REGION,
@@ -29,7 +29,7 @@ if __package__:
         require,
     )
 else:
-    from cloud_run_traffic_snapshot import SNAPSHOT_SCHEMA_VERSION, restore_targets
+    from cloud_run_traffic_snapshot import DEFAULT_SERVICES, SNAPSHOT_SCHEMA_VERSION, restore_targets
     from integration_canary_metrics import (
         PROJECT,
         REGION,
@@ -46,11 +46,14 @@ SERVICE = f'projects/{PROJECT}/locations/{REGION}/services/backend'
 MONITORING = f'https://monitoring.googleapis.com/v3/projects/{PROJECT}/timeSeries'
 REVISION = 'TRAFFIC_TARGET_ALLOCATION_TYPE_REVISION'
 LATEST = 'TRAFFIC_TARGET_ALLOCATION_TYPE_LATEST'
+REVISION_NAME = re.compile(r'backend-[a-z0-9](?:[a-z0-9-]{0,53}[a-z0-9])?')
 STAGES = (10, 50, 90, 100)
+ROUTING_SECONDS = 120
 STAGE_SECONDS = 360
 # Global external load-balancer metrics can take 210 seconds to publish.
 METRIC_LAG = 210
 METRIC_COLLECTION_SECONDS = 10
+MISSING_SAMPLE_RETRY_SECONDS = 5
 INGRESS_BACKEND = 'custom-domains-api-omi-me-backend-49a4-be'
 
 
@@ -94,24 +97,40 @@ def verify_service(doc, candidate, expected, tags, uid=None, generation=None):
     require(routing(doc.get('trafficStatuses')) == (expected, tags), 'observed_traffic_drift')
 
 
-def verify_snapshot(path, candidate, inverse):
-    snapshot = json.loads(path.read_text())
+def verify_snapshot(path, candidate, inverse, scope):
+    try:
+        snapshot = json.loads(path.read_text(encoding='utf-8'))
+    except (OSError, UnicodeError, json.JSONDecodeError):
+        raise Refused('snapshot_unreadable') from None
+    services = snapshot.get('services') if isinstance(snapshot, dict) else None
+    expected_services = set(DEFAULT_SERVICES) if scope == 'all' else {'backend'}
     require(
-        snapshot.get('schema_version') == SNAPSHOT_SCHEMA_VERSION
+        isinstance(services, dict)
+        and snapshot.get('schema_version') == SNAPSHOT_SCHEMA_VERSION
         and snapshot.get('project') == PROJECT
         and snapshot.get('region') == REGION
-        and set(snapshot.get('services', {})) == {'backend'}
+        and services.keys() == expected_services
         and snapshot.get('missing_services') == [],
         'snapshot_scope_invalid',
     )
-    backend = snapshot['services']['backend']
-    for field in ('spec', 'status'):
-        require(restore_targets(backend, traffic_source=field) == [(inverse, 100)], 'snapshot_inverse_mismatch')
+    backend = services['backend']
+    try:
+        requested = restore_targets(backend, traffic_source='spec')
+        observed_targets = restore_targets(backend, traffic_source='status')
+    except (AttributeError, ValueError):
+        raise Refused('snapshot_inverse_mismatch') from None
+    if scope == 'all':
+        require(inverse is None and len(observed_targets) == 1, 'snapshot_inverse_mismatch')
+        inverse = observed_targets[0][0]
+    require(isinstance(inverse, str) and bool(REVISION_NAME.fullmatch(inverse)), 'invalid_inverse')
+    require(inverse != candidate, 'candidate_equals_inverse')
+    require(requested == observed_targets == [(inverse, 100)], 'snapshot_inverse_mismatch')
     observed = backend['status']
     require(
         observed.get('latestCreatedRevisionName') == observed.get('latestReadyRevisionName') == candidate,
         'snapshot_candidate_mismatch',
     )
+    return inverse
 
 
 class MissingSample(Refused):
@@ -124,11 +143,13 @@ class Promotion:
         self.clock = clock
         self.candidate = args.candidate
         self.inverse = args.inverse
+        self.scope = args.scope
         self.path = args.receipt
         self.start = clock.monotonic()
         self.receipt = {
             'schema': 1,
             'service': 'backend',
+            'scope': self.scope,
             'source': args.source,
             'control': args.control,
             'run_id': int(os.environ['GITHUB_RUN_ID']),
@@ -310,7 +331,7 @@ class Promotion:
                     (self.candidate, self.inverse, None), end, deadline, include_capacity=True
                 )
             except MissingSample:
-                self.pause(5, deadline)
+                self.pause(MISSING_SAMPLE_RETRY_SECONDS, deadline)
                 continue
             break
         require(METRIC_LAG <= self.clock.time() - end <= METRIC_LAG + 60, 'stale_health_sample')
@@ -325,20 +346,22 @@ class Promotion:
     def run(self):
         try:
             self.record()
-            verify_snapshot(self.snapshot, self.candidate, self.inverse)
+            self.inverse = verify_snapshot(self.snapshot, self.candidate, self.inverse, self.scope)
+            self.receipt['inverse'] = self.inverse
             deadline = self.clock.monotonic() + 60
             expected = {self.inverse: 100}
             initial = self.service(deadline)
             _, tags = routing(initial.get('traffic'), self.candidate)
             verify_service(initial, self.candidate, expected, tags)
+            # Select a fresh bucket at the start of the bounded batch. Transport
+            # time does not age out a bucket selected near a minute boundary.
             baseline_end = int((self.clock.time() - METRIC_LAG) // 60) * 60
             baseline, ingress_baseline = self.collect_health((self.inverse, None), baseline_end, deadline)
-            require(self.clock.time() - baseline_end <= METRIC_LAG + 60, 'stale_baseline')
             self.receipt['baseline'] = {'sample_end': iso(baseline_end), **baseline}
             self.receipt['ingress_baseline'] = {'sample_end': iso(baseline_end), **ingress_baseline}
             current = initial
             for percent in STAGES:
-                deadline = self.clock.monotonic() + STAGE_SECONDS
+                deadline = self.clock.monotonic() + ROUTING_SECONDS
                 before = self.service(deadline)
                 verify_service(before, self.candidate, expected, tags, initial['uid'], current['generation'])
                 expected = {self.candidate: percent}
@@ -349,6 +372,8 @@ class Promotion:
                 self.record()
                 print(f'Requesting verified candidate traffic shift to {percent} percent', flush=True)
                 current = self.move(before, expected, tags, deadline)
+                require(self.clock.monotonic() <= deadline, 'routing_deadline')
+                deadline = self.clock.monotonic() + STAGE_SECONDS
                 convergence = self.clock.time()
                 row.update(verified_at=iso(convergence), generation=current['generation'])
                 self.record()
@@ -376,7 +401,9 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--project', required=True, choices=(PROJECT,))
     parser.add_argument('--region', required=True, choices=(REGION,))
-    for field in ('candidate', 'inverse', 'source', 'control'):
+    parser.add_argument('--scope', choices=('backend', 'all'), default='backend')
+    parser.add_argument('--inverse')
+    for field in ('candidate', 'source', 'control'):
         parser.add_argument(f'--{field}', required=True)
     for field in ('snapshot', 'receipt'):
         parser.add_argument(f'--{field}', required=True, type=Path)
@@ -387,9 +414,7 @@ def main():
 
     signal.signal(signal.SIGTERM, stop)
     try:
-        require(args.candidate != args.inverse, 'candidate_equals_inverse')
-        for revision in (args.candidate, args.inverse):
-            require(bool(re.fullmatch(r'backend-[a-z0-9](?:[a-z0-9-]{0,53}[a-z0-9])?', revision)), 'invalid_revision')
+        require(bool(REVISION_NAME.fullmatch(args.candidate)), 'invalid_revision')
         for sha in (args.source, args.control):
             require(bool(re.fullmatch(r'[0-9a-f]{40}', sha)), 'invalid_release_sha')
         clock = Clock()
