@@ -1057,7 +1057,8 @@
     },
     "STT_IDLE_REOPEN_COST_RESELECT_ENABLED": {
       "owner": "idlereopen / two-lane lead",
-      "review_by": "2026-11-26"
+      "review_by": "2026-12-03",
+      "reason": "SCA-3850: retain the default-off operations switch recorded in the registry after the first-text regression. Review the longer-term budget disposition with the two-lane lead by 2026-12-03."
     },
     "STT_NON_EN_MULTI_PREFER_HINTABLE_PERCENT": {
       "seeded": "2026-10-25"
