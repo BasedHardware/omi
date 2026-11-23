@@ -63,10 +63,11 @@ class ConversationsV3Provider extends ChangeNotifier {
 
   bool get finishTimedOut => finishFeedbackEnabled && _finishTimedOut;
 
-  bool takeFinishTimeout() {
+  bool takeFinishTimeout(Iterable<ServerConversation> rows) {
     if (!finishTimedOut) return false;
-    _finishTimedOut = false;
-    return true;
+    final stillWaiting = finishTerminalMatch(rows) == null;
+    _clearManualFinish(keepClosedLive: true);
+    return stillWaiting;
   }
 
   bool get finishFeedbackEnabled => v3 && !const bool.fromEnvironment('OMI_V3_FINISH_FEEDBACK_OFF');
@@ -91,9 +92,13 @@ class ConversationsV3Provider extends ChangeNotifier {
     }
     _armFinishExpiry();
     _finishDeadline = Timer(const Duration(minutes: 20), () {
-      final accepted = _finishAccepted;
-      _clearManualFinish(keepClosedLive: accepted);
-      _finishTimedOut = accepted;
+      if (_finishAccepted) {
+        // Keep the match identity until Home can show feedback. The row and its polling end here.
+        _finishRow = null;
+        _finishTimedOut = true;
+      } else {
+        _clearManualFinish();
+      }
       notifyListeners();
     });
     notifyListeners();
@@ -266,7 +271,7 @@ class ConversationsV3Provider extends ChangeNotifier {
             _live!.id != _finishLiveId &&
             (_finishRecordingId == null || _live!.v3?.recordingIds.contains(_finishRecordingId) != true)) {
           _suppressListening = false;
-          if (_finishRow == null) _finishLiveId = null;
+          if (_finishRow == null && !_finishTimedOut) _finishLiveId = null;
         }
       case ApiFailure(:final problem) when problem.kind == ApiProblemKind.notFound:
         // An older server: today's Home.

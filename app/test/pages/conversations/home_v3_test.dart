@@ -1391,6 +1391,8 @@ void main() {
       ('legacy failed projection', "Couldn't summarize this conversation", null),
       ('hidden result', 'Processing finished. This recording is hidden from Home.', '001-mobile-ios-hidden-finish'),
       ('20-minute deadline', 'Still processing. Check Home for the result.', '002-mobile-ios-finish-deadline'),
+      ('20-minute deadline off Home', 'Still processing. Check Home for the result.', null),
+      ('20-minute deadline followed by a result', 'Still processing. Check Home for the result.', null),
     ]) {
       testWidgets('a $caseName settles the manual finish and stops list polling', (tester) async {
         await withClock(Clock.fixed(_now), () async {
@@ -1421,11 +1423,28 @@ void main() {
           expect(find.byKey(const Key('home_processing_row')), findsOneWidget,
               reason: 'the unrelated failed conversation must not settle this finish');
 
-          if (caseName == '20-minute deadline') {
+          final resultAfterTimeout = caseName == '20-minute deadline followed by a result';
+          if (caseName.startsWith('20-minute deadline')) {
             await tester.pump(const Duration(minutes: 19, seconds: 59));
             expect(v3.finishRow, same(pending));
             expect(find.byKey(const Key('home_processing_row')), findsOneWidget);
-            await tester.pump(const Duration(seconds: 1));
+            if (caseName == '20-minute deadline off Home' || resultAfterTimeout) {
+              final tabs = tester.element(find.byType(ConversationsPage)).read<HomeProvider>();
+              tabs.setIndex(HomeProvider.tasksTab);
+              await tester.pump(const Duration(seconds: 1));
+              expect(v3.finishRow, isNull);
+              expect(find.text(message), findsNothing);
+              if (resultAfterTimeout) {
+                home.conversations.upsertConversation(
+                  _conversation('live-1', home.liveStart, 'Launch checklist', v3: _done),
+                  preserveHomeStep: false,
+                );
+                await tester.pump();
+              }
+              tabs.setIndex(HomeProvider.homeTab);
+            } else {
+              await tester.pump(const Duration(seconds: 1));
+            }
           } else if (caseName == 'legacy failed projection') {
             home.conversations.upsertConversation(
               _conversation('live-1', home.liveStart, 'Launch checklist', status: ConversationStatus.processing)
@@ -1448,8 +1467,8 @@ void main() {
           await tester.pump(const Duration(milliseconds: 300));
           expect(v3.finishRow, isNull);
           expect(find.byKey(const Key('home_processing_row')), findsNothing);
-          expect(find.text(message), findsOneWidget);
-          expect(find.text('Launch checklist'), findsNothing);
+          expect(find.text(message), resultAfterTimeout ? findsNothing : findsOneWidget);
+          expect(find.text('Launch checklist'), resultAfterTimeout ? findsOneWidget : findsNothing);
           if (image != null) await shoot(tester, image);
 
           await tester.pump(const Duration(minutes: 3));

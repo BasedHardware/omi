@@ -501,9 +501,11 @@ class _ConversationsPageState extends State<ConversationsPage>
         !source.showShortConversations &&
         !source.showDiscardedConversations);
     if (active && _feed?.preparationReady == true) unawaited(_feed!.refresh());
-    // Re-entering Home releases an outage-era grouping. With nothing held,
-    // a tab switch must not rebuild this page (tab_switch perf budget).
-    if (active && (_fallbackHomeLayout != null || _paintedStandaloneIds.isNotEmpty) && mounted) {
+    // Re-entering Home releases an outage-era grouping and shows deferred finish feedback.
+    // Skip the rebuild when there is nothing to update (tab_switch perf budget).
+    if (active &&
+        mounted &&
+        (_fallbackHomeLayout != null || _paintedStandaloneIds.isNotEmpty || _v3?.finishTimedOut == true)) {
       setState(_releaseHomeLayout);
     }
   }
@@ -929,7 +931,7 @@ class _ConversationsPageState extends State<ConversationsPage>
             !_wasBackgrounded &&
             (ModalRoute.of(context)?.isCurrent ?? true)) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (mounted && v3.takeFinishTimeout()) {
+            if (mounted && v3.takeFinishTimeout(convoProvider.conversations)) {
               OmiFeedback.info(context, context.l10n.finishCheckHome);
             }
           });
