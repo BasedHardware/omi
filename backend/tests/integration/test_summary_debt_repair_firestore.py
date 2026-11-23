@@ -1055,6 +1055,58 @@ def test_historical_work_yields_capacity_to_full_urgent_demand(debt_store, monke
             candidate.delete()
 
 
+def test_historical_scan_budget_is_independent_of_fresh_scan(debt_store, monkeypatch):
+    client, uid, tasks, ref, row = debt_store
+    now = 1_800_000_000.0
+    monkeypatch.setenv('ENRICHMENT_MAX_AGE_HOURS', '72')
+    monkeypatch.setenv('ENRICHMENT_FRESH_PROMOTE_MAX_AGE_MIN', '30')
+    monkeypatch.setenv('SUMMARY_DEBT_REPAIR_HISTORICAL_ENABLED', 'true')
+    monkeypatch.setattr(repair, 'REPAIR_ADMISSION_LIMIT', 8)
+    monkeypatch.setattr(repair, 'REPAIR_PER_OWNER_TICK_LIMIT', 3)
+    monkeypatch.setattr(repair, 'REPAIR_SCAN_LIMIT', 100)
+    monkeypatch.setattr(repair, 'account_deletion_blocks_user_work', lambda _: False)
+
+    fresh_refs = {'c': ref}
+    for index in range(17):
+        fresh_refs[f'fresh-{index:02d}'] = ref.parent.document(f'fresh-{index:02d}')
+    history_uid = f'{uid}-historical'
+    history_user = client.collection('users').document(history_uid)
+    history_user.set({'data_protection_level': 'standard'})
+    historical_ref = history_user.collection('conversations').document('historical')
+
+    try:
+        for fresh_ref in fresh_refs.values():
+            fresh_ref.set(
+                {
+                    **row,
+                    'summary_first_pending_at': now - 120,
+                    'summary_due_at': now - 1,
+                    'finished_at': now - 60,
+                }
+            )
+        historical_ref.set(
+            {
+                **row,
+                'summary_first_pending_at': now - 7_200,
+                'summary_due_at': now - 1,
+                'finished_at': now - 7_000,
+            }
+        )
+
+        counts = repair.tick(now=now, client=client)
+
+        assert counts['scanned'] > repair.HISTORICAL_SCAN_LIMIT
+        assert counts['admitted'] == 4
+        assert any(task['conversation_id'] == 'historical' for task in tasks)
+    finally:
+        for conversation_id, fresh_ref in fresh_refs.items():
+            fresh_ref.delete()
+            client.collection(reprocess.COLLECTION).document(reprocess.key(uid, conversation_id)).delete()
+        historical_ref.delete()
+        client.collection(reprocess.COLLECTION).document(reprocess.key(history_uid, 'historical')).delete()
+        history_user.delete()
+
+
 def test_historical_and_newest_queries_use_disjoint_freshness_bands(debt_store, monkeypatch):
     client, _, _, ref, row = debt_store
     now = 1_800_000_000.0

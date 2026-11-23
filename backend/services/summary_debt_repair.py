@@ -222,13 +222,24 @@ def tick(*, now: float | None = None, client: Any = None) -> dict[str, int]:
         historical = phase == 'historical'
         attempt_limit = min(REPAIR_ADMISSION_LIMIT, attempts + 1) if historical else REPAIR_ADMISSION_LIMIT
         scan_limit = history_rows if historical else REPAIR_SCAN_LIMIT
+        phase_scanned = 0
         deadline = min(scan_deadline, _scan_clock() + HISTORICAL_SCAN_SECONDS) if historical else scan_deadline
         observed = phase_counts[phase] = Counter()
         # Look ahead for skips without reading a full scan budget when the
         # remaining attempts could all be used on a short prefix.
         page_target = 2 * max(8, attempt_limit - attempts)
-        while attempts < attempt_limit and counts['scanned'] < scan_limit and _scan_clock() < deadline:
-            limit = min(page_target, REPAIR_QUERY_PAGE_LIMIT, scan_limit - counts['scanned'])
+        while (
+            attempts < attempt_limit
+            and phase_scanned < scan_limit
+            and counts['scanned'] < REPAIR_SCAN_LIMIT
+            and _scan_clock() < deadline
+        ):
+            limit = min(
+                page_target,
+                REPAIR_QUERY_PAGE_LIMIT,
+                scan_limit - phase_scanned,
+                REPAIR_SCAN_LIMIT - counts['scanned'],
+            )
             page_options = {}
             if historical or (historical_split and phase == 'newest'):
                 page_options['historical_before'] = historical_before
@@ -254,6 +265,7 @@ def tick(*, now: float | None = None, client: Any = None) -> dict[str, int]:
             # Count every returned document, including a fetched tail left for
             # next tick. No later RPC starts once attempts/time are exhausted.
             counts['scanned'] += len(page)
+            phase_scanned += len(page)
             observed[DiscoveryOutcome.FETCHED] += len(page)
             exhausted = len(page) < limit
             for snapshot in page:
