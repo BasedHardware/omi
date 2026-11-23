@@ -2,119 +2,158 @@
   "version": 1,
   "images": [
     {
-      "file": "001-web-plans-sheet-before-desktop.png",
+      "file": "001-web-plans-sheet-blocked-desktop.png",
       "platform": "web",
-      "description": "plans-sheet: before blocked-popup checkout at 1280px (desktop); origin/main behavior. Local mocked component harness; no live backend or payments.",
+      "description": "plans-sheet at 1280px: browser refuses the first launch, annual stays selected and checkout remains retryable.",
       "captured_by": "agent",
       "source": "playwright-e2e",
-      "sha256": "7af4971516324e8ed5e441867951f7f19d583d303c5642e95b7ce3aca8f4efa1"
+      "sha256": "839899fc33edaac58ea201af0f877c34c5e404843cf770cdc75e1c24cd5620d7"
     },
     {
-      "file": "002-web-plans-sheet-after-desktop.png",
+      "file": "002-web-plans-sheet-retry-desktop.png",
       "platform": "web",
-      "description": "plans-sheet: after blocked-popup checkout at 1280px (desktop); guidance and retry affordance. Local mocked component harness; no live backend or payments.",
+      "description": "plans-sheet at 1280px: a pointer click retries the same annual offer, with checkout processing in the fixture.",
       "captured_by": "agent",
       "source": "playwright-e2e",
-      "sha256": "c626b9b1c1feeaeaf3889a4445e5903833994277ba4274770ced1d61a74dbc05"
+      "sha256": "0e5cf35ffc1e3ee9b10bb6e8a3bfcc4b04322f890443d260bed057c68140769b"
     },
     {
-      "file": "003-web-plans-sheet-before-mobile.png",
+      "file": "003-web-plans-sheet-opened-desktop.png",
       "platform": "web",
-      "description": "plans-sheet: before blocked-popup checkout at 390px (mobile); origin/main behavior. Local mocked component harness; no live backend or payments.",
+      "description": "plans-sheet at 1280px: the local checkout tab opens on the same annual price.",
       "captured_by": "agent",
       "source": "playwright-e2e",
-      "sha256": "ddb03c4c094ea45447dfc40092d523595da3b318910307dd9666660d92194232"
+      "sha256": "e9b97f39451c9637a5edb05bc7f631350fc3127a319e8f2d426b95759bf23a59"
     },
     {
-      "file": "004-web-plans-sheet-after-mobile.png",
+      "file": "004-web-plans-sheet-blocked-mobile.png",
       "platform": "web",
-      "description": "plans-sheet: after blocked-popup checkout at 390px (mobile); guidance and retry affordance. Local mocked component harness; no live backend or payments.",
+      "description": "plans-sheet at 390px: browser refuses the first launch, annual stays selected and checkout remains retryable.",
       "captured_by": "agent",
       "source": "playwright-e2e",
-      "sha256": "77baccbf6e3a0e0f31e6410b6c8721a1ef04476680155340bf08ce0b97cd46fe"
+      "sha256": "3530a39892e7c37d5b706378631176942d2966778326ee33e0cfed4ef9908c1c"
     },
     {
-      "file": "005-web-settings-page-before-desktop.png",
+      "file": "005-web-plans-sheet-retry-mobile.png",
       "platform": "web",
-      "description": "settings-page: before blocked-popup checkout at 1280px (desktop); origin/main behavior. Local mocked component harness; no live backend or payments.",
+      "description": "plans-sheet at 390px: a pointer click retries the same annual offer, with checkout processing in the fixture.",
       "captured_by": "agent",
       "source": "playwright-e2e",
-      "sha256": "82fd79660a3df2c217b2105a12694e1590e2101b6624bc9e0c7d8e2f2196674b"
+      "sha256": "08fcd86e7a7c978bc4aab9775f3e97c8369f846af6e330d948e6ebb8213f5b91"
     },
     {
-      "file": "006-web-settings-page-after-desktop.png",
+      "file": "006-web-plans-sheet-opened-mobile.png",
       "platform": "web",
-      "description": "settings-page: after blocked-popup checkout at 1280px (desktop); guidance and retry affordance. Local mocked component harness; no live backend or payments.",
+      "description": "plans-sheet at 390px: the local checkout tab opens on the same annual price.",
       "captured_by": "agent",
       "source": "playwright-e2e",
-      "sha256": "1617dffc6993aa3fca5ea5819a2ba3945d6850045d4ef79f5c9f12b40bc5efaa"
+      "sha256": "012a364362f94165c5ddf1af397a1b4ad88f7da171abd281ac497dd951ef0608"
     },
     {
-      "file": "007-web-settings-page-before-mobile.png",
+      "file": "007-web-settings-page-blocked-desktop.png",
       "platform": "web",
-      "description": "settings-page: before blocked-popup checkout at 390px (mobile); origin/main behavior. Local mocked component harness; no live backend or payments.",
+      "description": "settings-page at 1280px: browser refuses the first launch, annual stays selected and checkout remains retryable.",
       "captured_by": "agent",
       "source": "playwright-e2e",
-      "sha256": "6833d0f4a8c17c056a62e941aa1450b890ff55d7064b2ddf25495e3e421ba91f"
+      "sha256": "4ab304387080bed425c87bc633b474daffe2fdf3d43d033c02d4edb3a9f3f923"
     },
     {
-      "file": "008-web-settings-page-after-mobile.png",
+      "file": "008-web-settings-page-retry-desktop.png",
       "platform": "web",
-      "description": "settings-page: after blocked-popup checkout at 390px (mobile); guidance and retry affordance. Local mocked component harness; no live backend or payments.",
+      "description": "settings-page at 1280px: a pointer click retries the same annual offer, with checkout processing in the fixture.",
       "captured_by": "agent",
       "source": "playwright-e2e",
-      "sha256": "5958ab8deeba105328e004a1121e5babc60f23a67f2fa5c32fd4b4a73b1eca52"
+      "sha256": "44981a202fab59dc216c5a2c7cc8fda4a88383db4c94cd25bf6b54aaa45c0924"
     },
     {
-      "file": "009-web-storefront-before-desktop.png",
+      "file": "009-web-settings-page-opened-desktop.png",
       "platform": "web",
-      "description": "storefront: before blocked-popup checkout at 1280px (desktop); origin/main behavior. Local mocked component harness; no live backend or payments.",
+      "description": "settings-page at 1280px: the local checkout tab opens on the same annual price.",
       "captured_by": "agent",
       "source": "playwright-e2e",
-      "sha256": "0bf8aaa3aa00fa57a6d0359b32d9e833dc497896cf73dafa82d0f2336a58cc15"
+      "sha256": "e9b97f39451c9637a5edb05bc7f631350fc3127a319e8f2d426b95759bf23a59"
     },
     {
-      "file": "010-web-storefront-after-desktop.png",
+      "file": "010-web-settings-page-blocked-mobile.png",
       "platform": "web",
-      "description": "storefront: after blocked-popup checkout at 1280px (desktop); guidance and retry affordance. Local mocked component harness; no live backend or payments.",
+      "description": "settings-page at 390px: browser refuses the first launch, annual stays selected and checkout remains retryable.",
       "captured_by": "agent",
       "source": "playwright-e2e",
-      "sha256": "dc8d9e96c85ff1da33d62b43207f4e0631b2ccd3ea79e68e6a69367aa4e1cfff"
+      "sha256": "1982b4eec7f0a72fdd5f0fe10e668072c191ebfb6bba8cef9f4557bf06e64ac5"
     },
     {
-      "file": "011-web-storefront-before-mobile.png",
+      "file": "011-web-settings-page-retry-mobile.png",
       "platform": "web",
-      "description": "storefront: before blocked-popup checkout at 390px (mobile); origin/main behavior. Local mocked component harness; no live backend or payments.",
+      "description": "settings-page at 390px: a pointer click retries the same annual offer, with checkout processing in the fixture.",
       "captured_by": "agent",
       "source": "playwright-e2e",
-      "sha256": "77345d4d744a05bf50b7132d935e0d1170c73866f5c3a01a99594e8dad017096"
+      "sha256": "da89227e7663b6d97333359427e10a74b8d46213b4fb15eb5dd9f8303c00276f"
     },
     {
-      "file": "012-web-storefront-after-mobile.png",
+      "file": "012-web-settings-page-opened-mobile.png",
       "platform": "web",
-      "description": "storefront: after blocked-popup checkout at 390px (mobile); guidance and retry affordance. Local mocked component harness; no live backend or payments.",
+      "description": "settings-page at 390px: the local checkout tab opens on the same annual price.",
       "captured_by": "agent",
       "source": "playwright-e2e",
-      "sha256": "14970dbfffbd1ff21dedea4869eec77b07f204c3aa3abb1f86e791f90234155a"
+      "sha256": "012a364362f94165c5ddf1af397a1b4ad88f7da171abd281ac497dd951ef0608"
+    },
+    {
+      "file": "013-web-storefront-blocked-desktop.png",
+      "platform": "web",
+      "description": "storefront at 1280px: browser refuses the first launch, annual stays selected and checkout remains retryable.",
+      "captured_by": "agent",
+      "source": "playwright-e2e",
+      "sha256": "1d04223ba23cccbd983e49f2c6576d13bb06d56d1c1feb2204864a2555c0ada3"
+    },
+    {
+      "file": "014-web-storefront-retry-desktop.png",
+      "platform": "web",
+      "description": "storefront at 1280px: a pointer click retries the same annual offer, with checkout processing in the fixture.",
+      "captured_by": "agent",
+      "source": "playwright-e2e",
+      "sha256": "fca193c7ba003c74357df5857764bef860a8f1a8be25a46120eed916356053bb"
+    },
+    {
+      "file": "015-web-storefront-opened-desktop.png",
+      "platform": "web",
+      "description": "storefront at 1280px: the local checkout tab opens on the same annual price.",
+      "captured_by": "agent",
+      "source": "playwright-e2e",
+      "sha256": "e9b97f39451c9637a5edb05bc7f631350fc3127a319e8f2d426b95759bf23a59"
+    },
+    {
+      "file": "016-web-storefront-blocked-mobile.png",
+      "platform": "web",
+      "description": "storefront at 390px: browser refuses the first launch, annual stays selected and checkout remains retryable.",
+      "captured_by": "agent",
+      "source": "playwright-e2e",
+      "sha256": "aa6f96a51120a5c09a9a3d02da56d5b6354c8054e8a9209b0ab7186f9d761ca1"
+    },
+    {
+      "file": "017-web-storefront-retry-mobile.png",
+      "platform": "web",
+      "description": "storefront at 390px: a pointer click retries the same annual offer, with checkout processing in the fixture.",
+      "captured_by": "agent",
+      "source": "playwright-e2e",
+      "sha256": "df7bcf0a1caae9ee71282b7a842bd47c8ac7d34d4125173a60cb7d589fe7bc74"
+    },
+    {
+      "file": "018-web-storefront-opened-mobile.png",
+      "platform": "web",
+      "description": "storefront at 390px: the local checkout tab opens on the same annual price.",
+      "captured_by": "agent",
+      "source": "playwright-e2e",
+      "sha256": "012a364362f94165c5ddf1af397a1b4ad88f7da171abd281ac497dd951ef0608"
     }
   ],
   "capture": {
-    "captured_at": "2026-11-11T04:10:17.056690+00:00",
-    "before_ref": "c8a75e2800e17bf5d26a4989bab987bbe158aacc",
-    "after_ref": "d46cfeed31349a5995bcf51b66e7a7266a9a25b0",
-    "source_origin": "Read-only exports of git archive at before_ref/after_ref; no working source modifications between code commit, build, capture and evidence commit.",
-    "renderer": "Local React component harness; Bun browser bundles; Playwright 1.65.0 Chromium; 1280x1000 and 390x1000 viewports; full-page PNGs; system sans-serif fallback (remote fonts disabled)",
-    "surfaces": {
-      "PlansSheet": "PlansSheet with controlled open state and cached fixture plans",
-      "SettingsPage": "Exported UsageSectionContent; storefront gate disabled; click See plans",
-      "StorefrontHost": "StorefrontPanel with initial fixture storefront"
-    },
-    "stubs": {
-      "checkout": "createCheckoutSession resolves to loopback checkout-stub URL; window.open records request and returns null",
-      "data": "Cached local basic subscription, Omi Pro monthly/annual offers, usage and storefront; no real account",
-      "providers": "API/auth/subscription analytics/feature gate/navigation modules replaced at bundle time; unexpected APIs throw",
-      "network": "Loopback-only HTTP server; Playwright aborts unexpected routes; CSP connect-src none; fetch throws; no external font import"
-    },
+    "captured_at": "2026-11-23T09:41:59.557152+00:00",
+    "base_ref": "d76ebe1ed35fd9929bea8a4262cf8b927b6119c8",
+    "source_ref": "a79e438cb9747f1cb05e4a6d2b291d2b9f6d4295",
+    "source_origin": "Rebased checkout sources and CSS with local auth, API, analytics, and navigation fixtures. The evidence commit does not alter the web sources.",
+    "renderer": "Bun browser bundle, Playwright Chromium 159.0.8154.6, 1280x1000 and 390x1000 viewports, full-page PNGs, system fonts.",
+    "behavior": "A browser stub refuses the first launch. A pointer click retries the same annual price while the checkout fixture holds the response for the retry screenshot. The retry opens a real Chromium tab to the loopback checkout fixture, without a window opener. A focus event verifies one subscription refresh.",
+    "network": "Loopback-only server and browser routing. No live service, real account, or payment.",
     "source_sha256": {
       "web/app/src/components/settings/PlansSheet.tsx": "7aec8989e668e4bda510e58788e5aeeb604590e8a03525dcb5d847e5f473a83c",
       "web/app/src/components/settings/SettingsPage.tsx": "ae100707d96841f4299266a26968d0484b738807722328765cb0116ae53b248b",
@@ -122,11 +161,188 @@
       "web/app/src/lib/checkoutWindow.ts": "e2a0552fcf8bcabb821c371c712823d047755e0c8d8875479f606a2dbf8e52d3",
       "web/app/src/lib/analytics/subscriptionFunnel.ts": "cca7e79dfe8dcab6b3297d8e0c9e711e80cfe121ebbc3c1d28d2a2262741b6bb"
     },
-    "source_sha256_command": "shasum -a 256; verified against the exported snapshot, working files, and committed Git blobs before committing evidence",
-    "behavior": "Each after state retains annual selection and allows a real pointer retry; both checkout attempts use fixture_pro_year. Before PlansSheet dismisses; SettingsPage/storefront show no popup warning. Keyboard activation used for initial launch in both versions so the uncorrected baseline dialog layout does not block the comparison.",
-    "bundle_sha256": {
-      "before": "dad45900e3b4e07adf55b531327c89a422379341576c426dd82ead150a583d43",
-      "after": "7bb91daa09d15370f027d38ac1d4a5f7af087643cfeeb1ca6644194312c2e819"
-    }
+    "bundle_sha256": "f9212f0c688c1b9e27a7a4b507c9bdc14ba8c73f6c044c6e712e0e17470f4934",
+    "cases": [
+      {
+        "surface": "plans-sheet",
+        "viewport": "desktop",
+        "width": 1280,
+        "prices": [
+          "fixture_pro_year",
+          "fixture_pro_year"
+        ],
+        "opens": [
+          {
+            "url": "/checkout-stub?price=fixture_pro_year",
+            "target": "_blank"
+          },
+          {
+            "url": "/checkout-stub?price=fixture_pro_year",
+            "target": "_blank"
+          }
+        ],
+        "results": [
+          [
+            "year",
+            "blocked"
+          ],
+          [
+            "year",
+            "opened"
+          ]
+        ],
+        "refreshes": 1
+      },
+      {
+        "surface": "plans-sheet",
+        "viewport": "mobile",
+        "width": 390,
+        "prices": [
+          "fixture_pro_year",
+          "fixture_pro_year"
+        ],
+        "opens": [
+          {
+            "url": "/checkout-stub?price=fixture_pro_year",
+            "target": "_blank"
+          },
+          {
+            "url": "/checkout-stub?price=fixture_pro_year",
+            "target": "_blank"
+          }
+        ],
+        "results": [
+          [
+            "year",
+            "blocked"
+          ],
+          [
+            "year",
+            "opened"
+          ]
+        ],
+        "refreshes": 1
+      },
+      {
+        "surface": "settings-page",
+        "viewport": "desktop",
+        "width": 1280,
+        "prices": [
+          "fixture_pro_year",
+          "fixture_pro_year"
+        ],
+        "opens": [
+          {
+            "url": "/checkout-stub?price=fixture_pro_year",
+            "target": "_blank"
+          },
+          {
+            "url": "/checkout-stub?price=fixture_pro_year",
+            "target": "_blank"
+          }
+        ],
+        "results": [
+          [
+            "year",
+            "blocked"
+          ],
+          [
+            "year",
+            "opened"
+          ]
+        ],
+        "refreshes": 1
+      },
+      {
+        "surface": "settings-page",
+        "viewport": "mobile",
+        "width": 390,
+        "prices": [
+          "fixture_pro_year",
+          "fixture_pro_year"
+        ],
+        "opens": [
+          {
+            "url": "/checkout-stub?price=fixture_pro_year",
+            "target": "_blank"
+          },
+          {
+            "url": "/checkout-stub?price=fixture_pro_year",
+            "target": "_blank"
+          }
+        ],
+        "results": [
+          [
+            "year",
+            "blocked"
+          ],
+          [
+            "year",
+            "opened"
+          ]
+        ],
+        "refreshes": 1
+      },
+      {
+        "surface": "storefront",
+        "viewport": "desktop",
+        "width": 1280,
+        "prices": [
+          "fixture_pro_year",
+          "fixture_pro_year"
+        ],
+        "opens": [
+          {
+            "url": "/checkout-stub?price=fixture_pro_year",
+            "target": "_blank"
+          },
+          {
+            "url": "/checkout-stub?price=fixture_pro_year",
+            "target": "_blank"
+          }
+        ],
+        "results": [
+          [
+            "year",
+            "blocked"
+          ],
+          [
+            "year",
+            "opened"
+          ]
+        ],
+        "refreshes": 1
+      },
+      {
+        "surface": "storefront",
+        "viewport": "mobile",
+        "width": 390,
+        "prices": [
+          "fixture_pro_year",
+          "fixture_pro_year"
+        ],
+        "opens": [
+          {
+            "url": "/checkout-stub?price=fixture_pro_year",
+            "target": "_blank"
+          },
+          {
+            "url": "/checkout-stub?price=fixture_pro_year",
+            "target": "_blank"
+          }
+        ],
+        "results": [
+          [
+            "year",
+            "blocked"
+          ],
+          [
+            "year",
+            "opened"
+          ]
+        ],
+        "refreshes": 1
+      }
+    ]
   }
 }
