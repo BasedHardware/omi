@@ -22,7 +22,7 @@ def step(name):
     return next(s for s in STEPS if s['name'] == name)
 
 
-def render(script):
+def render(script, *, service='all'):
     values = {
         'inputs.project_id': 'based-hardware',
         'inputs.admitted_sha': 'a' * 40,
@@ -33,6 +33,7 @@ def render(script):
         'inputs.deploy_profile': 'manual',
         'inputs.environment': 'prod',
         'inputs.deploy_targets': 'cloud-run-only',
+        'inputs.cloud_run_service': service,
         'inputs.deploy_gateway': 'false',
         'inputs.service': 'backend',
         'inputs.integration_only': 'false',
@@ -122,7 +123,7 @@ def test_actual_shared_shell_never_targets_omitted_services(tmp_path, service, n
     fake.chmod(0o700)
     (tmp_path / 'gcloud').symlink_to(fake)
     result = subprocess.run(
-        ['bash', '-c', render(step(name)['run'])],
+        ['bash', '-c', render(step(name)['run'], service=service)],
         env=dict(
             os.environ,
             PATH=str(tmp_path) + ':' + os.environ['PATH'],
@@ -131,6 +132,12 @@ def test_actual_shared_shell_never_targets_omitted_services(tmp_path, service, n
             SELECTED_CLOUD_RUN_SERVICES=' '.join(selected(service)),
             CLOUD_RUN_SERVICE=service,
             ROLLBACK_REVISION=f'{service}-old',
+            PROMOTION_PROJECT='based-hardware',
+            PROMOTION_REGION='us-central1',
+            PROMOTION_CANDIDATE='backend-new',
+            PROMOTION_INVERSE='backend-old',
+            PROMOTION_SOURCE='a' * 40,
+            PROMOTION_CONTROL='b' * 40,
             GMP_CANDIDATE_TAG='',
             RUNNER_TEMP=str(tmp_path),
         ),
@@ -140,6 +147,14 @@ def test_actual_shared_shell_never_targets_omitted_services(tmp_path, service, n
     )
     assert result.returncode == 0, result.stderr
     calls = log.read_text().splitlines() if log.exists() else []
+    if name == 'Shift Cloud Run traffic to validated revisions' and service == 'backend':
+        assert calls == [
+            f'/controls/promote_selected_backend.py --project based-hardware --region us-central1 '
+            f"--candidate backend-new --inverse backend-old --source {'a' * 40} --control {'b' * 40} "
+            '--snapshot artifacts/backend-cloud-run-pre-promotion-traffic-snapshot.json '
+            '--receipt artifacts/backend-promotion-stages.json'
+        ]
+        return
     expected = set(selected(service))
     if name == 'Attach Managed Prometheus to sync and integration candidates':
         expected.discard('backend')
