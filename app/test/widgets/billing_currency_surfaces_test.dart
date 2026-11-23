@@ -455,8 +455,8 @@ void main() {
     expect(formatBillingPrice(2999, 'usd'), r'US$29.99');
     expect(formatBillingPrice(0, 'usd'), r'US$0.00');
     expect(formatBillingPrice(4800, 'jpy'), '¥4,800');
-    expect(formatBillingPrice(2999, 'cad'), r'CA$29.99'); // Stripe Checkout's `en` glyph
-    expect(formatBillingPrice(1234, 'kwd'), 'KWD 1.234');
-    expect(formatBillingPrice(500, 'isk'), 'ISK 5.00');
+    expect(formatBillingPrice(2999, 'cad'), r'CA$29.99'); // Stripe Checkout's `en` render
+    expect(formatBillingPrice(1234, 'kwd'), 'KWD\u00a01.234');
+    expect(formatBillingPrice(50000, 'isk'), 'ISK\u00a0500'); // Stripe hundredths, no displayed decimals
   });
 }

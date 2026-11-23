@@ -661,10 +661,6 @@ def get_available_plans_endpoint(
                 localized = _localized_pricing_options(pricing_options, offer.currency or '')
                 if localized is not None:
                     return AvailablePlansResponse(plans=localized)
-                offer = local_currency.unconfigured(x_app_platform)
-            if offer.kind == 'hidden':
-                # No approved local price: show no purchase price rather than a foreign one.
-                return AvailablePlansResponse(plans=[])
 
         if not pricing_options:
             raise HTTPException(
@@ -882,7 +878,7 @@ def create_checkout_session_endpoint(
 
 
 def _new_buyer_checkout_currency(price_id: str, platform: Optional[str], region: Optional[str]) -> Optional[str]:
-    """Local currency for a new Checkout, None for today's price currency; 409 when none is offered."""
+    """Local currency for a new Checkout, or None for today's USD price."""
     offer = local_currency.offer_for(platform, region)
     if offer.kind == 'local' and offer.currency:
         try:
@@ -892,9 +888,6 @@ def _new_buyer_checkout_currency(price_id: str, platform: Optional[str], region:
             raise HTTPException(status_code=503, detail="Could not load this price. Please try again.")
         if local_currency.approved_amount(price, offer.currency) is not None:
             return offer.currency
-        offer = local_currency.unconfigured(platform)
-    if offer.kind == 'hidden':
-        raise HTTPException(status_code=400, detail="This plan is not available in your region yet.")
     return None
 
 

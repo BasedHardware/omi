@@ -1,0 +1,1110 @@
+{
+  "icu": "77.1",
+  "cldr": "47.0",
+  "currencies": {
+    "usd": {
+      "locale": "en-GB",
+      "prefix": "US$",
+      "digits": 2,
+      "stripe_exponent": 2,
+      "sample_minor": 1234500,
+      "sample": "US$12,345.00"
+    },
+    "aed": {
+      "locale": "en",
+      "prefix": "AED ",
+      "digits": 2,
+      "stripe_exponent": 2,
+      "sample_minor": 1234500,
+      "sample": "AED 12,345.00"
+    },
+    "afn": {
+      "locale": "en",
+      "prefix": "AFN ",
+      "digits": 0,
+      "stripe_exponent": 2,
+      "sample_minor": 1234500,
+      "sample": "AFN 12,345"
+    },
+    "all": {
+      "locale": "en",
+      "prefix": "ALL ",
+      "digits": 0,
+      "stripe_exponent": 2,
+      "sample_minor": 1234500,
+      "sample": "ALL 12,345"
+    },
+    "amd": {
+      "locale": "en",
+      "prefix": "AMD ",
+      "digits": 2,
+      "stripe_exponent": 2,
+      "sample_minor": 1234500,
+      "sample": "AMD 12,345.00"
+    },
+    "ang": {
+      "locale": "en",
+      "prefix": "ANG ",
+      "digits": 2,
+      "stripe_exponent": 2,
+      "sample_minor": 1234500,
+      "sample": "ANG 12,345.00"
+    },
+    "aoa": {
+      "locale": "en",
+      "prefix": "AOA ",
+      "digits": 2,
+      "stripe_exponent": 2,
+      "sample_minor": 1234500,
+      "sample": "AOA 12,345.00"
+    },
+    "ars": {
+      "locale": "en",
+      "prefix": "ARS ",
+      "digits": 2,
+      "stripe_exponent": 2,
+      "sample_minor": 1234500,
+      "sample": "ARS 12,345.00"
+    },
+    "aud": {
+      "locale": "en",
+      "prefix": "A$",
+      "digits": 2,
+      "stripe_exponent": 2,
+      "sample_minor": 1234500,
+      "sample": "A$12,345.00"
+    },
+    "awg": {
+      "locale": "en",
+      "prefix": "AWG ",
+      "digits": 2,
+      "stripe_exponent": 2,
+      "sample_minor": 1234500,
+      "sample": "AWG 12,345.00"
+    },
+    "azn": {
+      "locale": "en",
+      "prefix": "AZN ",
+      "digits": 2,
+      "stripe_exponent": 2,
+      "sample_minor": 1234500,
+      "sample": "AZN 12,345.00"
+    },
+    "bam": {
+      "locale": "en",
+      "prefix": "BAM ",
+      "digits": 2,
+      "stripe_exponent": 2,
+      "sample_minor": 1234500,
+      "sample": "BAM 12,345.00"
+    },
+    "bbd": {
+      "locale": "en",
+      "prefix": "BBD ",
+      "digits": 2,
+      "stripe_exponent": 2,
+      "sample_minor": 1234500,
+      "sample": "BBD 12,345.00"
+    },
+    "bdt": {
+      "locale": "en",
+      "prefix": "BDT ",
+      "digits": 2,
+      "stripe_exponent": 2,
+      "sample_minor": 1234500,
+      "sample": "BDT 12,345.00"
+    },
+    "bgn": {
+      "locale": "en",
+      "prefix": "BGN ",
+      "digits": 2,
+      "stripe_exponent": 2,
+      "sample_minor": 1234500,
+      "sample": "BGN 12,345.00"
+    },
+    "bhd": {
+      "locale": "en",
+      "prefix": "BHD ",
+      "digits": 3,
+      "stripe_exponent": 3,
+      "sample_minor": 1234500,
+      "sample": "BHD 1,234.500"
+    },
+    "bif": {
+      "locale": "en",
+      "prefix": "BIF ",
+      "digits": 0,
+      "stripe_exponent": 0,
+      "sample_minor": 1234500,
+      "sample": "BIF 1,234,500"
+    },
+    "bmd": {
+      "locale": "en",
+      "prefix": "BMD ",
+      "digits": 2,
+      "stripe_exponent": 2,
+      "sample_minor": 1234500,
+      "sample": "BMD 12,345.00"
+    },
+    "bnd": {
+      "locale": "en",
+      "prefix": "BND ",
+      "digits": 2,
+      "stripe_exponent": 2,
+      "sample_minor": 1234500,
+      "sample": "BND 12,345.00"
+    },
+    "bob": {
+      "locale": "en",
+      "prefix": "BOB ",
+      "digits": 2,
+      "stripe_exponent": 2,
+      "sample_minor": 1234500,
+      "sample": "BOB 12,345.00"
+    },
+    "brl": {
+      "locale": "en",
+      "prefix": "R$",
+      "digits": 2,
+      "stripe_exponent": 2,
+      "sample_minor": 1234500,
+      "sample": "R$12,345.00"
+    },
+    "bsd": {
+      "locale": "en",
+      "prefix": "BSD ",
+      "digits": 2,
+      "stripe_exponent": 2,
+      "sample_minor": 1234500,
+      "sample": "BSD 12,345.00"
+    },
+    "bwp": {
+      "locale": "en",
+      "prefix": "BWP ",
+      "digits": 2,
+      "stripe_exponent": 2,
+      "sample_minor": 1234500,
+      "sample": "BWP 12,345.00"
+    },
+    "byn": {
+      "locale": "en",
+      "prefix": "BYN ",
+      "digits": 2,
+      "stripe_exponent": 2,
+      "sample_minor": 1234500,
+      "sample": "BYN 12,345.00"
+    },
+    "bzd": {
+      "locale": "en",
+      "prefix": "BZD ",
+      "digits": 2,
+      "stripe_exponent": 2,
+      "sample_minor": 1234500,
+      "sample": "BZD 12,345.00"
+    },
+    "cad": {
+      "locale": "en",
+      "prefix": "CA$",
+      "digits": 2,
+      "stripe_exponent": 2,
+      "sample_minor": 1234500,
+      "sample": "CA$12,345.00"
+    },
+    "cdf": {
+      "locale": "en",
+      "prefix": "CDF ",
+      "digits": 2,
+      "stripe_exponent": 2,
+      "sample_minor": 1234500,
+      "sample": "CDF 12,345.00"
+    },
+    "chf": {
+      "locale": "en",
+      "prefix": "CHF ",
+      "digits": 2,
+      "stripe_exponent": 2,
+      "sample_minor": 1234500,
+      "sample": "CHF 12,345.00"
+    },
+    "clp": {
+      "locale": "en",
+      "prefix": "CLP ",
+      "digits": 0,
+      "stripe_exponent": 0,
+      "sample_minor": 1234500,
+      "sample": "CLP 1,234,500"
+    },
+    "cny": {
+      "locale": "en",
+      "prefix": "CN¥",
+      "digits": 2,
+      "stripe_exponent": 2,
+      "sample_minor": 1234500,
+      "sample": "CN¥12,345.00"
+    },
+    "cop": {
+      "locale": "en",
+      "prefix": "COP ",
+      "digits": 2,
+      "stripe_exponent": 2,
+      "sample_minor": 1234500,
+      "sample": "COP 12,345.00"
+    },
+    "crc": {
+      "locale": "en",
+      "prefix": "CRC ",
+      "digits": 2,
+      "stripe_exponent": 2,
+      "sample_minor": 1234500,
+      "sample": "CRC 12,345.00"
+    },
+    "cve": {
+      "locale": "en",
+      "prefix": "CVE ",
+      "digits": 2,
+      "stripe_exponent": 2,
+      "sample_minor": 1234500,
+      "sample": "CVE 12,345.00"
+    },
+    "czk": {
+      "locale": "en",
+      "prefix": "CZK ",
+      "digits": 2,
+      "stripe_exponent": 2,
+      "sample_minor": 1234500,
+      "sample": "CZK 12,345.00"
+    },
+    "djf": {
+      "locale": "en",
+      "prefix": "DJF ",
+      "digits": 0,
+      "stripe_exponent": 0,
+      "sample_minor": 1234500,
+      "sample": "DJF 1,234,500"
+    },
+    "dkk": {
+      "locale": "en",
+      "prefix": "DKK ",
+      "digits": 2,
+      "stripe_exponent": 2,
+      "sample_minor": 1234500,
+      "sample": "DKK 12,345.00"
+    },
+    "dop": {
+      "locale": "en",
+      "prefix": "DOP ",
+      "digits": 2,
+      "stripe_exponent": 2,
+      "sample_minor": 1234500,
+      "sample": "DOP 12,345.00"
+    },
+    "dzd": {
+      "locale": "en",
+      "prefix": "DZD ",
+      "digits": 2,
+      "stripe_exponent": 2,
+      "sample_minor": 1234500,
+      "sample": "DZD 12,345.00"
+    },
+    "egp": {
+      "locale": "en",
+      "prefix": "EGP ",
+      "digits": 2,
+      "stripe_exponent": 2,
+      "sample_minor": 1234500,
+      "sample": "EGP 12,345.00"
+    },
+    "etb": {
+      "locale": "en",
+      "prefix": "ETB ",
+      "digits": 2,
+      "stripe_exponent": 2,
+      "sample_minor": 1234500,
+      "sample": "ETB 12,345.00"
+    },
+    "eur": {
+      "locale": "en",
+      "prefix": "€",
+      "digits": 2,
+      "stripe_exponent": 2,
+      "sample_minor": 1234500,
+      "sample": "€12,345.00"
+    },
+    "fjd": {
+      "locale": "en",
+      "prefix": "FJD ",
+      "digits": 2,
+      "stripe_exponent": 2,
+      "sample_minor": 1234500,
+      "sample": "FJD 12,345.00"
+    },
+    "fkp": {
+      "locale": "en",
+      "prefix": "FKP ",
+      "digits": 2,
+      "stripe_exponent": 2,
+      "sample_minor": 1234500,
+      "sample": "FKP 12,345.00"
+    },
+    "gbp": {
+      "locale": "en",
+      "prefix": "£",
+      "digits": 2,
+      "stripe_exponent": 2,
+      "sample_minor": 1234500,
+      "sample": "£12,345.00"
+    },
+    "gel": {
+      "locale": "en",
+      "prefix": "GEL ",
+      "digits": 2,
+      "stripe_exponent": 2,
+      "sample_minor": 1234500,
+      "sample": "GEL 12,345.00"
+    },
+    "gip": {
+      "locale": "en",
+      "prefix": "GIP ",
+      "digits": 2,
+      "stripe_exponent": 2,
+      "sample_minor": 1234500,
+      "sample": "GIP 12,345.00"
+    },
+    "gmd": {
+      "locale": "en",
+      "prefix": "GMD ",
+      "digits": 2,
+      "stripe_exponent": 2,
+      "sample_minor": 1234500,
+      "sample": "GMD 12,345.00"
+    },
+    "gnf": {
+      "locale": "en",
+      "prefix": "GNF ",
+      "digits": 0,
+      "stripe_exponent": 0,
+      "sample_minor": 1234500,
+      "sample": "GNF 1,234,500"
+    },
+    "gtq": {
+      "locale": "en",
+      "prefix": "GTQ ",
+      "digits": 2,
+      "stripe_exponent": 2,
+      "sample_minor": 1234500,
+      "sample": "GTQ 12,345.00"
+    },
+    "gyd": {
+      "locale": "en",
+      "prefix": "GYD ",
+      "digits": 2,
+      "stripe_exponent": 2,
+      "sample_minor": 1234500,
+      "sample": "GYD 12,345.00"
+    },
+    "hkd": {
+      "locale": "en",
+      "prefix": "HK$",
+      "digits": 2,
+      "stripe_exponent": 2,
+      "sample_minor": 1234500,
+      "sample": "HK$12,345.00"
+    },
+    "hnl": {
+      "locale": "en",
+      "prefix": "HNL ",
+      "digits": 2,
+      "stripe_exponent": 2,
+      "sample_minor": 1234500,
+      "sample": "HNL 12,345.00"
+    },
+    "htg": {
+      "locale": "en",
+      "prefix": "HTG ",
+      "digits": 2,
+      "stripe_exponent": 2,
+      "sample_minor": 1234500,
+      "sample": "HTG 12,345.00"
+    },
+    "huf": {
+      "locale": "en",
+      "prefix": "HUF ",
+      "digits": 2,
+      "stripe_exponent": 2,
+      "sample_minor": 1234500,
+      "sample": "HUF 12,345.00"
+    },
+    "idr": {
+      "locale": "en",
+      "prefix": "IDR ",
+      "digits": 2,
+      "stripe_exponent": 2,
+      "sample_minor": 1234500,
+      "sample": "IDR 12,345.00"
+    },
+    "ils": {
+      "locale": "en",
+      "prefix": "₪",
+      "digits": 2,
+      "stripe_exponent": 2,
+      "sample_minor": 1234500,
+      "sample": "₪12,345.00"
+    },
+    "inr": {
+      "locale": "en",
+      "prefix": "₹",
+      "digits": 2,
+      "stripe_exponent": 2,
+      "sample_minor": 1234500,
+      "sample": "₹12,345.00"
+    },
+    "isk": {
+      "locale": "en",
+      "prefix": "ISK ",
+      "digits": 0,
+      "stripe_exponent": 2,
+      "sample_minor": 1234500,
+      "sample": "ISK 12,345"
+    },
+    "jmd": {
+      "locale": "en",
+      "prefix": "JMD ",
+      "digits": 2,
+      "stripe_exponent": 2,
+      "sample_minor": 1234500,
+      "sample": "JMD 12,345.00"
+    },
+    "jod": {
+      "locale": "en",
+      "prefix": "JOD ",
+      "digits": 3,
+      "stripe_exponent": 3,
+      "sample_minor": 1234500,
+      "sample": "JOD 1,234.500"
+    },
+    "jpy": {
+      "locale": "en",
+      "prefix": "¥",
+      "digits": 0,
+      "stripe_exponent": 0,
+      "sample_minor": 1234500,
+      "sample": "¥1,234,500"
+    },
+    "kes": {
+      "locale": "en",
+      "prefix": "KES ",
+      "digits": 2,
+      "stripe_exponent": 2,
+      "sample_minor": 1234500,
+      "sample": "KES 12,345.00"
+    },
+    "kgs": {
+      "locale": "en",
+      "prefix": "KGS ",
+      "digits": 2,
+      "stripe_exponent": 2,
+      "sample_minor": 1234500,
+      "sample": "KGS 12,345.00"
+    },
+    "khr": {
+      "locale": "en",
+      "prefix": "KHR ",
+      "digits": 2,
+      "stripe_exponent": 2,
+      "sample_minor": 1234500,
+      "sample": "KHR 12,345.00"
+    },
+    "kmf": {
+      "locale": "en",
+      "prefix": "KMF ",
+      "digits": 0,
+      "stripe_exponent": 0,
+      "sample_minor": 1234500,
+      "sample": "KMF 1,234,500"
+    },
+    "krw": {
+      "locale": "en",
+      "prefix": "₩",
+      "digits": 0,
+      "stripe_exponent": 0,
+      "sample_minor": 1234500,
+      "sample": "₩1,234,500"
+    },
+    "kwd": {
+      "locale": "en",
+      "prefix": "KWD ",
+      "digits": 3,
+      "stripe_exponent": 3,
+      "sample_minor": 1234500,
+      "sample": "KWD 1,234.500"
+    },
+    "kyd": {
+      "locale": "en",
+      "prefix": "KYD ",
+      "digits": 2,
+      "stripe_exponent": 2,
+      "sample_minor": 1234500,
+      "sample": "KYD 12,345.00"
+    },
+    "kzt": {
+      "locale": "en",
+      "prefix": "KZT ",
+      "digits": 2,
+      "stripe_exponent": 2,
+      "sample_minor": 1234500,
+      "sample": "KZT 12,345.00"
+    },
+    "lak": {
+      "locale": "en",
+      "prefix": "LAK ",
+      "digits": 0,
+      "stripe_exponent": 2,
+      "sample_minor": 1234500,
+      "sample": "LAK 12,345"
+    },
+    "lbp": {
+      "locale": "en",
+      "prefix": "LBP ",
+      "digits": 0,
+      "stripe_exponent": 2,
+      "sample_minor": 1234500,
+      "sample": "LBP 12,345"
+    },
+    "lkr": {
+      "locale": "en",
+      "prefix": "LKR ",
+      "digits": 2,
+      "stripe_exponent": 2,
+      "sample_minor": 1234500,
+      "sample": "LKR 12,345.00"
+    },
+    "lrd": {
+      "locale": "en",
+      "prefix": "LRD ",
+      "digits": 2,
+      "stripe_exponent": 2,
+      "sample_minor": 1234500,
+      "sample": "LRD 12,345.00"
+    },
+    "lsl": {
+      "locale": "en",
+      "prefix": "LSL ",
+      "digits": 2,
+      "stripe_exponent": 2,
+      "sample_minor": 1234500,
+      "sample": "LSL 12,345.00"
+    },
+    "mad": {
+      "locale": "en",
+      "prefix": "MAD ",
+      "digits": 2,
+      "stripe_exponent": 2,
+      "sample_minor": 1234500,
+      "sample": "MAD 12,345.00"
+    },
+    "mdl": {
+      "locale": "en",
+      "prefix": "MDL ",
+      "digits": 2,
+      "stripe_exponent": 2,
+      "sample_minor": 1234500,
+      "sample": "MDL 12,345.00"
+    },
+    "mga": {
+      "locale": "en",
+      "prefix": "MGA ",
+      "digits": 0,
+      "stripe_exponent": 0,
+      "sample_minor": 1234500,
+      "sample": "MGA 1,234,500"
+    },
+    "mkd": {
+      "locale": "en",
+      "prefix": "MKD ",
+      "digits": 2,
+      "stripe_exponent": 2,
+      "sample_minor": 1234500,
+      "sample": "MKD 12,345.00"
+    },
+    "mmk": {
+      "locale": "en",
+      "prefix": "MMK ",
+      "digits": 0,
+      "stripe_exponent": 2,
+      "sample_minor": 1234500,
+      "sample": "MMK 12,345"
+    },
+    "mnt": {
+      "locale": "en",
+      "prefix": "MNT ",
+      "digits": 2,
+      "stripe_exponent": 2,
+      "sample_minor": 1234500,
+      "sample": "MNT 12,345.00"
+    },
+    "mop": {
+      "locale": "en",
+      "prefix": "MOP ",
+      "digits": 2,
+      "stripe_exponent": 2,
+      "sample_minor": 1234500,
+      "sample": "MOP 12,345.00"
+    },
+    "mur": {
+      "locale": "en",
+      "prefix": "MUR ",
+      "digits": 2,
+      "stripe_exponent": 2,
+      "sample_minor": 1234500,
+      "sample": "MUR 12,345.00"
+    },
+    "mvr": {
+      "locale": "en",
+      "prefix": "MVR ",
+      "digits": 2,
+      "stripe_exponent": 2,
+      "sample_minor": 1234500,
+      "sample": "MVR 12,345.00"
+    },
+    "mwk": {
+      "locale": "en",
+      "prefix": "MWK ",
+      "digits": 2,
+      "stripe_exponent": 2,
+      "sample_minor": 1234500,
+      "sample": "MWK 12,345.00"
+    },
+    "mxn": {
+      "locale": "en",
+      "prefix": "MX$",
+      "digits": 2,
+      "stripe_exponent": 2,
+      "sample_minor": 1234500,
+      "sample": "MX$12,345.00"
+    },
+    "myr": {
+      "locale": "en",
+      "prefix": "MYR ",
+      "digits": 2,
+      "stripe_exponent": 2,
+      "sample_minor": 1234500,
+      "sample": "MYR 12,345.00"
+    },
+    "mzn": {
+      "locale": "en",
+      "prefix": "MZN ",
+      "digits": 2,
+      "stripe_exponent": 2,
+      "sample_minor": 1234500,
+      "sample": "MZN 12,345.00"
+    },
+    "nad": {
+      "locale": "en",
+      "prefix": "NAD ",
+      "digits": 2,
+      "stripe_exponent": 2,
+      "sample_minor": 1234500,
+      "sample": "NAD 12,345.00"
+    },
+    "ngn": {
+      "locale": "en",
+      "prefix": "NGN ",
+      "digits": 2,
+      "stripe_exponent": 2,
+      "sample_minor": 1234500,
+      "sample": "NGN 12,345.00"
+    },
+    "nio": {
+      "locale": "en",
+      "prefix": "NIO ",
+      "digits": 2,
+      "stripe_exponent": 2,
+      "sample_minor": 1234500,
+      "sample": "NIO 12,345.00"
+    },
+    "nok": {
+      "locale": "en",
+      "prefix": "NOK ",
+      "digits": 2,
+      "stripe_exponent": 2,
+      "sample_minor": 1234500,
+      "sample": "NOK 12,345.00"
+    },
+    "npr": {
+      "locale": "en",
+      "prefix": "NPR ",
+      "digits": 2,
+      "stripe_exponent": 2,
+      "sample_minor": 1234500,
+      "sample": "NPR 12,345.00"
+    },
+    "nzd": {
+      "locale": "en",
+      "prefix": "NZ$",
+      "digits": 2,
+      "stripe_exponent": 2,
+      "sample_minor": 1234500,
+      "sample": "NZ$12,345.00"
+    },
+    "omr": {
+      "locale": "en",
+      "prefix": "OMR ",
+      "digits": 3,
+      "stripe_exponent": 3,
+      "sample_minor": 1234500,
+      "sample": "OMR 1,234.500"
+    },
+    "pab": {
+      "locale": "en",
+      "prefix": "PAB ",
+      "digits": 2,
+      "stripe_exponent": 2,
+      "sample_minor": 1234500,
+      "sample": "PAB 12,345.00"
+    },
+    "pen": {
+      "locale": "en",
+      "prefix": "PEN ",
+      "digits": 2,
+      "stripe_exponent": 2,
+      "sample_minor": 1234500,
+      "sample": "PEN 12,345.00"
+    },
+    "pgk": {
+      "locale": "en",
+      "prefix": "PGK ",
+      "digits": 2,
+      "stripe_exponent": 2,
+      "sample_minor": 1234500,
+      "sample": "PGK 12,345.00"
+    },
+    "php": {
+      "locale": "en",
+      "prefix": "₱",
+      "digits": 2,
+      "stripe_exponent": 2,
+      "sample_minor": 1234500,
+      "sample": "₱12,345.00"
+    },
+    "pkr": {
+      "locale": "en",
+      "prefix": "PKR ",
+      "digits": 2,
+      "stripe_exponent": 2,
+      "sample_minor": 1234500,
+      "sample": "PKR 12,345.00"
+    },
+    "pln": {
+      "locale": "en",
+      "prefix": "PLN ",
+      "digits": 2,
+      "stripe_exponent": 2,
+      "sample_minor": 1234500,
+      "sample": "PLN 12,345.00"
+    },
+    "pyg": {
+      "locale": "en",
+      "prefix": "PYG ",
+      "digits": 0,
+      "stripe_exponent": 0,
+      "sample_minor": 1234500,
+      "sample": "PYG 1,234,500"
+    },
+    "qar": {
+      "locale": "en",
+      "prefix": "QAR ",
+      "digits": 2,
+      "stripe_exponent": 2,
+      "sample_minor": 1234500,
+      "sample": "QAR 12,345.00"
+    },
+    "ron": {
+      "locale": "en",
+      "prefix": "RON ",
+      "digits": 2,
+      "stripe_exponent": 2,
+      "sample_minor": 1234500,
+      "sample": "RON 12,345.00"
+    },
+    "rsd": {
+      "locale": "en",
+      "prefix": "RSD ",
+      "digits": 0,
+      "stripe_exponent": 2,
+      "sample_minor": 1234500,
+      "sample": "RSD 12,345"
+    },
+    "rub": {
+      "locale": "en",
+      "prefix": "RUB ",
+      "digits": 2,
+      "stripe_exponent": 2,
+      "sample_minor": 1234500,
+      "sample": "RUB 12,345.00"
+    },
+    "rwf": {
+      "locale": "en",
+      "prefix": "RWF ",
+      "digits": 0,
+      "stripe_exponent": 0,
+      "sample_minor": 1234500,
+      "sample": "RWF 1,234,500"
+    },
+    "sar": {
+      "locale": "en",
+      "prefix": "SAR ",
+      "digits": 2,
+      "stripe_exponent": 2,
+      "sample_minor": 1234500,
+      "sample": "SAR 12,345.00"
+    },
+    "sbd": {
+      "locale": "en",
+      "prefix": "SBD ",
+      "digits": 2,
+      "stripe_exponent": 2,
+      "sample_minor": 1234500,
+      "sample": "SBD 12,345.00"
+    },
+    "scr": {
+      "locale": "en",
+      "prefix": "SCR ",
+      "digits": 2,
+      "stripe_exponent": 2,
+      "sample_minor": 1234500,
+      "sample": "SCR 12,345.00"
+    },
+    "sek": {
+      "locale": "en",
+      "prefix": "SEK ",
+      "digits": 2,
+      "stripe_exponent": 2,
+      "sample_minor": 1234500,
+      "sample": "SEK 12,345.00"
+    },
+    "sgd": {
+      "locale": "en",
+      "prefix": "SGD ",
+      "digits": 2,
+      "stripe_exponent": 2,
+      "sample_minor": 1234500,
+      "sample": "SGD 12,345.00"
+    },
+    "shp": {
+      "locale": "en",
+      "prefix": "SHP ",
+      "digits": 2,
+      "stripe_exponent": 2,
+      "sample_minor": 1234500,
+      "sample": "SHP 12,345.00"
+    },
+    "sle": {
+      "locale": "en",
+      "prefix": "SLE ",
+      "digits": 2,
+      "stripe_exponent": 2,
+      "sample_minor": 1234500,
+      "sample": "SLE 12,345.00"
+    },
+    "sos": {
+      "locale": "en",
+      "prefix": "SOS ",
+      "digits": 0,
+      "stripe_exponent": 2,
+      "sample_minor": 1234500,
+      "sample": "SOS 12,345"
+    },
+    "srd": {
+      "locale": "en",
+      "prefix": "SRD ",
+      "digits": 2,
+      "stripe_exponent": 2,
+      "sample_minor": 1234500,
+      "sample": "SRD 12,345.00"
+    },
+    "szl": {
+      "locale": "en",
+      "prefix": "SZL ",
+      "digits": 2,
+      "stripe_exponent": 2,
+      "sample_minor": 1234500,
+      "sample": "SZL 12,345.00"
+    },
+    "thb": {
+      "locale": "en",
+      "prefix": "THB ",
+      "digits": 2,
+      "stripe_exponent": 2,
+      "sample_minor": 1234500,
+      "sample": "THB 12,345.00"
+    },
+    "tjs": {
+      "locale": "en",
+      "prefix": "TJS ",
+      "digits": 2,
+      "stripe_exponent": 2,
+      "sample_minor": 1234500,
+      "sample": "TJS 12,345.00"
+    },
+    "tnd": {
+      "locale": "en",
+      "prefix": "TND ",
+      "digits": 3,
+      "stripe_exponent": 3,
+      "sample_minor": 1234500,
+      "sample": "TND 1,234.500"
+    },
+    "top": {
+      "locale": "en",
+      "prefix": "TOP ",
+      "digits": 2,
+      "stripe_exponent": 2,
+      "sample_minor": 1234500,
+      "sample": "TOP 12,345.00"
+    },
+    "try": {
+      "locale": "en",
+      "prefix": "TRY ",
+      "digits": 2,
+      "stripe_exponent": 2,
+      "sample_minor": 1234500,
+      "sample": "TRY 12,345.00"
+    },
+    "ttd": {
+      "locale": "en",
+      "prefix": "TTD ",
+      "digits": 2,
+      "stripe_exponent": 2,
+      "sample_minor": 1234500,
+      "sample": "TTD 12,345.00"
+    },
+    "twd": {
+      "locale": "en",
+      "prefix": "NT$",
+      "digits": 2,
+      "stripe_exponent": 2,
+      "sample_minor": 1234500,
+      "sample": "NT$12,345.00"
+    },
+    "tzs": {
+      "locale": "en",
+      "prefix": "TZS ",
+      "digits": 2,
+      "stripe_exponent": 2,
+      "sample_minor": 1234500,
+      "sample": "TZS 12,345.00"
+    },
+    "uah": {
+      "locale": "en",
+      "prefix": "UAH ",
+      "digits": 2,
+      "stripe_exponent": 2,
+      "sample_minor": 1234500,
+      "sample": "UAH 12,345.00"
+    },
+    "ugx": {
+      "locale": "en",
+      "prefix": "UGX ",
+      "digits": 0,
+      "stripe_exponent": 2,
+      "sample_minor": 1234500,
+      "sample": "UGX 12,345"
+    },
+    "uyu": {
+      "locale": "en",
+      "prefix": "UYU ",
+      "digits": 2,
+      "stripe_exponent": 2,
+      "sample_minor": 1234500,
+      "sample": "UYU 12,345.00"
+    },
+    "uzs": {
+      "locale": "en",
+      "prefix": "UZS ",
+      "digits": 2,
+      "stripe_exponent": 2,
+      "sample_minor": 1234500,
+      "sample": "UZS 12,345.00"
+    },
+    "vnd": {
+      "locale": "en",
+      "prefix": "₫",
+      "digits": 0,
+      "stripe_exponent": 0,
+      "sample_minor": 1234500,
+      "sample": "₫1,234,500"
+    },
+    "vuv": {
+      "locale": "en",
+      "prefix": "VUV ",
+      "digits": 0,
+      "stripe_exponent": 0,
+      "sample_minor": 1234500,
+      "sample": "VUV 1,234,500"
+    },
+    "wst": {
+      "locale": "en",
+      "prefix": "WST ",
+      "digits": 2,
+      "stripe_exponent": 2,
+      "sample_minor": 1234500,
+      "sample": "WST 12,345.00"
+    },
+    "xaf": {
+      "locale": "en",
+      "prefix": "FCFA ",
+      "digits": 0,
+      "stripe_exponent": 0,
+      "sample_minor": 1234500,
+      "sample": "FCFA 1,234,500"
+    },
+    "xcd": {
+      "locale": "en",
+      "prefix": "EC$",
+      "digits": 2,
+      "stripe_exponent": 2,
+      "sample_minor": 1234500,
+      "sample": "EC$12,345.00"
+    },
+    "xof": {
+      "locale": "en",
+      "prefix": "F CFA ",
+      "digits": 0,
+      "stripe_exponent": 0,
+      "sample_minor": 1234500,
+      "sample": "F CFA 1,234,500"
+    },
+    "xpf": {
+      "locale": "en",
+      "prefix": "CFPF ",
+      "digits": 0,
+      "stripe_exponent": 0,
+      "sample_minor": 1234500,
+      "sample": "CFPF 1,234,500"
+    },
+    "yer": {
+      "locale": "en",
+      "prefix": "YER ",
+      "digits": 0,
+      "stripe_exponent": 2,
+      "sample_minor": 1234500,
+      "sample": "YER 12,345"
+    },
+    "zar": {
+      "locale": "en",
+      "prefix": "ZAR ",
+      "digits": 2,
+      "stripe_exponent": 2,
+      "sample_minor": 1234500,
+      "sample": "ZAR 12,345.00"
+    },
+    "zmw": {
+      "locale": "en",
+      "prefix": "ZMW ",
+      "digits": 2,
+      "stripe_exponent": 2,
+      "sample_minor": 1234500,
+      "sample": "ZMW 12,345.00"
+    }
+  }
+}

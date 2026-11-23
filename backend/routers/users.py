@@ -1317,20 +1317,14 @@ def _local_price_strings(
 def _apply_local_currency_offer(
     response: UserSubscriptionResponse, platform: Optional[str], region: Optional[str]
 ) -> None:
-    """A buyer with no paid plan: local-currency price strings, or no purchase UI (utils.local_currency)."""
+    """A buyer with no paid plan sees local-currency price strings when approved (utils.local_currency)."""
     if response.subscription.plan != PlanType.basic:
         return
     offer = local_currency.offer_for(platform, region)
     if offer.kind == 'local' and offer.currency:
         localized = _local_price_strings(response, offer.currency)
-        if localized is not None:
-            for price, text in localized:
-                price.price_string = text
-            return
-        offer = local_currency.unconfigured(platform)
-    if offer.kind == 'hidden':
-        response.show_subscription_ui = False
-        response.available_plans = []
+        for price, text in localized or []:
+            price.price_string = text
 
 
 @router.get('/v1/users/me/subscription', tags=['v1'], response_model=UserSubscriptionResponse)

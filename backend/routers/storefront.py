@@ -138,9 +138,8 @@ def get_storefront(
     # no Omi Pro card). NEW_BUYER_SINGLE_PLAN_ENABLED=false restores the ladder.
     usage = _usage(uid, subscription, locale)
     single_plan = subscription_utils.new_buyer_single_plan_applies(subscription.plan)
-    # A buyer with no paid plan sees the price in their approved local currency, or on
-    # Android no price at all when none is approved (utils.local_currency). Default off.
-    offer = local_currency.DEFAULT
+    # A buyer with no paid plan sees the price in their approved local currency; anything
+    # else keeps today's USD sheet (utils.local_currency). Default off.
     if subscription.plan.value == 'basic':
         offer = local_currency.offer_for(x_app_platform, x_storefront_region)
         if offer.kind == 'local' and single_plan:
@@ -155,10 +154,6 @@ def get_storefront(
             )
             if localized is not None:
                 return localized
-        if offer.kind == 'local':
-            offer = local_currency.unconfigured(x_app_platform)
-        if offer.kind == 'hidden':
-            return StorefrontResponse(catalog_revision=catalog.CATALOG_REVISION, show_subscription_ui=False)
     if single_plan:
         return build_single_plan_storefront(  # type: ignore[return-value]  # None only with a local currency
             catalog_revision=catalog.CATALOG_REVISION,
