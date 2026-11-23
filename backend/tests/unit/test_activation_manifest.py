@@ -42,6 +42,7 @@ def test_2026_11_17_state_reports_each_escape(manifest):
     assert missing == {
         # Stale gateway: older than the commit that adds the v3 lanes, and the lanes are not served.
         'service:llm-gateway:contains:012329830a9e',
+        'lane:omi:auto:conversation-v3-live-title',
         'lane:omi:auto:conversation-v3-outline',
         'lane:omi:auto:conversation-v3-summary',
         'lane:omi:auto:conversation-v3-summary-open',

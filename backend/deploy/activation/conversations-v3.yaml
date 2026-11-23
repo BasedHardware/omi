@@ -92,6 +92,7 @@ gateway_lanes:
   service: llm-gateway
   why: utils/conversations/v3/models.py calls these feature lanes only through the gateway
   lanes:
+    - omi:auto:conversation-v3-live-title
     - omi:auto:conversation-v3-outline
     - omi:auto:conversation-v3-summary
     - omi:auto:conversation-v3-summary-open

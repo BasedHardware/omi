@@ -9,6 +9,7 @@ cap and preservation paths, not the loader's query plan.
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 import json
+from types import SimpleNamespace
 
 import pytest
 
@@ -131,6 +132,9 @@ def timing(monkeypatch, gap, lock):
 async def test_live_recording_inside_the_lock_delay_keeps_one_open_card(strict, monkeypatch):
     # (a) A ten-minute recording arrives a minute at a time; its latest speech stays inside the lock delay.
     timing(monkeypatch, 900, 900)
+    monkeypatch.setenv('CONVERSATIONS_V3_LIVE_TITLE', 'off')
+    calls = []
+    monkeypatch.setattr(service.models, 'live_title', lambda *args: calls.append(args))
     ids = set()
     for minute in range(1, 11):
         segments = speech(minute * 2)
@@ -141,6 +145,86 @@ async def test_live_recording_inside_the_lock_delay_keeps_one_open_card(strict, 
         assert len(rows) == 1 and planner_open(rows[0]), [(r['started_at'], r['status']) for r in rows]
         ids.add(rows[0]['id'])
     assert len(ids) == 1
+    assert calls == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('gap', [300, 900])
+@pytest.mark.parametrize('provider_fails', [False, True])
+async def test_live_title_is_attempted_once_and_final_outline_wins(strict, monkeypatch, gap, provider_fails):
+    timing(monkeypatch, gap, gap)
+    monkeypatch.delenv('CONVERSATIONS_V3_LIVE_TITLE', raising=False)
+    calls = []
+
+    def live_title(uid, segments):
+        calls.append(uid)
+        assert derived(strict)[0]['status'] == 'in_progress'
+        if provider_fails:
+            raise TimeoutError()
+        return 'Planning the fall release'
+
+    monkeypatch.setattr(service.models, 'live_title', live_title)
+    monkeypatch.setattr(
+        store, 'stamp_home_display', lambda uid, row, kind: {'home_title_for_test': row['structured']['title']}
+    )
+    for count in (6, 7, 8):
+        segments = speech(count)
+        now = T0 + timedelta(seconds=segments[-1]['end'] + 1)
+        put_recording(strict, segments, status='in_progress', landed=now)
+        assert await reconcile_at(strict, monkeypatch, now) == 'committed'
+        (row,) = derived(strict)
+        assert row['status'] == 'in_progress' and not row['title_locked']
+        assert len(calls) == int(count >= 7)
+        expected = '' if count == 6 or provider_fails else 'Planning the fall release'
+        assert row['structured']['title'] == expected
+        if count == 7 and not provider_fails:
+            assert row['home_title_for_test'] == expected
+
+    put_recording(strict, segments, status='completed', landed=now)
+    assert await reconcile_at(strict, monkeypatch, now + timedelta(seconds=gap + 1)) == 'committed'
+    (row,) = derived(strict)
+    assert not planner_open(row)
+    assert row['structured']['title'] == 'Talk'
+    assert calls == [UID]
+
+
+def test_live_title_model_caps_multibyte_input_and_output(monkeypatch):
+    class Model:
+        def bind(self, **options):
+            assert options == {'reasoning_effort': 'none', 'max_completion_tokens': 32}
+            return self
+
+        def invoke(self, messages):
+            prompt, transcript = (message.encode('utf-8') for _, message in messages)
+            assert len(prompt) + len(transcript) <= 1024 - 64
+            assert transcript.decode('utf-8').startswith('秋')
+            return SimpleNamespace(content=' 秋のリリース計画 ', response_metadata={'finish_reason': 'stop'})
+
+    def gateway(lane, *, options, feature):
+        assert lane == 'omi:auto:conversation-v3-live-title'
+        assert options['max_retries'] == 0
+        assert feature == 'conversation_v3_live_title'
+        return Model()
+
+    monkeypatch.setattr(service.models, 'get_or_create_omi_gateway_llm', gateway)
+    assert service.models.live_title(UID, [{'text': '秋' * 1500}]) == '秋のリリース計画'
+
+
+@pytest.mark.asyncio
+async def test_live_title_does_not_overwrite_a_concurrent_user_rename(strict, monkeypatch):
+    def live_title(uid, segments):
+        (row,) = derived(strict)
+        row['user_title'] = row['structured']['title'] = 'My own title'
+        return 'Planning the fall release'
+
+    monkeypatch.setenv('CONVERSATIONS_V3_LIVE_TITLE', 'on')
+    monkeypatch.setattr(service.models, 'live_title', live_title)
+    segments = speech(7)
+    now = T0 + timedelta(seconds=segments[-1]['end'] + 1)
+    put_recording(strict, segments, status='in_progress', landed=now)
+    assert await reconcile_at(strict, monkeypatch, now) == 'committed'
+    (row,) = derived(strict)
+    assert row['structured']['title'] == 'My own title'
 
 
 def planner_open(row):
