@@ -15774,8 +15774,8 @@ class AppLocalizationsBe extends AppLocalizations {
   String get quietPayerCheck => 'Праверыць';
 
   @override
-  String get finishHiddenFromHome => 'Processing finished. This recording is hidden from Home.';
+  String get finishHiddenFromHome => 'Апрацоўка завершана. Гэты запіс схаваны на ўкладцы Home.';
 
   @override
-  String get finishCheckHome => 'Still processing. Check Home for the result.';
+  String get finishCheckHome => 'Яшчэ апрацоўваецца. Праверце вынік на ўкладцы Home.';
 }

@@ -4741,6 +4741,6 @@
     "quietPayerTitle": "5일 동안 녹음이 없어요",
     "quietPayerMessage": "Omi를 확인해 보세요.",
     "quietPayerCheck": "확인",
-    "finishHiddenFromHome": "Processing finished. This recording is hidden from Home.",
-    "finishCheckHome": "Still processing. Check Home for the result."
+    "finishHiddenFromHome": "처리가 완료되었습니다. 이 녹음은 홈에 표시되지 않습니다.",
+    "finishCheckHome": "아직 처리 중입니다. 홈에서 결과를 확인하세요."
 }

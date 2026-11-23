@@ -4741,6 +4741,6 @@
     "quietPayerTitle": "5 दिनों से कोई रिकॉर्डिंग नहीं",
     "quietPayerMessage": "अपना Omi जांचें।",
     "quietPayerCheck": "जांचें",
-    "finishHiddenFromHome": "Processing finished. This recording is hidden from Home.",
-    "finishCheckHome": "Still processing. Check Home for the result."
+    "finishHiddenFromHome": "प्रोसेसिंग पूरी हुई। यह रिकॉर्डिंग होम पर छिपी है।",
+    "finishCheckHome": "प्रोसेसिंग अभी भी जारी है। नतीजा होम पर देखें।"
 }

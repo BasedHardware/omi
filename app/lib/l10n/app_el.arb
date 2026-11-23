@@ -4741,6 +4741,6 @@
     "quietPayerTitle": "Καμία ηχογράφηση εδώ και 5 ημέρες",
     "quietPayerMessage": "Έλεγξε το Omi σου.",
     "quietPayerCheck": "Έλεγχος",
-    "finishHiddenFromHome": "Processing finished. This recording is hidden from Home.",
-    "finishCheckHome": "Still processing. Check Home for the result."
+    "finishHiddenFromHome": "Η επεξεργασία ολοκληρώθηκε. Αυτή η εγγραφή είναι κρυμμένη από το Home.",
+    "finishCheckHome": "Η επεξεργασία συνεχίζεται. Ελέγξτε το Home για το αποτέλεσμα."
 }

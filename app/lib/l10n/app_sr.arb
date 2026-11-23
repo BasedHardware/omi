@@ -12298,6 +12298,6 @@
     "quietPayerTitle": "Нема снимака 5 дана",
     "quietPayerMessage": "Проверите свој Omi.",
     "quietPayerCheck": "Провери",
-    "finishHiddenFromHome": "Processing finished. This recording is hidden from Home.",
-    "finishCheckHome": "Still processing. Check Home for the result."
+    "finishHiddenFromHome": "Обрада је завршена. Овај снимак је скривен на Почетној.",
+    "finishCheckHome": "Обрада је још у току. Проверите резултат на Почетној."
 }

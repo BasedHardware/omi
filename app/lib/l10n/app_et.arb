@@ -4741,6 +4741,6 @@
     "quietPayerTitle": "5 päeva pole salvestisi",
     "quietPayerMessage": "Kontrolli oma Omit.",
     "quietPayerCheck": "Kontrolli",
-    "finishHiddenFromHome": "Processing finished. This recording is hidden from Home.",
-    "finishCheckHome": "Still processing. Check Home for the result."
+    "finishHiddenFromHome": "Töötlemine on lõpetatud. See salvestis on Avalehel peidetud.",
+    "finishCheckHome": "Töötlemine on veel käimas. Kontrollige tulemust Avalehelt."
 }

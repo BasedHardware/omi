@@ -15750,8 +15750,8 @@ class AppLocalizationsUr extends AppLocalizations {
   String get quietPayerCheck => 'چیک کریں';
 
   @override
-  String get finishHiddenFromHome => 'Processing finished. This recording is hidden from Home.';
+  String get finishHiddenFromHome => 'پروسیسنگ مکمل ہو گئی۔ یہ ریکارڈنگ ہوم میں چھپا دی گئی ہے۔';
 
   @override
-  String get finishCheckHome => 'Still processing. Check Home for the result.';
+  String get finishCheckHome => 'ابھی پروسیسنگ جاری ہے۔ نتیجے کے لیے ہوم دیکھیں۔';
 }

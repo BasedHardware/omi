@@ -4741,6 +4741,6 @@
     "quietPayerTitle": "Inga inspelningar på 5 dagar",
     "quietPayerMessage": "Kolla din Omi.",
     "quietPayerCheck": "Kolla",
-    "finishHiddenFromHome": "Processing finished. This recording is hidden from Home.",
-    "finishCheckHome": "Still processing. Check Home for the result."
+    "finishHiddenFromHome": "Bearbetningen är klar. Den här inspelningen är dold under Hem.",
+    "finishCheckHome": "Bearbetning pågår. Kontrollera Hem för resultatet."
 }

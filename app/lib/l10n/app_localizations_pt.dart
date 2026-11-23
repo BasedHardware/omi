@@ -15767,8 +15767,8 @@ class AppLocalizationsPt extends AppLocalizations {
   String get quietPayerCheck => 'Verificar';
 
   @override
-  String get finishHiddenFromHome => 'Processing finished. This recording is hidden from Home.';
+  String get finishHiddenFromHome => 'Processamento concluído. Esta gravação está oculta no Início.';
 
   @override
-  String get finishCheckHome => 'Still processing. Check Home for the result.';
+  String get finishCheckHome => 'Ainda processando. Verifique o resultado no Início.';
 }

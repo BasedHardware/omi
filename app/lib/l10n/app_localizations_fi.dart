@@ -15744,8 +15744,8 @@ class AppLocalizationsFi extends AppLocalizations {
   String get quietPayerCheck => 'Tarkista';
 
   @override
-  String get finishHiddenFromHome => 'Processing finished. This recording is hidden from Home.';
+  String get finishHiddenFromHome => 'Käsittely valmis. Tämä nauhoitus ei näy Etusivulla.';
 
   @override
-  String get finishCheckHome => 'Still processing. Check Home for the result.';
+  String get finishCheckHome => 'Käsittely on vielä kesken. Tarkista tulos Etusivulta.';
 }

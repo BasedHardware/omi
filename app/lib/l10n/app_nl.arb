@@ -4741,6 +4741,6 @@
     "quietPayerTitle": "Al 5 dagen geen opnames",
     "quietPayerMessage": "Controleer je Omi.",
     "quietPayerCheck": "Controleren",
-    "finishHiddenFromHome": "Processing finished. This recording is hidden from Home.",
-    "finishCheckHome": "Still processing. Check Home for the result."
+    "finishHiddenFromHome": "Verwerking voltooid. Deze opname wordt niet weergegeven in Home.",
+    "finishCheckHome": "Wordt nog verwerkt. Bekijk Home voor het resultaat."
 }

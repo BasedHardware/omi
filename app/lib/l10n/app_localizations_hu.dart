@@ -15797,8 +15797,8 @@ class AppLocalizationsHu extends AppLocalizations {
   String get quietPayerCheck => 'Megnézem';
 
   @override
-  String get finishHiddenFromHome => 'Processing finished. This recording is hidden from Home.';
+  String get finishHiddenFromHome => 'A feldolgozás befejeződött. Ez a felvétel rejtve van a Kezdőlapon.';
 
   @override
-  String get finishCheckHome => 'Still processing. Check Home for the result.';
+  String get finishCheckHome => 'A feldolgozás még folyamatban van. Az eredményt a Kezdőlapon találod.';
 }

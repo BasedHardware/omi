@@ -15747,8 +15747,8 @@ class AppLocalizationsMr extends AppLocalizations {
   String get quietPayerCheck => 'तपासा';
 
   @override
-  String get finishHiddenFromHome => 'Processing finished. This recording is hidden from Home.';
+  String get finishHiddenFromHome => 'प्रक्रिया पूर्ण झाली. ही रेकॉर्डिंग होमवर लपवली गेली आहे.';
 
   @override
-  String get finishCheckHome => 'Still processing. Check Home for the result.';
+  String get finishCheckHome => 'अजून प्रक्रिया सुरू आहे. निकालासाठी होम तपासा.';
 }

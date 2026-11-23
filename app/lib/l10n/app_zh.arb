@@ -4741,6 +4741,6 @@
     "quietPayerTitle": "5 天没有录音",
     "quietPayerMessage": "请检查你的 Omi。",
     "quietPayerCheck": "检查",
-    "finishHiddenFromHome": "Processing finished. This recording is hidden from Home.",
-    "finishCheckHome": "Still processing. Check Home for the result."
+    "finishHiddenFromHome": "处理已完成。该录音已从首页隐藏。",
+    "finishCheckHome": "仍在处理中。请前往首页查看结果。"
 }

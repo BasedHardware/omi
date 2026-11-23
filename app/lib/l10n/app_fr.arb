@@ -4776,6 +4776,6 @@
     "quietPayerTitle": "Aucun enregistrement depuis 5 jours",
     "quietPayerMessage": "Vérifiez votre Omi.",
     "quietPayerCheck": "Vérifier",
-    "finishHiddenFromHome": "Processing finished. This recording is hidden from Home.",
-    "finishCheckHome": "Still processing. Check Home for the result."
+    "finishHiddenFromHome": "Le traitement est terminé. Cet enregistrement est masqué sur l'accueil.",
+    "finishCheckHome": "Le traitement est toujours en cours. Consultez l'accueil pour voir le résultat."
 }

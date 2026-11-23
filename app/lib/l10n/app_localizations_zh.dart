@@ -15485,8 +15485,8 @@ class AppLocalizationsZh extends AppLocalizations {
   String get quietPayerCheck => '检查';
 
   @override
-  String get finishHiddenFromHome => 'Processing finished. This recording is hidden from Home.';
+  String get finishHiddenFromHome => '处理已完成。该录音已从首页隐藏。';
 
   @override
-  String get finishCheckHome => 'Still processing. Check Home for the result.';
+  String get finishCheckHome => '仍在处理中。请前往首页查看结果。';
 }

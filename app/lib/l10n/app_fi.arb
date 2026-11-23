@@ -4741,6 +4741,6 @@
     "quietPayerTitle": "Ei tallenteita 5 päivään",
     "quietPayerMessage": "Tarkista Omisi.",
     "quietPayerCheck": "Tarkista",
-    "finishHiddenFromHome": "Processing finished. This recording is hidden from Home.",
-    "finishCheckHome": "Still processing. Check Home for the result."
+    "finishHiddenFromHome": "Käsittely valmis. Tämä nauhoitus ei näy Etusivulla.",
+    "finishCheckHome": "Käsittely on vielä kesken. Tarkista tulos Etusivulta."
 }

@@ -4741,6 +4741,6 @@
     "quietPayerTitle": "5 dienas nėra įrašų",
     "quietPayerMessage": "Patikrinkite savo Omi.",
     "quietPayerCheck": "Patikrinti",
-    "finishHiddenFromHome": "Processing finished. This recording is hidden from Home.",
-    "finishCheckHome": "Still processing. Check Home for the result."
+    "finishHiddenFromHome": "Apdorojimas baigtas. Šis įrašas nerodomas Pradžioje.",
+    "finishCheckHome": "Vis dar apdorojama. Rezultatą patikrinkite Pradžioje."
 }

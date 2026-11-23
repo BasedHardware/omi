@@ -15841,8 +15841,8 @@ class AppLocalizationsEl extends AppLocalizations {
   String get quietPayerCheck => 'Έλεγχος';
 
   @override
-  String get finishHiddenFromHome => 'Processing finished. This recording is hidden from Home.';
+  String get finishHiddenFromHome => 'Η επεξεργασία ολοκληρώθηκε. Αυτή η εγγραφή είναι κρυμμένη από το Home.';
 
   @override
-  String get finishCheckHome => 'Still processing. Check Home for the result.';
+  String get finishCheckHome => 'Η επεξεργασία συνεχίζεται. Ελέγξτε το Home για το αποτέλεσμα.';
 }

@@ -15763,8 +15763,8 @@ class AppLocalizationsLt extends AppLocalizations {
   String get quietPayerCheck => 'Patikrinti';
 
   @override
-  String get finishHiddenFromHome => 'Processing finished. This recording is hidden from Home.';
+  String get finishHiddenFromHome => 'Apdorojimas baigtas. Šis įrašas nerodomas Pradžioje.';
 
   @override
-  String get finishCheckHome => 'Still processing. Check Home for the result.';
+  String get finishCheckHome => 'Vis dar apdorojama. Rezultatą patikrinkite Pradžioje.';
 }

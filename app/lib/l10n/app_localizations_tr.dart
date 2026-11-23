@@ -15749,8 +15749,8 @@ class AppLocalizationsTr extends AppLocalizations {
   String get quietPayerCheck => 'Kontrol Et';
 
   @override
-  String get finishHiddenFromHome => 'Processing finished. This recording is hidden from Home.';
+  String get finishHiddenFromHome => 'İşlem tamamlandı. Bu kayıt Ana Sayfa\'da gizli.';
 
   @override
-  String get finishCheckHome => 'Still processing. Check Home for the result.';
+  String get finishCheckHome => 'İşlem sürüyor. Sonuç için Ana Sayfa\'ya bakın.';
 }

@@ -4741,6 +4741,6 @@
     "quietPayerTitle": "ไม่มีการบันทึกมา 5 วัน",
     "quietPayerMessage": "ตรวจสอบ Omi ของคุณ",
     "quietPayerCheck": "ตรวจสอบ",
-    "finishHiddenFromHome": "Processing finished. This recording is hidden from Home.",
-    "finishCheckHome": "Still processing. Check Home for the result."
+    "finishHiddenFromHome": "ประมวลผลเสร็จแล้ว การบันทึกนี้จะไม่แสดงในหน้าแรก",
+    "finishCheckHome": "ยังประมวลผลอยู่ ตรวจสอบผลลัพธ์ที่หน้าแรก"
 }

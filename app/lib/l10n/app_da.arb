@@ -4783,6 +4783,6 @@
     "quietPayerTitle": "Ingen optagelser i 5 dage",
     "quietPayerMessage": "Tjek din Omi.",
     "quietPayerCheck": "Tjek",
-    "finishHiddenFromHome": "Processing finished. This recording is hidden from Home.",
-    "finishCheckHome": "Still processing. Check Home for the result."
+    "finishHiddenFromHome": "Behandlingen er afsluttet. Denne optagelse er skjult på Home.",
+    "finishCheckHome": "Behandler stadig. Tjek Home for resultatet."
 }

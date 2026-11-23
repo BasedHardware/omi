@@ -15844,8 +15844,8 @@ class AppLocalizationsTa extends AppLocalizations {
   String get quietPayerCheck => 'சரிபார்';
 
   @override
-  String get finishHiddenFromHome => 'Processing finished. This recording is hidden from Home.';
+  String get finishHiddenFromHome => 'செயலாக்கம் முடிந்தது. இந்தப் பதிவு முகப்பில் மறைக்கப்பட்டுள்ளது.';
 
   @override
-  String get finishCheckHome => 'Still processing. Check Home for the result.';
+  String get finishCheckHome => 'இன்னும் செயலாக்கத்தில் உள்ளது. முகப்பில் முடிவைச் சரிபார்க்கவும்.';
 }

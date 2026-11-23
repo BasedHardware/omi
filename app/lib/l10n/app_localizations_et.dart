@@ -15731,8 +15731,8 @@ class AppLocalizationsEt extends AppLocalizations {
   String get quietPayerCheck => 'Kontrolli';
 
   @override
-  String get finishHiddenFromHome => 'Processing finished. This recording is hidden from Home.';
+  String get finishHiddenFromHome => 'Töötlemine on lõpetatud. See salvestis on Avalehel peidetud.';
 
   @override
-  String get finishCheckHome => 'Still processing. Check Home for the result.';
+  String get finishCheckHome => 'Töötlemine on veel käimas. Kontrollige tulemust Avalehelt.';
 }

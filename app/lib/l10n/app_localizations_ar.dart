@@ -15651,8 +15651,8 @@ class AppLocalizationsAr extends AppLocalizations {
   String get quietPayerCheck => 'تحقّق';
 
   @override
-  String get finishHiddenFromHome => 'Processing finished. This recording is hidden from Home.';
+  String get finishHiddenFromHome => 'انتهت المعالجة. هذا التسجيل مخفي من Home.';
 
   @override
-  String get finishCheckHome => 'Still processing. Check Home for the result.';
+  String get finishCheckHome => 'لا تزال المعالجة جارية. تحقق من Home للاطلاع على النتيجة.';
 }

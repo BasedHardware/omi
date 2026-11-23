@@ -4741,6 +4741,6 @@
     "quietPayerTitle": "Žiadne nahrávky za 5 dní",
     "quietPayerMessage": "Skontrolujte svoj Omi.",
     "quietPayerCheck": "Skontrolovať",
-    "finishHiddenFromHome": "Processing finished. This recording is hidden from Home.",
-    "finishCheckHome": "Still processing. Check Home for the result."
+    "finishHiddenFromHome": "Spracovávanie dokončené. Táto nahrávka je skrytá v časti Domov.",
+    "finishCheckHome": "Spracovávanie stále prebieha. Skontrolujte výsledok v časti Domov."
 }

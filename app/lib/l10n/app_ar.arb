@@ -4741,6 +4741,6 @@
     "quietPayerTitle": "لا توجد تسجيلات منذ 5 أيام",
     "quietPayerMessage": "تحقّق من Omi.",
     "quietPayerCheck": "تحقّق",
-    "finishHiddenFromHome": "Processing finished. This recording is hidden from Home.",
-    "finishCheckHome": "Still processing. Check Home for the result."
+    "finishHiddenFromHome": "انتهت المعالجة. هذا التسجيل مخفي من Home.",
+    "finishCheckHome": "لا تزال المعالجة جارية. تحقق من Home للاطلاع على النتيجة."
 }

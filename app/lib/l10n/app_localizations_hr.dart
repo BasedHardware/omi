@@ -15775,8 +15775,8 @@ class AppLocalizationsHr extends AppLocalizations {
   String get quietPayerCheck => 'Provjeri';
 
   @override
-  String get finishHiddenFromHome => 'Processing finished. This recording is hidden from Home.';
+  String get finishHiddenFromHome => 'Obrada je dovršena. Ova snimka je skrivena na Početnoj.';
 
   @override
-  String get finishCheckHome => 'Still processing. Check Home for the result.';
+  String get finishCheckHome => 'Obrada je još u tijeku. Provjeri rezultat na Početnoj.';
 }

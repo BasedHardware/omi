@@ -4776,6 +4776,6 @@
     "quietPayerTitle": "Нет записей 5 дней",
     "quietPayerMessage": "Проверьте свой Omi.",
     "quietPayerCheck": "Проверить",
-    "finishHiddenFromHome": "Processing finished. This recording is hidden from Home.",
-    "finishCheckHome": "Still processing. Check Home for the result."
+    "finishHiddenFromHome": "Обработка завершена. Эта запись скрыта на «Главной».",
+    "finishCheckHome": "Обработка ещё идёт. Проверьте результат на «Главной»."
 }

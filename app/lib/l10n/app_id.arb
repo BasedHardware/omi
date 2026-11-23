@@ -4776,6 +4776,6 @@
     "quietPayerTitle": "Tidak ada rekaman dalam 5 hari",
     "quietPayerMessage": "Periksa Omi Anda.",
     "quietPayerCheck": "Periksa",
-    "finishHiddenFromHome": "Processing finished. This recording is hidden from Home.",
-    "finishCheckHome": "Still processing. Check Home for the result."
+    "finishHiddenFromHome": "Pemrosesan selesai. Rekaman ini disembunyikan dari Beranda.",
+    "finishCheckHome": "Masih diproses. Periksa hasilnya di Beranda."
 }

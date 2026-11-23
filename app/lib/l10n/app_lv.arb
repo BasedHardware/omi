@@ -4741,6 +4741,6 @@
     "quietPayerTitle": "5 dienas nav ierakstu",
     "quietPayerMessage": "Pārbaudiet savu Omi.",
     "quietPayerCheck": "Pārbaudīt",
-    "finishHiddenFromHome": "Processing finished. This recording is hidden from Home.",
-    "finishCheckHome": "Still processing. Check Home for the result."
+    "finishHiddenFromHome": "Apstrāde pabeigta. Šis ieraksts ir paslēpts sadaļā Sākums.",
+    "finishCheckHome": "Vēl notiek apstrāde. Rezultātu skatiet sadaļā Sākums."
 }

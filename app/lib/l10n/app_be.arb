@@ -12298,6 +12298,6 @@
     "quietPayerTitle": "Няма запісаў 5 дзён",
     "quietPayerMessage": "Праверце свой Omi.",
     "quietPayerCheck": "Праверыць",
-    "finishHiddenFromHome": "Processing finished. This recording is hidden from Home.",
-    "finishCheckHome": "Still processing. Check Home for the result."
+    "finishHiddenFromHome": "Апрацоўка завершана. Гэты запіс схаваны на ўкладцы Home.",
+    "finishCheckHome": "Яшчэ апрацоўваецца. Праверце вынік на ўкладцы Home."
 }

@@ -4741,6 +4741,6 @@
     "quietPayerTitle": "Ingen opptak på 5 dager",
     "quietPayerMessage": "Sjekk Omi-en din.",
     "quietPayerCheck": "Sjekk",
-    "finishHiddenFromHome": "Processing finished. This recording is hidden from Home.",
-    "finishCheckHome": "Still processing. Check Home for the result."
+    "finishHiddenFromHome": "Behandlingen er ferdig. Dette opptaket er skjult fra Hjem.",
+    "finishCheckHome": "Fortsatt under behandling. Sjekk Hjem for resultatet."
 }

@@ -4741,6 +4741,6 @@
     "quietPayerTitle": "Nicio înregistrare de 5 zile",
     "quietPayerMessage": "Verifică-ți Omi.",
     "quietPayerCheck": "Verifică",
-    "finishHiddenFromHome": "Processing finished. This recording is hidden from Home.",
-    "finishCheckHome": "Still processing. Check Home for the result."
+    "finishHiddenFromHome": "Procesarea s-a încheiat. Această înregistrare este ascunsă din secțiunea Acasă.",
+    "finishCheckHome": "Încă se procesează. Verifică rezultatul în secțiunea Acasă."
 }

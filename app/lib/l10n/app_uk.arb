@@ -4741,6 +4741,6 @@
     "quietPayerTitle": "Немає записів 5 днів",
     "quietPayerMessage": "Перевірте свій Omi.",
     "quietPayerCheck": "Перевірити",
-    "finishHiddenFromHome": "Processing finished. This recording is hidden from Home.",
-    "finishCheckHome": "Still processing. Check Home for the result."
+    "finishHiddenFromHome": "Обробку завершено. Цей запис приховано з Головної.",
+    "finishCheckHome": "Обробка ще триває. Перевірте результат на Головній."
 }

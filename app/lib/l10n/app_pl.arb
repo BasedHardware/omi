@@ -4776,6 +4776,6 @@
     "quietPayerTitle": "Brak nagrań od 5 dni",
     "quietPayerMessage": "Sprawdź swoje Omi.",
     "quietPayerCheck": "Sprawdź",
-    "finishHiddenFromHome": "Processing finished. This recording is hidden from Home.",
-    "finishCheckHome": "Still processing. Check Home for the result."
+    "finishHiddenFromHome": "Przetwarzanie zakończone. To nagranie jest ukryte na ekranie głównym.",
+    "finishCheckHome": "Przetwarzanie nadal trwa. Sprawdź wynik na ekranie głównym."
 }
