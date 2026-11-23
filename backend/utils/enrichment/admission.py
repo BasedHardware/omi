@@ -1,14 +1,20 @@
 """Shared custody admission and deferred delivery seams for enrichment workers."""
 
 import asyncio
+from typing import cast
 
-from prometheus_client import Counter
+from prometheus_client import REGISTRY, Counter
 
 from models.conversation import Conversation
 
-TRANSCRIPT_DECODE_FAILURES = Counter(
-    'omi_sync_finalization_transcript_decode_failure_total',
-    'Sync finalization attempts stopped because the stored transcript could not be decoded',
+# Sync tests re-import admission while retaining the process-wide metrics registry.
+TRANSCRIPT_DECODE_FAILURES = cast(
+    Counter,
+    getattr(REGISTRY, '_names_to_collectors', {}).get('omi_sync_finalization_transcript_decode_failure_total')
+    or Counter(
+        'omi_sync_finalization_transcript_decode_failure_total',
+        'Sync finalization attempts stopped because the stored transcript could not be decoded',
+    ),
 )
 
 
