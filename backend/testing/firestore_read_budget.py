@@ -72,23 +72,39 @@ def delta_reads(before: ReadSnapshot) -> ReadDelta:
     )
 
 
-def read_budget(scenario: str) -> tuple[int, str]:
-    """Return ``(budget_reads, unit)`` for one reviewed scenario row."""
+def _budget_row(scenario: str) -> dict:
     with _BUDGETS_PATH.open('rb') as handle:
         rows = tomllib.load(handle)['scenario']
     matches = [row for row in rows if row['scenario'] == scenario]
     if len(matches) != 1:
         raise AssertionError(f'expected exactly one {scenario!r} read-budget row, found {len(matches)}')
-    return int(matches[0]['budget_reads']), matches[0]['unit']
+    return matches[0]
+
+
+def read_budget(scenario: str) -> tuple[int, str]:
+    """Return ``(budget_reads, unit)`` for one reviewed scenario row."""
+    row = _budget_row(scenario)
+    return int(row['budget_reads']), row['unit']
+
+
+def reads_for_caller(delta: ReadDelta, caller: str) -> float:
+    return sum(reads for labels, reads in delta.by_caller.items() if json.loads(labels).get('caller') == caller)
 
 
 def assert_read_budget(scenario: str, measured: float, delta: ReadDelta) -> None:
     """Fail with the scenario, measured value, budget and caller attribution."""
-    budget, unit = read_budget(scenario)
+    row = _budget_row(scenario)
+    budget, unit = int(row['budget_reads']), row['unit']
     assert measured <= budget, (
         f'{scenario}: measured {measured:g} Firestore reads exceeds budget {budget} per {unit}; '
         f'caller deltas={json.dumps(delta.by_caller, sort_keys=True)}'
     )
+    for caller, ceiling in row.get('caller_budget_reads', {}).items():
+        reads = reads_for_caller(delta, caller)
+        assert 0 < reads <= ceiling, (
+            f'{scenario}: expected {caller} to record between 1 and {ceiling} reads per {unit}; '
+            f'measured {reads:g}; caller deltas={json.dumps(delta.by_caller, sort_keys=True)}'
+        )
 
 
 @contextmanager
