@@ -2,7 +2,22 @@
 
 import asyncio
 
+from prometheus_client import Counter
+
 from models.conversation import Conversation
+
+TRANSCRIPT_DECODE_FAILURES = Counter(
+    'omi_sync_finalization_transcript_decode_failure_total',
+    'Sync finalization attempts stopped because the stored transcript could not be decoded',
+)
+
+
+def require_transcript_decoded(row: dict) -> None:
+    if row.get('_recovery_transcript_decoded') is False:
+        from utils.enrichment.outbox import FirstSummaryCallbackPending
+
+        TRANSCRIPT_DECODE_FAILURES.inc()
+        raise FirstSummaryCallbackPending('transcript_decode_failed')
 
 
 class SyncConversationPersistenceFenced(RuntimeError):

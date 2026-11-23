@@ -20,7 +20,7 @@ def admitted(state, monkeypatch):
 
 
 def callback(pipeline, monkeypatch, data):
-    monkeypatch.setattr(pipeline.conversations_db, 'get_conversation', lambda *_: deepcopy(data))
+    monkeypatch.setattr(pipeline.conversations_db, 'get_conversation', lambda *_, **_kwargs: deepcopy(data))
     monkeypatch.setattr(pipeline, 'repair_fenced', lambda *_: False)
     return pipeline._reprocess_conversation_after_update
 
