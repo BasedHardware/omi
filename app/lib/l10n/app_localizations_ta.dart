@@ -14459,6 +14459,9 @@ class AppLocalizationsTa extends AppLocalizations {
   String get processingProgress => 'உங்கள் காத்திருக்கும் பதிவுகள் செயலாக்கப்படுகின்றன…';
 
   @override
+  String get waitingForTranscriptionAllowance => 'ஒலியை எழுத்தாக்குவதற்கான ஒதுக்கீட்டுக்காகக் காத்திருக்கிறது';
+
+  @override
   String get processingDeferred => 'செயலாக்கத்திற்குக் காத்திருக்கிறது';
 
   @override
@@ -15827,6 +15830,9 @@ class AppLocalizationsTa extends AppLocalizations {
   String get stillWorkingOnIt => 'இன்னும் அதில் வேலை செய்யப்படுகிறது.';
 
   @override
+  String get deviceReadyToUse => 'பயன்படுத்தத் தயாராக உள்ளது';
+
+  @override
   String get firmwareUpdateFirmwareTooOld =>
       'உங்கள் சாதனத்தின் ஃபர்ம்வேர் இந்தப் புதுப்பிப்புக்கு மிகவும் பழையதாக உள்ளது. சாதனத்தைப் புதுப்பிக்க உதவி பெற ஆதரவைத் தொடர்புகொள்ளவும்.';
 
@@ -15842,4 +15848,65 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get quietPayerCheck => 'சரிபார்';
+
+  @override
+  String get playManageSubscription => 'சந்தாவை நிர்வகி';
+
+  @override
+  String get playBilledByGoogle => 'Google Play மூலம் கட்டணம் வசூலிக்கப்படும்';
+
+  @override
+  String get playPurchasePending => 'உங்கள் கட்டணம் நிலுவையில் உள்ளது. Google Play உறுதிசெய்ததும் Omi Pro தொடங்கும்.';
+
+  @override
+  String get playPurchaseOtherAccount => 'இந்த Google Play வாங்குதல் வேறொரு Omi கணக்கைச் சேர்ந்தது.';
+
+  @override
+  String get playPurchaseNotConfirmed => 'உங்கள் வாங்குதலை இன்னும் உறுதிசெய்ய முடியவில்லை. தானாக மீண்டும் முயல்வோம்.';
+
+  @override
+  String get playRenewalTerms =>
+      'நீங்கள் ரத்து செய்யும் வரை காட்டப்பட்ட விலையில் தானாகப் புதுப்பிக்கப்படும். Google Play இல் எப்போது வேண்டுமானாலும் நிர்வகிக்கலாம் அல்லது ரத்து செய்யலாம்.';
+
+  @override
+  String get playPaidAppUnavailable => 'Android இல் கிடைக்காது';
+
+  @override
+  String get pageNotAvailableInApp => 'இந்தப் பக்கம் ஆப்பில் கிடைக்காது.';
+
+  @override
+  String get shopOrderPlacedCheckEmail => 'ஆர்டர் செய்யப்பட்டது. உறுதிப்படுத்தலுக்கு உங்கள் மின்னஞ்சலைப் பாருங்கள்.';
+
+  @override
+  String get prepaidCodeEntry => 'குறியீடு உள்ளதா?';
+
+  @override
+  String get prepaidCodeTitle => 'குறியீட்டைப் பயன்படுத்து';
+
+  @override
+  String get prepaidCodeFieldHint => 'உங்கள் குறியீட்டை உள்ளிடவும்';
+
+  @override
+  String get prepaidCodeRedeem => 'பயன்படுத்து';
+
+  @override
+  String get prepaidCodeRedeemed => 'குறியீடு பயன்படுத்தப்பட்டது';
+
+  @override
+  String prepaidCodeResult(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'invalid': 'இந்தக் குறியீடு செல்லாது. சரிபார்த்து மீண்டும் முயலவும்.',
+        'used': 'இந்தக் குறியீடு ஏற்கனவே பயன்படுத்தப்பட்டது.',
+        'expired': 'இந்தக் குறியீடு காலாவதியானது.',
+        'hasPlan': 'உங்களிடம் ஏற்கனவே ஒரு திட்டம் உள்ளது. உங்கள் குறியீடு பயன்படுத்தப்படவில்லை.',
+        'notPrepaid': 'இந்தக் குறியீட்டை இங்கே பயன்படுத்த முடியாது. திட்டத்தைத் தேர்ந்தெடுக்கும்போது பயன்படுத்தவும்.',
+        'notEligible': 'இந்தக் கணக்கில் இந்தக் குறியீட்டைப் பயன்படுத்த முடியாது.',
+        'rateLimited': 'அதிக முயற்சிகள். பின்னர் மீண்டும் முயலவும்.',
+        'other': 'ஏதோ தவறு நடந்தது. மீண்டும் முயலவும்.',
+      },
+    );
+    return '$_temp0';
+  }
 }

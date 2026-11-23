@@ -14435,6 +14435,9 @@ class AppLocalizationsIt extends AppLocalizations {
   String get processingProgress => 'Elaborazione delle registrazioni in attesa…';
 
   @override
+  String get waitingForTranscriptionAllowance => 'In attesa di una quota di trascrizione disponibile';
+
+  @override
   String get processingDeferred => 'In attesa di elaborazione';
 
   @override
@@ -15800,6 +15803,9 @@ class AppLocalizationsIt extends AppLocalizations {
   String get stillWorkingOnIt => 'Ancora al lavoro.';
 
   @override
+  String get deviceReadyToUse => 'Pronto per l\'uso';
+
+  @override
   String get firmwareUpdateFirmwareTooOld =>
       'Il firmware del tuo dispositivo è troppo vecchio per questo aggiornamento. Contatta l\'assistenza per ricevere aiuto con l\'aggiornamento del dispositivo.';
 
@@ -15815,4 +15821,66 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get quietPayerCheck => 'Controlla';
+
+  @override
+  String get playManageSubscription => 'Gestisci abbonamento';
+
+  @override
+  String get playBilledByGoogle => 'Addebitato tramite Google Play';
+
+  @override
+  String get playPurchasePending => 'Il pagamento è in sospeso. Omi Pro inizia appena Google Play lo conferma.';
+
+  @override
+  String get playPurchaseOtherAccount => 'Questo acquisto su Google Play appartiene a un altro account Omi.';
+
+  @override
+  String get playPurchaseNotConfirmed =>
+      'Non è stato ancora possibile confermare l\'acquisto. Riproveremo automaticamente.';
+
+  @override
+  String get playRenewalTerms =>
+      'Si rinnova automaticamente al prezzo indicato finché non disdici. Gestisci o disdici in qualsiasi momento su Google Play.';
+
+  @override
+  String get playPaidAppUnavailable => 'Non disponibile su Android';
+
+  @override
+  String get pageNotAvailableInApp => 'Questa pagina non è disponibile nell\'app.';
+
+  @override
+  String get shopOrderPlacedCheckEmail => 'Ordine effettuato. Controlla l\'email per la conferma.';
+
+  @override
+  String get prepaidCodeEntry => 'Hai un codice?';
+
+  @override
+  String get prepaidCodeTitle => 'Riscatta un codice';
+
+  @override
+  String get prepaidCodeFieldHint => 'Inserisci il tuo codice';
+
+  @override
+  String get prepaidCodeRedeem => 'Riscatta';
+
+  @override
+  String get prepaidCodeRedeemed => 'Codice riscattato';
+
+  @override
+  String prepaidCodeResult(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'invalid': 'Questo codice non è valido. Controllalo e riprova.',
+        'used': 'Questo codice è già stato usato.',
+        'expired': 'Questo codice è scaduto.',
+        'hasPlan': 'Hai già un piano. Il tuo codice non è stato usato.',
+        'notPrepaid': 'Questo codice non può essere riscattato qui. Usalo quando scegli un piano.',
+        'notEligible': 'Questo codice non può essere usato su questo account.',
+        'rateLimited': 'Troppi tentativi. Riprova più tardi.',
+        'other': 'Qualcosa è andato storto. Riprova.',
+      },
+    );
+    return '$_temp0';
+  }
 }

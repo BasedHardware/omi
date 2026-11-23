@@ -1,0 +1,4 @@
+{
+  "change": "Pendant audio recovery continues when Custom Live transcription settings are refreshed without changes.",
+  "platforms": ["android"]
+}

@@ -27117,6 +27117,29 @@
             "$ref": "#/components/schemas/PlanType",
             "default": "basic"
           },
+          "prepaid": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prepaid"
+          },
+          "provider": {
+            "anyOf": [
+              {
+                "const": "play",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider"
+          },
           "status": {
             "$ref": "#/components/schemas/SubscriptionStatus",
             "default": "active"
@@ -27241,6 +27264,27 @@
                 "type": "null"
               }
             ]
+          },
+          "play_billing": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PlayBillingConfig"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "prepaid_code_redeem": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prepaid Code Redeem"
           },
           "processing_backlog": {
             "anyOf": [
@@ -27397,6 +27441,128 @@
           "minimum_supported_build"
         ],
         "title": "PlatformMinimumBuild",
+        "type": "object"
+      },
+      "PlayBasePlan": {
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "interval": {
+            "enum": [
+              "month",
+              "year"
+            ],
+            "title": "Interval",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "interval"
+        ],
+        "title": "PlayBasePlan",
+        "type": "object"
+      },
+      "PlayBillingConfig": {
+        "description": "What an Android client needs to sell Omi Pro through Google Play Billing.",
+        "properties": {
+          "base_plans": {
+            "items": {
+              "$ref": "#/components/schemas/PlayBasePlan"
+            },
+            "title": "Base Plans",
+            "type": "array"
+          },
+          "obfuscated_account_id": {
+            "title": "Obfuscated Account Id",
+            "type": "string"
+          },
+          "product_id": {
+            "title": "Product Id",
+            "type": "string"
+          },
+          "trial_offer_id": {
+            "title": "Trial Offer Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "product_id",
+          "base_plans",
+          "trial_offer_id",
+          "obfuscated_account_id"
+        ],
+        "title": "PlayBillingConfig",
+        "type": "object"
+      },
+      "PlayBillingErrorResponse": {
+        "properties": {
+          "detail": {
+            "title": "Detail",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          }
+        },
+        "required": [
+          "detail",
+          "message"
+        ],
+        "title": "PlayBillingErrorResponse",
+        "type": "object"
+      },
+      "PlayPurchaseRequest": {
+        "properties": {
+          "product_id": {
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Product Id",
+            "type": "string"
+          },
+          "purchase_token": {
+            "maxLength": 4096,
+            "minLength": 1,
+            "title": "Purchase Token",
+            "type": "string"
+          }
+        },
+        "required": [
+          "purchase_token",
+          "product_id"
+        ],
+        "title": "PlayPurchaseRequest",
+        "type": "object"
+      },
+      "PlayPurchaseResponse": {
+        "properties": {
+          "status": {
+            "enum": [
+              "active",
+              "pending",
+              "inactive"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "subscription": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Subscription"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "PlayPurchaseResponse",
         "type": "object"
       },
       "PluginResult": {
@@ -29687,6 +29853,34 @@
           "status"
         ],
         "title": "RedeemCodeResponse",
+        "type": "object"
+      },
+      "RedeemPrepaidCodeResponse": {
+        "properties": {
+          "ends_at": {
+            "title": "Ends At",
+            "type": "integer"
+          },
+          "months": {
+            "title": "Months",
+            "type": "integer"
+          },
+          "plan": {
+            "title": "Plan",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "plan",
+          "ends_at",
+          "months"
+        ],
+        "title": "RedeemPrepaidCodeResponse",
         "type": "object"
       },
       "ReferralClaimRequest": {
@@ -35722,6 +35916,29 @@
               "operator"
             ]
           },
+          "prepaid": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prepaid"
+          },
+          "provider": {
+            "anyOf": [
+              {
+                "const": "play",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider"
+          },
           "status": {
             "$ref": "#/components/schemas/SubscriptionStatus",
             "default": "active"
@@ -40638,6 +40855,27 @@
                 "type": "null"
               }
             ]
+          },
+          "play_billing": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PlayBillingConfig"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "prepaid_code_redeem": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prepaid Code Redeem"
           },
           "processing_backlog": {
             "anyOf": [
@@ -70880,6 +71118,114 @@
         "summary": "Payment Issue Monthly Switch Endpoint"
       }
     },
+    "/v1/payments/play/purchases": {
+      "post": {
+        "description": "Verify a Google Play purchase token, bind it to this account and grant Omi Pro once Google says it is paid.",
+        "operationId": "verify_play_purchase_v1_payments_play_purchases_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PlayPurchaseRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlayPurchaseResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlayBillingErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlayBillingErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "429": {
+            "description": "Too Many Requests"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Verify Play Purchase"
+      }
+    },
     "/v1/payments/portal-return": {
       "get": {
         "operationId": "portal_return_v1_payments_portal_return_get",
@@ -70904,6 +71250,91 @@
           }
         ],
         "summary": "Portal Return"
+      }
+    },
+    "/v1/payments/prepaid-code/redeem": {
+      "post": {
+        "description": "Redeem a fully prepaid Omi Pro code with no card. Errors carry a reason code as ``detail``.",
+        "operationId": "redeem_prepaid_code_endpoint_v1_payments_prepaid_code_redeem_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RedeemCodeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RedeemPrepaidCodeResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Redeem Prepaid Code Endpoint"
       }
     },
     "/v1/payments/redeem-code": {
@@ -81350,6 +81781,22 @@
             "schema": {
               "title": "X-App-Version",
               "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Build",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Build"
             }
           },
           {

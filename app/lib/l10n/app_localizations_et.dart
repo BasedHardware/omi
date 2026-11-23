@@ -14353,6 +14353,9 @@ class AppLocalizationsEt extends AppLocalizations {
   String get processingProgress => 'Sinu ootel salvestiste töötlemine…';
 
   @override
+  String get waitingForTranscriptionAllowance => 'Ootab saadaolevat transkribeerimismahtu';
+
+  @override
   String get processingDeferred => 'Ootab töötlemist';
 
   @override
@@ -15714,6 +15717,9 @@ class AppLocalizationsEt extends AppLocalizations {
   String get stillWorkingOnIt => 'Töötame veel selle kallal.';
 
   @override
+  String get deviceReadyToUse => 'Valmis kasutamiseks';
+
+  @override
   String get firmwareUpdateFirmwareTooOld =>
       'Teie seadme püsivara on selle värskenduse jaoks liiga vana. Seadme värskendamiseks abi saamiseks võtke ühendust klienditoega.';
 
@@ -15729,4 +15735,65 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get quietPayerCheck => 'Kontrolli';
+
+  @override
+  String get playManageSubscription => 'Halda tellimust';
+
+  @override
+  String get playBilledByGoogle => 'Arveldus Google Play kaudu';
+
+  @override
+  String get playPurchasePending => 'Makse ootel. Omi Pro algab, kui Google Play selle kinnitab.';
+
+  @override
+  String get playPurchaseOtherAccount => 'See Google Play ost kuulub teisele Omi kontole.';
+
+  @override
+  String get playPurchaseNotConfirmed => 'Ostu ei õnnestunud veel kinnitada. Proovime automaatselt uuesti.';
+
+  @override
+  String get playRenewalTerms =>
+      'Uueneb automaatselt näidatud hinnaga, kuni tühistad. Halda või tühista igal ajal Google Plays.';
+
+  @override
+  String get playPaidAppUnavailable => 'Androidis pole saadaval';
+
+  @override
+  String get pageNotAvailableInApp => 'See leht pole rakenduses saadaval.';
+
+  @override
+  String get shopOrderPlacedCheckEmail => 'Tellimus on esitatud. Kinnituse leiad oma e-postist.';
+
+  @override
+  String get prepaidCodeEntry => 'Kas sul on kood?';
+
+  @override
+  String get prepaidCodeTitle => 'Lunasta kood';
+
+  @override
+  String get prepaidCodeFieldHint => 'Sisesta oma kood';
+
+  @override
+  String get prepaidCodeRedeem => 'Lunasta';
+
+  @override
+  String get prepaidCodeRedeemed => 'Kood on lunastatud';
+
+  @override
+  String prepaidCodeResult(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'invalid': 'See kood ei kehti. Kontrolli seda ja proovi uuesti.',
+        'used': 'Seda koodi on juba kasutatud.',
+        'expired': 'Selle koodi kehtivus on lõppenud.',
+        'hasPlan': 'Sul on juba pakett. Sinu koodi ei kasutatud.',
+        'notPrepaid': 'Seda koodi ei saa siin lunastada. Kasuta seda paketi valimisel.',
+        'notEligible': 'Seda koodi ei saa selles kontos kasutada.',
+        'rateLimited': 'Liiga palju katseid. Proovi hiljem uuesti.',
+        'other': 'Midagi läks valesti. Proovi uuesti.',
+      },
+    );
+    return '$_temp0';
+  }
 }

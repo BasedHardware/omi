@@ -14382,6 +14382,9 @@ class AppLocalizationsLt extends AppLocalizations {
   String get processingProgress => 'Apdorojami laukiantys įrašai…';
 
   @override
+  String get waitingForTranscriptionAllowance => 'Laukiama, kol bus prieinama transkribavimo kvota';
+
+  @override
   String get processingDeferred => 'Laukia apdorojimo';
 
   @override
@@ -15746,6 +15749,9 @@ class AppLocalizationsLt extends AppLocalizations {
   String get stillWorkingOnIt => 'Vis dar dirbama.';
 
   @override
+  String get deviceReadyToUse => 'Paruošta naudoti';
+
+  @override
   String get firmwareUpdateFirmwareTooOld =>
       'Jūsų įrenginio programinė aparatinė įranga per sena šiam naujinimui. Kreipkitės į palaikymo tarnybą, kad padėtų atnaujinti įrenginį.';
 
@@ -15761,4 +15767,65 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get quietPayerCheck => 'Patikrinti';
+
+  @override
+  String get playManageSubscription => 'Tvarkyti prenumeratą';
+
+  @override
+  String get playBilledByGoogle => 'Mokestis per Google Play';
+
+  @override
+  String get playPurchasePending => 'Mokėjimas laukia. Omi Pro prasidės, kai Google Play jį patvirtins.';
+
+  @override
+  String get playPurchaseOtherAccount => 'Šis Google Play pirkinys priklauso kitai Omi paskyrai.';
+
+  @override
+  String get playPurchaseNotConfirmed => 'Pirkinio dar nepavyko patvirtinti. Bandysime dar kartą automatiškai.';
+
+  @override
+  String get playRenewalTerms =>
+      'Automatiškai atnaujinama nurodyta kaina, kol atšauksite. Tvarkykite ar atšaukite bet kada Google Play.';
+
+  @override
+  String get playPaidAppUnavailable => 'Android nepasiekiama';
+
+  @override
+  String get pageNotAvailableInApp => 'Šis puslapis programėlėje nepasiekiamas.';
+
+  @override
+  String get shopOrderPlacedCheckEmail => 'Užsakymas pateiktas. Patvirtinimą rasite el. pašte.';
+
+  @override
+  String get prepaidCodeEntry => 'Turite kodą?';
+
+  @override
+  String get prepaidCodeTitle => 'Panaudoti kodą';
+
+  @override
+  String get prepaidCodeFieldHint => 'Įveskite savo kodą';
+
+  @override
+  String get prepaidCodeRedeem => 'Panaudoti';
+
+  @override
+  String get prepaidCodeRedeemed => 'Kodas panaudotas';
+
+  @override
+  String prepaidCodeResult(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'invalid': 'Šis kodas negalioja. Patikrinkite jį ir bandykite dar kartą.',
+        'used': 'Šis kodas jau panaudotas.',
+        'expired': 'Šio kodo galiojimas baigėsi.',
+        'hasPlan': 'Jau turite planą. Jūsų kodas nepanaudotas.',
+        'notPrepaid': 'Šio kodo čia panaudoti negalima. Panaudokite jį rinkdamiesi planą.',
+        'notEligible': 'Šio kodo negalima naudoti šioje paskyroje.',
+        'rateLimited': 'Per daug bandymų. Bandykite vėliau.',
+        'other': 'Kažkas nepavyko. Bandykite dar kartą.',
+      },
+    );
+    return '$_temp0';
+  }
 }

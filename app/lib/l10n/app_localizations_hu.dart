@@ -14418,6 +14418,9 @@ class AppLocalizationsHu extends AppLocalizations {
   String get processingProgress => 'A várakozó felvételeid feldolgozása…';
 
   @override
+  String get waitingForTranscriptionAllowance => 'Várakozás az elérhető átírási keretre';
+
+  @override
   String get processingDeferred => 'Feldolgozásra vár';
 
   @override
@@ -15780,6 +15783,9 @@ class AppLocalizationsHu extends AppLocalizations {
   String get stillWorkingOnIt => 'Még dolgozunk rajta.';
 
   @override
+  String get deviceReadyToUse => 'Használatra kész';
+
+  @override
   String get firmwareUpdateFirmwareTooOld =>
       'Az eszköz firmware-e túl régi ehhez a frissítéshez. Az eszköz frissítéséhez kérjen segítséget az ügyfélszolgálattól.';
 
@@ -15795,4 +15801,65 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get quietPayerCheck => 'Megnézem';
+
+  @override
+  String get playManageSubscription => 'Előfizetés kezelése';
+
+  @override
+  String get playBilledByGoogle => 'A számlázás a Google Playen keresztül történik';
+
+  @override
+  String get playPurchasePending => 'A fizetés függőben van. Az Omi Pro akkor indul, amikor a Google Play megerősíti.';
+
+  @override
+  String get playPurchaseOtherAccount => 'Ez a Google Play-vásárlás egy másik Omi-fiókhoz tartozik.';
+
+  @override
+  String get playPurchaseNotConfirmed => 'Még nem tudtuk megerősíteni a vásárlást. Automatikusan újrapróbáljuk.';
+
+  @override
+  String get playRenewalTerms =>
+      'Lemondásig automatikusan megújul a feltüntetett áron. Bármikor kezelheted vagy lemondhatod a Google Playen.';
+
+  @override
+  String get playPaidAppUnavailable => 'Androidon nem érhető el';
+
+  @override
+  String get pageNotAvailableInApp => 'Ez az oldal nem érhető el az alkalmazásban.';
+
+  @override
+  String get shopOrderPlacedCheckEmail => 'A rendelés leadva. A visszaigazolást az e-mailjeidben találod.';
+
+  @override
+  String get prepaidCodeEntry => 'Van kódod?';
+
+  @override
+  String get prepaidCodeTitle => 'Kód beváltása';
+
+  @override
+  String get prepaidCodeFieldHint => 'Add meg a kódodat';
+
+  @override
+  String get prepaidCodeRedeem => 'Beváltás';
+
+  @override
+  String get prepaidCodeRedeemed => 'Kód beváltva';
+
+  @override
+  String prepaidCodeResult(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'invalid': 'Ez a kód érvénytelen. Ellenőrizd, és próbáld újra.',
+        'used': 'Ezt a kódot már felhasználták.',
+        'expired': 'Ez a kód lejárt.',
+        'hasPlan': 'Már van csomagod. A kódodat nem használtuk fel.',
+        'notPrepaid': 'Ez a kód itt nem váltható be. Használd, amikor csomagot választasz.',
+        'notEligible': 'Ez a kód ezen a fiókon nem használható.',
+        'rateLimited': 'Túl sok próbálkozás. Próbáld újra később.',
+        'other': 'Hiba történt. Próbáld újra.',
+      },
+    );
+    return '$_temp0';
+  }
 }

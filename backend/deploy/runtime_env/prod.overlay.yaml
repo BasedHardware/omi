@@ -108,6 +108,13 @@ overlay:
         EPISODE_COMPOSE_SETTLED_TERMINAL_ENABLED: {value: 'true', category: ops_kill}
         CONVERSATION_NOTES_SCALED_DETAIL_ENABLED: {value: 'true', category: ops_kill}
         QUIET_EMPTY_EXIT_ENABLED: {value: 'true', category: rollout}
+        # SCA-4019: a phone/pendant socket drop holds its mobile server-batch capture open for the
+        # 120 s reconnect grace instead of finalizing it, so a resumed recording stays one
+        # conversation. The producer drain releases the recording-session lease and persists a
+        # deadline, so the quiet check seals a held row at the deadline (the Nov 16 no-exit hold
+        # cannot recur). Activation gate met: every listen pod has run this code since 2026-11-22.
+        # Rollback: set 'false' on backend-listen and backend-sync in one config train.
+        LISTEN_BATCH_RECONNECT_ENABLED: {value: 'true', category: rollout}
         BATCH_INPUT_EXPIRING_ENABLED: {value: 'true', category: ops_kill}
         HOME_TRANSCRIPTION_PRESENTATION_GATE: {value: 'true', category: ops_kill}
         HOME_TRANSCRIPTION_DEADLINE_SECONDS: {value: '7200', category: config}
@@ -636,7 +643,25 @@ overlay:
           MCP_OAUTH_CLIENTS_JSON:
             secret: MCP_OAUTH_CLIENTS_JSON
             version: latest
+          # Google Play Billing account-id HMAC key. Create the secret (32+ random chars) and grant
+          # backend-runtime@ secretAccessor before the first deploy of this config.
+          PLAY_ACCOUNT_ID_HMAC_KEY:
+            secret: PLAY_ACCOUNT_ID_HMAC_KEY
+            version: latest
         env:
+          # Google Play Billing (Android). ANDROID_BILLING=stripe keeps new purchases on Stripe ('play' = everyone).
+          # Test accounts go in the android-play-billing rollout cohort (Firestore), never here.
+          ANDROID_BILLING: {value: stripe, category: rollout}
+          # RTDN push and reconcile identities:
+          PLAY_RTDN_OIDC_AUDIENCE: {value: 'https://api.omi.me/v2/internal/play-billing/rtdn', category: service_discovery}
+          PLAY_RTDN_PUSH_SA: {value: play-billing-rtdn-push@based-hardware.iam.gserviceaccount.com, category: service_discovery}
+          PLAY_RECONCILE_OIDC_AUDIENCE: {value: 'https://api.omi.me/v2/internal/play-billing/reconcile', category: service_discovery}
+          PLAY_RECONCILE_INVOKER_SA: {value: play-billing-reconcile@based-hardware.iam.gserviceaccount.com, category: service_discovery}
+          # First Android version code with the Play Billing hardening (1616 predates it). Below it, or with no
+          # cohort membership and ANDROID_BILLING=stripe, nobody is sent to Google Play.
+          ANDROID_PLAY_BILLING_MIN_BUILD: {value: '1617', category: rollout}
+          # Empty: cohort members come from the android-play-billing rollout cohort document instead.
+          ANDROID_PLAY_BILLING_COHORT: {value: '', category: rollout}
           # Unlimited backfill day cap, enforced only at sync upload (retryable 503 backfill_capacity until the
           # next UTC day). Rollback: 'false' in one config train (David 2026-11-18, support-packet decision 13).
           UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED: {value: 'true', category: rollout}
@@ -928,6 +953,8 @@ overlay:
             value: price_1TuIa81F8wnoWYvw0iX0j5M8
           STRIPE_UNLIMITED_V2_ANNUAL_PRICE_ID:
             value: price_1TuIap1F8wnoWYvwHWq0EvNU
+          # No-card prepaid Pro code redemption; off until billing turns it on (cohort: prepaid-code-redeem).
+          PREPAID_CODE_REDEEM: {value: 'off', category: rollout}
           OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE:
             value: 'true'
             category: rollout
@@ -1074,6 +1101,10 @@ overlay:
           BATCH_PIPELINE_UPLOAD_COALESCING_ENABLED: {value: 'true', category: ops_kill}
           # Quiet-check empty exit (David 0192a6, lead2 9b4ffd); evaluated on backend-sync. Kill switch: false.
           QUIET_EMPTY_EXIT_ENABLED: {value: 'true', category: rollout}
+          # SCA-4019: the quiet-check reconciler and finalization jobs read the same reconnect
+          # protocol as listen, so a drained hold seals at its producer deadline. Keep this equal
+          # to backend-listen; rollback sets 'false' on both in one config train.
+          LISTEN_BATCH_RECONNECT_ENABLED: {value: 'true', category: rollout}
           BATCH_INPUT_EXPIRING_ENABLED: {value: 'true', category: ops_kill}
           HOME_TRANSCRIPTION_PRESENTATION_GATE: {value: 'true', category: ops_kill}
           HOME_TRANSCRIPTION_DEADLINE_SECONDS: {value: '7200', category: config}
@@ -1481,8 +1512,9 @@ overlay:
           # next UTC day). Rollback: 'false' in one config train (David 2026-11-18, support-packet decision 13).
           UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED: {value: 'true', category: rollout}
           UNLIMITED_V2_BACKFILL_HOURS_CAP_HOURS: {value: '24', category: rollout}
-          # Silent read skipping on (SCA-1824 canary READBACK -13.5% reads); kill switch: set false.
-          BATCH_PIPELINE_SILENCE_READ_SKIP_ENABLED: {value: 'true', category: ops_kill}
+          # SCA-3544: preserve backfill behavior during the code catch-up.
+          BATCH_PIPELINE_FOLLOWUP_CLAIMED_SIBLING_SKIP_ENABLED: {value: 'false', category: ops_kill}
+          BATCH_PIPELINE_SILENCE_READ_SKIP_ENABLED: {value: 'false', category: ops_kill}
           PUSHER_RECORD_CLOSE_NOTIFY_ENABLED: {value: 'false', category: rollout}
           PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_PERCENT: {value: '100', category: rollout}
           PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_UID_SHA256S: {value: '', category: rollout}
@@ -1512,7 +1544,7 @@ overlay:
           HOME_TRANSCRIPTION_PRESENTATION_GATE: {value: 'true', category: ops_kill}
           HOME_TRANSCRIPTION_DEADLINE_SECONDS: {value: '7200', category: config}
           HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED: {value: 'true', category: ops_kill}
-          SYNC_FUTURE_CAPTURE_CLAMP_ENABLED: {value: 'true', category: rollout}
+          SYNC_FUTURE_CAPTURE_CLAMP_ENABLED: {value: 'false', category: rollout}
           RECORD_SEAL_REPAIR_FRESH_ENABLED: {value: 'true', category: ops_kill}
           RECORD_INTAKE_AGE_PRIORITY_ENABLED: {value: 'true', category: ops_kill}
           HOME_TRANSCRIPTION_MAX_AGE_SECONDS: {value: '86400', category: config}
@@ -1548,8 +1580,8 @@ overlay:
           # Graduation of the David-approved on-demand playback (DEC-BTR-004): build playback
           # artifacts on open/play/download only. Kill switch: set false.
           PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
-          SYNC_POLL_BACKOFF_ENABLED: {value: 'true', category: rollout}
-          SYNC_POLL_BACKOFF_PERCENT: {value: '5', category: rollout}
+          SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
+          SYNC_POLL_BACKOFF_PERCENT: {value: '0', category: rollout}
           # O4 excluded consumer: preserve decision cache 0, owner enforcement 0,
           # shadow 10, negative/TTL60 caches 0 (Release 2026-11-17 reconciliation).
           # This does not admit backfill enforcement when the shared kill switch clears.

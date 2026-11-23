@@ -221,6 +221,8 @@ class HeavyConnectedDevice extends ChangeNotifier implements DeviceProvider {
   @override
   int batteryLevel = 80;
   @override
+  int get settingsBatteryLevel => batteryLevel;
+  @override
   OfflineStorageCapability get offlineStorageCapability => OfflineStorageCapability.unsupported;
   @override
   bool supportsMultiFileSync = false;

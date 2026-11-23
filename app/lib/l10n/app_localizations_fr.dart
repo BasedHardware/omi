@@ -14476,6 +14476,9 @@ class AppLocalizationsFr extends AppLocalizations {
   String get processingProgress => 'Traitement de vos enregistrements en attente…';
 
   @override
+  String get waitingForTranscriptionAllowance => 'En attente d’un quota de transcription disponible';
+
+  @override
   String get processingDeferred => 'En attente de traitement';
 
   @override
@@ -15852,6 +15855,9 @@ class AppLocalizationsFr extends AppLocalizations {
   String get stillWorkingOnIt => 'Toujours en cours.';
 
   @override
+  String get deviceReadyToUse => 'Prêt à l\'emploi';
+
+  @override
   String get firmwareUpdateFirmwareTooOld =>
       'Le micrologiciel de votre appareil est trop ancien pour cette mise à jour. Contactez l\'assistance pour obtenir de l\'aide afin de mettre à jour votre appareil.';
 
@@ -15867,4 +15873,66 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get quietPayerCheck => 'Vérifier';
+
+  @override
+  String get playManageSubscription => 'Gérer l\'abonnement';
+
+  @override
+  String get playBilledByGoogle => 'Facturé par Google Play';
+
+  @override
+  String get playPurchasePending => 'Votre paiement est en attente. Omi Pro démarre dès que Google Play le confirme.';
+
+  @override
+  String get playPurchaseOtherAccount => 'Cet achat Google Play appartient à un autre compte Omi.';
+
+  @override
+  String get playPurchaseNotConfirmed =>
+      'Nous n\'avons pas encore pu confirmer votre achat. Nous réessaierons automatiquement.';
+
+  @override
+  String get playRenewalTerms =>
+      'Se renouvelle automatiquement au prix indiqué jusqu\'à résiliation. Gérez ou résiliez à tout moment dans Google Play.';
+
+  @override
+  String get playPaidAppUnavailable => 'Non disponible sur Android';
+
+  @override
+  String get pageNotAvailableInApp => 'Cette page n\'est pas disponible dans l\'app.';
+
+  @override
+  String get shopOrderPlacedCheckEmail => 'Commande passée. Consultez vos e-mails pour la confirmation.';
+
+  @override
+  String get prepaidCodeEntry => 'Vous avez un code ?';
+
+  @override
+  String get prepaidCodeTitle => 'Utiliser un code';
+
+  @override
+  String get prepaidCodeFieldHint => 'Saisissez votre code';
+
+  @override
+  String get prepaidCodeRedeem => 'Utiliser';
+
+  @override
+  String get prepaidCodeRedeemed => 'Code utilisé';
+
+  @override
+  String prepaidCodeResult(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'invalid': 'Ce code n\'est pas valide. Vérifiez-le et réessayez.',
+        'used': 'Ce code a déjà été utilisé.',
+        'expired': 'Ce code a expiré.',
+        'hasPlan': 'Vous avez déjà un forfait. Votre code n\'a pas été utilisé.',
+        'notPrepaid': 'Ce code ne peut pas être utilisé ici. Utilisez-le lorsque vous choisissez un forfait.',
+        'notEligible': 'Ce code ne peut pas être utilisé sur ce compte.',
+        'rateLimited': 'Trop de tentatives. Réessayez plus tard.',
+        'other': 'Une erreur s\'est produite. Veuillez réessayer.',
+      },
+    );
+    return '$_temp0';
+  }
 }

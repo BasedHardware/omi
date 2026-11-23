@@ -14254,6 +14254,9 @@ class AppLocalizationsHe extends AppLocalizations {
   String get processingProgress => 'ההקלטות הממתינות שלך בעיבוד…';
 
   @override
+  String get waitingForTranscriptionAllowance => 'בהמתנה למכסת תמלול זמינה';
+
+  @override
   String get processingDeferred => 'ממתין לעיבוד';
 
   @override
@@ -15609,6 +15612,9 @@ class AppLocalizationsHe extends AppLocalizations {
   String get stillWorkingOnIt => 'עדיין עובדים על זה.';
 
   @override
+  String get deviceReadyToUse => 'מוכן לשימוש';
+
+  @override
   String get firmwareUpdateFirmwareTooOld =>
       'הקושחה של המכשיר שלך ישנה מדי לעדכון הזה. יש לפנות לתמיכה לקבלת עזרה בעדכון המכשיר.';
 
@@ -15624,4 +15630,64 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get quietPayerCheck => 'בדיקה';
+
+  @override
+  String get playManageSubscription => 'ניהול המינוי';
+
+  @override
+  String get playBilledByGoogle => 'החיוב דרך Google Play';
+
+  @override
+  String get playPurchasePending => 'התשלום ממתין. Omi Pro יתחיל ברגע ש-Google Play יאשר אותו.';
+
+  @override
+  String get playPurchaseOtherAccount => 'הרכישה הזו ב-Google Play שייכת לחשבון Omi אחר.';
+
+  @override
+  String get playPurchaseNotConfirmed => 'עדיין לא הצלחנו לאשר את הרכישה. ננסה שוב אוטומטית.';
+
+  @override
+  String get playRenewalTerms => 'מתחדש אוטומטית במחיר המוצג עד שתבטלו. ניתן לנהל או לבטל בכל עת ב-Google Play.';
+
+  @override
+  String get playPaidAppUnavailable => 'לא זמין ב-Android';
+
+  @override
+  String get pageNotAvailableInApp => 'הדף הזה לא זמין באפליקציה.';
+
+  @override
+  String get shopOrderPlacedCheckEmail => 'ההזמנה בוצעה. האישור נשלח לאימייל שלך.';
+
+  @override
+  String get prepaidCodeEntry => 'יש לך קוד?';
+
+  @override
+  String get prepaidCodeTitle => 'מימוש קוד';
+
+  @override
+  String get prepaidCodeFieldHint => 'הזינו את הקוד שלכם';
+
+  @override
+  String get prepaidCodeRedeem => 'מימוש';
+
+  @override
+  String get prepaidCodeRedeemed => 'הקוד מומש';
+
+  @override
+  String prepaidCodeResult(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'invalid': 'הקוד הזה אינו תקף. בדקו אותו ונסו שוב.',
+        'used': 'הקוד הזה כבר נוצל.',
+        'expired': 'תוקף הקוד הזה פג.',
+        'hasPlan': 'כבר יש לכם תוכנית. הקוד שלכם לא נוצל.',
+        'notPrepaid': 'לא ניתן לממש את הקוד הזה כאן. השתמשו בו כשתבחרו תוכנית.',
+        'notEligible': 'לא ניתן להשתמש בקוד הזה בחשבון הזה.',
+        'rateLimited': 'יותר מדי ניסיונות. נסו שוב מאוחר יותר.',
+        'other': 'משהו השתבש. נסו שוב.',
+      },
+    );
+    return '$_temp0';
+  }
 }

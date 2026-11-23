@@ -14356,6 +14356,9 @@ class AppLocalizationsBn extends AppLocalizations {
   String get processingProgress => 'আপনার অপেক্ষমাণ রেকর্ডিং প্রক্রিয়া করা হচ্ছে…';
 
   @override
+  String get waitingForTranscriptionAllowance => 'প্রতিলিপি তৈরির বরাদ্দের অপেক্ষায়';
+
+  @override
   String get processingDeferred => 'প্রক্রিয়াকরণের অপেক্ষায়';
 
   @override
@@ -15716,6 +15719,9 @@ class AppLocalizationsBn extends AppLocalizations {
   String get stillWorkingOnIt => 'এখনও কাজ চলছে।';
 
   @override
+  String get deviceReadyToUse => 'ব্যবহারের জন্য প্রস্তুত';
+
+  @override
   String get firmwareUpdateFirmwareTooOld =>
       'এই আপডেটের জন্য আপনার ডিভাইসের ফার্মওয়্যার অনেক পুরোনো। ডিভাইস আপডেট করতে সাহায্যের জন্য সহায়তা দলের সঙ্গে যোগাযোগ করুন।';
 
@@ -15731,4 +15737,65 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get quietPayerCheck => 'দেখুন';
+
+  @override
+  String get playManageSubscription => 'সাবস্ক্রিপশন পরিচালনা';
+
+  @override
+  String get playBilledByGoogle => 'Google Play-এর মাধ্যমে বিল করা হয়';
+
+  @override
+  String get playPurchasePending => 'আপনার পেমেন্ট অপেক্ষমাণ। Google Play নিশ্চিত করলেই Omi Pro শুরু হবে।';
+
+  @override
+  String get playPurchaseOtherAccount => 'এই Google Play কেনাকাটা অন্য একটি Omi অ্যাকাউন্টের।';
+
+  @override
+  String get playPurchaseNotConfirmed => 'কেনাকাটা এখনও নিশ্চিত করা যায়নি। আমরা নিজে থেকে আবার চেষ্টা করব।';
+
+  @override
+  String get playRenewalTerms =>
+      'বাতিল না করা পর্যন্ত দেখানো দামে স্বয়ংক্রিয়ভাবে নবায়ন হয়। যেকোনো সময় Google Play-এ পরিচালনা বা বাতিল করুন।';
+
+  @override
+  String get playPaidAppUnavailable => 'Android-এ উপলভ্য নয়';
+
+  @override
+  String get pageNotAvailableInApp => 'এই পৃষ্ঠাটি অ্যাপে উপলব্ধ নয়।';
+
+  @override
+  String get shopOrderPlacedCheckEmail => 'অর্ডার দেওয়া হয়েছে। নিশ্চিতকরণের জন্য আপনার ইমেল দেখুন।';
+
+  @override
+  String get prepaidCodeEntry => 'কোড আছে?';
+
+  @override
+  String get prepaidCodeTitle => 'কোড রিডিম করুন';
+
+  @override
+  String get prepaidCodeFieldHint => 'আপনার কোড লিখুন';
+
+  @override
+  String get prepaidCodeRedeem => 'রিডিম';
+
+  @override
+  String get prepaidCodeRedeemed => 'কোড রিডিম হয়েছে';
+
+  @override
+  String prepaidCodeResult(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'invalid': 'এই কোডটি বৈধ নয়। যাচাই করে আবার চেষ্টা করুন।',
+        'used': 'এই কোডটি আগেই ব্যবহার করা হয়েছে।',
+        'expired': 'এই কোডের মেয়াদ শেষ হয়ে গেছে।',
+        'hasPlan': 'আপনার ইতিমধ্যে একটি প্ল্যান আছে। আপনার কোড ব্যবহার করা হয়নি।',
+        'notPrepaid': 'এই কোডটি এখানে রিডিম করা যাবে না। প্ল্যান বেছে নেওয়ার সময় এটি ব্যবহার করুন।',
+        'notEligible': 'এই কোডটি এই অ্যাকাউন্টে ব্যবহার করা যাবে না।',
+        'rateLimited': 'অনেকবার চেষ্টা করা হয়েছে। পরে আবার চেষ্টা করুন।',
+        'other': 'কিছু ভুল হয়েছে। আবার চেষ্টা করুন।',
+      },
+    );
+    return '$_temp0';
+  }
 }

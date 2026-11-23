@@ -14455,6 +14455,9 @@ class AppLocalizationsEl extends AppLocalizations {
   String get processingProgress => 'Γίνεται επεξεργασία των εγγραφών σε αναμονή…';
 
   @override
+  String get waitingForTranscriptionAllowance => 'Αναμονή για διαθέσιμο όριο απομαγνητοφώνησης';
+
+  @override
   String get processingDeferred => 'Σε αναμονή επεξεργασίας';
 
   @override
@@ -15824,6 +15827,9 @@ class AppLocalizationsEl extends AppLocalizations {
   String get stillWorkingOnIt => 'Εξακολουθούμε να δουλεύουμε πάνω σε αυτό.';
 
   @override
+  String get deviceReadyToUse => 'Έτοιμο για χρήση';
+
+  @override
   String get firmwareUpdateFirmwareTooOld =>
       'Το υλικολογισμικό της συσκευής σας είναι πολύ παλιό για αυτήν την ενημέρωση. Επικοινωνήστε με την υποστήριξη για βοήθεια με την ενημέρωση της συσκευής σας.';
 
@@ -15839,4 +15845,66 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get quietPayerCheck => 'Έλεγχος';
+
+  @override
+  String get playManageSubscription => 'Διαχείριση συνδρομής';
+
+  @override
+  String get playBilledByGoogle => 'Χρέωση μέσω Google Play';
+
+  @override
+  String get playPurchasePending => 'Η πληρωμή εκκρεμεί. Το Omi Pro ξεκινά μόλις την επιβεβαιώσει το Google Play.';
+
+  @override
+  String get playPurchaseOtherAccount => 'Αυτή η αγορά Google Play ανήκει σε άλλο λογαριασμό Omi.';
+
+  @override
+  String get playPurchaseNotConfirmed =>
+      'Δεν μπορέσαμε να επιβεβαιώσουμε την αγορά ακόμα. Θα ξαναδοκιμάσουμε αυτόματα.';
+
+  @override
+  String get playRenewalTerms =>
+      'Ανανεώνεται αυτόματα στην τιμή που εμφανίζεται μέχρι να την ακυρώσετε. Διαχείριση ή ακύρωση οποτεδήποτε στο Google Play.';
+
+  @override
+  String get playPaidAppUnavailable => 'Μη διαθέσιμο στο Android';
+
+  @override
+  String get pageNotAvailableInApp => 'Αυτή η σελίδα δεν είναι διαθέσιμη στην εφαρμογή.';
+
+  @override
+  String get shopOrderPlacedCheckEmail => 'Η παραγγελία καταχωρήθηκε. Δείτε το email σας για την επιβεβαίωση.';
+
+  @override
+  String get prepaidCodeEntry => 'Έχετε κωδικό;';
+
+  @override
+  String get prepaidCodeTitle => 'Εξαργύρωση κωδικού';
+
+  @override
+  String get prepaidCodeFieldHint => 'Εισαγάγετε τον κωδικό σας';
+
+  @override
+  String get prepaidCodeRedeem => 'Εξαργύρωση';
+
+  @override
+  String get prepaidCodeRedeemed => 'Ο κωδικός εξαργυρώθηκε';
+
+  @override
+  String prepaidCodeResult(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'invalid': 'Αυτός ο κωδικός δεν είναι έγκυρος. Ελέγξτε τον και δοκιμάστε ξανά.',
+        'used': 'Αυτός ο κωδικός έχει ήδη χρησιμοποιηθεί.',
+        'expired': 'Αυτός ο κωδικός έχει λήξει.',
+        'hasPlan': 'Έχετε ήδη πρόγραμμα. Ο κωδικός σας δεν χρησιμοποιήθηκε.',
+        'notPrepaid': 'Αυτός ο κωδικός δεν εξαργυρώνεται εδώ. Χρησιμοποιήστε τον όταν επιλέξετε πρόγραμμα.',
+        'notEligible': 'Αυτός ο κωδικός δεν μπορεί να χρησιμοποιηθεί σε αυτόν τον λογαριασμό.',
+        'rateLimited': 'Πάρα πολλές προσπάθειες. Δοκιμάστε αργότερα.',
+        'other': 'Κάτι πήγε στραβά. Δοκιμάστε ξανά.',
+      },
+    );
+    return '$_temp0';
+  }
 }

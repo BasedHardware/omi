@@ -46,7 +46,7 @@ class _ManualFinishConversations extends ConversationProvider {
   int refreshes = 0;
 
   @override
-  Future<void> forceRefreshConversations() async {
+  Future<void> forceRefreshConversations({bool reconcileHeldRecordings = false}) async {
     refreshes++;
   }
 }

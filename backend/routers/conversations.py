@@ -1221,9 +1221,14 @@ def get_conversations(
     if response is not None:
         list_page_headers.apply(response, page)
     _heal_locked_conversations_if_eligible(uid, conversations)
+    admissions = transcribing_hold.read_admissions(uid, conversations, budget=budget)
     conversations = [
         historical_projection.project(
-            transcribing_hold.project(home_step.project(row, show_held=show_held), home_list=True)
+            transcribing_hold.project(
+                home_step.project(row, show_held=show_held),
+                home_list=True,
+                admission=admissions.get(row.get('id')),
+            )
         )
         for row in conversations
     ]
@@ -1375,7 +1380,10 @@ def get_conversation_by_id(
     conversation.pop(v3_policy.LIVE_SUMMARY_FIELD, None)
     if preview:
         conversation['live_summary'] = preview
-    return present_generated_note_sections(historical_projection.project(transcribing_hold.project(conversation)))
+    admission = transcribing_hold.read_admissions(uid, [conversation]).get(conversation.get('id'))
+    return present_generated_note_sections(
+        historical_projection.project(transcribing_hold.project(conversation, admission=admission))
+    )
 
 
 @router.patch(

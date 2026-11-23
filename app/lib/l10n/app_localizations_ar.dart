@@ -14278,6 +14278,9 @@ class AppLocalizationsAr extends AppLocalizations {
   String get processingProgress => 'جارٍ معالجة تسجيلاتك المنتظرة…';
 
   @override
+  String get waitingForTranscriptionAllowance => 'في انتظار حصّة النسخ الصوتي';
+
+  @override
   String get processingDeferred => 'في انتظار المعالجة';
 
   @override
@@ -15634,6 +15637,9 @@ class AppLocalizationsAr extends AppLocalizations {
   String get stillWorkingOnIt => 'ما زلنا نعمل عليه.';
 
   @override
+  String get deviceReadyToUse => 'جاهز للاستخدام';
+
+  @override
   String get firmwareUpdateFirmwareTooOld =>
       'البرنامج الثابت لجهازك قديم جدًا لهذا التحديث. تواصل مع الدعم للمساعدة في تحديث جهازك.';
 
@@ -15649,4 +15655,65 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get quietPayerCheck => 'تحقّق';
+
+  @override
+  String get playManageSubscription => 'إدارة الاشتراك';
+
+  @override
+  String get playBilledByGoogle => 'تتم الفوترة عبر Google Play';
+
+  @override
+  String get playPurchasePending => 'دفعتك قيد الانتظار. يبدأ Omi Pro عند تأكيد Google Play لها.';
+
+  @override
+  String get playPurchaseOtherAccount => 'هذا الشراء من Google Play يخص حساب Omi آخر.';
+
+  @override
+  String get playPurchaseNotConfirmed => 'تعذّر تأكيد الشراء الآن. سنحاول مرة أخرى تلقائيًا.';
+
+  @override
+  String get playRenewalTerms =>
+      'يتجدد تلقائيًا بالسعر المعروض حتى تلغيه. يمكنك الإدارة أو الإلغاء في أي وقت من Google Play.';
+
+  @override
+  String get playPaidAppUnavailable => 'غير متاح على Android';
+
+  @override
+  String get pageNotAvailableInApp => 'هذه الصفحة غير متاحة في التطبيق.';
+
+  @override
+  String get shopOrderPlacedCheckEmail => 'تم تقديم الطلب. تحقق من بريدك الإلكتروني للاطلاع على التأكيد.';
+
+  @override
+  String get prepaidCodeEntry => 'لديك رمز؟';
+
+  @override
+  String get prepaidCodeTitle => 'استرداد رمز';
+
+  @override
+  String get prepaidCodeFieldHint => 'أدخل رمزك';
+
+  @override
+  String get prepaidCodeRedeem => 'استرداد';
+
+  @override
+  String get prepaidCodeRedeemed => 'تم استرداد الرمز';
+
+  @override
+  String prepaidCodeResult(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'invalid': 'هذا الرمز غير صالح. تحقق منه وحاول مرة أخرى.',
+        'used': 'تم استخدام هذا الرمز بالفعل.',
+        'expired': 'انتهت صلاحية هذا الرمز.',
+        'hasPlan': 'لديك خطة بالفعل. لم يتم استخدام رمزك.',
+        'notPrepaid': 'لا يمكن استرداد هذا الرمز هنا. استخدمه عند اختيار خطة.',
+        'notEligible': 'لا يمكن استخدام هذا الرمز على هذا الحساب.',
+        'rateLimited': 'محاولات كثيرة جدًا. حاول لاحقًا.',
+        'other': 'حدث خطأ ما. يرجى المحاولة مرة أخرى.',
+      },
+    );
+    return '$_temp0';
+  }
 }

@@ -14399,6 +14399,9 @@ class AppLocalizationsNl extends AppLocalizations {
   String get processingProgress => 'Je wachtende opnamen worden verwerkt…';
 
   @override
+  String get waitingForTranscriptionAllowance => 'Wachten op beschikbare transcriptieruimte';
+
+  @override
   String get processingDeferred => 'Wacht op verwerking';
 
   @override
@@ -15762,6 +15765,9 @@ class AppLocalizationsNl extends AppLocalizations {
   String get stillWorkingOnIt => 'Er wordt nog aan gewerkt.';
 
   @override
+  String get deviceReadyToUse => 'Klaar voor gebruik';
+
+  @override
   String get firmwareUpdateFirmwareTooOld =>
       'De firmware van je apparaat is te oud voor deze update. Neem contact op met de ondersteuning voor hulp bij het bijwerken van je apparaat.';
 
@@ -15777,4 +15783,66 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get quietPayerCheck => 'Controleren';
+
+  @override
+  String get playManageSubscription => 'Abonnement beheren';
+
+  @override
+  String get playBilledByGoogle => 'Gefactureerd via Google Play';
+
+  @override
+  String get playPurchasePending => 'Je betaling is in behandeling. Omi Pro start zodra Google Play die bevestigt.';
+
+  @override
+  String get playPurchaseOtherAccount => 'Deze Google Play-aankoop hoort bij een ander Omi-account.';
+
+  @override
+  String get playPurchaseNotConfirmed =>
+      'We konden je aankoop nog niet bevestigen. We proberen het automatisch opnieuw.';
+
+  @override
+  String get playRenewalTerms =>
+      'Wordt automatisch verlengd tegen de getoonde prijs tot je opzegt. Beheer of zeg op wanneer je wilt in Google Play.';
+
+  @override
+  String get playPaidAppUnavailable => 'Niet beschikbaar op Android';
+
+  @override
+  String get pageNotAvailableInApp => 'Deze pagina is niet beschikbaar in de app.';
+
+  @override
+  String get shopOrderPlacedCheckEmail => 'Bestelling geplaatst. Je bevestiging staat in je e-mail.';
+
+  @override
+  String get prepaidCodeEntry => 'Heb je een code?';
+
+  @override
+  String get prepaidCodeTitle => 'Code inwisselen';
+
+  @override
+  String get prepaidCodeFieldHint => 'Voer je code in';
+
+  @override
+  String get prepaidCodeRedeem => 'Inwisselen';
+
+  @override
+  String get prepaidCodeRedeemed => 'Code ingewisseld';
+
+  @override
+  String prepaidCodeResult(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'invalid': 'Deze code is ongeldig. Controleer hem en probeer het opnieuw.',
+        'used': 'Deze code is al gebruikt.',
+        'expired': 'Deze code is verlopen.',
+        'hasPlan': 'Je hebt al een abonnement. Je code is niet gebruikt.',
+        'notPrepaid': 'Deze code kan hier niet worden ingewisseld. Gebruik hem wanneer je een abonnement kiest.',
+        'notEligible': 'Deze code kan niet op dit account worden gebruikt.',
+        'rateLimited': 'Te veel pogingen. Probeer het later opnieuw.',
+        'other': 'Er ging iets mis. Probeer het opnieuw.',
+      },
+    );
+    return '$_temp0';
+  }
 }

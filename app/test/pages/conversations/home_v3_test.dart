@@ -567,7 +567,7 @@ class _Conversations extends ConversationProvider {
   ApiViewState<List<ServerConversation>> get apiViewState => listStatus ?? super.apiViewState;
 
   @override
-  Future<void> forceRefreshConversations() async {
+  Future<void> forceRefreshConversations({bool reconcileHeldRecordings = false}) async {
     forcedReads++;
     listStatus = null;
     notifyListeners();

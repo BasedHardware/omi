@@ -581,6 +581,8 @@ class Conversation(BaseModel):
     # Read-time projection (utils/conversations/transcribing_hold.py): the transcription wait ran out
     # with no failure receipt, so the audio is still waiting. Omitted when unset.
     transcription_wait: SkipJsonSchema[Optional[Literal['overdue']]] = None
+    # Read-time observation of a matching current batch job on the authenticated owner's recording.
+    transcription_admission: SkipJsonSchema[Optional[Literal['allowance_held', 'processing']]] = None
     transcript_segments: List[TranscriptSegment] = []
     transcript_segments_compressed: Optional[bool] = False
     geolocation: Optional[Geolocation] = None
@@ -680,7 +682,7 @@ class Conversation(BaseModel):
             data.pop('processing_deferred', None)
         if self.live_summary is None:
             data.pop('live_summary', None)
-        for name in ('home_step', 'transcription_wait'):
+        for name in ('home_step', 'transcription_wait', 'transcription_admission'):
             if getattr(self, name) is None:
                 data.pop(name, None)
         for name in ('processing_tier', 'summary_on_open'):

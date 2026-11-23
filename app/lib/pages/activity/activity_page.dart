@@ -219,6 +219,14 @@ class _ActivityPageState extends State<ActivityPage> with WidgetsBindingObserver
     });
   }
 
+  Future<void> _refreshManually() async {
+    final conversations = context.read<ConversationProvider?>();
+    await Future.wait<void>([
+      _refresh(),
+      if (conversations != null) conversations.forceRefreshConversations(reconcileHeldRecordings: true),
+    ]);
+  }
+
   void _rebuildItems() {
     _hasChanges = _changes.isNotEmpty;
     _items = <_ActivityItem>[..._recaps.map(_RecapItem.new), ..._changes.map(_ChangeItem.new)]
@@ -258,18 +266,18 @@ class _ActivityPageState extends State<ActivityPage> with WidgetsBindingObserver
     final provider = context.watch<ConversationProvider?>();
     // V3 Home can receive a terminal result in either the v3 or legacy projection.
     final v3 = context.select<ConversationsV3Provider?, bool>((p) => p?.v3 ?? false);
-    final failures = _pendingWork.homeProcessingToday || v3
-        ? failedActivityConversations(
-            pending: _pendingWork.pendingForActivity,
-            conversations: [
-              ...?provider?.searchedConversations,
-              ...?provider?.processingConversations,
-              ...?provider?.conversations
-            ],
-            episodes: context.watch<EpisodeProvider?>()?.homeEpisodes ?? const [],
-            attentionIds: _pendingWork.attentionConversationIds,
-          )
-        : <ServerConversation>[];
+    final search = provider?.searchedConversations ?? const <ServerConversation>[];
+    final failures = failedActivityConversations(
+      pending: _pendingWork.pendingForActivity,
+      conversations: [
+        ...search,
+        ...?provider?.processingConversations,
+        ...?provider?.conversations,
+      ],
+      episodes: context.watch<EpisodeProvider?>()?.homeEpisodes ?? const [],
+      attentionIds: _pendingWork.attentionConversationIds,
+      includeFailures: _pendingWork.homeProcessingToday || v3,
+    );
     if (failures.isNotEmpty) {
       final ids = [for (final c in failures) c.id];
       WidgetsBinding.instance.addPostFrameCallback((_) => _pendingWork.markFailedConversationsSeen(ids));
@@ -279,28 +287,31 @@ class _ActivityPageState extends State<ActivityPage> with WidgetsBindingObserver
         captureMonitor: _captureMonitor,
         failedConversations: failures,
         reprocess: widget.reprocessConversation);
-    final processing = _pendingWork.homeProcessingToday
-        ? pastProcessingConversations(
-            pending: _pendingWork.pendingForActivity,
-            episodes: context.watch<EpisodeProvider?>()?.homeEpisodes ?? const [],
-            conversations: [
-              ...?provider?.processingConversations,
-              ...?provider?.conversations,
-            ],
-            attentionIds: _pendingWork.attentionConversationIds,
-          )
-        : <ServerConversation>[];
+    final processingCandidates = <ServerConversation>[
+      ...search.where((conversation) => conversation.isAdmittedForTranscription),
+      ...?provider?.processingConversations,
+      ...?provider?.conversations,
+    ];
+    final processing = pastProcessingConversations(
+      pending: _pendingWork.homeProcessingToday ? _pendingWork.pendingForActivity : const [],
+      episodes:
+          _pendingWork.homeProcessingToday ? context.watch<EpisodeProvider?>()?.homeEpisodes ?? const [] : const [],
+      conversations: _pendingWork.homeProcessingToday
+          ? processingCandidates
+          : processingCandidates.where((conversation) => conversation.isAdmittedForTranscription),
+      attentionIds: _pendingWork.attentionConversationIds,
+    );
     final hasAttention = processing.isNotEmpty ||
         NeedsAttentionSection.hasContent(_pendingWork, context.watch<SyncProvider?>(), _captureMonitor, failures);
     final Widget body;
     if (_loading) {
       body = const OmiLoadingState();
     } else if (_failed && !hasAttention) {
-      body = OmiErrorState(message: l.activityLoadFailed, onRetry: _refresh);
+      body = OmiErrorState(message: l.activityLoadFailed, onRetry: _refreshManually);
     } else if (_items.isEmpty && !hasAttention) {
       // Still pullable: a recap that lands while the page is open is one pull away.
       body = RefreshIndicator(
-        onRefresh: _refresh,
+        onRefresh: _refreshManually,
         color: OmiColors.onAccent,
         backgroundColor: OmiColors.accent,
         child: LayoutBuilder(
@@ -347,7 +358,7 @@ class _ActivityPageState extends State<ActivityPage> with WidgetsBindingObserver
         groups.last.$2.add(item);
       }
       body = RefreshIndicator(
-        onRefresh: _refresh,
+        onRefresh: _refreshManually,
         color: OmiColors.onAccent,
         backgroundColor: OmiColors.accent,
         child: ListView(
@@ -358,7 +369,7 @@ class _ActivityPageState extends State<ActivityPage> with WidgetsBindingObserver
             if (_partial || _failed)
               Padding(
                 padding: const EdgeInsets.only(bottom: OmiSpacing.xs),
-                child: OmiPartialNotice(message: l.activityLoadFailed, onRetry: _refresh),
+                child: OmiPartialNotice(message: l.activityLoadFailed, onRetry: _refreshManually),
               ),
             attention,
             PastProcessingSection(conversations: processing),

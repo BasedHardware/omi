@@ -14423,6 +14423,9 @@ class AppLocalizationsRo extends AppLocalizations {
   String get processingProgress => 'Se procesează înregistrările în așteptare…';
 
   @override
+  String get waitingForTranscriptionAllowance => 'În așteptarea cotei disponibile pentru transcriere';
+
+  @override
   String get processingDeferred => 'În așteptarea procesării';
 
   @override
@@ -15787,6 +15790,9 @@ class AppLocalizationsRo extends AppLocalizations {
   String get stillWorkingOnIt => 'Încă lucrăm la asta.';
 
   @override
+  String get deviceReadyToUse => 'Pregătit pentru utilizare';
+
+  @override
   String get firmwareUpdateFirmwareTooOld =>
       'Firmware-ul dispozitivului tău este prea vechi pentru această actualizare. Contactează echipa de asistență pentru ajutor la actualizarea dispozitivului.';
 
@@ -15802,4 +15808,65 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get quietPayerCheck => 'Verifică';
+
+  @override
+  String get playManageSubscription => 'Gestionează abonamentul';
+
+  @override
+  String get playBilledByGoogle => 'Facturat prin Google Play';
+
+  @override
+  String get playPurchasePending => 'Plata este în așteptare. Omi Pro începe imediat ce Google Play o confirmă.';
+
+  @override
+  String get playPurchaseOtherAccount => 'Această achiziție Google Play aparține altui cont Omi.';
+
+  @override
+  String get playPurchaseNotConfirmed => 'Nu am putut confirma încă achiziția. Vom reîncerca automat.';
+
+  @override
+  String get playRenewalTerms =>
+      'Se reînnoiește automat la prețul afișat până când anulezi. Gestionează sau anulează oricând din Google Play.';
+
+  @override
+  String get playPaidAppUnavailable => 'Indisponibil pe Android';
+
+  @override
+  String get pageNotAvailableInApp => 'Această pagină nu este disponibilă în aplicație.';
+
+  @override
+  String get shopOrderPlacedCheckEmail => 'Comanda a fost plasată. Verifică e-mailul pentru confirmare.';
+
+  @override
+  String get prepaidCodeEntry => 'Ai un cod?';
+
+  @override
+  String get prepaidCodeTitle => 'Folosește un cod';
+
+  @override
+  String get prepaidCodeFieldHint => 'Introdu codul tău';
+
+  @override
+  String get prepaidCodeRedeem => 'Folosește';
+
+  @override
+  String get prepaidCodeRedeemed => 'Cod folosit';
+
+  @override
+  String prepaidCodeResult(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'invalid': 'Acest cod nu este valid. Verifică-l și încearcă din nou.',
+        'used': 'Acest cod a fost deja folosit.',
+        'expired': 'Acest cod a expirat.',
+        'hasPlan': 'Ai deja un plan. Codul tău nu a fost folosit.',
+        'notPrepaid': 'Acest cod nu poate fi folosit aici. Folosește-l când alegi un plan.',
+        'notEligible': 'Acest cod nu poate fi folosit în acest cont.',
+        'rateLimited': 'Prea multe încercări. Încearcă mai târziu.',
+        'other': 'Ceva nu a funcționat. Încearcă din nou.',
+      },
+    );
+    return '$_temp0';
+  }
 }

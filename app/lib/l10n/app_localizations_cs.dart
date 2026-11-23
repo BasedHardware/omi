@@ -14359,6 +14359,9 @@ class AppLocalizationsCs extends AppLocalizations {
   String get processingProgress => 'Zpracovávání čekajících nahrávek…';
 
   @override
+  String get waitingForTranscriptionAllowance => 'Čeká se na dostupný limit přepisu';
+
+  @override
   String get processingDeferred => 'Čeká na zpracování';
 
   @override
@@ -15721,6 +15724,9 @@ class AppLocalizationsCs extends AppLocalizations {
   String get stillWorkingOnIt => 'Stále na tom pracujeme.';
 
   @override
+  String get deviceReadyToUse => 'Připraveno k použití';
+
+  @override
   String get firmwareUpdateFirmwareTooOld =>
       'Firmware vašeho zařízení je pro tuto aktualizaci příliš starý. Obraťte se na podporu, která vám s aktualizací zařízení pomůže.';
 
@@ -15736,4 +15742,65 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get quietPayerCheck => 'Zkontrolovat';
+
+  @override
+  String get playManageSubscription => 'Spravovat předplatné';
+
+  @override
+  String get playBilledByGoogle => 'Účtováno přes Google Play';
+
+  @override
+  String get playPurchasePending => 'Platba čeká na vyřízení. Omi Pro začne, jakmile ji Google Play potvrdí.';
+
+  @override
+  String get playPurchaseOtherAccount => 'Tento nákup v Google Play patří jinému účtu Omi.';
+
+  @override
+  String get playPurchaseNotConfirmed => 'Nákup se zatím nepodařilo potvrdit. Zkusíme to znovu automaticky.';
+
+  @override
+  String get playRenewalTerms =>
+      'Automaticky se obnovuje za uvedenou cenu, dokud ho nezrušíte. Spravovat nebo zrušit ho můžete kdykoli v Google Play.';
+
+  @override
+  String get playPaidAppUnavailable => 'Na Androidu není k dispozici';
+
+  @override
+  String get pageNotAvailableInApp => 'Tato stránka není v aplikaci dostupná.';
+
+  @override
+  String get shopOrderPlacedCheckEmail => 'Objednávka byla odeslána. Potvrzení najdete v e-mailu.';
+
+  @override
+  String get prepaidCodeEntry => 'Máte kód?';
+
+  @override
+  String get prepaidCodeTitle => 'Uplatnit kód';
+
+  @override
+  String get prepaidCodeFieldHint => 'Zadejte svůj kód';
+
+  @override
+  String get prepaidCodeRedeem => 'Uplatnit';
+
+  @override
+  String get prepaidCodeRedeemed => 'Kód uplatněn';
+
+  @override
+  String prepaidCodeResult(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'invalid': 'Tento kód není platný. Zkontrolujte ho a zkuste to znovu.',
+        'used': 'Tento kód už byl použit.',
+        'expired': 'Platnost tohoto kódu vypršela.',
+        'hasPlan': 'Už máte plán. Váš kód nebyl použit.',
+        'notPrepaid': 'Tento kód zde nelze uplatnit. Použijte ho při výběru plánu.',
+        'notEligible': 'Tento kód nelze použít v tomto účtu.',
+        'rateLimited': 'Příliš mnoho pokusů. Zkuste to později.',
+        'other': 'Něco se pokazilo. Zkuste to znovu.',
+      },
+    );
+    return '$_temp0';
+  }
 }

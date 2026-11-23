@@ -59,6 +59,7 @@ def _get_build_subscription_fn():
         'record_fallback': lambda **kwargs: None,
         'logger': _MagicMock(),
         'sanitize': lambda value: value,
+        'prepaid_code_config': __import__('config.prepaid_code_redeem', fromlist=['is_prepaid_subscription']),
     }
     exec(compile(func_source, '<payment.py>', 'exec'), namespace)
     return namespace['_build_subscription_from_stripe_object'], namespace

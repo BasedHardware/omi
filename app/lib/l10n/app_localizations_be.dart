@@ -14394,6 +14394,9 @@ class AppLocalizationsBe extends AppLocalizations {
   String get processingProgress => 'Апрацоўваем запісы ў чаканні…';
 
   @override
+  String get waitingForTranscriptionAllowance => 'Чакаем даступнага ліміту транскрыпцыі';
+
+  @override
   String get processingDeferred => 'Чакае апрацоўкі';
 
   @override
@@ -15757,6 +15760,9 @@ class AppLocalizationsBe extends AppLocalizations {
   String get stillWorkingOnIt => 'Усё яшчэ працуем над гэтым.';
 
   @override
+  String get deviceReadyToUse => 'Гатова да выкарыстання';
+
+  @override
   String get firmwareUpdateFirmwareTooOld =>
       'Прашыўка вашай прылады занадта старая для гэтага абнаўлення. Звярніцеся ў службу падтрымкі па дапамогу з абнаўленнем прылады.';
 
@@ -15772,4 +15778,65 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get quietPayerCheck => 'Праверыць';
+
+  @override
+  String get playManageSubscription => 'Кіраваць падпіскай';
+
+  @override
+  String get playBilledByGoogle => 'Аплата праз Google Play';
+
+  @override
+  String get playPurchasePending => 'Аплата ў чаканні. Omi Pro пачнецца, калі Google Play яе пацвердзіць.';
+
+  @override
+  String get playPurchaseOtherAccount => 'Гэтая пакупка ў Google Play належыць іншаму акаўнту Omi.';
+
+  @override
+  String get playPurchaseNotConfirmed => 'Не ўдалося пацвердзіць пакупку. Мы паспрабуем зноў аўтаматычна.';
+
+  @override
+  String get playRenewalTerms =>
+      'Аўтаматычна падаўжаецца па паказаным кошце, пакуль вы не скасуеце. Кіраваць ці скасаваць можна ў любы час у Google Play.';
+
+  @override
+  String get playPaidAppUnavailable => 'Недаступна на Android';
+
+  @override
+  String get pageNotAvailableInApp => 'Гэтая старонка недаступная ў праграме.';
+
+  @override
+  String get shopOrderPlacedCheckEmail => 'Заказ аформлены. Пацвярджэнне прыйдзе на вашу пошту.';
+
+  @override
+  String get prepaidCodeEntry => 'Ёсць код?';
+
+  @override
+  String get prepaidCodeTitle => 'Актываваць код';
+
+  @override
+  String get prepaidCodeFieldHint => 'Увядзіце ваш код';
+
+  @override
+  String get prepaidCodeRedeem => 'Актываваць';
+
+  @override
+  String get prepaidCodeRedeemed => 'Код актываваны';
+
+  @override
+  String prepaidCodeResult(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'invalid': 'Гэты код несапраўдны. Праверце яго і паспрабуйце зноў.',
+        'used': 'Гэты код ужо выкарыстаны.',
+        'expired': 'Тэрмін дзеяння гэтага кода скончыўся.',
+        'hasPlan': 'У вас ужо ёсць план. Ваш код не выкарыстаны.',
+        'notPrepaid': 'Гэты код нельга актываваць тут. Выкарыстайце яго пры выбары плана.',
+        'notEligible': 'Гэты код нельга выкарыстаць на гэтым акаўнце.',
+        'rateLimited': 'Занадта шмат спроб. Паспрабуйце пазней.',
+        'other': 'Нешта пайшло не так. Паспрабуйце зноў.',
+      },
+    );
+    return '$_temp0';
+  }
 }

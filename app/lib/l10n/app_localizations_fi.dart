@@ -14364,6 +14364,9 @@ class AppLocalizationsFi extends AppLocalizations {
   String get processingProgress => 'Käsitellään odottavia tallenteitasi…';
 
   @override
+  String get waitingForTranscriptionAllowance => 'Odottaa vapaata litterointikiintiötä';
+
+  @override
   String get processingDeferred => 'Odottaa käsittelyä';
 
   @override
@@ -15727,6 +15730,9 @@ class AppLocalizationsFi extends AppLocalizations {
   String get stillWorkingOnIt => 'Yhä työn alla.';
 
   @override
+  String get deviceReadyToUse => 'Valmis käytettäväksi';
+
+  @override
   String get firmwareUpdateFirmwareTooOld =>
       'Laitteesi laiteohjelmisto on liian vanha tätä päivitystä varten. Ota yhteyttä tukeen saadaksesi apua laitteen päivittämiseen.';
 
@@ -15742,4 +15748,65 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get quietPayerCheck => 'Tarkista';
+
+  @override
+  String get playManageSubscription => 'Hallinnoi tilausta';
+
+  @override
+  String get playBilledByGoogle => 'Laskutus Google Playn kautta';
+
+  @override
+  String get playPurchasePending => 'Maksusi odottaa. Omi Pro alkaa, kun Google Play vahvistaa sen.';
+
+  @override
+  String get playPurchaseOtherAccount => 'Tämä Google Play -osto kuuluu toiselle Omi-tilille.';
+
+  @override
+  String get playPurchaseNotConfirmed => 'Ostoa ei voitu vielä vahvistaa. Yritämme automaattisesti uudelleen.';
+
+  @override
+  String get playRenewalTerms =>
+      'Uusiutuu automaattisesti näytettyyn hintaan, kunnes peruutat. Hallinnoi tai peruuta milloin tahansa Google Playssa.';
+
+  @override
+  String get playPaidAppUnavailable => 'Ei saatavilla Androidilla';
+
+  @override
+  String get pageNotAvailableInApp => 'Tämä sivu ei ole käytettävissä sovelluksessa.';
+
+  @override
+  String get shopOrderPlacedCheckEmail => 'Tilaus tehty. Vahvistus on sähköpostissasi.';
+
+  @override
+  String get prepaidCodeEntry => 'Onko sinulla koodi?';
+
+  @override
+  String get prepaidCodeTitle => 'Lunasta koodi';
+
+  @override
+  String get prepaidCodeFieldHint => 'Syötä koodisi';
+
+  @override
+  String get prepaidCodeRedeem => 'Lunasta';
+
+  @override
+  String get prepaidCodeRedeemed => 'Koodi lunastettu';
+
+  @override
+  String prepaidCodeResult(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'invalid': 'Tämä koodi ei ole kelvollinen. Tarkista se ja yritä uudelleen.',
+        'used': 'Tämä koodi on jo käytetty.',
+        'expired': 'Tämä koodi on vanhentunut.',
+        'hasPlan': 'Sinulla on jo tilaus. Koodiasi ei käytetty.',
+        'notPrepaid': 'Tätä koodia ei voi lunastaa täällä. Käytä sitä, kun valitset tilauksen.',
+        'notEligible': 'Tätä koodia ei voi käyttää tällä tilillä.',
+        'rateLimited': 'Liian monta yritystä. Yritä myöhemmin uudelleen.',
+        'other': 'Jokin meni pieleen. Yritä uudelleen.',
+      },
+    );
+    return '$_temp0';
+  }
 }

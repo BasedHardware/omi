@@ -25479,6 +25479,12 @@ abstract class AppLocalizations {
   /// **'Processing your waiting recordings…'**
   String get processingProgress;
 
+  /// Status for a recording whose transcription job is held awaiting allowance. The current monthly plan limit may be unknown or may have reset while the recording still waits.
+  ///
+  /// In en, this message translates to:
+  /// **'Waiting for transcription allowance'**
+  String get waitingForTranscriptionAllowance;
+
   /// No description provided for @processingDeferred.
   ///
   /// In en, this message translates to:
@@ -27603,6 +27609,12 @@ abstract class AppLocalizations {
   /// **'Still working on it.'**
   String get stillWorkingOnIt;
 
+  /// Status under the device name after successful Omi pairing. Refers to connection readiness, not to battery level.
+  ///
+  /// In en, this message translates to:
+  /// **'Ready to use'**
+  String get deviceReadyToUse;
+
   /// Firmware update unavailable because the device is below the release minimum firmware version.
   ///
   /// In en, this message translates to:
@@ -27632,6 +27644,96 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Check'**
   String get quietPayerCheck;
+
+  /// Google Play Billing (Android): playManageSubscription
+  ///
+  /// In en, this message translates to:
+  /// **'Manage subscription'**
+  String get playManageSubscription;
+
+  /// Google Play Billing (Android): playBilledByGoogle
+  ///
+  /// In en, this message translates to:
+  /// **'Billed by Google Play'**
+  String get playBilledByGoogle;
+
+  /// Google Play Billing (Android): playPurchasePending
+  ///
+  /// In en, this message translates to:
+  /// **'Your payment is pending. Omi Pro starts as soon as Google Play confirms it.'**
+  String get playPurchasePending;
+
+  /// Google Play Billing (Android): playPurchaseOtherAccount
+  ///
+  /// In en, this message translates to:
+  /// **'This Google Play purchase belongs to another Omi account.'**
+  String get playPurchaseOtherAccount;
+
+  /// Google Play Billing (Android): playPurchaseNotConfirmed
+  ///
+  /// In en, this message translates to:
+  /// **'We couldn\'t confirm your purchase yet. We\'ll try again automatically.'**
+  String get playPurchaseNotConfirmed;
+
+  /// Google Play Billing (Android): auto-renewal and where to cancel, under the Play purchase button
+  ///
+  /// In en, this message translates to:
+  /// **'Renews automatically at the price shown until you cancel. Manage or cancel anytime in Google Play.'**
+  String get playRenewalTerms;
+
+  /// Disabled action on a paid Marketplace app for a reader who buys through Google Play: it cannot be bought in the Android app
+  ///
+  /// In en, this message translates to:
+  /// **'Not available on Android'**
+  String get playPaidAppUnavailable;
+
+  /// Shown when an in-app store page links somewhere the app does not open
+  ///
+  /// In en, this message translates to:
+  /// **'This page isn\'t available in the app.'**
+  String get pageNotAvailableInApp;
+
+  /// Shown after the in-app store closes once an order is paid
+  ///
+  /// In en, this message translates to:
+  /// **'Order placed. Check your email for the confirmation.'**
+  String get shopOrderPlacedCheckEmail;
+
+  /// Link on the paywall and plans sheet that opens the sheet to redeem a prepaid Omi Pro code
+  ///
+  /// In en, this message translates to:
+  /// **'Have a code?'**
+  String get prepaidCodeEntry;
+
+  /// Title of the sheet to redeem a prepaid Omi Pro code
+  ///
+  /// In en, this message translates to:
+  /// **'Redeem a code'**
+  String get prepaidCodeTitle;
+
+  /// Hint in the code field of the prepaid code sheet
+  ///
+  /// In en, this message translates to:
+  /// **'Enter your code'**
+  String get prepaidCodeFieldHint;
+
+  /// Button that redeems the prepaid code
+  ///
+  /// In en, this message translates to:
+  /// **'Redeem'**
+  String get prepaidCodeRedeem;
+
+  /// Title after a prepaid code was redeemed
+  ///
+  /// In en, this message translates to:
+  /// **'Code redeemed'**
+  String get prepaidCodeRedeemed;
+
+  /// Why a prepaid code was not redeemed. The code is never used when this shows.
+  ///
+  /// In en, this message translates to:
+  /// **'{reason, select, invalid{This code isn\'t valid. Check it and try again.} used{This code has already been used.} expired{This code has expired.} hasPlan{You already have a plan. Your code was not used.} notPrepaid{This code can\'t be redeemed here. Use it when you choose a plan.} notEligible{This code can\'t be used on this account.} rateLimited{Too many tries. Try again later.} other{Something went wrong. Please try again.}}'**
+  String prepaidCodeResult(String reason);
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

@@ -72,7 +72,7 @@ import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/wal_file_manager.dart';
 
 import 'capture_committed_journal.dart';
-import 'package:omi/backend/schema/capture_committed_event.dart';
+import 'package:omi/backend/schema/message_event.dart';
 import 'package:omi/services/experiments/client_refactor_flags.dart';
 import 'package:omi/services/wals/upload_trace.dart';
 
@@ -601,7 +601,9 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     _stopDrain = null;
     if (_initializationInFlight == null) _initialIndexAdmissionPending = true;
     _headlessIndexLoad = false;
-    _initializeWals();
+    final startupGeneration = _sessionGeneration;
+    unawaited(_logTickFailure('receipt replay',
+        _initializeWals().then((_) => _enqueueBuffer(() => _persistCaptureCommits(startupGeneration)))));
     BleBridge.instance.addBatchRecordingFinalizedListener(_onNativeRecordingFinalized);
     _runNativeIntake();
     _chunkingTimer = _periodic(const Duration(seconds: chunkSizeInSeconds + newFrameSyncDelaySeconds), (t) async {
@@ -1426,7 +1428,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
       DebugLogManager.logInfo('Flushed WALs from memory to disk', {'count': flushedCount});
     }
 
-    await _persistCaptureCommits(generation, onlyIfReleased: true);
+    await _persistCaptureCommits(generation);
     await _evaluateRetentionPressure();
     final indexSaved = await _saveWalsToFile(generation);
     if (indexSaved && flushedCount > 0) _pendantBlockedByStorage = false;
@@ -2602,6 +2604,11 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
         }
 
         final fullPath = await Wal.getFilePath(wal.filePath);
+        if (!_isCurrent(generation) ||
+            !_activeWals.containsIdentity(wal) ||
+            !isAutoUploadEligible(wal, nowSeconds: batchNowSeconds)) {
+          continue;
+        }
         Logger.debug("sync wal: ${wal.id} file: $fullPath");
 
         try {
@@ -2624,6 +2631,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
             });
             continue;
           }
+          if (wal.isSyncing) continue;
           files.add(file);
           wal.isSyncing = true;
           batchWals.add(wal);
@@ -2899,12 +2907,22 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     if (wal.isSyncing || wal.status == WalStatus.uploaded || wal.status == WalStatus.synced) return null;
     final held = wal.holdForUser;
     final generation = _sessionGeneration;
-    wal.isSyncing = true;
-    if (held) heldRevision.value++;
+    if (held) {
+      wal.isSyncing = true;
+      heldRevision.value++;
+    }
+    var reserved = held;
     try {
+      await _enqueueBuffer(() => _flush(generation));
+      if (!_isCurrent(generation) || wal.status == WalStatus.synced || wal.status == WalStatus.uploaded) return null;
+      if (!held) {
+        if (wal.isSyncing) return null;
+        wal.isSyncing = true;
+        reserved = true;
+      }
       return await _syncWal(wal: wal, progress: progress);
     } finally {
-      wal.isSyncing = false;
+      if (reserved) wal.isSyncing = false;
       if (held && _isCurrent(generation)) heldRevision.value++;
     }
   }
@@ -2921,8 +2939,6 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
       return null;
     }
     final generation = _sessionGeneration;
-    await _enqueueBuffer(() => _flush(generation));
-    if (!_isCurrent(generation)) return null;
 
     final matches = _wals.where((w) => w == wal).toList();
     if (matches.isEmpty) {

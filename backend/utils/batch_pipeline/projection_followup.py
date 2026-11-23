@@ -730,8 +730,8 @@ class ProjectionFollowups:
                         if probe_page == self.pages.get(segment) and not self.closed:
                             self.completed_probes.setdefault(probe_page, {})[binding] = proof
 
-    async def step(self, policy, phase, executor, function, *args, **kwargs):
-        with projection_phase(phase, policy):
+    async def step(self, segment_id, policy, phase, executor, function, *args, **kwargs):
+        with projection_phase(phase, policy, unit_key=segment_id):
             return await run_blocking(executor, function, *args, **kwargs)
 
     async def finish_part(self, item, binding, receipt, index):
@@ -747,6 +747,7 @@ class ProjectionFollowups:
                 canonical = output['conversation_id']
                 if not binding.record_origin:
                     canonical = await self.step(
+                        item.segment_id,
                         policy,
                         'bridge',
                         postprocess_executor,
@@ -759,10 +760,17 @@ class ProjectionFollowups:
                 if receipt.get('audio_required') and not binding.native_record:
                     if self.projector.playback is not None:
                         await self.step(
-                            policy, 'playback', postprocess_executor, self.projector.playback, item, canonical
+                            item.segment_id,
+                            policy,
+                            'playback',
+                            postprocess_executor,
+                            self.projector.playback,
+                            item,
+                            canonical,
                         )
                     else:
                         await self.step(
+                            item.segment_id,
                             policy,
                             'playback',
                             postprocess_executor,
@@ -777,6 +785,7 @@ class ProjectionFollowups:
                         # being stored. Follow its redirect and recopy late donor
                         # audio even if an earlier bridge already checkpointed it.
                         canonical = await self.step(
+                            item.segment_id,
                             policy,
                             'bridge',
                             postprocess_executor,
@@ -791,6 +800,7 @@ class ProjectionFollowups:
             canonical = canonicals[0]
             if receipt['enrichment_required']:
                 await self.step(
+                    item.segment_id,
                     policy,
                     'enrichment',
                     db_executor,

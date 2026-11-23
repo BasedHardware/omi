@@ -81,10 +81,11 @@ services:
     contains: *v3_writer
 
 # Required move order. Requirements of a service are due before every later step and before the lever.
+# The live-title lane must be serving before a builder can claim a conversation's one attempt.
 # Listen hands finalization to pusher, and both call the gateway, so they move last (2026-11-17 train split).
 order:
-  - [backend, backend-sync, backend-sync-backfill, backend-integration, desktop-backend]
   - [llm-gateway]
+  - [backend, backend-sync, backend-sync-backfill, backend-integration, desktop-backend]
   - [pusher]
   - [backend-listen]
 
@@ -92,6 +93,7 @@ gateway_lanes:
   service: llm-gateway
   why: utils/conversations/v3/models.py calls these feature lanes only through the gateway
   lanes:
+    - omi:auto:conversation-v3-live-title
     - omi:auto:conversation-v3-outline
     - omi:auto:conversation-v3-summary
     - omi:auto:conversation-v3-summary-open

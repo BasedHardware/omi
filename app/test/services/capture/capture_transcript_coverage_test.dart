@@ -382,7 +382,7 @@ void main() {
   for (final rawAudio in [false, true]) {
     for (final complete in [false, true]) {
       test('Custom STT durable coverage complete=$complete rawAudio=$rawAudio preserves upload choice', () async {
-        await setRefactorFlags({'custody_capture_committed_release': true});
+        await setRefactorFlags({'custody_durable_audio_release': true});
         await SharedPreferencesUtil().saveCustomSttConfig(
             CustomSttConfig(provider: SttProvider.geminiLive, apiKey: 'synthetic-key', sendRawAudioToOmi: rawAudio));
         world.autoUploadAllowed = false;
@@ -406,7 +406,7 @@ void main() {
   }
 
   test('Custom STT Process Now confirms saved coverage instead of queuing an upload', () async {
-    await setRefactorFlags({'custody_capture_committed_release': true});
+    await setRefactorFlags({'custody_durable_audio_release': true});
     await SharedPreferencesUtil().saveCustomSttConfig(
         const CustomSttConfig(provider: SttProvider.geminiLive, apiKey: 'synthetic-key', sendRawAudioToOmi: false));
     world.autoUploadAllowed = false;

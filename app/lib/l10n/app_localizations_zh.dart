@@ -14134,6 +14134,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get processingProgress => '正在处理等待中的录音…';
 
   @override
+  String get waitingForTranscriptionAllowance => '正在等待可用的转写额度';
+
+  @override
   String get processingDeferred => '等待处理';
 
   @override
@@ -15470,6 +15473,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get stillWorkingOnIt => '仍在处理中。';
 
   @override
+  String get deviceReadyToUse => '可正常使用';
+
+  @override
   String get firmwareUpdateFirmwareTooOld => '你的设备固件版本太旧，无法安装此更新。请联系支持团队，获取设备更新方面的帮助。';
 
   @override
@@ -15483,4 +15489,64 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get quietPayerCheck => '检查';
+
+  @override
+  String get playManageSubscription => '管理订阅';
+
+  @override
+  String get playBilledByGoogle => '通过 Google Play 计费';
+
+  @override
+  String get playPurchasePending => '付款待处理。Google Play 确认后 Omi Pro 即会开始。';
+
+  @override
+  String get playPurchaseOtherAccount => '此 Google Play 购买属于另一个 Omi 账户。';
+
+  @override
+  String get playPurchaseNotConfirmed => '暂时无法确认你的购买。我们会自动重试。';
+
+  @override
+  String get playRenewalTerms => '在你取消前将按所示价格自动续订。可随时在 Google Play 中管理或取消。';
+
+  @override
+  String get playPaidAppUnavailable => 'Android 上不可用';
+
+  @override
+  String get pageNotAvailableInApp => '此页面无法在应用中打开。';
+
+  @override
+  String get shopOrderPlacedCheckEmail => '订单已提交。请查收确认邮件。';
+
+  @override
+  String get prepaidCodeEntry => '有兑换码？';
+
+  @override
+  String get prepaidCodeTitle => '兑换码';
+
+  @override
+  String get prepaidCodeFieldHint => '输入你的兑换码';
+
+  @override
+  String get prepaidCodeRedeem => '兑换';
+
+  @override
+  String get prepaidCodeRedeemed => '兑换成功';
+
+  @override
+  String prepaidCodeResult(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'invalid': '此兑换码无效。请检查后重试。',
+        'used': '此兑换码已被使用。',
+        'expired': '此兑换码已过期。',
+        'hasPlan': '你已有套餐。你的兑换码未被使用。',
+        'notPrepaid': '此兑换码无法在这里使用。请在选择套餐时使用。',
+        'notEligible': '此兑换码无法用于此账户。',
+        'rateLimited': '尝试次数过多。请稍后再试。',
+        'other': '出了点问题。请重试。',
+      },
+    );
+    return '$_temp0';
+  }
 }

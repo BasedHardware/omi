@@ -14344,6 +14344,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get processingProgress => 'Processing your waiting recordings…';
 
   @override
+  String get waitingForTranscriptionAllowance => 'Waiting for transcription allowance';
+
+  @override
   String get processingDeferred => 'Waiting for processing';
 
   @override
@@ -15705,6 +15708,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get stillWorkingOnIt => 'Still working on it.';
 
   @override
+  String get deviceReadyToUse => 'Ready to use';
+
+  @override
   String get firmwareUpdateFirmwareTooOld =>
       'Your device\'s firmware is too old for this update. Contact support for help updating your device.';
 
@@ -15720,4 +15726,65 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get quietPayerCheck => 'Check';
+
+  @override
+  String get playManageSubscription => 'Manage subscription';
+
+  @override
+  String get playBilledByGoogle => 'Billed by Google Play';
+
+  @override
+  String get playPurchasePending => 'Your payment is pending. Omi Pro starts as soon as Google Play confirms it.';
+
+  @override
+  String get playPurchaseOtherAccount => 'This Google Play purchase belongs to another Omi account.';
+
+  @override
+  String get playPurchaseNotConfirmed => 'We couldn\'t confirm your purchase yet. We\'ll try again automatically.';
+
+  @override
+  String get playRenewalTerms =>
+      'Renews automatically at the price shown until you cancel. Manage or cancel anytime in Google Play.';
+
+  @override
+  String get playPaidAppUnavailable => 'Not available on Android';
+
+  @override
+  String get pageNotAvailableInApp => 'This page isn\'t available in the app.';
+
+  @override
+  String get shopOrderPlacedCheckEmail => 'Order placed. Check your email for the confirmation.';
+
+  @override
+  String get prepaidCodeEntry => 'Have a code?';
+
+  @override
+  String get prepaidCodeTitle => 'Redeem a code';
+
+  @override
+  String get prepaidCodeFieldHint => 'Enter your code';
+
+  @override
+  String get prepaidCodeRedeem => 'Redeem';
+
+  @override
+  String get prepaidCodeRedeemed => 'Code redeemed';
+
+  @override
+  String prepaidCodeResult(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'invalid': 'This code isn\'t valid. Check it and try again.',
+        'used': 'This code has already been used.',
+        'expired': 'This code has expired.',
+        'hasPlan': 'You already have a plan. Your code was not used.',
+        'notPrepaid': 'This code can\'t be redeemed here. Use it when you choose a plan.',
+        'notEligible': 'This code can\'t be used on this account.',
+        'rateLimited': 'Too many tries. Try again later.',
+        'other': 'Something went wrong. Please try again.',
+      },
+    );
+    return '$_temp0';
+  }
 }

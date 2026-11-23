@@ -854,6 +854,8 @@ def test_prod_cloud_run_secret_refs_match_approved_bindings():
             # Keiki iMessage/WhatsApp signing secrets (David, 2026-10-30: build the Keiki integration).
             'KEIKI_IMESSAGE_SIGNING_SECRET',
             'KEIKI_WHATSAPP_SIGNING_SECRET',
+            # Google Play Billing account-id HMAC key (purchase binding; backend serves the Play routes).
+            'PLAY_ACCOUNT_ID_HMAC_KEY',
         },
         'backend-sync': common
         | {'GOOGLE_MAPS_API_KEY', 'DREAM_AGENT_FEEDBACK_SALT', 'TYPESENSE_HOST', 'TYPESENSE_API_KEY'},
@@ -1716,11 +1718,15 @@ def test_record_close_notify_renders_on_every_cloud_run_listener(environment, se
         assert [(name, value) for name, value in rendered if name == key] == [(key, expected)]
 
 
-def test_prod_silence_read_skip_respects_backend_pump_and_listen_pins():
+def test_prod_silence_read_skip_respects_backend_backfill_pump_and_listen_pins():
     key = 'BATCH_PIPELINE_SILENCE_READ_SKIP_ENABLED'
     prod = _MANIFEST['environments']['prod']
-    for name in ('backend-sync', 'backend-sync-backfill', 'backend-integration'):
+    for name in ('backend-sync', 'backend-integration'):
         assert prod['cloud_run']['services'][name]['env'][key] == {'value': 'true', 'category': 'ops_kill'}
+    assert prod['cloud_run']['services']['backend-sync-backfill']['env'][key] == {
+        'value': 'false',
+        'category': 'ops_kill',
+    }
     # SCA-3555: keep live backend behavior until the SCA-1824 guard covers first traffic.
     assert prod['cloud_run']['services']['backend']['env'][key] == {'value': 'false', 'category': 'ops_kill'}
     # SCA-3318: the pump's one-key activation keeps its dark successor's false; widening it is a later change.
@@ -1745,3 +1751,17 @@ def test_prod_backend_renders_sibling_skip_and_poll_backoff_preservation_pins(mo
     assert rendered['SYNC_POLL_BACKOFF_ENABLED'] == 'false'
     assert 'SYNC_POLL_BACKOFF_PERCENT' not in rendered
     assert 'SYNC_POLL_BACKOFF_PERCENT' in _MODULE['_remove_env_extra']('backend', backend).split(',')
+
+
+def test_prod_backfill_renders_sibling_skip_and_poll_backoff_preservation_pins(monkeypatch):
+    prod = _MANIFEST['environments']['prod']
+    _set_workflow_bound_env(monkeypatch, prod)
+    backfill = prod['cloud_run']['services']['backend-sync-backfill']
+    rendered = _MODULE['_parse_deploy_cloud_run_env_vars'](_MODULE['_render_env_vars'](backfill['env']))
+
+    for key, expected in {
+        'BATCH_PIPELINE_FOLLOWUP_CLAIMED_SIBLING_SKIP_ENABLED': 'false',
+        'SYNC_POLL_BACKOFF_ENABLED': 'false',
+        'SYNC_POLL_BACKOFF_PERCENT': '0',
+    }.items():
+        assert [(name, value) for name, value in rendered if name == key] == [(key, expected)]

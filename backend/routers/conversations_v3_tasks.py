@@ -2,11 +2,11 @@
 
 from typing import Literal
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from utils.cloud_tasks import verify_cloud_tasks_oidc
-from utils.conversations.v3 import backfill, service
+from utils.conversations.v3 import backfill, bind_request_log_trace, service
 from config.conversations_v3 import backfill_enabled
 
 router = APIRouter()
@@ -17,8 +17,9 @@ class ReconcileRequest(BaseModel):
 
 
 @router.post('/v1/conversations-v3/reconcile', include_in_schema=False)
-async def reconcile(body: ReconcileRequest, _retry: int = Depends(verify_cloud_tasks_oidc)):
-    return {'outcome': await service.reconcile(body.uid)}
+async def reconcile(body: ReconcileRequest, request: Request, _retry: int = Depends(verify_cloud_tasks_oidc)):
+    with bind_request_log_trace(dict(request.headers.raw)):
+        return {'outcome': await service.reconcile(body.uid)}
 
 
 @router.post('/v1/conversations-v3/sweep', include_in_schema=False)

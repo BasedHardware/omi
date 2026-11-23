@@ -51,6 +51,7 @@ SAFE_FIELDS = frozenset(
         'share_email_in_flight',
         'external_data',
         'summary_due_at',
+        'v3_live_title_state',
     }
 )
 
