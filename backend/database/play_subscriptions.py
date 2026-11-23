@@ -20,6 +20,8 @@ USER_POINTER_FIELD = 'play_current_purchase'
 PENDING_FIELD = 'play_pending_purchase'
 CUSTOMER_FIELD = 'play_billing_customer'
 ACCOUNTS = 'play_billing_accounts'
+# When account deletion last confirmed Google can no longer charge this purchase.
+DELETION_CONFIRMED_FIELD = 'account_deletion_confirmed_at'
 
 
 def token_key(purchase_token: str) -> str:
@@ -133,16 +135,28 @@ def pending_play_purchase(uid: str) -> bool:
     return (get_purchase(key) or {}).get('state') == 'SUBSCRIPTION_STATE_PENDING'
 
 
-def purge_account_records(uid: str, *, firestore_client: Optional[Any] = None) -> int:
+def purchase_keys_for_uid(uid: str, *, firestore_client: Optional[Any] = None) -> list[str]:
+    """Every purchase document bound to ``uid``: the exact set ``purge_account_records`` deletes."""
+    client = firestore_client or _client.get_firestore_client()
+    return [snapshot.id for snapshot in client.collection(COLLECTION).where('uid', '==', uid).stream()]
+
+
+def purge_account_records(uid: str, confirmed_since: Any, *, firestore_client: Optional[Any] = None) -> int:
     """Account deletion: drop every purchase document (uid + plaintext token) and account-map entry of ``uid``.
 
-    Runs inside the Firestore wipe, after the wipe's billing step confirmed Google stopped charging. A later
-    notification for a dropped token finds no owner and is recorded unbound (token, no uid), never granted.
+    Runs inside the Firestore wipe, after the wipe's billing step. Refuses (raises, so the wipe retries) when
+    a purchase document's cancel was not confirmed at or after ``confirmed_since`` (this wipe's billing step):
+    a purchase Google can still charge is never deleted. A later notification for a dropped token finds no
+    owner and is recorded unbound (token, no uid), never granted.
     """
     client = firestore_client or _client.get_firestore_client()
+    purchases = list(client.collection(COLLECTION).where('uid', '==', uid).stream())
+    for snapshot in purchases:
+        confirmed_at = (snapshot.to_dict() or {}).get(DELETION_CONFIRMED_FIELD)
+        if confirmed_at is None or confirmed_at < confirmed_since:
+            raise RuntimeError(f'Play purchase {snapshot.id[:12]} has no confirmed deletion cancel')
     removed = 0
-    for collection in (COLLECTION, ACCOUNTS):
-        for snapshot in client.collection(collection).where('uid', '==', uid).stream():
-            snapshot.reference.delete()
-            removed += 1
+    for snapshot in purchases + list(client.collection(ACCOUNTS).where('uid', '==', uid).stream()):
+        snapshot.reference.delete()
+        removed += 1
     return removed
