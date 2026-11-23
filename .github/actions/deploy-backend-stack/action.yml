@@ -1873,22 +1873,8 @@ runs:
             token_file.unlink(missing_ok=True)
         PY
 
-    - name: Smoke What Matters Now datastore query
-      id: smoke-what-matters-now-datastore-query
-      if: >-
-        ${{ inputs.integration_only != 'true' && (inputs.deploy_profile == 'manual' && inputs.environment == 'development') }}
-      shell: bash
-      env:
-        PROJECT_ID: ${{ inputs.project_id }}
-      run: |
-        set -euo pipefail
-        ADMIN_KEY="$(gcloud secrets versions access latest --secret=ADMIN_KEY --project="$PROJECT_ID")"
-        export ADMIN_KEY
-        trap 'unset ADMIN_KEY' EXIT
-        # api.omi.dev has never resolved (NXDOMAIN), so this smoke could not reach
-        # anything; api.omiapi.com is development's real public API host, matching
-        # the rest of the dev domain family (parakeet/nllb/pusher.omiapi.com).
-        python3 "$DEPLOY_CONTROL_SCRIPTS/smoke_what_matters_now.py" --base-url https://api.omiapi.com
+    # SCA-3681: The manual dev datastore smoke is suspended pending a verified
+    # dev endpoint. api.omiapi.com forwards Beta clients to production.
 
     - name: Restore Cloud Run traffic snapshot after failed promotion
       if: >-
@@ -1908,7 +1894,7 @@ runs:
 
     - name: Restore Cloud Run traffic snapshot after failed promotion
       if: >-
-        ${{ inputs.integration_only != 'true' && (inputs.deploy_profile == 'manual' && (failure() || cancelled()) && steps.cloud-run-traffic-snapshot.outcome == 'success' && (steps.shift-cloud-run-traffic.outcome == 'failure' || steps.shift-cloud-run-traffic.outcome == 'cancelled' || steps.verify-serving-release-vector.outcome == 'failure' || steps.verify-serving-release-vector.outcome == 'cancelled' || steps.smoke-promoted-production-serving-api.outcome == 'failure' || steps.smoke-promoted-production-serving-api.outcome == 'cancelled' || steps.smoke-what-matters-now-datastore-query.outcome == 'failure' || steps.smoke-what-matters-now-datastore-query.outcome == 'cancelled')) }}
+        ${{ inputs.integration_only != 'true' && (inputs.deploy_profile == 'manual' && (failure() || cancelled()) && steps.cloud-run-traffic-snapshot.outcome == 'success' && (steps.shift-cloud-run-traffic.outcome == 'failure' || steps.shift-cloud-run-traffic.outcome == 'cancelled' || steps.verify-serving-release-vector.outcome == 'failure' || steps.verify-serving-release-vector.outcome == 'cancelled' || steps.smoke-promoted-production-serving-api.outcome == 'failure' || steps.smoke-promoted-production-serving-api.outcome == 'cancelled')) }}
       shell: bash
       run: |
         set -euo pipefail
