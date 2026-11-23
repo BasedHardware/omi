@@ -932,7 +932,7 @@ checks:
     reason: "TestFlight 1.0.553 crashed when battery history wrote NSNull to UserDefaults; future Swift null placeholders and Optional<Any> coalescing require review before merge"
   - id: ios-ble-connection-policy
     command: ["ruby", "app/ios/test/omi_ble_connection_policy_test.rb"]
-    triggers: ["app/ios/Runner/Ble/OmiBleConnectionPolicy.swift", "app/ios/Runner/Ble/OmiBleManager.swift", "app/ios/test/omi_ble_connection_policy_test.rb", ".github/checks-manifest.yaml"]
+    triggers: ["app/ios/Runner/AppDelegate.swift", "app/ios/Runner/Ble/OmiBleConnectionPolicy.swift", "app/ios/Runner/Ble/OmiBleManager.swift", "app/ios/Runner/Limitless/LimitlessFlashDrainEngine.swift", "app/ios/test/omi_saved_reconnect_manager_test.swift", "app/ios/test/omi_ble_connection_policy_test.rb", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     platforms: ["macos"]
     reason: "pairing recovery must fire only for ATT authentication/encryption failures so ordinary Omi notification noise never tears down a healthy GATT link"
