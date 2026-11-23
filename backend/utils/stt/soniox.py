@@ -221,7 +221,10 @@ class SafeSonioxSocket(STTSocket):
             self._wire_ledger_enabled
             and soniox_ordered_finalize_enabled()
             and sample_rate == 16000
-            and SONIOX_MODEL in {'stt-rt-v5', 'stt-rt-v6'}
+            # v5 only. The 2026-11-23 probe (scripts/soniox_finalize_padding_probe.py)
+            # found no finalize padding on stt-rt-v5 or stt-rt-v6, so the ordered
+            # 120 ms law is not extended to v6; on v6 the reported clock is used.
+            and SONIOX_MODEL == 'stt-rt-v5'
             and SONIOX_WS_URL == 'wss://stt-rt.soniox.com/transcribe-websocket'
         ):
             self._provider_clock = OrderedSonioxProviderClock(sample_rate)

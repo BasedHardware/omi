@@ -1,4 +1,4 @@
-"""V6 config and the v5 env rollback use the same gated clock and wire path."""
+"""V6 is the default model; the ordered finalize clock stays gated to the v5 rollback."""
 
 import asyncio
 import importlib
@@ -15,7 +15,8 @@ from utils.stt.soniox_wire_ledger import OrderedSonioxProviderClock, SonioxProvi
 @pytest.mark.parametrize(
     'model,ledger,ordered,rate,url,clock_type',
     [
-        (None, True, True, 16000, None, OrderedSonioxProviderClock),
+        (None, True, True, 16000, None, SonioxProviderClock),
+        ('stt-rt-v6', True, True, 16000, None, SonioxProviderClock),
         ('stt-rt-v5', True, True, 16000, None, OrderedSonioxProviderClock),
         ('stt-rt-v6', True, False, 16000, None, SonioxProviderClock),
         ('stt-rt-v5', True, False, 16000, None, SonioxProviderClock),

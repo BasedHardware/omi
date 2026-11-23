@@ -4222,13 +4222,15 @@ and retains strict observed-send containment. Unknown text persists without an
 audio window. OFF retains the compact admission-time ledger exactly.
 
 `SONIOX_ORDERED_FINALIZE` is one additional default-off switch, effective only
-with the wire ledger, production Soniox endpoint and either `stt-rt-v6` (default) or `stt-rt-v5` (rollback) and mono
-pcm_s16le at 16 kHz. `SONIOX_MODEL=stt-rt-v5` restores the previous live model
-and ordered-clock selection, subject to the same existing switches. Soniox's
-[v6 changelog](https://docs.soniox.com/stt/models) declares API compatibility;
-the 120 ms quantum below was measured on v5, not live-probed on v6. Predictions
+with the wire ledger, production Soniox endpoint, `stt-rt-v5` and mono
+pcm_s16le at 16 kHz. The default model is `stt-rt-v6`, so the switch has no
+effect unless `SONIOX_MODEL=stt-rt-v5` is set. Keep it off: the 2026-11-23
+re-probe (`backend/scripts/soniox_finalize_padding_probe.py`) found that neither
+`stt-rt-v5` nor `stt-rt-v6` pads on finalize any more. Every `<fin>` reported
+the exact sent cursor, and the next speech started there, so every prediction
+below would now mismatch and refuse capture. Predictions
 still require matching progress fields before capture placement; mismatches
-invalidate capture. Controlled v5 synthetic probes covered sub-boundary offsets,
+invalidate capture. The original 2026-10-06 v5 synthetic probes covered sub-boundary offsets,
 back-to-back finalizes and five finalizes in flight: all 28 individual `<fin>`
 reports and 18 post-finalize speech starts matched the ordered padding model.
 For local provider cursor P, sending a finalize reserves the provider-only hole
