@@ -217,13 +217,15 @@ def webhook(monkeypatch):
     monkeypatch.setattr(payment.users_db, 'get_user_valid_subscription', lambda uid: state.row)
     monkeypatch.setattr(payment.users_db, 'get_existing_user_subscription', lambda uid: state.row)
     monkeypatch.setattr(payment.users_db, 'update_user_subscription', lambda uid, data: state.writes.append(data))
-    monkeypatch.setattr(payment.play_subscriptions_db, 'get_user_pointer', lambda uid: 'a' * 64)
+    monkeypatch.setattr(payment.play_stripe_guard.play_subscriptions_db, 'get_user_pointer', lambda uid: 'a' * 64)
     monkeypatch.setattr(
-        payment.stripe_utils,
+        payment.play_stripe_guard.stripe_utils,
         'cancel_and_refund_checkout_subscription',
         lambda sub_id: state.refused.append(sub_id) or {'subscription_id': sub_id, 'refund_id': 're_1'},
     )
-    monkeypatch.setattr(payment, 'send_notification', lambda uid, title, body: state.notices.append(body))
+    monkeypatch.setattr(
+        payment.play_stripe_guard, 'send_notification', lambda uid, title, body: state.notices.append(body)
+    )
     monkeypatch.setattr(payment, 'record_subscription_event', lambda **kw: None)
     monkeypatch.setattr(
         payment,
