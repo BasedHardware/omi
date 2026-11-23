@@ -89,12 +89,13 @@ def evaluate(sub: Any, customer: Any) -> RetentionOffer:
         return _ineligible('not_monthly')
     amount = _get(price, 'unit_amount')
     currency = _get(price, 'currency')
-    if local_currency.billed_in_option(price, _get(sub, 'currency')):
-        # Billed through a local currency option: show that amount, never the base USD one.
-        currency = _get(sub, 'currency')
-        amount = local_currency.option_amount_for(price, currency)
-        if amount is None:
-            return _ineligible('unavailable')
+    try:
+        option = local_currency.billed_option_amount(price, _get(sub, 'currency'))
+    except local_currency.OptionLookupFailed:
+        return _ineligible('unavailable')
+    if option is not None:
+        # Billed through a currency option of the Price: show that amount, never the base USD one.
+        amount, currency = option, _get(sub, 'currency')
     if not amount:
         return _ineligible('free_price')
     quantity = int(_get(items[0], 'quantity', 1) or 1)

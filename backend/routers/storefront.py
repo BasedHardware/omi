@@ -2,6 +2,7 @@
 
 from datetime import datetime, timezone
 import math
+import os
 from typing import Any, Literal, Optional
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
@@ -44,25 +45,29 @@ def _retrieve_price(price_id: str) -> dict[str, Any]:
         raise
 
 
-def _retrieve_price_with_options(price_id: str) -> dict[str, Any]:
-    """Live Price with currency_options; uncached so the sheet shows what Checkout charges."""
-    try:
-        return local_currency.retrieve_with_options(price_id).to_dict_recursive()
-    except Exception:
-        _degraded('storefront_price', 'hidden_price')
-        raise
-
-
 def _subscription_billing_currency(subscription: Subscription) -> str | None:
-    """The Stripe subscription's currency, read only once a local-currency table exists."""
+    """The Stripe subscription's currency once its Price carries any non-USD option.
+
+    Independent of the switch and the table, so a rollback cannot show a subscriber the base
+    price. A subscription's currency never changes, so it is cached.
+    """
     subscription_id = subscription.stripe_subscription_id
-    if not local_currency.load_table().amounts or not subscription_id or not subscription_id.startswith('sub_'):
+    price_id = subscription.current_price_id
+    if not subscription_id or not subscription_id.startswith('sub_') or not price_id:
         return None
     try:
-        return subscription_currency(stripe.Subscription.retrieve(subscription_id).to_dict())
+        if not local_currency.foreign_options(local_currency.cached_price_with_options(price_id)):
+            return None
+        key = f'stripe_subscription_currency:{subscription_id}'
+        cached = redis_db.get_generic_cache(key)
+        if isinstance(cached, str) and cached:
+            return cached
+        currency = subscription_currency(stripe.Subscription.retrieve(subscription_id).to_dict())
+        redis_db.set_generic_cache(key, currency, ttl=3600 * 24 * 30)
+        return currency
     except Exception:
-        _degraded('storefront_currency', 'base_currency')
-        return None
+        _degraded('storefront_currency', 'hidden_price')
+        return local_currency.UNKNOWN_CURRENCY
 
 
 def _usage(uid: str, subscription: Subscription, locale: str | None = None) -> StorefrontUsage:
@@ -140,17 +145,31 @@ def get_storefront(
     single_plan = subscription_utils.new_buyer_single_plan_applies(subscription.plan)
     # A buyer with no paid plan sees the price in their approved local currency; anything
     # else keeps today's USD sheet (utils.local_currency). Default off.
-    if subscription.plan.value == 'basic':
-        offer = local_currency.offer_for(x_app_platform, x_storefront_region)
-        if offer.kind == 'local' and single_plan:
+    if subscription.plan.value == 'basic' and single_plan:
+        price_ids = [
+            price_id
+            for price_id in (
+                os.getenv('STRIPE_UNLIMITED_V2_MONTHLY_PRICE_ID'),
+                os.getenv('STRIPE_UNLIMITED_V2_ANNUAL_PRICE_ID'),
+            )
+            if price_id
+        ]
+        try:
+            offer = local_currency.new_buyer_offer(
+                x_app_platform, x_storefront_region, lambda: users_db.get_stripe_customer_id(uid), price_ids
+            )
+        except Exception:
+            _degraded('storefront_currency', 'base_currency')
+            offer = local_currency.BuyerOffer()
+        if offer.currency and offer.rows:
             localized = build_single_plan_storefront(
                 catalog_revision=catalog.CATALOG_REVISION,
                 subscription=subscription,
                 usage=usage,
-                retrieve_price=_retrieve_price_with_options,
+                retrieve_price=lambda price_id: (offer.rows or {})[price_id],
                 trigger=trigger,
                 locale=locale,
-                local_currency_code=offer.currency,
+                local_offer=offer,
             )
             if localized is not None:
                 return localized

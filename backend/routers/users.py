@@ -1293,38 +1293,25 @@ def _byok_unlimited_subscription(
     )
 
 
-def _local_price_strings(
-    response: UserSubscriptionResponse, currency: str
-) -> Optional[list[tuple[PricingOption, str]]]:
-    """Every offered price string in ``currency``, or None when any price lacks its approved option."""
-    localized: list[tuple[PricingOption, str]] = []
-    for plan in response.available_plans:
-        for price in plan.prices:
-            try:
-                row = local_currency.retrieve_with_options(price.id)
-            except Exception as e:
-                logger.warning(f"Local currency price lookup failed: {type(e).__name__}")
-                return None
-            amount = local_currency.approved_amount(row, currency)
-            if amount is None:
-                return None
-            localized.append(
-                (price, f"{local_currency.display_money(amount, currency)}/{row['recurring']['interval']}")
-            )
-    return localized or None
-
-
 def _apply_local_currency_offer(
-    response: UserSubscriptionResponse, platform: Optional[str], region: Optional[str]
+    response: UserSubscriptionResponse, uid: str, platform: Optional[str], region: Optional[str]
 ) -> None:
-    """A buyer with no paid plan sees local-currency price strings when approved (utils.local_currency)."""
+    """A buyer with no paid plan sees price strings in their currency (utils.local_currency)."""
     if response.subscription.plan != PlanType.basic:
         return
-    offer = local_currency.offer_for(platform, region)
-    if offer.kind == 'local' and offer.currency:
-        localized = _local_price_strings(response, offer.currency)
-        for price, text in localized or []:
-            price.price_string = text
+    prices = [price for plan in response.available_plans for price in plan.prices]
+    try:
+        offer = local_currency.new_buyer_offer(
+            platform, region, lambda: users_db.get_stripe_customer_id(uid), [price.id for price in prices]
+        )
+    except Exception as e:  # noqa: BLE001 - the strings stay as today
+        logger.warning(f"Local currency price lookup failed: {type(e).__name__}")
+        return
+    if not offer.currency or not offer.amounts or not offer.rows:
+        return
+    for price in prices:
+        interval = offer.rows[price.id]['recurring']['interval']
+        price.price_string = f"{local_currency.display_money(offer.amounts[price.id], offer.currency)}/{interval}"
 
 
 @router.get('/v1/users/me/subscription', tags=['v1'], response_model=UserSubscriptionResponse)
@@ -1369,7 +1356,7 @@ def get_user_subscription_endpoint(
         )
         funded = allowance
     response.transcription_allowance = TranscriptionAllowanceSnapshot(**allowance.as_dict())
-    _apply_local_currency_offer(response, x_app_platform, request.headers.get(local_currency.REGION_HEADER))
+    _apply_local_currency_offer(response, uid, x_app_platform, request.headers.get(local_currency.REGION_HEADER))
     # Resolve from the real subscription, never the synthetic BYOK response plan.
     try:
         if 'subscription' not in already_read:

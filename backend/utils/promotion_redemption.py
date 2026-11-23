@@ -72,8 +72,12 @@ def _check_eligible(promo: dict, coupon: dict, subscription: dict) -> None:
 
     restrictions = promo.get('restrictions') or {}
     currency = subscription.get('currency')
-    if isinstance(currency, str) and local_currency.billed_in_option(price, currency):
-        _check_local_currency_eligible(restrictions, coupon, price, currency)
+    try:
+        option = local_currency.billed_option_amount(price, currency)
+    except local_currency.OptionLookupFailed as error:
+        raise RedemptionError(503, 'Could not verify your plan. Please try again.') from error
+    if option is not None and isinstance(currency, str):
+        _check_local_currency_eligible(restrictions, coupon, price, currency, option)
     else:
         minimum = restrictions.get('minimum_amount')
         if minimum:
@@ -88,22 +92,29 @@ def _check_eligible(promo: dict, coupon: dict, subscription: dict) -> None:
         raise RedemptionError(400, 'This code is only for new subscriptions.')
 
 
-def _check_local_currency_eligible(restrictions: dict, coupon: dict, price: dict, currency: str) -> None:
-    """A subscription billed in a local currency option: the code must work in that currency.
+def _check_local_currency_eligible(restrictions: dict, coupon: dict, price: dict, currency: str, amount: int) -> None:
+    """A subscription billed through a currency option of its Price (``amount`` in ``currency``).
 
-    The plan amount is the Price's option for the subscription currency. A minimum must be
-    stated in that currency (directly or in the restriction's currency_options), and a fixed
-    amount-off coupon needs an amount in that currency; otherwise the code is refused.
+    Minimum: stated in the subscription currency (directly or in the restriction's
+    currency_options) it is compared with ``amount``. A minimum stated only in the Price's
+    own currency (the USD-only bundle and prepaid codes) is compared with the same Price's
+    base amount: it is the same plan, so a code that qualifies for it in USD qualifies here
+    and the buyer is not charged at trial end because the code was refused. A minimum in any
+    other currency is refused. A fixed amount-off coupon needs an amount in ``currency``
+    (Stripe cannot apply a USD amount to this subscription); percent-off codes always apply.
     """
-    amount = local_currency.option_amount_for(price, currency)
-    if amount is None:
-        raise RedemptionError(400, 'This code cannot be applied to your plan.')
-    if restrictions.get('minimum_amount'):
+    minimum = restrictions.get('minimum_amount')
+    if minimum:
+        local = ((restrictions.get('currency_options') or {}).get(currency) or {}).get('minimum_amount')
         if restrictions.get('minimum_amount_currency') == currency:
-            minimum = restrictions.get('minimum_amount')
+            qualifies = amount >= minimum
+        elif isinstance(local, int):
+            qualifies = amount >= local
+        elif restrictions.get('minimum_amount_currency') == price.get('currency'):
+            qualifies = (price.get('unit_amount') or 0) >= minimum
         else:
-            minimum = ((restrictions.get('currency_options') or {}).get(currency) or {}).get('minimum_amount')
-        if not isinstance(minimum, int) or amount < minimum:
+            qualifies = False
+        if not qualifies:
             raise RedemptionError(400, 'This code is for a different plan.')
     if coupon.get('amount_off') and coupon.get('currency') != currency:
         if not ((coupon.get('currency_options') or {}).get(currency) or {}).get('amount_off'):

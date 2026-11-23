@@ -9,7 +9,9 @@ way and writes the symbol prefix, display decimals and a sample string to:
 - backend/config/checkout_currency_format.json (server: utils/local_currency.display_money)
 - app/lib/utils/checkout_currency_format.dart (app: utils/billing_price.formatBillingPrice)
 
-Both formatters are tested against the samples. Requires `node` with full ICU.
+Both formatters are tested against the samples. ICU data changes currency decimals and
+symbols between releases (ICU 78 drops HUF/COP/IDR/PKR decimals), so the script runs only on
+the pinned Node build below (official binaries ship full ICU) and CI installs exactly it.
 Usage: generate_checkout_currency_format.py [--check]
 """
 
@@ -36,6 +38,9 @@ CURRENCIES = (
 ZERO_DECIMAL = set('bif clp djf gnf jpy kmf krw mga pyg rwf vnd vuv xaf xof xpf'.split())
 THREE_DECIMAL = set('bhd jod kwd omr tnd'.split())
 SAMPLE_MINOR = 1234500
+# Bump together with .github/workflows/repo-checks.yml's setup-node, then regenerate.
+NODE_VERSION = 'v22.22.0'
+ICU_VERSION = '77.1'
 
 NODE = r"""
 const [codes, zero, three, sample] = JSON.parse(process.argv[1]);
@@ -61,7 +66,22 @@ console.log(JSON.stringify({icu: process.versions.icu, cldr: process.versions.cl
 """
 
 
+def _require_pinned_node() -> None:
+    try:
+        probe = subprocess.run(
+            ['node', '-p', 'process.version + " " + process.versions.icu'], check=True, capture_output=True, text=True
+        ).stdout.split()
+    except (OSError, subprocess.CalledProcessError) as error:
+        sys.exit(f'node {NODE_VERSION} (ICU {ICU_VERSION}) is required: {error}')
+    if probe != [NODE_VERSION, ICU_VERSION]:
+        sys.exit(
+            f'node {NODE_VERSION} with ICU {ICU_VERSION} is required, found {" ".join(probe)}; '
+            'another ICU renders some currencies differently. Install the pinned Node, or bump the pin.'
+        )
+
+
 def render() -> dict:
+    _require_pinned_node()
     args = json.dumps([CURRENCIES, sorted(ZERO_DECIMAL), sorted(THREE_DECIMAL), SAMPLE_MINOR])
     result = subprocess.run(['node', '-e', NODE, args], check=True, capture_output=True, text=True)
     return json.loads(result.stdout)

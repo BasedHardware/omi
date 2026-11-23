@@ -11,6 +11,7 @@ byte-identical to today, and a build that sends no region keeps today's behaviou
 
 import json
 import time
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
@@ -84,12 +85,26 @@ def env(monkeypatch):
     monkeypatch.delenv(local_currency.MODE_ENV, raising=False)
     monkeypatch.delenv(local_currency.TABLE_ENV, raising=False)
     monkeypatch.setattr(stripe.Price, 'retrieve', _retrieve_factory())
+    # Uncached in tests: always the (fake) live Price with its options.
+    monkeypatch.setattr(
+        local_currency,
+        'cached_price_with_options',
+        lambda price_id: stripe.Price.retrieve(price_id, expand=['currency_options']).to_dict_recursive(),
+    )
+    monkeypatch.setattr(storefront_route.redis_db, 'get_generic_cache', lambda key: None)
+    monkeypatch.setattr(storefront_route.redis_db, 'set_generic_cache', lambda key, value, ttl: None)
+    customer = SimpleNamespace(id=None, currency=None)
+    monkeypatch.setattr(payment.users_db, 'get_stripe_customer_id', lambda uid: customer.id)
+    monkeypatch.setattr(stripe.Customer, 'retrieve', lambda cid: SimpleNamespace(id=cid, currency=customer.currency))
 
     def on(mode='android', table=TABLE):
         monkeypatch.setenv(local_currency.MODE_ENV, mode)
         monkeypatch.setenv(local_currency.TABLE_ENV, json.dumps(table))
 
-    return SimpleNamespace(on=on, monkeypatch=monkeypatch)
+    def lapsed(currency):
+        customer.id, customer.currency = 'cus_lapsed_fixture', currency
+
+    return SimpleNamespace(on=on, lapsed=lapsed, monkeypatch=monkeypatch)
 
 
 # --- the decision -----------------------------------------------------------------------------
@@ -308,29 +323,29 @@ def _subscription_response():
 
 def test_user_subscription_price_strings(env):
     response = _subscription_response()
-    users_route._apply_local_currency_offer(response, 'android', 'JP')
+    users_route._apply_local_currency_offer(response, 'fixture', 'android', 'JP')
     assert response.model_dump() == _subscription_response().model_dump()  # switch off
 
     env.on()
-    users_route._apply_local_currency_offer(response, 'android', None)
+    users_route._apply_local_currency_offer(response, 'fixture', 'android', None)
     assert response.model_dump() == _subscription_response().model_dump()  # old app
-    users_route._apply_local_currency_offer(response, 'android', 'GB')
+    users_route._apply_local_currency_offer(response, 'fixture', 'android', 'GB')
     assert [p.price_string for p in response.available_plans[0].prices] == ['£22.99/month', '£206.99/year']
 
     outside = _subscription_response()
-    users_route._apply_local_currency_offer(outside, 'android', 'FR')
+    users_route._apply_local_currency_offer(outside, 'fixture', 'android', 'FR')
     assert outside.model_dump() == _subscription_response().model_dump()
 
     paid = _subscription_response()
     paid.subscription.plan = PlanType.unlimited_v2
-    users_route._apply_local_currency_offer(paid, 'android', 'GB')
+    users_route._apply_local_currency_offer(paid, 'fixture', 'android', 'GB')
     assert paid.available_plans[0].prices[0].price_string == 'US$29.99/month'  # subscribers keep theirs
 
 
 # --- checkout --------------------------------------------------------------------------------
 
 
-def _checkout(env, region=None, platform='android', currency=None, trial_days=7):
+def _checkout(env, region=None, platform='android', currency=None, trial_days=7, customer=None):
     captured = {}
 
     def create_session(uid, price_id, idempotency_key, **kwargs):
@@ -342,7 +357,7 @@ def _checkout(env, region=None, platform='android', currency=None, trial_days=7)
         patch.object(payment.subscription_utils, 'can_user_make_payment', return_value=(True, '')),
         patch.object(payment.subscription_utils, 'new_buyer_single_plan_violation', return_value=None),
         patch.object(payment, '_try_reactivate_subscription', return_value=None),
-        patch.object(payment.users_db, 'get_stripe_customer_id', return_value=None),
+        patch.object(payment.users_db, 'get_stripe_customer_id', return_value=customer),
         patch.object(payment.stripe_utils, 'create_subscription_checkout_session', side_effect=create_session),
     ):
         payment.create_checkout_session_endpoint(
@@ -430,22 +445,32 @@ def _gbp_subscription(**changes):
 def test_trial_reminder_names_the_local_charge(env):
     trial = _gbp_subscription(status='trialing', trial_end=int(time.time()) + 3 * 86400)
     trial['items']['data'][0]['price'] = dict(BASE[PRO_YEAR])
+    usd_trial = {**trial, 'currency': 'usd'}
     with patch.object(trial_reminder, 'get_plan_type_from_price_id', return_value=PlanType.unlimited_v2):
-        before = trial_reminder.trial_ending_reminder_body('fixture', trial, int(time.time()))
-        env.on()
-        after = trial_reminder.trial_ending_reminder_body('fixture', trial, int(time.time()))
-    assert 'US$269.91' in before  # table without gbp: today's text, byte for byte
-    assert 'charged £206.99 a year' in after and 'US$' not in after
+        gbp = trial_reminder.trial_ending_reminder_body('fixture', trial, int(time.time()))
+        usd = trial_reminder.trial_ending_reminder_body('fixture', usd_trial, int(time.time()))
+        env.monkeypatch.setattr(stripe.Price, 'retrieve', Mock(side_effect=stripe.APIConnectionError('offline')))
+        unreadable = trial_reminder.trial_ending_reminder_body('fixture', trial, int(time.time()))
+    assert 'charged £206.99 a year' in gbp and 'US$' not in gbp  # switch off, table empty
+    assert 'charged US$269.91 a year' in usd  # a USD trial: today's text
+    assert unreadable is None  # never a guessed amount
 
 
 def test_promo_minimum_is_checked_in_the_subscription_currency(env):
-    env.on()
+    """A USD-only minimum (bundle and prepaid codes) is compared with the same Price's USD
+    amount, so a local-currency trial is not charged because its code was refused."""
     sub = _gbp_subscription()
     price = sub['items']['data'][0]['price']
     coupon = {'valid': True, 'percent_off': 50}
-    usd_minimum = {'restrictions': {'minimum_amount': 2000, 'minimum_amount_currency': 'usd'}}
+    prepaid = {'valid': True, 'percent_off': 100}
+    usd_minimum = {'restrictions': {'minimum_amount': 2999, 'minimum_amount_currency': 'usd'}}
+    promotion_redemption._check_eligible(usd_minimum, prepaid, sub)  # same plan in USD: redeemable
+    usd_too_high = {'restrictions': {'minimum_amount': 3000, 'minimum_amount_currency': 'usd'}}
     with pytest.raises(promotion_redemption.RedemptionError):
-        promotion_redemption._check_eligible(usd_minimum, coupon, sub)
+        promotion_redemption._check_eligible(usd_too_high, coupon, sub)
+    eur_minimum = {'restrictions': {'minimum_amount': 100, 'minimum_amount_currency': 'eur'}}
+    with pytest.raises(promotion_redemption.RedemptionError):
+        promotion_redemption._check_eligible(eur_minimum, coupon, sub)
     gbp_ok = {
         'restrictions': {
             'minimum_amount': 2000,
@@ -463,12 +488,10 @@ def test_promo_minimum_is_checked_in_the_subscription_currency(env):
 
 
 def test_yearly_switch_refuses_a_non_usd_subscription(env):
-    env.on()
     assert yearly_switch.refusal(_gbp_subscription()) == 'currency'
 
 
-def test_retention_offer_shows_the_local_amount(env):
-    env.on()
+def test_retention_offer_shows_the_local_amount(env):  # switch off, table empty
     offer = retention_offer.evaluate(stripe.Subscription.construct_from(_gbp_subscription(), 'k'), {})
     assert (offer.currency, offer.regular_amount, offer.discounted_amount) == ('gbp', 2299, 1149)
 
@@ -603,3 +626,154 @@ def test_local_trial_is_charged_in_its_currency_at_trial_end_and_on_renewal(env,
     with patch.object(trial_reminder, 'get_plan_type_from_price_id', return_value=PlanType.unlimited_v2):
         body = trial_reminder.trial_ending_reminder_body('fixture', trial, int(time.time()))
     assert body is not None and '£206.99 a year' in body and 'US$' not in body
+
+
+def test_rollback_keeps_every_subscriber_surface_in_the_subscription_currency(env, gbp_case, sheet_client):
+    """Switch off and table emptied after a GBP subscription exists: Stripe still bills
+    £, so every surface still says £ (the billed currency comes from Stripe alone)."""
+    env.monkeypatch.delenv(local_currency.MODE_ENV)
+    env.monkeypatch.delenv(local_currency.TABLE_ENV)
+    plans = gbp_case.client.get('/v1/payments/available-plans', headers=ANDROID).json()['plans']
+    assert {(row['currency'], row['unit_amount']) for row in plans} == {('gbp', 2299), ('gbp', 20699)}
+
+    env.monkeypatch.setattr(storefront_route.users_db, 'get_user_valid_subscription', lambda uid, **kw: gbp_case.sub)
+    sheet = sheet_client.get('/v2/payments/plans', headers=ANDROID).json()  # real currency lookup
+    assert (sheet['current']['currency'], sheet['current']['amount_minor']) == ('gbp', 2299)
+    assert 'US$' not in json.dumps(sheet)
+
+    offer = retention_offer.evaluate(stripe.Subscription.construct_from(gbp_case.obj, 'k'), {})
+    assert (offer.currency, offer.regular_amount) == ('gbp', 2299)
+    with patch.object(trial_reminder, 'get_plan_type_from_price_id', return_value=PlanType.unlimited_v2):
+        body = trial_reminder.trial_ending_reminder_body(
+            'fixture', {**gbp_case.obj, 'status': 'trialing', 'trial_end': int(time.time()) + 86400}, int(time.time())
+        )
+    assert body is not None and '£22.99 a month' in body
+    promotion_redemption._check_eligible({}, {'valid': True, 'percent_off': 100}, gbp_case.obj)
+
+    env.monkeypatch.setattr(storefront_route.redis_db, 'get_generic_cache', Mock(side_effect=RuntimeError('down')))
+    unreadable = sheet_client.get('/v2/payments/plans', headers=ANDROID).json()
+    assert unreadable['current'].get('amount_minor') is None and 'US$' not in json.dumps(unreadable['current'])
+
+
+def test_lapsed_usd_customer_in_a_table_country_stays_in_usd(env, plans_client):
+    baseline = plans_client.get('/v1/payments/available-plans', headers=ANDROID).content
+    env.on()
+    env.lapsed('usd')
+    assert plans_client.get('/v1/payments/available-plans', headers={**ANDROID, REGION: 'GB'}).content == baseline
+    assert 'local_currency_code' not in _checkout(
+        env, region='GB', currency='usd', customer='cus_lapsed_fixture', trial_days=None
+    )
+    with pytest.raises(HTTPException):
+        _checkout(env, region='GB', currency='gbp', customer='cus_lapsed_fixture', trial_days=None)  # a stale £ page
+
+
+@pytest.mark.parametrize('mode', ['android', None])
+def test_lapsed_gbp_customer_who_moved_to_the_us_keeps_gbp(env, plans_client, mode):
+    if mode:
+        env.on(mode)
+    env.lapsed('gbp')
+    plans = plans_client.get('/v1/payments/available-plans', headers={**ANDROID, REGION: 'US'}).json()['plans']
+    assert {(row['currency'], row['billing_total']) for row in plans} == {('gbp', '£22.99'), ('gbp', '£206.99')}
+    checkout = _checkout(env, region='US', currency='gbp', customer='cus_lapsed_fixture', trial_days=None)
+    assert checkout['local_currency_code'] == 'gbp'
+
+
+def test_customer_currency_the_price_lacks_falls_back_to_usd(env, plans_client):
+    baseline = plans_client.get('/v1/payments/available-plans', headers=ANDROID).content
+    env.lapsed('chf')  # not an option on these Prices: today's USD path, nothing Checkout would refuse first
+    assert plans_client.get('/v1/payments/available-plans', headers=ANDROID).content == baseline
+
+
+def test_released_currencies_reach_the_app_unchanged_with_the_switch_off():
+    """With the switch off only USD and JPY Prices exist (catalog and management bindings),
+    and both render exactly as before in the shared Checkout table."""
+    from config.plan_catalog import MANAGEMENT_CURRENCY_PRICES
+
+    catalog_currencies = set()
+
+    def walk(node):
+        if isinstance(node, dict):
+            for key, value in node.items():
+                if key == 'currency' and isinstance(value, str):
+                    catalog_currencies.add(value)
+                walk(value)
+        elif isinstance(node, list):
+            for value in node:
+                walk(value)
+
+    walk(json.loads((Path(__file__).resolve().parents[2] / 'config/plan_catalog.json').read_text()))
+    assert catalog_currencies | {b['currency'] for b in MANAGEMENT_CURRENCY_PRICES.values()} <= {'usd', 'jpy'}
+    assert local_currency.display_money(2999, 'usd') == 'US$29.99'
+    assert local_currency.display_money(4800, 'jpy') == '¥4,800'
+
+
+class _FakeStripe:
+    """Records writes; serves Prices with given options and a subscription list."""
+
+    def __init__(self, options, subscriptions=()):
+        self.writes = []
+        outer = self
+
+        class Price:
+            @staticmethod
+            def retrieve(price_id, expand=None):
+                row = {**BASE[price_id], 'currency_options': {'usd': {'unit_amount': BASE[price_id]['unit_amount']}}}
+                row['currency_options'].update(options.get(price_id, {}))
+                return stripe.Price.construct_from(row, 'k')
+
+            @staticmethod
+            def modify(price_id, **kwargs):
+                outer.writes.append((price_id, kwargs))
+
+        class Subscription:
+            @staticmethod
+            def list(price, status, limit):
+                rows = [sub for sub in subscriptions if sub['price'] == price]
+                return SimpleNamespace(auto_paging_iter=lambda: iter(rows))
+
+        self.Price, self.Subscription = Price, Subscription
+
+
+def test_apply_reads_both_prices_and_refuses_a_different_amount(env, monkeypatch, capsys):
+    from scripts import local_currency_options as script
+
+    monkeypatch.setenv(local_currency.TABLE_ENV, json.dumps(TABLE))
+    assert script.main(['--apply'], stripe_module=_FakeStripe({})) == 2  # needs --confirm
+    conflict = _FakeStripe({PRO_YEAR: {'gbp': {'unit_amount': 19999}}})
+    assert script.main(['--apply', '--confirm'], stripe_module=conflict) == 2
+    assert conflict.writes == []
+    assert 'live 19999, table 20699' in capsys.readouterr().err
+
+    partial = _FakeStripe({PRO_MONTH: {'gbp': {'unit_amount': 2299}}})
+    assert script.main(['--apply', '--confirm'], stripe_module=partial) == 0
+    out = capsys.readouterr().out
+    assert 'existing currency_options' in out and '"gbp"' in out
+    assert [(price_id, sorted(kw['currency_options'])) for price_id, kw in partial.writes] == [
+        (PRO_MONTH, ['eur', 'jpy']),
+        (PRO_YEAR, ['eur', 'gbp', 'jpy']),
+    ]
+
+
+def test_apply_refuses_a_table_with_dropped_entries(env, monkeypatch, capsys):
+    from scripts import local_currency_options as script
+
+    bad = {**TABLE, 'currencies': {**TABLE['currencies'], 'huf': {'monthly': 1099050, 'annual': 9891000}}}
+    monkeypatch.setenv(local_currency.TABLE_ENV, json.dumps(bad))
+    fake = _FakeStripe({})
+    assert script.main(['--apply', '--confirm'], stripe_module=fake) == 2
+    assert fake.writes == [] and 'currency huf' in capsys.readouterr().err
+
+
+def test_count_non_usd_subscriptions_is_read_only(env, capsys):
+    from scripts import local_currency_options as script
+
+    subs = [
+        {'price': PRO_MONTH, 'currency': 'eur', 'status': 'active'},
+        {'price': PRO_MONTH, 'currency': 'usd', 'status': 'active'},
+        {'price': PRO_MONTH, 'currency': 'eur', 'status': 'canceled'},
+        {'price': PRO_YEAR, 'currency': 'gbp', 'status': 'trialing'},
+    ]
+    fake = _FakeStripe({}, subs)
+    assert script.main(['--count-non-usd-subscriptions'], stripe_module=fake) == 0
+    assert json.loads(capsys.readouterr().out) == {PRO_MONTH: {'eur': 1}, PRO_YEAR: {'gbp': 1}}
+    assert fake.writes == []

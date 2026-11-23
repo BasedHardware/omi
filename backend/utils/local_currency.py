@@ -30,7 +30,7 @@ from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
 from decimal import Decimal, ROUND_HALF_UP
-from typing import Any, Callable, Iterable, Literal, Mapping, Optional
+from typing import Any, Callable, Literal, Mapping, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -188,50 +188,78 @@ def approved_amount(price: Any, currency: str) -> Optional[int]:
     return amount
 
 
-def localize_rows(rows: Iterable[dict[str, Any]], currency: str) -> Optional[list[dict[str, Any]]]:
-    """Copies of Stripe price rows re-expressed in ``currency``, or None when any row lacks it.
+# ISO 4217 "no currency": a subscription whose billed currency could not be read.
+UNKNOWN_CURRENCY = 'xxx'
 
-    The price id stays the same: Checkout selects the currency option on that Price.
+
+class OptionLookupFailed(Exception):
+    """Stripe could not be read, so the billed amount is unknown. Callers show nothing."""
+
+
+def billed_option_amount(
+    price: Any, subscription_currency: Any, retrieve: Optional[Callable[[str], Any]] = None
+) -> Optional[int]:
+    """What Stripe bills a subscription in ``subscription_currency`` on ``price``.
+
+    Decided from Stripe alone, never from the switch or the operator table, so a rollback
+    or table edit cannot change what an existing subscriber is told. A subscription on a
+    multi-currency Price carries the base Price on its item, and Stripe bills the Price's
+    ``currency_options[subscription_currency]``. None when the subscription is in the
+    Price's own currency or the Price has no such option (older Adaptive Pricing
+    conversions keep today's handling). Raises OptionLookupFailed when the Price cannot
+    be read.
     """
-    localized = []
-    for row in rows:
-        amount = approved_amount(row, currency)
-        if amount is None:
-            return None
-        localized.append({**row, 'currency': currency, 'unit_amount': amount})
-    return localized
-
-
-def table_currency(currency: Any) -> bool:
-    """A currency the operator approved, for managing a subscription already billed in it."""
-    return isinstance(currency, str) and currency in load_table().amounts
-
-
-def billed_in_option(price: Any, subscription_currency: Any) -> bool:
-    """True when a subscription is billed through a table currency option of ``price``.
-
-    A subscription on a multi-currency Price carries the base Price (USD) on its item;
-    Stripe bills the ``currency_options`` entry for the subscription currency. Other
-    currency mismatches (older Adaptive Pricing conversions) keep today's handling.
-    """
-    return (
-        isinstance(subscription_currency, str)
-        and _get(price, 'currency') != subscription_currency
-        and table_currency(subscription_currency)
-    )
-
-
-def option_amount_for(price: Any, currency: str, retrieve: Optional[Callable[[str], Any]] = None) -> Optional[int]:
-    """``option_amount``, expanding the Price when the caller's copy lacks currency_options."""
-    amount = option_amount(price, currency)
+    base = _get(price, 'currency')
+    if not isinstance(subscription_currency, str) or not isinstance(base, str) or base == subscription_currency:
+        return None
+    amount = option_amount(price, subscription_currency)
     price_id = _get(price, 'id')
-    if amount is None and isinstance(price_id, str):
-        try:
-            amount = option_amount((retrieve or retrieve_with_options)(price_id), currency)
-        except Exception as exc:  # noqa: BLE001 - unknown amount, caller refuses
-            logger.warning('currency option lookup failed: %s', type(exc).__name__)
+    if amount is not None or _get(price, 'currency_options') is not None or not isinstance(price_id, str):
+        return amount
+    try:
+        expanded = (retrieve or retrieve_with_options)(price_id)
+    except Exception as exc:
+        logger.warning('currency option lookup failed: %s', type(exc).__name__)
+        raise OptionLookupFailed(price_id) from exc
+    return option_amount(expanded, subscription_currency)
+
+
+def foreign_options(price: Any) -> set[str]:
+    """Currencies other than the Price's own in its expanded ``currency_options``."""
+    options = _get(price, 'currency_options') or {}
+    keys = options.keys() if isinstance(options, Mapping) else []
+    return {code for code in keys if code != _get(price, 'currency')}
+
+
+def buyer_currency(platform: Any, region: Any, customer_currency: Any, prices: list[Any]) -> Optional[str]:
+    """The currency to show and charge a buyer with no paid plan; None for the Price's own (USD).
+
+    ``prices`` are the offered Prices with ``currency_options`` expanded. A Stripe customer
+    that already has a currency can only be charged in it, so it wins over the region: a
+    USD customer stays in USD, a customer in another currency gets that currency when
+    every offered Price carries it (else today's USD path). Otherwise the region's
+    approved table currency applies when the live Prices match the table.
+    """
+    if isinstance(customer_currency, str) and customer_currency:
+        if customer_currency == 'usd' or not prices:
             return None
-    return amount
+        if all(option_amount(price, customer_currency) is not None for price in prices):
+            return customer_currency
+        logger.warning('customer currency %s missing on an offered price; offering USD', customer_currency)
+        return None
+    offer = offer_for(platform, region)
+    if offer.kind != 'local' or not offer.currency or not prices:
+        return None
+    if all(approved_amount(price, offer.currency) is not None for price in prices):
+        return offer.currency
+    return None
+
+
+def offer_amount(price: Any, currency: str, customer_currency: Any) -> Optional[int]:
+    """The amount for ``buyer_currency``'s choice: the customer's option, or the approved table amount."""
+    if customer_currency == currency:
+        return option_amount(price, currency)
+    return approved_amount(price, currency)
 
 
 def retrieve_with_options(price_id: str) -> Any:
@@ -239,6 +267,91 @@ def retrieve_with_options(price_id: str) -> Any:
     import stripe
 
     return stripe.Price.retrieve(price_id, expand=['currency_options'])
+
+
+PRICE_CACHE_SECONDS = 300
+
+
+def cached_price_with_options(price_id: str) -> dict[str, Any]:
+    """``retrieve_with_options`` as a dict, cached briefly. Options of a live Price are not
+    edited in place (scripts/local_currency_options.py refuses), and Checkout re-reads live."""
+    from database import redis_db
+
+    key = f'stripe_price_currency_options:{price_id}'
+    try:
+        cached = redis_db.get_generic_cache(key)
+    except Exception:  # noqa: BLE001 - cache is optional
+        cached = None
+    if isinstance(cached, dict) and cached.get('id') == price_id:
+        return cached
+    price = retrieve_with_options(price_id)
+    row = price.to_dict_recursive() if hasattr(price, 'to_dict_recursive') else dict(price)
+    try:
+        redis_db.set_generic_cache(key, row, ttl=PRICE_CACHE_SECONDS)
+    except Exception:  # noqa: BLE001 - cache is optional
+        pass
+    return row
+
+
+@dataclass(frozen=True)
+class BuyerOffer:
+    """``currency`` None: today's prices. Otherwise ``amounts`` maps each offered Price id to its amount."""
+
+    currency: Optional[str] = None
+    amounts: Optional[dict[str, int]] = None
+    rows: Optional[dict[str, dict[str, Any]]] = None
+
+
+def customer_currency(customer_id: Optional[str]) -> Optional[str]:
+    """A Stripe customer's fixed recurring currency, or None (no customer, or none set yet)."""
+    if not customer_id:
+        return None
+    import stripe
+
+    currency = getattr(stripe.Customer.retrieve(customer_id), 'currency', None)
+    return currency.lower() if isinstance(currency, str) and currency else None
+
+
+def new_buyer_offer(
+    platform: Any,
+    region: Any,
+    customer_id: Callable[[], Optional[str]],
+    price_ids: list[str],
+    retrieve: Optional[Callable[[str], Any]] = None,
+) -> BuyerOffer:
+    """What a buyer with no paid plan is shown and charged (see ``buyer_currency``).
+
+    No Stripe or customer read happens unless a local offer applies or an offered Price
+    already carries a non-USD option, so today (USD-only Prices, switch off) nothing changes.
+    """
+    if not price_ids:
+        return BuyerOffer()
+    retrieve = retrieve or cached_price_with_options
+    local = offer_for(platform, region)
+    if local.kind != 'local':
+        # Today's path unless an existing customer is fixed to another currency the Prices carry.
+        # First-time buyers read nothing; any read failure keeps today's prices.
+        customer = customer_id()
+        if not customer:
+            return BuyerOffer()
+        try:
+            rows = {price_id: retrieve(price_id) for price_id in price_ids}
+            if not any(foreign_options(row) for row in rows.values()):
+                return BuyerOffer()
+            fixed = customer_currency(customer)
+        except Exception as exc:  # noqa: BLE001 - today's prices
+            logger.warning('customer currency lookup failed: %s', type(exc).__name__)
+            return BuyerOffer()
+    else:
+        rows = {price_id: retrieve(price_id) for price_id in price_ids}
+        fixed = customer_currency(customer_id()) if any(foreign_options(row) for row in rows.values()) else None
+    currency = buyer_currency(platform, region, fixed, list(rows.values()))
+    if currency is None:
+        return BuyerOffer()
+    amounts = {price_id: offer_amount(row, currency, fixed) for price_id, row in rows.items()}
+    if any(amount is None for amount in amounts.values()):
+        return BuyerOffer()
+    return BuyerOffer(currency, amounts, rows)  # type: ignore[arg-type]
 
 
 def checkout_locale(currency: str) -> str:

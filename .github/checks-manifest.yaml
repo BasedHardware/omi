@@ -1414,6 +1414,12 @@ checks:
     triggers: [".github/workflows/desktop-swift-ci.yml", ".github/checks-manifest.yaml", ".github/scripts/run_checks.py", "scripts/pre_push_ci_prediction.py", ".github/scripts/test_desktop_manifest_routes.py"]
     lanes: ["local", "ci"]
     reason: "#9843 Ticket 02: macOS-only manifest checks must have an executable CI route"
+  - id: checkout-currency-format
+    command: ["python3", "backend/scripts/generate_checkout_currency_format.py", "--check"]
+    triggers: ["backend/scripts/generate_checkout_currency_format.py", "backend/config/checkout_currency_format.json", "app/lib/utils/checkout_currency_format.dart", ".github/workflows/repo-checks.yml", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    platforms: ["linux", "macos"]
+    reason: "PR #26074 review: on Node 26 (ICU 78) the shared Checkout display table renders HUF, COP, IDR, PKR and RSD differently, so an unpinned regeneration would silently change the app's price strings and the server's table validation"
   - id: desktop-swift-generated-dtos
     command: ["python3", "backend/scripts/generate_swift_openapi_types.py", "--check"]
     triggers: ["desktop/macos/Desktop/Sources/Generated/**/*.generated.swift", "docs/api-reference/app-client-openapi.json", "backend/scripts/generate_swift_openapi_types.py"]

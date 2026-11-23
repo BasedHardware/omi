@@ -309,11 +309,17 @@ def build_storefront(
     # card; USD offers are dropped rather than shown in a foreign currency.
     offer_currency = 'usd'
     money = None
-    if current_row and subscription_currency and local_currency.billed_in_option(current_row, subscription_currency):
-        offer_currency = subscription_currency
-        money = local_currency.display_money
-        amount = local_currency.option_amount_for(current_row, offer_currency)
-        current_row = {**current_row, 'currency': offer_currency, 'unit_amount': amount} if amount else None
+    if subscription_currency == local_currency.UNKNOWN_CURRENCY:
+        current_row = None  # billed currency unreadable: show no price rather than the base one
+    elif current_row and subscription_currency and current_row.get('currency') != subscription_currency:
+        try:
+            amount = local_currency.billed_option_amount(current_row, subscription_currency)
+        except local_currency.OptionLookupFailed:
+            amount, current_row = None, None  # unknown: show no price rather than the base one
+        if amount is not None:
+            offer_currency = subscription_currency
+            money = local_currency.display_money
+            current_row = {**(current_row or {}), 'currency': offer_currency, 'unit_amount': amount}
     current_interval = None
     current_amount = None
     current_currency = 'usd'
@@ -583,7 +589,7 @@ def build_single_plan_storefront(
     retrieve_price: Callable[[str], dict[str, Any]],
     trigger: str | None = None,
     locale: str | None = None,
-    local_currency_code: str | None = None,
+    local_offer: local_currency.BuyerOffer | None = None,
 ) -> StorefrontResponse | None:
     """Omi Pro (`unlimited_v2`) offer sheet for a buyer with no current paid plan.
 
@@ -591,8 +597,8 @@ def build_single_plan_storefront(
     Omi Pro card, so this single-tier v2 sheet is served instead; current
     subscribers keep the ladder sheet via `build_storefront`.
 
-    With ``local_currency_code`` every price, the Free card included, is in that
-    currency; None when a configured price lacks its approved currency option.
+    With ``local_offer`` (utils.local_currency.new_buyer_offer) every price, the Free card
+    included, is in the buyer's currency; None when a configured price is not in the offer.
     """
     ladder = load_ladder()
     current_plan = subscription.plan.value
@@ -600,11 +606,13 @@ def build_single_plan_storefront(
     currency = raw_currency if isinstance(raw_currency, str) else 'usd'
     rows = _configured_unlimited_v2_rows(retrieve_price)
     money = None
-    if local_currency_code:
-        localized = local_currency.localize_rows(rows, local_currency_code) if len(rows) == 2 else None
-        if localized is None:
+    local_currency_code = local_offer.currency if local_offer else None
+    if local_offer and local_currency_code:
+        amounts = local_offer.amounts or {}
+        if len(rows) != 2 or any(row['id'] not in amounts for row in rows):
             return None
-        rows, currency, money = localized, local_currency_code, local_currency.display_money
+        rows = [{**row, 'currency': local_currency_code, 'unit_amount': amounts[row['id']]} for row in rows]
+        currency, money = local_currency_code, local_currency.display_money
     prices = _prices_for(
         rows, offered=['month', 'year'], locale=locale, currency=local_currency_code or 'usd', money=money
     )

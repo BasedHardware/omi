@@ -23,7 +23,6 @@ from config.plan_catalog import (
     RECOGNIZED_STRIPE_PRICE_PLAN_TYPES,
     resolve_stripe_price_plan,
 )
-from utils import local_currency
 from utils.metrics import OMI_SUBSCRIPTION_EVENTS
 
 logger = logging.getLogger(__name__)
@@ -168,8 +167,8 @@ def emit_billing_product_event(
     price_id = raw_price_id[:128] if isinstance(raw_price_id, str) and raw_price_id else 'unknown'
     mrr_cents = _monthly_mrr_cents(price, interval, obj.get('status'))
     currency_wire = _currency_wire(price)
-    if local_currency.billed_in_option(price, obj.get('currency')):
-        # Billed in a local currency option: the item's base USD amount is not this charge.
+    if isinstance(obj.get('currency'), str) and obj.get('currency') != price.get('currency'):
+        # Billed in another currency than the item Price (a currency option): its base USD amount is not this charge.
         mrr_cents, currency_wire = None, _currency_wire({'currency': obj.get('currency')})
     try:
         occurred_at = None
@@ -413,7 +412,7 @@ def emit_billing_plan_changed(
     previous_status = previous_attributes.get('status', subscription_obj.get('status'))
     before_mrr = _monthly_mrr_cents(before, _resolve_interval(previous_attributes), previous_status)
     after_mrr = _monthly_mrr_cents(after, interval, subscription_obj.get('status'))
-    if local_currency.billed_in_option(after, subscription_obj.get('currency')):
+    if isinstance(subscription_obj.get('currency'), str) and subscription_obj.get('currency') != after.get('currency'):
         before_mrr, after_mrr = None, None
         currency = _currency_wire({'currency': subscription_obj.get('currency')})
     occurred_at = None

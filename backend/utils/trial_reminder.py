@@ -32,13 +32,14 @@ def recurring_terms(
 
 
 def _billed(price: Mapping[str, Any], subscription: Mapping[str, Any], retrieve_price: Optional[Callable[[str], Any]]):
-    """(amount, currency, formatter) Stripe bills, or None when a local-currency amount is unknown."""
-    currency = subscription.get('currency') or price.get('currency')
-    if not isinstance(currency, str) or not local_currency.billed_in_option(price, currency):
-        return price.get('unit_amount'), price.get('currency'), None
-    amount = local_currency.option_amount_for(price, currency, retrieve_price)
-    if amount is None:
+    """(amount, currency, formatter) Stripe bills, or None when it cannot be read (no reminder)."""
+    currency = subscription.get('currency')
+    try:
+        amount = local_currency.billed_option_amount(price, currency, retrieve_price)
+    except local_currency.OptionLookupFailed:
         return None
+    if amount is None:
+        return price.get('unit_amount'), price.get('currency'), None
     return amount, currency, local_currency.display_money
 
 

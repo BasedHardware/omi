@@ -226,8 +226,8 @@ def create_subscription_checkout_session(
     `trial_period_days` starts the subscription with a free trial; Checkout still collects the
     card, and Stripe charges the first period when the trial ends unless the subscriber cancels.
 
-    `local_currency_code` charges the Price's approved `currency_options` entry instead of its
-    base currency (utils.local_currency); a Price without that approved entry raises ValueError.
+    `local_currency_code` charges the Price's `currency_options` entry instead of its base
+    currency (chosen by utils.local_currency.new_buyer_offer); a Price without it raises ValueError.
     """
     try:
         success_url = urljoin(base_url, 'v1/payments/success?session_id={CHECKOUT_SESSION_ID}')  # type: ignore[reportArgumentType]  # base_url validated at runtime
@@ -239,7 +239,7 @@ def create_subscription_checkout_session(
         local_amount = None
         if local_currency_code:
             price = local_currency.retrieve_with_options(price_id)
-            local_amount = local_currency.approved_amount(price, local_currency_code)
+            local_amount = local_currency.option_amount(price, local_currency_code)
             if local_amount is None:
                 raise ValueError('local_currency_unavailable')
             currency = local_currency_code

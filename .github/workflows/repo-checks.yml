@@ -154,6 +154,12 @@ jobs:
         with:
           bun-version: 1.3.14
 
+      - name: Set up Node for the manifest-selected checkout currency table check
+        uses: actions/setup-node@v7
+        with:
+          # Pinned with ICU 77.1: backend/scripts/generate_checkout_currency_format.py NODE_VERSION.
+          node-version: '22.22.0'
+
       - name: Save changed files
         run: |
           if [ -n "${{ inputs.nightly_main_sha }}" ]; then
