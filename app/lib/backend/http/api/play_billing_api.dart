@@ -1,3 +1,5 @@
+// Google Play Billing purchase verification: the app hands the Play purchase token to the server,
+// which validates it with Google, binds it to this account, acknowledges it and grants Omi Pro.
 import 'dart:convert';
 
 import 'package:omi/backend/http/shared.dart';
