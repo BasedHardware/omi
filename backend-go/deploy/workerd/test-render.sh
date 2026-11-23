@@ -70,7 +70,9 @@ GIT_INDEX_FILE="$index" git -C "$repo_root" read-tree "$head_commit"
 changed_blob="$( (git -C "$repo_root" show "$head_commit:backend-go/deploy/workerd/values-prod.yaml"; printf '# identity fixture\nreplicaCount: 3\n') |
   git -C "$repo_root" hash-object -w --stdin)"
 GIT_INDEX_FILE="$index" git -C "$repo_root" update-index --cacheinfo "100644,$changed_blob,backend-go/deploy/workerd/values-prod.yaml"
-fixture_commit="$(git -C "$repo_root" commit-tree "$(GIT_INDEX_FILE="$index" git -C "$repo_root" write-tree)" -p "$head_commit" -m identity-fixture)"
+# A fixed identity: CI runners have no git user, and the fixture commit is never pushed.
+fixture_commit="$(GIT_AUTHOR_NAME=fixture GIT_AUTHOR_EMAIL=fixture@invalid GIT_COMMITTER_NAME=fixture \
+  GIT_COMMITTER_EMAIL=fixture@invalid git -C "$repo_root" commit-tree "$(GIT_INDEX_FILE="$index" git -C "$repo_root" write-tree)" -p "$head_commit" -m identity-fixture)"
 fixture="$("$identity" --digest "$digest" --ref "$fixture_commit")"
 [[ "$fixture" == *"\"backend_go_tree\":\"$(git -C "$repo_root" rev-parse "$fixture_commit:backend-go")\""* ]] ||
   { echo 'release identity does not follow --ref' >&2; exit 1; }
