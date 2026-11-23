@@ -132,21 +132,24 @@ def episode_attach_memo_failure_reason(
     )
 
 
-def episode_attach_memo_writer_failure_reason(uid, cid, writer_keys, derived_documents):
-    """Validate Python's final memo against keys from rows passed to its writers.
+def episode_attach_memo_source_failure_reason(uid, cid, source_keys, derived_documents):
+    """Validate final memo fields against a key computed from their source row.
 
-    Python may re-encode the transcript and stamp a new content key during the
-    replay. The final Firestore conversation can be a different snapshot from
-    that writer row, so validating only the final row rejects a valid stamp.
-    Keys stay in-process and are never serialized into the diagnostic output.
+    Go's source row is the intake snapshot; Python may re-encode the transcript
+    and stamp from a later attach row. The final Firestore conversation can be a
+    different snapshot from either source, so validate the stamp against the
+    side's own key. Keys stay in-process and are never serialized in diagnostics.
     """
     link_path = f'users/{uid}/episode_links/{cid}'
     link = derived_documents.get(link_path)
     if not isinstance(link, dict):
         return 'missing_link'
+    expected_keys = {key for key in (source_keys or ()) if isinstance(key, str) and key}
+    if not expected_keys:
+        return 'source_key_unobserved'
     completed = link.get('attach_completed')
     revision = link.get('attach_revision')
-    if not completed or completed != revision or completed not in set(writer_keys or ()):
+    if not completed or completed != revision or completed not in expected_keys:
         return 'completed_key_mismatch'
     if not link.get('episode_id') or link.get('attach_owner_id') != link.get('episode_id'):
         return 'owner_binding_mismatch'
@@ -175,6 +178,7 @@ class CaseState:
         self.initial_updated_at = None
         self.replay_side = None
         self.episode_attach_memo_writer_keys = []
+        self.episode_attach_memo_intake_keys = []
         self.effects = {}
         self.provider_calls = []
         self.llm_tokens = {'prompt': 0, 'completion': 0}
@@ -341,15 +345,25 @@ class CaseState:
             derived_documents = changed_documents
         document = self.conversation.get().to_dict()
         if getattr(self, 'replay_side', None) == 'python':
-            memo_failure_reason = episode_attach_memo_writer_failure_reason(
+            memo_failure_reason = episode_attach_memo_source_failure_reason(
                 getattr(self, 'uid', ''),
                 getattr(self, 'cid', ''),
                 getattr(self, 'episode_attach_memo_writer_keys', []),
                 derived_documents,
             )
+        elif getattr(self, 'replay_side', None) == 'go':
+            memo_failure_reason = episode_attach_memo_source_failure_reason(
+                getattr(self, 'uid', ''),
+                getattr(self, 'cid', ''),
+                getattr(self, 'episode_attach_memo_intake_keys', []),
+                derived_documents,
+            )
         else:
             memo_failure_reason = episode_attach_memo_failure_reason(
-                getattr(self, 'uid', ''), getattr(self, 'cid', ''), document or {}, derived_documents
+                getattr(self, 'uid', ''),
+                getattr(self, 'cid', ''),
+                document or {},
+                derived_documents,
             )
         empty_privacy = {'exists': False, 'fields': {}}
         privacy_seed = getattr(self, 'batch_privacy_seed', None) or empty_privacy

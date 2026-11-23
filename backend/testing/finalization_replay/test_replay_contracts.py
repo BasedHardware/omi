@@ -17,7 +17,7 @@ from testing.finalization_replay.state import (
     CaseState,
     episode_attach_memo_failure_reason,
     episode_attach_memo_valid,
-    episode_attach_memo_writer_failure_reason,
+    episode_attach_memo_source_failure_reason,
 )
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -148,7 +148,7 @@ class ReplayContractTests(unittest.TestCase):
             )
         )
 
-    def test_python_attach_memo_writer_check_rejects_unbound_stamp(self):
+    def test_attach_memo_source_check_rejects_unbound_stamp(self):
         path = 'users/owner/episode_links/conversation'
         link = {
             'episode_id': 'episode',
@@ -160,24 +160,28 @@ class ReplayContractTests(unittest.TestCase):
         documents = {path: link}
 
         self.assertEqual(
-            episode_attach_memo_writer_failure_reason('owner', 'conversation', ['v2:writer-key'], documents),
+            episode_attach_memo_source_failure_reason('owner', 'conversation', ['v2:writer-key'], documents),
             '',
         )
         self.assertEqual(
-            episode_attach_memo_writer_failure_reason('owner', 'conversation', ['v2:other-key'], documents),
+            episode_attach_memo_source_failure_reason('owner', 'conversation', ['v2:other-key'], documents),
             'completed_key_mismatch',
         )
 
         link['attach_owner_id'] = 'other-episode'
         self.assertEqual(
-            episode_attach_memo_writer_failure_reason('owner', 'conversation', ['v2:writer-key'], documents),
+            episode_attach_memo_source_failure_reason('owner', 'conversation', ['v2:writer-key'], documents),
             'owner_binding_mismatch',
         )
         link['attach_owner_id'] = 'episode'
         link['attach_finalized'] = 'stale-key'
         self.assertEqual(
-            episode_attach_memo_writer_failure_reason('owner', 'conversation', ['v2:writer-key'], documents),
+            episode_attach_memo_source_failure_reason('owner', 'conversation', ['v2:writer-key'], documents),
             'finalized_binding_mismatch',
+        )
+        self.assertEqual(
+            episode_attach_memo_source_failure_reason('owner', 'conversation', [], documents),
+            'source_key_unobserved',
         )
 
     def test_database_creation_ignores_hostile_libpq_environment(self):

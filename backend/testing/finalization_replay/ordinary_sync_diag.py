@@ -257,6 +257,16 @@ def _run_side(cases, side, binary, database, key, worker_backend):
 
                 from utils.episodes import client_gate, finalize
 
+                def attach_at_intake(target):
+                    from database import episode_attach_memo
+
+                    row = target.conversation.get().to_dict() or {}
+                    key = episode_attach_memo.current_key(target.uid, row)
+                    result = finalize.attach_synced_at_intake(target.uid, target.cid, row)
+                    if key:
+                        target.episode_attach_memo_intake_keys.append(key)
+                    return result
+
                 outputs = []
                 for state in states:
                     out = {'name': state.case['name'], 'errors': {}}
@@ -270,9 +280,7 @@ def _run_side(cases, side, binary, database, key, worker_backend):
                             lambda target: _observe_sync(target, invoke, leaves, url),
                             out,
                             side,
-                            setup=lambda target: finalize.attach_synced_at_intake(
-                                target.uid, target.cid, target.conversation.get().to_dict()
-                            ),
+                            setup=attach_at_intake,
                         )
                     if getattr(state, 'diag_missing_module', None):
                         out['errors'][side] = f'ModuleNotFoundError: {state.diag_missing_module}'
