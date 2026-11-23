@@ -101,7 +101,8 @@ class _Switch:
             return 'absent', False
         percents = env_doc.get('percents')
         value = percents.get(RAMP_NAME) if isinstance(percents, dict) else None
-        if type(value) in (int, float) and float(value) == OPEN_PERCENT:
+        # bool is an int subclass, so check exact types: only a numeric 100 opens.
+        if (type(value) is int or type(value) is float) and value == OPEN_PERCENT:
             return 'open', True
         return ('absent' if value is None else 'closed'), False
 
