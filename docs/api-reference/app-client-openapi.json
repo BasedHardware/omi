@@ -27117,6 +27117,18 @@
             "$ref": "#/components/schemas/PlanType",
             "default": "basic"
           },
+          "provider": {
+            "anyOf": [
+              {
+                "const": "play",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider"
+          },
           "status": {
             "$ref": "#/components/schemas/SubscriptionStatus",
             "default": "active"
@@ -27236,6 +27248,16 @@
             "anyOf": [
               {
                 "$ref": "#/components/schemas/PhoneCallQuota"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "play_billing": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PlayBillingConfig"
               },
               {
                 "type": "null"
@@ -27397,6 +27419,128 @@
           "minimum_supported_build"
         ],
         "title": "PlatformMinimumBuild",
+        "type": "object"
+      },
+      "PlayBasePlan": {
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "interval": {
+            "enum": [
+              "month",
+              "year"
+            ],
+            "title": "Interval",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "interval"
+        ],
+        "title": "PlayBasePlan",
+        "type": "object"
+      },
+      "PlayBillingConfig": {
+        "description": "What an Android client needs to sell Omi Pro through Google Play Billing.",
+        "properties": {
+          "base_plans": {
+            "items": {
+              "$ref": "#/components/schemas/PlayBasePlan"
+            },
+            "title": "Base Plans",
+            "type": "array"
+          },
+          "obfuscated_account_id": {
+            "title": "Obfuscated Account Id",
+            "type": "string"
+          },
+          "product_id": {
+            "title": "Product Id",
+            "type": "string"
+          },
+          "trial_offer_id": {
+            "title": "Trial Offer Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "product_id",
+          "base_plans",
+          "trial_offer_id",
+          "obfuscated_account_id"
+        ],
+        "title": "PlayBillingConfig",
+        "type": "object"
+      },
+      "PlayBillingErrorResponse": {
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "detail": {
+            "title": "Detail",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "detail"
+        ],
+        "title": "PlayBillingErrorResponse",
+        "type": "object"
+      },
+      "PlayPurchaseRequest": {
+        "properties": {
+          "product_id": {
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Product Id",
+            "type": "string"
+          },
+          "purchase_token": {
+            "maxLength": 4096,
+            "minLength": 1,
+            "title": "Purchase Token",
+            "type": "string"
+          }
+        },
+        "required": [
+          "purchase_token",
+          "product_id"
+        ],
+        "title": "PlayPurchaseRequest",
+        "type": "object"
+      },
+      "PlayPurchaseResponse": {
+        "properties": {
+          "status": {
+            "enum": [
+              "active",
+              "pending",
+              "inactive"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "subscription": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Subscription"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "PlayPurchaseResponse",
         "type": "object"
       },
       "PluginResult": {
@@ -35722,6 +35866,18 @@
               "operator"
             ]
           },
+          "provider": {
+            "anyOf": [
+              {
+                "const": "play",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider"
+          },
           "status": {
             "$ref": "#/components/schemas/SubscriptionStatus",
             "default": "active"
@@ -40633,6 +40789,16 @@
             "anyOf": [
               {
                 "$ref": "#/components/schemas/PhoneCallQuota"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "play_billing": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PlayBillingConfig"
               },
               {
                 "type": "null"
@@ -70880,6 +71046,111 @@
         "summary": "Payment Issue Monthly Switch Endpoint"
       }
     },
+    "/v1/payments/play/purchases": {
+      "post": {
+        "description": "Verify a Google Play purchase token, bind it to this account and grant Omi Pro once Google says it is paid.",
+        "operationId": "verify_play_purchase_v1_payments_play_purchases_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PlayPurchaseRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlayPurchaseResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlayBillingErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlayBillingErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Verify Play Purchase"
+      }
+    },
     "/v1/payments/portal-return": {
       "get": {
         "operationId": "portal_return_v1_payments_portal_return_get",
@@ -81350,6 +81621,22 @@
             "schema": {
               "title": "X-App-Version",
               "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Build",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Build"
             }
           },
           {

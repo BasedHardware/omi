@@ -1320,6 +1320,9 @@ def can_user_make_payment(uid: str, target_price_id: Optional[str] = None) -> Tu
         if campaign_enabled()
         else users_db.get_user_valid_subscription(uid)
     )
+    # A live Google Play subscription is managed in Play; never start a second (Stripe) one.
+    if subscription is not None and subscription.provider == 'play' and is_paid_plan(subscription.plan):
+        return False, "Your Omi Pro subscription is billed through Google Play. Manage it in the Play Store."
     if target_price_id in configured_ladder_prices() and subscription is not None:
         if subscription.plan != PlanType.basic and ladder_policy.entitlements(subscription) is None:
             return False, "Legacy subscriptions keep their current plan"

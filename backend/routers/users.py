@@ -71,8 +71,9 @@ from database.users import (
     resolve_deletion_wipe_job_id,
     set_user_transcription_preferences,
 )
-from utils import ai_profile_refresh, billing_recovery, screen_vector_entitlements
+from utils import ai_profile_refresh, billing_recovery, play_billing, screen_vector_entitlements
 from utils.observability.fallback import record_fallback
+from config import play_billing as play_billing_config
 from config.daily_summary_depth import DEFAULT_DAILY_SUMMARY_DEPTH, DailySummaryDepth
 from utils.sync.held_audio_summary import attach_subscription_held_audio
 from config.stt_cap_dispatch import any_execution_admission_enabled as funded_processing_enabled
@@ -1301,6 +1302,7 @@ def get_user_subscription_endpoint(
     uid: str = Depends(auth.get_current_user_uid_no_byok_validation),
     x_app_platform: Optional[str] = Header(None, alias='X-App-Platform'),
     x_app_version: Optional[str] = Header(None, alias='X-App-Version'),
+    x_app_build: Optional[str] = Header(None, alias='X-App-Build'),
 ):
     """Gets the user's subscription plan and usage, plus the one transcription-allowance answer."""
     already_read: dict[str, Any] = {}
@@ -1371,6 +1373,8 @@ def get_user_subscription_endpoint(
         held = response.held_audio
         audio = {'count': held.count, 'seconds': held.seconds} if held else {'count': 0, 'seconds': 0}
         response.processing_backlog = processing_backlog.snapshot(uid, allowance=funded, audio=audio)
+    if play_billing_config.client_uses_play(x_app_platform, x_app_build):
+        response.play_billing = play_billing.client_config(uid)
     return response
 
 
