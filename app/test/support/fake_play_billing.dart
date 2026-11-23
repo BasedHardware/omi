@@ -25,7 +25,8 @@ PricingPhaseWrapper _phase(String price, int micros, String period, {String curr
     );
 
 /// Play's answer for omi_pro in a non-US currency: both base plans plus the 7-day trial offer on each.
-List<GooglePlayProductDetails> omiProDetails({bool withTrial = true}) {
+/// [trialPeriod] overrides both trial phases' length; [yearlyTrial] false lists no yearly trial offer.
+List<GooglePlayProductDetails> omiProDetails({bool withTrial = true, String? trialPeriod, bool yearlyTrial = true}) {
   final offers = <SubscriptionOfferDetailsWrapper>[
     SubscriptionOfferDetailsWrapper(
       basePlanId: 'monthly',
@@ -45,15 +46,16 @@ List<GooglePlayProductDetails> omiProDetails({bool withTrial = true}) {
         offerId: 'trial-7d',
         offerTags: const [],
         offerIdToken: 'token-monthly-trial',
-        pricingPhases: [_phase('Free', 0, 'P7D'), _phase('₹2,500.00', 2500000000, 'P1M')],
+        pricingPhases: [_phase('Free', 0, trialPeriod ?? 'P7D'), _phase('₹2,500.00', 2500000000, 'P1M')],
       ),
-      SubscriptionOfferDetailsWrapper(
-        basePlanId: 'yearly',
-        offerId: 'trial-7d',
-        offerTags: const [],
-        offerIdToken: 'token-yearly-trial',
-        pricingPhases: [_phase('Free', 0, 'P1W'), _phase('₹22,500.00', 22500000000, 'P1Y')],
-      ),
+      if (yearlyTrial)
+        SubscriptionOfferDetailsWrapper(
+          basePlanId: 'yearly',
+          offerId: 'trial-7d',
+          offerTags: const [],
+          offerIdToken: 'token-yearly-trial',
+          pricingPhases: [_phase('Free', 0, trialPeriod ?? 'P1W'), _phase('₹22,500.00', 22500000000, 'P1Y')],
+        ),
     ],
   ];
   return GooglePlayProductDetails.fromProductDetails(
@@ -84,11 +86,14 @@ PurchaseDetails playPurchase(PurchaseStatus status, {String token = 'purchase-to
 
 /// Fake Play Billing client: records purchase params; tests push purchase updates.
 class FakePlayPlatform extends InAppPurchasePlatform {
-  FakePlayPlatform({List<GooglePlayProductDetails>? details, this.available = true})
+  FakePlayPlatform({List<GooglePlayProductDetails>? details, this.available = true, this.hang = false})
       : details = details ?? omiProDetails();
 
   final List<GooglePlayProductDetails> details;
   final bool available;
+
+  /// A Play client that never answers isAvailable.
+  final bool hang;
   final controller = StreamController<List<PurchaseDetails>>.broadcast();
   final List<GooglePlayPurchaseParam> launched = [];
   bool launchResult = true;
@@ -101,7 +106,7 @@ class FakePlayPlatform extends InAppPurchasePlatform {
   Stream<List<PurchaseDetails>> get purchaseStream => controller.stream;
 
   @override
-  Future<bool> isAvailable() async => available;
+  Future<bool> isAvailable() => hang ? Completer<bool>().future : Future.value(available);
 
   @override
   Future<ProductDetailsResponse> queryProductDetails(Set<String> identifiers) async =>

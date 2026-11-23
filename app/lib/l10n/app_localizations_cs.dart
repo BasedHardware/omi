@@ -15761,4 +15761,43 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get playPaidAppUnavailable => 'Na Androidu není k dispozici';
+
+  @override
+  String get pageNotAvailableInApp => 'Tato stránka není v aplikaci dostupná.';
+
+  @override
+  String get shopOrderPlacedCheckEmail => 'Objednávka byla odeslána. Potvrzení najdete v e-mailu.';
+
+  @override
+  String get prepaidCodeEntry => 'Máte kód?';
+
+  @override
+  String get prepaidCodeTitle => 'Uplatnit kód';
+
+  @override
+  String get prepaidCodeFieldHint => 'Zadejte svůj kód';
+
+  @override
+  String get prepaidCodeRedeem => 'Uplatnit';
+
+  @override
+  String get prepaidCodeRedeemed => 'Kód uplatněn';
+
+  @override
+  String prepaidCodeResult(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'invalid': 'Tento kód není platný. Zkontrolujte ho a zkuste to znovu.',
+        'used': 'Tento kód už byl použit.',
+        'expired': 'Platnost tohoto kódu vypršela.',
+        'hasPlan': 'Už máte plán. Váš kód nebyl použit.',
+        'notPrepaid': 'Tento kód zde nelze uplatnit. Použijte ho při výběru plánu.',
+        'notEligible': 'Tento kód nelze použít v tomto účtu.',
+        'rateLimited': 'Příliš mnoho pokusů. Zkuste to později.',
+        'other': 'Něco se pokazilo. Zkuste to znovu.',
+      },
+    );
+    return '$_temp0';
+  }
 }

@@ -15770,4 +15770,43 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String get playPaidAppUnavailable => 'Android वर उपलब्ध नाही';
+
+  @override
+  String get pageNotAvailableInApp => 'हे पेज अ‍ॅपमध्ये उपलब्ध नाही.';
+
+  @override
+  String get shopOrderPlacedCheckEmail => 'ऑर्डर दिली आहे. पुष्टीकरणासाठी तुमचा ईमेल तपासा.';
+
+  @override
+  String get prepaidCodeEntry => 'कोड आहे?';
+
+  @override
+  String get prepaidCodeTitle => 'कोड रिडीम करा';
+
+  @override
+  String get prepaidCodeFieldHint => 'तुमचा कोड टाका';
+
+  @override
+  String get prepaidCodeRedeem => 'रिडीम करा';
+
+  @override
+  String get prepaidCodeRedeemed => 'कोड रिडीम झाला';
+
+  @override
+  String prepaidCodeResult(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'invalid': 'हा कोड वैध नाही. तपासा आणि पुन्हा प्रयत्न करा.',
+        'used': 'हा कोड आधीच वापरला गेला आहे.',
+        'expired': 'या कोडची मुदत संपली आहे.',
+        'hasPlan': 'तुमच्याकडे आधीच प्लॅन आहे. तुमचा कोड वापरला गेला नाही.',
+        'notPrepaid': 'हा कोड येथे रिडीम करता येत नाही. प्लॅन निवडताना तो वापरा.',
+        'notEligible': 'हा कोड या खात्यावर वापरता येत नाही.',
+        'rateLimited': 'खूप प्रयत्न झाले. नंतर पुन्हा प्रयत्न करा.',
+        'other': 'काहीतरी चूक झाली. कृपया पुन्हा प्रयत्न करा.',
+      },
+    );
+    return '$_temp0';
+  }
 }

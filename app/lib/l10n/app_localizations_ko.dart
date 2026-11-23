@@ -15537,4 +15537,43 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get playPaidAppUnavailable => 'Android에서는 사용할 수 없음';
+
+  @override
+  String get pageNotAvailableInApp => '이 페이지는 앱에서 볼 수 없습니다.';
+
+  @override
+  String get shopOrderPlacedCheckEmail => '주문이 완료되었습니다. 확인 메일을 확인하세요.';
+
+  @override
+  String get prepaidCodeEntry => '코드가 있나요?';
+
+  @override
+  String get prepaidCodeTitle => '코드 사용';
+
+  @override
+  String get prepaidCodeFieldHint => '코드를 입력하세요';
+
+  @override
+  String get prepaidCodeRedeem => '사용';
+
+  @override
+  String get prepaidCodeRedeemed => '코드가 적용되었습니다';
+
+  @override
+  String prepaidCodeResult(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'invalid': '유효하지 않은 코드입니다. 확인 후 다시 시도하세요.',
+        'used': '이미 사용된 코드입니다.',
+        'expired': '만료된 코드입니다.',
+        'hasPlan': '이미 플랜이 있습니다. 코드는 사용되지 않았습니다.',
+        'notPrepaid': '이 코드는 여기에서 사용할 수 없습니다. 플랜을 선택할 때 사용하세요.',
+        'notEligible': '이 계정에서는 이 코드를 사용할 수 없습니다.',
+        'rateLimited': '시도 횟수가 너무 많습니다. 나중에 다시 시도하세요.',
+        'other': '문제가 발생했습니다. 다시 시도하세요.',
+      },
+    );
+    return '$_temp0';
+  }
 }

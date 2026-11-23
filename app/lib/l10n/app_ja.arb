@@ -4748,5 +4748,13 @@
     "playPurchaseOtherAccount": "この Google Play の購入は別の Omi アカウントのものです。",
     "playPurchaseNotConfirmed": "購入をまだ確認できませんでした。自動的に再試行します。",
     "playRenewalTerms": "解約するまで表示価格で自動更新されます。Google Play でいつでも管理・解約できます。",
-    "playPaidAppUnavailable": "Android では利用できません"
+    "playPaidAppUnavailable": "Android では利用できません",
+    "pageNotAvailableInApp": "このページはアプリでは表示できません。",
+    "shopOrderPlacedCheckEmail": "ご注文を受け付けました。確認メールをご確認ください。",
+    "prepaidCodeEntry": "コードをお持ちですか？",
+    "prepaidCodeTitle": "コードを使う",
+    "prepaidCodeFieldHint": "コードを入力",
+    "prepaidCodeRedeem": "使う",
+    "prepaidCodeRedeemed": "コードを適用しました",
+    "prepaidCodeResult": "{reason, select, invalid{このコードは無効です。確認してもう一度お試しください。} used{このコードはすでに使用されています。} expired{このコードは有効期限が切れています。} hasPlan{すでにプランをお持ちです。コードは使用されていません。} notPrepaid{このコードはここでは使えません。プランを選ぶときに使ってください。} notEligible{このコードはこのアカウントでは使えません。} rateLimited{試行回数が多すぎます。後でもう一度お試しください。} other{問題が発生しました。もう一度お試しください。}}"
 }

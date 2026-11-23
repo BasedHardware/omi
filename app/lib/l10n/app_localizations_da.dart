@@ -15753,4 +15753,43 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get playPaidAppUnavailable => 'Ikke tilgængelig på Android';
+
+  @override
+  String get pageNotAvailableInApp => 'Denne side er ikke tilgængelig i appen.';
+
+  @override
+  String get shopOrderPlacedCheckEmail => 'Ordren er afgivet. Tjek din e-mail for bekræftelsen.';
+
+  @override
+  String get prepaidCodeEntry => 'Har du en kode?';
+
+  @override
+  String get prepaidCodeTitle => 'Indløs en kode';
+
+  @override
+  String get prepaidCodeFieldHint => 'Indtast din kode';
+
+  @override
+  String get prepaidCodeRedeem => 'Indløs';
+
+  @override
+  String get prepaidCodeRedeemed => 'Koden er indløst';
+
+  @override
+  String prepaidCodeResult(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'invalid': 'Denne kode er ikke gyldig. Tjek den og prøv igen.',
+        'used': 'Denne kode er allerede brugt.',
+        'expired': 'Denne kode er udløbet.',
+        'hasPlan': 'Du har allerede en plan. Din kode blev ikke brugt.',
+        'notPrepaid': 'Denne kode kan ikke indløses her. Brug den, når du vælger en plan.',
+        'notEligible': 'Denne kode kan ikke bruges på denne konto.',
+        'rateLimited': 'For mange forsøg. Prøv igen senere.',
+        'other': 'Noget gik galt. Prøv igen.',
+      },
+    );
+    return '$_temp0';
+  }
 }

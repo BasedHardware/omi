@@ -15814,4 +15814,43 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get playPaidAppUnavailable => 'Android ನಲ್ಲಿ ಲಭ್ಯವಿಲ್ಲ';
+
+  @override
+  String get pageNotAvailableInApp => 'ಈ ಪುಟ ಆ್ಯಪ್‌ನಲ್ಲಿ ಲಭ್ಯವಿಲ್ಲ.';
+
+  @override
+  String get shopOrderPlacedCheckEmail => 'ಆರ್ಡರ್ ಮಾಡಲಾಗಿದೆ. ದೃಢೀಕರಣಕ್ಕಾಗಿ ನಿಮ್ಮ ಇಮೇಲ್ ನೋಡಿ.';
+
+  @override
+  String get prepaidCodeEntry => 'ಕೋಡ್ ಇದೆಯೇ?';
+
+  @override
+  String get prepaidCodeTitle => 'ಕೋಡ್ ರಿಡೀಮ್ ಮಾಡಿ';
+
+  @override
+  String get prepaidCodeFieldHint => 'ನಿಮ್ಮ ಕೋಡ್ ನಮೂದಿಸಿ';
+
+  @override
+  String get prepaidCodeRedeem => 'ರಿಡೀಮ್';
+
+  @override
+  String get prepaidCodeRedeemed => 'ಕೋಡ್ ರಿಡೀಮ್ ಆಗಿದೆ';
+
+  @override
+  String prepaidCodeResult(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'invalid': 'ಈ ಕೋಡ್ ಮಾನ್ಯವಾಗಿಲ್ಲ. ಪರಿಶೀಲಿಸಿ ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.',
+        'used': 'ಈ ಕೋಡ್ ಈಗಾಗಲೇ ಬಳಸಲಾಗಿದೆ.',
+        'expired': 'ಈ ಕೋಡ್‌ನ ಅವಧಿ ಮುಗಿದಿದೆ.',
+        'hasPlan': 'ನಿಮ್ಮ ಬಳಿ ಈಗಾಗಲೇ ಪ್ಲಾನ್ ಇದೆ. ನಿಮ್ಮ ಕೋಡ್ ಬಳಸಲಾಗಿಲ್ಲ.',
+        'notPrepaid': 'ಈ ಕೋಡ್ ಅನ್ನು ಇಲ್ಲಿ ರಿಡೀಮ್ ಮಾಡಲು ಸಾಧ್ಯವಿಲ್ಲ. ಪ್ಲಾನ್ ಆಯ್ಕೆ ಮಾಡುವಾಗ ಬಳಸಿ.',
+        'notEligible': 'ಈ ಕೋಡ್ ಅನ್ನು ಈ ಖಾತೆಯಲ್ಲಿ ಬಳಸಲು ಸಾಧ್ಯವಿಲ್ಲ.',
+        'rateLimited': 'ತುಂಬಾ ಪ್ರಯತ್ನಗಳು. ನಂತರ ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.',
+        'other': 'ಏನೋ ತಪ್ಪಾಗಿದೆ. ದಯವಿಟ್ಟು ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.',
+      },
+    );
+    return '$_temp0';
+  }
 }

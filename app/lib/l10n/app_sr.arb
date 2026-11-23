@@ -12305,5 +12305,13 @@
     "playPurchaseOtherAccount": "Ова куповина на Google Play-у припада другом Omi налогу.",
     "playPurchaseNotConfirmed": "Куповину још нисмо могли да потврдимо. Покушаћемо поново аутоматски.",
     "playRenewalTerms": "Аутоматски се обнавља по приказаној цени док не откажете. Управљајте или откажите било када на Google Play-у.",
-    "playPaidAppUnavailable": "Није доступно на Android-у"
+    "playPaidAppUnavailable": "Није доступно на Android-у",
+    "pageNotAvailableInApp": "Ова страница није доступна у апликацији.",
+    "shopOrderPlacedCheckEmail": "Поруџбина је послата. Потврду потражите у е-пошти.",
+    "prepaidCodeEntry": "Имате код?",
+    "prepaidCodeTitle": "Искористите код",
+    "prepaidCodeFieldHint": "Унесите свој код",
+    "prepaidCodeRedeem": "Искористи",
+    "prepaidCodeRedeemed": "Код је искоришћен",
+    "prepaidCodeResult": "{reason, select, invalid{Овај код није важећи. Проверите га и покушајте поново.} used{Овај код је већ искоришћен.} expired{Овај код је истекао.} hasPlan{Већ имате план. Ваш код није искоришћен.} notPrepaid{Овај код не може да се искористи овде. Искористите га када изаберете план.} notEligible{Овај код не може да се користи на овом налогу.} rateLimited{Превише покушаја. Покушајте касније.} other{Нешто није у реду. Покушајте поново.}}"
 }

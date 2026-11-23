@@ -12305,5 +12305,13 @@
     "playPurchaseOtherAccount": "ही Google Play खरेदी दुसऱ्या Omi खात्याची आहे.",
     "playPurchaseNotConfirmed": "खरेदीची अद्याप पुष्टी करता आली नाही. आम्ही आपोआप पुन्हा प्रयत्न करू.",
     "playRenewalTerms": "रद्द करेपर्यंत दाखवलेल्या किमतीत आपोआप नूतनीकरण होते. Google Play मध्ये कधीही व्यवस्थापित किंवा रद्द करा.",
-    "playPaidAppUnavailable": "Android वर उपलब्ध नाही"
+    "playPaidAppUnavailable": "Android वर उपलब्ध नाही",
+    "pageNotAvailableInApp": "हे पेज अ‍ॅपमध्ये उपलब्ध नाही.",
+    "shopOrderPlacedCheckEmail": "ऑर्डर दिली आहे. पुष्टीकरणासाठी तुमचा ईमेल तपासा.",
+    "prepaidCodeEntry": "कोड आहे?",
+    "prepaidCodeTitle": "कोड रिडीम करा",
+    "prepaidCodeFieldHint": "तुमचा कोड टाका",
+    "prepaidCodeRedeem": "रिडीम करा",
+    "prepaidCodeRedeemed": "कोड रिडीम झाला",
+    "prepaidCodeResult": "{reason, select, invalid{हा कोड वैध नाही. तपासा आणि पुन्हा प्रयत्न करा.} used{हा कोड आधीच वापरला गेला आहे.} expired{या कोडची मुदत संपली आहे.} hasPlan{तुमच्याकडे आधीच प्लॅन आहे. तुमचा कोड वापरला गेला नाही.} notPrepaid{हा कोड येथे रिडीम करता येत नाही. प्लॅन निवडताना तो वापरा.} notEligible{हा कोड या खात्यावर वापरता येत नाही.} rateLimited{खूप प्रयत्न झाले. नंतर पुन्हा प्रयत्न करा.} other{काहीतरी चूक झाली. कृपया पुन्हा प्रयत्न करा.}}"
 }

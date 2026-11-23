@@ -1332,6 +1332,7 @@ environments:
             BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
+            PREPAID_CODE_REDEEM: {value: 'off', category: rollout}
             PUSHER_RECORD_CLOSE_NOTIFY_ENABLED: {value: 'false', category: rollout}
             PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_PERCENT: {value: '100', category: rollout}
             PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_UID_SHA256S: {value: '', category: rollout}
@@ -3402,6 +3403,7 @@ environments:
             value: 'true'
             category: ops_kill
           QUIET_EMPTY_EXIT_ENABLED: {value: 'true', category: rollout}
+          LISTEN_BATCH_RECONNECT_ENABLED: {value: 'true', category: rollout}
           HOME_TRANSCRIPTION_PRESENTATION_GATE:
             value: 'true'
             category: ops_kill
@@ -4144,6 +4146,9 @@ environments:
             MCP_OAUTH_CLIENTS_JSON:
               secret: MCP_OAUTH_CLIENTS_JSON
               version: latest
+            PLAY_ACCOUNT_ID_HMAC_KEY:
+              secret: PLAY_ACCOUNT_ID_HMAC_KEY
+              version: latest
           env:
             CONVERSATION_TERMINAL_FAMILY_MODE:
               value: 'on'
@@ -4442,6 +4447,21 @@ environments:
             BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
+            ANDROID_BILLING: {value: stripe, category: rollout}
+            PLAY_RTDN_OIDC_AUDIENCE:
+              value: https://api.omi.me/v2/internal/play-billing/rtdn
+              category: service_discovery
+            PLAY_RTDN_PUSH_SA:
+              value: play-billing-rtdn-push@based-hardware.iam.gserviceaccount.com
+              category: service_discovery
+            PLAY_RECONCILE_OIDC_AUDIENCE:
+              value: https://api.omi.me/v2/internal/play-billing/reconcile
+              category: service_discovery
+            PLAY_RECONCILE_INVOKER_SA:
+              value: play-billing-reconcile@based-hardware.iam.gserviceaccount.com
+              category: service_discovery
+            ANDROID_PLAY_BILLING_MIN_BUILD: {value: '1617', category: rollout}
+            ANDROID_PLAY_BILLING_COHORT: {value: '', category: rollout}
             BATCH_PIPELINE_SILENCE_READ_SKIP_ENABLED:
               value: 'false'
               category: ops_kill
@@ -4661,6 +4681,7 @@ environments:
               value: price_1TuIa81F8wnoWYvw0iX0j5M8
             STRIPE_UNLIMITED_V2_ANNUAL_PRICE_ID:
               value: price_1TuIap1F8wnoWYvwHWq0EvNU
+            PREPAID_CODE_REDEEM: {value: 'off', category: rollout}
             OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE: {value: 'true', category: rollout}
             MCP_OAUTH_CLAUDE_CLIENT_ID:
               env_var: MCP_OAUTH_CLAUDE_CLIENT_ID
@@ -5077,6 +5098,7 @@ environments:
               value: 'true'
               category: ops_kill
             QUIET_EMPTY_EXIT_ENABLED: {value: 'true', category: rollout}
+            LISTEN_BATCH_RECONNECT_ENABLED: {value: 'true', category: rollout}
             HOME_TRANSCRIPTION_PRESENTATION_GATE:
               value: 'true'
               category: ops_kill

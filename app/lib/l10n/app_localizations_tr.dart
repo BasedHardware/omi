@@ -15772,4 +15772,43 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get playPaidAppUnavailable => 'Android\'de kullanılamaz';
+
+  @override
+  String get pageNotAvailableInApp => 'Bu sayfa uygulamada kullanılamıyor.';
+
+  @override
+  String get shopOrderPlacedCheckEmail => 'Sipariş verildi. Onay için e-postanızı kontrol edin.';
+
+  @override
+  String get prepaidCodeEntry => 'Kodunuz var mı?';
+
+  @override
+  String get prepaidCodeTitle => 'Kod kullan';
+
+  @override
+  String get prepaidCodeFieldHint => 'Kodunuzu girin';
+
+  @override
+  String get prepaidCodeRedeem => 'Kullan';
+
+  @override
+  String get prepaidCodeRedeemed => 'Kod kullanıldı';
+
+  @override
+  String prepaidCodeResult(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'invalid': 'Bu kod geçerli değil. Kontrol edip tekrar deneyin.',
+        'used': 'Bu kod zaten kullanılmış.',
+        'expired': 'Bu kodun süresi dolmuş.',
+        'hasPlan': 'Zaten bir planınız var. Kodunuz kullanılmadı.',
+        'notPrepaid': 'Bu kod burada kullanılamaz. Bir plan seçerken kullanın.',
+        'notEligible': 'Bu kod bu hesapta kullanılamaz.',
+        'rateLimited': 'Çok fazla deneme. Daha sonra tekrar deneyin.',
+        'other': 'Bir sorun oluştu. Lütfen tekrar deneyin.',
+      },
+    );
+    return '$_temp0';
+  }
 }

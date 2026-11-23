@@ -144,6 +144,12 @@ class UsageProvider with ChangeNotifier {
   bool get billingProviderUnknown =>
       !kIsWeb && defaultTargetPlatform == TargetPlatform.android && _subscription == null;
 
+  /// The first subscription read failed, so the provider stays unknown until a retry.
+  bool get billingProviderFailed => billingProviderUnknown && _error != null && !isLoading;
+
+  /// The provider is not known yet and a read is (or will be) in flight: show loading, not an error.
+  bool get billingProviderPending => billingProviderUnknown && !billingProviderFailed;
+
   /// New purchases go through Google Play. A live Stripe subscriber keeps today's Stripe management.
   bool get playBilledPurchaser {
     if (playBilling == null) return false;
@@ -679,6 +685,17 @@ class UsageProvider with ChangeNotifier {
         notifyListeners();
       }
     }
+  }
+
+  /// Server switch on and no live paid plan: offer "Have a code?" for a prepaid code (no card).
+  /// Never for a Google Play purchaser or before Android knows its billing provider: the Play build
+  /// shows no purchase path outside Play.
+  bool get canRedeemPrepaidCode {
+    final response = subscription;
+    if (response == null || !response.prepaidCodeRedeem) return false;
+    if (playBilledPurchaser || billingProviderUnknown) return false;
+    final sub = response.subscription;
+    return !(sub.plan.isPaid && sub.status == SubscriptionStatus.active);
   }
 
   /// The backend maps both Stripe active and trialing to active. Stripe itself

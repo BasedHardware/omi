@@ -15799,4 +15799,43 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get playPaidAppUnavailable => 'Tidak tersedia di Android';
+
+  @override
+  String get pageNotAvailableInApp => 'Halaman ini tidak tersedia dalam apl.';
+
+  @override
+  String get shopOrderPlacedCheckEmail => 'Pesanan dibuat. Semak e-mel anda untuk pengesahan.';
+
+  @override
+  String get prepaidCodeEntry => 'Ada kod?';
+
+  @override
+  String get prepaidCodeTitle => 'Tebus kod';
+
+  @override
+  String get prepaidCodeFieldHint => 'Masukkan kod anda';
+
+  @override
+  String get prepaidCodeRedeem => 'Tebus';
+
+  @override
+  String get prepaidCodeRedeemed => 'Kod berjaya ditebus';
+
+  @override
+  String prepaidCodeResult(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'invalid': 'Kod ini tidak sah. Semak dan cuba lagi.',
+        'used': 'Kod ini telah digunakan.',
+        'expired': 'Kod ini telah tamat tempoh.',
+        'hasPlan': 'Anda sudah mempunyai pelan. Kod anda tidak digunakan.',
+        'notPrepaid': 'Kod ini tidak boleh ditebus di sini. Gunakannya semasa memilih pelan.',
+        'notEligible': 'Kod ini tidak boleh digunakan pada akaun ini.',
+        'rateLimited': 'Terlalu banyak percubaan. Cuba lagi nanti.',
+        'other': 'Ada sesuatu yang tidak kena. Sila cuba lagi.',
+      },
+    );
+    return '$_temp0';
+  }
 }

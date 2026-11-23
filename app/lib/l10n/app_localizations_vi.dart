@@ -15763,4 +15763,43 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get playPaidAppUnavailable => 'Không có trên Android';
+
+  @override
+  String get pageNotAvailableInApp => 'Trang này không khả dụng trong ứng dụng.';
+
+  @override
+  String get shopOrderPlacedCheckEmail => 'Đã đặt hàng. Kiểm tra email để xem xác nhận.';
+
+  @override
+  String get prepaidCodeEntry => 'Bạn có mã?';
+
+  @override
+  String get prepaidCodeTitle => 'Đổi mã';
+
+  @override
+  String get prepaidCodeFieldHint => 'Nhập mã của bạn';
+
+  @override
+  String get prepaidCodeRedeem => 'Đổi';
+
+  @override
+  String get prepaidCodeRedeemed => 'Đã đổi mã';
+
+  @override
+  String prepaidCodeResult(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'invalid': 'Mã này không hợp lệ. Hãy kiểm tra và thử lại.',
+        'used': 'Mã này đã được sử dụng.',
+        'expired': 'Mã này đã hết hạn.',
+        'hasPlan': 'Bạn đã có gói. Mã của bạn chưa được sử dụng.',
+        'notPrepaid': 'Không thể đổi mã này tại đây. Hãy dùng khi bạn chọn gói.',
+        'notEligible': 'Không thể dùng mã này cho tài khoản này.',
+        'rateLimited': 'Quá nhiều lần thử. Hãy thử lại sau.',
+        'other': 'Đã xảy ra lỗi. Vui lòng thử lại.',
+      },
+    );
+    return '$_temp0';
+  }
 }

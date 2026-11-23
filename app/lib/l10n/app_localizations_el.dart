@@ -15865,4 +15865,43 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get playPaidAppUnavailable => 'Μη διαθέσιμο στο Android';
+
+  @override
+  String get pageNotAvailableInApp => 'Αυτή η σελίδα δεν είναι διαθέσιμη στην εφαρμογή.';
+
+  @override
+  String get shopOrderPlacedCheckEmail => 'Η παραγγελία καταχωρήθηκε. Δείτε το email σας για την επιβεβαίωση.';
+
+  @override
+  String get prepaidCodeEntry => 'Έχετε κωδικό;';
+
+  @override
+  String get prepaidCodeTitle => 'Εξαργύρωση κωδικού';
+
+  @override
+  String get prepaidCodeFieldHint => 'Εισαγάγετε τον κωδικό σας';
+
+  @override
+  String get prepaidCodeRedeem => 'Εξαργύρωση';
+
+  @override
+  String get prepaidCodeRedeemed => 'Ο κωδικός εξαργυρώθηκε';
+
+  @override
+  String prepaidCodeResult(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'invalid': 'Αυτός ο κωδικός δεν είναι έγκυρος. Ελέγξτε τον και δοκιμάστε ξανά.',
+        'used': 'Αυτός ο κωδικός έχει ήδη χρησιμοποιηθεί.',
+        'expired': 'Αυτός ο κωδικός έχει λήξει.',
+        'hasPlan': 'Έχετε ήδη πρόγραμμα. Ο κωδικός σας δεν χρησιμοποιήθηκε.',
+        'notPrepaid': 'Αυτός ο κωδικός δεν εξαργυρώνεται εδώ. Χρησιμοποιήστε τον όταν επιλέξετε πρόγραμμα.',
+        'notEligible': 'Αυτός ο κωδικός δεν μπορεί να χρησιμοποιηθεί σε αυτόν τον λογαριασμό.',
+        'rateLimited': 'Πάρα πολλές προσπάθειες. Δοκιμάστε αργότερα.',
+        'other': 'Κάτι πήγε στραβά. Δοκιμάστε ξανά.',
+      },
+    );
+    return '$_temp0';
+  }
 }

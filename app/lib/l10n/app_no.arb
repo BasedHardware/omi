@@ -4748,5 +4748,13 @@
     "playPurchaseOtherAccount": "Dette Google Play-kjøpet tilhører en annen Omi-konto.",
     "playPurchaseNotConfirmed": "Vi kunne ikke bekrefte kjøpet ennå. Vi prøver igjen automatisk.",
     "playRenewalTerms": "Fornyes automatisk til prisen som vises, til du sier opp. Administrer eller si opp når som helst i Google Play.",
-    "playPaidAppUnavailable": "Ikke tilgjengelig på Android"
+    "playPaidAppUnavailable": "Ikke tilgjengelig på Android",
+    "pageNotAvailableInApp": "Denne siden er ikke tilgjengelig i appen.",
+    "shopOrderPlacedCheckEmail": "Bestillingen er sendt. Sjekk e-posten din for bekreftelsen.",
+    "prepaidCodeEntry": "Har du en kode?",
+    "prepaidCodeTitle": "Løs inn en kode",
+    "prepaidCodeFieldHint": "Skriv inn koden din",
+    "prepaidCodeRedeem": "Løs inn",
+    "prepaidCodeRedeemed": "Koden er løst inn",
+    "prepaidCodeResult": "{reason, select, invalid{Denne koden er ikke gyldig. Sjekk den og prøv igjen.} used{Denne koden er allerede brukt.} expired{Denne koden har utløpt.} hasPlan{Du har allerede et abonnement. Koden din ble ikke brukt.} notPrepaid{Denne koden kan ikke løses inn her. Bruk den når du velger et abonnement.} notEligible{Denne koden kan ikke brukes på denne kontoen.} rateLimited{For mange forsøk. Prøv igjen senere.} other{Noe gikk galt. Prøv igjen.}}"
 }

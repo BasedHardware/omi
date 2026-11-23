@@ -15825,4 +15825,43 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get playPaidAppUnavailable => 'Androidలో అందుబాటులో లేదు';
+
+  @override
+  String get pageNotAvailableInApp => 'ఈ పేజీ యాప్‌లో అందుబాటులో లేదు.';
+
+  @override
+  String get shopOrderPlacedCheckEmail => 'ఆర్డర్ చేయబడింది. నిర్ధారణ కోసం మీ ఇమెయిల్ చూడండి.';
+
+  @override
+  String get prepaidCodeEntry => 'కోడ్ ఉందా?';
+
+  @override
+  String get prepaidCodeTitle => 'కోడ్ రిడీమ్ చేయండి';
+
+  @override
+  String get prepaidCodeFieldHint => 'మీ కోడ్ నమోదు చేయండి';
+
+  @override
+  String get prepaidCodeRedeem => 'రిడీమ్';
+
+  @override
+  String get prepaidCodeRedeemed => 'కోడ్ రిడీమ్ అయింది';
+
+  @override
+  String prepaidCodeResult(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'invalid': 'ఈ కోడ్ చెల్లదు. తనిఖీ చేసి మళ్లీ ప్రయత్నించండి.',
+        'used': 'ఈ కోడ్ ఇప్పటికే ఉపయోగించబడింది.',
+        'expired': 'ఈ కోడ్ గడువు ముగిసింది.',
+        'hasPlan': 'మీకు ఇప్పటికే ప్లాన్ ఉంది. మీ కోడ్ ఉపయోగించబడలేదు.',
+        'notPrepaid': 'ఈ కోడ్‌ను ఇక్కడ రిడీమ్ చేయలేరు. ప్లాన్ ఎంచుకునేటప్పుడు దీన్ని ఉపయోగించండి.',
+        'notEligible': 'ఈ కోడ్‌ను ఈ ఖాతాలో ఉపయోగించలేరు.',
+        'rateLimited': 'చాలా ప్రయత్నాలు. తర్వాత మళ్లీ ప్రయత్నించండి.',
+        'other': 'ఏదో తప్పు జరిగింది. దయచేసి మళ్లీ ప్రయత్నించండి.',
+      },
+    );
+    return '$_temp0';
+  }
 }

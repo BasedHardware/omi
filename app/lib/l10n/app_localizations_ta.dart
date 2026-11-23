@@ -15867,4 +15867,43 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get playPaidAppUnavailable => 'Android இல் கிடைக்காது';
+
+  @override
+  String get pageNotAvailableInApp => 'இந்தப் பக்கம் ஆப்பில் கிடைக்காது.';
+
+  @override
+  String get shopOrderPlacedCheckEmail => 'ஆர்டர் செய்யப்பட்டது. உறுதிப்படுத்தலுக்கு உங்கள் மின்னஞ்சலைப் பாருங்கள்.';
+
+  @override
+  String get prepaidCodeEntry => 'குறியீடு உள்ளதா?';
+
+  @override
+  String get prepaidCodeTitle => 'குறியீட்டைப் பயன்படுத்து';
+
+  @override
+  String get prepaidCodeFieldHint => 'உங்கள் குறியீட்டை உள்ளிடவும்';
+
+  @override
+  String get prepaidCodeRedeem => 'பயன்படுத்து';
+
+  @override
+  String get prepaidCodeRedeemed => 'குறியீடு பயன்படுத்தப்பட்டது';
+
+  @override
+  String prepaidCodeResult(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'invalid': 'இந்தக் குறியீடு செல்லாது. சரிபார்த்து மீண்டும் முயலவும்.',
+        'used': 'இந்தக் குறியீடு ஏற்கனவே பயன்படுத்தப்பட்டது.',
+        'expired': 'இந்தக் குறியீடு காலாவதியானது.',
+        'hasPlan': 'உங்களிடம் ஏற்கனவே ஒரு திட்டம் உள்ளது. உங்கள் குறியீடு பயன்படுத்தப்படவில்லை.',
+        'notPrepaid': 'இந்தக் குறியீட்டை இங்கே பயன்படுத்த முடியாது. திட்டத்தைத் தேர்ந்தெடுக்கும்போது பயன்படுத்தவும்.',
+        'notEligible': 'இந்தக் கணக்கில் இந்தக் குறியீட்டைப் பயன்படுத்த முடியாது.',
+        'rateLimited': 'அதிக முயற்சிகள். பின்னர் மீண்டும் முயலவும்.',
+        'other': 'ஏதோ தவறு நடந்தது. மீண்டும் முயலவும்.',
+      },
+    );
+    return '$_temp0';
+  }
 }

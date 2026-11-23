@@ -4748,5 +4748,13 @@
     "playPurchaseOtherAccount": "यह Google Play खरीदारी किसी दूसरे Omi खाते की है।",
     "playPurchaseNotConfirmed": "हम अभी आपकी खरीदारी की पुष्टि नहीं कर सके। हम अपने आप फिर कोशिश करेंगे।",
     "playRenewalTerms": "रद्द करने तक दिखाई गई कीमत पर अपने आप नवीनीकृत होता है। Google Play में कभी भी प्रबंधित या रद्द करें।",
-    "playPaidAppUnavailable": "Android पर उपलब्ध नहीं"
+    "playPaidAppUnavailable": "Android पर उपलब्ध नहीं",
+    "pageNotAvailableInApp": "यह पेज ऐप में उपलब्ध नहीं है।",
+    "shopOrderPlacedCheckEmail": "ऑर्डर हो गया। पुष्टि के लिए अपना ईमेल देखें।",
+    "prepaidCodeEntry": "कोड है?",
+    "prepaidCodeTitle": "कोड रिडीम करें",
+    "prepaidCodeFieldHint": "अपना कोड दर्ज करें",
+    "prepaidCodeRedeem": "रिडीम करें",
+    "prepaidCodeRedeemed": "कोड रिडीम हो गया",
+    "prepaidCodeResult": "{reason, select, invalid{यह कोड मान्य नहीं है। जांचें और फिर से कोशिश करें।} used{यह कोड पहले ही इस्तेमाल हो चुका है।} expired{इस कोड की अवधि समाप्त हो गई है।} hasPlan{आपके पास पहले से एक प्लान है। आपका कोड इस्तेमाल नहीं हुआ।} notPrepaid{यह कोड यहां रिडीम नहीं हो सकता। प्लान चुनते समय इसका इस्तेमाल करें।} notEligible{यह कोड इस खाते पर इस्तेमाल नहीं हो सकता।} rateLimited{बहुत ज़्यादा कोशिशें। बाद में फिर कोशिश करें।} other{कुछ गलत हो गया। कृपया फिर से कोशिश करें।}}"
 }

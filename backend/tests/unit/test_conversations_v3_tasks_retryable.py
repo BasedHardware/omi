@@ -24,11 +24,11 @@ from unittest.mock import AsyncMock  # noqa: E402
 import httpx  # noqa: E402
 import openai  # noqa: E402
 import pytest  # noqa: E402
-from fastapi import HTTPException  # noqa: E402
+from fastapi import HTTPException, Request  # noqa: E402
 
 from routers import conversations_v3_tasks as route  # noqa: E402
 from utils.conversations.processing_metrics import RETRYABLE_PROCESSING_RESPONSES_TOTAL  # noqa: E402
-from utils.conversations.v3 import backfill, service  # noqa: E402
+from utils.conversations.v3 import backfill, request_log_trace_id, service  # noqa: E402
 from utils.executors import start_background_task  # noqa: E402
 from utils.llm.gateway_error_contract import (  # noqa: E402
     RETRYABLE_CONVERSATION_PROCESSING_ERROR_CODE,
@@ -94,52 +94,62 @@ def test_mapped_route_records_the_registered_metric_label():
 # ---------------------------------------------------------------------------
 
 
+@pytest.fixture
+def reconcile_request():
+    return Request({'type': 'http', 'headers': [(b'x-cloud-trace-context', b'a' * 32 + b'/42')]})
+
+
 @pytest.mark.asyncio
-async def test_reconcile_route_answers_provider_5xx_as_retryable(monkeypatch):
-    monkeypatch.setattr(service, 'reconcile', AsyncMock(side_effect=provider_502()))
+async def test_reconcile_route_answers_provider_5xx_as_retryable(monkeypatch, reconcile_request):
+    async def fail(_uid):
+        assert request_log_trace_id() == 'a' * 32
+        raise provider_502()
+
+    monkeypatch.setattr(service, 'reconcile', fail)
 
     with pytest.raises(HTTPException) as raised:
-        await route.reconcile(route.ReconcileRequest(uid='u'), _retry=0)
+        await route.reconcile(route.ReconcileRequest(uid='u'), reconcile_request, _retry=0)
 
     assert_retryable(raised.value)
+    assert request_log_trace_id() == '-'
 
 
 @pytest.mark.asyncio
-async def test_reconcile_route_keeps_a_non_provider_failure_loud(monkeypatch):
+async def test_reconcile_route_keeps_a_non_provider_failure_loud(monkeypatch, reconcile_request):
     monkeypatch.setattr(service, 'reconcile', AsyncMock(side_effect=ValueError('bug')))
 
     with pytest.raises(ValueError):
-        await route.reconcile(route.ReconcileRequest(uid='u'), _retry=0)
+        await route.reconcile(route.ReconcileRequest(uid='u'), reconcile_request, _retry=0)
 
 
 @pytest.mark.asyncio
-async def test_reconcile_route_kill_switch_restores_the_original_failure(monkeypatch):
+async def test_reconcile_route_kill_switch_restores_the_original_failure(monkeypatch, reconcile_request):
     monkeypatch.setenv(RETRYABLE_PROVIDER_FAILURE_SWITCH, 'off')
     monkeypatch.setattr(service, 'reconcile', AsyncMock(side_effect=provider_502()))
 
     with pytest.raises(openai.InternalServerError):
-        await route.reconcile(route.ReconcileRequest(uid='u'), _retry=0)
+        await route.reconcile(route.ReconcileRequest(uid='u'), reconcile_request, _retry=0)
 
 
 @pytest.mark.asyncio
-async def test_reconcile_route_re_raises_an_already_typed_answer(monkeypatch):
+async def test_reconcile_route_re_raises_an_already_typed_answer(monkeypatch, reconcile_request):
     """The composition boundary already recorded its metric; do not remap it."""
     typed = HTTPException(status_code=503, detail=RETRYABLE_CONVERSATION_PROCESSING_ERROR_DETAIL)
     monkeypatch.setattr(service, 'reconcile', AsyncMock(side_effect=typed))
 
     with pytest.raises(HTTPException) as raised:
-        await route.reconcile(route.ReconcileRequest(uid='u'), _retry=0)
+        await route.reconcile(route.ReconcileRequest(uid='u'), reconcile_request, _retry=0)
 
     assert raised.value is typed
 
 
 @pytest.mark.asyncio
-async def test_reconcile_route_does_not_override_a_typed_non_retryable_answer(monkeypatch):
+async def test_reconcile_route_does_not_override_a_typed_non_retryable_answer(monkeypatch, reconcile_request):
     typed = HTTPException(status_code=500, detail='deliberate')
     monkeypatch.setattr(service, 'reconcile', AsyncMock(side_effect=typed))
 
     with pytest.raises(HTTPException) as raised:
-        await route.reconcile(route.ReconcileRequest(uid='u'), _retry=0)
+        await route.reconcile(route.ReconcileRequest(uid='u'), reconcile_request, _retry=0)
 
     assert raised.value is typed
 

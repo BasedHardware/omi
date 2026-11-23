@@ -11,6 +11,7 @@ unset means none does. Env is read at call time.
 from __future__ import annotations
 
 import hashlib
+import hmac
 import os
 from typing import Mapping, Optional
 
@@ -71,6 +72,8 @@ def client_uses_play(
     """True when this client must start new purchases through Google Play Billing."""
     if not isinstance(platform, str) or platform.strip().lower() != 'android':
         return False
+    if account_id_key(environ) is None:
+        return False  # without the account-id secret no purchase could be bound safely
     minimum = min_play_build(environ)
     build = app_build.strip() if isinstance(app_build, str) else ''
     if minimum is None or not build.isdigit() or int(build) < minimum:
@@ -114,9 +117,28 @@ def reconcile_invoker_sa(environ: Optional[Mapping[str, str]] = None) -> str:
     return (_env(environ).get('PLAY_RECONCILE_INVOKER_SA') or '').strip()
 
 
-def obfuscated_account_id(uid: str) -> str:
-    """Stable 64-char id the app passes to Play; Google echoes it on the purchase."""
-    return hashlib.sha256(f'omi-play-account:{uid}'.encode('utf-8')).hexdigest()
+ACCOUNT_ID_KEY_ENV = 'PLAY_ACCOUNT_ID_HMAC_KEY'
+
+
+class AccountIdKeyMissing(RuntimeError):
+    """The server secret for Play account ids is not configured; Play Billing stays off."""
+
+
+def account_id_key(environ: Optional[Mapping[str, str]] = None) -> Optional[bytes]:
+    raw = (_env(environ).get(ACCOUNT_ID_KEY_ENV) or '').strip()
+    return raw.encode('utf-8') if len(raw) >= 32 else None
+
+
+def obfuscated_account_id(uid: str, environ: Optional[Mapping[str, str]] = None) -> str:
+    """64-hex id the app passes to Play; Google echoes it on the purchase.
+
+    HMAC-SHA256 of the uid under a server secret (Secret Manager), so nobody can compute another
+    user's id from their uid.
+    """
+    key = account_id_key(environ)
+    if key is None:
+        raise AccountIdKeyMissing(ACCOUNT_ID_KEY_ENV)
+    return hmac.new(key, f'omi-play-account:{uid}'.encode('utf-8'), hashlib.sha256).hexdigest()
 
 
 def client_config_payload(uid: str, environ: Optional[Mapping[str, str]] = None) -> dict:

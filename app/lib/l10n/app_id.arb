@@ -4783,5 +4783,13 @@
     "playPurchaseOtherAccount": "Pembelian Google Play ini milik akun Omi lain.",
     "playPurchaseNotConfirmed": "Kami belum bisa mengonfirmasi pembelian. Kami akan mencoba lagi otomatis.",
     "playRenewalTerms": "Diperpanjang otomatis dengan harga yang ditampilkan sampai Anda membatalkan. Kelola atau batalkan kapan saja di Google Play.",
-    "playPaidAppUnavailable": "Tidak tersedia di Android"
+    "playPaidAppUnavailable": "Tidak tersedia di Android",
+    "pageNotAvailableInApp": "Halaman ini tidak tersedia di aplikasi.",
+    "shopOrderPlacedCheckEmail": "Pesanan dibuat. Periksa email Anda untuk konfirmasinya.",
+    "prepaidCodeEntry": "Punya kode?",
+    "prepaidCodeTitle": "Tukarkan kode",
+    "prepaidCodeFieldHint": "Masukkan kode Anda",
+    "prepaidCodeRedeem": "Tukarkan",
+    "prepaidCodeRedeemed": "Kode berhasil ditukarkan",
+    "prepaidCodeResult": "{reason, select, invalid{Kode ini tidak valid. Periksa dan coba lagi.} used{Kode ini sudah digunakan.} expired{Kode ini sudah kedaluwarsa.} hasPlan{Anda sudah memiliki paket. Kode Anda tidak digunakan.} notPrepaid{Kode ini tidak bisa ditukarkan di sini. Gunakan saat memilih paket.} notEligible{Kode ini tidak bisa digunakan di akun ini.} rateLimited{Terlalu banyak percobaan. Coba lagi nanti.} other{Terjadi kesalahan. Silakan coba lagi.}}"
 }

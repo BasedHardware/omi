@@ -14,7 +14,7 @@ import unittest.mock
 from itertools import cycle
 
 from config.rollout_cohorts import legacy_membership
-from datetime import timedelta, timezone
+from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 from types import SimpleNamespace
 from typing import Any
@@ -163,7 +163,7 @@ BODY_DIGEST = {
     'utils.support.holds._events': '360ff57663deaf3c17c934276f219cce74f4a468dc28c8a1145623524625927e',
     'utils.support.holds._held_deferred_deletes': '612a521045553ef1b02d1eb81aac37a3c63a75c598ce5e99484c007c7c87e878',
     'utils.support.retention._select_conversations': 'f36920350f4e3a557e0e474e8801ae414c21ce67203e0627f7a39ba820243d16',
-    'database.conversations_v3.commit_projection': '1839fb90b6ce564158f484f9608796e98a401dc0b9b0b6222c60fee1d66514ad',
+    'database.conversations_v3.commit_projection': '2587c3ec10a675e41ecfed4ded303bdb9bda893380df227564408184e3daba62',
     'database.batch_pipeline_conversation_purge_scans._claim': 'faa5dabcf01dc5bd377b2e14a149282aa2db93b2872cdc97a3b756157701532c',
     'database.batch_pipeline_conversation_purge_scans.run_job': '1916be25d4e9d5b8a350a665ae0fce626ccc56f68fc66107e8f4b0bb1243b00e',
     'database.batch_pipeline_store.FirestoreStore.protected_retries': 'b55d2960c94057cb8df9b9cdd2e7728b6af63728bc0a2cb6f5bd333efed443a2',
@@ -262,7 +262,7 @@ BODY_DIGEST = {
     # discarded-barrier scan is still covered by the same two driven callees.
     # Recorded-span recomputation is pure; barrier queries still run under the covered callees.
     # Re-reviewed 2026-11-06: C2 preload runner and deleted-blob refusals; serving query shapes unchanged.
-    'database.smart_merge.absorb_conversation': 'f2e9751cdc2cdaef0b9c662d96188a14bcd17e6aefdb324e6d65f4f65f260968',
+    'database.smart_merge.absorb_conversation': 'b859b6a6baaaf774a76cf06120f9070f7759f728bfac4d24d6e288333ac3ffed',
     'database.omi_flags.read_all': '58b65fc434cd3253a55aa54c6defc2a4cfc40dc33b565326b6c688eb8ed374d3',
     'database.omi_flags.read_audit': '12ee243338e5fc080b8e2f81223586837bb454f8d8e14d711f3805c74e258cfa',
     'database.client_telemetry.recent_owner_ids': '65fe8200d7ad9418b793ccb0fa53a172b2576a80bba644caa3b36cdb53b74510',
@@ -419,6 +419,14 @@ _add(
 )
 # Play billing reconcile: one single-field ``next_check_at`` range, oldest first.
 _add(DriverEntry('database.play_subscriptions.due_for_reconcile', neutrals={'now': _NOW, 'limit': _LIMIT}))
+# Account deletion: single-field uid equality on the purchase and account-map collections.
+_add(
+    DriverEntry(
+        'database.play_subscriptions.purge_account_records',
+        base={'uid': UID, 'confirmed_since': datetime(2026, 1, 1, tzinfo=timezone.utc)},
+    )
+)
+_add(DriverEntry('database.play_subscriptions.purchase_keys_for_uid', base={'uid': UID}))
 # The pager's separate operations database uses a built-in next_at index.
 _add(DriverEntry('paging.store.due_deliveries', base={'now': T0}))
 # Sealed owner groups use an existing single-field uid index on obligations.
@@ -2826,7 +2834,8 @@ _add(
         'has_intervening_discarded/find_preceding_conversations, so the terminal '
         'stream records under those callees, never under absorb_conversation. '
         'The revision-debt hook is a pure payload update with no query or read; '
-        'passing the stored privacy state to the transcript codec adds no query',
+        'passing the stored privacy state to the transcript codec adds no query. '
+        'The WAL custody guard uses the donor, survivor and ancestor rows the transaction already read.',
         expect_observed=False,
         body_digest=BODY_DIGEST['database.smart_merge.absorb_conversation'],
     )
@@ -3648,7 +3657,8 @@ for entry in (
     CoveredByEntry(
         'database.conversations_v3.commit_projection',
         covered_by=('database.conversations_v3.merge_donors_have_tasks',),
-        reason='Refinement and live repair use the same bounded donor-task query and write point markers with donor redirects.',
+        reason='Refinement and live repair use the same bounded donor-task query and write point markers with donor redirects. '
+        'The WAL custody guard uses the existing observation rows before donor-task queries or projection writes.',
         expect_observed=False,
         body_digest=BODY_DIGEST['database.conversations_v3.commit_projection'],
     ),

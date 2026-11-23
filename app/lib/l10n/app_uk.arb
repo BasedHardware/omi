@@ -4748,5 +4748,13 @@
     "playPurchaseOtherAccount": "Ця покупка в Google Play належить іншому акаунту Omi.",
     "playPurchaseNotConfirmed": "Поки не вдалося підтвердити покупку. Ми спробуємо знову автоматично.",
     "playRenewalTerms": "Автоматично поновлюється за вказаною ціною, доки ви не скасуєте. Керуйте або скасовуйте будь-коли в Google Play.",
-    "playPaidAppUnavailable": "Недоступно на Android"
+    "playPaidAppUnavailable": "Недоступно на Android",
+    "pageNotAvailableInApp": "Ця сторінка недоступна в застосунку.",
+    "shopOrderPlacedCheckEmail": "Замовлення оформлено. Підтвердження надійде на вашу пошту.",
+    "prepaidCodeEntry": "Маєте код?",
+    "prepaidCodeTitle": "Активувати код",
+    "prepaidCodeFieldHint": "Введіть ваш код",
+    "prepaidCodeRedeem": "Активувати",
+    "prepaidCodeRedeemed": "Код активовано",
+    "prepaidCodeResult": "{reason, select, invalid{Цей код недійсний. Перевірте його та спробуйте ще раз.} used{Цей код уже використано.} expired{Термін дії цього коду минув.} hasPlan{У вас уже є план. Ваш код не використано.} notPrepaid{Цей код не можна активувати тут. Використайте його під час вибору плану.} notEligible{Цей код не можна використати в цьому акаунті.} rateLimited{Забагато спроб. Спробуйте пізніше.} other{Щось пішло не так. Спробуйте ще раз.}}"
 }

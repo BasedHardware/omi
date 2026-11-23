@@ -553,6 +553,7 @@ SCHEMA_GROUPS = {
             'PlayBillingConfig',
             'UserSubscriptionResponse',
             'PlayPurchaseResponse',
+            'RedeemPrepaidCodeResponse',
             'UsageStats',
             'UsageHistoryPoint',
             'UserUsageResponse',
