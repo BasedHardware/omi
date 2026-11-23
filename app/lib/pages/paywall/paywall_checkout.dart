@@ -214,6 +214,7 @@ class PaywallOffer {
             amountMinor: playMinorUnits(plan.priceMicros, plan.currencyCode),
             currency: plan.currencyCode.toLowerCase(),
             display: plan.formattedPrice,
+            trialDisplay: plan.trialFormattedPrice,
           );
     final offer = PaywallOffer(tierId: 'unlimited_v2', monthly: price(offers.monthly), yearly: price(offers.yearly));
     return offer.monthly == null && offer.yearly == null ? null : offer;
@@ -298,6 +299,7 @@ class PaywallPrice {
     required this.amountMinor,
     required this.currency,
     this.display,
+    this.trialDisplay,
   });
 
   final String priceId;
@@ -307,6 +309,9 @@ class PaywallPrice {
 
   /// Google Play's own price string; shown as-is when set.
   final String? display;
+
+  /// Google Play's own string for the free-trial phase, when Play lists a trial for this account.
+  final String? trialDisplay;
 
   String get formatted => display ?? formatBillingPrice(amountMinor, currency);
 

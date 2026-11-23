@@ -12,7 +12,14 @@ import 'package:omi/utils/l10n_extensions.dart';
 ///   skip past it.)
 /// * First load shows a spinner; a failed main-frame load shows the reason and **Try Again**.
 class OmiWebPage extends StatefulWidget {
-  const OmiWebPage({super.key, required this.title, required this.url, this.userAgent, this.showClose = false});
+  const OmiWebPage({
+    super.key,
+    required this.title,
+    required this.url,
+    this.userAgent,
+    this.showClose = false,
+    this.allowNavigation,
+  });
 
   final String title;
   final Uri url;
@@ -23,6 +30,9 @@ class OmiWebPage extends StatefulWidget {
   /// A Close (×) that dismisses the whole page, for a page presented as a sheet (the Omi store).
   /// The default back button steps back through the web history first.
   final bool showClose;
+
+  /// When set, a main-frame navigation this rejects is blocked and the page stays where it is.
+  final bool Function(Uri uri)? allowNavigation;
 
   @override
   State<OmiWebPage> createState() => _OmiWebPageState();
@@ -45,6 +55,12 @@ class _OmiWebPageState extends State<OmiWebPage> {
     _controller
       ..setNavigationDelegate(
         NavigationDelegate(
+          onNavigationRequest: (request) {
+            final allow = widget.allowNavigation;
+            if (allow == null || !request.isMainFrame) return NavigationDecision.navigate;
+            final uri = Uri.tryParse(request.url);
+            return uri != null && allow(uri) ? NavigationDecision.navigate : NavigationDecision.prevent;
+          },
           onPageStarted: (url) => _lastRequested = Uri.tryParse(url),
           onPageFinished: (_) async {
             final canGoBack = await _controller.canGoBack();

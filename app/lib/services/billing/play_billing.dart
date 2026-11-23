@@ -37,6 +37,7 @@ class PlayPlanOffer {
     required this.base,
     this.trial,
     this.trialDays,
+    this.trialFormattedPrice,
   });
 
   final String basePlanId;
@@ -53,6 +54,9 @@ class PlayPlanOffer {
   /// The free-trial offer when Play lists it for this account (Play applies new-subscriber eligibility).
   final GooglePlayProductDetails? trial;
   final int? trialDays;
+
+  /// Play's own string for the free-trial phase (e.g. "Free" or "₹0.00").
+  final String? trialFormattedPrice;
 }
 
 @immutable
@@ -173,6 +177,7 @@ class PlayBilling {
         base: base,
         trial: trial,
         trialDays: trial == null ? null : _trialDays(_offer(trial)!),
+        trialFormattedPrice: trial == null ? null : _offer(trial)!.pricingPhases.first.formattedPrice,
       );
       if (entry.value == 'year') {
         yearly = plan;

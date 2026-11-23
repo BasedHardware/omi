@@ -103,10 +103,10 @@ class _HarnessState extends State<_Harness> with TickerProviderStateMixin {
 }
 
 class _World {
-  _World(this.responses);
+  _World(this.responses, {FakePlayPlatform? platform}) : platform = platform ?? FakePlayPlatform();
 
   final List<UserSubscriptionResponse> responses;
-  final platform = FakePlayPlatform();
+  final FakePlayPlatform platform;
   final server = FakePlayServer();
   late final billing = PlayBilling(platform: () => platform, verify: server.call, store: MemoryTokenStore());
   late final usage = _Usage(
@@ -294,6 +294,77 @@ void main() {
     expect(world.platform.launched.single.offerToken, 'token-yearly-trial');
     expect(world.usage.checkoutSessions, 0);
     expect(find.byType(PaymentWebViewPage), findsNothing);
+  }, variant: TargetPlatformVariant.only(TargetPlatform.android));
+
+  testWidgets('trial paywall: Play disclosure, Play price strings, no computed was or saving', (tester) async {
+    await _pump(tester, [_response()], child: TrialPaywallPage(source: 'test', now: DateTime(2026, 11, 22)));
+    expect(find.byKey(const Key('play_renewal_terms')), findsOneWidget);
+    expect(find.text('Billed by Google Play'), findsOneWidget);
+    expect(find.text('Cancel anytime. No fees, no penalties.'), findsNothing);
+    final yearly = find.byKey(const Key('trial_paywall_yearly'));
+    expect(find.descendant(of: yearly, matching: find.text('₹22,500.00')), findsOneWidget);
+    expect(find.descendant(of: find.byKey(const Key('trial_paywall_monthly')), matching: find.text('₹2,500.00')),
+        findsOneWidget);
+    expect(find.textContaining('Save '), findsNothing);
+    expect(find.textContaining('₹30,000'), findsNothing); // 12 x monthly, app-computed
+    expect(find.text('Try for Free'), findsOneWidget); // Play's own trial-phase string
+  }, variant: TargetPlatformVariant.only(TargetPlatform.android));
+
+  for (final page in ['outline', 'trial']) {
+    testWidgets('$page paywall: Play offers unavailable shows the plans-sheet Retry, which recovers', (tester) async {
+      final world = _World([_response()], platform: FakePlayPlatform(available: false));
+      addTearDown(world.usage.dispose);
+      await world.usage.fetchSubscription();
+      await tester.pump();
+      tester.view.physicalSize = const Size(430, 2400);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      await tester.pumpWidget(ChangeNotifierProvider<UsageProvider>.value(
+        value: world.usage,
+        child: MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: const [Locale('en')],
+          home: page == 'outline'
+              ? const OutlinePaywallPage(source: 'test')
+              : TrialPaywallPage(source: 'test', now: DateTime(2026, 11, 22)),
+        ),
+      ));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('play_plans_error')), findsOneWidget);
+      expect(find.textContaining('US\$'), findsNothing);
+    }, variant: TargetPlatformVariant.only(TargetPlatform.android));
+  }
+
+  testWidgets('outline paywall: a failed subscription read shows Retry instead of a skeleton forever', (tester) async {
+    var calls = 0;
+    final world = _World([_response()]);
+    final usage = _Usage(
+      subscriptionRequest: () async => ++calls == 1 ? null : _response(),
+      playBilling: world.billing,
+    );
+    addTearDown(usage.dispose);
+    await usage.fetchSubscription();
+    expect(usage.billingProviderFailed, isTrue);
+    tester.view.physicalSize = const Size(430, 2400);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await tester.pumpWidget(ChangeNotifierProvider<UsageProvider>.value(
+      value: usage,
+      child: const MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: [Locale('en')],
+        home: OutlinePaywallPage(source: 'test'),
+      ),
+    ));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('play_plans_error')), findsOneWidget);
+    await tester.tap(find.descendant(of: find.byKey(const Key('play_plans_error')), matching: find.byType(OmiButton)));
+    await tester.pumpAndSettle();
+    expect(calls, 2);
+    expect(find.byKey(const Key('play_plans_error')), findsNothing);
+    expect(find.textContaining('₹22,500.00'), findsWidgets);
   }, variant: TargetPlatformVariant.only(TargetPlatform.android));
 
   testWidgets('before the billing provider is known, Android shows loading and never a price', (tester) async {

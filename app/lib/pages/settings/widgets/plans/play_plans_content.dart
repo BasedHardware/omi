@@ -216,10 +216,13 @@ class _PlayPlansContentState extends State<PlayPlansContent> {
 /// Under every Google Play purchase button: auto-renewal at the shown price, where to cancel, and the
 /// Terms and Privacy links.
 class PlayBillingDisclosure extends StatelessWidget {
-  const PlayBillingDisclosure({super.key, this.openUrl, this.color});
+  const PlayBillingDisclosure({super.key, this.openUrl, this.color, this.legalLinks = true});
 
   final PlayUrlOpener? openUrl;
   final Color? color;
+
+  /// False where the host page already shows Terms and Privacy.
+  final bool legalLinks;
 
   @override
   Widget build(BuildContext context) {
@@ -244,16 +247,34 @@ class PlayBillingDisclosure extends StatelessWidget {
       children: [
         Text(l10n.playRenewalTerms, key: const Key('play_renewal_terms'), textAlign: TextAlign.center, style: style),
         Text(l10n.playBilledByGoogle, textAlign: TextAlign.center, style: style),
-        Wrap(
-          alignment: WrapAlignment.center,
-          crossAxisAlignment: WrapCrossAlignment.center,
-          children: [
-            link(const Key('play_terms'), l10n.termsOfUse, AuthenticationProvider.termsOfServiceUrl),
-            ExcludeSemantics(child: Text(' · ', style: style)),
-            link(const Key('play_privacy'), l10n.privacyPolicy, AuthenticationProvider.privacyPolicyUrl),
-          ],
-        ),
+        if (legalLinks)
+          Wrap(
+            alignment: WrapAlignment.center,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              link(const Key('play_terms'), l10n.termsOfUse, AuthenticationProvider.termsOfServiceUrl),
+              ExcludeSemantics(child: Text(' · ', style: style)),
+              link(const Key('play_privacy'), l10n.privacyPolicy, AuthenticationProvider.privacyPolicyUrl),
+            ],
+          ),
       ],
+    );
+  }
+}
+
+/// The plans sheet's error state with its Retry, for paywalls that could not load Play's plans: the
+/// subscription read failed (provider unknown) or Play offered no product.
+class PlayPlansError extends StatelessWidget {
+  const PlayPlansError({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final usage = context.watch<UsageProvider>();
+    return OmiErrorState(
+      key: const Key('play_plans_error'),
+      title: context.l10n.unableToLoadPlans,
+      message: context.l10n.checkConnectionTryAgain,
+      onRetry: usage.billingProviderUnknown ? usage.fetchSubscription : usage.retryPlayOffers,
     );
   }
 }
