@@ -15,6 +15,7 @@ from config.batch_pipeline import (
     batch_held_dead_letter_enabled,
     HELD_DEAD_LETTER_SECONDS,
 )
+from config.policy import kill_switch
 
 from database.batch_pipeline_privacy import (
     assert_batch_write_allowed,
@@ -370,7 +371,9 @@ class ProjectionSession:
         self.job = self.store.ref('jobs', self.segment_id).get(transaction=transaction).to_dict() or {}
         self.entry = self.result_ref.get(transaction=transaction).to_dict() or {}
         assert_delivery_claim(self.segment_id, self.entry)
-        owner = self.owner_ref.get(transaction=transaction).to_dict() or {}
+        owner = None
+        if not kill_switch('BATCH_PIPELINE_PROJECTION_DEFER_OWNER_READ_ENABLED', log=False):
+            owner = self.owner_ref.get(transaction=transaction).to_dict() or {}
         self.ledger = self.ledger_ref.get(transaction=transaction).to_dict() or {}
         if (
             not self.job.get('projection_binding')
@@ -444,6 +447,10 @@ class ProjectionSession:
             if replay:
                 raise ProjectionReplay(receipt)
             return
+        # Only an already validated receipt can return without enrolling the
+        # owner in the transaction. New assignments still read the live cursor.
+        if owner is None:
+            owner = self.owner_ref.get(transaction=transaction).to_dict() or {}
         if self.part_index is not None:
             if self.entry.get('projection_part_count', self.part_count) != self.part_count:
                 raise ProjectionBlocked('immutable projection part count mismatch')
