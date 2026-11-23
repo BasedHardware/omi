@@ -4,6 +4,7 @@ import copy
 import json
 import re
 from pathlib import Path
+from threading import Barrier
 from types import SimpleNamespace
 from urllib.parse import parse_qs, urlsplit
 
@@ -30,8 +31,13 @@ class Clock:
 
 
 class FakeCloud:
-    def __init__(self, scenario):
+    def __init__(self, scenario, clock):
         self.scenario = scenario
+        self.clock = clock
+        self.metric_batch = None
+        if scenario in ('delayed', 'late'):
+            # Advance the shared clock once for eight overlapping responses.
+            self.metric_batch = Barrier(8, action=lambda: clock.sleep(9 if scenario == 'delayed' else 11))
         self.generation = 1
         self.writes = []
         self.polls = 0
@@ -74,6 +80,8 @@ class FakeCloud:
             assert method == 'PATCH'
             assert set(body) == {'etag', 'traffic'}
             assert body['etag'] == f'etag-{self.generation}'
+            if self.metric_batch:
+                self.clock.sleep(15)
             self.writes.append(copy.deepcopy(body))
             self.traffic = body['traffic']
             self.generation += 1
@@ -88,6 +96,8 @@ class FakeCloud:
                 doc = {'done': True, 'error': {'code': 9}}
         else:
             assert method == 'GET'
+            if self.writes and self.metric_batch:
+                self.metric_batch.wait(timeout=2)
             query = parse_qs(urlsplit(url).query)
             metric = re.search(
                 r'metric\.type="(?:run\.googleapis\.com/|loadbalancing\.googleapis\.com/https/)([^"]+)"',
@@ -163,7 +173,8 @@ def controller(tmp_path, monkeypatch, scenario):
         snapshot=snapshot,
         receipt=tmp_path / 'receipt.json',
     )
-    return promotion.Promotion(FakeCloud(scenario), Clock(), args)
+    clock = Clock()
+    return promotion.Promotion(FakeCloud(scenario, clock), clock, args)
 
 
 def test_promote_records_verified_stages_and_total_duration(tmp_path, monkeypatch):
@@ -214,6 +225,28 @@ def test_stage_refusals_do_not_advance_or_retry_a_write(tmp_path, monkeypatch, s
     assert receipt['reason'] == error
     assert [row['weights'][NEW] for row in receipt['stages']] == [10]
     assert receipt['promotion_elapsed_seconds'] <= promotion.STAGE_SECONDS
+
+
+def test_slow_healthy_metrics_fit_under_stage_deadline(tmp_path, monkeypatch):
+    rollout = controller(tmp_path, monkeypatch, 'delayed')
+    rollout.run()
+
+    receipt = json.loads(rollout.path.read_text())
+    assert receipt['outcome'] == 'promoted'
+    # First bucket is ready at 330s. Eight serial 9s calls would miss 360s.
+    assert receipt['stages'][0]['health_verified_at'] == promotion.iso(1_800_000_339)
+    assert [row['weights'][NEW] for row in receipt['stages']] == [10, 50, 90, 100]
+
+
+def test_metric_collection_timeout_cannot_advance_stage(tmp_path, monkeypatch):
+    rollout = controller(tmp_path, monkeypatch, 'late')
+    with pytest.raises(promotion.Refused, match='io_deadline'):
+        rollout.run()
+
+    assert len(rollout.transport.writes) == 1
+    receipt = json.loads(rollout.path.read_text())
+    assert receipt['outcome'] == 'refused'
+    assert 'health_verified_at' not in receipt['stages'][0]
 
 
 def test_cancellation_records_unverified_intent_without_advancing(tmp_path, monkeypatch):

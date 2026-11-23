@@ -12,6 +12,7 @@ import math
 import os
 import re
 import signal
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from urllib.parse import urlencode
 
@@ -49,6 +50,7 @@ STAGES = (10, 50, 90, 100)
 STAGE_SECONDS = 360
 # Global external load-balancer metrics can take 210 seconds to publish.
 METRIC_LAG = 210
+METRIC_COLLECTION_SECONDS = 10
 INGRESS_BACKEND = 'custom-domains-api-omi-me-backend-49a4-be'
 
 
@@ -227,9 +229,36 @@ class Promotion:
             result[label] = point['value']
         return result
 
-    def health(self, revision, end, deadline, *, capacity=False):
-        counts = self.metric(revision, 'request_count', end, deadline)
-        latencies = self.metric(revision, 'total_latencies' if revision is None else 'request_latencies', end, deadline)
+    def collect_health(self, revisions, end, deadline, *, include_capacity=False):
+        metrics = {
+            revision: ('request_count', 'total_latencies' if revision is None else 'request_latencies')
+            for revision in revisions
+        }
+        if include_capacity:
+            metrics[self.candidate] += ('container/instance_count', 'container/startup_latencies')
+
+        # Each read has its own connection and shares one absolute collection
+        # deadline. The earlier service read has already initialized the token.
+        deadline = min(deadline, self.clock.monotonic() + METRIC_COLLECTION_SECONDS)
+        require(self.clock.monotonic() < deadline, 'stage_deadline')
+        with ThreadPoolExecutor(max_workers=sum(map(len, metrics.values()))) as pool:
+            pending = {
+                revision: {name: pool.submit(self.metric, revision, name, end, deadline) for name in names}
+                for revision, names in metrics.items()
+            }
+            # Resolve all reads before checking availability so an absent sample
+            # cannot hide stale or malformed evidence from a different metric.
+            evidence = {
+                revision: {name: future.result() for name, future in reads.items()}
+                for revision, reads in pending.items()
+            }
+        require(self.clock.monotonic() <= deadline, 'metric_collection_deadline')
+        return [self.health(revision, evidence[revision]) for revision in revisions]
+
+    @staticmethod
+    def health(revision, metrics):
+        counts = metrics['request_count']
+        latencies = metrics['total_latencies' if revision is None else 'request_latencies']
         if not counts or not latencies:
             raise MissingSample('missing_request_evidence')
         if revision is None:
@@ -244,13 +273,13 @@ class Promotion:
         p95 = latencies['']['doubleValue']
         require(type(p95) in (int, float) and 0 <= p95 and math.isfinite(p95), 'invalid_request_latency')
         sample = {'requests': total, 'errors': sum(requests.get(code, 0) for code in error_codes), 'p95_ms': p95}
-        if capacity:
-            instances = self.metric(revision, 'container/instance_count', end, deadline)
+        if 'container/instance_count' in metrics:
+            instances = metrics['container/instance_count']
             if not instances:
                 raise MissingSample('missing_instance_evidence')
             require(int(instances['']['int64Value']) > 0, 'no_active_candidate_instances')
             sample['active_instances'] = int(instances['']['int64Value'])
-            startup = self.metric(revision, 'container/startup_latencies', end, deadline)
+            startup = metrics['container/startup_latencies']
             if startup:
                 distribution = startup['']['distributionValue']
                 sample['startup_count'] = int(distribution.get('count', 0))
@@ -277,9 +306,9 @@ class Promotion:
             if delay > 0:
                 self.pause(delay, deadline)
             try:
-                candidate = self.health(self.candidate, end, deadline, capacity=True)
-                inverse = self.health(self.inverse, end, deadline)
-                ingress = self.health(None, end, deadline)
+                candidate, inverse, ingress = self.collect_health(
+                    (self.candidate, self.inverse, None), end, deadline, include_capacity=True
+                )
             except MissingSample:
                 self.pause(5, deadline)
                 continue
@@ -303,8 +332,7 @@ class Promotion:
             _, tags = routing(initial.get('traffic'), self.candidate)
             verify_service(initial, self.candidate, expected, tags)
             baseline_end = int((self.clock.time() - METRIC_LAG) // 60) * 60
-            baseline = self.health(self.inverse, baseline_end, deadline)
-            ingress_baseline = self.health(None, baseline_end, deadline)
+            baseline, ingress_baseline = self.collect_health((self.inverse, None), baseline_end, deadline)
             require(self.clock.time() - baseline_end <= METRIC_LAG + 60, 'stale_baseline')
             self.receipt['baseline'] = {'sample_end': iso(baseline_end), **baseline}
             self.receipt['ingress_baseline'] = {'sample_end': iso(baseline_end), **ingress_baseline}
