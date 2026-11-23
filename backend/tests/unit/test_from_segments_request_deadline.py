@@ -17,6 +17,7 @@ from fastapi import HTTPException
 
 from utils.llm import conversation_processing, notes_agent_policy
 from utils.other import endpoints
+from routers import developer
 from utils.other.raise_site import raise_site_of
 from utils.other.request_deadline import (
     FROM_SEGMENTS_REQUEST_BUDGET_SECONDS,
@@ -122,8 +123,6 @@ def test_budget_is_a_ceiling_not_a_floor():
 
 def test_route_resolves_the_deadline_before_the_auth_dependency():
     """The contextvar must be set before get_current_user_uid runs in its thread."""
-    from routers import developer
-
     route = next(
         route for route in developer.router.routes if getattr(route, 'path', None) == '/v1/conversations/from-segments'
     )

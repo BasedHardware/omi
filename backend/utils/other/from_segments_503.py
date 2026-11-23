@@ -43,7 +43,7 @@ def log_from_segments_503(*, raise_site: str, body_bytes: int, elapsed_ms: float
     fields = {
         'event': FROM_SEGMENTS_503_EVENT,
         'route': FROM_SEGMENTS_PATH,
-        'status': 503,
+        'http_status': 503,
         'raise_site': raise_site,
         'body_bytes': body_bytes,
         'elapsed_ms': elapsed_ms,

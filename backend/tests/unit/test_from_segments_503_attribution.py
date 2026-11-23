@@ -82,7 +82,7 @@ def test_handler_503_logs_one_line_with_site_and_body_bytes(caplog):
     assert record.levelno == logging.WARNING
     assert record.event == FROM_SEGMENTS_503_EVENT
     assert record.route == FROM_SEGMENTS_PATH
-    assert record.status == 503
+    assert record.http_status == 503
     assert record.raise_site == 'conversation_processing_retryable'
     assert record.body_bytes == serialized_detail_bytes(
         gateway_error_contract.RETRYABLE_CONVERSATION_PROCESSING_ERROR_DETAIL
