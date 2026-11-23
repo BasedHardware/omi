@@ -11,6 +11,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/l10n/app_localizations.dart';
+import 'package:omi/models/clear_all_recording_export.dart';
 import 'package:omi/models/sync_state.dart';
 import 'package:omi/pages/conversations/auto_sync_page.dart';
 import 'package:omi/pages/conversations/sync_page.dart';
@@ -27,6 +28,15 @@ class _Sync extends ChangeNotifier with WalDerivedSyncViews implements SyncProvi
   final List<Wal> wals;
   int cleared = 0;
   final shared = <List<Wal>>[];
+  @override
+  final clearAllRecordingExport = ClearAllRecordingExport();
+
+  @override
+  void dispose() {
+    clearAllRecordingExport.dispose();
+    super.dispose();
+  }
+
   @override
   SyncState get syncState => const SyncState();
   @override

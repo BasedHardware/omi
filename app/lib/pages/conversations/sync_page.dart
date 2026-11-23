@@ -452,7 +452,12 @@ class _SyncPageState extends State<SyncPage> {
     );
     final offer = await pendingOffer;
     if (offer == null || !context.mounted) return;
-    final confirmed = await confirmClearAllRecordings(context, tooOld: offer.tooOld, share: offer.share);
+    final confirmed = await confirmClearAllRecordings(
+      context,
+      tooOld: offer.tooOld,
+      share: offer.share,
+      recordingExport: provider.clearAllRecordingExport,
+    );
     if (!confirmed || !context.mounted) return;
     var failed = false;
     try {

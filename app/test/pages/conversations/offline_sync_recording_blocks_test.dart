@@ -18,6 +18,7 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/l10n/app_localizations.dart';
+import 'package:omi/models/clear_all_recording_export.dart';
 import 'package:omi/models/sync_state.dart';
 import 'package:omi/pages/conversations/auto_sync_page.dart';
 import 'package:omi/providers/device_provider.dart';
@@ -89,6 +90,8 @@ class _Sync extends ChangeNotifier with WalDerivedSyncViews implements SyncProvi
   final List<Wal> relistOnDiscover;
   final deleted = <Wal>[];
   final shared = <List<Wal>>[];
+  @override
+  final clearAllRecordingExport = ClearAllRecordingExport();
   bool failShare = false;
   int shareAttempts = 0;
   Completer<void>? wavPending;
@@ -97,6 +100,12 @@ class _Sync extends ChangeNotifier with WalDerivedSyncViews implements SyncProvi
   int discovered = 0;
   String? skipDeleteId;
   final manuallyRetried = <Wal>[];
+
+  @override
+  void dispose() {
+    clearAllRecordingExport.dispose();
+    super.dispose();
+  }
 
   @override
   Future<void> syncWal(Wal wal) async => manuallyRetried.add(wal);
@@ -590,6 +599,20 @@ void main() {
     final share = find.descendant(of: exportSheet, matching: find.byIcon(Icons.ios_share_rounded));
     final exportRow = find.descendant(of: exportSheet, matching: find.byType(OmiSettingsRow));
     final spinner = find.descendant(of: exportRow, matching: find.byType(OmiSpinner));
+
+    Future<void> reopenDuringExport() async {
+      await tester.tap(find.descendant(of: exportSheet, matching: find.byType(OmiCloseButton)));
+      await tester.pumpAndSettle();
+      expect(exportSheet, findsNothing);
+      await openClearAll();
+      await tester.tap(find.descendant(of: find.byType(OmiAlertDialog), matching: find.text('Download Audio')));
+      // Settle the route transition while the indeterminate spinner keeps running.
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 450));
+      expect(spinner, findsOneWidget);
+      expect(tester.widget<OmiSettingsRow>(exportRow).onTap, isNull);
+    }
+
     final idleSize = tester.getSize(exportRow);
     sync.failShare = true;
     final failedWav = sync.wavPending = Completer<void>();
@@ -599,8 +622,10 @@ void main() {
     await tester.pump();
     expect(spinner, findsOneWidget);
     expect(tester.getSize(exportRow), idleSize);
+    await reopenDuringExport();
     await tester.tap(exportRow);
     expect(sync.shareAttempts, 1);
+    expect(sync.shared, isEmpty);
     failedWav.complete();
     await tester.pumpAndSettle();
     expect(find.text('Export failed. Please try again.'), findsOneWidget);
@@ -620,6 +645,7 @@ void main() {
     expect(sync.shared.single, rows);
     expect(spinner, findsOneWidget);
     await _frame(tester, '003-mobile-ios-too-old-export-in-progress');
+    await reopenDuringExport();
     await tester.tap(exportRow);
     expect(sync.shareAttempts, 2);
     expect(sync.shared.single, rows);

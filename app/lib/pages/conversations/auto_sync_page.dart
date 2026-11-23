@@ -1119,7 +1119,12 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
     );
     final offer = await pendingOffer;
     if (offer == null || !context.mounted) return;
-    final confirmed = await confirmClearAllRecordings(context, tooOld: offer.tooOld, share: offer.share);
+    final confirmed = await confirmClearAllRecordings(
+      context,
+      tooOld: offer.tooOld,
+      share: offer.share,
+      recordingExport: provider.clearAllRecordingExport,
+    );
     if (!confirmed || !context.mounted) return;
     await _clearVerified(provider, offer.targets, () => clearActions.all(offer.clear), context.l10n.allFilesDeleted);
   }

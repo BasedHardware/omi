@@ -30,6 +30,7 @@ import 'package:omi/utils/debug_log_manager.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/other/time_utils.dart';
+import 'package:omi/models/clear_all_recording_export.dart';
 import 'package:omi/models/sync_state.dart';
 import 'package:omi/utils/audio_player_utils.dart';
 import 'package:omi/utils/conversation_sync_utils.dart';
@@ -93,6 +94,7 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
   late final Future<void> initialized;
 
   // WAL management
+  final clearAllRecordingExport = ClearAllRecordingExport();
   List<Wal> _allWals = [];
   List<Wal> get allWals => _allWals;
   WalDerivedViews? _derived;
@@ -1480,6 +1482,7 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
   @override
   void dispose() {
     _endPhaseWork();
+    clearAllRecordingExport.dispose();
     _derived?.dispose();
     _cancelQueuedWalUpdates();
     _walUpdateRefresh = null;

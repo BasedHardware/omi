@@ -2,6 +2,7 @@
 // Only an explicit destructive selection returns confirmation.
 import 'package:flutter/material.dart';
 
+import 'package:omi/models/clear_all_recording_export.dart';
 import 'package:omi/pages/conversations/recording_blocks.dart';
 import 'package:omi/services/wals/wal.dart';
 import 'package:omi/ui/ui.dart';
@@ -15,6 +16,7 @@ Future<bool> confirmClearAllRecordings(
   BuildContext context, {
   required List<Wal> tooOld,
   required Future<void> Function(List<Wal>) share,
+  required ClearAllRecordingExport recordingExport,
 }) async {
   final l = context.l10n;
   if (tooOld.isEmpty) {
@@ -51,54 +53,52 @@ Future<bool> confirmClearAllRecordings(
 
   final sorted = [...tooOld]..sort((a, b) => b.timerStart.compareTo(a.timerStart));
   final recordings = groupRecordingBlocks(sorted);
-  int? exportingIndex;
   await showOmiSheet<void>(
     context: context,
     title: l.downloadAudio,
-    builder: (_) => StatefulBuilder(builder: (sheetContext, setSheetState) {
-      final rowHeight = 60.0 + MediaQuery.textScalerOf(sheetContext).scale(24);
-      final maxHeight = MediaQuery.sizeOf(sheetContext).height * 0.55;
-      return SizedBox(
-        height: (recordings.length * rowHeight).clamp(0.0, maxHeight).toDouble(),
-        child: ListView.builder(
-          itemCount: recordings.length,
-          itemBuilder: (_, index) {
-            final recording = recordings[index];
-            final date = DateTime.fromMillisecondsSinceEpoch(recording.startSeconds * 1000);
-            return OmiSettingsRow(
-              leading: exportingIndex == index
-                  ? Semantics(
-                      label: l.preparingAudio,
-                      liveRegion: true,
-                      child: const SizedBox.square(
-                        dimension: 20,
-                        child: Center(child: OmiSpinner(size: OmiSpinnerSize.small)),
-                      ),
-                    )
-                  : const Icon(Icons.ios_share_rounded),
-              title: OmiDateFormat.of(sheetContext).dateTime(date),
-              subtitle: OmiDuration.compact(recording.seconds, l),
-              showChevron: false,
-              onTap: exportingIndex != null
-                  ? null
-                  : () async {
-                      // Another tap can still reach this callback before the sheet rebuilds.
-                      if (exportingIndex != null) return;
-                      setSheetState(() => exportingIndex = index);
-                      try {
-                        await share(recording.wals);
-                      } catch (error) {
-                        Logger.debug('Offline Sync export failed: ${error.runtimeType}');
-                        if (sheetContext.mounted) OmiFeedback.error(sheetContext, l.exportFailedTryAgain);
-                      } finally {
-                        if (sheetContext.mounted) setSheetState(() => exportingIndex = null);
-                      }
-                    },
-            );
-          },
-        ),
-      );
-    }),
+    builder: (_) => ValueListenableBuilder(
+      valueListenable: recordingExport,
+      builder: (sheetContext, exportingWalIds, _) {
+        final rowHeight = 60.0 + MediaQuery.textScalerOf(sheetContext).scale(24);
+        final maxHeight = MediaQuery.sizeOf(sheetContext).height * 0.55;
+        return SizedBox(
+          height: (recordings.length * rowHeight).clamp(0.0, maxHeight).toDouble(),
+          child: ListView.builder(
+            itemCount: recordings.length,
+            itemBuilder: (_, index) {
+              final recording = recordings[index];
+              final date = DateTime.fromMillisecondsSinceEpoch(recording.startSeconds * 1000);
+              return OmiSettingsRow(
+                leading: exportingWalIds != null && recording.wals.any((wal) => exportingWalIds.contains(wal.id))
+                    ? Semantics(
+                        label: l.preparingAudio,
+                        liveRegion: true,
+                        child: const SizedBox.square(
+                          dimension: 20,
+                          child: Center(child: OmiSpinner(size: OmiSpinnerSize.small)),
+                        ),
+                      )
+                    : const Icon(Icons.ios_share_rounded),
+                title: OmiDateFormat.of(sheetContext).dateTime(date),
+                subtitle: OmiDuration.compact(recording.seconds, l),
+                showChevron: false,
+                onTap: exportingWalIds != null
+                    ? null
+                    : () async {
+                        try {
+                          await recordingExport.run(recording.wals, share);
+                        } catch (error) {
+                          Logger.debug('Offline Sync export failed: ${error.runtimeType}');
+                          final feedbackContext = sheetContext.mounted ? sheetContext : context;
+                          if (feedbackContext.mounted) OmiFeedback.error(feedbackContext, l.exportFailedTryAgain);
+                        }
+                      },
+              );
+            },
+          ),
+        );
+      },
+    ),
   );
   // Returning from the export list never invokes the destructive action.
   return false;
