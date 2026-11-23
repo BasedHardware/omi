@@ -200,7 +200,10 @@ CaptureWedgeMonitor composeCaptureWedgeMonitor() {
     featureGate: () => AnalyticsManager().isFeatureEnabled(captureRecoveryFeatureFlag),
     track: (event, properties) {
       final moved = event == 'Capture Ingress Health' || event == 'Capture Wedge Detected';
-      if (moved && ClientTelemetryFlags.posthogRetirementEnabled) return;
+      if (moved && ClientTelemetryFlags.posthogRetirementEnabled) {
+        AnalyticsManager.mirrorDeviceSignal(event, properties);
+        return;
+      }
       PlatformManager.instance.analytics.track(event, properties: properties);
     },
     bleRetry: (deviceId) async {
@@ -220,7 +223,10 @@ CaptureContinuityMonitor composeCaptureContinuityMonitor() {
   return CaptureContinuityMonitor(
     now: DateTime.now,
     track: (event, properties) {
-      if (ClientTelemetryFlags.posthogRetirementEnabled) return;
+      if (ClientTelemetryFlags.posthogRetirementEnabled) {
+        AnalyticsManager.mirrorDeviceSignal(event, properties);
+        return;
+      }
       PlatformManager.instance.analytics.track(event, properties: properties);
     },
     dogfood: () => kDebugMode || Env.isTestFlight,

@@ -84,6 +84,33 @@ void main() {
 
   tearDown(ClientTelemetryFlags.debugReset);
 
+  test('device signal mirror keeps strict WAL boundaries and distinguishes a missing wedge reason', () async {
+    telemetry.observeDeviceHeartbeat();
+    telemetry.observeDeviceHeartbeat();
+    telemetry.observeDeviceSignal('Local WAL Stuck', {
+      'oldest_pending_age_seconds': 86400,
+      'pending_wal_count': 720,
+      'device_id': 'must-not-leave-client',
+    });
+    telemetry.observeDeviceSignal('Local WAL Stuck', {
+      'oldest_pending_age_seconds': 86401,
+      'pending_wal_count': 721,
+    });
+    telemetry.observeDeviceSignal('Capture Wedge Detected', {});
+    telemetry.observeDeviceSignal('Capture Wedge Detected', {'block_reason': 'unregistered'});
+    await telemetry.settled;
+
+    final owner = (store.document!['owners'] as Map)[currentOwner] as Map;
+    final attributes = (owner['observations'] as List).map((row) => row['attributes']).toList();
+    expect(attributes, [
+      {'event': 'heartbeat'},
+      {'event': 'local_wal_stuck', 'over_age': false, 'over_count': false},
+      {'event': 'local_wal_stuck', 'over_age': true, 'over_count': true},
+      {'event': 'capture_wedge_detected', 'block_reason': 'missing'},
+      {'event': 'capture_wedge_detected', 'block_reason': 'other'},
+    ]);
+  });
+
   UploadMirror mirror({
     required String attemptId,
     required String phase,

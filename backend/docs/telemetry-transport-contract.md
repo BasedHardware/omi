@@ -122,6 +122,15 @@ Fallback outcome `recovered|degraded|exhausted`; areas `realtime_hub|ptt_cascade
 screen_task_gate|screen_task_extraction|other`; from/to/reason use existing registered
 fallback literals, unknown to `unknown`. Preserve existing exhausted triage filters.
 
+### Device Signals shadow
+
+The additive `device_signal` family carries a closed `event` value. For
+`local_wal_stuck` it can include Boolean `over_age` (>86400 seconds) and
+`over_count` (>720). For `capture_wedge_detected` it can include `block_reason`
+(`missing`, `count_cap`, `disk_reserve`, or `other`). Other events carry no
+additional fields. See the [collector runbook](runbooks/client-telemetry-ingestion.md)
+for coverage, parity, and PostHog retirement gates.
+
 ## 3. Metrics and query API
 
 Metric prefix `omi_client_`; counters end `_total`, histograms `_duration_seconds`.

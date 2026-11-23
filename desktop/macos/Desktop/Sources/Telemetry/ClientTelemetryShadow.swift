@@ -112,6 +112,21 @@ enum ClientTelemetryShadow {
     )
   }
 
+  static func captureDesktopHealth() {
+    guard ClientTelemetryFlags.transportShadowEnabled else { return }
+    guard let channel = ClientTelemetryFlags.resolvedChannel() else { return }
+    guard let ownerID = ClientTelemetryIdentity.currentOwnerID(), !ownerID.isEmpty else {
+      noteDrop(.missingOwner)
+      return
+    }
+    guard
+      let observation = make(
+        ownerID: ownerID, channel: channel, family: "device_signal",
+        attributes: ["event": .string("desktop_health_event")])
+    else { return }
+    deliver(observation)
+  }
+
   static func captureFallback(area: String, from: String, to: String, reason: String, outcome: String) {
     guard ClientTelemetryFlags.transportShadowEnabled else { return }
     guard let channel = ClientTelemetryFlags.resolvedChannel() else { return }
@@ -336,7 +351,7 @@ enum ClientTelemetryShadow {
     return min(max(Int(raw.rounded()), 0), 86_400_000)
   }
 
-  private static let families: Set<String> = ["screen_task", "voice_turn", "fallback"]
+  private static let families: Set<String> = ["screen_task", "voice_turn", "fallback", "device_signal"]
   private static let populations: Set<String> = ["physical_shortcut", "floating_voice"]
   private static let phases: Set<String> = ["started", "terminal"]
   private static let intents: Set<String> = ["hold", "locked", "legacy", "unknown"]

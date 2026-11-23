@@ -1190,6 +1190,9 @@ environment_shared:
           PROMETHEUS_SIDECAR_PORT:
             value: '9090'
             category: telemetry
+          CLIENT_TELEMETRY_DEVICE_SIGNALS_EXPORT:
+            value: 'off'
+            category: telemetry
           LLM_GATEWAY_ACCOUNTING_ENABLED:
             value: 'true'
             category: rollout

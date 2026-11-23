@@ -38,6 +38,7 @@ stackdriver:
       - 'prometheus.googleapis.com/omi_chat_search_tool_outcomes_total/'
       - 'prometheus.googleapis.com/omi_client_app_startup_duration_seconds/'
       - 'prometheus.googleapis.com/omi_client_events_total/'
+      - 'prometheus.googleapis.com/omi_client_device_signal_'
       - 'prometheus.googleapis.com/omi_client_journey_accepted_total/'
       - 'prometheus.googleapis.com/omi_client_journey_duration_seconds/'
       - 'prometheus.googleapis.com/omi_client_journey_issues_total/'

@@ -54,6 +54,7 @@ from utils.other.timeout import TimeoutMiddleware
 from utils.observability import log_langsmith_status
 from utils.subscription import validate_stripe_price_ids
 from utils.http_client import close_all_clients
+from utils.device_signal_metrics import register_device_signal_metrics
 from utils.metrics import start_metrics_sidecar_server, stop_metrics_sidecar_server
 from utils.observability.sync_phases import shutdown_sync_metrics
 from utils.sync.cap_hold_lifecycle import flush_active
@@ -255,6 +256,7 @@ async def startup_event():
         start_mutations()
         app.state.pinecone_restore_signal = install_shutdown_drain(drain_mutations)
         app.state.messaging_runtime = await start_adapters(messaging.register_adapter)
+    register_device_signal_metrics()
     start_metrics_sidecar_server()
     start_background_task(refresh_stt_cap_cohort_forever(), name='stt_cap_cohort_refresh')
     if full:

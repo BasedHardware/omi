@@ -635,10 +635,17 @@ class AnalyticsManager {
     return true;
   }
 
+  static void mirrorDeviceSignal(String eventName, Map<String, dynamic>? properties) {
+    if (!_trackingEnabled || !PlatformService.isAnalyticsSupported) return;
+    ClientTelemetry.instance.observeDeviceSignal(eventName, properties);
+  }
+
   void track(String eventName, {Map<String, dynamic>? properties}) =>
       PlatformService.executeIfSupported(PlatformService.isAnalyticsSupported, () {
         final adapter = _adapter;
-        if (adapter == null || !_trackingEnabled) return;
+        if (!_trackingEnabled) return;
+        mirrorDeviceSignal(eventName, properties);
+        if (adapter == null) return;
         final props = <String, Object>{};
         final ownedKeys = properties?.keys.toSet() ?? <String>{};
         if (properties != null) {

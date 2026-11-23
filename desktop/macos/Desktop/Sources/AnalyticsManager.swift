@@ -1144,6 +1144,7 @@ class AnalyticsManager {
     guard !Self.isDevBuild else { return }
     var props = properties
     props["health_event"] = name
+    ClientTelemetryShadow.captureDesktopHealth()
     PostHogManager.shared.track("desktop_health_event", properties: props)
   }
 

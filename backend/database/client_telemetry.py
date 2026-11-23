@@ -29,6 +29,7 @@ from config.client_telemetry import (
     window_days,
 )
 from database._client import get_firestore_client
+from database.device_signals import plan_hour_writes
 
 logger = logging.getLogger(__name__)
 
@@ -200,7 +201,10 @@ def _accept(
         days,
         shards,
     )
+    hour_writes = plan_hour_writes(transaction, client, doc_id(owner), plan["observations"])
     _write_plan(transaction, client, owner, plan, days, shards)
+    for target, document in hour_writes:
+        transaction.set(target, document)
     return plan
 
 

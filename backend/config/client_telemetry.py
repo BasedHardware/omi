@@ -76,8 +76,30 @@ FAMILIES = frozenset(
         "screen_task",
         "voice_turn",
         "fallback",
+        "device_signal",
     }
 )
+
+
+DEVICE_SIGNAL_EVENTS = frozenset(
+    {
+        "heartbeat",
+        "local_wal_stuck",
+        "recording_start_failed",
+        "upload_failed",
+        "capture_wedge_detected",
+        "capture_recovery_observed",
+        "capture_recovery_resolved",
+        "desktop_health_event",
+        "phone_battery_sample",
+        "mobile_device_health_daily",
+        "fallback_triggered",
+    }
+)
+DEVICE_SIGNAL_FILTERS = frozenset(
+    {"wal_backlog_age_24h", "wal_backlog_over_cap", "wedge_count_cap", "wedge_disk_reserve", "wedge_other"}
+)
+WEDGE_BLOCK_REASONS = frozenset({"missing", "count_cap", "disk_reserve", "other"})
 
 UPLOAD_PHASES = frozenset({"started", "accepted", "completed", "failed", "deferred"})
 UPLOAD_SOURCES = frozenset({"pendant", "phone", "sdcard", "other", "unknown"})
@@ -677,7 +699,32 @@ def _normalize_attributes(
         return _screen(attributes)
     if family == "voice_turn":
         return _voice(attributes)
+    if family == "device_signal":
+        return _device_signal(attributes)
     return _fallback(attributes)
+
+
+def _device_signal(
+    attributes: dict[str, Any],
+) -> tuple[dict[str, Any], dict[str, str], dict[str, int], None]:
+    event = _enum(attributes.get("event"), DEVICE_SIGNAL_EVENTS, "event")
+    dimensions = {"event": event}
+    optional: frozenset[str] = frozenset()
+    if event == "local_wal_stuck":
+        optional = frozenset({"over_age", "over_count"})
+        for key in optional:
+            if key in attributes:
+                dimensions[key] = "true" if _bool(attributes[key], key) else "false"
+    elif event == "capture_wedge_detected":
+        optional = frozenset({"block_reason"})
+        dimensions["block_reason"] = _enum(
+            attributes.get("block_reason", "missing"), WEDGE_BLOCK_REASONS, "block_reason"
+        )
+    _require_keys(attributes, frozenset({"event"}), optional)
+    normalized = dict(attributes)
+    if "block_reason" in dimensions:
+        normalized["block_reason"] = dimensions["block_reason"]
+    return normalized, dimensions, {}, None
 
 
 def _require_keys(attributes: dict[str, Any], required: frozenset[str], optional: frozenset[str]) -> None:
