@@ -15,6 +15,7 @@ Run all three (a missing backend SKIPS locally; ``OMI_REQUIRE_STORE_BACKENDS=all
 from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor
+from types import SimpleNamespace
 
 import pytest
 
@@ -593,6 +594,84 @@ def test_projection_outbox_merge_and_token_conformance(h, monkeypatch):
     assert outbox.settle(h.store, key, token, lambda: 85, 'retry') is None
     snapshot = h.store.run(lambda tx: tx.get('results', 'new'))
     assert snapshot['projection_state'] == 'pending' and snapshot[outbox.TOKEN_FIELD] == second
+
+
+@pytest.mark.parametrize('coverage_loss', ['overdue_debt', 'failed_scan'])
+def test_pl668_legacy_projection_recovers_when_outbox_coverage_is_lost(h, monkeypatch, coverage_loss):
+    from utils.batch_pipeline.projection_discovery import ProjectionDiscovery
+    from utils.batch_pipeline.projection_outbox import ProjectionOutbox
+
+    monkeypatch.setenv('BATCH_PROJECTION_OUTBOX', 'on')
+    monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED', 'true')
+    monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_STRIPING_ENABLED', 'off')
+    put_all(
+        h,
+        [
+            ('jobs', 'covered', job(h, 'covered')),
+            ('jobs', 'unstamped', job(h, 'unstamped')),
+            ('jobs', 'legacy', job(h, 'legacy')),
+            (
+                'results',
+                'covered',
+                {
+                    'segment_id': 'covered',
+                    'projection_state': 'pending',
+                    'committed_at': 48.0,
+                    'log_sequence': 1,
+                    projection_outbox.KIND_FIELD: projection_outbox.KIND,
+                    **projection_outbox.metadata(48.0, None, None),
+                },
+            ),
+            ('results', 'unstamped', {'segment_id': 'unstamped', 'projection_state': 'pending', 'committed_at': 49.0}),
+            (
+                'results',
+                'legacy',
+                {
+                    'segment_id': 'legacy',
+                    'projection_state': 'pending',
+                    'committed_at': 50.0,
+                    'log_sequence': 3,
+                    projection_outbox.KIND_FIELD: projection_outbox.KIND,
+                    **projection_outbox.metadata(None, None, 'legacy'),
+                },
+            ),
+        ],
+    )
+    now = 100.0
+    projector = SimpleNamespace(store=SimpleNamespace(store=h.store))
+    coordinator = ProjectionOutbox(h.store, projector, clock=lambda: now)
+    discovery = ProjectionDiscovery(h.store, outbox_coverage=coordinator.has_coverage)
+    assert not coordinator.has_coverage()
+    assert discovery.next(limit=4) == ['covered', 'unstamped', 'legacy']
+    assert coordinator.scan(10) == [projection_outbox.DueObligation(projection_outbox.Obligation('covered', 1), 48.0)]
+
+    now = 105.0  # The follower refreshes its cached view of the elected scanner.
+    assert discovery.next(limit=1) == []
+    assert discovery.after == (48.0, 'covered')
+    assert discovery.next(limit=1) == ['unstamped']
+    assert discovery.next(limit=1) == ['legacy']
+    assert discovery.next(limit=1) == []
+    assert discovery.after is None
+
+    now = 110.0
+    if coverage_loss == 'overdue_debt':
+        # A successful but lagging scan withdraws coverage before the original witness expires.
+        coordinator.scan(10)
+    else:
+
+        def fail_scan(*_args):
+            raise RuntimeError('synthetic projection scan failure')
+
+        with monkeypatch.context() as fault:
+            fault.setattr(h.store, 'projection_outbox_page', fail_scan)
+            with pytest.raises(RuntimeError, match='synthetic projection scan failure'):
+                coordinator.scan(10)
+        now = 129.0
+        assert coordinator.has_coverage()
+        now = 130.0  # A failed query does not renew the 30-second witness.
+
+    assert not coordinator.has_coverage()
+    assert discovery.next(limit=3) == ['covered', 'unstamped', 'legacy']
 
 
 def test_projection_page_is_a_stable_keyset_scan(h):
