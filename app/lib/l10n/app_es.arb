@@ -4750,5 +4750,11 @@
     "playRenewalTerms": "Se renueva automáticamente al precio indicado hasta que lo canceles. Gestiónalo o cancélalo cuando quieras en Google Play.",
     "playPaidAppUnavailable": "No disponible en Android",
     "pageNotAvailableInApp": "Esta página no está disponible en la app.",
-    "shopOrderPlacedCheckEmail": "Pedido realizado. Revisa tu correo para ver la confirmación."
+    "shopOrderPlacedCheckEmail": "Pedido realizado. Revisa tu correo para ver la confirmación.",
+    "prepaidCodeEntry": "¿Tienes un código?",
+    "prepaidCodeTitle": "Canjear un código",
+    "prepaidCodeFieldHint": "Introduce tu código",
+    "prepaidCodeRedeem": "Canjear",
+    "prepaidCodeRedeemed": "Código canjeado",
+    "prepaidCodeResult": "{reason, select, invalid{Este código no es válido. Revísalo e inténtalo de nuevo.} used{Este código ya se ha usado.} expired{Este código ha caducado.} hasPlan{Ya tienes un plan. Tu código no se ha usado.} notPrepaid{Este código no se puede canjear aquí. Úsalo cuando elijas un plan.} notEligible{Este código no se puede usar en esta cuenta.} rateLimited{Demasiados intentos. Inténtalo más tarde.} other{Algo salió mal. Inténtalo de nuevo.}}"
 }

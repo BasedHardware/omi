@@ -4750,5 +4750,11 @@
     "playRenewalTerms": "Verlängert sich automatisch zum angezeigten Preis, bis du kündigst. Verwalten oder kündigen jederzeit in Google Play.",
     "playPaidAppUnavailable": "Auf Android nicht verfügbar",
     "pageNotAvailableInApp": "Diese Seite ist in der App nicht verfügbar.",
-    "shopOrderPlacedCheckEmail": "Bestellung aufgegeben. Die Bestätigung findest du in deinen E-Mails."
+    "shopOrderPlacedCheckEmail": "Bestellung aufgegeben. Die Bestätigung findest du in deinen E-Mails.",
+    "prepaidCodeEntry": "Hast du einen Code?",
+    "prepaidCodeTitle": "Code einlösen",
+    "prepaidCodeFieldHint": "Code eingeben",
+    "prepaidCodeRedeem": "Einlösen",
+    "prepaidCodeRedeemed": "Code eingelöst",
+    "prepaidCodeResult": "{reason, select, invalid{Dieser Code ist ungültig. Prüfe ihn und versuche es erneut.} used{Dieser Code wurde bereits verwendet.} expired{Dieser Code ist abgelaufen.} hasPlan{Du hast bereits einen Plan. Dein Code wurde nicht verwendet.} notPrepaid{Dieser Code kann hier nicht eingelöst werden. Verwende ihn, wenn du einen Plan wählst.} notEligible{Dieser Code kann für dieses Konto nicht verwendet werden.} rateLimited{Zu viele Versuche. Versuche es später erneut.} other{Etwas ist schiefgelaufen. Bitte versuche es erneut.}}"
 }

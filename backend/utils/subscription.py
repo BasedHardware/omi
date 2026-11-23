@@ -47,6 +47,7 @@ from utils.transcription_allowance import TranscriptionAllowance
 from utils.observability.fallback import record_fallback
 import logging
 from config import ladder_v1 as ladder_policy
+from config import prepaid_code_redeem
 from config.refactor_modes import default_on as refactor_default_on
 from utils import ladder_v1
 
@@ -1184,9 +1185,10 @@ def find_active_paid_subscription_for_user(uid: str) -> Optional[Subscription]:
             status=SubscriptionStatus.active,
             stripe_subscription_id=d.get('id'),
             current_price_id=price_id,
-            current_period_end=d.get('current_period_end'),
+            current_period_end=prepaid_code_redeem.prepaid_end(d) or d.get('current_period_end'),
             current_period_start=d.get('current_period_start'),
-            cancel_at_period_end=d.get('cancel_at_period_end', False),
+            cancel_at_period_end=prepaid_code_redeem.prepaid_end(d) is not None or d.get('cancel_at_period_end', False),
+            prepaid=True if prepaid_code_redeem.prepaid_end(d) is not None else None,
             limits=get_plan_limits(plan),
         )
     return None

@@ -15680,4 +15680,37 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get shopOrderPlacedCheckEmail => 'تم تقديم الطلب. تحقق من بريدك الإلكتروني للاطلاع على التأكيد.';
+
+  @override
+  String get prepaidCodeEntry => 'لديك رمز؟';
+
+  @override
+  String get prepaidCodeTitle => 'استرداد رمز';
+
+  @override
+  String get prepaidCodeFieldHint => 'أدخل رمزك';
+
+  @override
+  String get prepaidCodeRedeem => 'استرداد';
+
+  @override
+  String get prepaidCodeRedeemed => 'تم استرداد الرمز';
+
+  @override
+  String prepaidCodeResult(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'invalid': 'هذا الرمز غير صالح. تحقق منه وحاول مرة أخرى.',
+        'used': 'تم استخدام هذا الرمز بالفعل.',
+        'expired': 'انتهت صلاحية هذا الرمز.',
+        'hasPlan': 'لديك خطة بالفعل. لم يتم استخدام رمزك.',
+        'notPrepaid': 'لا يمكن استرداد هذا الرمز هنا. استخدمه عند اختيار خطة.',
+        'notEligible': 'لا يمكن استخدام هذا الرمز على هذا الحساب.',
+        'rateLimited': 'محاولات كثيرة جدًا. حاول لاحقًا.',
+        'other': 'حدث خطأ ما. يرجى المحاولة مرة أخرى.',
+      },
+    );
+    return '$_temp0';
+  }
 }

@@ -15819,4 +15819,37 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get shopOrderPlacedCheckEmail => 'Поръчката е направена. Проверете имейла си за потвърждението.';
+
+  @override
+  String get prepaidCodeEntry => 'Имате код?';
+
+  @override
+  String get prepaidCodeTitle => 'Активиране на код';
+
+  @override
+  String get prepaidCodeFieldHint => 'Въведете вашия код';
+
+  @override
+  String get prepaidCodeRedeem => 'Активирай';
+
+  @override
+  String get prepaidCodeRedeemed => 'Кодът е активиран';
+
+  @override
+  String prepaidCodeResult(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'invalid': 'Този код не е валиден. Проверете го и опитайте отново.',
+        'used': 'Този код вече е използван.',
+        'expired': 'Този код е изтекъл.',
+        'hasPlan': 'Вече имате план. Кодът ви не е използван.',
+        'notPrepaid': 'Този код не може да се активира тук. Използвайте го, когато изберете план.',
+        'notEligible': 'Този код не може да се използва в този акаунт.',
+        'rateLimited': 'Твърде много опити. Опитайте по-късно.',
+        'other': 'Нещо се обърка. Опитайте отново.',
+      },
+    );
+    return '$_temp0';
+  }
 }

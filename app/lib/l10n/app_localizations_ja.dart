@@ -15537,4 +15537,37 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get shopOrderPlacedCheckEmail => 'ご注文を受け付けました。確認メールをご確認ください。';
+
+  @override
+  String get prepaidCodeEntry => 'コードをお持ちですか？';
+
+  @override
+  String get prepaidCodeTitle => 'コードを使う';
+
+  @override
+  String get prepaidCodeFieldHint => 'コードを入力';
+
+  @override
+  String get prepaidCodeRedeem => '使う';
+
+  @override
+  String get prepaidCodeRedeemed => 'コードを適用しました';
+
+  @override
+  String prepaidCodeResult(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'invalid': 'このコードは無効です。確認してもう一度お試しください。',
+        'used': 'このコードはすでに使用されています。',
+        'expired': 'このコードは有効期限が切れています。',
+        'hasPlan': 'すでにプランをお持ちです。コードは使用されていません。',
+        'notPrepaid': 'このコードはここでは使えません。プランを選ぶときに使ってください。',
+        'notEligible': 'このコードはこのアカウントでは使えません。',
+        'rateLimited': '試行回数が多すぎます。後でもう一度お試しください。',
+        'other': '問題が発生しました。もう一度お試しください。',
+      },
+    );
+    return '$_temp0';
+  }
 }

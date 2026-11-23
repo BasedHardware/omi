@@ -19,6 +19,9 @@ import 'package:omi/pages/paywall/trial_paywall_page.dart';
 import 'package:omi/pages/settings/payment_webview_page.dart';
 import 'package:omi/pages/settings/widgets/plans/play_plans_content.dart';
 import 'package:omi/pages/settings/widgets/plans_sheet.dart';
+import 'package:omi/pages/settings/widgets/plans/prepaid_code_sheet.dart';
+import 'package:omi/backend/http/api/payment.dart';
+import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/services/billing/play_billing.dart';
 import 'package:omi/services/capture/transcription_allowance_cache.dart';
@@ -38,6 +41,8 @@ UserSubscriptionResponse _response({
   bool trialEligible = true,
   bool cancelAtPeriodEnd = false,
   PlayBillingConfig? play = playConfig,
+  bool prepaidCodeRedeem = false,
+  bool prepaid = false,
 }) =>
     UserSubscriptionResponse(
       subscription: Subscription(
@@ -47,6 +52,7 @@ UserSubscriptionResponse _response({
         stripeSubscriptionId: stripeId,
         cancelAtPeriodEnd: cancelAtPeriodEnd,
         currentPeriodEnd: plan.isPaid ? 1893456000 : null,
+        prepaid: prepaid,
       ),
       transcriptionSecondsUsed: 0,
       transcriptionSecondsLimit: 0,
@@ -56,6 +62,7 @@ UserSubscriptionResponse _response({
       insightsGainedLimit: 0,
       trialEligible: trialEligible,
       playBilling: play,
+      prepaidCodeRedeem: prepaidCodeRedeem,
     );
 
 class _Usage extends UsageProvider {
@@ -279,6 +286,16 @@ void main() {
     expect(offer.yearly!.formatted, 'US\$269.91');
   }, variant: TargetPlatformVariant.only(TargetPlatform.iOS));
 
+  for (final platform in [TargetPlatform.iOS, TargetPlatform.android]) {
+    testWidgets('trial paywall for a Stripe-billed ${platform.name} reader keeps the 7-day timeline', (tester) async {
+      await _pump(tester, [_response(play: null)],
+          child: TrialPaywallPage(source: 'test', now: DateTime(2026, 11, 22)));
+      expect(find.byKey(const Key('trial_paywall_timeline')), findsOneWidget);
+      expect(find.text('In 7 days'), findsOneWidget);
+      expect(find.byKey(const Key('trial_paywall_timeline_pending')), findsNothing);
+    }, variant: TargetPlatformVariant.only(platform));
+  }
+
   testWidgets('trial paywall shows Play prices, hides the Stripe code hint, and buys the Play trial offer',
       (tester) async {
     final world = await _pump(
@@ -334,6 +351,9 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.byKey(const Key('play_plans_error')), findsOneWidget);
       expect(find.textContaining('US\$'), findsNothing);
+      // No trial length, date or timeline in the error state.
+      expect(find.byKey(const Key('trial_paywall_timeline')), findsNothing);
+      expect(find.text('In 7 days'), findsNothing);
     }, variant: TargetPlatformVariant.only(TargetPlatform.android));
   }
 
@@ -366,6 +386,50 @@ void main() {
     expect(calls, 2);
     expect(find.byKey(const Key('play_plans_error')), findsNothing);
     expect(find.textContaining('₹22,500.00'), findsWidgets);
+  }, variant: TargetPlatformVariant.only(TargetPlatform.android));
+
+  testWidgets('trial paywall: no trial length while the billing provider is unknown or its read failed',
+      (tester) async {
+    var calls = 0;
+    final gate = Completer<UserSubscriptionResponse?>();
+    final world = _World([_response()]);
+    final usage = _Usage(
+      subscriptionRequest: () => ++calls == 1 ? gate.future : Future.value(_response(play: null)),
+      playBilling: world.billing,
+    );
+    addTearDown(usage.dispose);
+    tester.view.physicalSize = const Size(430, 2400);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    unawaited(usage.fetchSubscription());
+    await tester.pumpWidget(ChangeNotifierProvider<UsageProvider>.value(
+      value: usage,
+      child: MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: const [Locale('en')],
+        home: TrialPaywallPage(source: 'test', now: DateTime(2026, 11, 22)),
+      ),
+    ));
+    await tester.pump();
+    // Read in flight: the reader may turn out to be Play-billed, so no constant trial promise yet.
+    expect(usage.billingProviderPending, isTrue);
+    expect(find.byKey(const Key('trial_paywall_timeline_pending')), findsOneWidget);
+    expect(find.byKey(const Key('trial_paywall_timeline')), findsNothing);
+    expect(find.text('In 7 days'), findsNothing);
+    // The read fails: Retry, still no trial length or date.
+    gate.complete(null);
+    await tester.pumpAndSettle();
+    expect(usage.billingProviderFailed, isTrue);
+    expect(find.byKey(const Key('play_plans_error')), findsOneWidget);
+    expect(find.byKey(const Key('trial_paywall_timeline')), findsNothing);
+    expect(find.byKey(const Key('trial_paywall_timeline_pending')), findsNothing);
+    expect(find.text('In 7 days'), findsNothing);
+    // Retry lands on a Stripe-billed reader: the 7-day timeline is back.
+    await tester.tap(find.descendant(of: find.byKey(const Key('play_plans_error')), matching: find.byType(OmiButton)));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('trial_paywall_timeline')), findsOneWidget);
+    expect(find.text('In 7 days'), findsOneWidget);
   }, variant: TargetPlatformVariant.only(TargetPlatform.android));
 
   testWidgets('before the billing provider is known, Android shows loading and never a price', (tester) async {
@@ -534,10 +598,17 @@ void main() {
     ));
     await tester.pump();
     expect(find.byKey(const Key('play_plans_error')), findsNothing);
+    // While Play's offers load: a skeleton, never the constant trial length or its date.
+    expect(find.byKey(const Key('trial_paywall_timeline_pending')), findsOneWidget);
+    expect(find.byKey(const Key('trial_paywall_timeline')), findsNothing);
+    expect(find.text('In 7 days'), findsNothing);
     await tester.pump(playQueryTimeout + const Duration(seconds: 1));
     await tester.pump();
     expect(world.usage.playOffersLoading, isFalse);
     expect(find.byKey(const Key('play_plans_error')), findsOneWidget);
+    expect(find.byKey(const Key('trial_paywall_timeline_pending')), findsNothing);
+    expect(find.byKey(const Key('trial_paywall_timeline')), findsNothing);
+    expect(find.text('In 7 days'), findsNothing);
   }, variant: TargetPlatformVariant.only(TargetPlatform.android));
 
   testWidgets('Restore says when the purchase belongs to another Omi account', (tester) async {
@@ -563,4 +634,79 @@ void main() {
     expect(playRefusalMessage(l10n, null), contains("couldn't confirm"));
     expect(const PlayVerifyResult('active').retryable, isFalse);
   });
+
+  // ---- prepaid code entry (switch on) -----------------------------------------------------------------
+
+  testWidgets('switch on: a Play-billed reader sees no code entry on the plans sheet, trial or outline paywall',
+      (tester) async {
+    final world = await _pump(tester, [_response(prepaidCodeRedeem: true)]);
+    expect(world.usage.playBilledPurchaser, isTrue);
+    expect(world.usage.canRedeemPrepaidCode, isFalse);
+    expect(find.byType(PlayPlansContent), findsOneWidget);
+    expect(find.byKey(const ValueKey('prepaid_code_entry')), findsNothing);
+
+    await _pump(tester, [_response(prepaidCodeRedeem: true)],
+        child: TrialPaywallPage(source: 'test', now: DateTime(2026, 11, 23)));
+    expect(find.byKey(const ValueKey('prepaid_code_entry')), findsNothing);
+    expect(find.byKey(const Key('trial_paywall_code_hint')), findsNothing);
+
+    await _pump(tester, [_response(prepaidCodeRedeem: true)], child: const OutlinePaywallPage(source: 'test'));
+    expect(find.byKey(const ValueKey('prepaid_code_entry')), findsNothing);
+  }, variant: TargetPlatformVariant.only(TargetPlatform.android));
+
+  testWidgets('switch on: Android before the billing provider is known shows no code entry', (tester) async {
+    final usage = UsageProvider();
+    addTearDown(usage.dispose);
+    expect(usage.billingProviderUnknown, isTrue);
+    expect(usage.canRedeemPrepaidCode, isFalse);
+  }, variant: TargetPlatformVariant.only(TargetPlatform.android));
+
+  testWidgets('switch on, Stripe reader on Android: one code row, and a discount code moves to the promo field',
+      (tester) async {
+    final world = await _pump(tester, [_response(play: null, prepaidCodeRedeem: true)]);
+    expect(world.usage.canRedeemPrepaidCode, isTrue);
+    expect(find.byKey(const ValueKey('prepaid_code_entry')), findsOneWidget);
+    expect(find.text('Promo code'), findsNothing);
+    prepaidCodeRedeemer =
+        (code) async => const ApiFailure(ApiProblem(ApiProblemKind.rejected, statusCode: 400, detail: 'not_prepaid'));
+    addTearDown(() => prepaidCodeRedeemer = redeemPrepaidCode);
+    await tester.tap(find.byKey(const ValueKey('prepaid_code_entry')));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const ValueKey('prepaid_code_field')), 'SAVE50');
+    await tester.pump();
+    await tester.tap(find.byKey(const ValueKey('prepaid_code_redeem')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('prepaid_code_field')), findsNothing);
+    expect(find.byKey(const ValueKey('prepaid_code_entry')), findsNothing);
+    expect(find.byKey(const ValueKey('plans_sheet_promo_code')), findsOneWidget);
+    expect(find.text('SAVE50'), findsOneWidget);
+  }, variant: TargetPlatformVariant.only(TargetPlatform.android));
+
+  testWidgets('switch off: the plans sheet keeps only today\'s promo row', (tester) async {
+    await _pump(tester, [_response(play: null)]);
+    expect(find.byKey(const ValueKey('prepaid_code_entry')), findsNothing);
+    expect(find.text('Promo code'), findsOneWidget);
+  }, variant: TargetPlatformVariant.only(TargetPlatform.android));
+
+  testWidgets('a prepaid plan shows only its end date: no resubscribe, upgrade, cancel or payment method',
+      (tester) async {
+    await _pump(tester, [
+      _response(
+          play: null,
+          plan: PlanType.unlimitedV2,
+          stripeId: 'sub_prepaid',
+          cancelAtPeriodEnd: true,
+          prepaid: true,
+          prepaidCodeRedeem: true)
+    ]);
+    expect(find.byKey(const ValueKey('plans_sheet_prepaid')), findsOneWidget);
+    expect(find.byKey(const ValueKey('plans_sheet_prepaid_ends')), findsOneWidget);
+    expect(find.textContaining('ends'), findsOneWidget);
+    expect(find.textContaining('Resubscribe'), findsNothing);
+    expect(find.byKey(const ValueKey('plans_sheet_cancel_reassurance')), findsNothing);
+    expect(find.byKey(const ValueKey('plans_sheet_upgrade_button')), findsNothing);
+    expect(find.textContaining('payment method'), findsNothing);
+    expect(find.textContaining('Cancel'), findsNothing);
+    expect(find.byKey(const ValueKey('prepaid_code_entry')), findsNothing);
+  }, variant: TargetPlatformVariant.all());
 }

@@ -15654,4 +15654,37 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get shopOrderPlacedCheckEmail => 'ההזמנה בוצעה. האישור נשלח לאימייל שלך.';
+
+  @override
+  String get prepaidCodeEntry => 'יש לך קוד?';
+
+  @override
+  String get prepaidCodeTitle => 'מימוש קוד';
+
+  @override
+  String get prepaidCodeFieldHint => 'הזינו את הקוד שלכם';
+
+  @override
+  String get prepaidCodeRedeem => 'מימוש';
+
+  @override
+  String get prepaidCodeRedeemed => 'הקוד מומש';
+
+  @override
+  String prepaidCodeResult(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'invalid': 'הקוד הזה אינו תקף. בדקו אותו ונסו שוב.',
+        'used': 'הקוד הזה כבר נוצל.',
+        'expired': 'תוקף הקוד הזה פג.',
+        'hasPlan': 'כבר יש לכם תוכנית. הקוד שלכם לא נוצל.',
+        'notPrepaid': 'לא ניתן לממש את הקוד הזה כאן. השתמשו בו כשתבחרו תוכנית.',
+        'notEligible': 'לא ניתן להשתמש בקוד הזה בחשבון הזה.',
+        'rateLimited': 'יותר מדי ניסיונות. נסו שוב מאוחר יותר.',
+        'other': 'משהו השתבש. נסו שוב.',
+      },
+    );
+    return '$_temp0';
+  }
 }

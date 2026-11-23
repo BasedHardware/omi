@@ -25,6 +25,7 @@ import 'package:omi/pages/settings/widgets/plans/plan_display_name.dart';
 import 'package:omi/pages/settings/widgets/plans/plans_hero.dart';
 import 'package:omi/pages/settings/widgets/plans/play_plans_content.dart';
 import 'package:omi/pages/settings/widgets/plans/training_data_option.dart';
+import 'package:omi/pages/settings/widgets/plans/prepaid_code_sheet.dart';
 import 'package:omi/pages/settings/widgets/yearly_switch.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
@@ -100,6 +101,8 @@ class _PlansSheetState extends State<PlansSheet> {
   String? _promoCodeError;
   bool _isRedeemingCode = false;
   bool _promoCodeApplied = false;
+  // A discount code typed into "Have a code?" lands here, in today's promo field, for checkout.
+  bool _showPromoField = false;
   Timer? _codeRetryTimer;
   bool _cancelSelectionTouched = false;
   String? _renewalConfirmation;
@@ -816,6 +819,35 @@ class _PlansSheetState extends State<PlansSheet> {
         final knownFutureEnd = periodEndAt != null && periodEndAt.isAfter(DateTime.now());
         final secondary = OmiType.subhead.copyWith(color: OmiColors.textSecondary);
 
+        // A prepaid no-card plan ends on its own: show when, and nothing to resubscribe, upgrade or cancel.
+        if (isPaidPlan && sub?.prepaid == true) {
+          final planName = currentPlanDisplayName(context, provider.subscription);
+          return DecoratedBox(
+            key: const ValueKey('plans_sheet_prepaid'),
+            decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.sheetTop),
+            child: SizedBox(
+              height: MediaQuery.sizeOf(context).height * 0.85,
+              child: ListView(
+                padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.xl),
+                children: [
+                  const SizedBox(height: OmiSpacing.xl),
+                  Semantics(
+                    header: true,
+                    child: Text(planName, style: OmiType.title3, textAlign: TextAlign.center),
+                  ),
+                  const SizedBox(height: OmiSpacing.xs),
+                  Text(
+                    l10n.yourPlanEndsOn(planName, renewalDate),
+                    key: const ValueKey('plans_sheet_prepaid_ends'),
+                    textAlign: TextAlign.center,
+                    style: secondary,
+                  ),
+                ],
+              ),
+            ),
+          );
+        }
+
         return DecoratedBox(
           // Paints the sheet surface itself too, for hosts that present it without showOmiSheet.
           decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.sheetTop),
@@ -949,7 +981,19 @@ class _PlansSheetState extends State<PlansSheet> {
                         _plansOrPlaceholder(provider),
 
                       const SizedBox(height: OmiSpacing.xl),
-                      _buildPromoCodeField(),
+                      // One code entry: "Have a code?" redeems a prepaid code; a discount code goes to today's
+                      // promo field for checkout.
+                      if (provider.canRedeemPrepaidCode && !_showPromoField)
+                        PrepaidCodeEntry(
+                          source: PrepaidCodeSource.plansSheet,
+                          onDiscountCode: (code) => setState(() {
+                            _promoCodeController.text = code;
+                            _promoCodeError = null;
+                            _showPromoField = true;
+                          }),
+                        )
+                      else
+                        _buildPromoCodeField(),
                       const SizedBox(height: OmiSpacing.md),
 
                       // Continue/Upgrade — hidden for same-tier annual (nothing to change) and for
@@ -1128,6 +1172,7 @@ class _PlansSheetState extends State<PlansSheet> {
         busy: _isRedeemingCode,
         applyEnabled: !_isUpgrading && _codeRetryTimer == null,
         applied: _promoCodeApplied,
+        initiallyExpanded: _showPromoField,
         onApply: _applySubscriptionCode,
         onChanged: () => setState(() {
           _promoCodeError = null;

@@ -15801,4 +15801,37 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get shopOrderPlacedCheckEmail => 'Замовлення оформлено. Підтвердження надійде на вашу пошту.';
+
+  @override
+  String get prepaidCodeEntry => 'Маєте код?';
+
+  @override
+  String get prepaidCodeTitle => 'Активувати код';
+
+  @override
+  String get prepaidCodeFieldHint => 'Введіть ваш код';
+
+  @override
+  String get prepaidCodeRedeem => 'Активувати';
+
+  @override
+  String get prepaidCodeRedeemed => 'Код активовано';
+
+  @override
+  String prepaidCodeResult(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'invalid': 'Цей код недійсний. Перевірте його та спробуйте ще раз.',
+        'used': 'Цей код уже використано.',
+        'expired': 'Термін дії цього коду минув.',
+        'hasPlan': 'У вас уже є план. Ваш код не використано.',
+        'notPrepaid': 'Цей код не можна активувати тут. Використайте його під час вибору плану.',
+        'notEligible': 'Цей код не можна використати в цьому акаунті.',
+        'rateLimited': 'Забагато спроб. Спробуйте пізніше.',
+        'other': 'Щось пішло не так. Спробуйте ще раз.',
+      },
+    );
+    return '$_temp0';
+  }
 }

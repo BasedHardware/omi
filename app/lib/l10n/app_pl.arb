@@ -4785,5 +4785,11 @@
     "playRenewalTerms": "Odnawia się automatycznie w podanej cenie, dopóki nie anulujesz. Zarządzaj lub anuluj w dowolnym momencie w Google Play.",
     "playPaidAppUnavailable": "Niedostępne na Androidzie",
     "pageNotAvailableInApp": "Ta strona nie jest dostępna w aplikacji.",
-    "shopOrderPlacedCheckEmail": "Zamówienie złożone. Potwierdzenie znajdziesz w e-mailu."
+    "shopOrderPlacedCheckEmail": "Zamówienie złożone. Potwierdzenie znajdziesz w e-mailu.",
+    "prepaidCodeEntry": "Masz kod?",
+    "prepaidCodeTitle": "Wykorzystaj kod",
+    "prepaidCodeFieldHint": "Wpisz swój kod",
+    "prepaidCodeRedeem": "Wykorzystaj",
+    "prepaidCodeRedeemed": "Kod wykorzystany",
+    "prepaidCodeResult": "{reason, select, invalid{Ten kod jest nieprawidłowy. Sprawdź go i spróbuj ponownie.} used{Ten kod został już wykorzystany.} expired{Ten kod wygasł.} hasPlan{Masz już plan. Twój kod nie został wykorzystany.} notPrepaid{Tego kodu nie można tu wykorzystać. Użyj go przy wyborze planu.} notEligible{Tego kodu nie można użyć na tym koncie.} rateLimited{Zbyt wiele prób. Spróbuj później.} other{Coś poszło nie tak. Spróbuj ponownie.}}"
 }

@@ -15826,4 +15826,37 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get shopOrderPlacedCheckEmail => 'A rendelés leadva. A visszaigazolást az e-mailjeidben találod.';
+
+  @override
+  String get prepaidCodeEntry => 'Van kódod?';
+
+  @override
+  String get prepaidCodeTitle => 'Kód beváltása';
+
+  @override
+  String get prepaidCodeFieldHint => 'Add meg a kódodat';
+
+  @override
+  String get prepaidCodeRedeem => 'Beváltás';
+
+  @override
+  String get prepaidCodeRedeemed => 'Kód beváltva';
+
+  @override
+  String prepaidCodeResult(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'invalid': 'Ez a kód érvénytelen. Ellenőrizd, és próbáld újra.',
+        'used': 'Ezt a kódot már felhasználták.',
+        'expired': 'Ez a kód lejárt.',
+        'hasPlan': 'Már van csomagod. A kódodat nem használtuk fel.',
+        'notPrepaid': 'Ez a kód itt nem váltható be. Használd, amikor csomagot választasz.',
+        'notEligible': 'Ez a kód ezen a fiókon nem használható.',
+        'rateLimited': 'Túl sok próbálkozás. Próbáld újra később.',
+        'other': 'Hiba történt. Próbáld újra.',
+      },
+    );
+    return '$_temp0';
+  }
 }

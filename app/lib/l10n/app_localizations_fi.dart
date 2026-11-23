@@ -15773,4 +15773,37 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get shopOrderPlacedCheckEmail => 'Tilaus tehty. Vahvistus on sähköpostissasi.';
+
+  @override
+  String get prepaidCodeEntry => 'Onko sinulla koodi?';
+
+  @override
+  String get prepaidCodeTitle => 'Lunasta koodi';
+
+  @override
+  String get prepaidCodeFieldHint => 'Syötä koodisi';
+
+  @override
+  String get prepaidCodeRedeem => 'Lunasta';
+
+  @override
+  String get prepaidCodeRedeemed => 'Koodi lunastettu';
+
+  @override
+  String prepaidCodeResult(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'invalid': 'Tämä koodi ei ole kelvollinen. Tarkista se ja yritä uudelleen.',
+        'used': 'Tämä koodi on jo käytetty.',
+        'expired': 'Tämä koodi on vanhentunut.',
+        'hasPlan': 'Sinulla on jo tilaus. Koodiasi ei käytetty.',
+        'notPrepaid': 'Tätä koodia ei voi lunastaa täällä. Käytä sitä, kun valitset tilauksen.',
+        'notEligible': 'Tätä koodia ei voi käyttää tällä tilillä.',
+        'rateLimited': 'Liian monta yritystä. Yritä myöhemmin uudelleen.',
+        'other': 'Jokin meni pieleen. Yritä uudelleen.',
+      },
+    );
+    return '$_temp0';
+  }
 }

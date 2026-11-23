@@ -21,10 +21,14 @@ from utils.conversations.v3 import service
 AT = datetime(2026, 11, 16, tzinfo=timezone.utc)
 
 
-@pytest.mark.parametrize('stall', [False, True])
-def test_paid_outline_stream_deadline_discards_partial_reply_and_closes_stream(monkeypatch, stall):
+@pytest.fixture
+def outline_gateway(monkeypatch, stall):
     import asyncio
     import httpx
+
+    # The first OpenAI chat client loads the SDK's entire resource package.
+    # Charge that one-time import to fixture setup instead of stream execution.
+    import openai.resources  # noqa: F401
 
     from utils.conversations.v3 import models
 
@@ -57,6 +61,12 @@ def test_paid_outline_stream_deadline_discards_partial_reply_and_closes_stream(m
         models, 'DefaultAsyncHttpxClient', lambda: httpx.AsyncClient(transport=httpx.MockTransport(gateway))
     )
 
+    return models, stream
+
+
+@pytest.mark.parametrize('stall', [False, True])
+def test_paid_outline_stream_deadline_discards_partial_reply_and_closes_stream(outline_gateway, stall):
+    models, stream = outline_gateway
     assert models.outline('u', [('human', 'synthetic speech')]) == ('' if stall else 'outline')
     assert stream.closed
 

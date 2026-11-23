@@ -48,6 +48,7 @@ class GeneratedSubscription {
   final List<String> features;
   final GeneratedPlanLimits limits;
   final String plan;
+  final bool? prepaid;
   final String? provider;
   final String status;
   final String? stripeSubscriptionId;
@@ -62,6 +63,7 @@ class GeneratedSubscription {
     this.features = const [],
     GeneratedPlanLimits? limits,
     this.plan = "basic",
+    this.prepaid,
     this.provider,
     this.status = "active",
     this.stripeSubscriptionId,
@@ -79,6 +81,7 @@ class GeneratedSubscription {
       features: _required(_readFieldValue<List<String>>(_readField(json, const ["features"]), "features", _readStringList, requiredField: false, nullable: false, defaultValue: const []), "features"),
       limits: _required(_readFieldValue<GeneratedPlanLimits>(_readField(json, const ["limits"]), "limits", (value) => _readObject(value, GeneratedPlanLimits.fromJson), requiredField: false, nullable: false, defaultValue: GeneratedPlanLimits.fromJson(const {})), "limits"),
       plan: _required(_readFieldValue<String>(_readField(json, const ["plan"]), "plan", _readString, requiredField: false, nullable: false, defaultValue: "basic"), "plan"),
+      prepaid: _readFieldValue<bool>(_readField(json, const ["prepaid"]), "prepaid", _readBool, requiredField: false, nullable: true),
       provider: _readFieldValue<String>(_readField(json, const ["provider"]), "provider", _readString, requiredField: false, nullable: true),
       status: _required(_readFieldValue<String>(_readField(json, const ["status"]), "status", _readString, requiredField: false, nullable: false, defaultValue: "active"), "status"),
       stripeSubscriptionId: _readFieldValue<String>(_readField(json, const ["stripe_subscription_id"]), "stripe_subscription_id", _readString, requiredField: false, nullable: true),
@@ -96,6 +99,7 @@ class GeneratedSubscription {
       'features': features,
       'limits': limits.toJson(),
       'plan': plan,
+      'prepaid': prepaid,
       'provider': provider,
       'status': status,
       'stripe_subscription_id': stripeSubscriptionId,
@@ -518,6 +522,7 @@ class GeneratedUserSubscriptionResponse {
   final GeneratedPaymentIssue? paymentIssue;
   final GeneratedPhoneCallQuota? phoneCallQuota;
   final GeneratedPlayBillingConfig? playBilling;
+  final bool? prepaidCodeRedeem;
   final GeneratedProcessingBacklog? processingBacklog;
   final bool showSubscriptionUi;
   final GeneratedSubscription subscription;
@@ -543,6 +548,7 @@ class GeneratedUserSubscriptionResponse {
     this.paymentIssue,
     this.phoneCallQuota,
     this.playBilling,
+    this.prepaidCodeRedeem,
     this.processingBacklog,
     this.showSubscriptionUi = true,
     required this.subscription,
@@ -570,6 +576,7 @@ class GeneratedUserSubscriptionResponse {
       paymentIssue: _readFieldValue<GeneratedPaymentIssue>(_readField(json, const ["payment_issue"]), "payment_issue", (value) => _readObject(value, GeneratedPaymentIssue.fromJson), requiredField: false, nullable: true),
       phoneCallQuota: _readFieldValue<GeneratedPhoneCallQuota>(_readField(json, const ["phone_call_quota"]), "phone_call_quota", (value) => _readObject(value, GeneratedPhoneCallQuota.fromJson), requiredField: false, nullable: true),
       playBilling: _readFieldValue<GeneratedPlayBillingConfig>(_readField(json, const ["play_billing"]), "play_billing", (value) => _readObject(value, GeneratedPlayBillingConfig.fromJson), requiredField: false, nullable: true),
+      prepaidCodeRedeem: _readFieldValue<bool>(_readField(json, const ["prepaid_code_redeem"]), "prepaid_code_redeem", _readBool, requiredField: false, nullable: true),
       processingBacklog: _readFieldValue<GeneratedProcessingBacklog>(_readField(json, const ["processing_backlog"]), "processing_backlog", (value) => _readObject(value, GeneratedProcessingBacklog.fromJson), requiredField: false, nullable: true),
       showSubscriptionUi: _required(_readFieldValue<bool>(_readField(json, const ["show_subscription_ui"]), "show_subscription_ui", _readBool, requiredField: false, nullable: false, defaultValue: true), "show_subscription_ui"),
       subscription: _required(_readFieldValue<GeneratedSubscription>(_readField(json, const ["subscription"]), "subscription", (value) => _readObject(value, GeneratedSubscription.fromJson), requiredField: true, nullable: false), "subscription"),
@@ -598,6 +605,7 @@ class GeneratedUserSubscriptionResponse {
       'payment_issue': paymentIssue?.toJson(),
       'phone_call_quota': phoneCallQuota?.toJson(),
       'play_billing': playBilling?.toJson(),
+      'prepaid_code_redeem': prepaidCodeRedeem,
       'processing_backlog': processingBacklog?.toJson(),
       'show_subscription_ui': showSubscriptionUi,
       'subscription': subscription.toJson(),
@@ -631,6 +639,38 @@ class GeneratedPlayPurchaseResponse {
     return {
       'status': status,
       'subscription': subscription?.toJson(),
+    };
+  }
+}
+
+class GeneratedRedeemPrepaidCodeResponse {
+  final int endsAt;
+  final int months;
+  final String plan;
+  final String status;
+
+  const GeneratedRedeemPrepaidCodeResponse({
+    required this.endsAt,
+    required this.months,
+    required this.plan,
+    required this.status,
+  });
+
+  factory GeneratedRedeemPrepaidCodeResponse.fromJson(Map<String, dynamic> json) {
+    return GeneratedRedeemPrepaidCodeResponse(
+      endsAt: _required(_readFieldValue<int>(_readField(json, const ["ends_at"]), "ends_at", _readInt, requiredField: true, nullable: false), "ends_at"),
+      months: _required(_readFieldValue<int>(_readField(json, const ["months"]), "months", _readInt, requiredField: true, nullable: false), "months"),
+      plan: _required(_readFieldValue<String>(_readField(json, const ["plan"]), "plan", _readString, requiredField: true, nullable: false), "plan"),
+      status: _required(_readFieldValue<String>(_readField(json, const ["status"]), "status", _readString, requiredField: true, nullable: false), "status"),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'ends_at': endsAt,
+      'months': months,
+      'plan': plan,
+      'status': status,
     };
   }
 }

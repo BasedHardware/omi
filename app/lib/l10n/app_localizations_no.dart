@@ -15772,4 +15772,37 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get shopOrderPlacedCheckEmail => 'Bestillingen er sendt. Sjekk e-posten din for bekreftelsen.';
+
+  @override
+  String get prepaidCodeEntry => 'Har du en kode?';
+
+  @override
+  String get prepaidCodeTitle => 'Løs inn en kode';
+
+  @override
+  String get prepaidCodeFieldHint => 'Skriv inn koden din';
+
+  @override
+  String get prepaidCodeRedeem => 'Løs inn';
+
+  @override
+  String get prepaidCodeRedeemed => 'Koden er løst inn';
+
+  @override
+  String prepaidCodeResult(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'invalid': 'Denne koden er ikke gyldig. Sjekk den og prøv igjen.',
+        'used': 'Denne koden er allerede brukt.',
+        'expired': 'Denne koden har utløpt.',
+        'hasPlan': 'Du har allerede et abonnement. Koden din ble ikke brukt.',
+        'notPrepaid': 'Denne koden kan ikke løses inn her. Bruk den når du velger et abonnement.',
+        'notEligible': 'Denne koden kan ikke brukes på denne kontoen.',
+        'rateLimited': 'For mange forsøk. Prøv igjen senere.',
+        'other': 'Noe gikk galt. Prøv igjen.',
+      },
+    );
+    return '$_temp0';
+  }
 }

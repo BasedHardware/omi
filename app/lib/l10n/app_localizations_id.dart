@@ -15782,4 +15782,37 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get shopOrderPlacedCheckEmail => 'Pesanan dibuat. Periksa email Anda untuk konfirmasinya.';
+
+  @override
+  String get prepaidCodeEntry => 'Punya kode?';
+
+  @override
+  String get prepaidCodeTitle => 'Tukarkan kode';
+
+  @override
+  String get prepaidCodeFieldHint => 'Masukkan kode Anda';
+
+  @override
+  String get prepaidCodeRedeem => 'Tukarkan';
+
+  @override
+  String get prepaidCodeRedeemed => 'Kode berhasil ditukarkan';
+
+  @override
+  String prepaidCodeResult(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'invalid': 'Kode ini tidak valid. Periksa dan coba lagi.',
+        'used': 'Kode ini sudah digunakan.',
+        'expired': 'Kode ini sudah kedaluwarsa.',
+        'hasPlan': 'Anda sudah memiliki paket. Kode Anda tidak digunakan.',
+        'notPrepaid': 'Kode ini tidak bisa ditukarkan di sini. Gunakan saat memilih paket.',
+        'notEligible': 'Kode ini tidak bisa digunakan di akun ini.',
+        'rateLimited': 'Terlalu banyak percobaan. Coba lagi nanti.',
+        'other': 'Terjadi kesalahan. Silakan coba lagi.',
+      },
+    );
+    return '$_temp0';
+  }
 }

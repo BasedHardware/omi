@@ -87,13 +87,68 @@ void main() {
     expect(_go(paypal, 'https://www.omi.me/products/omi-gift-card'), WebNavigation.block);
   });
 
-  test('a post-purchase page closes the store (the payment is already taken)', () {
+  test('a post-purchase page on the store checkout closes the store (the payment is already taken)', () {
     for (final url in [
       'https://www.omi.me/checkouts/cn/abc/post-purchase',
       'https://www.omi.me/123/checkouts/abc/post_purchase',
+      'https://omi.me/checkouts/cn/abc/post-purchase',
+      'https://checkout.shopify.com/123/checkouts/abc/post_purchase',
     ]) {
       expect(_go(_checkout, url), WebNavigation.finish, reason: url);
     }
+  });
+
+  test('post-purchase words outside the store checkout are not an order', () {
+    // Blocked pages get the normal "not available" message, never "Order placed".
+    for (final url in [
+      'https://blog.example.com/post-purchase-tips',
+      'https://www.omi.me/blogs/news/post_purchase',
+      'https://www.omi.me/pages/post-purchase',
+      'https://app.omi.me/checkouts/post-purchase',
+    ]) {
+      expect(_go(_product, url), WebNavigation.block, reason: url);
+      expect(_go(_checkout, url).kind, isNot(WebNavigationKind.finish), reason: url);
+    }
+    // An off-site page from checkout keeps the normal off-site rule, not a close.
+    expect(_go(_checkout, 'https://blog.example.com/post-purchase-tips'), WebNavigation.allow);
+  });
+
+  test('every other Omi host is blocked from the product page and from checkout', () {
+    final paypal = Uri.parse('https://www.paypal.com/checkoutnow?token=1');
+    for (final url in [
+      'https://app.omi.me/',
+      'https://app.omi.me/checkouts/cn/abc',
+      'https://h.omi.me/apps',
+      'https://random-subdomain.omi.me/products/omi',
+      'https://a.b.omi.me/cart',
+    ]) {
+      for (final from in [_product, _cart, _checkout, paypal, null]) {
+        expect(_go(from, url), WebNavigation.block, reason: '$from -> $url');
+      }
+    }
+    // Look-alike hosts are not Omi hosts: from checkout they are ordinary off-site pages.
+    expect(_go(_checkout, 'https://notomi.me/'), WebNavigation.allow);
+  });
+
+  test('a trailing root dot does not get a host past the rules', () {
+    final paypal = Uri.parse('https://www.paypal.com/checkoutnow?token=1');
+    for (final url in [
+      'https://app.omi.me./',
+      'https://h.omi.me./apps',
+      'https://www.omi.me./products/omi-gift-card',
+      'https://omi.me./collections/all',
+    ]) {
+      for (final from in [_product, _cart, _checkout, paypal, null]) {
+        expect(_go(from, url), WebNavigation.block, reason: '$from -> $url');
+      }
+    }
+    // Post-purchase words on a dotted non-store host are not an order.
+    expect(_go(_checkout, 'https://app.omi.me./checkouts/cn/abc/post_purchase'), WebNavigation.block);
+    // The dotted store host follows the store rules: the device page still gets the hardware view.
+    expect(_go(_cart, 'https://www.omi.me./products/omi').kind, WebNavigationKind.replace);
+    // Coming from a dotted Omi page is not coming from a payment page.
+    expect(_go(Uri.parse('https://www.omi.me./products/omi?view=app-hardware'), 'https://example.com/'),
+        WebNavigation.block);
   });
 
   test('the device page is shown only when the app-hardware marker is present', () {

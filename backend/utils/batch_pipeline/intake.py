@@ -1186,7 +1186,13 @@ async def accept_upload(
             return JSONResponse(status_code=error.status_code, headers=error.headers, content=error.detail)
         # A transaction may have committed even when its reply was lost. Keep
         # the staging outbox for reconciliation; never release/re-route content.
-        deterministic = phase == 'decode' and decode is None and is_deterministic_decode_failure(error)
+        # The sampled path advances the same decoder over the same bytes under
+        # its own phase (`sample_decode`) before anything is staged; its probe
+        # phase classifies already-decoded audio, so a decoder fault can only
+        # surface while the sample itself is being decoded.
+        deterministic = (
+            phase in ('decode', 'sample_decode') and decode is None and is_deterministic_decode_failure(error)
+        )
         if deterministic and decode_failure_memo_enabled():
             # These bytes cannot decode however often they are retried. Remember
             # the proven failure so the next retry answers the same 503 without
