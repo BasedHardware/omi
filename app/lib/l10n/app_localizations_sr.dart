@@ -15769,4 +15769,37 @@ class AppLocalizationsSr extends AppLocalizations {
 
   @override
   String get playPaidAppUnavailable => 'Није доступно на Android-у';
+
+  @override
+  String get prepaidCodeEntry => 'Имате код?';
+
+  @override
+  String get prepaidCodeTitle => 'Искористите код';
+
+  @override
+  String get prepaidCodeFieldHint => 'Унесите свој код';
+
+  @override
+  String get prepaidCodeRedeem => 'Искористи';
+
+  @override
+  String get prepaidCodeRedeemed => 'Код је искоришћен';
+
+  @override
+  String prepaidCodeResult(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'invalid': 'Овај код није важећи. Проверите га и покушајте поново.',
+        'used': 'Овај код је већ искоришћен.',
+        'expired': 'Овај код је истекао.',
+        'hasPlan': 'Већ имате план. Ваш код није искоришћен.',
+        'notPrepaid': 'Овај код не може да се искористи овде. Искористите га када изаберете план.',
+        'notEligible': 'Овај код не може да се користи на овом налогу.',
+        'rateLimited': 'Превише покушаја. Сачекајте и покушајте касније.',
+        'other': 'Нешто није у реду. Покушајте поново.',
+      },
+    );
+    return '$_temp0';
+  }
 }

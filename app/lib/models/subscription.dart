@@ -597,6 +597,9 @@ class UserSubscriptionResponse {
   /// Present only when this Android build must start new purchases through Google Play.
   final PlayBillingConfig? playBilling;
 
+  /// Server switch: this user may redeem a prepaid code with no card. False when omitted.
+  final bool prepaidCodeRedeem;
+
   UserSubscriptionResponse({
     required this.subscription,
     required this.transcriptionSecondsUsed,
@@ -619,6 +622,7 @@ class UserSubscriptionResponse {
     this.processingBacklog,
     this.paymentIssue,
     this.playBilling,
+    this.prepaidCodeRedeem = false,
   });
 
   /// The same response with [trialEligible] replaced (Play decides trial eligibility per Google account).
@@ -644,6 +648,7 @@ class UserSubscriptionResponse {
         processingBacklog: processingBacklog,
         paymentIssue: paymentIssue,
         playBilling: playBilling,
+        prepaidCodeRedeem: prepaidCodeRedeem,
       );
 
   factory UserSubscriptionResponse.fromJson(Map<String, dynamic> json) =>
@@ -675,6 +680,7 @@ class UserSubscriptionResponse {
       heldAudio: generated.heldAudio == null ? null : HeldAudioSummary.fromGenerated(generated.heldAudio!),
       paymentIssue: generated.paymentIssue == null ? null : PaymentIssue.fromGenerated(generated.paymentIssue!),
       playBilling: generated.playBilling == null ? null : PlayBillingConfig.fromGenerated(generated.playBilling!),
+      prepaidCodeRedeem: generated.prepaidCodeRedeem == true,
     );
   }
 
@@ -699,6 +705,7 @@ class UserSubscriptionResponse {
       transcriptionAllowance: transcriptionAllowance?.toGenerated(),
       paymentIssue: paymentIssue?.toGenerated(),
       playBilling: playBilling?.toGenerated(),
+      prepaidCodeRedeem: prepaidCodeRedeem ? true : null,
       heldAudio: heldAudio == null
           ? null
           : wire.GeneratedHeldAudioSummary(

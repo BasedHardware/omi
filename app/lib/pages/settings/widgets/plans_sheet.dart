@@ -25,6 +25,7 @@ import 'package:omi/pages/settings/widgets/plans/plan_display_name.dart';
 import 'package:omi/pages/settings/widgets/plans/plans_hero.dart';
 import 'package:omi/pages/settings/widgets/plans/play_plans_content.dart';
 import 'package:omi/pages/settings/widgets/plans/training_data_option.dart';
+import 'package:omi/pages/settings/widgets/plans/prepaid_code_sheet.dart';
 import 'package:omi/pages/settings/widgets/yearly_switch.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
@@ -949,6 +950,7 @@ class _PlansSheetState extends State<PlansSheet> {
                         _plansOrPlaceholder(provider),
 
                       const SizedBox(height: OmiSpacing.xl),
+                      if (provider.canRedeemPrepaidCode) const PrepaidCodeEntry(source: PrepaidCodeSource.plansSheet),
                       _buildPromoCodeField(),
                       const SizedBox(height: OmiSpacing.md),
 

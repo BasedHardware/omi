@@ -4748,5 +4748,11 @@
     "playPurchaseOtherAccount": "Šis Google Play pirkinys priklauso kitai Omi paskyrai.",
     "playPurchaseNotConfirmed": "Pirkinio dar nepavyko patvirtinti. Bandysime dar kartą automatiškai.",
     "playRenewalTerms": "Automatiškai atnaujinama nurodyta kaina, kol atšauksite. Tvarkykite ar atšaukite bet kada Google Play.",
-    "playPaidAppUnavailable": "Android nepasiekiama"
+    "playPaidAppUnavailable": "Android nepasiekiama",
+    "prepaidCodeEntry": "Turite kodą?",
+    "prepaidCodeTitle": "Panaudoti kodą",
+    "prepaidCodeFieldHint": "Įveskite savo kodą",
+    "prepaidCodeRedeem": "Panaudoti",
+    "prepaidCodeRedeemed": "Kodas panaudotas",
+    "prepaidCodeResult": "{reason, select, invalid{Šis kodas negalioja. Patikrinkite jį ir bandykite dar kartą.} used{Šis kodas jau panaudotas.} expired{Šio kodo galiojimas baigėsi.} hasPlan{Jau turite planą. Jūsų kodas nepanaudotas.} notPrepaid{Šio kodo čia panaudoti negalima. Panaudokite jį rinkdamiesi planą.} notEligible{Šio kodo negalima naudoti šioje paskyroje.} rateLimited{Per daug bandymų. Palaukite ir bandykite vėliau.} other{Kažkas nepavyko. Bandykite dar kartą.}}"
 }

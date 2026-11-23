@@ -27680,6 +27680,42 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Not available on Android'**
   String get playPaidAppUnavailable;
+
+  /// Link on the paywall and plans sheet that opens the sheet to redeem a prepaid Omi Pro code
+  ///
+  /// In en, this message translates to:
+  /// **'Have a code?'**
+  String get prepaidCodeEntry;
+
+  /// Title of the sheet to redeem a prepaid Omi Pro code
+  ///
+  /// In en, this message translates to:
+  /// **'Redeem a code'**
+  String get prepaidCodeTitle;
+
+  /// Hint in the code field of the prepaid code sheet
+  ///
+  /// In en, this message translates to:
+  /// **'Enter your code'**
+  String get prepaidCodeFieldHint;
+
+  /// Button that redeems the prepaid code
+  ///
+  /// In en, this message translates to:
+  /// **'Redeem'**
+  String get prepaidCodeRedeem;
+
+  /// Title after a prepaid code was redeemed
+  ///
+  /// In en, this message translates to:
+  /// **'Code redeemed'**
+  String get prepaidCodeRedeemed;
+
+  /// Why a prepaid code was not redeemed. The code is never used when this shows.
+  ///
+  /// In en, this message translates to:
+  /// **'{reason, select, invalid{This code isn\'t valid. Check it and try again.} used{This code has already been used.} expired{This code has expired.} hasPlan{You already have a plan. Your code was not used.} notPrepaid{This code can\'t be redeemed here. Use it when you choose a plan.} notEligible{This code can\'t be used on this account.} rateLimited{Too many tries. Please wait and try again later.} other{Something went wrong. Please try again.}}'**
+  String prepaidCodeResult(String reason);
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

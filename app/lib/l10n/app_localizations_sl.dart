@@ -15790,4 +15790,37 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get playPaidAppUnavailable => 'Ni na voljo v Androidu';
+
+  @override
+  String get prepaidCodeEntry => 'Imate kodo?';
+
+  @override
+  String get prepaidCodeTitle => 'Unovči kodo';
+
+  @override
+  String get prepaidCodeFieldHint => 'Vnesite svojo kodo';
+
+  @override
+  String get prepaidCodeRedeem => 'Unovči';
+
+  @override
+  String get prepaidCodeRedeemed => 'Koda unovčena';
+
+  @override
+  String prepaidCodeResult(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'invalid': 'Ta koda ni veljavna. Preverite jo in poskusite znova.',
+        'used': 'Ta koda je že bila uporabljena.',
+        'expired': 'Tej kodi je potekla veljavnost.',
+        'hasPlan': 'Že imate paket. Vaša koda ni bila uporabljena.',
+        'notPrepaid': 'Te kode ni mogoče unovčiti tukaj. Uporabite jo, ko izberete paket.',
+        'notEligible': 'Te kode ni mogoče uporabiti v tem računu.',
+        'rateLimited': 'Preveč poskusov. Počakajte in poskusite pozneje.',
+        'other': 'Prišlo je do napake. Poskusite znova.',
+      },
+    );
+    return '$_temp0';
+  }
 }

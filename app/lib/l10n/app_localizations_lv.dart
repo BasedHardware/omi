@@ -15797,4 +15797,37 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get playPaidAppUnavailable => 'Nav pieejams Android';
+
+  @override
+  String get prepaidCodeEntry => 'Vai jums ir kods?';
+
+  @override
+  String get prepaidCodeTitle => 'Izmantot kodu';
+
+  @override
+  String get prepaidCodeFieldHint => 'Ievadiet savu kodu';
+
+  @override
+  String get prepaidCodeRedeem => 'Izmantot';
+
+  @override
+  String get prepaidCodeRedeemed => 'Kods izmantots';
+
+  @override
+  String prepaidCodeResult(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'invalid': 'Šis kods nav derīgs. Pārbaudiet to un mēģiniet vēlreiz.',
+        'used': 'Šis kods jau ir izmantots.',
+        'expired': 'Šī koda derīgums ir beidzies.',
+        'hasPlan': 'Jums jau ir plāns. Jūsu kods netika izmantots.',
+        'notPrepaid': 'Šo kodu šeit nevar izmantot. Izmantojiet to, izvēloties plānu.',
+        'notEligible': 'Šo kodu nevar izmantot šajā kontā.',
+        'rateLimited': 'Pārāk daudz mēģinājumu. Lūdzu, uzgaidiet un mēģiniet vēlāk.',
+        'other': 'Kaut kas nogāja greizi. Lūdzu, mēģiniet vēlreiz.',
+      },
+    );
+    return '$_temp0';
+  }
 }

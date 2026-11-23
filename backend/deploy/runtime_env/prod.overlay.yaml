@@ -928,6 +928,8 @@ overlay:
             value: price_1TuIa81F8wnoWYvw0iX0j5M8
           STRIPE_UNLIMITED_V2_ANNUAL_PRICE_ID:
             value: price_1TuIap1F8wnoWYvwHWq0EvNU
+          # No-card prepaid Pro code redemption; off until billing turns it on (cohort: prepaid-code-redeem).
+          PREPAID_CODE_REDEEM: {value: 'off', category: rollout}
           OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE:
             value: 'true'
             category: rollout

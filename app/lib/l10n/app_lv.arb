@@ -4748,5 +4748,11 @@
     "playPurchaseOtherAccount": "Šis Google Play pirkums pieder citam Omi kontam.",
     "playPurchaseNotConfirmed": "Pirkumu vēl neizdevās apstiprināt. Mēģināsim vēlreiz automātiski.",
     "playRenewalTerms": "Automātiski atjaunojas par norādīto cenu, līdz atcelsiet. Pārvaldiet vai atceliet jebkurā laikā Google Play.",
-    "playPaidAppUnavailable": "Nav pieejams Android"
+    "playPaidAppUnavailable": "Nav pieejams Android",
+    "prepaidCodeEntry": "Vai jums ir kods?",
+    "prepaidCodeTitle": "Izmantot kodu",
+    "prepaidCodeFieldHint": "Ievadiet savu kodu",
+    "prepaidCodeRedeem": "Izmantot",
+    "prepaidCodeRedeemed": "Kods izmantots",
+    "prepaidCodeResult": "{reason, select, invalid{Šis kods nav derīgs. Pārbaudiet to un mēģiniet vēlreiz.} used{Šis kods jau ir izmantots.} expired{Šī koda derīgums ir beidzies.} hasPlan{Jums jau ir plāns. Jūsu kods netika izmantots.} notPrepaid{Šo kodu šeit nevar izmantot. Izmantojiet to, izvēloties plānu.} notEligible{Šo kodu nevar izmantot šajā kontā.} rateLimited{Pārāk daudz mēģinājumu. Lūdzu, uzgaidiet un mēģiniet vēlāk.} other{Kaut kas nogāja greizi. Lūdzu, mēģiniet vēlreiz.}}"
 }

@@ -1,5 +1,5 @@
 -- Offline/PostHog SQL projection: bind one namespace and build.
--- Closed properties only: choice, source, current_plan, plan, billing_interval, previous_plan, new_plan, change_source, reason, has_details, step, surface, provider, stage.
+-- Closed properties only: choice, source, current_plan, plan, billing_interval, previous_plan, new_plan, change_source, reason, has_details, step, surface, provider, stage, months.
 -- Upgrade Succeeded and Upgrade Cancelled are the property-less presence names.
 -- Upgrade Succeeded Attributed is the checkout success that carries tier and interval.
 SELECT event, COUNT(*) AS emitted
@@ -11,6 +11,9 @@ WHERE app_namespace = :app_namespace AND build_number = :build_number
     'Upgrade Plan Selected',
     'Upgrade Succeeded Attributed',
     'Upgrade Billing Provider',
+    'Prepaid Plan Code Redeem Started',
+    'Prepaid Plan Code Redeem Succeeded',
+    'Prepaid Plan Code Redeem Failed',
     'Upgrade Succeeded',
     'Upgrade Cancelled',
     'Subscription Plan Changed',

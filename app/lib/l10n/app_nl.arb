@@ -4748,5 +4748,11 @@
     "playPurchaseOtherAccount": "Deze Google Play-aankoop hoort bij een ander Omi-account.",
     "playPurchaseNotConfirmed": "We konden je aankoop nog niet bevestigen. We proberen het automatisch opnieuw.",
     "playRenewalTerms": "Wordt automatisch verlengd tegen de getoonde prijs tot je opzegt. Beheer of zeg op wanneer je wilt in Google Play.",
-    "playPaidAppUnavailable": "Niet beschikbaar op Android"
+    "playPaidAppUnavailable": "Niet beschikbaar op Android",
+    "prepaidCodeEntry": "Heb je een code?",
+    "prepaidCodeTitle": "Code inwisselen",
+    "prepaidCodeFieldHint": "Voer je code in",
+    "prepaidCodeRedeem": "Inwisselen",
+    "prepaidCodeRedeemed": "Code ingewisseld",
+    "prepaidCodeResult": "{reason, select, invalid{Deze code is ongeldig. Controleer hem en probeer het opnieuw.} used{Deze code is al gebruikt.} expired{Deze code is verlopen.} hasPlan{Je hebt al een abonnement. Je code is niet gebruikt.} notPrepaid{Deze code kan hier niet worden ingewisseld. Gebruik hem wanneer je een abonnement kiest.} notEligible{Deze code kan niet op dit account worden gebruikt.} rateLimited{Te veel pogingen. Wacht even en probeer het later opnieuw.} other{Er ging iets mis. Probeer het opnieuw.}}"
 }

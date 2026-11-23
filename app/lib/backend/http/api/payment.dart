@@ -268,3 +268,43 @@ Future<ApiResult<bool>> redeemSubscriptionCode(String code, {ApiSend? send, bool
     },
   );
 }
+
+/// A fully prepaid Omi Pro code redeemed with no card. [endsAt] is when the prepaid term ends.
+class PrepaidCodeRedemption {
+  const PrepaidCodeRedemption({required this.plan, required this.endsAt, required this.months});
+  final String plan;
+  final DateTime endsAt;
+  final int months;
+}
+
+/// Redeems a prepaid code for the signed-in user. Failures carry the server's reason code in
+/// `problem.detail` (invalid_code, code_used, code_expired, has_plan, not_prepaid, not_eligible, try_again).
+Future<ApiResult<PrepaidCodeRedemption>> redeemPrepaidCode(String code, {ApiSend? send}) async {
+  final trimmed = code.trim();
+  if (trimmed.isEmpty || trimmed.length > 64) {
+    return const ApiFailure(ApiProblem(ApiProblemKind.rejected, statusCode: 400, detail: 'invalid_code'));
+  }
+  return executeApi<PrepaidCodeRedemption>(
+    request: ApiRequest(
+      url: '${Env.apiBaseUrl}v1/payments/prepaid-code/redeem',
+      method: 'POST',
+      body: jsonEncode({'code': trimmed}),
+    ),
+    send: send,
+    decode: (body) {
+      final decoded = jsonDecode(body);
+      if (decoded is! Map ||
+          decoded['status'] != 'redeemed' ||
+          decoded['plan'] is! String ||
+          decoded['ends_at'] is! int ||
+          decoded['months'] is! int) {
+        throw const FormatException('Expected redeemed prepaid code');
+      }
+      return PrepaidCodeRedemption(
+        plan: decoded['plan'] as String,
+        endsAt: DateTime.fromMillisecondsSinceEpoch((decoded['ends_at'] as int) * 1000),
+        months: decoded['months'] as int,
+      );
+    },
+  );
+}

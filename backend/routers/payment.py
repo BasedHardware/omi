@@ -12,6 +12,7 @@ from config.plan_catalog import configured_ladder_prices, validate_ladder_price
 from database.fsr_read_cache import fresh_reader, fresh_reads
 import database.play_subscriptions as play_subscriptions_db
 from utils import play_stripe_guard
+from config import prepaid_code_redeem as prepaid_code_config
 from config import play_billing as play_billing_config
 import os
 from datetime import datetime, timezone
@@ -495,8 +496,13 @@ def _try_reactivate_subscription(uid: str, target_price_id: str) -> dict | None:
         if status in stripe_utils.TERMINAL_SUBSCRIPTION_STATUSES:
             return None
 
-        # Check if subscription is active but scheduled to cancel
-        if status == 'active' and stripe_sub_dict.get('cancel_at_period_end') == True:
+        # Check if subscription is active but scheduled to cancel. A prepaid no-card subscription is
+        # never un-cancelled (it has no card to renew with): it falls through to the 409 below.
+        if (
+            status == 'active'
+            and stripe_sub_dict.get('cancel_at_period_end') == True
+            and not prepaid_code_config.is_prepaid_subscription(stripe_sub_dict)
+        ):
             current_price_id = stripe_sub_dict['items']['data'][0]['price']['id']
 
             # If resubscribing to the same plan, just remove cancellation
@@ -968,6 +974,8 @@ def upgrade_subscription_endpoint(request: UpgradeSubscriptionRequest, uid: str 
     try:
         # Retrieve current subscription to get current price ID
         stripe_sub = stripe.Subscription.retrieve(current_subscription.stripe_subscription_id).to_dict()
+        if prepaid_code_config.is_prepaid_subscription(stripe_sub):
+            raise HTTPException(status_code=409, detail="Your prepaid plan can't be changed until it ends.")
         if stripe_sub.get('cancel_at_period_end') and (
             not stripe_sub.get('current_period_end') or stripe_sub['current_period_end'] > int(time.time())
         ):

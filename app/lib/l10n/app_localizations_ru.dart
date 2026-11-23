@@ -15814,4 +15814,37 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get playPaidAppUnavailable => 'Недоступно на Android';
+
+  @override
+  String get prepaidCodeEntry => 'Есть код?';
+
+  @override
+  String get prepaidCodeTitle => 'Активировать код';
+
+  @override
+  String get prepaidCodeFieldHint => 'Введите ваш код';
+
+  @override
+  String get prepaidCodeRedeem => 'Активировать';
+
+  @override
+  String get prepaidCodeRedeemed => 'Код активирован';
+
+  @override
+  String prepaidCodeResult(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'invalid': 'Этот код недействителен. Проверьте его и попробуйте снова.',
+        'used': 'Этот код уже использован.',
+        'expired': 'Срок действия этого кода истёк.',
+        'hasPlan': 'У вас уже есть план. Ваш код не использован.',
+        'notPrepaid': 'Этот код нельзя активировать здесь. Используйте его при выборе плана.',
+        'notEligible': 'Этот код нельзя использовать в этом аккаунте.',
+        'rateLimited': 'Слишком много попыток. Подождите и попробуйте позже.',
+        'other': 'Что-то пошло не так. Попробуйте снова.',
+      },
+    );
+    return '$_temp0';
+  }
 }

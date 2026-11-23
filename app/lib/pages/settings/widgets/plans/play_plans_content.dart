@@ -5,6 +5,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:omi/models/subscription.dart';
 import 'package:omi/pages/paywall/paywall_checkout.dart';
 import 'package:omi/pages/settings/widgets/plans/plan_cards.dart';
+import 'package:omi/pages/settings/widgets/plans/prepaid_code_sheet.dart';
 import 'package:omi/providers/auth_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/services/billing/play_billing.dart';
@@ -208,6 +209,8 @@ class _PlayPlansContentState extends State<PlayPlansContent> {
         onPressed: _busy ? null : _restore,
         child: Text(l10n.restoreAction),
       ),
+      if (usage.canRedeemPrepaidCode)
+        const Center(child: PrepaidCodeEntry(source: PrepaidCodeSource.plansSheet, center: true)),
       PlayBillingDisclosure(openUrl: widget.openUrl),
     ];
   }

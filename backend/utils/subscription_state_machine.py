@@ -8,6 +8,7 @@ trialing access and past_due→Basic are deliberately preserved.
 from dataclasses import dataclass
 from typing import Mapping, Any
 
+from config import prepaid_code_redeem
 from config.plan_catalog import PAID_PLAN_TYPES
 from models.users import PlanType, PlanLimits, Subscription, SubscriptionStatus
 
@@ -32,13 +33,17 @@ def project_subscription(
     effective_plan = plan if paid_status else PlanType.basic
     if effective_plan is None:
         return None
+    # A prepaid no-card subscription ends at its prepaid term and never renews.
+    prepaid_end = prepaid_code_redeem.prepaid_end(obj) if paid_status else None
     return Subscription(
         plan=effective_plan,
         status=SubscriptionStatus.active,
-        current_period_end=obj.get('current_period_end'),
+        current_period_end=prepaid_end or obj.get('current_period_end'),
         current_period_start=obj.get('current_period_start'),
         stripe_subscription_id=obj['id'],
-        cancel_at_period_end=obj.get('cancel_at_period_end', False) if paid_status else False,
+        cancel_at_period_end=(
+            (prepaid_end is not None or obj.get('cancel_at_period_end', False)) if paid_status else False
+        ),
         limits=PlanLimits.model_validate(limits),
     )
 

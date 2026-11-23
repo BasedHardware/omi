@@ -15756,4 +15756,37 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get playPaidAppUnavailable => 'Android-এ উপলভ্য নয়';
+
+  @override
+  String get prepaidCodeEntry => 'কোড আছে?';
+
+  @override
+  String get prepaidCodeTitle => 'কোড রিডিম করুন';
+
+  @override
+  String get prepaidCodeFieldHint => 'আপনার কোড লিখুন';
+
+  @override
+  String get prepaidCodeRedeem => 'রিডিম';
+
+  @override
+  String get prepaidCodeRedeemed => 'কোড রিডিম হয়েছে';
+
+  @override
+  String prepaidCodeResult(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'invalid': 'এই কোডটি বৈধ নয়। যাচাই করে আবার চেষ্টা করুন।',
+        'used': 'এই কোডটি আগেই ব্যবহার করা হয়েছে।',
+        'expired': 'এই কোডের মেয়াদ শেষ হয়ে গেছে।',
+        'hasPlan': 'আপনার ইতিমধ্যে একটি প্ল্যান আছে। আপনার কোড ব্যবহার করা হয়নি।',
+        'notPrepaid': 'এই কোডটি এখানে রিডিম করা যাবে না। প্ল্যান বেছে নেওয়ার সময় এটি ব্যবহার করুন।',
+        'notEligible': 'এই কোডটি এই অ্যাকাউন্টে ব্যবহার করা যাবে না।',
+        'rateLimited': 'অনেকবার চেষ্টা করা হয়েছে। অপেক্ষা করে পরে আবার চেষ্টা করুন।',
+        'other': 'কিছু ভুল হয়েছে। আবার চেষ্টা করুন।',
+      },
+    );
+    return '$_temp0';
+  }
 }

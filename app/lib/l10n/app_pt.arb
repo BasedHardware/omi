@@ -4783,5 +4783,11 @@
     "playPurchaseOtherAccount": "Esta compra do Google Play pertence a outra conta Omi.",
     "playPurchaseNotConfirmed": "Ainda não conseguimos confirmar a compra. Vamos tentar de novo automaticamente.",
     "playRenewalTerms": "Renova-se automaticamente ao preço indicado até cancelar. Gira ou cancele a qualquer momento no Google Play.",
-    "playPaidAppUnavailable": "Indisponível no Android"
+    "playPaidAppUnavailable": "Indisponível no Android",
+    "prepaidCodeEntry": "Tem um código?",
+    "prepaidCodeTitle": "Resgatar um código",
+    "prepaidCodeFieldHint": "Introduza o seu código",
+    "prepaidCodeRedeem": "Resgatar",
+    "prepaidCodeRedeemed": "Código resgatado",
+    "prepaidCodeResult": "{reason, select, invalid{Este código não é válido. Verifique-o e tente novamente.} used{Este código já foi usado.} expired{Este código expirou.} hasPlan{Já tem um plano. O seu código não foi usado.} notPrepaid{Este código não pode ser resgatado aqui. Use-o quando escolher um plano.} notEligible{Este código não pode ser usado nesta conta.} rateLimited{Demasiadas tentativas. Aguarde e tente mais tarde.} other{Algo correu mal. Tente novamente.}}"
 }

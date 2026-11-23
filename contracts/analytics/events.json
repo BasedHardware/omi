@@ -4108,6 +4108,90 @@
       "correlation": null
     },
     {
+      "id": "prepaidPlanCodeRedeemStarted",
+      "wire_name": "Prepaid Plan Code Redeem Started",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "source": {
+          "type": "enum",
+          "wire_name": "source",
+          "values": [
+            "paywall",
+            "plans_sheet"
+          ]
+        }
+      },
+      "consumers": [
+        "subscription-funnel"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "prepaidPlanCodeRedeemSucceeded",
+      "wire_name": "Prepaid Plan Code Redeem Succeeded",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "source": {
+          "type": "enum",
+          "wire_name": "source",
+          "values": [
+            "paywall",
+            "plans_sheet"
+          ]
+        },
+        "months": {
+          "type": "int",
+          "wire_name": "months"
+        }
+      },
+      "consumers": [
+        "subscription-funnel"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "prepaidPlanCodeRedeemFailed",
+      "wire_name": "Prepaid Plan Code Redeem Failed",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "source": {
+          "type": "enum",
+          "wire_name": "source",
+          "values": [
+            "paywall",
+            "plans_sheet"
+          ]
+        },
+        "reason": {
+          "type": "enum",
+          "wire_name": "reason",
+          "values": [
+            "invalid_code",
+            "code_used",
+            "code_expired",
+            "has_plan",
+            "not_prepaid",
+            "not_eligible",
+            "rate_limited",
+            "try_again"
+          ]
+        }
+      },
+      "consumers": [
+        "subscription-funnel"
+      ],
+      "correlation": null
+    },
+    {
       "id": "subscriptionPlanChanged",
       "wire_name": "Subscription Plan Changed",
       "status": "active",

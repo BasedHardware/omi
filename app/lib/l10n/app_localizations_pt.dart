@@ -15791,4 +15791,37 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get playPaidAppUnavailable => 'Indisponível no Android';
+
+  @override
+  String get prepaidCodeEntry => 'Tem um código?';
+
+  @override
+  String get prepaidCodeTitle => 'Resgatar um código';
+
+  @override
+  String get prepaidCodeFieldHint => 'Introduza o seu código';
+
+  @override
+  String get prepaidCodeRedeem => 'Resgatar';
+
+  @override
+  String get prepaidCodeRedeemed => 'Código resgatado';
+
+  @override
+  String prepaidCodeResult(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'invalid': 'Este código não é válido. Verifique-o e tente novamente.',
+        'used': 'Este código já foi usado.',
+        'expired': 'Este código expirou.',
+        'hasPlan': 'Já tem um plano. O seu código não foi usado.',
+        'notPrepaid': 'Este código não pode ser resgatado aqui. Use-o quando escolher um plano.',
+        'notEligible': 'Este código não pode ser usado nesta conta.',
+        'rateLimited': 'Demasiadas tentativas. Aguarde e tente mais tarde.',
+        'other': 'Algo correu mal. Tente novamente.',
+      },
+    );
+    return '$_temp0';
+  }
 }

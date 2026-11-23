@@ -15786,4 +15786,37 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get playPaidAppUnavailable => 'Android nepasiekiama';
+
+  @override
+  String get prepaidCodeEntry => 'Turite kodą?';
+
+  @override
+  String get prepaidCodeTitle => 'Panaudoti kodą';
+
+  @override
+  String get prepaidCodeFieldHint => 'Įveskite savo kodą';
+
+  @override
+  String get prepaidCodeRedeem => 'Panaudoti';
+
+  @override
+  String get prepaidCodeRedeemed => 'Kodas panaudotas';
+
+  @override
+  String prepaidCodeResult(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'invalid': 'Šis kodas negalioja. Patikrinkite jį ir bandykite dar kartą.',
+        'used': 'Šis kodas jau panaudotas.',
+        'expired': 'Šio kodo galiojimas baigėsi.',
+        'hasPlan': 'Jau turite planą. Jūsų kodas nepanaudotas.',
+        'notPrepaid': 'Šio kodo čia panaudoti negalima. Panaudokite jį rinkdamiesi planą.',
+        'notEligible': 'Šio kodo negalima naudoti šioje paskyroje.',
+        'rateLimited': 'Per daug bandymų. Palaukite ir bandykite vėliau.',
+        'other': 'Kažkas nepavyko. Bandykite dar kartą.',
+      },
+    );
+    return '$_temp0';
+  }
 }

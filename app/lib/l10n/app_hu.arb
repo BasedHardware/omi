@@ -4844,5 +4844,11 @@
     "playPurchaseOtherAccount": "Ez a Google Play-vásárlás egy másik Omi-fiókhoz tartozik.",
     "playPurchaseNotConfirmed": "Még nem tudtuk megerősíteni a vásárlást. Automatikusan újrapróbáljuk.",
     "playRenewalTerms": "Lemondásig automatikusan megújul a feltüntetett áron. Bármikor kezelheted vagy lemondhatod a Google Playen.",
-    "playPaidAppUnavailable": "Androidon nem érhető el"
+    "playPaidAppUnavailable": "Androidon nem érhető el",
+    "prepaidCodeEntry": "Van kódod?",
+    "prepaidCodeTitle": "Kód beváltása",
+    "prepaidCodeFieldHint": "Add meg a kódodat",
+    "prepaidCodeRedeem": "Beváltás",
+    "prepaidCodeRedeemed": "Kód beváltva",
+    "prepaidCodeResult": "{reason, select, invalid{Ez a kód érvénytelen. Ellenőrizd, és próbáld újra.} used{Ezt a kódot már felhasználták.} expired{Ez a kód lejárt.} hasPlan{Már van csomagod. A kódodat nem használtuk fel.} notPrepaid{Ez a kód itt nem váltható be. Használd, amikor csomagot választasz.} notEligible{Ez a kód ezen a fiókon nem használható.} rateLimited{Túl sok próbálkozás. Várj, és próbáld újra később.} other{Hiba történt. Próbáld újra.}}"
 }

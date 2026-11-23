@@ -4346,6 +4346,7 @@ export interface PlanIdentityUserSubscriptionResponse {
   payment_issue?: PaymentIssue | null;
   phone_call_quota?: PhoneCallQuota | null;
   play_billing?: PlayBillingConfig | null;
+  prepaid_code_redeem?: boolean | null;
   processing_backlog?: ProcessingBacklog | null;
   show_subscription_ui?: boolean;
   subscription: PlanIdentitySubscription;
@@ -4804,6 +4805,13 @@ export interface RedeemCodeResponse {
   applies_at?: number | null;
   currency?: string | null;
   percent_off?: number | null;
+  status: string;
+}
+
+export interface RedeemPrepaidCodeResponse {
+  ends_at: number;
+  months: number;
+  plan: string;
   status: string;
 }
 
@@ -6576,6 +6584,7 @@ export interface UserSubscriptionResponse {
   payment_issue?: PaymentIssue | null;
   phone_call_quota?: PhoneCallQuota | null;
   play_billing?: PlayBillingConfig | null;
+  prepaid_code_redeem?: boolean | null;
   processing_backlog?: ProcessingBacklog | null;
   show_subscription_ui?: boolean;
   subscription: Subscription;
@@ -7457,6 +7466,7 @@ export interface OmiApiSchemas {
   "RecordingVoice": RecordingVoice;
   "RedeemCodeRequest": RedeemCodeRequest;
   "RedeemCodeResponse": RedeemCodeResponse;
+  "RedeemPrepaidCodeResponse": RedeemPrepaidCodeResponse;
   "ReferralClaimRequest": ReferralClaimRequest;
   "ReferralClaimResponse": ReferralClaimResponse;
   "ReferralLinkResponse": ReferralLinkResponse;
@@ -11035,6 +11045,16 @@ export interface OmiApiPaths {
       responses: {
         "200": unknown;
         "401": void;
+      };
+    };
+  };
+  "/v1/payments/prepaid-code/redeem": {
+    post: {
+      operationId: "redeem_prepaid_code_endpoint_v1_payments_prepaid_code_redeem_post";
+      responses: {
+        "200": RedeemPrepaidCodeResponse;
+        "401": void;
+        "422": HTTPValidationError;
       };
     };
   };
@@ -19729,6 +19749,27 @@ export async function verify_play_purchase_v1_payments_play_purchases_post(heade
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
+export async function redeem_prepaid_code_endpoint_v1_payments_prepaid_code_redeem_post(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: RedeemCodeRequest, init?: OmiApiClientInit): Promise<RedeemPrepaidCodeResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/payments/prepaid-code/redeem`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "POST",
+    headers: {
+      ...(body ? { 'Content-Type': 'application/json' } : {}),
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
 export async function redeem_code_endpoint_v1_payments_redeem_code_post(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: RedeemCodeRequest, init?: OmiApiClientInit): Promise<RedeemCodeResponse> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/payments/redeem-code`;
@@ -24511,4 +24552,4 @@ export async function get_speech_profile_v4_speech_profile_get(header: { authori
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-// Total: 558 client methods generated.
+// Total: 559 client methods generated.

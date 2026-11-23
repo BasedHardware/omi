@@ -518,6 +518,7 @@ class GeneratedUserSubscriptionResponse {
   final GeneratedPaymentIssue? paymentIssue;
   final GeneratedPhoneCallQuota? phoneCallQuota;
   final GeneratedPlayBillingConfig? playBilling;
+  final bool? prepaidCodeRedeem;
   final GeneratedProcessingBacklog? processingBacklog;
   final bool showSubscriptionUi;
   final GeneratedSubscription subscription;
@@ -543,6 +544,7 @@ class GeneratedUserSubscriptionResponse {
     this.paymentIssue,
     this.phoneCallQuota,
     this.playBilling,
+    this.prepaidCodeRedeem,
     this.processingBacklog,
     this.showSubscriptionUi = true,
     required this.subscription,
@@ -570,6 +572,7 @@ class GeneratedUserSubscriptionResponse {
       paymentIssue: _readFieldValue<GeneratedPaymentIssue>(_readField(json, const ["payment_issue"]), "payment_issue", (value) => _readObject(value, GeneratedPaymentIssue.fromJson), requiredField: false, nullable: true),
       phoneCallQuota: _readFieldValue<GeneratedPhoneCallQuota>(_readField(json, const ["phone_call_quota"]), "phone_call_quota", (value) => _readObject(value, GeneratedPhoneCallQuota.fromJson), requiredField: false, nullable: true),
       playBilling: _readFieldValue<GeneratedPlayBillingConfig>(_readField(json, const ["play_billing"]), "play_billing", (value) => _readObject(value, GeneratedPlayBillingConfig.fromJson), requiredField: false, nullable: true),
+      prepaidCodeRedeem: _readFieldValue<bool>(_readField(json, const ["prepaid_code_redeem"]), "prepaid_code_redeem", _readBool, requiredField: false, nullable: true),
       processingBacklog: _readFieldValue<GeneratedProcessingBacklog>(_readField(json, const ["processing_backlog"]), "processing_backlog", (value) => _readObject(value, GeneratedProcessingBacklog.fromJson), requiredField: false, nullable: true),
       showSubscriptionUi: _required(_readFieldValue<bool>(_readField(json, const ["show_subscription_ui"]), "show_subscription_ui", _readBool, requiredField: false, nullable: false, defaultValue: true), "show_subscription_ui"),
       subscription: _required(_readFieldValue<GeneratedSubscription>(_readField(json, const ["subscription"]), "subscription", (value) => _readObject(value, GeneratedSubscription.fromJson), requiredField: true, nullable: false), "subscription"),
@@ -598,6 +601,7 @@ class GeneratedUserSubscriptionResponse {
       'payment_issue': paymentIssue?.toJson(),
       'phone_call_quota': phoneCallQuota?.toJson(),
       'play_billing': playBilling?.toJson(),
+      'prepaid_code_redeem': prepaidCodeRedeem,
       'processing_backlog': processingBacklog?.toJson(),
       'show_subscription_ui': showSubscriptionUi,
       'subscription': subscription.toJson(),

@@ -15754,4 +15754,37 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get playPaidAppUnavailable => 'Androidis pole saadaval';
+
+  @override
+  String get prepaidCodeEntry => 'Kas sul on kood?';
+
+  @override
+  String get prepaidCodeTitle => 'Lunasta kood';
+
+  @override
+  String get prepaidCodeFieldHint => 'Sisesta oma kood';
+
+  @override
+  String get prepaidCodeRedeem => 'Lunasta';
+
+  @override
+  String get prepaidCodeRedeemed => 'Kood on lunastatud';
+
+  @override
+  String prepaidCodeResult(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'invalid': 'See kood ei kehti. Kontrolli seda ja proovi uuesti.',
+        'used': 'Seda koodi on juba kasutatud.',
+        'expired': 'Selle koodi kehtivus on lõppenud.',
+        'hasPlan': 'Sul on juba pakett. Sinu koodi ei kasutatud.',
+        'notPrepaid': 'Seda koodi ei saa siin lunastada. Kasuta seda paketi valimisel.',
+        'notEligible': 'Seda koodi ei saa selles kontos kasutada.',
+        'rateLimited': 'Liiga palju katseid. Oota ja proovi hiljem uuesti.',
+        'other': 'Midagi läks valesti. Proovi uuesti.',
+      },
+    );
+    return '$_temp0';
+  }
 }

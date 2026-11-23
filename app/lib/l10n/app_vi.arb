@@ -4748,5 +4748,11 @@
     "playPurchaseOtherAccount": "Giao dịch Google Play này thuộc về một tài khoản Omi khác.",
     "playPurchaseNotConfirmed": "Chưa thể xác nhận giao dịch. Chúng tôi sẽ tự động thử lại.",
     "playRenewalTerms": "Tự động gia hạn theo giá hiển thị cho đến khi bạn hủy. Quản lý hoặc hủy bất cứ lúc nào trong Google Play.",
-    "playPaidAppUnavailable": "Không có trên Android"
+    "playPaidAppUnavailable": "Không có trên Android",
+    "prepaidCodeEntry": "Bạn có mã?",
+    "prepaidCodeTitle": "Đổi mã",
+    "prepaidCodeFieldHint": "Nhập mã của bạn",
+    "prepaidCodeRedeem": "Đổi",
+    "prepaidCodeRedeemed": "Đã đổi mã",
+    "prepaidCodeResult": "{reason, select, invalid{Mã này không hợp lệ. Hãy kiểm tra và thử lại.} used{Mã này đã được sử dụng.} expired{Mã này đã hết hạn.} hasPlan{Bạn đã có gói. Mã của bạn chưa được sử dụng.} notPrepaid{Không thể đổi mã này tại đây. Hãy dùng khi bạn chọn gói.} notEligible{Không thể dùng mã này cho tài khoản này.} rateLimited{Quá nhiều lần thử. Vui lòng đợi và thử lại sau.} other{Đã xảy ra lỗi. Vui lòng thử lại.}}"
 }

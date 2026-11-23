@@ -12305,5 +12305,11 @@
     "playPurchaseOtherAccount": "Ta nakup v Google Play pripada drugemu računu Omi.",
     "playPurchaseNotConfirmed": "Nakupa še nismo mogli potrditi. Samodejno bomo poskusili znova.",
     "playRenewalTerms": "Samodejno se podaljšuje po prikazani ceni, dokler ne prekličete. Upravljajte ali prekličite kadar koli v Google Play.",
-    "playPaidAppUnavailable": "Ni na voljo v Androidu"
+    "playPaidAppUnavailable": "Ni na voljo v Androidu",
+    "prepaidCodeEntry": "Imate kodo?",
+    "prepaidCodeTitle": "Unovči kodo",
+    "prepaidCodeFieldHint": "Vnesite svojo kodo",
+    "prepaidCodeRedeem": "Unovči",
+    "prepaidCodeRedeemed": "Koda unovčena",
+    "prepaidCodeResult": "{reason, select, invalid{Ta koda ni veljavna. Preverite jo in poskusite znova.} used{Ta koda je že bila uporabljena.} expired{Tej kodi je potekla veljavnost.} hasPlan{Že imate paket. Vaša koda ni bila uporabljena.} notPrepaid{Te kode ni mogoče unovčiti tukaj. Uporabite jo, ko izberete paket.} notEligible{Te kode ni mogoče uporabiti v tem računu.} rateLimited{Preveč poskusov. Počakajte in poskusite pozneje.} other{Prišlo je do napake. Poskusite znova.}}"
 }

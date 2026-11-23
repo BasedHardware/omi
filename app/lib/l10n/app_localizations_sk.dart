@@ -15757,4 +15757,37 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get playPaidAppUnavailable => 'Na Androide nie je k dispozícii';
+
+  @override
+  String get prepaidCodeEntry => 'Máte kód?';
+
+  @override
+  String get prepaidCodeTitle => 'Uplatniť kód';
+
+  @override
+  String get prepaidCodeFieldHint => 'Zadajte svoj kód';
+
+  @override
+  String get prepaidCodeRedeem => 'Uplatniť';
+
+  @override
+  String get prepaidCodeRedeemed => 'Kód uplatnený';
+
+  @override
+  String prepaidCodeResult(String reason) {
+    String _temp0 = intl.Intl.selectLogic(
+      reason,
+      {
+        'invalid': 'Tento kód nie je platný. Skontrolujte ho a skúste to znova.',
+        'used': 'Tento kód už bol použitý.',
+        'expired': 'Platnosť tohto kódu vypršala.',
+        'hasPlan': 'Už máte plán. Váš kód nebol použitý.',
+        'notPrepaid': 'Tento kód tu nemožno uplatniť. Použite ho pri výbere plánu.',
+        'notEligible': 'Tento kód nemožno použiť v tomto účte.',
+        'rateLimited': 'Príliš veľa pokusov. Počkajte a skúste to neskôr.',
+        'other': 'Niečo sa pokazilo. Skúste to znova.',
+      },
+    );
+    return '$_temp0';
+  }
 }

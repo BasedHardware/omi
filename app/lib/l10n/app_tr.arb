@@ -4783,5 +4783,11 @@
     "playPurchaseOtherAccount": "Bu Google Play satın alımı başka bir Omi hesabına ait.",
     "playPurchaseNotConfirmed": "Satın alımınızı henüz doğrulayamadık. Otomatik olarak yeniden deneyeceğiz.",
     "playRenewalTerms": "İptal edene kadar gösterilen fiyattan otomatik olarak yenilenir. Google Play'den istediğiniz zaman yönetin veya iptal edin.",
-    "playPaidAppUnavailable": "Android'de kullanılamaz"
+    "playPaidAppUnavailable": "Android'de kullanılamaz",
+    "prepaidCodeEntry": "Kodunuz var mı?",
+    "prepaidCodeTitle": "Kod kullan",
+    "prepaidCodeFieldHint": "Kodunuzu girin",
+    "prepaidCodeRedeem": "Kullan",
+    "prepaidCodeRedeemed": "Kod kullanıldı",
+    "prepaidCodeResult": "{reason, select, invalid{Bu kod geçerli değil. Kontrol edip tekrar deneyin.} used{Bu kod zaten kullanılmış.} expired{Bu kodun süresi dolmuş.} hasPlan{Zaten bir planınız var. Kodunuz kullanılmadı.} notPrepaid{Bu kod burada kullanılamaz. Bir plan seçerken kullanın.} notEligible{Bu kod bu hesapta kullanılamaz.} rateLimited{Çok fazla deneme. Lütfen bekleyip daha sonra tekrar deneyin.} other{Bir sorun oluştu. Lütfen tekrar deneyin.}}"
 }

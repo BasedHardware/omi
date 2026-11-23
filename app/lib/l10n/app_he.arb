@@ -12305,5 +12305,11 @@
     "playPurchaseOtherAccount": "הרכישה הזו ב-Google Play שייכת לחשבון Omi אחר.",
     "playPurchaseNotConfirmed": "עדיין לא הצלחנו לאשר את הרכישה. ננסה שוב אוטומטית.",
     "playRenewalTerms": "מתחדש אוטומטית במחיר המוצג עד שתבטלו. ניתן לנהל או לבטל בכל עת ב-Google Play.",
-    "playPaidAppUnavailable": "לא זמין ב-Android"
+    "playPaidAppUnavailable": "לא זמין ב-Android",
+    "prepaidCodeEntry": "יש לך קוד?",
+    "prepaidCodeTitle": "מימוש קוד",
+    "prepaidCodeFieldHint": "הזינו את הקוד שלכם",
+    "prepaidCodeRedeem": "מימוש",
+    "prepaidCodeRedeemed": "הקוד מומש",
+    "prepaidCodeResult": "{reason, select, invalid{הקוד הזה אינו תקף. בדקו אותו ונסו שוב.} used{הקוד הזה כבר נוצל.} expired{תוקף הקוד הזה פג.} hasPlan{כבר יש לכם תוכנית. הקוד שלכם לא נוצל.} notPrepaid{לא ניתן לממש את הקוד הזה כאן. השתמשו בו כשתבחרו תוכנית.} notEligible{לא ניתן להשתמש בקוד הזה בחשבון הזה.} rateLimited{יותר מדי ניסיונות. המתינו ונסו שוב מאוחר יותר.} other{משהו השתבש. נסו שוב.}}"
 }

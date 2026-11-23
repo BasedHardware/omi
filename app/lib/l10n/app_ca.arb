@@ -4748,5 +4748,11 @@
     "playPurchaseOtherAccount": "Aquesta compra de Google Play pertany a un altre compte d'Omi.",
     "playPurchaseNotConfirmed": "Encara no hem pogut confirmar la compra. Ho tornarem a provar automàticament.",
     "playRenewalTerms": "Es renova automàticament al preu indicat fins que el cancel·lis. Gestiona-ho o cancel·la-ho quan vulguis a Google Play.",
-    "playPaidAppUnavailable": "No disponible a Android"
+    "playPaidAppUnavailable": "No disponible a Android",
+    "prepaidCodeEntry": "Tens un codi?",
+    "prepaidCodeTitle": "Bescanvia un codi",
+    "prepaidCodeFieldHint": "Introdueix el teu codi",
+    "prepaidCodeRedeem": "Bescanvia",
+    "prepaidCodeRedeemed": "Codi bescanviat",
+    "prepaidCodeResult": "{reason, select, invalid{Aquest codi no és vàlid. Comprova'l i torna-ho a provar.} used{Aquest codi ja s'ha utilitzat.} expired{Aquest codi ha caducat.} hasPlan{Ja tens un pla. El teu codi no s'ha utilitzat.} notPrepaid{Aquest codi no es pot bescanviar aquí. Fes-lo servir quan triïs un pla.} notEligible{Aquest codi no es pot utilitzar en aquest compte.} rateLimited{Massa intents. Espera i torna-ho a provar més tard.} other{Alguna cosa ha anat malament. Torna-ho a provar.}}"
 }

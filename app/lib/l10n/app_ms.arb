@@ -4748,5 +4748,11 @@
     "playPurchaseOtherAccount": "Pembelian Google Play ini milik akaun Omi lain.",
     "playPurchaseNotConfirmed": "Kami belum dapat mengesahkan pembelian. Kami akan cuba lagi secara automatik.",
     "playRenewalTerms": "Diperbaharui secara automatik pada harga yang ditunjukkan sehingga anda membatalkannya. Urus atau batalkan bila-bila masa di Google Play.",
-    "playPaidAppUnavailable": "Tidak tersedia di Android"
+    "playPaidAppUnavailable": "Tidak tersedia di Android",
+    "prepaidCodeEntry": "Ada kod?",
+    "prepaidCodeTitle": "Tebus kod",
+    "prepaidCodeFieldHint": "Masukkan kod anda",
+    "prepaidCodeRedeem": "Tebus",
+    "prepaidCodeRedeemed": "Kod berjaya ditebus",
+    "prepaidCodeResult": "{reason, select, invalid{Kod ini tidak sah. Semak dan cuba lagi.} used{Kod ini telah digunakan.} expired{Kod ini telah tamat tempoh.} hasPlan{Anda sudah mempunyai pelan. Kod anda tidak digunakan.} notPrepaid{Kod ini tidak boleh ditebus di sini. Gunakannya semasa memilih pelan.} notEligible{Kod ini tidak boleh digunakan pada akaun ini.} rateLimited{Terlalu banyak percubaan. Sila tunggu dan cuba lagi nanti.} other{Ada sesuatu yang tidak kena. Sila cuba lagi.}}"
 }
