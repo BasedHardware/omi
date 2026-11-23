@@ -66,6 +66,8 @@ _RELEASE_HEAD_STATES = _FRESH_FIRST_HEAD_STATES | {'held'}
 # Aged GPU results may cross the depth cap one at a time per owner.
 GPU_DEPTH_HOLD_AGE_SECONDS = 6 * 3600
 GPU_AGED_RELEASE_INTERVAL_SECONDS = 60
+# Bound how far aged catch-up commits can outrun a stalled projection watermark.
+GPU_AGED_RELEASES_PER_PROJECTION_WATERMARK_MAX = 16
 GPU_AGED_RELEASE_SWITCH = 'BATCH_PIPELINE_MERGE_AGED_GPU_RELEASE_ENABLED'
 _WAIT_BUCKETS = (60, 120, 300, 600, 1800)
 
@@ -697,14 +699,22 @@ class OrderedMerge:
                         held['gpu_age_source'] = age_source
                         projection_watermark = owner.get('projection_watermark')
                         prior_release_watermark_present = 'aged_gpu_release_projection_watermark' in owner
-                        projection_advanced = not prior_release_watermark_present or projection_watermark != owner.get(
-                            'aged_gpu_release_projection_watermark'
+                        same_projection_watermark = (
+                            prior_release_watermark_present
+                            and projection_watermark == owner.get('aged_gpu_release_projection_watermark')
                         )
+                        # Before the count was added, a matching marker represented one release.
+                        releases_at_watermark = (
+                            owner.get('aged_gpu_release_count_at_projection_watermark', 1)
+                            if same_projection_watermark
+                            else 0
+                        )
+                        held['gpu_release_count'] = releases_at_watermark + 1
                         held['gpu_release_eligible'] = (
                             held['gpu_age'] >= GPU_DEPTH_HOLD_AGE_SECONDS
                             and kill_switch(GPU_AGED_RELEASE_SWITCH, log=False)
                             and now >= owner.get('next_aged_gpu_release_at', 0)
-                            and projection_advanced
+                            and releases_at_watermark < GPU_AGED_RELEASES_PER_PROJECTION_WATERMARK_MAX
                         )
                         aged_gpu_release = allow_aged_gpu and held['gpu_release_eligible']
                 if not aged_gpu_release:
@@ -759,6 +769,7 @@ class OrderedMerge:
             if aged_gpu_release:
                 owner['next_aged_gpu_release_at'] = now + GPU_AGED_RELEASE_INTERVAL_SECONDS
                 owner['aged_gpu_release_projection_watermark'] = owner.get('projection_watermark')
+                owner['aged_gpu_release_count_at_projection_watermark'] = held['gpu_release_count']
                 aged_gpu.update(age=held['gpu_age'], age_source=held['gpu_age_source'])
             owner.pop('record_sibling_cursor', None)
             owner.update(

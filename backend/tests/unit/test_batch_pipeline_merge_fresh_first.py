@@ -17,6 +17,7 @@ from tests.unit.test_batch_pipeline_scheduler import MemoryStore, MemoryTransact
 from utils.batch_pipeline.contracts import WorkResult
 from utils.batch_pipeline.merge import (
     GPU_AGED_RELEASE_INTERVAL_SECONDS,
+    GPU_AGED_RELEASES_PER_PROJECTION_WATERMARK_MAX,
     GPU_AGED_RELEASE_SWITCH,
     GPU_DEPTH_HOLD_AGE_SECONDS,
     OrderedMerge,
@@ -98,7 +99,6 @@ def test_aged_gpu_depth_hold_releases_in_capture_order_with_durable_cooldown():
     store.rows['owners', OWNER]['log_sequence'] = 1800
     store.rows['owners', OWNER]['projection_watermark'] = 'p1'
     store.rows['results', 'p1'] = {'log_sequence': 1}
-    store.rows['results', 'p2'] = {'log_sequence': 2}
     for segment in ('first', 'second'):
         complete(queue, leases, segment)
 
@@ -118,11 +118,11 @@ def test_aged_gpu_depth_hold_releases_in_capture_order_with_durable_cooldown():
     restarted = OrderedMerge(store, metrics=metrics, head_wait_seconds=0, catch_up_depth=16)
     next_slot = eligible_at + GPU_AGED_RELEASE_INTERVAL_SECONDS
     assert restarted.commit_next('heavy', next_slot - 1) is None
-    assert restarted.commit_next('heavy', next_slot) is None  # The same projection watermark cannot release twice.
-    store.rows['owners', OWNER]['projection_watermark'] = 'p2'
     entry = restarted.commit_next('heavy', next_slot)
     assert entry['segment_id'] == 'second' and entry['previous_segment_id'] == 'first'
     assert entry['log_sequence'] == 1803
+    assert store.rows['owners', OWNER]['aged_gpu_release_projection_watermark'] == 'p1'
+    assert store.rows['owners', OWNER]['aged_gpu_release_count_at_projection_watermark'] == 2
     assert (
         registry.get_sample_value(
             'omi_batch_pipeline_gpu_aged_releases_total', {'worker_release': 'unscoped', 'namespace': 'unscoped'}
@@ -130,6 +130,41 @@ def test_aged_gpu_depth_hold_releases_in_capture_order_with_durable_cooldown():
         == 2
     )
     assert registry.get_sample_value('omi_batch_pipeline_gpu_aged_release_age_seconds_count', labels) == 2
+
+
+def test_aged_gpu_release_budget_allows_bounded_progress_without_watermark_advance():
+    rows = {
+        f'old{index:02}': (1000 + index, CATCH_UP)
+        for index in range(GPU_AGED_RELEASES_PER_PROJECTION_WATERMARK_MAX + 1)
+    }
+    store, queue, leases = admitted(rows)
+    store.rows['owners', OWNER]['log_sequence'] = 1800
+    store.rows['owners', OWNER]['projection_watermark'] = 'p0'
+    store.rows['results', 'p0'] = {'log_sequence': 1}
+    for segment in rows:
+        complete(queue, leases, segment, NOW)
+
+    merge = merge_for(store, depth=16)
+    first_release_at = NOW + GPU_DEPTH_HOLD_AGE_SECONDS
+    for index, segment in enumerate(rows):
+        committed = merge.commit_next('heavy', first_release_at + index * GPU_AGED_RELEASE_INTERVAL_SECONDS)
+        if index < GPU_AGED_RELEASES_PER_PROJECTION_WATERMARK_MAX:
+            assert committed['segment_id'] == segment
+        else:
+            assert committed is None
+
+    owner = store.rows['owners', OWNER]
+    assert owner['aged_gpu_release_projection_watermark'] == 'p0'
+    assert owner['aged_gpu_release_count_at_projection_watermark'] == GPU_AGED_RELEASES_PER_PROJECTION_WATERMARK_MAX
+
+    # Projection progress resets the bounded stalled-watermark budget.
+    owner['projection_watermark'] = 'p1'
+    store.rows['results', 'p1'] = {'log_sequence': 2}
+    next_release_at = (
+        first_release_at + GPU_AGED_RELEASES_PER_PROJECTION_WATERMARK_MAX * GPU_AGED_RELEASE_INTERVAL_SECONDS
+    )
+    committed = merge.commit_next('heavy', next_release_at)
+    assert committed['segment_id'] == f'old{GPU_AGED_RELEASES_PER_PROJECTION_WATERMARK_MAX:02}'
 
 
 def test_aged_gpu_release_uses_enqueued_age_for_legacy_rows_without_ready_at():

@@ -1005,11 +1005,13 @@ least six hours from `ready_at` (or `enqueued_at` for legacy rows without a
 ready clock). The default-on `BATCH_PIPELINE_MERGE_AGED_GPU_RELEASE_ENABLED`
 switch gates this exception; setting it to `false` keeps those rows held.
 Provider-route rows and recovered-release rows do not use this path. Each
-owner can release at most one aged row for a given projection-watermark value,
-with a 60-second durable cooldown; the release and both markers are written
-with the result commit. A later aged release waits for the projection watermark
-to advance, bounding extra catch-up progress when projection stalls. The hold
-and successful-release age metrics are scoped by worker release and namespace;
+owner can release up to 16 aged rows while its projection watermark is
+unchanged, with a 60-second durable cooldown between releases. Projection
+progress resets that per-watermark budget. The release, cooldown and budget
+count are written with the result commit, bounding extra catch-up progress
+while still allowing a time-based burst during a stalled projection. Once the
+budget is spent, further aged rows wait for projection progress. The hold and
+successful-release age metrics are scoped by worker release and namespace;
 their `age_source` label distinguishes `ready_at` from the legacy
 `enqueued_at` fallback.
 
