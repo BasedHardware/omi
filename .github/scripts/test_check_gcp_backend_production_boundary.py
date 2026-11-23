@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import importlib.util
+from itertools import takewhile
 import json
 import os
 import shutil
@@ -97,7 +98,10 @@ class GcpBackendProductionBoundaryTests(unittest.TestCase):
     def test_selected_production_smoke_retries_only_before_an_http_response(self) -> None:
         composite = (ROOT / CHECKER.DEPLOY_BACKEND_STACK_ACTION).read_text(encoding="utf-8")
         smoke = composite.split(f"- name: {CHECKER.PROD_SMOKE}\n", 1)[1].split("\n    - name: ", 1)[0]
-        script = textwrap.dedent(smoke.split("\n      run: |\n", 1)[1])
+        run_block = smoke.split("\n      run: |\n", 1)[1]
+        # Stop at the end of the YAML block, before any step-level comments.
+        run_lines = takewhile(lambda line: not line.strip() or line.startswith("        "), run_block.splitlines(True))
+        script = textwrap.dedent("".join(run_lines))
         cases = {
             "pass": (0, 1),
             "transport_then_pass": (0, 2),
