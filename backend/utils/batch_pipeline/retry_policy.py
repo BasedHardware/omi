@@ -16,6 +16,8 @@ def quarantine_job(
     tx, job: dict, now: float, reason: str, *, lease_expired: bool = False, worker_failure: dict | None = None
 ) -> None:
     if worker_failure is not None:
+        if lease_expired:
+            raise ValueError('lease expiry and worker failure evidence are mutually exclusive')
         validate_worker_failure(worker_failure)
     # Preserve the durable audio and any existing artifact references for
     # operator recovery; quarantine never deletes encrypted source material.

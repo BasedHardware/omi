@@ -126,7 +126,8 @@ async def execute_chat_completion(
     attempt_trace: AttemptTrace | None = None,
     max_provider_attempts: int | None = None,
 ) -> ExecutorResult:
-    if current_attempt() is not None:
+    # The builder durably claims only one paid attempt for a live title.
+    if current_attempt() is not None or resolved_route.active_route.lane_id == 'omi:auto:conversation-v3-live-title':
         max_provider_attempts = 1
     serving_route = _select_serving_route(resolved_route)
     if serving_route.lane_id in DREAM_LANES:

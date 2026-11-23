@@ -1,4 +1,4 @@
-"""V6 is the default model; no model reaches the ordered finalize clock until it is revalidated."""
+"""Soniox v6 defaults and reported-clock selection."""
 
 import asyncio
 import importlib
@@ -13,23 +13,18 @@ from utils.stt.soniox_wire_ledger import SonioxProviderClock
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    'model,ledger,ordered,rate,url,clock_type',
+    'model,ledger,rate,url,clock_type',
     [
-        (None, True, True, 16000, None, SonioxProviderClock),
-        ('stt-rt-v6', True, True, 16000, None, SonioxProviderClock),
-        # Flag on is not enough: no model is validated for the ordered clock.
-        ('stt-rt-v5', True, True, 16000, None, SonioxProviderClock),
-        ('stt-rt-v6', True, False, 16000, None, SonioxProviderClock),
-        ('stt-rt-v5', True, False, 16000, None, SonioxProviderClock),
-        ('stt-rt-v6', False, True, 16000, None, type(None)),
-        ('stt-rt-v6', True, True, 8000, None, SonioxProviderClock),
-        ('stt-rt-v6', True, True, 16000, 'wss://example.invalid', SonioxProviderClock),
-        ('custom-model', True, True, 16000, None, SonioxProviderClock),
+        (None, True, 16000, None, SonioxProviderClock),
+        ('stt-rt-v6', True, 16000, None, SonioxProviderClock),
+        ('stt-rt-v5', True, 16000, None, SonioxProviderClock),
+        ('stt-rt-v6', False, 16000, None, type(None)),
+        ('stt-rt-v6', True, 8000, None, SonioxProviderClock),
+        ('stt-rt-v6', True, 16000, 'wss://example.invalid', SonioxProviderClock),
+        ('custom-model', True, 16000, None, SonioxProviderClock),
     ],
 )
-async def test_model_env_selects_wire_config_and_preserves_clock_gates(
-    monkeypatch, model, ledger, ordered, rate, url, clock_type
-):
+async def test_model_env_selects_wire_config_and_reported_clock(monkeypatch, model, ledger, rate, url, clock_type):
     sock = None
     try:
         with monkeypatch.context() as patch:
@@ -41,7 +36,6 @@ async def test_model_env_selects_wire_config_and_preserves_clock_gates(
                 patch.setenv('SONIOX_WS_URL', url)
             patch.setenv('SONIOX_API_KEY', 'test-key')
             patch.setenv('SONIOX_WIRE_LEDGER', str(ledger).lower())
-            patch.setenv('SONIOX_ORDERED_FINALIZE', str(ordered).lower())
             patch.setenv('SONIOX_IDLE_CLOSE_SECONDS', '0')
             importlib.reload(soniox)
             ws = AsyncMock()

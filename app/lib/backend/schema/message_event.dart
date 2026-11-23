@@ -1,6 +1,10 @@
 import 'package:omi/backend/schema/conversation.dart';
-import 'capture_committed_event.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
+
+import 'audio_custody_event.dart';
+import 'capture_committed_event.dart';
+
+export 'audio_custody_event.dart';
 
 abstract class MessageEvent {
   final String eventType;
@@ -11,6 +15,8 @@ abstract class MessageEvent {
     switch (json['type']) {
       case 'capture_committed':
         return CaptureCommittedEvent.parse(json);
+      case 'audio_custody':
+        return AudioCustodyEvent.parse(json) ?? UnknownEvent(eventType: 'invalid_audio_custody');
       case 'conversation_session':
         final id = json['conversation_id'];
         final status = json['status'];
