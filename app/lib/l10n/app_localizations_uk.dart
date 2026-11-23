@@ -562,11 +562,11 @@ class AppLocalizationsUk extends AppLocalizations {
   String get hardwareSection => 'Апаратне забезпечення';
 
   @override
-  String get v2Undetected => 'V2 не виявлено';
+  String get v2Undetected => 'Офлайн-синхронізація недоступна';
 
   @override
   String get v2UndetectedMessage =>
-      'Ми бачимо, що у вас або пристрій V1, або ваш пристрій не підключений. Функціонал SD-карти доступний лише для пристроїв V2.';
+      'Для офлайн-синхронізації потрібен підключений пристрій Omi з картою пам’яті SD. Ваш поточний пристрій це не підтримує.';
 
   @override
   String get endConversation => 'Завершити розмову';
@@ -15761,4 +15761,13 @@ class AppLocalizationsUk extends AppLocalizations {
   @override
   String get firmwareUpdateAppRequired =>
       'Для цього оновлення прошивки потрібна новіша версія застосунку Omi. Оновіть застосунок у магазині застосунків, а потім перевірте ще раз.';
+
+  @override
+  String get quietPayerTitle => 'Немає записів 5 днів';
+
+  @override
+  String get quietPayerMessage => 'Перевірте свій Omi.';
+
+  @override
+  String get quietPayerCheck => 'Перевірити';
 }

@@ -1,6 +1,7 @@
 {
   "schema_version": 1,
   "id": "FC-unbounded-module-cache",
+  "family": "work-bounded-resumable",
   "violated_contract": "Module-owned in-memory caches must have an explicit capacity and eviction policy.",
   "canonical_prevention": "Put cache ownership behind one bounded cache primitive with a declared capacity and deterministic eviction policy.",
   "evidence_prs": [9713, 9778, 9794],

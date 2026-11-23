@@ -2561,7 +2561,9 @@ enum PaywallOpenedSource {
   onboarding("onboarding"),
   ahaFirstSummary("aha_first_summary"),
   freeCap("free_cap"),
-  onPhoneBanner("on_phone_banner");
+  onPhoneBanner("on_phone_banner"),
+  heldRecording("held_recording"),
+  heldRecordingDetail("held_recording_detail");
   const PaywallOpenedSource(this.wireName);
   final String wireName;
 }
@@ -2651,7 +2653,9 @@ enum UpgradePlanSelectedSource {
   onboarding("onboarding"),
   ahaFirstSummary("aha_first_summary"),
   freeCap("free_cap"),
-  onPhoneBanner("on_phone_banner");
+  onPhoneBanner("on_phone_banner"),
+  heldRecording("held_recording"),
+  heldRecordingDetail("held_recording_detail");
   const UpgradePlanSelectedSource(this.wireName);
   final String wireName;
 }
@@ -3126,7 +3130,9 @@ enum PaywallVariantShownSource {
   onboarding("onboarding"),
   ahaFirstSummary("aha_first_summary"),
   freeCap("free_cap"),
-  onPhoneBanner("on_phone_banner");
+  onPhoneBanner("on_phone_banner"),
+  heldRecording("held_recording"),
+  heldRecordingDetail("held_recording_detail");
   const PaywallVariantShownSource(this.wireName);
   final String wireName;
 }
@@ -3578,6 +3584,22 @@ final class SubscriptionPaymentIssueMonthlyFailed extends RegisteredEvent {
   String get wireName => "Subscription Payment Issue Monthly Failed";
   @override
   Map<String, Object> get properties => {"reason": reason.wireName};
+}
+
+final class SubscriptionQuietRowShown extends RegisteredEvent {
+  const SubscriptionQuietRowShown();
+  @override
+  String get wireName => "Subscription Quiet Row Shown";
+  @override
+  Map<String, Object> get properties => {};
+}
+
+final class SubscriptionQuietRowTapped extends RegisteredEvent {
+  const SubscriptionQuietRowTapped();
+  @override
+  String get wireName => "Subscription Quiet Row Tapped";
+  @override
+  Map<String, Object> get properties => {};
 }
 
 final class MobileDeviceHealthDailyRingRead extends RegisteredEvent {

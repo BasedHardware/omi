@@ -54,6 +54,8 @@ async def consume(wire, message):
 
 async def setup_peer(monkeypatch):
     monkeypatch.setenv('SONIOX_WIRE_LEDGER', 'true')
+    # The ordered clock is gated to the stt-rt-v5 rollback; the default is v6.
+    monkeypatch.setattr(soniox, 'SONIOX_MODEL', 'stt-rt-v5')
     result = await managed(monkeypatch, True)
     leg, wire = result[4:6]
     leg.gate = None

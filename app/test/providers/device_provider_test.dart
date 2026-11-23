@@ -56,6 +56,53 @@ void main() {
 
   tearDown(AnalyticsManager.resetForTesting);
 
+  test('storage checks coalesce and a retired result cannot overwrite a same-device reconnect', () async {
+    final retired = Completer<OfflineStorageCapability>();
+    final current = Completer<OfflineStorageCapability>();
+    final responses = [retired.future, current.future];
+    var reads = 0;
+    final provider = DeviceProvider(
+      deviceInfoConnectionLoader: (_) async => _StorageProbeConnection(responses[reads++]),
+    );
+    addTearDown(provider.dispose);
+    provider.connectedDevice = BtDevice(id: 'storage-pendant', name: 'Omi', type: DeviceType.omi, rssi: -40);
+    provider.setIsConnected(true);
+
+    final first = provider.refreshOfflineStorageCapability();
+    expect(provider.refreshOfflineStorageCapability(), same(first));
+    expect(reads, 1);
+
+    provider.onDeviceConnectionStateChanged('storage-pendant', DeviceConnectionState.disconnected);
+    expect(provider.offlineStorageCapability, OfflineStorageCapability.unverified);
+    // The same link can return before the debounced disconnect clears the UI.
+    provider.setIsConnected(true);
+    final afterReconnect = provider.refreshOfflineStorageCapability();
+    expect(reads, 2);
+
+    current.complete(OfflineStorageCapability.supported);
+    await afterReconnect;
+    retired.complete(OfflineStorageCapability.unsupported);
+    await first;
+
+    expect(provider.offlineStorageCapability, OfflineStorageCapability.supported);
+  });
+
+  test('a failed storage check can be retried on the same connection', () async {
+    var reads = 0;
+    final provider = DeviceProvider(deviceInfoConnectionLoader: (_) async {
+      if (++reads == 1) throw StateError('synthetic GATT check failure');
+      return _StorageProbeConnection(Future.value(OfflineStorageCapability.supported));
+    });
+    addTearDown(provider.dispose);
+    provider.connectedDevice = BtDevice(id: 'storage-pendant', name: 'Omi', type: DeviceType.omi, rssi: -40);
+    provider.setIsConnected(true);
+
+    await provider.refreshOfflineStorageCapability();
+    expect(provider.offlineStorageCapability, OfflineStorageCapability.unverified);
+    await provider.refreshOfflineStorageCapability();
+    expect(provider.offlineStorageCapability, OfflineStorageCapability.supported);
+  });
+
   for (final firmware in ['1.0.2', '3.0.16', '3.0.21']) {
     test('empty firmware retries device info and updates WAL routing when $firmware resolves', () async {
       final provider = DeviceProvider();
@@ -601,4 +648,13 @@ class _TestAnalyticsAdapter implements AnalyticsAdapter {
 class _InfoConnection implements DeviceConnection {
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+class _StorageProbeConnection extends _InfoConnection {
+  _StorageProbeConnection(this.result);
+
+  final Future<OfflineStorageCapability> result;
+
+  @override
+  Future<OfflineStorageCapability> probeOfflineStorageCapability() => result;
 }

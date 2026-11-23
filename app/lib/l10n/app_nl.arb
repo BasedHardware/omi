@@ -178,8 +178,8 @@
     "deviceInfoSection": "Apparaatinformatie",
     "customizationSection": "Aanpassingen",
     "hardwareSection": "Hardware",
-    "v2Undetected": "V2 niet gedetecteerd",
-    "v2UndetectedMessage": "We zien dat je een V1-apparaat hebt of je apparaat is niet verbonden. SD-kaartfunctionaliteit is alleen beschikbaar voor V2-apparaten.",
+    "v2Undetected": "Offline synchronisatie niet beschikbaar",
+    "v2UndetectedMessage": "Offline synchronisatie vereist een verbonden Omi-apparaat met SD-kaartopslag. Je huidige apparaat ondersteunt dit niet.",
     "endConversation": "Gesprek beëindigen",
     "pauseResume": "Pauzeren/Hervatten",
     "starConversation": "Gesprek als favoriet markeren",
@@ -4737,5 +4737,8 @@
     "writingSummaryStatus": "Samenvatting wordt geschreven…",
     "stillWorkingOnIt": "Er wordt nog aan gewerkt.",
     "firmwareUpdateFirmwareTooOld": "De firmware van je apparaat is te oud voor deze update. Neem contact op met de ondersteuning voor hulp bij het bijwerken van je apparaat.",
-    "firmwareUpdateAppRequired": "Voor deze firmware-update is een nieuwere Omi-app nodig. Werk de app bij via je appwinkel en controleer daarna opnieuw."
+    "firmwareUpdateAppRequired": "Voor deze firmware-update is een nieuwere Omi-app nodig. Werk de app bij via je appwinkel en controleer daarna opnieuw.",
+    "quietPayerTitle": "Al 5 dagen geen opnames",
+    "quietPayerMessage": "Controleer je Omi.",
+    "quietPayerCheck": "Controleren"
 }

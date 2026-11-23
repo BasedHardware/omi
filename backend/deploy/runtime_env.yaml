@@ -132,13 +132,10 @@ environments:
           AUDIO_ARCHIVE_STOP_PCM_ENABLED: {value: 'false', category: rollout}
           AUDIO_ARCHIVE_SYNC_ENABLED: {value: 'false', category: rollout}
           AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED: {value: 'false', category: rollout}
-          AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED: {value: 'false', category: rollout}
           AUDIO_ARCHIVE_PERCENT: {category: rollout, value: '0'}
           AUDIO_ARCHIVE_STOP_PCM_PERCENT: {category: rollout, value: '0'}
           AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT: {category: rollout, value: '0'}
           BUCKET_AUDIO_DERIVED: {value: '', category: rollout}
-          AUDIO_MERGE_WORKER_URL: {value: '', category: rollout}
-          LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION: {value: 'false', category: rollout}
           LIVE_CAPTURE_WINDOW_MERGE_UNION: {category: rollout, value: 'false'}
           LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS: {category: rollout, value: 'false'}
           SONIOX_CAPTURE_AXIS_DIAGNOSTICS: {category: rollout, value: 'false'}
@@ -582,13 +579,10 @@ environments:
           AUDIO_ARCHIVE_STOP_PCM_ENABLED: {value: 'false', category: rollout}
           AUDIO_ARCHIVE_SYNC_ENABLED: {value: 'false', category: rollout}
           AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED: {value: 'false', category: rollout}
-          AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED: {value: 'false', category: rollout}
           AUDIO_ARCHIVE_PERCENT: {category: rollout, value: '0'}
           AUDIO_ARCHIVE_STOP_PCM_PERCENT: {category: rollout, value: '0'}
           AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT: {category: rollout, value: '0'}
           BUCKET_AUDIO_DERIVED: {value: '', category: rollout}
-          AUDIO_MERGE_WORKER_URL: {value: '', category: rollout}
-          LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION: {value: 'false', category: rollout}
           LIVE_CAPTURE_WINDOW_MERGE_UNION: {category: rollout, value: 'false'}
           LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS: {category: rollout, value: 'false'}
           SONIOX_CAPTURE_AXIS_DIAGNOSTICS: {category: rollout, value: 'false'}
@@ -1164,12 +1158,10 @@ environments:
             AUDIO_ARCHIVE_STOP_PCM_ENABLED: {value: 'false', category: rollout}
             AUDIO_ARCHIVE_SYNC_ENABLED: {value: 'false', category: rollout}
             AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED: {value: 'false', category: rollout}
-            AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED: {value: 'false', category: rollout}
             AUDIO_ARCHIVE_PERCENT: {category: rollout, value: '0'}
             AUDIO_ARCHIVE_STOP_PCM_PERCENT: {category: rollout, value: '0'}
             AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT: {category: rollout, value: '0'}
             BUCKET_AUDIO_DERIVED: {value: '', category: rollout}
-            AUDIO_MERGE_WORKER_URL: {value: '', category: rollout}
             REDIS_DB_PORT:
               value: '13151'
               category: service_discovery
@@ -1193,7 +1185,6 @@ environments:
             OMI_VERTEX_RESERVATION_PROJECT:
               value: based-hardware-dev
               category: runtime_identity
-            LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION: {value: 'false', category: rollout}
             LIVE_CAPTURE_WINDOW_MERGE_UNION: {value: 'false', category: rollout}
             LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS: {value: 'false', category: rollout}
             SONIOX_CAPTURE_AXIS_DIAGNOSTICS: {value: 'false', category: rollout}
@@ -1579,12 +1570,10 @@ environments:
             AUDIO_ARCHIVE_STOP_PCM_ENABLED: {value: 'false', category: rollout}
             AUDIO_ARCHIVE_SYNC_ENABLED: {value: 'false', category: rollout}
             AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED: {value: 'false', category: rollout}
-            AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED: {value: 'false', category: rollout}
             AUDIO_ARCHIVE_PERCENT: {category: rollout, value: '0'}
             AUDIO_ARCHIVE_STOP_PCM_PERCENT: {category: rollout, value: '0'}
             AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT: {category: rollout, value: '0'}
             BUCKET_AUDIO_DERIVED: {value: '', category: rollout}
-            AUDIO_MERGE_WORKER_URL: {value: '', category: rollout}
             OMI_VERTEX_RESERVATION_PROJECT:
               value: based-hardware-dev
               category: runtime_identity
@@ -1613,7 +1602,6 @@ environments:
               value: backend-sync
             TRANSLATION_CACHE_TTL: {value: '86400', category: rollout}
             TRANSLATION_NEGATIVE_CACHE_TTL: {value: '21600', category: rollout}
-            LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION: {value: 'false', category: rollout}
             LIVE_CAPTURE_WINDOW_MERGE_UNION: {value: 'false', category: rollout}
             LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS: {value: 'false', category: rollout}
             SONIOX_CAPTURE_AXIS_DIAGNOSTICS: {value: 'false', category: rollout}
@@ -2012,12 +2000,10 @@ environments:
             AUDIO_ARCHIVE_STOP_PCM_ENABLED: {value: 'false', category: rollout}
             AUDIO_ARCHIVE_SYNC_ENABLED: {value: 'false', category: rollout}
             AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED: {value: 'false', category: rollout}
-            AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED: {value: 'false', category: rollout}
             AUDIO_ARCHIVE_PERCENT: {category: rollout, value: '0'}
             AUDIO_ARCHIVE_STOP_PCM_PERCENT: {category: rollout, value: '0'}
             AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT: {category: rollout, value: '0'}
             BUCKET_AUDIO_DERIVED: {value: '', category: rollout}
-            AUDIO_MERGE_WORKER_URL: {value: '', category: rollout}
             REDIS_DB_PORT:
               value: '13151'
               category: service_discovery
@@ -2040,7 +2026,6 @@ environments:
               value: backend-sync-backfill
             TRANSLATION_CACHE_TTL: {value: '86400', category: rollout}
             TRANSLATION_NEGATIVE_CACHE_TTL: {value: '21600', category: rollout}
-            LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION: {value: 'false', category: rollout}
             LIVE_CAPTURE_WINDOW_MERGE_UNION: {value: 'false', category: rollout}
             LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS: {value: 'false', category: rollout}
             SONIOX_CAPTURE_AXIS_DIAGNOSTICS: {value: 'false', category: rollout}
@@ -2416,12 +2401,10 @@ environments:
             AUDIO_ARCHIVE_STOP_PCM_ENABLED: {value: 'false', category: rollout}
             AUDIO_ARCHIVE_SYNC_ENABLED: {value: 'false', category: rollout}
             AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED: {value: 'false', category: rollout}
-            AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED: {value: 'false', category: rollout}
             AUDIO_ARCHIVE_PERCENT: {category: rollout, value: '0'}
             AUDIO_ARCHIVE_STOP_PCM_PERCENT: {category: rollout, value: '0'}
             AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT: {category: rollout, value: '0'}
             BUCKET_AUDIO_DERIVED: {value: '', category: rollout}
-            AUDIO_MERGE_WORKER_URL: {value: '', category: rollout}
             REDIS_DB_PORT:
               value: '13151'
               category: service_discovery
@@ -2444,7 +2427,6 @@ environments:
               value: backend-integration
             TRANSLATION_CACHE_TTL: {value: '86400', category: rollout}
             TRANSLATION_NEGATIVE_CACHE_TTL: {value: '21600', category: rollout}
-            LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION: {value: 'false', category: rollout}
             LIVE_CAPTURE_WINDOW_MERGE_UNION: {value: 'false', category: rollout}
             LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS: {value: 'false', category: rollout}
             SONIOX_CAPTURE_AXIS_DIAGNOSTICS: {value: 'false', category: rollout}
@@ -3086,13 +3068,10 @@ environments:
           AUDIO_ARCHIVE_STOP_PCM_ENABLED: {value: 'false', category: rollout}
           AUDIO_ARCHIVE_SYNC_ENABLED: {value: 'false', category: rollout}
           AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED: {value: 'false', category: rollout}
-          AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED: {value: 'false', category: rollout}
           AUDIO_ARCHIVE_PERCENT: {category: rollout, value: '100'}
           AUDIO_ARCHIVE_STOP_PCM_PERCENT: {category: rollout, value: '0'}
           AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT: {category: rollout, value: '0'}
           BUCKET_AUDIO_DERIVED: {value: '', category: rollout}
-          AUDIO_MERGE_WORKER_URL: {value: '', category: rollout}
-          LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION: {value: 'false', category: rollout}
           LIVE_CAPTURE_WINDOW_MERGE_UNION: {category: rollout, value: 'true'}
           LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS: {category: rollout, value: 'true'}
           SONIOX_CAPTURE_AXIS_DIAGNOSTICS: {category: rollout, value: 'true'}
@@ -3662,13 +3641,10 @@ environments:
           AUDIO_ARCHIVE_STOP_PCM_ENABLED: {value: 'false', category: rollout}
           AUDIO_ARCHIVE_SYNC_ENABLED: {value: 'false', category: rollout}
           AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED: {value: 'false', category: rollout}
-          AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED: {value: 'false', category: rollout}
           AUDIO_ARCHIVE_PERCENT: {category: rollout, value: '100'}
           AUDIO_ARCHIVE_STOP_PCM_PERCENT: {category: rollout, value: '0'}
           AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT: {category: rollout, value: '0'}
           BUCKET_AUDIO_DERIVED: {value: '', category: rollout}
-          AUDIO_MERGE_WORKER_URL: {value: '', category: rollout}
-          LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION: {value: 'false', category: rollout}
           LIVE_CAPTURE_WINDOW_MERGE_UNION: {category: rollout, value: 'true'}
           LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS: {category: rollout, value: 'true'}
           SONIOX_CAPTURE_AXIS_DIAGNOSTICS: {category: rollout, value: 'true'}
@@ -4285,12 +4261,10 @@ environments:
             AUDIO_ARCHIVE_STOP_PCM_ENABLED: {value: 'false', category: rollout}
             AUDIO_ARCHIVE_SYNC_ENABLED: {value: 'false', category: rollout}
             AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED: {value: 'true', category: rollout}
-            AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED: {value: 'false', category: rollout}
             AUDIO_ARCHIVE_PERCENT: {category: rollout, value: '100'}
             AUDIO_ARCHIVE_STOP_PCM_PERCENT: {category: rollout, value: '0'}
             AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT: {category: rollout, value: '5'}
             BUCKET_AUDIO_DERIVED: {value: omi-audio-derived-uc1, category: rollout}
-            AUDIO_MERGE_WORKER_URL: {value: '', category: rollout}
             REDIS_DB_PORT:
               value: '13151'
               category: service_discovery
@@ -4314,7 +4288,6 @@ environments:
             OMI_VERTEX_RESERVATION_PROJECT:
               value: based-hardware
               category: runtime_identity
-            LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION: {value: 'false', category: rollout}
             LIVE_CAPTURE_WINDOW_MERGE_UNION: {value: 'false', category: rollout}
             LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS: {value: 'false', category: rollout}
             SONIOX_CAPTURE_AXIS_DIAGNOSTICS: {value: 'false', category: rollout}
@@ -4847,12 +4820,10 @@ environments:
             AUDIO_ARCHIVE_STOP_PCM_ENABLED: {value: 'false', category: rollout}
             AUDIO_ARCHIVE_SYNC_ENABLED: {value: 'false', category: rollout}
             AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED: {value: 'true', category: rollout}
-            AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED: {value: 'false', category: rollout}
             AUDIO_ARCHIVE_PERCENT: {category: rollout, value: '100'}
             AUDIO_ARCHIVE_STOP_PCM_PERCENT: {category: rollout, value: '0'}
             AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT: {category: rollout, value: '5'}
             BUCKET_AUDIO_DERIVED: {value: omi-audio-derived-uc1, category: rollout}
-            AUDIO_MERGE_WORKER_URL: {value: '', category: rollout}
             OMI_VERTEX_RESERVATION_PROJECT:
               value: based-hardware
               category: runtime_identity
@@ -4881,7 +4852,6 @@ environments:
               value: backend-sync
             TRANSLATION_CACHE_TTL: {value: '86400', category: rollout}
             TRANSLATION_NEGATIVE_CACHE_TTL: {value: '21600', category: rollout}
-            LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION: {value: 'false', category: rollout}
             LIVE_CAPTURE_WINDOW_MERGE_UNION: {value: 'false', category: rollout}
             LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS: {value: 'false', category: rollout}
             SONIOX_CAPTURE_AXIS_DIAGNOSTICS: {value: 'false', category: rollout}
@@ -5350,8 +5320,8 @@ environments:
               value: '8'
               category: reliability
             PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
-            SYNC_POLL_BACKOFF_ENABLED: {value: 'true', category: rollout}
-            SYNC_POLL_BACKOFF_PERCENT: {value: '5', category: rollout}
+            SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
+            SYNC_POLL_BACKOFF_PERCENT: {value: '0', category: rollout}
             SYNC_RECORD_COVERAGE_WAIT_MEMO:
               value: 'true'
               category: ops_kill
@@ -5437,12 +5407,10 @@ environments:
             AUDIO_ARCHIVE_STOP_PCM_ENABLED: {value: 'false', category: rollout}
             AUDIO_ARCHIVE_SYNC_ENABLED: {value: 'false', category: rollout}
             AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED: {value: 'true', category: rollout}
-            AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED: {value: 'false', category: rollout}
             AUDIO_ARCHIVE_PERCENT: {category: rollout, value: '100'}
             AUDIO_ARCHIVE_STOP_PCM_PERCENT: {category: rollout, value: '0'}
             AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT: {category: rollout, value: '5'}
             BUCKET_AUDIO_DERIVED: {value: omi-audio-derived-uc1, category: rollout}
-            AUDIO_MERGE_WORKER_URL: {value: '', category: rollout}
             REDIS_DB_PORT:
               value: '13151'
               category: service_discovery
@@ -5465,7 +5433,6 @@ environments:
               value: backend-sync-backfill
             TRANSLATION_CACHE_TTL: {value: '86400', category: rollout}
             TRANSLATION_NEGATIVE_CACHE_TTL: {value: '21600', category: rollout}
-            LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION: {value: 'false', category: rollout}
             LIVE_CAPTURE_WINDOW_MERGE_UNION: {value: 'false', category: rollout}
             LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS: {value: 'false', category: rollout}
             SONIOX_CAPTURE_AXIS_DIAGNOSTICS: {value: 'false', category: rollout}
@@ -5600,8 +5567,11 @@ environments:
             BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
             CONVERSATION_PARKED_TERMINAL_STATUS_ENABLED: {value: 'off', category: rollout}
+            BATCH_PIPELINE_FOLLOWUP_CLAIMED_SIBLING_SKIP_ENABLED:
+              value: 'false'
+              category: ops_kill
             BATCH_PIPELINE_SILENCE_READ_SKIP_ENABLED:
-              value: 'true'
+              value: 'false'
               category: ops_kill
             PUSHER_RECORD_CLOSE_NOTIFY_ENABLED: {value: 'false', category: rollout}
             PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_PERCENT: {value: '100', category: rollout}
@@ -5671,7 +5641,7 @@ environments:
             HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED:
               value: 'true'
               category: ops_kill
-            SYNC_FUTURE_CAPTURE_CLAMP_ENABLED: {value: 'true', category: rollout}
+            SYNC_FUTURE_CAPTURE_CLAMP_ENABLED: {value: 'false', category: rollout}
             RECORD_SEAL_REPAIR_FRESH_ENABLED:
               value: 'true'
               category: ops_kill
@@ -5974,12 +5944,10 @@ environments:
             AUDIO_ARCHIVE_STOP_PCM_ENABLED: {value: 'false', category: rollout}
             AUDIO_ARCHIVE_SYNC_ENABLED: {value: 'false', category: rollout}
             AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED: {value: 'true', category: rollout}
-            AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED: {value: 'false', category: rollout}
             AUDIO_ARCHIVE_PERCENT: {category: rollout, value: '100'}
             AUDIO_ARCHIVE_STOP_PCM_PERCENT: {category: rollout, value: '0'}
             AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT: {category: rollout, value: '5'}
             BUCKET_AUDIO_DERIVED: {value: omi-audio-derived-uc1, category: rollout}
-            AUDIO_MERGE_WORKER_URL: {value: '', category: rollout}
             REDIS_DB_PORT:
               value: '13151'
               category: service_discovery
@@ -6002,7 +5970,6 @@ environments:
               value: backend-integration
             TRANSLATION_CACHE_TTL: {value: '86400', category: rollout}
             TRANSLATION_NEGATIVE_CACHE_TTL: {value: '21600', category: rollout}
-            LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION: {value: 'false', category: rollout}
             LIVE_CAPTURE_WINDOW_MERGE_UNION: {value: 'false', category: rollout}
             LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS: {value: 'false', category: rollout}
             SONIOX_CAPTURE_AXIS_DIAGNOSTICS: {value: 'false', category: rollout}
@@ -6110,7 +6077,7 @@ environments:
             BATCH_PIPELINE_SERVING_TICK_SECONDS: {value: '10', category: rollout}
             BATCH_PROJECTION_FINISH_CLASSIFY_PAGE_LIMIT: {value: '16', category: rollout}
             BATCH_PIPELINE_FOLLOWUP_CLAIMED_SIBLING_SKIP_ENABLED:
-              value: 'true'
+              value: 'false'
               category: ops_kill
             BATCH_PIPELINE_SERVING_PROJECTION_SWEEP:
               value: 'true'
@@ -6468,12 +6435,10 @@ environments:
             AUDIO_ARCHIVE_STOP_PCM_ENABLED: {value: 'false', category: rollout}
             AUDIO_ARCHIVE_SYNC_ENABLED: {value: 'false', category: rollout}
             AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED: {value: 'true', category: rollout}
-            AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED: {value: 'false', category: rollout}
             AUDIO_ARCHIVE_PERCENT: {category: rollout, value: '100'}
             AUDIO_ARCHIVE_STOP_PCM_PERCENT: {category: rollout, value: '0'}
             AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT: {category: rollout, value: '5'}
             BUCKET_AUDIO_DERIVED: {value: omi-audio-derived-uc1, category: rollout}
-            AUDIO_MERGE_WORKER_URL: {value: '', category: rollout}
             REDIS_DB_PORT:
               value: '13151'
               category: service_discovery
@@ -6496,7 +6461,6 @@ environments:
               value: backend-projection-pump
             TRANSLATION_CACHE_TTL: {value: '86400', category: rollout}
             TRANSLATION_NEGATIVE_CACHE_TTL: {value: '21600', category: rollout}
-            LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION: {value: 'false', category: rollout}
             LIVE_CAPTURE_WINDOW_MERGE_UNION: {value: 'false', category: rollout}
             LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS: {value: 'false', category: rollout}
             SONIOX_CAPTURE_AXIS_DIAGNOSTICS: {value: 'false', category: rollout}
@@ -6604,7 +6568,7 @@ environments:
             BATCH_PIPELINE_SERVING_TICK_SECONDS: {value: '10', category: rollout}
             BATCH_PROJECTION_FINISH_CLASSIFY_PAGE_LIMIT: {value: '16', category: rollout}
             BATCH_PIPELINE_FOLLOWUP_CLAIMED_SIBLING_SKIP_ENABLED:
-              value: 'true'
+              value: 'false'
               category: ops_kill
             BATCH_PIPELINE_SERVING_PROJECTION_SWEEP:
               value: 'true'

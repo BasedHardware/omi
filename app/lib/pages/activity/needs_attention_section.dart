@@ -10,13 +10,16 @@ import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/pages/chat/widgets/content_blocks/conversation_link_blocks.dart';
 import 'package:omi/pages/conversations/recording_blocks.dart';
 import 'package:omi/pages/conversations/widgets/live_capture_card.dart';
+import 'package:omi/pages/held_audio/held_audio_views.dart';
 import 'package:omi/pages/conversations/sync_pending_work.dart';
 import 'package:omi/providers/sync_provider.dart';
+import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/services/capture/capture_wedge_monitor.dart';
 import 'package:omi/services/pending_work/pending_work_store.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/providers/transcription_pending_conversations.dart';
+import 'package:omi/widgets/freemium_switch_dialog.dart';
 
 /// Work that could not finish, at the top of Activity: conversations the server gave up summarizing
 /// (with Try Again) and recordings that could not be processed (opening Offline Sync, which owns
@@ -311,15 +314,36 @@ class _FailedConversationRowState extends State<_FailedConversationRow> {
     final c = widget.conversation;
     final at = (c.startedAt ?? c.createdAt).toLocal();
     final dates = OmiDateFormat.of(context);
+    final l = context.l10n;
     final pending = TranscriptionPendingConversations.contains(c.id);
-    final hasTitle =
-        !c.isLocked && c.structured.title.trim().isNotEmpty && !TranscriptionPendingConversations.replacesTitle(c);
-    final status = pending ? context.l10n.summaryTranscriptionPendingTitle : context.l10n.processingFailed;
+    // Held by the free plan's monthly minutes, not failed: a retry cannot transcribe it, Upgrade can.
+    final usage = context.watch<UsageProvider?>();
+    final held = heldByFreeAllowance(c, usage);
+    final title = c.structured.title.trim();
+    final hasTitle = !c.isLocked &&
+        title.isNotEmpty &&
+        !TranscriptionPendingConversations.replacesTitle(c) &&
+        !(held && title == TranscriptionPendingConversations.serverHoldTitle);
+    final status = held
+        ? l.freeCapTitle(((usage?.subscription?.transcriptionSecondsLimit ?? 0) / 60).round())
+        : pending
+            ? l.summaryTranscriptionPendingTitle
+            : l.processingFailed;
     return _AttentionRow(
-      title: hasTitle ? c.structured.title : status,
-      subtitle: [if (hasTitle) status, dates.dayHeader(at), dates.time(at)].join(' · '),
+      key: held ? Key('activity_held_${c.id}') : null,
+      title: hasTitle
+          ? c.structured.title
+          : held
+              ? l.summaryTranscriptionPendingTitle
+              : status,
+      subtitle: [if (hasTitle || held) status, dates.dayHeader(at), dates.time(at)].join(' · '),
       busy: _busy,
-      onRetry: pending ? null : _retry,
+      retryLabel: held ? l.upgrade : null,
+      onRetry: held
+          ? () => FreemiumSwitchHandler.openHeldRecordingUpgrade(context, source: 'held_recording')
+          : pending
+              ? null
+              : _retry,
       onTap: () => widget.openConversation(context, c.id),
     );
   }
@@ -382,6 +406,16 @@ class _AttentionRow extends StatelessWidget {
   }
 
   Widget _row(BuildContext context) {
+    final action = busy || onRetry == null
+        ? null
+        : OmiButton.secondary(
+            label: retryLabel ?? context.l10n.tryAgain,
+            onPressed: onRetry,
+            size: OmiButtonSize.compact,
+          );
+    // At the accessibility text sizes a trailing button leaves the title one letter per line: the
+    // action moves under the text instead.
+    final stacked = action != null && MediaQuery.textScalerOf(context).scale(1) >= 1.6;
     return InkWell(
       onTap: onTap,
       child: Padding(
@@ -405,6 +439,10 @@ class _AttentionRow extends StatelessWidget {
                     const SizedBox(height: 3),
                     Text(subtitle, style: OmiType.subhead.copyWith(color: OmiColors.textTertiary)),
                   ],
+                  if (stacked) ...[
+                    const SizedBox(height: OmiSpacing.xs),
+                    action,
+                  ],
                 ],
               ),
             ),
@@ -413,13 +451,9 @@ class _AttentionRow extends StatelessWidget {
                 padding: EdgeInsetsDirectional.only(start: OmiSpacing.xs, end: OmiSpacing.xs),
                 child: OmiSpinner(size: OmiSpinnerSize.small),
               )
-            else if (onRetry != null)
-              OmiButton.secondary(
-                label: retryLabel ?? context.l10n.tryAgain,
-                onPressed: onRetry,
-                size: OmiButtonSize.compact,
-              )
-            else if (onTap != null)
+            else if (action != null && !stacked)
+              action
+            else if (action == null && onTap != null)
               Icon(Icons.chevron_right, color: OmiColors.textTertiary),
           ],
         ),

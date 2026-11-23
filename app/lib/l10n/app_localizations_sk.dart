@@ -562,11 +562,11 @@ class AppLocalizationsSk extends AppLocalizations {
   String get hardwareSection => 'Hardvér';
 
   @override
-  String get v2Undetected => 'V2 nebolo zistené';
+  String get v2Undetected => 'Offline synchronizácia nie je k dispozícii';
 
   @override
   String get v2UndetectedMessage =>
-      'Zistili sme, že máte zariadenie V1 alebo vaše zariadenie nie je pripojené. Funkcia SD karty je dostupná len pre zariadenia V2.';
+      'Offline synchronizácia vyžaduje pripojené zariadenie Omi s úložiskom na SD karte. Vaše súčasné zariadenie ju nepodporuje.';
 
   @override
   String get endConversation => 'Ukončiť konverzáciu';
@@ -15723,4 +15723,13 @@ class AppLocalizationsSk extends AppLocalizations {
   @override
   String get firmwareUpdateAppRequired =>
       'Táto aktualizácia firmvéru vyžaduje novšiu aplikáciu Omi. Aktualizujte aplikáciu v obchode s aplikáciami a potom znova skontrolujte aktualizácie.';
+
+  @override
+  String get quietPayerTitle => 'Žiadne nahrávky za 5 dní';
+
+  @override
+  String get quietPayerMessage => 'Skontrolujte svoj Omi.';
+
+  @override
+  String get quietPayerCheck => 'Skontrolovať';
 }

@@ -560,11 +560,11 @@ class AppLocalizationsId extends AppLocalizations {
   String get hardwareSection => 'Perangkat Keras';
 
   @override
-  String get v2Undetected => 'V2 tidak terdeteksi';
+  String get v2Undetected => 'Sinkronisasi Offline Tidak Tersedia';
 
   @override
   String get v2UndetectedMessage =>
-      'Kami melihat bahwa Anda memiliki perangkat V1 atau perangkat Anda tidak terhubung. Fungsi Kartu SD hanya tersedia untuk perangkat V2.';
+      'Sinkronisasi Offline memerlukan perangkat Omi yang terhubung dengan penyimpanan kartu SD. Perangkat Anda saat ini tidak mendukungnya.';
 
   @override
   String get endConversation => 'Akhiri Percakapan';
@@ -15742,4 +15742,13 @@ class AppLocalizationsId extends AppLocalizations {
   @override
   String get firmwareUpdateAppRequired =>
       'Pembaruan firmware ini memerlukan aplikasi Omi versi lebih baru. Perbarui aplikasi dari toko aplikasi Anda, lalu periksa lagi.';
+
+  @override
+  String get quietPayerTitle => 'Tidak ada rekaman dalam 5 hari';
+
+  @override
+  String get quietPayerMessage => 'Periksa Omi Anda.';
+
+  @override
+  String get quietPayerCheck => 'Periksa';
 }

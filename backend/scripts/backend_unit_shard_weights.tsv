@@ -1064,7 +1064,6 @@ tests/unit/test_level_migration_batch_chunking.py	3.7
 tests/unit/test_lifecycle_clocks.py	9.7
 tests/unit/test_lifecycle_email.py	2.7
 tests/unit/test_limitless_import_idempotency.py	3.7
-tests/unit/test_list_projection.py	11.7
 tests/unit/test_list_read_budget_contract.py	12.7
 tests/unit/test_listen_account_deletion_fence.py	11.7
 tests/unit/test_listen_app_build.py	2.7

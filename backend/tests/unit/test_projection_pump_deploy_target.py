@@ -1135,13 +1135,16 @@ def test_cap_recovery_quoted_etag_round_trip(tmp_path, monkeypatch, inverse_read
         assert fixture.cap_requests == []
 
 
-def test_claimed_sibling_skip_is_active_on_every_role():
-    """SCA-3544 activates the skip across roles; the pump derives from integration."""
+def test_claimed_sibling_skip_pins_are_explicit_on_every_role():
+    """SCA-3544: the skip stays on for sync only; backend (SCA-3555) and integration (16:16Z rollback) pin false.
+
+    The pump derives its value from integration. Every role keeps an explicit key because main reads an
+    absent key as ON and Cloud Run merges env.
+    """
     services = _prod_services()
-    # SCA-3555: remove this exception with the backend activation.
-    sca_3555_preservation_pin = {'backend': 'false'}
+    false_pins = {'backend': 'false', 'backend-integration': 'false', PROJECTION_PUMP: 'false'}
     for name in ('backend', 'backend-sync', 'backend-integration', PROJECTION_PUMP):
-        expected = sca_3555_preservation_pin.get(name, 'true')
+        expected = false_pins.get(name, 'true')
         assert services[name]['env']['BATCH_PIPELINE_FOLLOWUP_CLAIMED_SIBLING_SKIP_ENABLED']['value'] == expected, name
 
 

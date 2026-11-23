@@ -178,8 +178,8 @@
     "deviceInfoSection": "Informations sur l'appareil",
     "customizationSection": "Personnalisation",
     "hardwareSection": "Matériel",
-    "v2Undetected": "V2 non détecté",
-    "v2UndetectedMessage": "Nous voyons que vous avez soit un appareil V1, soit votre appareil n'est pas connecté. La fonctionnalité carte SD n'est disponible que pour les appareils V2.",
+    "v2Undetected": "Synchronisation hors ligne indisponible",
+    "v2UndetectedMessage": "La synchronisation hors ligne nécessite un appareil Omi connecté avec stockage sur carte SD. Votre appareil actuel ne la prend pas en charge.",
     "endConversation": "Terminer la conversation",
     "pauseResume": "Pause/Reprendre",
     "starConversation": "Marquer la conversation comme favorite",
@@ -4772,5 +4772,8 @@
     "writingSummaryStatus": "Écriture du résumé…",
     "stillWorkingOnIt": "Toujours en cours.",
     "firmwareUpdateFirmwareTooOld": "Le micrologiciel de votre appareil est trop ancien pour cette mise à jour. Contactez l'assistance pour obtenir de l'aide afin de mettre à jour votre appareil.",
-    "firmwareUpdateAppRequired": "Cette mise à jour du micrologiciel nécessite une version plus récente de l'application Omi. Mettez l'application à jour depuis votre boutique d'applications, puis vérifiez à nouveau."
+    "firmwareUpdateAppRequired": "Cette mise à jour du micrologiciel nécessite une version plus récente de l'application Omi. Mettez l'application à jour depuis votre boutique d'applications, puis vérifiez à nouveau.",
+    "quietPayerTitle": "Aucun enregistrement depuis 5 jours",
+    "quietPayerMessage": "Vérifiez votre Omi.",
+    "quietPayerCheck": "Vérifier"
 }

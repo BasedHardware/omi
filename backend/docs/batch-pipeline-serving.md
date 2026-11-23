@@ -677,7 +677,7 @@ evidence, and provider failures stay held. There are no paid-intent resets.
 **Second multilingual provider — Soniox (ship on).**
 `config.stt_provider_policy.HELD_RECOVERY_SECOND_PROVIDER` names `soniox`.
 An ordinary held unit whose Modulate response is validated empty gets at most
-one Soniox `stt-async-v5` call inside the same `running` recovery intent,
+one Soniox `stt-async-v6` call inside the same `running` recovery intent,
 using the existing sync/operator or async/serving batch adapter. This includes
 short validation holds and oversized units; it no longer requires a long-speech
 handoff. Already-settled padded-empty outcomes do not spend another call.

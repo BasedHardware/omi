@@ -64,7 +64,7 @@ logger = logging.getLogger(__name__)
 
 SONIOX_SERVICE_NAME: Final = 'soniox'
 SONIOX_WS_URL: Final = os.getenv('SONIOX_WS_URL', 'wss://stt-rt.soniox.com/transcribe-websocket')
-SONIOX_MODEL: Final = os.getenv('SONIOX_MODEL', 'stt-rt-v5')
+SONIOX_MODEL: Final = os.getenv('SONIOX_MODEL', 'stt-rt-v6')
 # Soniox closes any socket that receives neither audio nor keepalive for 20s.
 # VAD gating routinely holds audio back for longer than that, so idle sockets die
 # as 408 request_timeout unless we fill the gap ourselves.
@@ -221,6 +221,9 @@ class SafeSonioxSocket(STTSocket):
             self._wire_ledger_enabled
             and soniox_ordered_finalize_enabled()
             and sample_rate == 16000
+            # v5 only. The 2026-11-23 probe (scripts/soniox_finalize_padding_probe.py)
+            # found no finalize padding on stt-rt-v5 or stt-rt-v6, so the ordered
+            # 120 ms law is not extended to v6; on v6 the reported clock is used.
             and SONIOX_MODEL == 'stt-rt-v5'
             and SONIOX_WS_URL == 'wss://stt-rt.soniox.com/transcribe-websocket'
         ):

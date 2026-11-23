@@ -16488,7 +16488,7 @@
     },
     "activityAttentionStorageUnknownTitle": "Can't check storage",
     "@activityAttentionStorageUnknownTitle": {
-        "description": "Activity capture attention row title when the free-space probe itself failed (reason disk_space_unknown); the disk may not actually be full."
+        "description": "Title for an unresolved storage check in capture attention or Offline Sync."
     },
     "activityAttentionStorageSubtitle": "Recordings paused",
     "@activityAttentionStorageSubtitle": {
@@ -19226,5 +19226,17 @@
     "firmwareUpdateAppRequired": "This firmware update needs a newer Omi app. Update the app from your app store, then check again.",
     "@firmwareUpdateAppRequired": {
         "description": "Firmware update unavailable because the installed Omi app does not meet the release app version or build requirement."
+    },
+    "quietPayerTitle": "No recordings in 5 days",
+    "@quietPayerTitle": {
+        "description": "Home row title for a paying monthly subscriber whose Omi has recorded nothing for 5 days"
+    },
+    "quietPayerMessage": "Check your Omi.",
+    "@quietPayerMessage": {
+        "description": "Home row line under quietPayerTitle"
+    },
+    "quietPayerCheck": "Check",
+    "@quietPayerCheck": {
+        "description": "Button on the quiet Home row; opens the Omi device page"
     }
 }

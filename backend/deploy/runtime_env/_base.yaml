@@ -149,9 +149,6 @@ environment_shared:
         AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED:
           value: 'false'
           category: rollout
-        AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED:
-          value: 'false'
-          category: rollout
         AUDIO_ARCHIVE_PERCENT:
           category: rollout
         AUDIO_ARCHIVE_STOP_PCM_PERCENT:
@@ -160,12 +157,6 @@ environment_shared:
           category: rollout
         BUCKET_AUDIO_DERIVED:
           value: ''
-          category: rollout
-        AUDIO_MERGE_WORKER_URL:
-          value: ''
-          category: rollout
-        LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION:
-          value: 'false'
           category: rollout
         LIVE_CAPTURE_WINDOW_MERGE_UNION:
           category: rollout
@@ -647,9 +638,6 @@ environment_shared:
         AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED:
           value: 'false'
           category: rollout
-        AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED:
-          value: 'false'
-          category: rollout
         AUDIO_ARCHIVE_PERCENT:
           category: rollout
         AUDIO_ARCHIVE_STOP_PCM_PERCENT:
@@ -658,12 +646,6 @@ environment_shared:
           category: rollout
         BUCKET_AUDIO_DERIVED:
           value: ''
-          category: rollout
-        AUDIO_MERGE_WORKER_URL:
-          value: ''
-          category: rollout
-        LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION:
-          value: 'false'
           category: rollout
         LIVE_CAPTURE_WINDOW_MERGE_UNION:
           category: rollout
@@ -1082,9 +1064,6 @@ environment_shared:
           AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED:
             value: 'false'
             category: rollout
-          AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED:
-            value: 'false'
-            category: rollout
           AUDIO_ARCHIVE_PERCENT:
             category: rollout
           AUDIO_ARCHIVE_STOP_PCM_PERCENT:
@@ -1092,9 +1071,6 @@ environment_shared:
           AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT:
             category: rollout
           BUCKET_AUDIO_DERIVED:
-            value: ''
-            category: rollout
-          AUDIO_MERGE_WORKER_URL:
             value: ''
             category: rollout
           REDIS_DB_PORT:
@@ -1143,9 +1119,6 @@ environment_shared:
           OMI_VERTEX_RESERVATION_PROJECT:
             value: '{compute_project}'
             category: runtime_identity
-          LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION:
-            value: 'false'
-            category: rollout
           LIVE_CAPTURE_WINDOW_MERGE_UNION:
             value: 'false'
             category: rollout
@@ -1497,9 +1470,6 @@ environment_shared:
           AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED:
             value: 'false'
             category: rollout
-          AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED:
-            value: 'false'
-            category: rollout
           AUDIO_ARCHIVE_PERCENT:
             category: rollout
           AUDIO_ARCHIVE_STOP_PCM_PERCENT:
@@ -1507,9 +1477,6 @@ environment_shared:
           AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT:
             category: rollout
           BUCKET_AUDIO_DERIVED:
-            value: ''
-            category: rollout
-          AUDIO_MERGE_WORKER_URL:
             value: ''
             category: rollout
           OMI_VERTEX_RESERVATION_PROJECT:
@@ -1566,9 +1533,6 @@ environment_shared:
             category: rollout
           TRANSLATION_NEGATIVE_CACHE_TTL:
             value: '21600'
-            category: rollout
-          LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION:
-            value: 'false'
             category: rollout
           LIVE_CAPTURE_WINDOW_MERGE_UNION:
             value: 'false'
@@ -1891,9 +1855,6 @@ environment_shared:
           AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED:
             value: 'false'
             category: rollout
-          AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED:
-            value: 'false'
-            category: rollout
           AUDIO_ARCHIVE_PERCENT:
             category: rollout
           AUDIO_ARCHIVE_STOP_PCM_PERCENT:
@@ -1901,9 +1862,6 @@ environment_shared:
           AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT:
             category: rollout
           BUCKET_AUDIO_DERIVED:
-            value: ''
-            category: rollout
-          AUDIO_MERGE_WORKER_URL:
             value: ''
             category: rollout
           REDIS_DB_PORT:
@@ -1954,9 +1912,6 @@ environment_shared:
             category: rollout
           TRANSLATION_NEGATIVE_CACHE_TTL:
             value: '21600'
-            category: rollout
-          LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION:
-            value: 'false'
             category: rollout
           LIVE_CAPTURE_WINDOW_MERGE_UNION:
             value: 'false'
@@ -2257,9 +2212,6 @@ environment_shared:
           AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED:
             value: 'false'
             category: rollout
-          AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED:
-            value: 'false'
-            category: rollout
           AUDIO_ARCHIVE_PERCENT:
             category: rollout
           AUDIO_ARCHIVE_STOP_PCM_PERCENT:
@@ -2267,9 +2219,6 @@ environment_shared:
           AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT:
             category: rollout
           BUCKET_AUDIO_DERIVED:
-            value: ''
-            category: rollout
-          AUDIO_MERGE_WORKER_URL:
             value: ''
             category: rollout
           REDIS_DB_PORT:
@@ -2320,9 +2269,6 @@ environment_shared:
             category: rollout
           TRANSLATION_NEGATIVE_CACHE_TTL:
             value: '21600'
-            category: rollout
-          LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION:
-            value: 'false'
             category: rollout
           LIVE_CAPTURE_WINDOW_MERGE_UNION:
             value: 'false'

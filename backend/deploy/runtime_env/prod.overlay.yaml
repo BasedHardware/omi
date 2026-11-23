@@ -1496,8 +1496,9 @@ overlay:
           # next UTC day). Rollback: 'false' in one config train (David 2026-11-18, support-packet decision 13).
           UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED: {value: 'true', category: rollout}
           UNLIMITED_V2_BACKFILL_HOURS_CAP_HOURS: {value: '24', category: rollout}
-          # Silent read skipping on (SCA-1824 canary READBACK -13.5% reads); kill switch: set false.
-          BATCH_PIPELINE_SILENCE_READ_SKIP_ENABLED: {value: 'true', category: ops_kill}
+          # SCA-3544: preserve backfill behavior during the code catch-up.
+          BATCH_PIPELINE_FOLLOWUP_CLAIMED_SIBLING_SKIP_ENABLED: {value: 'false', category: ops_kill}
+          BATCH_PIPELINE_SILENCE_READ_SKIP_ENABLED: {value: 'false', category: ops_kill}
           PUSHER_RECORD_CLOSE_NOTIFY_ENABLED: {value: 'false', category: rollout}
           PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_PERCENT: {value: '100', category: rollout}
           PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_UID_SHA256S: {value: '', category: rollout}
@@ -1527,7 +1528,7 @@ overlay:
           HOME_TRANSCRIPTION_PRESENTATION_GATE: {value: 'true', category: ops_kill}
           HOME_TRANSCRIPTION_DEADLINE_SECONDS: {value: '7200', category: config}
           HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED: {value: 'true', category: ops_kill}
-          SYNC_FUTURE_CAPTURE_CLAMP_ENABLED: {value: 'true', category: rollout}
+          SYNC_FUTURE_CAPTURE_CLAMP_ENABLED: {value: 'false', category: rollout}
           RECORD_SEAL_REPAIR_FRESH_ENABLED: {value: 'true', category: ops_kill}
           RECORD_INTAKE_AGE_PRIORITY_ENABLED: {value: 'true', category: ops_kill}
           HOME_TRANSCRIPTION_MAX_AGE_SECONDS: {value: '86400', category: config}
@@ -1563,8 +1564,8 @@ overlay:
           # Graduation of the David-approved on-demand playback (DEC-BTR-004): build playback
           # artifacts on open/play/download only. Kill switch: set false.
           PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
-          SYNC_POLL_BACKOFF_ENABLED: {value: 'true', category: rollout}
-          SYNC_POLL_BACKOFF_PERCENT: {value: '5', category: rollout}
+          SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
+          SYNC_POLL_BACKOFF_PERCENT: {value: '0', category: rollout}
           # O4 excluded consumer: preserve decision cache 0, owner enforcement 0,
           # shadow 10, negative/TTL60 caches 0 (Release 2026-11-17 reconciliation).
           # This does not admit backfill enforcement when the shared kill switch clears.
@@ -1893,8 +1894,10 @@ overlay:
           BATCH_ACCOUNT_PRIVACY_WRITER_ENABLED: {value: 'false', category: ops_kill}
           BATCH_PROJECTION_OUTBOX: {value: 'false', category: ops_kill}
           # SCA-3544: #25920's claimed-sibling skip; the pump derives this value from integration.
-          # Activated by David 2026-11-22 on every role (SCA-3544); rollback is 'false' (Cloud Run merges env, so deleting the key would leave the old value).
-          BATCH_PIPELINE_FOLLOWUP_CLAIMED_SIBLING_SKIP_ENABLED: {value: 'true', category: ops_kill}
+          # Rolled back 2026-11-22T16:16Z and closed by Shipping at 16:44Z (no third attempt): reads per completion
+          # moved -1.5% with privacy+prepare flat. Literal 'false' because Cloud Run merges env and main reads an
+          # absent key as ON. Re-enable only with a code change on SCA-3508.
+          BATCH_PIPELINE_FOLLOWUP_CLAIMED_SIBLING_SKIP_ENABLED: {value: 'false', category: ops_kill}
           # SCA-3318 (2026-11-22): integration keeps its serving sweep. The step-3 sweep-off tripped the pump
           # floor (completions 34k/h -> 20k/h) and was rolled back; the pump is dark again. Explicit 'true'
           # because Cloud Run merges env (deleting the key would leave 'off'). Only the literal 'off' disables it.

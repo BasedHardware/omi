@@ -210,7 +210,7 @@ autoscaling:
   # The original deployment name stays on OD; a -spot deployment shares its
   # queue metric scope but has a distinct pod selector and PodMonitoring.
   # Superseded as the cutover shape 10-28 (lead f05065): the qualified path is
-  # a single OD-pinned HPA (prod 4/16); balanced stays machinery-only.
+  # a single OD-pinned HPA (prod 6/16); balanced stays machinery-only.
   balancedPools:
     enabled: false
     onDemandNodePool: batch-pipeline-pool
@@ -223,9 +223,9 @@ autoscaling:
   # not double-count time waiting for that slot. Keep stage profiling enabled.
   # Frontier: 41 is the largest integer ready target passing the unchanged
   # sustained-step wait bound; 42 fails. 0.56 preserves zero starvation in the
-  # older 24h replay; 0.561 already starves. With the stockout policy below,
-  # current 3h replay mean/max = 4.34/5 (no hot minutes); synthetic 3.7x volume
-  # = 11.46/16 with 6 hot minutes, so full-volume capacity remains unqualified.
+  # older 24h replay; 0.561 already starves. The 3h replay at prod 6/16
+  # has mean/max 6.0/6 and zero hot minutes. The historical 4/16 synthetic
+  # 3.7x replay has mean/max 11.46/16 and six hot minutes.
   # See docs/batch-pipeline-hpa-frontier.md; the reverted 40/0.6 starved 35 min.
   targetQueuedUnitsPerWorker: 41
   targetChainBusyPerWorker: "0.56"

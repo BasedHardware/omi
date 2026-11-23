@@ -3912,7 +3912,9 @@
             "onboarding",
             "aha_first_summary",
             "free_cap",
-            "on_phone_banner"
+            "on_phone_banner",
+            "held_recording",
+            "held_recording_detail"
           ]
         },
         "currentPlan": {
@@ -4016,7 +4018,9 @@
             "onboarding",
             "aha_first_summary",
             "free_cap",
-            "on_phone_banner"
+            "on_phone_banner",
+            "held_recording",
+            "held_recording_detail"
           ]
         }
       },
@@ -4656,7 +4660,9 @@
             "onboarding",
             "aha_first_summary",
             "free_cap",
-            "on_phone_banner"
+            "on_phone_banner",
+            "held_recording",
+            "held_recording_detail"
           ]
         }
       },
@@ -5315,6 +5321,32 @@
       },
       "consumers": [
         "subscription-payment-recovery"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "subscriptionQuietRowShown",
+      "wire_name": "Subscription Quiet Row Shown",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {},
+      "consumers": [
+        "subscription-quiet-row"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "subscriptionQuietRowTapped",
+      "wire_name": "Subscription Quiet Row Tapped",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {},
+      "consumers": [
+        "subscription-quiet-row"
       ],
       "correlation": null
     },

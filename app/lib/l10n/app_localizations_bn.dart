@@ -559,11 +559,11 @@ class AppLocalizationsBn extends AppLocalizations {
   String get hardwareSection => 'হার্ডওয়্যার';
 
   @override
-  String get v2Undetected => 'V2 সনাক্ত হয়নি';
+  String get v2Undetected => 'অফলাইন সিঙ্ক উপলব্ধ নয়';
 
   @override
   String get v2UndetectedMessage =>
-      'আমরা দেখছি যে আপনার কাছে একটি V1 ডিভাইস রয়েছে বা আপনার ডিভাইস সংযুক্ত নয়। SD কার্ড কার্যকারিতা শুধুমাত্র V2 ডিভাইসের জন্য উপলব্ধ।';
+      'অফলাইন সিঙ্কের জন্য SD কার্ড স্টোরেজ সহ একটি সংযুক্ত Omi ডিভাইস প্রয়োজন। আপনার বর্তমান ডিভাইসটি এটি সমর্থন করে না।';
 
   @override
   String get endConversation => 'কথোপকথন শেষ করুন';
@@ -15722,4 +15722,13 @@ class AppLocalizationsBn extends AppLocalizations {
   @override
   String get firmwareUpdateAppRequired =>
       'এই ফার্মওয়্যার আপডেটের জন্য Omi অ্যাপের আরও নতুন সংস্করণ প্রয়োজন। আপনার অ্যাপ স্টোর থেকে অ্যাপটি আপডেট করুন, তারপর আবার পরীক্ষা করুন।';
+
+  @override
+  String get quietPayerTitle => '৫ দিন ধরে কোনো রেকর্ডিং নেই';
+
+  @override
+  String get quietPayerMessage => 'আপনার Omi দেখে নিন।';
+
+  @override
+  String get quietPayerCheck => 'দেখুন';
 }

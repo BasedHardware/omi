@@ -551,10 +551,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get hardwareSection => '硬件';
 
   @override
-  String get v2Undetected => '未检测到 V2';
+  String get v2Undetected => '离线同步不可用';
 
   @override
-  String get v2UndetectedMessage => '我们发现您使用的是 V1 设备或设备未连接。SD 卡功能仅适用于 V2 设备。';
+  String get v2UndetectedMessage => '离线同步需要已连接且配备 SD 卡存储的 Omi 设备。您当前的设备不支持此功能。';
 
   @override
   String get endConversation => '结束对话';
@@ -15474,4 +15474,13 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get firmwareUpdateAppRequired => '此固件更新需要更新版本的 Omi 应用。请前往应用商店更新应用，然后重新检查。';
+
+  @override
+  String get quietPayerTitle => '5 天没有录音';
+
+  @override
+  String get quietPayerMessage => '请检查你的 Omi。';
+
+  @override
+  String get quietPayerCheck => '检查';
 }

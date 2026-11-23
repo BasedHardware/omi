@@ -560,11 +560,11 @@ class AppLocalizationsEt extends AppLocalizations {
   String get hardwareSection => 'Riistvara';
 
   @override
-  String get v2Undetected => 'V2 tuvastamata';
+  String get v2Undetected => 'Võrguühenduseta sünkroonimine pole saadaval';
 
   @override
   String get v2UndetectedMessage =>
-      'Näeme, et teil on kas V1 seade või teie seade pole ühendatud. SD-kaardi funktsioon on saadaval ainult V2 seadmetele.';
+      'Võrguühenduseta sünkroonimine vajab SD-kaardi salvestusruumiga ühendatud Omi seadet. Teie praegune seade seda ei toeta.';
 
   @override
   String get endConversation => 'Lõpeta vestlus';
@@ -15720,4 +15720,13 @@ class AppLocalizationsEt extends AppLocalizations {
   @override
   String get firmwareUpdateAppRequired =>
       'See püsivara värskendus vajab Omi rakenduse uuemat versiooni. Värskendage rakendust oma rakenduste poes ja kontrollige seejärel uuesti.';
+
+  @override
+  String get quietPayerTitle => '5 päeva pole salvestisi';
+
+  @override
+  String get quietPayerMessage => 'Kontrolli oma Omit.';
+
+  @override
+  String get quietPayerCheck => 'Kontrolli';
 }

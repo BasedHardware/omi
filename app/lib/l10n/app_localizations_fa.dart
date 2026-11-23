@@ -561,11 +561,11 @@ class AppLocalizationsFa extends AppLocalizations {
   String get hardwareSection => 'سخت‌افزار';
 
   @override
-  String get v2Undetected => 'V2 شناسایی نشد';
+  String get v2Undetected => 'همگام‌سازی آفلاین در دسترس نیست';
 
   @override
   String get v2UndetectedMessage =>
-      'ما می‌بینیم که شما یک دستگاه V1 دارید یا دستگاه شما متصل نیست. عملکرد کارت SD فقط برای دستگاه‌های V2 دردسترس است.';
+      'برای Offline Sync به یک دستگاه Omi متصل با حافظه SD نیاز است. دستگاه فعلی شما از آن پشتیبانی نمی‌کند.';
 
   @override
   String get endConversation => 'پایان‌دادن به گفتگو';
@@ -15720,4 +15720,13 @@ class AppLocalizationsFa extends AppLocalizations {
   @override
   String get firmwareUpdateAppRequired =>
       'این به‌روزرسانی میان‌افزار به نسخه جدیدتری از برنامه Omi نیاز دارد. برنامه را از فروشگاه برنامه خود به‌روزرسانی کنید، سپس دوباره بررسی کنید.';
+
+  @override
+  String get quietPayerTitle => '۵ روز است که ضبطی نیست';
+
+  @override
+  String get quietPayerMessage => 'Omi خود را بررسی کنید.';
+
+  @override
+  String get quietPayerCheck => 'بررسی';
 }

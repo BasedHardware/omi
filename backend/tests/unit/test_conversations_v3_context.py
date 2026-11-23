@@ -191,10 +191,11 @@ def test_outline_title_read_is_owner_scoped_bounded_and_hides_capture_rows(monke
 
 
 @pytest.mark.asyncio
-async def test_context_change_alone_never_schedules_summary_rewrite(builder, monkeypatch):
+@pytest.mark.parametrize('text', ['greenhouse plan ' * 160, '温室計画' * 80], ids=['latin', 'cjk'])
+async def test_context_change_alone_never_schedules_summary_rewrite(builder, monkeypatch, text):
     committed, calls = builder
     existing, cache = {}, []
-    recording = source(transcript_segments=[{'text': 'greenhouse plan ' * 160, 'start': 0, 'end': 10}])
+    recording = source(transcript_segments=[{'text': text, 'start': 0, 'end': 10}])
     monkeypatch.setattr(store, 'load', lambda *a, **kw: ({'r': recording}, existing, cache))
     await service.reconcile('u')
     row = committed[-1][4][0]
@@ -212,7 +213,15 @@ async def test_context_change_alone_never_schedules_summary_rewrite(builder, mon
 
 
 @pytest.mark.asyncio
-async def test_late_speech_rewrite_drops_old_summary_coverage(builder, monkeypatch):
+@pytest.mark.parametrize(
+    ('original', 'addition'),
+    [
+        ('greenhouse plan ' * 160, 'late detail ' * 80),
+        (' '.join(['温室計画' * 4] * 20), '補充說明' * 30),
+    ],
+    ids=['latin', 'cjk'],
+)
+async def test_late_speech_rewrite_drops_old_summary_coverage(builder, monkeypatch, original, addition):
     from datetime import datetime
 
     committed, _calls = builder
@@ -224,7 +233,7 @@ async def test_late_speech_rewrite_drops_old_summary_coverage(builder, monkeypat
 
     monkeypatch.setattr(service, 'datetime', Clock)
     existing, cache = {}, []
-    recording = source(transcript_segments=[{'text': 'greenhouse plan ' * 160, 'start': 0, 'end': 10}])
+    recording = source(transcript_segments=[{'text': original, 'start': 0, 'end': 10}])
     monkeypatch.setattr(store, 'load', lambda *a, **kw: ({'r': recording}, existing, cache))
     await service.reconcile('u')
     row = committed[-1][4][0]
@@ -234,7 +243,7 @@ async def test_late_speech_rewrite_drops_old_summary_coverage(builder, monkeypat
     existing[row['id']] = row
     cache[:] = committed[-1][5]
     # Late transcription adds well over 10% more words inside the summarized window.
-    recording['transcript_segments'].append({'text': 'late detail ' * 80, 'start': 4, 'end': 8})
+    recording['transcript_segments'].append({'text': addition, 'start': 4, 'end': 8})
     await service.reconcile('u')
     rebuilt = committed[-1][4][0]
     assert rebuilt['v3_rewrites'] == 1 and rebuilt['v3_process_pending'] is True

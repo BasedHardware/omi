@@ -1,6 +1,7 @@
 {
   "schema_version": 1,
   "id": "FC-sync-lineage-writer-invariant-mismatch",
+  "family": "cross-boundary-contract",
   "violated_contract": "Every reader or validator of conversation redirect lineage must accept every shape the lineage writers actually persist. A validator must not reject, as structurally invalid, lineage that another production writer creates in normal operation.",
   "canonical_prevention": "Build the validator's fixtures from the real writers (run the ordinary sync absorb to create lineage, then flatten it), not from hand-shaped rows, and repair legitimate legacy shapes to the stricter invariant inside the same transaction behind a kill switch.",
   "canonical_prevention_artifact": [
