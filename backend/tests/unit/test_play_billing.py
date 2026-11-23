@@ -641,7 +641,9 @@ def test_switch_off_subscription_route_is_byte_identical(monkeypatch, env, warm_
     assert {k: v for k, v in on.items() if k != 'play_billing'} == json.loads(baseline)
 
 
-def _prod_backend_play_env():
+@pytest.fixture(scope='module')
+def prod_play_env():
+    """The rendered prod backend values, parsed in setup (the file is large)."""
     import yaml
     from pathlib import Path
 
@@ -651,8 +653,10 @@ def _prod_backend_play_env():
     return {key: str(env[key]['value']) for key in keys}
 
 
-def test_deployed_prod_values_send_nobody_to_play_without_the_rollout_cohort(monkeypatch, env, warm_subscription_route):
-    prod = _prod_backend_play_env()
+def test_deployed_prod_values_send_nobody_to_play_without_the_rollout_cohort(
+    monkeypatch, env, warm_subscription_route, prod_play_env
+):
+    prod = prod_play_env
     assert prod == {
         'ANDROID_BILLING': 'stripe',
         'ANDROID_PLAY_BILLING_MIN_BUILD': '1617',
