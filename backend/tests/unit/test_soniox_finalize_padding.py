@@ -52,12 +52,14 @@ async def consume(wire, message):
     await asyncio.sleep(0)
 
 
-async def setup_peer(monkeypatch):
+def use_ordered_clock(monkeypatch):
+    monkeypatch.setattr(soniox, 'SonioxProviderClock', soniox.OrderedSonioxProviderClock)
+
+
+async def setup_peer(monkeypatch, *, ordered=False):
     monkeypatch.setenv('SONIOX_WIRE_LEDGER', 'true')
-    # No model is validated for the ordered clock today; these suites opt one in
-    # so the dormant clock stays covered until its padding law is revalidated.
-    monkeypatch.setattr(soniox, 'SONIOX_MODEL', 'stt-rt-v5')
-    monkeypatch.setattr(soniox, 'ORDERED_FINALIZE_VALIDATED_MODELS', frozenset({'stt-rt-v5'}))
+    if ordered:
+        use_ordered_clock(monkeypatch)
     result = await managed(monkeypatch, True)
     leg, wire = result[4:6]
     leg.gate = None
