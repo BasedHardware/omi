@@ -849,3 +849,17 @@ def test_play_cohort_membership_read_is_bounded_and_never_retried():
     client = SimpleNamespace(collection=lambda name: SimpleNamespace(document=lambda uid: Doc()))
     assert cohort_db._read_memberships(UID, client) == {}
     assert seen['timeout'] <= 1.0 and seen['retry'] is None
+
+
+def test_a_failed_grace_attempt_is_recorded_on_the_deletion_marker(monkeypatch):
+    from unittest.mock import MagicMock
+
+    from database import account_deletion_grace as grace_db
+
+    doc = MagicMock()
+    monkeypatch.setattr(grace_db, 'account_deletion_firestore_client', lambda: object())
+    monkeypatch.setattr(grace_db, 'account_deletion_document', lambda uid, firestore_client: doc)
+    grace_db.record_grace_actions_failure(UID, 3, True)
+    (fields,), _ = doc.update.call_args
+    assert fields['grace_actions_failed_attempts'] == 3 and fields['grace_actions_overdue'] is True
+    assert fields['grace_actions_last_failed_at'] is not None
