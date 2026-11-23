@@ -17467,6 +17467,10 @@
     "processingNewestFirst": "We'll process the newest recordings first, up to what fits. The rest will stay waiting.",
     "processingAction": "Process waiting recordings",
     "processingProgress": "Processing your waiting recordings…",
+    "waitingForTranscriptionAllowance": "Waiting for transcription allowance",
+    "@waitingForTranscriptionAllowance": {
+        "description": "Status for a recording whose transcription job is held awaiting allowance. The current monthly plan limit may be unknown or may have reset while the recording still waits."
+    },
     "processingDeferred": "Waiting for processing",
     "processingCount": "{count, plural, =1{1 conversation waiting} other{{count} conversations waiting}}",
     "@processingCount": {

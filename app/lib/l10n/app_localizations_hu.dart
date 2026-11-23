@@ -14418,6 +14418,9 @@ class AppLocalizationsHu extends AppLocalizations {
   String get processingProgress => 'A várakozó felvételeid feldolgozása…';
 
   @override
+  String get waitingForTranscriptionAllowance => 'Várakozás az elérhető átírási keretre';
+
+  @override
   String get processingDeferred => 'Feldolgozásra vár';
 
   @override

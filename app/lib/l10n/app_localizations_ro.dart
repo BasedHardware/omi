@@ -14423,6 +14423,9 @@ class AppLocalizationsRo extends AppLocalizations {
   String get processingProgress => 'Se procesează înregistrările în așteptare…';
 
   @override
+  String get waitingForTranscriptionAllowance => 'În așteptarea cotei disponibile pentru transcriere';
+
+  @override
   String get processingDeferred => 'În așteptarea procesării';
 
   @override

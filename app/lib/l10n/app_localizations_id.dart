@@ -14373,6 +14373,9 @@ class AppLocalizationsId extends AppLocalizations {
   String get processingProgress => 'Memproses rekaman Anda yang menunggu…';
 
   @override
+  String get waitingForTranscriptionAllowance => 'Menunggu kuota transkripsi tersedia';
+
+  @override
   String get processingDeferred => 'Menunggu pemrosesan';
 
   @override

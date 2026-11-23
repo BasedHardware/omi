@@ -14393,6 +14393,9 @@ class AppLocalizationsLv extends AppLocalizations {
   String get processingProgress => 'Notiek gaidošo ierakstu apstrāde…';
 
   @override
+  String get waitingForTranscriptionAllowance => 'Gaida pieejamu transkripcijas kvotu';
+
+  @override
   String get processingDeferred => 'Gaida apstrādi';
 
   @override

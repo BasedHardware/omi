@@ -14410,6 +14410,9 @@ class AppLocalizationsBg extends AppLocalizations {
   String get processingProgress => 'Обработване на чакащите ви записи…';
 
   @override
+  String get waitingForTranscriptionAllowance => 'Изчаква се налична квота за транскрипция';
+
+  @override
   String get processingDeferred => 'Чака обработка';
 
   @override

@@ -14395,6 +14395,9 @@ class AppLocalizationsMs extends AppLocalizations {
   String get processingProgress => 'Memproses rakaman anda yang menunggu…';
 
   @override
+  String get waitingForTranscriptionAllowance => 'Menunggu kuota transkripsi tersedia';
+
+  @override
   String get processingDeferred => 'Menunggu pemprosesan';
 
   @override

@@ -4382,6 +4382,7 @@
     "processingNewestFirst": "เราจะประมวลผลบันทึกใหม่ล่าสุดก่อนตามโควตาที่เหลือ ส่วนที่เหลือจะยังรออยู่",
     "processingAction": "ประมวลผลบันทึกที่รออยู่",
     "processingProgress": "กำลังประมวลผลบันทึกที่รออยู่…",
+    "waitingForTranscriptionAllowance": "กำลังรอโควตาการถอดเสียงที่ใช้ได้",
     "processingDeferred": "รอประมวลผล",
     "processingCount": "{count, plural, =1{1 การสนทนารออยู่} other{{count} การสนทนารออยู่}}",
     "playbackPartialAudioSaved": "บันทึกเสียงแล้ว {saved} จาก {total}",

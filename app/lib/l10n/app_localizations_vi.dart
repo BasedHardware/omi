@@ -14360,6 +14360,9 @@ class AppLocalizationsVi extends AppLocalizations {
   String get processingProgress => 'Đang xử lý các bản ghi đang chờ của bạn…';
 
   @override
+  String get waitingForTranscriptionAllowance => 'Đang chờ hạn mức chép lời khả dụng';
+
+  @override
   String get processingDeferred => 'Đang chờ xử lý';
 
   @override

@@ -11805,6 +11805,7 @@
     "processingNewestFirst": "Prvo ćemo obraditi najnovije snimke do dostupne kvote. Ostale ostaju na čekanju.",
     "processingAction": "Obradi snimke na čekanju",
     "processingProgress": "Obrada vaših snimki na čekanju…",
+    "waitingForTranscriptionAllowance": "Čeka se dostupna kvota za transkripciju",
     "processingDeferred": "Čeka obradu",
     "processingCount": "{count, plural, =1{1 razgovor na čekanju} other{{count} razgovora na čekanju}}",
     "playbackPartialAudioSaved": "Spremljeno {saved} od {total} zvuka",

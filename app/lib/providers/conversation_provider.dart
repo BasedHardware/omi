@@ -782,14 +782,14 @@ class ConversationProvider extends ChangeNotifier {
   }
 
   // Force refresh bypassing debounce (for manual refresh, connection restored, etc.)
-  Future forceRefreshConversations() async {
+  Future<void> forceRefreshConversations({bool reconcileHeldRecordings = false}) async {
     _refreshDebounceTimer?.cancel();
     _cancelInitialFetchRetry();
     _lastRefreshTime = DateTime.now();
-    await _fetchNewConversations();
+    await _fetchNewConversations(reconcileHeldRecordings: reconcileHeldRecordings);
   }
 
-  Future _fetchNewConversations({bool restoreMergeWatches = true}) async {
+  Future _fetchNewConversations({bool restoreMergeWatches = true, bool reconcileHeldRecordings = false}) async {
     if (!_isSignedIn()) return;
     if (restoreMergeWatches) _restoreMergeWatches();
     loadMoreFailed = false;
@@ -798,6 +798,14 @@ class ConversationProvider extends ChangeNotifier {
     _conversationLoadingRevision = fetchRevision;
     final processingRowsAtStart = _realProcessingConversationsById();
     final processingIdsAtStart = processingRowsAtStart.keys.toSet();
+    // Activity can contain older loaded holds outside the current Home page or search filters.
+    // Reuse the lifecycle deadline for an explicit refresh, without polling the held backlog.
+    final heldRowsAtStart = <ServerConversation>{
+      if (reconcileHeldRecordings)
+        for (final row in [...conversations, ...searchedConversations])
+          if ((row.isTranscriptionAllowanceHeld || row.isAdmittedForTranscription) && !_isHiddenByDelete(row.id)) row,
+    };
+    final heldIdsAtStart = heldRowsAtStart.map((row) => row.id).toSet();
     final processingRevisionsAtStart = _processingStateRevisionSnapshot();
     final conversationsAtStart = <String, ServerConversation>{
       for (final conversation in conversations) conversation.id: conversation,
@@ -828,7 +836,8 @@ class ConversationProvider extends ChangeNotifier {
     final rawNewConversations = result.items;
     final newConversations = _filterPendingDeletes(rawNewConversations);
     final pageConversationIds = newConversations.map((conversation) => conversation.id).toSet();
-    final lifecycleResults = await _loadProcessingLifecycleResults(newConversations, processingIdsAtStart);
+    final lifecycleResults =
+        await _loadProcessingLifecycleResults(newConversations, {...processingIdsAtStart, ...heldIdsAtStart});
     if (generation != _sessionGeneration || fetchRevision != _conversationFetchRevision || !_isSignedIn()) {
       if (_conversationLoadingRevision == fetchRevision) setLoadingConversations(false);
       return;
@@ -840,6 +849,7 @@ class ConversationProvider extends ChangeNotifier {
       processingRevisionsAtStart,
       processingRowsAtStart,
       {for (final conversation in newConversations) conversation.id: conversation},
+      heldIdsAtStart: heldIdsAtStart,
     );
     // The storage count, not the body length, is the offset advance: a page
     // that crossed hidden rows is shorter than the rows it consumed.
@@ -889,10 +899,16 @@ class ConversationProvider extends ChangeNotifier {
       conversations.removeWhere((row) =>
           !row.id.startsWith('ondevice-') &&
           identical(conversationsAtStart[row.id], row) &&
+          !heldRowsAtStart.contains(row) &&
           !pageConversationIds.contains(row.id) &&
           (coveredAfter == null || row.createdAt.isAfter(coveredAfter)));
     }
-    conversations.removeWhere((row) => _isHiddenByDelete(row.id));
+    final admittedIds =
+        processingConversations.where((row) => row.isAdmittedForTranscription).map((row) => row.id).toSet();
+    // The same page can admit a recording still present in the completed list as held.
+    conversations.removeWhere((row) =>
+        _isHiddenByDelete(row.id) ||
+        ((row.isTranscriptionAllowanceHeld || row.isAdmittedForTranscription) && admittedIds.contains(row.id)));
     for (final conversation in completedById.values) {
       if (_isHiddenByDelete(conversation.id)) continue;
       final index = conversations.indexWhere((existing) => existing.id == conversation.id);
@@ -902,9 +918,37 @@ class ConversationProvider extends ChangeNotifier {
         conversations[index] = conversation.keepingTranscriptOf(conversations[index]);
       }
     }
+    if (heldIdsAtStart.isNotEmpty) {
+      // Keep Activity's already displayed copies current even when a Home filter excludes them.
+      ServerConversation? reconcileHeldRow(ServerConversation row) {
+        if (!heldRowsAtStart.contains(row) ||
+            _processingStateRevisionById[row.id] != processingRevisionsAtStart[row.id]) {
+          return row;
+        }
+        final result = lifecycleResults[row.id];
+        if (result == null || !result.ok) return row;
+        final updated = result.item;
+        if (updated == null ||
+            updated.id != row.id ||
+            updated.deleted ||
+            updated.isMergedDonor ||
+            _isHiddenByDelete(row.id)) {
+          return null;
+        }
+        TranscriptionPendingConversations.observe(updated);
+        return _withHomeProcessingProjection(updated).keepingTranscriptOf(row);
+      }
+
+      conversations = conversations.map(reconcileHeldRow).whereType<ServerConversation>().toList();
+      searchedConversations = searchedConversations.map(reconcileHeldRow).whereType<ServerConversation>().toList();
+    }
     conversations.sort((a, b) => (b.startedAt ?? b.createdAt).compareTo(a.startedAt ?? a.createdAt));
 
-    _groupConversationsByDateWithoutNotify();
+    if (reconcileHeldRecordings && hasActiveSearch) {
+      _groupSearchConvosByDateWithoutNotify();
+    } else {
+      _groupConversationsByDateWithoutNotify();
+    }
     // Keep pagination blocked until lifecycle reconciliation and the final
     // list assignment are complete. [getMoreConversationsFromServer] uses
     // this loading state as its serialization guard.

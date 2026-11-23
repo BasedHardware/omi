@@ -29,6 +29,12 @@ def entries():
     stores = [StoreArgument(namespace) for namespace in namespaces]
     return (
         DriverEntry(
+            'database.batch_pipeline_store.FirestoreStore.conversation_admission_jobs',
+            domains={'self': stores, 'conversation_ids': [['one'], ['one', 'two']]},
+            base={'uid': 'synthetic-owner'},
+            neutrals={'limit': (256, 'metadata read bound'), 'timeout': (1.5, 'RPC deadline')},
+        ),
+        DriverEntry(
             'database.batch_pipeline_store.FirestoreStore.packing_candidates',
             domains={'self': stores},
             base={'owner_key': 'synthetic-owner-hash'},

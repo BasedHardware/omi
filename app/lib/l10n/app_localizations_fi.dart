@@ -14364,6 +14364,9 @@ class AppLocalizationsFi extends AppLocalizations {
   String get processingProgress => 'Käsitellään odottavia tallenteitasi…';
 
   @override
+  String get waitingForTranscriptionAllowance => 'Odottaa vapaata litterointikiintiötä';
+
+  @override
   String get processingDeferred => 'Odottaa käsittelyä';
 
   @override

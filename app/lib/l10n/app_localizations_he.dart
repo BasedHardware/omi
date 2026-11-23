@@ -14254,6 +14254,9 @@ class AppLocalizationsHe extends AppLocalizations {
   String get processingProgress => 'ההקלטות הממתינות שלך בעיבוד…';
 
   @override
+  String get waitingForTranscriptionAllowance => 'בהמתנה למכסת תמלול זמינה';
+
+  @override
   String get processingDeferred => 'ממתין לעיבוד';
 
   @override

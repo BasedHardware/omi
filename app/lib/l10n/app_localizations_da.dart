@@ -14349,6 +14349,9 @@ class AppLocalizationsDa extends AppLocalizations {
   String get processingProgress => 'Behandler dine ventende optagelser…';
 
   @override
+  String get waitingForTranscriptionAllowance => 'Venter på ledig transskriptionskvote';
+
+  @override
   String get processingDeferred => 'Venter på behandling';
 
   @override

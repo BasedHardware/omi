@@ -14288,6 +14288,9 @@ class AppLocalizationsTh extends AppLocalizations {
   String get processingProgress => 'กำลังประมวลผลบันทึกที่รออยู่…';
 
   @override
+  String get waitingForTranscriptionAllowance => 'กำลังรอโควตาการถอดเสียงที่ใช้ได้';
+
+  @override
   String get processingDeferred => 'รอประมวลผล';
 
   @override

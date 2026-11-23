@@ -14356,6 +14356,9 @@ class AppLocalizationsBn extends AppLocalizations {
   String get processingProgress => 'আপনার অপেক্ষমাণ রেকর্ডিং প্রক্রিয়া করা হচ্ছে…';
 
   @override
+  String get waitingForTranscriptionAllowance => 'প্রতিলিপি তৈরির বরাদ্দের অপেক্ষায়';
+
+  @override
   String get processingDeferred => 'প্রক্রিয়াকরণের অপেক্ষায়';
 
   @override

@@ -14344,6 +14344,9 @@ class AppLocalizationsHi extends AppLocalizations {
   String get processingProgress => 'आपकी प्रतीक्षारत रिकॉर्डिंग प्रोसेस हो रही हैं…';
 
   @override
+  String get waitingForTranscriptionAllowance => 'ट्रांसक्रिप्शन कोटा उपलब्ध होने की प्रतीक्षा है';
+
+  @override
   String get processingDeferred => 'प्रोसेसिंग की प्रतीक्षा में';
 
   @override

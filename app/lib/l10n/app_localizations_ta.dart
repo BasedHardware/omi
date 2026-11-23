@@ -14459,6 +14459,9 @@ class AppLocalizationsTa extends AppLocalizations {
   String get processingProgress => 'உங்கள் காத்திருக்கும் பதிவுகள் செயலாக்கப்படுகின்றன…';
 
   @override
+  String get waitingForTranscriptionAllowance => 'ஒலியை எழுத்தாக்குவதற்கான ஒதுக்கீட்டுக்காகக் காத்திருக்கிறது';
+
+  @override
   String get processingDeferred => 'செயலாக்கத்திற்குக் காத்திருக்கிறது';
 
   @override

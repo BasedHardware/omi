@@ -14134,6 +14134,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get processingProgress => '正在处理等待中的录音…';
 
   @override
+  String get waitingForTranscriptionAllowance => '正在等待可用的转写额度';
+
+  @override
   String get processingDeferred => '等待处理';
 
   @override

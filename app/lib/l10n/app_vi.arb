@@ -4382,6 +4382,7 @@
     "processingNewestFirst": "Chúng tôi sẽ xử lý các bản ghi mới nhất trước, trong hạn mức còn lại. Phần còn lại sẽ tiếp tục chờ.",
     "processingAction": "Xử lý bản ghi đang chờ",
     "processingProgress": "Đang xử lý các bản ghi đang chờ của bạn…",
+    "waitingForTranscriptionAllowance": "Đang chờ hạn mức chép lời khả dụng",
     "processingDeferred": "Đang chờ xử lý",
     "processingCount": "{count, plural, =1{1 cuộc trò chuyện đang chờ} other{{count} cuộc trò chuyện đang chờ}}",
     "playbackPartialAudioSaved": "Đã lưu {saved} trên {total} âm thanh",

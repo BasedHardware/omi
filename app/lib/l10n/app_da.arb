@@ -4424,6 +4424,7 @@
     "processingNewestFirst": "Vi behandler de nyeste optagelser først, så langt kvoten rækker. Resten bliver ved med at vente.",
     "processingAction": "Behandl ventende optagelser",
     "processingProgress": "Behandler dine ventende optagelser…",
+    "waitingForTranscriptionAllowance": "Venter på ledig transskriptionskvote",
     "processingDeferred": "Venter på behandling",
     "processingCount": "{count, plural, =1{1 samtale venter} other{{count} samtaler venter}}",
     "playbackPartialAudioSaved": "{saved} af {total} lyd gemt",

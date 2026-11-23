@@ -4382,6 +4382,7 @@
     "processingNewestFirst": "Nejprve zpracujeme nejnovější nahrávky do výše dostupného limitu. Zbytek zůstane čekat.",
     "processingAction": "Zpracovat čekající nahrávky",
     "processingProgress": "Zpracovávání čekajících nahrávek…",
+    "waitingForTranscriptionAllowance": "Čeká se na dostupný limit přepisu",
     "processingDeferred": "Čeká na zpracování",
     "processingCount": "{count, plural, =1{1 čekající konverzace} other{{count} čekajících konverzací}}",
     "playbackPartialAudioSaved": "Uloženo {saved} z {total} zvuku",

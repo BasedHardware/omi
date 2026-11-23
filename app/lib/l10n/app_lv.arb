@@ -4382,6 +4382,7 @@
     "processingNewestFirst": "Vispirms apstrādāsim jaunākos ierakstus līdz pieejamajam limitam. Pārējie turpinās gaidīt.",
     "processingAction": "Apstrādāt gaidošos ierakstus",
     "processingProgress": "Notiek gaidošo ierakstu apstrāde…",
+    "waitingForTranscriptionAllowance": "Gaida pieejamu transkripcijas kvotu",
     "processingDeferred": "Gaida apstrādi",
     "processingCount": "{count, plural, =1{1 saruna gaida} other{{count} sarunas gaida}}",
     "playbackPartialAudioSaved": "Saglabāts {saved} no {total} audio",

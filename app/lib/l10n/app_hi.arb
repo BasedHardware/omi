@@ -4382,6 +4382,7 @@
     "processingNewestFirst": "हम उपलब्ध कोटे में सबसे नई रिकॉर्डिंग पहले प्रोसेस करेंगे। बाकी प्रतीक्षा में रहेंगी।",
     "processingAction": "प्रतीक्षारत रिकॉर्डिंग प्रोसेस करें",
     "processingProgress": "आपकी प्रतीक्षारत रिकॉर्डिंग प्रोसेस हो रही हैं…",
+    "waitingForTranscriptionAllowance": "ट्रांसक्रिप्शन कोटा उपलब्ध होने की प्रतीक्षा है",
     "processingDeferred": "प्रोसेसिंग की प्रतीक्षा में",
     "processingCount": "{count, plural, =1{1 बातचीत प्रतीक्षा में} other{{count} बातचीत प्रतीक्षा में}}",
     "playbackPartialAudioSaved": "{saved} ऑडियो सहेजा गया, कुल {total}",

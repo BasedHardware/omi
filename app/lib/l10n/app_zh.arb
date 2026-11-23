@@ -4382,6 +4382,7 @@
     "processingNewestFirst": "我们会在剩余额度内优先处理最新的录音，其余录音将继续等待。",
     "processingAction": "处理等待中的录音",
     "processingProgress": "正在处理等待中的录音…",
+    "waitingForTranscriptionAllowance": "正在等待可用的转写额度",
     "processingDeferred": "等待处理",
     "processingCount": "{count, plural, =1{1段对话等待中} other{{count}段对话等待中}}",
     "playbackPartialAudioSaved": "已保存 {saved} / {total} 的音频",
