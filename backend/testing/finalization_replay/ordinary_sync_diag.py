@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from contextlib import ExitStack, redirect_stderr, redirect_stdout
+from collections.abc import Mapping
 from hashlib import sha256
 import importlib
 import importlib.util
@@ -65,6 +66,35 @@ def _python_sync(state):
     if result is None:
         return 'deferred'
     return 'discarded' if result.discarded else result.status.value
+
+
+def _python_sync_with_memo_evidence(state):
+    """Capture the row keys Python actually offers to its attach memo writers."""
+    from database import episode_attach_memo, episode_timeline
+    from utils.conversations.episode_attach_key import content_key
+
+    original_attach_recorded = episode_timeline.attach_recorded
+    original_complete = episode_attach_memo.complete
+
+    def attach_recorded(*args, **kwargs):
+        row = kwargs.get('attach_row')
+        key = content_key(row) if isinstance(row, Mapping) else None
+        result = original_attach_recorded(*args, **kwargs)
+        if key:
+            state.episode_attach_memo_writer_keys.append(key)
+        return result
+
+    def complete(uid, cid, row, owner, *args, **kwargs):
+        key = content_key(row) if isinstance(row, Mapping) else None
+        result = original_complete(uid, cid, row, owner, *args, **kwargs)
+        if uid == state.uid and cid == state.cid and key:
+            state.episode_attach_memo_writer_keys.append(key)
+        return result
+
+    with patch.object(episode_timeline, 'attach_recorded', attach_recorded), patch.object(
+        episode_attach_memo, 'complete', complete
+    ):
+        return _python_sync(state)
 
 
 def _seed_worker_intent(state):
@@ -216,8 +246,9 @@ def _run_side(cases, side, binary, database, key, worker_backend):
                     server.reference = _receiver(client)
 
                 def invoke(state):
+                    state.replay_side = side
                     if side == 'python':
-                        return _python_sync(state)
+                        return _python_sync_with_memo_evidence(state)
                     privacy_document_path = f"batch_pipeline_privacy/{sha256(state.uid.encode('utf-8')).hexdigest()}"
                     with FirestoreProxy(
                         emulator_endpoint(), privacy_document_path, state.home_dirty_receipt_path
