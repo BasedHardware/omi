@@ -66,11 +66,16 @@ when the machine uses another managed Git-worktree root.
 
 This target builds the opt-in test binary from `WORKERD_REF`, runs the separate
 `ordinary_sync_diag.py` adapter, and compares its row-level observations with the same
-oracle comparator. The report is value-free and records each difference's family, path,
-kind and approved reason. Family attribution uses this precedence: goals; apps and
-webhooks; memory source and metering; digest, minimum and relevance; other. The family
-table counts unexplained and allowed rows separately. A nonzero unexplained count is a
-measurement, not a gate failure.
+oracle comparator. The value-free report records each difference's family, path, kind,
+label, and approved reason. Labels are `go_gap`, `python_bug:<issue>`, or
+`by_design:<rule>`; the by-design suffix is the comparator's approved reason. Rows without
+a reviewed label have `label: null` and count as unlabelled. It includes totals by label
+and family. The known SCA-3874 exception applies
+only while the unreadable-ciphertext case still shows Python discarding the conversation
+against Go's failure; the report fails if that behavior or its three affected rows change.
+Family attribution uses this precedence: goals; apps and webhooks; memory source and
+metering; digest, minimum and relevance; other. A nonzero unlabelled count is a measurement,
+not a gate failure.
 
 The seam admits each fixture as one `sync_update` over a stored completed row. It does not
 exercise per-case trigger behavior, repeat-admission, final-attempt handling,
