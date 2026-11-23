@@ -21,6 +21,7 @@ from utils.conversations import phase_shadow
 
 from config.policy import resolve_batch_policy
 from config.audio_archive import derived_audio_bucket
+from config.record_wal_duplicate import SOURCE_FIELD
 from config.record_audio import BARRIER_NOT_CLOSED, require_record_audio_barrier, record_identity
 from config.record_partial import UNIT_SECONDS, UNIT_REFERENCES, INVENTORY_POLL_SECONDS
 from config.record_latency import record_seal_wake_preserved_enabled
@@ -52,6 +53,7 @@ from utils.batch_pipeline.contracts import ProjectionBinding, WorkItem
 from utils.batch_pipeline.scheduler import owner_key
 from utils.batch_pipeline.source_audio import MAGIC, MAX_REFERENCES, read_reference, batch_timing_store
 from utils.batch_pipeline.record_barrier import validate_record_tail
+from utils.batch_pipeline.record_wal_source import attest
 from utils.batch_pipeline.record_language import prove_manifest
 from utils.batch_pipeline.language_receipt import admission as language_admission_receipt
 from utils.batch_pipeline.record_partial import drain_partial, record_failure as record_partial_failure
@@ -515,6 +517,7 @@ async def admit_recording(store, pending, *, now=None, provider_outbox_factory=N
             storage_executor, artifacts.stage_audio, item, MAGIC + json.dumps(manifest, separators=(',', ':')).encode()
         )
         staged.append(replace(item, audio_uri=uri, timing_store=batch_timing_store(refs)))
+    source_attestation = attest(private_cloud_sync_bucket, uid, conversation_id, current, record_barrier, units, staged)
     return await run_blocking(
         db_executor,
         admit_record_units,
@@ -536,6 +539,7 @@ async def admit_recording(store, pending, *, now=None, provider_outbox_factory=N
             'total_files': len(chunks),
             'total_audio_seconds': sum(i.duration_seconds for i in staged),
             'lane': 'fresh',
+            **({SOURCE_FIELD: source_attestation} if source_attestation else {}),
             'record_ranges': [{'start': i.capture_at, 'end': i.capture_at + i.duration_seconds} for i in staged],
             **({'language_receipts': language_receipts} if language_receipts else {}),
             **({'server_batch_only': True} if row.get('server_batch_only') is True else {}),
