@@ -409,6 +409,7 @@ def step_script(name, values=None, *, index=-1):
         'inputs.environment': 'prod',
         'inputs.runtime_env': 'prod',
         'inputs.deploy_targets': 'cloud-run-only',
+        'inputs.cloud_run_service': 'all',
         'inputs.deploy_gateway': 'false',
         'inputs.service': 'backend',
         'inputs.project_id': 'based-hardware',
@@ -494,6 +495,34 @@ def test_actual_traffic_shell_routes_only_through_controller_for_ruled_source(ca
         assert not any('update-traffic backend-integration' in call for call in calls)
     else:
         assert 'update-traffic backend-integration' in calls[-1] and 'integration-new=100' in calls[-1]
+
+
+def test_selected_production_backend_shift_invokes_only_staged_promotion(tmp_path):
+    script = step_script('Shift Cloud Run traffic to validated revisions', {'inputs.cloud_run_service': 'backend'})
+    python = tmp_path / 'python3'
+    python.write_text('#!/bin/sh\nprintf "%s\\n" "$*"\n')
+    python.chmod(0o700)
+    result = subprocess.run(
+        ['bash', '-c', script],
+        env=dict(
+            os.environ,
+            PATH=str(tmp_path) + ':' + os.environ['PATH'],
+            SELECTED_CLOUD_RUN_SERVICES='backend',
+            DEPLOY_CONTROL_SCRIPTS='/controls',
+            PROMOTION_PROJECT='based-hardware',
+            PROMOTION_REGION='us-central1',
+            PROMOTION_CANDIDATE='backend-new',
+            PROMOTION_INVERSE='backend-old',
+            PROMOTION_SOURCE='a' * 40,
+            PROMOTION_CONTROL='b' * 40,
+        ),
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.startswith('/controls/promote_selected_backend.py ')
+    assert len(result.stdout.splitlines()) == 1
 
 
 @pytest.mark.parametrize('shallow', ['true', 'false'])
