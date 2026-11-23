@@ -546,3 +546,33 @@ def get_supported_countries():
     # cache in redis for 7 days since it does not change that often. Maybe cache it for 30 days?
     redis_db.set_generic_cache('stripe_supported_countries', countries, 604800)
     return countries
+
+
+def cancel_and_refund_checkout_subscription(subscription_id: str) -> dict:
+    """End a just-created subscription now and refund its first charge (Play already bills this user).
+
+    Returns what was done. Raises on Stripe errors so the webhook is retried.
+    """
+    subscription = stripe.Subscription.retrieve(subscription_id, expand=['latest_invoice'])
+    refunded = None
+    invoice = subscription.get('latest_invoice') or {}
+    if isinstance(invoice, str):
+        invoice = stripe.Invoice.retrieve(invoice)
+    if (invoice.get('amount_paid') or 0) > 0:
+        payment_intent = invoice.get('payment_intent')
+        charge = invoice.get('charge')
+        if payment_intent:
+            refunded = stripe.Refund.create(
+                payment_intent=payment_intent if isinstance(payment_intent, str) else payment_intent['id'],
+                idempotency_key=f'play-conflict-refund-{subscription_id}',
+            ).get('id')
+        elif charge:
+            refunded = stripe.Refund.create(
+                charge=charge if isinstance(charge, str) else charge['id'],
+                idempotency_key=f'play-conflict-refund-{subscription_id}',
+            ).get('id')
+        else:
+            raise RuntimeError('Paid invoice has no payment to refund')
+    if subscription.get('status') not in TERMINAL_SUBSCRIPTION_STATUSES:
+        stripe.Subscription.cancel(subscription_id)
+    return {'subscription_id': subscription_id, 'refund_id': refunded, 'amount_paid': invoice.get('amount_paid') or 0}

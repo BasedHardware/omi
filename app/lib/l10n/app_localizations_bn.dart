@@ -15734,4 +15734,26 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get quietPayerCheck => 'দেখুন';
+
+  @override
+  String get playManageSubscription => 'সাবস্ক্রিপশন পরিচালনা';
+
+  @override
+  String get playBilledByGoogle => 'Google Play-এর মাধ্যমে বিল করা হয়';
+
+  @override
+  String get playPurchasePending => 'আপনার পেমেন্ট অপেক্ষমাণ। Google Play নিশ্চিত করলেই Omi Pro শুরু হবে।';
+
+  @override
+  String get playPurchaseOtherAccount => 'এই Google Play কেনাকাটা অন্য একটি Omi অ্যাকাউন্টের।';
+
+  @override
+  String get playPurchaseNotConfirmed => 'কেনাকাটা এখনও নিশ্চিত করা যায়নি। আমরা নিজে থেকে আবার চেষ্টা করব।';
+
+  @override
+  String get playRenewalTerms =>
+      'বাতিল না করা পর্যন্ত দেখানো দামে স্বয়ংক্রিয়ভাবে নবায়ন হয়। যেকোনো সময় Google Play-এ পরিচালনা বা বাতিল করুন।';
+
+  @override
+  String get playPaidAppUnavailable => 'Android-এ উপলভ্য নয়';
 }

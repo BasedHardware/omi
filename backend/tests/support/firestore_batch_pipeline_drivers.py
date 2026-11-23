@@ -309,6 +309,10 @@ def entries():
             neutrals={'limit': (10, 'bounded page size')},
         ),
         DriverEntry(
+            'utils.batch_pipeline.parked_sweep.parked_page',
+            domains={'namespace': namespaces, 'expired': [False, True], 'after': [None, 'held-09']},
+        ),
+        DriverEntry(
             'database.batch_pipeline_quarantine_recovery.dead_held_candidates',
             domains={'namespace': namespaces, 'after_id': [None, 'held-09']},
             neutrals={'limit': (32, 'bounded page size')},

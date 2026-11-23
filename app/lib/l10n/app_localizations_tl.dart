@@ -15864,4 +15864,28 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get quietPayerCheck => 'Tingnan';
+
+  @override
+  String get playManageSubscription => 'Pamahalaan ang subscription';
+
+  @override
+  String get playBilledByGoogle => 'Sinisingil ng Google Play';
+
+  @override
+  String get playPurchasePending =>
+      'Nakabinbin ang bayad mo. Magsisimula ang Omi Pro kapag kinumpirma ito ng Google Play.';
+
+  @override
+  String get playPurchaseOtherAccount => 'Ang pagbiling ito sa Google Play ay pag-aari ng ibang Omi account.';
+
+  @override
+  String get playPurchaseNotConfirmed =>
+      'Hindi pa namin makumpirma ang iyong pagbili. Susubukan naming muli nang awtomatiko.';
+
+  @override
+  String get playRenewalTerms =>
+      'Awtomatikong nire-renew sa ipinakitang presyo hanggang kanselahin mo. Pamahalaan o kanselahin anumang oras sa Google Play.';
+
+  @override
+  String get playPaidAppUnavailable => 'Hindi available sa Android';
 }

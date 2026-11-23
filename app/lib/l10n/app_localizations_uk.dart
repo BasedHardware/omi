@@ -15773,4 +15773,26 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get quietPayerCheck => 'Перевірити';
+
+  @override
+  String get playManageSubscription => 'Керувати підпискою';
+
+  @override
+  String get playBilledByGoogle => 'Оплата через Google Play';
+
+  @override
+  String get playPurchasePending => 'Платіж очікує. Omi Pro почнеться, щойно Google Play його підтвердить.';
+
+  @override
+  String get playPurchaseOtherAccount => 'Ця покупка в Google Play належить іншому акаунту Omi.';
+
+  @override
+  String get playPurchaseNotConfirmed => 'Поки не вдалося підтвердити покупку. Ми спробуємо знову автоматично.';
+
+  @override
+  String get playRenewalTerms =>
+      'Автоматично поновлюється за вказаною ціною, доки ви не скасуєте. Керуйте або скасовуйте будь-коли в Google Play.';
+
+  @override
+  String get playPaidAppUnavailable => 'Недоступно на Android';
 }

@@ -416,8 +416,8 @@ def test_admission_deferred_re_lease_records_relet_true_first_lease_false(monkey
     # the recorded refusal streak.
     assert second.attempt == 1 and second.token != first.token
     count = 'omi_batch_pipeline_owner_wait_seconds_count'
-    assert registry.get_sample_value(count, {'relet': 'false'}) == 1
-    assert registry.get_sample_value(count, {'relet': 'true'}) == 1
+    assert registry.get_sample_value(count, {'relet': 'false', 'priority': 'deep'}) == 1
+    assert registry.get_sample_value(count, {'relet': 'true', 'priority': 'deep'}) == 1
 
 
 def test_attempt_charged_re_lease_records_relet_true():
@@ -435,8 +435,8 @@ def test_attempt_charged_re_lease_records_relet_true():
     second = queue.pull(186)[0]
     assert second.attempt == 2
     count = 'omi_batch_pipeline_owner_wait_seconds_count'
-    assert registry.get_sample_value(count, {'relet': 'false'}) == 1
-    assert registry.get_sample_value(count, {'relet': 'true'}) == 1
+    assert registry.get_sample_value(count, {'relet': 'false', 'priority': 'deep'}) == 1
+    assert registry.get_sample_value(count, {'relet': 'true', 'priority': 'deep'}) == 1
 
 
 @pytest.mark.parametrize('mode', ['off', 'shadow'])

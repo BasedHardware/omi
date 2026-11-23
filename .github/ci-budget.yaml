@@ -2688,7 +2688,7 @@
       "runs_on": "ubuntu-latest"
     },
     "mobile-app-checks.yml/dart-tests-kiritimati": {
-      "budget_p50_minutes": 25,
+      "budget_p50_minutes": 35,
       "display_name": "Dart Tests (Pacific/Kiritimati)",
       "expected_nightly_runs_per_day": 1,
       "expected_runs_class": "sampled-pr-day",
@@ -2698,7 +2698,26 @@
       "matrix_size": 1,
       "needs": "changes",
       "owner": "CI maintainers",
-      "rationale": "Post-#19593 PR estimate: fork tier + narrowed PR paths applied to the 2026-09-26 internal share; re-seed from the weekly audit after 2026-10-05. Manual admission is conservatively budgeted at 0.1 run/day (folded into the four-run increase for compile/JVM and the 12-run emulator forecast); conditionally selected jobs also retain an allowance. P18 budgets one extra daily invocation at the same p50 and runner; notification/private smoke jobs are excluded (counted conservatively).",
+      "rationale": "SCA-3899 split the sequential two-zone job into one job per zone. Measured on the 2026-11-23 scheduled run (45113684750): Kiritimati step 32m04s on a 2m36s prelude, so the split job's wall is ~35 min; the old 25-minute p50 described a job that actually ran 62 min and was cancelled at its ceiling. Pago Pago is budgeted separately at 31. Both jobs run in parallel, so the critical path is unchanged.",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "mobile-app-checks.yml/dart-tests-pago-pago": {
+      "budget_p50_minutes": 31,
+      "display_name": "Dart Tests (Pacific/Pago_Pago)",
+      "expected_nightly_runs_per_day": 1,
+      "expected_runs_class": "sampled-pr-day",
+      "expected_runs_per_day": 2.1,
+      "if": "inputs.nightly_main_sha != '' || github.event_name == 'schedule' || (github.event_name == 'push' && needs.changes.outputs.has_app_dart == 'true')",
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": "changes",
+      "owner": "CI maintainers",
+      "rationale": "SCA-3899: new job carrying the Pacific/Pago_Pago pass that used to run second inside dart-tests-kiritimati. Measured step 27m47s on a 2m36s prelude in the 2026-11-23 scheduled run (45113684750), so ~31 min. Same selection and frequency as the Kiritimati job; the two run in parallel and neither is on the critical path.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -2781,10 +2800,11 @@
         "android-unit-tests",
         "android-emulator-checks",
         "ios-compile-check",
-        "dart-tests-kiritimati"
+        "dart-tests-kiritimati",
+        "dart-tests-pago-pago"
       ],
       "owner": "CI maintainers",
-      "rationale": "2026-09-26 PR sample p50 x 1.25, rounded up Include required native/AOT emulator acceptance; reject an unexpectedly skipped selected lane.. Manual admission is conservatively budgeted at 0.1 run/day (folded into the four-run increase for compile/JVM and the 12-run emulator forecast); conditionally selected jobs also retain an allowance. P18 budgets one extra daily invocation at the same p50 and runner; notification/private smoke jobs are excluded (counted conservatively).",
+      "rationale": "2026-09-26 PR sample p50 x 1.25, rounded up Include required native/AOT emulator acceptance; reject an unexpectedly skipped selected lane. SCA-3899 adds dart-tests-pago-pago to the needs graph and requires both far-timezone results whenever their selection applies, so an expected zone that is skipped or cancelled fails the aggregate. Manual admission is conservatively budgeted at 0.1 run/day (folded into the four-run increase for compile/JVM and the 12-run emulator forecast); conditionally selected jobs also retain an allowance. P18 budgets one extra daily invocation at the same p50 and runner; notification/private smoke jobs are excluded (counted conservatively).",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -2808,10 +2828,11 @@
         "android-compile-smoke",
         "android-unit-tests",
         "android-emulator-checks",
-        "dart-tests-kiritimati"
+        "dart-tests-kiritimati",
+        "dart-tests-pago-pago"
       ],
       "owner": "CI maintainers",
-      "rationale": "Reconcile regular Dart analyzer/tests alongside existing main/nightly suites, closing each matching failure issue on success. Existing five-minute budget and non-PR execution frequency remain sufficient; PR sentinel retained for inventory accounting. P18 budgets one extra daily invocation at the same p50 and runner; notification/private smoke jobs are excluded (counted conservatively).",
+      "rationale": "Reconcile regular Dart analyzer/tests alongside existing main/nightly suites, closing each matching failure issue on success. SCA-3899 tracks the two far-timezone jobs as separate suites (Pacific/Kiritimati and Pacific/Pago_Pago) so a cancelled zone opens its own issue. Existing five-minute budget and non-PR execution frequency remain sufficient; PR sentinel retained for inventory accounting. P18 budgets one extra daily invocation at the same p50 and runner; notification/private smoke jobs are excluded (counted conservatively).",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {

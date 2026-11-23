@@ -35,6 +35,13 @@ by itself prove transaction atomicity. Re-audit before `--write`, then run the
 strict writer unit tests and loopback emulator contract. A changed writer
 without a generation bump invalidates the inventory test.
 
+## Chat edit fence audit 2026-11-23
+
+#26100 changed only `chat_edits.apply_update`'s outer field validation: an
+unsupported field now raises the typed `UnsupportedChatEditField(ValueError)`.
+The transactional `apply_update.apply` and `restore` writers, including their
+generation bump, keep their pinned fingerprints. Only the outer scope is re-pinned.
+
 ## Recurring-voice scope audit 2026-11-04
 
 `recurring_voices.checkpoint`, `learn` and `learn.commit` read the People
