@@ -104,6 +104,8 @@ DEMAND_PLAYBACK_OUTCOMES = frozenset(
         'retry',
         'locked',
         'destructive_deferred',
+        'piece_readiness_deferred',
+        'piece_readiness_expired',
         'skipped',
         'account_pending_deletion',
         'chunks_missing',
@@ -133,6 +135,10 @@ def record_demand_playback_outcome(payload: Any, response_body: bytes | None) ->
         status = str(fields.get('status') or '')
         if status == 'dropped':
             outcome = str(fields.get('reason') or '')
+        elif status == 'deferred' and fields.get('reason') == 'v3_piece_not_ready':
+            outcome = 'piece_readiness_deferred'
+        elif status == 'unavailable' and fields.get('reason') == 'piece_readiness_expired':
+            outcome = 'piece_readiness_expired'
         else:
             outcome = _DEMAND_STATUS_OUTCOMES.get(status, status)
     PLAYBACK_BUILDS.labels(representation, outcome if outcome in DEMAND_PLAYBACK_OUTCOMES else 'other').inc()

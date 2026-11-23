@@ -91,6 +91,96 @@ def route_app():
     return app, sync
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize('scenario', ['metadata', 'chunks', 'window_changed', 'enqueue_failed', 'expired'])
+async def test_v3_merge_waits_for_piece_on_final_attempt(monkeypatch, route_app, scenario):
+    from datetime import datetime, timezone
+
+    import httpx
+    from utils.conversations.v3.audio import playback_piece_scope, playback_snapshot
+
+    app, sync = route_app
+    app.dependency_overrides[sync.verify_audio_merge_cloud_tasks_oidc] = lambda: 2
+    monkeypatch.setenv('OMI_ENV_STAGE', 'offline')
+    monkeypatch.setenv('PLAYBACK_ON_DEMAND_ENABLED', 'false')
+    monkeypatch.setattr(sync, 'account_deletion_blocks_user_work', lambda *_: False)
+    monkeypatch.setattr(sync, 'should_skip_background_account_mutation', lambda *_: False)
+    monkeypatch.setattr(sync, 'try_acquire_job_run_lock', lambda *_: 'token')
+    release, marker, enqueue, upload, stamp = (Mock() for _ in range(5))
+    monkeypatch.setattr(sync, 'release_job_run_lock', release)
+    monkeypatch.setattr(sync, 'get_sync_tasks_max_attempts', lambda: 3)
+    monkeypatch.setattr(sync, 'mark_conversation_playback_unavailable', marker)
+    monkeypatch.setattr(sync, 'enqueue_audio_merge_job_deferred', enqueue)
+    monkeypatch.setattr(build, 'get_conversation_playback_manifest', lambda *_: None)
+    monkeypatch.setattr(build, 'upload_conversation_playback_artifact', upload)
+    monkeypatch.setattr(sync.conversations_db, 'update_conversation', stamp)
+
+    source = {'id': 'file', 'chunk_timestamps': [] if scenario == 'metadata' else [1000.0]}
+    row = {
+        'id': 'conversation',
+        'started_at': datetime.fromtimestamp(1000, timezone.utc),
+        'audio_files': [source],
+        'recording_pieces': [{'recording_id': 'conversation', 'audio_file_id': 'file', 'start': 0, 'end': 1}],
+    }
+    monkeypatch.setattr(sync.conversations_db, 'get_conversation', lambda *_: row)
+    pcm = Mock(side_effect=FileNotFoundError)
+    monkeypatch.setattr(sync.sync_playback, '_merge_playback_sources', pcm)
+    segment = Mock()
+    segment.return_value.export.side_effect = lambda buf, **_: buf.write(b'mp3')
+    monkeypatch.setattr(sync.sync_playback, 'AudioSegment', segment)
+
+    fingerprint = playback_snapshot('synthetic', row)['_v3_playback_fingerprint']
+    payload = dict(schema_version=2, uid='synthetic', conversation_id='conversation', fingerprint=fingerprint)
+    if scenario == 'enqueue_failed':
+        enqueue.side_effect = TimeoutError
+    if scenario == 'expired':
+        payload.update(
+            piece_readiness_scope=playback_piece_scope(row),
+            piece_readiness_deferrals=sync.AUDIO_MERGE_PIECE_READINESS_DEFERRALS_MAX,
+        )
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://test') as client:
+        result = await client.post('/v2/audio-merge-jobs/run', json=payload)
+        release.assert_called_once_with('audio:conversation:conversation', 'token')
+        upload.assert_not_called()
+        stamp.assert_not_called()
+        if scenario == 'enqueue_failed':
+            assert result.status_code == 503 and result.json() == {'status': 'retry'}
+            marker.assert_not_called()
+            return
+        if scenario == 'expired':
+            assert result.status_code == 200 and result.json()['reason'] == 'piece_readiness_expired'
+            marker.assert_called_once_with('synthetic', 'conversation', fingerprint, 'piece_readiness_expired')
+            enqueue.assert_not_called()
+            return
+
+        assert result.status_code == 200
+        assert result.json() == {'status': 'deferred', 'reason': 'v3_piece_not_ready'}
+        marker.assert_not_called()
+        replacement, delay = enqueue.call_args.args
+        assert replacement['piece_readiness_deferrals'] == 1 and delay == 60
+        if scenario == 'window_changed':
+            row['recording_pieces'][0]['end'] = 2
+            result = await client.post('/v2/audio-merge-jobs/run', json=replacement)
+            assert result.status_code == 200 and result.json() == {'status': 'superseded'}
+            upload.assert_not_called()
+            stamp.assert_not_called()
+            return
+
+        source['chunk_timestamps'] = [1000.0]
+        pcm.side_effect = None
+        pcm.return_value = b'\0' * 32000
+        ready_fingerprint = playback_snapshot('synthetic', row)['_v3_playback_fingerprint']
+        assert (fingerprint != ready_fingerprint) == (scenario == 'metadata')
+        result = await client.post('/v2/audio-merge-jobs/run', json=replacement)
+
+    assert result.status_code == 200 and result.json() == {'status': 'done'}
+    assert upload.call_args.args == ('synthetic', 'conversation', b'mp3', ready_fingerprint)
+    assert stamp.call_args.args[2]['conversation_audio']['audio_files_fingerprint'] == ready_fingerprint
+    assert stamp.call_args.args[2]['conversation_audio']['captured_duration'] == 1.0
+    assert enqueue.call_count == 1
+    marker.assert_not_called()
+
+
 @pytest.mark.parametrize('demand', [False, True])
 @pytest.mark.asyncio
 async def test_locked_obsolete_job_is_consumed_but_current_job_keeps_retrying(monkeypatch, route_app, demand):

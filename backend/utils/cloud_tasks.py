@@ -614,18 +614,21 @@ def _audio_merge_task_id(payload: Dict[str, Any]) -> str:
 
 
 def enqueue_audio_merge_job_deferred(payload: Dict[str, Any], delay_seconds: int) -> None:
-    """Re-enqueue a merge task that ran into a destructive-operation fence.
+    """Schedule a named replacement, deduping replays of the same deferral.
 
-    The ``-dd{n}`` suffix (n = ``payload['destructive_deferrals']``) escapes the
-    original name's tombstone, and ``schedule_at`` places the new task after the
-    gate has cleared. Gate holds last seconds to a few minutes.
+    Include both counters so interleaving fence and readiness deferrals
+    cannot reuse a predecessor's name.
     """
-    deferral = int(payload['destructive_deferrals'])
+    task_id = _audio_merge_task_id(payload)
+    if payload.get('destructive_deferrals'):
+        task_id += f"-dd{payload['destructive_deferrals']}"
+    if payload.get('piece_readiness_deferrals'):
+        task_id += f"-pr{payload['piece_readiness_deferrals']}"
     handler_url = _audio_merge_handler_url()
     enqueue_named_task(
         os.getenv('AUDIO_MERGE_TASKS_QUEUE', ''),
         handler_url,
-        f'{_audio_merge_task_id(payload)}-dd{deferral}',
+        task_id,
         payload,
         audience=handler_url,
         schedule_at=int(time.time()) + delay_seconds,

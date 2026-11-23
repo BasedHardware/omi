@@ -55,6 +55,8 @@ V1_DEMAND = {'uid': 'u', 'conversation_id': 'c', 'audio_file_id': 'f', 'timestam
         ({'status': 'unavailable', 'reason': 'source_manifest_changed'}, 'unavailable'),
         ({'status': 'retry'}, 'retry'),
         ({'status': 'deferred', 'reason': 'destructive_operation'}, 'destructive_deferred'),
+        ({'status': 'deferred', 'reason': 'v3_piece_not_ready'}, 'piece_readiness_deferred'),
+        ({'status': 'unavailable', 'reason': 'piece_readiness_expired'}, 'piece_readiness_expired'),
         ({'status': 'surprise'}, 'other'),
     ],
 )

@@ -195,3 +195,10 @@ def test_deferred_task_name_and_schedule(monkeypatch):
 
     assert calls[0][0][2] == 'amc-conv-1-fp-1-dd2' and calls[0][1]['schedule_at'] == 1240
     assert calls[1][0][2] == 'am-conv-1-f1-dd1' and calls[1][1]['schedule_at'] == 1060
+
+    cloud_tasks.enqueue_audio_merge_job_deferred({**V2, 'piece_readiness_deferrals': 1}, 60)
+    cloud_tasks.enqueue_audio_merge_job_deferred(
+        {**V2, 'piece_readiness_deferrals': 1, 'destructive_deferrals': 2}, 240
+    )
+    assert calls[2][0][2] == 'amc-conv-1-fp-1-pr1' and calls[2][1]['schedule_at'] == 1060
+    assert calls[3][0][2] == 'amc-conv-1-fp-1-dd2-pr1' and calls[3][1]['schedule_at'] == 1240
