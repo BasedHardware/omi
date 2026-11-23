@@ -95,9 +95,25 @@ def test_read_error_closes_and_never_serves_last_known_good(member):
     assert admission.go_finalization_decision(UID)[0] == 'go'
     clock.now += admission.TTL_SECONDS
     assert admission.go_finalization_decision(UID) == ('python', 'closed')
-    # A failed read does not count as fresh: the next call retries instead of caching closed.
+    # The failure is cached closed for the backoff, so waiters share one failed read.
+    assert admission.go_finalization_decision(UID) == ('python', 'closed')
+    assert reader.calls == 2
+    clock.now += admission.ERROR_BACKOFF_SECONDS
     assert admission.go_finalization_decision(UID)[0] == 'go'
     assert reader.calls == 3
+
+
+def test_event_loop_caller_with_stale_cache_gets_closed_without_a_read(member):
+    import asyncio
+
+    reader, _clock = configure(env(100))
+
+    async def on_loop():
+        return admission.go_finalization_decision(UID)
+
+    assert asyncio.run(on_loop()) == ('python', 'closed')
+    assert reader.calls == 0
+    assert admission.go_finalization_decision(UID) == ('go', 'admitted')  # worker thread refreshes
 
 
 def test_closed_and_non_member_paths_add_no_firestore_operations(monkeypatch):
@@ -188,18 +204,63 @@ def test_membership_write_refuses_invalid_input_and_writes_nothing(kwargs):
     assert db.rows == {}
 
 
-def test_cli_reads_uid_from_file_and_never_prints_it(tmp_path, capsys):
-    db = StrictFirestore()
+def _cli(tmp_path, *extra, uid=UID, factory=None):
     uid_file = tmp_path / 'uid'
-    uid_file.write_text(UID + '\n')
-    code = cli.main(
-        ['--env', 'dev', '--uid-file', str(uid_file), '--add', '--actor', 'lead', '--reason', 'smoke'],
-        client_factory=lambda: db,
-    )
-    assert code == 0
+    uid_file.write_text(uid)
+    argv = ['--env', 'dev', '--uid-file', str(uid_file), '--add', '--actor', 'lead', '--reason', 'smoke', *extra]
+    return cli.main(argv, client_factory=factory)
+
+
+def test_cli_defaults_to_dry_run_and_writes_nothing(tmp_path, capsys):
+    db = StrictFirestore()
+    assert _cli(tmp_path, factory=lambda **kw: db) == 0
     out = capsys.readouterr().out
-    assert UID not in out and '"after": true' in out
+    assert '"dry_run": true' in out and UID not in out and db.rows == {}
+
+
+def test_cli_apply_binds_env_to_project_and_never_prints_uid(tmp_path, capsys):
+    db = StrictFirestore()
+    projects = []
+    assert _cli(tmp_path, '--apply', factory=lambda **kw: projects.append(kw['project']) or db) == 0
+    out = capsys.readouterr().out
+    assert projects == ['based-hardware-dev'] and UID not in out and '"after": true' in out
     assert db.rows[('rollout_cohorts', UID)]['cohorts']['dev']['go-finalization'] is True
+
+
+def test_cli_apply_requires_the_matching_operator_tier(tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv('GCP_AGENT_TIER', 'ro-prod')
+    assert _cli(tmp_path, '--apply') == 2
+    assert 'dev-operator' in capsys.readouterr().err
+
+
+def test_cli_hides_sdk_errors_and_rejects_multiline_uid_files(tmp_path, capsys):
+    def broken(**kw):
+        raise RuntimeError('projects/x/databases/(default)/documents/rollout_cohorts/' + UID)
+
+    assert _cli(tmp_path, '--apply', factory=broken) == 1
+    assert UID not in capsys.readouterr().err
+    assert _cli(tmp_path, uid=UID + '\nsecond') == 2
+
+
+def test_generic_cohort_cli_refuses_go_finalization(tmp_path):
+    from scripts import rollout_cohort
+
+    uid_file = tmp_path / 'uid'
+    uid_file.write_text(UID)
+    with pytest.raises(SystemExit):
+        rollout_cohort.main(
+            [
+                '--uid-file',
+                str(uid_file),
+                '--cohort',
+                'go-finalization',
+                '--project',
+                'based-hardware-dev',
+                '--environment',
+                'dev',
+                '--add',
+            ]
+        )
 
 
 def test_switch_reads_stay_outside_transaction_callbacks():

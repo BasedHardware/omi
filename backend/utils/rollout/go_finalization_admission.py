@@ -19,6 +19,7 @@ committed pin. Call `record_admission` once, after that creation commits.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from threading import Lock
 import time
@@ -33,6 +34,9 @@ COHORT = 'go-finalization'
 RAMP_NAME = 'go-finalization'
 OPEN_PERCENT = 100.0
 TTL_SECONDS = 30.0
+# A failed read is cached as closed this long, so an outage costs one read per process per
+# interval instead of one serialized read per waiting caller.
+ERROR_BACKOFF_SECONDS = 5.0
 
 Engine = Literal['python', 'go']
 Reason = Literal['closed', 'not_member', 'admitted']
@@ -46,7 +50,7 @@ ADMISSIONS = Counter(
 )
 SWITCH_READS = Counter(
     'omi_go_finalization_switch_reads_total',
-    'Go finalization switch refresh reads by result (open, closed, absent, error).',
+    'Go finalization switch refresh reads by result (open, closed, absent, error, event_loop).',
     ['result'],
 )
 
@@ -78,6 +82,12 @@ class _Switch:
         with self._state_lock:
             if self._fresh(self._clock()):
                 return self._open
+        if _on_event_loop():
+            # Contract: refresh only from a worker thread (the sync admission path runs on one).
+            # A blocking point read must never stall the loop, so an event-loop caller with a
+            # stale cache gets closed rather than a read.
+            SWITCH_READS.labels('event_loop').inc()
+            return False
         with self._refresh_lock:
             with self._state_lock:
                 if self._fresh(self._clock()):  # another caller refreshed while we waited
@@ -85,9 +95,10 @@ class _Switch:
             result, opened = self._read()
             with self._state_lock:
                 self._open = opened
-                # A failed read is not a successful read: the next caller retries, and
-                # until then the switch stays closed.
-                self._read_at = self._clock() if result != 'error' else None
+                now = self._clock()
+                # A failed read never counts as a successful one: it is cached closed for
+                # ERROR_BACKOFF_SECONDS only, shared by every waiter, and then retried.
+                self._read_at = now if result != 'error' else now - TTL_SECONDS + ERROR_BACKOFF_SECONDS
             SWITCH_READS.labels(result).inc()
             return opened
 
@@ -105,6 +116,14 @@ class _Switch:
         if (type(value) is int or type(value) is float) and value == OPEN_PERCENT:
             return 'open', True
         return ('absent' if value is None else 'closed'), False
+
+
+def _on_event_loop() -> bool:
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        return False
+    return True
 
 
 _switch = _Switch(_default_read)
