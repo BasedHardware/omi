@@ -187,15 +187,16 @@ async def test_backfill_route_kill_switch_restores_the_original_failure(monkeypa
 
 
 @pytest.mark.asyncio
-async def test_background_task_logs_a_provider_fault_as_a_bounded_warning(caplog):
-    """The paid outline runs in a background task; its done callback must not
+@pytest.mark.parametrize('name', ['v3-paid-work', 'v3-reconcile-open'])
+async def test_opted_in_background_task_logs_a_provider_fault_as_a_bounded_warning(caplog, name):
+    """The v3 outline tasks own a queue retry; their done callback must not
     log the provider body at ERROR (which Error Reporting would group)."""
     caplog.set_level(logging.WARNING)
 
     async def fail():
         raise provider_502()
 
-    task = start_background_task(fail(), name='v3-paid-work')
+    task = start_background_task(fail(), name=name, bounded_provider_failure=True)
     with pytest.raises(openai.InternalServerError):
         await task
     await asyncio.sleep(0.01)  # let the done callback run
@@ -211,13 +212,31 @@ async def test_background_task_logs_a_provider_fault_as_a_bounded_warning(caplog
 
 
 @pytest.mark.asyncio
-async def test_background_task_keeps_a_non_provider_failure_loud(caplog):
+async def test_background_task_keeps_a_provider_fault_loud_without_the_opt_in(caplog):
+    """A fire-and-forget task with no queue retry keeps its loud ERROR."""
+    caplog.set_level(logging.WARNING)
+
+    async def fail():
+        raise provider_502()
+
+    task = start_background_task(fail(), name='other-background-work')
+    with pytest.raises(openai.InternalServerError):
+        await task
+    await asyncio.sleep(0.01)
+
+    assert any(
+        record.levelno == logging.ERROR and 'background_task failed' in record.getMessage() for record in caplog.records
+    )
+
+
+@pytest.mark.asyncio
+async def test_opted_in_background_task_keeps_a_non_provider_failure_loud(caplog):
     caplog.set_level(logging.WARNING)
 
     async def fail():
         raise ValueError('bug')
 
-    task = start_background_task(fail(), name='v3-paid-work')
+    task = start_background_task(fail(), name='v3-paid-work', bounded_provider_failure=True)
     with pytest.raises(ValueError):
         await task
     await asyncio.sleep(0.01)

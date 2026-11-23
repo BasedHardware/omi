@@ -748,12 +748,20 @@ async def log_executor_health(
 _background_tasks: set[asyncio.Task[Any]] = set()
 
 
-def start_background_task(coro: Coroutine[Any, Any, Any], *, name: str) -> asyncio.Task[Any]:
+def start_background_task(
+    coro: Coroutine[Any, Any, Any], *, name: str, bounded_provider_failure: bool = False
+) -> asyncio.Task[Any]:
     """Schedule *coro* as a tracked background task with exception logging.
 
     Use this instead of bare ``asyncio.create_task()`` for production
     fire-and-forget work.  Bare ``create_task`` silently drops exceptions
     and can be garbage-collected if the caller doesn't keep a reference.
+
+    ``bounded_provider_failure`` opts this task into the retryable-provider
+    contract: a transient provider/transport fault is logged as one bounded
+    WARNING with its class instead of the provider body at ERROR. Only tasks
+    whose caller owns a queue retry or replay may opt in; every other task
+    keeps the loud ERROR so Error Reporting still sees it.
     """
     from database.firestore_read_origin import background_task_read_origin
 
@@ -769,18 +777,20 @@ def start_background_task(coro: Coroutine[Any, Any, Any], *, name: str) -> async
             return
         exc = t.exception()
         if exc:
-            # A transient provider/transport fault is a retryable dependency
-            # failure, not an Omi-side crash: log its bounded class at WARNING
-            # so Error Reporting does not group it and the provider body never
-            # reaches logs. The caller still receives the exception.
-            failure_class = _transient_provider_failure_class(exc)
-            if failure_class is not None:
-                logger.warning(
-                    'background_task transient provider failure: %s failure_class=%s',
-                    t.get_name(),
-                    failure_class,
-                )
-                return
+            if bounded_provider_failure:
+                # A transient provider/transport fault on a task whose caller
+                # owns a queue retry is a retryable dependency failure, not an
+                # Omi-side crash: log its bounded class at WARNING so Error
+                # Reporting does not group it and the provider body never
+                # reaches logs. The caller still receives the exception.
+                failure_class = _transient_provider_failure_class(exc)
+                if failure_class is not None:
+                    logger.warning(
+                        'background_task transient provider failure: %s failure_class=%s',
+                        t.get_name(),
+                        failure_class,
+                    )
+                    return
             logger.error('background_task failed: %s — %s: %s', t.get_name(), type(exc).__name__, exc)
 
     task.add_done_callback(_done)

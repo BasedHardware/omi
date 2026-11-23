@@ -12,9 +12,11 @@ its 30s `request_timeout`; the failure is now classified at the boundary.
 - An already-typed `HTTPException` from the composition boundary is re-raised
   unchanged, so its metric is recorded once and a deliberate non-retryable
   answer is not overridden.
-- The shared background-task done callback logs a transient provider fault as
-  one bounded WARNING with the failure class only, not the provider body at
-  ERROR. This covers the paid outline task and the on-open reconcile task.
+- The `v3-paid-work` and `v3-reconcile-open` background tasks opt into bounded
+  provider-failure logging: a transient provider fault is one WARNING with the
+  failure class only, not the provider body at ERROR. The opt-in is limited to
+  tasks whose caller owns a queue retry; every other background task keeps its
+  loud ERROR so Error Reporting still sees it.
 - A non-provider failure keeps its loud 500 and ERROR log.
 
 Kill switch: `CONVERSATION_PROCESSING_RETRYABLE_PROVIDER_FAILURE_ENABLED`
