@@ -22,6 +22,7 @@ from config.episodes import (
     home_transcription_queue_hold_enabled,
 )
 from config.transcription_pending import pending_retry_enabled, seal_wait_enabled
+from database.batch_pipeline_admission_view import read_jobs as read_admission_jobs
 from database.batch_pipeline_allowance_hold import EXHAUSTED, STATE
 from database.batch_pipeline_store import FirestoreStore
 from utils.conversations import empty_capture
@@ -271,7 +272,7 @@ def read_admissions(
         try:
             if budget is not None:
                 timeout = min(budget.rpc_timeout(), timeout)
-            jobs = store.conversation_admission_jobs(uid, batch, limit=limit, timeout=timeout)
+            jobs = read_admission_jobs(store, uid, batch, limit=limit, timeout=timeout)
             reads = max(1, len(jobs))  # Firestore bills a minimum read for an empty query.
             remaining -= reads
             if budget is not None:

@@ -4792,6 +4792,8 @@ FIELD_SITES = {
     'utils/workers/retry.py': [('retry_response', 'status', "'retry'", ('reason', 'status'))],
     'utils/conversations/transcribing_hold.py': [
         ('project', 'status', "'completed' if status == 'failed' else status", ('status', 'structured')),
+        # Current same-owner job evidence changes only the list/detail wire copy.
+        ('project', 'status', "'processing'", ('status', 'structured', 'summary_retryable', 'transcription_admission')),
         # API response only; never sent to a lifecycle persistence helper.
         ('retry_wire', 'status', "'processing'", ('home_step', 'status', 'structured', 'summary_retryable')),
     ],

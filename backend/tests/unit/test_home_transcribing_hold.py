@@ -17,6 +17,7 @@ from config.episodes import (
     home_transcription_queue_hold_enabled,
 )
 from database import conversations
+from models.conversation import ProcessConversationRequest
 from routers import conversations as routes
 from tests.unit.test_batch_pipeline_live import incoming, recording
 from tests.unit.test_indexed_list_read_path import Db
@@ -535,8 +536,23 @@ def admission_job(cid='capture', state='allowance_held', **fields):
     return {'owner_id': 'u', 'conversation_id': cid, 'state': state, 'compute_decision': decision, **fields}
 
 
+@pytest.fixture
+def bind_admission_lookup(monkeypatch):
+    def bind(find_jobs):
+        store = object()
+
+        def read(source, *args, **kwargs):
+            assert source is store
+            return find_jobs(*args, **kwargs)
+
+        monkeypatch.setattr(transcribing_hold, 'read_admission_jobs', read)
+        return store
+
+    return bind
+
+
 @pytest.mark.parametrize('kind', ['ordinary', 'no_clock', 'titled'])
-def test_list_and_detail_use_current_admission_then_clear_on_transcript(api, monkeypatch, kind):
+def test_list_and_detail_use_current_admission_then_clear_on_transcript(api, monkeypatch, kind, bind_admission_lookup):
     client, row = api
     row.update(
         finished_at=NOW - timedelta(hours=26),
@@ -558,7 +574,7 @@ def test_list_and_detail_use_current_admission_then_clear_on_transcript(api, mon
         assert limit <= 256 and 0 < timeout <= 1.5
         return jobs
 
-    store = SimpleNamespace(conversation_admission_jobs=find_jobs)
+    store = bind_admission_lookup(find_jobs)
     read_admissions = transcribing_hold.read_admissions
     monkeypatch.setattr(
         transcribing_hold,
@@ -606,7 +622,7 @@ def test_list_and_detail_use_current_admission_then_clear_on_transcript(api, mon
     assert len(reads) == 6
 
 
-def test_admissions_require_current_owner_and_usable_job_state():
+def test_admissions_require_current_owner_and_usable_job_state(bind_admission_lookup):
     current = NOW.timestamp()
     jobs = [
         admission_job('held'),
@@ -663,7 +679,7 @@ def test_admissions_require_current_owner_and_usable_job_state():
         assert set(ids).isdisjoint(excluded)
         return jobs
 
-    store = SimpleNamespace(conversation_admission_jobs=find_jobs)
+    store = bind_admission_lookup(find_jobs)
     assert transcribing_hold.read_admissions('u', rows, store=store, now=NOW) == {
         'held': 'allowance_held',
         'held_legacy_retry': 'allowance_held',
@@ -673,7 +689,7 @@ def test_admissions_require_current_owner_and_usable_job_state():
     }
 
 
-def test_admissions_batch_conversation_ids_and_stop_on_truncation(monkeypatch):
+def test_admissions_batch_conversation_ids_and_stop_on_truncation(monkeypatch, bind_admission_lookup):
     rows = [capture(id=f'capture-{i}') for i in range(75)]
     reads = []
 
@@ -684,12 +700,12 @@ def test_admissions_batch_conversation_ids_and_stop_on_truncation(monkeypatch):
         return [admission_job(cid) for cid in ids[:limit]]
 
     monkeypatch.setattr(transcribing_hold, '_MAX_ADMISSION_JOB_READS', 3)
-    store = SimpleNamespace(conversation_admission_jobs=find_jobs)
+    store = bind_admission_lookup(find_jobs)
     assert transcribing_hold.read_admissions('u', rows, store=store, now=NOW) == {'capture-0': 'allowance_held'}
     assert [(len(ids), limit) for ids, limit in reads] == [(30, 3), (30, 2)]
 
 
-def test_admissions_charge_empty_queries_to_the_request_budget():
+def test_admissions_charge_empty_queries_to_the_request_budget(bind_admission_lookup):
     rows = [capture(id=f'capture-{i}') for i in range(75)]
     budget = ListReadBudget(deadline_monotonic=time.monotonic() + 1, max_documents=2)
     limits = []
@@ -698,15 +714,26 @@ def test_admissions_charge_empty_queries_to_the_request_budget():
         limits.append(limit)
         return []
 
-    store = SimpleNamespace(conversation_admission_jobs=find_jobs)
+    store = bind_admission_lookup(find_jobs)
     assert transcribing_hold.read_admissions('u', rows, budget=budget, store=store, now=NOW) == {}
     assert budget.docs_scanned == 2
     assert limits == [2, 1]
 
 
-def test_admission_lookup_timeout_preserves_existing_wait():
+def test_admission_lookup_timeout_preserves_existing_wait(bind_admission_lookup):
     def timeout(*args, **kwargs):
         raise DeadlineExceeded('lookup deadline')
 
-    store = SimpleNamespace(conversation_admission_jobs=timeout)
+    store = bind_admission_lookup(timeout)
     assert transcribing_hold.read_admissions('u', [capture()], store=store, now=NOW) == {}
+
+
+@pytest.mark.parametrize('value', ['allowance_held', 'processing'])
+def test_client_or_stored_payload_cannot_supply_transcription_admission(value):
+    state = {'transcription_admission': value}
+    request = ProcessConversationRequest.model_validate(state)
+    assert 'transcription_admission' not in request.model_dump()
+    payload = {'id': 'capture', **state}
+    assert 'transcription_admission' not in conversations.encode_conversation_for_write('u', payload)
+    assert 'transcription_admission' not in conversations.prepare_conversation_for_read(payload, 'u')
+    assert payload['transcription_admission'] == value

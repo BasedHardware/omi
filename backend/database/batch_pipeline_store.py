@@ -43,7 +43,6 @@ from database.batch_pipeline_privacy import assert_batch_write_allowed
 from database.batch_pipeline_transaction_attempt import note_direct_reads as _note_direct_reads, prepare_transaction
 from config.firestore_read_levers import lever_enabled
 from database.batch_pipeline_recovery import defer_privacy_blocked_record, quarantine_fenced
-from database.firestore_retry import FIRESTORE_NO_RETRY
 from database.firestore_transaction_retry import FirestoreContentionExhausted, run_with_transaction_contention_retry
 from database.batch_pipeline_transaction_labels import (
     current_operation,
@@ -298,31 +297,6 @@ class FirestoreTransaction:
 
 
 class FirestoreStore:
-    def conversation_admission_jobs(
-        self, uid: str, conversation_ids: list[str], *, limit: int, timeout: float
-    ) -> list[dict[str, Any]]:
-        """Read only the current job evidence needed by one conversation page."""
-        docs = (
-            self.client.collection(f'{self.namespace}_jobs')
-            .where('owner_id', '==', uid)
-            .where('conversation_id', 'in', conversation_ids)
-            .select(
-                (
-                    'owner_id',
-                    'conversation_id',
-                    'state',
-                    'compute_decision',
-                    'recovery_state',
-                    'available_at',
-                    'lease_until',
-                    'ready_at',
-                )
-            )
-            .limit(limit)
-            .stream(timeout=timeout, retry=FIRESTORE_NO_RETRY)
-        )
-        return [doc.to_dict() for doc in docs]
-
     def packing_candidates(self, owner_key: str) -> list[dict]:
         """One projected owner prefix, including rows that can block a pack."""
         docs = (

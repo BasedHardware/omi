@@ -385,6 +385,7 @@ def _prepare_conversation_for_write(
     allow_offload: bool = True,
 ) -> Dict[str, Any]:
     data = copy.deepcopy(data)
+    data.pop('transcription_admission', None)  # Current authenticated read evidence, never persisted.
 
     # Partial writes cannot certify an entire legacy row. Explicit prepare
     # reconciles them; full creates/processing results get compact content now.
@@ -717,6 +718,7 @@ def prepare_conversation_for_read(
         return None
 
     data = copy.deepcopy(conversation_data)
+    data.pop('transcription_admission', None)  # Only the current job lookup can supply this wire field.
     # Separate encrypted card data must not leak into hydrated detail or be
     # replayed as stale projection metadata by a logical-state writer.
     for field in DISPLAY_FIELDS:

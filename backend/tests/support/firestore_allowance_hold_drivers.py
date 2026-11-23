@@ -3,7 +3,7 @@
 from dataclasses import dataclass
 from types import SimpleNamespace
 
-from tests.support.firestore_query_drivers import DriverEntry, CoveredByEntry
+from tests.support.firestore_query_drivers import CallerProfile, DriverEntry, CoveredByEntry
 
 
 @dataclass(frozen=True)
@@ -29,10 +29,14 @@ def entries():
     stores = [StoreArgument(namespace) for namespace in namespaces]
     return (
         DriverEntry(
-            'database.batch_pipeline_store.FirestoreStore.conversation_admission_jobs',
-            domains={'self': stores, 'conversation_ids': [['one'], ['one', 'two']]},
+            'database.batch_pipeline_admission_view.read_jobs',
+            domains={'store': stores},
             base={'uid': 'synthetic-owner'},
             neutrals={'limit': (256, 'metadata read bound'), 'timeout': (1.5, 'RPC deadline')},
+            profiles=(
+                CallerProfile('conversation-detail', {'conversation_ids': [['one']]}),
+                CallerProfile('conversation-list', {'conversation_ids': [['one'], ['one', 'two']]}),
+            ),
         ),
         DriverEntry(
             'database.batch_pipeline_store.FirestoreStore.packing_candidates',
