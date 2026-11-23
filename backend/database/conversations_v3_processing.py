@@ -140,7 +140,7 @@ def store_summary(uid, cid, token, revision, structured, covers, *, live_input=N
         snapshot = ref.get(transaction=tx)
         deletion = account_deletion_document(uid, firestore_client=client).get(transaction=tx)
         if account_deletion_marker_blocks_access(
-            marker_exists=deletion.exists, raw_status=(deletion.to_dict() or {}).get('status')
+            marker_exists=deletion.exists, raw_status=(deletion.to_dict() or {}).get('wipe_status')
         ):
             raise Conflict('account_deletion')
         lease = held.get(transaction=tx).to_dict() or {}
