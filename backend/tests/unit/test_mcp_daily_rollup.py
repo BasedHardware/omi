@@ -117,10 +117,38 @@ def test_success_path_queues_rollup_without_blocking_raw_event(monkeypatch):
     monkeypatch.delenv(rollup.ENABLED_ENV, raising=False)
     analytics.schedule_mcp_tool_use_succeeded(uid='u', tool_name='get_memories', client_name='codex', initiator='user')
     assert capture.call_args.kwargs['event'] == 'MCP Tool Use Succeeded'
-    assert queued == [
-        (rollup.record_success, {'uid': 'u', 'client': 'codex', 'tool': 'get_memories', 'initiator': 'user'})
-    ]
+    assert len(queued) == 1
+    fn, kwargs = queued[0]
+    occurred_at = capture.call_args.kwargs['timestamp']
+    assert fn is rollup.record_success
+    assert kwargs == {'uid': 'u', 'client': 'codex', 'tool': 'get_memories', 'initiator': 'user', 'now': kwargs['now']}
+    # The UTC day comes from the success time, not from when the queued task runs.
+    assert kwargs['now'].tzinfo is not None and kwargs['now'] == occurred_at
     monkeypatch.setenv(rollup.ENABLED_ENV, 'false')
     queued.clear()
     analytics.schedule_mcp_tool_use_succeeded(uid='u', tool_name='get_memories', client_name='codex', initiator='user')
     assert queued == [] and capture.call_count == 2
+
+
+def test_day_bucket_follows_the_success_time_not_the_worker_clock(redis):
+    late = datetime(2026, 11, 23, 23, 59, 59, tzinfo=timezone.utc)
+    rollup.record_success(
+        uid='u1',
+        client='codex',
+        tool='get_memories',
+        initiator='user',
+        now=late,
+        redis=redis,
+        clock_s=int(late.timestamp()) + 5,
+    )  # the worker runs after midnight
+    assert redis.exists(rollup.stats_key('20261123', 'u1', 'codex'))
+    assert not redis.exists(rollup.stats_key('20261124', 'u1', 'codex'))
+
+
+def test_refused_snapshot_is_requeued_and_retried(redis):
+    record(redis, 0)
+    refused = Mock(return_value=False)
+    assert rollup.flush_due(refused, now=DAY + timedelta(days=1), redis=redis) == 0
+    assert refused.call_count == 1
+    count, emitted = flush(redis, DAY + timedelta(days=1, minutes=2))
+    assert count == 1 and emitted[0]['properties']['calls'] == 1

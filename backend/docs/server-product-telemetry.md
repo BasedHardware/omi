@@ -107,9 +107,12 @@ per-process daemon sweeper emits a cumulative `MCP Daily Activity` snapshot
 and a final one for every key still dirty after its day ends. ZREM on the dirty
 set is the claim, so one instance emits each snapshot.
 
-`web/admin/lib/wall-mcp.ts` prefers raw rows and falls back to the largest
-snapshot (by `raw_calls`) per actor/client/day. Its cadence statistics are
-computed from the same sums, so DAU/WAU/MAU stay exact for complete days.
+`web/admin/lib/wall-mcp.ts` reads, per actor/client/day, whichever source saw
+more qualifying calls (raw on a tie; the largest snapshot by `raw_calls`). The
+counts and the UTC day match the raw stream (the day comes from the success
+time). Gaps use Redis TIME, one clock ordered across instances, so they can
+differ from the raw event clock by queue delay; the first full day's comparison
+against the raw reader gates switching the raw event off.
 
 Kill switch: `MCP_DAILY_ROLLUP_ENABLED` (on unless `0`/`false`/`off`/`no`).
 Redis errors fail open and never touch the raw event. The server keeps emitting

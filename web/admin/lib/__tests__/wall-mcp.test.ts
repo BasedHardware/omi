@@ -145,10 +145,18 @@ it("falls back to the server's daily rollup only where raw rows are absent (SCA-
   expect(sql).toContain("properties.schema_version))=1");
   // Snapshots for the last day arrive after it ends: read one day past the window.
   expect(sql).toContain("timestamp < toDateTime('2026-10-16 00:00:00', 'UTC')");
-  // Raw (prio 1) wins over the rollup (prio 0) for the same actor/client/day.
   expect(sql).toContain("1 prio FROM mcp_raw_stats");
   expect(sql).toContain("0 prio FROM mcp_roll_stats");
-  expect(sql).toContain("argMax(c,prio) calls");
+  // The source with more qualifying calls wins (raw on a tie), so the day the
+  // raw stream is switched off mid-day reads the complete rollup.
+  expect(sql).toContain("argMax(c,tuple(c,prio)) calls");
+  // A snapshot of only scheduled-agent calls still proves the marker is live.
+  expect(sql).toContain(
+    "toFloatOrZero(JSONExtractString(properties,'raw_calls')) > 0"
+  );
+  expect(sql).not.toContain(
+    "toFloatOrZero(JSONExtractString(properties,'calls')) > 0"
+  );
   // The largest cumulative snapshot of a day is the one read.
   expect(sql).toContain("argMax(calls,tuple(raw_calls,timestamp))");
   // The marker survives the raw stream being switched off.

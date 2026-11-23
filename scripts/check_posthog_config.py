@@ -196,7 +196,7 @@ def validate(doc, today):
         entry = events.get(name)
         listed = name in keep[0]['events']
         est = (entry or {}).get('est_events_per_day')
-        if entry is not None and est is not None and (not isinstance(est, int) or est < 0):
+        if entry is not None and est is not None and (not isinstance(est, int) or isinstance(est, bool) or est < 0):
             errors.append(f'{name}: est_events_per_day must be a non-negative integer')
             continue
         if pct > SAMPLE_CEILING and not isinstance(est, int):

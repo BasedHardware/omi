@@ -168,10 +168,12 @@ To change sampling:
    `monthly_usd` only while it is signed by David Zhang and unexpired), when
    `feature_flags.measured_requests_per_day` is missing, or when a warehouse
    schema full-refreshes more than 1M rows per run. It also prints the
-   estimate at flags = 0 and with each `budget.planned` change.
+   estimate at flags = 0.
 3. After merge, the release owner runs `scripts/posthog/apply.py plan`, then
-   `apply --snapshot-dir DIR` from `main`. `apply.py drift` runs daily and exits
-   1 on any difference, including a transformation that is not in the file.
+   `apply --snapshot-dir DIR` from `main`. `apply.py drift` exits 1 on any
+   difference, including a transformation that is not in the file. Nothing in
+   this repository schedules it yet; the release owner runs it after each apply
+   and a daily schedule is a follow-up on SCA-3665.
 
 Keep-list membership exempts an event from the 2% default; a later sampler in
 the file can still sample it. `$` events (except `$rageclick`) and names
@@ -268,7 +270,7 @@ Some events were sampled at 5%, then 2%, for a few hours before they returned to
 - `App Session Started`: ~04:00Z–10:14Z. Saved insights `EblY7Tul` Downloads per day, `L0xHnHgX` Country breakdown, `e8wp6WgL` iOS vs. Android, `bZShNqgU` Mobile vs. Desktop and `ViHw9RI8` DAU / WAU carry a note.
 - Admin-read events (crash rate, releases, macOS versions, device health, desktop ratings, desktop prompts, floating-bar usage, notifications, K-factor): ~04:00Z–10:53Z.
 - `Task Extracted`, `Device Disconnected`, `Action Items Page Opened`: ~04:00Z–~10:12Z.
-- `Recording Upload Failed`: 3% from ~04:25Z to ~10:05Z, then 100% until ~11:25Z. Since ~11:25Z it is sampled (10%, then 3% from 2026-11-23), not complete; the current rate is in `contracts/analytics/posthog.json`.
+- `Recording Upload Failed`: 3% from ~04:25Z to ~10:05Z, then 100% until ~11:25Z. Since ~11:25Z it is sampled (10%, then 3% and 2% from 2026-11-23), not complete; the current rate is in `contracts/analytics/posthog.json`.
 
 Readers that still see sampled events without weights:
 `Product Journey Outcome` (2%) in

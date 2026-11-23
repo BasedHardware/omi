@@ -25,6 +25,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Optional
 
 import database.redis_db as redis_db
+from utils.product_telemetry import emit_product_event
 
 logger = logging.getLogger(__name__)
 
@@ -162,6 +163,7 @@ def flush_due(
 
     ZREM is the claim: across instances exactly one sweeper emits a given
     dirty entry. A later call re-adds the key, so the next snapshot follows.
+    A snapshot the capture client refuses is re-queued for the next sweep.
     """
     if not enabled():
         return 0
@@ -189,19 +191,24 @@ def flush_due(
             if len(parts) != 5 or not stats:
                 continue
             _, _, key_day, client, uid = parts
-            emit(
+            accepted = emit(
                 uid=uid,
                 event=MCP_DAILY_ACTIVITY,
                 properties=snapshot_properties(key_day, client, stats),
                 timestamp=now,
             )
+            if accepted is False:
+                # Not captured: put the claim back so a later sweep retries (bounded by the key TTL).
+                try:
+                    r.zadd(dirty, {key: now.timestamp() + SWEEP_INTERVAL_SECONDS}, nx=True)
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning("mcp daily rollup requeue failed error=%s", type(exc).__name__)
+                continue
             emitted += 1
     return emitted
 
 
 def _sweep_forever() -> None:
-    from utils.product_telemetry import emit_product_event
-
     while True:
         time.sleep(SWEEP_INTERVAL_SECONDS)
         try:

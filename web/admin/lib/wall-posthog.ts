@@ -54,7 +54,7 @@ function activityCtes(
     end
   )})-1,${days * 86400}) period,
       uniqExact(${UTC_DAY(at)}) days,max(${at}) latest,countIf(cap) captures,
-      countIf(fg) fgn,if(countIf(cap)>0,maxIf(${SAMPLE_PCT_SQL},cap),100) cap_pct${
+      countIf(fg) fgn,if(countIf(cap)>0,maxIf(${SAMPLE_PCT_SQL},cap),0) cap_pct${
     extra.app
   } FROM qualified
       WHERE ${predicate} AND ${at} >= ${sqlTime(start)} AND ${at} < ${sqlTime(
@@ -67,7 +67,7 @@ function activityCtes(
       intDiv(dateDiff('second',mcp_days.latest,${sqlTime(end)})-1,${
             days * 86400
           }) period,
-      count() days,max(mcp_days.latest) latest,0 captures,1 fgn,100 cap_pct${
+      count() days,max(mcp_days.latest) latest,0 captures,1 fgn,0 cap_pct${
         extra.mcp
       } FROM mcp_days GROUP BY actor,period`
         : ""
@@ -82,6 +82,7 @@ function activityCtes(
  * any foreground or MCP activity is seen regardless and counts once. Actors
  * with any untagged (pre-sampling) capture in the period count once too. The
  * saved count weights every saved actor, since saved status is itself sampled.
+ * cap_pct is 0 on rows without captures, so the max covers capture rows only.
  * Counts are unbiased but noisy for small groups (one sampled user = 50). */
 const ACTOR_COUNT = {
   active: "toInt64(round(sum(if(fg_any>0,1,100/pct_any))))",

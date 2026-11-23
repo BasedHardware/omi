@@ -81,6 +81,9 @@ class CheckPostHogConfig(unittest.TestCase):
         doc = passing()
         doc['events']['Device Connected']['est_events_per_day'] = -40000
         self.assertOneError(doc, 'Device Connected: est_events_per_day must be a non-negative integer')
+        doc = passing()
+        doc['events']['Device Connected']['est_events_per_day'] = True
+        self.assertOneError(doc, 'Device Connected: est_events_per_day must be a non-negative integer')
 
     def test_kept_event_without_estimate(self):
         doc = passing()

@@ -236,9 +236,7 @@
     "Product Journey First Result",
     "Recording Produced No Conversation",
     "Recording Start Failed",
-    "Recording Upload Completed",
     "Recording Upload Failed",
-    "Recording Upload Started",
     "Referral Program Opened",
     "Screen Capture Broken Detected",
     "Screen Capture Reset Clicked",
@@ -1886,7 +1884,7 @@
    "reader": [
     "web/admin/lib/qualified-activity.ts",
     "web/admin/lib/wall-posthog.ts",
-    "web/admin/app/api/viral-metrics/route.ts",
+    "web/admin/app/api/omi/stats/viral-metrics/route.ts",
     "ym8miKtQ",
     "xkycBQGR",
     "nX4yHJZR",

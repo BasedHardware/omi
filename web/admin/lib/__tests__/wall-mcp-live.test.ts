@@ -83,9 +83,16 @@ it.skipIf(process.env.OMI_TV_LIVE_CHECK !== "1")(
     // Pre-projecting a client column hid the client_name/emitter mismatch.
     const suffix = production.slice(production.indexOf("mcp_eligible AS"));
     expect(production).toContain(`SELECT ${MCP_SUCCESS_SELECT}`);
-    const mcp = `mcp_raw AS (SELECT ${MCP_SUCCESS_SELECT} FROM (${raw}) fixture_events),${suffix}`;
+    // The production rollup and marker CTEs, reading no rows: these fixtures are raw calls only.
+    const rollup = production
+      .slice(
+        production.indexOf("mcp_rollup_raw AS"),
+        production.indexOf("mcp_eligible AS")
+      )
+      .replace("FROM events WHERE ", "FROM events WHERE false AND ");
+    const mcp = `mcp_raw AS (SELECT ${MCP_SUCCESS_SELECT} FROM (${raw}) fixture_events),${rollup}${suffix}`;
     const app =
-      "SELECT 'app-and-mcp' AS actor,'macos' AS p,0 AS period,1 AS days,toDateTime('2026-10-14 20:00:00','UTC') AS latest,0 AS captures";
+      "SELECT 'app-and-mcp' AS actor,'macos' AS p,0 AS period,1 AS days,toDateTime('2026-10-14 20:00:00','UTC') AS latest,0 AS captures,1 AS fgn,0 AS cap_pct";
     const rows = await queryPosthog(`WITH app_pd AS (${app}),${mcp}`);
     const actual = Object.fromEntries(
       rows

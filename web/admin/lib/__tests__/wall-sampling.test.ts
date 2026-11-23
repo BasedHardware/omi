@@ -16,9 +16,9 @@ describe("readers of sampled product events (SCA-3665)", () => {
   it("weights capture-only actors and counts foreground or MCP actors once", () => {
     const sql = activityQuery(end, 7, "active", 1);
     expect(sql).toContain(
-      `if(countIf(cap)>0,maxIf(${SAMPLE_PCT_SQL},cap),100) cap_pct`
+      `if(countIf(cap)>0,maxIf(${SAMPLE_PCT_SQL},cap),0) cap_pct`
     );
-    expect(sql).toContain("0 captures,1 fgn,100 cap_pct");
+    expect(sql).toContain("0 captures,1 fgn,0 cap_pct");
     expect(sql).toContain("sum(if(fg_any>0,1,100/pct_any))");
     expect(sql).not.toMatch(/SELECT period,p,count\(\)/);
   });

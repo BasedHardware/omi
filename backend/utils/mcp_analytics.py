@@ -419,18 +419,25 @@ def schedule_mcp_tool_use_succeeded(*, uid: str, tool_name: Any, client_name: An
     touches Redis; the daily rollup (``utils.mcp_daily_rollup``) is queued
     separately and fails open.
     """
+    occurred_at = datetime.now(timezone.utc)
     emit_mcp_tool_use_succeeded(
         uid=uid,
         tool_name=tool_name,
         client_name=client_name,
         initiator=initiator,
-        occurred_at=datetime.now(timezone.utc),
+        occurred_at=occurred_at,
     )
-    schedule_mcp_daily_rollup(uid=uid, tool_name=tool_name, client_name=client_name, initiator=initiator)
+    schedule_mcp_daily_rollup(
+        uid=uid, tool_name=tool_name, client_name=client_name, initiator=initiator, occurred_at=occurred_at
+    )
 
 
-def schedule_mcp_daily_rollup(*, uid: str, tool_name: Any, client_name: Any, initiator: str) -> None:
-    """Queue the Redis accumulation for the ``MCP Daily Activity`` snapshot off the request path."""
+def schedule_mcp_daily_rollup(
+    *, uid: str, tool_name: Any, client_name: Any, initiator: str, occurred_at: Optional[datetime] = None
+) -> None:
+    """Queue the Redis accumulation for the ``MCP Daily Activity`` snapshot off the request path.
+
+    The UTC day comes from the success time, not from when the queued task runs."""
     tool = mcp_tool_enum(tool_name)
     if not uid or uid == MCP_ANONYMOUS_DISTINCT_ID or tool == "unknown" or not mcp_daily_rollup.enabled():
         return
@@ -442,6 +449,7 @@ def schedule_mcp_daily_rollup(*, uid: str, tool_name: Any, client_name: Any, ini
             client=client_name if client_name in _MCP_CLIENT_NAMES else "unknown",
             tool=tool,
             initiator=initiator if initiator in {"user", "scheduled_agent", "unknown"} else "unknown",
+            now=occurred_at or datetime.now(timezone.utc),
         )
     except Exception as exc:  # noqa: BLE001 - optional telemetry must fail open
         logger.warning("mcp daily rollup scheduling failed error=%s", type(exc).__name__)

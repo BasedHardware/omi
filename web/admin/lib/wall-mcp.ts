@@ -63,7 +63,7 @@ export function mcpMarkerCte(start: Date, end: Date, observationDays = 30) {
     observedStart
   )} AND timestamp < ${sqlTime(shiftDay(end, 1))}
       AND toIntOrZero(toString(properties.schema_version))=${MCP_ROLLUP_SCHEMA_VERSION} AND ${num(
-    "calls"
+    "raw_calls"
   )} > 0 AND ${EXCLUSIONS_SQL}
   ),
   mcp_marker AS (SELECT actor FROM mcp_raw UNION ALL SELECT actor FROM mcp_rollup_raw
@@ -72,10 +72,13 @@ export function mcpMarkerCte(start: Date, end: Date, observationDays = 30) {
     )} AND utc_day < ${UTC_DAY_OF(sqlTime(end))})`;
 }
 
-/** Per actor/client/UTC day cadence statistics, from raw rows where they exist
- * (complete while the raw stream is on) and otherwise from the rollup's largest
- * snapshot. Both give the same numbers: the rollup accumulates the same counts,
- * positive gaps, gap sums and dominant tool as the raw SQL below. */
+/** Per actor/client/UTC day cadence statistics from whichever source saw more
+ * qualifying calls, raw rows on a tie: raw is complete while the raw stream is
+ * on, and the rollup's largest snapshot covers the day the stream is switched
+ * off mid-day and every day after. The rollup accumulates the same counts,
+ * positive gaps, gap sums and dominant tool as the raw SQL below; its day comes
+ * from the success time and its gaps from Redis TIME (one ordered clock), so
+ * gaps can differ from the raw event clock by queue delay. */
 export function mcpActivityCtes(start: Date, end: Date, observationDays = 30) {
   return `${mcpMarkerCte(start, end, observationDays)},
   mcp_eligible AS (SELECT *,intDiv(toUnixTimestamp(timestamp),86400) AS utc_day FROM mcp_raw WHERE initiator IN ('user','unknown')),
@@ -99,10 +102,10 @@ export function mcpActivityCtes(start: Date, end: Date, observationDays = 30) {
     FROM mcp_rollup_raw GROUP BY actor,client,utc_day),
   mcp_stream_union AS (SELECT actor,client,utc_day,calls c,span sp,gaps g,sum_gap sg,sum_gap_sq sq,dominant dm,latest lt,1 prio FROM mcp_raw_stats
     UNION ALL SELECT actor,client,utc_day,calls c,span sp,gaps g,sum_gap sg,sum_gap_sq sq,dominant dm,latest lt,0 prio FROM mcp_roll_stats),
-  mcp_stream_stats AS (SELECT actor,client,utc_day,argMax(c,prio) calls,argMax(sp,prio) span,argMax(g,prio) gaps,
-    if(argMax(g,prio)>0,argMax(sg,prio)/argMax(g,prio),0) mean_gap,
-    if(argMax(g,prio)>0,argMax(sq,prio)/argMax(g,prio),0) mean_square_gap,
-    argMax(dm,prio) dominant,argMax(lt,prio) latest
+  mcp_stream_stats AS (SELECT actor,client,utc_day,argMax(c,tuple(c,prio)) calls,argMax(sp,tuple(c,prio)) span,argMax(g,tuple(c,prio)) gaps,
+    if(argMax(g,tuple(c,prio))>0,argMax(sg,tuple(c,prio))/argMax(g,tuple(c,prio)),0) mean_gap,
+    if(argMax(g,tuple(c,prio))>0,argMax(sq,tuple(c,prio))/argMax(g,tuple(c,prio)),0) mean_square_gap,
+    argMax(dm,tuple(c,prio)) dominant,argMax(lt,tuple(c,prio)) latest
     FROM mcp_stream_union GROUP BY actor,client,utc_day),
   mcp_streams AS (SELECT actor,client,utc_day,calls,latest,
     (calls>=${MCP_CADENCE.calls} AND gaps>=${
