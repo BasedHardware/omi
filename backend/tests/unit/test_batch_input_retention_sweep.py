@@ -195,6 +195,8 @@ def test_sleeping_switch_off_has_no_queries_or_cursor_writes(setup, monkeypatch,
     sleeping = {'next_at': NOW_TERMINAL + 86400, 'held_after': 'kept', 'input_after': {'enqueued_at': None}}
     store.run(lambda tx: tx.put('leases', sweep.CURSOR_KEY, sleeping))
     monkeypatch.setenv(flag, 'false')
+    # The independent parked census has its own checkpoint.
+    monkeypatch.setenv('BATCH_PARKED_JOB_SWEEPER_ENABLED', 'false')
     unexpected = Mock(side_effect=AssertionError('query while killed'))
     for name in ('input_expiring_candidates', 'held_candidates', 'dead_held_candidates', 'held_expired_stock'):
         monkeypatch.setattr(sweep, name, unexpected)

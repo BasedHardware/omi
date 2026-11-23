@@ -109,6 +109,7 @@ RATE_POLICIES: dict[str, tuple[int, int]] = {
     "storefront:plans": (12, 60),
     # Each attempt looks up a promotion code; a low ceiling stops code guessing.
     "payments:redeem_code": (10, 3600),
+    "payments:play_verify": (30, 3600),
     "proactivity:api": (120, 60),
     # Conversations — each triggers ~22 OpenAI calls
     "conversations:create": (10, 3600),

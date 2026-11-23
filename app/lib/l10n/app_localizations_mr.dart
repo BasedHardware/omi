@@ -15748,4 +15748,26 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String get quietPayerCheck => 'तपासा';
+
+  @override
+  String get playManageSubscription => 'सदस्यता व्यवस्थापित करा';
+
+  @override
+  String get playBilledByGoogle => 'Google Play द्वारे बिल केले जाते';
+
+  @override
+  String get playPurchasePending => 'तुमचे पेमेंट प्रलंबित आहे. Google Play ने पुष्टी करताच Omi Pro सुरू होईल.';
+
+  @override
+  String get playPurchaseOtherAccount => 'ही Google Play खरेदी दुसऱ्या Omi खात्याची आहे.';
+
+  @override
+  String get playPurchaseNotConfirmed => 'खरेदीची अद्याप पुष्टी करता आली नाही. आम्ही आपोआप पुन्हा प्रयत्न करू.';
+
+  @override
+  String get playRenewalTerms =>
+      'रद्द करेपर्यंत दाखवलेल्या किमतीत आपोआप नूतनीकरण होते. Google Play मध्ये कधीही व्यवस्थापित किंवा रद्द करा.';
+
+  @override
+  String get playPaidAppUnavailable => 'Android वर उपलब्ध नाही';
 }

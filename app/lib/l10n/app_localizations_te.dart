@@ -15802,4 +15802,27 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get quietPayerCheck => 'తనిఖీ';
+
+  @override
+  String get playManageSubscription => 'సబ్‌స్క్రిప్షన్ నిర్వహించండి';
+
+  @override
+  String get playBilledByGoogle => 'Google Play ద్వారా బిల్ చేయబడుతుంది';
+
+  @override
+  String get playPurchasePending => 'మీ చెల్లింపు పెండింగ్‌లో ఉంది. Google Play నిర్ధారించగానే Omi Pro మొదలవుతుంది.';
+
+  @override
+  String get playPurchaseOtherAccount => 'ఈ Google Play కొనుగోలు మరో Omi ఖాతాకు చెందినది.';
+
+  @override
+  String get playPurchaseNotConfirmed =>
+      'మీ కొనుగోలును ఇంకా నిర్ధారించలేకపోయాము. మేము ఆటోమేటిక్‌గా మళ్లీ ప్రయత్నిస్తాము.';
+
+  @override
+  String get playRenewalTerms =>
+      'మీరు రద్దు చేసే వరకు చూపిన ధరకు ఆటోమేటిక్‌గా పునరుద్ధరించబడుతుంది. Google Playలో ఎప్పుడైనా నిర్వహించండి లేదా రద్దు చేయండి.';
+
+  @override
+  String get playPaidAppUnavailable => 'Androidలో అందుబాటులో లేదు';
 }

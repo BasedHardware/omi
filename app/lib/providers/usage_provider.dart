@@ -3,7 +3,7 @@ import 'dart:async';
 import 'package:connectivity_plus/connectivity_plus.dart';
 
 import 'package:omi/utils/platform/platform_manager.dart';
-import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
 
 import 'package:omi/backend/http/api/payment.dart';
@@ -17,6 +17,7 @@ import 'package:omi/services/capture/free_tier_on_device_stt_flag.dart';
 import 'package:omi/services/capture/on_device_stt_preparer.dart';
 import 'package:omi/services/capture/phone_transcription_choice.dart';
 import 'package:omi/services/capture/transcription_allowance_cache.dart';
+import 'package:omi/services/billing/play_billing.dart';
 import 'package:omi/services/freemium_transcription_service.dart';
 import 'package:omi/utils/logger.dart';
 
@@ -37,7 +38,9 @@ class UsageProvider with ChangeNotifier {
     ProcessingBacklogRequest? processBacklogRequest,
     SubscriptionCodeRequest? redeemCodeRequest,
     DateTime Function()? now,
-  })  : _deviceTimeZone = deviceTimeZone ?? getUsageDeviceTimeZone,
+    PlayBilling? playBilling,
+  })  : _playBilling = playBilling,
+        _deviceTimeZone = deviceTimeZone ?? getUsageDeviceTimeZone,
         _usageRequest = usageRequest ?? getUserUsage,
         _subscriptionRequest = subscriptionRequest ?? getUserSubscription,
         _processBacklogRequest = processBacklogRequest ?? processProcessingBacklog,
@@ -50,6 +53,10 @@ class UsageProvider with ChangeNotifier {
   final SubscriptionCodeRequest _redeemCodeRequest;
   final DateTime Function() _now;
   final ProcessingBacklogRequest _processBacklogRequest;
+  final PlayBilling? _playBilling;
+  PlayOffers? _playOffers;
+  bool _playOffersLoading = false;
+  bool _playPendingSent = false;
   String? _backlogIdempotencyKey;
   bool _isProcessingBacklog = false;
   int _backlogMutationGeneration = 0;
@@ -125,6 +132,88 @@ class UsageProvider with ChangeNotifier {
   /// Defaults to true when the subscription response hasn't loaded yet, so a
   /// network blip doesn't silently hide paid surfaces from real users.
   bool get showSubscriptionUI => _subscription?.showSubscriptionUi ?? true;
+
+  PlayBilling get playBillingService => _playBilling ?? PlayBilling.instance;
+
+  /// Google Play Billing setup; only on Android, and only when the server sent it for this build.
+  PlayBillingConfig? get playBilling =>
+      !kIsWeb && defaultTargetPlatform == TargetPlatform.android ? _subscription?.playBilling : null;
+
+  /// Android before the first subscription read: the billing provider is not known yet, so no
+  /// purchase surface may show a price (it could be the wrong provider's).
+  bool get billingProviderUnknown =>
+      !kIsWeb && defaultTargetPlatform == TargetPlatform.android && _subscription == null;
+
+  /// New purchases go through Google Play. A live Stripe subscriber keeps today's Stripe management.
+  bool get playBilledPurchaser {
+    if (playBilling == null) return false;
+    final sub = _subscription!.subscription;
+    return !(sub.plan.isPaid && !sub.billedByPlay);
+  }
+
+  /// Play's prices for this Google account; null until loaded or when Play has no product.
+  PlayOffers? get playOffers => _playOffers;
+  bool get playOffersLoading => _playOffersLoading;
+
+  void retryPlayOffers() {
+    final config = playBilling;
+    if (config == null || _playOffersLoading) return;
+    _playOffersLoading = true;
+    notifyListeners();
+    unawaited(_loadPlayOffers(config, _sessionGeneration));
+  }
+
+  void _afterSubscriptionLoaded() {
+    final android = !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
+    // A token paid for before the switch or build gate turned this reader off is still delivered.
+    if (android && !_playPendingSent) {
+      _playPendingSent = true;
+      unawaited(_deliverPendingPlayTokens());
+    }
+    final config = playBilling;
+    if (config == null) return;
+    // Play decides trial eligibility per Google account: no trial offer listed, no trial promised.
+    final offers = _playOffers;
+    if (offers != null && !offers.hasTrial && _subscription!.trialEligible) {
+      _subscription = _subscription!.withTrialEligible(false);
+    }
+    if (offers == null && !_playOffersLoading) {
+      _playOffersLoading = true;
+      unawaited(_loadPlayOffers(config, _sessionGeneration));
+    }
+    playBillingService.startListening(obfuscatedAccountId: config.obfuscatedAccountId);
+  }
+
+  Future<void> _loadPlayOffers(PlayBillingConfig config, int generation) async {
+    try {
+      final offers = await playBillingService.loadOffers(config);
+      if (generation != _sessionGeneration) return;
+      _playOffers = offers;
+      if (offers != null && !offers.hasTrial && _subscription?.trialEligible == true) {
+        _subscription = _subscription!.withTrialEligible(false);
+      }
+      notifyListeners();
+    } catch (e) {
+      // No offers: the plans sheet shows its retry state.
+      _playOffers = null;
+      Logger.debug('Failed to load Play offers: $e');
+    } finally {
+      _playOffersLoading = false;
+      if (generation == _sessionGeneration) notifyListeners();
+    }
+  }
+
+  /// A purchase paid for in an earlier session whose server confirmation never arrived.
+  Future<void> _deliverPendingPlayTokens() async {
+    try {
+      if (await playBillingService.deliverPendingTokens()) await fetchSubscription();
+    } catch (e) {
+      // Try again on the next subscription read.
+      _playPendingSent = false;
+      Logger.debug('Failed to deliver pending Play purchases: $e');
+    }
+  }
+
   UsageStats? _todayUsage;
   int? _todayCacheKey;
   UsageStats? get todayUsage => _todayUsage;
@@ -342,6 +431,8 @@ class UsageProvider with ChangeNotifier {
     _timeZoneLookupInFlight = null;
     _usageFetchInFlight = null;
     _availablePlans = null;
+    _playOffers = null;
+    _playPendingSent = false;
     _error = null;
     _sessionGeneration++;
     _isSubscriptionLoading = false;
@@ -376,7 +467,17 @@ class UsageProvider with ChangeNotifier {
 
   /// Restore Purchases: read the plan again. A read that failed is [RestoreOutcome.failed], never
   /// "Free plan" (ux-contract §17.2): a paying reader must not be told they are free.
+  /// Why the last Google Play restore granted nothing (a server refusal code), or null.
+  String? get lastPlayRestoreRefusal => _lastPlayRestoreRefusal;
+  String? _lastPlayRestoreRefusal;
+
   Future<RestoreOutcome> restorePurchases() async {
+    final config = playBilling;
+    _lastPlayRestoreRefusal = null;
+    if (config != null) {
+      final restored = await playBillingService.restore(obfuscatedAccountId: config.obfuscatedAccountId);
+      if (restored.outcome != PlayPurchaseOutcome.purchased) _lastPlayRestoreRefusal = restored.code;
+    }
     await fetchSubscription();
     final plan = _subscription?.subscription.plan;
     if (_error != null || plan == null) return RestoreOutcome.failed;
@@ -400,6 +501,7 @@ class UsageProvider with ChangeNotifier {
         return;
       }
       _subscription = subscription;
+      _afterSubscriptionLoaded();
       TranscriptionAllowanceCache.replace(subscription.transcriptionAllowance);
       unawaited(_prepareOnDeviceNearCap(subscription.transcriptionAllowance));
       PlatformManager.instance.analytics.setSubscriptionTier(subscription.subscription.plan.name);

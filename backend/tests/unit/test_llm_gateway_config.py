@@ -329,6 +329,7 @@ def test_v3_lanes_preserve_legacy_catalog_and_separate_foreground_tier():
     config = load_gateway_config(prod_mode=True)
     assert 'conversation_v3_summary' not in get_all_configured_features()
     for feature, effort in [
+        ('conversation_v3_live_title', 'none'),
         ('conversation_v3_outline', 'none'),
         ('conversation_v3_summary', 'low'),
         ('conversation_v3_summary_open', 'low'),
