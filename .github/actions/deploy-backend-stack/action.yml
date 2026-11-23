@@ -1793,12 +1793,8 @@ runs:
           --secret-project "$PROBE_SECRET_PROJECT" \
           --firebase-project "$FIREBASE_AUTH_PROJECT_ID" \
           --token-output "$token_file"
-        reservation_timeouts=()
-        if [[ "$SMOKE_CLOUD_RUN_SERVICE" == backend ]]; then
-          reservation_timeouts=(--connect-timeout 5 --max-time 10)
-        fi
         reservation_status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
-          "${reservation_timeouts[@]}" \
+          --connect-timeout 5 --max-time 10 \
           --request POST https://api.omi.me/v2/desktop/beta/candidates/reserve \
           --header 'Content-Type: application/json' --data '{"tag":"v0.0.0+1-macos"}')"
         # A schema-valid inert tag reaches the authorization wall without reserving a real candidate.
