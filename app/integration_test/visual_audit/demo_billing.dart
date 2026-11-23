@@ -49,6 +49,7 @@ class DemoBillingUsage extends UsageProvider {
     required String priceId,
     String? promotionCode,
     int? trialDays,
+    String? currency,
   }) async =>
       null;
 
