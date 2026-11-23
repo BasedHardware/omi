@@ -5,7 +5,11 @@ import { useSearchParams } from '@tschk/moonshine-next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { CalendarDays, CheckSquare, Search as SearchIcon, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { conversationsForSurface, isFailedConversation } from '@/lib/conversationHome';
 import { useConversations } from '@/hooks/useConversations';
+import { useActivityFailures } from '@/hooks/useActivityFailures';
+import { useAttentionItems } from '@/hooks/useAttentionItems';
+import { AttentionItemsSection } from './AttentionItemsSection';
 import { useConversation } from '@/hooks/useConversation';
 import { useRecaps } from '@/hooks/useRecaps';
 import { useSearchConversations } from '@/hooks/useSearchConversations';
@@ -22,6 +26,7 @@ import {
   FolderTabsSkeleton,
   FOLDER_ALL,
   FOLDER_STARRED,
+  FOLDER_ACTIVITY,
 } from '@/components/conversations/FolderTabs';
 import {
   FolderDialog,
@@ -37,6 +42,7 @@ import { PageToolbar } from '@/components/layout/PageToolbar';
 import { useToast } from '@/components/ui/Toast';
 import { TextSwap } from '@/components/ui/TextSwap';
 import {
+  getHomeFailurePlacement,
   mergeConversations,
   getFolders,
   createFolder,
@@ -99,6 +105,7 @@ export function ConversationSplitView() {
     loading: searchLoading,
     search: performSearch,
     clear: clearSearch,
+    replaceConversation: replaceSearchConversation,
   } = useSearchConversations();
 
   // Date filter state
@@ -155,7 +162,8 @@ export function ConversationSplitView() {
     if (
       selectedFolderId &&
       selectedFolderId !== FOLDER_ALL &&
-      selectedFolderId !== FOLDER_STARRED
+      selectedFolderId !== FOLDER_STARRED &&
+      selectedFolderId !== FOLDER_ACTIVITY
     ) {
       params.folderId = selectedFolderId;
     }
@@ -176,6 +184,7 @@ export function ConversationSplitView() {
     hasMore,
     loadMore,
     refresh,
+    replaceConversation,
   } = useConversations(conversationFilterParams);
 
   const {
@@ -278,15 +287,73 @@ export function ConversationSplitView() {
   // Determine if we're showing search results or regular list
   const isSearching = submittedSearchQuery.length > 0;
 
+  const [failurePlacement, setFailurePlacement] = useState(false);
+  useEffect(() => {
+    let current = true;
+    let sequence = 0;
+    setFailurePlacement(false);
+    async function reload() {
+      const request = ++sequence;
+      let confirmed = false;
+      try {
+        confirmed = await getHomeFailurePlacement();
+      } catch {
+        /* Restore previous placement. */
+      }
+      if (!current || request !== sequence) return;
+      setFailurePlacement(confirmed);
+      if (!confirmed)
+        setSelectedFolderId((previous) =>
+          previous === FOLDER_ACTIVITY ? FOLDER_ALL : previous,
+        );
+    }
+    void reload();
+    window.addEventListener('focus', reload);
+    return () => {
+      current = false;
+      window.removeEventListener('focus', reload);
+    };
+  }, [user?.uid]);
+
+  const {
+    failures: knownFailures,
+    forget: forgetFailures,
+    resolveRetry,
+  } = useActivityFailures(conversations, searchResults, user?.uid);
+
+  const attention = useAttentionItems(failurePlacement, user?.uid, resolveRetry);
+
   // The Starred list is fetched starred-only, but search results (and the previous
   // tab's page while that fetch is in flight) are not, so keep filtering here.
   const visibleConversations = useMemo(() => {
-    const source = isSearching ? searchResults : conversations;
+    const loaded =
+      selectedFolderId === FOLDER_ACTIVITY
+        ? knownFailures.filter(
+            (row) =>
+              !attention.conversationIds.has(row.id) &&
+              (!isSearching || searchResults.some((match) => match.id === row.id)),
+          )
+        : isSearching
+        ? searchResults
+        : conversations;
+    const source = conversationsForSurface(
+      loaded,
+      selectedFolderId === FOLDER_ACTIVITY,
+      failurePlacement,
+    );
     if (selectedFolderId === FOLDER_STARRED) {
       return source.filter((c) => c.starred);
     }
     return source;
-  }, [isSearching, searchResults, conversations, selectedFolderId]);
+  }, [
+    isSearching,
+    searchResults,
+    conversations,
+    selectedFolderId,
+    failurePlacement,
+    knownFailures,
+    attention.conversationIds,
+  ]);
 
   // Recaps only belong in the unfiltered gallery: a search, a date filter or a
   // folder is a question about conversations, and a day summary cannot answer it.
@@ -371,6 +438,31 @@ export function ConversationSplitView() {
     if (hasMore) void loadMore();
     if (recapsHasMore) void loadMoreRecaps();
   }, [isSearching, hasMore, loadMore, recapsHasMore, loadMoreRecaps]);
+
+  // Reprocess returns the authoritative new attempt/result. Update an open
+  // detail only if it still belongs to this conversation, then reload the feed.
+  const handleRetryUpdate = useCallback(
+    (updated: Conversation) => {
+      if (!isFailedConversation(updated)) resolveRetry(updated.id);
+      replaceConversation(updated);
+      replaceSearchConversation(updated);
+      const activeSelection = selectionRef.current;
+      if (activeSelection?.kind === 'conversation' && activeSelection.id === updated.id) {
+        updateSelectedConversation(updated);
+      }
+      void refresh();
+      if (submittedSearchQuery) void performSearch(submittedSearchQuery);
+    },
+    [
+      updateSelectedConversation,
+      refresh,
+      submittedSearchQuery,
+      performSearch,
+      replaceConversation,
+      replaceSearchConversation,
+      resolveRetry,
+    ],
+  );
 
   // Handle star toggle
   const handleStarToggle = useCallback(
@@ -547,7 +639,10 @@ export function ConversationSplitView() {
     setDeleteLoading(true);
     try {
       // Delete each selected conversation
-      const deletePromises = Array.from(selectedIds).map((id) => deleteConversation(id));
+      const deletePromises = Array.from(selectedIds).map(async (id) => {
+        await deleteConversation(id);
+        forgetFailures([id]);
+      });
       await Promise.all(deletePromises);
 
       // Exit selection mode and close dialog
@@ -568,7 +663,7 @@ export function ConversationSplitView() {
     } finally {
       setDeleteLoading(false);
     }
-  }, [selectedIds, selectedConversationId, refresh, showToast]);
+  }, [selectedIds, selectedConversationId, refresh, showToast, forgetFailures]);
 
   // ============================================================================
   // Folder handlers
@@ -698,6 +793,7 @@ export function ConversationSplitView() {
             ) : (
               <FolderTabs
                 folders={folders}
+                showActivity={failurePlacement}
                 selectedFolderId={selectedFolderId}
                 onSelectFolder={handleFolderSelect}
                 onCreateFolder={handleCreateFolder}
@@ -818,6 +914,18 @@ export function ConversationSplitView() {
             </div>
           )}
 
+          {failurePlacement && selectedFolderId === FOLDER_ACTIVITY && (
+            <AttentionItemsSection
+              {...attention}
+              onRetry={attention.retry}
+              onOpen={(id) => {
+                setSelection({ kind: 'conversation', id });
+                setSelectedRecap(null);
+                preventAutoSelect.current = false;
+              }}
+            />
+          )}
+
           {/* Empty state */}
           {recapsError &&
             !isSearching &&
@@ -838,37 +946,50 @@ export function ConversationSplitView() {
                 </Button>
               </div>
             )}
-          {isEmpty && !listError && !recapsError && (
-            <div className="flex flex-1 flex-col items-center justify-center py-12 text-center">
-              <div className="mb-3 flex h-14 w-14 items-center justify-center rounded-section bg-bg-tertiary">
-                {isSearching ? (
-                  <SearchIcon className="h-6 w-6 text-text-quaternary" />
-                ) : (
-                  <CalendarDays className="h-6 w-6 text-text-quaternary" />
-                )}
+          {isEmpty &&
+            !listError &&
+            !recapsError &&
+            !(
+              selectedFolderId === FOLDER_ACTIVITY &&
+              (attention.items.length || attention.loadError)
+            ) && (
+              <div className="flex flex-1 flex-col items-center justify-center py-12 text-center">
+                <div className="mb-3 flex h-14 w-14 items-center justify-center rounded-section bg-bg-tertiary">
+                  {isSearching ? (
+                    <SearchIcon className="h-6 w-6 text-text-quaternary" />
+                  ) : (
+                    <CalendarDays className="h-6 w-6 text-text-quaternary" />
+                  )}
+                </div>
+                <p className="text-sm text-text-tertiary">
+                  {isSearching
+                    ? 'No conversations found'
+                    : filterDate
+                    ? 'Nothing on this date'
+                    : selectedFolderId === FOLDER_STARRED
+                    ? 'No starred conversations'
+                    : selectedFolderId === FOLDER_ACTIVITY
+                    ? 'No failed conversations'
+                    : selectedFolderId !== FOLDER_ALL
+                    ? 'No conversations in this folder'
+                    : 'Your timeline is empty'}
+                </p>
               </div>
-              <p className="text-sm text-text-tertiary">
-                {isSearching
-                  ? 'No conversations found'
-                  : filterDate
-                  ? 'Nothing on this date'
-                  : selectedFolderId === FOLDER_STARRED
-                  ? 'No starred conversations'
-                  : selectedFolderId !== FOLDER_ALL
-                  ? 'No conversations in this folder'
-                  : 'Your timeline is empty'}
-              </p>
-            </div>
-          )}
+            )}
 
           {dayGroups.length > 0 && (
             <div className="flex-1 overflow-hidden pt-4">
               <ConversationGallery
+                showFailedStatus={
+                  failurePlacement && selectedFolderId === FOLDER_ACTIVITY
+                }
                 groups={dayGroups}
                 selectedId={selection?.id ?? null}
                 onConversationClick={handleConversationClick}
                 onRecapClick={handleRecapClick}
                 onStarToggle={handleStarToggle}
+                onConversationUpdate={handleRetryUpdate}
+                onRetryResolved={failurePlacement ? resolveRetry : undefined}
                 isSelectionMode={isSelectionMode}
                 selectedIds={selectedIds}
                 onSelect={toggleSelection}

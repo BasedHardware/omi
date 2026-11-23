@@ -11,6 +11,7 @@ import fakeredis
 from database import batch_pipeline_projection_claim as projection_claims
 from tests.integration.test_batch_pipeline_projection_firestore import lane, active_rows, frozen_manifest
 from utils.batch_pipeline.live import register_recording, record_identity
+from utils.batch_pipeline import empty_transcription
 from utils.batch_pipeline.scheduler import owner_key
 from utils.batch_pipeline.projection import build_incoming
 from utils.sync.assignment_errors import SyncAssignmentConflict
@@ -71,7 +72,14 @@ def complete(lane, item, binding):
 def test_finalize_racing_projection_and_replay_preserve_one_visible_record(lane):
     item, binding, live = native(lane, status='processing')
     register_recording(lane.uid, live, store=lane.store, now=0)
+    # Current admission requires completed finalization. Admit a completed row,
+    # then reproduce a later finalizer race at the projection boundary.
+    reference = lane.user.collection('conversations').document('live-record')
+    with pytest.raises(ValueError, match='barrier not closed'):
+        complete(lane, item, binding)
+    reference.update({'status': 'completed'})
     complete(lane, item, binding)
+    reference.update({'status': 'processing'})
     with pytest.raises(SyncAssignmentConflict, match='finalize'):
         lane.projector.project(item.segment_id)
     reference = lane.user.collection('conversations').document('live-record')
@@ -204,6 +212,10 @@ async def test_pre_enable_capture_holds_wal_until_finalizer_reserves_owner(lane,
         is not None
     )
     register_recording(lane.uid, live, store=lane.store, now=0)
+    # Ownership alone cannot bypass the current completed-finalization barrier.
+    with pytest.raises(ValueError, match='barrier not closed'):
+        admit(lane.store, [item], binding, 0, namespace=lane.store.namespace)
+    reference.update({'status': 'completed'})
     admit(lane.store, [item], binding, 0, namespace=lane.store.namespace)
     jobs = list(lane.client.collection(lane.store.namespace + '_jobs').stream())
     assert len(jobs) == 1 and jobs[0].to_dict()['state'] == 'ready'
@@ -276,6 +288,9 @@ def test_stale_finalizer_and_late_socket_cannot_overwrite_record(lane):
     # Internal markers do not round-trip through the public model dump. The
     # canonical finalizer must retain both the route and pusher's close receipt.
     processed = Conversation(**live).model_dump()
+    # The completed finalizer must satisfy main's kept-summary receipt fence;
+    # this case tests stale record ownership, not empty summary acceptance.
+    processed['structured']['overview'] = 'Synthetic finalized summary.'
     assert 'record_lane_owner' not in processed
     assert lane.conversations.persist_processing_result_with_lifecycle(lane.uid, processed)
     current = lane.user.collection('conversations').document('live-record').get().to_dict()
@@ -303,8 +318,8 @@ def test_true_vad_silence_replaces_unprotected_provisional_speech(lane, monkeypa
         monkeypatch.setattr(projection_claims, '_redis_client', lambda: redis)
         assign = lane.projector.assign_record_silence
 
-        def lost_reply(item, binding, session):
-            assign(item, binding, session)
+        def lost_reply(item, binding, session, **kwargs):
+            assign(item, binding, session, **kwargs)
             # The receipt committed; surface a competing projector's replay
             # before completion and verify the remaining obligations resume.
             lane.projector.store.check(session)
@@ -320,6 +335,7 @@ def test_true_vad_silence_replaces_unprotected_provisional_speech(lane, monkeypa
     row = active_rows(lane)[0]
     assert result['updated_memories'] == ['live-record']
     assert row['record_projection_revision'] == 1 and not row['transcript_segments']
+    assert empty_transcription.terminal(row)
 
 
 def test_native_record_preserves_real_correction_translation_and_manual_receipt(lane):
@@ -418,3 +434,27 @@ def test_native_reference_proof_outlives_gpu_result_for_first_late_wal(lane):
     audio = refs.document('audio').get().to_dict()['cleanup_after']
     result = refs.document('results').get().to_dict()['cleanup_after']
     assert audio - result == timedelta(days=44)
+
+
+def test_registered_nonterminal_stt_is_not_settled_by_summary_exhaustion(lane):
+    from datetime import timedelta
+    from utils.episodes import composer
+
+    item, binding, live = native(lane)
+    pending = datetime(2026, 11, 15, 15, tzinfo=timezone.utc)
+    live.update(
+        transcript_segments=[],
+        structured={},
+        summary_blocked_reason='empty_output_exhausted',
+        summary_output_present=False,
+        home_transcription_pending_at=pending,
+        server_batch_audio_received=True,
+    )
+    lane.user.collection('conversations').document('live-record').set(
+        lane.conversations.encode_conversation_for_write(lane.uid, live, 'standard')
+    )
+    assert register_recording(lane.uid, live, store=lane.store, now=0)
+    job = lane.projector.store.ref('jobs', item.segment_id).get().to_dict()
+    assert job['state'] == 'record_pending'
+    assert not empty_transcription.terminal(active_rows(lane)[0])
+    assert composer._transcript_wait_until(live) == pending + timedelta(seconds=1200)

@@ -1195,7 +1195,7 @@ def test_flattened_lineage_delete_purges_every_source(world, monkeypatch):
             blobs.pop(self.name, None)
 
     class _Bucket:
-        def list_blobs(self, prefix=''):
+        def list_blobs(self, prefix='', *, versions=False):
             return [_Blob(name) for name in list(blobs) if name.startswith(prefix)]
 
     for cid in ('p', 'n', 'g1', 'g2'):
@@ -1224,6 +1224,7 @@ def test_flattened_lineage_delete_purges_every_source(world, monkeypatch):
 
     calls = {'vector': [], 'index': [], 'survivor': []}
     monkeypatch.setattr(merge_conversations, 'firestore_db', store)
+    monkeypatch.setattr(merge_conversations, '_purge_rederive_priors', lambda *a: None)
     # Merge-source tombstone writes go through their own module-level client;
     # bind it to the same fake store or the write hits real Firestore.
     monkeypatch.setattr(merge_conversations.conversation_tombstones, 'db', store)

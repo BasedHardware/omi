@@ -7,9 +7,11 @@ no expiring lock that lets a late worker overwrite a newer transcript.
 
 from copy import deepcopy
 from dataclasses import dataclass
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 from utils.sync import processing_hold, bridge_pending
 from config.recorded_time import late_audio_intake_enabled
+from config.conversations_v3 import SPEECH_LANDED_FIELD
+from config.episodes import episodes_enabled, episode_compose_transcript_ready_enabled
 from models.conversation_continuity import DEFAULT_GAP_SECONDS
 import time
 
@@ -32,6 +34,7 @@ from utils.conversations.size_limit import (
     projected_size_bucket,
 )
 from utils.conversations.summary_delivery import rearm_on_revision_change
+from utils.conversations.v3 import sync_custody
 from utils.observability.fallback import record_fallback
 from utils.sync.size_telemetry import (
     finish_size_attempt,
@@ -45,6 +48,7 @@ from utils.manual_speaker_assignments import apply_manual_assignments
 from utils.capture_evidence import bounded_envelope, merge_track_receipts
 
 from config import merge_ancestry, merge_before_processing
+from config.sync_bridge_containment import CONTAINMENT_TOLERANCE_SECONDS
 import config.speaker_match_scores as match_scores
 from utils.conversations.fragment_visibility import is_automatic_discard, superseded_intake_discard, is_user_curated
 from config.occasion_relevance import enabled as occasion_relevance_enabled
@@ -76,10 +80,12 @@ from utils.capture.dedupe import choose_segments
 from utils.capture.identity import assignment_keys_compatible, persist_identity
 from utils.sync.assignment_index import AssignmentIndex
 from utils.sync.live_overlap import (
+    batch_target_contains,
     choose_live_overlap,
     compatible_capture,
     discoverable_live_overlap,
     live_overlap_enabled,
+    span_contained,
 )
 from utils.sync.assignment_errors import SyncAssignmentConflict, SyncAssignmentSuperseded
 from utils.sync.assignment_errors import SyncAssignmentConflictReason as Reason
@@ -165,16 +171,20 @@ def auto_mergeable(row: dict) -> bool:
     Explicit live targets retain their identity. Shared/curated/photo-bearing records
     remain intact rather than exposing private donors or orphaning user edits.
     """
-    return bool(row.get('sync_content_revision')) and not (
-        (row.get('smart_merge') or {}).get('role') == 'survivor'
-        or row.get('sync_live_target')
-        or row.get('has_photos')
-        or row.get('user_title')
-        or row.get('starred')
-        or row.get('folder_user_set')
-        or row.get('sync_relevance_user_kept')
-        or row.get('has_transcript_corrections')
-        or row.get('visibility', 'private') not in (None, 'private')
+    return (
+        bool(row.get('sync_content_revision'))
+        and not row.get('v3_derived')
+        and not (
+            (row.get('smart_merge') or {}).get('role') == 'survivor'
+            or row.get('sync_live_target')
+            or row.get('has_photos')
+            or row.get('user_title')
+            or row.get('starred')
+            or row.get('folder_user_set')
+            or row.get('sync_relevance_user_kept')
+            or row.get('has_transcript_corrections')
+            or row.get('visibility', 'private') not in (None, 'private')
+        )
     )
 
 
@@ -212,6 +222,7 @@ class _Plan(NamedTuple):
     estimated_bytes: int
     bridge: dict | None
     append_stats: dict | None = None
+    custody_updates: dict[str, dict] | None = None
 
     @property
     def grows(self) -> bool:
@@ -236,6 +247,7 @@ def assign_in_transaction(
     live_lookup_incomplete_reason: str | None = None,
     discover_on_reroute: bool = False,
     record_obligations: Callable[[], tuple[dict, ...]] | None = None,
+    absorb_contained_processed_donor: bool = False,
 ) -> tuple[dict, bool, list[dict]]:
     """Production transaction body; injected codecs preserve encryption in adapters.
 
@@ -251,14 +263,22 @@ def assign_in_transaction(
     commit hit Firestore's document-size limit). They and any canonical whose
     write is estimated above ``SYNC_CONVERSATION_BYTE_BUDGET`` are left
     untouched: the chunk's new speech goes to another conversation instead.
+
+    ``absorb_contained_processed_donor`` is the bridge's narrow exception to the
+    processed-donor protection: the donor may be absorbed only when its recorded
+    span is fully inside the explicit target's. The transaction re-reads both
+    rows and refuses the whole assignment when that proof no longer holds, so a
+    late append can never turn a partial overlap into a merge.
     """
     # The SDK may retry this body after contention; only its winning plan may log success.
     finish_size_attempt(logger, committed=False)
     if absorbed is not None:
         absorbed.clear()
     incoming = deepcopy(incoming)
+    transcript_receipt = incoming.pop('_episode_transcript_receipt', False)
     lineage_eligible = incoming.pop('_sync_lineage_eligible', False) is True
     lineage_binding = incoming.pop('_sync_lineage_binding', None)
+    capture_clock_shift = float(incoming.pop('_sync_capture_clock_offset', 0.0) or 0.0)
     require_live_target = incoming.pop('_batch_require_live_target', False)
     redrive_target = incoming.pop('_batch_redrive_target', False)
     record_span = incoming.pop('_batch_replace_live', None)
@@ -362,6 +382,9 @@ def assign_in_transaction(
         result, survivors = replace_record(current, incoming, record_span, obligations=obligations)
         if result.get('transcript_segments') != current.get('transcript_segments'):
             rearm_on_revision_change(current, result)
+            if current.get('recording'):
+                # v3: the landing time commits with the appended speech.
+                result[SPEECH_LANDED_FIELD] = datetime.now(timezone.utc)
         invalidate(result)
         encoded = encode(result)
         estimated = _stored_document_bytes(collection.document(target_id), encoded, target, invalidate)
@@ -452,9 +475,9 @@ def assign_in_transaction(
         and (target['created_at'] - incoming['finished_at']).total_seconds() > DEFAULT_GAP_SECONDS
         and target_recorded_span is None
     )
-    if (
-        late_audio_intake_enabled()
-        and target
+    if target and (
+        not batch_target_contains(target, incoming)
+        or late_audio_intake_enabled()
         and (
             stale_empty_target
             or incoming['finished_at'] < target_recorded_start - timedelta(seconds=DEFAULT_GAP_SECONDS)
@@ -525,6 +548,21 @@ def assign_in_transaction(
 
     live_stats: Optional[dict] = None
     privacy_excluded: frozenset[str] = frozenset()
+    custody_card_reads: set[str] = set()
+
+    def custody_card(cid: str) -> dict | None:
+        if cid not in custody_card_reads and len(custody_card_reads) >= sync_custody.MAX_CLAIMS:
+            raise sync_custody.CustodyBlocked('card_read_budget')
+        custody_card_reads.add(cid)
+        if tombstoned(cid):
+            return None
+        raw = load(cid)
+        if not raw or not raw.get('v3_derived') or raw.get('deleted'):
+            return None
+        try:
+            return decode(raw)
+        except (ValueError, TypeError, transcript_pointer.TranscriptBlobAbsent, transcript_pointer.TranscriptShredded):
+            raise sync_custody.CustodyBlocked('card_unavailable') from None
 
     def plan(
         excluded: frozenset[str],
@@ -532,6 +570,7 @@ def assign_in_transaction(
         *,
         isolated_id: str | None = None,
         speech_interval: bool = False,
+        custody_anchor: str | None = None,
     ) -> _Plan:
         """Choose, merge and encode without writing; ``excluded`` rows stay untouched.
 
@@ -547,8 +586,10 @@ def assign_in_transaction(
         if plan_target_id and own_anchor and own_id != plan_target_id and own_anchor.get('manual_speaker_assignments'):
             raise SyncAssignmentSuperseded('sync anchor has manual speaker assignments')
 
-        receipt_owner = plan_target_id or (
-            own_id if not isolated_id and own_anchor and own_anchor.get('manual_speaker_assignments') else None
+        receipt_owner = (
+            plan_target_id
+            or custody_anchor
+            or (own_id if not isolated_id and own_anchor and own_anchor.get('manual_speaker_assignments') else None)
         )
         matched = {}
         extent = deepcopy(incoming)
@@ -600,6 +641,8 @@ def assign_in_transaction(
                     # Live and user-managed rows can only be explicit targets.
                     if not auto_mergeable(raw) and cid != plan_target_id:
                         continue
+                    if plan_target and not batch_target_contains(plan_target, decode(raw)):
+                        continue
                     candidates.append((cid, raw))
             if receipt_owner is None:
                 labeled = [(cid, raw) for cid, raw in candidates if raw.get('manual_speaker_assignments')]
@@ -621,8 +664,23 @@ def assign_in_transaction(
             or (receipt_owner if receipt_owner in matched else None)
             or (min(matched, key=lambda cid: (matched[cid]['started_at'], cid)) if matched else incoming['id'])
         )
+        processed_ids = {cid for cid, raw in matched.items() if merge_before_processing.already_processed(raw)}
+        if absorb_contained_processed_donor and plan_target_id and own_id in processed_ids and own_id != canonical:
+            # The bridge proved containment on its own read. Re-prove it on the
+            # rows this transaction will actually merge; a donor that grew past
+            # the target is refused whole, never partially merged. This runs
+            # regardless of the merge-before-processing flag: the absorb flag
+            # alone authorizes the irreversible merge, so it cannot depend on a
+            # second gate to re-check containment.
+            donor_row = decode(own_anchor) if own_anchor is not None else incoming
+            target_row = decode(plan_target) if plan_target is not None else None
+            if target_row is None or not span_contained(
+                donor_row, target_row, tolerance_seconds=CONTAINMENT_TOLERANCE_SECONDS
+            ):
+                raise SyncAssignmentConflict(
+                    'contained donor span changed', subtype=Reason.CONTAINED_DONOR_NOT_CONTAINED
+                )
         if merge_before_processing.enabled():
-            processed_ids = {cid for cid, raw in matched.items() if merge_before_processing.already_processed(raw)}
             if not plan_target_id and not receipt_owner and processed_ids:
                 # Keep an enriched identity as the parent, preferring the retry
                 # anchor. Late bridges must never turn completed notes into a
@@ -633,6 +691,8 @@ def assign_in_transaction(
                     else min(processed_ids, key=lambda cid: (matched[cid]['started_at'], cid))
                 )
             protected_donors = processed_ids - {canonical}
+            if absorb_contained_processed_donor and plan_target_id and own_id in protected_donors:
+                protected_donors = protected_donors - {own_id}
             if protected_donors:
                 # Replan from the incoming interval, so excluded processed rows
                 # cannot bridge to otherwise disconnected raw candidates.
@@ -641,6 +701,7 @@ def assign_in_transaction(
                     segment_indices,
                     isolated_id=isolated_id,
                     speech_interval=speech_interval,
+                    custody_anchor=custody_anchor,
                 )
         if canonical in privacy_excluded:
             # No safe alternative to the rejected retry owner. Do not overwrite
@@ -659,6 +720,8 @@ def assign_in_transaction(
             raise SyncAssignmentSuperseded('sync anchor was deleted')
         records = [decode(raw) for _, raw in sorted(matched.items())]
         result = deepcopy(next((row for row in records if row['id'] == canonical), records[0] if records else incoming))
+        if incoming.get('capture_time_trust') == 'untrusted':
+            result['capture_time_trust'] = 'untrusted'
         try:
             contributions = [r for record in records for r in record.get(match_scores.FIELD) or []]
             if contributions:
@@ -792,6 +855,27 @@ def assign_in_transaction(
                 'exact_retries': exact_retries,
                 'sync_retry': sync_retry,
             }
+        if (
+            live_dedupe
+            and live_row is not None
+            and live_row.get('record_lane_owner') == 'batch_live_v1'
+            and live_row.get('record_projection_revision')
+        ):
+            # A sync unit can arrive after the final record transcript. The
+            # frame-proof-only fresh path abstains on legacy receipts; apply
+            # the same conservative lexical rule as stored donor transfer.
+            batch_repeats = dedupe_donor(survivors, incoming, live_row)
+            survivors = batch_repeats.kept
+            if live_stats is not None:
+                report = live_stats['report']
+                report['dropped_segments'] += batch_repeats.capture + batch_repeats.lexical
+                report['methods'].extend(
+                    ['source_frame_lexical'] * batch_repeats.capture + ['lexical'] * batch_repeats.lexical
+                )
+                if batch_repeats.capture or batch_repeats.lexical:
+                    methods = set(report['methods'])
+                    report['alignment_method'] = next(iter(methods)) if len(methods) == 1 else 'mixed'
+                live_stats['exact_retries'] += batch_repeats.exact_retry
         if fleet_live_dedupe or not live_dedupe:
             # Compose the cohort contract with the shipped fleet matcher:
             # capture-proven lexical drops and exact retries run first, then
@@ -918,7 +1002,12 @@ def assign_in_transaction(
         result['has_content'] = bool(segments)
         result['sync_content_revision'] = max([row.get('sync_content_revision') or 0 for row in records] + [0]) + 1
         if processing_hold.enabled():
-            result[processing_hold.FIELD] = processing_hold.activity_patch(result, time.time())
+            result[processing_hold.FIELD] = processing_hold.activity_patch(
+                result,
+                time.time(),
+                clock_offset=capture_clock_shift,
+                owns_end=recorded_input_finish >= result['finished_at'],
+            )
         verdict, rule = fragment_rule(segments)
         curated = is_user_curated(result)
         result['sync_relevance'] = (
@@ -1008,12 +1097,55 @@ def assign_in_transaction(
         index.read(extent)
         result.update(write_span(result, arrival_at=incoming.get('arrival_at')))
         if survivors or transfers:
+            if transcript_receipt and episodes_enabled() and episode_compose_transcript_ready_enabled():
+                # Commit the revision signal with speech, including every size rollover.
+                # Exact assignment retries preserve the original marker.
+                result['episode_transcript_updated_at'] = datetime.now(timezone.utc)
             rearm_on_revision_change(current or {}, result)
+            if result.get('recording'):
+                # v3: the landing time commits with the speech it describes.
+                result[SPEECH_LANDED_FIELD] = datetime.now(timezone.utc)
+        donor_updates = {cid: _donor_redirect_patch(raw, canonical) for cid, raw in matched.items() if cid != canonical}
+        custody_donors = {
+            row['id']: row
+            for row in records
+            if row['id'] in donor_updates and (row.get('claims') or row.get('deleted_spans'))
+        }
+        custody_updates = {}
+        if custody_donors:
+            try:
+                if any(row.get('deleted_spans') for row in custody_donors.values()):
+                    raise sync_custody.CustodyBlocked('deletion_custody')
+                custody_updates = sync_custody.transfer(result, custody_donors, custody_card)
+                if any(
+                    projected_document_bytes(collection.document(cid), patch, load(cid))
+                    > CONVERSATION_ABSORPTION_BYTE_CAP
+                    for cid, patch in custody_updates.items()
+                    if cid not in donor_updates and cid != canonical
+                ):
+                    raise sync_custody.CustodyBlocked('card_size_budget')
+            except sync_custody.CustodyBlocked as error:
+                logger.info('event=sync_v3_custody outcome=kept_source reason=%s', error)
+                if own_id in custody_donors and plan_target_id:
+                    raise SyncAssignmentConflict('explicit redirect would strand v3 custody', subtype=Reason.V3_CUSTODY)
+                own_custody_anchor = custody_anchor or (own_id if own_id in custody_donors else None)
+                return plan(
+                    excluded | (custody_donors.keys() - {own_custody_anchor}),
+                    segment_indices,
+                    isolated_id=isolated_id,
+                    speech_interval=speech_interval,
+                    custody_anchor=own_custody_anchor,
+                )
+            if custody_updates:
+                result['claims'] = custody_updates.pop(canonical)['claims']
+                result['v3_pending'] = True
+                result['v3_pending_since'] = result.get('v3_pending_since') or datetime.now(timezone.utc)
+                for cid in custody_donors:
+                    donor_updates[cid].update(custody_updates.pop(cid))
         payload = encode(result)
         payload.pop('photos', None)
         if current is not None:
             _omit_unchanged_authority_fields(payload, current)
-        donor_updates = {cid: _donor_redirect_patch(raw, canonical) for cid, raw in matched.items() if cid != canonical}
         estimated_bytes = _stored_document_bytes(collection.document(canonical), payload, current, invalidate)
         absorption_bytes = max(
             [estimated_bytes]
@@ -1040,6 +1172,7 @@ def assign_in_transaction(
             _stored_document_bytes(collection.document(canonical), payload, current, invalidate),
             bridge,
             append_stats,
+            custody_updates,
         )
 
     # Every plan is read-only, so a full canonical can be dropped and the
@@ -1160,10 +1293,13 @@ def assign_in_transaction(
         and not chosen.created
         and chosen.canonical == target_id
         and target is not None
+        and not chosen.donor_updates
     ):
         # Every incoming segment repeated speech already on the explicit live
         # target. Acknowledge without any writes; a sync-scoped retry still
-        # completes the enrichment the earlier commit owed.
+        # completes the enrichment the earlier commit owed. A requested
+        # donor absorption is the exception: the donor redirect and cumulative
+        # ancestry are writes this call owes even when all its words repeat.
         no_op = decode(chosen.matched[chosen.canonical])
         no_op['id'] = chosen.canonical
         no_op['sync_live_target'] = chosen.result['sync_live_target']
@@ -1369,6 +1505,8 @@ def assign_in_transaction(
             transaction.update(collection.document(cid), patch)
         for ancestor_id, patch in accepted.ancestor_updates.items():
             transaction.update(collection.document(ancestor_id), patch)
+        for cid, patch in (accepted.custody_updates or {}).items():
+            transaction.update(collection.document(cid), patch)
         index.write(accepted.result, set(accepted.matched) | {accepted.canonical})
     if extra_plans:
         result['_sync_size_rollover_rows'] = [(p.result, p.created) for p in extra_plans]
@@ -1424,6 +1562,7 @@ def _donor_redirect_patch(row: dict, canonical: str) -> dict:
     return {
         'deleted': True,
         'discarded': True,
+        'summary_due_at': None,
         'sync_merged_into': canonical,
         **(
             {

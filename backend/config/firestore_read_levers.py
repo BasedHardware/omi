@@ -52,25 +52,33 @@ KNOWN_LEVERS = frozenset(
         'privacy_session_token',
         'tombstone_negative_cache',
         'sync_snapshot_resolve_cache',
+        'episode_members_singleflight',  # ship-on: concurrent identical reads only; 0 restores independent reads
         'episode_members_cache',  # Home member projections may be stale for <= 60s; absent = 0/off
         'conversation_list_cursor',  # conversations:_collect_visible_conversation_page
         'finjob_candidate_queries',  # conversation_finalization_jobs:{scan_in_progress,get_abandoned_byok,get_stale_processing}
         'bpp_decision_cache',  # batch privacy: token-validated generation reuse across attempts, <= 60s
+        'bpp_owner_memo',  # ship-on: batch privacy owner-level decision reuse, same per-use token certification; 0 restores id-set keying
+        'bpp_owner_memo_enforce',  # explicit admission after shadow qualification; absent/invalid = off
         'bpp_attempt_scope',  # batch privacy: per-call attempt scope for store.run + retention entry points
         'bpp_token_mint',  # batch privacy: lazily mint memo tokens so decisions become memo-eligible
         'privacy_ttl60',  # legal-hold fence, tombstone and deletion-marker decisions reused <= 60s, no token read
         'action_items_ttl120',  # action_items_cache: 120s default reuse under action_items_page
         'lifecycle_record_pending_head',  # lifecycle_metrics_queries:record_pending head(1)+count, key=serving replica
         'admission_frontier_hint',  # ship-on: owner activation reads the service frontier outside the txn; 0 restores the txn query
+        'sync_allowance_single_resolve',  # ship-on: one admission answer; 0 restores the legacy two-call race
     }
 )
 
 
 DEFAULT_PERCENTAGES = {
     'episode_members_cache': 0,
+    'episode_members_singleflight': 100,
     'batch_metrics_oldest_leader': 100,
     'batch_timeliness_leader': 100,
     'admission_frontier_hint': 100,
+    'sync_allowance_single_resolve': 100,
+    'bpp_owner_memo': 100,
+    'bpp_owner_memo_enforce': 0,
 }
 
 

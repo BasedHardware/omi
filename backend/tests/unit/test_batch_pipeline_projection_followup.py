@@ -6,6 +6,8 @@ from dataclasses import asdict
 from config.policy import BatchUnitPolicy, ProjectionPolicy, resolve_batch_policy, resolve_stage_policy
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
+import hashlib
+import logging
 
 import pytest
 
@@ -13,7 +15,54 @@ from database.batch_pipeline_projection import ProjectionBlocked, ProjectionRepl
 from utils.batch_pipeline import projection, projection_followup
 from utils.batch_pipeline.contracts import WorkItem, Priority, ProjectionBinding
 from utils.batch_pipeline.serving import Serving
+from utils.batch_pipeline.scheduler import owner_key as binding_owner_key
 from tests.unit.test_batch_pipeline_scheduler import MemoryStore
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('kind', ['projection', 'privacy', 'unknown_privacy', 'retry'])
+async def test_followup_failure_logs_correlate_without_source_or_exception_content(followup, caplog, kind):
+    from database.batch_pipeline_privacy import BatchPrivacyBlocked
+
+    private = 'private-owner@example.test/private-recording-content'
+    errors = {
+        'projection': ProjectionBlocked(private),
+        'privacy': BatchPrivacyBlocked('account_deleted', conversation_id=private),
+        'unknown_privacy': BatchPrivacyBlocked(private, conversation_id=private),
+        'retry': RuntimeError(private),
+    }
+    error = errors[kind]
+    error.block_reason = private  # An unregistered reason must never enter a log.
+    followup.runner.read_persisted = Mock(side_effect=error)
+    with caplog.at_level(logging.INFO, logger=projection_followup.__name__):
+        await followup.runner.run(private)
+    messages = [r.getMessage() for r in caplog.records if r.name == projection_followup.__name__]
+    assert len(messages) == 1
+    message = messages[0]
+    assert f'unit={hashlib.sha256(private.encode()).hexdigest()[:16]}' in message
+    assert private not in message and 'private-owner' not in message
+    assert ' site=' in message
+    assert f'outcome={"retry" if kind == "retry" else "blocked"}' in message
+    if kind != 'retry':
+        assert 'block_reason=other' in message
+    if kind == 'privacy':
+        assert 'fence_reason=account_deleted' in message
+    if kind == 'unknown_privacy':
+        assert 'fence_reason=unknown' in message
+    assert not followup.owner_claim
+    followup.projector.store.mark_enrichment.assert_not_called()
+    followup.projector.complete_content.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_followup_timeout_uses_same_private_safe_unit_key(followup, monkeypatch, caplog):
+    segment = 'private-recording@example.test'
+    followup.runner._run = AsyncMock(side_effect=TimeoutError('private audio URI'))
+    with caplog.at_level(logging.WARNING, logger=projection_followup.__name__):
+        await followup.runner.run(segment)
+    assert f'outcome=timeout unit={hashlib.sha256(segment.encode()).hexdigest()[:16]}' in caplog.text
+    assert segment not in caplog.text and 'private audio URI' not in caplog.text
+    assert not followup.runner.closed
 
 
 @pytest.fixture
@@ -117,6 +166,39 @@ def followup(monkeypatch, owner_claim):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize('state', ['ready', 'quarantined'])
+async def test_terminal_followup_part_performs_no_policy_read_or_write(followup, state):
+    f = followup
+    f.projector.store.policy.side_effect = AssertionError('terminal receipt performed a policy read')
+    item = WorkItem(**{key: value for key, value in f.jobs['head'].items() if key in WorkItem.__dataclass_fields__})
+    receipt = {**f.receipts['head'], 'state': state}
+
+    await f.runner.finish_part(item, f.binding, receipt, None)
+
+    f.projector.store.policy.assert_not_called()
+    f.projector.store.mark_enrichment.assert_not_called()
+    f.projector.store.ready.assert_not_called()
+    f.projector.complete_content.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_unfinished_followup_part_retains_policy_refusal_before_side_effects(followup):
+    from database.batch_pipeline_privacy import BatchPrivacyBlocked
+
+    f = followup
+    f.projector.store.policy.side_effect = BatchPrivacyBlocked('account_deleted')
+    item = WorkItem(**{key: value for key, value in f.jobs['head'].items() if key in WorkItem.__dataclass_fields__})
+
+    with pytest.raises(BatchPrivacyBlocked):
+        await f.runner.finish_part(item, f.binding, f.receipts['head'], None)
+
+    f.projector.store.policy.assert_called_once_with('head')
+    f.projector.store.mark_enrichment.assert_not_called()
+    f.projector.store.ready.assert_not_called()
+    f.projector.complete_content.assert_not_called()
+
+
+@pytest.mark.asyncio
 async def test_slow_enrichment_does_not_block_later_followup_or_next_serving_pass(followup, monkeypatch):
     f = followup
     started, release, later_done = asyncio.Event(), asyncio.Event(), asyncio.Event()
@@ -156,6 +238,54 @@ async def test_slow_enrichment_does_not_block_later_followup_or_next_serving_pas
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize('outcome', [None, 'success', 'silence'])
+@pytest.mark.parametrize('enabled', [False, True])
+async def test_completion_uses_validated_outcome_and_honors_silence_switch(followup, monkeypatch, outcome, enabled):
+    from dataclasses import replace
+
+    f = followup
+    monkeypatch.setenv('BATCH_PIPELINE_SILENCE_READ_SKIP_ENABLED', str(enabled).lower())
+    f.projector.clock = lambda: 10000
+    f.binding = replace(f.binding, native_record=False)
+    f.receipts['head'].update(state='ready', enrichment_required=False)
+    # The discovery fetch is only a hint; the validated session is authoritative.
+    f.projector.store.read.side_effect = lambda sid: (
+        f.jobs[sid],
+        {'projection': f.receipts[sid], 'result': {'outcome': 'success' if outcome == 'silence' else 'silence'}},
+        f.binding,
+    )
+    f.projector.store.session.side_effect = lambda sid, *_: SimpleNamespace(
+        job=f.jobs[sid],
+        entry={'projection': f.receipts[sid], **({'result': {'outcome': outcome}} if outcome else {})},
+    )
+    # Exercise the real completion selector, rather than only asserting a mock call.
+    f.projector.complete_content = projection.Projector.complete_content.__get__(f.projector)
+    result = {'outcome': 'expected_silence'}
+    f.projector.store.complete = Mock(return_value=result)
+    f.projector.store.prepare_accounting = Mock(return_value=None)
+    f.projector.store.completion_entries = Mock(
+        return_value={
+            sid: {'result': {'outcome': outcome}, 'projection': {**f.receipts[sid], 'state': 'ready'}}
+            for sid in f.binding.segment_ids
+        }
+    )
+    f.projector.store.hold_for_quarantine = Mock()
+    f.projector.publish_completion = Mock(return_value=result)
+
+    assert await f.runner._run('head') == ('completed' if enabled and outcome == 'silence' else 'incomplete')
+    if enabled and outcome == 'silence':
+        f.projector.store.complete.assert_called_once_with(
+            'head', f.binding, f.projector.clock(), None, policy=f.projector.store.policy.return_value
+        )
+        f.projector.store.prepare_accounting.assert_not_called()
+        f.projector.publish_completion.assert_called_once()
+    else:
+        f.projector.store.prepare_accounting.assert_called_once()
+        f.projector.store.complete.assert_not_called()
+        f.projector.publish_completion.assert_not_called()
+
+
+@pytest.mark.asyncio
 async def test_failed_followup_stays_durable_and_resumes_with_same_receipt(followup):
     f = followup
     f.projector.store.mark_enrichment.side_effect = RuntimeError('synthetic interrupted enqueue')
@@ -165,7 +295,7 @@ async def test_failed_followup_stays_durable_and_resumes_with_same_receipt(follo
     f.projector.store.mark_enrichment.side_effect = None
     await f.runner.run('head')
     assert f.projector.store.mark_enrichment.call_count == 2
-    f.projector.complete_content.assert_called_once_with('head', f.binding)
+    f.projector.complete_content.assert_called_once_with('head', f.binding, silence=False)
     f.projector.load_result.assert_not_called()
 
 
@@ -190,7 +320,7 @@ async def test_real_claim_released_across_run_blocking_leaves_never_fails_the_ta
 
     f = followup
     await asyncio.wait_for(f.runner.run('head'), 5)
-    f.projector.complete_content.assert_called_once_with('head', f.binding)
+    f.projector.complete_content.assert_called_once_with('head', f.binding, silence=False)
     # The release ran to completion: the advisory lease is gone, not left to its TTL.
     assert not redis.keys('batch_projection:*')
 
@@ -259,9 +389,9 @@ async def test_private_playback_follows_concurrent_bridge_before_enrichment(foll
         None,
     )
     assert calls == [
-        ('bridge', 'head', {}),
+        ('bridge', 'head', {'require_python_owner': True}),
         ('playback', 'head'),
-        ('bridge', 'head', {'audio_source_id': 'head'}),
+        ('bridge', 'head', {'audio_source_id': 'head', 'require_python_owner': True}),
         ('enrichment', 'survivor'),
     ]
 
@@ -305,7 +435,7 @@ async def test_unchanged_ready_receipt_retries_when_external_sibling_unblocks(fo
     sibling_ready = False
     completed = []
 
-    def complete(segment, binding):
+    def complete(segment, binding, *, silence):
         if sibling_ready:
             completed.append(segment)
 
@@ -360,7 +490,7 @@ async def test_ready_backlog_scans_sibling_accounting_once_per_page(followup, mo
     f.projector.store.ref.side_effect = ref
     accounting_reads = []
 
-    def complete(segment, binding):
+    def complete(segment, binding, *, silence):
         reads = []
         token = probe_reads.set(reads)
         try:
@@ -392,7 +522,9 @@ async def test_ready_probe_failure_does_not_suppress_next_queued_sibling(followu
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('next_page', [[], ['head']])
-async def test_next_discovery_keeps_running_pages_probe_and_starts_a_fresh_one(followup, next_page):
+async def test_next_discovery_keeps_running_pages_probe_and_starts_a_fresh_one(followup, monkeypatch, next_page):
+    # Pins the full path's same-page interleaving; the claimed-sibling skip has its own tests.
+    monkeypatch.setenv('BATCH_PIPELINE_FOLLOWUP_CLAIMED_SIBLING_SKIP_ENABLED', 'false')
     f = followup
     for receipt in f.receipts.values():
         receipt['state'] = 'ready'
@@ -444,7 +576,9 @@ async def test_owed_row_also_discovered_still_probes_completion(followup, monkey
 
 
 @pytest.mark.asyncio
-async def test_owed_running_row_bypasses_its_existing_pages_probe(followup):
+async def test_owed_running_row_bypasses_its_existing_pages_probe(followup, monkeypatch):
+    # Pins the full path's same-page interleaving; the claimed-sibling skip has its own tests.
+    monkeypatch.setenv('BATCH_PIPELINE_FOLLOWUP_CLAIMED_SIBLING_SKIP_ENABLED', 'false')
     f = followup
     for receipt in f.receipts.values():
         receipt['state'] = 'ready'
@@ -500,7 +634,7 @@ async def test_recovery_wake_bypasses_same_page_ready_probe_hint(followup, wake)
         await f.runner.schedule(tail=('later',))
     await drain()
     assert f.projector.complete_content.call_count == 2
-    f.projector.complete_content.assert_called_with('later', f.binding)
+    f.projector.complete_content.assert_called_with('later', f.binding, silence=False)
 
 
 @pytest.mark.asyncio
@@ -518,7 +652,7 @@ async def test_owner_only_recovery_clears_stale_page_marker_before_completion_pr
 
     assert 'later' not in f.runner.pages
     assert (1, f.binding) in f.runner.completion_attempts
-    f.projector.complete_content.assert_called_once_with('later', f.binding)
+    f.projector.complete_content.assert_called_once_with('later', f.binding, silence=False)
 
 
 @pytest.mark.asyncio
@@ -547,7 +681,7 @@ async def test_persisted_sibling_unblocks_content_after_ready_probe_in_same_page
     f.receipts['head']['state'] = 'ready'
     completed = []
 
-    def complete(segment, binding):
+    def complete(segment, binding, *, silence):
         if all(receipt['state'] == 'ready' for receipt in f.receipts.values()):
             completed.append(segment)
 
@@ -827,3 +961,521 @@ async def test_tail_handoff_waits_behind_discovery_and_reaches_complete_content(
         await asyncio.wait_for(asyncio.gather(*list(f.runner.tasks.values())), 2)
     assert [call.args[0] for call in f.projector.complete_content.call_args_list] == ['head', 'later']
     assert not f.runner.owed and not f.projector.chain_followups
+
+
+@pytest.fixture
+def ready_followup(followup, monkeypatch):
+    from datetime import datetime, timezone
+
+    from database import batch_pipeline_privacy
+    from database.batch_pipeline_privacy import PRIVACY_COLLECTION, privacy_owner_key
+    from database.batch_privacy_attempt import with_batch_privacy_attempt
+    from database.sync_ledger import sync_content_ledger_ref
+    from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore, StrictFirestoreDocument
+
+    f = followup
+    monkeypatch.setenv('OMI_ENV_STAGE', 'local')
+    monkeypatch.setenv('FIRESTORE_READ_LEVERS', '{"bpp_generation_memo":100}')
+    monkeypatch.setattr(batch_pipeline_privacy, 'ttl_disabled', lambda: False)
+    monkeypatch.delenv('BATCH_PIPELINE_FOLLOWUP_EARLY_COALESCE_ENABLED', raising=False)
+    # These cases pin C1's same-page proof path; the claimed-sibling skip (SCA-3508)
+    # runs ahead of it and has its own tests below.
+    monkeypatch.setenv('BATCH_PIPELINE_FOLLOWUP_CLAIMED_SIBLING_SKIP_ENABLED', 'false')
+    client = StrictFirestore()
+    store = ProjectionStore(SimpleNamespace(client=client, namespace='synthetic'))
+    f.projector.store = store
+    store.policy = Mock(return_value=ProjectionPolicy(async_projection=True))
+    store.check = Mock(wraps=store.check)
+    client.collection('users').document(f.binding.owner_id).create({'data_protection_level': 'standard'})
+    authority = client.collection(PRIVACY_COLLECTION).document(privacy_owner_key(f.binding.owner_id))
+    authority.create({'memo_token': '1' * 32, 'memo_schema': 1, 'generation': 0})
+    original_get = StrictFirestoreDocument.get
+
+    def read(ref, *args, **kwargs):
+        snapshot = original_get(ref, *args, **kwargs)
+        if ref.path == authority.path:
+            snapshot.update_time = datetime(2026, 11, 19, tzinfo=timezone.utc)
+        return snapshot
+
+    monkeypatch.setattr(StrictFirestoreDocument, 'get', read)
+    for segment in f.binding.segment_ids:
+        # Synthetic older rows sharing a capture anchor. Distinct anchors below
+        # demonstrate that binding equality alone cannot cover a sibling.
+        job = {
+            **f.jobs[segment],
+            'capture_at': 1000,
+            'projection_binding': asdict(f.binding),
+            'privacy_generation': 0,
+            'result': {'outcome': 'success'},
+        }
+        store.ref('jobs', segment).create(job)
+        store.ref('results', segment).create(
+            {
+                'protocol_version': 1,
+                'owner_key': binding_owner_key(f.binding.owner_id),
+                'segment_id': segment,
+                'capture_at': 1000,
+                'previous_segment_id': None,
+                'result': job['result'],
+                'projection_state': 'ready',
+                'projection': {'state': 'ready'},
+            }
+        )
+    sync_content_ledger_ref(client, f.binding.owner_id, f.binding.content_id).create(
+        {
+            'dispatch_protocol': 'batch_v1',
+            'status': 'processing',
+            'job_id': f.binding.job_id,
+            'batch_pipeline': {'protocol_version': 1, 'namespace': 'synthetic', 'segment_ids': ['head', 'later']},
+        }
+    )
+    f.projector.complete_content.return_value = {'outcome': 'success'}
+    f.runner.pages.update({'head': 1, 'later': 1})
+    f.run = with_batch_privacy_attempt(f.runner._run)
+    return f, authority
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    'case',
+    [
+        'same_page',
+        'different_page',
+        'invalidation',
+        'distinct_input',
+        'distinct_output',
+        'kill',
+        'targeted',
+        'expired',
+        'expired_during_read',
+    ],
+)
+async def test_early_followup_checks_fresh_privacy_version_and_covered_conversations(ready_followup, monkeypatch, case):
+    f, authority = ready_followup
+    store = f.projector.store
+    assert await f.run('head') == 'completed'
+    assert f.runner.completed_probes[1][f.binding].ids
+
+    if case == 'different_page':
+        f.runner.pages['later'] = 2
+    elif case == 'invalidation':
+        store.client.rows[authority.path]['memo_token'] = '2' * 32
+        store.client.collection('account_deletions').document(f.binding.owner_id).create({'wipe_status': 'pending'})
+    elif case == 'distinct_input':
+        store.client.rows[store.ref('jobs', 'later').path]['capture_at'] = 1001
+        store.client.rows[store.ref('results', 'later').path]['capture_at'] = 1001
+    elif case == 'distinct_output':
+        store.client.rows[store.ref('jobs', 'later').path]['conversation_ids'] = ['unverified-output']
+        store.client.rows[store.ref('results', 'later').path]['projection']['conversation_id'] = 'unverified-output'
+    elif case == 'kill':
+        monkeypatch.setenv('BATCH_PIPELINE_FOLLOWUP_EARLY_COALESCE_ENABLED', 'false')
+    elif case == 'targeted':
+        f.runner.forget_page('later')
+    elif case in {'expired', 'expired_during_read'}:
+        expiry = f.runner.completed_probes[1][f.binding].expires_at
+        times = [expiry] if case == 'expired' else [expiry - 0.5, expiry]
+        monkeypatch.setattr(projection_followup, 'time', SimpleNamespace(monotonic=Mock(side_effect=times)))
+
+    result = await f.run('later')
+    assert store.check.call_count == (1 if case == 'same_page' else 2)
+    assert result == (
+        'blocked' if case == 'invalidation' else 'completed' if case in {'targeted', 'different_page'} else 'coalesced'
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    'case', ['missing', 'error', 'refusal', 'first_walk_refusal', 'no_proof', 'memo_only', 'token_error', 'inflight']
+)
+async def test_early_followup_falls_back_when_first_probe_is_unproven(ready_followup, monkeypatch, case):
+    from database.batch_pipeline_privacy import BatchPrivacyBlocked
+
+    f, authority = ready_followup
+    store = f.projector.store
+    if case == 'inflight':
+        f.runner.completion_attempts.add((1, f.binding))
+    elif case == 'missing':
+        f.projector.complete_content.side_effect = [None, {'outcome': 'success'}]
+        assert await f.run('head') == 'incomplete'
+    elif case == 'error':
+        f.projector.complete_content.side_effect = [RuntimeError('synthetic'), {'outcome': 'success'}]
+        assert await f.run('head') == 'retry'
+    elif case == 'refusal':
+        f.projector.complete_content.side_effect = [
+            BatchPrivacyBlocked('account_deleted'),
+            {'outcome': 'success'},
+        ]
+        assert await f.run('head') == 'blocked'
+    elif case == 'first_walk_refusal':
+        store.client.collection('account_deletions').document(f.binding.owner_id).create({'wipe_status': 'pending'})
+        assert await f.run('head') == 'blocked'
+    elif case == 'no_proof':
+        store.client.rows[authority.path]['memo_schema'] = 0
+        assert await f.run('head') == 'completed'
+    elif case == 'memo_only':
+        from database import batch_pipeline_privacy
+        from database.batch_privacy_attempt import batch_privacy_attempt
+
+        monkeypatch.setenv('FIRESTORE_READ_LEVERS', '{"bpp_generation_memo":100,"bpp_owner_memo_enforce":100}')
+        monkeypatch.setattr(batch_pipeline_privacy, 'PROCESS_OWNERS', batch_pipeline_privacy.BoundedTTLCache())
+        with batch_privacy_attempt(), pytest.raises(ProjectionReplay):
+            store.check(store.session('head', f.binding, 1000))
+        assert await f.run('head') == 'completed'
+        assert not f.runner.completed_probes
+    else:
+        assert await f.run('head') == 'completed'
+        from database import batch_pipeline_privacy
+
+        original = batch_pipeline_privacy.metrics.read_snapshot
+
+        def read_snapshot(family, reference, **kwargs):
+            if 'transaction' not in kwargs:
+                raise RuntimeError('synthetic')
+            return original(family, reference, **kwargs)
+
+        monkeypatch.setattr(batch_pipeline_privacy.metrics, 'read_snapshot', read_snapshot)
+    before = store.check.call_count
+    await f.run('later')
+    assert store.check.call_count == before + 1
+
+
+@pytest.mark.asyncio
+async def test_failed_first_claim_release_does_not_publish_proof(ready_followup, monkeypatch):
+    f, _ = ready_followup
+    previous_claim = projection_followup.projection_claim
+
+    @contextmanager
+    def failed_release(*_):
+        yield True
+        raise RuntimeError('synthetic release failure')
+
+    monkeypatch.setattr(projection_followup, 'projection_claim', failed_release)
+    with pytest.raises(RuntimeError, match='release failure'):
+        await f.run('head')
+    assert not f.runner.completed_probes
+    monkeypatch.setattr(projection_followup, 'projection_claim', previous_claim)
+    assert await f.run('later') == 'coalesced'
+    assert f.projector.store.check.call_count == 2
+
+
+# --- claimed-sibling skip (SCA-3508) -------------------------------------------------------------
+# A ready sibling may coalesce behind its same-page claimant only on the claimant's
+# live privacy proof, verified exactly as C1 verifies a completed proof.
+
+SKIP = 'BATCH_PIPELINE_FOLLOWUP_CLAIMED_SIBLING_SKIP_ENABLED'
+
+
+def _skips():
+    return projection_followup.OUTCOMES.labels('claimed_sibling_skipped')._value.get()
+
+
+def _requeues():
+    return projection_followup.OUTCOMES.labels('claimed_sibling_requeued')._value.get()
+
+
+async def _claimant_holding_completion(f, *, fail=False):
+    """Start head and hold it inside complete_content once its proof is published."""
+    import threading
+
+    release = threading.Event()
+
+    def complete(*_args, **_kwargs):
+        assert release.wait(10)
+        if fail:
+            raise RuntimeError('synthetic completion failure')
+        return {'outcome': 'success'}
+
+    f.projector.complete_content.side_effect = complete
+    head = asyncio.create_task(f.run('head'))
+    for _ in range(500):
+        claim = f.runner.sibling_claims.get((1, f.binding))
+        if claim is not None and claim.ready.is_set():
+            break
+        await asyncio.sleep(0.01)
+    else:
+        raise AssertionError('claimant never published its proof')
+    return head, release
+
+
+@pytest.mark.asyncio
+async def test_ready_sibling_coalesces_on_the_claimants_live_privacy_proof(ready_followup, monkeypatch):
+    f, _authority = ready_followup
+    monkeypatch.setenv(SKIP, 'true')
+    store = f.projector.store
+    before = _skips()
+    head, release = await _claimant_holding_completion(f)
+    assert f.runner.sibling_claims[(1, f.binding)].proof is not None
+
+    assert await f.run('later') == 'coalesced'
+    assert store.check.call_count == 1  # only the claimant paid the session check
+    assert _skips() == before + 1
+
+    release.set()
+    assert await head == 'completed'
+    assert not f.runner.sibling_claims
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    'case', ['uncovered_input', 'uncovered_output', 'privacy_changed', 'switch_off', 'page_cleared']
+)
+async def test_sibling_takes_its_own_privacy_check_unless_the_proof_covers_it(ready_followup, monkeypatch, case):
+    """Panel F1: a sibling-only privacy change must never be skipped."""
+    f, authority = ready_followup
+    monkeypatch.setenv(SKIP, 'false' if case == 'switch_off' else 'true')
+    store = f.projector.store
+    before = _skips()
+    if case == 'switch_off':
+        # Concurrent siblings with the switch off: C1 refuses an in-flight probe,
+        # so the sibling pays its own check (today's behaviour).
+        import threading
+
+        release = threading.Event()
+        f.projector.complete_content.side_effect = lambda *_a, **_k: release.wait(10) and {'outcome': 'success'}
+        head = asyncio.create_task(f.run('head'))
+        for _ in range(500):
+            if (1, f.binding) in f.runner.completion_attempts:
+                break
+            await asyncio.sleep(0.01)
+        await f.run('later')
+        release.set()
+        await head
+        assert store.check.call_count == 2
+        assert _skips() == before and not f.runner.sibling_claims
+        return
+    head, release = await _claimant_holding_completion(f)
+    if case == 'uncovered_input':
+        store.client.rows[store.ref('jobs', 'later').path]['capture_at'] = 1001
+        store.client.rows[store.ref('results', 'later').path]['capture_at'] = 1001
+    elif case == 'uncovered_output':
+        store.client.rows[store.ref('jobs', 'later').path]['conversation_ids'] = ['unverified-output']
+        store.client.rows[store.ref('results', 'later').path]['projection']['conversation_id'] = 'unverified-output'
+    elif case == 'privacy_changed':
+        store.client.rows[authority.path]['memo_token'] = '2' * 32
+        store.client.collection('account_deletions').document(f.binding.owner_id).create({'wipe_status': 'pending'})
+    elif case == 'page_cleared':
+        f.runner.forget_page('later')
+        release.set()  # this run reaches its own completion attempt; don't make it wait
+
+    result = await f.run('later')
+    release.set()
+    await head
+    assert _skips() == before
+    assert store.check.call_count == 2  # the sibling paid its own session and privacy check
+    if case == 'privacy_changed':
+        assert result == 'blocked'
+
+
+@pytest.mark.asyncio
+async def test_sibling_skipped_behind_a_failed_claimant_is_requeued(ready_followup, monkeypatch):
+    f, _authority = ready_followup
+    monkeypatch.setenv(SKIP, 'true')
+    before = _requeues()
+    head, release = await _claimant_holding_completion(f, fail=True)
+    assert await f.run('later') == 'coalesced'
+    release.set()
+    assert await head == 'retry'
+    # The claimant's attempt failed (key discarded): the skipped sibling runs again.
+    assert f.runner.pending[0] == 'later'
+    assert 'later' in f.runner.prioritized
+    assert _requeues() == before + 1
+    assert not f.runner.sibling_claims
+
+
+@pytest.mark.asyncio
+async def test_still_running_skipped_sibling_is_requeued_when_it_finishes(followup):
+    f = followup
+    claim = projection_followup.SiblingClaim(waiting=['synthetic-sibling'])
+    f.runner.tasks['synthetic-sibling'] = object()
+    f.runner.sibling_claims[(1, f.binding)] = claim
+    before = _requeues()
+
+    f.runner.release_sibling_claim((1, f.binding))
+    assert claim.ready.is_set()
+    assert 'synthetic-sibling' not in f.runner.pending
+    assert _requeues() == before
+
+    f.runner.launch = lambda: None
+    f.runner.finished('synthetic-sibling', SimpleNamespace(cancelled=lambda: False))
+    assert f.runner.pending[0] == 'synthetic-sibling'
+    assert _requeues() == before + 1
+
+
+def test_released_claim_after_a_completion_attempt_requeues_nothing(followup):
+    f = followup
+    f.runner.completion_attempts.add((1, f.binding))
+    f.runner.sibling_claims[(1, f.binding)] = projection_followup.SiblingClaim(waiting=['x'], attempted=True)
+    before = _requeues()
+    f.runner.release_sibling_claim((1, f.binding))
+    assert not f.runner.pending and _requeues() == before
+
+
+@pytest.mark.parametrize(
+    'hints',
+    [
+        None,
+        ({'policy_parts': {}}, {'projection': {'state': 'ready'}}, 'binding'),
+        (
+            {'policy_parts': {'projection': ProjectionPolicy(async_projection=False).to_dict()}},
+            {'projection': {'state': 'ready'}},
+            'b',
+        ),
+        (
+            {'policy_parts': {'projection': ProjectionPolicy(async_projection=True).to_dict()}},
+            {'projection': {'state': 'ready'}, 'projection_parts': {'0': {'state': 'persisted'}}},
+            'b',
+        ),
+        (
+            {'policy_parts': {'projection': ProjectionPolicy(async_projection=True).to_dict()}},
+            {'projection': {'state': 'ready'}},
+            ['unhashable'],
+        ),
+    ],
+)
+def test_ready_sibling_key_refuses_anything_the_legacy_path_would_not_coalesce(hints):
+    assert projection_followup.ProjectionFollowups.ready_sibling_key(3, hints) is None
+
+
+def test_ready_sibling_key_matches_the_legacy_coalesce_key():
+    hints = (
+        {'policy_parts': {'projection': ProjectionPolicy(async_projection=True).to_dict()}},
+        {'projection': {'state': 'ready'}, 'projection_parts': {'0': {'state': 'ready'}}},
+        'b',
+    )
+    assert projection_followup.ProjectionFollowups.ready_sibling_key(3, hints) == (3, 'b')
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('case', ['claimant_refused_before_proof', 'proof_wait_timeout'])
+async def test_sibling_without_a_published_proof_pays_its_own_privacy_check(ready_followup, monkeypatch, case):
+    """Confirmation panel F1: the no-proof and timeout branches never coalesce unverified."""
+    f, _authority = ready_followup
+    monkeypatch.setenv(SKIP, 'true')
+    store = f.projector.store
+    claim = projection_followup.SiblingClaim()
+    if case == 'claimant_refused_before_proof':
+        claim.ready.set()  # claimant ended without publishing a proof
+    else:
+        monkeypatch.setattr(projection_followup, 'CLAIM_PROOF_WAIT_SECONDS', 0.05)
+    f.runner.sibling_claims[(1, f.binding)] = claim
+    store.client.collection('account_deletions').document(f.binding.owner_id).create({'wipe_status': 'pending'})
+    before = _skips()
+
+    assert await f.run('later') == 'blocked'
+    assert store.check.call_count == 1  # the sibling's own session and privacy check
+    assert _skips() == before
+    assert not claim.waiting
+
+
+def test_release_requeues_unless_the_claimant_itself_attempted_completion(followup):
+    """Confirmation panel F2: a foreign in-flight attempt must not suppress the re-queue."""
+    f = followup
+    f.runner.completion_attempts.add((1, f.binding))
+    claim = projection_followup.SiblingClaim(waiting=['x'])
+    f.runner.sibling_claims[(1, f.binding)] = claim
+    before = _requeues()
+    f.runner.release_sibling_claim((1, f.binding))
+    assert f.runner.pending[0] == 'x' and _requeues() == before + 1
+
+
+@pytest.mark.asyncio
+async def test_failed_claimant_does_not_duplicate_a_queued_targeted_recovery(followup, monkeypatch):
+    """lead2 custody review: a re-queue must not race a targeted wake into two tasks."""
+    f = followup
+    runner = f.runner
+    monkeypatch.setattr(projection_followup, 'MAX_FOLLOWUPS', 1)
+    started = []
+
+    class Task:
+        def __init__(self, segment):
+            self.segment, self.callbacks = segment, []
+
+        def add_done_callback(self, cb):
+            self.callbacks.append(cb)
+
+    def start(coro, name=None):
+        coro.close()
+        task = Task(started[-1] if started else None)
+        return task
+
+    def run(segment):
+        started.append(segment)
+
+        async def noop():
+            return None
+
+        return noop()
+
+    monkeypatch.setattr(projection_followup, 'start_background_task', start)
+    monkeypatch.setattr(runner, 'run', run)
+    runner.tasks['busy'] = object()  # the only slot is taken
+    await runner.schedule(['later'], discover=False)
+    assert list(runner.targeted_pending) == ['later'] and not started
+
+    # The claimant fails before its completion attempt; the sibling already skipped.
+    runner.sibling_claims[(1, f.binding)] = projection_followup.SiblingClaim(waiting=['later'])
+    runner.release_sibling_claim((1, f.binding))
+    assert 'later' not in runner.pending
+
+    runner.tasks.pop('busy')
+    monkeypatch.setattr(projection_followup, 'MAX_FOLLOWUPS', 4)
+    runner.launch()
+    assert started == ['later']
+    assert list(runner.tasks) == ['later'] and not runner.pending and not runner.targeted_pending
+
+
+def test_ordinary_launch_never_overwrites_a_running_segment(followup, monkeypatch):
+    f = followup
+    runner = f.runner
+    monkeypatch.setattr(projection_followup, 'MAX_FOLLOWUPS', 4)
+    owner = object()
+    runner.tasks['later'] = owner
+    runner.pending.append('later')
+    runner.prioritized.add('later')
+    monkeypatch.setattr(projection_followup, 'start_background_task', lambda *a, **k: pytest.fail('duplicate launch'))
+    runner.launch()
+    assert runner.tasks['later'] is owner and not runner.pending and 'later' not in runner.prioritized
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('case', ['released_after_attempt', 'released_without_attempt', 'page_cleared_during_check'])
+async def test_claim_state_changes_during_the_proof_check(ready_followup, monkeypatch, case):
+    """Exact-head panel F1: pin the non-live coalesce branch and the post-await page re-checks."""
+    f, _authority = ready_followup
+    monkeypatch.setenv(SKIP, 'true')
+    key = (1, f.binding)
+    head, release = await _claimant_holding_completion(f)
+    original = f.runner.read_persisted
+
+    def read_persisted(segment, *, prior=None, hints=None):
+        result = original(segment, prior=prior, hints=hints)
+        if segment == 'later' and prior:
+            if case == 'released_after_attempt':
+                f.runner.sibling_claims.pop(key)  # claimant released; its attempt stays registered
+            elif case == 'released_without_attempt':
+                f.runner.sibling_claims.pop(key)
+                f.runner.completion_attempts.discard(key)
+            else:
+                f.runner.pages.pop('later')
+            if case != 'released_after_attempt':
+                release.set()  # this sibling reaches its own completion; don't make it wait
+        return result
+
+    monkeypatch.setattr(f.runner, 'read_persisted', read_persisted)
+    before = _skips()
+    result = await f.run('later')
+    release.set()
+    await head
+    if case == 'released_after_attempt':
+        assert result == 'coalesced' and _skips() == before + 1
+    else:
+        assert _skips() == before
+
+
+def test_cancelled_task_does_not_count_a_dropped_requeue(followup):
+    """Exact-head panel F2: shutdown drops the queue, so it must not count a requeue."""
+    f = followup
+    f.runner.sibling_requeue.add('x')
+    before = _requeues()
+    f.runner.finished('x', SimpleNamespace(cancelled=lambda: True))
+    assert _requeues() == before and not f.runner.pending and f.runner.closed

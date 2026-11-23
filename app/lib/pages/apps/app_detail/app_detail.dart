@@ -511,7 +511,9 @@ class _AppDetailPageState extends State<AppDetailPage> with WidgetsBindingObserv
                   if (_setupWaiting || _setupFailed) ...[
                     AppDetailNotice(
                         icon: FontAwesomeIcons.circleInfo,
-                        text: _setupFailed ? l10n.connectionErrorDesc : l10n.completeAuthInBrowser),
+                        text: _setupFailed
+                            ? (_setupTimedOut ? l10n.appSetupNotFinished : l10n.connectionErrorDesc)
+                            : l10n.completeAuthInBrowser),
                     if (_setupFailed)
                       OmiButton.secondary(
                           key: const Key('app-setup-retry'),

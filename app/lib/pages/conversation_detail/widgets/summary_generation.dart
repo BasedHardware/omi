@@ -324,6 +324,14 @@ class SummaryFailureCard extends StatelessWidget {
           null,
           null,
         ),
+      SummaryFailureKind.transcriptionPending => (
+          l10n.summaryTranscriptionPendingTitle,
+          l10n.summaryTranscriptionPendingBody,
+          l10n.ok,
+          () async => provider.dismissSummaryFailure(),
+          null,
+          null,
+        ),
       SummaryFailureKind.generic => (
           l10n.summaryFailedTitle,
           l10n.summaryFailedBody,
@@ -334,7 +342,9 @@ class SummaryFailureCard extends StatelessWidget {
         ),
     };
     // Retrying is pointless while another reprocess runs; acknowledging never is.
-    final blocked = busy && failure.kind != SummaryFailureKind.rateLimited;
+    final blocked = busy &&
+        failure.kind != SummaryFailureKind.rateLimited &&
+        failure.kind != SummaryFailureKind.transcriptionPending;
 
     return Padding(
       padding: const EdgeInsets.only(bottom: OmiSpacing.lg),

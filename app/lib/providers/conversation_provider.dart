@@ -18,6 +18,7 @@ import 'package:omi/backend/http/api_presentation.dart';
 import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/backend/schema/conversation_v3.dart';
 import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/services/capture/empty_recording_notice.dart';
 import 'package:omi/services/capture/optimistic_processing.dart';
@@ -28,6 +29,7 @@ import 'package:omi/services/notifications/merge_notification_handler.dart';
 import 'package:omi/utils/conversations/capture_groups.dart';
 import 'package:omi/utils/conversations/home_member_fallback.dart';
 import 'package:omi/utils/logger.dart';
+import 'package:omi/providers/transcription_pending_conversations.dart';
 
 part 'conversation_visibility.dart';
 part 'conversation_home_fetch.dart';
@@ -90,6 +92,10 @@ class ConversationProvider extends ChangeNotifier {
   Map<DateTime, List<ServerConversation>> groupedConversations = {};
 
   bool isLoadingConversations = false;
+
+  /// The last older-page read failed; Home ends its list with one line to retry it (X6). Cleared
+  /// when the next page or a fresh first page lands.
+  bool loadMoreFailed = false;
   bool _isLoadingConversationList = false;
   bool _isLoadingConversationSearch = false;
   bool showDiscardedConversations = false;
@@ -120,6 +126,7 @@ class ConversationProvider extends ChangeNotifier {
   static const Duration _refreshCooldown = Duration(seconds: 60); // Minimum time between refreshes
 
   List<ServerConversation> processingConversations = [];
+  final Set<String> _failedHomeProcessingIds = {};
   Timer? _processingPlaceholderTimeout;
   Timer? _processingReconcileTimer;
 
@@ -199,6 +206,10 @@ class ConversationProvider extends ChangeNotifier {
   static const int _conversationPageSize = 50;
   int _conversationServerOffset = 0;
   bool _conversationServerHasMore = false;
+
+  /// The server's resume point after the last loaded page, when its cursor is enabled; the next page
+  /// sends it alongside the offset, and an older server ignores it.
+  String? _conversationServerCursor;
   final Set<String> _conversationServerLoadedIds = {};
 
   // The empty-state widget should defer to a pending auto-retry so the user
@@ -217,6 +228,17 @@ class ConversationProvider extends ChangeNotifier {
       List<ServerConversation>.unmodifiable(groupedConversations.values.expand((group) => group));
 
   Map<String, List<ServerConversation>> Function()? heldHomeEpisodes;
+  void Function(String id, bool pendingDelete)? homeCardSourceChanged;
+  // Display-only Home seeds support selection without populating/persisting detail history.
+  Map<String, ServerConversation> _homeCardSelectionSeeds = {};
+  String _homeCardOwner = '';
+  void setHomeCardSelectionSeeds(List<ServerConversation> seeds) {
+    _homeCardOwner = SharedPreferencesUtil().uid;
+    _homeCardSelectionSeeds = {for (final seed in seeds) seed.id: seed};
+  }
+
+  Map<String, ServerConversation> get _currentHomeSeeds =>
+      _homeCardOwner == SharedPreferencesUtil().uid ? _homeCardSelectionSeeds : const {};
   final ConversationListFetcher? _conversationListFetcher;
   final ConversationLifecycleFetcher _conversationLifecycleFetcher;
   final DailySummariesChecker? _dailySummariesChecker;
@@ -361,6 +383,8 @@ class ConversationProvider extends ChangeNotifier {
   }
 
   void clearUserData() {
+    _homeCardSelectionSeeds.clear();
+    homeCardSourceChanged?.call('', false);
     for (final watcher in _mergeWatchers.values) {
       watcher.cancel();
     }
@@ -377,11 +401,13 @@ class ConversationProvider extends ChangeNotifier {
     searchedConversations = [];
     groupedConversations = {};
     processingConversations = [];
+    _failedHomeProcessingIds.clear();
     _cancelProcessingPlaceholderTimers();
     _syncProcessingReconcileTimer();
     _processingStateRevisionById.clear();
     _conversationServerOffset = 0;
     _conversationServerHasMore = false;
+    _conversationServerCursor = null;
     _conversationServerLoadedIds.clear();
     mergingConversationIds = {};
     selectedConversationIds = {};
@@ -497,7 +523,7 @@ class ConversationProvider extends ChangeNotifier {
     }
     // Search results are ranked by the server, including transcript-match relevance.
     // Re-sorting by recency would bury older spoken-moment matches.
-    searchedConversations = _filterPendingDeletes(result.items);
+    searchedConversations = _filterPendingDeletes(result.items).map(_retainingHomeStep).toList();
     currentSearchPage = result.currentPage;
     totalSearchPages = result.totalPages;
     groupSearchConvosByDate();
@@ -548,7 +574,7 @@ class ConversationProvider extends ChangeNotifier {
       _setLoadingConversationSearch(false);
       return;
     }
-    searchedConversations.addAll(_filterPendingDeletes(result.items));
+    searchedConversations.addAll(_filterPendingDeletes(result.items).map(_retainingHomeStep));
     totalSearchPages = result.totalPages;
     currentSearchPage = result.currentPage;
     groupSearchConvosByDate();
@@ -565,40 +591,16 @@ class ConversationProvider extends ChangeNotifier {
     return -1;
   }
 
-  void addProcessingConversation(ServerConversation conversation, {bool freshProcessingAttempt = false}) {
-    if (SharedPreferencesUtil().isConversationDeleteConfirmed(_processingTargetId(conversation))) return;
-    if (conversation.id == OptimisticProcessingPlaceholder.id) {
-      _cancelProcessingPlaceholderTimers();
-      // The request or WAL drain may never resolve. Expire only this local
-      // attempt, even offline, without declaring server processing complete.
-      _processingPlaceholderTimeout = Timer(OptimisticProcessingPlaceholder.timeout, () {
-        if (!processingConversations.any((row) => identical(row, conversation))) return;
-        removeProcessingConversation(OptimisticProcessingPlaceholder.id);
-        if (_isSignedIn()) unawaited(_refreshProcessingLifecycle());
-      });
-    }
-    _bumpProcessingStateRevision(conversation.id);
-    if (conversation.id != '0' && _isActiveProcessingStatus(conversation.status)) {
-      _clientTelemetry.noteProcessingVisible(conversation.id, freshAttempt: freshProcessingAttempt);
-    }
-    final existingIndex = processingConversations.indexWhere((item) => item.id == conversation.id);
-    if (existingIndex == -1) {
-      processingConversations.add(conversation);
-    } else {
-      // A replayed processing-start event can arrive while reconciliation is
-      // waiting. Replace the old snapshot so the UI cannot render a stale
-      // duplicate ahead of the live row.
-      processingConversations[existingIndex] = conversation;
-    }
-    _syncProcessingReconcileTimer();
-    notifyListeners();
-  }
+  void addProcessingConversation(ServerConversation conversation, {bool freshProcessingAttempt = false}) =>
+      _addProcessingConversation(conversation, freshProcessingAttempt: freshProcessingAttempt);
 
   /// Apply a list-row reprocess response: processing/merging rows leave the
   /// completed list and join the processing skeleton; a titled (or otherwise
   /// settled) result upserts in place.
   void applyConversationReprocessResult(ServerConversation updated) {
-    if (_isActiveProcessingStatus(updated.status)) {
+    TranscriptionPendingConversations.observe(updated);
+    if (updated.homeStep != 'failed') _failedHomeProcessingIds.remove(updated.id);
+    if (_isActiveProcessingRow(updated)) {
       conversations.removeWhere((conversation) => conversation.id == updated.id);
       searchedConversations.removeWhere((conversation) => conversation.id == updated.id);
       if (hasActiveSearch) {
@@ -609,7 +611,7 @@ class ConversationProvider extends ChangeNotifier {
       addProcessingConversation(updated);
       return;
     }
-    upsertConversation(updated);
+    upsertConversation(updated, preserveHomeStep: false);
   }
 
   void removeProcessingConversation(String conversationId) {
@@ -790,6 +792,7 @@ class ConversationProvider extends ChangeNotifier {
   Future _fetchNewConversations({bool restoreMergeWatches = true}) async {
     if (!_isSignedIn()) return;
     if (restoreMergeWatches) _restoreMergeWatches();
+    loadMoreFailed = false;
     final generation = _sessionGeneration;
     final fetchRevision = ++_conversationFetchRevision;
     _conversationLoadingRevision = fetchRevision;
@@ -836,12 +839,16 @@ class ConversationProvider extends ChangeNotifier {
       pageConversationIds,
       processingRevisionsAtStart,
       processingRowsAtStart,
-      {for (final conversation in newConversations) conversation.id: conversation.status.name},
+      {for (final conversation in newConversations) conversation.id: conversation},
     );
-    final receivedStorageCount = _recordServerPageIds(rawNewConversations, rawNewConversations.length);
+    // The storage count, not the body length, is the offset advance: a page
+    // that crossed hidden rows is shorter than the rows it consumed.
+    final receivedStorageCount = _recordServerPageIds(rawNewConversations, result.storageCount);
     if (_conversationServerOffset == 0) {
       _conversationServerOffset = receivedStorageCount;
-      _conversationServerHasMore = !result.truncated && rawNewConversations.length >= _conversationPageSize;
+      _conversationServerHasMore = result.page
+          .more(storageCount: result.storageCount, pageSize: _conversationPageSize, truncated: result.truncated);
+      _conversationServerCursor = result.page.nextCursor;
     }
     final currentlyProcessingIds = processingConversations
         .where((conversation) => _isActiveProcessingStatus(conversation.status))
@@ -854,33 +861,36 @@ class ConversationProvider extends ChangeNotifier {
     // path as page completions.
     final completedById = <String, ServerConversation>{
       for (final conversation in newConversations)
-        if (conversation.status == ConversationStatus.completed && !currentlyProcessingIds.contains(conversation.id))
-          conversation.id: conversation,
+        if (_isHomeListRow(conversation) && !currentlyProcessingIds.contains(conversation.id))
+          conversation.id: _withHomeProcessingProjection(conversation),
     };
     for (final lifecycleResult in lifecycleResults.values) {
       final conversation = lifecycleResult.item;
       if (!lifecycleResult.ok ||
           conversation == null ||
-          conversation.status != ConversationStatus.completed ||
+          !_isHomeListRow(conversation) ||
           currentlyProcessingIds.contains(conversation.id) ||
           _isHiddenByDelete(conversation.id) ||
           !_matchesActiveConversationFilters(conversation)) {
         continue;
       }
-      completedById[conversation.id] = conversation;
+      completedById[conversation.id] = _withHomeProcessingProjection(conversation);
     }
     // Refresh pages exclude discarded/bridged donors. Absence is authoritative
     // inside this page's time window, not for older paginated rows. Failed or
     // truncated reads never remove rows, nor do they override a live update.
-    if (!result.truncated) {
-      final coveredAfter = rawNewConversations.length >= _conversationPageSize
-          ? rawNewConversations.map((c) => c.startedAt ?? c.createdAt).reduce((a, b) => a.isBefore(b) ? a : b)
-          : null;
+    // A page with more after it (the server's answer, else a full page of storage
+    // rows) covers only down to its oldest row; one with no visible row covers nothing.
+    // GET /v1/conversations orders pages by created_at, so the boundary is too.
+    final fullPage = result.page.hasMore ?? result.storageCount >= _conversationPageSize;
+    if (!result.truncated && !(fullPage && rawNewConversations.isEmpty)) {
+      final coveredAfter =
+          fullPage ? rawNewConversations.map((c) => c.createdAt).reduce((a, b) => a.isBefore(b) ? a : b) : null;
       conversations.removeWhere((row) =>
           !row.id.startsWith('ondevice-') &&
           identical(conversationsAtStart[row.id], row) &&
           !pageConversationIds.contains(row.id) &&
-          (coveredAfter == null || (row.startedAt ?? row.createdAt).isAfter(coveredAfter)));
+          (coveredAfter == null || row.createdAt.isAfter(coveredAfter)));
     }
     conversations.removeWhere((row) => _isHiddenByDelete(row.id));
     for (final conversation in completedById.values) {
@@ -909,6 +919,7 @@ class ConversationProvider extends ChangeNotifier {
       return false;
     }
     if (restoreMergeWatches) _restoreMergeWatches();
+    loadMoreFailed = false;
     final generation = _sessionGeneration;
     final fetchRevision = ++_conversationFetchRevision;
     _conversationLoadingRevision = fetchRevision;
@@ -986,11 +997,13 @@ class ConversationProvider extends ChangeNotifier {
       pageConversationIds,
       processingRevisionsAtStart,
       processingRowsAtStart,
-      {for (final conversation in fetchedConversations) conversation.id: conversation.status.name},
+      {for (final conversation in fetchedConversations) conversation.id: conversation},
     );
     _conversationServerLoadedIds.clear();
     _conversationServerOffset = _recordServerPageIds(result.items, result.storageCount);
-    _conversationServerHasMore = !result.truncated && result.storageCount >= _conversationPageSize;
+    _conversationServerHasMore = result.page
+        .more(storageCount: result.storageCount, pageSize: _conversationPageSize, truncated: result.truncated);
+    _conversationServerCursor = result.page.nextCursor;
 
     // The page replaces overlaps and covered rows; older cached pages remain
     // reachable. A live completion while the list/lifecycle awaits can outdate
@@ -1004,14 +1017,15 @@ class ConversationProvider extends ChangeNotifier {
       for (final conversation in _cachedRowsBeforePage(fetchedConversations, conversations))
         if (!currentlyProcessingIds.contains(conversation.id)) conversation.id: conversation,
       for (final conversation in fetchedConversations)
-        if (conversation.status == ConversationStatus.completed && !currentlyProcessingIds.contains(conversation.id))
-          conversation.id: conversation.keepingTranscriptOf(conversationsAtStart[conversation.id]),
+        if (_isHomeListRow(conversation) && !currentlyProcessingIds.contains(conversation.id))
+          conversation.id:
+              _withHomeProcessingProjection(conversation).keepingTranscriptOf(conversationsAtStart[conversation.id]),
     };
     for (final lifecycleResult in lifecycleResults.values) {
       final conversation = lifecycleResult.item;
       if (!lifecycleResult.ok ||
           conversation == null ||
-          conversation.status != ConversationStatus.completed ||
+          !_isHomeListRow(conversation) ||
           currentlyProcessingIds.contains(conversation.id) ||
           _isHiddenByDelete(conversation.id) ||
           !_matchesActiveConversationFilters(conversation)) {
@@ -1019,10 +1033,11 @@ class ConversationProvider extends ChangeNotifier {
       }
       // A successful lifecycle probe is authoritative when the page still
       // reports this row as processing, so publish its completed detail.
-      completedById[conversation.id] = conversation.keepingTranscriptOf(conversationsAtStart[conversation.id]);
+      completedById[conversation.id] =
+          _withHomeProcessingProjection(conversation).keepingTranscriptOf(conversationsAtStart[conversation.id]);
     }
     for (final conversation in conversations) {
-      if (conversation.status != ConversationStatus.completed) continue;
+      if (!_isHomeListRow(conversation)) continue;
       if (_isHiddenByDelete(conversation.id) || !_matchesActiveConversationFilters(conversation)) {
         continue;
       }
@@ -1036,6 +1051,9 @@ class ConversationProvider extends ChangeNotifier {
     completedById.removeWhere((id, _) => _isHiddenByDelete(id));
     conversations = completedById.values.toList()
       ..sort((a, b) => (b.startedAt ?? b.createdAt).compareTo(a.startedAt ?? a.createdAt));
+    for (final row in conversations) {
+      TranscriptionPendingConversations.observe(row);
+    }
     // Only use cache when no folder filter is applied
     if (conversations.isEmpty && selectedFolderId == null) {
       if (!await _restoreCacheForFetch(generation, fetchRevision)) {
@@ -1094,38 +1112,6 @@ class ConversationProvider extends ChangeNotifier {
     // this loading state as its serialization guard.
     setLoadingConversations(false);
     notifyListeners();
-    return true;
-  }
-
-  Future<bool> _restoreCacheForFetch(int generation, int fetchRevision) async {
-    final ownerUid = SharedPreferencesUtil().uid;
-    final cached = await _conversationCacheLoader();
-    if (generation != _sessionGeneration ||
-        fetchRevision != _conversationFetchRevision ||
-        !_isSignedIn() ||
-        SharedPreferencesUtil().uid != ownerUid) {
-      return false;
-    }
-    final activeProcessingIds = processingConversations
-        .where((conversation) => _isActiveProcessingStatus(conversation.status))
-        .map((conversation) => conversation.id)
-        .toSet();
-    bool visible(ServerConversation conversation) =>
-        !activeProcessingIds.contains(conversation.id) &&
-        !_isHiddenByDelete(conversation.id) &&
-        _matchesActiveConversationFilters(conversation);
-    // The fallback starts with an empty list. Rows delivered during decode
-    // (including local phone rows) win over older cached objects with that ID.
-    final restored = <String, ServerConversation>{
-      for (final conversation in cached)
-        if (visible(conversation)) conversation.id: conversation,
-      for (final conversation in conversations)
-        if (visible(conversation)) conversation.id: conversation,
-      for (final conversation in _phoneOnlyConversations.values)
-        if (visible(conversation)) conversation.id: conversation,
-    };
-    conversations = restored.values.toList()
-      ..sort((a, b) => (b.startedAt ?? b.createdAt).compareTo(a.startedAt ?? a.createdAt));
     return true;
   }
 
@@ -1351,6 +1337,7 @@ class ConversationProvider extends ChangeNotifier {
     // list cardinality differ from the server page cardinality.
     if (!_conversationServerHasMore) return false;
     if (isLoadingConversations) return false;
+    final processingRevisionsAtStart = _processingStateRevisionSnapshot();
     final operationRevision = ++_conversationFetchRevision;
     _conversationLoadingRevision = operationRevision;
     setLoadingConversations(true);
@@ -1359,14 +1346,9 @@ class ConversationProvider extends ChangeNotifier {
     final (startDate, endDate) = _getDateFilterRange();
 
     final pageOffset = _conversationServerOffset;
+    final pageCursor = _conversationServerCursor;
     final typedApi = _conversationApi;
-    late final ({
-      List<ServerConversation> items,
-      bool ok,
-      bool truncated,
-      int storageCount,
-      ApiResult<List<ServerConversation>>? typed
-    }) pageResult;
+    late final _HomePage pageResult;
     if (conversationPageFetcherOverride != null) {
       final fetched = await conversationPageFetcherOverride!.call();
       pageResult = (
@@ -1374,24 +1356,34 @@ class ConversationProvider extends ChangeNotifier {
         ok: fetched.ok,
         truncated: fetched.truncated,
         storageCount: fetched.items.length,
+        page: const ConversationPageHeaders(),
         typed: null
       );
     } else if (typedApi != null) {
-      pageResult = await _getTypedHomePage(typedApi, pageOffset, startDate, endDate);
+      pageResult = await _getTypedHomePage(typedApi, pageOffset, pageCursor, startDate, endDate);
     } else {
       var storageCount = 0;
+      var page = const ConversationPageHeaders();
       final fetched = await getConversationsResult(
         heldHomeEpisodes: _homeEpisodeAcknowledgements,
         onStorageCount: (count) => storageCount = count,
+        onPageHeaders: (headers) => page = headers,
         offset: pageOffset,
+        cursor: pageCursor,
         includeDiscarded: showDiscardedConversations,
         startDate: startDate,
         endDate: endDate,
         folderId: selectedFolderId,
         starred: showStarredOnly ? true : null,
       );
-      pageResult =
-          (items: fetched.items, ok: fetched.ok, truncated: fetched.truncated, storageCount: storageCount, typed: null);
+      pageResult = (
+        items: fetched.items,
+        ok: fetched.ok,
+        truncated: fetched.truncated,
+        storageCount: storageCount,
+        page: page,
+        typed: null
+      );
     }
     if (operationRevision != _conversationFetchRevision) {
       if (_conversationLoadingRevision == operationRevision) setLoadingConversations(false);
@@ -1403,16 +1395,25 @@ class ConversationProvider extends ChangeNotifier {
       return getMoreConversationsFromServer();
     }
     if (!pageResult.ok) {
+      loadMoreFailed = true;
       setLoadingConversations(false);
       notifyListeners();
       return false;
     }
+    loadMoreFailed = false;
     final newConversations = pageResult.items;
     _conversationServerOffset += _recordServerPageIds(newConversations, pageResult.storageCount);
-    _conversationServerHasMore = !pageResult.truncated && pageResult.storageCount >= _conversationPageSize;
+    _conversationServerHasMore = pageResult.page
+        .more(storageCount: pageResult.storageCount, pageSize: _conversationPageSize, truncated: pageResult.truncated);
+    _conversationServerCursor = pageResult.page.nextCursor;
     final existingIds = conversations.map((conversation) => conversation.id).toSet();
     final visiblePage = _filterPendingDeletes(newConversations);
-    conversations.addAll(visiblePage.where((conversation) => !existingIds.contains(conversation.id)));
+    _recordHomeProcessingPage(visiblePage, processingRevisionsAtStart);
+    conversations = conversations.map(_withHomeProcessingProjection).toList();
+    processingConversations.removeWhere(_hasFailedHomeProcessing);
+    _syncProcessingReconcileTimer();
+    conversations.addAll(
+        visiblePage.where((conversation) => !existingIds.contains(conversation.id)).map(_withHomeProcessingProjection));
     conversations.sort((a, b) => (b.startedAt ?? b.createdAt).compareTo(a.startedAt ?? a.createdAt));
     _groupConversationsByDateWithoutNotify();
     final siriFetchIsUnfiltered = selectedFolderId == null &&
@@ -1435,7 +1436,9 @@ class ConversationProvider extends ChangeNotifier {
     return true;
   }
 
-  Future<void> addConversation(ServerConversation conversation) async {
+  Future<void> addConversation(ServerConversation conversation, {bool preserveHomeStep = true}) async {
+    if (conversation.status == ConversationStatus.completed) homeCardSourceChanged?.call(conversation.id, false);
+    conversation = _homeReplacement(conversation, preserveHomeStep);
     if (conversation.deleted || conversation.isMergedDonor || _mergedAwayConversationIds.contains(conversation.id)) {
       return;
     }
@@ -1509,7 +1512,8 @@ class ConversationProvider extends ChangeNotifier {
   }
 
   final _phoneOnlyConversations = <String, ServerConversation>{};
-  void upsertConversation(ServerConversation conversation) {
+  void upsertConversation(ServerConversation conversation, {bool preserveHomeStep = true}) {
+    conversation = _homeReplacement(conversation, preserveHomeStep);
     if (_isHiddenByDelete(conversation.id)) return;
     if (conversation.deleted || conversation.isMergedDonor) {
       updateConversationInSortedList(conversation);
@@ -1520,18 +1524,22 @@ class ConversationProvider extends ChangeNotifier {
     if (conversation.id.startsWith('ondevice-')) _phoneOnlyConversations[conversation.id] = conversation;
     int idx = conversations.indexWhere((m) => m.id == conversation.id);
     if (idx < 0) {
-      addConversation(conversation);
+      addConversation(conversation, preserveHomeStep: preserveHomeStep);
     } else {
-      updateConversation(conversation, idx);
+      updateConversation(conversation, index: idx, preserveHomeStep: preserveHomeStep);
     }
     if (!conversation.discarded) clearEmptyRecordingExplanation();
   }
 
   void _publishConversationChange() => notifyListeners();
 
-  void updateConversationInSortedList(ServerConversation conversation) => _updateConversationProjections(conversation);
+  void updateConversationInSortedList(ServerConversation conversation) {
+    homeCardSourceChanged?.call(conversation.id, false);
+    _updateConversationProjections(conversation);
+  }
 
   (int, DateTime) addConversationWithDateGrouped(ServerConversation conversation) {
+    conversation = _retainingHomeStep(conversation);
     conversations.insert(0, conversation);
     SiriIntegration.current.queueUpsertConversations([conversation]);
     conversations.sort((a, b) => (b.startedAt ?? b.createdAt).compareTo(a.startedAt ?? a.createdAt));
@@ -1559,7 +1567,13 @@ class ConversationProvider extends ChangeNotifier {
     return (idx, memDate);
   }
 
-  void updateConversation(ServerConversation conversation, [int? index]) {
+  void updateConversation(ServerConversation conversation, {int? index, bool preserveHomeStep = true}) {
+    if (conversation.isLocked || conversation.deleted || conversation.isMergedDonor) {
+      homeCardSourceChanged?.call(conversation.id, false);
+    }
+    conversation = _homeReplacement(conversation, preserveHomeStep);
+    // Observe the row actually applied: it keeps a retained 'failed' Home step.
+    TranscriptionPendingConversations.observe(conversation);
     if (conversation.deleted || conversation.isMergedDonor) {
       updateConversationInSortedList(conversation);
       return;
@@ -1628,6 +1642,7 @@ class ConversationProvider extends ChangeNotifier {
   /// Hides [conversation] now and deletes it on the server after [pendingDeleteWindow], unless
   /// [undoDeletedConversation] restores it first. The one delete path for list, bulk and detail.
   Future<void> deleteConversationLocally(ServerConversation conversation, {VoidCallback? onFailure}) async {
+    homeCardSourceChanged?.call(conversation.id, true);
     memoriesToDelete[conversation.id] = conversation;
     SiriIntegration.current.queueDelete('conversation', conversation.id);
     _pendingDeletes.remove(conversation.id)?.timer.cancel();
@@ -1679,7 +1694,12 @@ class ConversationProvider extends ChangeNotifier {
       succeeded = await (conversationId.startsWith('ondevice-')
           ? (OnDeviceTranscriptionController.instance.deleteLocalConversation?.call(conversationId) ??
               Future.value(false))
-          : conversationDeleteFetcherOverride?.call(conversationId) ?? deleteConversationServer(conversationId));
+          : _inServerDeleteTurn(() async {
+              // A queued delete must not go out under a different account.
+              if (!_isSignedIn() || prefs.uid != owner) return false;
+              return conversationDeleteFetcherOverride?.call(conversationId) ??
+                  deleteConversationServer(conversationId);
+            }));
     } catch (_) {
       succeeded = false;
     }
@@ -1732,9 +1752,24 @@ class ConversationProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// The server answers a delete that overlaps another on the same account with 409, so server
+  /// deletes (a bulk delete commits many at once) go out one at a time, in commit order.
+  Future<void>? _serverDeleteTail;
+
+  Future<bool> _inServerDeleteTurn(Future<bool> Function() send) {
+    final previous = _serverDeleteTail;
+    final result = previous == null ? send() : previous.then((_) => send());
+    final tail = _serverDeleteTail = result.then<void>((_) {}, onError: (_) {});
+    unawaited(tail.whenComplete(() {
+      if (identical(_serverDeleteTail, tail)) _serverDeleteTail = null;
+    }));
+    return result;
+  }
+
   void _clearDeleteTombstone(String conversationId) => memoriesToDelete.remove(conversationId);
 
   bool _removeConfirmedDeleteFromLists(String id) {
+    homeCardSourceChanged?.call(id, false);
     var removed = _phoneOnlyConversations.remove(id) != null;
     List<ServerConversation> withoutDeleted(List<ServerConversation> rows) {
       if (!rows.any((row) => row.id == id)) return rows;
@@ -1767,24 +1802,13 @@ class ConversationProvider extends ChangeNotifier {
     return removed;
   }
 
-  /// Puts a row hidden by [deleteConversationLocally] back in the list and in Siri: on Undo, and when
-  /// the server refuses or fails the DELETE, since the conversation then still exists.
-  Future<void> _restoreDeletedConversation(ServerConversation conversation) async {
-    memoriesToDelete.remove(conversation.id);
-    if (!conversations.any((e) => e.id == conversation.id)) {
-      conversations.add(conversation);
-      conversations.sort((a, b) => (b.startedAt ?? b.createdAt).compareTo(a.startedAt ?? a.createdAt));
-    }
-    groupConversationsByDate();
-    await _restoreSiriAfterOptimisticDelete(conversation);
-  }
-
   /// Restores a conversation whose delete is still pending. Does nothing once the DELETE was sent.
   Future<void> undoDeletedConversation(ServerConversation conversation) async {
     final pending = _pendingDeletes.remove(conversation.id);
     if (pending == null) return;
     pending.timer.cancel();
     await _restoreDeletedConversation(conversation);
+    homeCardSourceChanged?.call(conversation.id, false);
   }
 
   @override
@@ -2091,7 +2115,10 @@ class ConversationProvider extends ChangeNotifier {
 
   /// Get selected conversations sorted by creation date (earliest first)
   List<ServerConversation> get selectedConversations {
-    final selected = conversations.where((c) => selectedConversationIds.contains(c.id)).toList();
+    final selected = {..._currentHomeSeeds, for (final c in conversations) c.id: c}
+        .values
+        .where((c) => selectedConversationIds.contains(c.id))
+        .toList();
     selected.sort((a, b) => a.createdAt.compareTo(b.createdAt));
     return selected;
   }
@@ -2105,12 +2132,12 @@ class ConversationProvider extends ChangeNotifier {
   /// No time gap restrictions - user can merge any conversations they want.
   bool isConversationEligibleForMerge(String conversationId) {
     // Find the conversation
-    final idx = conversations.indexWhere((c) => c.id == conversationId);
-    if (idx == -1) return false;
-
-    final convo = conversations[idx];
+    final convo = conversations.where((c) => c.id == conversationId).firstOrNull ?? _currentHomeSeeds[conversationId];
+    if (convo == null) return false;
     if (convo.isLocked) return false;
     if (mergingConversationIds.contains(conversationId)) return false;
+    // A v3 conversation still in progress: capture is still writing it.
+    if (convo.v3?.tileState == ConversationTileState.live) return false;
 
     return true;
   }
@@ -2299,6 +2326,9 @@ class ConversationProvider extends ChangeNotifier {
       return;
     }
     final removed = removedConversationIds.where((id) => id != mergedConversationId).toSet();
+    for (final id in removed) {
+      homeCardSourceChanged?.call(id, false);
+    }
     await _queueConversationPersistence(() async {
       if (!current() || _mergedAwayConversationIds.contains(target.id)) return;
       final cached = await _conversationCacheLoader();

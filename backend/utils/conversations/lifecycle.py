@@ -30,6 +30,10 @@ from database import conversation_finalization_jobs as jobs_db
 from utils.conversations import merge_conversations_job
 
 from database import conversations as conversations_db
+from database import no_speech_terminal as no_speech_terminal_db
+from database import pipeline_ledger
+from database._client import get_firestore_client
+from utils.conversations.no_speech_restore import restore_no_speech_capture as restore_no_speech_capture
 from database import oversized_conversation_terminal as oversized_terminal_db
 from database import recording_sessions as recording_sessions_db
 from database import sync_cap_recovery
@@ -51,7 +55,10 @@ from utils.conversations.finalization_decision import (
 from utils.conversations.processing_trigger import is_recovery_trigger
 from utils.conversations.processing_trigger import ProcessingTrigger
 from utils.conversations.terminal_relevance import stamp_terminal_decision
-from utils.llm.gateway_error_contract import is_byok_account_state_http_exception
+from utils.llm.gateway_error_contract import (
+    is_byok_account_state_http_exception,
+    is_retryable_processing_http_exception,
+)
 from utils.observability.fallback import record_fallback
 from utils.observability.transcription import record_sync_intake_outcome
 from utils.other.storage import delete_conversation_audio_files
@@ -157,6 +164,9 @@ def create_in_progress_conversation(
 ) -> bool:
     """Create the one durable in-progress resource for a recording generation."""
     _require_status(conversation_data, ConversationStatus.in_progress)
+    from utils.conversations.v3.triggers import mark_new
+
+    mark_new(uid, conversation_data)
     if server_batch_requested:
         # The decorated reservation resolves a missing/None privacy level first.
         _reserve_batch_live_capture(
@@ -211,6 +221,9 @@ def ingest_sync_conversation(
     Existing lifecycle fields are preserved by the transactional append.
     """
     _require_status(incoming, ConversationStatus.completed)
+    from utils.conversations.v3.triggers import mark_new
+
+    mark_new(uid, incoming)
     checkpoint_hooks: dict[str, Any] = {}
     if recovery_checkpoint is not None:
         before, after = sync_cap_recovery.ingest_hooks(uid, recovery_checkpoint, incoming)
@@ -218,6 +231,10 @@ def ingest_sync_conversation(
     assigned, created, survivors = conversations_db.assign_sync_conversation(
         uid, incoming, candidate_id=candidate_id, target_id=target_id, **checkpoint_hooks
     )
+    if assigned.get('recording'):
+        from utils.conversations.v3.triggers import changed
+
+        changed(uid, assigned['id'])
     size_bucket = assigned.pop('_sync_projected_size_bucket', None)
     record_sync_intake_outcome(created=created, projected_size_bucket=size_bucket)
     if created:
@@ -538,11 +555,20 @@ def processing_admission_guard(uid: str, conversation_id: str, *, rollback_on_fa
     thread.start()
     try:
         yield
-    except Exception as error:
+    except BaseException as error:
         # The composition boundary already logged a typed BYOK account-state halt
-        # by its bounded class; a traceback here would re-emit the chained
-        # provider error body for account state only the user can fix.
-        log_failure = logger.warning if is_byok_account_state_http_exception(error) else logger.exception
+        # or a retryable transient provider halt by its bounded class; a
+        # traceback here would re-emit the chained provider error body for a
+        # fault the caller is expected to retry.
+        log_failure = (
+            logger.warning
+            if (
+                not isinstance(error, Exception)
+                or is_byok_account_state_http_exception(error)
+                or is_retryable_processing_http_exception(error)
+            )
+            else logger.exception
+        )
         if rollback_on_failure:
             try:
                 rolled_back = rollback_processing_admission(uid, conversation_id)
@@ -646,7 +672,7 @@ def rule_discard_outcome(
     *,
     expected_sync_content_revision: Optional[int] = None,
 ) -> str:
-    """``discarded`` on a write, ``already_discarded`` for a stored hide, else ``refused``."""
+    """Report whether the rule discard wrote, was already stored, or was refused."""
     return conversations_db.rule_discard_outcome(
         uid,
         conversation_id,
@@ -1212,6 +1238,7 @@ def request_finalization(
     # The outbox transaction is the authoritative acceptance boundary. Count
     # only newly-created jobs so an idempotent re-dispatch cannot inflate traffic.
     if intent.get('created'):
+        _record_ledger_end(uid, conversation_id, trigger, firestore_client)
         record_journey_accepted('capture_finalization')
         record_client_journey_accepted(
             'conversation_finalization',
@@ -1306,6 +1333,51 @@ def get_finalization_status(uid: str, conversation_id: str) -> dict[str, Any] | 
     }
 
 
+# The end that fired, typed for the ledger. A bare capture end (a socket
+# closing) is not user intent and stays unknown; only an explicit client
+# finalize is the user's, and server recovery is the silence backstop.
+_TRIGGER_END_TYPES = {
+    ProcessingTrigger.CLIENT_FINALIZE: 'user_initiated',
+    ProcessingTrigger.SERVER_RECOVERY: 'silence_backstop',
+    ProcessingTrigger.CAPTURE_END: 'unknown',
+}
+
+
+def _record_ledger_end(uid: str, conversation_id: str, trigger: Any, firestore_client: Any) -> None:
+    """Stamp the ledger with the server-known end at the instant its intent is accepted."""
+    end_type = _TRIGGER_END_TYPES.get(trigger)
+    if end_type is None:
+        return  # Reprocess, merge and backfill triggers are not ends of a recording.
+    now = datetime.now(timezone.utc).timestamp()
+    pipeline_ledger.record_end(
+        uid, conversation_id, end_type=end_type, end_at=now, end_observed_at=now, firestore_client=firestore_client
+    )
+
+
+def _ledger_terminal(
+    uid: str, conversation_id: str, stage: str, *, firestore_client: Any = None, **fields: Any
+) -> None:
+    """Record a reversible hide as the capture's ledger terminal, after the real close commits.
+
+    Fenced like every ledger write: nothing is written for a conversation
+    deleted since the close, or for an account being wiped. A later restore
+    needs no ledger undo: the restored capture's next real transition re-opens
+    the row with its own higher source revision.
+    """
+    client = firestore_client or get_firestore_client()
+    user_ref = client.collection('users').document(uid)
+    pipeline_ledger.advance(
+        uid,
+        conversation_id,
+        stage,
+        reason=stage,
+        source_ref=user_ref.collection('conversations').document(conversation_id),
+        owner_ref=user_ref,
+        firestore_client=client,
+        **fields,
+    )
+
+
 def close_stuck_backfill_noise(
     uid: str,
     conversation_id: str,
@@ -1317,7 +1389,7 @@ def close_stuck_backfill_noise(
     firestore_client: Any = None,
 ) -> str:
     """Lifecycle owner for the operator's approved metadata-only close."""
-    return stuck_backfill_db.close_noise(
+    committed = stuck_backfill_db.close_noise(
         uid,
         conversation_id,
         expected_revision=expected_revision,
@@ -1326,6 +1398,8 @@ def close_stuck_backfill_noise(
         run_id=run_id,
         firestore_client=firestore_client,
     )
+    _ledger_terminal(uid, conversation_id, pipeline_ledger.NOISE, firestore_client=firestore_client)
+    return committed
 
 
 def restore_stuck_backfill_noise(
@@ -1343,4 +1417,63 @@ def restore_stuck_backfill_noise(
         expected_closed_revision=expected_closed_revision,
         run_id=run_id,
         firestore_client=firestore_client,
+    )
+
+
+def close_no_speech_capture(
+    uid: str,
+    conversation_id: str,
+    *,
+    expected_revision: str,
+    run_id: str,
+    speech_seconds: float,
+    audio_seconds: float,
+    firestore_client: Any = None,
+    expected_privacy_generation: int | None = None,
+) -> str:
+    """Lifecycle owner for the reversible no-speech terminal.
+
+    The caller has already proven strict-VAD speech below ten seconds on the
+    retained audio. Audio and content are untouched; the marker records the
+    prior lifecycle fields for the operator undo.
+    """
+    committed = no_speech_terminal_db.close_no_speech(
+        uid,
+        conversation_id,
+        expected_revision=expected_revision,
+        run_id=run_id,
+        speech_seconds=speech_seconds,
+        audio_seconds=audio_seconds,
+        firestore_client=firestore_client,
+        expected_privacy_generation=expected_privacy_generation,
+    )
+    _ledger_terminal(
+        uid,
+        conversation_id,
+        pipeline_ledger.NO_SPEECH,
+        firestore_client=firestore_client,
+        speech_seconds=speech_seconds,
+        has_speech=False,
+        speech_basis='vad',
+    )
+    return committed
+
+
+def commit_v3_projection(
+    uid, token, recordings, existing, rows, cache, *, clear_pending=True, remove=(), retire=None, key='builder'
+):
+    """The lifecycle owner delegates the atomic derived-row/claim transaction."""
+    from database import conversations_v3
+
+    return conversations_v3.commit_projection(
+        uid,
+        token,
+        recordings,
+        existing,
+        rows,
+        cache,
+        clear_pending=clear_pending,
+        remove=remove,
+        retire=retire,
+        key=key,
     )

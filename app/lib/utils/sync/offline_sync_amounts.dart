@@ -1,5 +1,6 @@
 import 'package:omi/models/sync_state.dart';
 import 'package:omi/services/wals/wal.dart';
+import 'package:omi/services/wals/wal_derived_views.dart';
 import 'package:omi/utils/debug_log_manager.dart';
 
 /// Offline Sync measures work in seconds of audio, never in files.
@@ -62,7 +63,10 @@ class SyncPipelineAmounts {
     required this.processingSeconds,
   });
 
-  factory SyncPipelineAmounts.of(Iterable<Wal> wals) {
+  factory SyncPipelineAmounts.of(Iterable<Wal> wals, {int? nowSeconds}) =>
+      SyncPipelineAmounts.fromPending(pendingWorkRows(wals, nowSeconds: nowSeconds));
+
+  factory SyncPipelineAmounts.fromPending(Iterable<Wal> wals) {
     var onDeviceSeconds = 0, onDeviceBytes = 0, onPhoneSeconds = 0, processingSeconds = 0;
     for (final w in wals) {
       final seconds = w.seconds > 0 ? w.seconds : 0;
@@ -146,7 +150,8 @@ class SyncRunTracker {
       };
 
   /// Call on every build. Returns null when no sync is running.
-  SyncStepProgress? update(SyncState state, List<Wal> wals) {
+  SyncStepProgress? update(SyncState state, List<Wal> wals, {List<Wal>? pendingWork}) {
+    final pendingRows = pendingWork ?? pendingWorkRows(wals);
     final active = state.isSyncing || state.isFetchingConversations;
     if (!active) {
       _runSeconds = null;
@@ -160,15 +165,16 @@ class SyncRunTracker {
 
     // Grows when device discovery lands after the first frame; never shrinks
     // as recordings finish.
-    final pending = walSeconds(wals.where((w) => w.status == WalStatus.miss && walIsSyncable(w)));
+    final pending = walSeconds(pendingRows);
     if (_runSeconds == null || pending > _runSeconds!) _runSeconds = pending;
 
     final step = _stepOf(state.phase);
     if (step != _stepKey) {
       _stepKey = step;
       final members = switch (step) {
-        SyncStep.download => wals.where((w) => walIsOnDevice(w) && w.status == WalStatus.miss),
-        SyncStep.upload => wals.where((w) => !walIsOnDevice(w) && w.status == WalStatus.miss && walIsSyncable(w)),
+        SyncStep.download => pendingRows.where((w) => walIsOnDevice(w) && w.status == WalStatus.miss),
+        SyncStep.upload =>
+          pendingRows.where((w) => !walIsOnDevice(w) && w.status == WalStatus.miss && walIsSyncable(w)),
         SyncStep.transcribe => const <Wal>[],
       };
       _stepIds = members.map(_key).toSet();

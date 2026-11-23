@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-incomplete-cleanup.png",
+      "platform": "mobile-ios",
+      "description": "Production Offline Sync page on iOS 26.5 simulator with synthetic providers: skipped device cleanup retains the row and shows failure. Grouped phone files were removed first.",
+      "captured_by": "agent",
+      "source": "manual"
+    }
+  ]
+}

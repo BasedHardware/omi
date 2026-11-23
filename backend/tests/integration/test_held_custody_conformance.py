@@ -14,6 +14,7 @@ from unittest.mock import Mock
 
 from fastapi import HTTPException
 import pytest
+from google.cloud import firestore
 
 from config.policy import BatchUnitPolicy, RecoveryPolicy
 from database.batch_pipeline_intake import admit
@@ -214,7 +215,9 @@ def test_pl363_permanent_manifest_failure_holds_once_before_paid_start(store_bac
     before = read(h)
     recovery, artifacts, inspect, first, second = runner(h, monkeypatch)
     source_read = Mock(side_effect=AssertionError('malformed manifest tried to fetch a source'))
-    artifacts.fetch_audio.side_effect = lambda item: materialize(body, item, source_read)
+    artifacts.fetch_audio.side_effect = lambda item, *, confirm_retained_digest=False: materialize(
+        body, item, source_read
+    )
     assert recovery.recover('held', owner) == 'failed_held'
     held = assert_unspent(h, before, 'invalid_retained_manifest')
     assert recovery.protocol.prepare('held', owner, T0 + 50) is None
@@ -246,7 +249,7 @@ def test_pl363_transient_audio_failure_remains_retryable_not_permanent_custody(s
     second.assert_not_called()
 
 
-@pytest.mark.parametrize('method', ['hold_invalid_manifest', 'hold_duration_limit'])
+@pytest.mark.parametrize('method', ['hold_invalid_manifest', 'hold_input_missing', 'hold_duration_limit'])
 @pytest.mark.parametrize('change', ['token', 'audio', 'running', 'lease', 'result', 'privacy'])
 def test_pl105_pl363_refusal_cannot_settle_a_foreign_or_started_epoch(store_backend, method, change):
     h = store_backend
@@ -278,3 +281,29 @@ def test_pl105_pl363_refusal_cannot_settle_a_foreign_or_started_epoch(store_back
     else:
         assert not getattr(protocol, method)('held', token, T0 + 3, **kwargs)
     assert read(h) == before
+
+
+def test_lease_token_shape_does_not_release_held_custody(store_backend, monkeypatch):
+    h = store_backend
+    owner, binding, _ = seed(h)
+    ref = h.customer.client.collection('users').document(owner).collection('conversations').document('visible')
+    tokens = {
+        's': {
+            'pod': 'synthetic-pusher',
+            'process_started_at': T0 - 86400,
+            'last_signal_at': T0 - 7200,
+            'lease_expires_at': T0 - 3600,
+            'signal_source': 'frames',
+        }
+    }
+
+    @firestore.transactional
+    def attach(tx):
+        tx.update(ref, {'record_upload_sessions': tokens})
+
+    attach(h.customer.client.transaction())
+    monkeypatch.setattr(intake, 'time', SimpleNamespace(time=lambda: T0 + 20))
+    patch(h, {'status': 'partial', 'result': PARTIAL['result']}, 'content', f'{owner}/{binding.content_id}')
+    assert intake.durable_status(h.store, owner, binding.job_id)['status'] != 'completed'
+    assert ref.get().to_dict()['record_upload_sessions'] == tokens
+    assert read(h)['audio_uri'] == AUDIO

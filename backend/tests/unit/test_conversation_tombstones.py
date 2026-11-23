@@ -6,12 +6,12 @@ collaborators rather than importing network clients or asserting source strings.
 
 import ast
 import asyncio
-from contextlib import nullcontext
+from contextlib import ExitStack, nullcontext
 from pathlib import Path
 from types import SimpleNamespace, MethodType
 from unittest.mock import MagicMock, AsyncMock
 
-from fastapi import HTTPException
+from fastapi import HTTPException, Response
 import pytest
 
 from database import conversation_tombstones as tombstones
@@ -28,6 +28,21 @@ class Store:
 
     def collection(self, name):
         return Ref(self, name)
+
+    def batch(self):
+        return Batch()
+
+
+class Batch:
+    def __init__(self):
+        self.refs = []
+
+    def delete(self, ref):
+        self.refs.append(ref)
+
+    def commit(self):
+        for ref in self.refs:
+            ref.delete()
 
 
 class Ref:
@@ -60,8 +75,14 @@ class Ref:
 
 def function(path, name, namespace):
     if path == 'routers/conversations.py' and name == 'delete_conversation':
+        namespace['Response'] = Response
         namespace['nullcontext'] = nullcontext
+        namespace['ExitStack'] = ExitStack
+        namespace.setdefault('accepts_conversation_deletes', lambda: False)
         namespace.setdefault('destructive_operation_gate', lambda *args, **kwargs: nullcontext())
+        namespace.setdefault('CONVERSATION_DELETE_GATE_WAIT_SECONDS', 0.0)
+        namespace.setdefault('deferred_batch_purges', lambda uid: nullcontext())
+        namespace.setdefault('_legal_hold_defers_delete', lambda uid: False)
         function(path, '_delete_conversation_under_gate', namespace)
     node = next(
         n
@@ -127,7 +148,7 @@ def test_non_cascade_delete_purges_prompt_evidence_after_intent_without_purging_
     delete = function('routers/conversations.py', 'delete_conversation', namespace)
     # The handler returns no body: the route is 204 No Content, the contract the
     # released mobile client gates on (test_conversation_delete_wire_contract.py).
-    assert delete('c', MagicMock(), False, None, 'u') is None
+    assert delete('c', MagicMock(), False, None, 'u').status_code == 204
     assert calls == [('prompt', True), ('parent', True)]
     audio.assert_not_called()
 
@@ -155,7 +176,10 @@ def test_user_delete_records_intent_before_retraction_and_cleanup(store, failure
         'logger': MagicMock(),
         'conversation_tombstones': tombstones,
         'db_client_module': SimpleNamespace(db=store),
-        'conversations_db': SimpleNamespace(get_conversation=lambda *args: {'sync_merged_from': ['donor']}),
+        'conversations_db': SimpleNamespace(
+            get_conversation_raw_snapshot=lambda *args, **kwargs: {'sync_merged_from': ['donor']}
+        ),
+        'object_lake': SimpleNamespace(LakeFetchError=type('LakeFetchError', (Exception,), {})),
         'os': SimpleNamespace(getenv=lambda *args: 'canonical'),
         'MemoryService': lambda **kw: SimpleNamespace(retract_conversation_memories=retract),
         'retraction_can_be_skipped': lambda *a, **kw: False,
@@ -177,7 +201,7 @@ def test_user_delete_records_intent_before_retraction_and_cleanup(store, failure
         assert 'users/u/conversations/c' in store.rows
     else:
         tasks = MagicMock()
-        assert delete('c', tasks, True, None, 'u') is None
+        assert delete('c', tasks, True, None, 'u').status_code == 204
         tasks.add_task.assert_called_once_with(
             namespace['delete_privacy_conversation_audio'], 'u', 'c', source_ids=['donor']
         )
@@ -205,6 +229,8 @@ def test_account_wipe_enumerates_tombstones_even_without_root(store, monkeypatch
         'delete_user_data',
         {
             'db': store,
+            'account_authority_writer_enabled': lambda: True,
+            'get_data_plane_firestore_client': lambda: store,
             'logger': MagicMock(),
             'delete_collection_recursive': purge,
         },

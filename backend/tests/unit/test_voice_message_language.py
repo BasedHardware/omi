@@ -63,6 +63,9 @@ def chat():
     usage_tracker.set_usage_context = MagicMock()
     usage_tracker.reset_usage_context = MagicMock()
 
+    users = MagicMock()
+    users.get_user_language_preference = MagicMock(return_value='')
+    users.get_user_transcription_preferences = MagicMock(return_value={})
     fakes: dict[str, object] = {
         "database._client": MagicMock(),
         "stripe": MagicMock(),
@@ -70,7 +73,7 @@ def chat():
         "database.notifications": MagicMock(),
         "database.apps": MagicMock(),
         "database.auth": MagicMock(),
-        "database.users": MagicMock(),
+        "database.users": users,
         "utils.apps": MagicMock(),
         "utils.llm.chat": MagicMock(),
         "utils.llm.persona": MagicMock(),
@@ -199,7 +202,12 @@ async def test_stream_routes_storage_and_transcription_to_owned_executors(chat, 
 
     monkeypatch.setattr(chat, "run_blocking", fake_run_blocking)
 
-    chunks = [chunk async for chunk in chat.process_voice_message_segment_stream("audio.wav", "uid", "en")]
+    chunks = [
+        chunk
+        async for chunk in chat.process_voice_message_segment_stream(
+            "audio.wav", "uid", "en", register_answer=lambda *_: None
+        )
+    ]
 
     assert chunks == []
     assert [(executor, func) for executor, func, _, _ in calls] == [
@@ -233,7 +241,12 @@ async def test_silent_stream_still_schedules_temporary_audio_cleanup(chat, monke
 
     monkeypatch.setattr(chat, "run_blocking", fake_run_blocking)
 
-    chunks = [chunk async for chunk in chat.process_voice_message_segment_stream("audio.wav", "uid", "en")]
+    chunks = [
+        chunk
+        async for chunk in chat.process_voice_message_segment_stream(
+            "audio.wav", "uid", "en", register_answer=lambda *_: None
+        )
+    ]
 
     assert chunks == []
     sign.assert_called_once_with("audio.wav")

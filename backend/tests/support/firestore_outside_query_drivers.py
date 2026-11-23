@@ -77,6 +77,23 @@ _driver(
 )
 
 
+_driver(
+    'utils.batch_pipeline.no_speech.discover',
+    domains={
+        'after': [
+            None,
+            {'created_at': T0.isoformat(), 'path': f'users/{UID}/conversations/record'},
+        ]
+    },
+    neutrals={
+        'limit': (128, 'bounds the operator discovery page only'),
+        'now': (T0, 'clock changes only the representative range operand'),
+    },
+    profile='operational-no-speech-terminal',
+    serving=False,
+)
+
+
 def _feedback_rows(client, combo, trial):
     session = 'session-1' if trial == 1 else None
     client.queue_results(
@@ -546,4 +563,34 @@ _driver(
     setup=_enrichment_redrive_rows,
     profile='operational-stalled-enrichment-redrive',
     serving=False,
+)
+
+# Required account erasure includes abandoned lake upload intents; a single
+# collection field range uses Firestore's automatic ascending key index.
+_driver(
+    'utils.other.object_lake.delete_space_upload_candidates',
+    base={'space_id': UID},
+    profile='maintenance-lake-account-erasure',
+    serving=False,
+)
+_driver(
+    'utils.other.object_lake.assert_space_uploads_quiescent',
+    base={'space_id': UID},
+    profile='maintenance-lake-erasure-quiescence',
+    serving=False,
+)
+
+_driver(
+    'utils.other.object_lake.delete_entity_upload_candidates',
+    base={'space_id': UID, 'entity_id': 'conversation-1'},
+    profile='maintenance-lake-conversation-erasure',
+    serving=False,
+)
+
+_driver(
+    'utils.memory.recap_review._source_successor',
+    base={'uid': UID},
+    domains={'memory_id': ['retired-memory', 'another-retired-memory']},
+    neutrals={'deadline': (None, 'RPC wall-time bound only; no query-shape change')},
+    profile='recap-learning-source-successor',
 )

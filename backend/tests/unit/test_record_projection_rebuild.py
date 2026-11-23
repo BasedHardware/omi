@@ -143,6 +143,15 @@ def test_kill_switch_and_preview_never_rebuild_or_write(monkeypatch, mode):
         client.collection.assert_not_called()
 
 
+@pytest.mark.parametrize('exists', [False, True])
+def test_demand_observation_has_a_bounded_point_read_and_exact_version(exists):
+    client = MagicMock()
+    ref = client.collection.return_value.document.return_value
+    ref.get.return_value = SimpleNamespace(exists=exists, update_time='observed-version')
+    assert jobs.pending_version('u', 'c', firestore_client=client) == ('observed-version' if exists else None)
+    ref.get.assert_called_once_with(field_paths=['kind'], timeout=1, retry=None)
+
+
 def test_marker_is_content_free_and_coalesces_by_owner():
     client = MagicMock()
     jobs.mark_due('u', 'c', firestore_client=client)
@@ -459,3 +468,101 @@ def test_pressure_alerts_when_all_empty_candidates_are_fenced(monkeypatch, clear
     assert consumer.PRESSURE_BLOCKED.collect()[0].samples[0].value == (0 if clear_one else 1)
     for doc in docs:
         doc.reference.delete.assert_not_called()  # Only the fenced transaction may retire empty debt.
+
+
+def test_uploaded_batch_ack_maps_each_marker_to_its_committed_version():
+    client = MagicMock()
+    versions = iter(['first', 'second'])
+    client.batch.return_value.commit.return_value = [SimpleNamespace(update_time=next(versions)) for _ in range(2)]
+    observed = jobs.mark_many('u', ['a', 'b'], firestore_client=client)
+    ordered_cids = [call.args[1]['conversation_id'] for call in client.batch.return_value.set.call_args_list]
+    assert observed == dict(zip(ordered_cids, ['first', 'second']))
+    client.batch.return_value.commit.assert_called_once_with(timeout=1, retry=None)
+
+
+@pytest.mark.parametrize('replacement', [False, True])
+def test_successful_close_retires_only_acknowledged_marker_version(replacement):
+    client = MagicMock()
+    ref = client.collection.return_value.document.return_value
+    state = {'version': 'newer' if replacement else 'acknowledged', 'present': True}
+    client.write_option.side_effect = lambda **kw: kw
+
+    def conditional_delete(*, option, **kwargs):
+        assert option == {'last_update_time': 'acknowledged'}
+        if state['version'] != option['last_update_time']:
+            raise FailedPrecondition('replacement must survive')
+        state['present'] = False
+
+    ref.delete.side_effect = conditional_delete
+    assert jobs.retire_observed('u', 'c', observed_update_time='acknowledged', firestore_client=client) is (
+        not replacement
+    )
+    assert state['present'] is replacement
+    ref.get.assert_not_called()
+    ref.update.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    'fence',
+    [
+        'account',
+        'missing',
+        'tombstone',
+        'deleted',
+        'discarded',
+        'e2ee',
+        'migration',
+        'sync',
+        'owner_sync',
+        'generation',
+    ],
+)
+def test_demand_privacy_preflight_refuses_before_encoded_or_raw_discovery(client, monkeypatch, fence):
+    from fastapi import HTTPException
+    from database.batch_pipeline_privacy import privacy_owner_key
+    from utils.sync import playback_metadata
+    from utils.other import storage
+
+    client.rows[ROW]['record_lane_owner'] = 'batch_live_v1'
+    if fence == 'account':
+        client.rows[('account_deletions', 'u')] = {'wipe_status': 'completed'}
+    elif fence == 'missing':
+        client.rows.pop(('users', 'u'))
+    elif fence == 'tombstone':
+        client.rows[('users', 'u', 'deleted_conversations', 'c')] = {}
+    elif fence == 'e2ee':
+        client.rows[('users', 'u')]['data_protection_level'] = 'e2ee'
+    elif fence == 'migration':
+        client.rows[('users', 'u')]['migration_status'] = 'migrating'
+    elif fence == 'sync':
+        client.rows[ROW]['private_cloud_sync_enabled'] = False
+    elif fence == 'owner_sync':
+        client.rows[('users', 'u')]['private_cloud_sync_enabled'] = False
+    elif fence == 'generation':
+        client.rows[('batch_pipeline_privacy', privacy_owner_key('u'))] = {'purging': True}
+    else:
+        client.rows[ROW][fence] = True
+    monkeypatch.setattr(jobs, 'get_firestore_client', lambda: client)
+    monkeypatch.setattr(jobs, 'pending_version', lambda *args: 'version')
+    encoded, raw = MagicMock(), MagicMock()
+    monkeypatch.setattr(storage, 'list_audio_chunks', encoded)
+    monkeypatch.setattr(storage, 'list_packs', raw)
+    before = deepcopy(client.rows)
+    with pytest.raises(HTTPException) as error:
+        playback_metadata._refresh('u', 'c')
+    assert error.value.status_code == 404
+    encoded.assert_not_called()
+    raw.assert_not_called()
+    assert client.rows == before
+
+
+def test_demand_preflight_and_transactional_recheck_are_independent(client):
+    assert jobs.preflight_projection('u', 'c', firestore_client=client)
+    client.rows[('users', 'u')]['data_protection_level'] = 'e2ee'
+    assert (
+        jobs.apply_projection(
+            'u', 'c', {'audio_files': [{'id': 'new'}]}, expected_audio_files=[], firestore_client=client
+        )
+        is None
+    )
+    assert client.rows[ROW]['audio_files'] == []

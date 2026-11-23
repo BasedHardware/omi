@@ -1,7 +1,77 @@
 {
   "version": 1,
-  "adopted_files": [],
+  "adopted_files": [
+    "app/lib/services/wals/wal_orphan_reclaim.dart"
+  ],
   "events": [
+    {
+      "id": "onDeviceTranscriptionUsed",
+      "wire_name": "On Device Transcription Used",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "route": {
+          "type": "enum",
+          "wire_name": "route",
+          "values": [
+            "allowance",
+            "custom",
+            "offline_batch"
+          ]
+        },
+        "audioMs": {
+          "type": "int",
+          "wire_name": "audio_ms"
+        },
+        "segmentCount": {
+          "type": "int",
+          "wire_name": "segment_count"
+        }
+      },
+      "consumers": [
+        "on-device-transcription-usage"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "walWriteReceipt",
+      "wire_name": "WAL Write Receipt",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "result": {
+          "type": "enum",
+          "wire_name": "result",
+          "values": [
+            "replay",
+            "invalid",
+            "deleted_owner",
+            "missing_audio",
+            "content_mismatch",
+            "budget_exhausted",
+            "scan_unavailable",
+            "index_unavailable",
+            "publish_failed"
+          ]
+        },
+        "recovered": {
+          "type": "int",
+          "wire_name": "recovered"
+        },
+        "withheld": {
+          "type": "int",
+          "wire_name": "withheld"
+        }
+      },
+      "consumers": [
+        "wal-write-receipt"
+      ],
+      "correlation": null
+    },
     {
       "id": "savedPendantReconnectObserved",
       "wire_name": "Saved Pendant Reconnect",
@@ -190,6 +260,67 @@
       "correlation": null
     },
     {
+      "id": "signInFailureDetail",
+      "wire_name": "Sign In Failure Detail",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "provider": {
+          "type": "enum",
+          "wire_name": "provider",
+          "values": [
+            "apple",
+            "google"
+          ]
+        },
+        "errorCode": {
+          "type": "enum",
+          "wire_name": "error_code",
+          "values": [
+            "apple_canceled",
+            "apple_failed",
+            "apple_invalid_response",
+            "apple_not_handled",
+            "apple_not_interactive",
+            "apple_unknown",
+            "apple_credential_export",
+            "apple_credential_import",
+            "apple_matched_excluded_credential",
+            "apple_not_supported",
+            "apple_credentials_error",
+            "apple_platform_error",
+            "apple_missing_identity_token",
+            "firebase_invalid_credential",
+            "firebase_invalid_credential_audience",
+            "firebase_invalid_credential_stale",
+            "firebase_invalid_idp_response",
+            "firebase_missing_or_invalid_nonce",
+            "firebase_account_exists_with_different_credential",
+            "firebase_credential_already_in_use",
+            "firebase_email_already_in_use",
+            "firebase_operation_not_allowed",
+            "firebase_admin_restricted_operation",
+            "firebase_user_disabled",
+            "firebase_app_not_authorized",
+            "firebase_invalid_api_key",
+            "firebase_too_many_requests",
+            "firebase_network_request_failed",
+            "firebase_internal_error",
+            "firebase_other",
+            "network",
+            "timeout",
+            "other"
+          ]
+        }
+      },
+      "consumers": [
+        "onboarding-activation-funnel"
+      ],
+      "correlation": null
+    },
+    {
       "id": "onboardingPermissionResult",
       "wire_name": "Onboarding Permission Result",
       "status": "active",
@@ -295,6 +426,37 @@
             "not_found_or_dropped",
             "stale_bond",
             "unknown"
+          ]
+        },
+        "platform": {
+          "type": "enum",
+          "wire_name": "platform",
+          "values": [
+            "ios",
+            "android",
+            "other"
+          ]
+        }
+      },
+      "consumers": [
+        "onboarding-activation-funnel"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "devicePairingSettingsOpened",
+      "wire_name": "Device Pairing Settings Opened",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "failureReason": {
+          "type": "enum",
+          "wire_name": "failure_reason",
+          "values": [
+            "bluetooth_permission_denied",
+            "nearby_devices_denied"
           ]
         },
         "platform": {
@@ -3749,7 +3911,10 @@
             "budget_80",
             "onboarding",
             "aha_first_summary",
-            "free_cap"
+            "free_cap",
+            "on_phone_banner",
+            "held_recording",
+            "held_recording_detail"
           ]
         },
         "currentPlan": {
@@ -3763,6 +3928,29 @@
             "operator",
             "architect",
             "unknown"
+          ]
+        }
+      },
+      "consumers": [
+        "subscription-funnel"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "freeCapSheetChoice",
+      "wire_name": "Free Cap Sheet Choice",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "choice": {
+          "type": "enum",
+          "wire_name": "choice",
+          "values": [
+            "upgrade",
+            "transcribe_on_phone",
+            "dismissed"
           ]
         }
       },
@@ -3829,7 +4017,10 @@
             "budget_80",
             "onboarding",
             "aha_first_summary",
-            "free_cap"
+            "free_cap",
+            "on_phone_banner",
+            "held_recording",
+            "held_recording_detail"
           ]
         }
       },
@@ -4468,7 +4659,10 @@
             "budget_80",
             "onboarding",
             "aha_first_summary",
-            "free_cap"
+            "free_cap",
+            "on_phone_banner",
+            "held_recording",
+            "held_recording_detail"
           ]
         }
       },
@@ -5065,6 +5259,404 @@
       "properties": {},
       "consumers": [
         "subscription-payment-recovery"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "subscriptionPaymentIssueMonthlyShown",
+      "wire_name": "Subscription Payment Issue Monthly Shown",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {},
+      "consumers": [
+        "subscription-payment-recovery"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "subscriptionPaymentIssueMonthlyTapped",
+      "wire_name": "Subscription Payment Issue Monthly Tapped",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {},
+      "consumers": [
+        "subscription-payment-recovery"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "subscriptionPaymentIssueMonthlySwitched",
+      "wire_name": "Subscription Payment Issue Monthly Switched",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {},
+      "consumers": [
+        "subscription-payment-recovery"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "subscriptionPaymentIssueMonthlyFailed",
+      "wire_name": "Subscription Payment Issue Monthly Failed",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "reason": {
+          "type": "enum",
+          "wire_name": "reason",
+          "values": [
+            "declined",
+            "refused",
+            "error"
+          ]
+        }
+      },
+      "consumers": [
+        "subscription-payment-recovery"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "subscriptionQuietRowShown",
+      "wire_name": "Subscription Quiet Row Shown",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {},
+      "consumers": [
+        "subscription-quiet-row"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "subscriptionQuietRowTapped",
+      "wire_name": "Subscription Quiet Row Tapped",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {},
+      "consumers": [
+        "subscription-quiet-row"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "mobileDeviceHealthDailyRingRead",
+      "wire_name": "Mobile Device Health Daily",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "disconnectsDuringRingRead": {
+          "type": "int",
+          "wire_name": "disconnects_during_ring_read"
+        },
+        "disconnectsWithRingReadState": {
+          "type": "int",
+          "wire_name": "disconnects_with_ring_read_state"
+        },
+        "rssiBelowMinus90": {
+          "type": "int",
+          "wire_name": "ring_read_disconnect_rssi_below_minus90"
+        },
+        "rssiMinus90ToMinus80": {
+          "type": "int",
+          "wire_name": "ring_read_disconnect_rssi_minus90_to_minus80"
+        },
+        "rssiMinus80ToMinus60": {
+          "type": "int",
+          "wire_name": "ring_read_disconnect_rssi_minus80_to_minus60"
+        },
+        "rssiAtLeastMinus60": {
+          "type": "int",
+          "wire_name": "ring_read_disconnect_rssi_at_least_minus60"
+        },
+        "rssiUnknown": {
+          "type": "int",
+          "wire_name": "ring_read_disconnect_rssi_unknown"
+        }
+      },
+      "consumers": [
+        "pendant-ring-read-disconnects"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "walStopDrain",
+      "wire_name": "WAL Stop Drain",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "lateFramesIndexed": {
+          "type": "int",
+          "wire_name": "late_frames_indexed"
+        },
+        "result": {
+          "type": "enum",
+          "wire_name": "result",
+          "values": [
+            "drained",
+            "pending",
+            "failed",
+            "superseded"
+          ]
+        }
+      },
+      "consumers": [
+        "wal-stop-drain"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "orphanAudioRecovery",
+      "wire_name": "Orphan Audio Recovery",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "classWorkingCount": {
+          "type": "int",
+          "wire_name": "class_working_count"
+        },
+        "classWorkingBytes": {
+          "type": "int",
+          "wire_name": "class_working_bytes"
+        },
+        "classUnparseableCount": {
+          "type": "int",
+          "wire_name": "class_unparseable_count"
+        },
+        "classUnparseableBytes": {
+          "type": "int",
+          "wire_name": "class_unparseable_bytes"
+        },
+        "classRecoverableCount": {
+          "type": "int",
+          "wire_name": "class_recoverable_count"
+        },
+        "classRecoverableBytes": {
+          "type": "int",
+          "wire_name": "class_recoverable_bytes"
+        },
+        "classExpiredCount": {
+          "type": "int",
+          "wire_name": "class_expired_count"
+        },
+        "classExpiredBytes": {
+          "type": "int",
+          "wire_name": "class_expired_bytes"
+        },
+        "classOwnerUnknownCount": {
+          "type": "int",
+          "wire_name": "class_owner_unknown_count"
+        },
+        "classOwnerUnknownBytes": {
+          "type": "int",
+          "wire_name": "class_owner_unknown_bytes"
+        },
+        "age07Count": {
+          "type": "int",
+          "wire_name": "age_0_7_count"
+        },
+        "age07Bytes": {
+          "type": "int",
+          "wire_name": "age_0_7_bytes"
+        },
+        "age814Count": {
+          "type": "int",
+          "wire_name": "age_8_14_count"
+        },
+        "age814Bytes": {
+          "type": "int",
+          "wire_name": "age_8_14_bytes"
+        },
+        "age1528Count": {
+          "type": "int",
+          "wire_name": "age_15_28_count"
+        },
+        "age1528Bytes": {
+          "type": "int",
+          "wire_name": "age_15_28_bytes"
+        },
+        "age2945Count": {
+          "type": "int",
+          "wire_name": "age_29_45_count"
+        },
+        "age2945Bytes": {
+          "type": "int",
+          "wire_name": "age_29_45_bytes"
+        },
+        "ageOver45Count": {
+          "type": "int",
+          "wire_name": "age_over_45_count"
+        },
+        "ageOver45Bytes": {
+          "type": "int",
+          "wire_name": "age_over_45_bytes"
+        },
+        "ageUnknownCount": {
+          "type": "int",
+          "wire_name": "age_unknown_count"
+        },
+        "ageUnknownBytes": {
+          "type": "int",
+          "wire_name": "age_unknown_bytes"
+        },
+        "adopted": {
+          "type": "int",
+          "wire_name": "adopted"
+        },
+        "changed": {
+          "type": "int",
+          "wire_name": "changed"
+        },
+        "referenced": {
+          "type": "int",
+          "wire_name": "referenced"
+        },
+        "passCap": {
+          "type": "int",
+          "wire_name": "passCap"
+        },
+        "dailyCap": {
+          "type": "int",
+          "wire_name": "dailyCap"
+        },
+        "pressureCap": {
+          "type": "int",
+          "wire_name": "pressureCap"
+        },
+        "result": {
+          "type": "enum",
+          "wire_name": "result",
+          "values": [
+            "completed",
+            "admission_pending",
+            "headless",
+            "background",
+            "kill_switch",
+            "generation_changed",
+            "incomplete_census",
+            "sources_changed",
+            "budget_unavailable",
+            "failed"
+          ]
+        },
+        "censusComplete": {
+          "type": "bool",
+          "wire_name": "census_complete"
+        },
+        "expiredSinceCensus": {
+          "type": "int",
+          "wire_name": "expired_since_census"
+        },
+        "outsideDocuments": {
+          "type": "int",
+          "wire_name": "outside_documents"
+        }
+      },
+      "consumers": [
+        "orphan-audio-recovery"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "orphanAudioReclaim",
+      "wire_name": "Orphan Audio Reclaim",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "deletedFiles": {
+          "type": "int",
+          "wire_name": "deleted_files"
+        },
+        "deletedBytes": {
+          "type": "int",
+          "wire_name": "deleted_bytes"
+        },
+        "working": {
+          "type": "int",
+          "wire_name": "working"
+        },
+        "unknownCaptureTime": {
+          "type": "int",
+          "wire_name": "unknown_capture_time"
+        },
+        "captureTooYoung": {
+          "type": "int",
+          "wire_name": "capture_too_young"
+        },
+        "mtimeTooYoung": {
+          "type": "int",
+          "wire_name": "mtime_too_young"
+        },
+        "outsideDocuments": {
+          "type": "int",
+          "wire_name": "outside_documents"
+        },
+        "passCap": {
+          "type": "int",
+          "wire_name": "pass_cap"
+        },
+        "sourcesChanged": {
+          "type": "int",
+          "wire_name": "sources_changed"
+        },
+        "referenced": {
+          "type": "int",
+          "wire_name": "referenced"
+        },
+        "fileChanged": {
+          "type": "int",
+          "wire_name": "file_changed"
+        },
+        "sidecarType": {
+          "type": "int",
+          "wire_name": "sidecar_type"
+        },
+        "durationMs": {
+          "type": "int",
+          "wire_name": "duration_ms"
+        },
+        "result": {
+          "type": "enum",
+          "wire_name": "result",
+          "values": [
+            "completed",
+            "admission_pending",
+            "headless",
+            "background",
+            "kill_switch",
+            "generation_changed",
+            "incomplete_census",
+            "sources_changed",
+            "journal_unavailable",
+            "failed"
+          ]
+        },
+        "censusComplete": {
+          "type": "bool",
+          "wire_name": "census_complete"
+        }
+      },
+      "consumers": [
+        "orphan-audio-reclaim"
       ],
       "correlation": null
     }

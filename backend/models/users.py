@@ -242,6 +242,18 @@ class ProcessingBacklog(BaseModel):
     exceeds_remaining: bool = False
 
 
+class PaymentIssueMonthlySwitch(BaseModel):
+    """The plan's catalog monthly price, charged today by POST /v1/payments/payment-issue/monthly-switch.
+
+    Amounts are minor units of ``currency``. ``yearly_amount`` is the unpaid yearly charge the switch voids.
+    """
+
+    price_id: str
+    amount: int
+    currency: str
+    yearly_amount: int
+
+
 class PaymentIssue(BaseModel):
     """A paid plan whose renewal charge failed and can still be paid.
 
@@ -252,6 +264,16 @@ class PaymentIssue(BaseModel):
 
     status: Literal['past_due', 'unpaid']
     plan: PlanType
+    # A declined yearly renewal may move to the same plan's monthly price instead
+    # (utils/monthly_switch.py). Omitted when not offered; older clients ignore it.
+    monthly_switch: Optional[PaymentIssueMonthlySwitch] = None
+
+    @model_serializer(mode='wrap')
+    def serialize_optional_monthly_switch(self, handler):
+        data = handler(self)
+        if data.get('monthly_switch') is None:
+            data.pop('monthly_switch', None)
+        return data
 
 
 class UserSubscriptionResponse(BaseModel):

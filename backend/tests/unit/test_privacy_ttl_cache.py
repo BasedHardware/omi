@@ -1,17 +1,22 @@
 """Token-certified privacy reuse: a 60s upper bound never substitutes for the revoke fence."""
 
+from contextlib import nullcontext
 from datetime import datetime, timezone, timedelta
+from functools import partial
 import json
 from types import SimpleNamespace
 
 import fakeredis
+from google.api_core.exceptions import Aborted
 import pytest
+from prometheus_client import CollectorRegistry, Counter, Gauge
 
 from database import account_deletion_marker as marker
 from database import batch_pipeline_privacy as privacy, conversation_tombstones as tombstones
+from database import batch_pipeline_store as storage
 from database import fsr_read_cache as cache, legal_holds, privacy_check_metrics as metrics
 from database import privacy_negative_cache as negative, privacy_ttl_cache as ttl_cache
-from database.batch_privacy_attempt import batch_privacy_attempt
+from database.batch_privacy_attempt import batch_privacy_attempt, current_attempt
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore, StrictFirestoreDocument
 
 UID = 'privacy-ttl-owner'
@@ -56,19 +61,26 @@ def world(monkeypatch):
     monkeypatch.setattr(cache, '_redis', lambda: redis)
     monkeypatch.setattr(ttl_cache.DECISIONS, 'clock', clock)
     monkeypatch.setattr(privacy.PROCESS_DECISIONS, 'clock', clock)
-    monkeypatch.setenv('FIRESTORE_READ_LEVERS', '{}')
+    monkeypatch.setattr(privacy.PROCESS_OWNERS, 'clock', clock)
+    # These tests pin the id-set memo paths; the owner-level memo (default on in
+    # production) has its own section below and is disabled here explicitly.
+    monkeypatch.setenv('FIRESTORE_READ_LEVERS', '{"bpp_owner_memo": 0}')
     ttl_cache.reset_for_tests()
     monkeypatch.setattr(ttl_cache, '_read_kill_flag', lambda: False)
     privacy.PROCESS_DECISIONS.clear()
+    privacy.PROCESS_OWNERS.clear()
     redis = fakeredis.FakeRedis()
     yield db, reads, revision, clock
     ttl_cache.DECISIONS.clear()
     privacy.PROCESS_DECISIONS.clear()
+    privacy.PROCESS_OWNERS.clear()
     redis.close()
 
 
 def enable(monkeypatch, *names):
-    monkeypatch.setenv('FIRESTORE_READ_LEVERS', json.dumps(dict.fromkeys(names, 100)))
+    levers = dict.fromkeys(names, 100)
+    levers.setdefault('bpp_owner_memo', 0)  # id-set tests; owner tests name it explicitly
+    monkeypatch.setenv('FIRESTORE_READ_LEVERS', json.dumps(levers))
 
 
 def external(db):
@@ -180,6 +192,29 @@ def test_external_fence_inside_a_transaction_always_reads_live(world, monkeypatc
     with legal_holds.external_write_fence(UID, firestore_client=db, transaction=transaction):
         pass
     assert len(reads) == 2
+
+
+def test_gate_owner_pass_is_never_cached_for_other_writers(world, monkeypatch):
+    """The owning request may write through its own running gate; that pass must never be reused by others."""
+    import contextvars
+
+    db, reads, _, _ = world
+    enable(monkeypatch, 'privacy_ttl60')
+
+    def fresh_writer():
+        with legal_holds.external_write_fence(UID, firestore_client=db):
+            raise AssertionError('a writer outside the owning request must stay fenced')
+
+    with legal_holds.destructive_operation_gate(UID, firestore_client=db):
+        for _ in range(2):
+            with legal_holds.external_write_fence(UID, firestore_client=db):
+                pass
+        for _ in range(3):
+            reads.clear()
+            with pytest.raises(legal_holds.DestructiveOperationInProgress):
+                contextvars.Context().run(fresh_writer)
+            # Live marker + gate reads every time: no cached owner pass.
+            assert MARKER in reads and ('legal_hold_deletion_gates', UID) in reads
 
 
 @pytest.mark.parametrize('cache_lever', ['legal_hold_fence_cache', 'privacy_ttl60'])
@@ -349,6 +384,44 @@ def test_unreadable_kill_switch_fails_closed_and_is_polled_at_most_every_interva
     assert ttl_cache.disabled() and ttl_cache.disabled()
     assert len(calls) == 1
     ttl_cache.reset_for_tests()
+
+
+@pytest.mark.parametrize('result', ['clear', 'disabled', 'error'])
+def test_switch_read_counter_distinguishes_actual_polls_from_import_and_cached_values(monkeypatch, result):
+    registry = CollectorRegistry()
+    monkeypatch.setattr(metrics, 'TTL_KILL', Gauge('privacy_ttl_cache_disabled', 'synthetic', registry=registry))
+    monkeypatch.setattr(
+        metrics,
+        'TTL_SWITCH_READS',
+        Counter('privacy_ttl_cache_switch_reads_total', 'synthetic', ['result'], registry=registry),
+    )
+    clock, polls = [100.0], []
+    monkeypatch.setattr(ttl_cache, 'time', SimpleNamespace(monotonic=lambda: clock[0]))
+
+    def read():
+        polls.append(1)
+        if result == 'error':
+            raise PermissionError('synthetic private switch detail')
+        return result == 'disabled'
+
+    monkeypatch.setattr(ttl_cache, '_read_kill_flag', read)
+    ttl_cache.reset_for_tests()
+    try:
+        assert registry.get_sample_value('privacy_ttl_cache_disabled') == 0
+        assert registry.get_sample_value('privacy_ttl_cache_switch_reads_total', {'result': 'clear'}) is None
+        for _ in range(2):
+            assert ttl_cache.disabled() is (result != 'clear')
+        assert len(polls) == 1
+        assert registry.get_sample_value('privacy_ttl_cache_disabled') == (result != 'clear')
+        for label in ('clear', 'disabled', 'error'):
+            value = registry.get_sample_value('privacy_ttl_cache_switch_reads_total', {'result': label})
+            assert value == (1 if label == result else None)
+        clock[0] += ttl_cache.KILL_POLL_SECONDS
+        assert ttl_cache.disabled() is (result != 'clear')
+        assert len(polls) == 2
+        assert registry.get_sample_value('privacy_ttl_cache_switch_reads_total', {'result': result}) == 2
+    finally:
+        ttl_cache.reset_for_tests()
 
 
 def test_privacy_ttl60_leaves_the_deletion_marker_on_its_shared_redis_cache(world, monkeypatch):
@@ -586,3 +659,777 @@ def test_delayed_redis_hit_cannot_extend_the_sixty_second_bound(world, monkeypat
     with pytest.raises(legal_holds.DestructiveOperationInProgress):
         external(db)
     assert reads == [TOKEN, MARKER]
+
+
+# --- no-attempt transactional process-cache eligibility -----------------------
+
+
+def test_no_attempt_transactional_cold_walk_then_certified_warm_reuse(world, monkeypatch):
+    db, reads, _, _ = world
+    enable(monkeypatch, 'bpp_generation_memo', 'bpp_decision_cache')
+    assert current_attempt() is None
+    assert check(db) == 7
+    assert len(reads) == 5  # token plus the full live walk
+    assert current_attempt() is None
+    assert len(privacy.PROCESS_DECISIONS) == 1
+    reads.clear()
+    assert check(db) == 7
+    assert reads == [TOKEN]  # certified by this transaction's fresh token read
+    assert current_attempt() is None
+
+
+def test_no_attempt_revoke_before_check_rotates_token_and_blocks(world, monkeypatch):
+    db, reads, revision, clock = world
+    enable(monkeypatch, 'bpp_generation_memo', 'bpp_decision_cache')
+    assert check(db) == 7
+    db.rows[MARKER] = {'wipe_status': 'pending'}
+    db.rows[TOKEN].update(memo_token='b' * 32, generation=8)
+    revision[0] += timedelta(seconds=1)
+    clock.now += 1
+    reads.clear()
+    with pytest.raises(privacy.BatchPrivacyBlocked, match='account_deleted'):
+        check(db)
+    assert reads == [TOKEN, MARKER]
+    assert len(privacy.PROCESS_DECISIONS) == 0  # BLOCK is never cached
+
+
+def test_no_attempt_nontransactional_never_consults_process_cache(world, monkeypatch):
+    db, reads, _, _ = world
+    enable(monkeypatch, 'bpp_generation_memo', 'bpp_decision_cache')
+
+    def fail(*args, **kwargs):
+        raise AssertionError('process cache consulted for a nontransactional check')
+
+    monkeypatch.setattr(privacy.PROCESS_DECISIONS, 'get', fail)
+    monkeypatch.setattr(privacy, 'ttl_enabled', fail)
+    db.rows[MARKER] = {'wipe_status': 'pending'}
+    reads.clear()
+    with pytest.raises(privacy.BatchPrivacyBlocked, match='account_deleted'):
+        privacy.assert_batch_write_allowed(db, None, UID, conversation_ids=['source'])
+    assert MARKER in reads
+
+
+def test_no_attempt_snapshots_export_never_consults_or_populates_process_cache(world, monkeypatch):
+    db, reads, _, _ = world
+    enable(monkeypatch, 'bpp_generation_memo', 'bpp_decision_cache')
+
+    def fail(*args, **kwargs):
+        raise AssertionError('process cache consulted for a snapshots export')
+
+    monkeypatch.setattr(privacy.PROCESS_DECISIONS, 'get', fail)
+    monkeypatch.setattr(privacy.PROCESS_DECISIONS, 'put', fail)
+    monkeypatch.setattr(privacy, 'ttl_enabled', fail)
+    output = {}
+    assert (
+        privacy.assert_batch_write_allowed(db, db.transaction(), UID, conversation_ids=['source'], snapshots=output)
+        == 7
+    )
+    assert output['conversations']['source']['record_lane_owner'] == 'batch_live_v1'
+    assert len(privacy.PROCESS_DECISIONS) == 0
+
+
+def test_no_attempt_lever_off_stays_live_and_ineligible(world, monkeypatch):
+    db, reads, _, _ = world
+    enable(monkeypatch, 'bpp_generation_memo')
+    before = metrics.MEMO_INELIGIBLE.labels('no_attempt', 'other')._value.get()
+    for _ in range(2):
+        assert check(db) == 7
+    assert len(reads) == 10  # every decision reads live
+    assert metrics.MEMO_INELIGIBLE.labels('no_attempt', 'other')._value.get() == before + 2
+    assert len(privacy.PROCESS_DECISIONS) == 0
+
+
+def test_no_attempt_expected_generation_mismatch_stays_live(world, monkeypatch):
+    db, reads, _, _ = world
+    enable(monkeypatch, 'bpp_generation_memo', 'bpp_decision_cache')
+    assert check(db) == 7
+    reads.clear()
+    with pytest.raises(privacy.BatchPrivacyBlocked, match='privacy_generation_changed'):
+        privacy.assert_batch_write_allowed(
+            db, db.transaction(), UID, conversation_ids=['source'], expected_generation=8
+        )
+    # Token plus the live walk up to the generation check; never a cached ALLOW.
+    assert reads == [TOKEN, MARKER, ('users', UID)]
+
+
+def test_no_attempt_certificate_outage_falls_through_to_live_marker(world, monkeypatch):
+    db, reads, _, _ = world
+    enable(monkeypatch, 'bpp_generation_memo', 'bpp_decision_cache')
+    assert check(db) == 7
+    db.rows[MARKER] = {'wipe_status': 'pending'}
+    original = StrictFirestoreDocument.get
+
+    def get(ref, **kwargs):
+        if ref.path == TOKEN:
+            reads.append(ref.path)
+            raise RuntimeError('synthetic certificate outage')
+        return original(ref, **kwargs)
+
+    monkeypatch.setattr(StrictFirestoreDocument, 'get', get)
+    reads.clear()
+    with pytest.raises(privacy.BatchPrivacyBlocked, match='account_deleted'):
+        check(db)
+    assert reads == [TOKEN, MARKER]
+
+
+def test_no_attempt_concurrent_revoke_aborts_then_retries_into_live_block(world, monkeypatch):
+    db, reads, revision, clock = world
+    enable(monkeypatch, 'bpp_generation_memo', 'bpp_decision_cache')
+    monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
+    store = storage.FirestoreStore('batch_pipeline_dev', firestore_client=db)
+    monkeypatch.setattr(storage, 'contention_retry_enabled', lambda: True)
+    monkeypatch.setattr(
+        storage,
+        'run_with_transaction_contention_retry',
+        partial(storage.run_with_transaction_contention_retry, sleep=lambda delay: None, random_value=lambda: 0.0),
+    )
+    # Cold walk populates the process cache for this owner.
+    assert store.run(lambda view: view.check_privacy(UID, ['source'], 7)) == 7
+    assert current_attempt() is None
+    transactions_before = len(db.transactions)
+    original_transaction = db.transaction
+    commits = []
+
+    def transaction(max_attempts=None):
+        tx = original_transaction(max_attempts=max_attempts)
+
+        def commit():
+            commits.append(True)
+            if len(commits) == 1:
+                # A concurrent revoke commits between this transaction's token
+                # read and its commit, so Firestore aborts the whole attempt.
+                db.rows[MARKER] = {'wipe_status': 'pending'}
+                db.rows[TOKEN].update(memo_token='b' * 32, generation=8)
+                revision[0] += timedelta(seconds=1)
+                clock.now += 1
+                raise Aborted('synthetic concurrent revoke')
+
+        monkeypatch.setattr(tx, '_commit', commit)
+        return tx
+
+    monkeypatch.setattr(db, 'transaction', transaction)
+    reads.clear()
+    with pytest.raises(privacy.BatchPrivacyBlocked, match='account_deleted'):
+        store.run(lambda view: view.check_privacy(UID, ['source'], 7))
+    assert len(commits) == 1
+    assert len(db.transactions) - transactions_before == 2  # fresh transaction on retry
+    assert reads == [TOKEN, TOKEN, MARKER]  # warm hit aborted, retry walks live
+    assert current_attempt() is None
+
+
+# --- owner-level memo (bpp_owner_memo, default on) ---------------------------
+
+
+def owner_enable(monkeypatch, *names):
+    levers = dict.fromkeys(names, 100)
+    levers['bpp_owner_memo'] = 100
+    levers['bpp_owner_memo_enforce'] = 100
+    monkeypatch.setenv('FIRESTORE_READ_LEVERS', json.dumps(levers))
+
+
+def test_image_without_admission_config_cannot_enforce_owner_memo(world, monkeypatch):
+    db, reads, _, _ = world
+    monkeypatch.delenv('FIRESTORE_READ_LEVERS', raising=False)
+    with batch_privacy_attempt():
+        assert check(db) == 7
+        reads.clear()
+        assert check(db) == 7
+    assert reads == [MARKER, ('users', UID), TOKEN, TOMBSTONE, SOURCE]
+
+
+def test_owner_memo_serves_repeat_checks_and_verifies_only_new_ids(world, monkeypatch):
+    db, reads, _, _ = world
+    owner_enable(monkeypatch)
+    with batch_privacy_attempt():
+        assert check(db) == 7
+        assert len(reads) == 5  # token plus the full live walk
+        reads.clear()
+        assert check(db) == 7
+        assert reads == [TOKEN]  # certified by this transaction's fresh token read
+        reads.clear()
+        assert check(db, ids=('source', 'other')) == 7
+        # The certified id is not walked again; the new id pays its own two reads.
+        assert reads == [TOKEN, ('users', UID, 'deleted_conversations', 'other'), OTHER]
+
+
+def test_owner_memo_never_serves_a_block(world, monkeypatch):
+    db, reads, revision, clock = world
+    owner_enable(monkeypatch)
+    with batch_privacy_attempt():
+        assert check(db) == 7
+    db.rows[TOMBSTONE] = {}
+    db.rows[TOKEN].update(memo_token='b' * 32)
+    revision[0] += timedelta(seconds=1)
+    clock.now += 1
+    reads.clear()
+    with batch_privacy_attempt():
+        with pytest.raises(privacy.BatchPrivacyBlocked, match='conversation_deleted'):
+            check(db)
+    assert len(privacy.PROCESS_OWNERS) == 0  # BLOCK is never stored
+
+
+def test_owner_memo_kill_switch_forces_the_live_walk(world, monkeypatch):
+    db, reads, _, _ = world
+    owner_enable(monkeypatch)
+    with batch_privacy_attempt():
+        assert check(db) == 7
+    monkeypatch.setattr(ttl_cache, '_read_kill_flag', lambda: True)
+    ttl_cache.reset_for_tests()
+    reads.clear()
+    with batch_privacy_attempt():
+        assert check(db) == 7
+    assert len(reads) == 5
+
+
+def test_owner_memo_expected_generation_mismatch_walks_live(world, monkeypatch):
+    db, reads, _, _ = world
+    owner_enable(monkeypatch)
+    with batch_privacy_attempt():
+        assert check(db) == 7
+    reads.clear()
+    with batch_privacy_attempt():
+        with pytest.raises(privacy.BatchPrivacyBlocked, match='privacy_generation_changed'):
+            privacy.assert_batch_write_allowed(
+                db, db.transaction(), UID, conversation_ids=['source'], expected_generation=8
+            )
+    assert reads == [TOKEN, MARKER, ('users', UID)]
+
+
+def test_owner_memo_serves_a_snapshots_call_without_exporting_rows(world, monkeypatch):
+    db, reads, _, _ = world
+    owner_enable(monkeypatch)
+    with batch_privacy_attempt():
+        assert check(db) == 7
+    output = {}
+    reads.clear()
+    with batch_privacy_attempt():
+        assert (
+            privacy.assert_batch_write_allowed(db, db.transaction(), UID, conversation_ids=['source'], snapshots=output)
+            == 7
+        )
+    assert reads == [TOKEN]
+    assert output == {}  # the caller reads the rows it needs itself
+
+
+# --- owner-level memo (lever bpp_owner_memo, default on) -------------------------
+
+
+def owner_enable(monkeypatch, *names):
+    monkeypatch.setenv(
+        'FIRESTORE_READ_LEVERS', json.dumps(dict.fromkeys(('bpp_owner_memo', 'bpp_owner_memo_enforce', *names), 100))
+    )
+
+
+def test_owner_memo_repeat_check_reads_only_the_token(world, monkeypatch):
+    db, reads, _, _ = world
+    owner_enable(monkeypatch)
+    assert check(db) == 7
+    assert reads == [TOKEN, MARKER, ('users', UID), TOMBSTONE, SOURCE]
+    reads.clear()
+    assert check(db) == 7
+    assert reads == [TOKEN]  # certified by this transaction's fresh token read
+
+
+def test_owner_memo_new_id_sets_verify_only_the_new_ids(world, monkeypatch):
+    db, reads, _, _ = world
+    owner_enable(monkeypatch)
+    assert check(db) == 7
+    reads.clear()
+    OTHER_TOMB = ('users', UID, 'deleted_conversations', 'other')
+    assert check(db, ids=('other',)) == 7
+    assert reads == [TOKEN, OTHER_TOMB, OTHER]
+    reads.clear()
+    assert check(db, ids=('source', 'other')) == 7
+    assert reads == [TOKEN]  # the certified union now covers both sets
+
+
+def test_owner_memo_revoke_rotates_token_and_blocks_live(world, monkeypatch):
+    db, reads, revision, clock = world
+    owner_enable(monkeypatch)
+    assert check(db) == 7
+    db.rows[MARKER] = {'wipe_status': 'pending'}
+    db.rows[TOKEN].update(memo_token='b' * 32, generation=8)
+    revision[0] += timedelta(seconds=1)
+    clock.now += 1
+    reads.clear()
+    with pytest.raises(privacy.BatchPrivacyBlocked, match='account_deleted'):
+        check(db)
+    assert reads == [TOKEN, MARKER]
+    assert len(privacy.PROCESS_OWNERS) == 0  # BLOCK is never cached
+
+
+def test_owner_memo_tombstone_on_a_new_id_blocks_and_forgets(world, monkeypatch):
+    db, reads, _, _ = world
+    owner_enable(monkeypatch)
+    # The tombstone predates the certified walk, so the token stays valid and
+    # only the new id's own verification can catch it.
+    db.rows[('users', UID, 'deleted_conversations', 'other')] = {}
+    assert check(db, ids=('source',)) == 7
+    reads.clear()
+    with pytest.raises(privacy.BatchPrivacyBlocked, match='conversation_deleted'):
+        check(db, ids=('other',))
+    assert reads == [TOKEN, ('users', UID, 'deleted_conversations', 'other')]
+    assert len(privacy.PROCESS_OWNERS) == 0
+    reads.clear()
+    assert check(db, ids=('source',)) == 7  # the certified union died with the refusal
+    assert MARKER in reads
+
+
+def test_owner_memo_serves_snapshots_calls_with_an_empty_export(world, monkeypatch):
+    db, reads, _, _ = world
+    owner_enable(monkeypatch)
+    first = {}
+    assert (
+        privacy.assert_batch_write_allowed(db, db.transaction(), UID, conversation_ids=['source'], snapshots=first) == 7
+    )
+    assert first['user'] == {'data_protection_level': 'standard'}
+    assert first['conversations']['source']['record_lane_owner'] == 'batch_live_v1'
+    reads.clear()
+    second = {}
+    assert (
+        privacy.assert_batch_write_allowed(db, db.transaction(), UID, conversation_ids=['source'], snapshots=second)
+        == 7
+    )
+    assert second == {}  # a served decision exports no rows; the caller reads what it needs
+    assert reads == [TOKEN]
+
+
+def test_owner_memo_kill_switch_returns_to_live_reads(world, monkeypatch):
+    db, reads, _, _ = world
+    owner_enable(monkeypatch)
+    assert check(db) == 7
+    monkeypatch.setattr(ttl_cache, '_read_kill_flag', lambda: True)
+    ttl_cache.reset_for_tests()
+    privacy.PROCESS_OWNERS.clear()
+    reads.clear()
+    assert check(db) == 7
+    assert check(db) == 7
+    assert len(reads) == 10  # every decision walks live again
+
+
+def test_owner_memo_expected_generation_mismatch_never_serves_a_cached_allow(world, monkeypatch):
+    db, reads, _, _ = world
+    owner_enable(monkeypatch)
+    assert check(db) == 7
+    reads.clear()
+    with pytest.raises(privacy.BatchPrivacyBlocked, match='privacy_generation_changed'):
+        privacy.assert_batch_write_allowed(
+            db, db.transaction(), UID, conversation_ids=['source'], expected_generation=8
+        )
+    assert reads == [TOKEN, MARKER, ('users', UID)]
+
+
+def test_owner_memo_attempt_scope_reuses_across_id_sets_and_survives_it(world, monkeypatch):
+    from database.batch_privacy_attempt import batch_privacy_attempt
+
+    db, reads, _, _ = world
+    owner_enable(monkeypatch)
+    with batch_privacy_attempt():
+        assert check(db, ids=('source',)) == 7
+        reads.clear()
+        assert check(db, ids=('other',)) == 7
+        assert reads == [TOKEN, ('users', UID, 'deleted_conversations', 'other'), OTHER]
+    reads.clear()
+    assert check(db, ids=('source', 'other')) == 7
+    assert reads == [TOKEN]  # the process entry outlives the attempt, still token-certified
+
+
+def test_owner_memo_lane_check_uses_the_certified_user_sync_default(world, monkeypatch):
+    db, reads, _, _ = world
+    owner_enable(monkeypatch)
+    db.rows[('users', UID)] = {'data_protection_level': 'standard', 'private_cloud_sync_enabled': False}
+    db.rows[('users', UID, 'conversations', 'plain')] = {}
+    assert check(db, ids=('plain',)) == 7  # cold walk stores the user opt-out
+    reads.clear()
+    with pytest.raises(privacy.BatchPrivacyBlocked, match='recording_privacy_changed'):
+        check(db, ids=('source',))
+    assert reads == [TOKEN, TOMBSTONE, SOURCE]
+
+
+def test_owner_memo_follows_redirect_chains_when_verifying_new_ids(world, monkeypatch):
+    db, reads, _, _ = world
+    owner_enable(monkeypatch)
+    db.rows[('users', UID, 'conversations', 'donor')] = {
+        'deleted': True,
+        'sync_merged_into': 'source',
+    }
+    assert check(db, ids=('source',)) == 7
+    reads.clear()
+    assert check(db, ids=('donor',)) == 7
+    DONOR_TOMB = ('users', UID, 'deleted_conversations', 'donor')
+    assert reads == [TOKEN, DONOR_TOMB, ('users', UID, 'conversations', 'donor'), TOMBSTONE, SOURCE]
+
+
+def test_owner_memo_snapshot_export_is_filled_when_the_walk_runs_live(world, monkeypatch):
+    db, reads, _, _ = world
+    owner_enable(monkeypatch)
+    output = {}
+    assert (
+        privacy.assert_batch_write_allowed(db, db.transaction(), UID, conversation_ids=['other'], snapshots=output) == 7
+    )
+    assert output['conversations']['other']['record_lane_owner'] == 'batch_live_v1'
+    assert len(reads) == 5  # a miss pays the full walk and exports its rows
+
+
+def test_owner_memo_ineligible_labels_stay_for_nontransactional_calls(world, monkeypatch):
+    db, _, _, _ = world
+    owner_enable(monkeypatch)
+    before = metrics.MEMO_INELIGIBLE.labels('no_attempt', 'other')._value.get()
+    with pytest.raises(privacy.BatchPrivacyBlocked, match='account_deleted'):
+        db.rows[MARKER] = {'wipe_status': 'pending'}
+        privacy.assert_batch_write_allowed(db, None, UID, conversation_ids=['source'])
+    assert metrics.MEMO_INELIGIBLE.labels('no_attempt', 'other')._value.get() == before + 1
+
+
+def test_owner_memo_shadow_comparison_labels_the_owner_source(world, monkeypatch):
+    db, reads, _, _ = world
+    owner_enable(monkeypatch, 'privacy_checks_shadow')
+    from database.batch_privacy_attempt import batch_privacy_attempt
+
+    before = metrics.COMPARISONS.labels(
+        'batch', 'match', 'owner_hit', 'unknown', 'same', 'same', 'unknown', 'matched'
+    )._value.get()
+    with batch_privacy_attempt():
+        assert check(db) == 7
+        reads.clear()
+        assert check(db) == 7
+        # Live decides (observation token, marker, user, privacy, tombstone,
+        # source); the shadow candidate then serves its owner-memo hit.
+        assert reads == [TOKEN, MARKER, ('users', UID), TOKEN, TOMBSTONE, SOURCE, TOKEN]
+    after = metrics.COMPARISONS.labels(
+        'batch', 'match', 'owner_hit', 'unknown', 'same', 'same', 'unknown', 'matched'
+    )._value.get()
+    assert after > before
+
+
+def test_owner_memo_shadow_covers_the_no_attempt_store_and_retention_paths(world, monkeypatch):
+    """The store/retention mass runs without an attempt scope; those calls must
+    still serve the live decision and compare an owner-memo candidate."""
+    db, reads, _, _ = world
+    owner_enable(monkeypatch, 'privacy_checks_shadow')
+    matches = metrics.SHADOW_CHECKS.labels('batch', 'match')
+    owner_hits = metrics.COMPARISONS.labels(
+        'batch', 'match', 'owner_hit', 'lt_1s', 'same', 'same', 'unknown', 'matched'
+    )
+    matches_before, owner_before = matches._value.get(), owner_hits._value.get()
+    # No batch_privacy_attempt: the no_attempt mass must never enforce unshadowed.
+    assert check(db) == 7
+    assert check(db) == 7
+    assert matches._value.get() == matches_before + 2
+    assert owner_hits._value.get() == owner_before + 1
+    # Both calls served live (full walk each time); the second compared a
+    # process owner-memo candidate that read only the token.
+    assert reads[-1] == TOKEN
+
+
+def test_owner_memo_shadow_compares_snapshot_callers_with_a_throwaway_export(world, monkeypatch):
+    db, reads, _, _ = world
+    owner_enable(monkeypatch, 'privacy_checks_shadow')
+    calls = []
+    original = privacy._assert_batch_write_allowed_memo
+
+    def spy(*args, **kwargs):
+        calls.append(kwargs.get('snapshots'))
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(privacy, '_assert_batch_write_allowed_memo', spy)
+    matches = metrics.SHADOW_CHECKS.labels('batch', 'match')
+    before = matches._value.get()
+    output = {}
+    assert (
+        privacy.assert_batch_write_allowed(db, db.transaction(), UID, conversation_ids=['source'], snapshots=output)
+        == 7
+    )
+    # The live decision still exports the rows it read.
+    assert output['user'] == {'data_protection_level': 'standard'}
+    assert output['conversations']['source']['record_lane_owner'] == 'batch_live_v1'
+    assert matches._value.get() == before + 1
+    # The compared candidate got its own throwaway export: never the caller's.
+    # (It may fill that copy in place; the caller's dict is a different object.)
+    assert len(calls) == 1 and calls[0] is not output
+    assert output['user'] == {'data_protection_level': 'standard'}
+
+
+def test_owner_memo_partial_export_covers_only_unseen_ids(world, monkeypatch):
+    """Contract: a served decision exports nothing for certified ids; unseen ids
+    are walked live and their rows are exported, so exports can be partial."""
+    db, reads, _, _ = world
+    owner_enable(monkeypatch)
+    assert check(db) == 7  # certify 'source'
+    output = {}
+    assert (
+        privacy.assert_batch_write_allowed(
+            db, db.transaction(), UID, conversation_ids=['source', 'other'], snapshots=output
+        )
+        == 7
+    )
+    assert set(output) == {'conversations'}
+    assert set(output['conversations']) == {'other'}  # the certified id is not re-exported
+    assert reads[-2:] == [('users', UID, 'deleted_conversations', 'other'), OTHER]
+
+
+def test_owner_memo_shadow_window_serves_no_enforcement_for_unsampled_uids(world, monkeypatch):
+    """While any privacy_checks_shadow percentage is set, the owner memo serves
+    no one: unsampled uids walk live every time instead of enforcing the memo
+    beside (never validated by) the compared cohort."""
+    from config.policy.batch import cohort_bucket
+
+    db, reads, _, _ = world
+    bucket = int(cohort_bucket(UID, 'privacy_checks_shadow', bits=64, formula='modulo'))
+    assert bucket > 0  # this uid must be able to sit above the sample
+    monkeypatch.setenv('FIRESTORE_READ_LEVERS', json.dumps({'bpp_owner_memo': 100, 'privacy_checks_shadow': bucket}))
+    matches = metrics.SHADOW_CHECKS.labels('batch', 'match')
+    matches_before = matches._value.get()
+    reads.clear()
+    assert check(db) == 7
+    assert check(db) == 7  # still a full live walk: no owner serving, no saving
+    assert reads == [MARKER, ('users', UID), TOKEN, TOMBSTONE, SOURCE] * 2
+    assert matches._value.get() == matches_before  # unsampled: no candidate at all
+
+
+def test_owner_memo_growth_cannot_extend_the_sixty_second_bound(world, monkeypatch):
+    db, reads, _, clock = world
+    owner_enable(monkeypatch)
+    assert check(db, ids=('source',)) == 7
+    clock.now += 40
+    reads.clear()
+    assert check(db, ids=('other',)) == 7  # partial verify at 40s: union grows, bound does not
+    assert reads == [TOKEN, ('users', UID, 'deleted_conversations', 'other'), OTHER]
+    clock.now += 30  # 70s after the authority walk that certified the owner
+    reads.clear()
+    assert check(db, ids=('source',)) == 7
+    assert MARKER in reads and ('users', UID) in reads  # the entry expired; a fresh walk certifies
+
+
+def test_retention_authorize_fills_rows_when_the_owner_memo_serves_the_check(world, monkeypatch):
+    from types import SimpleNamespace
+
+    from utils.batch_pipeline import retention
+
+    db, reads, _, _ = world
+    owner_enable(monkeypatch)
+    store = SimpleNamespace(client=db)
+    item = SimpleNamespace(owner_id=UID, conversation_id='source', privacy_generation=7)
+    output = {}
+    context = retention.batch_artifact_authorize(store, item, snapshots=output)
+    assert context.level == 'standard' and context.generation == 7
+    assert output['user'] == {'data_protection_level': 'standard'}
+    assert output['conversations']['source']['record_lane_owner'] == 'batch_live_v1'
+    assert len(reads) == 5  # cold: the walk exported everything
+    reads.clear()
+    output = {}
+    context = retention.batch_artifact_authorize(store, item, snapshots=output)
+    assert context.level == 'standard' and context.generation == 7
+    assert output['user'] == {'data_protection_level': 'standard'}
+    assert output['conversations']['source']['record_lane_owner'] == 'batch_live_v1'
+    # Served decision: token read, then the two rows the callback needs.
+    assert reads == [TOKEN, ('users', UID), SOURCE]
+
+
+@pytest.mark.parametrize(
+    'raw',
+    [
+        None,
+        '{}',
+        'not-json',
+        '[]',
+        '{"bpp_owner_memo":100}',
+        '{"bpp_owner_memo":100,"bpp_owner_memo_enforce":false}',
+        '{"bpp_owner_memo":100,"bpp_owner_memo_enforce":"100"}',
+        '{"bpp_owner_memo":100,"bpp_owner_memo_enforce":-1}',
+    ],
+)
+@pytest.mark.parametrize('export', [False, True])
+def test_reland_admission_fence_keeps_warm_shadow_candidates_observation_only(world, monkeypatch, raw, export):
+    db, reads, _, _ = world
+    # Seed a real owner candidate, then model image-before-config, a missing
+    # admission key, or malformed configuration on any consumer of this image.
+    monkeypatch.setenv('FIRESTORE_READ_LEVERS', '{"privacy_checks_shadow":100}')
+    assert check(db) == 7
+    assert check(db) == 7
+    if raw is None:
+        monkeypatch.delenv('FIRESTORE_READ_LEVERS', raising=False)
+    else:
+        monkeypatch.setenv('FIRESTORE_READ_LEVERS', raw)
+    reads.clear()
+    output = {} if export else None
+    assert (
+        privacy.assert_batch_write_allowed(db, db.transaction(), UID, conversation_ids=['source'], snapshots=output)
+        == 7
+    )
+    assert reads == [MARKER, ('users', UID), TOKEN, TOMBSTONE, SOURCE]
+    if export:
+        assert output['user'] == {'data_protection_level': 'standard'}
+        assert output['conversations']['source']['record_lane_owner'] == 'batch_live_v1'
+
+
+@pytest.mark.parametrize('shape', ['attempt', 'no_attempt', 'snapshots'])
+def test_reland_comparison_only_packet_emits_positive_owner_hit_on_each_shape(world, monkeypatch, shape):
+
+    db, reads, _, _ = world
+    # Admission remains OFF. Sampling is 100 here to exercise a deterministic
+    # member of the production 10-percent comparison cohort.
+    monkeypatch.setenv(
+        'FIRESTORE_READ_LEVERS',
+        json.dumps(
+            {
+                'privacy_checks_shadow': 100,
+                'privacy_negative_lookup_cache': 0,
+                'privacy_ttl60': 0,
+                'bpp_owner_memo_enforce': 0,
+                'bpp_decision_cache': 100,
+                'bpp_generation_memo': 100,
+                # bpp_owner_memo defaults on; token mint and attempt scope default off.
+            }
+        ),
+    )
+    errors_before = sum(
+        sample.value
+        for family in metrics.OWNER_SHADOW_ERRORS.collect()
+        for sample in family.samples
+        if sample.name == 'privacy_owner_shadow_error_total'
+    )
+    owner_counter = metrics.OWNER_COMPARISONS.labels(shape, 'match', 'owner_hit')
+    owner_before = owner_counter._value.get()
+    comparisons = []
+    original = metrics.compare
+
+    def capture(*args, **kwargs):
+        comparisons.append(kwargs['candidate_evidence'].source)
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(metrics, 'compare', capture)
+    scope = batch_privacy_attempt() if shape == 'attempt' else nullcontext()
+    with scope:
+        for index in range(2):
+            reads.clear()
+            output = {} if shape == 'snapshots' else None
+            assert (
+                privacy.assert_batch_write_allowed(
+                    db, db.transaction(), UID, conversation_ids=['source'], snapshots=output
+                )
+                == 7
+            )
+            if output is not None:
+                assert output['conversations']['source']['record_lane_owner'] == 'batch_live_v1'
+            if index == 1:
+                # Live walk + observation token, followed by ONE candidate token
+                # read; the throwaway evidence/export cannot change the memo key.
+                assert reads == [TOKEN, MARKER, ('users', UID), TOKEN, TOMBSTONE, SOURCE, TOKEN]
+    assert (
+        sum(
+            sample.value
+            for family in metrics.OWNER_SHADOW_ERRORS.collect()
+            for sample in family.samples
+            if sample.name == 'privacy_owner_shadow_error_total'
+        )
+        == errors_before
+    )
+    assert comparisons == ['fresh_read', 'owner_hit']
+    assert owner_counter._value.get() == owner_before + 1
+    assert reads.count(MARKER) == 1  # live authority still decides the warm call
+
+
+def test_owner_comparison_metric_rejects_identifier_labels():
+    before = metrics.OWNER_COMPARISONS.labels('other', 'error', 'unknown')._value.get()
+    metrics.owner_comparison('synthetic-user-secret', 'synthetic-job-secret', 'synthetic-path-secret')
+    assert metrics.OWNER_COMPARISONS.labels('other', 'error', 'unknown')._value.get() == before + 1
+    rendered = repr(metrics.OWNER_COMPARISONS.collect())
+    assert 'synthetic-user-secret' not in rendered
+    assert 'synthetic-job-secret' not in rendered
+    assert 'synthetic-path-secret' not in rendered
+
+
+@pytest.mark.parametrize('shape', ['attempt', 'no_attempt', 'snapshots'])
+def test_production_owner_shadow_reports_unrotated_revoke_and_serves_live_block(world, monkeypatch, shape):
+
+    db, reads, _, _ = world
+    enable(monkeypatch, 'bpp_owner_memo', 'bpp_decision_cache', 'bpp_generation_memo', 'privacy_checks_shadow')
+    stale = metrics.DECISION_MISMATCH.labels('batch', 'stale_allow')
+    owner = metrics.OWNER_COMPARISONS.labels(shape, 'mismatch', 'owner_hit')
+    before, owner_before = stale._value.get(), owner._value.get()
+    scope = batch_privacy_attempt() if shape == 'attempt' else nullcontext()
+    with scope:
+
+        def authorize():
+            return privacy.assert_batch_write_allowed(
+                db,
+                db.transaction(),
+                UID,
+                conversation_ids=['source'],
+                snapshots={} if shape == 'snapshots' else None,
+            )
+
+        assert authorize() == 7
+        # Deliberately bypass the Commit token hook, leaving the token AND its
+        # server revision unchanged. The candidate must expose the stale ALLOW.
+        db.rows[TOMBSTONE] = {}
+        reads.clear()
+        with pytest.raises(privacy.BatchPrivacyBlocked, match='conversation_deleted'):
+            authorize()
+        assert reads[-1] == TOKEN  # Candidate serves the warm owner decision.
+    assert stale._value.get() == before + 1
+    assert owner._value.get() == owner_before + 1
+
+
+@pytest.mark.parametrize('shape', ['attempt', 'no_attempt', 'snapshots'])
+def test_production_levers_enforcement_reads_one_token_for_warm_owner(world, monkeypatch, shape):
+
+    db, reads, _, _ = world
+    enable(monkeypatch, 'bpp_owner_memo', 'bpp_owner_memo_enforce', 'bpp_decision_cache', 'bpp_generation_memo')
+    scope = batch_privacy_attempt() if shape == 'attempt' else nullcontext()
+    with scope:
+        for index in range(2):
+            reads.clear()
+            output = {} if shape == 'snapshots' else None
+            assert (
+                privacy.assert_batch_write_allowed(
+                    db,
+                    db.transaction(),
+                    UID,
+                    conversation_ids=['source'],
+                    snapshots=output,
+                )
+                == 7
+            )
+            if index == 1:
+                assert reads == [TOKEN]
+                if output is not None:
+                    assert output == {}  # Payload consumers still read the rows they need.
+
+
+@pytest.mark.parametrize('shape', ['attempt', 'no_attempt', 'snapshots'])
+def test_unreadable_kill_switch_reproduces_zero_owner_hits_with_production_levers(world, monkeypatch, shape):
+
+    db, reads, _, _ = world
+    enable(monkeypatch, 'bpp_owner_memo', 'bpp_decision_cache', 'bpp_generation_memo', 'privacy_checks_shadow')
+
+    def unavailable():
+        raise PermissionError('synthetic private kill-switch read failure')
+
+    monkeypatch.setattr(ttl_cache, '_read_kill_flag', unavailable)
+    ttl_cache.reset_for_tests()
+    comparisons = []
+    original = metrics.compare
+
+    def capture(*args, **kwargs):
+        comparisons.append(kwargs['candidate_evidence'].source)
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(metrics, 'compare', capture)
+    scope = batch_privacy_attempt() if shape == 'attempt' else nullcontext()
+    with scope:
+        for _ in range(2):
+            assert (
+                privacy.assert_batch_write_allowed(
+                    db,
+                    db.transaction(),
+                    UID,
+                    conversation_ids=['source'],
+                    snapshots={} if shape == 'snapshots' else None,
+                )
+                == 7
+            )
+    assert comparisons == ['fresh_read', 'session_hit' if shape == 'attempt' else 'fresh_read']
+    assert len(privacy.PROCESS_OWNERS) == 0
+    assert metrics.TTL_KILL._value.get() == 1

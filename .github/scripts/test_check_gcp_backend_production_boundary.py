@@ -4,11 +4,16 @@
 from __future__ import annotations
 
 import importlib.util
+import json
+import os
 import shutil
+import subprocess
 import sys
 from pathlib import Path
 import re
 import tempfile
+import textwrap
+import time
 import unittest
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -26,6 +31,100 @@ SPEC.loader.exec_module(CHECKER)
 
 
 class GcpBackendProductionBoundaryTests(unittest.TestCase):
+    def test_selected_production_smoke_retries_only_before_an_http_response(self) -> None:
+        composite = (ROOT / CHECKER.DEPLOY_BACKEND_STACK_ACTION).read_text(encoding="utf-8")
+        smoke = composite.split(f"- name: {CHECKER.PROD_SMOKE}\n", 1)[1].split("\n    - name: ", 1)[0]
+        script = textwrap.dedent(smoke.split("\n      run: |\n", 1)[1])
+        cases = {
+            "pass": (0, 1),
+            "transport_then_pass": (0, 2),
+            "persistent_transport": (1, 2),
+            "hard_failure": (1, 1),
+            "body_timeout": (1, 1),
+            "reservation_rejected": (1, 0),
+            "deadline": (1, 0),
+            "cancel_during_delay": (143, 1),
+        }
+        for scenario, (exit_code, attempts) in cases.items():
+            with self.subTest(scenario=scenario), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                curl = root / "curl"
+                curl.write_text(
+                    '#!/bin/sh\ncase " $* " in *" --connect-timeout 5 --max-time 10 "*) ;; *) exit 2 ;; esac\n'
+                    'if [ "$SCENARIO" = reservation_rejected ]; then printf 403; else printf 401; fi\n',
+                    encoding="utf-8",
+                )
+                curl.chmod(0o700)
+                (root / "firebase_release_probe_token.py").write_text(
+                    "import sys\nfrom pathlib import Path\nPath(sys.argv[-1]).touch()\n",
+                    encoding="utf-8",
+                )
+                (root / "transcription_capability_probe.py").write_text(
+                    textwrap.dedent("""\
+                        import os
+                        import json
+                        from pathlib import Path
+                        import sys
+                        import time
+
+                        scenario = os.environ["SCENARIO"]
+                        assert sys.argv[-4:] == ["--timeout-seconds", "30", "--no-redirects", "--json-only"]
+                        calls = Path(os.environ["RUNNER_TEMP"]) / "calls"
+                        with calls.open("a") as stream:
+                            stream.write("POST\\n")
+                        attempts = len(calls.read_text().splitlines())
+                        if scenario == "deadline":
+                            time.sleep(20)
+                        passed = scenario == "pass" or (scenario == "transport_then_pass" and attempts == 2)
+                        details = {"error_kind": "network_error"}
+                        if scenario == "hard_failure":
+                            details = {"http_status": 200, "phrase_match": False}
+                        if scenario == "body_timeout":
+                            details["http_status"] = 200
+                        print(json.dumps({"status": "PASS" if passed else "FAIL", "checks": [{"details": details}]}))
+                        sys.exit(0 if passed else 1)
+                        """),
+                    encoding="utf-8",
+                )
+                env = {
+                    **os.environ,
+                    "PATH": f"{root}:{os.environ['PATH']}",
+                    "RUNNER_TEMP": directory,
+                    "DEPLOY_CONTROL_SCRIPTS": directory,
+                    "PROBE_SECRET_PROJECT": "fixture",
+                    "FIREBASE_AUTH_PROJECT_ID": "fixture",
+                    "SMOKE_CLOUD_RUN_SERVICE": "backend",
+                    "SCENARIO": scenario,
+                }
+                attempt_script = script
+                if scenario == "deadline":
+                    self.assertIn("deadline = time.monotonic() + 65", script)
+                    attempt_script = script.replace("deadline = time.monotonic() + 65", "deadline = time.monotonic() + 1")
+                command = ["bash", "-c", attempt_script]
+                if scenario == "cancel_during_delay":
+                    log = root / "smoke.log"
+                    with log.open("w") as stdout, subprocess.Popen(command, env=env, stdout=stdout) as process:
+                        wait_until = time.monotonic() + 4
+                        while "Retrying transcription smoke in 5 seconds" not in log.read_text():
+                            self.assertLess(time.monotonic(), wait_until, "retry delay never started")
+                            time.sleep(0.02)
+                        process.terminate()
+                        self.assertEqual(process.wait(timeout=2), exit_code)
+                    output = log.read_text()
+                else:
+                    result = subprocess.run(command, env=env, text=True, capture_output=True, timeout=10)
+                    self.assertEqual(result.returncode, exit_code, result.stderr)
+                    output = result.stdout
+                reports = [json.loads(line) for line in output.splitlines() if line.startswith("{")]
+                self.assertEqual([report["attempt"] for report in reports], list(range(1, attempts + 1)))
+                calls = root / "calls"
+                expected_calls = 1 if scenario == "deadline" else attempts
+                self.assertEqual(len(calls.read_text().splitlines()) if calls.exists() else 0, expected_calls)
+                self.assertFalse((root / "firebase-production-serving-token").exists())
+
+        rollback = composite.split("    - name: Restore Cloud Run traffic snapshot after failed promotion")[-1]
+        self.assertIn("steps.smoke-promoted-production-serving-api.outcome == 'cancelled'", rollback)
+
     def stage_contract(self, root: Path) -> None:
         workflow_path = root / CHECKER.WORKFLOW
         composite_path = root / CHECKER.DEPLOY_BACKEND_STACK_ACTION

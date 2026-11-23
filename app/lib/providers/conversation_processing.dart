@@ -2,6 +2,99 @@ part of 'conversation_provider.dart';
 
 /// Reconcile pending Home rows through the provider's existing page/detail owner.
 extension _ConversationProcessingLifecycle on ConversationProvider {
+  void _addProcessingConversation(ServerConversation conversation, {bool freshProcessingAttempt = false}) {
+    if (SharedPreferencesUtil().isConversationDeleteConfirmed(_processingTargetId(conversation))) return;
+    if (conversation.homeStep == 'failed') _failedHomeProcessingIds.add(conversation.id);
+    if (_hasFailedHomeProcessing(conversation)) {
+      removeProcessingConversation(conversation.id);
+      if (conversation.homeStep == 'failed' && _matchesActiveConversationFilters(conversation)) {
+        upsertConversation(conversation);
+      }
+      return;
+    }
+    if (conversation.id == OptimisticProcessingPlaceholder.id) {
+      _cancelProcessingPlaceholderTimers();
+      // The request or WAL drain may never resolve. Expire only this local
+      // attempt, even offline, without declaring server processing complete.
+      _processingPlaceholderTimeout = Timer(OptimisticProcessingPlaceholder.timeout, () {
+        if (!processingConversations.any((row) => identical(row, conversation))) return;
+        removeProcessingConversation(OptimisticProcessingPlaceholder.id);
+        if (_isSignedIn()) unawaited(_refreshProcessingLifecycle());
+      });
+    }
+    _bumpProcessingStateRevision(conversation.id);
+    if (conversation.id != '0' && _isActiveProcessingStatus(conversation.status)) {
+      _clientTelemetry.noteProcessingVisible(conversation.id, freshAttempt: freshProcessingAttempt);
+    }
+    final existingIndex = processingConversations.indexWhere((item) => item.id == conversation.id);
+    if (existingIndex == -1) {
+      processingConversations.add(conversation);
+    } else {
+      // A replayed processing-start event can arrive while reconciliation is
+      // waiting. Replace the old snapshot so the UI cannot render a stale
+      // duplicate ahead of the live row.
+      processingConversations[existingIndex] = conversation;
+    }
+    _syncProcessingReconcileTimer();
+    _publishConversationChange();
+  }
+
+  // Home's list projection owns this presentation. Detail and websocket rows
+  // can omit home_step while still carrying the stored processing status.
+  void _recordHomeProcessingPage(Iterable<ServerConversation> rows, Map<String, int> revisionsAtStart) {
+    for (final row in rows) {
+      if (row.homeStep == 'failed') {
+        _failedHomeProcessingIds.add(row.id);
+      } else if (_processingStateRevisionById[row.id] == revisionsAtStart[row.id]) {
+        // A fresh list response also restores legacy behavior when the server
+        // disables/does not support the projection.
+        _failedHomeProcessingIds.remove(row.id);
+      }
+    }
+  }
+
+  bool _hasFailedHomeProcessing(ServerConversation row) =>
+      row.homeStep == 'failed' || _failedHomeProcessingIds.contains(_processingTargetId(row));
+
+  bool _isHomeListRow(ServerConversation row) =>
+      row.status == ConversationStatus.completed || _hasFailedHomeProcessing(row);
+
+  bool _isActiveProcessingRow(ServerConversation row) =>
+      _isActiveProcessingStatus(row.status) && !_hasFailedHomeProcessing(row);
+
+  ServerConversation _withHomeProcessingProjection(ServerConversation row) =>
+      _isActiveProcessingStatus(row.status) && row.homeStep != 'failed' && _failedHomeProcessingIds.contains(row.id)
+          ? row.withHomeStep('failed')
+          : row;
+
+  /// Reprocess results explicitly replace the old presentation; ordinary edits retain it.
+  ServerConversation _homeReplacement(ServerConversation row, bool preserveHomeStep) {
+    if (!preserveHomeStep && row.homeStep != 'failed') _failedHomeProcessingIds.remove(row.id);
+    return preserveHomeStep ? _retainingHomeStep(row) : _restoreHomeProcessingProjection(row);
+  }
+
+  /// Local edits/detail reads may omit the list-only field. Server page replacement
+  /// deliberately bypasses this retention so absence still supports older servers.
+  ServerConversation _retainingHomeStep(ServerConversation row) {
+    row = _withHomeProcessingProjection(row);
+    if (row.homeStep != null) return _restoreHomeProcessingProjection(row);
+    for (final current in [...conversations, ...searchedConversations]) {
+      if (current.id == row.id &&
+          current.homeStep != null &&
+          (current.status == row.status ||
+              (_isActiveProcessingStatus(row.status) &&
+                  (current.homeStep == 'failed' || _isActiveProcessingStatus(current.status))))) {
+        return _restoreHomeProcessingProjection(row.withHomeStep(current.homeStep!));
+      }
+    }
+    return row;
+  }
+
+  ServerConversation _restoreHomeProcessingProjection(ServerConversation row) {
+    if (row.homeStep == 'failed') _failedHomeProcessingIds.add(row.id);
+    return _withHomeProcessingProjection(row);
+  }
+
   void _cancelProcessingPlaceholderTimers() {
     _processingPlaceholderTimeout?.cancel();
     _processingPlaceholderTimeout = null;
@@ -113,12 +206,24 @@ extension _ConversationProcessingLifecycle on ConversationProvider {
     Set<String> pageConversationIds,
     Map<String, int> processingRevisionsAtStart,
     Map<String, ServerConversation> processingRowsAtStart,
-    Map<String, String> pageStatusById,
+    Map<String, ServerConversation> pageRowsById,
   ) {
+    _recordHomeProcessingPage(pageRowsById.values, processingRevisionsAtStart);
+    for (final result in lifecycleResults.values) {
+      if (result.ok && result.item?.homeStep == 'failed') {
+        final row = result.item!;
+        _failedHomeProcessingIds.add(row.id);
+      }
+    }
+    conversations = conversations.map(_withHomeProcessingProjection).toList();
     final localPlaceholder = processingConversations.where((conversation) => conversation.id == '0').toList();
     final reconciled = <ServerConversation>[];
     localPlaceholder.removeWhere((placeholder) {
       if (placeholder is! OptimisticProcessingConversation) return false;
+      if (_hasFailedHomeProcessing(placeholder)) {
+        _cancelProcessingPlaceholderTimers();
+        return true;
+      }
       final targetId = placeholder.targetConversationId;
       if (targetId == null || _processingStateRevisionById['0'] != processingRevisionsAtStart['0']) return false;
       if (_processingStateRevisionById[targetId] != processingRevisionsAtStart[targetId]) {
@@ -137,7 +242,7 @@ extension _ConversationProcessingLifecycle on ConversationProvider {
           _matchesActiveConversationFilters(current)) {
         return false;
       }
-      if (current != null && _isActiveProcessingStatus(current.status) && _matchesActiveConversationFilters(current)) {
+      if (current != null && _isActiveProcessingRow(current) && _matchesActiveConversationFilters(current)) {
         // A real row supersedes the local attempt, including off-page rows.
         reconciled.add(current);
       }
@@ -146,6 +251,15 @@ extension _ConversationProcessingLifecycle on ConversationProvider {
     });
 
     for (final existing in processingConversations.where((conversation) => conversation.id != '0')) {
+      if (_hasFailedHomeProcessing(existing)) {
+        _clientTelemetry.noteProcessingRowLeft(
+          id: existing.id,
+          lifecycleOk: lifecycleResults[existing.id]?.ok ?? false,
+          lifecycleStatus: lifecycleResults[existing.id]?.item?.status.name,
+          pageStatus: pageRowsById[existing.id]?.status.name,
+        );
+        continue;
+      }
       // A row added or replaced by websocket after this refresh began is newer
       // than the page/detail snapshot. Preserve that live object for this pass;
       // unrelated websocket events must not block reconciliation of this ID.
@@ -159,12 +273,12 @@ extension _ConversationProcessingLifecycle on ConversationProvider {
         continue;
       }
       final current = result.item;
-      if (current != null && _isActiveProcessingStatus(current.status) && _matchesActiveConversationFilters(current)) {
+      if (current != null && _isActiveProcessingRow(current) && _matchesActiveConversationFilters(current)) {
         if (reconciled.every((row) => row.id != current.id)) reconciled.add(current);
         continue;
       }
       if (processingIdsAtStart.contains(existing.id)) {
-        final pageStatus = pageStatusById[existing.id];
+        final pageStatus = pageRowsById[existing.id]?.status.name;
         _clientTelemetry.noteProcessingRowLeft(
           id: existing.id,
           lifecycleOk: true,
@@ -176,7 +290,7 @@ extension _ConversationProcessingLifecycle on ConversationProvider {
 
     for (final result in lifecycleResults.values) {
       final conversation = result.item;
-      if (!result.ok || conversation == null || !_isActiveProcessingStatus(conversation.status)) continue;
+      if (!result.ok || conversation == null || !_isActiveProcessingRow(conversation)) continue;
       // Previously tracked IDs are owned by the live-list loop above. If a
       // websocket completion removed one while lifecycle GETs were in flight,
       // a stale detail response must not revive it here. This loop only admits

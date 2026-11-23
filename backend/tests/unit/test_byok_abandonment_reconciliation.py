@@ -767,3 +767,15 @@ def test_conversion_counter_counts_only_committed_abandonments(monkeypatch):
 
     assert result == {'abandoned': 2, 'conversations_closed': 1, 'skipped': 1, 'error': 1}
     assert counter._value.get() - before == 2
+
+
+def test_byok_abandonment_refuses_foreign_job_or_conversation():
+    for marked_row in ('job', 'conversation'):
+        transaction = _OrderedTransaction()
+        job = _Ref('job-1', _stranded_job())
+        conversation = _bound_conversation()
+        marked = job if marked_row == 'job' else conversation
+        marked.data.update(finalization_engine='go', finalization_owner_epoch=1)
+
+        assert _abandon(transaction, job, conversation)['status'] == 'fenced'
+        assert transaction.updates == transaction.sets == []

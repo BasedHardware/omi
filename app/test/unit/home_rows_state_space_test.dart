@@ -16,7 +16,7 @@ const _ages = [0, 10, 20, 240];
 enum _Member { transcribing, writingNotes, ready, noise, failed, locked, discarded, deleted }
 
 /// Members a Home row must show somewhere (nothing a user should lose from Home).
-const _shownStates = {_Member.transcribing, _Member.writingNotes, _Member.ready, _Member.locked};
+const _shownStates = {_Member.transcribing, _Member.writingNotes, _Member.ready, _Member.failed, _Member.locked};
 
 ServerConversation _conversation(String id, _Member state, int minute) {
   final at = _start.add(Duration(minutes: minute));
@@ -123,12 +123,14 @@ List<_Scenario> _scenarios() {
 
 /// The member's own server-side state says it is still in progress.
 bool _serverUnfinished(ServerConversation m) =>
-    m.clientProcessing != null || m.processingDeferred || homeStepOf(m) != null;
+    m.homeStep != 'failed' && (m.clientProcessing != null || m.processingDeferred || homeStepOf(m) != null);
 
-bool _covers(HomeRow row, String id) =>
-    row.conversation.id == id ||
-    row.episodeConversationIds.contains(id) ||
-    (row.episode?.members.any((m) => m.id == id) ?? false);
+bool _covers(HomeRow row, ServerConversation member) {
+  // Full episode IDs retain owner identity, but cannot stand in for a failed
+  // member's own openable terminal row.
+  if (member.homeStep == 'failed') return row.episode == null && row.conversation.id == member.id;
+  return row.conversation.id == member.id || (row.episode?.members.any((m) => m.id == member.id) ?? false);
+}
 
 List<String> _violations(_Scenario s, List<ServerConversation> members, Episode episode,
     List<ServerConversation> processing, List<HomeRow> rows) {
@@ -141,6 +143,17 @@ List<String> _violations(_Scenario s, List<ServerConversation> members, Episode 
     // Episode-level rows only: a single recording's own row keeps its conversation id, and
     // the fold's synthetic episode carries an empty id.
     final isEpisodeRow = row.episode?.id == episode.id;
+    if (isEpisodeRow && !row.isTemporaryMember && !row.episodeConversationIds.containsAll(episode.conversationIds)) {
+      out.add('full-owner-identities-lost');
+    }
+    if (row.isTemporaryMember &&
+        (row.isProcessing ||
+            row.episode == null ||
+            row.episode!.members.length != 1 ||
+            row.episode!.members.single.id != row.conversation.id ||
+            (row.conversation.homeStep != 'ready' && !row.conversation.isLocked))) {
+      out.add('invalid-temporary-member');
+    }
     if (!episode.live && episode.composed && row.isProcessing && isEpisodeRow) {
       out.add('composed-episode-shows-processing');
     }
@@ -149,8 +162,12 @@ List<String> _violations(_Scenario s, List<ServerConversation> members, Episode 
     }
     if (row.episode == null &&
         !row.isProcessing &&
-        (isHomeNoise(row.conversation) || homeStepOf(row.conversation) == HomeStep.failed)) {
-      out.add('standalone-noise-or-failed-shown');
+        (isHomeNoise(row.conversation) ||
+            (homeStepOf(row.conversation) == HomeStep.failed && row.conversation.homeStep != 'failed'))) {
+      out.add('standalone-noise-or-legacy-failure-shown');
+    }
+    if (row.conversation.homeStep == 'failed' && (row.isProcessing || row.episode != null || row.step != null)) {
+      out.add('projected-failure-not-standalone-terminal');
     }
     final episodeMembers = row.episode?.members ?? const <ServerConversation>[];
     if (row.episode != null &&
@@ -164,12 +181,14 @@ List<String> _violations(_Scenario s, List<ServerConversation> members, Episode 
     if (rows[i].isProcessing && rows[i + 1].isProcessing && rows[i].day == rows[i + 1].day) {
       out.add('adjacent-processing-rows-not-folded');
     }
-    if (rows[i].startedAt.isBefore(rows[i + 1].startedAt)) out.add('rows-out-of-order');
+    if (!rows[i].isProcessing && rows[i].startedAt.isBefore(rows[i + 1].startedAt)) {
+      out.add('finished-rows-out-of-order');
+    }
   }
   for (var i = 0; i < members.length; i++) {
     final state = s.states[i];
     if (!_shownStates.contains(state)) continue;
-    final covering = rows.where((r) => _covers(r, members[i].id)).length;
+    final covering = rows.where((r) => _covers(r, members[i])).length;
     if (covering == 0) out.add('recording-dropped-from-home');
     if (covering > 1) out.add('recording-shown-more-than-once');
   }
@@ -177,7 +196,7 @@ List<String> _violations(_Scenario s, List<ServerConversation> members, Episode 
 }
 
 void main() {
-  test('a live owner hides every combination of closed member states', () {
+  test('a live owner retains unfinished members while ready and locked members have their own rows', () {
     for (final a in _Member.values) {
       for (final b in _Member.values) {
         final members = [_conversation('a', a, 0), _conversation('b', b, 1)];
@@ -189,7 +208,10 @@ void main() {
             processingConversations: members,
             groupAwaitingTranscript: true,
             now: _now);
-        expect(rows, isEmpty, reason: '$a / $b are owned by Listening');
+        final independent = members.where((m) => m.homeStep == 'ready' || m.isLocked).map((m) => m.id).toSet();
+        expect(rows.map((r) => r.conversation.id).toSet(), independent,
+            reason: '$a / $b: Listening owns unfinished members, while READY notes are immediately readable');
+        expect(rows.every((r) => r.isTemporaryMember && !r.isProcessing && r.episode?.id == episode.id), isTrue);
       }
     }
   });

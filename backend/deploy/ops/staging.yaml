@@ -1,6 +1,7 @@
 # Staging ops values (B4), contract (i). Mirrors prod.yaml; the differences are
 # names (the `-staging` services and `staging-` queues in based-hardware-dev)
-# and the bounded backfill controller, which staging does not run.
+# and the bounded backfill controller, which staging does not run. Intentional
+# queue-capacity divergence: enrichment stays 50/25 and enrichment-fresh stays 5/2.
 # test_config_train.py asserts every prod key has a staging counterpart.
 schema: omi.ops/v1
 environment: staging
@@ -9,6 +10,7 @@ region: us-central1
 
 cloud_run:
   backend-staging:
+    memory: 4Gi
     env:
       # live-only on prod, 2026-10-20 inventory (see prod.yaml)
       AUDIO_MERGE_DISPATCH_MODE: cloud_tasks
@@ -24,6 +26,7 @@ cloud_run:
       OMI_LANGSMITH_PROMPT_CACHE_TTL_SECONDS: '3600'
       TYPESENSE_HOST_PORT: '443'
   backend-sync-staging:
+    memory: 6Gi
     env:
       SYNC_TASKS_QUEUE: staging-sync-jobs-fresh
       SYNC_BACKFILL_TASKS_QUEUE: staging-sync-backfill-fresh
@@ -61,6 +64,11 @@ cloud_run:
     max_instances: {owner: none, floor: 8, ceiling: 40}
   backend-integration-staging:
     env:
+      # Margin-40 O1 inverse, 2026-11-17: preserve restored cadence; O3 stays 16.
+      # The former 100/20 source is held. A new lead/Release ruling must supersede this.
+      BATCH_PIPELINE_SERVING_SWEEP_PAGE_ROWS: '200'
+      BATCH_PIPELINE_SERVING_TICK_SECONDS: '10'
+      BATCH_PROJECTION_FINISH_CLASSIFY_PAGE_LIMIT: '16'
       SYNC_TASKS_QUEUE: staging-sync-jobs-fresh
       SUMMARY_DEBT_REPAIR_ENABLED: 'true'
       # live-only on prod, 2026-10-20 inventory (see prod.yaml)
@@ -78,6 +86,23 @@ cloud_tasks:
     max_attempts: 5
     min_backoff: 5s
     max_backoff: 60s
+  staging-conversations-v3:
+    # Isolate outline/summary latency from capture STT and finalization dispatch.
+    max_concurrent_dispatches: 64
+    max_dispatches_per_second: 20
+    max_attempts: 10
+    min_backoff: 30s
+    max_backoff: 300s
+    log_sampling_ratio: 0.1
+  staging-conversations-v3-backfill:
+    # Operator-planned per-owner v3 backfill/repair steps (utils/conversations/v3/backfill.py). One
+    # dispatch at a time keeps historical outline/notes work off the live conversations-v3 queue
+    # and bounds it to one owner partition; a 503 (owner busy) retries after a minute.
+    max_concurrent_dispatches: 1
+    max_dispatches_per_second: 1
+    max_attempts: 5
+    min_backoff: 60s
+    max_backoff: 600s
   staging-sync-jobs-fresh:
     # Five attempts: sync's 409 leaves the retry to the queue (routers/sync.py), and
     # utils/cloud_tasks.py get_sync_tasks_max_attempts mirrors it. The config-train is
@@ -96,14 +121,14 @@ cloud_tasks:
     max_backoff: 60s
     log_sampling_ratio: 0.1
   staging-enrichment:
-    # Mirrors prod's enrichment queue (mirror test enforces it); create_queues.sh already made it.
+    # Intentional staging capacity: 50/25; prod's 300/25 live-drift reconciliation is prod-only.
     max_concurrent_dispatches: 50
     max_dispatches_per_second: 25
     max_attempts: -1
     min_backoff: 10s
     max_backoff: 300s
   staging-enrichment-fresh:
-    # Keep the reserved queue contract mirrored with production.
+    # Intentional staging capacity: 5/2; prod's permanent 30/10 catch-up setting is prod-only.
     max_concurrent_dispatches: 5
     max_dispatches_per_second: 2
     max_attempts: -1

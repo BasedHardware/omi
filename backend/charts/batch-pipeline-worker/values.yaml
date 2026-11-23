@@ -1,6 +1,17 @@
 # Rendering defaults creates no resources. Enabling this release only drains
 # durable admitted work; the lead separately controls backend admission cohorts.
 enabled: false
+audioDerivedBucket: ""
+# Part A only. All repair children inherit a stable release epoch; 0 is
+# dormant while off. The release owner pins the epoch with the shadow flip,
+# then retains it across restarts and later ramp steps.
+recordTokenLease:
+  mode: "off"
+  servePercent: 0
+  seconds: 3600
+  deployedAt: 0
+podLabels:
+  service_name: batch-pipeline-worker
 recordSealRules:
   partialEnabled: true
   overlapTrimEnabled: true
@@ -16,6 +27,18 @@ dataPlaneProject: ""
 bucket: ""
 secretName: ""
 replicaCount: 1
+# Worker rolls replace pods in place with maxSurge 0 (no surge GPU). This is the
+# share of replicas that may be draining or starting at once; Kubernetes rounds
+# it down and never below one pod. 50% finishes a roll in two drain-plus-startup
+# waves, which fits the deploy workflow's single-wave rollout wait the way
+# Recreate did, while half the fleet keeps serving (Recreate stopped all of it).
+# Rollback: 100% replaces every pod at once (Recreate's capacity drop, but each
+# replacement still keeps its node).
+rollout:
+  maxUnavailable: 50%
+  # Read-only, redacted carrier report. Use helm template --dry-run=server --show-only
+  # templates/primary-only-preview.yaml against the three existing Deployments.
+  primaryOnlyPreview: false
 # Operator-managed L4 (g2-standard-8) pool; never share the live diarizer pool.
 nodeSelector:
   cloud.google.com/gke-nodepool: batch-pipeline-pool
@@ -49,6 +72,9 @@ borrowedNodePools:
   # autoscaler's expendable cutoff (-10), so a Pending borrower is not ignored.
   priority: -1
 worker:
+  # Staged ordering guard; enable on every merge writer before CPU fresh admission.
+  RECORD_FRESH_MERGE_ENABLED: false
+  # Post-seal rollback controls, shared with the CPU serving hosts.
   heldDeadLetterEnabled: true
   inputExpiringEnabled: true
   # Match the serving hosts; prod overrides this below the 120s guard blind window.
@@ -58,10 +84,15 @@ worker:
   admissionParallelCalls: true
   idlePollMaxSeconds: 10
   firestoreReadLevers: '{}'
+  uidAllowlist:
+    # A new deployment can use a Secret reference. Existing private bindings
+    # stay on the live Deployment and are carried by the primary-only patch.
+    value: ""
   # Fenced per-shard pulls and worker affinity; false restores legacy selection.
   shardSpreadEnabled: true
   # One shard transaction leases up to the pull batch; false leases one per transaction.
   pullMultiLeaseEnabled: true
+  packingSampleRate: '0.001'
   # Ship-on: a pump's non-first lanes take recent/deep backfill when every fresh
   # shard is claimed by another puller; lane 0 stays fresh-first. false restores
   # strict fresh-first on every lane.
@@ -75,6 +106,10 @@ worker:
   capDispatchEnforcement: false
   capDispatchCohort: ""
   capDispatchLanes: live
+  # Default-off unlimited_v2 backfill/import daily transcribed-hours cap (see
+  # utils/backfill_hours_cap.py). false restores current behavior exactly.
+  unlimitedV2BackfillHoursCapEnabled: false
+  unlimitedV2BackfillHoursCapHours: "24"
   # HTTPS policy host and exact OIDC audience; admission remains on CPU hosts.
   apiUrl: ""
   audience: ""
@@ -95,6 +130,7 @@ worker:
   # shared 1800-audio-second decode budget, not only the first, so the GPU
   # section does not wait on artifact fetches. false restores first-only.
   prepareFlightEnabled: true
+  projectionOutbox: true
   shadowPercent: 0
   shadowPaidRecoveryPerHour: 200
   shadowRecoveryApiUrl: ""
@@ -174,7 +210,7 @@ autoscaling:
   # The original deployment name stays on OD; a -spot deployment shares its
   # queue metric scope but has a distinct pod selector and PodMonitoring.
   # Superseded as the cutover shape 10-28 (lead f05065): the qualified path is
-  # a single OD-pinned HPA (prod 4/16); balanced stays machinery-only.
+  # a single OD-pinned HPA (prod 6/16); balanced stays machinery-only.
   balancedPools:
     enabled: false
     onDemandNodePool: batch-pipeline-pool
@@ -187,9 +223,9 @@ autoscaling:
   # not double-count time waiting for that slot. Keep stage profiling enabled.
   # Frontier: 41 is the largest integer ready target passing the unchanged
   # sustained-step wait bound; 42 fails. 0.56 preserves zero starvation in the
-  # older 24h replay; 0.561 already starves. With the stockout policy below,
-  # current 3h replay mean/max = 4.34/5 (no hot minutes); synthetic 3.7x volume
-  # = 11.46/16 with 6 hot minutes, so full-volume capacity remains unqualified.
+  # older 24h replay; 0.561 already starves. The 3h replay at prod 6/16
+  # has mean/max 6.0/6 and zero hot minutes. The historical 4/16 synthetic
+  # 3.7x replay has mean/max 11.46/16 and six hot minutes.
   # See docs/batch-pipeline-hpa-frontier.md; the reverted 40/0.6 starved 35 min.
   targetQueuedUnitsPerWorker: 41
   targetChainBusyPerWorker: "0.56"
@@ -214,16 +250,45 @@ t4Fallback:
 podMonitoring:
   enabled: true
 recordSealRepair:
+  shards: 1
+  # Independently pin the repair artifact; never change the GPU image for a repair-only patch.
+  imageRepository: ""
+  imageDigest: ""
   # Independent CPU CronJob: never extends or consumes the sweeper's 240s loop.
   enabled: true
   # Retained for evening overlap and rollback; lead overrides false for the first peak.
   suspend: true
   runtimeEnabled: true
   jobsDiscovery: "on"
+  # Used by the repair CronJob and by the CPU seal worker and GPU variants
+  # when their live fresh-repair binding is not being preserved.
+  # The production depth-only overlay preserves that binding or its absence.
+  # Serving hosts also need the matching runtime-env/listen overlay switch.
+  freshEnabled: true
+  # Forbid still prevents overlap; minute ticks bound restart gaps after a 25m run.
+  schedule: "* * * * *"
   projectionDebtDurableEnabled: true
   mode: apply
   workers: 8
   rowSeconds: 270
+  # CPU-only repair pod placement. The old affinity excluded the batch-pipeline
+  # pool, so repair landed on the monitoring pool at 101% CPU and received ~2 of
+  # its 4-core limit; the batch-pipeline pool sits at 8-19% CPU. Empty nodePool
+  # restores the old exclusion (and empty tolerations the old no-toleration pod).
+  # Current GPU nodes have only 1.3 CPU / 2.5 GiB free by requests; do not co-locate repair.
+  # Prod uses separate CPU-only api-pool nodes; this default preserves the one-pod footprint.
+  nodePool: batch-pipeline-pool
+  tolerations:
+    - key: omi.ai/batch-pipeline
+      operator: Equal
+      value: "true"
+      effect: NoSchedule
+    - key: nvidia.com/gpu
+      operator: Equal
+      value: present
+      effect: NoSchedule
+  # 2 -> 4 (== the unchanged limit) so 16 row workers are not starved to ~2 cores.
+  cpuRequest: "4"
   # Lead supplies current serving-role policy flags; absent/invalid refuses IO.
   # Refresh this map per ramp rung with --reuse-values; no worker restart.
   serverFlags: {}

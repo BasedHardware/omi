@@ -375,6 +375,14 @@ final class ShellSummonTests: XCTestCase {
       "recovery must land the shell where its controls are reachable")
   }
 
+  func testStrandedFrameRecoveryOnlyMakesTheShellKeyWhenOmiIsActive() {
+    XCTAssertFalse(
+      ShellSummonPlacement.shouldMakeKeyOnStrandedFrameRecovery(isAppActive: false),
+      "a background display change must not pull the shell over the app the user is working in")
+    XCTAssertTrue(
+      ShellSummonPlacement.shouldMakeKeyOnStrandedFrameRecovery(isAppActive: true))
+  }
+
   @MainActor
   private func makeShellWindow() -> NSWindow {
     NSWindow(

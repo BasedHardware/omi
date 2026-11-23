@@ -44,17 +44,59 @@ verified absence, and key destroy causing `SpaceKeyDestroyed`. Record commands,
 resource identities and results in that provisioning PR. C1 runs only hermetic
 FakeKMS/local-storage tests, with no cloud credentials or production calls.
 
-C2 owns codec integration, inline threshold/read kill switch and
-`owner_storage_write_gate(space_id, bucket)` around puts/deletes. C3 owns offload,
-backfill, current-consent export filtering, registry and janitor. C4 must explicitly
-purge lake content with verified absence and destroy `space_keys/{sid}` **LAST**.
-The top-level key collection is invisible to today's generic user-subtree wipe.
-Before purge, C4 must durably fence deleted owners and quiesce in-flight puts to prevent object/key recreation.
-Until C4 ships, no production key documents or lake objects may be created.
+C2 owns codec integration, inline threshold/read kill switch and the lake's
+pre-upload/post-upload deletion-marker and key-authority checks. C3 owns offload,
+backfill, current-consent export filtering, registry and orphan janitor.
 
-Destroy evicts local raw keys and every unwrap rechecks document existence before
-using the bounded TTL KMS cache, so other workers observe document deletion too.
-An already-running read/write still requires C4's account quiescence/write fence.
+C4 ships required, retry-safe account wipe steps in this order: cell/directory
+purge, **lake_prefix_purge**, Firestore user subtree, Typesense, memory registry,
+then **lake_key_destroy LAST**, before the completed marker. The prefix step
+requires a running wipe and rechecks the blocking deletion fence, then deletes
+and verifies absence. Each pending upload has a resumable session; the final key
+step cancels and verifies terminal session status, purges the current prefix,
+then fences sessions again and deletes/verifies each recorded bucket before
+transactional candidate erasure. Keys survive any failure. Socket deadlines
+are pointer-success budgets; storage session status supplies deletion authority.
+Legacy timestamp-only attempts fail closed without age-based erasure.
+
+An unset `BUCKET_OBJECT_LAKE` skips prefix purge with zero marker/storage IO.
+A configured bucket is purged even after writer rollback (false/percent 0).
+Key destruction runs unconditionally, including with no bucket: the top-level
+`space_keys/{sid}` collection is outside the generic user-subtree wipe. It retains
+a permanent content-free `{space_id, state: destroyed, destroyed_at}` tombstone,
+evicts local raw keys, and fresh authority reads fence cached unwraps on other
+workers. Retained pointers report `TranscriptShredded` after key destruction.
+
+Explicit conversation deletion synchronously purges every lake class for that
+conversation and its deduplicated `sync_merged_from` donors before document
+deletion, with verified absence. Storage unavailability returns retryable 503,
+retaining the durable conversation tombstone and primary documents; success
+remains 204. Before any listing, each conversation and donor gets a durable
+`users/{uid}/deleted_conversations/{conversation_id}` fence, preserving any
+existing intent metadata. Writers read this authority fresh before and after
+upload, alongside the account marker and space key. A newly created late
+candidate removes only its own generation and refuses to return a pointer;
+a create-only retry never removes an existing referenced object. Verified-absence
+failure is a retryable `LakePurgeIncomplete` (a `LakeFetchError`) with HTTP 503.
+After verified prefix absence, deletion cancels pending resumable sessions in
+each conversation's exact key range, queries terminal status, then deletes and
+verifies every recorded bucket binding before compare-and-delete. This is
+synchronous and has no delayed task, route or drain setting. Final same-key
+settlement may also erase a fenced candidate after verified object deletion.
+
+The developer delete endpoint calls the same orchestrator and therefore also
+purges lake content, adding a raw Firestore snapshot and a synchronous GCS purge
+even with current bucket configuration unset. Its existing error handling
+returns HTTP 500 on lake outage, with durable intent and primary documents retained. Merge targets
+encode their own objects; merge-internal donor cleanup and abandoned candidates
+still rely on C3's orphan janitor.
+
+The O1 activation precondition is the green wipe-coverage test
+`backend/tests/unit/test_lake_wipe_step.py::test_o1_wipe_coverage_gate_and_crash_retry`,
+plus separately authorized dev round-trip/shred qualification and provisioning.
+No flag is activated by C4. Purge covers only the configured release: the `v1`
+pin is load-bearing. A future release bump must widen purge to a release list.
+
 Wrapped-DEK Firestore backups/PITR can restore readability for about seven days
 while the regional KMS key remains usable. This is R13's accepted deletion tail;
 per-space KMS keys were rejected on cost. Retired DEKs are retained until no object
@@ -62,3 +104,21 @@ references their version. Never prune version history during rotation.
 
 Rollback: set write enabled false and percent 0; keep read resolution, bucket
 bindings, version history and explicit deletion available for existing pointers.
+
+
+Upload intent erasure uses terminal storage-session status, not elapsed time.
+Candidates remain user-derived data with no TTL. The final key step cancels every
+pending session and queries status, then verifies prefix absence and repeats
+session fencing plus recorded-bucket deletion immediately before transactional
+compare-and-delete. Legacy timestamp-only attempts cannot be cancelled and block
+erasure, regardless of age. Lake writes have never been admitted outside
+local/offline/dev, so production has no legacy rows.
+
+Candidate admission reads owner and conversation fences in the same Firestore
+transaction that records a session. A delayed writer cannot recreate discovery
+after the purge scan; failed admission cancels the empty session best-effort.
+The five-second put-success budget does not authorize erasure. Storage status
+must prove finalization, cancellation or expiry; nonterminal status and transport
+errors keep discovery and keys for retry. There are no delayed tasks or new
+infrastructure bindings.
+See [candidate protocol](../../docs/listen_pusher_pipeline/changes/2026-11-08-lake-upload-candidates.md).

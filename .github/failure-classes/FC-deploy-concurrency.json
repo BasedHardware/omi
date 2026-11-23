@@ -1,6 +1,7 @@
 {
   "schema_version": 1,
   "id": "FC-deploy-concurrency",
+  "family": "ci-merge-integrity",
   "violated_contract": "An exact eligible main SHA must have one authoritative automatic development deployment lifecycle for each shared persistent mutation domain; sibling automatic workflows must not compete for the same GitHub Actions concurrency group.",
   "canonical_prevention": "Fold shared-backend automatic mutations into the Release Eligibility-admitted backend lifecycle and deterministically reject a second automatic writer for deploy-backend-stack-development.",
   "canonical_prevention_artifact": [".github/scripts/check-deployment-concurrency.py"],

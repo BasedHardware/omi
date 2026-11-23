@@ -115,7 +115,7 @@ def test_conversation_create_process_finalize_lifecycle(client, auth_headers, mo
         transcript_segments=[
             TranscriptSegment(
                 id="seg-life-1",
-                text="We should ship deterministic conversation lifecycle coverage for the complete create process and finalize flow.",
+                text="We should ship deterministic conversation lifecycle coverage for the complete create process and finalize flow. I want these tests to verify durable memory persistence, retries after listener restarts, and exactly once integration delivery.",
                 speaker="SPEAKER_00",
                 is_user=True,
                 start=0.0,
@@ -138,7 +138,7 @@ def test_conversation_create_process_finalize_lifecycle(client, auth_headers, mo
     assert body["structured"]["title"] == "Hermetic Conversation Lifecycle"
     assert (
         body["transcript_segments"][0]["text"]
-        == "We should ship deterministic conversation lifecycle coverage for the complete create process and finalize flow."
+        == "We should ship deterministic conversation lifecycle coverage for the complete create process and finalize flow. I want these tests to verify durable memory persistence, retries after listener restarts, and exactly once integration delivery."
     )
 
     # INV-TASK-2: an omi conversation has no Suggested surface to review a
@@ -308,7 +308,17 @@ def test_transactional_create_exposes_recorded_span_and_preexisting_episode_memb
     assert not conversations.create_conversation_if_absent_with_lifecycle('123', payload)
 
 
-def test_reprocess_route_persists_deterministic_processing_result(client, auth_headers, monkeypatch):
+@pytest.mark.parametrize(
+    'title_provenance,expected_title',
+    [
+        (None, 'Before Reprocess'),
+        ('server_minimum', 'Hermetic Conversation Lifecycle Reprocessed'),
+    ],
+    ids=['established-title', 'provisional-title'],
+)
+def test_reprocess_route_persists_deterministic_processing_result(
+    client, auth_headers, monkeypatch, title_provenance, expected_title
+):
     kg_calls = _patch_process_conversation_boundaries(monkeypatch)
     conv_id = "deterministic-processing-001"
     seed_conversation(
@@ -322,6 +332,7 @@ def test_reprocess_route_persists_deterministic_processing_result(client, auth_h
             "language": "en",
             "structured": {
                 "title": "Before Reprocess",
+                "title_provenance": title_provenance,
                 "overview": "",
                 "emoji": "🧠",
                 "category": "other",
@@ -349,7 +360,10 @@ def test_reprocess_route_persists_deterministic_processing_result(client, auth_h
     assert response.status_code == 200, response.text
     body = response.json()
     assert body["id"] == conv_id
-    assert body["structured"]["title"] == "Hermetic Conversation Lifecycle Reprocessed"
+    # Reprocessing replaces derived notes/tasks, while the title policy keeps
+    # an established title for unchanged speech and enriches provisional ones.
+    assert body["structured"]["title"] == expected_title
+    assert body["structured"]["overview"] == "A deterministic processing result created by the E2E harness."
     assert body["structured"]["action_items"][0]["description"] == (
         "Ship deterministic conversation lifecycle coverage"
     )
@@ -357,7 +371,8 @@ def test_reprocess_route_persists_deterministic_processing_result(client, auth_h
     persisted = client.get(f"/v1/conversations/{conv_id}", headers=auth_headers)
     assert persisted.status_code == 200, persisted.text
     persisted_body = persisted.json()
-    assert persisted_body["structured"]["title"] == "Hermetic Conversation Lifecycle Reprocessed"
+    assert persisted_body["structured"]["title"] == expected_title
+    assert persisted_body["structured"]["overview"] == body["structured"]["overview"]
     assert persisted_body["structured"]["action_items"][0]["description"] == (
         "Ship deterministic conversation lifecycle coverage"
     )

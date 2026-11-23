@@ -24,7 +24,15 @@ WORKERS="${OMI_SWIFT_TEST_SUITE_WORKERS:-${SWIFT_TEST_SUITE_WORKERS:-4}}"
 # the remaining hundreds of suites retain worker-level parallelism.
 # Membership is also derived from the source below, so a new adopter of the
 # owner-authority fixture cannot silently rejoin the parallel pool.
-SERIAL_SUITES="${OMI_SWIFT_TEST_SERIAL_SUITES:-APIClientAuthRetryTests AuthRefreshResilienceTests AuthSessionAttemptFenceTests AuthTokenStorageTests ChatToolExecutorCreateMemoryTests FirebaseAuthAvailabilityTests KernelJournalOwnerBoundAuthTests RuntimeOwnerIdentityTests}"
+#
+# TasksStoreOwnerBoundaryTests and TasksStoreEmptyCloudReconcileTests mutate
+# `.authUserId` through a local `defaults` alias (`let defaults =
+# UserDefaults.standard`), which the derivation regex below cannot see because
+# it matches only a literal `UserDefaults.standard.set/removeObject`. They are
+# therefore listed explicitly: on a hosted runner their parallel execution
+# overlapped the auth cluster near 19:47:30Z and four assertions in
+# TasksStoreEmptyCloudReconcileTests failed (SCA-2064, SCA-2068).
+SERIAL_SUITES="${OMI_SWIFT_TEST_SERIAL_SUITES:-APIClientAuthRetryTests AuthRefreshResilienceTests AuthSessionAttemptFenceTests AuthTokenStorageTests ChatToolExecutorCreateMemoryTests FirebaseAuthAvailabilityTests KernelJournalOwnerBoundAuthTests RuntimeOwnerIdentityTests TasksStoreEmptyCloudReconcileTests TasksStoreOwnerBoundaryTests}"
 PREBUILD="${OMI_SWIFT_TEST_PREBUILD:-1}"
 # The per-suite budget must clear the slowest legitimate suite, not the median
 # one: MemoryAtlasPerformanceHarnessTests runs 19 tests whose XCTest `measure`

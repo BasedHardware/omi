@@ -9,8 +9,10 @@ from typing import Any
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
 
+from config.conversation_processing_retry import DETERMINISTIC_PROCESSING_FAILURE, PROCESSING_BURST_ATTEMPTS
 from config.listen_finalization import durable_attempt_cap_enabled as _durable_attempt_cap_enabled
 
+from models.finalization_owner import REFUSAL as FINALIZATION_OWNER_REFUSAL, python_owns_finalization
 from database import conversation_finalization_jobs as jobs_db
 from database.account_deletion_marker import account_deletion_blocks_user_work
 from database.sync_jobs import release_job_run_lock, try_acquire_job_run_lock
@@ -23,10 +25,12 @@ from utils.account_cutover.access import should_skip_background_account_mutation
 from utils.conversations import lifecycle as lifecycle_service
 from utils.conversations import quiet_finalization
 from utils.conversations.processing_trigger import trigger_for_finalization_job
+from utils.conversations.processing_retry import processing_failure_code
 from utils.conversations.recovery import RecoveryStructureUnavailableError, recovery_minimum_terminal_enabled
 from utils.conversations.finalizer import (
     ConversationFinalizationDisposition,
     ConversationFinalizationError,
+    ServerBatchArchiveNotClosed,
     finalize_persisted_conversation,
 )
 from utils.executors import db_executor, postprocess_executor, run_blocking
@@ -78,7 +82,9 @@ async def _retry_or_dead_letter(
     # dispatch generation. The job's failed-processing count survives that
     # handoff and is the authoritative budget (as on the pusher path).
     this_attempt = max(task_retry_count, failed_attempts) + 1
-    if this_attempt >= max_attempts:
+    if this_attempt >= max_attempts or (
+        reason == DETERMINISTIC_PROCESSING_FAILURE and this_attempt >= PROCESSING_BURST_ATTEMPTS
+    ):
         return await run_blocking(
             db_executor,
             final_attempt_failed,
@@ -161,6 +167,8 @@ async def run_listen_finalization_job(
     # Read the owner and marker before admitting a lease. The transaction in
     # claim_finalization_job repeats this fence to close the race with deletion.
     pending_job = await run_blocking(db_executor, jobs_db.get_finalization_job, job_id)
+    if pending_job is not None and not python_owns_finalization(pending_job):
+        return JSONResponse(status_code=200, content={'status': 'dropped', 'reason': FINALIZATION_OWNER_REFUSAL})
     if pending_job and isinstance(pending_job.get('uid'), str):
         if await run_blocking(db_executor, account_deletion_blocks_user_work, pending_job['uid']):
             return retry_response(RetryReason.PERSISTENCE_FENCED)
@@ -321,8 +329,9 @@ async def run_listen_finalization_job(
                 if disposition == 'requeued':
                     return JSONResponse(status_code=200, content={'status': 'delayed_requeue'})
                 return JSONResponse(status_code=409, content={'status': 'completion_conflict'})
+            failure_code = processing_failure_code(error) if error.code == 'processing_failed' else error.code
             disposition = await _retry_or_dead_letter(
-                job_id, dispatch_generation, claimed_lease_epoch, task_retry_count, failed_attempts, error.code
+                job_id, dispatch_generation, claimed_lease_epoch, task_retry_count, failed_attempts, failure_code
             )
             if disposition == 'dead_letter':
                 # A BYOK provider failure is the user's own account state even at
@@ -379,10 +388,12 @@ async def run_listen_finalization_job(
         raise
     except Exception as error:
         logger.warning(
-            'listen finalization worker failed stage=handler exception_type=%s job_hash=%s dispatch_generation=%s',
+            'listen finalization worker failed stage=handler exception_type=%s job_hash=%s dispatch_generation=%s '
+            'reason=%s',
             type(error).__name__,
             finalization_diagnostic_id(job_id),
             dispatch_generation,
+            'server_batch_archive_not_closed' if isinstance(error, ServerBatchArchiveNotClosed) else 'worker_failed',
         )
         if claimed_lease_epoch is not None:
             try:

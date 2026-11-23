@@ -558,11 +558,11 @@ class AppLocalizationsFi extends AppLocalizations {
   String get hardwareSection => 'Laitteisto';
 
   @override
-  String get v2Undetected => 'V2 ei havaittu';
+  String get v2Undetected => 'Offline-synkronointi ei ole käytettävissä';
 
   @override
   String get v2UndetectedMessage =>
-      'Sinulla näyttää olevan V1-laite tai laitteesi ei ole yhdistetty. SD-korttitoiminto on saatavilla vain V2-laitteille.';
+      'Offline-synkronointi tarvitsee yhdistetyn Omi-laitteen, jossa on SD-korttitallennustila. Nykyinen laitteesi ei tue sitä.';
 
   @override
   String get endConversation => 'Lopeta keskustelu';
@@ -1120,6 +1120,11 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get nameUpdatedSuccessfully => 'Nimi päivitetty onnistuneesti!';
+
+  @override
+  String calendarReadSelectionHelp(String calendar) {
+    return 'Lue valitut kalenterit. Uudet tapahtumat käyttävät kalenteria $calendar.';
+  }
 
   @override
   String get calendarSettings => 'Kalenteriasetukset';
@@ -1989,6 +1994,15 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get memoryHistory => 'Historia';
+
+  @override
+  String get recordingWithYourPhone => 'Tallennetaan puhelimella';
+
+  @override
+  String get wrapUp => 'Päätä';
+
+  @override
+  String get recordingDiscarded => 'Tallenne hylätty';
 
   @override
   String get undo => 'Kumoa';
@@ -7032,6 +7046,10 @@ class AppLocalizationsFi extends AppLocalizations {
   String get authFailedToSignInWithApple => 'Kirjautuminen Applella epäonnistui, yritä uudelleen.';
 
   @override
+  String get authAppleSignInFailedUseGoogle =>
+      'Kirjautuminen Applella ei onnistunut. Yritä uudelleen tai jatka Googlella.';
+
+  @override
   String get authFailedToRetrieveToken => 'Firebase-tunnuksen hakeminen epäonnistui, yritä uudelleen.';
 
   @override
@@ -9067,7 +9085,7 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get deleteWhileProcessingMessage =>
-      'Tämä tallenne on ladattu, mutta Omi luo yhä keskustelua. Jos poistat sen nyt ja käsittely epäonnistuu, sitä ei voi palauttaa. Poistetaanko silti?';
+      'Tämä tallenne on jo lähetetty, ja Omi käsittelee sitä. Poistaminen tässä poistaa puhelimen kopion. Jos käsittely epäonnistuu, Omi ei voi yrittää uudelleen tästä puhelimesta.';
 
   @override
   String get syncCardAllBackedUp => 'Kaikki tallenteet synkronoitu';
@@ -9172,6 +9190,24 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get unableToDetermineFirmwareVersion => 'Nykyistä laiteohjelmistoversiota ei voida määrittää';
+
+  @override
+  String get applyCodeToCurrentPlan => 'Käytä nykyiseen tilaukseen';
+
+  @override
+  String subscriptionCodeResult(String result) {
+    String _temp0 = intl.Intl.selectLogic(
+      result,
+      {
+        'applied': 'Koodi käytettiin nykyiseen tilaukseesi.',
+        'refused': 'Koodia ei voi käyttää. Tarkista koodi ja vaadittu tilaus.',
+        'conflict': 'Koodi on jo käytetty tai tilauksessasi on jo alennus.',
+        'rateLimited': 'Liian monta yritystä. Odota ja yritä myöhemmin uudelleen.',
+        'other': 'Koodia ei voitu käyttää. Yritä uudelleen.',
+      },
+    );
+    return '$_temp0';
+  }
 
   @override
   String get promoCode => 'Tarjouskoodi';
@@ -12199,7 +12235,7 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String diagnosticsSincePairingSummary(int drops, int failed) {
-    return 'Parituksen jälkeen: katkoksia $drops, epäonnistuneita yhteyksiä $failed.';
+    return 'Pariliitoksen jälkeen: $drops uudelleenyhdistämistä, $failed epäonnistunutta yhteyttä.';
   }
 
   @override
@@ -13388,6 +13424,9 @@ class AppLocalizationsFi extends AppLocalizations {
   }
 
   @override
+  String get paywallTrialCodeHint => 'Onko sinulla Omi Pro -koodi? Syötä se seuraavalla näytöllä.';
+
+  @override
   String get paywallTrialCancelNote => 'Peruuta milloin tahansa. Ei maksuja, ei sakkoja.';
 
   @override
@@ -13434,16 +13473,6 @@ class AppLocalizationsFi extends AppLocalizations {
   }
 
   @override
-  String syncCardTranscribingAmount(String amount) {
-    return 'Muutetaan $amount keskusteluiksi';
-  }
-
-  @override
-  String syncCardTranscribedOf(String done, String total) {
-    return '$done / $total valmis · voit poistua tästä näkymästä';
-  }
-
-  @override
   String syncCardReadyAmount(String amount) {
     return '$amount valmiina synkronoitavaksi';
   }
@@ -13467,7 +13496,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get syncDetailsWaitingOnPhone => 'Odottaa tässä puhelimessa';
 
   @override
-  String get syncDetailsTranscribing => 'Litteroidaan Omissa';
+  String get syncDetailsTranscribing => 'Lähetetty, odottaa palvelinta';
 
   @override
   String get syncDetailsAudioFiles => 'Äänitiedostot';
@@ -13655,6 +13684,9 @@ class AppLocalizationsFi extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get attentionRerunNotes => 'Luo muistiinpanot uudelleen';
 
   @override
   String get attentionSummaryFailed => 'Tätä keskustelua ei voitu tiivistää';
@@ -13921,6 +13953,12 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get summaryBusyBody => 'Omi käsittelee jo tätä keskustelua. Tiivistelmä näkyy tässä, kun se on valmis.';
+
+  @override
+  String get summaryTranscriptionPendingTitle => 'Ei vielä litteroitu';
+
+  @override
+  String get summaryTranscriptionPendingBody => 'Tiivistelmä näkyy, kun litterointi on valmis.';
 
   @override
   String get summaryCheckAgain => 'Tarkista uudelleen';
@@ -14454,14 +14492,6 @@ class AppLocalizationsFi extends AppLocalizations {
   @override
   String deviceCatchingUpProgress(int done, int total) {
     return '$done/$total min';
-  }
-
-  @override
-  String get deviceRecently => 'Äskettäin';
-
-  @override
-  String deviceDisconnectedFor(String duration) {
-    return 'Yhteys katkesi $duration ajaksi';
   }
 
   @override
@@ -15381,6 +15411,11 @@ class AppLocalizationsFi extends AppLocalizations {
   String get paymentDeclinedTitle => 'Korttisi hylättiin';
 
   @override
+  String paymentDeclinedMonthlyMessage(String plan, String price) {
+    return 'Päivitä kortti tai saa $plan takaisin hintaan $price kuukaudessa';
+  }
+
+  @override
   String paymentDeclinedMessage(Object plan) {
     return 'Päivitä kortti saadaksesi $plan takaisin';
   }
@@ -15397,6 +15432,11 @@ class AppLocalizationsFi extends AppLocalizations {
   }
 
   @override
+  String firmwareUpdateNotInstalledCv1Message(String version) {
+    return 'Päivitys ei asentunut. Riipuksesi toimii edelleen nykyisellä laiteohjelmistolla ($version). Ota yhteyttä tukeen sen sijaan, että yrität päivitystä uudelleen.';
+  }
+
+  @override
   String get firmwareUpdateUnconfirmedMessage =>
       'Couldn\'t confirm the update. Your pendant hasn\'t reconnected yet. Keep it nearby and check its firmware version before trying again.';
 
@@ -15405,4 +15445,301 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get firmwareVerifyingInstallation => 'Confirming installation… This may take up to 3 minutes.';
+
+  @override
+  String get monthlySwitchTitle => 'Vaihda kuukausimaksuun';
+
+  @override
+  String monthlySwitchPlanValue(String plan, String price) {
+    return '$plan, $price kuukaudessa';
+  }
+
+  @override
+  String monthlySwitchNote(String yearly) {
+    return 'Korvaa maksamattoman $yearly vuosimaksun. Uusiutuu kuukausittain. Peru milloin tahansa.';
+  }
+
+  @override
+  String get monthlySwitchDeclined => 'Maksu hylättiin. Tilauksesi ei muuttunut.';
+
+  @override
+  String get monthlySwitchUnavailable => 'Vaihto ei ole juuri nyt saatavilla. Päivitä kortti sen sijaan.';
+
+  @override
+  String get monthlySwitchDoneTitle => 'Maksat nyt kuukausittain';
+
+  @override
+  String monthlySwitchDoneBody(String price) {
+    return '$price maksettu tänään. Uusiutuu kuukausittain.';
+  }
+
+  @override
+  String get processingDeleteScopeChanged => 'Käsittelylista muuttui. Tarkista lista ja yritä uudelleen.';
+
+  @override
+  String get syncTooOldExplanation =>
+      'This recording is older than Omi\'s sync window, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
+
+  @override
+  String freeCapTitle(int minutes) {
+    return 'Olet käyttänyt tämän kuun $minutes minuuttia';
+  }
+
+  @override
+  String get freeCapBody => 'Omi tallentaa yhä. Valitse, miten litterointi jatkuu.';
+
+  @override
+  String get omiProPlanName => 'Omi Pro';
+
+  @override
+  String get freeCapProUnlimited => 'Rajaton pilvilitterointi';
+
+  @override
+  String get freeCapProAccuracy => 'Paras tarkkuus';
+
+  @override
+  String get freeCapProWaiting => 'Litteroi odottavat tallenteesi';
+
+  @override
+  String get freeCapPhoneSubtitle => 'Ilmainen. Pysyy päällä, kunnes vaihdat takaisin.';
+
+  @override
+  String get transcribingOnThisPhone => 'Litteroidaan tällä puhelimella';
+
+  @override
+  String get getPro => 'Hanki Pro';
+
+  @override
+  String get unlock => 'Avaa';
+
+  @override
+  String get transcribeWith => 'Litteroi käyttäen';
+
+  @override
+  String get omiCloud => 'Omi-pilvi';
+
+  @override
+  String get thisPhone => 'Tämä puhelin';
+
+  @override
+  String get onDeviceReady => 'Valmis';
+
+  @override
+  String cloudMinutesLeft(int left, int limit, String date) {
+    return '$left/$limit min jäljellä · nollautuu $date';
+  }
+
+  @override
+  String cloudMinutesAvailable(int minutes) {
+    return '$minutes pilviminuuttia käytettävissä';
+  }
+
+  @override
+  String get switchBack => 'Vaihda takaisin';
+
+  @override
+  String get setUpThisPhone => 'Määritä tämä puhelin';
+
+  @override
+  String get speechRecognition => 'Puheentunnistus';
+
+  @override
+  String get audioStaysOnPhone => 'Ääni pysyy puhelimessasi';
+
+  @override
+  String onDeviceModelDownloadSize(int size) {
+    return '$size Mt:n lataus';
+  }
+
+  @override
+  String get downloadNow => 'Lataa nyt';
+
+  @override
+  String get onWifiLater => 'Myöhemmin Wi-Fillä';
+
+  @override
+  String get conversationWritingSummary => 'Kirjoitetaan yhteenvetoasi…';
+
+  @override
+  String get onTheWayServerWork => 'Palvelimen ilmoittama työ';
+
+  @override
+  String get finishNothingToProcess => 'Ei vielä mitään käsiteltävää.';
+
+  @override
+  String get finishStillProcessing => 'Käsitellään yhä. Se näkyy kotinäkymässä.';
+
+  @override
+  String get finishBackToHome => 'Takaisin kotiin';
+
+  @override
+  String get conversationSummaryWhenItEnds => 'Yhteenveto, kun tämä keskustelu päättyy';
+
+  @override
+  String get deviceUploadsWaitingOnServer => 'Palvelimelle lähetetyt tiedostot odottavat';
+
+  @override
+  String get deviceUploadsWaitingOnServerSubtitle => 'Äänityksesi ovat turvassa laitteella tai puhelimella';
+
+  @override
+  String conversationSummaryThrough(String time) {
+    return 'Yhteenveto klo $time asti';
+  }
+
+  @override
+  String get conversationRecentTranscript => 'Viimeisin litterointi';
+
+  @override
+  String get finishAlreadySaved => 'Jo tallennettu. Se on etusivulla.';
+
+  @override
+  String get finishAudioNotReceived => 'Ääni on vielä matkalla.';
+
+  @override
+  String get finishFailedOffline => 'Se ei onnistunut. Äänisi on turvassa.';
+
+  @override
+  String get finishFailed => 'Se ei onnistunut. Äänisi on turvassa.';
+
+  @override
+  String get micBlockedCannotRecord => 'Salli mikrofonin käyttö tallentamista varten.';
+
+  @override
+  String get couldNotStartRecording => 'Tallennusta ei voitu aloittaa.';
+
+  @override
+  String get restorePurchasesFailed => 'Tilaustasi ei voitu tarkistaa.';
+
+  @override
+  String get firmwareCheckFailed => 'Päivityksiä ei voitu tarkistaa.';
+
+  @override
+  String get conversationStillPublic => 'Se on edelleen jaettu linkillä.';
+
+  @override
+  String get goalSaveFailed => 'Tavoitettasi ei voitu tallentaa.';
+
+  @override
+  String get goalDeleteFailed => 'Poisto ei onnistunut. Tavoite palautettiin.';
+
+  @override
+  String get goalsLoadFailed => 'Tavoitteitasi ei voitu ladata.';
+
+  @override
+  String get missingTargetEndedRecording => 'Tuo tallenne on päättynyt.';
+
+  @override
+  String get missingTargetMemory => 'Tuo muisto on kadonnut.';
+
+  @override
+  String get missingTargetTask => 'Tuo tehtävä on kadonnut.';
+
+  @override
+  String get missingTargetConversation => 'Tätä keskustelua ei voitu avata.';
+
+  @override
+  String get couldNotRefreshConversations => 'Päivitys ei onnistunut.';
+
+  @override
+  String get connectDeviceForOfflineSync => 'Yhdistä Omi synkronointia varten.';
+
+  @override
+  String get useDifferentAccountMessage => 'Sinut kirjataan ulos ja tämän puhelimen Omi-asetukset nollataan.';
+
+  @override
+  String get rayBanMetaNotFoundAfterSetup => 'Laseja ei löytynyt. Ovatko ne päällä?';
+
+  @override
+  String get couldNotMoveTask => 'Tehtävää ei voitu siirtää.';
+
+  @override
+  String lockedTasksKept(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Poistettu. $count lukittua tehtävää säilytettiin.',
+      one: 'Poistettu. 1 lukittu tehtävä säilytettiin.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get settingNotSaved => 'Muutosta ei voitu tallentaa.';
+
+  @override
+  String get couldNotLoadNotificationSettings => 'Asetuksiasi ei voitu ladata.';
+
+  @override
+  String get waitForOmiToFinish => 'Odota, että Omi valmistuu.';
+
+  @override
+  String get voiceNoteTooShort => 'Liian lyhyt. Pidä pohjassa tallentaaksesi.';
+
+  @override
+  String get submitAppMissingFields => 'Lisää nimi, kuvaus, kuva, kategoria ja ominaisuus lähettämistä varten.';
+
+  @override
+  String get appSetupNotFinished => 'Määritys ei ole vielä valmis.';
+
+  @override
+  String get finishNothingKeptTitle => 'Ei säilytettävää';
+
+  @override
+  String get submitAppFinishDetails =>
+      'Viimeistele yllä olevat ominaisuuden ja hinnoittelun tiedot lähettämistä varten.';
+
+  @override
+  String get finishNothingNew => 'Ei vielä mitään uutta.';
+
+  @override
+  String get takingLongerThanUsual => 'Kestää tavallista kauemmin. Se saapuu etusivulle.';
+
+  @override
+  String get couldNotCheckOnIt => 'Sen tilaa ei voitu tarkistaa. Yritä uudelleen.';
+
+  @override
+  String get upgradeToOpenThisOne => 'Päivitä tilauksesi avataksesi tämän.';
+
+  @override
+  String get missingTargetConversationGone => 'Tuo keskustelu poistettiin.';
+
+  @override
+  String get cantConnectRightNow => 'Yhdistäminen ei juuri nyt onnistu.';
+
+  @override
+  String get loadOlderFailed => 'Vanhempia ei voitu ladata. Yritä uudelleen napauttamalla.';
+
+  @override
+  String listeningWithDuration(String duration) {
+    return 'Kuuntelee · $duration';
+  }
+
+  @override
+  String get conversationLiveNoEdits => 'Odota, että se päättyy, ennen kuin muutat sitä.';
+
+  @override
+  String get finishedSummaryReady => 'Tiivistelmä valmis';
+
+  @override
+  String get writingSummaryStatus => 'Kirjoitetaan tiivistelmää…';
+
+  @override
+  String get stillWorkingOnIt => 'Yhä työn alla.';
+
+  @override
+  String get firmwareUpdateFirmwareTooOld =>
+      'Laitteesi laiteohjelmisto on liian vanha tätä päivitystä varten. Ota yhteyttä tukeen saadaksesi apua laitteen päivittämiseen.';
+
+  @override
+  String get firmwareUpdateAppRequired =>
+      'Tämä laiteohjelmistopäivitys tarvitsee Omi-sovelluksen uudemman version. Päivitä sovellus sovelluskaupastasi ja tarkista sitten uudelleen.';
+
+  @override
+  String get quietPayerTitle => 'Ei tallenteita 5 päivään';
+
+  @override
+  String get quietPayerMessage => 'Tarkista Omisi.';
+
+  @override
+  String get quietPayerCheck => 'Tarkista';
 }

@@ -72,7 +72,11 @@ const API_BASE_URL = '/api/proxy';
 
 /** Retain the status for safe endpoint-specific recovery messages. */
 export class ApiHttpError extends Error {
-  constructor(public readonly status: number, message: string) {
+  constructor(
+    public readonly status: number,
+    message: string,
+    public readonly state?: string,
+  ) {
     super(message);
     this.name = 'ApiHttpError';
   }
@@ -136,9 +140,18 @@ async function fetchWithAuthResponse<T>(
       if (response.status === 401) {
         throw new ApiHttpError(401, 'Unauthorized - please sign in again');
       }
+      let state: string | undefined;
+      try {
+        const body = JSON.parse(errorText);
+        const value = body?.state ?? body?.detail?.state;
+        if (typeof value === 'string') state = value;
+      } catch {
+        /* Non-JSON errors retain their HTTP status. */
+      }
       throw new ApiHttpError(
         response.status,
         `API error: ${response.status} ${response.statusText}`,
+        state,
       );
     }
 
@@ -179,6 +192,31 @@ export interface GetConversationsParams {
 }
 
 /** Flags owned by Omi's flag store for this account; unlisted keys keep reading PostHog. */
+/** Missing/error confirmation keeps the previous Home failure rows. */
+export async function getHomeFailurePlacement(): Promise<boolean> {
+  const snapshot = await fetchWithAuth<import('./omiApi.generated').PendingWorkSnapshot>(
+    '/v1/pending-work',
+  );
+  return snapshot.enabled === true && snapshot.home_processing_today === true;
+}
+
+export async function getAttentionItems(): Promise<{
+  enabled?: boolean;
+  items: import('./attentionItems').AttentionItem[];
+}> {
+  return fetchWithAuth('/v1/attention-items');
+}
+
+export async function retryAttentionItem(
+  id: string,
+  key: string,
+): Promise<{ operation_id: string; state: string }> {
+  return fetchWithAuth(`/v1/attention-items/${encodeURIComponent(id)}/retry`, {
+    method: 'POST',
+    headers: { 'Idempotency-Key': key },
+  });
+}
+
 export async function getClientFlags(): Promise<ClientFlagsResponse> {
   return fetchWithAuth<ClientFlagsResponse>('/v1/flags?surface=web-app');
 }

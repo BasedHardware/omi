@@ -119,3 +119,8 @@ false on those hosts.
 21600 seconds on the same dev/prod hosts as `HOME_TRANSCRIPTION_DEADLINE_SECONDS`.
 It bounds only the Home list's processing/merging presentation. Invalid or
 nonpositive values use 21600; `HOME_STEP_PROJECTION=off` is the rollback switch.
+
+`HOME_EMPTY_OUTPUT_NOISE` is non-secret runtime `config`, on by default and
+not pinned in deployment manifests. It makes a terminal empty-output summary
+Home noise regardless of title provenance only when no overview or section body
+exists. Set it to `false` to restore the legacy provenance-dependent rule.

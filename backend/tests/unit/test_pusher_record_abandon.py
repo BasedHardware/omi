@@ -4,6 +4,7 @@ import asyncio
 import logging
 import threading
 from unittest.mock import Mock
+from types import SimpleNamespace
 
 import pytest
 
@@ -313,7 +314,8 @@ async def test_shared_storage_settles_before_four_coordinators_attest(records, m
             await asyncio.sleep(0)
         assert len(finish._abandon_record_drains) == cap
         assert len(owners) == cap + 1  # Retained owner plus four abandon owners.
-        assert sum('outcome=abandon_overflow' in r.message for r in caplog.records) == count - cap - 1
+        assert sum('outcome=abandon_queued' in r.message for r in caplog.records) == count - cap - 1
+        assert len(finish._abandon_queue) == count - cap - 1
         assert all(tracker.pending for tracker in trackers)
         sessions = records.rows[PATH]['record_upload_sessions']
         assert len(sessions) == count and all('abandoned_at' not in value for value in sessions.values())
@@ -327,11 +329,13 @@ async def test_shared_storage_settles_before_four_coordinators_attest(records, m
         release.set()
         await asyncio.wait_for(asyncio.gather(tasks[0], *owners), 5)
         await asyncio.wait_for(asyncio.gather(*(tracker.wait() for tracker in trackers)), 5)
-        await asyncio.sleep(0)
+        async with asyncio.timeout(5):
+            while finish._abandon_by_worker:
+                await asyncio.sleep(0)
         assert not finish._abandon_record_drains
         sessions = records.rows[PATH]['record_upload_sessions']
-        assert sum('abandoned_at' in value for value in sessions.values()) == cap
-        assert all('abandoned_at' not in sessions[b.upload_sessions['record']] for b in barriers_[cap + 1 :])
+        assert sum('abandoned_at' in value for value in sessions.values()) == count - 1
+        assert not finish._abandon_queue
         extra = asyncio.create_task(asyncio.Event().wait())
         tasks.append(extra)
         assert finish.abandon_evicted_record_drain(extra, barriers_[-1], executors.ExecutorFutureTracker())
@@ -345,3 +349,132 @@ async def test_shared_storage_settles_before_four_coordinators_attest(records, m
                 task.cancel()
         await asyncio.gather(*tasks, *owners, return_exceptions=True)
         await asyncio.wait_for(asyncio.gather(*(tracker.wait() for tracker in trackers)), 5)
+
+
+async def test_frame_batch_renewal_is_throttled_and_late_append_bumps_revision(records, monkeypatch):
+    monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', 'shadow')
+    epoch = [10000.0]
+    monotonic = [10000.0]
+    monkeypatch.setattr(record_audio.time, 'time', lambda: epoch[0])
+    monkeypatch.setattr(barriers, 'producer_identity', lambda: {'pod': 'synthetic-pusher', 'process_started_at': 9000})
+
+    monkeypatch.setattr(barriers, 'time', SimpleNamespace(time=lambda: epoch[0], monotonic=lambda: monotonic[0]))
+    barrier = barriers.PusherRecordBarrier('uid-at')
+    await barrier.begin_recording('record')
+    token = barrier.upload_sessions['record']
+    revision = records.rows[PATH]['record_upload_revision']
+    before = len(records.transactions)
+    await barrier.renew_recording('record')
+    assert len(records.transactions) == before
+    epoch[0] += 1800
+    monotonic[0] += 1800
+    await barrier.renew_recording('record')
+    assert records.rows[PATH]['record_upload_sessions'][token]['last_signal_at'] == epoch[0]
+    assert records.rows[PATH]['record_upload_revision'] == revision
+    epoch[0] += 3601
+    monotonic[0] += 3601
+    await barrier.renew_recording('record')
+    assert records.rows[PATH]['record_upload_revision'] == revision + 1
+    monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', 'off')
+    before = len(records.transactions)
+    epoch[0] += 7200
+    monotonic[0] += 7200
+    await barrier.renew_recording('record')
+    assert len(records.transactions) == before
+    await barrier.finish_recording('record')
+
+
+async def test_receive_and_projection_batches_share_one_committed_renewal(records, monkeypatch):
+    monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', 'shadow')
+    monkeypatch.setattr(barriers, 'producer_identity', lambda: {'pod': 'synthetic-pusher', 'process_started_at': 100})
+    barrier = barriers.PusherRecordBarrier('uid-at')
+    await barrier.begin_recording('record')
+    barrier.lease_renewed_at['record'] -= 1801
+    entered, release = threading.Event(), threading.Event()
+    renew = record_audio.renew_record_token_lease
+    calls = []
+
+    def slow(*args, **kwargs):
+        calls.append(kwargs['source'])
+        entered.set()
+        assert release.wait(10)
+        return renew(*args, **kwargs)
+
+    monkeypatch.setattr(record_audio, 'renew_record_token_lease', slow)
+    first = asyncio.create_task(barrier.renew_recording('record'))
+    second = None
+    try:
+        assert await asyncio.to_thread(entered.wait, 5)
+        second = asyncio.create_task(barrier.renew_recording('record'))
+        await asyncio.sleep(0)
+        assert calls == ['frames']
+        assert not first.done() and not second.done()
+        release.set()
+        await asyncio.wait_for(asyncio.gather(first, second), 5)
+        assert calls == ['frames']
+        await barrier.finish_recording('record')
+        assert not barrier.lease_locks
+    finally:
+        release.set()
+        await asyncio.gather(first, *(task for task in (second,) if task is not None), return_exceptions=True)
+
+
+async def test_delayed_begin_response_cannot_hide_a_lapsed_lease(records, monkeypatch):
+
+    monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', 'serve')
+    monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT', '100')
+    epoch, monotonic = [10000.0], [10000.0]
+    monkeypatch.setattr(record_audio.time, 'time', lambda: epoch[0])
+    monkeypatch.setattr(barriers, 'time', SimpleNamespace(time=lambda: epoch[0], monotonic=lambda: monotonic[0]))
+    monkeypatch.setattr(barriers, 'producer_identity', lambda: {'pod': 'synthetic-pusher', 'process_started_at': 9000})
+    register = record_audio.set_record_upload_pending
+
+    def delayed_response(*args, **kwargs):
+        result = register(*args, **kwargs)
+        epoch[0] += 3601
+        monotonic[0] += 3601
+        return result
+
+    monkeypatch.setattr(record_audio, 'set_record_upload_pending', delayed_response)
+    barrier = barriers.PusherRecordBarrier('uid-at')
+    await barrier.begin_recording('record')
+    assert producer_tokens_dead(records.rows[PATH]['record_upload_sessions'], None, uid='uid-at')
+    await barrier.renew_recording('record')
+    assert records.rows[PATH]['record_upload_revision'] == 2
+    assert not producer_tokens_dead(records.rows[PATH]['record_upload_sessions'], None, uid='uid-at')
+    await barrier.finish_recording('record')
+
+
+async def test_projection_after_partial_clear_restores_its_exact_producer(records, monkeypatch):
+    monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', 'shadow')
+    monkeypatch.setattr(barriers, 'producer_identity', lambda: {'pod': 'synthetic-pusher', 'process_started_at': 100})
+    barrier = barriers.PusherRecordBarrier('uid-at')
+    await barrier.begin_recording('record')
+    token = barrier.upload_sessions['record']
+    revision = records.rows[PATH]['record_upload_revision']
+    records.rows[PATH].update(record_upload_sessions={}, record_audio_partial={'upload_revision': revision})
+    barrier.lease_renewed_at['record'] -= 3601
+    await barrier.renew_recording('record')
+    assert set(records.rows[PATH]['record_upload_sessions']) == {token}
+    assert records.rows[PATH]['record_upload_revision'] == revision + 1
+    await barrier.finish_recording('record')
+    assert not records.rows[PATH].get('record_audio_closed')  # Partial is never a complete seal.
+
+
+async def test_failed_renewal_retains_fence_across_rollback(records, monkeypatch):
+    monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', 'serve')
+    monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT', '100')
+    barrier = barriers.PusherRecordBarrier('uid-at')
+    await barrier.begin_recording('record')
+    barrier.lease_renewed_at['record'] -= 7200
+    real = record_audio.renew_record_token_lease
+    monkeypatch.setattr(record_audio, 'renew_record_token_lease', Mock(side_effect=OSError('unavailable')))
+    try:
+        assert not await barrier.renew_recording('record')
+        monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', 'off')
+        assert not await barrier.renew_recording('record')
+        monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', 'serve')
+        monkeypatch.setattr(record_audio, 'renew_record_token_lease', real)
+        assert await barrier.renew_recording('record')
+    finally:
+        barrier._forget_lease('record')

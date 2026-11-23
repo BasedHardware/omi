@@ -239,6 +239,13 @@ jobs:
             --file-reporter "json:$GITHUB_WORKSPACE/flutter-test-results.json" \
             2>&1 | tee "$GITHUB_WORKSPACE/flutter-test-output.log"
 
+      - name: Verify Home local-day boundaries in non-UTC zones
+        working-directory: app
+        run: |
+          TZ=America/New_York flutter test --no-pub test/unit/processing_today_test.dart test/widgets/processing_today_render_test.dart
+          TZ=Pacific/Kiritimati flutter test --no-pub test/unit/processing_today_test.dart test/widgets/processing_today_render_test.dart
+          TZ=Pacific/Pago_Pago flutter test --no-pub test/unit/processing_today_test.dart test/widgets/processing_today_render_test.dart
+
       - name: Summarize failed Flutter tests
         if: ${{ failure() && steps.flutter_tests.outcome == 'failure' }}
         env:

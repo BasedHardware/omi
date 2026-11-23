@@ -9,12 +9,17 @@ list wire as ``home_step`` so clients stop inferring it from titles.
 - ``transcribing`` / ``writing_notes``: still being processed, at that step.
 - ``failed``: processing gave up or exceeded the Home wait; default Home hides it.
 - ``noise``: finished with nothing worth a Home row: no speech, below floor,
-  or a stand-in title (first sentence / "Recording · time") that no summary
-  will ever replace.
+  a stand-in title (first sentence / "Recording · time") that no summary will
+  ever replace, or a terminal empty-output block (``empty_output_exhausted`` /
+  ``empty_output_lifetime_exhausted``) with no overview or section body and no
+  banked receipt or open debt. ``HOME_EMPTY_OUTPUT_NOISE=false`` restores the
+  legacy stand-in-title-only rule.
 
 Presentation only: nothing is stored, search and direct links are unaffected,
 and a completed curated row (user title, star, folder, photos) is always ``ready``.
 Processing rows, including curated ones, have a bounded presentation wait.
+The step is independent of the viewer's day: clients show processing on Home
+only on the current local day and place older work in Activity instead.
 """
 
 from __future__ import annotations
@@ -28,13 +33,18 @@ from prometheus_client import Counter
 
 from config.episodes import (
     DEFAULT_HOME_PROCESSING_MAX_AGE_SECONDS,
+    home_empty_output_noise_enabled,
     home_processing_max_age_seconds,
     home_step_projection_enabled,
+    home_transcription_max_age_seconds,
+    home_transcription_queue_hold_enabled,
 )
 from utils.conversations import transcribing_hold
-from utils.conversations.fragment_visibility import is_completed_below_floor, is_user_curated
-from utils.conversations.home_titles import summary_owed
-from utils.conversations.summary_delivery import EMPTY_BLOCKED_REASONS
+from utils.conversations import home_latency, legacy_empty_wire
+from utils.conversations import empty_capture
+from utils.conversations.fragment_visibility import held_for_notes, is_completed_below_floor, is_user_curated
+from utils.conversations.home_titles import summary_owed, untitled_pending
+from utils.conversations.summary_delivery import EMPTY_BLOCKED_REASONS, present
 
 READY = 'ready'
 TRANSCRIBING = 'transcribing'
@@ -64,14 +74,17 @@ def _value(value: Any) -> Any:
     return getattr(value, 'value', value)
 
 
-def classify(row: Mapping[str, Any]) -> str | None:
+def classify(row: Mapping[str, Any], *, show_held: bool = False) -> str | None:
     """The row's Home step, or None for live rows and when the projection is off.
 
     Call on the stored read copy, before ``transcribing_hold.project`` rewrites
-    status and title for the wire.
+    status and title for the wire. ``show_held`` is the legacy Home list's
+    opt-in for sync pieces held for notes (``held_for_notes``).
     """
     if not home_step_projection_enabled():
         return None
+    if empty_capture.applies(row):
+        return NOISE
     status = _value(row.get('status'))
     structured = row.get('structured') or {}
     title = str(structured.get('title') or '').strip()
@@ -90,7 +103,12 @@ def classify(row: Mapping[str, Any]) -> str | None:
         elif _older_than(anchor, seconds):
             PROCESSING_AGE_TOTAL.labels(reason=HomeProcessingAgeReason.EXPIRED).inc()
             return FAILED
-        return TRANSCRIBING if not title else WRITING_NOTES
+        # A derived preview outside the live slot still shows its outline.
+        # Keep the normal age bound if its source stops reaching the builder.
+        if status == 'processing' and row.get('v3_derived') and row.get('tile_state') == 'live' and title:
+            return READY
+        # A placeholder stamped on a capture stub is not evidence of a transcript.
+        return TRANSCRIBING if untitled_pending(structured) else WRITING_NOTES
     if status == 'failed':
         return FAILED
     if status != 'completed':
@@ -100,7 +118,7 @@ def classify(row: Mapping[str, Any]) -> str | None:
     if transcribing_hold.applies(row):
         _, presented = transcribing_hold.transcription_presentation(
             transcribing_hold.deadline(row),
-            failed=bool(row.get('record_upload_failed') or row.get('finalization_status') == 'dead_letter'),
+            failed=transcribing_hold.failed(row),
         )
         return FAILED if presented == 'failed' else TRANSCRIBING
     if (
@@ -109,21 +127,49 @@ def classify(row: Mapping[str, Any]) -> str | None:
         or row.get('record_upload_failed')
     ):
         return FAILED
-    provisional = structured.get('title_provenance') == 'server_minimum'
-    if is_completed_below_floor(row) or (provisional and row.get('summary_blocked_reason') in EMPTY_BLOCKED_REASONS):
+    # The projection stamp records provenance on the row, not in structured, so
+    # it does not suppress derived effects through is_server_minimum. Home still
+    # needs to see the same provisional row the repair sees.
+    provisional = (
+        structured.get('title_provenance') == 'server_minimum'
+        or row.get('summary_title_provenance') == 'server_minimum'
+    )
+    empty_output = (
+        home_empty_output_noise_enabled()
+        and row.get('summary_blocked_reason') in EMPTY_BLOCKED_REASONS
+        and not present(structured)
+        # A banked receipt or live debt outranks a stale terminal reason: the
+        # row recovered, or a late revision re-opened it.
+        and not row.get('summary_output_present')
+        and not row.get('summary_completed_at')
+        and not summary_owed(row)
+    )
+    if is_completed_below_floor(row) or empty_output or legacy_empty_wire.terminal_noise(row):
         return NOISE
     if provisional:
-        if summary_owed(row):
+        if summary_owed(row) or (show_held and held_for_notes(row)):
             return WRITING_NOTES
         if row.get('summary_output_present') or row.get('summary_completed_at'):
             # A real summary landed; read projections may still re-stamp an echo title.
+            return READY
+        if structured.get('title_provenance') != 'server_minimum' and not row.get('summary_blocked_reason'):
+            # Only the batch projection marks the row alone, and only when its
+            # transcript text landed. Past the repair age gate it carries no debt
+            # and no notes will come, but the speech stays on Home. A blocked row
+            # (local-only, BYOK, empty output) keeps its terminal disposition.
             return READY
         # The stand-in title is final: nothing will ever summarize this row.
         return NOISE
     if not title and not str(structured.get('overview') or '').strip() and not row.get('transcript_segments'):
         # A capture whose speech has not landed. Unstamped legacy rows get the same
         # bound the stamped ones have, so none can stay Processing forever.
-        return FAILED if _older_than(row.get('finished_at'), LEGACY_TRANSCRIPTION_SECONDS) else TRANSCRIBING
+        if home_transcription_queue_hold_enabled():
+            seconds = home_transcription_max_age_seconds()
+            anchor = transcribing_hold.wait_started_at(row)
+        else:
+            seconds = LEGACY_TRANSCRIPTION_SECONDS
+            anchor = row.get('finished_at')
+        return FAILED if _older_than(anchor, seconds) else TRANSCRIBING
     return READY
 
 
@@ -135,7 +181,10 @@ def _older_than(moment: Any, seconds: float) -> bool:
     return (datetime.now(timezone.utc) - moment).total_seconds() >= seconds
 
 
-def project(row: dict[str, Any]) -> dict[str, Any]:
+def project(row: dict[str, Any], *, show_held: bool = False) -> dict[str, Any]:
     """Return a wire copy carrying ``home_step`` (unchanged when there is none)."""
-    step = classify(row)
-    return row if step is None else {**row, 'home_step': step}
+    step = classify(row, show_held=True) if show_held else classify(row)
+    if step == READY:
+        home_latency.observe(row)
+    wire = row if step is None else {**row, 'home_step': step}
+    return legacy_empty_wire.project(empty_capture.project(wire), noise=step == NOISE)

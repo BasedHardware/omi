@@ -18,6 +18,7 @@ extension _ConversationVisibility on ConversationProvider {
   }
 
   void _updateConversationProjections(ServerConversation conversation) {
+    conversation = _retainingHomeStep(conversation);
     if (conversation.isMergedDonor) _mergedAwayConversationIds.add(conversation.id);
     if (conversation.deleted || conversation.isMergedDonor) {
       conversations.removeWhere((row) => row.id == conversation.id);
@@ -48,7 +49,21 @@ extension _ConversationVisibility on ConversationProvider {
     _publishConversationChange();
   }
 
+  /// Puts a row hidden by [deleteConversationLocally] back in the list and in Siri: on Undo, and when
+  /// the server refuses or fails the DELETE, since the conversation then still exists.
+  Future<void> _restoreDeletedConversation(ServerConversation conversation) async {
+    conversation = _retainingHomeStep(conversation);
+    memoriesToDelete.remove(conversation.id);
+    if (!conversations.any((e) => e.id == conversation.id)) {
+      conversations.add(conversation);
+      conversations.sort((a, b) => (b.startedAt ?? b.createdAt).compareTo(a.startedAt ?? a.createdAt));
+    }
+    groupConversationsByDate();
+    await _restoreSiriAfterOptimisticDelete(conversation);
+  }
+
   void _replaceBridgedProjections(String donorId, ServerConversation survivor) {
+    survivor = _retainingHomeStep(survivor);
     _mergedAwayConversationIds.add(donorId);
     final completed = survivor.status == ConversationStatus.completed && !survivor.deleted && !survivor.isMergedDonor;
     conversations

@@ -109,6 +109,7 @@ enum ConversationReconciliationPolicy {
   static func mergeList(
     server: [ServerConversation],
     current: [ServerConversation],
+    activeLocalCaptureIds: Set<String> = [],
     pendingMutations: [String: ConversationPendingMutation] = [:],
     now: Date = Date(),
     pendingMutationTTL: TimeInterval = 120
@@ -137,7 +138,8 @@ enum ConversationReconciliationPolicy {
     // backend yet. Synced cache rows missing from the server response are not
     // retained, because doing so masks filtered/deleted/backend-updated state.
     let localOnly = current.filter { conversation in
-      !serverIds.contains(conversation.id) && shouldPreserveLocalOnly(conversation)
+      !serverIds.contains(conversation.id)
+        && shouldPreserveLocalOnly(conversation, activeLocalCaptureIds: activeLocalCaptureIds)
     }
     merged.append(contentsOf: localOnly)
 
@@ -145,6 +147,21 @@ enum ConversationReconciliationPolicy {
       conversations: merged,
       pendingMutations: nextPending
     )
+  }
+
+  /// Detail endpoints on older servers omit the list-only Home projection.
+  /// Keep that failure while the pipeline is still active; terminal status or
+  /// an explicit projection can acknowledge recovery.
+  static func retainingHomeFailure(
+    server: ServerConversation,
+    current: ServerConversation?
+  ) -> ServerConversation {
+    guard server.homeStep == nil, current?.id == server.id, current?.homeStep == "failed",
+      [.inProgress, .processing, .merging].contains(server.status)
+    else { return server }
+    var retained = server
+    retained.homeStep = "failed"
+    return retained
   }
 
   /// List responses omit `transcript_segments`; that means "not loaded", not
@@ -200,6 +217,7 @@ enum ConversationReconciliationPolicy {
       source: serverConversation.source,
       language: serverConversation.language,
       status: serverConversation.status,
+      homeStep: serverConversation.homeStep,
       discarded: serverConversation.discarded,
       deleted: serverConversation.deleted,
       isLocked: serverConversation.isLocked,
@@ -213,7 +231,10 @@ enum ConversationReconciliationPolicy {
     )
   }
 
-  private static func shouldPreserveLocalOnly(_ conversation: ServerConversation) -> Bool {
-    conversation.status == .inProgress && !conversation.deleted && !conversation.discarded
+  private static func shouldPreserveLocalOnly(
+    _ conversation: ServerConversation, activeLocalCaptureIds: Set<String>
+  ) -> Bool {
+    activeLocalCaptureIds.contains(conversation.id)
+      && conversation.status == .inProgress && !conversation.deleted && !conversation.discarded
   }
 }

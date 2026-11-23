@@ -6,6 +6,35 @@
 schema_version: 1
 service: backend-main
 routes:
+  - {route_type: http, method: POST, path: "/v2/sync-local-files/{job_id}/release-hold", policy: {review_status: reviewed, auth: {mechanisms: [firebase_id_token, admin_key_uid_prefix], placement: dependency, scopes: []}, byok: not_applicable, rate_limit: {policy_name: sync_job_poll, key_subject: uid, enforcement: fail_open, placement: handler}, timeout_class: default_method, surface: first_party_app, visibility: first_party, data_domain: conversations, deprecation: {state: active}, owner: backend}}
+  - route_type: http
+    method: GET
+    path: /v1/calendar/google/calendars
+    policy:
+      review_status: reviewed
+      auth: {mechanisms: [firebase_id_token, admin_key_uid_prefix], placement: dependency, scopes: []}
+      byok: validated_when_headers_present
+      rate_limit: {policy_name: "google_calendar:selection", key_subject: uid, enforcement: fail_open, placement: dependency}
+      timeout_class: default_method
+      surface: first_party_app
+      visibility: first_party
+      data_domain: user_profile
+      deprecation: {state: active}
+      owner: backend
+  - route_type: http
+    method: PUT
+    path: /v1/calendar/google/calendars
+    policy:
+      review_status: reviewed
+      auth: {mechanisms: [firebase_id_token, admin_key_uid_prefix], placement: dependency, scopes: []}
+      byok: validated_when_headers_present
+      rate_limit: {policy_name: "google_calendar:selection", key_subject: uid, enforcement: fail_open, placement: dependency}
+      timeout_class: default_method
+      surface: first_party_app
+      visibility: first_party
+      data_domain: user_profile
+      deprecation: {state: active}
+      owner: backend
   - route_type: http
     method: GET
     path: /v1/mcp/keys/scopes
@@ -31,6 +60,7 @@ routes:
   - {route_type: http, method: POST, path: /v1/capture/boundary-evidence, policy: {review_status: reviewed, auth: {mechanisms: [firebase_id_token, admin_key_uid_prefix], placement: dependency, scopes: []}, byok: not_applicable, rate_limit: {policy_name: "episodes:write", key_subject: uid, enforcement: fail_open, placement: dependency}, timeout_class: default_method, surface: first_party_app, visibility: first_party, data_domain: conversations, deprecation: {state: active}, owner: backend}}
   - {route_type: http, method: GET, path: /v2/capture-coverage, policy: {review_status: reviewed, auth: {mechanisms: [firebase_id_token, admin_key_uid_prefix], placement: dependency, scopes: []}, byok: not_applicable, rate_limit: {policy_name: "capture_coverage:query", key_subject: uid, enforcement: fail_closed, placement: inline}, timeout_class: default_method, surface: first_party_app, visibility: first_party, data_domain: conversations, deprecation: {state: active}, owner: backend}}
   - {route_type: http, method: POST, path: /v2/cap-hold-recovery/sweep, policy: {review_status: reviewed, auth: {mechanisms: [service_oidc], placement: dependency, scopes: []}, byok: not_applicable, rate_limit: {policy_name: none, key_subject: none, enforcement: none, placement: none}, timeout_class: sync_job, surface: internal_task, visibility: internal, data_domain: sync_audio, deprecation: {state: active}, owner: backend}}
+  - {route_type: http, method: POST, path: /v2/batch-census/run, policy: {review_status: reviewed, auth: {mechanisms: [service_oidc], placement: dependency, scopes: []}, byok: not_applicable, rate_limit: {policy_name: none, key_subject: none, enforcement: none, placement: none}, timeout_class: sync_job, surface: internal_task, visibility: internal, data_domain: metrics, deprecation: {state: active}, owner: backend}}
   - route_type: http
     method: POST
     path: /v1/users/processing-backlog/process
@@ -82,6 +112,7 @@ routes:
   - {route_type: http, method: GET, path: /v1/payments/retention-offer,policy: {review_status: reviewed, auth: {mechanisms: [firebase_id_token, admin_key_uid_prefix], placement: dependency, scopes: []}, byok: not_applicable, rate_limit: {policy_name: none, key_subject: none, enforcement: none, placement: none}, timeout_class: default_method, surface: first_party_app, visibility: first_party, data_domain: billing, deprecation: {state: active}, owner: backend}}
   - {route_type: http, method: POST, path: /v1/payments/retention-offer, policy: {review_status: reviewed, auth: {mechanisms: [firebase_id_token, admin_key_uid_prefix], placement: dependency, scopes: []}, byok: not_applicable, rate_limit: {policy_name: none, key_subject: none, enforcement: none, placement: none}, timeout_class: default_method, surface: first_party_app, visibility: first_party, data_domain: billing, deprecation: {state: active}, owner: backend}}
   - {route_type: http, method: GET, path: /v1/payments/yearly-switch, policy: {review_status: reviewed, auth: {mechanisms: [firebase_id_token, admin_key_uid_prefix], placement: dependency, scopes: []}, byok: not_applicable, rate_limit: {policy_name: none, key_subject: none, enforcement: none, placement: none}, timeout_class: default_method, surface: first_party_app, visibility: first_party, data_domain: billing, deprecation: {state: active}, owner: backend}}
+  - {route_type: http, method: POST, path: /v1/payments/payment-issue/monthly-switch, policy: {review_status: reviewed, auth: {mechanisms: [firebase_id_token, admin_key_uid_prefix], placement: dependency, scopes: []}, byok: not_applicable, rate_limit: {policy_name: none, key_subject: none, enforcement: none, placement: none}, timeout_class: default_method, surface: first_party_app, visibility: first_party, data_domain: billing, deprecation: {state: active}, owner: backend}}
   - {route_type: http, method: POST, path: "/v1/messaging/webhooks/{adapter_id}", policy: {review_status: reviewed, auth: {mechanisms: [webhook_signature], placement: handler, scopes: []}, byok: not_applicable, rate_limit: {policy_name: none, key_subject: none, enforcement: none, placement: none}, timeout_class: default_method, surface: webhook, visibility: internal, data_domain: chat, deprecation: {state: active}, owner: backend}}
   - {route_type: http, method: POST, path: /v2/files/video, policy: {review_status: reviewed, auth: {mechanisms: [firebase_id_token, admin_key_uid_prefix], placement: dependency, scopes: []}, byok: validated_when_headers_present, rate_limit: {policy_name: "file:upload", key_subject: uid, enforcement: fail_open, placement: dependency}, timeout_class: default_method, surface: first_party_app, visibility: first_party, data_domain: chat, deprecation: {state: active}, owner: backend}}
   - {route_type: http, method: POST, path: "/v1/messaging/link-proofs", policy: {review_status: reviewed, auth: {mechanisms: [firebase_id_token], placement: dependency, scopes: []}, byok: validated_when_headers_present, rate_limit: {policy_name: "chat:send_message", key_subject: uid, enforcement: fail_open, placement: dependency}, timeout_class: default_method, surface: first_party_app, visibility: first_party, data_domain: chat, deprecation: {state: active}, owner: backend}}
@@ -117,6 +148,34 @@ routes:
       surface: internal_task
       visibility: internal
       data_domain: sync_audio
+      deprecation: {state: active}
+      owner: backend
+  - route_type: http
+    method: POST
+    path: /v2/app-review-config/sweep
+    policy:
+      review_status: reviewed
+      auth: {mechanisms: [service_oidc], placement: dependency, scopes: []}
+      byok: not_applicable
+      rate_limit: {policy_name: none, key_subject: none, enforcement: none, placement: none}
+      timeout_class: sync_job
+      surface: internal_task
+      visibility: internal
+      data_domain: billing
+      deprecation: {state: active}
+      owner: backend
+  - route_type: http
+    method: POST
+    path: /v2/internal/app-review-config/submissions
+    policy:
+      review_status: reviewed
+      auth: {mechanisms: [codemagic_submission_token], placement: handler, scopes: []}
+      byok: not_applicable
+      rate_limit: {policy_name: app_review_config_submission, key_subject: ip, enforcement: fail_open, placement: dependency}
+      timeout_class: default_method
+      surface: internal_task
+      visibility: internal
+      data_domain: billing
       deprecation: {state: active}
       owner: backend
   - route_type: http
@@ -1693,6 +1752,24 @@ routes:
         state: active
   - route_type: http
     method: POST
+    path: /v1/conversations/deletion-batch-purges/run
+    policy:
+      review_status: reviewed
+      auth: {mechanisms: [service_oidc], placement: dependency, scopes: []}
+      byok: not_applicable
+      rate_limit:
+        policy_name: none
+        key_subject: none
+        enforcement: none
+        placement: none
+      timeout_class: account_deletion_wipe
+      surface: internal_task
+      visibility: internal
+      data_domain: conversations
+      deprecation:
+        state: active
+  - route_type: http
+    method: POST
     path: /v1/conversation-finalization-jobs/run
     policy:
       review_status: reviewed
@@ -2839,6 +2916,29 @@ routes:
         state: active
       owner: backend
   - route_type: http
+    method: POST
+    path: /v2/sync-capture-end
+    policy:
+      review_status: reviewed
+      auth:
+        mechanisms:
+          - firebase_id_token
+        placement: dependency
+        scopes: []
+      byok: not_applicable
+      rate_limit:
+        policy_name: none
+        key_subject: none
+        enforcement: none
+        placement: none
+      timeout_class: default_method
+      surface: first_party_app
+      visibility: first_party
+      data_domain: conversations
+      deprecation:
+        state: active
+      owner: backend
+  - route_type: http
     method: PUT
     path: /v1/workstreams/{workstream_id}/checkpoints/{runtime_id}
     policy:
@@ -3045,6 +3145,8 @@ routes:
       deprecation:
         state: active
       owner: backend
+  - {route_type: http, method: POST, path: /v1/users/ai-profile/refresh, policy: {review_status: reviewed, auth: {mechanisms: [firebase_id_token], placement: dependency, scopes: []}, byok: not_applicable, rate_limit: {policy_name: "users:ai_profile_refresh", key_subject: uid, enforcement: fail_closed, placement: wrapper}, timeout_class: default_method, surface: first_party_app, visibility: first_party, data_domain: user_profile, deprecation: {state: active}, owner: backend}}
+  - {route_type: http, method: DELETE, path: /v1/users/ai-profile, policy: {review_status: reviewed, auth: {mechanisms: [firebase_id_token, admin_key_uid_prefix], placement: dependency, scopes: []}, byok: not_applicable, rate_limit: {policy_name: none, key_subject: none, enforcement: none, placement: none}, timeout_class: default_method, surface: first_party_app, visibility: first_party, data_domain: user_profile, deprecation: {state: active}, owner: backend}}
   - route_type: http
     method: POST
     path: /v1/conversations/topic
@@ -3559,6 +3661,8 @@ routes:
       deprecation:
         state: active
       owner: backend
+  # Deletion feed for clients that keep copies: tombstone ids and deleted_at only, keyset paged.
+  - {route_type: http, method: GET, path: /v1/mcp/conversations/deleted, policy: {review_status: reviewed, auth: {mechanisms: [mcp_api_key], placement: dependency, scopes: [conversations.read]}, byok: not_applicable, rate_limit: {policy_name: "mcp:read", key_subject: app_key, enforcement: fail_closed, placement: dependency}, timeout_class: default_method, surface: mcp, visibility: public_documented, data_domain: conversations, deprecation: {state: active}, owner: backend}}
   - route_type: http
     method: PATCH
     path: /v1/mcp/people/{person_id}/name
@@ -4746,6 +4850,8 @@ routes:
   - {route_type: http, method: POST, path: /v2/batch-pipeline/gpu-idle, policy: {review_status: reviewed, auth: {mechanisms: [service_oidc], placement: dependency, scopes: []}, byok: not_applicable, rate_limit: {policy_name: none, key_subject: none, enforcement: none, placement: none}, timeout_class: sync_job, surface: internal_task, visibility: internal, data_domain: sync_audio, deprecation: {state: active}, owner: backend}}
   - {route_type: http, method: POST, path: /v2/batch-pipeline/reconcile, policy: {review_status: reviewed, auth: {mechanisms: [service_oidc], placement: dependency, scopes: []}, byok: not_applicable, rate_limit: {policy_name: none, key_subject: none, enforcement: none, placement: none}, timeout_class: sync_job, surface: internal_task, visibility: internal, data_domain: sync_audio, deprecation: {state: active}, owner: backend}}
   - {route_type: http, method: GET, path: /v2/batch-pipeline/metrics, policy: {review_status: reviewed, auth: {mechanisms: [service_oidc], placement: dependency, scopes: []}, byok: not_applicable, rate_limit: {policy_name: none, key_subject: none, enforcement: none, placement: none}, timeout_class: sync_job, surface: internal_task, visibility: internal, data_domain: sync_audio, deprecation: {state: active}, owner: backend}}
+  - {route_type: http, method: GET, path: /v2/pipeline-ledger/census, policy: {review_status: reviewed, auth: {mechanisms: [service_oidc], placement: dependency, scopes: []}, byok: not_applicable, rate_limit: {policy_name: none, key_subject: none, enforcement: none, placement: none}, timeout_class: sync_job, surface: internal_task, visibility: internal, data_domain: metrics, deprecation: {state: active}, owner: backend}}
+  - {route_type: http, method: GET, path: "/v2/pipeline-ledger/explain/{conversation_id}", policy: {review_status: reviewed, auth: {mechanisms: [service_oidc], placement: dependency, scopes: []}, byok: not_applicable, rate_limit: {policy_name: none, key_subject: none, enforcement: none, placement: none}, timeout_class: default_method, surface: internal_task, visibility: internal, data_domain: metrics, deprecation: {state: active}, owner: backend}}
   - {route_type: http, method: POST, path: /v2/batch-pipeline/authorize-compute, policy: {review_status: reviewed, auth: {mechanisms: [service_oidc], placement: dependency, scopes: []}, byok: not_applicable, rate_limit: {policy_name: none, key_subject: none, enforcement: none, placement: none}, timeout_class: sync_job, surface: internal_task, visibility: internal, data_domain: sync_audio, deprecation: {state: active}, owner: backend}}
   - {route_type: http, method: POST, path: /v2/batch-pipeline/recover-quarantine, policy: {review_status: reviewed, auth: {mechanisms: [service_oidc], placement: dependency, scopes: []}, byok: not_applicable, rate_limit: {policy_name: none, key_subject: none, enforcement: none, placement: none}, timeout_class: sync_job, surface: internal_task, visibility: internal, data_domain: sync_audio, deprecation: {state: active}, owner: backend}}
   - {route_type: http, method: POST, path: /v2/enrichment/run, policy: {review_status: reviewed, auth: {mechanisms: [service_oidc], placement: dependency, scopes: []}, byok: not_applicable, rate_limit: {policy_name: none, key_subject: none, enforcement: none, placement: none}, timeout_class: sync_job, surface: internal_task, visibility: internal, data_domain: conversations, deprecation: {state: active}, owner: backend}}
@@ -4857,3 +4963,14 @@ routes:
       deprecation:
         state: active
       owner: backend
+
+  - {"route_type":"http","method":"GET","path":"/v1/home/feed","policy":{"review_status":"reviewed","auth":{"mechanisms":["firebase_id_token","admin_key_uid_prefix"],"placement":"dependency","scopes":[]},"byok":"validated_when_headers_present","rate_limit":{"policy_name":"none","key_subject":"none","enforcement":"none","placement":"none"},"timeout_class":"default_method","surface":"first_party_app","visibility":"first_party","data_domain":"conversations","deprecation":{"state":"active"},"owner":"backend"}}
+  - {"route_type":"http","method":"POST","path":"/v1/home/feed/prepare","policy":{"review_status":"reviewed","auth":{"mechanisms":["firebase_id_token","admin_key_uid_prefix"],"placement":"dependency","scopes":[]},"byok":"validated_when_headers_present","rate_limit":{"policy_name":"home:prepare","key_subject":"uid","enforcement":"fail_open","placement":"dependency"},"timeout_class":"default_method","surface":"first_party_app","visibility":"first_party","data_domain":"conversations","deprecation":{"state":"active"},"owner":"backend"}}
+  - {route_type: http, method: GET, path: "/v1/conversations/live", policy: {review_status: reviewed, auth: {mechanisms: [firebase_id_token, admin_key_uid_prefix], placement: dependency, scopes: []}, byok: not_applicable, rate_limit: {policy_name: none, key_subject: none, enforcement: none, placement: none}, timeout_class: default_method, surface: first_party_app, visibility: first_party, data_domain: conversations, deprecation: {state: active}, owner: backend}}
+  - {route_type: http, method: GET, path: "/v1/conversations/{conversation_id}/summary/live-catchup/stream", policy: {review_status: reviewed, auth: {mechanisms: [firebase_id_token, admin_key_uid_prefix], placement: dependency, scopes: []}, byok: not_applicable, rate_limit: {policy_name: none, key_subject: none, enforcement: none, placement: none}, timeout_class: default_method, surface: first_party_app, visibility: first_party, data_domain: conversations, deprecation: {state: active}, owner: backend}}
+  - {route_type: http, method: POST, path: "/v1/conversations/{conversation_id}/summary/open", policy: {review_status: reviewed, auth: {mechanisms: [firebase_id_token, admin_key_uid_prefix], placement: dependency, scopes: []}, byok: validated_when_headers_present, rate_limit: {policy_name: "conversations:historical_summary_open", key_subject: uid, enforcement: fail_open, placement: inline}, timeout_class: default_method, surface: first_party_app, visibility: first_party, data_domain: conversations, deprecation: {state: active}, owner: backend}}
+  - {route_type: http, method: GET, path: "/v1/conversations/{conversation_id}/summary/stream", policy: {review_status: reviewed, auth: {mechanisms: [firebase_id_token, admin_key_uid_prefix], placement: dependency, scopes: []}, byok: not_applicable, rate_limit: {policy_name: none, key_subject: none, enforcement: none, placement: none}, timeout_class: default_method, surface: first_party_app, visibility: first_party, data_domain: conversations, deprecation: {state: active}, owner: backend}}
+  - {route_type: http, method: POST, path: /v1/conversations-v3/reconcile, policy: {review_status: reviewed, auth: {mechanisms: [service_oidc], placement: dependency, scopes: []}, byok: not_applicable, rate_limit: {policy_name: none, key_subject: none, enforcement: none, placement: none}, timeout_class: sync_job, surface: internal_task, visibility: internal, data_domain: conversations, deprecation: {state: active}, owner: backend}}
+  - {route_type: http, method: POST, path: /v1/conversations-v3/sweep, policy: {review_status: reviewed, auth: {mechanisms: [service_oidc], placement: dependency, scopes: []}, byok: not_applicable, rate_limit: {policy_name: none, key_subject: none, enforcement: none, placement: none}, timeout_class: sync_job, surface: internal_task, visibility: internal, data_domain: conversations, deprecation: {state: active}, owner: backend}}
+  - {route_type: http, method: POST, path: /v1/conversations-v3/backfill, policy: {review_status: reviewed, auth: {mechanisms: [service_oidc], placement: dependency, scopes: []}, byok: not_applicable, rate_limit: {policy_name: none, key_subject: none, enforcement: none, placement: none}, timeout_class: sync_job, surface: internal_task, visibility: internal, data_domain: conversations, deprecation: {state: active}, owner: backend}}
+  - {route_type: http, method: POST, path: /v1/conversations-v3/legacy-users, policy: {review_status: reviewed, auth: {mechanisms: [service_oidc], placement: dependency, scopes: []}, byok: not_applicable, rate_limit: {policy_name: none, key_subject: none, enforcement: none, placement: none}, timeout_class: sync_job, surface: internal_task, visibility: internal, data_domain: conversations, deprecation: {state: active}, owner: backend}}

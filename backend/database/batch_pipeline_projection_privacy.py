@@ -6,7 +6,13 @@ from datetime import datetime, timedelta, timezone
 from google.cloud import firestore
 
 from database.batch_pipeline_privacy import BatchPrivacyReason
+from database.batch_pipeline_projection_outbox import arm as arm_projection
 from database.batch_pipeline_projection_protocol import ProjectionBlocked
+from database.batch_pipeline_projection_finish import (
+    PROJECTION_FINISH_DUE_FIELD,
+    PROJECTION_FINISH_STEP_FIELD,
+    projection_finish_entry_fields,
+)
 from database.sync_ledger import LEDGER_RETENTION_DAYS
 
 HOLD_REASONS = frozenset(
@@ -80,6 +86,8 @@ def hold(store, segment_id, binding, now, reason, *, policy):
                 'audio_required': False,
                 'enrichment_required': False,
             }
+        entry.pop(PROJECTION_FINISH_DUE_FIELD, None)
+        entry.pop(PROJECTION_FINISH_STEP_FIELD, None)
         entry.update(
             protocol_version=2,
             privacy_quarantine_version=1,
@@ -126,8 +134,15 @@ def resume(store, segment_id, binding, now, *, policy):
         if (entry.get('projection') or {}).get('privacy_control_only'):
             entry.pop('projection')
         entry.pop('projection_privacy_refusal')
+        entry.pop(PROJECTION_FINISH_DUE_FIELD, None)
+        entry.pop(PROJECTION_FINISH_STEP_FIELD, None)
         if entry.get('projection'):
             entry.update(protocol_version=saved['protocol_before'], projection_state=saved['state_before'])
+            entry.update(
+                projection_finish_entry_fields(
+                    saved['state_before'], now, async_projection=session.policy.async_projection
+                )
+            )
             entry.pop('projection_privacy_checkpoint')
             entry.pop('privacy_quarantine_version')
         else:
@@ -135,6 +150,7 @@ def resume(store, segment_id, binding, now, *, policy):
             # The last ordinary assignment clears this checkpoint, without
             # ever moving the owner's watermark back to an older result.
             entry['projection_state'] = 'pending'
+        entry.update(arm_projection(entry, now))
         transaction.set(session.result_ref, entry)
         return entry
 

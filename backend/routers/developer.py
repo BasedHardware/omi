@@ -7,6 +7,7 @@ from-segments intake carries capture evidence lineage, so compatibility rules
 apply here that do not apply to app-facing routes.
 """
 
+from utils.conversations.layer import read_product as read_product_conversation
 from models.developer_transcript import SimpleTranscriptSegment
 from routers import developer_segments
 from routers.developer_segments_models import (
@@ -36,7 +37,6 @@ import database.daily_summaries as daily_summaries_db
 from database._client import db
 from database import conversation_tombstones
 from database.firestore_read_metrics import FirestoreReadSite
-from utils.list_version_check import ListVersionCheck
 
 from models.calendar_context import DevCalendarMeetingContext
 from models.folder import Folder
@@ -98,7 +98,7 @@ from utils.observability.external_lists import (
 from utils.observability.firestore_request_reads import ReadComponent, read_component
 from utils import external_list_reads as external_lists
 from utils import external_polling_cache as polling_cache
-from utils.developer_item_reads import read_conversation_item
+from utils.developer_item_reads import project_structured_defaults, read_conversation_item
 from utils.conversations import transcribing_hold
 from config.episodes import home_transcription_presentation_gate_enabled
 from utils.mcp_server.handlers.conversations import conversation_cards_page_core
@@ -874,16 +874,9 @@ def get_action_items(
     # oversized limit cannot stream the whole collection. Mirrors the GET /v3/memories hardening.
     offset, limit = external_lists.clamp_list_page(offset, limit, 1000)
     observe_action_items_page(limit, offset)
-    version_check = ListVersionCheck.start(request, uid, 'action_items')
-    if version_check.not_modified is not None:
-        return version_check.not_modified
     with read_component(ReadComponent.OTHER):
         budget = list_read_budget_for_request(request, route='developer-action-items', owner_uid=uid, context=auth)
-        cached = (
-            external_lists.cached_external_list(request, response, auth, locals())
-            if not (version_check.active and 'lp1-' in request.headers.get('if-none-match', ''))
-            else None
-        )
+        cached = external_lists.cached_external_list(request, response, auth, locals())
         observe_action_items_shape(
             conversation_id is not None, start_date is not None or end_date is not None, completed, cached is not None
         )
@@ -904,7 +897,6 @@ def get_action_items(
     valid_action_items = external_lists.validate_developer_action_items(action_items, ActionItemResponse, uid, logger)
     observe_action_items_rows('returned', len(valid_action_items))
     finish_list_budget(response, budget)
-    version_check.finish(response, truncated=budget.truncated)
     return valid_action_items
 
 
@@ -1628,7 +1620,7 @@ def get_conversations(
                 logger.warning('Skipping malformed conversation in Developer API conversation list')
                 continue
             try:
-                valid_conversations.append(Conversation.model_validate(conv))
+                valid_conversations.append(Conversation.model_validate(project_structured_defaults(conv)))
             except ValidationError as e:
                 invalid_fields = [err['loc'][0] for err in e.errors() if err.get('loc')]
                 logger.warning(
@@ -2149,8 +2141,11 @@ def _ingest_conversation_from_segments(
                 conversation_id,
             )
             return ConversationResponse(id=conversation_id, status='deleted', discarded=True)
-        existing_conversation = conversations_db.get_conversation(
-            uid, conversation_id, read_site=FirestoreReadSite.DEVELOPER_FROM_SEGMENTS_IDEMPOTENCY
+        existing_conversation = read_product_conversation(
+            conversations_db.get_conversation,
+            uid,
+            conversation_id,
+            read_site=FirestoreReadSite.DEVELOPER_FROM_SEGMENTS_IDEMPOTENCY,
         )
         if existing_conversation:
             if _is_stale_from_segments_claim(
@@ -2253,7 +2248,7 @@ def _ingest_conversation_from_segments(
         if client_projection is not None:
             create_payload.update(client_processing_mutation(client_projection))
         if not lifecycle_service.create_processing_conversation(uid, create_payload, idempotent=True):
-            existing_conversation = conversations_db.get_conversation(uid, conversation_id)
+            existing_conversation = read_product_conversation(conversations_db.get_conversation, uid, conversation_id)
             if existing_conversation:
                 logger.info(
                     "from-segments idempotency concurrent hit for uid=%s client_session_id=%s conversation_id=%s",
@@ -2551,7 +2546,7 @@ def update_conversation_endpoint(
     - **title**: New title for the conversation (optional)
     - **discarded**: Whether the conversation is discarded (optional)
     """
-    conversation = conversations_db.get_conversation(uid, conversation_id)
+    conversation = read_product_conversation(conversations_db.get_conversation, uid, conversation_id)
     if not conversation or conversation.get('deleted', False):
         raise HTTPException(status_code=404, detail="Conversation not found")
     if conversation.get('is_locked', False):
@@ -2569,10 +2564,10 @@ def update_conversation_endpoint(
         else:
             lifecycle_service.restore_discarded(uid, conversation_id)
 
-    conversation = conversations_db.get_conversation(uid, conversation_id)
+    conversation = read_product_conversation(conversations_db.get_conversation, uid, conversation_id)
     if conversation:
         populate_folder_names(uid, [conversation])
-    return conversation
+    return project_structured_defaults(conversation) if conversation else conversation
 
 
 # ******************************************************

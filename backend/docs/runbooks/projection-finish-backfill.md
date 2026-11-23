@@ -1,0 +1,54 @@
+# Projection finish clock backfill
+
+The async finish-page skip only filters after the versioned marker in
+`<namespace>_control/projection_finish_clock_v1` is complete. Before that,
+serving uses the legacy page without adding per-row stamp transactions. Negative
+marker lookups are cached for 60 seconds; completion is trusted for the process
+lifetime. The marker uses one existing control document per namespace: at
+most one read per process per minute before completion and one per process
+lifetime afterward; turning off the async skip avoids marker reads. New replicas read that same marker and filter on their first tick.
+
+Deploy this code to **every writer first**, including backend-listen
+(`BATCH_PIPELINE_SERVING_ENABLED=false`, `BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED=true`). The
+shared `projection_finish_state_fields` and `projection_finish_entry_fields`
+helpers now stamp persisted/ready transitions regardless of the read lever.
+Writer audit: ordinary and multipart persistence/receipt transitions go through
+`ProjectionSession`; quarantine release, recovery, and ready transitions use
+`ProjectionStore` / `batch_pipeline_projection_release`; privacy restore uses
+`batch_pipeline_projection_privacy`; the ghost-hold repair script also uses the
+shared helper. Merge creates pending rows; purge only creates erased rows.
+Do not finish the pass while any old writer binary is still active: it could
+insert an unstamped row behind the checkpoint. Post-marker rollback of the read
+flag is safe; rollback of writer code requires repeating maintenance with a new
+marker version before enabling filtering again.
+
+The Store contract includes marker readiness for every backend. Postgres and
+simulation stores read the versioned marker from their own namespaced control
+store; the Postgres simulation delegates to Postgres. A missing or wrong-version
+marker keeps legacy discovery active. The stamping CLI in this runbook operates
+on Firestore only: its completion does not certify a different store's result
+population or authorize native Postgres filtering.
+
+Use the approved read-only/operator identity for the selected stage. Example operator commands from `backend/`:
+
+```bash
+# Bounded read-only preview at the current durable checkpoint (one page).
+GCP_AGENT_TIER=ro-prod python scripts/batch_pipeline_projection_finish_backfill.py --stage prod
+# Separate authorized operator action, after all writers have been deployed.
+GCP_AGENT_TIER=prod-operator python scripts/batch_pipeline_projection_finish_backfill.py --stage prod --apply --confirm-writers-deployed --max-pages 1000
+```
+
+Each invocation reads at most `--max-pages * --page-size` rows (page size is
+capped at 200) plus transactional fences. Repeat the apply command until output
+reports `complete: true`. Every page atomically commits missing clocks and its
+shared cursor. Errors leave that page retryable. Concurrent operators cannot
+commit a stale checkpoint. Existing clocks, projection state and payloads are
+preserved. The script prints aggregate counts only. Dry-run neither stamps nor
+advances the cursor and is a bounded preview, not a whole-population census.
+An exactly full last page requires one further empty page to mark completion.
+
+With the marker complete, `BATCH_PROJECTION_FINISH_ASYNC_SKIP_ENABLED` can use the
+existing finish-clock index to route classified async rows to follow-up
+discovery. Verify that persisted/ready rows have `projection_finish_due_at`.
+Firestore range filters omit rows where that field is absent. Turning the
+async skip switch off restores the unfiltered finish page.

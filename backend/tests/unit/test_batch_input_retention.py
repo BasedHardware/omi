@@ -10,6 +10,9 @@ from typing import Any, cast
 from unittest.mock import Mock
 
 import pytest
+
+from tests.unit.test_timeliness_metrics_are_scraped import FRESH_NEWEST
+from tests.unit.test_batch_pipeline_projection_release import rows as projection_rows, store_for, OWNER, TARGET
 from prometheus_client import CollectorRegistry
 
 from config.batch_pipeline import scheduler_control_key
@@ -20,8 +23,17 @@ from database.batch_pipeline_projection_release import ProjectionReleaseStore
 from database.batch_pipeline_privacy import BatchPrivacyBlocked, privacy_owner_key
 from database.batch_pipeline_projection_protocol import ProjectionBlocked
 from scripts import redrive_staging_inputs as cli
+
+# Load shared helpers at collection; their provider/model imports are setup,
+# not part of the release operation's per-test CPU budget.
+from tests.unit.test_batch_pipeline_projection_release import rows, store_for, OWNER, TARGET
 from tests.unit.test_batch_pipeline_quarantine_recovery import setup as setup, row, ledger_row
 from tests.unit.test_batch_pipeline_timeliness import _sample, NOW, EPOCH  # pyright: ignore[reportPrivateUsage]
+
+# Resolve shared fixture/provider-model imports at collection, as the fixture's
+# own module does. The fast call budget must measure the retained/release checks,
+# rather than the first import of another test module's dependencies.
+from tests.unit.test_batch_pipeline_projection_release import rows, store_for, OWNER, TARGET
 from utils.batch_pipeline.input_retention import STAGING_BUCKET, TERMINAL_SECONDS, WARNING_SECONDS, staged_enqueue
 from utils.batch_pipeline.intake import durable_status, get_durable_job_status
 from utils.batch_pipeline.metrics import QueueMetrics
@@ -29,7 +41,7 @@ from utils.batch_pipeline.scheduler import Scheduler
 
 URI = f'gs://{STAGING_BUCKET}/synthetic/audio#1'
 ENQUEUED = 1_000_000.0
-NOW29 = ENQUEUED + TERMINAL_SECONDS
+NOW_TERMINAL = ENQUEUED + TERMINAL_SECONDS
 BACKEND = Path(__file__).resolve().parents[2]
 BAD_STAGED_CLOCKS = [None, False, True, 0, -1, float('nan'), float('inf'), float('-inf'), '123', {}, []]
 
@@ -47,7 +59,7 @@ def runtime(monkeypatch):
 def seed(setup, leg='gpu'):
     client, store, binding, *_ = setup
     job = row(client)
-    job.update(audio_uri=URI, enqueued_at=ENQUEUED, held_deadline_at=NOW29 + 86400)
+    job.update(audio_uri=URI, enqueued_at=ENQUEUED, held_deadline_at=NOW_TERMINAL + 86400)
     if leg == 'assignment':
         job.update(state='committed', recovery_state='held', result={'result_uri': 'gs://synthetic/result'})
         client.rows['batch_pipeline_prod_results', 'bad'] = {
@@ -60,25 +72,25 @@ def seed(setup, leg='gpu'):
 
 
 @pytest.mark.parametrize('leg', ['gpu', 'assignment'])
-def test_exact_day29_terminal_retains_all_bytes_receipts_and_attempts(setup, leg):
+def test_exact_terminal_day_terminal_retains_all_bytes_receipts_and_attempts(setup, leg):
     client, store, _ = seed(setup, leg)
     before = deepcopy(client.rows)
     recovery = RecoveryStore(store)
-    assert recovery.expire_held('bad', NOW29 - 1) == 'held'
+    assert recovery.expire_held('bad', NOW_TERMINAL - 1) == 'held'
     assert client.rows == before
-    assert recovery.expire_held('bad', NOW29) == 'expired'
+    assert recovery.expire_held('bad', NOW_TERMINAL) == 'expired'
     job = row(client)
     assert job == {
         **before['batch_pipeline_prod_jobs', 'bad'],
         'state': 'dead',
         'merge_pending': leg == 'gpu',
         'dead_letter_reason': 'input_expiring',
-        'input_expiring_at': NOW29,
+        'input_expiring_at': NOW_TERMINAL,
         'input_expiring_leg': leg,
     }
     assert all(value == client.rows[key] for key, value in before.items() if key[0].endswith(('results', 'artifacts')))
     terminal = deepcopy(client.rows)
-    assert recovery.expire_held('bad', NOW29 + 1) == 'held'
+    assert recovery.expire_held('bad', NOW_TERMINAL + 1) == 'held'
     assert client.rows == terminal
     assert not setup[3].mock_calls  # no artifact or provider calls
 
@@ -92,9 +104,9 @@ def test_existing_sweep_reaches_both_held_legs_without_nightly_terminal_redrive(
     monkeypatch.setattr(sweep, 'held_candidates', lambda *a, **kw: [('bad', deepcopy(row(client)))])
     monkeypatch.setattr(sweep, 'dead_held_candidates', lambda *a, **kw: [])
     monkeypatch.setattr(sweep, 'held_expired_stock', lambda *a: 0)
-    assert sweep.HeldDeadLetter(store).tick(NOW29) == {'expired': 1, 'requeued': 0}
+    assert sweep.HeldDeadLetter(store).tick(NOW_TERMINAL) == {'expired': 1, 'requeued': 0}
     assert row(client)['dead_letter_reason'] == 'input_expiring'
-    assert sweep.HeldDeadLetter(store).tick(NOW29 + 86400) == {'expired': 0, 'requeued': 0}
+    assert sweep.HeldDeadLetter(store).tick(NOW_TERMINAL + 86400) == {'expired': 0, 'requeued': 0}
     assert row(client)['state'] == 'dead'
 
 
@@ -103,10 +115,10 @@ def test_terminal_cannot_arm_completed_artifact_cleanup(setup, monkeypatch, leg)
     from utils.batch_pipeline import retention
 
     client, store, binding = seed(setup, leg)
-    assert RecoveryStore(store).expire_held('bad', NOW29) == 'expired'
+    assert RecoveryStore(store).expire_held('bad', NOW_TERMINAL) == 'expired'
     monkeypatch.setattr(retention.queries, 'segment_artifacts', lambda *a: [])
     before = deepcopy(client.rows)
-    assert not retention.expire_completed_segment(store, binding.owner_id, 'bad', NOW29 + 1)
+    assert not retention.expire_completed_segment(store, binding.owner_id, 'bad', NOW_TERMINAL + 1)
     assert client.rows == before
     assert 'expires_at' not in row(client)
 
@@ -118,7 +130,7 @@ def test_kill_preserves_existing_held_behavior(setup, monkeypatch, value, leg):
     monkeypatch.setenv('BATCH_INPUT_EXPIRING_ENABLED', value)
     assert not batch_input_expiring_enabled()
     before = deepcopy(client.rows)
-    assert RecoveryStore(store).expire_held('bad', NOW29) == 'held'
+    assert RecoveryStore(store).expire_held('bad', NOW_TERMINAL) == 'held'
     assert client.rows == before
 
 
@@ -129,7 +141,7 @@ def test_kill_preserves_existing_held_behavior(setup, monkeypatch, value, leg):
         {'state': 'ready'},
         {'recovery_state': 'running'},
         {'token': 'active'},
-        {'lease_until': NOW29 + 1},
+        {'lease_until': NOW_TERMINAL + 1},
         {'lease_until': float('nan')},
         {'enqueued_at': False},
         {'enqueued_at': float('nan')},
@@ -143,7 +155,7 @@ def test_terminal_scope_and_active_intent_fences(setup, patch):
     client, store, _ = seed(setup)
     row(client).update(patch)
     before = deepcopy(client.rows)
-    assert RecoveryStore(store).expire_held('bad', NOW29) == 'held'
+    assert RecoveryStore(store).expire_held('bad', NOW_TERMINAL) == 'held'
     assert client.rows == before
 
 
@@ -159,7 +171,7 @@ def test_terminal_content_and_privacy_fences(setup, leg, fence):
         ledger_row(client, binding)['job_id'] = 'other'
     before = deepcopy(client.rows)
     with pytest.raises(error):
-        RecoveryStore(store).expire_held('bad', NOW29)
+        RecoveryStore(store).expire_held('bad', NOW_TERMINAL)
     assert client.rows == before
 
 
@@ -167,7 +179,7 @@ def test_terminal_failed_status_precedes_partial_and_never_poll_redrives(setup, 
     from utils.batch_pipeline import intake
 
     client, store, binding = seed(setup)
-    assert RecoveryStore(store).expire_held('bad', NOW29) == 'expired'
+    assert RecoveryStore(store).expire_held('bad', NOW_TERMINAL) == 'expired'
     client.rows['batch_pipeline_prod_intakes', binding.job_id] = {
         'owner_id': binding.owner_id,
         'content_id': binding.content_id,
@@ -187,11 +199,11 @@ def test_terminal_failed_status_precedes_partial_and_never_poll_redrives(setup, 
     assert isinstance(capable, dict) and capable['status'] == 'failed'
     assert isinstance(legacy, dict) and legacy['status'] == 'processing'
     assert client.rows == before
-    assert not store.run(lambda tx: Scheduler.redrive_in_transaction(tx, tx.get('jobs', 'bad'), NOW29 + 1))
+    assert not store.run(lambda tx: Scheduler.redrive_in_transaction(tx, tx.get('jobs', 'bad'), NOW_TERMINAL + 1))
     # Operator-only requeue uses the existing content/privacy/intent transaction, even with the kill off.
     monkeypatch.setenv('BATCH_INPUT_EXPIRING_ENABLED', 'false')
     client.rows['batch_pipeline_prod_control', scheduler_control_key(row(client)['owner_key'])] = {'p0_active': True}
-    assert RecoveryStore(store).requeue_quarantined('bad', NOW29 + 1)
+    assert RecoveryStore(store).requeue_quarantined('bad', NOW_TERMINAL + 1)
     assert row(client)['state'] == 'ready'
 
 
@@ -201,29 +213,29 @@ def test_expiring_gpu_reuses_exact_bundle_client_reupload(setup, monkeypatch):
 
     monkeypatch.setattr(batch_pipeline_store, 'service_frontier', lambda *a, **kw: 0.0)
     client, store, binding = seed(setup)
-    RecoveryStore(store).expire_held('bad', NOW29)
+    RecoveryStore(store).expire_held('bad', NOW_TERMINAL)
     repair = ArtifactMissingStore(store)
     assert set(repair.reupload_snapshot(binding.owner_id, binding.content_id)[2]) == {'bad'}
     snapshot = deepcopy(row(client))
     uri = f'gs://{STAGING_BUCKET}/synthetic/replacement#2'
     staged(client, binding, uri)
     good = deepcopy(row(client, 'results', 'good'))
-    repair.restore_reupload(binding.owner_id, binding.content_id, {'bad': snapshot}, {'bad': uri}, NOW29 + 1)
+    repair.restore_reupload(binding.owner_id, binding.content_id, {'bad': snapshot}, {'bad': uri}, NOW_TERMINAL + 1)
     assert row(client)['audio_uri'] == uri and row(client)['state'] == 'ready'
-    assert row(client)['audio_staged_at'] == NOW29 + 1
+    assert row(client)['audio_staged_at'] == NOW_TERMINAL + 1
     assert row(client)['enqueued_at'] == ENQUEUED
     row(client).update(state='quarantined', recovery_state='failed_held')
-    assert RecoveryStore(store).expire_held('bad', NOW29 + 2) == 'held'
+    assert RecoveryStore(store).expire_held('bad', NOW_TERMINAL + 2) == 'held'
     assert row(client, 'results', 'good') == good
 
 
 @pytest.mark.parametrize('leg', ['gpu', 'assignment'])
 def test_fresh_current_object_does_not_expire_on_old_enqueue(setup, leg):
     client, store, _ = seed(setup, leg)
-    row(client)['audio_staged_at'] = NOW29
-    assert staged_enqueue(row(client)) == NOW29
-    assert RecoveryStore(store).expire_held('bad', NOW29) == 'held'
-    assert RecoveryStore(store).expire_held('bad', NOW29 + TERMINAL_SECONDS) == 'expired'
+    row(client)['audio_staged_at'] = NOW_TERMINAL
+    assert staged_enqueue(row(client)) == NOW_TERMINAL
+    assert RecoveryStore(store).expire_held('bad', NOW_TERMINAL) == 'held'
+    assert RecoveryStore(store).expire_held('bad', NOW_TERMINAL + TERMINAL_SECONDS) == 'expired'
 
 
 @pytest.mark.parametrize('stamp', BAD_STAGED_CLOCKS)
@@ -234,11 +246,11 @@ def test_bad_restage_clock_falls_back_to_earlier_admission(stamp):
 
 @pytest.mark.parametrize('stamp', BAD_STAGED_CLOCKS)
 @pytest.mark.parametrize('leg', ['gpu', 'assignment'])
-def test_bad_restage_clock_expires_by_admission_at_day29(setup, stamp, leg):
+def test_bad_restage_clock_expires_by_admission_at_terminal_day(setup, stamp, leg):
     client, store, _ = seed(setup, leg)
     row(client)['audio_staged_at'] = stamp
-    assert RecoveryStore(store).expire_held('bad', NOW29 - 1) == 'held'
-    assert RecoveryStore(store).expire_held('bad', NOW29) == 'expired'
+    assert RecoveryStore(store).expire_held('bad', NOW_TERMINAL - 1) == 'held'
+    assert RecoveryStore(store).expire_held('bad', NOW_TERMINAL) == 'expired'
     assert row(client)['dead_letter_reason'] == 'input_expiring'
 
 
@@ -255,7 +267,7 @@ def test_bad_clocks_are_visible_in_the_age_sample_and_exported_count(monkeypatch
         'enqueued_at': enqueued,
         'audio_staged_at': stamp,
     }
-    sample = _sample(jobs=[job], now=NOW29)
+    sample = _sample(jobs=[job], now=NOW_TERMINAL)
     assert sample['held_oldest']['staged_input'] == (ENQUEUED if enqueued else None)
     assert sample['staged_input_clock_invalid'] == 1
     assert sample['truncated']['staged_input'] is (not bool(enqueued))
@@ -264,7 +276,7 @@ def test_bad_clocks_are_visible_in_the_age_sample_and_exported_count(monkeypatch
     monkeypatch.setattr(metrics_module, 'timeliness_sample', lambda *a, **kw: sample)
     monkeypatch.setattr(metrics_module, 'lever_enabled', lambda name: False)
     monkeypatch.setattr(metrics_module, 'batch_timeliness_alarm_enabled', lambda: True)
-    metrics.refresh_timeliness(cast(Any, SimpleNamespace(client=None, namespace='ns')), NOW29)
+    metrics.refresh_timeliness(cast(Any, SimpleNamespace(client=None, namespace='ns')), NOW_TERMINAL)
     assert registry.get_sample_value('omi_batch_staged_input_clock_invalid_total') == 1
     assert registry.get_sample_value('omi_batch_held_oldest_age_seconds', {'leg': 'staged_input'}) == (
         TERMINAL_SECONDS if enqueued else 0
@@ -286,22 +298,20 @@ def test_metric_uses_current_object_and_does_not_mask_older_legacy_input():
 
 
 def test_terminal_assignment_is_not_automatically_released_but_operator_uses_existing_target_gate(monkeypatch):
-    from tests.unit.test_batch_pipeline_projection_release import rows, store_for, OWNER, TARGET
-
     monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_HOLD_RECOVERY_ENABLED', 'true')
-    seeded = rows()
+    seeded = projection_rows()
     key = ('batch_pipeline_prod_jobs', 'held')
     seeded[key].update(state='dead', dead_letter_reason='input_expiring', input_expiring_leg='assignment')
     client, projection = store_for(seeded)
     release = ProjectionReleaseStore(projection)
     before = deepcopy(client.rows)
-    assert not release.release('held', NOW29)
+    assert not release.release('held', NOW_TERMINAL)
     assert client.rows == before
     client.rows['users', OWNER, 'conversations', TARGET]['discarded'] = True
-    assert not release.release('held', NOW29, operator=True)
+    assert not release.release('held', NOW_TERMINAL, operator=True)
     assert row(client, sid='held')['state'] == 'dead'
     client.rows['users', OWNER, 'conversations', TARGET]['discarded'] = False
-    assert release.release('held', NOW29, operator=True)
+    assert release.release('held', NOW_TERMINAL, operator=True)
     assert row(client, sid='held')['state'] == 'committed'
     assert row(client, 'results', 'held')['projection_state'] == 'pending'
 
@@ -347,49 +357,53 @@ def test_staging_age_scan_fails_sample_instead_of_publishing_false_zero():
         )
 
 
-def test_existing_record_conversation_failure_presentation_at_day29(monkeypatch):
+@pytest.mark.parametrize('queue_hold', ['true', 'false'])
+@pytest.mark.parametrize('clock', [None, 'created_at', 'home_transcription_pending_at'])
+def test_existing_record_conversation_failure_presentation_at_terminal_day(monkeypatch, queue_hold, clock):
     from utils.conversations import home_step
 
     monkeypatch.setattr(home_step, 'home_step_projection_enabled', lambda: True)
-    assert (
-        home_step.classify(
-            {
-                'status': 'completed',
-                'record_lane_owner': 'batch_sync_v1',
-                'finished_at': datetime.now(timezone.utc) - timedelta(days=29),
-            }
-        )
-        == 'failed'
-    )
+    monkeypatch.setenv('HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED', queue_hold)
+    arrived = datetime.now(timezone.utc) - timedelta(days=29)
+    server_clock = {clock: arrived} if clock else {}
+    assert home_step.classify(
+        {
+            'status': 'completed',
+            'record_lane_owner': 'batch_sync_v1',
+            'finished_at': datetime.now(timezone.utc) - timedelta(days=29),
+            **server_clock,
+        }
+    ) == ('transcribing' if queue_hold == 'true' and clock is None else 'failed')
 
 
-def test_digest_requires_exact_approval_before_any_writer_and_binds_whole_snapshot(setup):
+def test_digest_requires_exact_approval_before_any_writer_and_binds_whole_snapshot(setup, monkeypatch):
     client, store, _ = seed(setup)
     units: list[dict[str, Any]] = [{'id': 'bad', 'leg': 'gpu', 'job': deepcopy(row(client)), 'entry': {}}]
-    digest = cli.plan_digest(units, NOW29, 128, None)
+    digest = cli.plan_digest(units, NOW_TERMINAL, 128, None)
     untouched = Mock()
     with pytest.raises(cli.Refused, match='approval_digest_changed'):
-        cli.apply_plan(untouched, units, digest, 'wrong', NOW29)
+        cli.apply_plan(untouched, units, digest, 'wrong', NOW_TERMINAL)
     assert not untouched.mock_calls
+    monkeypatch.setattr(cli, 'pinned_audio_exists', lambda *a: True)
     row(client)['attempt'] = 99
-    assert cli.apply_plan(store, units, digest, digest, NOW29) == {'refused': 1}
+    assert cli.apply_plan(store, units, digest, digest, NOW_TERMINAL) == {'refused': 1}
     units[0]['job']['attempt'] = 99
-    assert cli.plan_digest(units, NOW29, 128, None) != digest
+    assert cli.plan_digest(units, NOW_TERMINAL, 128, None) != digest
 
 
-def test_operator_discovery_is_bounded_oldest_first_and_scopes_21_day_proxy():
+def test_operator_discovery_is_bounded_oldest_first_and_scopes_warning_age_proxy():
     query = Mock()
     for name in ('where', 'order_by', 'limit', 'start_after'):
         getattr(query, name).return_value = query
     query.stream.return_value = []
     client = Mock()
     client.collection.return_value = query
-    assert cli.discover(client, NOW29, 128, {'enqueued_at': 1, 'id': 'private'}) == ([], 0, None)
+    assert cli.discover(client, NOW_TERMINAL, 128, {'enqueued_at': 1, 'id': 'private'}) == ([], 0, None)
     query.limit.assert_called_once_with(128)
     assert [c.args for c in query.order_by.call_args_list] == [('enqueued_at',), ('__name__',)]
-    assert ('enqueued_at', '<=', NOW29 - WARNING_SECONDS) in [c.args for c in query.where.call_args_list]
+    assert ('enqueued_at', '<=', NOW_TERMINAL - WARNING_SECONDS) in [c.args for c in query.where.call_args_list]
     with pytest.raises(cli.Refused, match='invalid_page_size'):
-        cli.discover(client, NOW29, 129)
+        cli.discover(client, NOW_TERMINAL, 129)
 
 
 @pytest.mark.parametrize('tier', ['ro-prod', 'prod-operator'])
@@ -423,8 +437,7 @@ def test_warning_rule_threshold_freshness_route_and_pending_period():
     )
     assert json.loads((BACKEND / 'charts/monitoring/alerts/batch-input-retention.json').read_text()) == [rule]
     assert rule['data'][0]['model']['expr'] == (
-        'max(omi_batch_held_oldest_age_seconds{leg="staged_input"} and ignoring(leg) '
-        '(time() - omi_batch_timeliness_observed_at_seconds < 900))'
+        'max(omi_batch_held_oldest_age_seconds{leg="staged_input"} and ignoring(leg) ' f'{FRESH_NEWEST})'
     )
     for age in (WARNING_SECONDS - 1, WARNING_SECONDS, WARNING_SECONDS + 1):
         assert b.evaluate(rule, {'A': {(): [age]}}) == {(): float(age > WARNING_SECONDS)}
@@ -432,3 +445,117 @@ def test_warning_rule_threshold_freshness_route_and_pending_period():
     assert rule['for'] == '10m' and not rule['isPaused']
     assert rule['labels']['severity'] == 'warning' and rule['labels']['audience'] == 'human'
     assert not rule['notification_settings']['mute_time_intervals']
+
+
+@pytest.mark.parametrize('leg', ['gpu', 'assignment'])
+@pytest.mark.parametrize(
+    'age_days,offset,terminal',
+    [
+        (29, -1, False),
+        (29, 0, False),
+        (29, 1, False),
+        (51, -1, False),
+        (51, 0, False),
+        (51, 1, False),
+        (59, -1, False),
+        (59, 0, True),
+        (59, 1, True),
+        (60, -1, True),
+        (60, 0, True),
+        (60, 1, True),
+    ],
+)
+def test_sixty_day_lifecycle_boundaries(setup, leg, age_days, offset, terminal):
+    client, store, _ = seed(setup, leg)
+    now = ENQUEUED + age_days * 86400 + offset
+    before = deepcopy(client.rows)
+    assert (RecoveryStore(store).expire_held('bad', now) == 'expired') is terminal
+    if terminal:
+        assert row(client)['dead_letter_reason'] == 'input_expiring'
+    else:
+        assert client.rows == before
+
+
+@pytest.mark.parametrize(
+    'age_days,offset,selected',
+    [(29, 0, False), (51, -1, False), (51, 0, True), (51, 1, True), (59, 0, True), (60, 0, True)],
+)
+def test_redrive_selection_uses_current_object_warning_age(age_days, offset, selected):
+    as_of = ENQUEUED + 100 * 86400
+    job = {
+        'segment_id': 'synthetic',
+        'state': 'quarantined',
+        'quarantine_reason': 'worker_failed',
+        'recovery_state': 'held',
+        'audio_uri': URI,
+        'enqueued_at': ENQUEUED,
+        'audio_staged_at': as_of - age_days * 86400 - offset,
+    }
+    query = Mock()
+    for name in ('where', 'order_by', 'limit'):
+        getattr(query, name).return_value = query
+    query.stream.return_value = [SimpleNamespace(id='synthetic', to_dict=lambda: job)]
+    client = Mock()
+    client.collection.return_value = query
+    query.document.return_value.get.return_value.to_dict.return_value = {}
+    units, examined, _ = cli.discover(client, as_of)
+    assert len(units) == int(selected)
+    assert examined == 1
+    assert ('enqueued_at', '<=', as_of - 51 * 86400) in [c.args for c in query.where.call_args_list]
+
+
+@pytest.mark.parametrize('leg', ['gpu', 'assignment'])
+@pytest.mark.parametrize('evidence', ['deleted', 'wrong_generation', 'existing', 'unavailable', 'unpinned'])
+def test_redrive_requires_exact_generation_metadata_before_either_writer(monkeypatch, leg, evidence):
+    from google.api_core.exceptions import NotFound, Forbidden
+    from database.batch_pipeline_quarantine_recovery import RecoveryStore
+    from database.batch_pipeline_projection_release import ProjectionReleaseStore
+
+    job = {'state': 'dead', 'dead_letter_reason': 'input_expiring', 'audio_uri': URI}
+    if evidence == 'unpinned':
+        job['audio_uri'] = URI.split('#')[0]
+    units = [{'id': 'synthetic', 'leg': leg, 'job': job, 'entry': {'synthetic': True}}]
+    digest = cli.plan_digest(units, NOW_TERMINAL, 128, None)
+    storage = Mock()
+    blob = storage.bucket.return_value.blob.return_value
+    blob.generation = 2 if evidence == 'wrong_generation' else 1
+    if evidence == 'deleted':
+        blob.reload.side_effect = NotFound('private diagnostic')
+    if evidence == 'unavailable':
+        blob.reload.side_effect = Forbidden('private diagnostic')
+    gpu = Mock(return_value=True)
+    assignment = Mock(return_value=True)
+    monkeypatch.setattr(RecoveryStore, 'requeue_quarantined', gpu)
+    monkeypatch.setattr(ProjectionReleaseStore, 'release', assignment)
+    store = Mock()
+    result = cli.apply_plan(store, units, digest, digest, NOW_TERMINAL, storage_client=storage)
+    if evidence == 'existing':
+        assert result == {'requeued': 1}
+        if leg == 'gpu':
+            gpu.assert_called_once_with('synthetic', NOW_TERMINAL, expected_job=job)
+            assignment.assert_not_called()
+        else:
+            assignment.assert_called_once_with(
+                'synthetic', NOW_TERMINAL, operator=True, expected_job=job, expected_entry=units[0]['entry']
+            )
+            gpu.assert_not_called()
+    else:
+        assert result == {'skipped_input_unproven': 1}
+        gpu.assert_not_called()
+        assignment.assert_not_called()
+        assert not store.mock_calls
+    if evidence == 'unpinned':
+        storage.bucket.assert_not_called()
+    else:
+        storage.bucket.assert_called_once_with(STAGING_BUCKET)
+        storage.bucket.return_value.blob.assert_called_once_with('synthetic/audio', generation=1)
+        blob.reload.assert_called_once_with(if_generation_match=1, timeout=10, retry=None)
+    blob.download_as_bytes.assert_not_called()
+    blob.delete.assert_not_called()
+
+
+def test_unapproved_redrive_never_reads_object_metadata():
+    storage = Mock()
+    with pytest.raises(cli.Refused, match='approval_digest_changed'):
+        cli.apply_plan(Mock(), [], 'approved', 'wrong', NOW_TERMINAL, storage_client=storage)
+    assert not storage.mock_calls

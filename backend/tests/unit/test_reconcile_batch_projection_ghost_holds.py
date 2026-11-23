@@ -11,6 +11,18 @@ from google.api_core.exceptions import FailedPrecondition
 
 from scripts import reconcile_batch_projection_ghost_holds as repair
 
+CLOCK = {
+    'projection_finish_due_at': 123.0,
+    'projection_finish_backoff_step': 0,
+    'projection_followup_due_at': 123.0,
+}
+
+
+@pytest.fixture(autouse=True)
+def fixed_clock(monkeypatch):
+    monkeypatch.setattr(repair.time, 'time', lambda: 123.0)
+
+
 GHOST = {'projection_state': 'quarantine_held', 'projection': {'state': 'ready'}}
 
 
@@ -25,7 +37,7 @@ GHOST = {'projection_state': 'quarantine_held', 'projection': {'state': 'ready'}
         ({**GHOST, 'projection_parts': {'0': {'state': 'quarantined', 'disposition': 'ambiguous_generation'}}}, False),
         ({**GHOST, 'projection_parts': {'0': {'state': 'quarantined', 'disposition': 'other'}}}, False),
         ({**GHOST, 'projection_state': 'persisted', 'projection': {'state': 'quarantined'}}, False),
-        ({**GHOST, 'projection_state': 'ready'}, False),
+        ({**GHOST, 'projection_state': 'ready', **CLOCK}, False),
         ({'projection_state': 'quarantine_held'}, False),
         ({**GHOST, 'projection_parts': None}, False),
         ({**GHOST, 'projection_parts': {'0': None}}, False),
@@ -47,7 +59,7 @@ def client_for(rows):
         ref = Mock(id=name)
 
         def update(payload, *, option, timeout, retry, name=name):
-            assert payload == {'projection_state': 'ready'}
+            assert payload == {'projection_state': 'ready', **CLOCK}
             assert option._last_update_time == stamp
             assert retry is None and 0 < timeout <= 3
             rows[name].update(payload)
@@ -96,9 +108,22 @@ def test_apply_is_hint_only_idempotent_and_preserves_real_holds():
     before = deepcopy(rows)
     counts = repair.reconcile(client, 'batch_pipeline_test_held', apply=True, batch_size=1)
     assert counts['scanned'] == 3 and counts['matched'] == counts['updated'] == 2
-    assert rows == {**before, 'a': {**GHOST, 'projection_state': 'ready'}, 'c': {**GHOST, 'projection_state': 'ready'}}
+    assert rows == {
+        **before,
+        'a': {**GHOST, 'projection_state': 'ready', **CLOCK},
+        'c': {**GHOST, 'projection_state': 'ready', **CLOCK},
+    }
     again = repair.reconcile(client, 'batch_pipeline_test_held', apply=True)
     assert again['scanned'] == 1 and again['matched'] == again['updated'] == 0
+
+
+def test_apply_stamps_both_clocks():
+    client, rows, _, _ = client_for({'a': GHOST})
+    counts = repair.reconcile(client, 'batch_pipeline_test_held', apply=True)
+    assert counts['updated'] == 1
+    assert rows['a']['projection_state'] == 'ready'
+    assert rows['a']['projection_finish_backoff_step'] == 0
+    assert rows['a']['projection_finish_due_at'] == rows['a']['projection_followup_due_at'] == 123.0
 
 
 def test_concurrent_quarantine_change_cannot_be_overwritten():

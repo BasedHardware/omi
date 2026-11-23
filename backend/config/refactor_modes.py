@@ -42,7 +42,6 @@ WAVE2_MODES = frozenset(
         'MEDIA_NOISE',
         'CAPTURE_COVERAGE',
         'NOTES_PACKET_V2',
-        'EPISODE_BOUNDARIES',
         'LIFECYCLE_V2',
         'CALLS_RECAP',
         'ACTION_ITEMS_V2',
@@ -54,6 +53,12 @@ WAVE2_COHORT_SALT = 'capture-speaker-notes:wave2'
 
 # Typed bindings make the generic cohort reader visible to registry validation.
 CONVERSATION_TERMINAL_FAMILY_MODE_ENV = 'CONVERSATION_TERMINAL_FAMILY_MODE'
+PUSHER_RECORD_CLOSE_NOTIFY_ENV = 'PUSHER_RECORD_CLOSE_NOTIFY_ENABLED'
+PUSHER_RECORD_CLOSE_NOTIFY_SERVE_PERCENT_ENV = 'PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_PERCENT'
+PUSHER_RECORD_CLOSE_NOTIFY_SERVE_UID_SHA256S_ENV = 'PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_UID_SHA256S'
+RECORD_TOKEN_LEASE_MODE_ENV = 'RECORD_TOKEN_LEASE_MODE'
+RECORD_TOKEN_LEASE_SERVE_PERCENT_ENV = 'RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT'
+RECORD_TOKEN_LEASE_SERVE_UID_SHA256S_ENV = 'RECORD_TOKEN_LEASE_MODE_SERVE_UID_SHA256S'
 CAPTURE_COVERAGE_MODE_ENV = 'CAPTURE_COVERAGE_MODE'
 CAPTURE_COVERAGE_SERVE_PERCENT_ENV = 'CAPTURE_COVERAGE_MODE_SERVE_PERCENT'
 CAPTURE_COVERAGE_SERVE_UID_SHA256S_ENV = 'CAPTURE_COVERAGE_MODE_SERVE_UID_SHA256S'
@@ -64,6 +69,11 @@ ACTION_ITEMS_V2_SERVE_UID_SHA256S_ENV = 'ACTION_ITEMS_V2_MODE_SERVE_UID_SHA256S'
 STT_VOCAB_SERVE_PERCENT_ENV = 'STT_VOCAB_MODE_SERVE_PERCENT'
 STT_VOCAB_SERVE_UID_SHA256S_ENV = 'STT_VOCAB_MODE_SERVE_UID_SHA256S'
 _COHORT_ENVS = {
+    PUSHER_RECORD_CLOSE_NOTIFY_ENV: (
+        PUSHER_RECORD_CLOSE_NOTIFY_SERVE_PERCENT_ENV,
+        PUSHER_RECORD_CLOSE_NOTIFY_SERVE_UID_SHA256S_ENV,
+    ),
+    RECORD_TOKEN_LEASE_MODE_ENV: (RECORD_TOKEN_LEASE_SERVE_PERCENT_ENV, RECORD_TOKEN_LEASE_SERVE_UID_SHA256S_ENV),
     'CALLS_RECAP_MODE': (CALLS_RECAP_SERVE_PERCENT_ENV, CALLS_RECAP_SERVE_UID_SHA256S_ENV),
     'ACTION_ITEMS_V2_MODE': (ACTION_ITEMS_V2_SERVE_PERCENT_ENV, ACTION_ITEMS_V2_SERVE_UID_SHA256S_ENV),
     'STT_VOCAB_MODE': (STT_VOCAB_SERVE_PERCENT_ENV, STT_VOCAB_SERVE_UID_SHA256S_ENV),
@@ -71,12 +81,10 @@ _COHORT_ENVS = {
 }
 CAPTURE_COVERAGE_SHADOW_PERCENT_ENV = 'CAPTURE_COVERAGE_MODE_SHADOW_PERCENT'
 SPEAKER_EVIDENCE_SHADOW_PERCENT_ENV = 'SPEAKER_EVIDENCE_MODE_SHADOW_PERCENT'
-EPISODE_BOUNDARIES_SHADOW_PERCENT_ENV = 'EPISODE_BOUNDARIES_MODE_SHADOW_PERCENT'
 MEDIA_NOISE_SHADOW_PERCENT_ENV = 'MEDIA_NOISE_MODE_SHADOW_PERCENT'
 _SHADOW_PERCENT_ENVS = {
     CAPTURE_COVERAGE_MODE_ENV: CAPTURE_COVERAGE_SHADOW_PERCENT_ENV,
     'SPEAKER_EVIDENCE_MODE': SPEAKER_EVIDENCE_SHADOW_PERCENT_ENV,
-    'EPISODE_BOUNDARIES_MODE': EPISODE_BOUNDARIES_SHADOW_PERCENT_ENV,
     'MEDIA_NOISE_MODE': MEDIA_NOISE_SHADOW_PERCENT_ENV,
 }
 
@@ -88,6 +96,8 @@ def _warn_once(name: str, raw: str) -> None:
 
 
 def mode(name: str, default: Mode = 'shadow', *, environ: Mapping[str, str] | None = None) -> Mode:
+    if name == RECORD_TOKEN_LEASE_MODE_ENV:
+        default = 'off'
     raw = (os.environ if environ is None else environ).get(name, '').strip().lower()
     if not raw:
         return default
@@ -129,14 +139,41 @@ def batch_live_orphan_repair_enabled() -> bool:
     return default_off('BATCH_LIVE_ORPHAN_REPAIR_ENABLED')
 
 
+def no_speech_terminal_enabled() -> bool:
+    """Default-on operator kill switch for the reversible no-speech terminal.
+
+    Only the digest-approved operator tool reads this. No scheduled or automatic
+    apply exists; false blocks new closes while undo always remains available.
+    """
+    return default_on('NO_SPEECH_TERMINAL_ENABLED')
+
+
 def record_seal_repair_age_order() -> bool:
-    """Prefer oldest pending records; off restores the name-ordered repair scan."""
+    """Prefer near-dead-letter records, then newest; off restores the name-ordered jobs scan."""
     return default_on('RECORD_SEAL_REPAIR_AGE_ORDER')
+
+
+def raw_live_gapped_packs_enabled() -> bool:
+    """Read gapped, unframed raw-live packs through their custody manifest.
+
+    Off restores the pre-existing skip: a pack without a declared frame schema
+    and a nonzero ``gap_count`` is not listed and cannot be decoded.
+    """
+    return default_on('RAW_LIVE_GAPPED_PACKS_ENABLED')
+
+
+def inventory_manifest_body_cache_enabled() -> bool:
+    return default_on('PRIVATE_SYNC_INVENTORY_MANIFEST_BODY_CACHE_ENABLED')
 
 
 def batch_input_expiring_enabled() -> bool:
     """Stop held staging inputs at day 29; off restores the existing held lifecycle."""
     return default_on('BATCH_INPUT_EXPIRING_ENABLED')
+
+
+def pipeline_ledger_enabled() -> bool:
+    """Write-only in-flight ledger; off stops ledger writes and leaves capture behavior unchanged."""
+    return default_on('PIPELINE_LEDGER')
 
 
 def uid_digest(uid: str) -> str:
@@ -151,7 +188,11 @@ def serving_for(
     current = mode(name, default, environ=env)
     if current == 'off':
         return False
-    if current == 'serve':
+    if name == RECORD_TOKEN_LEASE_MODE_ENV:
+        # Lease shadow is observation only; serve always honors its own cohort.
+        if current != 'serve':
+            return False
+    elif current == 'serve':
         return True
     if not uid:
         return False
@@ -167,7 +208,11 @@ def serving_for(
     if not math.isfinite(percent) or not 0 <= percent <= 100:
         _warn_once(percent_env, 'invalid')
         percent = 0.0
-    salt = WAVE2_COHORT_SALT if name in WAVE2_MODES else name.lower()
+    salt = (
+        'record-token-lease'
+        if name == RECORD_TOKEN_LEASE_MODE_ENV
+        else WAVE2_COHORT_SALT if name in WAVE2_MODES else name.lower()
+    )
     return percent > 0 and cohort_bucket(uid, salt) < percent
 
 

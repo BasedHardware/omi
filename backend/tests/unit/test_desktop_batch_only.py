@@ -357,7 +357,14 @@ async def test_zero_sample_packets_do_not_expand_or_shrink_batch_span(remote, mo
             originals.append(b'\xff')
     await archive.close()
     receipt = AudioReceipt(**h.events[0].receipt)
-    assert remote.blob(receipt.path).data == b''.join(originals)
+    blob = remote.blob(receipt.path)
+    if blob.metadata['codec'] == 'flac':
+        # Lossless storage can change the container; custody still recovers
+        # every original PCM byte through the generation/hash-verified reader.
+        assert read_pcm('owner', receipt) == b''.join(originals)
+    else:
+        # Undecodable/unaligned zero-sample packets retain their raw bytes.
+        assert blob.data == b''.join(originals)
     manifest = json.loads(remote.blob(receipt.manifest_path).data)
     assert len(manifest['frames']) == len(originals)
     assert sum(frame['samples'] for frame in manifest['frames']) == 16000
@@ -402,7 +409,10 @@ async def test_first_audio_marker_failure_keeps_buffered_original_for_shutdown_c
     ],
 )
 @pytest.mark.parametrize('status', [ConversationStatus.processing, ConversationStatus.completed])
-async def test_zero_preview_finalizer_registers_exact_language_bounds_before_completion(monkeypatch, trigger, status):
+@pytest.mark.parametrize('archive_closed', [False, True])
+async def test_zero_preview_finalizer_registers_exact_language_bounds_before_completion(
+    monkeypatch, trigger, status, archive_closed
+):
     row = capture()
     row.update(
         status=status.value,
@@ -414,6 +424,7 @@ async def test_zero_preview_finalizer_registers_exact_language_bounds_before_com
         has_content=True,
         server_batch_audio_start=1000,
         server_batch_audio_end=1002,
+        server_batch_audio_closed=archive_closed,
     )
     store = MemoryStore()
     model = SimpleNamespace(status=status, transcript_segments=[])

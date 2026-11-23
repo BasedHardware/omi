@@ -1,0 +1,3 @@
+{
+  "change": "Covered live Custom STT backups leave Pending without uploading, and Offline Sync reports incomplete recording cleanup."
+}

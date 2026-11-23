@@ -1,27 +1,34 @@
-"""IAM-env-only migration operator; never prints connection settings."""
+"""Direct IAM migration operator; never prints connection settings.
+
+Run from backend/: ``python -m database.cells migrate|status`` (``--help`` for usage).
+Set ``CELLS_PG_HOST`` to the direct Cloud SQL private IP, never a pooler endpoint;
+the connection uses port 5432. Set ``CELLS_PG_DATABASE`` and ``CELLS_PG_USER`` to the
+target database and migration-owner IAM database user (service account email without
+``.gserviceaccount.com``). Run with that identity's application default credentials
+(ADC); the password is a fresh short-lived IAM token. Both commands use one direct
+connection, with no pool or fallback. No additional flags or password env vars.
+"""
 
 import argparse
 import os
 from pathlib import Path
 
-from database.jobstore.connection import Pool, iam_connector
+from database.jobstore.connection import iam_connector
 from database.jobstore.migrate import current_version, migrate
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('command', choices=('migrate', 'status'))
     args = parser.parse_args()
-    connect = iam_connector(os.environ['CELLS_PG_HOST'], os.environ['CELLS_PG_DATABASE'], os.environ['CELLS_PG_USER'])
-    pool = Pool('', size=2, connect=connect)
+    conn = iam_connector(os.environ['CELLS_PG_HOST'], os.environ['CELLS_PG_DATABASE'], os.environ['CELLS_PG_USER'])()
     try:
-        with pool.connection() as conn:
-            if args.command == 'migrate':
-                print(migrate(conn, directory=Path(__file__).parent / 'migrations'))
-            else:
-                print(current_version(conn))
+        if args.command == 'migrate':
+            print(migrate(conn, directory=Path(__file__).parent / 'migrations'))
+        else:
+            print(current_version(conn))
     finally:
-        pool.close()
+        conn.close()
 
 
 if __name__ == '__main__':

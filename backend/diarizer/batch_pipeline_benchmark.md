@@ -72,12 +72,13 @@ compacted/windowed candidate measured .002470 RTF but WER **24.83%**, versus
 496→617; 26 words crossed compacted timeline seams and could not be mapped
 safely. Compact whole-file also worsened WER (29.79% versus 28.44%).
 
-**Keep `TRANSCRIPTION_FINAL_PASS_VAD_COMPACTION_ENABLED=false`.** The implemented
-wrapper abstains to original audio on VAD/mapping failure; these unguarded
-candidate scores are not its post-fallback output. On this corpus, mapping
-abstention can cause an extra ASR request, so no cost/latency saving is accepted.
-Pyannote DER after compaction remains unmeasured. Improve segmentation/join
-handling and repeat word/speaker quality gates before enabling the flag.
+**`TRANSCRIPTION_FINAL_PASS_VAD_COMPACTION_ENABLED` was retired 2026-11-22**
+after serving off on every surface; the benchmark verdict above is why it never
+shipped. The implemented wrapper abstains to original audio on VAD/mapping
+failure; these unguarded candidate scores are not its post-fallback output. On
+this corpus, mapping abstention can cause an extra ASR request, so no
+cost/latency saving is accepted. Pyannote DER after compaction remains
+unmeasured.
 
 ## Receipts and reproduction
 

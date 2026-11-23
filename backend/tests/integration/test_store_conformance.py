@@ -20,8 +20,10 @@ import pytest
 
 from config.batch_pipeline import scheduler_control_key
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
+from database import batch_pipeline_projection_outbox as projection_outbox
 from testing.store_fixtures import store_backend  # noqa: F401  (the parametrized fixture)
-from utils.batch_pipeline.contracts import Priority, WorkItem
+from utils.batch_pipeline.contracts import Priority, WorkItem, WorkResult
+from utils.batch_pipeline.merge import OrderedMerge
 from utils.batch_pipeline.scheduler import Scheduler, owner_key as scheduler_owner_key
 
 pytestmark = pytest.mark.integration
@@ -69,6 +71,48 @@ def need(harness, *names):
     """Skip a test that does not apply to a backend by design."""
     if harness.name in names:
         pytest.skip(f'not applicable to the {harness.name} backend')
+
+
+def test_shared_ready_cursor_rejects_stale_progress_and_reaches_fresh_owner(h, monkeypatch):
+    from utils.batch_pipeline.ready_discovery import ReadyDiscovery
+
+    monkeypatch.setenv('BATCH_PIPELINE_READY_DISCOVERY_CURSOR_ENABLED', 'true')
+    monkeypatch.setenv('BATCH_PIPELINE_READY_DISCOVERY_OWNERS_PER_TICK', '2')
+    monkeypatch.setenv('BATCH_PIPELINE_READY_DISCOVERY_TICK_SECONDS', '60')
+    put_all(
+        h,
+        [
+            (
+                'jobs',
+                key,
+                job(
+                    h,
+                    key,
+                    owner_key=key,
+                    state='result_ready',
+                    merge_pending=True,
+                    fresh_capture=key == 'z',
+                    stt_route={'stt_route': 'provider'},
+                ),
+            )
+            for key in ('b', 'd', 'f', 'h', 'z')
+        ],
+    )
+    serving, pump = ReadyDiscovery(h.store, 'serving'), ReadyDiscovery(h.store, 'pump')
+    stale = serving.page()
+    for expected in (['b', 'd'], ['f', 'h']):
+        page = pump.page()
+        assert [key for key, _ in pump.owners(page)] == expected
+        assert pump.finish(page)
+    progress = h.store.run(lambda tx: tx.get('merge_discovery', 'cursor'))
+    assert progress['after_owner_key'] == 'h' and progress['revision'] == 2
+    assert [key for key, _ in serving.owners(stale)] == ['b', 'd']
+    assert serving.finish(stale)
+    assert h.store.run(lambda tx: tx.get('merge_discovery', 'cursor')) == progress
+    page = pump.page()
+    assert [key for key, _ in pump.owners(page)] == ['z']
+    assert pump.finish(page)
+    assert h.store.run(lambda tx: tx.get('merge_discovery', 'cursor'))['revision'] == 3
 
 
 # -- document semantics ------------------------------------------------------------------------------
@@ -511,6 +555,46 @@ def _projection_rows(h):
     return rows
 
 
+def test_projection_outbox_merge_and_token_conformance(h, monkeypatch):
+    from utils.batch_pipeline import scheduler as scheduler_module
+
+    # This test advances a synthetic domain clock. Host load must not expire the scheduler's setup claim.
+    monkeypatch.setattr(scheduler_module, 'monotonic', lambda: 100.0)
+    queue = Scheduler(h.store)
+    merge = OrderedMerge(h.store, head_wait_seconds=0, catch_up_depth=0)
+    uid = h.uid('o')
+
+    def commit(segment, now):
+        assert queue.enqueue(WorkItem(segment, uid, now, 'gs://synthetic/input', 30, Priority.FRESH), now)
+        (lease,) = queue.pull(now + 1)
+        assert queue.complete(WorkResult(segment, 'gs://synthetic/result'), lease.token, now + 2)
+        return merge.commit_next(uid, now + 3)
+
+    outbox = projection_outbox
+    monkeypatch.setenv('BATCH_PROJECTION_OUTBOX', 'false')
+    assert outbox.KIND_FIELD not in commit('old', 10)
+    monkeypatch.setenv('BATCH_PROJECTION_OUTBOX', 'true')
+    entry = commit('new', 20)
+    assert entry[outbox.DUE_FIELD] == 23 and merge.commit_next(uid, 24) is None
+    assert h.store.projection_outbox_page(22, 10) == []
+    (due,) = h.store.projection_outbox_page(23, 10)
+    key = outbox.Obligation('new', 2)
+    assert due == outbox.DueObligation(key, 23)
+    assert h.store.projection_page_with_outbox() == (['old', 'new'], None, {'new'})
+    assert outbox.claim(h.store, outbox.Obligation('new', 1), lambda: 23) is None
+    token = outbox.claim(h.store, key, lambda: 23)
+    assert token and outbox.claim(h.store, key, lambda: 23) is None
+    assert h.store.projection_outbox_page(23, 10) == []
+    assert outbox.settle(h.store, key, token, lambda: 24, 'incomplete') == 'incomplete'
+    assert h.store.projection_outbox_page(83, 10) == []
+    assert h.store.projection_outbox_page(84, 10) == [outbox.DueObligation(key, 84)]
+    second = outbox.claim(h.store, key, lambda: 84)
+    assert second and second != token
+    assert outbox.settle(h.store, key, token, lambda: 85, 'retry') is None
+    snapshot = h.store.run(lambda tx: tx.get('results', 'new'))
+    assert snapshot['projection_state'] == 'pending' and snapshot[outbox.TOKEN_FIELD] == second
+
+
 def test_projection_page_is_a_stable_keyset_scan(h):
     put_all(h, _projection_rows(h))
     ids, cursor = h.store.projection_page(2)
@@ -527,6 +611,60 @@ def test_projection_cursor_survives_removal_of_its_source_row(h):
     ids, cursor = h.store.projection_page(2)
     put_all(h, [('results', ids[-1], {'segment_id': ids[-1], 'projection_state': 'completed', 'committed_at': 1.0})])
     assert h.store.projection_page(10, after=cursor)[0] == ['r0', 'r1']
+
+
+def test_projection_due_page_filters_orders_and_survives_cursor_removal(h):
+    rows = []
+    for key, state, committed, due in [
+        ('a', 'ready', 3.0, 10.0),
+        ('b', 'persisted', 3.0, 10.0),
+        ('c', 'ready', 1.0, 11.0),
+        ('future', 'ready', 0.0, 12.0),
+        ('pending', 'pending', 0.0, 10.0),
+        ('missing', 'ready', 0.0, None),
+    ]:
+        rows.append(('jobs', key, job(h, key)))
+        doc = {'segment_id': key, 'projection_state': state, 'committed_at': committed}
+        if due is not None:
+            doc['projection_finish_due_at'] = due
+        rows.append(('results', key, doc))
+    put_all(h, rows)
+    args = {'states': ('persisted', 'ready'), 'due_before': 11.0}
+    assert h.store.projection_page(10, **args) == (['a', 'b', 'c'], None)
+    ids, cursor = h.store.projection_page(2, **args)
+    assert (ids, cursor) == (['a', 'b'], (10.0, 3.0, 'b'))
+    put_all(h, [('results', 'b', {'segment_id': 'b', 'projection_state': 'completed', 'committed_at': 3.0})])
+    assert h.store.projection_page(2, after=cursor, **args) == (['c'], None)
+    assert h.store.projection_page(10, after=(10.0,), **args) == (['a', 'c'], None)
+    assert h.store.projection_page(10, after=(11.0,), **args) == (['c'], None)
+    assert h.store.projection_page(10, after=(12.0,), **args) == ([], None)
+    assert h.store.projection_page(10, states=('pending',)) == (['pending'], None)
+    assert h.store.projection_page(10, states=('ready',), after=(1.0, '')) == (['c', 'a'], None)
+
+
+@pytest.mark.parametrize('limit, expected', [(0, 1), (1, 1), (150, 150), (200, 200), (500, 200)])
+@pytest.mark.parametrize('due_before', [None, 10.0])
+def test_projection_page_uses_firestore_page_bounds(h, limit, expected, due_before):
+    rows = []
+    for i in range(201):
+        key = f'bound-{i:03}'
+        rows.append(('jobs', key, job(h, key)))
+        rows.append(
+            (
+                'results',
+                key,
+                {
+                    'segment_id': key,
+                    'projection_state': 'ready',
+                    'committed_at': 1.0,
+                    'projection_finish_due_at': 10.0,
+                },
+            )
+        )
+    put_all(h, rows)
+    ids, cursor = h.store.projection_page(limit, due_before=due_before)
+    assert ids == [f'bound-{i:03}' for i in range(expected)]
+    assert cursor == ((1.0, ids[-1]) if due_before is None else (10.0, 1.0, ids[-1]))
 
 
 # -- merge, capacity and projection hints (Store protocol parity, plan A3 step 1) ----------------------------
@@ -582,12 +720,118 @@ def test_fresh_pending_returns_the_earliest_fresh_rows_in_any_state(h):
     assert [row['segment_id'] for row in h.store.fresh_pending(key, 10)] == ['b', 'e', 'a']
 
 
+def test_merge_poll_preserves_capture_order_and_fresh_wait(h):
+    from utils.batch_pipeline.merge import _fresh_pick
+
+    terminals = ('committed', 'dead', 'quarantined', 'privacy_blocked', 'partial_retired', 'provider_superseded')
+    nonterminal = (
+        'ready',
+        'leased',
+        'retry',
+        'result_ready',
+        'record_pending',
+        'held',
+        'provider_pending',
+        'provider_running',
+        'vendor_held',
+        'future_state',
+    )
+    for state in (*terminals, *nonterminal):
+        put_all(h, [_pending(h, state, capture_at=0.0 if state in terminals else 1.0, fresh_capture=True, state=state)])
+    key = owner_key(h.uid('o'))
+    rows = h.store.fresh_pending(key, 32)
+    expected = set(nonterminal) | set(terminals)
+    assert {r['state'] for r in rows} == expected
+    assert h.store.run(lambda tx: tx.first_pending(key))['state'] == rows[0]['state']
+
+    # Isolate a decisionless allowance retry ahead of a completed fresh result.
+    for state in (*terminals, *nonterminal):
+
+        def remove(tx):
+            current = tx.get('jobs', state)
+            tx.put('jobs', state, {**current, 'merge_pending': False})
+
+        h.store.run(remove)
+    put_all(
+        h,
+        [
+            _pending(
+                h,
+                'waiting',
+                capture_at=1.0,
+                state='retry',
+                fresh_capture=True,
+                available_at=10.0,
+                last_policy_hold={'reason': 'allowance_exhausted'},
+            ),
+            _pending(h, 'done', capture_at=2.0, state='result_ready', fresh_capture=True, ready_at=10.0),
+        ],
+    )
+    rows = h.store.fresh_pending(key, 32)
+    assert [r['segment_id'] for r in rows] == ['waiting', 'done']
+    assert h.store.run(lambda tx: tx.first_pending(key))['segment_id'] == 'waiting'
+    assert _fresh_pick(rows, 100, 300) == (None, None)
+    assert _fresh_pick(rows, 311, 300)[1]['segment_ids'] == ['waiting']
+
+
+def test_merge_poll_preserves_recovery_and_durable_terminal_transitions(h, monkeypatch):
+    monkeypatch.setenv('BATCH_ALLOWANCE_PARK_ENABLED', 'off')  # Legacy retry behavior under rollback.
+    from utils.batch_pipeline.contracts import WorkResult
+    from utils.batch_pipeline.merge import OrderedMerge
+    from utils.batch_pipeline.retry_policy import quarantine_job
+
+    queue = Scheduler(h.store)
+    uid = h.uid('o')
+    assert queue.enqueue(WorkItem('recover-me', uid, 1, 'gs://synthetic/input', 30, Priority.FRESH), 100)
+    lease = queue.pull(101)[0]
+    assert queue.defer('recover-me', lease.token, 102, 30, held_reason='allowance_exhausted')
+    assert h.store.due('retry', 133, 10) == ['recover-me']
+    assert queue.recover(133) == 1
+    lease = queue.pull(134)[0]
+    assert queue.complete(WorkResult('recover-me', 'gs://synthetic/result'), lease.token, 135)
+    assert OrderedMerge(h.store).commit_next(uid, 136) is not None
+    assert h.store.run(lambda tx: tx.get('jobs', 'recover-me'))['state'] == 'committed'
+
+    assert queue.enqueue(WorkItem('fail-me', uid, 2, 'gs://synthetic/input2', 30, Priority.FRESH), 140)
+
+    def quarantine(tx):
+        current = tx.get('jobs', 'fail-me')
+        quarantine_job(tx, current, 141, 'worker_failed')
+        tx.put('jobs', 'fail-me', current)
+
+    h.store.run(quarantine)
+    assert h.store.run(lambda tx: tx.get('jobs', 'fail-me'))['state'] == 'quarantined'
+
+    # Retained terminal rows remain directly addressable for fenced redrive.
+    def expire(tx):
+        current = tx.get('jobs', 'fail-me')
+        tx.put(
+            'jobs',
+            'fail-me',
+            {**current, 'state': 'dead', 'merge_pending': True, 'dead_letter_reason': 'synthetic_failure'},
+        )
+
+    h.store.run(expire)
+    assert h.store.run(lambda tx: tx.get('jobs', 'fail-me'))['state'] == 'dead'
+    assert h.store.run(lambda tx: queue.redrive_in_transaction(tx, tx.get('jobs', 'fail-me'), 142, operator=True))
+    assert h.store.run(lambda tx: tx.get('jobs', 'fail-me'))['state'] == 'ready'
+
+    assert queue.enqueue(WorkItem('fenced', h.uid('p'), 3, 'gs://synthetic/private', 30, Priority.FRESH), 150)
+    assert 'fenced' in {lease.item.segment_id for lease in queue.pull(151, 2)}
+    h.customer.block_privacy(h.uid('p'))
+    assert h.store.quarantine_fenced('fenced', 152)
+    fenced = h.store.run(lambda tx: tx.get('jobs', 'fenced'))
+    assert fenced['state'] == 'privacy_blocked' and fenced['merge_pending'] is True
+    pending = h.store.run(lambda tx: tx.first_pending(fenced['owner_key']))
+    assert pending['segment_id'] == 'fenced'
+
+
 def test_held_merge_owners_rotates_markers_and_resolves_the_owner_from_pending_work(h):
     held = owner_key(h.uid('o'))
     put_all(
         h,
         [
-            _pending(h, 'a'),
+            _pending(h, 'a', state='dead'),
             ('merge_holds', held, {'held': True}),
             ('merge_holds', 'ok-stale', {'held': True}),
             ('merge_holds', owner_key(h.uid('p')), {'held': False}),
@@ -883,3 +1127,302 @@ def test_concurrent_schedulers_lease_every_job_exactly_once(h):
     with ThreadPoolExecutor(max_workers=4) as pool:
         list(pool.map(drain, range(4)))
     assert sorted(leased) == sorted(expected)
+
+
+def test_ordered_merge_retained_terminal_head_and_later_result(h):
+    from utils.batch_pipeline.contracts import WorkResult
+    from utils.batch_pipeline.merge import OrderedMerge
+
+    uid = h.uid('o')
+    queue = Scheduler(h.store)
+    for segment, capture in [('terminal', 1), ('later', 2)]:
+        assert queue.enqueue(WorkItem(segment, uid, capture, 'gs://synthetic/input', 30, Priority.FRESH), 100)
+    leases = {lease.item.segment_id: lease for lease in queue.pull(101, 2)}
+    assert queue.complete(WorkResult('later', 'gs://synthetic/result'), leases['later'].token, 102)
+
+    def retain(tx):
+        old = tx.get('jobs', 'terminal')
+        old.update(state='dead', merge_pending=True, token='', lease_until=0, dead_letter_reason='synthetic_failure')
+        tx.put('jobs', 'terminal', old)
+        return old
+
+    terminal = h.store.run(retain)
+    merge = OrderedMerge(h.store, head_wait_seconds=0, catch_up_depth=0)
+    entry = merge.commit_next(uid, 103)
+    assert h.store.run(lambda tx: tx.get('jobs', 'terminal')) == terminal
+    assert entry is None
+    assert h.store.run(lambda tx: tx.get('results', 'later')) == {}
+
+
+@pytest.mark.parametrize('head_state', ['dead', 'future_state'])
+def test_head_priority_never_promotes_past_a_terminal_or_unknown_predecessor(h, head_state):
+    from utils.batch_pipeline.scheduler import _prefer_merge_head
+
+    put_all(
+        h,
+        [
+            _pending(h, 'head', capture_at=1, state=head_state, next='middle', duration_seconds=30),
+            _pending(h, 'middle', capture_at=2, next='selected', duration_seconds=30, available_at=1),
+            _pending(h, 'selected', capture_at=3, next=None, duration_seconds=30, available_at=1),
+        ],
+    )
+    observations = []
+
+    def pick(tx):
+        return _prefer_merge_head(
+            tx,
+            {'tail': 'selected'},
+            tx.get('jobs', 'selected'),
+            [1],
+            observations,
+            now=10,
+            max_seconds=60,
+            shared_gpu=False,
+        )
+
+    assert h.store.run(pick)['segment_id'] == 'selected'
+    assert h.store.run(lambda tx: tx.get('jobs', 'head'))['state'] == head_state
+    assert observations == []
+
+
+@pytest.mark.parametrize('state', ['missing', None])
+def test_missing_and_null_pending_state_stays_visible(h, state):
+    legacy = job(h, 'legacy', state=state, merge_pending=True, fresh_capture=True, privacy_generation=0)
+    if state == 'missing':
+        del legacy['state']
+    put_all(h, [('jobs', 'legacy', legacy)])
+    key = owner_key(h.uid('o'))
+    assert h.store.fresh_pending(key, 32) == [legacy]
+    assert h.store.run(lambda tx: tx.first_pending(key)) == legacy
+    assert h.store.run(lambda tx: tx.get('jobs', 'legacy')) == legacy
+
+
+def test_state_census_counts_only_pending_missing_null_or_unknown_rows(h, monkeypatch):
+    if h.name != 'emulator':
+        pytest.skip('Firestore aggregate API only')
+    from scripts.batch_pipeline_poll_state_census import KNOWN_STATES, census
+
+    rows = [('jobs', state, job(h, state, state=state, merge_pending=True)) for state in KNOWN_STATES]
+    put_all(h, rows)
+    client = h.store.client
+    collection = f'{h.store.namespace}_jobs'
+
+    def forbid_document_reads(*args, **kwargs):
+        pytest.fail('census must use aggregation COUNT, never document reads')
+
+    commit = client._firestore_api.commit
+
+    def aggregate_only_commit(request, **kwargs):
+        assert not request['writes']
+        return commit(request, **kwargs)
+
+    with monkeypatch.context() as census_only:
+        census_only.setattr(client._firestore_api, 'commit', aggregate_only_commit)
+        census_only.setattr(client._firestore_api, 'run_query', forbid_document_reads)
+        census_only.setattr(client._firestore_api, 'batch_get_documents', forbid_document_reads)
+        assert census(client.transaction(read_only=True), client, collection) == 0
+    missing = job(h, 'missing', merge_pending=True)
+    del missing['state']
+    put_all(
+        h,
+        [
+            ('jobs', 'missing', missing),
+            ('jobs', 'null', job(h, 'null', state=None, merge_pending=True)),
+            ('jobs', 'unknown', job(h, 'unknown', state='future_state', merge_pending=True)),
+            ('jobs', 'not_pending', job(h, 'not_pending', state=None, merge_pending=False)),
+        ],
+    )
+    with monkeypatch.context() as census_only:
+        census_only.setattr(client._firestore_api, 'commit', aggregate_only_commit)
+        census_only.setattr(client._firestore_api, 'run_query', forbid_document_reads)
+        census_only.setattr(client._firestore_api, 'batch_get_documents', forbid_document_reads)
+        assert census(client.transaction(read_only=True), client, collection) == 3
+
+
+def test_transactional_fresh_first_sees_ready_past_40_unready_rows_and_terminal_states(h):
+    rows = [
+        job(
+            h,
+            f'f{i:02}',
+            capture_at=float(i),
+            merge_pending=True,
+            fresh_capture=True,
+            state='result_ready' if i == 40 else 'leased',
+        )
+        for i in range(41)
+    ]
+    put_all(h, [('jobs', row['segment_id'], row) for row in rows])
+    for state in ('leased', 'dead', 'quarantined', 'committed'):
+        row = {**rows[0], 'state': state}
+        put_all(h, [('jobs', row['segment_id'], row)])
+        first, ready = h.store.run(
+            lambda tx: (tx.fresh_first_pending(row['owner_key']), tx.fresh_first_ready_pending(row['owner_key']))
+        )
+        assert first['segment_id'] == 'f00' and ready['segment_id'] == 'f40'
+
+
+@pytest.mark.parametrize('head_class', [True, None])
+@pytest.mark.parametrize('wait', [0, 60])
+@pytest.mark.parametrize('privacy_blocked', [False, True])
+def test_unready_fresh_or_legacy_head_does_not_hide_fresh_behind_held_provider(
+    h, monkeypatch, head_class, wait, privacy_blocked
+):
+    from utils.batch_pipeline.merge import OrderedMerge
+
+    monkeypatch.setenv('BATCH_PIPELINE_PROVIDER_BACKLOG_RELEASE_ENABLED', 'false')
+    monkeypatch.setenv('BATCH_PIPELINE_PROVIDER_MERGE_MEMBERSHIP_ENABLED', 'true')
+    monkeypatch.setenv('BATCH_PIPELINE_MERGE_TX_FRESH_GATE_ENABLED', 'true')
+    uid = h.uid('o')
+    key = scheduler_owner_key(uid)
+    rows = [
+        job(
+            h,
+            name,
+            owner_key=key,
+            capture_at=float(i),
+            merge_pending=True,
+            fresh_capture=True,
+            state='result_ready' if name in ('held', 'fresh') else 'retry',
+            protocol_version=1,
+            result={'text': ''},
+            ready_at=1.0,
+        )
+        for i, name in enumerate(('head', *(f'blocked-{n}' for n in range(40)), 'held', 'fresh'))
+    ]
+    if head_class is None:
+        rows[0].pop('fresh_capture')
+    rows[-2].update(fresh_capture=False, stt_route={'stt_route': 'provider'})
+    put_all(h, [('jobs', row['segment_id'], row) for row in rows])
+    if privacy_blocked:
+        h.customer.block_privacy(uid)
+    entry = OrderedMerge(h.store, head_wait_seconds=wait, catch_up_depth=1).commit_next(uid, 100.0)
+    assert (entry['segment_id'] if entry else None) == ('fresh' if wait and not privacy_blocked else None)
+    assert h.store.run(lambda tx: tx.get('jobs', 'held'))['state'] == 'result_ready'
+
+
+@pytest.mark.parametrize('initial_state', ['leased', 'dead'])
+def test_fresh_settle_or_redrive_before_commit_beats_stale_probe(h, monkeypatch, initial_state):
+    from unittest.mock import Mock
+
+    from utils.batch_pipeline.merge import OrderedMerge
+
+    uid = h.uid('o')
+    key = scheduler_owner_key(uid)
+    rows = [
+        job(
+            h,
+            name,
+            owner_key=key,
+            capture_at=float(i),
+            merge_pending=True,
+            fresh_capture=i > 0,
+            state=initial_state if i == 1 else 'leased',
+            protocol_version=1,
+            result={'text': ''},
+            ready_at=1.0,
+        )
+        for i, name in enumerate(('backlog', 'early', 'later'))
+    ]
+    rows[2]['state'] = 'result_ready'
+    put_all(h, [('jobs', row['segment_id'], row) for row in rows])
+    stale = [rows[2].copy()]
+    probe = Mock(return_value=stale)
+    monkeypatch.setattr(h.store, 'fresh_pending', probe)
+    tx_type = h.store.run(type)
+    first_query, query, put = tx_type.fresh_first_pending, tx_type.fresh_first_ready_pending, tx_type.put
+    firsts, reads, writes = [], [], []
+
+    def first(tx, key):
+        firsts.append(tx)
+        return first_query(tx, key)
+
+    def read(tx, key):
+        reads.append(tx)
+        return query(tx, key)
+
+    def write(tx, table, key, value):
+        if table == 'results':
+            writes.append(tx)
+        return put(tx, table, key, value)
+
+    monkeypatch.setattr(tx_type, 'fresh_first_pending', first)
+    monkeypatch.setattr(tx_type, 'fresh_first_ready_pending', read)
+    monkeypatch.setattr(tx_type, 'put', write)
+    run, calls = h.store.run, []
+
+    def interleave(body):
+        calls.append(body)
+        result = run(body)
+        if len(calls) == 1:
+            assert result is None
+            run(lambda tx: tx.put('jobs', 'early', {**rows[1], 'state': 'result_ready'}))
+        return result
+
+    monkeypatch.setattr(h.store, 'run', interleave)
+    entry = OrderedMerge(h.store, head_wait_seconds=60, catch_up_depth=4).commit_next(uid, 100.0)
+    assert entry['segment_id'] == 'early' and entry['fresh_first'] is True
+    assert firsts and reads and writes and firsts[-1] is reads[-1] is writes[-1]
+    probe.assert_not_called()
+
+
+def test_ready_owners_skips_an_owner_block_and_ignores_nonpending_or_unready(h):
+    rows = [('jobs', f's{i}', job(h, f's{i}', state='result_ready', merge_pending=True)) for i in range(5)]
+    rows += [
+        ('jobs', 'p', job(h, 'p', owner='p', state='result_ready', merge_pending=True)),
+        ('jobs', 'unready', job(h, 'unready', owner_key='z1', merge_pending=True)),
+        ('jobs', 'done', job(h, 'done', owner_key='z2', state='result_ready')),
+    ]
+    put_all(h, rows)
+    expected = [(owner_key(h.uid(o)), h.uid(o)) for o in ('o', 'p')]
+    assert h.store.ready_owners(None, 1) == expected[:1]
+    assert h.store.ready_owners(expected[0][0], 1) == expected[1:]
+    assert h.store.ready_owners(expected[1][0], 1) == []
+
+    assert h.store.ready_owners(None, 1, descending=True) == expected[-1:]
+    assert h.store.ready_owners(None, 2, ceiling_owner_key=expected[0][0]) == expected[:1]
+
+
+def test_owner_serialization_prevents_a_pending_head_phantom(h):
+    """Admission and merge take the same owner row before querying the head."""
+    need(h, 'sim')
+    import threading
+    from concurrent.futures import TimeoutError as FutureTimeout
+
+    key = owner_key(h.uid('o'))
+    put_all(h, [('owners', key, {'revision': 0})])
+    queried, attempted, release = threading.Event(), threading.Event(), threading.Event()
+
+    def reader():
+        def body(tx):
+            owner = tx.get('owners', key)
+            assert tx.first_pending(key) is None
+            queried.set()
+            assert release.wait(10)
+            assert tx.first_pending(key) is None
+            tx.put('owners', key, {'revision': owner['revision'] + 1})
+
+        h.store.run(body)
+
+    def admitter():
+        def body(tx):
+            attempted.set()
+            owner = tx.get('owners', key)
+            tx.put('owners', key, {'revision': owner['revision'] + 1})
+            tx.put('jobs', 'phantom', job(h, 'phantom', merge_pending=True))
+
+        h.store.run(body)
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        held = pool.submit(reader)
+        try:
+            assert queried.wait(10)
+            inserted = pool.submit(admitter)
+            assert attempted.wait(10)
+            with pytest.raises(FutureTimeout):
+                inserted.result(timeout=0.2)
+        finally:
+            release.set()
+        held.result(timeout=30)
+        inserted.result(timeout=30)
+    assert h.store.run(lambda tx: tx.first_pending(key))['segment_id'] == 'phantom'
+    assert h.store.run(lambda tx: tx.get('owners', key))['revision'] == 2

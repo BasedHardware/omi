@@ -88,7 +88,8 @@ def search_conversations(
     end_date: Optional[datetime] = None,
     auth: ApiKeyAuth = Depends(get_auth_with_conversations_read),
 ):
-    from utils.mcp_server.handlers.conversations import search_conversations_core
+    from utils.mcp_server import search_views
+    from utils.mcp_server.handlers.conversations import search_conversation_hits
     from utils.mcp_server.helpers import conversation_card
     from utils.mcp_server.errors import ToolExecutionError
 
@@ -97,7 +98,7 @@ def search_conversations(
     if not query.strip():
         raise HTTPException(status_code=400, detail='query must not be blank')
     try:
-        rows = search_conversations_core(
+        hits = search_conversation_hits(
             auth.uid,
             query,
             limit=limit,
@@ -107,10 +108,11 @@ def search_conversations(
         )
     except ToolExecutionError as exc:
         raise HTTPException(status_code=exc.http_status or 503, detail=exc.message) from exc
+    coverage, _unavailable = search_views.search_coverage(vectors_ok=hits.vectors_ok, keyword_ok=hits.keyword_ok)
     return {
-        'conversations': [conversation_card(row, include_display=False) for row in rows],
-        'search_coverage': 'summary_vectors_with_keyword_recovery',
-        'message': 'Unindexed content may still match; browse a date window.' if not rows else None,
+        'conversations': [conversation_card(row, include_display=False) for row in hits.conversations],
+        'search_coverage': coverage,
+        'message': 'Unindexed content may still match; browse a date window.' if not hits.conversations else None,
     }
 
 

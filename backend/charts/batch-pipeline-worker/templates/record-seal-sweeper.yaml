@@ -48,6 +48,7 @@ spec:
         metadata:
           labels:
             app.kubernetes.io/name: record-seal-sweeper
+            service_name: record-seal-sweeper
         spec:
           serviceAccountName: {{ required "existing worker KSA required" .Values.serviceAccountName }}
           automountServiceAccountToken: true

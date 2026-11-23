@@ -62,7 +62,9 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
 
   bool isConnecting = false;
   bool isConnected = false;
-  bool isDeviceStorageSupport = false;
+  OfflineStorageCapability _offlineStorageCapability = OfflineStorageCapability.unverified;
+  OfflineStorageCapability get offlineStorageCapability => _offlineStorageCapability;
+  Future<void>? _offlineStorageCheck;
   bool supportsMultiFileSync = SharedPreferencesUtil().deviceSupportsMultiFileSync;
 
   // Latest on-device ring-buffer storage snapshot (firmware 3.0.20+ only).
@@ -103,7 +105,13 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   final Set<String> _intentionalDisconnectDevices = {};
 
   void markDisconnectIntentional(String deviceId) {
-    _intentionalDisconnectDevices.add(deviceId);
+    // A marker belongs to the connected episode. An already-down action
+    // still retires capture below, but has no later disconnect to classify.
+    if (connectedDevice?.id.toUpperCase() == deviceId.toUpperCase()) {
+      _intentionalDisconnectDevices.add(deviceId.toUpperCase());
+    }
+    // The link may already be down, with no further native callback owed.
+    captureProvider?.updateRecordingDevice(null);
     _wedgeMonitor.dismissDeviceEpisode(deviceId);
   }
 
@@ -284,6 +292,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     _latestStableFirmwareVersion = '';
     _latestOmiGlassFirmwareDetails = {};
     _ringStatus = null;
+    _resetOfflineStorageCapability();
     isConnecting = false;
     _detachAccountOwnedDeviceBindings();
     notifyListeners();
@@ -365,9 +374,13 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
         capture!.recordingState == RecordingState.deviceRecord &&
         !capture.isPaused &&
         !SharedPreferencesUtil().batchModeEnabled;
-    final endedSessionWasIntentional = endedDevice != null && _intentionalDisconnectDevices.remove(endedDevice.id);
+    final endedSessionWasIntentional =
+        endedDevice != null && _intentionalDisconnectDevices.remove(endedDevice.id.toUpperCase());
     final isNewConnection = device != null && connectedDevice?.id != device.id;
-    if (isNewConnection || device == null) _resetBatteryState();
+    if (isNewConnection || device == null) {
+      _resetBatteryState();
+      _resetOfflineStorageCapability();
+    }
     connectedDevice = device;
     pairedDevice = device;
     if (isNewConnection) {
@@ -612,14 +625,6 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
       }
       return connection.getBleBatteryLevelListener(onBatteryLevelChange: onBatteryLevelChange);
     }
-  }
-
-  Future<List<int>> _getStorageList(String deviceId) async {
-    var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
-    if (connection == null) {
-      return [];
-    }
-    return connection.getStorageList();
   }
 
   initiateBleBatteryListener() async {
@@ -930,7 +935,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
       if (connection != null) {
         await setConnectedDevice(connection.device);
         if (!_isCurrent(generation)) return;
-        await setisDeviceStorageSupport();
+        await refreshOfflineStorageCapability();
         if (!_isCurrent(generation)) return;
         SharedPreferencesUtil().deviceName = connection.device.name;
         setIsConnected(true);
@@ -956,6 +961,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     if (!value) {
       _admittedLink = null;
       _resetBatteryState();
+      _resetOfflineStorageCapability();
     }
     if (isConnected) {
       _discoveryTimer?.cancel();
@@ -993,7 +999,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     super.dispose();
   }
 
-  void onDeviceDisconnected() async {
+  void onDeviceDisconnected({bool captureLinkAlreadyHandled = false}) async {
     final generation = _sessionGeneration;
     // Capture before setConnectedDevice(null) clears both device references.
     final disconnectedDeviceId = pairedDevice?.id ?? connectedDevice?.id;
@@ -1002,17 +1008,14 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     _firmwareUpdatePromptCoordinator.invalidatePresentation();
     // Link loss is not an unplug. Keep this device's alert; another device does not inherit it.
     if (disconnectedDeviceId != null) _fullyChargedAlert.onLinkLost(disconnectedDeviceId);
+    if (!captureLinkAlreadyHandled) _notifyCaptureLinkLost(disconnectedDeviceId);
     BatteryWidgetService().updateChargingState(false);
     unawaited(setConnectedDevice(null));
-    unawaited(setisDeviceStorageSupport());
     setIsConnected(false);
     updateConnectingStatus(false);
 
     // Recovery changes the link, not the user's capture intent. Retain the
     // session (and Resume control) while native reports the physical link down.
-    if (disconnectedDeviceId == null || !BleBridge.instance.preservesCaptureIntent(disconnectedDeviceId)) {
-      captureProvider?.updateRecordingDevice(null);
-    }
 
     // Batch mode: the native writer finalizes the in-progress recording on
     // disconnect (.bin.part -> .bin). Rescan shortly after the rename completes
@@ -1055,6 +1058,18 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     SyncHealthWatchdog.instance.evaluateSyncHealth();
   }
 
+  void _notifyCaptureLinkLost(String? deviceId) {
+    final intentional = deviceId != null && _intentionalDisconnectDevices.contains(deviceId.toUpperCase());
+    if (!intentional && deviceId != null && BleBridge.instance.preservesCaptureIntent(deviceId)) return;
+    captureProvider?.updateRecordingDevice(null,
+        reconnectDeviceId: !intentional &&
+                deviceId != null &&
+                !SyncWakeScope.syncOnly &&
+                BleBridge.instance.allowsRecordingReconnect(deviceId)
+            ? deviceId
+            : null);
+  }
+
   /// Emits the enriched Device Disconnected analytics event with the reason
   /// native persisted for this disconnect. Both platforms persist the event
   /// before notifying Dart, so the freshest history entry is the one that
@@ -1081,15 +1096,6 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     );
   }
 
-  /// The paired device's connection history from the phone's native BLE diagnostics (newest last).
-  /// Best-effort: no device or no history is an empty list.
-  Future<List<BleDisconnectEvent>> disconnectHistory() async {
-    final id = (pairedDevice?.id.isNotEmpty ?? false) ? pairedDevice!.id : connectedDevice?.id;
-    if (id == null || id.isEmpty) return const [];
-    final diagnostics = await _bleDiagnosticsLoader(id);
-    return diagnostics.disconnectHistory;
-  }
-
   Future<(String, bool, String, Map)> shouldUpdateFirmware() async {
     if (pairedDevice == null || connectedDevice == null) {
       return ('No paired device is connected', false, '', {});
@@ -1103,12 +1109,13 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
       return ('Unable to determine current firmware version', false, '', {});
     }
     var latestFirmwareDetails = await getLatestFirmwareVersion(
-      deviceModelNumber: device.modelNumber,
-      firmwareRevision: device.firmwareRevision,
-      hardwareRevision: device.hardwareRevision,
-      manufacturerName: device.manufacturerName,
-      serialNumber: device.serialNumber,
-    );
+          deviceModelNumber: device.modelNumber,
+          firmwareRevision: device.firmwareRevision,
+          hardwareRevision: device.hardwareRevision,
+          manufacturerName: device.manufacturerName,
+          serialNumber: device.serialNumber,
+        ) ??
+        {};
 
     var (message, hasUpdate, version) = await DeviceUtils.shouldUpdateFirmware(
       currentFirmware: device.firmwareRevision,
@@ -1144,7 +1151,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
       captureProvider?.updateRecordingDevice(normalizedDevice);
     }
 
-    await setisDeviceStorageSupport();
+    await refreshOfflineStorageCapability();
     if (!_isCurrentBatterySession(generation, batterySession, device.id)) return;
     setIsConnected(true);
     // A live link is sync-activity evidence for the stall watchdog: the
@@ -1501,7 +1508,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
         // Fetch latest stable version for rollback comparison
         String? latestStableFirmwareVersion;
         try {
-          var stableDetails = await getStableFirmwareVersion(deviceModelNumber: pairedDevice?.modelNumber ?? '');
+          var stableDetails = await getStableFirmwareVersion(deviceModelNumber: pairedDevice?.modelNumber ?? '') ?? {};
           if (!_isCurrent(generation) || !_isCurrentFirmwareCheckSession(checkSession)) {
             Logger.debug('Discarding stable firmware result from a stale device session');
             return false;
@@ -1630,18 +1637,38 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     });
   }
 
-  Future setisDeviceStorageSupport() async {
-    final generation = _sessionGeneration;
-    if (connectedDevice == null) {
-      if (!_isCurrent(generation)) return;
-      isDeviceStorageSupport = false;
-    } else {
-      var storageFiles = await _getStorageList(connectedDevice!.id);
-      if (!_isCurrent(generation)) return;
-      isDeviceStorageSupport = storageFiles.isNotEmpty;
+  void _resetOfflineStorageCapability() {
+    _offlineStorageCheck = null;
+    _offlineStorageCapability = OfflineStorageCapability.unverified;
+  }
+
+  Future<OfflineStorageCapability> _readOfflineStorageCapability(String deviceId) async {
+    try {
+      final connection = await _deviceInfoConnectionLoader(deviceId);
+      return await connection?.probeOfflineStorageCapability() ?? OfflineStorageCapability.unverified;
+    } catch (error) {
+      Logger.debug('Device storage check failed: $error');
+      return OfflineStorageCapability.unverified;
     }
-    if (!_isCurrent(generation)) return;
-    notifyListeners();
+  }
+
+  Future<void> refreshOfflineStorageCapability() {
+    final device = connectedDevice;
+    if (_isDisposed || device == null) return Future<void>.value();
+    final activeCheck = _offlineStorageCheck;
+    if (activeCheck != null) return activeCheck;
+
+    // Link and account resets retire the pending check, even on reconnect to
+    // the same device. Concurrent consumers share the one characteristic read.
+    late final Future<void> check;
+    check = _readOfflineStorageCapability(device.id).then((capability) {
+      if (!identical(_offlineStorageCheck, check)) return;
+      _offlineStorageCheck = null;
+      if (_isDisposed || connectedDevice?.id != device.id) return;
+      _offlineStorageCapability = capability;
+      notifyListeners();
+    });
+    return _offlineStorageCheck = check;
   }
 
   /// Readopts a service link native already holds while the mirror shows the
@@ -1688,12 +1715,16 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
         // Check if this is the paired device or currently connected device
         // Coz connectedDevice and pairedDevice are the same but connectedDevice becomes null after disconnect
         if (deviceId == connectedDevice?.id || deviceId == pairedDevice?.id) {
+          // Capture sees the loss before a sub-500ms reconnect can cancel the
+          // UI debounce. Native published its reason before this callback.
+          _notifyCaptureLinkLost(deviceId);
           // Invalidate immediately, before disconnect UI/capture work is debounced.
           _resetBatteryState();
+          _resetOfflineStorageCapability();
           notifyListeners();
           _disconnectDebouncer.run(() {
             if (!_isCurrent(generation)) return;
-            onDeviceDisconnected();
+            onDeviceDisconnected(captureLinkAlreadyHandled: true);
           });
         }
         break;

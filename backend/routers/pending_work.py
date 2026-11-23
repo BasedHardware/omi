@@ -1,6 +1,7 @@
 """Filter-independent processing projection and owner-only recovery endpoints."""
 
 from __future__ import annotations
+from utils.conversations.layer import read_product as read_product_conversation
 
 import hashlib
 import logging
@@ -11,7 +12,7 @@ from fastapi.responses import JSONResponse, Response
 from google.cloud import firestore
 
 from config.app_channel import APP_CHANNEL_HEADER
-from config.episodes import client_channel_admitted
+from config.episodes import client_channel_admitted, home_step_projection_enabled
 from config.home_processing import ownership_enabled
 from database import processing_attention as store
 from database import sync_jobs
@@ -55,6 +56,7 @@ def pending_work(
         syncs = sync_jobs.pending_sync_jobs(uid)
     return {
         'enabled': True,
+        'home_processing_today': home_step_projection_enabled(),
         'items': conversations + syncs,
         'attention_unseen_count': sum(not item['seen'] for item in attention),
     }
@@ -77,7 +79,7 @@ def _run(uid: str, item_id: str, operation: dict[str, Any], background_tasks: Ba
     from utils.conversations.factory import deserialize_conversation
 
     try:
-        raw = conversations_db.get_conversation(uid, operation['conversation_id'])
+        raw = read_product_conversation(conversations_db.get_conversation, uid, operation['conversation_id'])
         if not raw or conversations_db.is_soft_deleted(raw) or store.generation(raw) != operation['generation']:
             store.finish(uid, operation, 'failed', item_id)
             operation['state'] = 'failed'

@@ -64,3 +64,16 @@ content has no age-based deletion, versioning or soft-delete copies. Transcripts
 stay Standard/Nearline. `validate_object_lake_bucket_contract.py` checks this
 contract offline; [LAKE.md](LAKE.md) documents the separately authorized bucket,
 KMS and audit-log provisioning. No existing bucket receives this policy.
+
+
+## Batch staging lifecycle (separate, procedural)
+
+The private-cloud-sync workflow above does not apply the batch staging bucket's
+policy. Before and after any separately authorized batch lifecycle change, follow
+the [mandatory batch lifecycle-change check](../../docs/runbooks/held-staging-inputs.md#mandatory-batch-lifecycle-change-check-procedural).
+The existing `backend/scripts/check_sync_staging_lifecycle.py` enforces live Delete
+age strictly greater than the runtime input terminal, in addition to all existing
+hold/privacy floors. Review the proposed Delete against that same strict cutoff
+before applying it and retain both checker receipts. Metadata denial or any failed
+prerequisite blocks qualification. No automatic batch scheduler/apply integration
+is claimed; out-of-band changes bypass this procedural detection.

@@ -54,7 +54,7 @@ def get_review_config(platform: object) -> dict[str, Any]:
     return cast(dict[str, Any], fetched) if isinstance(fetched, dict) else {}
 
 
-_SUPPORTED_PLATFORMS = {"ios", "macos"}
+_SUPPORTED_PLATFORMS = {"ios", "android", "macos"}
 
 
 def should_hide_subscription_ui(uid: object, platform: object, app_version: object) -> bool:

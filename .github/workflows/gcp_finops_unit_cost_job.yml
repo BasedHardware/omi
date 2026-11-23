@@ -7,6 +7,15 @@ name: Deploy FinOps Unit Cost Job to Cloud Run
 on:
   workflow_dispatch:
     inputs:
+      operation:
+        description: 'Deploy the settled ledger job, or provision only the approved margin schedule'
+        type: choice
+        default: deploy
+        options: [deploy, margin_scheduler]
+      cutover_ref:
+        description: 'Stopped legacy writer and accepted active margin execution record (margin_scheduler only)'
+        type: string
+        required: false
       environment:
         description: 'Select the environment to deploy to'
         required: true
@@ -45,11 +54,12 @@ env:
 
 # Serialize writes to the selected Cloud Run job environment.
 concurrency:
-  group: deploy-cloud-run-finops-unit-cost-job-${{ github.event.inputs.environment }}
+  group: ${{ inputs.operation == 'margin_scheduler' && 'margin-scheduler-prod' || format('deploy-cloud-run-finops-unit-cost-job-{0}', github.event.inputs.environment) }}
   cancel-in-progress: false
 
 jobs:
   deploy:
+    if: inputs.operation != 'margin_scheduler'
     environment: ${{ github.event.inputs.environment == 'prod' && 'prod' || 'development' }}
     permissions:
       contents: 'read'
@@ -222,3 +232,32 @@ jobs:
             echo "- Scheduler: ${{ github.event.inputs.provision_scheduler == 'true' && format('{0} 30 10 * * * America/New_York', env.SCHEDULER_JOB) || 'unchanged' }}"
             echo "- Rollback: re-enable the m4-air Hermes cron d23863b14bf7 (untouched)"
           } >> "$GITHUB_STEP_SUMMARY"
+
+  margin-scheduler:
+    if: inputs.operation == 'margin_scheduler'
+    environment: prod
+    permissions:
+      contents: read
+      id-token: write
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require approved production cutover on main
+        env:
+          CUTOVER_REF: ${{ inputs.cutover_ref }}
+          INPUT_ENV: ${{ inputs.environment }}
+          INPUT_BRANCH: ${{ inputs.branch }}
+        run: |
+          test "$GITHUB_REF" = refs/heads/main
+          test "$INPUT_ENV" = prod
+          test "$INPUT_BRANCH" = main
+          test -n "$CUTOVER_REF"
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+      - uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: projects/208440318997/locations/global/workloadIdentityPools/omi-gha-deploy-prod/providers/github
+          service_account: omi-ci-deployer-prod@based-hardware.iam.gserviceaccount.com
+      - uses: google-github-actions/setup-gcloud@v3
+      - name: Verify active margin job and provision only its schedule
+        run: python3 backend/scripts/provision_margin_scheduler.py

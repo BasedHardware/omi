@@ -1,6 +1,4 @@
-@Echo off
-;%~dp0\JLink\JLink -if swd -commandFile %~dp0\program_net.jlink
-;%~dp0\JLink\JLink -if swd -commandFile %~dp0\program_app.jlink
-%~dp0\JLink\JLink -if swd -commandFile %~dp0\program_test.jlink
-
-pause
+@echo off
+echo Archived factory launcher disabled. Follow omi/firmware/docs/cv1-bootloader.md.
+echo Never substitute an unvalidated release HEX or stock MCUboot.
+exit /b 1

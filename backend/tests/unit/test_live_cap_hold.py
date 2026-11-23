@@ -8,6 +8,7 @@ import pytest
 
 from utils.sync import live_cap_hold as live
 from utils.sync import cap_hold, held_audio_summary, cap_hold_recovery
+from utils.sync.live_cap_capacity import acquire as real_capacity_acquire
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 
 
@@ -137,7 +138,7 @@ def test_reservation_is_per_user_month_and_fail_closed(monkeypatch):
     monkeypatch.setattr(live, 'MAX_MONTHLY_CHUNKS', 2)
     live.reserve('synthetic', 50)
     live.reserve('synthetic', 50)
-    with pytest.raises(RuntimeError, match='capacity'):
+    with pytest.raises(live.StorageQuotaExceeded):
         live.reserve('synthetic', 1)
     live.reserve('another', 50)
     assert sorted(row['bytes'] for row in client.rows.values()) == [50, 100]
@@ -225,10 +226,49 @@ def test_recovery_storage_uses_the_capture_month_and_combined_ceiling(monkeypatc
     monkeypatch.setattr(live, 'MAX_MONTHLY_BYTES', 100)
     live.reserve('synthetic', 100, month='2026-09')
     live.reserve('synthetic', 100, month='2026-09', recovery=True)
-    with pytest.raises(RuntimeError):
+    with pytest.raises(live.StorageQuotaExceeded):
         live.reserve('synthetic', 1, month='2026-09', recovery=True)
     row = client.rows[('users', 'synthetic', 'stt_cap_live_storage', '2026-09')]
     assert row['bytes'] == 200 and row['source_bytes'] == 100
+
+
+async def test_storage_quota_refusal_preserves_pcm_for_final_attempt(host, persistence, monkeypatch, caplog):
+    import asyncio
+    from contextlib import nullcontext
+
+    capacity = live.live_cap_capacity
+    client = StrictFirestore()
+    monkeypatch.setattr(capacity, 'get_firestore_client', lambda: client)
+    monkeypatch.setattr(capacity, 'external_write_fence', lambda *args, **kwargs: nullcontext())
+    monkeypatch.setattr(capacity, 'MAX_MONTHLY_GROUPS', capacity.BLOCK_GROUPS - 1)
+    # Use the real reservation path to verify Firestore's quota refusal reaches the async caller as typed.
+    acquire_with_capacity = capacity.acquire
+    monkeypatch.setattr(capacity, 'acquire', real_capacity_acquire)
+    refusal = Mock()
+    loss = Mock()
+    monkeypatch.setattr(live, 'record_live_storage_quota_refusal', refusal)
+    monkeypatch.setattr(live, 'record_capture', loss)
+    hold = live.LiveHeldAudio(host)
+    pcm = b'\x01\x02' * 16000
+    hold.append(pcm, 16000, 10, 'a')
+
+    with pytest.raises(live.StorageQuotaExceeded):
+        await hold.flush(force=True)
+    assert await hold.finish_updates(None, asyncio.Event()) is False
+    assert client.rows == {}
+    assert not persistence
+    assert hold.pending[0][0] == pcm and hold.seconds == 0
+    host.request.websocket.send_json.assert_not_called()
+    refusal.assert_called_once_with()
+    loss.assert_called_once_with('lost')
+    assert 'outcome=storage_quota_refused' in caplog.text
+    assert 'outcome=publication_failed' not in caplog.text
+
+    monkeypatch.setattr(capacity, 'acquire', acquire_with_capacity)
+    assert await hold.close() is True
+    assert persistence[0][0] == pcm
+    assert hold.seconds == 1 and not hold.pending
+    refusal.assert_called_once_with()
 
 
 def test_group_recovery_joins_pcm_without_duplicate_wav_headers(tmp_path, monkeypatch):

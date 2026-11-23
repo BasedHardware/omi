@@ -12,9 +12,13 @@ from dataclasses import dataclass, field
 import threading
 import time
 
+from google.api_core import exceptions as google_errors
 from prometheus_client import Counter, Gauge, Histogram
+from config.plan_catalog import PlanType
 from database.batch_privacy_attempt import PrivacyAttempt, token_version
+from database.firestore_tier_context import current_tier
 from utils.async_tasks import create_named_task, drain_tasks, wait_for_event
+from utils.batch_pipeline.artifact_reads import ArtifactReadLimit
 
 logger = logging.getLogger(__name__)
 FAMILIES = frozenset({'batch', 'external', 'tombstone', 'deletion_marker'})
@@ -36,9 +40,16 @@ REASONS = frozenset(
         'unknown',
     }
 )
-CHECKS = Counter('privacy_checks_total', 'Privacy check decisions', ['family', 'mode', 'reason'])
+CHECKS = Counter('privacy_checks_total', 'Privacy check decisions', ['family', 'mode', 'reason', 'plan_group'])
 CALLS = Counter('privacy_check_calls_total', 'Privacy check calls including invalid inputs', ['family', 'mode'])
-READS = Counter('privacy_check_reads_total', 'Privacy document reads issued', ['family', 'mode', 'result'])
+ACCOUNT_AUTHORITY_WRITES = Counter(
+    'omi_batch_pipeline_account_privacy_writes_total',
+    'Committed account authority writes observed by the Firestore interceptor',
+    ['writer_class', 'field_group', 'certified'],
+)
+READS = Counter(
+    'privacy_check_reads_total', 'Privacy document reads issued', ['family', 'mode', 'result', 'plan_group']
+)
 WALKS = Counter('privacy_conversations_walked_total', 'Distinct conversation documents walked per check', ['mode'])
 DECISION_MISMATCH = Counter(
     'privacy_decision_mismatch_total', 'Live and candidate privacy decisions disagree', ['family', 'reason']
@@ -58,6 +69,16 @@ COMPARISONS = Counter(
     ],
 )
 SHADOW_CHECKS = Counter('privacy_shadow_checks_total', 'Privacy shadow comparisons', ['family', 'result'])
+OWNER_COMPARISONS = Counter(
+    'privacy_owner_comparison_total',
+    'Owner candidate comparisons by bounded transactional call shape',
+    ['shape', 'result', 'candidate_source'],
+)
+OWNER_SHADOW_ERRORS = Counter(
+    'privacy_owner_shadow_error_total',
+    'Owner candidate failures by bounded call shape and exception class',
+    ['shape', 'error_class'],
+)
 MEMO_REQUESTS = Counter('privacy_memo_requests_total', 'Candidate decision reuse', ['family', 'result'])
 NEGATIVE_LOOKUPS = Counter(
     'privacy_negative_lookup_total',
@@ -112,6 +133,68 @@ _READ_CALLERS = {
 _SESSION: ContextVar['SessionCensus | None'] = ContextVar('privacy_metrics_session', default=None)
 _LOG_LOCK = threading.Lock()
 _LOG_AT = {}
+
+
+# Margin meter: margin_core.segment_rollup / margin-basis.json split.segments.
+_PLAN_SEGMENTS: dict[str, str] = {
+    PlanType.basic: 'free',
+    PlanType.architect: 'paid',
+    PlanType.operator: 'paid',
+    PlanType.plus: 'paid',
+    PlanType.unlimited: 'paid',
+    PlanType.unlimited_v2: 'unlimited_v2',
+}
+
+
+def plan_group(plan):
+    """Explicit meter allowlist; legacy 'free' follows database.users normalization."""
+    if not isinstance(plan, str):
+        return 'unattributed'
+    return _PLAN_SEGMENTS.get(plan, 'free' if plan == 'free' else 'unattributed')
+
+
+@dataclass
+class _BatchPlan:
+    uid: str | None  # Scope identity only; never a metric label.
+    group: str
+    reads: Counts = field(default_factory=Counts)
+
+
+_BATCH_PLAN: ContextVar[_BatchPlan | None] = ContextVar('privacy_batch_plan', default=None)
+
+
+def observe_batch_plan(plan):
+    """Consume only the user snapshot the authority walk already needed."""
+    holder = _BATCH_PLAN.get()
+    if holder is not None:
+        holder.group = plan_group(plan)
+
+
+def with_batch_plan(function):
+    @wraps(function)
+    def wrapped(*args, **kwargs):
+        uid = kwargs.get('uid', args[2] if len(args) > 2 else None)
+        holder = _BatchPlan(uid, plan_group(current_tier(uid)) if uid is not None else 'unattributed')
+        token = _BATCH_PLAN.set(holder)
+        try:
+            return function(*args, **kwargs)
+        finally:
+            try:
+                _BATCH_PLAN.reset(token)
+                # At most six counters; a hard kill before exit drops this check's reads.
+                for (mode, result), count in holder.reads.items():
+                    READS.labels('batch', mode, result, holder.group).inc(count)
+            except Exception:
+                pass  # Including iteration faults: metrics never alter authority.
+
+    return wrapped
+
+
+def _plan_label(family, uid):
+    holder = _BATCH_PLAN.get() if _family(family) == 'batch' else None
+    if holder is not None:
+        return holder.group if uid is None or uid == holder.uid else 'unattributed'
+    return plan_group(current_tier(uid)) if uid is not None else 'unattributed'
 
 
 @dataclass
@@ -208,7 +291,11 @@ def comparison_labels(live, candidate):
         'true' if any(live.markers[k] != candidate.markers[k] for k in common) else ('false' if common else 'unknown')
     )
     return (
-        candidate.source if candidate.source in {'ttl_hit', 'token_hit', 'session_hit', 'fresh_read'} else 'unknown',
+        (
+            candidate.source
+            if candidate.source in {'ttl_hit', 'token_hit', 'session_hit', 'owner_hit', 'fresh_read'}
+            else 'unknown'
+        ),
         age_bucket(candidate.age),
         version_relation(live.token, candidate.token) if observed else 'unknown',
         version_relation(live.generation, candidate.generation) if observed else 'unknown',
@@ -237,9 +324,9 @@ def _count(family, kind):
                 session.counts[(_family(family), _MODE.get(), kind)] += 1
 
 
-def decision(family, reason='allow'):
+def decision(family, reason='allow', *, uid=None):
     try:
-        CHECKS.labels(_family(family), _MODE.get(), _reason(reason)).inc()
+        CHECKS.labels(_family(family), _MODE.get(), _reason(reason), _plan_label(family, uid)).inc()
     except Exception:
         pass  # Metrics must never alter authority decisions.
 
@@ -253,11 +340,22 @@ def called(family):
 
 
 TTL_KILL = Gauge('privacy_ttl_cache_disabled', '1 when the privacy decision cache kill switch is set or unreadable')
+TTL_SWITCH_READS = Counter(
+    'privacy_ttl_cache_switch_reads_total', 'Actual privacy kill-switch polls by closed read outcome', ['result']
+)
 
 
 def ttl_kill_state(disabled):
     try:
         TTL_KILL.set(1 if disabled else 0)
+    except Exception:
+        pass
+
+
+def ttl_switch_read(result):
+    try:
+        result = result if result in {'clear', 'disabled', 'error'} else 'error'
+        TTL_SWITCH_READS.labels(result).inc()
     except Exception:
         pass
 
@@ -314,7 +412,7 @@ def negative_lookup(collection, mode, result):
         pass
 
 
-def read_snapshot(family, reference, *, read_budget=None, **kwargs):
+def read_snapshot(family, reference, *, read_budget=None, uid=None, **kwargs):
     """Count issued reads, including failures, without inspecting paths or payloads."""
     _count(family, 'reads')
     caller = _READ_CALLERS[_family(family)]
@@ -324,11 +422,11 @@ def read_snapshot(family, reference, *, read_budget=None, **kwargs):
             kwargs.update(timeout=read_budget.timeout(10), retry=None)
         snapshot = reference.get(**kwargs)
     except BaseException:
-        _read_result(family, 'error')
+        _read_result(family, 'error', uid=uid)
         raise
     finally:
         _READ_CALLER.reset(caller_token)
-    _read_result(family, 'hit' if snapshot.exists else 'miss')
+    _read_result(family, 'hit' if snapshot.exists else 'miss', uid=uid)
     observe_snapshot(reference, snapshot, family)
     return snapshot
 
@@ -338,9 +436,13 @@ def current_read_caller():
     return _READ_CALLER.get()
 
 
-def _read_result(family, result):
+def _read_result(family, result, *, uid=None):
     try:
-        READS.labels(_family(family), _MODE.get(), result).inc()
+        holder = _BATCH_PLAN.get() if _family(family) == 'batch' else None
+        if holder is not None and (uid is None or uid == holder.uid):
+            holder.reads[(_MODE.get(), result)] += 1
+        else:
+            READS.labels(_family(family), _MODE.get(), result, _plan_label(family, uid)).inc()
     except Exception:
         pass
 
@@ -494,3 +596,41 @@ def with_session_census(plane):
         return wrapped
 
     return decorate
+
+
+def owner_comparison(shape, result, source):
+    """Counts only: evidence that each newly eligible path actually compared."""
+    shape = shape if shape in {'attempt', 'no_attempt', 'snapshots'} else 'other'
+    result = result if result in {'match', 'mismatch', 'error'} else 'error'
+    source = source if source in {'owner_hit', 'fresh_read', 'session_hit', 'ttl_hit'} else 'unknown'
+    try:
+        OWNER_COMPARISONS.labels(shape, result, source).inc()
+    except Exception:
+        pass
+
+
+def owner_shadow_error(shape, error):
+    """Classify without exception messages, custom type names, paths or payloads."""
+    shape = shape if shape in {'attempt', 'no_attempt', 'snapshots'} else 'other'
+    error_class = 'other'
+    for kind, label in (
+        (google_errors.DeadlineExceeded, 'deadline_exceeded'),
+        (google_errors.Aborted, 'aborted'),
+        (google_errors.FailedPrecondition, 'failed_precondition'),
+        (google_errors.PermissionDenied, 'permission_denied'),
+        (google_errors.ResourceExhausted, 'resource_exhausted'),
+        (google_errors.ServiceUnavailable, 'service_unavailable'),
+        (google_errors.InvalidArgument, 'invalid_argument'),
+        (TimeoutError, 'timeout'),
+        (ValueError, 'value_error'),
+        (TypeError, 'type_error'),
+        (ArtifactReadLimit, 'artifact_read_limit'),
+        (RuntimeError, 'runtime_error'),
+    ):
+        if isinstance(error, kind):
+            error_class = label
+            break
+    try:
+        OWNER_SHADOW_ERRORS.labels(shape, error_class).inc()
+    except Exception:
+        pass

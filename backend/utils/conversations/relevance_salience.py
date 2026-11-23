@@ -11,9 +11,10 @@ import unicodedata
 from importlib import import_module
 from typing import Any, Sequence
 
+from config.historical_tier import STAND_IN_TITLE_PROVENANCES
 from models.speaker_evidence import SpeakerEvidence
 from utils.conversations.relevance_content import owner_speech_seconds, value
-from utils.conversations.relevance_rules import EXPLICIT_REMINDER_RE
+from utils.conversations.relevance_rules import has_explicit_keep_instruction
 
 MAX_NOISE_CLIP_SECONDS = 20
 MAX_REPETITION_CHARS = 400
@@ -36,12 +37,12 @@ def minimum_is_background(conversation: Any, structured: Any, evidence: SpeakerE
     """Do not turn a compute floor, an unknown identity or a short moment into noise."""
     segments = value(conversation, 'transcript_segments', ()) or ()
     if (
-        value(structured, 'title_provenance') != 'server_minimum'
+        value(structured, 'title_provenance') not in STAND_IN_TITLE_PROVENANCES
         or any(value(structured, field) for field in ('overview', 'sections', 'action_items', 'events'))
         or value(conversation, 'photos')
         or value(conversation, 'user_title')
         or any(value(s, 'is_user', False) for s in segments)
-        or any(EXPLICIT_REMINDER_RE.search(str(value(s, 'text', '') or '')) for s in segments)
+        or any(has_explicit_keep_instruction(str(value(s, 'text', '') or '')) for s in segments)
         or owner_speech_seconds(evidence, segments) != 0
     ):
         return False
@@ -99,7 +100,10 @@ def finish_home_salience(uid: str, structured: Any, conversation: Any, *, user_k
 
     Only candidate background rows need the evidence read; normal highlights incur no I/O.
     """
-    if value(structured, 'salience') != 'background' and value(structured, 'title_provenance') != 'server_minimum':
+    if (
+        value(structured, 'salience') != 'background'
+        and value(structured, 'title_provenance') not in STAND_IN_TITLE_PROVENANCES
+    ):
         return structured
     if user_kept:
         structured.salience = 'highlight'

@@ -12,10 +12,12 @@ import pytest
 from utils.sync.worker_privacy_metrics import WorkerPrivacyMetrics
 
 CHILD = """
-from database import privacy_check_metrics as metrics
+from database import privacy_check_metrics as metrics, privacy_ttl_cache as ttl_cache
 from prometheus_client import Counter
 from types import SimpleNamespace
 import sys
+ttl_cache._read_kill_flag = lambda: False
+assert ttl_cache.disabled() is False
 metrics.called('batch')
 metrics.decision('batch')
 metrics.walked()
@@ -26,6 +28,8 @@ with metrics.mode_scope('shadow'):
     metrics.walked()
     metrics.read_snapshot('batch', SimpleNamespace(get=lambda: SimpleNamespace(exists=False)))
 metrics.compare('batch', 'allow', 'allow')
+metrics.owner_comparison('snapshots', 'match', 'owner_hit')
+metrics.owner_shadow_error('attempt', TimeoutError('synthetic-private-detail'))
 metrics.compare('batch', 'account_deleted', 'allow')
 metrics.memo_result('batch', 'hit')
 metrics.negative_lookup('conversations', 'shadow', 'mismatch')
@@ -35,10 +39,15 @@ sys.stdin.read()
 """
 
 
-def samples(metrics):
+def samples(metrics, *, counters_only=False):
+    return exposition_samples(metrics.render(), counters_only=counters_only)
+
+
+def exposition_samples(body, *, counters_only=False):
     return {
         (sample.name, tuple(sorted(sample.labels.items()))): sample.value
-        for family in text_string_to_metric_families(metrics.render().decode())
+        for family in text_string_to_metric_families(body.decode())
+        if not counters_only or family.type == 'counter'
         for sample in family.samples
     }
 
@@ -61,9 +70,25 @@ async def test_child_counters_survive_reaping_without_double_count_or_file_growt
         )
         try:
             assert await asyncio.wait_for(process.stdout.readline(), 15) == b'ready\n'
-            before = samples(metrics)
+            before = samples(metrics, counters_only=True)
+            gauges = [value for (name, _), value in samples(metrics).items() if name == 'privacy_ttl_cache_disabled']
+            assert gauges == [0.0]
+            assert before[('privacy_ttl_cache_switch_reads_total', (('result', 'clear'),))] == attempt
             assert before[('privacy_check_calls_total', (('family', 'batch'), ('mode', 'live')))] == attempt
             assert before[('privacy_check_calls_total', (('family', 'batch'), ('mode', 'shadow')))] == attempt
+            assert (
+                before[
+                    (
+                        'privacy_owner_comparison_total',
+                        (('candidate_source', 'owner_hit'), ('result', 'match'), ('shape', 'snapshots')),
+                    )
+                ]
+                == attempt
+            )
+            assert (
+                before[('privacy_owner_shadow_error_total', (('error_class', 'timeout'), ('shape', 'attempt')))]
+                == attempt
+            )
             assert before[('privacy_shadow_checks_total', (('family', 'batch'), ('result', 'match')))] == attempt
             assert before[('privacy_memo_requests_total', (('family', 'batch'), ('result', 'hit')))] == attempt
             assert (
@@ -72,11 +97,21 @@ async def test_child_counters_survive_reaping_without_double_count_or_file_growt
             assert before[('privacy_conversations_walked_total', (('mode', 'live'),))] == attempt
             assert before[('privacy_conversations_walked_total', (('mode', 'shadow'),))] == attempt
             assert (
-                before[('privacy_check_reads_total', (('family', 'batch'), ('mode', 'live'), ('result', 'hit')))]
+                before[
+                    (
+                        'privacy_check_reads_total',
+                        (('family', 'batch'), ('mode', 'live'), ('plan_group', 'unattributed'), ('result', 'hit')),
+                    )
+                ]
                 == attempt
             )
             assert (
-                before[('privacy_check_reads_total', (('family', 'batch'), ('mode', 'shadow'), ('result', 'miss')))]
+                before[
+                    (
+                        'privacy_check_reads_total',
+                        (('family', 'batch'), ('mode', 'shadow'), ('plan_group', 'unattributed'), ('result', 'miss')),
+                    )
+                ]
                 == attempt
             )
             assert {name for name, _ in before} == {
@@ -85,6 +120,10 @@ async def test_child_counters_survive_reaping_without_double_count_or_file_growt
                 'privacy_check_reads_total',
                 'privacy_conversations_walked_total',
                 'privacy_decision_mismatch_total',
+                'privacy_decision_comparison_total',
+                'privacy_owner_comparison_total',
+                'privacy_owner_shadow_error_total',
+                'privacy_ttl_cache_switch_reads_total',
                 'privacy_shadow_checks_total',
                 'privacy_memo_requests_total',
                 'privacy_negative_lookup_total',
@@ -108,7 +147,7 @@ async def test_child_counters_survive_reaping_without_double_count_or_file_growt
                 os.killpg(process.pid, signal.SIGKILL)
                 await asyncio.wait_for(process.wait(), 15)
             metrics.finish_job()
-        assert samples(metrics) == before
+        assert samples(metrics) == before  # Counters retained; the dead child's gauge is gone.
         assert not directory.exists()
     assert 'PROMETHEUS_MULTIPROC_DIR' not in os.environ
 
@@ -152,7 +191,9 @@ async def test_supervisor_wires_child_counters_to_metrics_endpoint(monkeypatch):
         await asyncio.wait_for(runtime.execute(lease), 20)
         responses.append(await http.get('/metrics'))
     assert all(response.status_code == 200 for response in responses)
-    assert responses[0].content == responses[1].content
+    assert exposition_samples(responses[0].content, counters_only=True) == exposition_samples(responses[1].content)
+    assert b'privacy_ttl_cache_disabled' in responses[0].content
+    assert b'privacy_ttl_cache_disabled' not in responses[1].content
     assert b'privacy_shadow_checks_total{family="batch",result="match"} 1.0' in responses[1].content
     assert b'privacy_decision_mismatch_total{family="batch",reason="stale_allow"} 1.0' in responses[1].content
     assert runtime.privacy_metrics._directory is None
@@ -204,8 +245,11 @@ sys.stdin.read()
         values = {s.labels['name']: s.value for s in rows if s.name == 'omi_runtime_percent'}
         assert len(values) == 6
         assert values['batch-pipeline'] == 23 and values['new-owner-cell1'] == 17
+        assert [row.value for row in rows if row.name == 'privacy_ttl_cache_disabled'] == [0.0]
+        assert not any(row.name == 'privacy_ttl_cache_switch_reads_total' for row in rows)
         for row in rows:
-            assert row.labels['revision'] == 'synthetic-pod-hash'
+            if row.name != 'privacy_ttl_cache_disabled':
+                assert row.labels['revision'] == 'synthetic-pod-hash'
             assert row.labels['pid'] == str(process.pid)
         if killed:
             os.killpg(process.pid, signal.SIGKILL)

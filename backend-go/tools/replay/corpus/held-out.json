@@ -1,0 +1,57 @@
+{
+  "version": 1,
+  "cases": [
+    {
+      "name": "heldout-concurrent-lost-response",
+      "recording": {
+        "duration_s": 25,
+        "segments": [
+          {
+            "text": "Synthetic contract replay for heldout-concurrent-lost-response. The test fixture records the conversation outcome without customer data."
+          }
+        ]
+      },
+      "repeat": true
+    },
+    {
+      "name": "heldout-expired-worker-epoch",
+      "recording": {
+        "duration_s": 25,
+        "segments": [
+          {
+            "text": "Synthetic contract replay for heldout-expired-worker-epoch. The test fixture records the conversation outcome without customer data."
+          }
+        ]
+      },
+      "trigger": "server_recovery"
+    },
+    {
+      "name": "heldout-embedding-failure",
+      "recording": {
+        "duration_s": 25,
+        "segments": [
+          {
+            "text": "Synthetic contract replay for heldout-embedding-failure. The test fixture records the conversation outcome without customer data."
+          }
+        ]
+      },
+      "responses": {
+        "memory-l1": {
+          "items": []
+        }
+      }
+    },
+    {
+      "name": "heldout-revision-race",
+      "recording": {
+        "duration_s": 25,
+        "segments": [
+          {
+            "text": "Synthetic contract replay for heldout-revision-race. The test fixture records the conversation outcome without customer data."
+          }
+        ]
+      },
+      "revision": 2
+    }
+  ]
+}

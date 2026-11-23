@@ -1,0 +1,10 @@
+{
+  "schema_version": 1,
+  "field": "expires_at",
+  "collection_groups": [
+    "free_allowance_receipts",
+    "free_allowance_operations"
+  ],
+  "receipt_retention_days": 90,
+  "active_protected_hold_ttl": false
+}

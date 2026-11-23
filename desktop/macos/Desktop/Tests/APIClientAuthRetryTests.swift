@@ -14,6 +14,15 @@ import XCTest
     private nonisolated(unsafe) static var forcedBody = Data()
     private nonisolated(unsafe) static var successfulStatus = 204
     private nonisolated(unsafe) static var successfulBody = Data()
+    private nonisolated(unsafe) static var received: URLRequest?
+    private nonisolated(unsafe) static var receivedBody: Data?
+    private nonisolated(unsafe) static var responseOverride: (@Sendable (URLRequest) -> (Int, Data))?
+
+    static var lastRequest: URLRequest? { lock.withLock { received } }
+    static var lastBody: Data? { lock.withLock { receivedBody } }
+    static func respond(_ response: @escaping @Sendable (URLRequest) -> (Int, Data)) {
+      lock.withLock { responseOverride = response }
+    }
 
     static func reset() {
       lock.lock()
@@ -23,6 +32,9 @@ import XCTest
       forcedBody = Data()
       successfulStatus = 204
       successfulBody = Data()
+      received = nil
+      receivedBody = nil
+      responseOverride = nil
       lock.unlock()
     }
 
@@ -57,7 +69,22 @@ import XCTest
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
 
     override func startLoading() {
+      var requestBody = request.httpBody
+      if requestBody == nil, let stream = request.httpBodyStream {
+        stream.open()
+        defer { stream.close() }
+        var data = Data()
+        var buffer = [UInt8](repeating: 0, count: 4096)
+        while true {
+          let count = stream.read(&buffer, maxLength: buffer.count)
+          guard count > 0 else { break }
+          data.append(buffer, count: count)
+        }
+        requestBody = data
+      }
       Self.lock.lock()
+      Self.received = request
+      Self.receivedBody = requestBody
       Self.deleteAttempts += 1
       let attempt = Self.deleteAttempts
       let status = Self.forcedStatus ?? (Self.alwaysUnauthorized || attempt == 1 ? 401 : Self.successfulStatus)
@@ -65,18 +92,20 @@ import XCTest
         Self.forcedStatus == nil && !Self.alwaysUnauthorized && attempt > 1
         ? Self.successfulBody
         : Self.forcedBody
+      let override = Self.responseOverride
       Self.lock.unlock()
+      let (responseStatus, responseBody) = override?(request) ?? (status, body)
 
       guard let url = request.url,
         let response = HTTPURLResponse(
           url: url,
-          statusCode: status,
+          statusCode: responseStatus,
           httpVersion: nil,
           headerFields: nil
         )
       else { return }
       client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
-      client?.urlProtocol(self, didLoad: body)
+      client?.urlProtocol(self, didLoad: responseBody)
       client?.urlProtocolDidFinishLoading(self)
     }
 
@@ -136,6 +165,12 @@ import XCTest
     }
   }
 
+  extension APIClient {
+    fileprivate func useSyntheticCalendarTestDeviceIdentity() {
+      transport.testDeviceIdHash = "20195001"
+    }
+  }
+
   @MainActor
   final class APIClientAuthRetryTests: XCTestCase {
     override func setUp() async throws {
@@ -163,6 +198,7 @@ import XCTest
       let config = URLSessionConfiguration.ephemeral
       config.protocolClasses = [AuthRetryURLStub.self]
       let client = APIClient(session: URLSession(configuration: config))
+      await client.useSyntheticCalendarTestDeviceIdentity()
 
       try configureRefreshableSession()
 
@@ -180,10 +216,164 @@ import XCTest
       XCTAssertEqual(snapshot["retry_outcome"] as? String, "succeeded")
     }
 
+    func testGoogleCalendarSelectionRoundTripKeepsReadSelectionSeparateFromWrites() async throws {
+      try configureRefreshableSession()
+      await establishOwnerForAuthTest("user-1")
+      let snapshot = try XCTUnwrap(RuntimeOwnerIdentity.captureAuthorizationSnapshot(expectedOwnerID: "user-1"))
+      let config = URLSessionConfiguration.ephemeral
+      config.protocolClasses = [AuthRetryURLStub.self]
+      let client = APIClient(session: URLSession(configuration: config))
+      await client.useSyntheticCalendarTestDeviceIdentity()
+      await client.setTestAuthHeader("Bearer synthetic-token")
+      let body = """
+        {"account_id":"personal@example.test","calendars":[
+          {"id":"personal@example.test","name":"Personal","primary":true,"available":true},
+          {"id":"team","name":"Team","primary":false,"available":true}
+        ],"selected_ids":["team"],"write_calendar_id":"primary"}
+        """
+      AuthRetryURLStub.returnStatus(200, body: body)
+      let loaded = try await client.googleCalendarSelection(authorizationSnapshot: snapshot)
+      XCTAssertEqual(loaded.selectedIDs, ["team"])
+      XCTAssertEqual(AuthRetryURLStub.lastRequest?.httpMethod, "GET")
+      XCTAssertEqual(AuthRetryURLStub.lastRequest?.url?.path, "/v1/calendar/google/calendars")
+      let saved = try await client.saveGoogleCalendarSelection(
+        accountID: loaded.accountID, selectedIDs: ["team"], authorizationSnapshot: snapshot)
+      XCTAssertEqual(saved.selectedIDs, ["team"])
+      let sent = try XCTUnwrap(AuthRetryURLStub.lastRequest)
+      XCTAssertEqual(sent.httpMethod, "PUT")
+      let payload = try XCTUnwrap(
+        try JSONSerialization.jsonObject(with: XCTUnwrap(AuthRetryURLStub.lastBody)) as? [String: Any])
+      XCTAssertEqual(payload["account_id"] as? String, "personal@example.test")
+      XCTAssertEqual(payload["selected_ids"] as? [String], ["team"])
+      XCTAssertNil(payload["write_calendar_id"])
+
+      let calls = AuthRetryURLStub.attempts
+      await transitionOwnerForAuthTest(to: nil)
+      await transitionOwnerForAuthTest(to: "user-1")
+      do {
+        _ = try await client.saveGoogleCalendarSelection(
+          accountID: loaded.accountID, selectedIDs: ["team"], authorizationSnapshot: snapshot)
+        XCTFail("A previous same-UID session must not save a selection")
+      } catch {}
+      XCTAssertEqual(AuthRetryURLStub.attempts, calls)
+    }
+
+    func testCalendarConnectionURLCannotUseAReplacementSession() async throws {
+      try configureRefreshableSession()
+      await establishOwnerForAuthTest("user-1")
+      let snapshot = try XCTUnwrap(RuntimeOwnerIdentity.captureAuthorizationSnapshot(expectedOwnerID: "user-1"))
+      let config = URLSessionConfiguration.ephemeral
+      config.protocolClasses = [AuthRetryURLStub.self]
+      let client = APIClient(session: URLSession(configuration: config))
+      await client.useSyntheticCalendarTestDeviceIdentity()
+      await client.setTestAuthHeader("Bearer synthetic-token")
+      AuthRetryURLStub.returnStatus(
+        200, body: "{\"auth_url\":\"https://accounts.google.com/o/oauth2/auth?state=synthetic\"}")
+      let url = try await client.googleCalendarOAuthURL(authorizationSnapshot: snapshot)
+      XCTAssertEqual(url.host, "accounts.google.com")
+      XCTAssertEqual(AuthRetryURLStub.lastRequest?.url?.path, "/v1/integrations/google_calendar/oauth-url")
+      let calls = AuthRetryURLStub.attempts
+      await transitionOwnerForAuthTest(to: nil)
+      await transitionOwnerForAuthTest(to: "user-1")
+      do {
+        _ = try await client.googleCalendarOAuthURL(authorizationSnapshot: snapshot)
+        XCTFail("An old picker must not start a connection in a replacement session")
+      } catch {}
+      XCTAssertEqual(AuthRetryURLStub.attempts, calls)
+    }
+
+    func testCalendarReaderDoesNotBypassGrantFailuresThroughBrowserCookies() async throws {
+      try configureRefreshableSession()
+      await establishOwnerForAuthTest("user-1")
+      let config = URLSessionConfiguration.ephemeral
+      config.protocolClasses = [AuthRetryURLStub.self]
+      let client = APIClient(session: URLSession(configuration: config))
+      await client.useSyntheticCalendarTestDeviceIdentity()
+      await client.setTestAuthHeader("Bearer synthetic-token")
+      let reader = CalendarReaderService(calendarAPI: client)
+
+      // Both a failed status lookup and a failed existing-grant event read must
+      // stay on the backend boundary. Falling through would enter browser/
+      // Keychain discovery and return CalendarReaderError instead.
+      for failStatus in [true, false] {
+        AuthRetryURLStub.reset()
+        AuthRetryURLStub.respond { request in
+          if failStatus || request.url?.path == "/v1/calendar/google/events" {
+            return (403, Data("{}".utf8))
+          }
+          return (200, Data("{\"connected\":true}".utf8))
+        }
+        do {
+          _ = try await reader.readEvents(daysBack: 1, daysForward: 1, maxResults: 1)
+          XCTFail("A grant failure must propagate")
+        } catch { XCTAssertTrue(error is APIError) }
+        XCTAssertEqual(AuthRetryURLStub.attempts, failStatus ? 1 : 2)
+      }
+      AuthRetryURLStub.reset()
+      AuthRetryURLStub.returnStatus(200, body: "{\"connected\":false,\"read_selection_configured\":false}")
+      let absent = try await reader.readEventsViaGrant(daysBack: 1, daysForward: 1, maxResults: 1)
+      XCTAssertNil(absent)
+      XCTAssertEqual(AuthRetryURLStub.attempts, 1)
+
+      for configured in [true, nil] as [Bool?] {
+        AuthRetryURLStub.reset()
+        let field = configured == true ? ",\"read_selection_configured\":true" : ""
+        AuthRetryURLStub.returnStatus(200, body: "{\"connected\":false\(field)}")
+        do {
+          _ = try await reader.readEvents(daysBack: 1, daysForward: 1, maxResults: 1)
+          XCTFail("A saved or unverifiable selection must never fall through to browser cookies")
+        } catch {
+          if configured == true {
+            XCTAssertEqual(error as? CalendarReaderError, .savedSelectionNeedsGrant)
+          } else {
+            XCTAssertTrue(error is APIError)
+          }
+        }
+        XCTAssertEqual(AuthRetryURLStub.attempts, 1)
+      }
+    }
+
+    func testLegacyCalendarReadCannotPublishAfterSameUIDReauthentication() async throws {
+      try configureRefreshableSession()
+      await establishOwnerForAuthTest("user-1")
+      let config = URLSessionConfiguration.ephemeral
+      config.protocolClasses = [AuthRetryURLStub.self]
+      let client = APIClient(session: URLSession(configuration: config))
+      await client.useSyntheticCalendarTestDeviceIdentity()
+      await client.setTestAuthHeader("Bearer synthetic-token")
+      AuthRetryURLStub.returnStatus(200, body: "{\"connected\":false,\"read_selection_configured\":false}")
+      let started = expectation(description: "Legacy read admitted")
+      let release = AsyncStream<Void>.makeStream()
+      let reader = CalendarReaderService(
+        calendarAPI: client,
+        legacyRead: { _, _ in
+          started.fulfill()
+          var iterator = release.stream.makeAsyncIterator()
+          _ = await iterator.next()
+          return []
+        })
+      let operation = Task { try await reader.readEvents() }
+      let admitted = await XCTWaiter.fulfillment(of: [started], timeout: 2)
+      XCTAssertEqual(admitted, .completed)
+      await transitionOwnerForAuthTest(to: nil)
+      await transitionOwnerForAuthTest(to: "user-1")
+      release.continuation.yield(())
+      release.continuation.finish()
+      do {
+        _ = try await operation.value
+        XCTFail("A prior-session legacy read must not be published")
+      } catch {
+        guard case APIError.unauthorized = error else {
+          return XCTFail("Expected owner authorization failure")
+        }
+      }
+    }
+
     func testFeatureVoidRoutesUseShared401Recovery() async throws {
       let config = URLSessionConfiguration.ephemeral
       config.protocolClasses = [AuthRetryURLStub.self]
       let client = APIClient(session: URLSession(configuration: config))
+      await client.useSyntheticCalendarTestDeviceIdentity()
       try configureRefreshableSession()
       setenv("FIREBASE_API_KEY", "test-key", 1)
       defer { unsetenv("FIREBASE_API_KEY") }
@@ -213,6 +403,7 @@ import XCTest
       let config = URLSessionConfiguration.ephemeral
       config.protocolClasses = [AuthRetryURLStub.self]
       let client = APIClient(session: URLSession(configuration: config))
+      await client.useSyntheticCalendarTestDeviceIdentity()
       try configureRefreshableSession()
       setenv("FIREBASE_API_KEY", "test-key", 1)
       defer { unsetenv("FIREBASE_API_KEY") }
@@ -251,6 +442,7 @@ import XCTest
       let config = URLSessionConfiguration.ephemeral
       config.protocolClasses = [SuspendedOwnerBoundURLStub.self]
       let client = APIClient(session: URLSession(configuration: config))
+      await client.useSyntheticCalendarTestDeviceIdentity()
       await client.setTestAuthHeader("Bearer id-token")
       let request = Task { () -> Result<Response, Error> in
         do {
@@ -306,6 +498,7 @@ import XCTest
       let config = URLSessionConfiguration.ephemeral
       config.protocolClasses = [SuspendedOwnerBoundURLStub.self]
       let client = APIClient(session: URLSession(configuration: config))
+      await client.useSyntheticCalendarTestDeviceIdentity()
       do {
         let _: Response = try await client.get(
           "v1/mismatched-owner",
@@ -346,6 +539,7 @@ import XCTest
       let config = URLSessionConfiguration.ephemeral
       config.protocolClasses = [SuspendedOwnerBoundURLStub.self]
       let client = APIClient(session: URLSession(configuration: config))
+      await client.useSyntheticCalendarTestDeviceIdentity()
       do {
         let _: Response = try await client.get(
           "v1/preflight-owner-mismatch",
@@ -408,6 +602,7 @@ import XCTest
       let config = URLSessionConfiguration.ephemeral
       config.protocolClasses = [AuthRetryURLStub.self]
       let client = APIClient(session: URLSession(configuration: config))
+      await client.useSyntheticCalendarTestDeviceIdentity()
 
       let auth = AuthService.shared
       auth.tokenStorageHooks = AuthService.TokenStorageHooks(
@@ -476,6 +671,7 @@ import XCTest
       let config = URLSessionConfiguration.ephemeral
       config.protocolClasses = [AuthRetryURLStub.self]
       let client = APIClient(session: URLSession(configuration: config))
+      await client.useSyntheticCalendarTestDeviceIdentity()
 
       let auth = AuthService.shared
       auth.tokenStorageHooks = AuthService.TokenStorageHooks(
@@ -544,6 +740,7 @@ import XCTest
       let config = URLSessionConfiguration.ephemeral
       config.protocolClasses = [AuthRetryURLStub.self]
       let client = APIClient(session: URLSession(configuration: config))
+      await client.useSyntheticCalendarTestDeviceIdentity()
       await client.setTestAuthHeader("Bearer test-token")
 
       do {
@@ -566,6 +763,7 @@ import XCTest
       let config = URLSessionConfiguration.ephemeral
       config.protocolClasses = [AuthRetryURLStub.self]
       let client = APIClient(session: URLSession(configuration: config))
+      await client.useSyntheticCalendarTestDeviceIdentity()
       await client.setTestAuthHeader("Bearer test-token")
 
       do {
@@ -589,6 +787,7 @@ import XCTest
       let config = URLSessionConfiguration.ephemeral
       config.protocolClasses = [AuthRetryURLStub.self]
       let client = APIClient(session: URLSession(configuration: config))
+      await client.useSyntheticCalendarTestDeviceIdentity()
       await client.setTestAuthHeader("Bearer test-token")
 
       let stream = try await client.synthesizeSpeechStream(

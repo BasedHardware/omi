@@ -7,6 +7,7 @@ import pytest
 
 from config.stt_provider_policy import SONIOX_PROVIDER
 from tests.unit.fixtures.live_stt_registry import enabled_live_targets
+from utils.stt import language_policy
 from utils.stt import streaming as st
 from utils.stt.language_policy import (
     MAX_DETECTION_CHARS,
@@ -193,8 +194,6 @@ def test_hintable_arm_prefers_soniox_but_respects_exclude_key_and_breaker(monkey
 
 
 def test_hintable_arm_respects_provider_enablement(monkeypatch):
-    from utils.stt import language_policy
-
     monkeypatch.setenv('STT_NON_EN_MULTI_PREFER_HINTABLE_PERCENT', '100')
     monkeypatch.setenv('SONIOX_API_KEY', 'local-test-key')
     monkeypatch.setattr(st, 'stt_service_models', ['modulate-velma-2', 'soniox'])
@@ -331,10 +330,22 @@ async def test_failed_learning_write_does_not_break_summary(monkeypatch):
     monkeypatch.setattr(
         'utils.stt.language_policy.append_live_language_session', lambda *_: (_ for _ in ()).throw(RuntimeError())
     )
+    spawned = []
+    start_background_task = language_policy.start_background_task
+
+    def capture_background_task(coro, *, name):
+        task = start_background_task(coro, name=name)
+        spawned.append(task)
+        return task
+
+    monkeypatch.setattr(language_policy, 'start_background_task', capture_background_task)
     observations = LiveLanguageObservations(LiveLanguageProfile.create('en', multi=True, uid='u'))
     observations._record('soniox', ('in_profile', 'en'))
     await observations.summarize('u')
-    await asyncio.sleep(0.05)
+    assert len(spawned) == 1
+    # summarize schedules persistence and returns without waiting for the write.
+    assert not spawned[0].done()
+    await asyncio.wait_for(spawned[0], timeout=1.0)
     assert observations.telemetry_failure_logged
 
 

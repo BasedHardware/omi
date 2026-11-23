@@ -1062,6 +1062,11 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
   Future<void> _showClearChatDialog() async {
     if (!mounted) return;
     final l10n = context.l10n;
+    // While Omi answers the chat cannot be cleared; say why instead of ignoring the tap (H3).
+    if (!context.read<MessageProvider>().canSwitchChat) {
+      OmiFeedback.info(context, l10n.waitForOmiToFinish);
+      return;
+    }
     // Clearing cannot be undone: confirm every time, with the verb on the button.
     final confirmed = await showOmiConfirm(
       context,
@@ -1128,7 +1133,10 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
 
     // Store references before async operation
     final messageProvider = mounted ? context.read<MessageProvider>() : null;
-    if (messageProvider == null || !messageProvider.canSwitchChat || context.read<VoiceRecorderProvider>().isActive) {
+    if (messageProvider == null) return;
+    if (!messageProvider.canSwitchChat || context.read<VoiceRecorderProvider>().isActive) {
+      // A switch now would mix two chats; say why the tap did nothing (H3).
+      OmiFeedback.info(context, context.l10n.waitForOmiToFinish);
       return;
     }
 

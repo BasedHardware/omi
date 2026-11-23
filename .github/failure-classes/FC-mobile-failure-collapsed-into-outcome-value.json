@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "id": "FC-mobile-failure-collapsed-into-outcome-value",
+  "family": "ui-surface-contract",
+  "violated_contract": "After a tap the reader must see what happened. A request that failed must not reach the page as the same value as a real answer (null, {}, [], false read as 'nothing new', 'up to date', 'Free plan' or 'no change'), state the reader made must not be cleared before the request that could fail has answered, and a write that rolls back must say so where the reader is looking. On 2026-11-18 a Finish with content and no server answer cleared the transcript, removed the processing row, announced the absence silently and popped the reader to Home with no message.",
+  "canonical_prevention": "Return a typed outcome that separates 'nothing there' from 'could not find out' (FinishOutcome for every Finish entry point; a nullable lookup for firmware; RestoreOutcome for Restore Purchases), present it through one shared helper (presentFinishOutcome, applyOmiSetting, OmiMissingTarget), and keep the no-increase ratchet rules silent-catch, generic-error and pop-before-await so new pages cannot reintroduce the pattern.",
+  "canonical_prevention_artifact": [
+    ".github/scripts/check_mobile_ux_contract.py",
+    "app/test/widgets/finish_outcome_test.dart",
+    "app/test/widgets/outcomes_widgets_test.dart"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "app/lib/pages/episodes/",
+    "app/lib/services/capture/finish_outcome.dart",
+    "app/lib/ui/feedback/",
+    "app/docs/ux-contract.md"
+  ],
+  "status": "open"
+}

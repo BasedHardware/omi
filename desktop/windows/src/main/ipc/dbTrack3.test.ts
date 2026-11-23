@@ -9,15 +9,6 @@ import { describe, expect, it } from 'vitest'
 
 // Verbatim from db.ts's `/* ---- Track 3 ---- */` CREATE block.
 const TRACK3_SCHEMA = `
-  CREATE TABLE IF NOT EXISTS ai_user_profiles (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    profile_text TEXT NOT NULL,
-    data_sources_used TEXT,
-    generated_at INTEGER NOT NULL,
-    backend_synced INTEGER NOT NULL DEFAULT 0
-  );
-  CREATE INDEX IF NOT EXISTS idx_ai_user_profiles_generated_at ON ai_user_profiles(generated_at);
-
   CREATE TABLE IF NOT EXISTS focus_sessions (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     screenshot_id TEXT,
@@ -64,79 +55,11 @@ function tableNames(db: DatabaseSync): string[] {
 }
 
 describe('Track 3 schema', () => {
-  it('creates the three net-new tables', () => {
+  it('creates the net-new tables', () => {
     const names = tableNames(makeDb())
-    for (const t of ['ai_user_profiles', 'focus_sessions', 'memories']) {
+    for (const t of ['focus_sessions', 'memories']) {
       expect(names, `table ${t}`).toContain(t)
     }
-  })
-})
-
-describe('ai_user_profiles round-trip', () => {
-  it('inserts, lists newest-first, updates text, marks synced, and deletes', () => {
-    const db = makeDb()
-    const insert = db.prepare(
-      'INSERT INTO ai_user_profiles (profile_text, data_sources_used, generated_at, backend_synced) VALUES (?, ?, ?, ?)'
-    )
-    insert.run('older profile', JSON.stringify(['conversations']), 1000, 0)
-    const newer = insert.run('newer profile', JSON.stringify(['conversations', 'files']), 2000, 0)
-
-    // Newest first (default consolidation read).
-    const list = db
-      .prepare(
-        'SELECT id, profile_text AS profileText, data_sources_used AS dataSourcesUsed, generated_at AS generatedAt, backend_synced AS backendSynced FROM ai_user_profiles ORDER BY generated_at DESC, id DESC LIMIT 5'
-      )
-      .all() as {
-      profileText: string
-      dataSourcesUsed: string
-      generatedAt: number
-      backendSynced: number
-    }[]
-    expect(list.map((r) => r.profileText)).toEqual(['newer profile', 'older profile'])
-    expect(JSON.parse(list[0].dataSourcesUsed)).toEqual(['conversations', 'files'])
-
-    const newerId = Number(newer.lastInsertRowid)
-    db.prepare('UPDATE ai_user_profiles SET profile_text = ? WHERE id = ?').run('edited', newerId)
-    db.prepare('UPDATE ai_user_profiles SET backend_synced = 1 WHERE id = ?').run(newerId)
-    const edited = db
-      .prepare(
-        'SELECT profile_text AS profileText, backend_synced AS backendSynced FROM ai_user_profiles WHERE id = ?'
-      )
-      .get(newerId) as { profileText: string; backendSynced: number }
-    expect(edited.profileText).toBe('edited')
-    expect(edited.backendSynced).toBe(1)
-
-    db.prepare('DELETE FROM ai_user_profiles WHERE id = ?').run(newerId)
-    expect(
-      (db.prepare('SELECT COUNT(*) AS n FROM ai_user_profiles').get() as { n: number }).n
-    ).toBe(1)
-    db.prepare('DELETE FROM ai_user_profiles').run()
-    expect(
-      (db.prepare('SELECT COUNT(*) AS n FROM ai_user_profiles').get() as { n: number }).n
-    ).toBe(0)
-  })
-
-  it('maps NULL data_sources_used to an empty array (mapper null/empty path)', () => {
-    const db = makeDb()
-    // db.ts can't be imported here (it pulls in better-sqlite3/electron — see the
-    // file header), so replicate the exact `parseJsonArray(x) ?? []` the mapper uses.
-    const parseJsonArray = (s: string | null): string[] | undefined => {
-      if (!s) return undefined
-      try {
-        const v = JSON.parse(s)
-        return Array.isArray(v) ? (v as string[]) : undefined
-      } catch {
-        return undefined
-      }
-    }
-    db.prepare(
-      'INSERT INTO ai_user_profiles (profile_text, data_sources_used, generated_at, backend_synced) VALUES (?, ?, ?, ?)'
-    ).run('no sources', null, 1000, 0)
-    const row = db
-      .prepare('SELECT data_sources_used AS dataSourcesUsed FROM ai_user_profiles')
-      .get() as { dataSourcesUsed: string | null }
-    expect(row.dataSourcesUsed).toBeNull()
-    expect(parseJsonArray(row.dataSourcesUsed) ?? []).toEqual([])
   })
 })
 

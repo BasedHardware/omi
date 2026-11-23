@@ -6,6 +6,9 @@ from typing import Any, cast
 from unittest.mock import Mock
 
 import pytest
+
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
 from prometheus_client import CollectorRegistry
 
 from config.batch_pipeline import HELD_DEAD_LETTER_SECONDS, batch_held_dead_letter_enabled, scheduler_control_key
@@ -19,6 +22,7 @@ from utils.batch_pipeline import held_dead_letter as sweep
 from utils.batch_pipeline.intake import _held_status  # pyright: ignore[reportPrivateUsage] -- unit contract seam
 from utils.batch_pipeline.metrics import QueueMetrics
 from utils.batch_pipeline.scheduler import Scheduler
+from routers import batch_pipeline as router
 
 
 def row(client):
@@ -65,6 +69,8 @@ def test_requeue_idempotent_and_usable_with_flag_off_retains_attempt_and_audio_h
     # Keep the strict document fake off query paths; the emulator covers a cold DRR ring.
     client.rows['batch_pipeline_prod_control', scheduler_control_key(job['owner_key'])] = {'p0_active': True}
     monkeypatch.setenv('BATCH_HELD_DEAD_LETTER_ENABLED', 'false')
+    # Main's retain-attempt contract; class 3 on resets attempt (test_backlog_state_machine.py).
+    monkeypatch.setenv('BATCH_HELD_REDRIVE_BUDGET_ENABLED', 'false')
     recovery = RecoveryStore(store)
     assert recovery.requeue_quarantined('bad', 30)
     after = deepcopy(client.rows)
@@ -85,6 +91,8 @@ def test_expired_row_requeues_through_unchanged_legacy_redrive_with_flag_off(set
     assert row(client)['merge_pending'] is True
     client.rows['batch_pipeline_prod_control', scheduler_control_key(job['owner_key'])] = {'p0_active': True}
     monkeypatch.setenv('BATCH_HELD_DEAD_LETTER_ENABLED', 'false')
+    # Main's retain-attempt contract; class 3 on resets attempt (test_backlog_state_machine.py).
+    monkeypatch.setenv('BATCH_HELD_REDRIVE_BUDGET_ENABLED', 'false')
     # Only the unchanged, pre-feature path is available after a code rollback.
     queue = Scheduler(store)
     assert queue.redrive_dead('bad', 31)
@@ -266,9 +274,6 @@ def test_crash_before_checkpoint_replays_without_duplicate_expiry(monkeypatch):
 
 
 def test_private_requeue_rpc_is_stage_bound_authenticated_and_idempotent(setup, monkeypatch):
-    from fastapi import FastAPI
-    from fastapi.testclient import TestClient
-    from routers import batch_pipeline as router
     from types import SimpleNamespace
 
     client, store, _, _, _, _ = setup

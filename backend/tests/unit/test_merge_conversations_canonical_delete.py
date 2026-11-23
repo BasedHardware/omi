@@ -311,3 +311,27 @@ def test_merge_source_document_delete_failure_propagates_on_current_main(purge_s
             _delete_conversation_and_related_data(
                 'owner', 'source', purge_sync_sources=purge_sync_sources, merged_into='retained-target'
             )
+
+
+def test_deleting_a_live_rederived_conversation_purges_its_undo_copies_first():
+    merge_mod = sys.modules['utils.conversations.merge_conversations']
+    row = {'sync_merged_from': ['bridge'], 'v3_rederive_live_run': 'run-1'}
+    calls = []
+    with patch.object(merge_mod.conversations_db, 'get_conversation', return_value=row), patch.object(
+        merge_mod, '_delete_conversation_and_related_data', side_effect=lambda *a, **kw: calls.append('bridge')
+    ), patch.object(merge_mod.conversation_tombstones, 'record_deletion'), patch.object(
+        merge_mod, 'record_survivor_deleted'
+    ), patch.object(
+        merge_mod, '_purge_rederive_priors', side_effect=lambda *a: calls.append(a)
+    ):
+        merge_mod.delete_conversation_with_sync_sources('u', 'survivor')
+    assert calls[0] == ('u', ['survivor', 'bridge']) and calls[1] == 'bridge'
+
+
+def test_deleting_a_conversation_without_a_rederive_stamp_still_checks_for_priors():
+    merge_mod = sys.modules['utils.conversations.merge_conversations']
+    with patch.object(merge_mod.conversations_db, 'get_conversation', return_value={}), patch.object(
+        merge_mod, 'record_survivor_deleted'
+    ), patch.object(merge_mod, '_purge_rederive_priors') as purge:
+        merge_mod.delete_conversation_with_sync_sources('u', 'plain')
+    purge.assert_called_once_with('u', ['plain'])

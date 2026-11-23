@@ -45,6 +45,31 @@ consent, and excluded rows alone never finish the choice to waiting-choice.
 This change adds no scheduler lifecycle or indexes; the pre-existing job and
 index prerequisites below are unchanged and are not deployed by this lane.
 
+## Monthly live held-storage quota
+
+Listen reserves capacity for the UTC month of capture before it uploads held
+audio or hands it to the encrypted staging journal. When quota blocks a
+reservation, the affected PCM stays in the bounded, process-local hold for the
+existing final flush attempt. Previously committed held audio and its redrive
+remain available. If the final attempt also hits quota, the pending PCM has no
+held receipt and can be lost when the sink is released. The held-seconds client
+receipt includes only published audio.
+
+Listen normally offers incoming frames to a separate raw archive before STT
+admission. That path depends on private cloud sync consent, the active archive
+lane, and a successful commit. A held-storage refusal alone therefore shows a
+gap in held custody. Complete audio loss occurs when no other copy committed.
+The quota refusal has no durable user-facing receipt of its own.
+
+Use `omi_held_content_live_storage_quota_refusals_total` and
+`event=stt_cap_live_held outcome=storage_quota_refused` to count affected
+sessions. Both count the first refusal per session, including a session whose
+final retry succeeds. For a post-deploy readback, confirm the serving digest
+and count quota-caused `stt_shutdown` task exceptions over the first full hour
+on that digest. The expected count is zero. The quota metric and warning
+contain no owner or session identifiers, so neither can produce daily unique
+owner counts.
+
 ## Deployment prerequisites
 
 1. Merge and approve the production Firestore index apply. Three new ascending

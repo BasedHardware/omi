@@ -11,6 +11,7 @@ import 'package:omi/providers/conversation_provider.dart';
 
 typedef EpisodeLiveFetcher = Future<ApiResult<EpisodeRead>> Function();
 typedef EpisodeLookupFetcher = Future<ApiResult<EpisodeRead>> Function(String conversationId);
+typedef EpisodeDetailFetcher = Future<ApiResult<Episode>> Function(String episodeId);
 typedef EpisodeWrapUpCall = Future<ApiResult<Episode>> Function(String episodeId, {String? conversationId});
 typedef EpisodeDismissCall = Future<ApiResult<Episode>> Function(String episodeId, String itemId);
 
@@ -24,12 +25,14 @@ class EpisodeProvider extends ChangeNotifier {
     EpisodeLiveFetcher? fetchLive,
     Future<ApiResult<EpisodePageRead>> Function(DateTime, DateTime, {String? cursor})? fetchPage,
     EpisodeLookupFetcher? lookup,
+    EpisodeDetailFetcher? detail,
     EpisodeWrapUpCall? wrapUp,
     EpisodeDismissCall? dismiss,
     DateTime Function()? clock,
   })  : _fetchLive = fetchLive ?? api.getLiveEpisode,
         _fetchPage = fetchPage ?? api.getEpisodes,
         _lookup = lookup ?? api.getEpisodeForConversation,
+        _detail = detail ?? api.getEpisode,
         _wrapUp = wrapUp ?? api.wrapUpEpisode,
         _dismiss = dismiss ?? api.dismissEpisodeItem,
         _clock = clock ?? DateTime.now;
@@ -69,8 +72,9 @@ class EpisodeProvider extends ChangeNotifier {
             if (episode.live ||
                 (episode.composed &&
                     episode.members
-                            .where((m) =>
-                                !_hiddenHomeMembers.contains(m.id) && !provider.memoriesToDelete.containsKey(m.id))
+                            .where(
+                              (m) => !_hiddenHomeMembers.contains(m.id) && !provider.memoriesToDelete.containsKey(m.id),
+                            )
                             .length >=
                         2))
               episode.id: episode.members
@@ -103,10 +107,18 @@ class EpisodeProvider extends ChangeNotifier {
       ..removeWhere((id) => !pending.contains(id) && restored.contains(id));
     if (setEquals(hidden, _hiddenHomeMembers)) return;
     _hiddenHomeMembers = hidden;
+    _openedEpisodes.removeWhere((_, episode) => episode.conversationIds.any(hidden.contains));
+    _byConversation.removeWhere((_, episode) => episode?.conversationIds.any(hidden.contains) ?? false);
     notifyListeners();
   }
 
   void invalidateHome() {
+    _openedEpisodes.clear();
+    _openProblems.clear();
+    _byConversation.clear();
+    _cachedAt.clear();
+    _opening.clear();
+    _openTokens.clear();
     _homeHold?.cancel();
     _homeReadingKey = null;
     _homeReadAt = null;
@@ -127,8 +139,13 @@ class EpisodeProvider extends ChangeNotifier {
     return _refreshHome(from, to, force: force, bootstrap: bootstrap);
   }
 
-  Future<bool> _refreshHome(DateTime from, DateTime to,
-      {required bool force, required bool bootstrap, Set<String>? heldIds}) {
+  Future<bool> _refreshHome(
+    DateTime from,
+    DateTime to, {
+    required bool force,
+    required bool bootstrap,
+    Set<String>? heldIds,
+  }) {
     final key = '$_ownerUid|$from|$to|$bootstrap';
     if (!force && key == _homeReadingKey && _homeRead != null) return _homeRead!;
     final read = _readHome(from, to, force: force, bootstrap: bootstrap, heldIds: heldIds);
@@ -142,8 +159,14 @@ class EpisodeProvider extends ChangeNotifier {
     });
   }
 
-  Future<bool> _readHome(DateTime from, DateTime to,
-      {required bool force, required bool bootstrap, Set<String>? heldIds}) async {
+  Future<bool> _readHome(
+    DateTime from,
+    DateTime to, {
+    required bool force,
+    required bool bootstrap,
+    Set<String>? heldIds,
+  }) async {
+    if (_off) return true; // v3: no episodes to read, so the overlay is complete and empty.
     if (!_enabled && !bootstrap) return false;
     final key = '${from.toIso8601String()}|${to.toIso8601String()}';
     if (!force &&
@@ -207,7 +230,7 @@ class EpisodeProvider extends ChangeNotifier {
         ? collected.values.toList()
         : [
             for (final episode in _homeEpisodes)
-              heldIds.contains(episode.id) ? collected[episode.id] ?? episode : episode
+              heldIds.contains(episode.id) ? collected[episode.id] ?? episode : episode,
           ];
     _homeFrom = from;
     _homeTo = to;
@@ -227,8 +250,9 @@ class EpisodeProvider extends ChangeNotifier {
     _homeHold?.cancel();
     final now = _clock();
     final episodeCalls = _homeHoldEpisodeCalls.putIfAbsent(_ownerUid, () => {});
-    final held =
-        _homeEpisodes.where((e) => e.members.length != 1 && (e.awaitingSummary(now) || _homeHeldByProcessingMember(e)));
+    final held = _homeEpisodes.where(
+      (e) => e.members.length != 1 && (e.awaitingSummary(now) || _homeHeldByProcessingMember(e)),
+    );
     final eligible = held.where((e) => (episodeCalls[e.id] ?? 0) < homeHoldAttempts).toList();
     if (eligible.isEmpty || (_homeHoldWindowCalls['$_ownerUid|$key'] ?? 0) >= homeHoldWindowCalls) {
       _homeHoldAttempts = 0;
@@ -266,6 +290,9 @@ class EpisodeProvider extends ChangeNotifier {
 
   final EpisodeLiveFetcher _fetchLive;
   final EpisodeLookupFetcher _lookup;
+  final EpisodeDetailFetcher _detail;
+  final Map<String, Episode> _openedEpisodes = {};
+  Episode? openedEpisode(String id) => !_off && _ownerUid == SharedPreferencesUtil().uid ? _openedEpisodes[id] : null;
   final EpisodeWrapUpCall _wrapUp;
   final EpisodeDismissCall _dismiss;
   final DateTime Function() _clock;
@@ -290,7 +317,13 @@ class EpisodeProvider extends ChangeNotifier {
   final LiveStartAnchor liveAnchor = LiveStartAnchor();
 
   bool _enabled = false;
-  bool get enabled => _enabled && _ownerUid == SharedPreferencesUtil().uid;
+  bool get enabled => _enabled && !_off && _ownerUid == SharedPreferencesUtil().uid;
+
+  /// True while the server runs recordings and conversations (v3) for this account: episodes are
+  /// retired for it, so the app makes no episode calls at all (the server's episode-call counter
+  /// decides when the old code can be deleted).
+  bool Function()? suppressed;
+  bool get _off => suppressed?.call() == true;
 
   Episode? _live;
   Episode? get live => _ownerUid == SharedPreferencesUtil().uid ? _live : null;
@@ -338,6 +371,10 @@ class EpisodeProvider extends ChangeNotifier {
     _homeTo = null;
     _homeGeneration++;
     _byConversation.clear();
+    _openedEpisodes.clear();
+    _openProblems.clear();
+    _opening.clear();
+    _openTokens.clear();
     _cachedAt.clear();
     _lookups.clear();
     _ended.clear();
@@ -394,7 +431,7 @@ class EpisodeProvider extends ChangeNotifier {
     final uid = SharedPreferencesUtil().uid;
     final id =
         conversationId ?? (uid.isEmpty ? '' : SharedPreferencesUtil().getString('previousEpisodeConversation:$uid'));
-    if (id.isEmpty || _recovering.contains(id)) return;
+    if (_off || id.isEmpty || _recovering.contains(id)) return;
     _recovering.add(id);
     try {
       final result = await _lookup(id);
@@ -487,6 +524,18 @@ class EpisodeProvider extends ChangeNotifier {
   /// Re-reads the live episode. A failed read keeps what was shown; a 404 means no episodes here.
   Future<void> refreshLive() async {
     _ensureOwner();
+    if (_off) {
+      // Episodes are retired for this account (or the switch has not answered yet): drop anything an
+      // earlier read cached, so no episode UI or write follows from it.
+      if (_enabled || _live != null || _previous != null || _byConversation.isNotEmpty) {
+        _enabled = false;
+        _live = null;
+        _previous = null;
+        invalidateHome();
+        notifyListeners();
+      }
+      return;
+    }
     final uid = _ownerUid;
     final generation = ++_generation;
     final result = await _fetchLive();
@@ -529,12 +578,13 @@ class EpisodeProvider extends ChangeNotifier {
   }
 
   /// The conversations the existing live row stands for on Home.
-  Set<String> get liveConversationIds => _enabled && live != null ? live!.conversationIds.toSet() : const {};
+  Set<String> get liveConversationIds => enabled && live != null ? live!.conversationIds.toSet() : const {};
 
   /// The episode [conversationId] belongs to. Coalesce reads and keep only a short-lived cache:
   /// finalization can add moments even after the episode closes and another one starts.
   Future<Episode?> episodeFor(String conversationId) {
     _ensureOwner();
+    if (_off) return Future.value(null);
     final uid = _ownerUid;
     final cachedAt = _cachedAt[conversationId];
     if (_byConversation.containsKey(conversationId) &&
@@ -558,7 +608,99 @@ class EpisodeProvider extends ChangeNotifier {
   }
 
   Episode? cachedEpisodeFor(String conversationId) =>
-      _ownerUid == SharedPreferencesUtil().uid ? _byConversation[conversationId] : null;
+      !_off && _ownerUid == SharedPreferencesUtil().uid ? _byConversation[conversationId] : null;
+
+  static const openComposePolls = 8;
+  static const openComposePollInterval = Duration(seconds: 5);
+  static const openComposeReadTimeout = Duration(seconds: 4);
+  final Map<String, Future<Episode?>> _opening = {};
+  final Map<String, ApiProblem> _openProblems = {};
+  ApiProblem? openProblem(String id) => _ownerUid == SharedPreferencesUtil().uid ? _openProblems[id] : null;
+  final Map<String, Object> _openTokens = {};
+
+  /// One read per open, with at most eight more reads only while the server says
+  /// notes are deferred. Concurrent opens coalesce; leaving the page cancels polling.
+  Future<Episode?> openEpisode(String episodeId) {
+    _ensureOwner();
+    if (_off || _disposed || episodeId.isEmpty) return Future.value(null);
+    final existing = _opening[episodeId];
+    if (existing != null) return existing;
+    final token = Object();
+    _openProblems.remove(episodeId);
+    _openTokens[episodeId] = token;
+    final future = _readOpened(episodeId, token).whenComplete(() {
+      if (identical(_openTokens[episodeId], token)) {
+        _opening.remove(episodeId);
+        _openTokens.remove(episodeId);
+      }
+    });
+    _opening[episodeId] = future;
+    return future;
+  }
+
+  void cancelOpenEpisode(String episodeId) {
+    _openTokens.remove(episodeId);
+    _opening.remove(episodeId);
+  }
+
+  Future<Episode?> _readOpened(String episodeId, Object token) async {
+    final uid = _ownerUid;
+    bool active() => !_disposed && uid == SharedPreferencesUtil().uid && identical(_openTokens[episodeId], token);
+    final deadline = _clock().add(const Duration(seconds: 45));
+    Episode? episode;
+    for (var attempt = 0; attempt <= openComposePolls && active(); attempt++) {
+      if (attempt > 0) {
+        await Future<void>.delayed(openComposePollInterval);
+        if (!active() || !_clock().isBefore(deadline)) break;
+      }
+      ApiResult<Episode> result;
+      try {
+        final remaining = deadline.difference(_clock());
+        if (remaining <= Duration.zero) break;
+        result = await _detail(
+          episodeId,
+        ).timeout(remaining < openComposeReadTimeout ? remaining : openComposeReadTimeout);
+      } on TimeoutException {
+        if (active()) {
+          _openProblems[episodeId] = const ApiProblem(ApiProblemKind.transport);
+          notifyListeners();
+        }
+        break;
+      }
+      if (!active()) return null;
+      if (result is! ApiSuccess<Episode>) {
+        if (result is ApiFailure<Episode>) {
+          _openProblems[episodeId] = result.problem;
+          if ({
+            ApiProblemKind.authTerminal,
+            ApiProblemKind.forbidden,
+            ApiProblemKind.paymentRequired,
+            ApiProblemKind.notFound
+          }.contains(result.problem.kind)) {
+            _openedEpisodes.remove(episodeId);
+          }
+          notifyListeners();
+        }
+        break;
+      }
+      _openProblems.remove(episodeId);
+      episode = result.data;
+      _mergeOpened(episode);
+      if (episode.live || !episode.composeDeferred) break;
+    }
+    return episode;
+  }
+
+  void _mergeOpened(Episode episode) {
+    _openedEpisodes.remove(episode.id);
+    _openedEpisodes[episode.id] = episode;
+    if (_openedEpisodes.length > 16) _openedEpisodes.remove(_openedEpisodes.keys.first);
+    for (final id in episode.conversationIds) {
+      _byConversation[id] = episode;
+      _cachedAt[id] = _clock();
+    }
+    notifyListeners();
+  }
 
   /// Starts polling while at least one live surface is on screen.
   void watch() {
@@ -586,7 +728,7 @@ class EpisodeProvider extends ChangeNotifier {
     _ensureOwner();
     final uid = _ownerUid;
     final episode = _live;
-    if (episode == null || _wrappingUp) return false;
+    if (_off || episode == null || _wrappingUp) return false;
     _wrappingUp = true;
     notifyListeners();
     try {
@@ -611,7 +753,7 @@ class EpisodeProvider extends ChangeNotifier {
     _ensureOwner();
     final now = _clock();
     liveAnchor.restart(now);
-    final episode = _live;
+    final episode = _off ? null : _live;
     if (episode != null) {
       _remember(episode);
       _ended.add(episode.id);
@@ -629,7 +771,7 @@ class EpisodeProvider extends ChangeNotifier {
   /// Undo on a captured item: hidden at once, dismissed on the server; restored if that fails.
   Future<bool> dismissItem(String itemId) async {
     final episode = _live;
-    if (episode == null) return false;
+    if (_off || episode == null) return false;
     _live = episode.copyWith(
       items: [
         for (final item in episode.items) item.id == itemId ? item.withStatus(EpisodeItemStatus.dismissed) : item,

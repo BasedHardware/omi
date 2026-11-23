@@ -169,4 +169,43 @@ void main() {
     expect(persisted, hasLength(801), reason: 'foreign WALs loaded after an account switch remain, unevicted');
     await syncC.stop();
   });
+
+  test('same-account sign-in rehydrates WALs parked during signed-out cold start or retired on logout', () async {
+    var persisted = <Wal>[
+      _wal(start: 1000, ownerUid: 'account-a'),
+      _wal(start: 2000, ownerUid: 'account-b'),
+    ];
+
+    // Cold start while signed out (e.g. after app update cleared auth session).
+    SharedPreferences.setMockInitialValues({'uid': ''});
+    await SharedPreferencesUtil.init();
+    final sync = LocalWalSyncImpl(
+      _FakeListener(),
+      persistWals: (wals) async => persisted = List<Wal>.from(wals),
+      loadWals: () async => List<Wal>.from(persisted),
+    );
+    sync.start();
+    await sync.walReady;
+
+    expect(sync.testWals, isEmpty, reason: 'signed-out cold start parks account-stamped WALs');
+    expect(sync.testForeignWals.map((w) => w.timerStart), containsAll([1000, 2000]));
+
+    // Account A signs back in on the same singleton instance.
+    SharedPreferencesUtil().uid = 'account-a';
+    await sync.rehydrateForCurrentUser();
+
+    expect((await sync.getAllWals()).map((w) => w.timerStart), [1000]);
+    expect(sync.testForeignWals.map((w) => w.timerStart), [2000]);
+
+    // Account A signs out in-session and signs back in again.
+    sync.clearUserData();
+    expect(await sync.getAllWals(), isEmpty, reason: 'reads during sign-out must not restore the retiring owner');
+    SharedPreferencesUtil().uid = '';
+    expect(await sync.getAllWals(), isEmpty);
+
+    SharedPreferencesUtil().uid = 'account-a';
+    await sync.rehydrateForCurrentUser();
+    expect((await sync.getAllWals()).map((w) => w.timerStart), [1000]);
+    await sync.stop();
+  });
 }

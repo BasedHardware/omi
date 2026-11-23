@@ -1,7 +1,7 @@
 import base64
 import uuid
 from datetime import datetime, timezone
-from typing import AsyncGenerator, List, Optional, Tuple
+from typing import Any, AsyncGenerator, Awaitable, Callable, List, Optional, Tuple
 
 from fastapi import HTTPException
 
@@ -173,19 +173,35 @@ def _transcribe_voice_message_url(
     path: str,
     language: str,
     detect_language: bool = True,
-) -> Tuple[Optional[str], Optional[str]]:
+    *,
+    return_provider: bool = False,
+) -> Any:
     """Run the synchronous prerecorded-STT pipeline for one signed URL."""
     provider, stt_language, stt_model = get_prerecorded_service(language)
+    served_provider = provider
+    served_model = stt_model
     is_multi = stt_language == 'multi'
+    wants_language = is_multi and detect_language
     try:
         with parakeet_caller('voice_message'):
-            if is_multi and detect_language:
-                words, detected_language = prerecorded(
-                    url, diarize=False, language=stt_language, return_language=True, model=stt_model
-                )
-            else:
-                words = prerecorded(url, diarize=False, language=stt_language, return_language=False, model=stt_model)
-                detected_language = stt_language
+            result = prerecorded(
+                url,
+                diarize=False,
+                language=stt_language,
+                return_language=wants_language,
+                model=stt_model,
+                **({"return_provider": True} if return_provider else {}),
+            )
+        if return_provider:
+            words_result, served_provider, served_model = result
+        else:
+            words_result = result
+        if wants_language:
+            words, detected_language = words_result
+        else:
+            words = words_result
+            detected_language = stt_language
+        provider = served_provider
     except Exception as error:
         failure = failure_from_exception(error, provider=provider)
         logger.warning(
@@ -211,6 +227,8 @@ def _transcribe_voice_message_url(
     if len(text) == 0:
         raise empty_unexpected_failure(provider)
 
+    if return_provider:
+        return text, detected_language, served_provider, served_model
     return text, detected_language
 
 
@@ -218,18 +236,22 @@ def transcribe_voice_message_segment(
     path: str,
     uid: str,
     language: str = 'multi',
-) -> Tuple[Optional[str], Optional[str]]:
+    *,
+    return_provider: bool = False,
+) -> Any:
     if not language:
         language = resolve_voice_message_language(uid, None)
-    provider, provider_language, _ = get_prerecorded_service(language)
+    provider, provider_language, provider_model = get_prerecorded_service(language)
     # Schedule deletion before the VAD gate as well: silence is a valid
     # terminal outcome, not a reason to retain temporary customer audio.
     url = _prepare_voice_message_url(path)
     if _validated_wav_is_silent(path, provider=provider):
         detected_language = provider_language if provider_language != 'multi' else None
+        if return_provider:
+            return None, detected_language, provider, provider_model
         return None, detected_language
 
-    return _transcribe_voice_message_url(url, path, language)
+    return _transcribe_voice_message_url(url, path, language, **({"return_provider": True} if return_provider else {}))
 
 
 def transcribe_pcm_bytes(
@@ -240,7 +262,9 @@ def transcribe_pcm_bytes(
     sample_rate: int = 16000,
     channels: int = 1,
     keywords: Optional[List[str]] = None,
-) -> Tuple[Optional[str], Optional[str]]:
+    *,
+    return_provider: bool = False,
+) -> Any:
     """Transcribe raw PCM audio bytes through the selected pre-recorded STT provider.
 
     Skips GCS upload and WAV conversion for maximum speed.
@@ -255,6 +279,8 @@ def transcribe_pcm_bytes(
     if encoding == 'linear16':
         try:
             if linear16_pcm_is_silent(audio_bytes, sample_rate=sample_rate, channels=channels):
+                if return_provider:
+                    return None, stt_language if not is_multi else None, provider, stt_model
                 return None, stt_language if not is_multi else None
         except VADAudioDecodeError as error:
             raise TranscriptionFailure(
@@ -265,33 +291,32 @@ def transcribe_pcm_bytes(
         except VADProcessingError as error:
             raise TranscriptionFailure(TranscriptionOutcome.UPSTREAM_ERROR, provider=provider) from error
 
+    served_provider = provider
+    served_model = stt_model
     try:
         with parakeet_caller('voice_message'):
-            if is_multi:
-                result = prerecorded_from_bytes(
-                    audio_bytes,
-                    sample_rate=sample_rate,
-                    diarize=False,
-                    encoding=encoding,
-                    channels=channels,
-                    language=stt_language,
-                    model=stt_model,
-                    return_language=True,
-                    keywords=keywords,
-                )
-                words, detected_language = result
-            else:
-                words = prerecorded_from_bytes(
-                    audio_bytes,
-                    sample_rate=sample_rate,
-                    diarize=False,
-                    encoding=encoding,
-                    channels=channels,
-                    language=stt_language,
-                    model=stt_model,
-                    keywords=keywords,
-                )
-                detected_language = stt_language
+            result = prerecorded_from_bytes(
+                audio_bytes,
+                sample_rate=sample_rate,
+                diarize=False,
+                encoding=encoding,
+                channels=channels,
+                language=stt_language,
+                model=stt_model,
+                **({"return_language": True} if is_multi else {}),
+                keywords=keywords,
+                **({"return_provider": True} if return_provider else {}),
+            )
+        if return_provider:
+            words_result, served_provider, served_model = result
+        else:
+            words_result = result
+        if is_multi:
+            words, detected_language = words_result
+        else:
+            words = words_result
+            detected_language = stt_language
+        provider = served_provider
     except Exception as error:
         raise failure_from_exception(error, provider=provider) from error
 
@@ -311,6 +336,8 @@ def transcribe_pcm_bytes(
     if len(text) == 0:
         raise empty_unexpected_failure(provider)
 
+    if return_provider:
+        return text, detected_language, served_provider, served_model
     return text, detected_language
 
 
@@ -467,6 +494,8 @@ async def process_voice_message_segment_stream(
     uid: str,
     language: str = 'multi',
     platform: Optional[str] = None,
+    *,
+    register_answer: Callable[[str, Callable[[], Awaitable[int]]], None],
 ) -> AsyncGenerator[str, None]:
     if not language:
         language = await run_blocking(db_executor, resolve_voice_message_language, uid, None)
@@ -574,7 +603,7 @@ async def process_voice_message_segment_stream(
     usage_token = set_usage_context(uid, Features.CHAT)
 
     async def emit_voice_done_frame(response: str):
-        """Persist (or fail-open) a terminal voice answer and return the done frame."""
+        """Persist and register the answer push before a client can close at done."""
         persist_outcome = 'degraded'
         try:
             ai_message, ask_for_nps = await process_message(response, callback_data)
@@ -615,7 +644,12 @@ async def process_voice_message_segment_stream(
                 reason='other',
                 outcome='exhausted',
             )
-        return f"done: {data}\n\n", ai_message
+
+        async def notify_answer():
+            return await send_chat_message_notification_async(uid, "omi", "omi", ai_message.text, ai_message.id)
+
+        register_answer(ai_message.id, notify_answer)
+        return f"done: {data}\n\n"
 
     try:
         async for chunk in execute_graph_chat_stream(
@@ -630,10 +664,9 @@ async def process_voice_message_segment_stream(
                     # error frame so history and UI stay on the typed terminal reply.
                     response = callback_data.get('answer')
                     if response and not answered:
-                        done_frame, ai_message = await emit_voice_done_frame(response)
-                        yield done_frame
+                        done_frame = await emit_voice_done_frame(response)
                         answered = True
-                        await send_chat_message_notification_async(uid, "omi", "omi", ai_message.text, ai_message.id)
+                        yield done_frame
                         continue
                 data = chunk.replace("\n", "__CRLF__")
                 yield f'{data}\n\n'
@@ -641,17 +674,15 @@ async def process_voice_message_segment_stream(
             else:
                 response = callback_data.get('answer')
                 if response and not answered:
-                    done_frame, ai_message = await emit_voice_done_frame(response)
-                    yield done_frame
+                    done_frame = await emit_voice_done_frame(response)
                     answered = True
-                    await send_chat_message_notification_async(uid, "omi", "omi", ai_message.text, ai_message.id)
+                    yield done_frame
 
         if not answered:
             response = callback_data.get('answer')
             if response:
-                done_frame, ai_message = await emit_voice_done_frame(response)
+                done_frame = await emit_voice_done_frame(response)
                 yield done_frame
-                await send_chat_message_notification_async(uid, "omi", "omi", ai_message.text, ai_message.id)
             else:
                 if streamed_terminal_error:
                     logger.error(
@@ -705,10 +736,10 @@ async def send_chat_message_notification_async(
     app_id: str,
     message: str,
     message_id: str,
-) -> None:
+) -> int:
     """Async notification boundary for streaming chat responses."""
     ai_message = _chat_message_notification(app_id, message, message_id)
-    await send_client_displayed_notification_async(
+    return await send_client_displayed_notification_async(
         user_id,
         app_name + ' says',
         message,

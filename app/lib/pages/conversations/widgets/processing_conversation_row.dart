@@ -9,8 +9,7 @@ import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
 
 /// A conversation or episode that just ended and is still processing, on Home under the live row:
-/// the same row in its middle state, a turning ring and "Writing notes… · 1h 36m". When several
-/// recordings in a row are processing, the row says how many it stands for. It opens the same
+/// the same row in its middle state, a turning ring, its step and a recording count. It opens the same
 /// page the finished row will. The placeholder the app adds the moment the person ends a
 /// conversation is replaced by the server's row, then by the finished row.
 class ProcessingConversationRow extends StatelessWidget {
@@ -18,7 +17,8 @@ class ProcessingConversationRow extends StatelessWidget {
     super.key,
     required this.conversation,
     this.episode,
-    this.step = HomeStep.writingNotes,
+    this.processingEpisodes = const [],
+    this.step = HomeStep.transcribing,
     this.count = 1,
   });
 
@@ -26,11 +26,12 @@ class ProcessingConversationRow extends StatelessWidget {
 
   /// The episode this row stands for; a lone conversation has none yet.
   final Episode? episode;
+  final List<Episode> processingEpisodes;
 
   /// The current processing step shown in the subtitle.
   final HomeStep step;
 
-  /// How many recordings this row stands for; a count above one is shown in the subtitle.
+  /// How many genuinely pending recordings this row stands for.
   final int count;
 
   void _open(BuildContext context) {
@@ -39,6 +40,10 @@ class ProcessingConversationRow extends StatelessWidget {
     routeToPage(
       context,
       EpisodePage(
+        // Even one real owner is a pending-member projection, not its full
+        // episode. Finished/source-only records must never join its actions.
+        processingAggregate: true,
+        processingEpisodes: processingEpisodes,
         episode: episode ??
             Episode(
               id: '',
@@ -56,15 +61,12 @@ class ProcessingConversationRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
-    final started = conversation.startedAt ?? conversation.createdAt;
-    final seconds = conversation.finishedAt?.difference(started).inSeconds ?? 0;
-    // A run's span is wall-clock, not recording time, so a run shows its count instead.
-    final size =
-        count > 1 ? l10n.homeRecordingsCount(count) : (seconds > 0 ? OmiDuration.compact(seconds, l10n) : null);
     final meta = [
       if (step == HomeStep.transcribing) l10n.homeStepTranscribing,
       if (step == HomeStep.writingNotes) l10n.episodeWritingNotes,
-      if (size != null) size,
+      // Recording length is not processing age. A single record uses the same
+      // unambiguous count label as a multi-record aggregate.
+      l10n.homeRecordingsCount(count),
     ].join(' · ');
     final shownTitle = l10n.wrappedProcessingDefault;
     return Padding(

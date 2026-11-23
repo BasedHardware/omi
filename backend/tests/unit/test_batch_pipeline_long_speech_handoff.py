@@ -5,6 +5,7 @@ Vietnamese; repadding cannot make Parakeet TDT v3 transcribe a language it lacks
 """
 
 import logging
+from dataclasses import replace
 import time
 from types import SimpleNamespace
 from unittest.mock import Mock
@@ -143,6 +144,7 @@ def test_staged_audio_reads_the_intake_language():
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize('clock', ['trusted', 'early', 'future'])
 @pytest.mark.parametrize(
     'inherit,user_language,expected',
     [
@@ -154,13 +156,14 @@ def test_staged_audio_reads_the_intake_language():
         (False, None, ''),
     ],
 )
-async def test_intake_freezes_the_resolved_stt_language(monkeypatch, inherit, user_language, expected):
+async def test_intake_freezes_the_resolved_stt_language(monkeypatch, inherit, user_language, expected, clock):
     from utils.batch_pipeline.artifacts import ProtectionContext
     from utils.batch_pipeline.audio import read_context
 
     monkeypatch.setenv('BATCH_PIPELINE_LANGUAGE_INHERITANCE_ENABLED', 'true' if inherit else 'false')
     store = MemoryStore()
     frozen = []
+    frozen_work = []
 
     class Captured(Exception):
         pass
@@ -172,6 +175,7 @@ async def test_intake_freezes_the_resolved_stt_language(monkeypatch, inherit, us
 
     def stage_audio(work, body):
         frozen.append(read_context(body))
+        frozen_work.append(work)
         raise Captured
 
     monkeypatch.setattr(intake, 'FirestoreStore', lambda *a, **kw: store)
@@ -181,10 +185,15 @@ async def test_intake_freezes_the_resolved_stt_language(monkeypatch, inherit, us
         intake, 'provider_config', lambda: SimpleNamespace(pool_kind='dedicated_batch', max_unit_seconds=600)
     )
 
-    def decode_units(paths, max_seconds):
-        yield audio_unit(100, b'\x00\x00' * 1600)
+    def decode_units(paths, max_seconds, **kwargs):
+        unit = audio_unit(100, b'\x00\x00' * 1600)
+        if clock == 'future':
+            yield replace(unit, stored_capture_at=1800000000, recovery_id='receipt-synthetic-source')
+        else:
+            yield replace(unit, stored_capture_at=1800000000) if clock == 'early' else unit
 
     monkeypatch.setattr(intake, 'decode_units', decode_units)
+    monkeypatch.setattr(intake, 'decode_future_units', decode_units)
     monkeypatch.setattr(intake, 'artifacts_for', lambda store_: SimpleNamespace(stage_audio=stage_audio))
     from config.policy import BatchUnitPolicy
 
@@ -203,9 +212,15 @@ async def test_intake_freezes_the_resolved_stt_language(monkeypatch, inherit, us
             conversation_id=None,
             client_device_id='pendant-1',
             client_platform='ios',
-            intake_context={'stt_language': 'en'},  # caller context cannot override it
+            intake_context={
+                'stt_language': 'en',  # caller context cannot override it
+                **({'capture_clock_policy': 'future_device_offset_v1'} if clock == 'future' else {}),
+                **({'capture_received_at': 1800000000} if clock != 'trusted' else {}),
+            },
             policy=policy,
         )
     except Captured:
         pass
     assert len(frozen) == 1 and frozen[0]['stt_language'] == expected
+    assert frozen_work[0].capture_time_trust == ('untrusted' if clock == 'future' else None)
+    assert frozen_work[0].capture_at == (1800000000 if clock != 'trusted' else 100)

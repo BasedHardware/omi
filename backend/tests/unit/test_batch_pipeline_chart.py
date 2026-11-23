@@ -1,6 +1,7 @@
 """Offline Helm contract: no deployment, dedicated pool and scoped queue age."""
 
 from pathlib import Path
+import json
 import os
 import shutil
 import subprocess
@@ -9,6 +10,8 @@ import pytest
 import yaml
 
 CHART = Path(__file__).resolve().parents[2] / 'charts' / 'batch-pipeline-worker'
+# Rolls replace pods in place: no surge GPU, and no GPU node left empty mid-roll (SCA-3274).
+NO_SURGE_ROLL = {'type': 'RollingUpdate', 'rollingUpdate': {'maxSurge': 0, 'maxUnavailable': '50%'}}
 
 
 def render(*arguments, namespace='synthetic'):
@@ -180,9 +183,13 @@ def test_worker_metrics_are_scraped_into_the_hpa_prometheus():
         '__meta_kubernetes_pod_phase': 'Running',
     }
     # The adapter joins freshness on (namespace, worker_release, pod): relabels
-    # must add exactly namespace+pod, never touch priority/worker_release.
+    # must preserve namespace+pod, never touch priority/worker_release.
     labels = {r['target_label']: r['source_labels'] for r in scrape['relabel_configs'] if 'target_label' in r}
-    assert labels == {'namespace': ['__meta_kubernetes_namespace'], 'pod': ['__meta_kubernetes_pod_name']}
+    assert labels == {
+        'namespace': ['__meta_kubernetes_namespace'],
+        'pod': ['__meta_kubernetes_pod_name'],
+        'service_name': ['__meta_kubernetes_pod_label_service_name'],
+    }
     assert 'metric_relabel_configs' not in scrape
     # Freshness cutoff is 60s; 15s keeps two samples in window and matches the
     # chart's GMP PodMonitoring cadence.
@@ -233,7 +240,7 @@ def test_environment_values_render_worker_identity_and_gpu_pool(
 
     deployments = [doc for doc in yaml.safe_load_all(result.stdout) if doc and doc['kind'] == 'Deployment']
     deployment = next(doc for doc in deployments if doc['metadata']['name'] == 'synthetic-worker')
-    assert deployment['spec']['progressDeadlineSeconds'] == 2400
+    assert deployment['spec']['progressDeadlineSeconds'] == 3000
     pod = deployment['spec']['template']['spec']
     if environment == 'prod':
         # Borrowing stays off in prod so Parakeet's freed L4s go back to GCE; the
@@ -243,13 +250,13 @@ def test_environment_values_render_worker_identity_and_gpu_pool(
             'synthetic-worker',
             'synthetic-worker-t4',
         ]
-        assert deployment['spec']['replicas'] == 4  # Preserve the approved live floor for HPA.
+        assert deployment['spec']['replicas'] == 6  # Preserve the approved live floor for HPA.
         hpa = next(
             doc['spec']
             for doc in yaml.safe_load_all(result.stdout)
             if doc and doc['kind'] == 'HorizontalPodAutoscaler' and doc['metadata']['name'] == 'synthetic-worker'
         )
-        assert hpa['minReplicas'] == 4 and hpa['maxReplicas'] == 8
+        assert hpa['minReplicas'] == 6 and hpa['maxReplicas'] == 16
         assert 'omi.ai/required-companion-deployment' not in deployment['metadata'].get('annotations', {})
     else:
         assert len(deployments) == 1 and deployment['spec']['replicas'] == 1
@@ -265,6 +272,35 @@ def test_environment_values_render_worker_identity_and_gpu_pool(
     }
     container = pod['containers'][0]
     project_env = {item['name']: item for item in container['env']}
+    lever_manifest = json.loads((CHART.parents[1] / 'deploy/firestore_read_levers_manifest.json').read_text())
+    integration_levers = lever_manifest['surfaces']['runtime/prod/cloud_run/services/backend-integration']['explicit']
+    for candidate in deployments:
+        for worker in candidate['spec']['template']['spec']['containers']:
+            if worker['name'] != 'worker':
+                continue
+            worker_env = {item['name']: item.get('value') for item in worker['env']}
+            # SCA-3503: neither retired batch flag belongs on a worker.
+            assert 'BATCH_HELD_POLL_SKIP_ENABLED' not in worker_env
+            assert 'BATCH_PROJECTION_FINISH_BACKOFF_ENABLED' not in worker_env
+            assert 'BATCH_PIPELINE_UPLOAD_COALESCING_ENABLED' not in worker_env
+            if environment == 'prod':
+                assert 'BATCH_PROJECTION_OUTBOX' not in worker_env
+                assert worker_env['RECORD_SEAL_REPAIR_FRESH_ENABLED'] == 'true'
+                assert 'RECORD_FRESH_MERGE_ENABLED' not in worker_env
+                assert 'BATCH_PIPELINE_MERGE_STALE_HEAD_UID_ALLOWLIST' not in worker_env
+                assert 'BATCH_PIPELINE_PACKING_SAMPLE_RATE' not in worker_env
+                assert worker_env['BATCH_PIPELINE_SHADOW_LANGUAGE_ONLY'] == 'false'
+                assert worker_env['BUCKET_AUDIO_DERIVED'] is None
+                assert json.loads(worker_env['FIRESTORE_READ_LEVERS']) == dict(
+                    integration_levers,
+                    usage_month_cache=0,
+                    usage_month_total=0,
+                    bpp_decision_cache=0,
+                    privacy_checks_shadow=0,
+                    bpp_owner_memo_enforce=0,
+                )
+            else:
+                assert worker_env['FIRESTORE_READ_LEVERS'] == '{}'
     assert project_env['OMI_FIRESTORE_DATA_PLANE_PROJECT']['value'] == project
     assert project_env['OMI_ENV_STAGE']['value'] == stage
     assert project_env['BATCH_PIPELINE_NAMESPACE']['value'] == namespace
@@ -315,11 +351,15 @@ def test_balanced_pools_have_distinct_ownership_and_shared_fresh_queue_scope():
     ]:
         d, h, monitor = deployments[name], hpas[name]['spec'], monitors[name]['spec']
         pod = d['spec']['template']
-        assert d['spec']['selector']['matchLabels'] == pod['metadata']['labels'] == monitor['selector']['matchLabels']
+        assert d['spec']['selector']['matchLabels'] == monitor['selector']['matchLabels']
+        assert pod['metadata']['labels'] == {
+            **d['spec']['selector']['matchLabels'],
+            'service_name': 'batch-pipeline-worker',
+        }
         assert pod['metadata']['labels']['app.kubernetes.io/instance'] == name
         assert pod['spec']['nodeSelector']['cloud.google.com/gke-nodepool'] == pool
         assert 'topologySpreadConstraints' not in pod['spec']
-        assert d['spec']['strategy']['type'] == 'Recreate'
+        assert d['spec']['strategy'] == NO_SURGE_ROLL
         assert pod['spec']['terminationGracePeriodSeconds'] == 1500
         env = {v['name']: v.get('value') for v in pod['spec']['containers'][0]['env']}
         assert env['BATCH_PIPELINE_WORKER_RELEASE'] == 'synthetic-worker'
@@ -421,19 +461,19 @@ def by_name(docs, kind):
     return {d['metadata']['name']: d for d in docs if d['kind'] == kind}
 
 
-def test_production_cutover_preserves_live_single_od_hpa_min4_max8():
-    # The approved live shape (2026-11-06, David D4 / bc18db): one HPA pinned
-    # to the on-demand pool, GPU floor 4 to ceiling 8; no -spot deployment.
+def test_production_cutover_preserves_live_single_od_hpa_min6_max16():
+    # The approved live shape (floor 6 David 2026-11-20, superseding D4; ceiling 16
+    # David 2026-11-16): one HPA pinned to the on-demand pool; no -spot deployment.
     # The floor is config: replicaCount and minReplicas move together.
     # The stockout borrower (below) is extra and never part of this floor.
     values = yaml.safe_load((CHART / 'prod_omi_batch-pipeline-worker_values.yaml').read_text())
-    assert values['replicaCount'] == values['autoscaling']['minReplicas'] == 4
+    assert values['replicaCount'] == values['autoscaling']['minReplicas'] == 6
     result = render_prod()
     assert result.returncode == 0, result.stderr
     docs = [doc for doc in yaml.safe_load_all(result.stdout) if doc]
     hpas = by_name(docs, 'HorizontalPodAutoscaler')
-    assert hpas['synthetic-worker']['spec']['minReplicas'] == 4
-    assert hpas['synthetic-worker']['spec']['maxReplicas'] == 8
+    assert hpas['synthetic-worker']['spec']['minReplicas'] == 6
+    assert hpas['synthetic-worker']['spec']['maxReplicas'] == 16
     assert not [name for name in hpas if name.endswith('-spot')]
     pod = by_name(docs, 'Deployment')['synthetic-worker']['spec']['template']['spec']
     assert pod['nodeSelector']['cloud.google.com/gke-nodepool'] == 'batch-pipeline-pool'
@@ -447,8 +487,8 @@ def test_production_cutover_preserves_live_single_od_hpa_min4_max8():
         container = by_name(docs, 'Deployment')[name]['spec']['template']['spec']['containers'][0]
         env = {v['name']: v.get('value') for v in container['env']}
         assert env['BATCH_PIPELINE_WORKER_PROCESSES'] == processes
-        # Three pump lanes per process on L4; the slower T4 sibling keeps two.
-        assert env['BATCH_PIPELINE_WORKER_PIPELINE_DEPTH'] == ('3' if processes == '2' else '2')
+        # Four pump lanes per process on L4; the slower T4 sibling keeps two.
+        assert env['BATCH_PIPELINE_WORKER_PIPELINE_DEPTH'] == ('4' if processes == '2' else '2')
 
 
 PROD_BORROWED = ['parakeet-pool', 'parakeet-pool-b', 'parakeet-pool-v2']
@@ -467,7 +507,7 @@ def test_prod_borrower_runs_only_on_parakeet_nodes_and_yields_fast():
 
     borrow = by_name(docs, 'Deployment')['synthetic-worker-borrow']
     pod = borrow['spec']['template']['spec']
-    assert borrow['spec']['strategy']['type'] == 'Recreate' and borrow['spec']['replicas'] == 1
+    assert borrow['spec']['strategy'] == NO_SURGE_ROLL and borrow['spec']['replicas'] == 1
     assert pod['priorityClassName'] == priority_class['metadata']['name'] == 'synthetic-worker-borrower'
     assert pod['terminationGracePeriodSeconds'] == 120
     [term] = pod['affinity']['nodeAffinity']['requiredDuringSchedulingIgnoredDuringExecution']['nodeSelectorTerms']
@@ -621,9 +661,9 @@ def test_production_worker_policy_binding_matches_accepted_identity():
     assert env['BATCH_PIPELINE_ENABLED'] == 'false'
     assert env['BATCH_PIPELINE_API_URL'] == config['worker']['apiUrl'] == config['worker']['audience']
     assert env['BATCH_PIPELINE_WORKER_AUDIENCE'] == config['worker']['audience']
-    assert docs['Deployment']['spec']['replicas'] == 4  # Keep the HPA floor through Helm upgrades.
+    assert docs['Deployment']['spec']['replicas'] == 6  # Keep the HPA floor through Helm upgrades.
     hpa = docs['HorizontalPodAutoscaler']['spec']
-    assert hpa['minReplicas'] == 4 and hpa['maxReplicas'] == 8
+    assert hpa['minReplicas'] == 6 and hpa['maxReplicas'] == 16
 
 
 @pytest.mark.parametrize('enabled', [False, True])
@@ -767,7 +807,7 @@ def test_worker_dispatch_rollout_defaults_are_dark_and_live_only(environment):
     env = {row['name']: row.get('value') for row in deployment['spec']['template']['spec']['containers'][0]['env']}
     assert env['STT_CAP_DISPATCH_ENFORCEMENT'] == 'false'
     assert 'LADDER_V1_BUDGET_ENFORCEMENT_ENABLED' not in env
-    assert env['STT_CAP_DISPATCH_COHORT'] == ''
+    assert env['STT_CAP_DISPATCH_COHORT'] == (None if environment == 'prod' else '')
     assert env['STT_CAP_DISPATCH_LANES'] == 'live'
 
 
@@ -810,14 +850,17 @@ def test_t4_fallback_is_a_zero_replica_t4_sibling_without_hpa():
     assert t4['spec']['replicas'] == 0
     pod = t4['spec']['template']
     assert pod['metadata']['labels']['app.kubernetes.io/instance'] == 'synthetic-worker-t4'
-    assert t4['spec']['selector']['matchLabels'] == pod['metadata']['labels']
+    assert pod['metadata']['labels'] == {
+        **t4['spec']['selector']['matchLabels'],
+        'service_name': 'batch-pipeline-worker',
+    }
     assert pod['spec']['nodeSelector'] == {
         **primary['spec']['template']['spec']['nodeSelector'],
         'cloud.google.com/gke-nodepool': 'batch-pipeline-t4-pool',
     }
     assert pod['spec']['tolerations'] == primary['spec']['template']['spec']['tolerations']
     assert pod['spec']['containers'][0]['image'] == primary['spec']['template']['spec']['containers'][0]['image']
-    assert t4['spec']['strategy']['type'] == 'Recreate'
+    assert t4['spec']['strategy'] == NO_SURGE_ROLL
 
 
 @pytest.mark.parametrize(
@@ -985,3 +1028,64 @@ def test_held_dead_letter_kill_switch_renders_literal_worker_setting(enabled):
     for deployment in deployments:
         env = deployment['spec']['template']['spec']['containers'][0]['env']
         assert next(v['value'] for v in env if v['name'] == 'BATCH_HELD_DEAD_LETTER_ENABLED') == enabled
+
+
+@pytest.mark.parametrize('environment', ['default', 'dev'])
+def test_worker_default_inheritance_is_reviewed_and_unresolved(environment):
+    manifest = json.loads((CHART.parents[1] / 'deploy/firestore_read_levers_manifest.json').read_text())
+    surface = manifest['surfaces'][f'chart/{environment}/batch-pipeline-worker']
+    assert surface['explicit'] == {}
+    assert surface['inheritance']['reason'] == 'intentionally inherits code defaults'
+    assert surface['inheritance']['status'] == 'UNRESOLVED'
+    assert surface['effective']['batch_timeliness_leader'] == 100
+
+
+def test_prod_worker_levers_match_backend_integration_with_worker_overrides():
+    manifest = json.loads((CHART.parents[1] / 'deploy/firestore_read_levers_manifest.json').read_text())
+    worker = manifest['surfaces']['chart/prod/batch-pipeline-worker']
+    integration = manifest['surfaces']['runtime/prod/cloud_run/services/backend-integration']
+    assert worker['explicit'] == dict(
+        integration['explicit'],
+        usage_month_cache=0,
+        usage_month_total=0,
+        bpp_decision_cache=0,
+        privacy_checks_shadow=0,
+        bpp_owner_memo_enforce=0,
+    )
+    assert worker['effective'] == dict(
+        integration['effective'],
+        usage_month_cache=0,
+        usage_month_total=0,
+        bpp_decision_cache=0,
+        privacy_checks_shadow=0,
+        bpp_owner_memo_enforce=0,
+    )
+    assert 'inheritance' not in worker
+
+
+def test_worker_rolls_never_surge_and_reject_non_percent_unavailability():
+    """SCA-3274: maxSurge is fixed at 0 (never a surge GPU); maxUnavailable is a bounded percentage."""
+    result = render_prod()
+    assert result.returncode == 0, result.stderr
+    docs = [doc for doc in yaml.safe_load_all(result.stdout) if doc]
+    workers = {name: d for name, d in by_name(docs, 'Deployment').items() if name.startswith('synthetic-worker')}
+    assert sorted(workers) == ['synthetic-worker', 'synthetic-worker-borrow', 'synthetic-worker-t4']
+    for d in workers.values():
+        assert d['spec']['strategy'] == NO_SURGE_ROLL
+    whole = render_prod('--set-string', 'rollout.maxUnavailable=100%')
+    assert whole.returncode == 0, whole.stderr
+    [primary] = [
+        d
+        for d in yaml.safe_load_all(whole.stdout)
+        if d and d['kind'] == 'Deployment' and d['metadata']['name'] == 'synthetic-worker'
+    ]
+    assert primary['spec']['strategy']['rollingUpdate'] == {'maxSurge': 0, 'maxUnavailable': '100%'}
+    for bad in ('0%', '1', '150%', '25', 'all'):
+        rendered = render_prod('--set-string', 'rollout.maxUnavailable=' + bad)
+        assert rendered.returncode != 0, bad
+        assert 'rollout.maxUnavailable must be a percentage' in rendered.stderr, bad
+    # A null or missing rollout map reaches the same message, not a nil-pointer render error.
+    for missing in (('--set', 'rollout=null'), ('--set', 'rollout.maxUnavailable=null')):
+        rendered = render_prod(*missing)
+        assert rendered.returncode != 0, missing
+        assert 'rollout.maxUnavailable must be a percentage' in rendered.stderr, missing

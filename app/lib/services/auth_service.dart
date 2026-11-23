@@ -1,3 +1,4 @@
+import 'package:omi/services/pending_work/pending_work_store.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
@@ -20,6 +21,7 @@ import 'package:omi/env/environment_profile.dart';
 import 'package:omi/flavors.dart';
 import 'package:omi/services/auth/auth_token_result.dart';
 import 'package:omi/services/siri_integration.dart';
+import 'package:omi/utils/auth/sign_in_failure.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 
@@ -280,72 +282,62 @@ class AuthService {
     return digest.toString();
   }
 
-  Future<UserCredential?> signInWithAppleMobile() async {
-    try {
-      // Sign out the current user first
-      Logger.debug('Signing out current user...');
-      await signOutForAccountSwitch();
-      Logger.debug('User signed out successfully.');
+  /// Throws the Apple or Firebase error unchanged so the caller can tell a
+  /// cancel from a real failure and report its code.
+  Future<UserCredential> signInWithAppleMobile() async {
+    // Sign out the current user first
+    Logger.debug('Signing out current user...');
+    await signOutForAccountSwitch();
+    Logger.debug('User signed out successfully.');
 
-      final rawNonce = generateNonce();
-      final nonce = sha256ofString(rawNonce);
+    final rawNonce = generateNonce();
+    final nonce = sha256ofString(rawNonce);
 
-      Logger.debug('Requesting Apple credential...');
-      final appleCredential = await SignInWithApple.getAppleIDCredential(
-        scopes: [AppleIDAuthorizationScopes.email, AppleIDAuthorizationScopes.fullName],
-        nonce: nonce,
-      );
+    Logger.debug('Requesting Apple credential...');
+    final appleCredential = await SignInWithApple.getAppleIDCredential(
+      scopes: [AppleIDAuthorizationScopes.email, AppleIDAuthorizationScopes.fullName],
+      nonce: nonce,
+    );
 
-      if (appleCredential.identityToken == null) {
-        throw Exception('Apple Sign In failed - no identity token received.');
-      }
-
-      // Create an `OAuthCredential` from the credential returned by Apple.
-      final oauthCredential = OAuthProvider("apple.com").credential(
-        idToken: appleCredential.identityToken,
-        rawNonce: rawNonce,
-        accessToken: appleCredential.authorizationCode,
-      );
-
-      // Sign in the user with Firebase.
-      Logger.debug('Attempting to sign in with Firebase...');
-      UserCredential userCred = await runAccountMutation(() => _firebaseAuth.signInWithCredential(oauthCredential));
-      Logger.debug('Firebase sign-in successful.');
-
-      // Extract name from Apple credential (only available on first sign-in)
-      if (appleCredential.givenName != null && appleCredential.givenName!.isNotEmpty) {
-        Logger.debug('Apple provided name: ${appleCredential.givenName} ${appleCredential.familyName ?? ""}');
-        SharedPreferencesUtil().givenName = appleCredential.givenName!;
-        if (appleCredential.familyName != null && appleCredential.familyName!.isNotEmpty) {
-          SharedPreferencesUtil().familyName = appleCredential.familyName!;
-        }
-
-        // Update Firebase profile with the name
-        final fullName = appleCredential.familyName != null && appleCredential.familyName!.isNotEmpty
-            ? '${appleCredential.givenName} ${appleCredential.familyName}'
-            : appleCredential.givenName!;
-        try {
-          await userCred.user?.updateProfile(displayName: fullName);
-          await userCred.user?.reload();
-        } catch (e) {
-          Logger.debug('Failed to update Firebase profile with Apple name: $e');
-        }
-      }
-
-      await _updateUserPreferences(userCred, 'apple');
-
-      return userCred;
-    } on FirebaseAuthException catch (e) {
-      Logger.debug('FirebaseAuthException: ${e.code} - ${e.message}');
-      if (e.code == 'invalid-credential') {
-        Logger.debug('Please check Firebase console configuration for Apple Sign In.');
-      }
-      return null;
-    } catch (e) {
-      Logger.debug('Error during Apple Sign In: $e');
-      Logger.handle(e, null, message: 'An error occurred while signing in. Please try again later.');
-      return null;
+    if (appleCredential.identityToken == null) {
+      throw const AppleIdentityTokenMissing();
     }
+
+    // Create an `OAuthCredential` from the credential returned by Apple.
+    final oauthCredential = OAuthProvider("apple.com").credential(
+      idToken: appleCredential.identityToken,
+      rawNonce: rawNonce,
+      accessToken: appleCredential.authorizationCode,
+    );
+
+    // Sign in the user with Firebase.
+    Logger.debug('Attempting to sign in with Firebase...');
+    UserCredential userCred = await runAccountMutation(() => _firebaseAuth.signInWithCredential(oauthCredential));
+    Logger.debug('Firebase sign-in successful.');
+
+    // Extract name from Apple credential (only available on first sign-in)
+    if (appleCredential.givenName != null && appleCredential.givenName!.isNotEmpty) {
+      Logger.debug('Apple provided name: ${appleCredential.givenName} ${appleCredential.familyName ?? ""}');
+      SharedPreferencesUtil().givenName = appleCredential.givenName!;
+      if (appleCredential.familyName != null && appleCredential.familyName!.isNotEmpty) {
+        SharedPreferencesUtil().familyName = appleCredential.familyName!;
+      }
+
+      // Update Firebase profile with the name
+      final fullName = appleCredential.familyName != null && appleCredential.familyName!.isNotEmpty
+          ? '${appleCredential.givenName} ${appleCredential.familyName}'
+          : appleCredential.givenName!;
+      try {
+        await userCred.user?.updateProfile(displayName: fullName);
+        await userCred.user?.reload();
+      } catch (e) {
+        Logger.debug('Failed to update Firebase profile with Apple name: $e');
+      }
+    }
+
+    await _updateUserPreferences(userCred, 'apple');
+
+    return userCred;
   }
 
   Future<void> _accountMutationTail = Future<void>.value();
@@ -374,6 +366,7 @@ class AuthService {
       });
 
   void _invalidateRefreshes() {
+    PendingWorkStore.instance.reset();
     _sessionGeneration++;
     _refreshInFlight = null;
     _sessionGenerationController.add(_sessionGeneration);

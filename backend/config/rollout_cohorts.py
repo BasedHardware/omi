@@ -14,6 +14,8 @@ class RolloutCohortUnavailable(RuntimeError):
 
 # Literal env reads keep the migration fallbacks visible to the flag registry.
 COHORT_ENVS = {
+    'conversations-v3': lambda: os.getenv('CONVERSATIONS_V3_UID_ALLOWLIST', ''),
+    'v3-recording-rotation': lambda: '',
     'batch-pipeline-shadow': lambda: '',
     # The composition root injects scoped policy env readers with the runtime.
     'batch-pipeline': lambda: '',

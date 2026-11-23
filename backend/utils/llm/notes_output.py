@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field, ValidationError, field_validator, model_v
 from models.conversation_emoji import CATEGORY_EMOJI, DEFAULT_EMOJI, NEUTRAL_EMOJI, fallback_emoji
 from models.conversation_enums import CategoryEnum
 from models.structured import Structured
+from utils.summary_quality import clean_structured
 from models.structured_extraction import (
     AgentNotesParticipant,
     ExtractedActionItem,
@@ -18,6 +19,7 @@ from models.structured_extraction import (
     ExtractedRichSection,
     MeetingType,
     SALIENCE_DESCRIPTION,
+    clip_gist,
     scrub_open_loop_fields,
 )
 
@@ -29,11 +31,26 @@ from models.structured_extraction import (
 __all__ = ['CATEGORY_EMOJI', 'DEFAULT_EMOJI', 'NEUTRAL_EMOJI', 'fallback_emoji']
 
 
+class QualityFlag(BaseModel):
+    field: str = Field(max_length=120, description='Zero-based dot path of an output prose field')
+    kind: Literal['capture_availability']
+    statement: Optional[str] = Field(
+        default=None,
+        max_length=4000,
+        description='Exact availability-only sentence/bullet if this field also contains real notes; omit only when the whole field is availability narration',
+    )
+
+
 class NotesOutput(BaseModel):
     """One schema, independent of the legacy parser's subtype-coercing validators."""
 
+    quality_flags: list[QualityFlag] = Field(
+        default_factory=list,
+        description='Current-capture availability narration in any language; empty for clean output',
+    )
     title: str = ''
     overview: str = ''
+    gist: str = Field(default='', description='One line of at most 12 words saying what this conversation was about')
     emoji: str = Field(description='An emoji to represent the conversation', default=DEFAULT_EMOJI)
     category: CategoryEnum = CategoryEnum.other
     sections: list[ExtractedRichSection] = Field(default_factory=list)
@@ -50,8 +67,8 @@ class NotesOutput(BaseModel):
         """A malformed optional item must not cost every other grounded field."""
         if not isinstance(data, dict):
             return data
-        data = dict(data)
-        for field in ('title', 'overview', 'emoji'):
+        data = clean_structured(data)
+        for field in ('title', 'overview', 'emoji', 'gist'):
             if data.get(field) is None:
                 data.pop(field, None)
         for field, vocabulary in (('salience', ('highlight', 'background')), ('meeting_type', MeetingType.__args__)):
@@ -91,6 +108,11 @@ class NotesOutput(BaseModel):
         except (ValueError, TypeError):
             return CategoryEnum.other
 
+    @field_validator('gist', mode='before')
+    @classmethod
+    def clip_gist_words(cls, value: Any) -> str:
+        return clip_gist(value)
+
     def to_structured(self) -> Structured:
         structured = Structured(
             title=self.title,
@@ -103,6 +125,8 @@ class NotesOutput(BaseModel):
             action_items=[item.to_action_item() for item in self.action_items],
             events=[event.to_event() for event in self.events],
         )
+        if self.gist:
+            structured.gist = self.gist
         if self.participants:
             structured.participants = [person.to_participant() for person in self.participants]
         if self.salience is not None:

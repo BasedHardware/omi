@@ -10,5 +10,9 @@ def purge_chunks(uid: str, conversation_id: str, count: int = 128, *, firestore_
         firestore_client = account_deletion_firestore_client()
     client: Any = firestore_client
     chunks = client.collection('users').document(uid).collection('from_segments_chunks')
+    # One commit, not one RPC per slot: every conversation delete runs this, and
+    # 128 sequential deletes cost seconds even when no chunk was ever staged.
+    batch = client.batch()
     for index in range(min(count, 128)):
-        chunks.document(f'{conversation_id}-{index:03d}').delete()
+        batch.delete(chunks.document(f'{conversation_id}-{index:03d}'))
+    batch.commit()

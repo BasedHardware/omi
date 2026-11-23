@@ -256,6 +256,7 @@ void main() {
   test('deterministic refusals aggregate without requesting user attention', () async {
     // 413 is deterministic: the same bytes are the same size, so the card's
     // retry-all must skip it and leave it to the row's Delete.
+    // Invalid dates can recover on the persisted daily/weekly schedule, never an immediate attention retry.
     final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
     final tooLarge = (await diskWal('audio_too_large.bin', timerStart: now - 600))
       ..markUploadRejected(reasonCode: WalUploadRejection.tooLarge);
@@ -270,9 +271,12 @@ void main() {
     expect(syncProvider.refusalSummary.count, 2);
     expect(syncProvider.retryableAttentionWals, isEmpty);
 
+    expect(invalidDate.refusalRetryDue(now), isFalse);
+    await syncProvider.drainForTesting();
     await syncProvider.retryNeedsAttentionWals();
 
     expect(uploads, isEmpty);
+    expect(invalidDate.status, WalStatus.uploadRejected);
     expect(tooLarge.status, WalStatus.uploadRejected, reason: 'a retry cannot change the bytes');
   });
   test('daily eligible refusal is picked up by the provider drain with no other work', () async {

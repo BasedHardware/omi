@@ -92,7 +92,12 @@ FIELD_BUILDERS = {module: builders(sites) for module, sites in FIELD_SITES.items
 def writers(machine, *fields):
     status_modules = {
         'finalization': {'database/conversation_finalization_jobs.py', 'database/conversation_terminal_title.py'},
-        'episode': {'database/episodes.py', 'database/episode_timeline.py', 'utils/episodes/service.py'},
+        'episode': {
+            'database/episodes.py',
+            'database/episode_timeline.py',
+            'database/episode_live_members.py',
+            'utils/episodes/service.py',
+        },
     }.get(
         machine,
         {
@@ -112,6 +117,29 @@ def writers(machine, *fields):
     )
 
 
+# Durably refused transitions must retire the summary due index in the same
+# payload. These write owners are exercised by test_summary_refusal_writers;
+# they do not create a new lifecycle state or retire transient pending debt.
+SUMMARY_REFUSAL_WRITERS = (
+    Writer('utils/sync/assignment.py', '_donor_redirect_patch'),
+    Writer('database/conversations.py', 'update_conversation_title'),
+    Writer('database/conversation_mutations.py', '_apply_operation'),
+    Writer('database/chat_edits.py', 'apply_update.apply'),
+    Writer('database/chat_edits.py', 'restore.apply'),
+    Writer('utils/retrieval/tools/edit_tools.py', 'update_conversation'),
+    Writer('utils/conversations/summary_delivery.py', 'merge_result'),
+)
+
+# The inverse manual-field writes recover only an owed, unindexed obligation,
+# from its original acceptance and deadline, inside the same transaction.
+SUMMARY_MANUAL_CLEAR_WRITERS = (
+    Writer('database/chat_edits.py', 'apply_update.apply'),
+    Writer('database/chat_edits.py', 'restore.apply'),
+)
+
+SUMMARY_DISCARD_RESTORE_WRITERS = (Writer('database/conversations.py', 'restore_conversation_from_discarded._restore'),)
+
+
 FINALIZATION_MODULE = 'database/conversation_finalization_jobs.py'
 FAIR_USE_MODULE = 'utils/fair_use.py'
 
@@ -126,12 +154,14 @@ class PatchContract:
 # been audited. AST fingerprints ignore comments/formatting, but force a new
 # source audit when this proof's callees or serialization model change.
 PATCH_CONTRACTS = {
+    # Receipt-clock provenance changes only the existing clock value; the returned
+    # keys remain recorded_start/end, arrival_at and clock, never lifecycle latches.
     'utils.conversations.recorded_time.write_span': PatchContract(
         ('recorded_start', 'recorded_end', 'arrival_at', 'clock'),
         (
             (
                 Writer('utils/conversations/recorded_time.py', 'write_span'),
-                '67652bbdd304ef4e0761e2e20594a50369cef1bc6955f3dce41bfa5d58ca553b',
+                'e99a6a16ddaafe76a22695da366d2d74a35afe08adb316ed2421fcfbc2fbad5a',
             ),
             (
                 Writer('utils/conversations/recorded_time.py', 'span_fields'),
@@ -139,7 +169,7 @@ PATCH_CONTRACTS = {
             ),
             (
                 Writer('utils/conversations/recorded_time.py', 'conversation_span'),
-                'd04053702f344798afcdaf665c967d325084a1bf8dd4009b0a0576898350c993',
+                'fc65ea6d28331e9fdb075178b84bca85d3d47a28aecf4155d0d11f314e6cab92',
             ),
             (
                 Writer('models/recorded_span.py', 'RecordedSpan'),
@@ -341,7 +371,20 @@ EPISODE_PHASES = ('live', 'closing', 'closed', 'composed', 'redirected')
 # Derived conversation rows are reader vocabulary, not automatic entry sites.
 # The underlying obligations below each receive the full four-clause verdict.
 STATES = (
-    tuple(
+    (
+        row(
+            'batch',
+            'allowance_held',
+            ('state',),
+            exit=Exit('sweeper', 'utils/batch_pipeline/allowance_hold.py:AllowanceHolds.tick'),
+            metric='omi_batch_allowance_held_units',
+            alert_required=False,
+            deadline_exemption='SCA-2195: allowance policy parking has no recording expiry; owner generation releases it.',
+            entry_writers=(Writer('database/batch_pipeline_allowance_hold.py', 'park'),),
+            note='Current held/allowance_exhausted only; custody retained, outside retry and pending-work sweeps.',
+        ),
+    )
+    + tuple(
         row(
             'conversation_phase',
             name,
@@ -401,9 +444,59 @@ STATES = (
             'utils/pusher_record_barrier.py:PusherRecordBarrier.abandon_recordings). '
             'The kill switch can disable this conditional exit. When bounded abandon admission is full, '
             'outcome=abandon_overflow leaves the token capturing/fenced with no new coordinator; '
-            'the existing process/pod-death repair proof remains its exit. Live tokens never expire by age. '
+            'the existing process/pod-death repair proof remains its exit. Off-mode frame tokens never expire by age; '
+            'serve-created custody tokens retain their own lease exit after rollback. The leased per-token view is separate. '
             'Refused seals have a separate first-entry clock and bounded job-page visibility in seal_refused; '
             'general live-producer dwell visibility remains required',
+        ),
+        row(
+            'record_token',
+            'capturing',
+            ('record_upload_sessions',),
+            entry_writers=(
+                Writer('database/record_audio.py', 'set_record_upload_pending.commit'),
+                Writer('database/record_audio.py', 'renew_record_token_lease.commit'),
+                Writer('database/record_custody_append.py', 'begin.commit'),
+            ),
+            exit=Exit('lease', 'utils/batch_pipeline/record_producer_proof.py:producer_tokens_dead'),
+            derived=True,
+            metric='omi_record_token_lease_active',
+            alert=Alert('omi-record-token-lease-late-append', 'page'),
+            deadline_exemption='Nested per-token lease_expires_at, stamped only when lease mode is enabled',
+            note='Exact-token finish clear (including record_custody_append.finish after durable acceptance or refusal); '
+            'custody lease covers the configured sync request timeout plus a named margin. '
+            'abandon attestation; or computed lease lapse. Off preserves original producer proof.',
+        ),
+        row(
+            'record_token',
+            'lease_lapsed',
+            ('record_upload_sessions',),
+            entry_writers=(
+                Writer('database/record_audio.py', 'set_record_upload_pending.commit'),
+                Writer('database/record_audio.py', 'renew_record_token_lease.commit'),
+            ),
+            exit=Exit(
+                'sweeper',
+                'utils/batch_pipeline/record_seal_repair.py:apply_seals',
+                (
+                    Writer('utils/batch_pipeline/record_seal_repair.py', 'apply_seals.commit'),
+                    Writer('database/record_partial.py', 'finish_partial.commit'),
+                    Writer('database/record_audio.py', 'renew_record_token_lease.commit'),
+                ),
+            ),
+            derived=True,
+            metric='omi_record_token_lease_active',
+            alert=Alert('omi-record-token-lease-late-append', 'page'),
+            deadline_exemption='Computed from nested lease clocks; never persisted as expiry state',
+            note='Named exits: seal via apply_seals after retained-tail proof; partial finish via finish_partial '
+            'clears token map and re-arms hourly inventory; late frames re-activate via renew_record_token_lease. '
+            'Custody uploads first fence via record_custody_append.begin, then bump record_upload_revision '
+            'only after durable acceptance in finish, including after rollback. A lost accepted fence recovers via '
+            'record_custody_append.recover_committed with an exact-request durable receipt and partial continuation. '
+            'Separate recovery is parked as record_recovery_waiting until record_recovery_gate.promote '
+            'transactionally observes the original publication complete; promotion runs off/shadow/serve. '
+            'Recovery is independent of '
+            'conversation status; uncaptured input reopens for normal admission of the newer revision. Never deletes audio.',
         ),
         row(
             'record_audio',
@@ -514,6 +607,18 @@ STATES = (
             terminal=True,
             owner='services/conversation_finalization.py',
             note='Publisher samples queued/leased/blocked_byok/dead_letter, not completed stock',
+        ),
+        row(
+            'finalization_receipt',
+            'fenced',
+            ('status',),
+            entry_writers=(Writer(FINALIZATION_MODULE, '_record_meeting_receipt_txn'),),
+            exit=Exit('return', f'{FINALIZATION_MODULE}:_record_meeting_receipt_txn'),
+            terminal=True,
+            owner=FINALIZATION_MODULE,
+            derived=True,
+            note='Ownership refusal ends this receipt attempt without changing the conversation or job. '
+            'A later attempt rechecks both owners before it may record a receipt.',
         ),
         row(
             'summary_debt',

@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 from datetime import date
 from pathlib import Path
@@ -15,6 +16,7 @@ CHANGELOG_DIR = DESKTOP_DIR / "changelog"
 UNRELEASED_DIR = CHANGELOG_DIR / "unreleased"
 RELEASES_DIR = CHANGELOG_DIR / "releases"
 LEGACY_CHANGELOG_PATH = DESKTOP_DIR / "CHANGELOG.json"
+PREPARE_RUNTIME_PATH = DESKTOP_DIR / "scripts" / "prepare-agent-runtime.sh"
 NONE_KIND = "none"
 
 
@@ -161,6 +163,49 @@ def format_changes(changes: list[str], output_format: str) -> str:
     return "\n".join(f"- {change}" for change in changes)
 
 
+def bundled_node_runtime_version(script_path: Path | None = None) -> str | None:
+    target = script_path if script_path is not None else PREPARE_RUNTIME_PATH
+    if not target.is_file():
+        return None
+    for raw_line in target.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if line.startswith('NODE_VERSION="${OMI_AGENT_NODE_VERSION:-') and line.endswith('}"'):
+            version = line.removeprefix('NODE_VERSION="${OMI_AGENT_NODE_VERSION:-').removesuffix('}"').strip()
+            if version:
+                return version
+    return None
+
+
+def verified_runtime_version(path: Path) -> str:
+    try:
+        result = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        raise ChangelogError(f"Cannot read runtime smoke result: {path}") from exc
+    version = result.get("bundled_node_version") if isinstance(result, dict) else None
+    if (
+        not isinstance(result, dict)
+        or result.get("ok") is not True
+        or not isinstance(version, str)
+        or not re.fullmatch(r"v22\.\d+\.\d+", version)
+    ):
+        raise ChangelogError(f"Missing passed Node 22 artifact verification: {path}")
+    return version
+
+
+def with_bundled_runtime_note(changes: list[str], runtime_version: str | None = None) -> list[str]:
+    version = runtime_version if runtime_version is not None else bundled_node_runtime_version()
+    if not version:
+        return list(changes)
+    note = f"Bundled Node.js runtime: {version}"
+    return [entry for entry in changes if not entry.startswith("Bundled Node.js runtime:")] + [note]
+
+
+def latest_release_changes(runtime_version: str | None = None) -> list[str]:
+    releases = release_entries()
+    changes = list(releases[0]["changes"]) if releases else ["Bug fixes and improvements"]
+    return with_bundled_runtime_note(changes, runtime_version=runtime_version)
+
+
 def consolidate(version: str, release_date: str, *, write: bool) -> dict[str, object]:
     """Fold unreleased fragments into releases/<version>.json.
 
@@ -246,7 +291,8 @@ def main() -> int:
     subparsers.add_parser("generate-legacy")
     subparsers.add_parser("migrate-from-legacy")
     subparsers.add_parser("unreleased", parents=[output_parser])
-    subparsers.add_parser("latest-release", parents=[output_parser])
+    latest_parser = subparsers.add_parser("latest-release", parents=[output_parser])
+    latest_parser.add_argument("--runtime-smoke-result", type=Path)
 
     consolidate_parser = subparsers.add_parser("consolidate")
     consolidate_parser.add_argument("--version", required=True)
@@ -272,9 +318,10 @@ def main() -> int:
         elif args.command == "unreleased":
             print(format_changes(unreleased_changes(), args.format))
         elif args.command == "latest-release":
-            releases = release_entries()
-            changes = releases[0]["changes"] if releases else ["Bug fixes and improvements"]
-            print(format_changes(list(changes), args.format))
+            runtime_version = None
+            if args.runtime_smoke_result:
+                runtime_version = verified_runtime_version(args.runtime_smoke_result)
+            print(format_changes(latest_release_changes(runtime_version), args.format))
         elif args.command == "consolidate":
             release = consolidate(args.version, args.date, write=args.write)
             print(json.dumps(release, indent=2, ensure_ascii=False))

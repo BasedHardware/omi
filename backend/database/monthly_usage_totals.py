@@ -29,6 +29,10 @@ class UsagePublicationRootMissing(DestructiveOperationInProgress):
     """Usage must not recreate children after the account root disappears."""
 
 
+class UsageBaselineNotReady(ValueError):
+    """A baseline must be proved from hourly sources, never defaulted to zero."""
+
+
 @contextmanager
 def publication_fence(user_ref: Any, transaction: Any, *, firestore_client: Any) -> Iterator[None]:
     """Hold erasure authorities and the user root through aggregate publication."""
@@ -101,6 +105,57 @@ def _ready(data: dict, epoch: str, date: datetime) -> bool:
     )
 
 
+@read_origin('job:free_allowance_watch')
+def read_verified_transcription_seconds(uid: str, now: datetime, *, firestore_client: Any = None) -> float:
+    """Read a verified billing baseline without cohort gates, scans, or zero fallbacks.
+
+    Observation only: missing/unready projections raise, including new accounts.
+    This is not a reservation and must not authorize concurrent provider spend.
+    """
+    now = now.astimezone(timezone.utc)
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    data = month_ref(client.collection('users').document(uid), now).get(timeout=2, retry=None).to_dict()
+    return verified_transcription_seconds(data, now)
+
+
+def verified_transcription_seconds(data: Any, now: datetime) -> float:
+    """Validate a transaction's billing snapshot without a second, racy read."""
+    if data is None or isinstance(data, dict) and data.get('ready') is not True:
+        raise UsageBaselineNotReady('unverified monthly usage')
+    epoch = _epoch()
+    if not epoch or not isinstance(data, dict):
+        raise ValueError('unverified monthly usage')
+    if not _ready(data, epoch, now):
+        other = data.get('epoch')
+        if isinstance(other, str) and other != epoch and _ready(data, other, now):
+            # Ready under another service's epoch: the fenced source scan can
+            # re-prove it under ours, so this is a missing baseline, not corruption.
+            raise UsageBaselineNotReady('monthly usage ready under another epoch')
+        raise ValueError('unverified monthly usage')
+    value = data['totals'].get('transcription_seconds')
+    if type(value) not in (int, float) or not math.isfinite(value) or value < 0:
+        raise ValueError('invalid monthly seconds')
+    return float(value)
+
+
+def establish_verified_month(uid: str, date: datetime, *, firestore_client: Any = None) -> None:
+    """Prove a missing/new-month baseline using the existing fenced source scan.
+
+    Only a successful complete query can prove a genuine zero. Query errors,
+    malformed sources, missing roots and invalid epochs remain unavailable.
+    There is no rollout/cohort gate on this accounting initialization.
+    """
+    epoch = _epoch()
+    if not epoch:
+        raise ValueError('invalid usage epoch')
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    date = date.astimezone(timezone.utc)
+    data = _rebuild(
+        client.transaction(), client.collection('users').document(uid), date, epoch, firestore_client=client
+    )
+    verified_transcription_seconds(data, date)
+
+
 def _month_rows(user_ref: Any, date: datetime, transaction: Any) -> Any:
     return (
         user_ref.collection('hourly_usage')
@@ -162,20 +217,30 @@ def _rebuild(transaction: Any, user_ref: Any, date: datetime, epoch: str, *, fir
 
 @read_origin('job:usage_month_total_read')
 def read_monthly_totals(
-    uid: str, date: datetime, *, firestore_client: Any = None, start_date: datetime | None = None
+    uid: str,
+    date: datetime,
+    *,
+    firestore_client: Any = None,
+    start_date: datetime | None = None,
+    ready_only: bool = False,
 ) -> dict | None:
     """One warm document read, including arbitrary day-cutoff and late updates.
 
     None requests the unchanged hourly query. Redis and reader cohort selection
-    do not participate in accounting or maintenance.
+    do not participate in accounting or maintenance. A speculative intake read
+    uses only an already-verified document and leaves misses to the spend gate.
     """
     if not lever_enabled('usage_month_total', uid) or not (epoch := _epoch()):
         return None
     try:
         firestore_client = firestore_client if firestore_client is not None else get_firestore_client()
         user_ref = firestore_client.collection('users').document(uid)
-        data = month_ref(user_ref, date).get().to_dict() or {}
+        ref = month_ref(user_ref, date)
+        options = {'timeout': 1, 'retry': None} if ready_only else {}
+        data = ref.get(**options).to_dict() or {}
         if not _ready(data, epoch, date):
+            if ready_only:
+                return None
             data = _rebuild(firestore_client.transaction(), user_ref, date, epoch, firestore_client=firestore_client)
         if data is not None:
             if start_date is None or (start_date.year, start_date.month) < (date.year, date.month):
@@ -190,6 +255,8 @@ def read_monthly_totals(
     except Exception:
         # Do not retain a stale total on transaction/read failure.
         pass
+    if ready_only:
+        return None
     record_fallback(
         component='firestore_read',
         from_mode='monthly_total',

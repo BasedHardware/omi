@@ -10,11 +10,28 @@
 #                        listen-only fix without a full backend train. The push runs
 #                        in the same GitHub Environment as deploy, so the prod
 #                        registry keeps the prod approval and WIF binding.
+#   workerd-image-only  Publish only the admitted prod workerd image.
 #   repair-traffic-only  Restore Cloud Run traffic to the serving revisions.
+#   recover-pump-cap    SCA-3318 one-time service-level cap correction on the dark pump.
 
 name: Deploy Backend to Cloud RUN
 
-run-name: Deploy Backend (${{ inputs.environment || github.event_name }} ${{ inputs.mode || github.event_name }}) by ${{ inputs.requested_by || github.actor }}
+run-name: >-
+  ${{ inputs.selected_rollback_revision && format('Select {0}/{1}/{2} sha={3} lock={4} img={5} elig={6} by {7} inverse={8}',
+    inputs.environment, inputs.mode, inputs.cloud_run_service, inputs.release_sha,
+    github.event.inputs.break_glass_lock == 'true' && 'break-glass' || 'prod-train',
+    inputs.service_images == '' && 'default' || 'override',
+    github.event.inputs.skip_eligibility_proof == 'true' && 'bypass' || 'proof',
+    inputs.requested_by, inputs.selected_rollback_revision) ||
+    format('Deploy Backend ({0} {1} service={2} source={3} lock={4} images={5} eligibility={6}) by {7}',
+      inputs.environment || github.event_name,
+      inputs.mode || github.event_name,
+      inputs.cloud_run_service || 'all',
+      inputs.release_sha || '',
+      github.event.inputs.break_glass_lock == 'true' && 'break-glass' || 'prod-train',
+      inputs.service_images == '' && 'default' || 'override',
+      github.event.inputs.skip_eligibility_proof == 'true' && 'bypass' || 'proof',
+      inputs.requested_by || github.actor) }}
 
 on:
   workflow_dispatch:
@@ -47,7 +64,10 @@ on:
         options:
           - deploy
           - build-only
+          - workerd-image-only
           - repair-traffic-only
+          - operator-qualify-publish
+          - recover-pump-cap
       deploy_targets:
         description: 'Deploy all backend surfaces or Cloud Run only'
         required: true
@@ -56,6 +76,16 @@ on:
         options:
           - all
           - cloud-run-only
+      cloud_run_service:
+        description: 'Cloud Run deploy target; all retains the existing four-service path; backend-projection-pump is explicit-only (SCA-3120)'
+        required: false
+        default: 'all'
+        type: choice
+        options: [all, backend, backend-sync, backend-sync-backfill, backend-integration, backend-projection-pump]
+      selected_rollback_revision:
+        description: 'Named standard deploy only. Exact revision admitted at 100% serving before dispatch.'
+        required: false
+        default: ''
       deploy_gateway:
         description: 'Development only: deploy the LLM gateway binary with the backend stack (requires deploy_targets=all)'
         required: true
@@ -64,6 +94,18 @@ on:
       # Plan B B2 opt-in; blank changes nothing. See backend/docs/runbooks/role-image-cutover.md.
       service_images:
         description: 'mode=deploy only: service=<role image>@sha256 pairs from a build-only run of this release_sha (blank = every service keeps its current image)'
+        required: false
+        default: ''
+      pump_control_sha:
+        description: 'Projection pump only. Full reviewed SHA of the workflow and deploy controls on main.'
+        required: false
+        default: ''
+      pump_release_disposition:
+        description: 'Existing projection pump only. Release comment UUID, serving revision, source SHA, digest-pinned image (space-separated).'
+        required: false
+        default: ''
+      pump_recovery_etag:
+        description: 'SCA-3318 cap recovery only. Fresh Cloud Run v2 service etag from Release readback.'
         required: false
         default: ''
       # Break-glass: the eligibility proof requires a *successful* Release
@@ -145,20 +187,118 @@ env:
 
 jobs:
   validate-production-boundary:
+    outputs:
+      integration_only: ${{ steps.boundary.outputs.integration_only }}
+      integration_image: ${{ steps.boundary.outputs.integration_image }}
+      post_wrap_guard: ${{ steps.boundary.outputs.post_wrap_guard }}
+      rollback_revision: ${{ steps.boundary.outputs.rollback_revision }}
     if: >-
       github.event.inputs.mode == 'deploy' ||
-      github.event.inputs.mode == 'build-only'
+      github.event.inputs.mode == 'build-only' ||
+      github.event.inputs.mode == 'workerd-image-only' ||
+      github.event.inputs.mode == 'recover-pump-cap'
     runs-on: ubuntu-latest
     steps:
       - name: Reject unsupported production deployment boundary before side effects
+        if: inputs.mode != 'recover-pump-cap'
+        id: boundary
         env:
           DEPLOY_ENVIRONMENT: ${{ github.event.inputs.environment }}
           DEPLOY_TARGETS: ${{ github.event.inputs.deploy_targets }}
           WORKFLOW_MODE: ${{ github.event.inputs.mode }}
+          CLOUD_RUN_SERVICE: ${{ github.event.inputs.cloud_run_service || 'all' }}
           SERVICE_IMAGES: ${{ github.event.inputs.service_images }}
+          SELECTED_ROLLBACK_REVISION: ${{ inputs.selected_rollback_revision }}
           REQUESTED_BY: ${{ github.event.inputs.requested_by }}
+          RELEASE_SHA: ${{ github.event.inputs.release_sha }}
+          SKIP_ELIGIBILITY: ${{ github.event.inputs.skip_eligibility_proof }}
+          BREAK_GLASS_LOCK: ${{ github.event.inputs.break_glass_lock }}
+          PUMP_CONTROL_SHA: ${{ inputs.pump_control_sha }}
+          PUMP_RELEASE_DISPOSITION: ${{ inputs.pump_release_disposition }}
+          WORKFLOW_CONTROL_SHA: ${{ github.workflow_sha }}
         run: |
           set -euo pipefail
+          CLOUD_RUN_SERVICE="${CLOUD_RUN_SERVICE:-all}"
+          SELECTED_ROLLBACK_REVISION="${SELECTED_ROLLBACK_REVISION:-}"
+          case "$CLOUD_RUN_SERVICE" in all|backend|backend-sync|backend-sync-backfill|backend-integration|backend-projection-pump) ;; *) exit 1 ;; esac
+          if [[ "$CLOUD_RUN_SERVICE" != all ]]; then
+            [[ "$WORKFLOW_MODE" == deploy && "$DEPLOY_TARGETS" == cloud-run-only && "$DEPLOY_ENVIRONMENT" == prod && "$BREAK_GLASS_LOCK" != true && "$SKIP_ELIGIBILITY" != true ]] || exit 1
+          fi
+          # SCA-3120: the projection pump ships the admitted fat image only, never a role-image opt-in.
+          if [[ "$CLOUD_RUN_SERVICE" == backend-projection-pump ]]; then
+            if [[ -n "${SERVICE_IMAGES//[[:space:],]/}" ]]; then
+              echo 'backend-projection-pump takes no service_images.' >&2
+              exit 1
+            fi
+            if [[ ! "$PUMP_CONTROL_SHA" =~ ^[0-9a-f]{40}$ ||
+                  "$PUMP_CONTROL_SHA" != "$WORKFLOW_CONTROL_SHA" ||
+                  "$WORKFLOW_CONTROL_SHA" != "$GITHUB_SHA" ]]; then
+              echo 'backend-projection-pump requires the reviewed workflow control SHA.' >&2
+              exit 1
+            fi
+            # Publish the actual inputs before the prod environment approval so the
+            # approver can compare the recovery disposition with the Release order.
+            {
+              echo '### Projection pump approval inputs'
+              echo '```json'
+              jq -n --arg control "$WORKFLOW_CONTROL_SHA" --arg source "$RELEASE_SHA" \
+                --arg disposition "$PUMP_RELEASE_DISPOSITION" \
+                '{dispatch_control: $control, requested_source: $source, release_disposition: $disposition}'
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+          if [[ "$WORKFLOW_MODE" == workerd-image-only ]]; then
+            if [[ "$DEPLOY_ENVIRONMENT" != prod || "$SKIP_ELIGIBILITY" == true || "$BREAK_GLASS_LOCK" == true ]]; then
+              echo 'workerd-image-only requires prod and normal release admission.' >&2
+              exit 1
+            fi
+          fi
+          INTEGRATION_ONLY=false
+          INTEGRATION_IMAGE=''
+          POST_WRAP_GUARD=internal
+          ROLLBACK_REVISION=backend-integration-provfix-off1114
+          if [[ "$SERVICE_IMAGES" == integration-canary=* ]]; then
+            INTEGRATION_IMAGE="${SERVICE_IMAGES#integration-canary=}"
+            if [[ "$INTEGRATION_IMAGE" == *,rollback_revision=* ]]; then
+              ROLLBACK_REVISION="${INTEGRATION_IMAGE##*,rollback_revision=}"
+              INTEGRATION_IMAGE="${INTEGRATION_IMAGE%,rollback_revision=*}"
+            fi
+            [[ "$ROLLBACK_REVISION" =~ ^backend-integration-[a-z0-9]([a-z0-9-]*[a-z0-9])?$ && ${#ROLLBACK_REVISION} -le 63 ]] || exit 1
+            if [[ "$INTEGRATION_IMAGE" == *,post_wrap_guard=* ]]; then
+              POST_WRAP_GUARD="${INTEGRATION_IMAGE##*,post_wrap_guard=}"
+              INTEGRATION_IMAGE="${INTEGRATION_IMAGE%,post_wrap_guard=*}"
+            fi
+            [[ "$DEPLOY_ENVIRONMENT" == prod && "$WORKFLOW_MODE" == deploy &&
+               "$DEPLOY_TARGETS" == cloud-run-only && "$SKIP_ELIGIBILITY" != true &&
+               "$BREAK_GLASS_LOCK" != true && "$RELEASE_SHA" =~ ^[0-9a-f]{40}$ &&
+               "$INTEGRATION_IMAGE" =~ ^gcr\.io/based-hardware/(backend|backend-workers)@sha256:[0-9a-f]{64}$ &&
+               ("$POST_WRAP_GUARD" == internal || "$POST_WRAP_GUARD" == external) ]] || {
+              echo 'Integration-only requires exact admitted source/digest and normal production gates.' >&2
+              exit 1
+            }
+            [[ "$CLOUD_RUN_SERVICE" == all || "$CLOUD_RUN_SERVICE" == backend-integration ]] || exit 1
+            INTEGRATION_ONLY=true
+          fi
+          if [[ "$CLOUD_RUN_SERVICE" != all && "$CLOUD_RUN_SERVICE" != backend-projection-pump && "$INTEGRATION_ONLY" != true ]]; then
+            if [[ ! "$SELECTED_ROLLBACK_REVISION" =~ ^${CLOUD_RUN_SERVICE}-[a-z0-9]([a-z0-9-]*[a-z0-9])?$ ||
+                  ${#SELECTED_ROLLBACK_REVISION} -gt 63 ]]; then
+              echo 'Named deploy requires the admitted selected_rollback_revision.' >&2
+              exit 1
+            fi
+            ROLLBACK_REVISION="$SELECTED_ROLLBACK_REVISION"
+          elif [[ -n "$SELECTED_ROLLBACK_REVISION" ]]; then
+            echo 'selected_rollback_revision applies only to a named standard deploy.' >&2
+            exit 1
+          fi
+          printf 'integration_only=%s\nintegration_image=%s\npost_wrap_guard=%s\nrollback_revision=%s\n' "$INTEGRATION_ONLY" "$INTEGRATION_IMAGE" "$POST_WRAP_GUARD" "$ROLLBACK_REVISION" >> "$GITHUB_OUTPUT"
+          if [[ "$DEPLOY_ENVIRONMENT" == prod && "$WORKFLOW_MODE" == deploy &&
+                "$RELEASE_SHA" == 0714c5198be8f0183c8fd7dd3810d53c91af17a4 ]]; then
+            [[ "$DEPLOY_TARGETS" == cloud-run-only && "$SKIP_ELIGIBILITY" != true &&
+               "$BREAK_GLASS_LOCK" != true ]] || {
+              echo 'The ruled integration canary requires normal cloud-run-only admission and lock.' >&2
+              exit 1
+            }
+          fi
           if [[ "$DEPLOY_ENVIRONMENT" != "development" && "$DEPLOY_ENVIRONMENT" != "prod" ]]; then
             echo "Invalid environment: $DEPLOY_ENVIRONMENT. Must be 'development' or 'prod'." >&2
             exit 1
@@ -195,6 +335,38 @@ jobs:
             exit 1
           fi
 
+      - name: Bind SCA-3318 recovery approval inputs
+        if: inputs.mode == 'recover-pump-cap'
+        env:
+          DEPLOY_ENVIRONMENT: ${{ inputs.environment }}
+          DEPLOY_TARGETS: ${{ inputs.deploy_targets }}
+          CLOUD_RUN_SERVICE: ${{ inputs.cloud_run_service }}
+          RELEASE_SHA: ${{ inputs.release_sha }}
+          CONTROL_SHA: ${{ inputs.pump_control_sha }}
+          WORKFLOW_CONTROL_SHA: ${{ github.workflow_sha }}
+          APPROVED_ETAG: ${{ inputs.pump_recovery_etag }}
+        run: |
+          set -euo pipefail
+          jq -e '.inputs |
+            .break_glass_lock == "false" and .skip_eligibility_proof == "false" and
+            .deploy_gateway == "false" and
+            ([.service_images, .pump_release_disposition, .break_glass_confirm,
+              .break_glass_reason, .release_version, .selected_rollback_revision] | all(. == "" or . == null)) and
+            (.requested_by | test("[^[:space:]]"))' "$GITHUB_EVENT_PATH" >/dev/null
+          # Cloud Run v2 can return literal outer quotes as part of the etag.
+          etag_pattern='^([A-Za-z0-9_+/=-]{1,200}|"[A-Za-z0-9_+/=-]{1,200}")$'
+          [[ "$GITHUB_EVENT_NAME" == workflow_dispatch && "$GITHUB_REF" == refs/heads/main &&
+             "$GITHUB_REPOSITORY" == BasedHardware/omi && "$GITHUB_RUN_ATTEMPT" == 1 &&
+             "$DEPLOY_ENVIRONMENT" == prod && "$DEPLOY_TARGETS" == cloud-run-only &&
+             "$CLOUD_RUN_SERVICE" == backend-projection-pump &&
+             "$CONTROL_SHA" =~ ^[0-9a-f]{40}$ && "$CONTROL_SHA" == "$WORKFLOW_CONTROL_SHA" &&
+             "$WORKFLOW_CONTROL_SHA" == "$GITHUB_SHA" &&
+             "$RELEASE_SHA" == f7060aa1a0c9e3481790d497140096ae99f9b062 &&
+             "$APPROVED_ETAG" =~ $etag_pattern ]]
+          jq -n --arg control "$CONTROL_SHA" --arg etag "$APPROVED_ETAG" --arg source "$RELEASE_SHA" \
+            '{issue:"SCA-3318", service:"backend-projection-pump", control:$control, etag:$etag,
+              base_source:$source, forward_max:4, inverse_max:20}' >> "$GITHUB_STEP_SUMMARY"
+
   repair-traffic:
     if: >-
       github.ref == 'refs/heads/main' &&
@@ -207,8 +379,10 @@ jobs:
     steps:
       - name: Validate Environment Input
         env:
+          CLOUD_RUN_SERVICE: ${{ github.event.inputs.cloud_run_service || 'all' }}
           REQUESTED_BY: ${{ github.event.inputs.requested_by }}
         run: |
+          [[ "${CLOUD_RUN_SERVICE:-all}" == all ]] || { echo "::error::repair does not accept a service selector" >&2; exit 1; }
           if [[ "${{ github.event.inputs.environment }}" != "development" && "${{ github.event.inputs.environment }}" != "prod" ]]; then
             echo "Invalid environment: ${{ github.event.inputs.environment }}. Must be 'development' or 'prod'."
             exit 1
@@ -227,12 +401,13 @@ jobs:
           # Traffic repair changes no source-derived runtime state. It stays a
           # separate recovery path and does not consume a release proof.
           ref: main
+          fetch-depth: 0
 
       # Prod: GitHub WIF as omi-ci-deployer-prod@ (credential-hygiene WS-C,
       # plan v2 Phase E). Development keeps its JSON lane.
       - name: Google Auth (prod WIF)
         id: auth-wif
-        if: github.event.inputs.environment == 'prod'
+        if: github.event.inputs.environment == 'prod' && (github.event.inputs.cloud_run_service == '' || github.event.inputs.cloud_run_service == 'all')
         uses: 'google-github-actions/auth@v3'
         with:
           workload_identity_provider: projects/208440318997/locations/global/workloadIdentityPools/omi-gha-deploy-prod/providers/github
@@ -252,10 +427,12 @@ jobs:
 
       - name: Restore Cloud Run traffic spec to currently serving revisions
         run: |
+          git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
           python3 backend/scripts/repair_cloud_run_traffic.py \
             --project=${{ vars.GCP_PROJECT_ID }} \
             --region=${{ env.REGION }} \
-            --repair
+            --repair \
+            --release-floor-check .github/scripts/verify_backend_release_floor.py
 
       - name: Cloud Run deploy status report
         if: always()
@@ -270,13 +447,13 @@ jobs:
             --cloud-run-service backend-sync-backfill \
             --cloud-run-service backend-integration || true
 
-  # Source admission is shared by deploy and build-only so both modes enforce the
+  # Source admission is shared by deploy and image-only modes so they enforce the
   # one Release Eligibility proof (and break-glass audit) for the exact SHA.
   firestore_readiness:
     needs: validate-production-boundary
     if: >-
       github.ref == 'refs/heads/main' &&
-      (github.event.inputs.mode == 'deploy' || github.event.inputs.mode == 'build-only')
+      (github.event.inputs.mode == 'deploy' || github.event.inputs.mode == 'build-only' || github.event.inputs.mode == 'workerd-image-only')
     environment: ${{ github.event.inputs.environment == 'prod' && 'prod' || 'development' }}
     permissions:
       actions: 'read'
@@ -331,6 +508,8 @@ jobs:
             echo "ERROR: release_sha is not an ancestor of origin/main; only merged code may deploy."
             exit 1
           fi
+
+          python3 .github/scripts/verify_backend_release_floor.py --sha "$DEPLOY_SHA"
 
           if [[ "${SKIP_PROOF:-false}" == "true" ]]; then
             if [[ "$BREAK_GLASS_CONFIRM" != "deploy-without-proof" ]]; then
@@ -607,6 +786,73 @@ jobs:
             echo "\`gh workflow run gcp_backend_listen_helm.yml --ref main -f environment=${DEPLOY_ENVIRONMENT} -f branch=main -f mode=deploy -f image_tag=${SHORT_SHA}\`"
           } >> "$GITHUB_STEP_SUMMARY"
 
+  publish-workerd:
+    name: Build and publish workerd production image
+    needs: [validate-production-boundary, firestore_readiness]
+    if: >-
+      github.ref == 'refs/heads/main' &&
+      inputs.mode == 'workerd-image-only' &&
+      inputs.environment == 'prod' &&
+      needs.firestore_readiness.outputs.break_glass == 'false'
+    environment: prod
+    permissions:
+      contents: 'read'
+      id-token: 'write'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout admitted workerd source
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.firestore_readiness.outputs.admitted_sha }}
+          persist-credentials: false
+
+      - name: Google Auth (WIF)
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: projects/208440318997/locations/global/workloadIdentityPools/omi-gha-deploy-prod/providers/github
+          service_account: omi-ci-deployer-prod@based-hardware.iam.gserviceaccount.com
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v3
+        with:
+          project_id: ${{ vars.GCP_PROJECT_ID }}
+
+      - name: Configure Docker for GCR
+        run: gcloud auth configure-docker --quiet
+
+      - name: Publish admitted workerd image
+        env:
+          ADMITTED_SHA: ${{ needs.firestore_readiness.outputs.admitted_sha }}
+        run: |
+          set -euo pipefail
+          [[ "$ADMITTED_SHA" =~ ^[a-f0-9]{40}$ && "$(git rev-parse HEAD)" == "$ADMITTED_SHA" ]]
+          repository="gcr.io/based-hardware/workerd"
+          image="$repository:${ADMITTED_SHA:0:7}"
+
+          if digest="$(gcloud container images describe "$image" --format='value(image_summary.digest)' 2>"$RUNNER_TEMP/workerd-describe.err")"; then
+            [[ "$digest" =~ ^sha256:[a-f0-9]{64}$ ]]
+            revision="$(docker buildx imagetools inspect "$repository@$digest" --format '{{ index .Image.Config.Labels "org.opencontainers.image.revision" }}')"
+            if [[ "$revision" != "$ADMITTED_SHA" ]]; then
+              echo "::error::Existing workerd tag has a different source revision."
+              exit 1
+            fi
+          elif grep -qF "[${image}] is not found or is not a valid name" "$RUNNER_TEMP/workerd-describe.err"; then
+            docker build --platform linux/amd64 --label "org.opencontainers.image.revision=$ADMITTED_SHA" \
+              --tag "$image" --file backend-go/Dockerfile backend-go
+            docker push "$image"
+            digest="$(gcloud container images describe "$image" --format='value(image_summary.digest)')"
+            [[ "$digest" =~ ^sha256:[a-f0-9]{64}$ ]]
+          else
+            cat "$RUNNER_TEMP/workerd-describe.err" >&2
+            exit 1
+          fi
+
+          {
+            echo "### Workerd production image published"
+            echo "- Source SHA: \`$ADMITTED_SHA\`"
+            echo "- Image: \`$repository@$digest\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
   # Plan B B2 release train: build-only also publishes every role image
   # (backend/Dockerfile.roles targets and listen-edge) from the admitted SHA,
   # stamped OMI_RELEASE_SHA and labelled with that revision, on the private base.
@@ -708,6 +954,7 @@ jobs:
       always() &&
       github.ref == 'refs/heads/main' &&
       github.event.inputs.mode == 'deploy' &&
+      github.event.inputs.cloud_run_service != 'backend-projection-pump' &&
       needs.validate-production-boundary.result == 'success' &&
       needs.firestore_readiness.result == 'success' &&
       (needs.record_break_glass.result == 'success' || needs.record_break_glass.result == 'skipped')
@@ -722,6 +969,7 @@ jobs:
         uses: actions/checkout@v7
 
       - name: Deploy backend stack
+        timeout-minutes: ${{ needs.firestore_readiness.outputs.admitted_sha == '0714c5198be8f0183c8fd7dd3810d53c91af17a4' && 90 || 360 }}
         uses: ./.github/actions/deploy-backend-stack
         env:
           LADDER_V1_PLUS_MONTH_PRICE_ID: ${{ vars.LADDER_V1_PLUS_MONTH_PRICE_ID }}
@@ -732,12 +980,19 @@ jobs:
           LADDER_V1_ARCHITECT_YEAR_PRICE_ID: ${{ vars.LADDER_V1_ARCHITECT_YEAR_PRICE_ID }}
         with:
           deploy_profile: manual
+          # SCA-2283 captain ruling 01a1dca2: finite exact-source path only.
+          integration_canary: ${{ github.event.inputs.environment == 'prod' && (needs.validate-production-boundary.outputs.integration_only == 'true' || needs.firestore_readiness.outputs.admitted_sha == '0714c5198be8f0183c8fd7dd3810d53c91af17a4') && 'true' || 'false' }}
+          integration_only: ${{ needs.validate-production-boundary.outputs.integration_only || 'false' }}
+          integration_image: ${{ needs.validate-production-boundary.outputs.integration_image }}
+          post_wrap_guard: ${{ needs.validate-production-boundary.outputs.post_wrap_guard || 'internal' }}
+          rollback_revision: ${{ needs.validate-production-boundary.outputs.rollback_revision || 'backend-integration-provfix-off1114' }}
           # 2026-10-24 costcut (live 22:45Z): prod backend-sync runs 6Gi; dev keeps 8Gi.
           backend_sync_memory: ${{ vars.BACKEND_SYNC_MEMORY || (github.event.inputs.environment == 'prod' && '6Gi' || '8Gi') }}
           # Read only for a development dispatch, so a production run never carries it.
           admitted_sha: ${{ needs.firestore_readiness.outputs.admitted_sha }}
           environment: ${{ github.event.inputs.environment }}
           deploy_targets: ${{ github.event.inputs.deploy_targets }}
+          cloud_run_service: ${{ github.event.inputs.cloud_run_service || 'all' }}
           deploy_gateway: ${{ github.event.inputs.deploy_gateway }}
           service_images: ${{ github.event.inputs.service_images }}
           release_version: ${{ github.event.inputs.release_version }}
@@ -763,7 +1018,7 @@ jobs:
 
       - name: Provision backend route and request storm alerts
         id: backend-route-alert
-        if: github.event.inputs.environment == 'prod'
+        if: github.event.inputs.environment == 'prod' && (github.event.inputs.cloud_run_service == '' || github.event.inputs.cloud_run_service == 'all')
         continue-on-error: true
         timeout-minutes: 15
         env:
@@ -811,7 +1066,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Provision Firestore missing-index alert
-        if: github.event.inputs.environment == 'prod'
+        if: github.event.inputs.environment == 'prod' && (github.event.inputs.cloud_run_service == '' || github.event.inputs.cloud_run_service == 'all')
         env:
           ALERT_CHANNELS: ${{ vars.SYNC_BACKFILL_ALERT_NOTIFICATION_CHANNELS }}
           PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
@@ -828,3 +1083,167 @@ jobs:
           python3 "$DEPLOY_WORKFLOW_ROOT/.github/scripts/ensure_firestore_missing_index_alert.py" \
             --project "$PROJECT_ID" \
             --notification-channels "$ALERT_CHANNELS"
+
+  # SCA-3120: the dedicated projection pump is a fifth Cloud Run service with its own
+  # composite. It runs only for an explicit manual prod cloud-run-only selection, under
+  # the same prod-train concurrency group, admission and break-glass jobs as deploy; the
+  # deploy job above never runs for it, so the four-service stack is untouched.
+  deploy-projection-pump:
+    needs: [validate-production-boundary, firestore_readiness, record_break_glass]
+    if: >-
+      always() &&
+      github.ref == 'refs/heads/main' &&
+      github.event.inputs.mode == 'deploy' &&
+      github.event.inputs.environment == 'prod' &&
+      github.event.inputs.cloud_run_service == 'backend-projection-pump' &&
+      needs.validate-production-boundary.result == 'success' &&
+      needs.firestore_readiness.result == 'success' &&
+      (needs.record_break_glass.result == 'success' || needs.record_break_glass.result == 'skipped')
+    environment: prod
+    permissions:
+      contents: 'read'
+      id-token: 'write'
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - name: Checkout workflow dispatch surface for composite action
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.workflow_sha }}
+
+      - name: Deploy backend projection pump
+        uses: ./.github/actions/deploy-projection-pump
+        with:
+          admitted_sha: ${{ needs.firestore_readiness.outputs.admitted_sha }}
+          reviewed_control_sha: ${{ inputs.pump_control_sha }}
+          release_disposition: ${{ inputs.pump_release_disposition }}
+          environment: ${{ github.event.inputs.environment }}
+          runtime_env: ${{ vars.ENV }}
+          workload_identity_provider: projects/208440318997/locations/global/workloadIdentityPools/omi-gha-deploy-prod/providers/github
+          workload_identity_service_account: omi-ci-deployer-prod@based-hardware.iam.gserviceaccount.com
+          project_id: ${{ vars.GCP_PROJECT_ID }}
+          region: ${{ env.REGION }}
+          release_version: ${{ github.event.inputs.release_version }}
+
+  recover-projection-pump-cap:
+    needs: validate-production-boundary
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      github.ref == 'refs/heads/main' &&
+      inputs.mode == 'recover-pump-cap' &&
+      inputs.environment == 'prod' &&
+      inputs.cloud_run_service == 'backend-projection-pump' &&
+      !inputs.break_glass_lock &&
+      !inputs.skip_eligibility_proof &&
+      needs.validate-production-boundary.result == 'success'
+    environment: prod
+    permissions:
+      contents: read
+      id-token: write
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Checkout exact reviewed recovery controls
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.workflow_sha }}
+          persist-credentials: false
+      - name: Verify recovery control checkout
+        env:
+          CONTROL_SHA: ${{ inputs.pump_control_sha }}
+        run: test "$(git rev-parse HEAD)" = "$CONTROL_SHA"
+      - name: Authenticate existing production workflow identity
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: projects/208440318997/locations/global/workloadIdentityPools/omi-gha-deploy-prod/providers/github
+          service_account: omi-ci-deployer-prod@based-hardware.iam.gserviceaccount.com
+      - name: Set up existing gcloud client
+        uses: google-github-actions/setup-gcloud@v3
+      - name: Validate, correct and read back only the pump service cap
+        env:
+          APPROVED_ETAG: ${{ inputs.pump_recovery_etag }}
+        run: python3 backend/scripts/recover_projection_pump_cap.py --etag="$APPROVED_ETAG"
+
+  # SOURCE-ONLY PROPOSAL: contract remains closed until approved ingress IDs
+  # and existing repository authorization evidence are reviewed and committed.
+  operator-qualify-publish:
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      github.ref == 'refs/heads/main' &&
+      github.event.inputs.environment == 'prod' &&
+      github.event.inputs.mode == 'operator-qualify-publish'
+    environment: prod
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    permissions:
+      # Draft release visibility requires push access. This ephemeral write
+      # scope is proposed explicitly, never replaced with a new PAT/secret.
+      contents: write
+      actions: read
+      id-token: write
+    steps:
+      - name: Checkout immutable workflow controls
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.workflow_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Check operator publication controls without external services
+        run: python3 -m unittest discover -s backend/scripts/jobstore_operator/tests -v
+      - name: Validate mode, protected source, and available scratch
+        env:
+          REQUESTED_SOURCE: ${{ inputs.release_sha }}
+          SKIP_PROOF: ${{ inputs.skip_eligibility_proof }}
+          BREAK_GLASS_LOCK: ${{ inputs.break_glass_lock }}
+          SERVICE_IMAGES: ${{ inputs.service_images }}
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_WORKFLOW_SHA: ${{ github.workflow_sha }}
+        run: |
+          set -euo pipefail
+          test "$SKIP_PROOF" = false
+          test "$BREAK_GLASS_LOCK" = false
+          test -z "$SERVICE_IMAGES"
+          python3 backend/scripts/jobstore_operator/preflight.py
+          git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+          for source in "$REQUESTED_SOURCE" "$GITHUB_WORKFLOW_SHA"; do
+            git merge-base --is-ancestor "$source" origin/main
+            gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/release-eligibility.yml/runs?event=push&branch=main&status=completed&head_sha=${source}&per_page=100" > "$RUNNER_TEMP/operator-proof.json"
+            python3 .github/scripts/verify_backend_release_admission.py --sha "$source" --repository "$GITHUB_REPOSITORY" --workflow-runs "$RUNNER_TEMP/operator-proof.json"
+          done
+      - name: Fetch only approved private draft asset identities
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 backend/scripts/jobstore_operator/operator_ingress.py --contract backend/scripts/jobstore_operator/artifact-contract.json --directory "$RUNNER_TEMP/operator-input"
+      - name: Qualify the exact image on the native AMD64 runner
+        env:
+          GITHUB_WORKFLOW_SHA: ${{ github.workflow_sha }}
+        run: |
+          python3 backend/scripts/jobstore_operator/qualify_operator.py --contract backend/scripts/jobstore_operator/artifact-contract.json --directory "$RUNNER_TEMP/operator-input" --output "$RUNNER_TEMP/operator-native-qualification.json"
+      - name: Google Auth only after native qualification (existing WIF)
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: projects/208440318997/locations/global/workloadIdentityPools/omi-gha-deploy-prod/providers/github
+          service_account: omi-ci-deployer-prod@based-hardware.iam.gserviceaccount.com
+      - name: Set up existing gcloud client
+        uses: google-github-actions/setup-gcloud@v3
+      - name: Preserve and verify the dedicated operator digest
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_WORKFLOW_SHA: ${{ github.workflow_sha }}
+        run: |
+          python3 backend/scripts/jobstore_operator/publish_operator.py --contract backend/scripts/jobstore_operator/artifact-contract.json --directory "$RUNNER_TEMP/operator-input" --qualification "$RUNNER_TEMP/operator-native-qualification.json" --output "$RUNNER_TEMP/operator-publication.json"
+      - name: Retain only bounded qualification and publication receipts
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: jobstore-operator-evidence-${{ github.run_id }}
+          if-no-files-found: warn
+          path: |
+            ${{ runner.temp }}/operator-native-qualification.json
+            ${{ runner.temp }}/operator-native-qualification.log
+            ${{ runner.temp }}/operator-native-qualification.failure.json
+            ${{ runner.temp }}/operator-native-qualification.failure.log
+            ${{ runner.temp }}/operator-native-qualification.cleanup.json
+            ${{ runner.temp }}/operator-publication.json
+            ${{ runner.temp }}/operator-proof.json

@@ -54,6 +54,7 @@ podAnnotations:
 # For more information checkout: https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/
 podLabels:
   env: dev
+  service_name: pusher
   # The development Prometheus job keeps this target in the development
   # evidence plane as a second boundary alongside its namespace selector.
 
@@ -116,18 +117,82 @@ envFrom:
 runtimeConfigMapName: dev-omi-backend-config
 
 env:
+  - name: PUSHER_RECORD_CLOSE_NOTIFY_ENABLED
+    value: "false"
+  - name: PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_PERCENT
+    value: "100"
+  - name: PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_UID_SHA256S
+    value: ""
+  - name: PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED
+    value: "true"
+  - name: PUSHER_RECORD_SEAL_WAKE_ENABLED
+    value: "true"
+  - name: EPISODE_COMPOSER_DEFAULT_CONTEXT_ENABLED
+    value: "true"
+  - name: EPISODE_COMPOSER_CONTEXT_ENABLED
+    value: "true"
+  - name: EPISODE_COMPOSER_DETAIL_ENABLED
+    value: "true"
+  - name: EPISODE_COMPOSE_TRANSCRIPT_WAIT_ENABLED
+    value: "true"
+  - name: EPISODE_COMPOSE_TRANSCRIPT_READY_ENABLED
+    value: "true"
+  - name: EPISODE_COMPOSE_SETTLED_TERMINAL_ENABLED
+    value: "true"
+  - name: EPISODE_COMPOSE_ANCHORED_WAIT_ENABLED
+    value: "true"
+  - name: EPISODE_EMPTY_MEMBER_CLEANUP_ENABLED
+    value: "false"
+  - name: HOME_SETTLED_EMPTY_WIRE_ENABLED
+    value: "true"
+  - name: CONVERSATION_NOTES_SCALED_DETAIL_ENABLED
+    value: "true"
+  - name: CONVERSATIONS_V3_STAGE
+    valueFrom:
+      configMapKeyRef: {name: dev-omi-backend-config, key: CONVERSATIONS_V3_STAGE}
+  - name: CONVERSATIONS_V3_FIRST_APP_BUILD
+    valueFrom:
+      configMapKeyRef: {name: dev-omi-backend-config, key: CONVERSATIONS_V3_FIRST_APP_BUILD}
+  - name: RECORD_TOKEN_LEASE_MODE
+    valueFrom:
+      configMapKeyRef: {name: dev-omi-backend-config, key: RECORD_TOKEN_LEASE_MODE}
+  - name: RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT
+    valueFrom:
+      configMapKeyRef: {name: dev-omi-backend-config, key: RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT}
+  - name: RECORD_TOKEN_LEASE_SECONDS
+    valueFrom:
+      configMapKeyRef: {name: dev-omi-backend-config, key: RECORD_TOKEN_LEASE_SECONDS}
+  - name: RECORD_TOKEN_LEASE_DEPLOYED_AT
+    valueFrom:
+      configMapKeyRef: {name: dev-omi-backend-config, key: RECORD_TOKEN_LEASE_DEPLOYED_AT}
   - name: BATCH_PIPELINE_PROJECTION_GHOST_SETTLE_COHORT
     value: "g1"
   # Dev-only canary (lead2 2afa3e, 2026-11-08): 512 MiB byte-budgeted custody admission.
   # Prod stays '0' (off). Rollback: set back to '0'. Gate: dev mem p99 <75% and no kills over 30 min.
   - name: PUSHER_STORAGE_PCM_BUDGET_MB
     value: '512'
+  - name: PROCESSING_ATTENTION_NON_RETRYABLE_EXPIRY_ENABLED
+    value: "true"
+  - name: SYNC_RECORD_COVERAGE_WAIT_MEMO
+    value: "true"
+  - name: SYNC_RECORD_WAIT_MEMO_FIRST
+    value: "true"
+  - name: SYNC_RECORD_DECODE_FAILURE_MEMO
+    value: "true"
   - name: CONVERSATION_TERMINAL_FAMILY_MODE
     value: "on"
   - name: HOME_TRANSCRIPTION_PRESENTATION_GATE
     value: "true"
   - name: HOME_TRANSCRIPTION_DEADLINE_SECONDS
     value: "7200"
+  - name: HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED
+    value: "true"
+  - name: PUSHER_RECORD_SEAL_PENDING_RETRY_BOUND_ENABLED
+    value: "true"
+  - name: HOME_TRANSCRIPTION_MAX_AGE_SECONDS
+    value: "86400"
+  - name: HOME_LIVE_MEMBER_NOTES_BOUNDED_ENABLED
+    value: "true"
   - name: HOME_PROCESSING_MAX_AGE_SECONDS
     value: "21600"
   - name: RECORD_SEAL_OVERLAP_TRIM_ENABLED
@@ -166,6 +231,8 @@ env:
     value: "true"
   - name: SYNC_POLL_BACKOFF_ENABLED
     value: "false"
+  - name: SYNC_POLL_BACKOFF_PERCENT
+    value: "0"
   - name: AUDIO_ARCHIVE_LIVE_ENABLED
     value: "true"
   - name: AUDIO_ARCHIVE_READ_ENABLED
@@ -176,8 +243,6 @@ env:
     value: "false"
   - name: AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED
     value: "false"
-  - name: AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED
-    value: "false"
   - name: AUDIO_ARCHIVE_PERCENT
     value: "0"
   - name: AUDIO_ARCHIVE_STOP_PCM_PERCENT
@@ -185,8 +250,6 @@ env:
   - name: AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT
     value: "0"
   - name: BUCKET_AUDIO_DERIVED
-    value: ""
-  - name: AUDIO_MERGE_WORKER_URL
     value: ""
   # Public client token for v2 cohort reads only; shared backend PostHog stays disabled.
   - name: PROACTIVITY_V2_POSTHOG_TOKEN
@@ -282,8 +345,6 @@ env:
   # existing v1 sessions and resumed v1 conversations are unaffected.
   - name: AUDIO_TIMELINE_V2
     value: "true"
-  - name: LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION
-    value: 'false'
   - name: LIVE_CAPTURE_WINDOW_MERGE_UNION
     value: 'false'
   - name: LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS
@@ -466,6 +527,8 @@ env:
     value: "http://parakeet.omiapi.com"
   - name: STT_PRERECORDED_MODEL
     value: "parakeet,modulate-velma-2"
+  - name: PRERECORDED_SONIOX_FAILOVER_ENABLED
+    value: "true"
   - name: STT_SERVICE_MODELS
     value: "modulate-velma-2,soniox"
   - name: STRIPE_UNLIMITED_MONTHLY_PRICE_ID

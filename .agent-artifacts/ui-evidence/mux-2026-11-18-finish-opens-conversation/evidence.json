@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-finish-opens-conversation.png",
+      "platform": "mobile-ios",
+      "description": "Live page, then Finish on main (back to the list, the conversation is not there) vs this branch (Processing conversation, then the conversation with its summary, then Back to Home with it as the top row). Simulator, seeded v3 recording and derived conversation.",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "002-mobile-ios-finish-dark-and-largest-text.png",
+      "platform": "mobile-ios",
+      "description": "This branch: the Processing state and the conversation it turns into, dark appearance and the largest accessibility text size.",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "003-mobile-ios-finish-processing-expired.png",
+      "platform": "mobile-ios",
+      "description": "This branch: when the wait runs out (shortened with a debug-only define), the page says it is still processing and will appear on Home, with Back to Home; light, dark, largest text, and Home after the tap.",
+      "captured_by": "agent",
+      "source": "screencapture"
+    }
+  ]
+}

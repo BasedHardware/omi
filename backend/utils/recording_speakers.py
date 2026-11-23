@@ -5,6 +5,7 @@ origin/session queries. Completeness requires creation-time index provenance;
 later index repairs cannot certify a legacy lineage. No migration is needed.
 """
 
+from utils.conversations.layer import read_product as read_product_conversation
 from datetime import datetime, timezone
 
 from config.recording_speakers import MAX_SCOPES, MAX_MEMBERS, SCOPE_INDEX_AT_CREATION_FIELD, check_budget, enabled
@@ -25,7 +26,7 @@ def _current_conversation(uid, conversation_id):
     seen = set()
     while conversation_id not in seen and len(seen) < 16:
         seen.add(conversation_id)
-        row = conversations_db.get_conversation(uid, conversation_id)
+        row = read_product_conversation(conversations_db.get_conversation, uid, conversation_id)
         if not row:
             break
         if not row.get('deleted'):
@@ -41,6 +42,15 @@ def _current_conversation(uid, conversation_id):
 def members(uid, conversation_id, *, episode_id=None, extra_scopes=()):
     anchor = _current_conversation(uid, conversation_id)
     conversation_id = anchor['id']
+    if anchor.get('v3_derived') is True:
+        if anchor.get('is_locked'):
+            raise PermissionError('Conversation is locked')
+        if episode_id:
+            raise ValueError('Conversation is no longer in this recording')
+        # Source scopes can span several product windows. The copy already owns
+        # exactly the speech that its transcript and speaker picker may expose.
+        check_budget(1, len(anchor.get('transcript_segments') or []))
+        return None, [dict(anchor, transcript_segments=assignment_segments(anchor))], 'complete'
     if not enabled():
         return None, [dict(anchor, transcript_segments=assignment_segments(anchor))], 'partial'
     episode = (
@@ -69,7 +79,13 @@ def members(uid, conversation_id, *, episode_id=None, extra_scopes=()):
         rows = [
             dict(row, id=cid)
             for cid in ids
-            if (row := (anchor if cid == conversation_id else conversations_db.get_conversation(uid, cid)))
+            if (
+                row := (
+                    anchor
+                    if cid == conversation_id
+                    else read_product_conversation(conversations_db.get_conversation, uid, cid)
+                )
+            )
         ]
     elif scopes:
         indexed = set(scope_conversation_ids(uid, scopes))
@@ -81,7 +97,11 @@ def members(uid, conversation_id, *, episode_id=None, extra_scopes=()):
         # Indexed membership is necessary but insufficient: old renames may
         # have indexed only c0/c2 while leaving an invisible c1 behind.
         coverage = 'complete' if set(ids) <= indexed else 'partial'
-        rows = [dict(row, id=cid) for cid in ids if (row := conversations_db.get_conversation(uid, cid))]
+        rows = [
+            dict(row, id=cid)
+            for cid in ids
+            if (row := read_product_conversation(conversations_db.get_conversation, uid, cid))
+        ]
     else:
         ids, rows = [conversation_id], [anchor]
     check_budget(len(ids), sum(len(row.get('transcript_segments') or []) for row in rows))

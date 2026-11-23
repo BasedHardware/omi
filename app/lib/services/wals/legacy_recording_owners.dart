@@ -23,6 +23,10 @@ class LegacyRecordingOwners {
 
   Future<String?> resolve(File file, String name, String uid, {required int timerStart}) async {
     if (corruptModified != null) {
+      if (!await file.exists()) {
+        nativeCustodyObserved(NativeCustodyObservedOutcome.legacyOwnersDeferred);
+        return null;
+      }
       // Native timestamp is creation time; also require newer file metadata.
       final modified = (await file.stat()).modified;
       if (timerStart * 1000 <= corruptModified!.millisecondsSinceEpoch || !modified.isAfter(corruptModified!)) {
@@ -30,6 +34,9 @@ class LegacyRecordingOwners {
         return null;
       }
     }
-    return stamps[name] ?? uid;
+    final stamped = stamps[name];
+    if (stamped != null) return stamped.isEmpty ? null : stamped;
+    if (!await file.exists()) return null;
+    return uid;
   }
 }

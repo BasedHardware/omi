@@ -18,6 +18,26 @@ def test_spaces_policies_declare_auth_byok_validation():
     assert all(route['policy']['byok'] == 'validated_when_headers_present' for route in spaces)
 
 
+def test_app_review_lifecycle_routes_have_scoped_auth_and_billing_policy():
+    manifest = inventory.load_manifest(Path(__file__).parents[2] / 'route_policy_manifest.yaml')
+    policies = {route['path']: route['policy'] for route in manifest['routes']}
+
+    submission = policies['/v2/internal/app-review-config/submissions']
+    assert submission['auth'] == {
+        'mechanisms': ['codemagic_submission_token'],
+        'placement': 'handler',
+        'scopes': [],
+    }
+    assert submission['surface'] == 'internal_task'
+    assert submission['visibility'] == 'internal'
+    assert submission['data_domain'] == 'billing'
+
+    sweep = policies['/v2/app-review-config/sweep']
+    assert sweep['auth']['mechanisms'] == ['service_oidc']
+    assert sweep['timeout_class'] == 'sync_job'
+    assert sweep['data_domain'] == 'billing'
+
+
 def _policy(**overrides):
     policy = {
         'review_status': 'reviewed',

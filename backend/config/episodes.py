@@ -45,13 +45,32 @@ HOME_HIDE_BELOW_FLOOR_ROWS_ENV = 'HOME_HIDE_BELOW_FLOOR_ROWS'
 HOME_HIDE_EPISODE_MEMBERS_ENV = 'HOME_HIDE_EPISODE_MEMBERS'
 HOME_NEUTRAL_MINIMUM_TITLES_ENV = 'HOME_NEUTRAL_MINIMUM_TITLES'
 HOME_TRANSCRIPTION_PRESENTATION_GATE_ENV = 'HOME_TRANSCRIPTION_PRESENTATION_GATE'
+HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED_ENV = 'HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED'
+DEFAULT_HOME_TRANSCRIPTION_MAX_AGE_SECONDS = 86400
 HOME_STEP_PROJECTION_ENV = 'HOME_STEP_PROJECTION'
+HOME_EMPTY_OUTPUT_NOISE_ENV = 'HOME_EMPTY_OUTPUT_NOISE'
 HOME_PROCESSING_MAX_AGE_SECONDS_ENV = 'HOME_PROCESSING_MAX_AGE_SECONDS'
 DEFAULT_HOME_PROCESSING_MAX_AGE_SECONDS = 21600
 EPISODE_CARRY_ON_SESSION_END_ENV = 'EPISODE_CARRY_ON_SESSION_END'
 EPISODE_MOMENT_OUTPUT_VALIDATOR_ENV = 'EPISODE_MOMENT_OUTPUT_VALIDATOR'
+EPISODE_COMPOSER_THRIFT_ENV = 'EPISODE_COMPOSER_THRIFT'
 EPISODE_COMPOSER_ENV = 'EPISODE_COMPOSER'
+EPISODE_COMPOSER_CONTEXT_ENV = 'EPISODE_COMPOSER_CONTEXT_ENABLED'
+EPISODE_COMPOSER_DETAIL_ENV = 'EPISODE_COMPOSER_DETAIL_ENABLED'
+EPISODE_COMPOSE_TRANSCRIPT_WAIT_ENV = 'EPISODE_COMPOSE_TRANSCRIPT_WAIT_ENABLED'
+EPISODE_COMPOSE_TRANSCRIPT_READY_ENV = 'EPISODE_COMPOSE_TRANSCRIPT_READY_ENABLED'
 EPISODE_COMPOSE_SETTLE_ENABLED_ENV = 'EPISODE_COMPOSE_SETTLE_ENABLED'
+EPISODE_COMPOSE_LATE_ATTACH_ENABLED_ENV = 'EPISODE_COMPOSE_LATE_ATTACH_ENABLED'
+
+
+EPISODE_LATE_COMPOSE_AFTER_HOURS_ENV = 'EPISODE_LATE_COMPOSE_AFTER_HOURS'
+EPISODE_LATE_COMPOSE_GRACE_HOURS_ENV = 'EPISODE_LATE_COMPOSE_GRACE_HOURS'
+# A recording repaired or synced more than this long after capture is "late": it
+# composes when its page is first opened, not at finalize.
+DEFAULT_LATE_COMPOSE_AFTER_HOURS = 48.0
+# The read-side safety net still composes a deferred episode after this long, so a
+# client that never opens the page cannot leave notes unwritten forever.
+DEFAULT_LATE_COMPOSE_GRACE_HOURS = 168.0
 _DEFAULT_CLIENT_CHANNELS = frozenset({'beta'})
 _ON = frozenset({'true', 'on', '1', 'yes'})
 
@@ -106,6 +125,11 @@ def home_step_projection_enabled() -> bool:
     return modes_default_on(HOME_STEP_PROJECTION_ENV)
 
 
+def home_empty_output_noise_enabled() -> bool:
+    """Default-on: no-output terminal summaries are noise regardless of title provenance."""
+    return modes_default_on(HOME_EMPTY_OUTPUT_NOISE_ENV)
+
+
 def home_processing_max_age_seconds() -> int | None:
     """6h by default; None tells the reader to count invalid config and use 6h.
 
@@ -122,6 +146,23 @@ def home_processing_max_age_seconds() -> int | None:
 def home_transcription_presentation_gate_enabled() -> bool:
     """Default-on batch transcription presentation; off restores stored status/title."""
     return modes_default_on(HOME_TRANSCRIPTION_PRESENTATION_GATE_ENV)
+
+
+def home_transcription_queue_hold_enabled() -> bool:
+    """Keep queued captures transcribing up to the read-time bound; off restores stamped deadlines."""
+    return modes_default_on(HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED_ENV)
+
+
+def home_transcription_max_age_seconds() -> int:
+    """24h per revision from pending, else deadline minus its interval, else creation.
+
+    Reads never renew it; invalid/nonpositive values keep the default bound.
+    """
+    try:
+        seconds = int(os.getenv('HOME_TRANSCRIPTION_MAX_AGE_SECONDS', str(DEFAULT_HOME_TRANSCRIPTION_MAX_AGE_SECONDS)))
+    except ValueError:
+        return DEFAULT_HOME_TRANSCRIPTION_MAX_AGE_SECONDS
+    return seconds if seconds > 0 else DEFAULT_HOME_TRANSCRIPTION_MAX_AGE_SECONDS
 
 
 def home_transcription_deadline_seconds() -> int:
@@ -156,9 +197,95 @@ def episode_composer_enabled() -> bool:
     return modes_default_on(EPISODE_COMPOSER_ENV)
 
 
+def episode_composer_context_enabled() -> bool:
+    return modes_default_on(EPISODE_COMPOSER_CONTEXT_ENV)
+
+
+def episode_composer_detail_enabled() -> bool:
+    return modes_default_on(EPISODE_COMPOSER_DETAIL_ENV)
+
+
+def episode_compose_transcript_wait_enabled() -> bool:
+    return modes_default_on(EPISODE_COMPOSE_TRANSCRIPT_WAIT_ENV)
+
+
+def episode_compose_transcript_ready_enabled() -> bool:
+    return modes_default_on(EPISODE_COMPOSE_TRANSCRIPT_READY_ENV)
+
+
+def episode_compose_transcript_wait_seconds() -> float:
+    """A fixed deadline from the member's pending stamp; reads never renew it."""
+    try:
+        return max(0.0, min(float(os.getenv('EPISODE_COMPOSE_TRANSCRIPT_WAIT_SECONDS', '1200')), 86400.0))
+    except ValueError:
+        return 1200.0
+
+
 def episode_compose_settle_enabled() -> bool:
     """Default-on cost control; off restores the original trigger and retry behavior."""
     return modes_default_on(EPISODE_COMPOSE_SETTLE_ENABLED_ENV)
+
+
+def episode_compose_late_attach_enabled() -> bool:
+    """Default-on: a member that joins an already-composed closed episode re-arms its compose.
+
+    Its own switch, not ``EPISODE_COMPOSER_THRIFT``: turning the THRIFT cost
+    controls off must not silently restore the class-7 gap where a late member's
+    notes never reach the composed summary. Off restores the previous attach
+    behavior, where only a member finalize or a Home read could notice the member.
+    """
+    return modes_default_on(EPISODE_COMPOSE_LATE_ATTACH_ENABLED_ENV)
+
+
+def episode_compose_keep_paid_enabled() -> bool:
+    """Default-on: keep paid composes instead of discarding them.
+
+    On, a parse failure gets one repair retry over the bad output alone, a short
+    episode may ship a title and lede with no chapters, a superseded result is
+    stored and the episode marked pending, and paid failures stop at two per
+    evidence. Off restores the previous discard-and-retry behavior and the
+    four-failure cap.
+    """
+    return modes_default_on(EPISODE_COMPOSER_THRIFT_ENV)
+
+
+def episode_single_member_compose_enabled() -> bool:
+    """Default-on: a one-conversation episode is built from that conversation's notes in code.
+
+    Off restores the paid composer for single-member episodes. The shortcut never
+    calls a model, so it has no lease, backoff or settle window.
+    """
+    return modes_default_on(EPISODE_COMPOSER_THRIFT_ENV)
+
+
+def episode_late_compose_enabled() -> bool:
+    """Default-on: a late episode composes on its first open instead of at finalize.
+
+    Off restores today's behavior: every closed episode composes as soon as its
+    members finish, however old the capture is.
+    """
+    return modes_default_on(EPISODE_COMPOSER_THRIFT_ENV)
+
+
+def _positive_hours(name: str, default: float) -> float:
+    """A positive hour count; invalid, non-finite or nonpositive values use the default."""
+    try:
+        hours = float(os.getenv(name, str(default)))
+    except ValueError:
+        return default
+    if hours != hours or hours in (float('inf'), float('-inf')) or hours <= 0:
+        return default
+    return hours
+
+
+def episode_late_compose_after_hours() -> float:
+    """48h by default: capture age at finalize above which a compose waits for the first open."""
+    return _positive_hours(EPISODE_LATE_COMPOSE_AFTER_HOURS_ENV, DEFAULT_LATE_COMPOSE_AFTER_HOURS)
+
+
+def episode_late_compose_grace_hours() -> float:
+    """7 days by default: how long a deferred episode may wait before a read composes it anyway."""
+    return _positive_hours(EPISODE_LATE_COMPOSE_GRACE_HOURS_ENV, DEFAULT_LATE_COMPOSE_GRACE_HOURS)
 
 
 def client_channel_admitted(raw: str | None) -> bool:
@@ -302,7 +429,19 @@ COMPOSER_TIMEOUT_SECONDS = 90.0
 # About 60k tokens. With the 4h episode cap almost every episode fits whole; beyond it the
 # densest 10-minute windows are kept in time order.
 COMPOSER_MAX_TRANSCRIPT_CHARS = 240_000
-COMPOSER_MAX_CHAPTERS = 8
+COMPOSER_MAX_CHAPTERS = 8  # Legacy ceiling when scaled detail is disabled.
+COMPOSER_DETAIL_MAX_CHAPTERS = 20  # Below the existing 48-moment storage ceiling.
+COMPOSER_DETAIL_WORDS_PER_CHAPTER = 2000
+COMPOSER_DETAIL_MIN_WORDS = 100
+COMPOSER_DETAIL_MAX_WORDS = 3500
+COMPOSER_DETAIL_WORD_RATIO = 0.10
+COMPOSER_DETAIL_WORDS_PER_MINUTE = 125
+# At most 4500 background tokens total; one bounded semantic-memory search per compose.
+COMPOSER_MEMORY_TOKENS = 3500
+COMPOSER_PROFILE_TOKENS = 1000
+COMPOSER_MEMORY_QUERY_TOKENS = 1000
+COMPOSER_CONTEXT_TIMEOUT_SECONDS = 8.0
+COMPOSER_CONTEXT_MAX_READS = 640
 # Read-side safety net: at most this many closed, uncomposed episodes queued per list read.
 COMPOSER_MAX_SCHEDULED_PER_READ = 2
 # A read-side caller re-queues the same episode at most this often per process.
@@ -310,14 +449,27 @@ COMPOSER_READ_THROTTLE_SECONDS = 600
 # The per-conversation lookup runs once per Home row: cap the distinct episodes it queues per user
 # per throttle window, per process.
 COMPOSER_LOOKUP_SCHEDULES_PER_WINDOW = 4
-# One paid call per evidence across replicas: the claim outlives the model call (90 s x 2 attempts).
-COMPOSER_LEASE_SECONDS = 240
-COMPOSER_SETTLE_SECONDS = 10 * 60
-COMPOSER_MAX_SETTLE_SECONDS = 25 * 60
+# Every logical turn permits two 90s provider attempts plus 30s retry/processing
+# headroom. The lease covers all permitted turns plus a final-write margin.
+COMPOSER_MAX_PAID_TURNS = 2  # initial + optional repair; L9 extends this bound
+COMPOSER_CALL_BUDGET_SECONDS = COMPOSER_TIMEOUT_SECONDS * 2 + 30
+COMPOSER_LEASE_SECONDS = COMPOSER_MAX_PAID_TURNS * COMPOSER_CALL_BUDGET_SECONDS + 60
+# Quiet time after the last evidence change before a background compose, and the cap since the
+# first pending change. A closed episode already waits for every member's transcript before it
+# may compose, so the quiet window only coalesces late note refreshes. At ten minutes it was the
+# largest single wait between a recording ending and its row on Home (median 599 s, 2026-11-15).
+COMPOSER_SETTLE_SECONDS = 2 * 60
+COMPOSER_MAX_SETTLE_SECONDS = 5 * 60
 # After a failed paid attempt the read-side net backs off 10, 20, 40 min, then stops until
 # the evidence changes (a member finalize still composes).
 COMPOSER_RETRY_MINUTES = 10
 COMPOSER_MAX_FAILURES = 4
+# With EPISODE_COMPOSER_THRIFT on, one attempt plus one repair retry is the whole budget:
+# a third paid failure on the same evidence cannot produce a different result.
+COMPOSER_MAX_PAID_FAILURES = 2
+# A short episode (at most this much recorded member time) may ship a title and lede with
+# no chapters: the lede is the page, and a sectionless reply is not a failed compose.
+COMPOSER_SHORT_EPISODE_SECONDS = 15 * 60
 # Wire budget per composed paragraph (to_wire serves bullets up to this length).
 COMPOSER_MAX_PARAGRAPH_CHARS = 1200
 # A composed moment's points (each with a few supporting details) are the episode page's sections.

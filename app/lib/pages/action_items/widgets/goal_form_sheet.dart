@@ -8,7 +8,9 @@ import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
 /// What the goal sheet saves.
-typedef GoalSaveCallback = FutureOr<void> Function(String title, double current, double target, String? emoji);
+/// Saves the goal; resolves false when the save failed, and the sheet then stays open with what the
+/// reader typed (ux-contract §17.3).
+typedef GoalSaveCallback = FutureOr<bool> Function(String title, double current, double target, String? emoji);
 
 /// Opens the one goal sheet (Home and the Tasks page share it): a new goal, or [goal] for editing.
 /// Cancel and Save are explicit, unsaved edits are guarded, and Delete (edit mode) is immediate
@@ -50,7 +52,20 @@ Future<void> deleteGoalWithUndo(
   );
   if (undone) return;
   final deleted = await provider.commitStagedGoalDelete(goal.id);
-  if (deleted) onDeleted?.call();
+  if (deleted) {
+    onDeleted?.call();
+    return;
+  }
+  // The goal is back in the list; say why, where the reader is looking (ux-contract §17.4).
+  if (!context.mounted) return;
+  OmiFeedback.error(
+    context,
+    context.l10n.goalDeleteFailed,
+    actionLabel: context.l10n.tryAgain,
+    onAction: () {
+      if (context.mounted) unawaited(deleteGoalWithUndo(context, provider, goal, onDeleted: onDeleted));
+    },
+  );
 }
 
 class GoalFormSheet extends StatefulWidget {
@@ -118,13 +133,34 @@ class _GoalFormSheetState extends State<GoalFormSheet> {
       _targetController.text.trim() != _initialTarget ||
       _emoji != widget.initialEmoji;
 
-  void _save() {
+  bool _saving = false;
+  bool _saveFailed = false;
+
+  /// The sheet closes once the save succeeded. A failed save keeps it open with what the reader
+  /// typed and says so, with Try Again (ux-contract §17.3).
+  Future<void> _save() async {
     final title = _titleController.text.trim();
-    if (title.isEmpty) return;
+    if (title.isEmpty || _saving) return;
     final current = double.tryParse(_currentController.text) ?? widget.goal?.currentValue ?? 0;
     final target = double.tryParse(_targetController.text) ?? widget.goal?.targetValue ?? 100;
-    Navigator.pop(context);
-    widget.onSave(title, current, target, _emoji);
+    setState(() {
+      _saving = true;
+      _saveFailed = false;
+    });
+    var saved = false;
+    try {
+      saved = await widget.onSave(title, current, target, _emoji);
+    } catch (_) {
+      saved = false;
+    }
+    if (!mounted) return;
+    setState(() {
+      _saving = false;
+      _saveFailed = !saved;
+    });
+    if (saved) Navigator.pop(context);
+    // A failed save is said inside the sheet: a toast on the page's messenger sits under this modal
+    // route, where the reader cannot see it (ux-contract §17).
   }
 
   void _delete() {
@@ -225,6 +261,12 @@ class _GoalFormSheetState extends State<GoalFormSheet> {
                 Expanded(child: _field(l10n.target, _targetController, number: true)),
               ],
             ),
+            if (_saveFailed)
+              OmiPartialNotice(
+                key: const Key('goal_save_failed'),
+                message: l10n.goalSaveFailed,
+                onRetry: _save,
+              ),
             const SizedBox(height: OmiSpacing.xl),
             Row(
               children: [
@@ -237,6 +279,7 @@ class _GoalFormSheetState extends State<GoalFormSheet> {
                     key: const Key('goal_save_button'),
                     label: _isEditing ? l10n.save : l10n.addGoal,
                     expand: true,
+                    isLoading: _saving,
                     onPressed: _titleController.text.trim().isEmpty ? null : _save,
                   ),
                 ),

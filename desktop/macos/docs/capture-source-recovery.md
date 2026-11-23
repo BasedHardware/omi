@@ -1,5 +1,32 @@
 # Desktop capture source recovery
 
+## Screen capture intent across sync
+
+`SettingsSyncManager.setUserScreenAnalysisEnabled` records this Mac's explicit
+choice before publishing the settings notification. Onboarding Skip uses the
+same owner without sending a request before onboarding completes. A local off
+survives remote on values and the startup default-repair migrations; only an
+explicit local on releases it. Existing installations without the hold marker
+conservatively preserve a stored off before their first hydration or repair.
+Old local and remote off values were indistinguishable, so both are preserved
+until a local on. Newly received remote off values do not create a local veto.
+
+Normal user toggles push only `shared.screen_analysis_enabled`. This is an
+account-wide value: another Mac without a local veto adopts it. A Mac that
+explicitly turned capture off rejects an account-wide on. Failed uploads do not
+undo local off. Named lazy-permission bundles keep their existing local-only
+sync behavior; this patch changes neither TCC nor screen-capture drivers.
+
+Verification checklist for #25132:
+- [x] Pre-upgrade off survives hydration, persisted reread and startup repair
+- [x] Onboarding Skip survives sync; a later Allow releases the hold
+- [x] Remote off/on remains authoritative without a local veto
+- [x] Settings HTTP round trip and two-client state sequence with a synthetic server
+- [ ] Current follow-up commit CI
+
+Tests use production settings owners and synthetic transport; they do not prove
+physical screen capture or two real Macs. Customer release confirmation is separate.
+
 ## Ownership and scope
 
 `AppState` owns the recording session, conversation and capture attempt. The

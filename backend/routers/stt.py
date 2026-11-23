@@ -20,6 +20,7 @@ from typing import BinaryIO
 
 import httpx
 from config.live_stt_gpu_fleet import gpu_fleet_off
+from utils.stt.allowance_session import operation as allowance_operation, current as current_allowance_operation
 from utils.stt.proxy_vendor import vendor_proxy_payload
 from utils.stt.modulate_batch import ModulateBatchError
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
@@ -134,6 +135,7 @@ def _safe_upstream_filename(filename) -> str:
 
 
 @router.post('/v1/stt/transcribe', tags=['stt'])
+@allowance_operation('one_shot', live=False)
 async def stt_transcribe(
     request: Request,
     file: UploadFile = File(...),
@@ -181,6 +183,9 @@ async def stt_transcribe(
     except OSError:
         raise HTTPException(status_code=503, detail='Audio duration probe unavailable') from None
     await file.seek(0)
+    allowance_scope = current_allowance_operation.get()
+    if allowance_scope is not None:
+        allowance_scope.seconds = seconds
     source = request.headers.get('x-app-platform')
     await _admit(uid, source, seconds)
 
@@ -194,6 +199,7 @@ async def stt_transcribe(
         logger.warning(f'stt_transcribe: no upstream slot within {_UPSTREAM_WAIT_SECS}s uid={uid}')
         raise HTTPException(status_code=503, detail='Transcription service busy — try again shortly')
 
+    transcription_completed = False
     try:
         # Initial admission precedes the slot. Recheck after queueing so
         # stale admissions cannot escape the in-flight accounting bound.
@@ -209,6 +215,12 @@ async def stt_transcribe(
             del audio_bytes
             raise HTTPException(status_code=413, detail=f'Body too large (max {_MAX_UPLOAD_BYTES} bytes)')
 
+        from utils.stt.allowance_watch import observe_async
+
+        if allowance_scope is not None:
+            await allowance_scope.reserve_async(provider)
+        else:
+            await observe_async(uid, 'one_shot', provider, seconds)
         if retired:
             try:
                 payload = await vendor_proxy_payload(
@@ -268,6 +280,7 @@ async def stt_transcribe(
                 logger.error(f'stt_transcribe: parakeet returned non-JSON success body uid={uid}')
                 raise HTTPException(status_code=502, detail='Transcription upstream returned an invalid response')
 
+        transcription_completed = True
         # Keep completed-but-unaccounted calls inside the four-slot bound too.
         # This is not a distributed monthly-quota reservation.
         try:
@@ -286,3 +299,8 @@ async def stt_transcribe(
         return payload
     finally:
         semaphore.release()
+        if allowance_scope is not None and not transcription_completed:
+            # A failed transcript has no usage charge. Completed transcripts
+            # with an uncertain billing write retain their hold for reconciliation.
+            allowance_scope.closed = True
+            await run_blocking(db_executor, allowance_scope.billed, 0)

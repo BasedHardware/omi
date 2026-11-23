@@ -20,7 +20,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "(((max(omi_batch_timeliness_backlog_units{leg=\"assignment_held\"} and ignoring(leg) ((time() - omi_batch_timeliness_observed_at_seconds) < 900)) > 1000) and on() (delta((max(omi_batch_timeliness_backlog_units{leg=\"assignment_held\"} and ignoring(leg) ((time() - omi_batch_timeliness_observed_at_seconds) < 900)))[1h:5m]) > 50)) or (max(omi_batch_timeliness_backlog_units{leg=\"assignment_held\"} and ignoring(leg) ((time() - omi_batch_timeliness_observed_at_seconds) < 900)) >= 10000) or on() vector(0))",
+          "expr": "(((max(omi_batch_timeliness_backlog_units{leg=\"assignment_held\"} and ignoring(leg) ((max_over_time(omi_batch_timeliness_observed_at_seconds[20m]) == scalar(max(max_over_time(omi_batch_timeliness_observed_at_seconds[20m])))) and (time() - max_over_time(omi_batch_timeliness_observed_at_seconds[20m]) < 1200))) > 1000) and on() (delta((max(omi_batch_timeliness_backlog_units{leg=\"assignment_held\"} and ignoring(leg) ((max_over_time(omi_batch_timeliness_observed_at_seconds[20m]) == scalar(max(max_over_time(omi_batch_timeliness_observed_at_seconds[20m])))) and (time() - max_over_time(omi_batch_timeliness_observed_at_seconds[20m]) < 1200))))[1h:5m]) > 50)) or (max(omi_batch_timeliness_backlog_units{leg=\"assignment_held\"} and ignoring(leg) ((max_over_time(omi_batch_timeliness_observed_at_seconds[20m]) == scalar(max(max_over_time(omi_batch_timeliness_observed_at_seconds[20m])))) and (time() - max_over_time(omi_batch_timeliness_observed_at_seconds[20m]) < 1200))) >= 10000) or on() vector(0))",
           "instant": true,
           "intervalMs": 1000,
           "maxDataPoints": 43200,
@@ -104,7 +104,7 @@
       "scope": "Fleet-max pre-epoch assignment_held stock: growth below the 10000 count cap, or stock at/above it; fresh samples only.",
       "verification": "Run the exact query in this rule on its declared datasource and compare sample freshness and the replay coverage in the runbook.",
       "safe_next_action": "Inspect assignment/projection recovery and the aggregate batch custody census. At 10000 the bounded count means at least 10000, not measured growth; repair the held leg and drain below the cap without deleting audio.",
-      "threshold": "(Stock >1000 AND 1h growth >50) OR stock >=10000, with sample age <900s for 15m. Saturation is actionable stock, not proof of growth; a capped flat series must keep paging. Lever 0 reports exact stock and keeps the same >=10000 condition. Normal control is synthetic, not a claimed healthy day.",
+      "threshold": "(Stock >1000 AND 1h growth >50) OR stock >=10000, with sample age <1200s for 15m. Saturation is actionable stock, not proof of growth; a capped flat series must keep paging. Lever 0 reports exact stock and keeps the same >=10000 condition. Normal control is synthetic, not a claimed healthy day.",
       "runbook": "backend/charts/monitoring/critical-failures.md"
     },
     "labels": {

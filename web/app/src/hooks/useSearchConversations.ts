@@ -13,6 +13,7 @@ interface UseSearchConversationsReturn {
   search: (query: string) => Promise<void>;
   loadMore: () => Promise<void>;
   clear: () => void;
+  replaceConversation: (conversation: Conversation) => void;
 }
 
 export function useSearchConversations(): UseSearchConversationsReturn {
@@ -22,6 +23,7 @@ export function useSearchConversations(): UseSearchConversationsReturn {
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(0);
   const currentQueryRef = useRef<string>('');
+  const replacementGeneration = useRef(0);
 
   const search = useCallback(async (query: string) => {
     // Don't search if query is empty
@@ -37,6 +39,7 @@ export function useSearchConversations(): UseSearchConversationsReturn {
     setLoading(true);
     setError(null);
 
+    const generation = replacementGeneration.current;
     try {
       const response = await searchConversationsApi({
         query,
@@ -44,6 +47,7 @@ export function useSearchConversations(): UseSearchConversationsReturn {
         perPage: 20,
       });
 
+      if (generation !== replacementGeneration.current) return;
       setResults(response.items);
       setCurrentPage(response.current_page);
       setTotalPages(response.total_pages);
@@ -63,6 +67,7 @@ export function useSearchConversations(): UseSearchConversationsReturn {
     setLoading(true);
     setError(null);
 
+    const generation = replacementGeneration.current;
     try {
       const response = await searchConversationsApi({
         query: currentQueryRef.current,
@@ -70,6 +75,7 @@ export function useSearchConversations(): UseSearchConversationsReturn {
         perPage: 20,
       });
 
+      if (generation !== replacementGeneration.current) return;
       setResults((prev) => [...prev, ...response.items]);
       setCurrentPage(response.current_page);
       setTotalPages(response.total_pages);
@@ -89,6 +95,11 @@ export function useSearchConversations(): UseSearchConversationsReturn {
     currentQueryRef.current = '';
   }, []);
 
+  const replaceConversation = useCallback((updated: Conversation) => {
+    replacementGeneration.current += 1;
+    setResults((rows) => rows.map((row) => (row.id === updated.id ? updated : row)));
+  }, []);
+
   return {
     results,
     loading,
@@ -98,5 +109,6 @@ export function useSearchConversations(): UseSearchConversationsReturn {
     search,
     loadMore,
     clear,
+    replaceConversation,
   };
 }

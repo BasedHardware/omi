@@ -3,7 +3,7 @@ from urllib.parse import unquote
 
 from fastapi.testclient import TestClient
 
-from main import _subject_slug, app
+from main import _clean_text, _description_text, _subject_slug, _work_id, app
 
 
 def test_subject_slug_ascii():
@@ -101,3 +101,56 @@ def test_search_subject_missing_subject():
     resp = client.post("/tools/search_subject", json={"subject": "   "})
     assert resp.status_code == 200
     assert resp.json()["error"] == "Provide a subject to browse."
+
+
+def test_work_id_accepts_slug_urls_and_rejects_other_keys():
+    assert _work_id("OL45883W") == "OL45883W"
+    assert _work_id("ol45883w") == "OL45883W"
+    assert _work_id("works/OL45883W") == "OL45883W"
+    assert _work_id("/works/OL45883W/The_Adventures_of_Tom_Sawyer") == "OL45883W"
+    assert _work_id("https://openlibrary.org/works/OL45883W/The_Adventures_of_Tom_Sawyer") == "OL45883W"
+    assert _work_id("https://openlibrary.org/works/OL45883W.json") == "OL45883W"
+    assert _work_id("OL45883M") is None
+    assert _work_id("see OL45883W in the notes") is None
+    assert _work_id(None) is None
+    assert _work_id("") is None
+
+
+def test_description_keeps_paragraphs_and_titles_stay_flat():
+    assert _description_text("First paragraph.\n\nSecond paragraph.") == "First paragraph.\n\nSecond paragraph."
+    assert _description_text("<p>First paragraph.</p><p>Second paragraph.</p>") == "First paragraph.\nSecond paragraph."
+    assert _description_text({"type": "/type/text", "value": "One.\n\nTwo."}) == "One.\n\nTwo."
+    assert _clean_text("First paragraph.\n\nSecond paragraph.") == "First paragraph. Second paragraph."
+
+
+def test_slug_url_fetches_the_work_and_keeps_description_lines():
+    client = TestClient(app)
+    with patch("main._request_json", new_callable=AsyncMock) as mock_req:
+        mock_req.return_value = {
+            "title": "The Adventures of Tom Sawyer",
+            "description": "First paragraph.\n\nSecond paragraph.",
+            "subjects": ["Fiction"],
+        }
+        resp = client.post(
+            "/tools/get_book_details",
+            json={"work_id": "https://openlibrary.org/works/OL45883W/The_Adventures_of_Tom_Sawyer"},
+        )
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["error"] is None
+    assert "Open Library work: OL45883W" in body["result"]
+    assert "First paragraph.\n\nSecond paragraph." in body["result"]
+    assert "First paragraph. Second paragraph." not in body["result"]
+    mock_req.assert_awaited_once()
+    assert mock_req.await_args[0][0] == "/works/OL45883W.json"
+
+
+def test_non_work_id_does_not_call_open_library():
+    client = TestClient(app)
+    with patch("main._request_json", new_callable=AsyncMock) as mock_req:
+        resp = client.post("/tools/get_book_details", json={"work_id": "OL45883M"})
+
+    assert resp.status_code == 200
+    assert resp.json()["error"] == "Provide a valid Open Library work_id like OL45883W or an ISBN."
+    mock_req.assert_not_awaited()

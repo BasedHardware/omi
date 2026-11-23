@@ -16,6 +16,8 @@ from utils import manual_speaker_assignments  # noqa: F401 - retain pure policy 
 from utils.stt import speaker_identity  # noqa: F401 - retain allocator across legacy package stubs
 from utils.stt import sync_speaker_evidence  # noqa: F401 - retain pure evidence policy across legacy package stubs
 from utils.stt import voiceprints  # noqa: F401 - retain pure voiceprint policy across legacy package stubs
+from utils.stt import allowance_session  # noqa: F401 - retain operation scopes across legacy package stubs
+from utils.stt import allowance_watch  # noqa: F401 - retain observer metrics across legacy package stubs
 from utils.observability import speaker_identification  # noqa: F401 - retain telemetry across legacy package stubs
 from utils.observability import sync_phases  # noqa: F401 - retain aggregate telemetry across legacy package stubs
 from config.sync_telemetry import SyncFailureReason
@@ -1325,6 +1327,11 @@ def _load_sync_router_for_fast_path():
     sys.modules['utils.conversations.deterministic_minimum'] = MagicMock()
 
     sys.modules['utils'].__path__ = []
+    # The upload-time unlimited_v2 backfill day cap defaults off; a bare MagicMock
+    # attribute would read as enabled and defer every historical upload.
+    sys.modules['utils'].backfill_hours_cap = types.SimpleNamespace(
+        cap_enabled=lambda: False, defers_upload=lambda *_a, **_k: False
+    )
     # These tests exercise Cloud Tasks dispatch, not voiceprint acquisition.
     # Register the new shared dependency under the existing non-package stubs.
     sys.modules['utils.stt.owner_profile'].load_owner_embedding = MagicMock(return_value=None)
@@ -1342,12 +1349,18 @@ def _load_sync_router_for_fast_path():
         ctx = contextvars.copy_context()
         return executor.submit(ctx.run, fn, *args, **kwargs)
 
+    async def _passthrough_run_blocking(_executor, fn, *args, **kwargs):
+        return fn(*args, **kwargs)
+
     mock_executors = MagicMock()
     mock_executors.critical_executor = MagicMock()
     mock_executors.sync_executor = MagicMock()
     mock_executors.postprocess_executor = MagicMock()
     mock_executors.storage_executor = MagicMock()
     mock_executors.submit_with_context = _submit_with_context
+    # Imported helpers also await this API. Installing the async contract before
+    # router import keeps their executor seam identical to the router's seam.
+    mock_executors.run_blocking = _passthrough_run_blocking
     saved_modules['utils.executors'] = sys.modules.get('utils.executors')
     sys.modules['utils.executors'] = mock_executors
 
@@ -1381,7 +1394,18 @@ def _load_sync_router_for_fast_path():
     sys.modules['utils.fair_use'].get_enforcement_stage = MagicMock(return_value='off')
     sys.modules['utils.fair_use'].FAIR_USE_ENABLED = False
     sys.modules['utils.fair_use'].FAIR_USE_RESTRICT_DAILY_DG_MS = 0
-    sys.modules['utils.subscription'].has_transcription_credits = MagicMock(return_value=True)
+    sys.modules['utils.subscription'].resolve_transcription_allowance = MagicMock(
+        return_value=types.SimpleNamespace(managed=True, reason='plan_within_allowance')
+    )
+    subscription_stub = sys.modules['utils.subscription']
+
+    def has_transcription_credits(uid, source=None):
+        return subscription_stub.resolve_transcription_allowance(uid, source).managed
+
+    subscription_stub.has_transcription_credits = MagicMock(side_effect=has_transcription_credits)
+    sys.modules['utils.subscription'].TRANSCRIPTION_ALLOWANCE_TRANSIENT_REASONS = frozenset(
+        {'allowance_unavailable', 'usage_invalid'}
+    )
     sys.modules['utils.request_validation'].parse_sync_filename_timestamp = MagicMock(return_value=time.time())
     sys.modules['utils.sync.files'].get_timestamp_from_path = MagicMock(return_value=time.time())
     saved_modules['utils.sync'] = prior_utils_sync
@@ -1554,11 +1578,11 @@ def _load_sync_router_for_fast_path():
         and (payload.get('sequencer_epoch') is not None or payload.get('lane') == 'backfill')
     )
 
-    async def _passthrough_run_blocking(_executor, fn, *args, **kwargs):
-        return fn(*args, **kwargs)
-
     module.run_blocking = _passthrough_run_blocking
     module._retrieve_file_paths_v2 = MagicMock(return_value=['syncing/test-uid/job-1/file.bin'])
+    # This route harness uses synthetic paths without source bytes or metadata.
+    # Real retained-anchor classification is covered by recovery admission tests.
+    module.retained_source_offsets = MagicMock(return_value={})
     module._capture_matches_server_conversation = MagicMock(return_value=True)
     module._stage_files_to_gcs = MagicMock()
     module._cleanup_files = MagicMock()
@@ -2780,11 +2804,13 @@ async def test_sync_post_enqueue_cleanup_does_not_unstage(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_fresh_admission_daily_ceiling_prevents_staging_or_dispatch():
+@pytest.mark.parametrize('single_resolve_percentage', [0, 100])
+async def test_fresh_admission_daily_ceiling_prevents_staging_or_dispatch(monkeypatch, single_resolve_percentage):
     """A fresh V2 upload over the hard ceiling must leave its WAL audio untouched."""
     from starlette.datastructures import UploadFile
 
     module, saved_modules, mock_sync_jobs, BytesIO, _, _ = _load_sync_router_for_fast_path()
+    monkeypatch.setenv('FIRESTORE_READ_LEVERS', f'{{"sync_allowance_single_resolve": {single_resolve_percentage}}}')
     module.is_daily_audio_ceiling_exceeded = MagicMock(return_value=True)
     module._fair_use_restriction_response = AsyncMock(
         return_value=module.JSONResponse(status_code=429, content={'code': 'fair_use_restricted'})
@@ -2816,6 +2842,7 @@ async def test_fresh_admission_daily_ceiling_prevents_staging_or_dispatch():
         module.claim_sync_content.assert_not_called()
         module.enqueue_sync_job.assert_not_called()
         module.start_background_task.assert_not_called()
+        module.resolve_transcription_allowance.assert_not_called()
         module.has_transcription_credits.assert_not_called()
     finally:
         sys.modules.pop('routers.sync', None)
@@ -5986,23 +6013,42 @@ async def test_sync_task_budget_deferral_timeout_during_enqueue_keeps_deferred_m
         },
     )
 
-    async def _pipeline_that_never_finishes(*args, **kwargs):
-        await asyncio.sleep(30)
+    pipeline = _pipeline_expiring_the_handler_budget(module)
+    passthrough = module.run_blocking
+    captured = []
+    parent_asyncio = module.asyncio
+
+    class EnqueueBudgetAsyncio:
+        def __getattr__(self, name):
+            return getattr(parent_asyncio, name)
+
+        def timeout_at(self, deadline):
+            context = asyncio.timeout_at(deadline)
+            captured.append(context)
+            return context
+
+    async def enqueue(*args, **kwargs):
+        # Expire the real shared context only after marker completion and
+        # entry into enqueue. Host scheduling cannot move expiry to setup.
+        captured[-1].reschedule(asyncio.get_running_loop().time())
+        await asyncio.Event().wait()
+
+    async def run_blocking(executor, fn, *args, **kwargs):
+        result = await passthrough(executor, fn, *args, **kwargs)
+        return await result if asyncio.iscoroutine(result) else result
 
     try:
-        module.SYNC_JOB_HANDLER_BUDGET_SECONDS = 0.05
-        module.SYNC_JOB_BUDGET_REPLACEMENT_ENQUEUE_TIMEOUT_SECONDS = 0.05
-        module.run_full_pipeline_background_async = _pipeline_that_never_finishes
+        module.asyncio = EnqueueBudgetAsyncio()
+        module.run_full_pipeline_background_async = pipeline
+        module.run_blocking = run_blocking
         module.update_sync_job = MagicMock(return_value={'job_id': 'job-1', 'status': 'processing'})
-        # The shared post-budget deadline firing mid-enqueue surfaces as
-        # TimeoutError from the timeout_at context: the handler stopped
-        # waiting while the underlying create may still have landed.
-        module.enqueue_sync_job_budget_replacement = MagicMock(side_effect=TimeoutError('post-budget deadline'))
+        module.enqueue_sync_job_budget_replacement = MagicMock(side_effect=enqueue)
 
         response = await module.run_sync_job(request, task_retry_count=0)
 
         assert response.status_code == 409
         assert json.loads(response.body) == {'status': 'locked'}
+        module.enqueue_sync_job_budget_replacement.assert_called_once()
         assert module.update_sync_job.call_count == 1
         assert [call['reason'] for call in fallback_calls] == ['enqueue_uncertain']
     finally:
@@ -6174,8 +6220,16 @@ async def test_sequenced_cleanup_waits_share_one_deadline():
     async def _pipeline_that_never_finishes(*args, **kwargs):
         await asyncio.sleep(30)
 
+    heartbeat_cancelled_at: list[float] = []
+
     async def _heartbeat_blocked_in_renewal(uid, job_id, epoch, stop, owner):
-        await asyncio.sleep(30)
+        try:
+            await asyncio.sleep(30)
+        except asyncio.CancelledError:
+            # The drain's wait_for cancels this renewal at its bound, so this
+            # instant is the absolute deadline the drain actually used.
+            heartbeat_cancelled_at.append(time.monotonic())
+            raise
 
     created = []
 
@@ -6186,14 +6240,35 @@ async def test_sequenced_cleanup_waits_share_one_deadline():
 
     passthrough_run_blocking = module.run_blocking
     marker_clear_started = threading.Event()
+    # The deferral's own state carries the absolute post-budget deadline the
+    # cleanup waits share. Capturing it lets the bound below be measured from
+    # that deadline instead of from the request start, which is the only part
+    # of the elapsed time the shared-deadline contract actually covers.
+    deferral_states: list[dict] = []
+    passthrough_deferral = module._defer_sync_job_after_handler_budget_expiry
+
+    async def _record_deferral(request, attempt_state=None, **kwargs):
+        if isinstance(attempt_state, dict):
+            deferral_states.append(attempt_state)
+        return await passthrough_deferral(request, attempt_state, **kwargs)
 
     async def _run_blocking(executor, fn, *args, **kwargs):
-        if fn is module.update_sync_job and args and args[1] == {'deferred_until': None}:
+        if fn is module.update_sync_job and len(args) > 1 and args[1] == {'deferred_until': None}:
             marker_clear_started.set()
-            # 0.5s: runs past the post-budget deadline (~0.35s) but inside the
-            # clear's own bound (deadline + 0.3s), so the heartbeat drain is
-            # left only the shared window's remainder.
-            await asyncio.sleep(0.5)
+            # 0.4s: consumes most of the shared window (0.6s from the deferral)
+            # while leaving the heartbeat drain only the remainder — well under
+            # a fresh cleanup window — and leaves room for a loaded runner's
+            # sleep overshoot before the shared deadline cuts the clear.
+            await asyncio.sleep(0.4)
+        if fn is module.update_sync_job and len(args) > 1 and 'deferred_until' in args[1]:
+            # The marker write is not what this test measures. Settling it
+            # without an executor hop keeps the shared window's start — and so
+            # the clear's remaining room — independent of runner load.
+            return {'job_id': 'job-1', 'status': 'processing'}
+        if fn is module.sync_backfill_sequencer.note_budget_deferral:
+            # Same reason: the owner-count write is a mock here, and its
+            # executor hop would otherwise spend the window the clear needs.
+            return True
         if fn is module.enqueue_sync_job_budget_replacement:
             raise RuntimeError('create_task failed')
         return await passthrough_run_blocking(executor, fn, *args, **kwargs)
@@ -6207,6 +6282,7 @@ async def test_sequenced_cleanup_waits_share_one_deadline():
         module.start_background_task = _capture_task
         module.run_blocking = _run_blocking
         module.update_sync_job = MagicMock(return_value={'job_id': 'job-1', 'status': 'processing'})
+        module._defer_sync_job_after_handler_budget_expiry = _record_deferral
 
         started = time.monotonic()
         response = await module.run_sync_job(request, task_retry_count=0)
@@ -6215,11 +6291,32 @@ async def test_sequenced_cleanup_waits_share_one_deadline():
         assert response.status_code == 409
         assert json.loads(response.body) == {'status': 'locked'}
         assert marker_clear_started.is_set()
-        # Shared window: budget expiry (~0.05) + enqueue timeout (0.3) + one
-        # cleanup window (0.3) bounds the whole tail. The pre-fix behavior —
-        # the clear spending its fresh 0.3s to completion (~0.86s) and the
-        # drain adding another 0.3s (~1.16s) — is what this bound excludes.
-        assert elapsed < 0.05 + 0.3 + 0.3 + 0.1
+        # The marker clear and the heartbeat drain must share one absolute
+        # cleanup deadline: one cleanup window past the post-budget deadline.
+        # The drain's bound is observed where it lands — the instant wait_for
+        # cancels the renewal — and compared with that deadline. A drain that
+        # took a fresh cleanup window from its own start would land a full
+        # window later; a clear that took a fresh window of its own is already
+        # excluded by the fallback assertion below, which records
+        # marker_clear_failed when the 0.4s clear is cut at 0.3s.
+        #
+        # The comparison is anchored at the deferral's post-budget deadline,
+        # not at the request start. The handler budget's expiry is only
+        # observed when the event loop next runs, and on a loaded runner that
+        # scheduling delay alone reaches half a second: the 2026-11-16 nightly
+        # measured 1.103s against the former 0.75s request-start bound while
+        # the drain still landed exactly on the shared deadline. That delay
+        # precedes the shared deadline and is not part of this contract, so
+        # charging it here failed the contract for a reason it does not cover.
+        assert deferral_states, 'the budget-expiry deferral must be reached'
+        post_budget_deadline = deferral_states[-1].get('post_budget_deadline')
+        assert isinstance(post_budget_deadline, float)
+        shared_deadline = post_budget_deadline + module.SYNC_JOB_POST_ATTEMPT_CLEANUP_TIMEOUT_SECONDS
+        assert heartbeat_cancelled_at, 'the heartbeat drain must be bounded'
+        assert abs(heartbeat_cancelled_at[0] - shared_deadline) < 0.05
+        # A hang anywhere still fails: the pre-deferral phase is bounded by the
+        # handler budget in the implementation, generously here.
+        assert elapsed < 5
         assert created and created[0].cancelled()
         assert [call['reason'] for call in fallback_calls] == ['enqueue_failed']
     finally:

@@ -1,10 +1,7 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
-import 'package:omi/gen/pigeon_communicator.g.dart';
 import 'package:omi/pages/episodes/live_episode_clock.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
@@ -203,72 +200,6 @@ class DeviceRightNowGroup extends StatelessWidget {
                           builder: (context, now) => _liveRow(l10n.deviceLiveEpisode(liveLengthNow!(now))),
                         ),
       ],
-    );
-  }
-}
-
-/// Recently: when this device dropped and for how long, from the phone's own connection history.
-class DeviceRecentlyGroup extends StatefulWidget {
-  const DeviceRecentlyGroup({super.key, required this.load, this.now});
-
-  /// The device's native disconnect history (newest last).
-  final Future<List<BleDisconnectEvent>> Function() load;
-  final DateTime Function()? now;
-
-  @override
-  State<DeviceRecentlyGroup> createState() => _DeviceRecentlyGroupState();
-}
-
-class _DeviceRecentlyGroupState extends State<DeviceRecentlyGroup> {
-  List<BleDisconnectEvent> _events = const [];
-
-  static const _window = Duration(hours: 24);
-  static const _limit = 4;
-
-  @override
-  void initState() {
-    super.initState();
-    unawaited(_load());
-  }
-
-  Future<void> _load() async {
-    try {
-      final history = await widget.load();
-      final now = (widget.now ?? DateTime.now)();
-      final recent = [
-        for (final event in history.reversed)
-          if (event.eventType != 'fail_to_connect' &&
-              !event.isManual &&
-              event.timeToReconnectMs > 0 &&
-              now.difference(DateTime.fromMillisecondsSinceEpoch(event.timestamp)) <= _window)
-            event
-      ].take(_limit).toList();
-      if (mounted) setState(() => _events = recent);
-    } catch (_) {
-      // Diagnostics are best-effort: no history, no section.
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    if (_events.isEmpty) return const SizedBox.shrink();
-    final l10n = context.l10n;
-    final dates = OmiDateFormat.of(context);
-    return Padding(
-      padding: const EdgeInsets.only(bottom: OmiSpacing.xxl),
-      child: OmiSettingsGroup(
-        key: const Key('device_recently'),
-        header: l10n.deviceRecently,
-        children: [
-          for (final event in _events)
-            OmiSettingsRow(
-              leading: Icon(Icons.bluetooth_disabled_rounded, color: OmiColors.warning),
-              title: l10n.deviceDisconnectedFor(OmiDuration.compact((event.timeToReconnectMs / 1000).round(), l10n)),
-              value: dates.time(DateTime.fromMillisecondsSinceEpoch(event.timestamp)),
-              showChevron: false,
-            ),
-        ],
-      ),
     );
   }
 }

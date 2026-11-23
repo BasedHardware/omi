@@ -1,6 +1,12 @@
 import { BigQueryDate } from "@google-cloud/bigquery";
 import { getGcpBillingClient } from "@/lib/services/gcp-billing";
 import { bigQueryFailure, WallSourceError } from "./wall-source-error";
+import {
+  spendDailyQuery,
+  spendDays,
+  type SpendDay,
+  type SpendDayRow,
+} from "./wall-spend";
 
 /** Every `omi_finops` table the admin reads. The reader identity
  * (`GCP_BILLING_SA_JSON`, omi-admin-billing-ro) holds table-level dataViewer
@@ -17,6 +23,9 @@ export const ADMIN_FINOPS_TABLES = [
   "omi_finops.stt_modulate_modelled_daily",
   "omi_finops.vendor_balance_snapshot",
   "omi_finops.vendor_balance_spend_daily",
+  "omi_finops.margin_meter_hourly",
+  "omi_finops.spend_daily",
+  "omi_finops.spend_daily_gcp_sku",
 ] as const;
 
 /** Aggregate FinOps tables only; no user-level table is read.
@@ -517,6 +526,30 @@ export interface VendorBalanceHistory {
   spend: Record<string, number | null>;
   /** date → producer flag ('' normal, 'gap_spread', 'baseline_reset'). */
   flags: Record<string, string>;
+  /** Set when the vendor-balance tables are not created yet: the leg completes
+   * dark with this reason instead of failing. */
+  dark?: string;
+}
+
+/** Shown on the Soniox line while the vendor-balance tables do not exist. */
+export const VENDOR_BALANCE_DARK_REASON =
+  "Soniox balance not tracked (org key off)";
+
+export function darkVendorBalance(): VendorBalanceHistory {
+  return {
+    snapshots: 0,
+    latestTs: null,
+    asOf: null,
+    spend: {},
+    flags: {},
+    dark: VENDOR_BALANCE_DARK_REASON,
+  };
+}
+
+/** True only for the not-created-yet 404 on a vendor-balance table, as
+ * bigQueryFailure classifies it. Grants (403) and other errors stay errors. */
+export function isVendorBalanceDark(failure: WallSourceError): boolean {
+  return /\(table not created yet\)$/.test(failure.message);
 }
 
 export async function fetchVendorBalanceHistory(
@@ -532,11 +565,11 @@ export async function fetchVendorBalanceHistory(
     [rows] = await bq.query({
       query: FINOPS_VENDOR_BALANCE_QUERY,
       params: { today: new BigQueryDate(today), days },
-      maximumBytesBilled: String(10 * 1024 * 1024),
+      maximumBytesBilled: String(20 * 1024 * 1024),
       jobTimeoutMs: 30_000,
     });
   } catch (error) {
-    throw bigQueryFailure(
+    const failure = bigQueryFailure(
       error,
       [
         "omi_finops.vendor_balance_snapshot",
@@ -544,8 +577,38 @@ export async function fetchVendorBalanceHistory(
       ],
       "Soniox measured STT unavailable (balance line dark: org key unmounted or table not created)"
     );
+    if (isVendorBalanceDark(failure)) return darkVendorBalance();
+    throw failure;
   }
   return parseVendorBalance(rows[0]?.history || "{}");
+}
+
+/** Settled daily spend (`omi_finops.spend_daily`) over `days` days ending on
+ * `today`. A table that is not created yet reads as no rows, so the Soniox
+ * line shows "no data yet" instead of failing the leg; other errors throw. */
+export async function fetchSpendDays(
+  today: string,
+  days = HEALTH_HISTORY_DAYS
+): Promise<SpendDay[]> {
+  const bq = getGcpBillingClient();
+  if (!bq) throw new WallSourceError("FinOps BigQuery client unavailable");
+  let rows: SpendDayRow[];
+  try {
+    [rows] = await bq.query({
+      query: spendDailyQuery(today, days),
+      maximumBytesBilled: String(10 * 1024 * 1024),
+      jobTimeoutMs: 30_000,
+    });
+  } catch (error) {
+    const failure = bigQueryFailure(
+      error,
+      ["omi_finops.spend_daily"],
+      "Settled spend ledger unavailable (spend_daily unreadable)"
+    );
+    if (isVendorBalanceDark(failure)) return [];
+    throw failure;
+  }
+  return spendDays(rows);
 }
 
 export function parseVendorBalance(json: string): VendorBalanceHistory {
@@ -634,4 +697,67 @@ export async function fetchModulateModelled(
     priceAsOf = r.price_as_of;
   }
   return { byDay, price, priceAsOf };
+}
+
+/** The margin meter's newest hourly row (a null margin in the newest row is
+ * "no value", never an older row's number) (`omi_finops.margin_meter_hourly`,
+ * written by the meter's publisher; the board's read grant is
+ * omi-admin-billing-ro dataViewer). It is the live headline for Variable
+ * margin (David 2026-11-13): one number from one owner, so the tile and the
+ * meter cannot disagree. Read directly, never through the per-day leg store:
+ * the row is hourly. Any failure is null, never a guess. */
+export interface MeterTile {
+  /** ISO timestamp of the row's hour. */
+  asOf: string;
+  variableMarginPct: number;
+  basisVersion: string | null;
+}
+
+export const METER_TILE_QUERY = `
+SELECT FORMAT_TIMESTAMP('%FT%TZ', as_of) AS as_of, variable_margin_pct, basis_version
+FROM \`based-hardware.omi_finops.margin_meter_hourly\`
+ORDER BY as_of DESC
+LIMIT 1`;
+
+export function parseMeterTile(
+  rows: {
+    as_of?: unknown;
+    variable_margin_pct?: unknown;
+    basis_version?: unknown;
+  }[]
+): MeterTile | null {
+  const row = rows[0];
+  if (!row) return null;
+  const asOf = typeof row.as_of === "string" ? row.as_of : null;
+  // Number(null) is 0: a missing margin must not become a real 0%.
+  const raw = row.variable_margin_pct;
+  const pct =
+    typeof raw === "number"
+      ? raw
+      : typeof raw === "string" && raw.trim() !== ""
+      ? Number(raw)
+      : NaN;
+  if (!asOf || !Number.isFinite(Date.parse(asOf)) || !Number.isFinite(pct))
+    return null;
+  return {
+    asOf,
+    variableMarginPct: pct,
+    basisVersion:
+      typeof row.basis_version === "string" ? row.basis_version : null,
+  };
+}
+
+export async function fetchMeterTile(): Promise<MeterTile | null> {
+  try {
+    const bq = getGcpBillingClient();
+    if (!bq) return null;
+    const [rows] = await bq.query({
+      query: METER_TILE_QUERY,
+      maximumBytesBilled: String(10 * 1024 * 1024),
+      jobTimeoutMs: 30_000,
+    });
+    return parseMeterTile(rows as Parameters<typeof parseMeterTile>[0]);
+  } catch {
+    return null;
+  }
 }

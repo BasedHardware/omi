@@ -55,6 +55,14 @@ class _FakeCollectionReference:
         return self
 
 
+class _AbsentCollection:
+    def document(self, _document_id: str) -> Any:
+        return self
+
+    def get(self, transaction=None) -> _FakeSnapshot:
+        return _FakeSnapshot(None)
+
+
 class _FakeTransaction:
     """Surface ``_Transactional.__call__`` drives on a real transaction."""
 
@@ -86,6 +94,11 @@ class _FakeTransaction:
     def _commit(self) -> None:
         if self._client.commit_errors:
             raise self._client.commit_errors.pop(0)
+        # The in-flight ledger writes in its own transaction after the real
+        # commit; keep it out of the real-transition commit assertions.
+        if isinstance(self.payload, dict) and self.payload.get('schema_version') == 1 and 'owner_key' in self.payload:
+            self._client.ledger_commits.append(self.payload)
+            return
         self._client.commits.append(self.payload)
 
 
@@ -94,10 +107,14 @@ class _FakeFirestoreClient:
         self.document = document
         self.commit_errors = list(commit_errors or [])
         self.commits: List[Dict[str, Any] | None] = []
+        self.ledger_commits: List[Dict[str, Any]] = []
         self.transactions: List[_FakeTransaction] = []
         self.doc_ref = _FakeDocumentReference(self, 'doc')
 
-    def collection(self, _collection_id: str) -> _FakeCollectionReference:
+    def collection(self, _collection_id: str) -> Any:
+        if _collection_id == 'account_deletions':
+            # No wipe is in progress: the ledger's account fence reads an absent marker.
+            return _AbsentCollection()
         return _FakeCollectionReference(self)
 
     def transaction(self) -> _FakeTransaction:
@@ -158,5 +175,7 @@ def test_delivery_counter_only_after_committed_result_not_transaction_attempts(m
         assert not calls and not client.commits
     else:
         assert conversations_db.persist_processing_result_with_lifecycle('synthetic', payload)
-        assert len(client.transactions) == 2 and len(client.commits) == 1
+        # One expired real transaction, one retry, and one ledger transaction
+        # that writes noted and done together.
+        assert len(client.transactions) == 3 and len(client.commits) == 1
         assert calls == [('summary', 'delivered')]

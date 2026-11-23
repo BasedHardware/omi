@@ -40,7 +40,8 @@ def test_recent_unbound_capture_stays_in_backfill(clock, age):
         ([], 'missing_capture_time'),
     ],
 )
-def test_time_guards_survive_retirement(clock, ages, reason):
+def test_time_guards_survive_retirement(clock, ages, reason, monkeypatch):
+    monkeypatch.setenv('SYNC_FUTURE_CAPTURE_CLAMP_ENABLED', 'false')
     decision = decide(clock, ages)
     assert decision.lane is lanes.SyncLane.BACKFILL
     assert decision.reason == reason

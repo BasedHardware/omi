@@ -1,3 +1,5 @@
+import 'package:omi/backend/schema/pending_work.dart';
+import 'package:omi/services/pending_work/pending_work_store.dart';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:ui' as ui;
@@ -12,6 +14,8 @@ import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/episode.dart';
+import 'package:omi/backend/schema/home_feed.dart';
+import 'package:omi/providers/home_feed_provider.dart';
 import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/providers/conversation_provider.dart';
@@ -19,17 +23,32 @@ import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/services/capture/capture_external_actions.dart';
 import 'package:omi/services/capture/local_segment_store.dart';
 import 'package:omi/pages/episodes/live_episode_row.dart';
+import 'package:omi/pages/conversation_detail/page.dart';
+import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
+import 'package:omi/pages/conversations/widgets/conversation_list_item.dart';
+import 'package:omi/providers/app_provider.dart';
+import 'package:omi/providers/connectivity_provider.dart';
+import 'package:omi/providers/integration_provider.dart';
+import 'package:omi/providers/message_provider.dart';
+import 'package:omi/providers/usage_provider.dart';
+import 'package:omi/providers/folder_provider.dart';
+import 'package:omi/utils/platform/platform_manager.dart';
+import 'package:provider/provider.dart';
 import 'package:omi/providers/episode_provider.dart';
+import 'package:omi/pages/conversations/widgets/processing_conversation_row.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:visibility_detector/visibility_detector.dart';
 
 import '../helpers/home_fixture_env.dart';
+import '../helpers/home_one_processing_fixture.dart';
+import '../helpers/home_ready_members_fixture.dart';
 import '../helpers/sfpro_font_fixtures.dart';
 import '../support/typed_conversation_screen.dart';
 
 const _output = String.fromEnvironment('HOME_ROW_RENDER_OUTPUT');
 const _baseline = bool.fromEnvironment('HOME_OVERLAP_BASELINE');
+const _followupBaseline = bool.fromEnvironment('HOME_FOLLOWUP_BASELINE');
 
 class _LiveCapture extends CaptureProvider {
   _LiveCapture()
@@ -131,7 +150,12 @@ EpisodeProvider _episodes() => EpisodeProvider(
 /// built for assertions. Returns the boundary key used by [_capture].
 Future<GlobalKey> _pumpHome(WidgetTester tester, List<ServerConversation> items,
     {EpisodeProvider? episodeProvider,
+    HomeFeedProvider? feed,
     CaptureProvider? capture,
+    bool withNavigation = false,
+    bool capability = true,
+    List<ServerConversation> detailItems = const [],
+    void Function(String)? onDetailFetch,
     List<ServerConversation> processing = const []}) async {
   debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
   tester.view.devicePixelRatio = 1;
@@ -147,16 +171,53 @@ Future<GlobalKey> _pumpHome(WidgetTester tester, List<ServerConversation> items,
     conversations.dispose();
     episodes.dispose();
   });
+  final store = PendingWorkStore(
+      loadPending: () async => ApiSuccess(PendingWorkSnapshot(
+          enabled: capability, items: [], attentionUnseenCount: 0, homeProcessingToday: capability)),
+      loadAttention: () async => const ApiSuccess(AttentionItemsPage.disabled));
+  await store.refresh();
+  addTearDown(store.dispose);
   final boundary = GlobalKey();
+  final captureTheme = buildOmiTheme(brightness: Brightness.light);
+  // A native iOS snackbar resolves its unspecified family to SF Pro. The test
+  // engine otherwise falls back to Ahem for this standalone TextStyle.
+  final theme = captureTheme.copyWith(
+      snackBarTheme: captureTheme.snackBarTheme.copyWith(
+          contentTextStyle: captureTheme.snackBarTheme.contentTextStyle?.copyWith(fontFamily: 'SF Pro Display')));
+  Widget screen = await buildTypedConversationScreen(
+    conversations,
+    pendingWork: store,
+    episodes: episodes,
+    feed: feed,
+    captureProvider: capture,
+    initializePreferences: false,
+    theme: theme,
+  );
+  if (withNavigation) {
+    final apps = AppProvider();
+    final detail = ConversationDetailProvider(fetchConversation: (id) async {
+      onDetailFetch?.call(id);
+      return [...detailItems, ...items].where((c) => c.id == id).firstOrNull;
+    });
+    detail.setProviders(apps, conversations);
+    addTearDown(apps.dispose);
+    addTearDown(detail.dispose);
+    screen = MultiProvider(providers: [
+      ChangeNotifierProvider<ConversationProvider>.value(value: conversations),
+      ChangeNotifierProvider<EpisodeProvider>.value(value: episodes),
+      if (feed != null) ChangeNotifierProvider<HomeFeedProvider>.value(value: feed),
+      ChangeNotifierProvider<ConversationDetailProvider>.value(value: detail),
+      ChangeNotifierProvider<AppProvider>.value(value: apps),
+      ChangeNotifierProvider(create: (_) => ConnectivityProvider()),
+      ChangeNotifierProvider(create: (_) => FolderProvider()),
+      ChangeNotifierProvider(create: (_) => IntegrationProvider()),
+      ChangeNotifierProvider(create: (_) => UsageProvider()),
+      ChangeNotifierProvider(create: (_) => MessageProvider()),
+    ], child: screen);
+  }
   await tester.pumpWidget(RepaintBoundary(
     key: boundary,
-    child: await buildTypedConversationScreen(
-      conversations,
-      episodes: episodes,
-      captureProvider: capture,
-      initializePreferences: false,
-      theme: buildOmiTheme(brightness: Brightness.light),
-    ),
+    child: screen,
   ));
   for (var i = 0; i < 4; i++) {
     await tester.pump(const Duration(milliseconds: 300));
@@ -193,14 +254,409 @@ void _expectAbsent(List<String> titles) {
 double _top(WidgetTester tester, Finder finder) => tester.getTopLeft(finder).dy;
 
 void main() {
+  testWidgets('older-server capability-off Home renders one neutral aggregate under Listening', (tester) async {
+    addTearDown(() => debugDefaultTargetPlatformOverride = null);
+    SharedPreferences.setMockInitialValues({'uid': 'fixture-home'});
+    await SharedPreferencesUtil.init();
+    final now = DateTime.now();
+    final fixture = HomeOneProcessingFixture(now);
+    final episodes = EpisodeProvider(
+        fetchLive: () async => ApiSuccess(EpisodeRead(enabled: true, episode: fixture.live)),
+        fetchPage: (from, to, {cursor}) async => const ApiSuccess(EpisodePageRead(enabled: true)),
+        lookup: (_) async => const ApiSuccess(EpisodeRead(enabled: true)));
+    await episodes.refreshLive();
+    ServerConversation pending(String id, DateTime at) => ServerConversation(
+        id: id,
+        createdAt: at,
+        startedAt: at,
+        status: ConversationStatus.processing,
+        structured: Structured('Draft title', ''));
+    final capture = _LiveCapture();
+    addTearDown(capture.dispose);
+    final boundary = await _pumpHome(
+        tester,
+        [
+          pending('new', now.subtract(const Duration(minutes: 10))),
+          fixture.finished,
+          pending('old', now.subtract(const Duration(days: 1)))
+        ],
+        episodeProvider: episodes,
+        capture: capture,
+        capability: false,
+        processing: [pending('local', now.subtract(const Duration(minutes: 20)))]);
+    if (_followupBaseline) {
+      expect(find.byType(ProcessingConversationRow), findsNWidgets(2));
+      expect(find.textContaining('Writing notes'), findsNWidgets(2));
+    } else {
+      expect(find.byType(ProcessingConversationRow), findsOneWidget);
+      final row = tester.widget<ProcessingConversationRow>(find.byType(ProcessingConversationRow));
+      expect(row.count, 3);
+      expect(row.step.name, 'transcribing');
+      expect(find.text('Transcribing… · 3 recordings'), findsOneWidget);
+      expect(find.textContaining('Writing notes'), findsNothing);
+      expect(find.text('Listening now'), findsOneWidget);
+      expect(_top(tester, find.byType(LiveEpisodeRow)), lessThan(_top(tester, find.byKey(_processingKey))));
+    }
+    await _capture(tester, boundary,
+        _followupBaseline ? '001-mobile-ios-capability-off-before' : '002-mobile-ios-capability-off-after');
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+  testWidgets('processing changed during confirmation cancels deletion and shows review notice', (tester) async {
+    addTearDown(() => debugDefaultTargetPlatformOverride = null);
+    final fixture = HomeReadyMembersFixture(DateTime.now());
+    final episodes = EpisodeProvider(
+        fetchLive: () async => const ApiSuccess(EpisodeRead(enabled: true)),
+        fetchPage: (from, to, {cursor}) async =>
+            ApiSuccess(EpisodePageRead(enabled: true, episodes: [fixture.waiting])),
+        detail: (_) async => ApiSuccess(fixture.waiting));
+    episodes.debugSetHomeEpisodes([fixture.waiting]);
+    final boundary = await _pumpHome(tester, fixture.members, episodeProvider: episodes, withNavigation: true);
+    final history = tester.element(find.byType(ProcessingConversationRow)).read<ConversationProvider>();
+    await tester.tap(find.byKey(_processingKey));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+    await tester.tap(find.byKey(const Key('episode_more')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+    await tester.tap(find.text('Delete'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(find.text('Delete 2 Conversations?'), findsOneWidget);
+    history.updateConversation(fixture.members[2].withHomeStep('ready'), preserveHomeStep: false);
+    await tester.pump();
+    await tester.tap(find.text('Delete').last);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(history.memoriesToDelete, isEmpty);
+    expect(find.text('Undo'), findsNothing);
+    expect(find.text('Processing changed. Review the list and try again.'), findsOneWidget);
+    expect(find.byKey(ValueKey('episode_member_${fixture.members[2].id}')), findsNothing);
+    await _capture(tester, boundary, '003-mobile-ios-delete-scope-changed');
+    await tester.pumpWidget(const SizedBox.shrink());
+    episodes.invalidateHome();
+  });
+  for (final compact in [false, true]) {
+    testWidgets('reported settled-noise and older-local shape compact=$compact', (tester) async {
+      addTearDown(() => debugDefaultTargetPlatformOverride = null);
+      // Establish the fixture account before owner-fenced episode reads. A
+      // later mock-account reset must not invalidate the live snapshot mid-frame.
+      SharedPreferences.setMockInitialValues({'uid': 'fixture-home'});
+      await SharedPreferencesUtil.init();
+      final fixture = HomeSettledNoiseFixture(DateTime.now());
+      final episodes = EpisodeProvider(
+          fetchLive: () async => ApiSuccess(EpisodeRead(enabled: true, episode: fixture.live)),
+          lookup: (_) async => const ApiSuccess(EpisodeRead(enabled: true)),
+          fetchPage: (from, to, {cursor}) async =>
+              ApiSuccess(EpisodePageRead(enabled: true, episodes: [fixture.waiting, fixture.older])));
+      await episodes.refreshLive();
+      episodes.debugSetHomeEpisodes(compact ? [] : [fixture.waiting, fixture.older]);
+      final feed = HomeFeedProvider(
+          owner: () => 'synthetic-shape',
+          fetch: ({cursor}) async => ApiSuccess(HomeFeedPage(items: [
+                for (final member in fixture.members)
+                  HomeFeedCard(
+                      id: 'conversation:${member.id}',
+                      kind: 'conversation',
+                      detailId: member.id,
+                      startedAt: member.startedAt,
+                      finishedAt: member.finishedAt,
+                      title: member.structured.title,
+                      emoji: '',
+                      preview: member.structured.overview,
+                      status: 'completed',
+                      homeStep: member.homeStep,
+                      starred: false,
+                      isLocked: false,
+                      hasTasks: false,
+                      memberCount: 1,
+                      sources: const [],
+                      summaryAvailable: member.homeStep == 'ready',
+                      revision: 'shape')
+              ], nextCursor: null, hasMore: false, truncated: false, generation: 'shape')));
+      addTearDown(feed.dispose);
+      if (compact) await feed.start();
+      final capture = _LiveCapture();
+      addTearDown(capture.dispose);
+      final boundary = await _pumpHome(tester, compact ? [] : fixture.members,
+          episodeProvider: episodes, feed: compact ? feed : null, capture: capture, processing: fixture.localPending);
+      expect(find.byType(LiveEpisodeRow), findsOneWidget);
+      expect(find.text('Listening now'), findsOneWidget);
+      if (_baseline) {
+        expect(find.byType(ProcessingConversationRow), findsNWidgets(4));
+        expect(find.text('Transcribing… · 13 recordings'), findsOneWidget);
+        expect(find.text('Writing notes… · 1h 45m'), findsOneWidget);
+        expect(find.text('Writing notes… · 22m'), findsOneWidget);
+        expect(find.text('Writing notes… · 2m 52s'), findsOneWidget);
+      } else {
+        expect(find.byType(ProcessingConversationRow), findsOneWidget);
+        final pending = tester.widget<ProcessingConversationRow>(find.byType(ProcessingConversationRow));
+        expect(pending.count, 3);
+        expect(pending.step.name, 'transcribing');
+        expect(pending.episode!.members.map((m) => m.id).toSet(), fixture.localPending.map((m) => m.id).toSet());
+        expect(find.text('Transcribing… · 3 recordings'), findsOneWidget);
+        expect(find.textContaining('Writing notes'), findsNothing);
+        expect(_top(tester, find.byType(LiveEpisodeRow)), lessThan(_top(tester, find.byKey(_processingKey))));
+        for (final member in fixture.members.take(10)) {
+          expect(find.text(member.structured.title), findsOneWidget);
+          expect(_top(tester, find.byKey(_processingKey)),
+              lessThan(_top(tester, find.byKey(ValueKey(compact ? 'conversation:${member.id}' : member.id)))));
+        }
+        for (final member in fixture.members.skip(10)) {
+          expect(find.byKey(ValueKey(member.id)), findsNothing);
+        }
+      }
+      await _capture(
+          tester,
+          boundary,
+          _baseline
+              ? '007-mobile-ios-reported-shape-before'
+              : compact
+                  ? '008-mobile-ios-reported-shape-after'
+                  : 'reported-shape-legacy-after');
+      expect(find.text('Listening now'), findsOneWidget, reason: 'capture keeps the real visible live row');
+      await tester.pumpWidget(const SizedBox.shrink());
+      episodes.invalidateHome();
+    }, skip: _baseline && compact);
+  }
+
+  testWidgets('compact cards fold pending only and atomically replace READY members on compose', (tester) async {
+    addTearDown(() => debugDefaultTargetPlatformOverride = null);
+    final fixture = HomeReadyMembersFixture(DateTime.now());
+    var composed = false;
+    var newlyReady = false;
+    final feed = HomeFeedProvider(
+        owner: () => 'fixture',
+        fetch: ({cursor}) async => ApiSuccess(HomeFeedPage(
+            items: composed
+                ? [
+                    HomeFeedCard(
+                        id: 'episode:owner',
+                        kind: 'episode',
+                        detailId: 'owner',
+                        startedAt: fixture.waiting.startedAt,
+                        title: 'Combined fixture',
+                        emoji: '',
+                        preview: 'Combined notes',
+                        status: 'completed',
+                        homeStep: 'ready',
+                        starred: false,
+                        isLocked: false,
+                        hasTasks: false,
+                        memberCount: 4,
+                        sources: const [],
+                        summaryAvailable: true,
+                        revision: 'composed')
+                  ]
+                : [
+                    for (final member in fixture.members)
+                      HomeFeedCard(
+                          id: 'conversation:${member.id}',
+                          kind: 'conversation',
+                          detailId: member.id,
+                          startedAt: member.startedAt,
+                          title: member.structured.title,
+                          emoji: '',
+                          preview: member.structured.overview,
+                          status: 'completed',
+                          homeStep: newlyReady && member.id == fixture.members[2].id ? 'ready' : member.homeStep,
+                          starred: false,
+                          isLocked: false,
+                          hasTasks: false,
+                          memberCount: 1,
+                          sources: const [],
+                          summaryAvailable: member.homeStep == 'ready',
+                          revision: 'waiting')
+                  ],
+            nextCursor: null,
+            hasMore: false,
+            truncated: false,
+            generation: composed ? 'composed' : 'waiting')));
+    addTearDown(feed.dispose);
+    await feed.start();
+    await _pumpHome(tester, [], feed: feed, withNavigation: true, detailItems: fixture.members);
+    expect(find.byType(ProcessingConversationRow), findsOneWidget);
+    expect(tester.widget<ProcessingConversationRow>(find.byType(ProcessingConversationRow)).count, 2);
+    expect(find.text('Ready recording 1'), findsOneWidget);
+    expect(find.text('Ready recording 2'), findsOneWidget);
+    final aggregate = tester.widget<ProcessingConversationRow>(find.byType(ProcessingConversationRow));
+    expect(aggregate.episode!.members.map((m) => m.id).toSet(), fixture.members.skip(2).map((m) => m.id).toSet());
+    expect(aggregate.episode!.conversationIds.toSet(), fixture.members.skip(2).map((m) => m.id).toSet());
+    await tester.tap(find.byKey(_processingKey));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+    // Near the fixture's capture time, the pending page uses Summary/Transcript
+    // tabs. Member assertions belong to Transcript in that layout as well.
+    final transcriptTab = find.byKey(const Key('conversation_tab_transcript'));
+    if (transcriptTab.evaluate().isNotEmpty) {
+      await tester.tap(transcriptTab);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+    }
+    for (final member in fixture.members.take(2)) {
+      expect(find.byKey(ValueKey('episode_member_${member.id}')), findsNothing);
+    }
+    for (final member in fixture.members.skip(2)) {
+      expect(find.byKey(ValueKey('episode_member_${member.id}')), findsOneWidget);
+    }
+    newlyReady = true;
+    await feed.refresh();
+    await tester.pump();
+    expect(find.byKey(ValueKey('episode_member_${fixture.members[2].id}')), findsNothing);
+    expect(find.byKey(ValueKey('episode_member_${fixture.members[3].id}')), findsOneWidget);
+    final history =
+        Provider.of<ConversationProvider>(tester.element(find.byKey(const Key('episode_page'))), listen: false);
+    final deleted = <String>[];
+    history.conversationDeleteFetcherOverride = (id) async {
+      deleted.add(id);
+      return true;
+    };
+    await tester.tap(find.byKey(const Key('episode_more')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+    await tester.tap(find.text('Delete'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(find.text('Delete 1 Conversation?'), findsOneWidget);
+    await tester.tap(find.text('Delete').last);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(history.memoriesToDelete.keys.toSet(), {fixture.members[3].id});
+    // The typed Home fixture nests Scaffolds; invoke the rendered Undo action
+    // directly. The standalone destructive-scope suite verifies its tap path.
+    tester
+        .widget<TextButton>(find.descendant(of: find.byType(SnackBarAction), matching: find.byType(TextButton)))
+        .onPressed!();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(history.memoriesToDelete, isEmpty);
+    expect(deleted, isEmpty);
+    expect(find.text('Ready recording 1'), findsOneWidget);
+    expect(find.text('Ready recording 2'), findsOneWidget);
+    composed = true;
+    await feed.refresh();
+    await tester.pump();
+    expect(find.text('Combined fixture'), findsOneWidget);
+    expect(find.text('Ready recording 1'), findsNothing);
+    expect(find.text('Ready recording 2'), findsNothing);
+    expect(find.byType(ProcessingConversationRow), findsNothing);
+    await tester.pumpWidget(const SizedBox.shrink());
+    debugDefaultTargetPlatformOverride = null;
+  });
+
   TestWidgetsFlutterBinding.ensureInitialized();
   final previousVisibilityInterval = VisibilityDetectorController.instance.updateInterval;
   setUpAll(() async {
     Env.init(HomeFixtureEnv());
+    PlatformManager.initializeForLocalHarness();
     VisibilityDetectorController.instance.updateInterval = Duration.zero;
     await _fonts();
   });
   tearDownAll(() => VisibilityDetectorController.instance.updateInterval = previousVisibilityInterval);
+
+  for (final withLive in [false, true]) {
+    for (final metadataOnly in [false, true]) {
+      testWidgets('READY members are readable before compose, live=$withLive metadataOnly=$metadataOnly',
+          (tester) async {
+        final fixture = HomeReadyMembersFixture(DateTime.now());
+        var current = fixture.waiting;
+        final episodes = EpisodeProvider(
+            fetchLive: () async => ApiSuccess(EpisodeRead(enabled: true, episode: withLive ? fixture.live : null)),
+            lookup: (_) async => ApiSuccess(EpisodeRead(enabled: true, episode: current)),
+            fetchPage: (from, to, {cursor}) async => ApiSuccess(EpisodePageRead(enabled: true, episodes: [current])));
+        await episodes.refreshLive();
+        episodes.debugSetHomeEpisodes([current]);
+        final capture = withLive ? _LiveCapture() : null;
+        if (capture != null) addTearDown(capture.dispose);
+        final detailReads = <String>[];
+        final boundary = await _pumpHome(tester, metadataOnly ? [] : [...fixture.members],
+            episodeProvider: episodes,
+            capture: capture,
+            withNavigation: true,
+            detailItems: fixture.members,
+            onDetailFetch: detailReads.add);
+        expect(find.text('Transcribing… · 2 recordings'), findsOneWidget);
+        for (final member in fixture.members.take(2)) {
+          final row = tester.widget<ConversationListItem>(find.byKey(ValueKey(member.id)));
+          expect(row.homeEpisode, isNull, reason: 'temporary member opens its own notes');
+          expect(row.conversation.structured.overview, member.structured.overview);
+          expect(_top(tester, find.byKey(_processingKey)) < _top(tester, find.byKey(ValueKey(member.id))), isTrue);
+        }
+        {
+          await tester.tap(find.byKey(ValueKey(fixture.members.first.id)));
+          await tester.pump();
+          await tester.pump(const Duration(milliseconds: 400));
+          final page = tester.widget<ConversationDetailPage>(find.byType(ConversationDetailPage));
+          expect(page.conversation.id, fixture.members.first.id);
+          expect(detailReads, contains(fixture.members.first.id), reason: 'metadata rows hydrate the real recording');
+          expect(find.text(fixture.members.first.structured.overview), findsWidgets);
+          Navigator.of(tester.element(find.byType(ConversationDetailPage))).pop();
+          await tester.pump();
+          await tester.pump(const Duration(milliseconds: 400));
+        }
+        await _capture(tester, boundary, 'ready-members-before-compose');
+        current = fixture.composed;
+        episodes.debugSetHomeEpisodes([current]);
+        await tester.pump();
+        expect(find.text('Combined episode fixture'), findsOneWidget);
+        expect(find.byKey(_processingKey), findsNothing);
+        for (final member in fixture.members) {
+          expect(find.byKey(ValueKey(member.id)), findsNothing, reason: 'one frame replaces every temporary row');
+        }
+        final replacement = tester.widget<ConversationListItem>(find.byKey(ValueKey('episode:${current.id}')));
+        expect(replacement.homeEpisode!.members.map((m) => m.id).toSet(), fixture.members.map((m) => m.id).toSet());
+        await _capture(tester, boundary, 'ready-members-after-compose');
+        await tester.pumpWidget(const SizedBox.shrink());
+        episodes.invalidateHome();
+      });
+    }
+  }
+
+  for (final withPending in [false, true]) {
+    testWidgets('stale ready and noise processing entries never bypass the fold, pending=$withPending', (tester) async {
+      final now = DateTime.now();
+      final ready = _conv('ready-stale', now, title: 'Finished fixture', homeStep: 'ready');
+      final noise = _conv('noise-stale', now, homeStep: 'noise');
+      final pending = _conv('pending', now, homeStep: 'transcribing');
+      await _pumpHome(tester, [ready, noise, if (withPending) pending],
+          processing: [ready, noise, if (withPending) pending]);
+      expect(find.byKey(_processingKey), withPending ? findsOneWidget : findsNothing);
+      expect(find.text('Finished fixture'), findsOneWidget);
+      await tester.pumpWidget(const SizedBox.shrink());
+      debugDefaultTargetPlatformOverride = null;
+    });
+  }
+
+  for (final withLive in [false, true]) {
+    for (final serverOnly in [false, true]) {
+      testWidgets('five pending episode groups have one row with live=$withLive serverOnly=$serverOnly',
+          (tester) async {
+        final fixture = HomeOneProcessingFixture(DateTime.now(), serverOnly: serverOnly);
+        final episodes = EpisodeProvider(
+          fetchLive: () async => ApiSuccess(EpisodeRead(enabled: true, episode: withLive ? fixture.live : null)),
+          fetchPage: (from, to, {cursor}) async =>
+              ApiSuccess(EpisodePageRead(enabled: true, episodes: fixture.episodes)),
+        );
+        await episodes.refreshLive();
+        episodes.debugSetHomeEpisodes(fixture.episodes);
+        final capture = withLive ? _LiveCapture() : null;
+        if (capture != null) addTearDown(capture.dispose);
+        final boundary = await _pumpHome(tester, [if (!serverOnly) ...fixture.pending, fixture.finished],
+            episodeProvider: episodes, capture: capture, processing: serverOnly ? [] : fixture.pending);
+        expect(find.byKey(_processingKey), findsOneWidget);
+        expect(find.text('Transcribing… · 27 recordings'), findsOneWidget);
+        final row = tester.widget<ProcessingConversationRow>(find.byType(ProcessingConversationRow));
+        expect(row.episode!.members.map((m) => m.id).toSet(), fixture.pending.map((m) => m.id).toSet());
+        expect(row.processingEpisodes.map((e) => e.id).toSet(), fixture.episodes.map((e) => e.id).toSet());
+        expect(_top(tester, find.byKey(_processingKey)) < _top(tester, find.text('Finished episode fixture')), isTrue);
+        if (withLive) {
+          expect(_top(tester, find.byType(LiveEpisodeRow)) < _top(tester, find.byKey(_processingKey)), isTrue);
+        }
+        await _capture(tester, boundary, withLive ? 'one-row-with-live' : 'one-row-without-live');
+        await tester.pumpWidget(const SizedBox.shrink());
+        episodes.invalidateHome();
+      });
+    }
+  }
 
   testWidgets('live episode owns its three closed processing recordings', (tester) async {
     final now = DateTime.now();
@@ -284,12 +740,11 @@ void main() {
     expect(find.text('Today'), findsOneWidget);
     expect(find.text('Yesterday'), findsOneWidget);
     // Today: one run of three unfinished rows, then the two finished rows.
-    expect(find.byKey(_processingKey), findsNWidgets(3));
+    expect(find.byKey(_processingKey), findsOneWidget);
     expect(find.textContaining('$_transcribing · 3 recordings'), findsOneWidget);
-    // Yesterday: the five-row run, then two finished rows, then a single-recording run.
-    expect(find.textContaining('$_transcribing · 5 recordings'), findsOneWidget);
-    // A lone unfinished recording shows no count (the row says a count only above one).
-    expect(find.textContaining(_transcribing), findsNWidgets(3));
+    // Yesterday keeps its finished rows; the older processing runs live in Activity.
+    expect(find.textContaining('$_transcribing · 5 recordings'), findsNothing);
+    expect(find.textContaining(_transcribing), findsOneWidget);
     expect(find.text('Building Company Brains With AI'), findsOneWidget);
     expect(find.text('Check-In and Timer Search'), findsOneWidget);
     expect(find.text('Family Tensions and AI Consulting'), findsOneWidget);
@@ -379,7 +834,7 @@ void main() {
     await _capture(tester, boundary, '004-noise-hidden');
   });
 
-  testWidgets('005-finished-breaks-run', (tester) async {
+  testWidgets('005-finished-keeps-one-processing-row', (tester) async {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
     DateTime at(int h, int m) => DateTime(today.year, today.month, today.day, h, m);
@@ -392,19 +847,19 @@ void main() {
     ];
     final boundary = await _pumpHome(tester, items);
 
-    expect(find.byKey(_processingKey), findsNWidgets(2));
+    expect(find.byKey(_processingKey), findsOneWidget);
     expect(find.text('Middle finished review'), findsOneWidget);
-    expect(find.text(_processing), findsNWidgets(2));
-    expect(find.textContaining(_transcribing), findsNWidgets(0));
-    // Newest run first, the finished row between them, the earliest run last.
+    expect(find.text(_processing), findsOneWidget);
+    expect(find.text('Transcribing… · 2 recordings'), findsOneWidget,
+        reason: 'a provisional title without a server step does not prove note writing');
+    // All pending recordings share the first row; finished work keeps its own row.
     final runs = find.byKey(_processingKey);
     final late = _top(tester, runs.at(0));
     final middle = _top(tester, find.text('Middle finished review'));
-    final early = _top(tester, runs.at(1));
-    expect(late < middle && middle < early, isTrue, reason: 'the finished row must split the two runs');
+    expect(late < middle, isTrue, reason: 'processing stays above the finished row');
     _expectAbsent(['Okay.', 'Recording · 3:00 PM']);
 
-    await _capture(tester, boundary, '005-finished-breaks-run');
+    await _capture(tester, boundary, '005-finished-keeps-one-row');
   });
 
   testWidgets('006-locked-row', (tester) async {
@@ -424,13 +879,12 @@ void main() {
     ];
     final boundary = await _pumpHome(tester, items);
 
-    expect(find.byKey(_processingKey), findsNWidgets(2));
+    expect(find.byKey(_processingKey), findsOneWidget);
     expect(find.text('Locked recording'), findsOneWidget);
     final runs = find.byKey(_processingKey);
     final late = _top(tester, runs.at(0));
     final locked = _top(tester, find.text('Locked recording'));
-    final early = _top(tester, runs.at(1));
-    expect(late < locked && locked < early, isTrue, reason: 'the locked row keeps its own place between runs');
+    expect(late < locked, isTrue, reason: 'processing stays above the locked row');
     _expectAbsent(['Mm-hmm.']);
 
     await _capture(tester, boundary, '006-locked-row');

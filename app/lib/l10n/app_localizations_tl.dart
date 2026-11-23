@@ -563,11 +563,11 @@ class AppLocalizationsTl extends AppLocalizations {
   String get hardwareSection => 'Hardware';
 
   @override
-  String get v2Undetected => 'V2 ay hindi na-detect';
+  String get v2Undetected => 'Hindi Available ang Offline Sync';
 
   @override
   String get v2UndetectedMessage =>
-      'Nakita namin na mayroon kang V1 device o ang iyong device ay hindi konektado. Ang SD Card functionality ay available lamang para sa V2 devices.';
+      'Kailangan ng Offline Sync ng nakakonektang Omi device na may SD card storage. Hindi ito sinusuportahan ng iyong kasalukuyang device.';
 
   @override
   String get endConversation => 'Tapusin ang Pag-uusap';
@@ -1128,6 +1128,11 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get nameUpdatedSuccessfully => 'Ang pangalan ay na-update na!';
+
+  @override
+  String calendarReadSelectionHelp(String calendar) {
+    return 'Basahin ang mga napiling kalendaryo. Gagamit ang mga bagong event ng $calendar.';
+  }
 
   @override
   String get calendarSettings => 'Mga setting ng Calendar';
@@ -2002,6 +2007,15 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get memoryHistory => 'Kasaysayan';
+
+  @override
+  String get recordingWithYourPhone => 'Nagre-record gamit ang iyong phone';
+
+  @override
+  String get wrapUp => 'Tapusin';
+
+  @override
+  String get recordingDiscarded => 'Itinapon ang recording';
 
   @override
   String get undo => 'Undo';
@@ -7093,6 +7107,10 @@ class AppLocalizationsTl extends AppLocalizations {
   String get authFailedToSignInWithApple => 'Nabigo ang pag-sign in gamit ang Apple, mangyaring subukan ulit.';
 
   @override
+  String get authAppleSignInFailedUseGoogle =>
+      'Hindi gumana ang pag-sign in gamit ang Apple. Subukang muli o magpatuloy gamit ang Google.';
+
+  @override
   String get authFailedToRetrieveToken => 'Nabigo ang pagkuha ng firebase token, mangyaring subukan ulit.';
 
   @override
@@ -9148,7 +9166,7 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get deleteWhileProcessingMessage =>
-      'Na-upload na ang recording na ito ngunit ginagawa pa ng Omi ang usapan. Kung buburahin mo ito ngayon at mabigo ang pagproseso, hindi na ito mababawi. Burahin pa rin?';
+      'Na-upload na ang recording na ito at pinoproseso na ito ng Omi. Ang pagbura dito ay nag-aalis ng kopya sa phone. Kung pumalya ang pagproseso, hindi na makakasubok ulit ang Omi mula sa phone na ito.';
 
   @override
   String get syncCardAllBackedUp => 'Lahat ng recording ay na-sync na';
@@ -9254,6 +9272,24 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get unableToDetermineFirmwareVersion => 'Hindi matukoy ang kasalukuyang bersyon ng firmware';
+
+  @override
+  String get applyCodeToCurrentPlan => 'Ilapat sa Kasalukuyang Plan';
+
+  @override
+  String subscriptionCodeResult(String result) {
+    String _temp0 = intl.Intl.selectLogic(
+      result,
+      {
+        'applied': 'Nailapat ang code sa kasalukuyan mong plan.',
+        'refused': 'Hindi mailapat ang code na ito. Suriin ang code at kinakailangang plan.',
+        'conflict': 'Nagamit na ang code o may diskuwento na ang plan mo.',
+        'rateLimited': 'Masyadong maraming pagsubok. Maghintay at subukan ulit mamaya.',
+        'other': 'Hindi mailapat ang code. Pakisubukang muli.',
+      },
+    );
+    return '$_temp0';
+  }
 
   @override
   String get promoCode => 'Promo code';
@@ -12296,7 +12332,7 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String diagnosticsSincePairingSummary(int drops, int failed) {
-    return 'Mula nang ipares: $drops pagputol, $failed bigong koneksyon.';
+    return 'Mula nang ipinares: $drops muling pagkonekta, $failed nabigong koneksyon.';
   }
 
   @override
@@ -13490,6 +13526,9 @@ class AppLocalizationsTl extends AppLocalizations {
   }
 
   @override
+  String get paywallTrialCodeHint => 'May Omi Pro code ka? Ilagay ito sa susunod na screen.';
+
+  @override
   String get paywallTrialCancelNote => 'Magkansela anumang oras. Walang bayad, walang multa.';
 
   @override
@@ -13536,16 +13575,6 @@ class AppLocalizationsTl extends AppLocalizations {
   }
 
   @override
-  String syncCardTranscribingAmount(String amount) {
-    return 'Ginagawang mga usapan ang $amount';
-  }
-
-  @override
-  String syncCardTranscribedOf(String done, String total) {
-    return '$done sa $total tapos na · puwede mong iwan ang screen na ito';
-  }
-
-  @override
   String syncCardReadyAmount(String amount) {
     return '$amount handa nang i-sync';
   }
@@ -13569,7 +13598,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get syncDetailsWaitingOnPhone => 'Naghihintay sa phone na ito';
 
   @override
-  String get syncDetailsTranscribing => 'Tina-transcribe sa Omi';
+  String get syncDetailsTranscribing => 'Na-upload, naghihintay sa server';
 
   @override
   String get syncDetailsAudioFiles => 'Mga audio file';
@@ -13757,6 +13786,9 @@ class AppLocalizationsTl extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get attentionRerunNotes => 'Bumuo muli ng mga tala';
 
   @override
   String get attentionSummaryFailed => 'Hindi ma-summarize ang usapang ito';
@@ -14026,6 +14058,12 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get summaryBusyBody => 'Ginagawa na ng Omi ang usapang ito. Lalabas dito ang buod kapag tapos na.';
+
+  @override
+  String get summaryTranscriptionPendingTitle => 'Hindi pa naita-transcribe';
+
+  @override
+  String get summaryTranscriptionPendingBody => 'Lalabas ang buod kapag handa na ang transcript.';
 
   @override
   String get summaryCheckAgain => 'Suriin muli';
@@ -14564,14 +14602,6 @@ class AppLocalizationsTl extends AppLocalizations {
   @override
   String deviceCatchingUpProgress(int done, int total) {
     return '$done sa $total min';
-  }
-
-  @override
-  String get deviceRecently => 'Kamakailan';
-
-  @override
-  String deviceDisconnectedFor(String duration) {
-    return 'Nadiskonekta nang $duration';
   }
 
   @override
@@ -15498,6 +15528,11 @@ class AppLocalizationsTl extends AppLocalizations {
   String get paymentDeclinedTitle => 'Tinanggihan ang iyong card';
 
   @override
+  String paymentDeclinedMonthlyMessage(String plan, String price) {
+    return 'I-update ang card, o ibalik ang $plan sa $price bawat buwan';
+  }
+
+  @override
   String paymentDeclinedMessage(Object plan) {
     return 'I-update ang card para maibalik ang $plan';
   }
@@ -15514,6 +15549,11 @@ class AppLocalizationsTl extends AppLocalizations {
   }
 
   @override
+  String firmwareUpdateNotInstalledCv1Message(String version) {
+    return 'Hindi na-install ang update. Gumagana pa rin ang iyong pendant sa kasalukuyang firmware ($version). Makipag-ugnayan sa support sa halip na subukang muli ang update.';
+  }
+
+  @override
   String get firmwareUpdateUnconfirmedMessage =>
       'Couldn\'t confirm the update. Your pendant hasn\'t reconnected yet. Keep it nearby and check its firmware version before trying again.';
 
@@ -15522,4 +15562,303 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get firmwareVerifyingInstallation => 'Confirming installation… This may take up to 3 minutes.';
+
+  @override
+  String get monthlySwitchTitle => 'Lumipat sa Buwanan';
+
+  @override
+  String monthlySwitchPlanValue(String plan, String price) {
+    return '$plan, $price bawat buwan';
+  }
+
+  @override
+  String monthlySwitchNote(String yearly) {
+    return 'Papalitan ang hindi pa nababayarang taunang singil na $yearly. Nire-renew buwan-buwan. Kanselahin anumang oras.';
+  }
+
+  @override
+  String get monthlySwitchDeclined => 'Tinanggihan ang bayad. Hindi nagbago ang plan mo.';
+
+  @override
+  String get monthlySwitchUnavailable => 'Hindi pa available ang paglipat ngayon. I-update na lang ang card mo.';
+
+  @override
+  String get monthlySwitchDoneTitle => 'Buwanan ka na';
+
+  @override
+  String monthlySwitchDoneBody(String price) {
+    return 'Nabayaran ang $price ngayon. Nire-renew buwan-buwan.';
+  }
+
+  @override
+  String get processingDeleteScopeChanged =>
+      'Nagbago ang listahan ng pinoproseso. Suriin ang listahan at subukang muli.';
+
+  @override
+  String get syncTooOldExplanation =>
+      'This recording is older than Omi\'s sync window, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
+
+  @override
+  String freeCapTitle(int minutes) {
+    return 'Nagamit mo na ang $minutes minuto ngayong buwan';
+  }
+
+  @override
+  String get freeCapBody => 'Nagre-record pa rin ang Omi. Piliin kung paano magpapatuloy ang transcription.';
+
+  @override
+  String get omiProPlanName => 'Omi Pro';
+
+  @override
+  String get freeCapProUnlimited => 'Walang limitasyong cloud transcription';
+
+  @override
+  String get freeCapProAccuracy => 'Pinakamataas na katumpakan';
+
+  @override
+  String get freeCapProWaiting => 'Itina-transcribe ang mga naghihintay mong recording';
+
+  @override
+  String get freeCapPhoneSubtitle => 'Libre. Mananatiling naka-on hanggang ibalik mo.';
+
+  @override
+  String get transcribingOnThisPhone => 'Nagta-transcribe sa phone na ito';
+
+  @override
+  String get getPro => 'Kumuha ng Pro';
+
+  @override
+  String get unlock => 'I-unlock';
+
+  @override
+  String get transcribeWith => 'Mag-transcribe gamit ang';
+
+  @override
+  String get omiCloud => 'Omi cloud';
+
+  @override
+  String get thisPhone => 'Ang phone na ito';
+
+  @override
+  String get onDeviceReady => 'Handa na';
+
+  @override
+  String cloudMinutesLeft(int left, int limit, String date) {
+    return '$left sa $limit min ang natitira · magre-reset sa $date';
+  }
+
+  @override
+  String cloudMinutesAvailable(int minutes) {
+    return '$minutes cloud minuto ang available';
+  }
+
+  @override
+  String get switchBack => 'Ibalik';
+
+  @override
+  String get setUpThisPhone => 'I-set up ang phone na ito';
+
+  @override
+  String get speechRecognition => 'Speech recognition';
+
+  @override
+  String get audioStaysOnPhone => 'Nananatili ang audio sa phone mo';
+
+  @override
+  String onDeviceModelDownloadSize(int size) {
+    return '$size MB na download';
+  }
+
+  @override
+  String get downloadNow => 'I-download Ngayon';
+
+  @override
+  String get onWifiLater => 'Mamaya sa Wi-Fi';
+
+  @override
+  String get conversationWritingSummary => 'Isinusulat ang iyong buod…';
+
+  @override
+  String get onTheWayServerWork => 'Trabahong iniulat ng server';
+
+  @override
+  String get finishNothingToProcess => 'Wala pang ipoproseso.';
+
+  @override
+  String get finishStillProcessing => 'Pinoproseso pa. Lalabas ito sa Home.';
+
+  @override
+  String get finishBackToHome => 'Bumalik sa Home';
+
+  @override
+  String get conversationSummaryWhenItEnds => 'Buod kapag natapos ang usapang ito';
+
+  @override
+  String get deviceUploadsWaitingOnServer => 'Mga upload na naghihintay sa server';
+
+  @override
+  String get deviceUploadsWaitingOnServerSubtitle => 'Ligtas ang iyong audio sa iyong device o phone';
+
+  @override
+  String conversationSummaryThrough(String time) {
+    return 'Buod hanggang $time';
+  }
+
+  @override
+  String get conversationRecentTranscript => 'Pinakabagong Transcript';
+
+  @override
+  String get finishAlreadySaved => 'Naka-save na. Nasa Home na ito.';
+
+  @override
+  String get finishAudioNotReceived => 'Paparating pa lang ang audio.';
+
+  @override
+  String get finishFailedOffline => 'Hindi natuloy. Ligtas pa ang audio mo.';
+
+  @override
+  String get finishFailed => 'Hindi natuloy. Ligtas pa ang audio mo.';
+
+  @override
+  String get micBlockedCannotRecord => 'Payagan ang mikropono upang makapag-record.';
+
+  @override
+  String get couldNotStartRecording => 'Hindi nasimulan ang pag-record.';
+
+  @override
+  String get restorePurchasesFailed => 'Hindi na-check ang iyong plano.';
+
+  @override
+  String get firmwareCheckFailed => 'Hindi ma-check ang mga update.';
+
+  @override
+  String get conversationStillPublic => 'Nakabahagi pa rin ito sa pamamagitan ng link.';
+
+  @override
+  String get goalSaveFailed => 'Hindi na-save ang goal mo.';
+
+  @override
+  String get goalDeleteFailed => 'Hindi natanggal. Nabalik ang goal.';
+
+  @override
+  String get goalsLoadFailed => 'Hindi na-load ang mga goal mo.';
+
+  @override
+  String get missingTargetEndedRecording => 'Tapos na ang pag-record na iyon.';
+
+  @override
+  String get missingTargetMemory => 'Wala na ang alaala na iyon.';
+
+  @override
+  String get missingTargetTask => 'Wala na ang gawaing iyon.';
+
+  @override
+  String get missingTargetConversation => 'Hindi mabuksan ang pag-uusap na ito.';
+
+  @override
+  String get couldNotRefreshConversations => 'Hindi na-refresh.';
+
+  @override
+  String get connectDeviceForOfflineSync => 'Ikonekta ang Omi mo para mag-sync.';
+
+  @override
+  String get useDifferentAccountMessage => 'Mag-sign out ka at mareset ang mga Omi setting ng teleponong ito.';
+
+  @override
+  String get rayBanMetaNotFoundAfterSetup => 'Hindi nahanap ang salamin. Naka-on ba ito?';
+
+  @override
+  String get couldNotMoveTask => 'Hindi nailipat ang gawain.';
+
+  @override
+  String lockedTasksKept(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Tinanggal. $count naka-lock na gawain ang naiwan.',
+      one: 'Tinanggal. 1 naka-lock na gawain ang naiwan.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get settingNotSaved => 'Hindi na-save ang pagbabagong iyon.';
+
+  @override
+  String get couldNotLoadNotificationSettings => 'Hindi na-load ang mga setting mo.';
+
+  @override
+  String get waitForOmiToFinish => 'Hintayin mong matapos si Omi.';
+
+  @override
+  String get voiceNoteTooShort => 'Masyadong maikli. Pindutin nang matagal para mag-record.';
+
+  @override
+  String get submitAppMissingFields =>
+      'Magdagdag ng pangalan, paglalarawan, larawan, kategorya at kakayahan para makapag-submit.';
+
+  @override
+  String get appSetupNotFinished => 'Hindi pa tapos ang setup.';
+
+  @override
+  String get finishNothingKeptTitle => 'Walang Mapapanatili';
+
+  @override
+  String get submitAppFinishDetails =>
+      'Tapusin muna ang mga detalye ng kakayahan at presyo sa itaas para makapag-submit.';
+
+  @override
+  String get finishNothingNew => 'Wala pang bago.';
+
+  @override
+  String get takingLongerThanUsual => 'Mas matagal kaysa dati. Malapit na itong makita sa Home.';
+
+  @override
+  String get couldNotCheckOnIt => 'Hindi na-check ito. Subukan ulit.';
+
+  @override
+  String get upgradeToOpenThisOne => 'Mag-upgrade para mabuksan ito.';
+
+  @override
+  String get missingTargetConversationGone => 'Tinanggal na ang pag-uusap na iyon.';
+
+  @override
+  String get cantConnectRightNow => 'Hindi makakonekta ngayon.';
+
+  @override
+  String get loadOlderFailed => 'Hindi na-load ang mga mas luma. I-tap para subukan ulit.';
+
+  @override
+  String listeningWithDuration(String duration) {
+    return 'Nakikinig · $duration';
+  }
+
+  @override
+  String get conversationLiveNoEdits => 'Hintaying matapos muna bago ito baguhin.';
+
+  @override
+  String get finishedSummaryReady => 'Handa na ang buod';
+
+  @override
+  String get writingSummaryStatus => 'Isinusulat ang buod…';
+
+  @override
+  String get stillWorkingOnIt => 'Pinagtatrabahuhan pa rin ito.';
+
+  @override
+  String get firmwareUpdateFirmwareTooOld =>
+      'Napakaluma na ng firmware ng iyong device para sa update na ito. Makipag-ugnayan sa support para sa tulong sa pag-update ng iyong device.';
+
+  @override
+  String get firmwareUpdateAppRequired =>
+      'Kailangan ng firmware update na ito ng mas bagong Omi app. I-update ang app mula sa iyong app store, pagkatapos ay tingnan muli.';
+
+  @override
+  String get quietPayerTitle => 'Walang recording sa loob ng 5 araw';
+
+  @override
+  String get quietPayerMessage => 'Tingnan ang iyong Omi.';
+
+  @override
+  String get quietPayerCheck => 'Tingnan';
 }

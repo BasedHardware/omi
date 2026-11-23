@@ -7,6 +7,7 @@ Extracted from routers/sync.py so the router stays thin and utils never imports 
 
 from __future__ import annotations
 
+from utils.stt.allowance_session import operation as allowance_operation, current as current_allowance_operation
 from utils.enrichment.admission import SyncConversationPersistenceFenced
 from utils.enrichment.admission import require_current_persistence as _require_current_conversation_persistence
 from utils.enrichment.admission import run_created_webhook as _run_conversation_created_webhook
@@ -56,6 +57,7 @@ from utils.sync.staging_custody import add_staging_derivatives, cleanup_sync_sta
 from utils.sync import conversation_turn as conversation_turn_lease
 
 from database import conversations as conversations_db
+from database import capture_end as capture_end_db
 from database.summary_processing import claim_from_snapshot
 from utils.conversations.summary_delivery import (
     repair_fenced,
@@ -1066,8 +1068,13 @@ def retrieve_vad_segments(
 @observe_sync_failures
 def _reprocess_conversation_after_update(uid: str, conversation_id: str, language: str, *, user_selected: bool = False):
     """Reassess relevance and regenerate notes after sync appends."""
+    from models.finalization_owner import REFUSAL as FINALIZATION_OWNER_REFUSAL
+    from models.finalization_owner import FinalizationOwnedElsewhere, python_owns_finalization
+
     conversation_data = conversations_db.get_conversation(uid, conversation_id)
     context = PROCESS_CONTEXT.get()
+    if conversation_data is not None and not python_owns_finalization(conversation_data):
+        raise processing_hold.finalization_owner_deferral()
     if conversation_data and conversation_data.get('deleted') and conversation_data.get('sync_merged_into'):
         if context is not None:
             try:
@@ -1088,6 +1095,8 @@ def _reprocess_conversation_after_update(uid: str, conversation_id: str, languag
             return sync_result('deferred')
         conversation_data = conversations_db.get_sync_redirected_conversation(uid, conversation_id)
         if conversation_data:
+            if not python_owns_finalization(conversation_data):
+                raise processing_hold.finalization_owner_deferral()
             conversation_id = conversation_data['id']
     if not conversation_data or conversation_data.get('deleted'):
         if context is not None:
@@ -1102,6 +1111,8 @@ def _reprocess_conversation_after_update(uid: str, conversation_id: str, languag
         conversation_id, conversation_data = bridge.resume_pending(uid, conversation_id, conversation_data, context)
         if conversation_data is None:
             return sync_result('deferred')
+        if not python_owns_finalization(conversation_data):
+            raise processing_hold.finalization_owner_deferral()
 
     if repair_fenced(conversation_data):
         raise SummaryRepairSuperseded(
@@ -1123,7 +1134,12 @@ def _reprocess_conversation_after_update(uid: str, conversation_id: str, languag
         # Rollback bypasses admission, but still settles stored hold metadata
         # after success so lazy effects do not remain fenced indefinitely.
         outcome, due = (
-            processing_hold.admission(conversation_data, context, now=time.time())
+            processing_hold.admission(
+                conversation_data,
+                context,
+                now=time.time(),
+                end_proven=lambda: capture_end_db.proven(uid, conversation_data),
+            )
             if processing_hold.enabled_for(context)
             else ('ready', None)
         )
@@ -1164,6 +1180,8 @@ def _reprocess_conversation_after_update(uid: str, conversation_id: str, languag
                 sync_intake_decision(rule),
                 expected_sync_content_revision=conversation_data.get('sync_content_revision'),
             )
+            if outcome == FINALIZATION_OWNER_REFUSAL:
+                raise processing_hold.finalization_owner_deferral()
             if outcome == 'discarded':
                 record_conversation_relevance(trigger='sync_intake', verdict='discard', decided_by='rule', reason=rule)
             if outcome in ('discarded', 'already_discarded'):
@@ -1245,11 +1263,15 @@ def _reprocess_conversation_after_update(uid: str, conversation_id: str, languag
             # sync_update means a previous enrichment, sync_intake or absence does not.
             prior_relevance_decision=prior_decision if isinstance(prior_decision, dict) else None,
         )
+    except FinalizationOwnedElsewhere as error:
+        raise processing_hold.finalization_owner_deferral() from error
     except ConversationAbsorbed as absorbed:
         if context is not None:
             context['redirect_to'] = absorbed.canonical_id
             return sync_result('deferred')
         canonical = conversations_db.get_sync_redirected_conversation(uid, conversation_id)
+        if canonical is not None and not python_owns_finalization(canonical):
+            raise processing_hold.finalization_owner_deferral()
         return sync_result('deferred', deserialize_conversation(canonical) if canonical else None)
 
     if context is not None and context.get('hold_budget_denied_at_max'):
@@ -1508,6 +1530,9 @@ def process_segment(  # pyright: ignore[reportGeneralTypeIssues] — segment pip
     def cap_enforced() -> bool:
         return (recovery_admission_enabled if cap_recovery else cap_enabled)(uid, cap_dispatch_lane)
 
+    # The unlimited_v2 backfill day cap is enforced only at upload admission
+    # (routers/sync.py), never here: a segment-time refusal would park admitted
+    # audio in a hold that no prod recovery path releases.
     if cap_recovery and not cap_enforced():
         return False
     cap_context = {
@@ -1586,7 +1611,12 @@ def process_segment(  # pyright: ignore[reportGeneralTypeIssues] — segment pip
                     path,
                     selector=get_prerecorded_service,
                     before_probe=lambda: not cap_enforced()
-                    or sync_allowed(uid, provider='modulate', lane=cap_dispatch_lane, path=DispatchPath.LANGUAGE_PROBE),
+                    or sync_allowed(
+                        uid,
+                        provider='modulate',
+                        lane=cap_dispatch_lane,
+                        path=DispatchPath.LANGUAGE_PROBE,
+                    ),
                     cohort_key=uid,
                 ),
             )
@@ -1624,6 +1654,10 @@ def process_segment(  # pyright: ignore[reportGeneralTypeIssues] — segment pip
                 _bounded_correlation_ref(attempt_ref),
             )
 
+        def _note_served_provider(served_provider: str, served_model: str) -> None:
+            nonlocal provider, model
+            provider, model = served_provider, served_model
+
         empty_retried = False
         recovered_via_retry = False
         transcript_segments: List[TranscriptSegment] = []
@@ -1656,6 +1690,7 @@ def process_segment(  # pyright: ignore[reportGeneralTypeIssues] — segment pip
                 return_language=True,
                 language=req_language,
                 keywords=vocabulary if vocabulary else None,
+                on_provider_served=_note_served_provider,
                 **recovery_dispatch,
             )
             if cap_enforced():
@@ -1848,6 +1883,10 @@ def process_segment(  # pyright: ignore[reportGeneralTypeIssues] — segment pip
             incoming[SYNC_CLOCK_RUN_FIELD] = clock_run
         apply_capture_evidence_dark_write(incoming, source_position_map, transcript_segments)
         annotate_identity(incoming, client_device_id, recording_session_id)
+        if capture_time_offset > 0:
+            # The stored times above are shifted by this much; the end-of-recording
+            # proof needs it to compare the row with the phone's own clock.
+            incoming['_sync_capture_clock_offset'] = capture_time_offset
         if lineage_binding is not None and target_conversation_id:
             incoming['_sync_lineage_binding'] = lineage_binding
         if lineage_eligible:
@@ -2285,7 +2324,7 @@ def _record_capture_time_admission(outcome: SyncCaptureTimeReason, ahead_seconds
         record_fallback(component='sync_dispatch', from_mode='none', to_mode='none', reason='other', outcome='degraded')
 
 
-def _retrieve_file_paths_v2(files: List[UploadFile], uid: str, job_id: str):
+def _retrieve_file_paths_v2(files: List[UploadFile], uid: str, job_id: str, *, probe_future: bool = False):
     """Like retrieve_file_paths but uses a job-specific directory to avoid concurrency conflicts."""
     names = [file.filename for file in files if file.filename]
     if len(set(names)) != len(names):
@@ -2317,18 +2356,23 @@ def _retrieve_file_paths_v2(files: List[UploadFile], uid: str, job_id: str):
         now = datetime.now(timezone.utc)
         ahead_seconds = (time_val - now).total_seconds()
         rejection = capture_time_rejection(time_val, now=now)
-        if rejection is not None:
+        if rejection is not None and not (probe_future and rejection is SyncCaptureTimeReason.REJECTED_FUTURE):
             # Defense in depth: the shared parser already enforces this window.
             _record_capture_time_admission(rejection, ahead_seconds=ahead_seconds)
             raise SyncCaptureTimeRejected()
-        _record_capture_time_admission(
-            (
-                SyncCaptureTimeReason.ACCEPTED_EARLY_CLAMPED
-                if is_early_capture_time(timestamp)
-                else SyncCaptureTimeReason.ACCEPTED_FUTURE_SKEW if ahead_seconds > 0 else SyncCaptureTimeReason.ACCEPTED
-            ),
-            ahead_seconds=max(0.0, ahead_seconds),
-        )
+        if rejection is None:
+            _record_capture_time_admission(
+                (
+                    SyncCaptureTimeReason.ACCEPTED_EARLY_CLAMPED
+                    if is_early_capture_time(timestamp)
+                    else (
+                        SyncCaptureTimeReason.ACCEPTED_FUTURE_SKEW
+                        if ahead_seconds > 0
+                        else SyncCaptureTimeReason.ACCEPTED
+                    )
+                ),
+                ahead_seconds=max(0.0, ahead_seconds),
+            )
 
         path = f"{directory}{filename}"
         try:
@@ -2558,6 +2602,7 @@ async def _resolve_safety_wal_target(
 @sync_attempt
 @sync_snapshot_resolve_job
 @with_batch_privacy_attempt
+@allowance_operation('sync', live=False)
 async def run_full_pipeline_background_async(  # pyright: ignore[reportGeneralTypeIssues] — legacy coordinator exceeds Pyright's analyzer complexity ceiling
     job_id: str,
     uid: str,
@@ -3026,6 +3071,9 @@ async def run_full_pipeline_background_async(  # pyright: ignore[reportGeneralTy
             total_speech_seconds = await run_blocking(
                 sync_executor, lambda: sum(get_wav_duration(p) for p in segmented_paths)
             )
+            allowance_scope = current_allowance_operation.get()
+            if allowance_scope is not None:
+                allowance_scope.seconds = int(total_speech_seconds)
             total_speech_ms = int(total_speech_seconds * 1000)
             total_segments = len(segmented_paths)
 

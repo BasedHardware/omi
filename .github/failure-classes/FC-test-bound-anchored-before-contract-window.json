@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "id": "FC-test-bound-anchored-before-contract-window",
+  "family": "test-fidelity",
+  "violated_contract": "A test that bounds a contract's duration must measure from the instant that contract's window opens. A wall-clock bound anchored earlier — at request start — charges the harness's own scheduling delay against a deadline the implementation already enforces absolutely. That delay is unbounded on a loaded runner: the event loop only observes a short handler budget when it next runs, so a correct implementation fails on a busy machine and the shard goes red for a reason the contract does not cover. test_sequenced_cleanup_waits_share_one_deadline measured 1.103s against its 0.75s request-start bound on the 2026-11-16 nightly while the cleanup tail from the shared post-budget deadline was still exactly one cleanup window.",
+  "canonical_prevention": "Anchor the assertion at the absolute deadline the implementation publishes (here the deferral's post-budget deadline) and observe where the bounded wait actually lands, so the bound is independent of pre-window scheduling delay. Keep a generous total-elapsed hang guard, and prove the named regressions still fail: a wait that takes a fresh window from its own start must land a full window later, and a first wait that takes a fresh window must still be cut and recorded.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_sync_cloud_tasks.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/tests/unit/test_sync_cloud_tasks.py"
+  ],
+  "status": "open"
+}

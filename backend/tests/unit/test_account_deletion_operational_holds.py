@@ -2,12 +2,19 @@
 
 from copy import deepcopy
 import hashlib
+import json
+import os
 import sqlite3
 from types import SimpleNamespace
 from unittest.mock import MagicMock
+from uuid import uuid4
 
 import pytest
-from google.api_core.exceptions import PreconditionFailed
+from google.api_core.exceptions import InvalidArgument, PreconditionFailed
+from google.auth.credentials import AnonymousCredentials
+from google.cloud import firestore
+from google.cloud.firestore_v1._helpers import encode_dict
+from google.cloud.firestore_v1.types import Document
 
 from database import account_deletion_operational_holds as holds
 from scripts import account_deletion_operational_holds as operator
@@ -58,16 +65,29 @@ def approval(blob):
     }
 
 
-@pytest.fixture
-def setup(monkeypatch):
+@pytest.fixture(params=['inline', 'sharded'])
+def setup(monkeypatch, request):
     blob = Blob()
-    marker = {'wipe_status': 'running', 'operational_hold_release_approval': approval(blob)}
+    approved = approval(blob)
+    shards = {}
+    if request.param == 'sharded':
+        approved, shards = holds.shard_release_approval(UID, approved)
+    marker = {'wipe_status': 'running', 'operational_hold_release_approval': approved}
     receipt = {}
     marker_ref = MagicMock()
     marker_ref.get.side_effect = lambda: SimpleNamespace(exists=True, to_dict=lambda: deepcopy(marker))
     receipt_ref = marker_ref.collection.return_value.document.return_value
     receipt_ref.get.side_effect = lambda: SimpleNamespace(exists=bool(receipt), to_dict=lambda: deepcopy(receipt))
     receipt_ref.set.side_effect = lambda value: (receipt.clear(), receipt.update(deepcopy(value)))
+    shard_collection = MagicMock()
+    shard_collection.document.side_effect = lambda prefix: SimpleNamespace(
+        get=lambda: SimpleNamespace(exists=prefix in shards, to_dict=lambda: deepcopy(shards[prefix]))
+    )
+    marker_ref.collection.side_effect = lambda name: (
+        shard_collection
+        if name == holds.OPERATIONAL_HOLD_RELEASE_PLAN_SHARDS
+        else SimpleNamespace(document=lambda _: receipt_ref)
+    )
     gate = MagicMock()
     legal = MagicMock()
     monkeypatch.setattr(holds, 'assert_destructive_gate_still_ours', gate)
@@ -75,7 +95,14 @@ def setup(monkeypatch):
     monkeypatch.setattr(holds, 'account_deletion_document', lambda *args, **kwargs: marker_ref)
     client = object()
     return SimpleNamespace(
-        blob=blob, marker=marker, receipt=receipt, receipt_ref=receipt_ref, client=client, gate=gate, legal=legal
+        blob=blob,
+        marker=marker,
+        receipt=receipt,
+        receipt_ref=receipt_ref,
+        client=client,
+        gate=gate,
+        legal=legal,
+        shards=shards,
     )
 
 
@@ -94,6 +121,7 @@ def test_approved_hold_released_with_cas_and_durable_intent(setup):
     assert writes == ['release_pending', 'patch', 'released']
     assert s.blob.temporary_hold is False
     assert s.receipt['released_metageneration'] == '3'
+    assert s.receipt['plan_sha256'] == approval(s.blob)['plan_sha256']
     assert UID not in str(s.receipt)
     assert s.blob.name not in str(s.receipt)
     s.gate.assert_called_with(UID, 'account_deletion', token=f'account-deletion:{UID}', firestore_client=s.client)
@@ -123,6 +151,7 @@ def test_object_retention_never_released(setup):
     with pytest.raises(holds.OperationalStorageHoldBlocked, match='protected'):
         release(s)
     s.blob.patch.assert_not_called()
+    s.receipt_ref.set.assert_not_called()
 
 
 @pytest.mark.parametrize('gate_kind', ['gate', 'legal'])
@@ -331,8 +360,28 @@ def test_registration_uses_transaction_authority_before_writing():
         'started_at': holds.datetime.now(holds.timezone.utc),
     }
     plan_approval = approval(Blob())
-    operator.register_plan(client.transaction(), client, UID, 'opaque-job', 'operator-token', plan_approval)
-    assert client.rows[('account_deletions', UID)]['operational_hold_release_approval'] == plan_approval
+    transaction = client.transaction()
+    operator.register_plan(transaction, client, UID, 'opaque-job', 'operator-token', plan_approval)
+    marker = client.rows[('account_deletions', UID)]['operational_hold_release_approval']
+    assert marker['plan_sha256'] == plan_approval['plan_sha256']
+    assert 'objects' not in marker['plan']
+    assert len(transaction.creates) == 1
+    prefix = plan_approval['plan']['objects'][0]['object_sha256'][:2]
+    assert client.rows[('account_deletions', UID, holds.OPERATIONAL_HOLD_RELEASE_PLAN_SHARDS, prefix)] == {
+        'objects': plan_approval['plan']['objects']
+    }
+    replay = client.transaction()
+    operator.register_plan(replay, client, UID, 'opaque-job', 'operator-token', plan_approval)
+    assert not replay.has_written
+    with pytest.raises(ValueError, match='must not be overwritten'):
+        operator.register_plan(
+            client.transaction(),
+            client,
+            UID,
+            'opaque-job',
+            'operator-token',
+            {**plan_approval, 'approval_ref': 'other'},
+        )
 
 
 def test_registration_refuses_legal_hold_and_preserves_marker():
@@ -342,3 +391,96 @@ def test_registration_refuses_legal_hold_and_preserves_marker():
     with pytest.raises(RuntimeError, match='legal hold'):
         operator.register_plan(client.transaction(), client, UID, 'opaque-job', 'token', approval(Blob()))
     assert 'operational_hold_release_approval' not in client.rows[('account_deletions', UID)]
+    assert not client.transactions[-1].has_written
+
+
+@pytest.mark.parametrize('missing', [True, False])
+@pytest.mark.parametrize('setup', ['sharded'], indirect=True)
+def test_missing_or_changed_shard_blocks_release(setup, missing):
+    s = setup
+    prefix = holds.object_digest(s.blob.name)[:2]
+    if missing:
+        del s.shards[prefix]
+    else:
+        s.shards[prefix]['objects'][0]['metageneration'] = '999'
+    with pytest.raises(holds.OperationalStorageHoldBlocked, match='shard is missing or changed'):
+        release(s)
+    s.blob.patch.assert_not_called()
+    s.receipt_ref.set.assert_not_called()
+
+
+@pytest.mark.skipif(
+    not os.getenv('FIRESTORE_EMULATOR_HOST', '').startswith(('127.0.0.1:', 'localhost:')),
+    reason='isolated loopback Firestore emulator required',
+)
+def test_registration_above_firestore_document_limit():
+    client = firestore.Client(project='demo-deletion-shards', credentials=AnonymousCredentials())
+    uid = 'synthetic-' + uuid4().hex
+    marker = client.collection('account_deletions').document(uid)
+    gate = client.collection('legal_hold_deletion_gates').document(uid)
+    blob = Blob()
+    blob.name = f'syncing/{uid}/synthetic.bin'
+    plan_approval = approval(blob)
+    plan = plan_approval['plan']
+    plan['owner_sha256'] = holds.object_digest(uid)
+    plan['objects'].extend(
+        {
+            'bucket': 'syncing-local',
+            'object_sha256': holds.object_digest(f'synthetic-object/{index}'),
+            'generation': str(1_792_000_000_000_000 + index),
+            'metageneration': '2',
+        }
+        for index in range(13_463)
+    )
+    plan['objects'].sort(key=lambda item: item['object_sha256'])
+    plan_approval['plan_sha256'] = holds.plan_digest(plan)
+    inline_bytes = len(json.dumps(plan_approval, separators=(',', ':')).encode())
+    assert inline_bytes > 1_048_576
+    marker.set({'wipe_status': 'failed', 'wipe_job_id': 'opaque-job'})
+    gate.set(
+        {
+            'schema_version': 'legal_hold_deletion_gate.v1',
+            'uid': uid,
+            'kind': 'account_deletion',
+            'token': 'operator-token',
+            'state': 'running',
+            'started_at': holds.datetime.now(holds.timezone.utc),
+        }
+    )
+    try:
+        with pytest.raises(InvalidArgument, match='(?i)size|large'):
+            marker.update({'operational_hold_release_approval': plan_approval})
+
+        operator.register_plan(client.transaction(), client, uid, 'opaque-job', 'operator-token', plan_approval)
+        marker_data = marker.get().to_dict()
+        manifest = marker_data['operational_hold_release_approval']
+        assert manifest['plan_sha256'] == plan_approval['plan_sha256']
+        assert 'objects' not in manifest['plan']
+        shards = {
+            doc.id: doc.to_dict() for doc in marker.collection(holds.OPERATIONAL_HOLD_RELEASE_PLAN_SHARDS).stream()
+        }
+        assert len(shards) == 256
+        assert set(shards) == set(manifest['shard_sha256'])
+        assert [item for prefix in sorted(shards) for item in shards[prefix]['objects']] == plan['objects']
+        for prefix, shard in shards.items():
+            assert all(item['object_sha256'].startswith(prefix) for item in shard['objects'])
+            assert holds.plan_digest(shard) == manifest['shard_sha256'][prefix]
+
+        marker_bytes = Document.pb(Document(fields=encode_dict(marker_data))).ByteSize()
+        max_shard_bytes = max(Document.pb(Document(fields=encode_dict(shard))).ByteSize() for shard in shards.values())
+        print(
+            f'objects={len(plan["objects"])} inline_json_bytes={inline_bytes} shards={len(shards)} '
+            f'marker_proto_field_bytes={marker_bytes} max_shard_proto_field_bytes={max_shard_bytes}'
+        )
+
+        marker.update({'wipe_status': 'running'})
+        gate.update({'token': f'account-deletion:{uid}'})
+        holds.release_operational_hold_for_account_deletion(uid, blob, firestore_client=client)
+        blob.patch.assert_called_once_with(if_generation_match=123, if_metageneration_match=2)
+        (receipt,) = list(marker.collection('operational_hold_releases').stream())
+        assert receipt.to_dict()['state'] == 'released'
+        assert receipt.to_dict()['plan_sha256'] == plan_approval['plan_sha256']
+    finally:
+        client.recursive_delete(marker)
+        gate.delete()
+        client.close()

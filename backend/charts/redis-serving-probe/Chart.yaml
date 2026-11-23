@@ -1,0 +1,5 @@
+apiVersion: v2
+name: redis-serving-probe
+description: Authenticated Redis availability probe for the production serving network
+version: 0.1.0
+type: application

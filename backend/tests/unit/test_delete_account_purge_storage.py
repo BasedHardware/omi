@@ -60,6 +60,7 @@ def users_service():
         "utils.integration_telemetry": AutoMockModule("utils.integration_telemetry"),
         "utils.other": _pkg("utils.other"),
         "utils.other.endpoints": AutoMockModule("utils.other.endpoints"),
+        "utils.other.lake_wipe": AutoMockModule("utils.other.lake_wipe"),
         "utils.other.storage": AutoMockModule("utils.other.storage"),
         "utils.memory": _pkg("utils.memory"),
         "utils.memory.canonical_memory_adapter": AutoMockModule("utils.memory.canonical_memory_adapter"),

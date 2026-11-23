@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime
-from typing import Any, Mapping
+from typing import Any, Iterable, Mapping
 
 from google.cloud import firestore
 
@@ -193,3 +193,35 @@ def resolve_live_continuation(
                 transaction.update(ref, {'external_data': external})
 
     return resolve(client.transaction())
+
+
+def supersede_live_continuation(
+    uid: str,
+    origin_id: str,
+    *,
+    previous_id: str,
+    proposed: Mapping[str, str],
+    own_ids: Iterable[str] = (),
+    firestore_client: Any = None,
+) -> str:
+    """Move an origin's continuation from a rotated recording to its persisted successor.
+
+    Only a pointer that names the retired recording, one of this socket's own recordings, or
+    nothing moves, so a reconnect resumes the successor. Returns moved, absent or other_owner.
+    """
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    root = client.collection('users').document(uid).collection('recording_sessions').document(origin_id)
+    owned = set(own_ids)
+
+    @firestore.transactional
+    def supersede(transaction: Any) -> str:
+        original = root.get(transaction=transaction).to_dict() or {}
+        if original.get('uid') != uid or original.get('recording_session_id') != origin_id:
+            return 'absent'
+        current = (original.get('live_continuation') or {}).get('conversation_id')
+        if current is not None and current != previous_id and current not in owned:
+            return 'other_owner'
+        transaction.update(root, {'live_continuation': dict(proposed)})
+        return 'moved'
+
+    return supersede(client.transaction())

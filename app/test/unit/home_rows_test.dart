@@ -237,7 +237,7 @@ void main() {
     expect(rows.single.conversation.structured.title, 'Finishing up…');
     expect(rows.single.episode!.members.length, 2);
   });
-  test('ready and locked rows break Processing runs and remain ordinary; in-flight rows join them', () {
+  test('ready and locked rows remain ordinary outside the single processing aggregate', () {
     final ready = conversation('ready');
     final locked = waiting('locked', 2, locked: true);
     final pending = waiting('pending', 3, status: ConversationStatus.processing);
@@ -298,19 +298,67 @@ void main() {
       expect(homeStepOf(done), isNull);
     });
 
-    test('failed rows never show on Home; the unfinished rows around them fold as one run', () {
+    test('projected failures remain separate terminal rows outside the processing aggregate', () {
       final rows = home([
         provisional('p', 0),
         provisional('f1', -10, step: 'failed'),
         provisional('f2', -20, step: 'failed'),
         provisional('p2', -30),
       ]);
-      expect(rows, hasLength(1));
-      expect(rows.single.step, HomeStep.writingNotes);
-      expect(rows.single.count, 2);
-      expect(rows.single.episodeConversationIds, {'p', 'p2'});
-      // Search and filtered views keep exact matches.
-      expect(buildHomeRows([provisional('f1', 0, step: 'failed')], [], enabled: false).single.conversation.id, 'f1');
+      expect(rows.map((r) => r.isProcessing), [true, false, false]);
+      expect(rows.map((r) => r.conversation.id), containsAll(['f1', 'f2']));
+    });
+
+    test('explicit failure wins over deferred and client processing metadata', () {
+      for (final c in [
+        ServerConversation(
+            id: 'deferred',
+            createdAt: start,
+            structured: Structured('Processing', ''),
+            homeStep: 'failed',
+            processingDeferred: true),
+        ServerConversation(
+            id: 'client',
+            createdAt: start,
+            structured: Structured('Processing', ''),
+            homeStep: 'failed',
+            clientProcessing: {'stage': 'processing'}),
+      ]) {
+        expect(homeStepOf(c), HomeStep.failed);
+        expect(home([c]).single.isProcessing, isFalse);
+      }
+    });
+
+    test('failed episode members remain openable outside their episode', () {
+      final failed = provisional('expired', 0, step: 'failed');
+      final e = episode(members: [failed], moments: [], closedAt: start);
+      final rows = home([failed], episodes: [e]);
+      expect(rows.single.conversation.id, 'expired');
+      expect(rows.single.episode, isNull);
+      expect(rows.single.isProcessing, isFalse);
+    });
+
+    test('Listening owns projected failures until capture stops, including metadata-only members', () {
+      final failed = provisional('expired', 0, step: 'failed');
+      final e = episode(live: true, members: [failed], moments: []).copyWith(conversationIds: ['current', failed.id]);
+      for (final byEpisodeId in [false, true]) {
+        for (final conversations in [
+          <ServerConversation>[],
+          [failed]
+        ]) {
+          final rows = buildHomeRows(conversations, [e],
+              enabled: true,
+              liveEpisodeId: byEpisodeId ? e.id : null,
+              liveConversationIds: byEpisodeId ? {} : {'current'},
+              processingConversations: [failed],
+              groupAwaitingTranscript: true);
+          expect(rows, isEmpty, reason: 'Listening owns the failed member too');
+          final stopped = home(conversations, episodes: [e]);
+          expect(stopped.single.conversation.id, failed.id);
+          expect(stopped.single.episode, isNull);
+          expect(stopped.single.isProcessing, isFalse);
+        }
+      }
     });
 
     test('runs never cross a day boundary', () {
@@ -319,9 +367,11 @@ void main() {
       expect(home([today, yesterday]).length, 2);
     });
 
-    test('a finished row between unfinished ones keeps them as two runs', () {
+    test('unfinished rows across a finished row share one aggregate at the top', () {
       final rows = home([provisional('a', 0), conversation('done', hours: -1), provisional('b', -180)]);
-      expect(rows.map((r) => r.isProcessing), [true, false, true]);
+      expect(rows.map((r) => r.isProcessing), [true, false]);
+      expect(rows.first.count, 2);
+      expect(rows.first.episodeConversationIds, {'a', 'b'});
     });
 
     test('an episode still finishing joins an adjacent Processing run', () {
@@ -336,6 +386,7 @@ void main() {
       final retry = ServerConversation(
           id: 'r', createdAt: start, startedAt: start, structured: Structured('Yeah.', ''), summaryRetryable: true);
       expect(homeStepOf(retry), HomeStep.failed);
+      expect(home([retry]), isEmpty);
       expect(homeStepOf(waiting('l', 0, locked: true)), isNull);
     });
   });

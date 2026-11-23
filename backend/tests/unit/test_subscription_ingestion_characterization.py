@@ -322,7 +322,16 @@ def test_schedule_write_failure_is_currently_acknowledged(lane):
     'stored_plan,same_id,duplicate',
     [(PlanType.basic, True, False), (PlanType.plus, True, True), (PlanType.plus, False, False)],
 )
-def test_checkout_created_before_completed_and_duplicate_paths(lane, stored_plan, same_id, duplicate):
+def test_checkout_created_before_completed_and_duplicate_paths(lane, monkeypatch, stored_plan, same_id, duplicate):
+    if duplicate:
+
+        def forbidden(*args, **kwargs):
+            pytest.fail('discount-free duplicate added a Stripe dependency')
+
+        monkeypatch.setattr(payment.stripe.Subscription, 'retrieve', forbidden)
+        monkeypatch.setattr(payment.stripe.Subscription, 'modify', forbidden)
+        monkeypatch.setattr(payment.stripe.Subscription, 'cancel', forbidden)
+        monkeypatch.setattr(payment.stripe.PromotionCode, 'retrieve', forbidden)
     lane.current = Subscription(plan=stored_plan, stripe_subscription_id='sub-current' if same_id else 'sub-old')
     lane.stripe_obj = event(EVENTS[1], 'active')['data']['object']
     lane.event = {

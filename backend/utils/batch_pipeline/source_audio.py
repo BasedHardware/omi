@@ -13,9 +13,11 @@ from typing import Callable
 
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
+from utils.other.private_sync_get_metrics import Reader, object_get_reader
 from utils.batch_pipeline.audio import audio_unit, with_context
 from utils.batch_pipeline import leaf_timings, record_seal_profile
-from utils.other.raw_audio import decode_capture
+from utils.other.audio_frame_table import FRAME_SCHEMA, gapped_frames
+from utils.other.raw_audio import WAL_FORMAT, decode_capture, decode_capture_frames
 
 MAGIC = b'OMIRECORD1\n'
 MAX_SOURCE_BYTES = 256 * 1024 * 1024
@@ -33,7 +35,15 @@ class InvalidRetainedManifest(ValueError):
     """The stored manifest itself can never materialize; a retry reads the same bytes."""
 
 
-def decode_source(raw: bytes, ref: dict, owner_key: bytes) -> bytes:
+class RetainedPcmDigestChanged(ValueError):
+    """A pinned source's decoded PCM repeatedly disagrees with the manifest digest.
+
+    Raised only after an opted-in confirmation read of the same ref mismatches
+    again, so the disagreement is repeatable rather than one transient read.
+    Carries no reference, URI or bytes."""
+
+
+def decode_source(raw: bytes, ref: dict, owner_key: bytes, *, frames: list[dict] | None = None) -> bytes:
     if not raw or len(raw) > MAX_SOURCE_BYTES:
         raise ValueError('invalid retained audio size')
     metadata = ref.get('metadata') or {}
@@ -56,6 +66,11 @@ def decode_source(raw: bytes, ref: dict, owner_key: bytes) -> bytes:
     if path.startswith('raw-live/'):
         if hashlib.sha256(raw).hexdigest() != metadata.get('sha256'):
             raise ValueError('retained capture checksum mismatch')
+        if frames is not None and metadata.get('format') == WAL_FORMAT:
+            # A gapped pack's retained zero-sample frames are not decodable
+            # packets; walking the writer's own frame table keeps every sample
+            # at its capture position instead of failing on the diagnostic row.
+            return leaf_timings.call('decode', decode_capture_frames, raw, metadata, frames, 16000)
         return leaf_timings.call('decode', decode_capture, raw, metadata, 16000)
     if '.opus' in path:
         # Existing legacy chunk codec, shared with playback. Import is lazy in
@@ -84,6 +99,7 @@ def validate_reference(ref: dict, uid: str, conversation_id: str, allowed_bucket
         raise InvalidRetainedManifest('retained audio reference is outside admitted source')
 
 
+@object_get_reader(Reader.BATCH_SOURCE)
 def read_reference(
     client,
     ref: dict,
@@ -95,6 +111,7 @@ def read_reference(
     source_metadata=False,
     read_budget=None,
     listed_source=None,
+    frames=None,
 ) -> bytes:
     validate_reference(ref, uid, conversation_id, allowed_buckets)
     generation = int(ref['generation'])
@@ -145,14 +162,32 @@ def read_reference(
     if read_budget is not None:
         read_budget.received_bytes += len(raw)
         read_budget.timeout(60)
-    return decode_source(raw, ref, key)
+    if frames is None and ref['path'].startswith('raw-live/') and metadata:
+        # A gapped, unframed omi-wal pack has no declared frame schema, so the
+        # ordinary decoder would try to decode its retained zero-sample
+        # diagnostic rows. Resolve the writer's own frame table and decode
+        # through it. A gapped flac/pcm16 pack encodes the captured PCM
+        # contiguously, so the ordinary decoder already returns its samples.
+        if (
+            metadata.get('format') == WAL_FORMAT
+            and metadata.get('frame_schema') != FRAME_SCHEMA
+            and int(metadata.get('gap_count') or 0) != 0
+        ):
+            frames, _ = gapped_frames(client.bucket(ref['bucket']), blob, uid, metadata=metadata)
+    return decode_source(raw, ref, key, frames=frames)
 
 
 def _well_formed(ref: dict) -> bool:
     return isinstance(ref.get('pcm_sha256'), str) and isinstance(ref.get('path', ''), str)
 
 
-def materialize(body: bytes, item, fetch: Callable[[dict], bytes]) -> bytes:
+def materialize(
+    body: bytes,
+    item,
+    fetch: Callable[[dict], bytes],
+    *,
+    confirm_mismatch: Callable[[dict], bytes] | None = None,
+) -> bytes:
     try:
         manifest = json.loads(body[len(MAGIC) :])
     except ValueError:
@@ -182,7 +217,13 @@ def materialize(body: bytes, item, fetch: Callable[[dict], bytes]) -> bytes:
         else:
             source = fetch(ref)
             if hashlib.sha256(source).hexdigest() != ref['pcm_sha256']:
-                raise ValueError('retained PCM digest changed')
+                if confirm_mismatch is None:
+                    raise ValueError('retained PCM digest changed')
+                # One bounded re-read of the same pinned ref; a second mismatch
+                # is a repeatable disagreement, not a transient read.
+                source = confirm_mismatch(ref)
+                if hashlib.sha256(source).hexdigest() != ref['pcm_sha256']:
+                    raise RetainedPcmDigestChanged('retained PCM digest changed')
             previous_key, previous_source = source_key if pinned else None, source
         start, offset, frames = ref.get('start_frame'), ref.get('offset_frame'), ref.get('frames')
         if any(type(v) is not int for v in (start, offset, frames)) or start < previous or offset < 0 or frames <= 0:

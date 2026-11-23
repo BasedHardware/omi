@@ -24,12 +24,20 @@ from tests.support.lifecycle_state_table import (
     STATES,
     ordering_holds,
 )
-from tests.support.lifecycle_ast import EntryPath, definition_fingerprint, entry_deadline_sites, function_node
+from tests.support.lifecycle_ast import (
+    EntryPath,
+    constant_names,
+    definition_fingerprint,
+    entry_deadline_sites,
+    function_node,
+    parsed,
+)
 from utils.conversations.phase import ConversationPhase, EpisodePhase
 
 BACKEND = Path(__file__).resolve().parents[2]
 METRIC_MODULES = (
     'utils/metrics.py',
+    'database/record_token_lease_metrics.py',
     'utils/batch_pipeline/metrics.py',
     'utils/conversations/summary_delivery.py',
     'utils/observability/fair_use.py',
@@ -141,7 +149,31 @@ def module_source(module):
     if not path.is_file():
         return '', ast.Module(body=[], type_ignores=[])
     source = path.read_text()
-    return source, ast.parse(source)
+    return source, parsed(source)
+
+
+@pytest.mark.parametrize(
+    'body',
+    [
+        'if condition:\n    FIELD = "state"\nelse:\n    FIELD = "status"',
+        'def outer():\n    FIELD = "state"\n    def inner():\n        FIELD = "status"',
+        'class Owner:\n    FIELD: str = "state"\n    def method(self):\n        FIELD = "status"',
+        'try:\n    FIELD = "state"\nexcept Exception:\n    FIELD = "status"',
+        'match value:\n    case 1:\n        FIELD = "state"\n    case _:\n        FIELD = "status"',
+    ],
+)
+def test_constant_inventory_retains_all_statement_scopes(body):
+    source = body + '\nPHASE = "queued" if condition else ConversationStatus.completed.value\n'
+    assert constant_names(parsed(source)) == {'FIELD': {'state', 'status'}, 'PHASE': {'queued', 'completed'}}
+
+
+def scope_definitions(nodes):
+    """Find definitions through control flow without entering another scope."""
+    for node in nodes:
+        if isinstance(node, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
+            yield node
+        else:
+            yield from scope_definitions(ast.iter_child_nodes(node))
 
 
 @lru_cache(maxsize=None)
@@ -152,16 +184,38 @@ def function_source(cite):
         return source
     for part in function.split('.'):
         node = next(
-            (
-                child
-                for child in node.body
-                if isinstance(child, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)) and child.name == part
-            ),
+            (child for child in scope_definitions(node.body) if child.name == part),
             None,
         )
         if node is None:
             return ''
     return ast.get_source_segment(source, node) or ''
+
+
+def test_function_source_finds_loop_nested_transaction_without_crossing_scopes(monkeypatch):
+    source = 'def outer():\n    for item in []:\n        def commit(tx):\n            return item\ndef other():\n    def hidden():\n        pass\n'
+    monkeypatch.setitem(
+        function_source.__wrapped__.__globals__, 'module_source', lambda path: (source, ast.parse(source))
+    )
+    read = function_source.__wrapped__
+    assert 'return item' in read('synthetic.py:outer.commit')
+    assert read('synthetic.py:outer.hidden') == ''
+    assert read('synthetic.py:commit') == ''
+
+
+@pytest.mark.parametrize('outer_deadline', [False, True])
+def test_deadline_probe_never_borrows_or_erases_a_deadline_from_a_nested_scope(outer_deadline):
+    deadline = ", 'lease_until': 123" if outer_deadline else ''
+    nested = "row.pop('lease_until')" if outer_deadline else "row['lease_until'] = 123"
+    source = (
+        "def commit(tx, ref):\n"
+        f"    row = {{'state': 'leased'{deadline}}}\n"
+        "    def unrelated():\n"
+        f"        {nested}\n"
+        "    tx.set(ref, row)\n"
+    )
+    path = EntryPath('synthetic.py', 'commit', 'state', 'leased')
+    assert [stamped for _line, stamped in entry_deadline_sites(source, path, 'lease_until')] == [outer_deadline]
 
 
 def assigned_fields(source):
@@ -245,8 +299,46 @@ def assert_patch_contract(entry, deadline):
 
 def assert_clause(row, clause):
     if row.derived:
-        # Compatibility reader vocabulary has no state entry side effect.
-        assert row.machine == 'conversation_phase' and row.note.startswith('Read-only')
+        if row.machine == 'finalization_receipt':
+            assert row.terminal and row.fields == ('status',) and row.exit.kind == 'return'
+            assert len(row.entered_by) == 1
+            (writer,) = row.entered_by
+            assert row.owner == writer.module
+            assert row.exit.cite == f'{writer.module}:{writer.function}'
+            assert function_source(row.exit.cite)
+            assert not row.deadline_field and not row.deadline_entries and not row.deadline_stamped_at_entry
+            assert not row.dwell_metric and not row.alert_required and row.alert.uid is None
+        elif row.machine == 'record_token':
+            # Per-token views derive from nested clocks, not a persisted phase.
+            # Their process-local stock and custody-invariant page do not claim
+            # an independent persisted-state deadline or backlog dwell alarm.
+            assert row.state in {'capturing', 'lease_lapsed'}
+            assert row.fields == ('record_upload_sessions',)
+            assert row.deadline_field is None and not row.deadline_stamped_at_entry and not row.deadline_entries
+            assert row.deadline_exemption
+            assert function_source(row.exit.cite), row.exit.cite
+            if clause == 'automatic_exit':
+                assert row.exit.kind in {'lease', 'sweeper'}
+                for writer in row.exit.automatic_writers:
+                    assert function_source(f'{writer.module}:{writer.function}'), writer
+                    assert writer.function in FIELD_BUILDERS.get(writer.module, {}).get('record_upload_sessions', ())
+            elif clause == 'entry_deadline':
+                assert function_source('config/record_seal_rules.py:token_lease_lapsed')
+            elif clause == 'dwell_metric':
+                assert row.dwell_metric == 'omi_record_token_lease_active' and row.dwell_metric in gauge_names()
+            elif clause == 'dwell_alert':
+                assert row.alert.uid == 'omi-record-token-lease-late-append' and row.alert.tier == 'page'
+                rule = alerts()[row.alert.uid]
+                assert rule.get('labels', {}).get('tier') == row.alert.tier and not rule.get('isPaused', False)
+                assert any(
+                    'omi_record_token_late_append_total' in item.get('model', {}).get('expr', '')
+                    for item in rule['data']
+                )
+            else:
+                raise AssertionError(clause)
+        else:
+            # Compatibility reader vocabulary has no state entry side effect.
+            assert row.machine == 'conversation_phase' and row.note.startswith('Read-only')
         return
     if row.quiescent:
         assert (row.machine, row.state) == ('fair_use', 'none')
@@ -276,6 +368,11 @@ def assert_clause(row, clause):
     elif clause == 'entry_deadline':
         if not row.terminal:
             if row.deadline_exemption:
+                if row.key == 'batch:allowance_held':
+                    assert 'SCA-2195' in row.deadline_exemption and 'no recording expiry' in row.deadline_exemption
+                    assert row.deadline_field is None and not row.deadline_stamped_at_entry
+                    assert row.exit.cite == 'utils/batch_pipeline/allowance_hold.py:AllowanceHolds.tick'
+                    return
                 assert row.key in {'record_audio:capturing', 'record_audio_orphan:capturing'}
                 assert row.fields == ('record_upload_sessions',)
                 assert 'No producer TTL' in row.deadline_exemption and '9d457c' in row.deadline_exemption
@@ -300,6 +397,10 @@ def assert_clause(row, clause):
         assert row.dwell_metric in gauge_names(), 'authoritative age/stock Gauge missing (a counter is insufficient)'
     elif clause == 'dwell_alert':
         if not row.alert_required:
+            if row.key == 'batch:allowance_held':
+                assert row.deadline_exemption and row.dwell_metric == 'omi_batch_allowance_held_units'
+                assert not row.terminal  # A held recording still owes an eventual result.
+                return
             assert row.terminal and row.state in {'completed', 'committed', 'erased', 'composed', 'redirected'}
             return  # Success stock needs an owner/gauge, not a debt alarm.
         rule = alerts().get(row.alert.uid)
@@ -531,6 +632,14 @@ def parameters():
 @pytest.mark.parametrize('row,clause', list(parameters()))
 def test_latch_clause(row, clause):
     assert_clause(row, clause)
+
+
+@pytest.mark.parametrize('clause', CLAUSES)
+def test_derived_record_token_view_rejects_unknown_states_and_fields(clause):
+    view = next(row for row in STATES if row.key == 'record_token:capturing')
+    for changed in (replace(view, state='invented'), replace(view, fields=('status',))):
+        with pytest.raises(AssertionError):
+            assert_clause(changed, clause)
 
 
 def test_declared_phase_vocabulary_matches_compatibility_reader():

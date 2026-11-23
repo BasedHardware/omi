@@ -160,13 +160,9 @@ def _build_fakes() -> dict:
 
     fakes['stripe'] = ModuleType('stripe')
 
-    python_multipart = ModuleType('python_multipart')
-    python_multipart.__version__ = '0.0.99'
-    fakes['python_multipart'] = python_multipart
-
-    python_multipart_parser = ModuleType('python_multipart.multipart')
-    python_multipart_parser.parse_options_header = MagicMock(return_value={})
-    fakes['python_multipart.multipart'] = python_multipart_parser
+    # Keep the installed lightweight multipart package real: routers.sync also
+    # imports utils.multipart, which needs python_multipart.exceptions. A plain
+    # ModuleType here hides that submodule even inside this restored fixture.
 
     # utils heavy/optional modules
     process_conversation = ModuleType('utils.conversations.process_conversation')
@@ -1473,3 +1469,36 @@ class TestSpeakerIdBoundaries:
         assert segments[0].person_id == 'p2'
         assert segments[1].person_id == 'p2'
         assert segments[2].person_id == 'p2'
+
+
+def test_soniox_failover_metadata_reaches_sync_segments_and_outcomes(monkeypatch):
+    from utils.sync import pipeline
+    from utils.conversations import lifecycle
+
+    words = [{'timestamp': [0.0, 0.5], 'speaker': 'SPEAKER_00', 'text': 'recovered'}]
+
+    def dispatch(url, **kwargs):
+        kwargs['on_provider_served']('soniox', 'stt-async-v5')
+        return words, 'en'
+
+    monkeypatch.setattr(pipeline, 'prerecorded', dispatch)
+    monkeypatch.setattr(pipeline, 'get_prerecorded_service', lambda _: ('modulate', 'en', 'velma-2'))
+    monkeypatch.setattr(pipeline, 'get_syncing_file_temporal_signed_url', lambda _: 'http://synthetic.invalid/audio')
+    monkeypatch.setattr(pipeline, 'get_timestamp_from_path', lambda _: 1700000000)
+    monkeypatch.setattr(pipeline, 'sync_safety_wal_enabled', lambda: True)
+    assigned = _make_assigned_conversation()
+    intake = MagicMock(return_value=(assigned, True, assigned['transcript_segments']))
+    monkeypatch.setattr(lifecycle, 'ingest_sync_conversation', intake)
+    response = {'new_memories': set(), 'updated_memories': set()}
+    errors = []
+    pipeline.process_segment(
+        'test/path.bin',
+        'uid123',
+        response,
+        threading.Lock(),
+        errors,
+        transcription_prefs={'language': 'en', 'single_language_mode': True},
+    )
+    incoming = intake.call_args.args[1]
+    assert incoming['transcript_segments'][0]['stt_provider'] == 'stt-async-v5'
+    assert pipeline._bounded_sync_model('stt-async-v5') == 'stt-async-v5'

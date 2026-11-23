@@ -1208,7 +1208,9 @@ def check_firmware_ota_assets(workflow: Path) -> list[str]:
                 return [f"firmware release workflow must invoke the guarded {command} helper"]
         spec = importlib.util.spec_from_file_location("cv1_release_guard_smoke", helper)
         release = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(release)
+        with patch.object(sys, "path", [str(helper.parent), *sys.path]), patch.dict(sys.modules):
+            sys.modules.pop("cv1_bootloader", None)
+            spec.loader.exec_module(release)
         # The smoke exercises packaging, not the simulator: pin a synthetic
         # scenario catalog that the staged report below matches exactly.
         catalog = {f"suite/s{i}" for i in range(release.SIM_MIN_SCENARIOS)}
@@ -1227,8 +1229,19 @@ def check_firmware_ota_assets(workflow: Path) -> list[str]:
             with zipfile.ZipFile(build / "dfu_application.zip", "w") as archive:
                 archive.writestr("manifest.json", json.dumps(manifest))
                 archive.writestr("omi.signed.bin", image)
-            (build / "merged.hex").write_bytes(b"app hex")
-            (build / "merged_CPUNET.hex").write_bytes(b"net hex")
+            # Synthetic boot policy is confined to this offline smoke module.
+            boot = release.bootloader
+            boot_memory = {0: 0x42}
+            boot_hash = hashlib.sha256(boot.boot_bytes(boot_memory)).hexdigest()
+            policy = root / "boot-policy.json"
+            policy.write_text(json.dumps({"build_boot_sha256": boot_hash, "approved_boot_sha256": [boot_hash]}))
+            boot.POLICY = policy
+            boot_path = build / "mcuboot/zephyr/zephyr.hex"
+            boot_path.parent.mkdir(parents=True)
+            boot.write_hex(boot_path, boot_memory)
+            (build / "merged_CPUNET.hex").write_text(
+                ":020000040100F9\n:0100000033CC\n:00000001FF\n"
+            )
             context = {
                 "sha": "a" * 40,
                 "run_id": "123",
@@ -1299,7 +1312,7 @@ def check_firmware_ota_assets(workflow: Path) -> list[str]:
             creates = [call.args for call in gh.call_args_list if call.args[:2] == ("release", "create")]
             expected_assets = {str(ota), str(out / "Omi_CV1_v9.8.7.hex"), str(out / "Omi_CV1_v9.8.7_CPUNET.hex")}
             if len(creates) != 1 or set(creates[0][-3:]) != expected_assets:
-                return ["firmware release helper must publish the staged OTA .zip and factory hex assets"]
+                return ["firmware release helper must publish the staged OTA .zip, app-only HEX and separate network HEX"]
     except Exception as exc:
         return [f"firmware OTA staging/publishing smoke failed: {exc}"]
     return []

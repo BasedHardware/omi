@@ -33,3 +33,5 @@ than 20% relative is switched to 0% regardless of conversion. Run until each arm
 falls back to the shipped sheet without a release.
 
 **Owner.** nik. Created 2026-10-13. Review by 2026-11-12.
+
+**Outcome (2026-11-17).** Retired as stale, by David's ruling. The `trial` arm served 100% in PostHog and has been fixed in code since commit 8999d3730d9 (#24485, merged 2026-11-04), so it is the shipped flow and is recorded as graduated. The other arms and the exposure tracking are deleted in a follow-up.

@@ -37,12 +37,17 @@ and reserved emergency-revert versions.
 ## Scripts
 
 - `build-cv1.sh` — runs inside `ghcr.io/zephyrproject-rtos/ci` (firmware bind-mounted
-  at `/omi/firmware`): west init/update of NCS v2.9.0, `cp omi.conf prj.conf`, and
+  at `/omi/firmware`): west init/update of NCS v2.9.0, image-scoped `omi_CONF_FILE=omi.conf`, and
   `west build … --sysbuild` (MCUboot-signed). Mirrors [`omi/firmware/omi/BUILD.md`](../../omi/BUILD.md).
   Outputs `dfu_application.zip`, `merged.hex`, `merged_CPUNET.hex`.
 - `cv1_release.py` — validates inputs, packages QA bytes, verifies provenance and promotes them.
 - `test_cv1_release.py` — offline packaging and promotion contract tests.
 - `make-release-body.sh` — renders the GitHub Release body + `KEY_VALUE` block.
+
+`cv1_bootloader.py` strictly parses and hashes every staged HEX at stage, promotion
+and publish. App-core HEX carries the pinned jig-qualified MCUboot plus the exact staged OTA
+app. CI must reproduce the approved build hash; equivalence/rebuild evidence is
+uploaded separately from release assets. See [the bootloader runbook](../../docs/cv1-bootloader.md).
 
 ## Notes
 

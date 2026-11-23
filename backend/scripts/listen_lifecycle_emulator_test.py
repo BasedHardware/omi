@@ -10,7 +10,7 @@ import sys
 import threading
 import uuid
 from collections.abc import Callable
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 from unittest.mock import patch
@@ -27,6 +27,9 @@ if str(BACKEND_DIR) not in sys.path:
 from google.cloud import firestore
 
 from config.record_audio import record_identity
+from config.server_batch import MARKER
+from config import listen_reconnect
+from database import listen_batch_reconnect, server_batch_audio
 from database import conversation_finalization_jobs as finalization_jobs_db
 from database import conversations as conversations_db
 from database import recording_sessions as recording_sessions_db
@@ -490,12 +493,128 @@ def _assert_restore_fences_fanout_until_record_registration(client: Any, uid: st
     assert projection_ref.get().to_dict() == projection, 'completion replay double-counted the terminal outcome'
 
 
+def _assert_batch_reconnect_contention(client: Any, uid: str) -> None:
+    """Two sockets contend on a real parent; the loser has no finalization right."""
+    now = datetime(2026, 11, 16, 12, tzinfo=timezone.utc)
+    user = client.collection('users').document(uid)
+    user.set({'data_protection_level': 'standard', 'private_cloud_sync_enabled': True, 'time_zone': 'UTC'})
+    row_ref = user.collection('conversations').document('reconnect')
+    row_ref.set(
+        {
+            'id': 'reconnect',
+            'source': 'omi',
+            'client_device_id': 'synthetic-phone',
+            'status': 'in_progress',
+            'started_at': now,
+            'finished_at': now,
+            'has_content': True,
+            'private_cloud_sync_enabled': True,
+            'record_lane_owner': 'batch_live_v1',
+            'server_batch_audio_received': True,
+            'server_batch_audio_start': now.timestamp(),
+            'server_batch_audio_end': now.timestamp() + 1,
+            'external_data': {MARKER: True, 'recording_origin_id': 'origin', 'recording_session_id': 'session'},
+        }
+    )
+    user.collection('recording_sessions').document('session').set(
+        {
+            'uid': uid,
+            'recording_session_id': 'session',
+            'conversation_id': 'reconnect',
+            'lifecycle_phase': 'in_progress',
+            'lease_expires_at': now + timedelta(minutes=5),
+        }
+    )
+    start = threading.Barrier(2)
+    results: dict[str, Any] = {}
+
+    def compete(token):
+        try:
+            start.wait(timeout=10)
+            results[token] = listen_batch_reconnect.claim(
+                uid,
+                'reconnect',
+                'session',
+                token=token,
+                origin_id='origin',
+                source='omi',
+                device_id='synthetic-phone',
+                now=now,
+                timeout=1800,
+                firestore_client=client,
+            )
+        except BaseException as error:
+            results[token] = error
+
+    threads = [threading.Thread(target=compete, args=(token,)) for token in ('first', 'second')]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(timeout=30)
+        assert not thread.is_alive(), 'producer claim exceeded contention deadline'
+    assert sorted(str(result) for result in results.values()) == ['busy', 'claimed'], results
+    winner = next(token for token, outcome in results.items() if outcome == 'claimed')
+    assert (
+        listen_batch_reconnect.disconnect(
+            uid,
+            'reconnect',
+            'session',
+            winner,
+            disconnected_at=now,
+            now=now,
+            timeout=1800,
+            firestore_client=client,
+        )
+        == 'held'
+    )
+    assert (
+        listen_batch_reconnect.claim(
+            uid,
+            'reconnect',
+            'session',
+            token='successor',
+            origin_id='origin',
+            source='omi',
+            device_id='synthetic-phone',
+            now=now + timedelta(seconds=10),
+            timeout=1800,
+            firestore_client=client,
+        )
+        == 'claimed'
+    )
+    assert (
+        listen_batch_reconnect.disconnect(
+            uid,
+            'reconnect',
+            'session',
+            winner,
+            disconnected_at=now,
+            now=now,
+            timeout=1800,
+            firestore_client=client,
+        )
+        == 'fenced'
+    )
+    assert not server_batch_audio.note_server_batch_audio(
+        uid,
+        'reconnect',
+        now.timestamp(),
+        now.timestamp() + 10,
+        producer_token=winner,
+        firestore_client=client,
+    )
+    assert row_ref.get().to_dict()[listen_reconnect.FIELD]['token'] == 'successor'
+    print('PASS: mobile batch competing claims, reconnect ABA and late producer bounds are fenced')
+
+
 def main() -> int:
     if not os.environ.get('FIRESTORE_EMULATOR_HOST'):
         raise RuntimeError('FIRESTORE_EMULATOR_HOST is required; run through Firebase emulators:exec')
 
     client: Any = firestore.Client(project=PROJECT_ID)
     uid = f'listen-lifecycle-emulator-{uuid.uuid4().hex}'
+    with patch.dict(os.environ, {'LISTEN_BATCH_RECONNECT_ENABLED': 'true'}):
+        _assert_batch_reconnect_contention(client, uid)
     _assert_segment_content_contract(client, uid)
     _assert_photo_content_contract(client, uid)
     _assert_photo_only_finalization_is_admitted(client, uid)

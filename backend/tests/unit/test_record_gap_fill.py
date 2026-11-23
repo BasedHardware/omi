@@ -14,6 +14,7 @@ import wave
 import pytest
 from google.api_core.exceptions import PreconditionFailed
 
+
 from config.policy import BatchUnitPolicy
 from database import sync_record_wait_cache
 from database.audio_chunk_metadata import audio_chunk_entry
@@ -26,8 +27,15 @@ from utils.batch_pipeline.record_barrier import validate_record_tail
 from utils.batch_pipeline.source_audio import MAGIC, decode_source, materialize
 from utils.other import storage
 
+
+@pytest.fixture(autouse=True)
+def strict_coverage_rollback(monkeypatch):
+    """These regressions exercise the strict path retained by the kill switch."""
+    monkeypatch.setenv('RECORD_WAL_HANDOFF_ENABLED', 'false')
+
+
 UID, CID = 'synthetic-owner', 'synthetic-conversation'
-REAL_SOURCE_UNITS = record_gap_fill._source_units
+REAL_SOURCE_UNITS = record_gap_fill.source_units
 RATE = 16000
 NOW = 10_000.0
 PRIMARY = storage.private_cloud_sync_bucket
@@ -125,7 +133,7 @@ def world(monkeypatch):
 
     monkeypatch.setattr(record_gap_fill, 'claim_gap_fill_marker', claim)
     monkeypatch.setattr(record_gap_fill, 'list_audio_chunks', lambda *a, **kw: bucket.listing())
-    monkeypatch.setattr(record_gap_fill, '_source_units', lambda paths: iter(wal['units']))
+    monkeypatch.setattr(record_gap_fill, 'source_units', lambda paths: iter(wal['units']))
     monkeypatch.setattr(live, 'read_reference', read)
     store = MemoryStore()
     content, segment = live.record_identity(UID, CID)
@@ -386,7 +394,7 @@ def wal_file(tmp_path, capture, pcm):
 def test_real_decoder_keeps_a_hole_between_wal_files(world, tmp_path, monkeypatch):
     # decode_units joins files up to 30 s apart with silence; the fill must
     # still see the 107..108 hole and stop there, not admit across it.
-    monkeypatch.setattr(record_gap_fill, '_source_units', REAL_SOURCE_UNITS)
+    monkeypatch.setattr(record_gap_fill, 'source_units', REAL_SOURCE_UNITS)
     world.bucket.put(f'chunks/{UID}/{CID}/100.000.bin', tone(5, 7))
     early, late = ramp(2), ramp(3, offset=7)
     paths = [wal_file(tmp_path, 108, late), wal_file(tmp_path, 105, early)]
@@ -403,7 +411,7 @@ def test_real_decoder_keeps_a_hole_between_wal_files(world, tmp_path, monkeypatc
 
 
 def test_real_decoder_fills_contiguous_wal_files(world, tmp_path, monkeypatch):
-    monkeypatch.setattr(record_gap_fill, '_source_units', REAL_SOURCE_UNITS)
+    monkeypatch.setattr(record_gap_fill, 'source_units', REAL_SOURCE_UNITS)
     world.bucket.put(f'chunks/{UID}/{CID}/100.000.bin', tone(5, 7))
     paths = [wal_file(tmp_path, 105, ramp(2)), wal_file(tmp_path, 107, ramp(4, offset=5))]
     assert fill(world, paths=paths) == 'written'
@@ -1002,7 +1010,7 @@ def test_multi_batch_walk_acks_each_batch_and_admission_passes(world, ack):
 
 
 def test_real_decoder_wal_is_proven_against_the_fill(world, ack, tmp_path, monkeypatch):
-    monkeypatch.setattr(record_gap_fill, '_source_units', REAL_SOURCE_UNITS)
+    monkeypatch.setattr(record_gap_fill, 'source_units', REAL_SOURCE_UNITS)
     world.bucket.put(f'chunks/{UID}/{CID}/100.000.bin', ramp(5))
     whole = ramp(10)
     paths = [wal_file(tmp_path, 105, whole[5 * RATE * 2 :])]
