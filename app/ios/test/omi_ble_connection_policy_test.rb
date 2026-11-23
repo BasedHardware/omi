@@ -26,7 +26,9 @@ class OmiBleConnectionPolicyTest < Minitest::Test
     manager = File.read(File.join(IOS_ROOT, 'Runner/Ble/OmiBleManager.swift'))
     signatures = [
       'private func hasEverConnected(', 'private func scheduleSavedRetry(', 'private func setupRetryRemaining(',
-      'private func issueConnect(', 'private func reconcileSavedReconnect(',
+      'private func canConnect(', 'private func issueConnect(', 'private func reconcileSavedReconnect(',
+      'private func cancelConnectionWithoutCapture(', 'func centralManagerDidUpdateState(',
+      'func centralManager(_ central: CBCentralManager, willRestoreState ',
       'private func runSavedScanWindow(', 'private func endSavedScan(',
       'private func updateReconnectScan(', 'private func reportDiscoveryFailure(',
       'private func recoverCaptureConnection(', 'func disconnectPeripheral(',
@@ -43,12 +45,25 @@ class OmiBleConnectionPolicyTest < Minitest::Test
     # Replace only radio/scheduler boundaries, preserving production control flow.
     methods = methods.gsub('private func', 'func')
       .gsub(/\bCBCentralManager\b/, 'TestCentral').gsub(/\bCBPeripheral\b/, 'TestPeripheral')
+      .gsub('UIApplication.shared', 'TestApplication.shared')
+      .gsub('canDrainAfterRelaunch(uuid)', 'canDrainAfterRelaunch(uuid, defaults: reconnectDefaults)')
       .gsub('DispatchWorkItem', 'TestWorkItem')
       .gsub('DispatchQueue.main.asyncAfter', 'self.queue.asyncAfter')
       .gsub('ProcessInfo.processInfo.systemUptime', 'self.queue.now')
       .gsub('.now()', 'self.queue.now').gsub('.milliseconds(200)', '0.2')
     template = File.read(File.join(__dir__, 'omi_saved_reconnect_manager_test.swift'))
     harness = template.sub('    // Production methods are inserted here by the Ruby runner.', methods)
+    drain = File.read(File.join(IOS_ROOT, 'Runner/Limitless/LimitlessFlashDrainEngine.swift'))
+    drain_policy = [
+      drain[/^    private static let limitlessServiceUuid = .*$/],
+      drain[/^    private static let limitlessRxCharUuid = .*$/],
+      drain[/^    private struct Config \{.*?^    \}/m],
+      drain[/^    func canDrainAfterRelaunch\(.*?^    \}/m],
+      drain[/^    private func loadConfig\(.*?^    \}/m],
+    ]
+    refute_includes drain_policy, nil
+    harness = harness.sub('    // Production flash admission is inserted here by the Ruby runner.', drain_policy.join("\n"))
+    assert_match(/didConnect peripheral: CBPeripheral\).*?guard canConnect\(uuid\), !headlessRetiringLinks\.contains\(uuid\) else \{\s+cancelConnectionWithoutCapture.*?discoverServices\(/m, manager)
     Dir.mktmpdir('omi-reconnect-manager') do |directory|
       source = File.join(directory, 'harness.swift')
       binary = File.join(directory, 'test')
