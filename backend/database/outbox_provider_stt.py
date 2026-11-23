@@ -14,6 +14,7 @@ sweep. A provider unit is admitted exactly once, so a second ``enqueue`` of an o
 
 from __future__ import annotations
 
+import math
 import re
 import uuid
 from typing import Any, Callable, Literal, Mapping
@@ -410,8 +411,10 @@ class FirestoreProviderSttOutbox:
             enqueued_at = job.get('enqueued_at')
             if (
                 job.get('state') != 'provider_running'
-                or type(enqueued_at) not in (int, float)
-                or not enqueued_at <= cutoff
+                or isinstance(enqueued_at, bool)
+                or not isinstance(enqueued_at, (int, float))
+                or not math.isfinite(enqueued_at)
+                or enqueued_at > cutoff
             ):
                 return None
             row = outbox_ref.get(transaction=transaction, timeout=5, retry=None).to_dict()
