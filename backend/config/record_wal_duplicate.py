@@ -32,3 +32,15 @@ def mode(uid: str, now: float) -> tuple[str, int | None]:
         return 'off', None
     bucket = int.from_bytes(hashlib.sha256(uid.encode()).digest()[:8], 'big') % 100
     return ('settle', None) if bucket < percent else ('off', None)
+
+
+# These persisted fields remain authoritative when admission is disabled.
+SETTLED_FIELD = 'wal_duplicate_settled_v1'
+MERGE_PLAN_FIELD = 'wal_duplicate_merge_plan_v1'
+MERGE_TARGET_FIELD = 'wal_duplicate_merge_target_v1'
+RETAINED_DONORS_FIELD = 'wal_duplicate_retained_donors_v1'
+
+
+def has_retained_custody(row) -> bool:
+    """Unsupported lineage writers must defer even when settlement is disabled."""
+    return bool(row and (row.get(SETTLED_FIELD) or row.get(RETAINED_DONORS_FIELD) or row.get(MERGE_TARGET_FIELD)))

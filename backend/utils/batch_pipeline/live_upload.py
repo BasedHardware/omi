@@ -24,7 +24,7 @@ from config.batch_pipeline import (
 )
 from config.policy import resolve_batch_policy
 from config.record_gap_fill import gap_fill_enabled
-from config.record_wal_duplicate import RECEIPT_FIELD
+from config.record_wal_duplicate import MERGE_TARGET_FIELD, RECEIPT_FIELD
 from config.batch_pipeline_coverage_wait import coverage_wait_memo_enabled, record_wait_memo_first_enabled
 from config.batch_pipeline_language import admission_language_exclusion_enabled, batch_admission_language
 from database.conversations import claim_record_lane_owner
@@ -398,7 +398,13 @@ async def registered_record_response(
                 'retryable': False,
             },
         )
-    if row.get('deleted') or row.get('source') != source or row.get('client_device_id') != client_device_id:
+    retained_merge = bool(row.get(MERGE_TARGET_FIELD))
+    if (
+        row.get('deleted')
+        and not retained_merge
+        or row.get('source') != source
+        or row.get('client_device_id') != client_device_id
+    ):
         return _pending(RecordUploadWait.OWNER_CONTEXT_MISMATCH)
     content, _ = record_identity(uid, conversation_id)
 
@@ -429,6 +435,8 @@ async def registered_record_response(
         except Exception:
             return _pending(RecordUploadWait.RECEIPT_STATUS_READ_FAILED, content)
         return start_response(status) if status else _pending(RecordUploadWait.RECEIPT_STATUS_MISSING, content)
+    if retained_merge:
+        return _pending(RecordUploadWait.AUDIO_COVERAGE_UNPROVEN, content)
     duplicate_mode, shadow_slot = record_wal_duplicate.select(uid, content_id)
     if duplicate_mode == 'settle' and not prior and jobs and client_device_id and claims:
         try:

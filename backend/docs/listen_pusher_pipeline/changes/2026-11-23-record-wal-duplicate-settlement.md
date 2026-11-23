@@ -21,6 +21,25 @@ removing backing audio, and retained-donor erasure requires its tombstone. A
 failed fence leaves prefix cleanup pending. A canonical revision change refuses replay
 until equivalence is established.
 
+## Non-erasure merges
+
+Durable manual merge admission persists the keep-or-remove choice alongside
+its source claims. The claimed donor row blocks new settlement and keeps the
+original replay authorized until publication. The correction-transfer
+transaction validates the current merge lease and both ends of the erase
+lineage, publishes a reciprocal direct link, and advances to source cleanup
+together. A successor merging again republishes the flattened lineage in that
+transaction. This bounds a successor to 16 retained original donors. A merge
+above the bound defers before retraction. Exact replay allows one redirect
+and up to 56 point reads. Explicit deletion of either record defeats replay;
+successor deletion uses its existing persisted source-deletion lineage.
+
+Post-publication donor cleanup retracts derived state and preserves original
+custody, canonical obligations and aliases. Smart merge, automatic sync
+lineage and v3 projection defer when they cannot maintain these bindings.
+A rollback after the first settlement must keep the verified merge writers,
+erasure and replay behavior serving, including with settlement disabled.
+
 ## Release gates
 
 - Keep all controls off for the initial carrier. Qualify both effective

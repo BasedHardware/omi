@@ -1050,6 +1050,8 @@ def _delete_conversation_and_related_data(
     - Vector embedding
     - Conversation document
     """
+    if merged_into and not retain_capture:
+        retain_capture = fence_record_audio_removal(uid, conversation_id)
     # Import here to avoid circular imports
     import database.action_items as action_items_db
 
@@ -1131,7 +1133,6 @@ def _delete_conversation_and_related_data(
     try:
         # Delete audio chunks from GCS
         if merged_into:
-            fence_record_audio_removal(uid, conversation_id)
             delete_conversation_audio_files(uid, conversation_id, merged_into=merged_into)
         else:
             delete_conversation_audio_files(uid, conversation_id)

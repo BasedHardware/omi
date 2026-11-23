@@ -9,6 +9,7 @@ from copy import deepcopy
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from utils.sync import processing_hold, bridge_pending
+from config.record_wal_duplicate import has_retained_custody
 from config.recorded_time import late_audio_intake_enabled
 from config.conversations_v3 import SPEECH_LANDED_FIELD
 from config.episodes import episodes_enabled, episode_compose_transcript_ready_enabled
@@ -1487,6 +1488,12 @@ def assign_in_transaction(
         for accepted in [chosen, *extra_plans]
     ):
         raise SyncAssignmentConflict('record target discarded', subtype=Reason.RECORD_TARGET_DISCARDED)
+    for accepted in [chosen, *extra_plans]:
+        lineage_updates = set(accepted.donor_updates) | set(accepted.ancestor_updates)
+        if lineage_updates and any(has_retained_custody(load(cid)) for cid in {*lineage_updates, accepted.canonical}):
+            raise SyncAssignmentConflict(
+                'retained WAL lineage requires merge authority', subtype=Reason.ANCESTRY_FLATTEN_REJECTED
+            )
     remember_size_payload(canonical, result)
     for accepted in [chosen, *extra_plans]:
         remember_size_payload(accepted.canonical, accepted.result)

@@ -196,7 +196,8 @@ def _budget():
 
 
 def _views(budget, current):
-    return ledger.PointReads(budget, mode=current), ledger.PointReads(budget, mode=current)
+    limit = ledger.MAX_VIEW_READS + ledger.MAX_REDIRECT_READS if current == 'replay' else ledger.MAX_VIEW_READS
+    return ledger.PointReads(budget, limit=limit, mode=current), ledger.PointReads(budget, mode=current)
 
 
 async def replay(store, uid, cid, source, device, content_id, session, claims):
@@ -294,6 +295,7 @@ async def evaluate(store, uid, cid, source, device, content_id, session, paths, 
                 proof_io.labels(current, 'bundle_bytes').inc(sum(entry['size'] for entry in entries))
                 if current == 'settle':
                     proof_io.labels(current, 'receipt_writes').inc(1 + len(settled.file_ids) - len(settled.known))
+                    proof_io.labels(current, 'donor_writes').inc(int(not settled.marked))
             return settled.reply if current == 'settle' else None
     except Exception:
         outcome = 'unavailable'

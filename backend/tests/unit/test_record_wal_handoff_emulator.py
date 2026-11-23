@@ -585,3 +585,151 @@ def test_merge_removal_cannot_use_missing_source_as_durable_fence(duplicate_worl
     case.user.collection('deleted_conversations').document(case.cid).set({'reason': 'synthetic'})
     fence_record_audio_removal(request.uid, request.cid, firestore_client=case.store.client)
     assert not case.conversation.get().exists
+
+
+def _prepare_retained_merge(case, other_id, monkeypatch):
+    from database import conversation_merge_jobs as jobs
+
+    monkeypatch.setattr(jobs, 'stop_quiet_checks_for_job', lambda *args, **kwargs: None)
+    request = case.request('retained')
+    other = case.user.collection('conversations').document(other_id)
+    other.set({'status': 'completed', 'private_cloud_sync_enabled': True})
+    admitted = jobs.admit(request.uid, [request.cid, other_id], False, firestore_client=case.store.client)
+    assert admitted
+    return jobs.claim(admitted['job_id'], firestore_client=case.store.client)
+
+
+def _publish_retained_merge(case, job):
+    from database import review_overlay_merge
+
+    target_id = job['merge_target_id']
+    case.user.collection('conversations').document(target_id).set(
+        {'status': 'completed', 'private_cloud_sync_enabled': True}
+    )
+    assert review_overlay_merge.transfer(
+        job['uid'],
+        job['conversation_ids'],
+        target_id,
+        firestore_client=case.store.client,
+        merge_job_id=job['job_id'],
+        merge_lease_epoch=job['lease_epoch'],
+    )
+    return target_id
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('erase_end', ['original', 'successor'])
+async def test_duplicate_replays_original_handle_through_preparation_and_two_merges(
+    duplicate_world, monkeypatch, erase_end
+):
+    from config.record_wal_duplicate import MERGE_TARGET_FIELD, RETAINED_DONORS_FIELD
+    from database import conversation_merge_jobs as jobs, conversation_tombstones
+    from database.record_audio import fence_record_audio_removal
+
+    case = duplicate_world
+    request = case.request('retained')
+    old = case.attempt(request, files=case.files)
+    assert case.attempt(request, files=case.files, expected=old.scope, placements=['a', 'b'], commit=True)
+    first = _prepare_retained_merge(case, 'first-other', monkeypatch)
+
+    # An interruption after the donor fence leaves the original readable and
+    # refuses new settlements. Cleanup cannot run before publication.
+    assert case.attempt(request).reply['job_id'] == case.canonical
+    assert case.attempt(case.request('new-bundle'), files=case.files) is None
+    from database.record_wal_merge import RetainedMergeDeferred
+
+    with pytest.raises(RetainedMergeDeferred):
+        fence_record_audio_removal(request.uid, request.cid, firestore_client=case.store.client)
+
+    successor = _publish_retained_merge(case, first)
+    assert fence_record_audio_removal(request.uid, request.cid, firestore_client=case.store.client)
+    assert case.attempt(request).reply['job_id'] == case.canonical
+
+    second_other = case.user.collection('conversations').document('second-other')
+    second_other.set({'status': 'completed', 'private_cloud_sync_enabled': True})
+    admitted = jobs.admit(request.uid, [successor, 'second-other'], False, firestore_client=case.store.client)
+    assert admitted
+    second = jobs.claim(admitted['job_id'], firestore_client=case.store.client)
+    final_target = _publish_retained_merge(case, second)
+    assert case.conversation.get().to_dict()[MERGE_TARGET_FIELD] == final_target
+    assert case.user.collection('conversations').document(final_target).get().to_dict()[RETAINED_DONORS_FIELD] == [
+        case.cid
+    ]
+    assert case.user.collection('conversations').document(successor).get().to_dict()['sync_merged_from'] == []
+    monkeypatch.setenv('RECORD_WAL_DUPLICATE_PERCENT', '0')
+    assert case.attempt(request).reply['job_id'] == case.canonical
+    monkeypatch.setattr(live_upload, 'FirestoreStore', lambda *_: case.store)
+    legacy = Mock(side_effect=AssertionError('legacy poll would redrive'))
+    monkeypatch.setattr(live_upload, 'durable_status', legacy)
+    response = await live_upload.registered_record_response(
+        uid=request.uid,
+        conversation_id=request.cid,
+        content_id=request.content_id,
+        paths=['synthetic'],
+        source=request.source,
+        client_device_id=request.device,
+        loaded_conversation=case.conversation.get().to_dict(),
+    )
+    assert isinstance(response, live_upload.JSONResponse)
+    assert response.status_code == 202
+    assert json.loads(bytes(response.body))['job_id'] == case.canonical
+    legacy.assert_not_called()
+
+    erased = case.cid if erase_end == 'original' else final_target
+    conversation_tombstones.accept_deletion(
+        request.uid, erased, firestore_client=case.store.client, legal_hold_deferred=True
+    )
+    with pytest.raises(BatchPrivacyBlocked):
+        case.attempt(request)
+    if erase_end == 'successor':
+        from database.conversation_batch_purge_jobs import erasure_job_ref
+
+        owed = erasure_job_ref(case.store.client, request.uid, final_target).get().to_dict()
+        assert owed['audio_source_ids'] == [case.cid]
+
+
+def test_erase_after_merge_preparation_blocks_publication(duplicate_world, monkeypatch):
+    from config.record_wal_duplicate import MERGE_TARGET_FIELD
+    from database.review_store import ReviewConflict
+    from database import conversation_tombstones
+
+    case = duplicate_world
+    request = case.request('retained')
+    old = case.attempt(request, files=case.files)
+    assert case.attempt(request, files=case.files, expected=old.scope, placements=['a', 'b'], commit=True)
+    prepared = _prepare_retained_merge(case, 'other', monkeypatch)
+    conversation_tombstones.accept_deletion(
+        request.uid, request.cid, firestore_client=case.store.client, legal_hold_deferred=True
+    )
+    with pytest.raises(ReviewConflict, match='Merge source unavailable'):
+        _publish_retained_merge(case, prepared)
+    assert MERGE_TARGET_FIELD not in case.conversation.get().to_dict()
+
+
+def test_retained_merge_admit_defers_above_limit_without_changing_donors(duplicate_world, monkeypatch):
+    from config.record_wal_duplicate import MERGE_PLAN_FIELD, SETTLED_FIELD
+    from database import conversation_merge_jobs as jobs
+
+    case = duplicate_world
+    request = case.request('limit')
+    monkeypatch.setattr(jobs, 'stop_quiet_checks_for_job', lambda *args, **kwargs: None)
+    refs = [case.user.collection('conversations').document(f'source-{number:02}') for number in range(17)]
+    for ref in refs:
+        ref.set({'status': 'completed', SETTLED_FIELD: True})
+    assert jobs.admit(request.uid, [ref.id for ref in refs], False, firestore_client=case.store.client) is None
+    assert all(ref.get().to_dict()['status'] == 'completed' for ref in refs)
+    admitted = jobs.admit(request.uid, [ref.id for ref in refs[:16]], False, firestore_client=case.store.client)
+    assert admitted and len(admitted[MERGE_PLAN_FIELD]) == 16
+    claimed = jobs.claim(admitted['job_id'], firestore_client=case.store.client)
+    target = _publish_retained_merge(case, claimed)
+    row = case.user.collection('conversations').document(target).get().to_dict()
+    assert row['sync_merged_from'] == [ref.id for ref in refs[:16]]
+
+
+def test_merge_preparation_wins_against_uncommitted_settlement(duplicate_world, monkeypatch):
+    case = duplicate_world
+    request = case.request('retained')
+    old = case.attempt(request, files=case.files)
+    _prepare_retained_merge(case, 'other', monkeypatch)
+    assert case.attempt(request, files=case.files, expected=old.scope, placements=['a', 'b'], commit=True) is None
+    assert case.attempt(request) is None

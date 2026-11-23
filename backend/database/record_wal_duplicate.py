@@ -6,7 +6,7 @@ from datetime import datetime, timedelta, timezone
 from prometheus_client import Counter
 
 from config.record_audio import record_identity
-from config.record_wal_duplicate import MAX_JOBS, RECEIPT_FIELD, SOURCE_FIELD
+from config.record_wal_duplicate import MAX_JOBS, MERGE_TARGET_FIELD, RECEIPT_FIELD, SETTLED_FIELD, SOURCE_FIELD
 from database import record_wal_handoff as handoff
 from database.batch_pipeline_artifact_missing import artifact_missing
 from database.batch_pipeline_privacy import privacy_owner_key
@@ -16,6 +16,7 @@ from utils.batch_pipeline.artifact_reads import ArtifactReadBudget, ArtifactRead
 
 MAX_FILES = 20
 MAX_VIEW_READS = 5 + 3 + MAX_JOBS + 2 * MAX_FILES
+MAX_REDIRECT_READS = 4
 lifecycle_rpcs = Counter(
     'omi_record_wal_handoff_duplicate_firestore_transactions_total',
     'Duplicate WAL snapshot lifecycle RPC attempts and outcomes',
@@ -53,10 +54,11 @@ class PointReads:
 @dataclass
 class AuthorityReads:
     reads: PointReads
+    limit: int = 5
     issued: int = 0
 
     def timeout(self, ceiling):
-        if self.issued >= 5:
+        if self.issued >= self.limit:
             raise ArtifactReadLimit('duplicate WAL owner-read limit')
         self.issued += 1
         return self.reads.point(ceiling)
@@ -87,10 +89,12 @@ class View:
     known: dict[str, dict]
     reply: dict
     prior: dict | None
+    marked: bool
 
 
 def _read(view, reads, request, files, expected):
     uid, cid = request.uid, request.cid
+    replay = files is None
     generation, protection, row = handoff.check_owner_authority(
         view.client,
         view.transaction,
@@ -99,15 +103,20 @@ def _read(view, reads, request, files, expected):
         request.source,
         request.device,
         expected.generation if expected else None,
-        sampling_read_budget=AuthorityReads(reads),
+        sampling_read_budget=AuthorityReads(reads, 5 + MAX_REDIRECT_READS if replay else 5),
+        allow_retained_merge=replay,
     )
     if (
         row.get('status') != 'completed'
+        and not (
+            replay and row.get('status') == 'merging' and row.get(SETTLED_FIELD) is True and row.get('merge_job_id')
+        )
         or row.get('record_audio_closed') is not True
         or not row.get('finished_at')
         or row.get('record_audio_partial')
         or row.get('record_upload_failed')
         or row.get('record_audio_removal_pending')
+        and not (replay and row.get(MERGE_TARGET_FIELD))
         or row.get('record_upload_sessions')
         or row.get('record_wal_handoff_present')
         or request.recording_session is not None
@@ -185,7 +194,14 @@ def _read(view, reads, request, files, expected):
             known[file_id] = receipt
     if stored and len(known) != len(file_ids):
         return None
-    return View(ProofScope(generation, source_digest, attestation), file_ids, known, reply, prior or None)
+    return View(
+        ProofScope(generation, source_digest, attestation),
+        file_ids,
+        known,
+        reply,
+        prior or None,
+        row.get(SETTLED_FIELD) is True,
+    )
 
 
 def _completed_status(view, request, canonical, intake, job, segments, generation):
@@ -250,6 +266,11 @@ def reconcile(store, reads, request, *, files=None, expected=None, placements=No
                         'segment_ids': [],
                     },
                 )
+        if not state.marked:
+            view.transaction.update(
+                view.client.collection('users').document(request.uid).collection('conversations').document(request.cid),
+                {SETTLED_FIELD: True},
+            )
         record, _ = record_identity(request.uid, request.cid)
         view.put(
             'content',

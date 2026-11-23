@@ -10,6 +10,7 @@ import time
 from uuid import uuid4
 
 from google.cloud import firestore
+from config.record_wal_duplicate import MERGE_TARGET_FIELD, RETAINED_DONORS_FIELD, SETTLED_FIELD
 
 from database._client import run_transactional, get_data_plane_firestore_client
 from database.batch_pipeline_privacy import (
@@ -60,7 +61,18 @@ def _file_ref(client, namespace, file_id):
     return _ref(client, namespace, 'wal_file_' + file_id)
 
 
-def check_owner_authority(client, tx, uid, cid, source, device, expected_generation=None, *, sampling_read_budget=None):
+def check_owner_authority(
+    client,
+    tx,
+    uid,
+    cid,
+    source,
+    device,
+    expected_generation=None,
+    *,
+    sampling_read_budget=None,
+    allow_retained_merge=False,
+):
     snapshots = {}
     check = assert_batch_write_allowed
     options = {}
@@ -74,14 +86,28 @@ def check_owner_authority(client, tx, uid, cid, source, device, expected_generat
         conversation_ids=(cid,),
         expected_generation=expected_generation,
         snapshots=snapshots,
-        **options
+        **options,
     )
     row = snapshots.get('conversations', {}).get(cid) or {}
     user = snapshots.get('user') or {}
+    target_id = row.get(MERGE_TARGET_FIELD)
+    successor = snapshots.get('conversations', {}).get(target_id) or {}
+    retained = (
+        allow_retained_merge
+        and row.get(SETTLED_FIELD) is True
+        and row.get('deleted') is True
+        and bool(target_id)
+        and target_id == row.get('sync_merged_into')
+        and successor.get('private_cloud_sync_enabled') is True
+        and not successor.get('uses_custom_stt')
+        and not successor.get('deleted')
+        and not successor.get('sync_merged_into')
+        and cid in (successor.get(RETAINED_DONORS_FIELD) or [])
+    )
     if (
         not row
-        or row.get('deleted')
-        or row.get('sync_merged_into')
+        or (row.get('deleted') or row.get('sync_merged_into'))
+        and not retained
         or row.get('record_lane_owner') != 'batch_live_v1'
         or row.get('source') != source
         or row.get('client_device_id') != device
