@@ -793,16 +793,47 @@ def test_pending_bridge_preserves_user_curated_rows_and_layer_counts_use_aggrega
     aggregate_calls = []
     query = _CountQuery(docs, aggregate_calls)
     original_stream = _CountQuery.stream
+    streamed_projections = []
+
+    def select(self, fields):
+        projected = self._copy()
+        projected.projection = tuple(fields)
+        return projected
 
     def stream(self):
         assert not any(
             f.field_path in {'recording', 'home_hidden'} for f in self._filters
         ), 'layer count streamed documents'
+        streamed_projections.append((self._filters[0].field_path, self._limit_count, getattr(self, 'projection', None)))
         return original_stream(self)
 
+    monkeypatch.setattr(_CountQuery, 'select', select)
     monkeypatch.setattr(_CountQuery, 'stream', stream)
     assert count_hidden(query, include_discarded=False, hide_home=True) == 5
     assert len(aggregate_calls) == 3
+    expected_projection = (
+        'discarded',
+        'status',
+        'source',
+        'structured.category',
+        'folder_id',
+        'starred',
+        'created_at',
+        'recording',
+        'home_hidden',
+        'sync_bridge_pending',
+        'sync_relevance_user_kept',
+        'has_photos',
+        'photos',
+        'user_title',
+        'folder_user_set',
+    )
+    assert streamed_projections == [
+        ('sync_bridge_pending.expires_at', 1, None),
+        ('deleted', None, expected_projection),
+        ('dream_duplicate_of', None, expected_projection),
+        ('sync_bridge_pending.expires_at', None, expected_projection),
+    ]
     monkeypatch.setattr(_CountQuery, 'stream', original_stream)
     assert count_hidden(query, include_discarded=False, hide_home=True, starred=True) == 0
 
