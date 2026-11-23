@@ -45,6 +45,8 @@ class LiveConversationEndButton extends StatefulWidget {
 
 class _LiveConversationEndButtonState extends State<LiveConversationEndButton> {
   bool _ended = false;
+  // Failure count when a successful close latched End; a later unsuccessful settlement releases it.
+  int? _latchedFailures;
 
   bool _owns(ServerConversation conversation, CaptureProvider capture, bool v3Feedback) {
     final recordingId = v3Feedback ? capture.verifiedLiveServerRecordingId : null;
@@ -64,6 +66,14 @@ class _LiveConversationEndButtonState extends State<LiveConversationEndButton> {
     final mine = context.select<CaptureProvider?, bool>(
       (capture) => capture != null && _owns(conversation, capture, v3Feedback),
     );
+    final failures = context.select<ConversationsV3Provider?, int>((v3) => v3?.finishFailures ?? 0);
+    if (_ended && _latchedFailures != null && failures != _latchedFailures) {
+      _latchedFailures = null;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _ended = false;
+        if (mounted) widget.onEndSuppressionChanged?.call(false);
+      });
+    }
     if (!mine) return const SizedBox.shrink();
     final label = context.l10n.endConversation;
     return Padding(
@@ -95,6 +105,7 @@ class _LiveConversationEndButtonState extends State<LiveConversationEndButton> {
                 setEndSuppressed?.call(true);
                 final v3 = context.read<ConversationsV3Provider?>();
                 final previousFinish = v3?.finishRow;
+                final failuresAtTap = v3?.finishFailures;
                 var started = false;
                 var closed = false;
                 try {
@@ -111,6 +122,8 @@ class _LiveConversationEndButtonState extends State<LiveConversationEndButton> {
                   if (!(closed && started)) {
                     _ended = false;
                     if (_owns(conversation, capture, v3Feedback)) setEndSuppressed?.call(false);
+                  } else {
+                    _latchedFailures = failuresAtTap;
                   }
                 }
                 if (!context.mounted || !started || ModalRoute.of(context)?.isCurrent != true) return;

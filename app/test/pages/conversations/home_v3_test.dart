@@ -1398,6 +1398,15 @@ void main() {
         await tester.tap(end, warnIfMissed: false);
         await tester.pump();
         expect(home.capture.endCalls, calls, reason: 'a closed window keeps End latched');
+
+        // The detached server finalize fails: End is released for a retry.
+        expect(home.conversationsV3.settleManualFinish(home.conversationsV3.finishRow!, null), isTrue);
+        await tester.pump();
+        await tester.pump();
+        home.capture.drain = null;
+        await tester.tap(end, warnIfMissed: false);
+        await tester.pump();
+        expect(home.capture.endCalls, calls + 1, reason: 'an unsuccessful settlement releases End');
         home.conversations.showStarredOnly = false;
         await _dispose(tester, home);
       });

@@ -56,6 +56,10 @@ class ConversationsV3Provider extends ChangeNotifier {
   // An accepted finish that reached its deadline: Home reads the list once.
   bool _reconcileOnHome = false;
 
+  // Counts manual finishes the server did not accept, so a latched End can be retried.
+  int _finishFailures = 0;
+  int get finishFailures => _finishFailures;
+
   bool takeHomeReconcile() {
     final due = _reconcileOnHome;
     _reconcileOnHome = false;
@@ -102,6 +106,7 @@ class ConversationsV3Provider extends ChangeNotifier {
   bool settleManualFinish(ServerConversation row, ServerConversation? result) {
     if (!finishFeedbackEnabled || !identical(_finishRow, row)) return false;
     if (result == null || result.discarded || result.status == ConversationStatus.in_progress) {
+      _finishFailures++;
       _clearManualFinish();
     } else {
       _finishAccepted = true;
