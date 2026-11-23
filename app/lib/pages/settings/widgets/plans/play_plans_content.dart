@@ -11,6 +11,8 @@ import 'package:omi/services/billing/play_billing.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
+// Google Play Billing plan screens: the Play-priced plans sheet, the renewal and cancel disclosure
+// shown under every Play purchase button, and the loading state before the billing provider is known.
 typedef PlayUrlOpener = Future<bool> Function(Uri uri);
 
 Future<bool> _openExternal(Uri uri) => launchUrl(uri, mode: LaunchMode.externalApplication);
