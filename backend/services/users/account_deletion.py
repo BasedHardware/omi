@@ -684,7 +684,7 @@ def _retry_firestore_write(
     logger.critical(msg)
 
 
-def _cancel_subscription_for_account_deletion(uid: str) -> None:
+def _cancel_stripe_for_account_deletion(uid: str) -> None:
     subscription_id = None
     try:
         sub = users_db.get_existing_user_subscription(uid)
@@ -696,9 +696,19 @@ def _cancel_subscription_for_account_deletion(uid: str) -> None:
             stripe_utils.cancel_subscription_for_account_deletion(subscription_id)
     except Exception as error:
         raise DeletionBillingError(subscription_id, error) from error
+
+
+def _cancel_subscription_for_account_deletion(uid: str, *, defer_play_failure: bool = False) -> None:
+    _cancel_stripe_for_account_deletion(uid)
     # Google Play bills outside Stripe: stop it too, or the deleted account keeps being charged. A failure
     # is a plain retryable error (never a parked billing failure): the wipe backs off and tries again.
-    play_publisher.cancel_for_account_deletion(uid)
+    try:
+        play_publisher.cancel_for_account_deletion(uid)
+    except Exception as error:
+        if not defer_play_failure:
+            raise
+        # Admission only: the wipe repeats the cancel at its irreversible boundary until Google confirms.
+        logger.warning('delete_account admission: Play cancel pending (%s)', type(error).__name__)
 
 
 def purge_user_conversation_index(uid: str) -> None:
@@ -712,10 +722,7 @@ def _run_immediate_deletion_steps(uid: str) -> None:
     """Run admission actions, leaving protected credential deletion to the wipe."""
     failures: list[Exception] = []
     try:
-        _cancel_subscription_for_account_deletion(uid)
-    except play_publisher.PlayCancelPending as error:
-        # The wipe repeats the cancel at its irreversible boundary and retries until Google confirms.
-        logger.warning('delete_account admission: %s', error)
+        _cancel_subscription_for_account_deletion(uid, defer_play_failure=True)
     except Exception as error:
         failures.append(error)
     try:
