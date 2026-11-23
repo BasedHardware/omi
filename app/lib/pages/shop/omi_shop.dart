@@ -26,12 +26,23 @@ Uri omiHardwareUrl(String source) =>
 
 bool _isStoreHost(String host) => host == 'www.omi.me' || host == 'omi.me';
 
+/// Any Omi host. Only the store hosts serve pages here; the rest (app.omi.me sells Omi Pro, h.omi.me)
+/// are never off-site payment pages and stay blocked from everywhere.
+bool _isOmiHost(String host) => host == 'omi.me' || host.endsWith('.omi.me');
+
 bool _isProductPage(Uri uri) {
   final path = uri.path.toLowerCase();
   return _isStoreHost(uri.host.toLowerCase()) && (path == '/products/omi' || path == '/products/omi/');
 }
 
 bool _isCheckoutPath(String path) => path.startsWith('/checkouts/') || RegExp(r'^/\d+/checkouts/').hasMatch(path);
+
+/// A post-purchase page on the store's own checkout: on omi.me under a checkout path, or on
+/// checkout.shopify.com. The same words anywhere else are not an order.
+bool _isPostPurchase(String host, String path) {
+  if (!path.contains('post_purchase') && !path.contains('post-purchase')) return false;
+  return host == 'checkout.shopify.com' || (_isStoreHost(host) && _isCheckoutPath(path));
+}
 
 /// Main-frame navigation in the hardware-only store.
 ///
@@ -42,14 +53,17 @@ bool _isCheckoutPath(String path) => path.startsWith('/checkouts/') || RegExp(r'
 ///   off-site payment page already reached that way (Shop Pay, PayPal, Klarna, Afterpay, Amazon Pay,
 ///   bank redirects, top-level 3-D Secure), so a paying buyer is never stranded. From the product,
 ///   cart and policy pages off-site navigation stays blocked. A return to omi.me is checked again.
-/// * A post-purchase page means the payment was already taken: the store closes and the reader is
-///   told the order was placed (it never shows the upsell sold outside Google Play).
+///   Every other Omi host (app.omi.me, h.omi.me, any *.omi.me) is blocked from everywhere.
+/// * A post-purchase page on the store's checkout means the payment was already taken: the store
+///   closes and the reader is told the order was placed (it never shows the upsell sold outside
+///   Google Play).
 /// Subframes (card fields, in-page 3-D Secure) are not filtered.
 WebNavigation omiHardwareNavigation(Uri? current, Uri target) {
   if (target.scheme != 'https') return WebNavigation.block;
   final host = target.host.toLowerCase();
   final path = target.path.toLowerCase();
-  if (path.contains('post_purchase') || path.contains('post-purchase')) return WebNavigation.finish;
+  if (_isPostPurchase(host, path)) return WebNavigation.finish;
+  if (_isOmiHost(host) && !_isStoreHost(host)) return WebNavigation.block;
   if (_isStoreHost(host)) {
     if (_isProductPage(target)) {
       if (target.queryParameters['view'] == omiHardwareView) return WebNavigation.allow;
@@ -66,7 +80,7 @@ WebNavigation omiHardwareNavigation(Uri? current, Uri target) {
   if (current == null || current.scheme != 'https') return WebNavigation.block;
   final fromHost = current.host.toLowerCase();
   final fromCheckout = _isCheckoutPath(current.path.toLowerCase());
-  final fromPaymentHop = !_isStoreHost(fromHost);
+  final fromPaymentHop = !_isOmiHost(fromHost);
   return fromCheckout || fromPaymentHop ? WebNavigation.allow : WebNavigation.block;
 }
 
@@ -101,7 +115,6 @@ Future<void> openOmiShop(BuildContext context, {required String source}) async {
   PlatformManager.instance.analytics.track('Omi Shop Opened', properties: {'source': source});
   final title = context.l10n.getOmiDevice;
   final hardwareOnly = omiShopRestrictedToHardware(context);
-  // Presented as a sheet that slides up, with Close rather than Back: it is a detour, not a step.
   // Presented as a sheet that slides up, with Close rather than Back: it is a detour, not a step.
   final outcome = await Navigator.of(context).push<WebNavigationKind>(
     MaterialPageRoute<WebNavigationKind>(

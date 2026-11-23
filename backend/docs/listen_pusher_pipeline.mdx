@@ -42,6 +42,10 @@ segments counted once. Its durable claim limits it to one title-only provider
 attempt. The builder publishes the preview through `structured.title` while the
 row is live. User titles and the final outline take precedence.
 
+`CONVERSATIONS_V3_BATCH_COMMIT_READS=on` is the default. The projection commit reads its
+recordings and existing derived rows with one transactional BatchGet per chunk. Set it to `off`
+to restore serial per-document reads.
+
 ## Pre-recorded Modulate credit-refusal failover
 
 `PRERECORDED_SONIOX_FAILOVER_ENABLED` defaults to `true` and is explicitly declared

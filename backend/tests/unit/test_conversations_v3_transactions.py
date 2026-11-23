@@ -11,10 +11,12 @@ import importlib
 from unittest.mock import AsyncMock, Mock
 
 import pytest
+from google.api_core.exceptions import Aborted
+
 
 from config.record_wal_duplicate import SETTLED_FIELD
 from database import conversations_v3 as store
-from utils.conversations.v3 import service, summary
+from utils.conversations.v3 import bind_request_log_trace, service, summary
 from utils.conversations import (
     lifecycle,
 )  # noqa: F401 -- the commit path's import graph is paid at collection, not in a test's CPU budget
@@ -76,7 +78,13 @@ def test_expired_worker_cannot_release_successor(strict):
     assert strict.rows[L]['token'] == new
 
 
-def test_atomic_projection_and_claim(strict):
+@pytest.mark.parametrize('mode', ['default', 'off'])
+def test_atomic_projection_and_claim(strict, monkeypatch, mode):
+    monkeypatch.delenv('CONVERSATIONS_V3_BATCH_COMMIT_READS', raising=False)
+    if mode == 'off':
+        monkeypatch.setenv('CONVERSATIONS_V3_BATCH_COMMIT_READS', 'off')
+    batch_get = Mock(wraps=strict.get_all)
+    monkeypatch.setattr(strict, 'get_all', batch_get)
     strict.rows[R] = {'recording': True, 'v3_pending': True}
     token = leases.acquire('synthetic', 'builder', firestore_client=strict)
     source = {'id': 'r', 'recording': True, '_v3_revision': 1}
@@ -90,9 +98,43 @@ def test_atomic_projection_and_claim(strict):
         'structured': {},
     }
     store.commit_projection('synthetic', token, {'r': source}, {}, [row], [], firestore_client=strict)
+    if mode == 'default':
+        batch_get.assert_called_once()
+        assert batch_get.call_args.kwargs['transaction'] is strict.transactions[-1]
+    else:
+        batch_get.assert_not_called()
     assert strict.rows[R]['v3_pending'] is False
     assert strict.rows[R]['claims'] == [{'conversation_id': 'c', 'start': AT, 'end': AT}]
     assert strict.rows[('users', 'synthetic', 'conversations', 'c')]['id'] == 'c'
+
+
+@pytest.mark.parametrize('missing', [False, True])
+def test_projection_reads_unordered_chunks_and_prefers_existing_row(strict, monkeypatch, missing):
+    monkeypatch.delenv('CONVERSATIONS_V3_BATCH_COMMIT_READS', raising=False)
+    strict.rows[R] = {'recording': True, 'v3_pending': True}
+    token = leases.acquire('synthetic', 'builder', firestore_client=strict)
+    existing = {'r': {'_v3_revision': 1}}
+    for index in range(100):
+        cid = f'c{index}'
+        existing[cid] = {'_v3_revision': 1}
+        if not (missing and index == 99):
+            strict.rows[(*R[:-1], cid)] = {'_test_revision': 1}
+    batch_get = Mock(wraps=strict.get_all)
+    monkeypatch.setattr(strict, 'get_all', batch_get)
+
+    def commit():
+        return store.commit_projection(
+            'synthetic', token, {'r': {'_v3_revision': 2}}, existing, [], [], firestore_client=strict
+        )
+
+    if missing:
+        with pytest.raises(store.Conflict, match='source_changed'):
+            commit()
+    else:
+        assert commit() == set()
+    assert strict.rows[R]['v3_pending'] is missing
+    assert [len(call.args[0]) for call in batch_get.call_args_list] == [100, 1]
+    assert all(call.kwargs['transaction'] is strict.transactions[-1] for call in batch_get.call_args_list)
 
 
 def test_projection_defers_full_row_replacement_of_settled_wal(strict):
@@ -342,7 +384,10 @@ def test_projection_allows_transcript_offload(strict, monkeypatch):
     assert calls[0]['allow_offload'] is True
 
 
-def test_projection_partitions_bytes_and_keeps_pending_until_last_batch(strict, monkeypatch):
+@pytest.mark.parametrize('abort_second_batch', [False, True])
+def test_projection_partitions_bytes_and_keeps_pending_until_last_batch(
+    strict, monkeypatch, caplog, abort_second_batch
+):
     strict.rows[R] = {'id': 'r', 'recording': True, 'v3_pending': True, 'status': 'completed'}
     token = leases.acquire('synthetic', 'builder', firestore_client=strict)
     original = store.firestore.transactional
@@ -352,6 +397,8 @@ def test_projection_partitions_bytes_and_keeps_pending_until_last_batch(strict, 
         wrapped = original(body)
 
         def run(tx, *args):
+            if abort_second_batch and len(observations) == 1:
+                raise Aborted('cross-transaction contention')
             result = wrapped(tx, *args)
             observations.append(strict.rows[R]['v3_pending'])
             return result
@@ -370,9 +417,24 @@ def test_projection_partitions_bytes_and_keeps_pending_until_last_batch(strict, 
         }
         for i in range(128)
     ]
-    store.commit_projection(
-        'synthetic', token, {'r': {**strict.rows[R], '_v3_revision': 1}}, {}, rows, [], firestore_client=strict
-    )
+
+    def commit():
+        store.commit_projection(
+            'synthetic', token, {'r': {**strict.rows[R], '_v3_revision': 1}}, {}, rows, [], firestore_client=strict
+        )
+
+    if abort_second_batch:
+        trace_id = 'a' * 32
+        with bind_request_log_trace({b'x-cloud-trace-context': (trace_id + '/42').encode()}):
+            with pytest.raises(Aborted):
+                commit()
+        assert observations == [True]
+        assert strict.rows[R]['v3_pending'] is True
+        assert 0 < len(strict.rows[R]['claims']) < len(rows)
+        assert f'stage=projection_commit outcome=contention trace_id={trace_id}' in caplog.text
+        return
+
+    commit()
     assert len(observations) >= 4
     assert all(observations[:-1]) and observations[-1] is False
     assert len(strict.rows[R]['claims']) == 128
