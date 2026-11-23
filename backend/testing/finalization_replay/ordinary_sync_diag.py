@@ -68,35 +68,6 @@ def _python_sync(state):
     return 'discarded' if result.discarded else result.status.value
 
 
-def _python_sync_with_memo_evidence(state):
-    """Capture the row keys Python actually offers to its attach memo writers."""
-    from database import episode_attach_memo, episode_timeline
-    from utils.conversations.episode_attach_key import content_key
-
-    original_attach_recorded = episode_timeline.attach_recorded
-    original_complete = episode_attach_memo.complete
-
-    def attach_recorded(*args, **kwargs):
-        row = kwargs.get('attach_row')
-        key = content_key(row) if isinstance(row, Mapping) else None
-        result = original_attach_recorded(*args, **kwargs)
-        if key:
-            state.episode_attach_memo_writer_keys.append(key)
-        return result
-
-    def complete(uid, cid, row, owner, *args, **kwargs):
-        key = content_key(row) if isinstance(row, Mapping) else None
-        result = original_complete(uid, cid, row, owner, *args, **kwargs)
-        if uid == state.uid and cid == state.cid and key:
-            state.episode_attach_memo_writer_keys.append(key)
-        return result
-
-    with patch.object(episode_timeline, 'attach_recorded', attach_recorded), patch.object(
-        episode_attach_memo, 'complete', complete
-    ):
-        return _python_sync(state)
-
-
 def _seed_worker_intent(state):
     job_id = str(UUID(bytes=sha256(f'listen-finalization:{state.uid}:{state.cid}:1'.encode()).digest()[:16], version=4))
     owner = {'finalization_engine': 'go', 'finalization_owner_epoch': 1, 'finalization_revision': 1}
@@ -203,6 +174,30 @@ def _observe_sync(state, run, leaves, url):
     leaves.enter_context(patch.object(callback, 'submit_with_context', track))
     leaves.enter_context(patch.object(finalize, 'submit_with_context', track))
     leaves.enter_context(patch.object(reference_module, '_run', run))
+    if state.replay_side == 'python':
+        from database import episode_attach_memo, episode_timeline
+        from utils.conversations.episode_attach_key import content_key
+
+        original_attach_recorded = episode_timeline.attach_recorded
+        original_complete = episode_attach_memo.complete
+
+        def attach_recorded(*args, **kwargs):
+            row = kwargs.get('attach_row')
+            key = content_key(row) if isinstance(row, Mapping) else None
+            result = original_attach_recorded(*args, **kwargs)
+            if key:
+                state.episode_attach_memo_writer_keys.append(key)
+            return result
+
+        def complete(uid, cid, row, owner, *args, **kwargs):
+            key = content_key(row) if isinstance(row, Mapping) else None
+            result = original_complete(uid, cid, row, owner, *args, **kwargs)
+            if uid == state.uid and cid == state.cid and key:
+                state.episode_attach_memo_writer_keys.append(key)
+            return result
+
+        leaves.enter_context(patch.object(episode_timeline, 'attach_recorded', attach_recorded))
+        leaves.enter_context(patch.object(episode_attach_memo, 'complete', complete))
     try:
         return reference_module.run_reference(state, leaves, url)
     finally:
@@ -248,7 +243,7 @@ def _run_side(cases, side, binary, database, key, worker_backend):
                 def invoke(state):
                     state.replay_side = side
                     if side == 'python':
-                        return _python_sync_with_memo_evidence(state)
+                        return _python_sync(state)
                     privacy_document_path = f"batch_pipeline_privacy/{sha256(state.uid.encode('utf-8')).hexdigest()}"
                     with FirestoreProxy(
                         emulator_endpoint(), privacy_document_path, state.home_dirty_receipt_path
@@ -273,6 +268,7 @@ def _run_side(cases, side, binary, database, key, worker_backend):
                     outputs.append(out)
                     server.state = state
                     server.errors.clear()
+                    state.replay_side = side
                     client_gate.note_client_seen(state.uid)
                     with ExitStack() as leaves:
                         _observe(
