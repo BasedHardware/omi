@@ -12,7 +12,8 @@
     "backend/charts/**",
     ".github/workflows/**"
   ],
-  "status": "open",
+  "status": "dormant",
+  "dormant_since": "2026-11-23T09:20:05.889275Z",
   "canonical_prevention_artifact": [
     "backend/tests/unit/test_sync_ingest_archive.py",
     "backend/docs/runbooks/sync-ingest-archive.md"
