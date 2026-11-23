@@ -131,9 +131,8 @@ def enrich(report: dict) -> dict:
     raw_unexplained = report.get('unexplained_differences', 0)
     for case in report.get('cases', []):
         python_bug_issue = validate_python_bug_exception(case)
-        case['home_dirty_receipt_trace'] = {
-            side: (case.get(side) or {}).get('home_dirty_receipt_trace', {}) for side in ('python', 'go')
-        }
+        captured_receipt_trace = case.get('home_dirty_receipt_trace') or {}
+        case['home_dirty_receipt_trace'] = {side: captured_receipt_trace.get(side, {}) for side in ('python', 'go')}
         case.pop('cost', None)
         case.pop('go_evidence', None)
         case.pop('python', None)

@@ -27,7 +27,8 @@ use the stated five-second grace; all other clocks stop at `finished_at`.
 
 | Field | Additional check |
 | --- | --- |
-| Conversation `updated_at`, `notes_written_at`, `terminal_family_at`, `summary_completed_at` | Firestore timestamp; own replay window. |
+| Conversation `updated_at`, `notes_written_at`, `terminal_family_at`, `title_changed_at` | Firestore timestamp; own replay window. |
+| Conversation `summary_completed_at` | Numeric Unix seconds; own replay window. |
 | `episodes/{id}.compose_deferred_at`, `created_at`, `title_changed_at` | Firestore timestamp; `created_at` alone permits up to 5 seconds after finish for the scheduled episode write. |
 | `goals/{id}.updated_at` | Firestore timestamp; own replay window. |
 | `goals/{id}/goal_history/{day}.recorded_at` | Firestore timestamp; `date` and document day must match the timestamp's UTC day. |

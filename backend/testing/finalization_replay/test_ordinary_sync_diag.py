@@ -35,6 +35,11 @@ class OrdinarySyncDiagnosticTests(unittest.TestCase):
             'unexplained_differences': 4,
             'cases': [
                 {
+                    'name': 'receipt-trace',
+                    'home_dirty_receipt_trace': {
+                        'python': {'set_true': 2, 'set_false': 1, 'deleted': 0, 'other_write': 0},
+                        'go': {'set_true': 1, 'set_false': 0, 'deleted': 1, 'other_write': 0},
+                    },
                     'differences': [
                         {'path': '/provider_calls/memory-l1', 'kind': 'different_value'},
                         {'path': '/webhooks/sample/0/payload', 'kind': 'different_value'},
@@ -50,7 +55,7 @@ class OrdinarySyncDiagnosticTests(unittest.TestCase):
                             'kind': 'missing_in_python',
                             'reason': 'Go finalization job ID binds to its admitted queue job',
                         },
-                    ]
+                    ],
                 }
             ],
             'cost_table': [{'case': 'synthetic', 'python': {}, 'go': {}}],
@@ -66,6 +71,9 @@ class OrdinarySyncDiagnosticTests(unittest.TestCase):
         self.assertEqual(enriched['diagnostic']['label_counts']['go_gap'], 2)
         self.assertEqual(enriched['diagnostic']['home_dirty_receipt_missing']['rows'], 1)
         self.assertEqual(enriched['diagnostic']['home_dirty_receipt_missing']['label'], 'unlabelled')
+        self.assertEqual(enriched['diagnostic']['home_dirty_receipt_missing']['writes_set_true'], 1)
+        self.assertEqual(enriched['diagnostic']['home_dirty_receipt_missing']['writes_set_false'], 0)
+        self.assertEqual(enriched['diagnostic']['home_dirty_receipt_missing']['deletes'], 1)
         self.assertEqual(
             enriched['diagnostic']['approved_rule_reference'],
             'backend-go/tools/replay/comparison-rules.md',

@@ -65,6 +65,32 @@ func TestCompareCountsExecutionErrors(t *testing.T) {
 	}
 }
 
+func TestCompareRetainsValueFreeHomeReceiptTraceWhenStrippingObservations(t *testing.T) {
+	result, err := compare([]replayCase{{
+		Name: "receipt",
+		Python: &observation{
+			Status: "completed", Derived: map[string]any{}, Effects: map[string]any{},
+			HomeDirtyReceiptTrace: map[string]int{"set_true": 2, "set_false": 1, "deleted": 0, "other_write": 0},
+		},
+		Go: &observation{
+			Status: "completed", Derived: map[string]any{}, Effects: map[string]any{},
+			HomeDirtyReceiptTrace: map[string]int{"set_true": 1, "set_false": 0, "deleted": 1, "other_write": 0},
+		},
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	stripReportValues(&result)
+	trace := result.Cases[0].HomeDirtyReceiptTrace
+	if trace["python"]["set_true"] != 2 || trace["python"]["set_false"] != 1 ||
+		trace["go"]["set_true"] != 1 || trace["go"]["deleted"] != 1 {
+		t.Fatalf("home receipt write trace was lost or changed: %#v", trace)
+	}
+	if result.Cases[0].Python != nil || result.Cases[0].Go != nil {
+		t.Fatal("value-bearing observations should still be stripped")
+	}
+}
+
 func TestCompareDifferencesWithIncompatibleJSONShapes(t *testing.T) {
 	t.Parallel()
 	for _, pair := range [][2]any{

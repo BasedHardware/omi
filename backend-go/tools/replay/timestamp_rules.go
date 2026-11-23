@@ -1,6 +1,8 @@
 package main
 
 import (
+	"encoding/json"
+	"math"
 	"strings"
 	"time"
 )
@@ -45,8 +47,12 @@ var approvedTimestampRules = []timestampRule{
 }
 
 var approvedConversationTimestampFields = map[string]bool{
-	"notes_written_at":     true,
-	"terminal_family_at":   true,
+	"notes_written_at":   true,
+	"terminal_family_at": true,
+	"title_changed_at":   true,
+}
+
+var approvedConversationUnixSecondFields = map[string]bool{
 	"summary_completed_at": true,
 }
 
@@ -79,6 +85,45 @@ func validTimestampValueWithin(run *observation, value any, firestore bool, grac
 	}
 	parsed, err := time.Parse(time.RFC3339Nano, stamp)
 	return err == nil && !parsed.Before(run.Started) && !parsed.After(run.Finished.Add(grace))
+}
+
+func validUnixSecondValue(run *observation, value any) bool {
+	if run == nil || run.Started.IsZero() || run.Finished.IsZero() || run.Finished.Before(run.Started) {
+		return false
+	}
+	var seconds float64
+	switch number := value.(type) {
+	case json.Number:
+		parsed, err := number.Float64()
+		if err != nil {
+			return false
+		}
+		seconds = parsed
+	case float64:
+		seconds = number
+	case float32:
+		seconds = float64(number)
+	case int:
+		seconds = float64(number)
+	case int64:
+		seconds = float64(number)
+	case int32:
+		seconds = float64(number)
+	case uint64:
+		seconds = float64(number)
+	case uint32:
+		seconds = float64(number)
+	case uint:
+		seconds = float64(number)
+	default:
+		return false
+	}
+	if math.IsNaN(seconds) || math.IsInf(seconds, 0) {
+		return false
+	}
+	start := float64(run.Started.UnixNano()) / float64(time.Second)
+	finish := float64(run.Finished.UnixNano()) / float64(time.Second)
+	return seconds >= start && seconds <= finish
 }
 
 func timestampRuleForDocument(path, field string) (timestampRule, bool) {
@@ -117,6 +162,14 @@ func approvedTimestampDifference(path string, python, goRun *observation) string
 		if field == "updated_at" {
 			if timestampInWindow(python) && timestampInWindow(goRun) {
 				return "both conversation updated_at values are Firestore timestamps within their own replay windows"
+			}
+			return ""
+		}
+		if approvedConversationUnixSecondFields[field] {
+			pyValue, pyOK := nestedField(python.Document, field)
+			goValue, goOK := nestedField(goRun.Document, field)
+			if pyOK && goOK && validUnixSecondValue(python, pyValue) && validUnixSecondValue(goRun, goValue) {
+				return "both conversation Unix-second clocks are numeric and within their own replay windows"
 			}
 			return ""
 		}
@@ -163,6 +216,11 @@ func validateTimestampEvidence(diffs *[]difference, side string, run *observatio
 	}
 	for field := range approvedConversationTimestampFields {
 		if value, exists := conversation[field]; exists && !validTimestampValue(run, value, true) {
+			addDifference(diffs, "/"+side+"/conversation/"+field, "invalid_clock")
+		}
+	}
+	for field := range approvedConversationUnixSecondFields {
+		if value, exists := conversation[field]; exists && !validUnixSecondValue(run, value) {
 			addDifference(diffs, "/"+side+"/conversation/"+field, "invalid_clock")
 		}
 	}

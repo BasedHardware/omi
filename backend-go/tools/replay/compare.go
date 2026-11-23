@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"math/big"
 	"slices"
 	"strings"
@@ -102,11 +103,12 @@ type difference struct {
 
 type caseReport struct {
 	replayCase
-	PythonStatus string         `json:"python_status,omitempty"`
-	GoStatus     string         `json:"go_status,omitempty"`
-	Differences  []difference   `json:"differences"`
-	Cost         costPair       `json:"cost"`
-	GoEvidence   map[string]any `json:"go_evidence,omitempty"`
+	PythonStatus          string                    `json:"python_status,omitempty"`
+	GoStatus              string                    `json:"go_status,omitempty"`
+	Differences           []difference              `json:"differences"`
+	Cost                  costPair                  `json:"cost"`
+	GoEvidence            map[string]any            `json:"go_evidence,omitempty"`
+	HomeDirtyReceiptTrace map[string]map[string]int `json:"home_dirty_receipt_trace,omitempty"`
 }
 
 type report struct {
@@ -140,11 +142,23 @@ func compare(cases []replayCase) (report, error) {
 		if c.Python != nil {
 			entry.PythonStatus = c.Python.Status
 			entry.Cost.Python = c.Python.Cost
+			if c.Python.HomeDirtyReceiptTrace != nil {
+				if entry.HomeDirtyReceiptTrace == nil {
+					entry.HomeDirtyReceiptTrace = make(map[string]map[string]int)
+				}
+				entry.HomeDirtyReceiptTrace["python"] = maps.Clone(c.Python.HomeDirtyReceiptTrace)
+			}
 		}
 		if c.Go != nil {
 			entry.GoStatus = c.Go.Status
 			entry.Cost.Go = c.Go.Cost
 			entry.GoEvidence = c.Go.GoEvidence
+			if c.Go.HomeDirtyReceiptTrace != nil {
+				if entry.HomeDirtyReceiptTrace == nil {
+					entry.HomeDirtyReceiptTrace = make(map[string]map[string]int)
+				}
+				entry.HomeDirtyReceiptTrace["go"] = maps.Clone(c.Go.HomeDirtyReceiptTrace)
+			}
 		}
 		out.CostRows = append(out.CostRows, costRow{Case: c.Name, Python: entry.Cost.Python, Go: entry.Cost.Go})
 		switch {

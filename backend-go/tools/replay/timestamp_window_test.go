@@ -42,7 +42,7 @@ func TestPostFinishClockGraceIsFiveSecondsAndFieldScoped(t *testing.T) {
 }
 
 func TestApprovedConversationAndNestedWriteClocksAreChecked(t *testing.T) {
-	for _, field := range []string{"notes_written_at", "terminal_family_at", "summary_completed_at"} {
+	for _, field := range []string{"notes_written_at", "terminal_family_at", "title_changed_at"} {
 		py, goRun := ruleRun(), ruleRun()
 		py.Document = map[string]any{field: wrappedStamp(ruleStart.Add(time.Minute))}
 		goRun.Document = map[string]any{field: wrappedStamp(ruleStart.Add(2 * time.Minute))}
@@ -57,10 +57,30 @@ func TestApprovedConversationAndNestedWriteClocksAreChecked(t *testing.T) {
 	}
 
 	py, goRun := ruleRun(), ruleRun()
+	py.Document = map[string]any{"summary_completed_at": float64(ruleStart.Add(time.Minute).UnixNano()) / float64(time.Second)}
+	goRun.Document = map[string]any{"summary_completed_at": float64(ruleStart.Add(2*time.Minute).UnixNano()) / float64(time.Second)}
+	diffs := compareObservations(py, goRun)
+	if hasUnexplained(diffs) || !hasReason(diffs, "summary_completed_at") {
+		t.Fatalf("valid numeric summary clock was not explained: %+v", diffs)
+	}
+
+	goRun.Document.(map[string]any)["summary_completed_at"] = float64(goRun.Finished.Add(time.Second).UnixNano()) / float64(time.Second)
+	diffs = compareObservations(py, goRun)
+	if !hasUnexplained(diffs) || !hasKindPath(diffs, "invalid_clock", "/go/conversation/summary_completed_at") {
+		t.Fatalf("out-of-window numeric summary clock was excused: %+v", diffs)
+	}
+
+	goRun.Document.(map[string]any)["summary_completed_at"] = wrappedStamp(ruleStart.Add(2 * time.Minute))
+	diffs = compareObservations(py, goRun)
+	if !hasUnexplained(diffs) || !hasKindPath(diffs, "invalid_clock", "/go/conversation/summary_completed_at") {
+		t.Fatalf("Firestore timestamp was accepted for numeric summary clock: %+v", diffs)
+	}
+
+	py, goRun = ruleRun(), ruleRun()
 	path := "users/u/memory_source_replacements/r"
 	py.Derived[path] = map[string]any{"control_state": map[string]any{"updated_at": wrappedStamp(ruleStart.Add(time.Minute))}}
 	goRun.Derived[path] = map[string]any{"control_state": map[string]any{"updated_at": wrappedStamp(ruleStart.Add(2 * time.Minute))}}
-	diffs := compareObservations(py, goRun)
+	diffs = compareObservations(py, goRun)
 	if hasUnexplained(diffs) || !hasReason(diffs, "control_state/updated_at") {
 		t.Fatalf("nested memory write clock was not explained: %+v", diffs)
 	}
