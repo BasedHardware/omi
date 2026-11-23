@@ -256,8 +256,7 @@ class _ActivityPageState extends State<ActivityPage> with WidgetsBindingObserver
   Widget build(BuildContext context) {
     final l = context.l10n;
     final provider = context.watch<ConversationProvider?>();
-    // A failed v3 conversation leaves Home and is listed here, with Try Again (X5), whether or not
-    // the server's Home-processing placement is on; that switch still gates the legacy failures.
+    // V3 Home can receive a terminal result in either the v3 or legacy projection.
     final v3 = context.select<ConversationsV3Provider?, bool>((p) => p?.v3 ?? false);
     final failures = _pendingWork.homeProcessingToday || v3
         ? failedActivityConversations(
@@ -269,7 +268,6 @@ class _ActivityPageState extends State<ActivityPage> with WidgetsBindingObserver
             ],
             episodes: context.watch<EpisodeProvider?>()?.homeEpisodes ?? const [],
             attentionIds: _pendingWork.attentionConversationIds,
-            v3Only: !_pendingWork.homeProcessingToday,
           )
         : <ServerConversation>[];
     if (failures.isNotEmpty) {

@@ -1,15 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:provider/provider.dart';
 
 import 'package:omi/backend/http/api_result.dart';
+import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/daily_summary.dart';
+import 'package:omi/backend/schema/pending_work.dart';
 import 'package:omi/backend/schema/review.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/activity/activity_bell_button.dart';
 import 'package:omi/pages/activity/activity_page.dart';
 import 'package:omi/pages/activity/activity_seen.dart';
-import 'package:omi/backend/schema/pending_work.dart';
+import 'package:omi/providers/conversation_provider.dart';
+import 'package:omi/providers/conversations_v3_provider.dart';
 import 'package:omi/services/pending_work/pending_work_store.dart';
 
 /// An in-memory bell state starting at [stored] (0: never visited).
@@ -127,6 +131,48 @@ void main() {
   });
 
   group('ActivityPage', () {
+    testWidgets('lists failed summaries from v3 and legacy conversation results', (tester) async {
+      final (seen, _) = _seen(0);
+      final store = _noWork();
+      final conversations = ConversationProvider(isSignedIn: () => false)
+        ..conversations = [
+          for (final id in ['v3', 'legacy'])
+            ServerConversation.fromJson({
+              'id': id,
+              'created_at': '2026-11-23T10:00:00Z',
+              'started_at': '2026-11-23T10:00:00Z',
+              'finished_at': '2026-11-23T10:12:00Z',
+              'source': 'omi',
+              'kind': 'conversation',
+              'transcript_segments': const [],
+              'status': id == 'v3' ? 'completed' : 'failed',
+              'structured': {'title': 'Synthetic summary', 'overview': '', 'emoji': '📝'},
+              if (id == 'v3') 'tile_state': 'failed',
+            }),
+        ];
+      final v3 = ConversationsV3Provider(uid: () => 'u1', cached: 'u1:1');
+      addTearDown(conversations.dispose);
+      addTearDown(v3.dispose);
+      addTearDown(store.dispose);
+      await tester.pumpWidget(MultiProvider(
+        providers: [
+          ChangeNotifierProvider.value(value: conversations),
+          ChangeNotifierProvider.value(value: v3),
+        ],
+        child: _app(ActivityPage(
+          pendingWork: store,
+          seen: seen,
+          probeDreamReport: () async => false,
+          loadRecaps: () async => (items: <DailySummary>[], ok: true),
+          loadChanges: ({cursor}) async => const ApiSuccess(ReviewChangesPage(changes: [])),
+        )),
+      ));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('activity_failed_v3')), findsOneWidget);
+      expect(find.byKey(const ValueKey('activity_failed_legacy')), findsOneWidget);
+      await tester.pumpWidget(const SizedBox());
+    });
+
     testWidgets('a failed recap load leaves an unseen recap unseen', (tester) async {
       final (seen, stored) = _seen(yesterday.millisecondsSinceEpoch);
       seen.observe([anHourAgo]);

@@ -1386,13 +1386,13 @@ void main() {
       });
     });
 
-    for (final (caseName, message, image) in [
-      ('failed summary', "Couldn't summarize this conversation", '003-mobile-ios-v3-manual-finish-failed'),
-      ('legacy failed projection', "Couldn't summarize this conversation", null),
-      ('hidden result', null, '001-mobile-ios-hidden-finish'),
-      ('20-minute deadline', null, '002-mobile-ios-finish-deadline'),
-      ('20-minute deadline off Home', null, null),
-      ('20-minute deadline followed by a result', null, null),
+    for (final (caseName, image) in [
+      ('failed summary', '003-mobile-ios-v3-manual-finish-failed'),
+      ('legacy failed projection', null),
+      ('hidden result', '001-mobile-ios-hidden-finish'),
+      ('20-minute deadline', '002-mobile-ios-finish-deadline'),
+      ('20-minute deadline off Home', null),
+      ('20-minute deadline followed by a result', null),
     ]) {
       testWidgets('a $caseName settles the manual finish and stops list polling', (tester) async {
         await withClock(Clock.fixed(_now), () async {
@@ -1400,14 +1400,8 @@ void main() {
           final palette = OmiColors.active;
           addTearDown(() => OmiColors.active = palette);
           OmiColors.active = OmiColors.forBrightness(Brightness.dark);
-          final base = theme();
-          final feedbackTheme = base.copyWith(
-            snackBarTheme: base.snackBarTheme.copyWith(
-              contentTextStyle: base.snackBarTheme.contentTextStyle?.copyWith(fontFamily: 'SF Pro Display'),
-            ),
-          );
           final home =
-              await _pumpHome(tester, v3: true, boundary: boundary, theme: feedbackTheme, size: const Size(393, 852));
+              await _pumpHome(tester, v3: true, boundary: boundary, theme: theme(), size: const Size(393, 852));
           final v3 = home.conversationsV3;
           final recording = home.conversations.conversations.firstWhere((row) => row.id == 'rec-1');
           home.conversations.conversations.removeWhere((row) =>
@@ -1467,8 +1461,9 @@ void main() {
           await tester.pump(const Duration(milliseconds: 300));
           expect(v3.finishRow, isNull);
           expect(find.byKey(const Key('home_processing_row')), findsNothing);
-          expect(find.byType(SnackBar), message == null ? findsNothing : findsOneWidget);
-          if (message != null) expect(find.text(message), findsOneWidget);
+          expect(find.byType(SnackBar), findsNothing);
+          expect(find.byKey(const ValueKey('home_activity_attention_dot')), findsNothing);
+          expect(find.byKey(const Key('conversation_summary_failed_indicator')), findsNothing);
           expect(find.text('Launch checklist'), resultAfterTimeout ? findsOneWidget : findsNothing);
           if (image != null) await shoot(tester, image);
 
