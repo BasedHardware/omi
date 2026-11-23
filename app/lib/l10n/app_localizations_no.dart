@@ -15768,6 +15768,12 @@ class AppLocalizationsNo extends AppLocalizations {
   String get playPaidAppUnavailable => 'Ikke tilgjengelig på Android';
 
   @override
+  String get pageNotAvailableInApp => 'Denne siden er ikke tilgjengelig i appen.';
+
+  @override
+  String get shopOrderPlacedCheckEmail => 'Bestillingen er sendt. Sjekk e-posten din for bekreftelsen.';
+
+  @override
   String get prepaidCodeEntry => 'Har du en kode?';
 
   @override

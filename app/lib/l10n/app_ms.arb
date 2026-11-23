@@ -4749,6 +4749,8 @@
     "playPurchaseNotConfirmed": "Kami belum dapat mengesahkan pembelian. Kami akan cuba lagi secara automatik.",
     "playRenewalTerms": "Diperbaharui secara automatik pada harga yang ditunjukkan sehingga anda membatalkannya. Urus atau batalkan bila-bila masa di Google Play.",
     "playPaidAppUnavailable": "Tidak tersedia di Android",
+    "pageNotAvailableInApp": "Halaman ini tidak tersedia dalam apl.",
+    "shopOrderPlacedCheckEmail": "Pesanan dibuat. Semak e-mel anda untuk pengesahan.",
     "prepaidCodeEntry": "Ada kod?",
     "prepaidCodeTitle": "Tebus kod",
     "prepaidCodeFieldHint": "Masukkan kod anda",

@@ -12306,6 +12306,8 @@
     "playPurchaseNotConfirmed": "هنوز نتوانستیم خرید را تأیید کنیم. دوباره خودکار تلاش می‌کنیم.",
     "playRenewalTerms": "تا زمانی که لغو نکنید، با قیمت نمایش‌داده‌شده خودکار تمدید می‌شود. هر زمان در Google Play مدیریت یا لغو کنید.",
     "playPaidAppUnavailable": "در Android در دسترس نیست",
+    "pageNotAvailableInApp": "این صفحه در برنامه در دسترس نیست.",
+    "shopOrderPlacedCheckEmail": "سفارش ثبت شد. ایمیل خود را برای تأییدیه بررسی کنید.",
     "prepaidCodeEntry": "کد دارید؟",
     "prepaidCodeTitle": "استفاده از کد",
     "prepaidCodeFieldHint": "کد خود را وارد کنید",

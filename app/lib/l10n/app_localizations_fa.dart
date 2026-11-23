@@ -15756,6 +15756,12 @@ class AppLocalizationsFa extends AppLocalizations {
   String get playPaidAppUnavailable => 'در Android در دسترس نیست';
 
   @override
+  String get pageNotAvailableInApp => 'این صفحه در برنامه در دسترس نیست.';
+
+  @override
+  String get shopOrderPlacedCheckEmail => 'سفارش ثبت شد. ایمیل خود را برای تأییدیه بررسی کنید.';
+
+  @override
   String get prepaidCodeEntry => 'کد دارید؟';
 
   @override

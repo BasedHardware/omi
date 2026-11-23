@@ -15799,6 +15799,12 @@ class AppLocalizationsLv extends AppLocalizations {
   String get playPaidAppUnavailable => 'Nav pieejams Android';
 
   @override
+  String get pageNotAvailableInApp => 'Šī lapa lietotnē nav pieejama.';
+
+  @override
+  String get shopOrderPlacedCheckEmail => 'Pasūtījums veikts. Apstiprinājumu meklējiet e-pastā.';
+
+  @override
   String get prepaidCodeEntry => 'Vai jums ir kods?';
 
   @override

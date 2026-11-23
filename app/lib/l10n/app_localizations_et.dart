@@ -15756,6 +15756,12 @@ class AppLocalizationsEt extends AppLocalizations {
   String get playPaidAppUnavailable => 'Androidis pole saadaval';
 
   @override
+  String get pageNotAvailableInApp => 'See leht pole rakenduses saadaval.';
+
+  @override
+  String get shopOrderPlacedCheckEmail => 'Tellimus on esitatud. Kinnituse leiad oma e-postist.';
+
+  @override
   String get prepaidCodeEntry => 'Kas sul on kood?';
 
   @override

@@ -144,6 +144,12 @@ class UsageProvider with ChangeNotifier {
   bool get billingProviderUnknown =>
       !kIsWeb && defaultTargetPlatform == TargetPlatform.android && _subscription == null;
 
+  /// The first subscription read failed, so the provider stays unknown until a retry.
+  bool get billingProviderFailed => billingProviderUnknown && _error != null && !isLoading;
+
+  /// The provider is not known yet and a read is (or will be) in flight: show loading, not an error.
+  bool get billingProviderPending => billingProviderUnknown && !billingProviderFailed;
+
   /// New purchases go through Google Play. A live Stripe subscriber keeps today's Stripe management.
   bool get playBilledPurchaser {
     if (playBilling == null) return false;

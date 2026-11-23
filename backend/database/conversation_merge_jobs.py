@@ -6,6 +6,7 @@ retraction cleans the provisional target before releasing the source claims.
 """
 
 from datetime import datetime, timedelta, timezone
+import logging
 from typing import Any
 from uuid import uuid4
 
@@ -15,11 +16,14 @@ from models.finalization_owner import python_owns_finalization
 from database.quiet_check_retirement import stop_quiet_checks_for_job
 from database.account_deletion_policy import account_deletion_marker_blocks_access
 from database._client import get_firestore_client
+from config.record_wal_duplicate import MERGE_PLAN_FIELD
+from database.record_wal_merge import plan_retention, RetainedMergeDeferred
 from database.conversation_merge_policy import source_has_merge_receipt
 
 COLLECTION = 'conversation_finalization_jobs'
 KIND = 'conversation_merge'
 LEASE = timedelta(minutes=10)
+logger = logging.getLogger(__name__)
 
 
 def _now() -> datetime:
@@ -64,8 +68,9 @@ def admit(uid: str, conversation_ids: list[str], reprocess: bool, *, firestore_c
         ]
         if any(doc.exists for doc in tombstones):
             return None
+        retained = plan_retention(dict(zip(conversation_ids, rows)))
         now = _now()
-        job = dict(
+        job: dict[str, Any] = dict(
             kind=KIND,
             uid=uid,
             conversation_ids=conversation_ids,
@@ -80,12 +85,18 @@ def admit(uid: str, conversation_ids: list[str], reprocess: bool, *, firestore_c
             updated_at=now,
             reconcile_after_at=now + LEASE,
         )
+        if retained:
+            job[MERGE_PLAN_FIELD] = retained
         transaction.create(job_ref, job)
         for ref in refs:
             transaction.update(ref, {'status': 'merging', 'merge_job_id': job_id})
         return job | {'job_id': job_id}
 
-    job = commit(client.transaction())
+    try:
+        job = commit(client.transaction())
+    except RetainedMergeDeferred:
+        logger.info('event=conversation_merge outcome=deferred reason=wal_retained_lineage')
+        return None
     if job is not None:
         stop_quiet_checks_for_job(job['job_id'], firestore_client=client)
     return job

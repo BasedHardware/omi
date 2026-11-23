@@ -27681,6 +27681,18 @@ abstract class AppLocalizations {
   /// **'Not available on Android'**
   String get playPaidAppUnavailable;
 
+  /// Shown when an in-app store page links somewhere the app does not open
+  ///
+  /// In en, this message translates to:
+  /// **'This page isn\'t available in the app.'**
+  String get pageNotAvailableInApp;
+
+  /// Shown after the in-app store closes once an order is paid
+  ///
+  /// In en, this message translates to:
+  /// **'Order placed. Check your email for the confirmation.'**
+  String get shopOrderPlacedCheckEmail;
+
   /// Link on the paywall and plans sheet that opens the sheet to redeem a prepaid Omi Pro code
   ///
   /// In en, this message translates to:

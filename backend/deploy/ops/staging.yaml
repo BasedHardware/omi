@@ -135,7 +135,7 @@ cloud_tasks:
     min_backoff: 10s
     max_backoff: 300s
   staging-provider-stt:
-    # Mirrors prod's provider-stt queue; create_queues.sh made it at 16/5 and the config-train raises it.
+    # Staging keeps its lower dispatch capacity (SCA-3552).
     max_concurrent_dispatches: 48
     max_dispatches_per_second: 10
     max_attempts: -1

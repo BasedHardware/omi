@@ -164,6 +164,42 @@ async def test_malformed_outline_uses_cached_deterministic_fallback(builder, mon
     await service.reconcile('u')
 
 
+@pytest.mark.parametrize(
+    'error, status',
+    [('v3_lease_lifetime_exhausted', 200), ('v3_lease_lifetime_exhausted unexpectedly', 500)],
+)
+def test_reconcile_route_falls_back_only_for_exact_lease_exhaustion(builder, monkeypatch, error, status):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from routers import conversations_v3_tasks as routes
+
+    committed, _ = builder
+    monkeypatch.setattr(store, 'load', lambda *a, **kw: ({'r': source()}, {}, []))
+    paid_work = AsyncMock(side_effect=RuntimeError(error))
+    monkeypatch.setattr(service, 'leased_work', paid_work)
+    fallback = service.metrics.RECONCILES.labels('outline_fallback')
+    before = fallback._value.get()
+    app = FastAPI()
+    app.include_router(routes.router)
+    app.dependency_overrides[routes.verify_cloud_tasks_oidc] = lambda: 0
+
+    with TestClient(app, raise_server_exceptions=False) as client:
+        response = client.post('/v1/conversations-v3/reconcile', json={'uid': 'u'})
+
+    paid_work.assert_awaited_once()
+    assert response.status_code == status
+    if status == 200:
+        assert response.json() == {'outcome': 'committed'}
+        (commit,) = committed
+        assert commit[4]
+        assert commit[5][0]['entries'][0]['title'] == 'speech for a synthetic plan'
+        assert commit[5][0]['entries'][0]['_outline_failed'] is True
+        assert fallback._value.get() == before + 1
+    else:
+        assert not committed
+        assert fallback._value.get() == before
+
+
 @pytest.mark.parametrize('recording,hidden', [(True, False), (False, True)])
 def test_home_projection_retains_visibility_fields(recording, hidden):
     from database import home_feed

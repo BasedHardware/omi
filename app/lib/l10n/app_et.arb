@@ -4749,6 +4749,8 @@
     "playPurchaseNotConfirmed": "Ostu ei õnnestunud veel kinnitada. Proovime automaatselt uuesti.",
     "playRenewalTerms": "Uueneb automaatselt näidatud hinnaga, kuni tühistad. Halda või tühista igal ajal Google Plays.",
     "playPaidAppUnavailable": "Androidis pole saadaval",
+    "pageNotAvailableInApp": "See leht pole rakenduses saadaval.",
+    "shopOrderPlacedCheckEmail": "Tellimus on esitatud. Kinnituse leiad oma e-postist.",
     "prepaidCodeEntry": "Kas sul on kood?",
     "prepaidCodeTitle": "Lunasta kood",
     "prepaidCodeFieldHint": "Sisesta oma kood",

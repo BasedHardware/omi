@@ -4784,6 +4784,8 @@
     "playPurchaseNotConfirmed": "Nous n'avons pas encore pu confirmer votre achat. Nous réessaierons automatiquement.",
     "playRenewalTerms": "Se renouvelle automatiquement au prix indiqué jusqu'à résiliation. Gérez ou résiliez à tout moment dans Google Play.",
     "playPaidAppUnavailable": "Non disponible sur Android",
+    "pageNotAvailableInApp": "Cette page n'est pas disponible dans l'app.",
+    "shopOrderPlacedCheckEmail": "Commande passée. Consultez vos e-mails pour la confirmation.",
     "prepaidCodeEntry": "Vous avez un code ?",
     "prepaidCodeTitle": "Utiliser un code",
     "prepaidCodeFieldHint": "Saisissez votre code",

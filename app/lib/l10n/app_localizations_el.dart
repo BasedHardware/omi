@@ -15867,6 +15867,12 @@ class AppLocalizationsEl extends AppLocalizations {
   String get playPaidAppUnavailable => 'Μη διαθέσιμο στο Android';
 
   @override
+  String get pageNotAvailableInApp => 'Αυτή η σελίδα δεν είναι διαθέσιμη στην εφαρμογή.';
+
+  @override
+  String get shopOrderPlacedCheckEmail => 'Η παραγγελία καταχωρήθηκε. Δείτε το email σας για την επιβεβαίωση.';
+
+  @override
   String get prepaidCodeEntry => 'Έχετε κωδικό;';
 
   @override

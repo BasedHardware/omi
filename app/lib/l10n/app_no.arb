@@ -4749,6 +4749,8 @@
     "playPurchaseNotConfirmed": "Vi kunne ikke bekrefte kjøpet ennå. Vi prøver igjen automatisk.",
     "playRenewalTerms": "Fornyes automatisk til prisen som vises, til du sier opp. Administrer eller si opp når som helst i Google Play.",
     "playPaidAppUnavailable": "Ikke tilgjengelig på Android",
+    "pageNotAvailableInApp": "Denne siden er ikke tilgjengelig i appen.",
+    "shopOrderPlacedCheckEmail": "Bestillingen er sendt. Sjekk e-posten din for bekreftelsen.",
     "prepaidCodeEntry": "Har du en kode?",
     "prepaidCodeTitle": "Løs inn en kode",
     "prepaidCodeFieldHint": "Skriv inn koden din",

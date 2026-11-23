@@ -15788,6 +15788,12 @@ class AppLocalizationsLt extends AppLocalizations {
   String get playPaidAppUnavailable => 'Android nepasiekiama';
 
   @override
+  String get pageNotAvailableInApp => 'Šis puslapis programėlėje nepasiekiamas.';
+
+  @override
+  String get shopOrderPlacedCheckEmail => 'Užsakymas pateiktas. Patvirtinimą rasite el. pašte.';
+
+  @override
   String get prepaidCodeEntry => 'Turite kodą?';
 
   @override

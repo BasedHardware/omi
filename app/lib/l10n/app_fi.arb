@@ -4749,6 +4749,8 @@
     "playPurchaseNotConfirmed": "Ostoa ei voitu vielä vahvistaa. Yritämme automaattisesti uudelleen.",
     "playRenewalTerms": "Uusiutuu automaattisesti näytettyyn hintaan, kunnes peruutat. Hallinnoi tai peruuta milloin tahansa Google Playssa.",
     "playPaidAppUnavailable": "Ei saatavilla Androidilla",
+    "pageNotAvailableInApp": "Tämä sivu ei ole käytettävissä sovelluksessa.",
+    "shopOrderPlacedCheckEmail": "Tilaus tehty. Vahvistus on sähköpostissasi.",
     "prepaidCodeEntry": "Onko sinulla koodi?",
     "prepaidCodeTitle": "Lunasta koodi",
     "prepaidCodeFieldHint": "Syötä koodisi",

@@ -15801,6 +15801,12 @@ class AppLocalizationsMs extends AppLocalizations {
   String get playPaidAppUnavailable => 'Tidak tersedia di Android';
 
   @override
+  String get pageNotAvailableInApp => 'Halaman ini tidak tersedia dalam apl.';
+
+  @override
+  String get shopOrderPlacedCheckEmail => 'Pesanan dibuat. Semak e-mel anda untuk pengesahan.';
+
+  @override
   String get prepaidCodeEntry => 'Ada kod?';
 
   @override

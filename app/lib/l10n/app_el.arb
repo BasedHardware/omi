@@ -4749,6 +4749,8 @@
     "playPurchaseNotConfirmed": "Δεν μπορέσαμε να επιβεβαιώσουμε την αγορά ακόμα. Θα ξαναδοκιμάσουμε αυτόματα.",
     "playRenewalTerms": "Ανανεώνεται αυτόματα στην τιμή που εμφανίζεται μέχρι να την ακυρώσετε. Διαχείριση ή ακύρωση οποτεδήποτε στο Google Play.",
     "playPaidAppUnavailable": "Μη διαθέσιμο στο Android",
+    "pageNotAvailableInApp": "Αυτή η σελίδα δεν είναι διαθέσιμη στην εφαρμογή.",
+    "shopOrderPlacedCheckEmail": "Η παραγγελία καταχωρήθηκε. Δείτε το email σας για την επιβεβαίωση.",
     "prepaidCodeEntry": "Έχετε κωδικό;",
     "prepaidCodeTitle": "Εξαργύρωση κωδικού",
     "prepaidCodeFieldHint": "Εισαγάγετε τον κωδικό σας",

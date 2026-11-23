@@ -12306,6 +12306,8 @@
     "playPurchaseNotConfirmed": "ನಿಮ್ಮ ಖರೀದಿಯನ್ನು ಇನ್ನೂ ದೃಢೀಕರಿಸಲಾಗಲಿಲ್ಲ. ನಾವು ಸ್ವಯಂಚಾಲಿತವಾಗಿ ಮತ್ತೆ ಪ್ರಯತ್ನಿಸುತ್ತೇವೆ.",
     "playRenewalTerms": "ನೀವು ರದ್ದುಗೊಳಿಸುವವರೆಗೆ ತೋರಿಸಿದ ಬೆಲೆಯಲ್ಲಿ ಸ್ವಯಂಚಾಲಿತವಾಗಿ ನವೀಕರಿಸುತ್ತದೆ. Google Play ನಲ್ಲಿ ಯಾವಾಗ ಬೇಕಾದರೂ ನಿರ್ವಹಿಸಿ ಅಥವಾ ರದ್ದುಗೊಳಿಸಿ.",
     "playPaidAppUnavailable": "Android ನಲ್ಲಿ ಲಭ್ಯವಿಲ್ಲ",
+    "pageNotAvailableInApp": "ಈ ಪುಟ ಆ್ಯಪ್‌ನಲ್ಲಿ ಲಭ್ಯವಿಲ್ಲ.",
+    "shopOrderPlacedCheckEmail": "ಆರ್ಡರ್ ಮಾಡಲಾಗಿದೆ. ದೃಢೀಕರಣಕ್ಕಾಗಿ ನಿಮ್ಮ ಇಮೇಲ್ ನೋಡಿ.",
     "prepaidCodeEntry": "ಕೋಡ್ ಇದೆಯೇ?",
     "prepaidCodeTitle": "ಕೋಡ್ ರಿಡೀಮ್ ಮಾಡಿ",
     "prepaidCodeFieldHint": "ನಿಮ್ಮ ಕೋಡ್ ನಮೂದಿಸಿ",

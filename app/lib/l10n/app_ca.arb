@@ -4749,6 +4749,8 @@
     "playPurchaseNotConfirmed": "Encara no hem pogut confirmar la compra. Ho tornarem a provar automàticament.",
     "playRenewalTerms": "Es renova automàticament al preu indicat fins que el cancel·lis. Gestiona-ho o cancel·la-ho quan vulguis a Google Play.",
     "playPaidAppUnavailable": "No disponible a Android",
+    "pageNotAvailableInApp": "Aquesta pàgina no està disponible a l'app.",
+    "shopOrderPlacedCheckEmail": "Comanda feta. Consulta el correu per veure la confirmació.",
     "prepaidCodeEntry": "Tens un codi?",
     "prepaidCodeTitle": "Bescanvia un codi",
     "prepaidCodeFieldHint": "Introdueix el teu codi",

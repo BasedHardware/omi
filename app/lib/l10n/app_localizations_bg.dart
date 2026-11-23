@@ -15815,6 +15815,12 @@ class AppLocalizationsBg extends AppLocalizations {
   String get playPaidAppUnavailable => 'Не е налично за Android';
 
   @override
+  String get pageNotAvailableInApp => 'Тази страница не е достъпна в приложението.';
+
+  @override
+  String get shopOrderPlacedCheckEmail => 'Поръчката е направена. Проверете имейла си за потвърждението.';
+
+  @override
   String get prepaidCodeEntry => 'Имате код?';
 
   @override

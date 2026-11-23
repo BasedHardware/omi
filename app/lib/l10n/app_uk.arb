@@ -4749,6 +4749,8 @@
     "playPurchaseNotConfirmed": "Поки не вдалося підтвердити покупку. Ми спробуємо знову автоматично.",
     "playRenewalTerms": "Автоматично поновлюється за вказаною ціною, доки ви не скасуєте. Керуйте або скасовуйте будь-коли в Google Play.",
     "playPaidAppUnavailable": "Недоступно на Android",
+    "pageNotAvailableInApp": "Ця сторінка недоступна в застосунку.",
+    "shopOrderPlacedCheckEmail": "Замовлення оформлено. Підтвердження надійде на вашу пошту.",
     "prepaidCodeEntry": "Маєте код?",
     "prepaidCodeTitle": "Активувати код",
     "prepaidCodeFieldHint": "Введіть ваш код",

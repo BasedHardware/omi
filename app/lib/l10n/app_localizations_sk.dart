@@ -15759,6 +15759,12 @@ class AppLocalizationsSk extends AppLocalizations {
   String get playPaidAppUnavailable => 'Na Androide nie je k dispozícii';
 
   @override
+  String get pageNotAvailableInApp => 'Táto stránka nie je v aplikácii dostupná.';
+
+  @override
+  String get shopOrderPlacedCheckEmail => 'Objednávka bola odoslaná. Potvrdenie nájdete v e-maile.';
+
+  @override
   String get prepaidCodeEntry => 'Máte kód?';
 
   @override

@@ -4749,6 +4749,8 @@
     "playPurchaseNotConfirmed": "Nu am putut confirma încă achiziția. Vom reîncerca automat.",
     "playRenewalTerms": "Se reînnoiește automat la prețul afișat până când anulezi. Gestionează sau anulează oricând din Google Play.",
     "playPaidAppUnavailable": "Indisponibil pe Android",
+    "pageNotAvailableInApp": "Această pagină nu este disponibilă în aplicație.",
+    "shopOrderPlacedCheckEmail": "Comanda a fost plasată. Verifică e-mailul pentru confirmare.",
     "prepaidCodeEntry": "Ai un cod?",
     "prepaidCodeTitle": "Folosește un cod",
     "prepaidCodeFieldHint": "Introdu codul tău",

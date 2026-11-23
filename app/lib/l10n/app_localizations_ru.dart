@@ -15816,6 +15816,12 @@ class AppLocalizationsRu extends AppLocalizations {
   String get playPaidAppUnavailable => 'Недоступно на Android';
 
   @override
+  String get pageNotAvailableInApp => 'Эта страница недоступна в приложении.';
+
+  @override
+  String get shopOrderPlacedCheckEmail => 'Заказ оформлен. Подтверждение придёт на вашу почту.';
+
+  @override
   String get prepaidCodeEntry => 'Есть код?';
 
   @override

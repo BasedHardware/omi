@@ -352,11 +352,6 @@ class CompositeTranscriptionSocket implements IPureSocket {
   /// Source evidence describes the next binary frame on the Omi connection.
   /// Keep the pair together and honor the same raw-audio consent as [send].
   void sendEvidenceAudioFrame(String evidence, List<int> audio) {
-    if (!_routesOmiControls) {
-      send(evidence);
-      send(audio);
-      return;
-    }
     if (_status != PureSocketStatus.connected) return;
     primarySocket.send(audio);
     if (_status == PureSocketStatus.connected && !_secondaryDegraded && forwardRawAudioToSecondary) {

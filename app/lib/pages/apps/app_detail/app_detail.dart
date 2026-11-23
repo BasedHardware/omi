@@ -859,10 +859,12 @@ class _AppDetailPageState extends State<AppDetailPage> with WidgetsBindingObserv
     );
   }
 
-  /// Google Play buyers cannot be sent to an app's own payment link. Hosts without plan state never are.
+  /// Google Play buyers cannot be sent to an app's own payment link, nor can an Android reader whose
+  /// billing provider is not known yet (as the store does). Hosts without plan state never are.
   bool _playBilledReader() {
     try {
-      return context.read<UsageProvider>().playBilledPurchaser;
+      final usage = context.read<UsageProvider>();
+      return usage.playBilledPurchaser || usage.billingProviderUnknown;
     } on ProviderNotFoundException {
       return false;
     }

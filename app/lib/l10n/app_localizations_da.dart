@@ -15755,6 +15755,12 @@ class AppLocalizationsDa extends AppLocalizations {
   String get playPaidAppUnavailable => 'Ikke tilgængelig på Android';
 
   @override
+  String get pageNotAvailableInApp => 'Denne side er ikke tilgængelig i appen.';
+
+  @override
+  String get shopOrderPlacedCheckEmail => 'Ordren er afgivet. Tjek din e-mail for bekræftelsen.';
+
+  @override
   String get prepaidCodeEntry => 'Har du en kode?';
 
   @override

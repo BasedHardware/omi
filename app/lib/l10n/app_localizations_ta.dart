@@ -15869,6 +15869,12 @@ class AppLocalizationsTa extends AppLocalizations {
   String get playPaidAppUnavailable => 'Android இல் கிடைக்காது';
 
   @override
+  String get pageNotAvailableInApp => 'இந்தப் பக்கம் ஆப்பில் கிடைக்காது.';
+
+  @override
+  String get shopOrderPlacedCheckEmail => 'ஆர்டர் செய்யப்பட்டது. உறுதிப்படுத்தலுக்கு உங்கள் மின்னஞ்சலைப் பாருங்கள்.';
+
+  @override
   String get prepaidCodeEntry => 'குறியீடு உள்ளதா?';
 
   @override

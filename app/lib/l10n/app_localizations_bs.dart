@@ -15792,6 +15792,12 @@ class AppLocalizationsBs extends AppLocalizations {
   String get playPaidAppUnavailable => 'Nije dostupno na Androidu';
 
   @override
+  String get pageNotAvailableInApp => 'Ova stranica nije dostupna u aplikaciji.';
+
+  @override
+  String get shopOrderPlacedCheckEmail => 'Narudžba je poslana. Potvrdu potražite u e-pošti.';
+
+  @override
   String get prepaidCodeEntry => 'Imate kod?';
 
   @override

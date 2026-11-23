@@ -12306,6 +12306,8 @@
     "playPurchaseNotConfirmed": "עדיין לא הצלחנו לאשר את הרכישה. ננסה שוב אוטומטית.",
     "playRenewalTerms": "מתחדש אוטומטית במחיר המוצג עד שתבטלו. ניתן לנהל או לבטל בכל עת ב-Google Play.",
     "playPaidAppUnavailable": "לא זמין ב-Android",
+    "pageNotAvailableInApp": "הדף הזה לא זמין באפליקציה.",
+    "shopOrderPlacedCheckEmail": "ההזמנה בוצעה. האישור נשלח לאימייל שלך.",
     "prepaidCodeEntry": "יש לך קוד?",
     "prepaidCodeTitle": "מימוש קוד",
     "prepaidCodeFieldHint": "הזינו את הקוד שלכם",

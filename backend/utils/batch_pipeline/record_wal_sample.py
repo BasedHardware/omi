@@ -76,7 +76,9 @@ def _try_process_slot(slot: int) -> bool:
         return True
 
 
-def _upload_packets(paths: Sequence[str], budget: ArtifactReadBudget) -> list[tuple[str, int, list[Packet]]]:
+def read_staged_packets(
+    paths: Sequence[str], budget: ArtifactReadBudget, *, descriptors=None
+) -> list[tuple[str, int, list[Packet]]]:
     if not 0 < len(paths) <= MAX_FILES:
         raise ArtifactReadLimit('WAL sample file count')
     remaining = MAX_WAL_BYTES
@@ -112,6 +114,25 @@ def _upload_packets(paths: Sequence[str], budget: ArtifactReadBudget) -> list[tu
                     span = samples * CLOCK_RATE // rate
                     packets.append(Packet(hashlib.sha256(packet).hexdigest(), span, cursor, len(packet)))
                     cursor += span
+                if descriptors is not None and packets:
+                    frame_size = info.get('frame_size')
+                    if (
+                        info.get('codec') == 'opus'
+                        and frame_size in {80, 160, 320, 480, 640, 960}
+                        and all(packet.ticks * rate == frame_size * CLOCK_RATE for packet in packets)
+                    ):
+                        descriptors[path.name] = {
+                            'name': path.name,
+                            'sha256': hashlib.sha256(raw).hexdigest(),
+                            'size': size,
+                            'codec': 'opus',
+                            'sample_rate': rate,
+                            'channels': 1,
+                            'frame_size': frame_size,
+                            'capture_start': info['capture_start'],
+                            'frame_count': len(packets),
+                            'sample_count': frame_size * len(packets),
+                        }
             except (OSError, ValueError):
                 # A known-size unreadable file has ambiguous bytes but no
                 # measured duration. Its valid siblings still contribute.
@@ -199,6 +220,8 @@ def _manifest(bucket, uid, cid, media, listed, budget):
     if hashlib.sha256(raw).hexdigest() != before.get('sha256'):
         raise ValueError('manifest digest changed')
     manifest = json.loads(raw)
+    if not isinstance(manifest, dict):
+        raise ValueError('manifest must be a JSON object')
     if manifest.get('schema') != 'audio_custody_v1' or manifest['media'] != {
         'bucket': bucket.name,
         'path': media.name,
@@ -239,7 +262,7 @@ def _manifest(bucket, uid, cid, media, listed, budget):
     return result
 
 
-def _inventory(uid, cid, check_alternate_sources, budget):
+def read_manifest_inventory(uid, cid, check_alternate_sources, budget, *, versions=None):
     bucket = get_private_cloud_sync_bucket()
     media = _page(bucket, f'raw-live/{uid}/{cid}/', MAX_PACKS, budget)
     if not media:
@@ -251,7 +274,13 @@ def _inventory(uid, cid, check_alternate_sources, budget):
         if name in by_name:
             raise ValueError('conflicting live manifests')
         by_name[name] = manifest
-    runs = [_manifest(bucket, uid, cid, item, by_name[media_name(item.name, uid)], budget) for item in media]
+    runs = []
+    for item in media:
+        manifest = by_name[media_name(item.name, uid)]
+        run = _manifest(bucket, uid, cid, item, manifest, budget)
+        runs.append(run)
+        if versions is not None:
+            versions.append((item, manifest, run))
     alternate = True
     if check_alternate_sources:
         prefix = f'chunks/{uid}/{cid}/'
@@ -395,13 +424,15 @@ async def observe(
                 db_executor, state.authority, store, uid, cid, source, device, budget, reads
             )
             try:
-                layout = await run_blocking(sync_executor, _upload_packets, paths, budget)
+                layout = await run_blocking(sync_executor, read_staged_packets, paths, budget)
             except OSError:
                 attempts.labels('unreadable_staged').inc()
                 return
             candidate = not has_jobs and _same_sealed_capture(row, row)
             try:
-                runs, no_alternate = await run_blocking(storage_executor, _inventory, uid, cid, candidate, budget)
+                runs, no_alternate = await run_blocking(
+                    storage_executor, read_manifest_inventory, uid, cid, candidate, budget
+                )
             except (InvalidTag, StructError):
                 attempts.labels('unreadable_manifest').inc()
                 runs, no_alternate = [], False

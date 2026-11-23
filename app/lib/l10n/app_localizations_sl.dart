@@ -15792,6 +15792,12 @@ class AppLocalizationsSl extends AppLocalizations {
   String get playPaidAppUnavailable => 'Ni na voljo v Androidu';
 
   @override
+  String get pageNotAvailableInApp => 'Ta stran v aplikaciji ni na voljo.';
+
+  @override
+  String get shopOrderPlacedCheckEmail => 'Naročilo je oddano. Potrditev boste našli v e-pošti.';
+
+  @override
   String get prepaidCodeEntry => 'Imate kodo?';
 
   @override

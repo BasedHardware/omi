@@ -15763,6 +15763,12 @@ class AppLocalizationsCs extends AppLocalizations {
   String get playPaidAppUnavailable => 'Na Androidu není k dispozici';
 
   @override
+  String get pageNotAvailableInApp => 'Tato stránka není v aplikaci dostupná.';
+
+  @override
+  String get shopOrderPlacedCheckEmail => 'Objednávka byla odeslána. Potvrzení najdete v e-mailu.';
+
+  @override
   String get prepaidCodeEntry => 'Máte kód?';
 
   @override

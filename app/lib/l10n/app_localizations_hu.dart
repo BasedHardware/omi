@@ -15822,6 +15822,12 @@ class AppLocalizationsHu extends AppLocalizations {
   String get playPaidAppUnavailable => 'Androidon nem érhető el';
 
   @override
+  String get pageNotAvailableInApp => 'Ez az oldal nem érhető el az alkalmazásban.';
+
+  @override
+  String get shopOrderPlacedCheckEmail => 'A rendelés leadva. A visszaigazolást az e-mailjeidben találod.';
+
+  @override
   String get prepaidCodeEntry => 'Van kódod?';
 
   @override

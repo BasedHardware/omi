@@ -15769,6 +15769,12 @@ class AppLocalizationsFi extends AppLocalizations {
   String get playPaidAppUnavailable => 'Ei saatavilla Androidilla';
 
   @override
+  String get pageNotAvailableInApp => 'Tämä sivu ei ole käytettävissä sovelluksessa.';
+
+  @override
+  String get shopOrderPlacedCheckEmail => 'Tilaus tehty. Vahvistus on sähköpostissasi.';
+
+  @override
   String get prepaidCodeEntry => 'Onko sinulla koodi?';
 
   @override

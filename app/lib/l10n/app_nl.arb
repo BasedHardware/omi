@@ -4749,6 +4749,8 @@
     "playPurchaseNotConfirmed": "We konden je aankoop nog niet bevestigen. We proberen het automatisch opnieuw.",
     "playRenewalTerms": "Wordt automatisch verlengd tegen de getoonde prijs tot je opzegt. Beheer of zeg op wanneer je wilt in Google Play.",
     "playPaidAppUnavailable": "Niet beschikbaar op Android",
+    "pageNotAvailableInApp": "Deze pagina is niet beschikbaar in de app.",
+    "shopOrderPlacedCheckEmail": "Bestelling geplaatst. Je bevestiging staat in je e-mail.",
     "prepaidCodeEntry": "Heb je een code?",
     "prepaidCodeTitle": "Code inwisselen",
     "prepaidCodeFieldHint": "Voer je code in",

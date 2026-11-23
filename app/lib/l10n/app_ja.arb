@@ -4749,6 +4749,8 @@
     "playPurchaseNotConfirmed": "購入をまだ確認できませんでした。自動的に再試行します。",
     "playRenewalTerms": "解約するまで表示価格で自動更新されます。Google Play でいつでも管理・解約できます。",
     "playPaidAppUnavailable": "Android では利用できません",
+    "pageNotAvailableInApp": "このページはアプリでは表示できません。",
+    "shopOrderPlacedCheckEmail": "ご注文を受け付けました。確認メールをご確認ください。",
     "prepaidCodeEntry": "コードをお持ちですか？",
     "prepaidCodeTitle": "コードを使う",
     "prepaidCodeFieldHint": "コードを入力",

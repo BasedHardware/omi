@@ -10,7 +10,7 @@ import pytest
 
 from testing.pipeline_lab import contracts as c
 from testing.pipeline_lab.ledger import SpendLedger
-from testing.pipeline_lab.llm_proxy import tagging, wire
+from testing.pipeline_lab.llm_proxy import server, tagging, wire
 from testing.pipeline_lab.llm_proxy.server import LlmProxy, ProxyConfig
 from testing.pipeline_lab.store import Store
 
@@ -139,7 +139,16 @@ def _post(url, body, headers=None):
 CHAT = {'model': 'omi-auto:notes', 'messages': [{'role': 'user', 'content': 'Summarise a fictional chat.'}]}
 
 
-def test_miss_forwards_records_and_logs_then_hit_serves_from_cache(lab, upstream):
+def test_miss_forwards_records_and_logs_then_hit_serves_from_cache(lab, upstream, monkeypatch):
+    send = server._Handler._send
+    logged_before_send = []
+
+    def check_log_before_send(handler, status, body, content_type='application/json', extra=None):
+        call_id = (extra or {}).get('X-Pipeline-Lab-Call-Id')
+        logged_before_send.append(any(call.id == call_id for call in lab.read_llm_calls('run-1')))
+        send(handler, status, body, content_type, extra)
+
+    monkeypatch.setattr(server._Handler, '_send', check_log_before_send)
     with _proxy(lab, upstream) as proxy:
         headers = {
             'X-Omi-LLM-Feature': 'conversation_notes',
@@ -154,6 +163,7 @@ def test_miss_forwards_records_and_logs_then_hit_serves_from_cache(lab, upstream
         status, response_headers, again = _post(proxy.url + '/v1/chat/completions', CHAT, headers)
         assert again == body and response_headers['X-Pipeline-Lab-Cache'] == 'hit'
         hit_id = response_headers['X-Pipeline-Lab-Call-Id']
+    assert logged_before_send == [True, True]
     assert len(upstream.requests) == 1
     sent = upstream.requests[0]
     assert sent['path'] == '/v1/chat/completions'
@@ -163,7 +173,6 @@ def test_miss_forwards_records_and_logs_then_hit_serves_from_cache(lab, upstream
     assert not any(k.startswith('x-pipeline-lab-') for k in lowered)
     calls = lab.read_llm_calls('run-1')
     assert len(calls) == 2
-    # Handlers can append their log rows in a different order from the HTTP responses.
     by_id = {call.id: call for call in calls}
     assert set(by_id) == {miss_id, hit_id} and miss_id != hit_id
     miss, hit = by_id[miss_id], by_id[hit_id]

@@ -32,6 +32,8 @@ COHORT_ENVS = {
     'prepaid-code-redeem': lambda: '',
     'messaging-telegram': lambda: os.getenv('OMI_MESSAGING_CHANNELS_UIDS', ''),
     'messaging-imessage': lambda: os.getenv('OMI_MESSAGING_CHANNELS_UIDS', ''),
+    # Go ordinary-sync finalization (SCA-3883): runtime membership only, no env fallback.
+    'go-finalization': lambda: '',
 }
 
 
@@ -90,6 +92,9 @@ def in_rollout_cohort(uid: str, name: str, *, legacy_members=None, legacy_all=Fa
     if _membership_resolver is None:
         if name == 'dream-agent':
             raise RolloutCohortUnavailable('dream cohort resolver is unbound')
+        if name == 'go-finalization':
+            # Go admission reports an unknown membership as a fallback, never as a plain miss.
+            raise RolloutCohortUnavailable('go finalization cohort resolver is unbound')
         return False
     return _membership_resolver(uid, name, legacy_members=legacy_members, legacy_all=legacy_all)
 
