@@ -1360,6 +1360,38 @@ void main() {
       });
     });
 
+    testWidgets('End from a deep link stays on detail when a Home filter would hide Processing', (tester) async {
+      await withClock(Clock.fixed(_now), () async {
+        final home = await _pumpHome(tester, v3: true, boundary: boundary, theme: theme(), size: const Size(393, 852));
+        home.publishManualEnds();
+        final drain = home.capture.drain = Completer<void>();
+        final context = tester.element(find.byType(ConversationsPage));
+        final tabs = context.read<HomeProvider>()..setIndex(HomeProvider.tasksTab);
+        home.conversations.showStarredOnly = true;
+        final navigator = Navigator.of(context);
+        Future<bool> openRoute(String route, {bool Function()? canOpen}) async {
+          unawaited(navigator.push(omiPageRoute(
+            builder: (_) => ConversationDetailPage(conversation: home.conversationsV3.live!),
+          )));
+          return true;
+        }
+
+        HomeNavigation.register(openRoute);
+        addTearDown(() => HomeNavigation.unregister(openRoute));
+        expect(await HomeNavigation.openRoute('/conversation/live-1', navigator: navigator), isTrue);
+        await settleDetailTab(tester);
+        await tester.tap(find.byKey(const Key('live_conversation_end')));
+        await settleDetailTab(tester);
+        drain.complete();
+        await settleDetailTab(tester);
+        await tester.pump(const Duration(milliseconds: 500));
+        expect(find.byType(ConversationDetailPage), findsOneWidget, reason: 'starred Home cannot show Processing');
+        expect(tabs.selectedIndex, HomeProvider.tasksTab);
+        home.conversations.showStarredOnly = false;
+        await _dispose(tester, home);
+      });
+    });
+
     testWidgets('End from a deep link selects Home after the drain', (tester) async {
       await withClock(Clock.fixed(_now), () async {
         debugDefaultTargetPlatformOverride = TargetPlatform.iOS;

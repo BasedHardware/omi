@@ -8,6 +8,7 @@ import 'package:provider/provider.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/pages/home/home_navigation.dart';
 import 'package:omi/providers/capture_provider.dart';
+import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/conversations_v3_provider.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/ui/ui.dart';
@@ -110,6 +111,8 @@ class _LiveConversationEndButtonState extends State<LiveConversationEndButton> {
                   }
                 }
                 if (!context.mounted || !started || ModalRoute.of(context)?.isCurrent != true) return;
+                // A filtered Home cannot show the Processing row; the result lands on this detail instead.
+                if (context.read<ConversationProvider?>()?.showsDefaultHome != true) return;
                 context.read<HomeProvider?>()?.showNewestOnHome();
                 HomeNavigation.returnHome(context);
               },
