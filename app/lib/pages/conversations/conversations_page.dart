@@ -494,9 +494,6 @@ class _ConversationsPageState extends State<ConversationsPage>
     _homeTabActive = active;
     _syncV3Watch();
     final source = context.read<ConversationProvider>();
-    if (active && context.read<ConversationsV3Provider?>()?.takeHomeReconcile() == true) {
-      unawaited(source.forceRefreshConversations().then<void>((_) {}, onError: (Object _) {}));
-    }
     _feed?.setActive(active &&
         !_wasBackgrounded &&
         !source.hasActiveSearch &&
@@ -910,6 +907,11 @@ class _ConversationsPageState extends State<ConversationsPage>
         final activityOnlyFailures = v3On || _pendingWork.homeProcessingToday;
         final v3Live = v3Home ? v3!.live : null;
         final manualFinish = v3On ? v3!.finishRow : null;
+        if (v3On && v3!.takeHomeReconcile()) {
+          // An accepted finish reached its deadline: read the list once, wherever the reader is.
+          WidgetsBinding.instance.addPostFrameCallback(
+              (_) => unawaited(convoProvider.forceRefreshConversations().then<void>((_) {}, onError: (Object _) {})));
+        }
         final terminalFinish = manualFinish == null ? null : v3!.finishTerminalMatch(convoProvider.conversations);
         final finishHandedOff = v3Home &&
             manualFinish != null &&

@@ -53,7 +53,7 @@ class ConversationsV3Provider extends ChangeNotifier {
   ServerConversation? _finishRow;
   String? _finishRecordingId;
   String? _finishLiveId;
-  // An accepted finish that timed out off Home: the next Home entry reads the list once.
+  // An accepted finish that reached its deadline: Home reads the list once.
   bool _reconcileOnHome = false;
 
   bool takeHomeReconcile() {

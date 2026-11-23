@@ -1566,6 +1566,7 @@ void main() {
           if (caseName.startsWith('20-minute deadline')) {
             await tester.pump(const Duration(minutes: 19, seconds: 59));
             expect(v3.finishRow, same(pending));
+            forcedBefore = home.conversations.forcedReads;
             expect(find.byKey(const Key('home_processing_row')), findsOneWidget);
             if (caseName == '20-minute deadline off Home' || resultAfterTimeout) {
               final tabs = tester.element(find.byType(ConversationsPage)).read<HomeProvider>();
@@ -1580,7 +1581,6 @@ void main() {
                 );
                 await tester.pump();
               }
-              forcedBefore = home.conversations.forcedReads;
               tabs.setIndex(HomeProvider.homeTab);
             } else {
               await tester.pump(const Duration(seconds: 1));
@@ -1612,7 +1612,7 @@ void main() {
           expect(find.byKey(const Key('conversation_summary_failed_indicator')), findsNothing);
           expect(find.text('Launch checklist'), resultAfterTimeout ? findsOneWidget : findsNothing);
           if (forcedBefore != null) {
-            expect(home.conversations.forcedReads, forcedBefore + 1, reason: 'Home re-entry reconciles the list once');
+            expect(home.conversations.forcedReads, forcedBefore + 1, reason: 'the deadline reconciles the list once');
           }
           if (image != null) await shoot(tester, image);
 
