@@ -185,3 +185,8 @@ def cancel_for_account_deletion(uid: str, publisher: Optional[PublisherClient] =
                         raise PlayCancelPending(_status_code(error), key) from None
         play_db.update_purchase(key, {'auto_renewing': False, 'account_deletion_cancelled': True})
     return cancelled
+
+
+def purge_account_records(uid: str) -> int:
+    """Account wipe: drop the user's Play purchase records and account-map entries (uid + token)."""
+    return play_db.purge_account_records(uid)

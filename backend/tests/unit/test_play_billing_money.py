@@ -685,9 +685,12 @@ def test_the_wipe_drops_play_purchase_records_and_account_map_entries():
     assert list(client.store[play_db.ACCOUNTS]) == ['other-id']
 
 
-def test_the_firestore_wipe_purges_play_records(monkeypatch):
+def test_the_account_wipe_purges_play_records_after_billing_and_before_the_user_data(monkeypatch):
     import inspect
 
-    from database import user_data_deletion
+    from services.users import account_deletion
 
-    assert 'play_subscriptions.purge_account_records(uid)' in inspect.getsource(user_data_deletion.purge_user_subtree)
+    source = inspect.getsource(account_deletion.background_wipe_user_data)
+    billing = source.index('_cancel_subscription_for_account_deletion(uid)')
+    purge = source.index('play_publisher.purge_account_records(uid)')
+    assert billing < purge < source.index('users_db.delete_user_data(uid)')

@@ -518,6 +518,11 @@ def background_wipe_user_data(
         current_operation = 'lake_prefix_purge'
         heartbeat()
         purge_owner_lake_content(uid)
+        # Google Play purchase records (uid + purchase token) and the account map live outside users/{uid}.
+        # The billing step above already confirmed Google stopped charging; a failure keeps the wipe retryable.
+        current_operation = 'play_billing_records'
+        heartbeat()
+        play_publisher.purge_account_records(uid)
         current_operation = 'firestore_user_data'
         heartbeat()
         wipe_result = users_db.delete_user_data(uid)
