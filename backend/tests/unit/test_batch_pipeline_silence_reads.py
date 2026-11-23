@@ -120,12 +120,14 @@ def assert_silent_read_deltas(before, stages, outcome, *, avoided=0):
 def test_silent_read_metrics_survive_cloud_run_scrape(profile):
     config = Path(__file__).resolve().parents[2] / 'deploy' / f'cloud_run_gmp_{profile}.yaml'
     rules = yaml.safe_load(config.read_text())['spec']['endpoints'][0]['metricRelabeling']
+    (keep,) = [rule for rule in rules if rule['action'] == 'keep']
+    assert keep['sourceLabels'] == ['__name__']
     for metric in (SKIP_METRIC, AVOIDED_METRIC):
-        keep = next(rule for rule in rules if rule['action'] == 'keep')
-        assert keep['sourceLabels'] == ['__name__']
         assert re.fullmatch(keep['regex'], metric)
         for rule in rules:
             if rule['action'] == 'drop':
+                # These counters have no component label. A new match key needs an explicit test value.
+                assert set(rule['sourceLabels']) <= {'__name__', 'component'}
                 labels = {'__name__': metric}
                 value = ';'.join(labels.get(label, '') for label in rule['sourceLabels'])
                 assert not re.fullmatch(rule['regex'], value)
