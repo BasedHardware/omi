@@ -1,0 +1,47 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-trial-paywall-us-switch-on.png",
+      "platform": "mobile-ios",
+      "description": "Trial paywall, region US, switch on: unchanged US$",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "002-mobile-ios-plans-us-switch-on.png",
+      "platform": "mobile-ios",
+      "description": "Plans, region US, switch on: unchanged US$",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "003-mobile-ios-trial-paywall-gb-switch-off.png",
+      "platform": "mobile-ios",
+      "description": "Trial paywall, region GB, switch off: today's US$",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "004-mobile-ios-plans-gb-switch-off.png",
+      "platform": "mobile-ios",
+      "description": "Plans, region GB, switch off: today's US$",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "005-mobile-ios-trial-paywall-gb-switch-on.png",
+      "platform": "mobile-ios",
+      "description": "Trial paywall, region GB, switch on: GBP",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "006-mobile-ios-plans-gb-switch-on.png",
+      "platform": "mobile-ios",
+      "description": "Plans, region GB, switch on: GBP",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ]
+}
