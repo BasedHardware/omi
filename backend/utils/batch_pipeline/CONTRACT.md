@@ -365,8 +365,8 @@ on `failed_held`. Eligible legacy rows get a full window on first examination,
 never immediate expiry based on capture age. Provider-STT holds are excluded
 from GPU expiry/requeue.
 
-Scheduler quarantine also writes `quarantine_diagnostic` for the current
-attempt and records `worker_failure` when supplied. Lease expiry and typed
+Scheduler quarantine also writes `quarantine_diagnostic` for the last
+scheduler quarantine and records `worker_failure` when supplied. Lease expiry and typed
 worker validation have distinct diagnostic classes. Attempt exhaustion without
 typed worker evidence records an unknown underlying cause. Legacy rows and
 quarantines written outside the scheduler may lack the diagnostic entirely.
