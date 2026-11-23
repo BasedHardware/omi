@@ -15784,7 +15784,7 @@ class AppLocalizationsSk extends AppLocalizations {
         'hasPlan': 'Už máte plán. Váš kód nebol použitý.',
         'notPrepaid': 'Tento kód tu nemožno uplatniť. Použite ho pri výbere plánu.',
         'notEligible': 'Tento kód nemožno použiť v tomto účte.',
-        'rateLimited': 'Príliš veľa pokusov. Počkajte a skúste to neskôr.',
+        'rateLimited': 'Príliš veľa pokusov. Skúste to neskôr.',
         'other': 'Niečo sa pokazilo. Skúste to znova.',
       },
     );

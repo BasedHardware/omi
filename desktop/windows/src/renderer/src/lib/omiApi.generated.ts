@@ -4326,6 +4326,7 @@ export interface PlanIdentitySubscription {
   features?: Array<string>;
   limits?: PlanLimits;
   plan?: PlanType;
+  prepaid?: boolean | null;
   provider?: "play" | null;
   status?: SubscriptionStatus;
   stripe_subscription_id?: string | null;
@@ -5829,6 +5830,7 @@ export interface Subscription {
   features?: Array<string>;
   limits?: PlanLimits;
   plan?: PlanType;
+  prepaid?: boolean | null;
   provider?: "play" | null;
   status?: SubscriptionStatus;
   stripe_subscription_id?: string | null;

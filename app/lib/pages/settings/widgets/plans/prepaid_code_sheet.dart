@@ -9,21 +9,34 @@ import 'package:omi/backend/http/api/payment.dart';
 import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/ui/ui.dart';
-import 'package:omi/utils/analytics/registry/events.g.dart';
-import 'package:omi/utils/analytics/registry/typed_events.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
 enum PrepaidCodeSource { paywall, plansSheet }
 
 typedef PrepaidCodeRedeem = Future<ApiResult<PrepaidCodeRedemption>> Function(String code);
 
+/// The redeem call the entry uses; tests replace it.
+@visibleForTesting
+PrepaidCodeRedeem prepaidCodeRedeemer = redeemPrepaidCode;
+
 /// The entry row. [style] lets a page with its own type (the trial paywall) keep its look.
+/// [onRedeemed] runs after the sheet closes on a redeemed code; [onDiscountCode] takes a valid code that is a
+/// discount rather than prepaid, for the caller's existing promo-code field.
 class PrepaidCodeEntry extends StatelessWidget {
-  const PrepaidCodeEntry({super.key, required this.source, this.style, this.center = false});
+  const PrepaidCodeEntry({
+    super.key,
+    required this.source,
+    this.style,
+    this.center = false,
+    this.onRedeemed,
+    this.onDiscountCode,
+  });
 
   final PrepaidCodeSource source;
   final TextStyle? style;
   final bool center;
+  final VoidCallback? onRedeemed;
+  final ValueChanged<String>? onDiscountCode;
 
   @override
   Widget build(BuildContext context) {
@@ -32,7 +45,10 @@ class PrepaidCodeEntry extends StatelessWidget {
       button: true,
       child: InkWell(
         key: const ValueKey('prepaid_code_entry'),
-        onTap: () => showPrepaidCodeSheet(context, source: source),
+        onTap: () async {
+          final redeemed = await showPrepaidCodeSheet(context, source: source, onDiscountCode: onDiscountCode);
+          if (redeemed) onRedeemed?.call();
+        },
         borderRadius: OmiRadius.smAll,
         child: ConstrainedBox(
           constraints: const BoxConstraints(minHeight: 44),
@@ -51,29 +67,56 @@ class PrepaidCodeEntry extends StatelessWidget {
   }
 }
 
-Future<void> showPrepaidCodeSheet(BuildContext context, {required PrepaidCodeSource source}) {
+/// True when a code was redeemed before the sheet closed.
+Future<bool> showPrepaidCodeSheet(
+  BuildContext context, {
+  required PrepaidCodeSource source,
+  ValueChanged<String>? onDiscountCode,
+  PrepaidCodeRedeem? redeem,
+}) async {
   final usage = context.read<UsageProvider>();
-  return showOmiSheet<void>(
+  var redeemed = false;
+  String? discountCode;
+  await showOmiSheet<void>(
     context: context,
     title: context.l10n.prepaidCodeTitle,
-    builder: (_) => PrepaidCodeSheet(
+    builder: (sheetContext) => PrepaidCodeSheet(
       source: source,
-      redeem: redeemPrepaidCode,
+      redeem: redeem ?? prepaidCodeRedeemer,
       onRedeemed: () {
+        redeemed = true;
         // The Stripe webhook grants Pro a moment after the subscription exists: read now and once more.
         unawaited(usage.fetchSubscription());
         Future.delayed(const Duration(seconds: 4), () => unawaited(usage.fetchSubscription()));
       },
+      onDiscountCode: onDiscountCode == null
+          ? null
+          : (code) {
+              discountCode = code;
+              Navigator.of(sheetContext).pop();
+            },
     ),
   );
+  final handOff = discountCode;
+  if (handOff != null) onDiscountCode?.call(handOff);
+  return redeemed;
 }
 
 class PrepaidCodeSheet extends StatefulWidget {
-  const PrepaidCodeSheet({super.key, required this.source, required this.redeem, this.onRedeemed});
+  const PrepaidCodeSheet({
+    super.key,
+    required this.source,
+    required this.redeem,
+    this.onRedeemed,
+    this.onDiscountCode,
+  });
 
   final PrepaidCodeSource source;
   final PrepaidCodeRedeem redeem;
   final VoidCallback? onRedeemed;
+
+  /// Set where a discount code has somewhere to go (the plans sheet's promo field) instead of a dead end.
+  final ValueChanged<String>? onDiscountCode;
 
   @override
   State<PrepaidCodeSheet> createState() => _PrepaidCodeSheetState();
@@ -118,19 +161,6 @@ class _PrepaidCodeSheetState extends State<PrepaidCodeSheet> {
     };
   }
 
-  static PrepaidPlanCodeRedeemFailedReason _failedReason(String reason) => switch (reason) {
-        'invalid' => PrepaidPlanCodeRedeemFailedReason.invalidCode,
-        'used' => PrepaidPlanCodeRedeemFailedReason.codeUsed,
-        'expired' => PrepaidPlanCodeRedeemFailedReason.codeExpired,
-        'hasPlan' => PrepaidPlanCodeRedeemFailedReason.hasPlan,
-        'notPrepaid' => PrepaidPlanCodeRedeemFailedReason.notPrepaid,
-        'notEligible' => PrepaidPlanCodeRedeemFailedReason.notEligible,
-        'rateLimited' => PrepaidPlanCodeRedeemFailedReason.rateLimited,
-        _ => PrepaidPlanCodeRedeemFailedReason.tryAgain,
-      };
-
-  bool get _paywall => widget.source == PrepaidCodeSource.paywall;
-
   Future<void> _submit() async {
     final code = _controller.text.trim();
     if (_busy || code.isEmpty) return;
@@ -138,9 +168,6 @@ class _PrepaidCodeSheetState extends State<PrepaidCodeSheet> {
       _busy = true;
       _errorReason = null;
     });
-    const TypedEvents().emit(PrepaidPlanCodeRedeemStarted(
-      source: _paywall ? PrepaidPlanCodeRedeemStartedSource.paywall : PrepaidPlanCodeRedeemStartedSource.plansSheet,
-    ));
     ApiResult<PrepaidCodeRedemption> result;
     try {
       result = await widget.redeem(code);
@@ -151,11 +178,6 @@ class _PrepaidCodeSheetState extends State<PrepaidCodeSheet> {
     switch (result) {
       case ApiSuccess<PrepaidCodeRedemption>(:final data):
         OmiHaptics.success();
-        const TypedEvents().emit(PrepaidPlanCodeRedeemSucceeded(
-          source:
-              _paywall ? PrepaidPlanCodeRedeemSucceededSource.paywall : PrepaidPlanCodeRedeemSucceededSource.plansSheet,
-          months: data.months,
-        ));
         setState(() {
           _busy = false;
           _redeemed = data;
@@ -163,10 +185,11 @@ class _PrepaidCodeSheetState extends State<PrepaidCodeSheet> {
         widget.onRedeemed?.call();
       case ApiFailure<PrepaidCodeRedemption>(:final problem):
         final reason = _reason(problem);
-        const TypedEvents().emit(PrepaidPlanCodeRedeemFailed(
-          source: _paywall ? PrepaidPlanCodeRedeemFailedSource.paywall : PrepaidPlanCodeRedeemFailedSource.plansSheet,
-          reason: _failedReason(reason),
-        ));
+        final handOff = widget.onDiscountCode;
+        if (reason == 'notPrepaid' && handOff != null) {
+          handOff(code);
+          return;
+        }
         setState(() {
           _busy = false;
           _errorReason = reason;

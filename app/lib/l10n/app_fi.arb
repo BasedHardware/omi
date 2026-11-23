@@ -4754,5 +4754,5 @@
     "prepaidCodeFieldHint": "Syötä koodisi",
     "prepaidCodeRedeem": "Lunasta",
     "prepaidCodeRedeemed": "Koodi lunastettu",
-    "prepaidCodeResult": "{reason, select, invalid{Tämä koodi ei ole kelvollinen. Tarkista se ja yritä uudelleen.} used{Tämä koodi on jo käytetty.} expired{Tämä koodi on vanhentunut.} hasPlan{Sinulla on jo tilaus. Koodiasi ei käytetty.} notPrepaid{Tätä koodia ei voi lunastaa täällä. Käytä sitä, kun valitset tilauksen.} notEligible{Tätä koodia ei voi käyttää tällä tilillä.} rateLimited{Liian monta yritystä. Odota ja yritä myöhemmin uudelleen.} other{Jokin meni pieleen. Yritä uudelleen.}}"
+    "prepaidCodeResult": "{reason, select, invalid{Tämä koodi ei ole kelvollinen. Tarkista se ja yritä uudelleen.} used{Tämä koodi on jo käytetty.} expired{Tämä koodi on vanhentunut.} hasPlan{Sinulla on jo tilaus. Koodiasi ei käytetty.} notPrepaid{Tätä koodia ei voi lunastaa täällä. Käytä sitä, kun valitset tilauksen.} notEligible{Tätä koodia ei voi käyttää tällä tilillä.} rateLimited{Liian monta yritystä. Yritä myöhemmin uudelleen.} other{Jokin meni pieleen. Yritä uudelleen.}}"
 }

@@ -15834,7 +15834,7 @@ class AppLocalizationsPl extends AppLocalizations {
         'hasPlan': 'Masz już plan. Twój kod nie został wykorzystany.',
         'notPrepaid': 'Tego kodu nie można tu wykorzystać. Użyj go przy wyborze planu.',
         'notEligible': 'Tego kodu nie można użyć na tym koncie.',
-        'rateLimited': 'Zbyt wiele prób. Poczekaj i spróbuj później.',
+        'rateLimited': 'Zbyt wiele prób. Spróbuj później.',
         'other': 'Coś poszło nie tak. Spróbuj ponownie.',
       },
     );

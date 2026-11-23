@@ -15772,7 +15772,7 @@ class AppLocalizationsEn extends AppLocalizations {
         'hasPlan': 'You already have a plan. Your code was not used.',
         'notPrepaid': 'This code can\'t be redeemed here. Use it when you choose a plan.',
         'notEligible': 'This code can\'t be used on this account.',
-        'rateLimited': 'Too many tries. Please wait and try again later.',
+        'rateLimited': 'Too many tries. Try again later.',
         'other': 'Something went wrong. Please try again.',
       },
     );

@@ -1381,9 +1381,16 @@ def get_user_subscription_endpoint(
             play_subscriptions_db.remember_account_once(response.play_billing.obfuscated_account_id, uid)
         except Exception:  # noqa: BLE001 - the map only helps bind notification-only tokens
             logger.warning('play_billing account map write failed')
+    _apply_prepaid_code_switch(response, uid)
+    return response
+
+
+def _apply_prepaid_code_switch(response: UserSubscriptionResponse, uid: str) -> None:
+    """Prepaid code fields appear only for users the switch admits; otherwise the response is unchanged."""
     if prepaid_code_config.enabled_for(uid):
         response.prepaid_code_redeem = True
-    return response
+    else:
+        response.subscription.prepaid = None
 
 
 @router.post('/v1/users/processing-backlog/process', response_model=ProcessingBacklog, tags=['v1'])

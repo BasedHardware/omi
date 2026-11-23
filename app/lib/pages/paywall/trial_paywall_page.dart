@@ -231,6 +231,12 @@ class _TrialPaywallPageState extends State<TrialPaywallPage> {
           source: PrepaidCodeSource.paywall,
           center: true,
           style: _Paper.label(size: 13, color: _Paper.textSecondary),
+          // Redeemed: the reader is Pro now, so close the paywall the way a restored purchase does.
+          onRedeemed: () {
+            if (!mounted || _dismissed) return;
+            _dismissed = true;
+            Navigator.of(context).pop(true);
+          },
         )
       else if (!playBilled)
         Text(

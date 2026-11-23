@@ -15558,7 +15558,7 @@ class AppLocalizationsJa extends AppLocalizations {
         'hasPlan': 'すでにプランをお持ちです。コードは使用されていません。',
         'notPrepaid': 'このコードはここでは使えません。プランを選ぶときに使ってください。',
         'notEligible': 'このコードはこのアカウントでは使えません。',
-        'rateLimited': '試行回数が多すぎます。しばらくしてからもう一度お試しください。',
+        'rateLimited': '試行回数が多すぎます。後でもう一度お試しください。',
         'other': '問題が発生しました。もう一度お試しください。',
       },
     );

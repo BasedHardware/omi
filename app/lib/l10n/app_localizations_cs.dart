@@ -15788,7 +15788,7 @@ class AppLocalizationsCs extends AppLocalizations {
         'hasPlan': 'Už máte plán. Váš kód nebyl použit.',
         'notPrepaid': 'Tento kód zde nelze uplatnit. Použijte ho při výběru plánu.',
         'notEligible': 'Tento kód nelze použít v tomto účtu.',
-        'rateLimited': 'Příliš mnoho pokusů. Počkejte a zkuste to později.',
+        'rateLimited': 'Příliš mnoho pokusů. Zkuste to později.',
         'other': 'Něco se pokazilo. Zkuste to znovu.',
       },
     );

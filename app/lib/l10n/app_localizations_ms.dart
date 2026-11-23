@@ -15826,7 +15826,7 @@ class AppLocalizationsMs extends AppLocalizations {
         'hasPlan': 'Anda sudah mempunyai pelan. Kod anda tidak digunakan.',
         'notPrepaid': 'Kod ini tidak boleh ditebus di sini. Gunakannya semasa memilih pelan.',
         'notEligible': 'Kod ini tidak boleh digunakan pada akaun ini.',
-        'rateLimited': 'Terlalu banyak percubaan. Sila tunggu dan cuba lagi nanti.',
+        'rateLimited': 'Terlalu banyak percubaan. Cuba lagi nanti.',
         'other': 'Ada sesuatu yang tidak kena. Sila cuba lagi.',
       },
     );

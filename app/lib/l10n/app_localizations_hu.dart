@@ -15847,7 +15847,7 @@ class AppLocalizationsHu extends AppLocalizations {
         'hasPlan': 'Már van csomagod. A kódodat nem használtuk fel.',
         'notPrepaid': 'Ez a kód itt nem váltható be. Használd, amikor csomagot választasz.',
         'notEligible': 'Ez a kód ezen a fiókon nem használható.',
-        'rateLimited': 'Túl sok próbálkozás. Várj, és próbáld újra később.',
+        'rateLimited': 'Túl sok próbálkozás. Próbáld újra később.',
         'other': 'Hiba történt. Próbáld újra.',
       },
     );

@@ -18,6 +18,9 @@ import 'package:omi/pages/paywall/trial_paywall_page.dart';
 import 'package:omi/pages/settings/payment_webview_page.dart';
 import 'package:omi/pages/settings/widgets/plans/play_plans_content.dart';
 import 'package:omi/pages/settings/widgets/plans_sheet.dart';
+import 'package:omi/pages/settings/widgets/plans/prepaid_code_sheet.dart';
+import 'package:omi/backend/http/api/payment.dart';
+import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/services/billing/play_billing.dart';
 import 'package:omi/services/capture/transcription_allowance_cache.dart';
@@ -37,6 +40,8 @@ UserSubscriptionResponse _response({
   bool trialEligible = true,
   bool cancelAtPeriodEnd = false,
   PlayBillingConfig? play = playConfig,
+  bool prepaidCodeRedeem = false,
+  bool prepaid = false,
 }) =>
     UserSubscriptionResponse(
       subscription: Subscription(
@@ -46,6 +51,7 @@ UserSubscriptionResponse _response({
         stripeSubscriptionId: stripeId,
         cancelAtPeriodEnd: cancelAtPeriodEnd,
         currentPeriodEnd: plan.isPaid ? 1893456000 : null,
+        prepaid: prepaid,
       ),
       transcriptionSecondsUsed: 0,
       transcriptionSecondsLimit: 0,
@@ -55,6 +61,7 @@ UserSubscriptionResponse _response({
       insightsGainedLimit: 0,
       trialEligible: trialEligible,
       playBilling: play,
+      prepaidCodeRedeem: prepaidCodeRedeem,
     );
 
 class _Usage extends UsageProvider {
@@ -416,4 +423,79 @@ void main() {
     expect(playRefusalMessage(l10n, null), contains("couldn't confirm"));
     expect(const PlayVerifyResult('active').retryable, isFalse);
   });
+
+  // ---- prepaid code entry (switch on) -----------------------------------------------------------------
+
+  testWidgets('switch on: a Play-billed reader sees no code entry on the plans sheet, trial or outline paywall',
+      (tester) async {
+    final world = await _pump(tester, [_response(prepaidCodeRedeem: true)]);
+    expect(world.usage.playBilledPurchaser, isTrue);
+    expect(world.usage.canRedeemPrepaidCode, isFalse);
+    expect(find.byType(PlayPlansContent), findsOneWidget);
+    expect(find.byKey(const ValueKey('prepaid_code_entry')), findsNothing);
+
+    await _pump(tester, [_response(prepaidCodeRedeem: true)],
+        child: TrialPaywallPage(source: 'test', now: DateTime(2026, 11, 23)));
+    expect(find.byKey(const ValueKey('prepaid_code_entry')), findsNothing);
+    expect(find.byKey(const Key('trial_paywall_code_hint')), findsNothing);
+
+    await _pump(tester, [_response(prepaidCodeRedeem: true)], child: const OutlinePaywallPage(source: 'test'));
+    expect(find.byKey(const ValueKey('prepaid_code_entry')), findsNothing);
+  }, variant: TargetPlatformVariant.only(TargetPlatform.android));
+
+  testWidgets('switch on: Android before the billing provider is known shows no code entry', (tester) async {
+    final usage = UsageProvider();
+    addTearDown(usage.dispose);
+    expect(usage.billingProviderUnknown, isTrue);
+    expect(usage.canRedeemPrepaidCode, isFalse);
+  }, variant: TargetPlatformVariant.only(TargetPlatform.android));
+
+  testWidgets('switch on, Stripe reader on Android: one code row, and a discount code moves to the promo field',
+      (tester) async {
+    final world = await _pump(tester, [_response(play: null, prepaidCodeRedeem: true)]);
+    expect(world.usage.canRedeemPrepaidCode, isTrue);
+    expect(find.byKey(const ValueKey('prepaid_code_entry')), findsOneWidget);
+    expect(find.text('Promo code'), findsNothing);
+    prepaidCodeRedeemer =
+        (code) async => const ApiFailure(ApiProblem(ApiProblemKind.rejected, statusCode: 400, detail: 'not_prepaid'));
+    addTearDown(() => prepaidCodeRedeemer = redeemPrepaidCode);
+    await tester.tap(find.byKey(const ValueKey('prepaid_code_entry')));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const ValueKey('prepaid_code_field')), 'SAVE50');
+    await tester.pump();
+    await tester.tap(find.byKey(const ValueKey('prepaid_code_redeem')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('prepaid_code_field')), findsNothing);
+    expect(find.byKey(const ValueKey('prepaid_code_entry')), findsNothing);
+    expect(find.byKey(const ValueKey('plans_sheet_promo_code')), findsOneWidget);
+    expect(find.text('SAVE50'), findsOneWidget);
+  }, variant: TargetPlatformVariant.only(TargetPlatform.android));
+
+  testWidgets('switch off: the plans sheet keeps only today\'s promo row', (tester) async {
+    await _pump(tester, [_response(play: null)]);
+    expect(find.byKey(const ValueKey('prepaid_code_entry')), findsNothing);
+    expect(find.text('Promo code'), findsOneWidget);
+  }, variant: TargetPlatformVariant.only(TargetPlatform.android));
+
+  testWidgets('a prepaid plan shows only its end date: no resubscribe, upgrade, cancel or payment method',
+      (tester) async {
+    await _pump(tester, [
+      _response(
+          play: null,
+          plan: PlanType.unlimitedV2,
+          stripeId: 'sub_prepaid',
+          cancelAtPeriodEnd: true,
+          prepaid: true,
+          prepaidCodeRedeem: true)
+    ]);
+    expect(find.byKey(const ValueKey('plans_sheet_prepaid')), findsOneWidget);
+    expect(find.byKey(const ValueKey('plans_sheet_prepaid_ends')), findsOneWidget);
+    expect(find.textContaining('ends'), findsOneWidget);
+    expect(find.textContaining('Resubscribe'), findsNothing);
+    expect(find.byKey(const ValueKey('plans_sheet_cancel_reassurance')), findsNothing);
+    expect(find.byKey(const ValueKey('plans_sheet_upgrade_button')), findsNothing);
+    expect(find.textContaining('payment method'), findsNothing);
+    expect(find.textContaining('Cancel'), findsNothing);
+    expect(find.byKey(const ValueKey('prepaid_code_entry')), findsNothing);
+  }, variant: TargetPlatformVariant.all());
 }

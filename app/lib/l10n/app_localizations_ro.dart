@@ -15854,7 +15854,7 @@ class AppLocalizationsRo extends AppLocalizations {
         'hasPlan': 'Ai deja un plan. Codul tău nu a fost folosit.',
         'notPrepaid': 'Acest cod nu poate fi folosit aici. Folosește-l când alegi un plan.',
         'notEligible': 'Acest cod nu poate fi folosit în acest cont.',
-        'rateLimited': 'Prea multe încercări. Te rugăm să aștepți și să încerci mai târziu.',
+        'rateLimited': 'Prea multe încercări. Încearcă mai târziu.',
         'other': 'Ceva nu a funcționat. Încearcă din nou.',
       },
     );

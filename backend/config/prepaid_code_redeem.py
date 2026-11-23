@@ -1,7 +1,8 @@
 """Switch for redeeming a fully prepaid Omi Pro code without a card. Pure module: stdlib only.
 
-``PREPAID_CODE_REDEEM=on`` admits everyone; any other value (default off) admits only members of
-the ``prepaid-code-redeem`` rollout cohort document. Env is read at call time.
+``PREPAID_CODE_REDEEM``: ``off`` (default, and any unknown value) admits nobody and reads nothing;
+``cohort`` admits members of the ``prepaid-code-redeem`` rollout cohort document; ``on`` admits everyone
+without a read. Env is read at call time.
 """
 
 from __future__ import annotations
@@ -21,8 +22,11 @@ def enabled_for(uid: Optional[str], environ: Optional[Mapping[str, str]] = None)
     if not isinstance(uid, str) or not rollout_cohorts.valid_uid(uid):
         return False
     env = os.environ if environ is None else environ
-    if (env.get(ENV) or '').strip().lower() == 'on':
+    mode = (env.get(ENV) or '').strip().lower()
+    if mode == 'on':
         return True
+    if mode != 'cohort':
+        return False
     try:
         return rollout_cohorts.in_rollout_cohort(uid, ROLLOUT_COHORT)
     except Exception:

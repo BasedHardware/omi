@@ -134,6 +134,11 @@ async def _deletion_webhook_blocks_entitlement(uid: str, subscription_id: str | 
     return True
 
 
+PREPAID_PLAN_DETAIL = (
+    "Your prepaid plan ends on its own and nothing will be charged. It can't be changed until it ends."
+)
+
+
 def _stripe_client_error_detail(e: stripe.error.StripeError, fallback: str) -> str:
     """User-safe detail for a Stripe error HTTP response.
 
@@ -346,6 +351,9 @@ def _build_subscription_from_stripe_object(
     current period's latest invoice is paid (see ``_cancel_grace_period_paid``).
     """
     stripe_status = stripe_sub['status']
+    # A prepaid plan's term end is its real end: no paid-through grace, the user drops to Free now.
+    if prepaid_code_config.is_prepaid_subscription(stripe_sub):
+        grant_cancel_grace = False
 
     # For inactive subscriptions (canceled, unpaid, etc.), always downgrade to Basic
     # regardless of price ID — ensures deleted/canceled users don't keep paid access.
@@ -975,7 +983,7 @@ def upgrade_subscription_endpoint(request: UpgradeSubscriptionRequest, uid: str 
         # Retrieve current subscription to get current price ID
         stripe_sub = stripe.Subscription.retrieve(current_subscription.stripe_subscription_id).to_dict()
         if prepaid_code_config.is_prepaid_subscription(stripe_sub):
-            raise HTTPException(status_code=409, detail="Your prepaid plan can't be changed until it ends.")
+            raise HTTPException(status_code=409, detail=PREPAID_PLAN_DETAIL)
         if stripe_sub.get('cancel_at_period_end') and (
             not stripe_sub.get('current_period_end') or stripe_sub['current_period_end'] > int(time.time())
         ):
@@ -1217,6 +1225,9 @@ def cancel_subscription_endpoint(
     try:
         # First, check if the subscription is managed by a subscription schedule
         stripe_sub = stripe.Subscription.retrieve(subscription.stripe_subscription_id)
+        if prepaid_code_config.is_prepaid_subscription(stripe_sub):
+            # Cancelling would move its end to this month's end and lose the prepaid months.
+            raise HTTPException(status_code=409, detail=PREPAID_PLAN_DETAIL)
 
         # Look for active subscription schedules for this customer
         customer_id = stripe_sub.get('customer')
@@ -2264,8 +2275,12 @@ def stripe_cancel():
 def create_customer_portal_endpoint(uid: str = Depends(auth.get_current_user_uid)):
     """Create a Stripe Customer Portal session for managing payment methods and subscriptions."""
     # Released clients open this URL as-is; a Play subscriber is sent to Google Play's subscription center.
-    if users_db.get_user_subscription(uid).provider == 'play':
+    current = users_db.get_user_subscription(uid)
+    if current.provider == 'play':
         return {"url": play_billing_config.manage_subscription_url()}
+    # The portal could renew, switch or cancel a prepaid no-card plan; it ends on its own.
+    if current.prepaid:
+        raise HTTPException(status_code=409, detail=PREPAID_PLAN_DETAIL)
 
     customer_id = users_db.get_stripe_customer_id(uid)
 

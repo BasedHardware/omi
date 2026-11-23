@@ -15564,7 +15564,7 @@ class AppLocalizationsKo extends AppLocalizations {
         'hasPlan': '이미 플랜이 있습니다. 코드는 사용되지 않았습니다.',
         'notPrepaid': '이 코드는 여기에서 사용할 수 없습니다. 플랜을 선택할 때 사용하세요.',
         'notEligible': '이 계정에서는 이 코드를 사용할 수 없습니다.',
-        'rateLimited': '시도 횟수가 너무 많습니다. 잠시 후 다시 시도하세요.',
+        'rateLimited': '시도 횟수가 너무 많습니다. 나중에 다시 시도하세요.',
         'other': '문제가 발생했습니다. 다시 시도하세요.',
       },
     );

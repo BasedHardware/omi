@@ -15813,7 +15813,7 @@ class AppLocalizationsLt extends AppLocalizations {
         'hasPlan': 'Jau turite planą. Jūsų kodas nepanaudotas.',
         'notPrepaid': 'Šio kodo čia panaudoti negalima. Panaudokite jį rinkdamiesi planą.',
         'notEligible': 'Šio kodo negalima naudoti šioje paskyroje.',
-        'rateLimited': 'Per daug bandymų. Palaukite ir bandykite vėliau.',
+        'rateLimited': 'Per daug bandymų. Bandykite vėliau.',
         'other': 'Kažkas nepavyko. Bandykite dar kartą.',
       },
     );

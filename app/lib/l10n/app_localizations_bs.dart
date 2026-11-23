@@ -15817,7 +15817,7 @@ class AppLocalizationsBs extends AppLocalizations {
         'hasPlan': 'Već imate plan. Vaš kod nije iskorišten.',
         'notPrepaid': 'Ovaj kod se ne može iskoristiti ovdje. Iskoristite ga kada odaberete plan.',
         'notEligible': 'Ovaj kod se ne može koristiti na ovom računu.',
-        'rateLimited': 'Previše pokušaja. Sačekajte i pokušajte kasnije.',
+        'rateLimited': 'Previše pokušaja. Pokušajte kasnije.',
         'other': 'Nešto nije u redu. Pokušajte ponovo.',
       },
     );

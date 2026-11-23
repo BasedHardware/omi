@@ -23,13 +23,6 @@
       "source": "screencapture"
     },
     {
-      "file": "004-mobile-ios-plans-have-a-code.png",
-      "platform": "mobile-ios",
-      "description": "Plans sheet with the switch on: Have a code? above Promo code",
-      "captured_by": "agent",
-      "source": "screencapture"
-    },
-    {
       "file": "005-mobile-ios-sheet-empty.png",
       "platform": "mobile-ios",
       "description": "Redeem a code sheet: one field, one button",
@@ -68,13 +61,6 @@
       "file": "010-mobile-ios-success.png",
       "platform": "mobile-ios",
       "description": "Success: plan and end date",
-      "captured_by": "agent",
-      "source": "screencapture"
-    },
-    {
-      "file": "011-mobile-ios-plans-after-redeem.png",
-      "platform": "mobile-ios",
-      "description": "Plans sheet after redeeming: plan ends on the prepaid date",
       "captured_by": "agent",
       "source": "screencapture"
     },

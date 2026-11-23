@@ -32,8 +32,13 @@ UserSubscriptionResponse _response({required bool switchOn, PlanType plan = Plan
 class _Usage extends UsageProvider {
   _Usage(this.response);
   final UserSubscriptionResponse response;
+  int fetches = 0;
   @override
   UserSubscriptionResponse get subscription => response;
+  @override
+  bool get billingProviderUnknown => false;
+  @override
+  Future<void> fetchSubscription({bool force = false}) async => fetches++;
 }
 
 Widget _app(Widget child) => MaterialApp(
@@ -104,7 +109,7 @@ void main() {
     expect(find.text('Your Omi Pro plan ends Nov 23, 2027.'), findsOneWidget);
     expect(redeemed, [1]);
     expect(find.byKey(const ValueKey('prepaid_code_field')), findsNothing);
-  });
+  }, variant: TargetPlatformVariant.only(TargetPlatform.android));
 
   for (final (status, detail, message) in [
     (400, 'invalid_code', "This code isn't valid. Check it and try again."),
@@ -113,7 +118,7 @@ void main() {
     (409, 'has_plan', 'You already have a plan. Your code was not used.'),
     (400, 'not_prepaid', "This code can't be redeemed here. Use it when you choose a plan."),
     (400, 'not_eligible', "This code can't be used on this account."),
-    (429, null, 'Too many tries. Please wait and try again later.'),
+    (429, null, 'Too many tries. Try again later.'),
     (503, 'try_again', 'Something went wrong. Please try again.'),
   ]) {
     testWidgets('refusal $status $detail shows its own message and keeps the code', (tester) async {
@@ -129,7 +134,7 @@ void main() {
       await tester.enterText(find.byKey(const ValueKey('prepaid_code_field')), 'OMI-12345');
       await tester.pump();
       expect(find.text(message), findsNothing);
-    });
+    }, variant: TargetPlatformVariant.only(TargetPlatform.android));
   }
 
   testWidgets('a transport error is a retryable message, not a crash', (tester) async {
@@ -214,5 +219,73 @@ void main() {
       tester.takeException();
       expect(find.byKey(const ValueKey('prepaid_code_field')), findsOneWidget);
     });
+
+    testWidgets('a redeemed code closes the paywall with true, like a restored purchase', (tester) async {
+      prepaidCodeRedeemer = (code) async =>
+          ApiSuccess(PrepaidCodeRedemption(plan: 'Omi Pro', endsAt: DateTime(2027, 11, 23, 5), months: 12));
+      addTearDown(() => prepaidCodeRedeemer = redeemPrepaidCode);
+      Object? closed = 'open';
+      final usage = _Usage(_response(switchOn: true));
+      await tester.pumpWidget(MultiProvider(
+        providers: [
+          ChangeNotifierProvider<UsageProvider>.value(value: usage),
+          ChangeNotifierProvider<AuthenticationProvider>(
+              create: (_) => AuthenticationProvider(initializeListeners: false)),
+        ],
+        child: MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: Builder(
+            builder: (context) => TextButton(
+              onPressed: () async {
+                closed = await Navigator.of(context).push<Object?>(MaterialPageRoute(
+                  builder: (_) => TrialPaywallPage(
+                    source: 'onboarding',
+                    offer: offer,
+                    now: DateTime(2026, 11, 23),
+                    checkout: (_, __, ___) async => PaywallCheckoutOutcome.failed,
+                  ),
+                ));
+              },
+              child: const Text('open'),
+            ),
+          ),
+        ),
+      ));
+      await tester.tap(find.text('open'));
+      await tester.pumpAndSettle();
+      final entry = find.byKey(const ValueKey('prepaid_code_entry'));
+      await tester.scrollUntilVisible(entry, 200, scrollable: find.byType(Scrollable).first);
+      await tester.tap(entry);
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byKey(const ValueKey('prepaid_code_field')), 'OMI-BUNDLE-1');
+      await tester.pump();
+      await tester.tap(find.byKey(const ValueKey('prepaid_code_redeem')));
+      await tester.pumpAndSettle();
+      expect(closed, 'open', reason: 'the success sheet stays until Done');
+      await tester.tap(find.byKey(const ValueKey('prepaid_code_done')));
+      await tester.pumpAndSettle();
+      expect(closed, isTrue);
+      expect(find.byType(TrialPaywallPage), findsNothing);
+      expect(usage.fetches, greaterThan(0));
+      await tester.pump(const Duration(seconds: 5)); // the delayed second refresh
+    }, variant: TargetPlatformVariant.only(TargetPlatform.android));
+
+    testWidgets('a refused code keeps the paywall up', (tester) async {
+      prepaidCodeRedeemer =
+          (code) async => const ApiFailure(ApiProblem(ApiProblemKind.rejected, statusCode: 409, detail: 'code_used'));
+      addTearDown(() => prepaidCodeRedeemer = redeemPrepaidCode);
+      await pumpPaywall(tester, switchOn: true);
+      final entry = find.byKey(const ValueKey('prepaid_code_entry'));
+      await tester.scrollUntilVisible(entry, 200, scrollable: find.byType(Scrollable).first);
+      await tester.tap(entry);
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byKey(const ValueKey('prepaid_code_field')), 'OMI-USED-1');
+      await tester.pump();
+      await tester.tap(find.byKey(const ValueKey('prepaid_code_redeem')));
+      await tester.pumpAndSettle();
+      expect(find.text('This code has already been used.'), findsOneWidget);
+      expect(find.byType(TrialPaywallPage), findsOneWidget);
+    }, variant: TargetPlatformVariant.only(TargetPlatform.android));
   });
 }

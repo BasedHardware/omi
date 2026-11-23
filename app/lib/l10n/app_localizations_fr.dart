@@ -15920,7 +15920,7 @@ class AppLocalizationsFr extends AppLocalizations {
         'hasPlan': 'Vous avez déjà un forfait. Votre code n\'a pas été utilisé.',
         'notPrepaid': 'Ce code ne peut pas être utilisé ici. Utilisez-le lorsque vous choisissez un forfait.',
         'notEligible': 'Ce code ne peut pas être utilisé sur ce compte.',
-        'rateLimited': 'Trop de tentatives. Patientez et réessayez plus tard.',
+        'rateLimited': 'Trop de tentatives. Réessayez plus tard.',
         'other': 'Une erreur s\'est produite. Veuillez réessayer.',
       },
     );

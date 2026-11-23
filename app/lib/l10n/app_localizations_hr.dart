@@ -15825,7 +15825,7 @@ class AppLocalizationsHr extends AppLocalizations {
         'hasPlan': 'Već imate plan. Vaš kôd nije iskorišten.',
         'notPrepaid': 'Ovaj kôd ne može se iskoristiti ovdje. Iskoristite ga kada odaberete plan.',
         'notEligible': 'Ovaj kôd ne može se koristiti na ovom računu.',
-        'rateLimited': 'Previše pokušaja. Pričekajte i pokušajte kasnije.',
+        'rateLimited': 'Previše pokušaja. Pokušajte kasnije.',
         'other': 'Nešto nije u redu. Pokušajte ponovno.',
       },
     );

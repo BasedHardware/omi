@@ -1,12 +1,11 @@
 """Promotion code redemption: onto an existing subscription (utils.promotion_redemption), or a fully
 prepaid code with no card (utils.prepaid_code_redemption)."""
 
-import hashlib
 import logging
 from typing import Optional
 
 import stripe
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from config import prepaid_code_redeem as prepaid_code_config
@@ -53,26 +52,15 @@ class RedeemPrepaidCodeResponse(BaseModel):
     months: int
 
 
-def _client_ip(request: Request) -> str:
-    # The rightmost X-Forwarded-For hop is appended by Google's front end; a client can only prepend.
-    forwarded = [part.strip() for part in request.headers.get('x-forwarded-for', '').split(',') if part.strip()]
-    if forwarded:
-        return forwarded[-1]
-    return request.client.host if request.client else 'unknown'
-
-
 @router.post('/v1/payments/prepaid-code/redeem', response_model=RedeemPrepaidCodeResponse)
 def redeem_prepaid_code_endpoint(
     body: RedeemCodeRequest,
-    request: Request,
     uid: str = Depends(auth.get_current_user_uid),
 ):
     """Redeem a fully prepaid Omi Pro code with no card. Errors carry a reason code as ``detail``."""
     if not prepaid_code_config.enabled_for(uid):
         raise HTTPException(status_code=404, detail='Not Found')
     auth.check_rate_limit_inline(uid, 'payments:prepaid_code')
-    ip_key = hashlib.sha256(_client_ip(request).encode('utf-8')).hexdigest()
-    auth.check_rate_limit_inline(f'ip:{ip_key}', 'payments:prepaid_code_ip')
     try:
         return redeem_prepaid_code(uid, body.code)
     except PrepaidCodeError as e:

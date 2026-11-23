@@ -15799,7 +15799,7 @@ class AppLocalizationsTr extends AppLocalizations {
         'hasPlan': 'Zaten bir planınız var. Kodunuz kullanılmadı.',
         'notPrepaid': 'Bu kod burada kullanılamaz. Bir plan seçerken kullanın.',
         'notEligible': 'Bu kod bu hesapta kullanılamaz.',
-        'rateLimited': 'Çok fazla deneme. Lütfen bekleyip daha sonra tekrar deneyin.',
+        'rateLimited': 'Çok fazla deneme. Daha sonra tekrar deneyin.',
         'other': 'Bir sorun oluştu. Lütfen tekrar deneyin.',
       },
     );

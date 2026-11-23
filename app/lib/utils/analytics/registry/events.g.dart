@@ -2737,69 +2737,6 @@ final class UpgradeBillingProvider extends RegisteredEvent {
   Map<String, Object> get properties => {"provider": provider.wireName, "stage": stage.wireName, "billing_interval": billingInterval.wireName};
 }
 
-enum PrepaidPlanCodeRedeemStartedSource {
-  paywall("paywall"),
-  plansSheet("plans_sheet");
-  const PrepaidPlanCodeRedeemStartedSource(this.wireName);
-  final String wireName;
-}
-
-final class PrepaidPlanCodeRedeemStarted extends RegisteredEvent {
-  const PrepaidPlanCodeRedeemStarted({required this.source});
-  final PrepaidPlanCodeRedeemStartedSource source;
-  @override
-  String get wireName => "Prepaid Plan Code Redeem Started";
-  @override
-  Map<String, Object> get properties => {"source": source.wireName};
-}
-
-enum PrepaidPlanCodeRedeemSucceededSource {
-  paywall("paywall"),
-  plansSheet("plans_sheet");
-  const PrepaidPlanCodeRedeemSucceededSource(this.wireName);
-  final String wireName;
-}
-
-final class PrepaidPlanCodeRedeemSucceeded extends RegisteredEvent {
-  const PrepaidPlanCodeRedeemSucceeded({required this.source, required this.months});
-  final PrepaidPlanCodeRedeemSucceededSource source;
-  final int months;
-  @override
-  String get wireName => "Prepaid Plan Code Redeem Succeeded";
-  @override
-  Map<String, Object> get properties => {"source": source.wireName, "months": months};
-}
-
-enum PrepaidPlanCodeRedeemFailedSource {
-  paywall("paywall"),
-  plansSheet("plans_sheet");
-  const PrepaidPlanCodeRedeemFailedSource(this.wireName);
-  final String wireName;
-}
-
-enum PrepaidPlanCodeRedeemFailedReason {
-  invalidCode("invalid_code"),
-  codeUsed("code_used"),
-  codeExpired("code_expired"),
-  hasPlan("has_plan"),
-  notPrepaid("not_prepaid"),
-  notEligible("not_eligible"),
-  rateLimited("rate_limited"),
-  tryAgain("try_again");
-  const PrepaidPlanCodeRedeemFailedReason(this.wireName);
-  final String wireName;
-}
-
-final class PrepaidPlanCodeRedeemFailed extends RegisteredEvent {
-  const PrepaidPlanCodeRedeemFailed({required this.source, required this.reason});
-  final PrepaidPlanCodeRedeemFailedSource source;
-  final PrepaidPlanCodeRedeemFailedReason reason;
-  @override
-  String get wireName => "Prepaid Plan Code Redeem Failed";
-  @override
-  Map<String, Object> get properties => {"source": source.wireName, "reason": reason.wireName};
-}
-
 enum SubscriptionPlanChangedPreviousPlan {
   basic("basic"),
   plus("plus"),

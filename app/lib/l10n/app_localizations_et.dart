@@ -15781,7 +15781,7 @@ class AppLocalizationsEt extends AppLocalizations {
         'hasPlan': 'Sul on juba pakett. Sinu koodi ei kasutatud.',
         'notPrepaid': 'Seda koodi ei saa siin lunastada. Kasuta seda paketi valimisel.',
         'notEligible': 'Seda koodi ei saa selles kontos kasutada.',
-        'rateLimited': 'Liiga palju katseid. Oota ja proovi hiljem uuesti.',
+        'rateLimited': 'Liiga palju katseid. Proovi hiljem uuesti.',
         'other': 'Midagi läks valesti. Proovi uuesti.',
       },
     );

@@ -15780,7 +15780,7 @@ class AppLocalizationsDa extends AppLocalizations {
         'hasPlan': 'Du har allerede en plan. Din kode blev ikke brugt.',
         'notPrepaid': 'Denne kode kan ikke indløses her. Brug den, når du vælger en plan.',
         'notEligible': 'Denne kode kan ikke bruges på denne konto.',
-        'rateLimited': 'For mange forsøg. Vent og prøv igen senere.',
+        'rateLimited': 'For mange forsøg. Prøv igen senere.',
         'other': 'Noget gik galt. Prøv igen.',
       },
     );

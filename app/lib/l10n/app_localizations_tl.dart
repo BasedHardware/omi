@@ -15915,7 +15915,7 @@ class AppLocalizationsTl extends AppLocalizations {
         'hasPlan': 'May plan ka na. Hindi nagamit ang iyong code.',
         'notPrepaid': 'Hindi ma-redeem dito ang code na ito. Gamitin ito kapag pumili ka ng plan.',
         'notEligible': 'Hindi magagamit ang code na ito sa account na ito.',
-        'rateLimited': 'Masyadong maraming pagsubok. Maghintay at subukang muli mamaya.',
+        'rateLimited': 'Masyadong maraming pagsubok. Subukang muli mamaya.',
         'other': 'May nangyaring mali. Pakisubukang muli.',
       },
     );

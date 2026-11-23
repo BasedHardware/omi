@@ -15797,7 +15797,7 @@ class AppLocalizationsSv extends AppLocalizations {
         'hasPlan': 'Du har redan en plan. Din kod användes inte.',
         'notPrepaid': 'Den här koden kan inte lösas in här. Använd den när du väljer en plan.',
         'notEligible': 'Den här koden kan inte användas på det här kontot.',
-        'rateLimited': 'För många försök. Vänta och försök igen senare.',
+        'rateLimited': 'För många försök. Försök igen senare.',
         'other': 'Något gick fel. Försök igen.',
       },
     );

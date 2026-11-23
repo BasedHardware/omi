@@ -15803,7 +15803,7 @@ class AppLocalizationsId extends AppLocalizations {
         'hasPlan': 'Anda sudah memiliki paket. Kode Anda tidak digunakan.',
         'notPrepaid': 'Kode ini tidak bisa ditukarkan di sini. Gunakan saat memilih paket.',
         'notEligible': 'Kode ini tidak bisa digunakan di akun ini.',
-        'rateLimited': 'Terlalu banyak percobaan. Harap tunggu dan coba lagi nanti.',
+        'rateLimited': 'Terlalu banyak percobaan. Coba lagi nanti.',
         'other': 'Terjadi kesalahan. Silakan coba lagi.',
       },
     );

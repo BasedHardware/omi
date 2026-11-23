@@ -15794,7 +15794,7 @@ class AppLocalizationsFi extends AppLocalizations {
         'hasPlan': 'Sinulla on jo tilaus. Koodiasi ei käytetty.',
         'notPrepaid': 'Tätä koodia ei voi lunastaa täällä. Käytä sitä, kun valitset tilauksen.',
         'notEligible': 'Tätä koodia ei voi käyttää tällä tilillä.',
-        'rateLimited': 'Liian monta yritystä. Odota ja yritä myöhemmin uudelleen.',
+        'rateLimited': 'Liian monta yritystä. Yritä myöhemmin uudelleen.',
         'other': 'Jokin meni pieleen. Yritä uudelleen.',
       },
     );

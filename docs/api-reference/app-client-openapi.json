@@ -27117,6 +27117,17 @@
             "$ref": "#/components/schemas/PlanType",
             "default": "basic"
           },
+          "prepaid": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prepaid"
+          },
           "provider": {
             "anyOf": [
               {
@@ -35904,6 +35915,17 @@
               "architect",
               "operator"
             ]
+          },
+          "prepaid": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prepaid"
           },
           "provider": {
             "anyOf": [

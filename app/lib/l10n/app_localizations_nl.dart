@@ -15830,7 +15830,7 @@ class AppLocalizationsNl extends AppLocalizations {
         'hasPlan': 'Je hebt al een abonnement. Je code is niet gebruikt.',
         'notPrepaid': 'Deze code kan hier niet worden ingewisseld. Gebruik hem wanneer je een abonnement kiest.',
         'notEligible': 'Deze code kan niet op dit account worden gebruikt.',
-        'rateLimited': 'Te veel pogingen. Wacht even en probeer het later opnieuw.',
+        'rateLimited': 'Te veel pogingen. Probeer het later opnieuw.',
         'other': 'Er ging iets mis. Probeer het opnieuw.',
       },
     );

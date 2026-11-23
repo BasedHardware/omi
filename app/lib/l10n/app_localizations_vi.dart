@@ -15790,7 +15790,7 @@ class AppLocalizationsVi extends AppLocalizations {
         'hasPlan': 'Bạn đã có gói. Mã của bạn chưa được sử dụng.',
         'notPrepaid': 'Không thể đổi mã này tại đây. Hãy dùng khi bạn chọn gói.',
         'notEligible': 'Không thể dùng mã này cho tài khoản này.',
-        'rateLimited': 'Quá nhiều lần thử. Vui lòng đợi và thử lại sau.',
+        'rateLimited': 'Quá nhiều lần thử. Hãy thử lại sau.',
         'other': 'Đã xảy ra lỗi. Vui lòng thử lại.',
       },
     );

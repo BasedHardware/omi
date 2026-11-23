@@ -169,6 +169,9 @@ class Subscription {
   /// 'play' for a Google Play Billing subscription; null for Stripe and legacy rows.
   final String? provider;
 
+  /// A prepaid no-card plan: it ends at [currentPeriodEnd] and has nothing to renew or resubscribe.
+  final bool prepaid;
+
   Subscription({
     required this.plan,
     required this.status,
@@ -181,6 +184,7 @@ class Subscription {
     this.deprecationMessage,
     PlanLimits? limits,
     this.provider,
+    this.prepaid = false,
   }) : limits = limits ?? PlanLimits();
 
   bool get billedByPlay => provider == 'play';
@@ -202,6 +206,7 @@ class Subscription {
       deprecationMessage: generated.deprecationMessage,
       limits: PlanLimits.fromGenerated(generated.limits),
       provider: generated.provider,
+      prepaid: generated.prepaid == true,
     );
   }
 
@@ -218,6 +223,7 @@ class Subscription {
       deprecationMessage: deprecationMessage,
       limits: limits.toGenerated(),
       provider: provider,
+      prepaid: prepaid ? true : null,
     );
   }
 

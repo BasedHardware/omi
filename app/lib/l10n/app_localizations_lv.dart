@@ -15824,7 +15824,7 @@ class AppLocalizationsLv extends AppLocalizations {
         'hasPlan': 'Jums jau ir plāns. Jūsu kods netika izmantots.',
         'notPrepaid': 'Šo kodu šeit nevar izmantot. Izmantojiet to, izvēloties plānu.',
         'notEligible': 'Šo kodu nevar izmantot šajā kontā.',
-        'rateLimited': 'Pārāk daudz mēģinājumu. Lūdzu, uzgaidiet un mēģiniet vēlāk.',
+        'rateLimited': 'Pārāk daudz mēģinājumu. Mēģiniet vēlāk.',
         'other': 'Kaut kas nogāja greizi. Lūdzu, mēģiniet vēlreiz.',
       },
     );

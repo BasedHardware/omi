@@ -41,6 +41,7 @@ def project_subscription(
         current_period_end=prepaid_end or obj.get('current_period_end'),
         current_period_start=obj.get('current_period_start'),
         stripe_subscription_id=obj['id'],
+        prepaid=True if prepaid_end is not None else None,
         cancel_at_period_end=(
             (prepaid_end is not None or obj.get('cancel_at_period_end', False)) if paid_status else False
         ),

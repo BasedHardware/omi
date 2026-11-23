@@ -53,6 +53,7 @@ class FakeStripe:
         self.customers = []
         self.idempotent = {}
         self.fail_create = None
+        self.existing = []  # the customer's earlier subscriptions
         outer = self
 
         class _Obj(dict):
@@ -84,6 +85,12 @@ class FakeStripe:
                 return customer
 
         class Subscription:
+            @staticmethod
+            def list(customer, status, limit):
+                assert status == 'all'
+                subs = [_Obj(s) for s in outer.existing + list(outer.created)]
+                return SimpleNamespace(auto_paging_iter=lambda: iter(subs))
+
             @staticmethod
             def create(idempotency_key, **params):
                 if outer.fail_create:
@@ -129,7 +136,6 @@ def world(monkeypatch):
         stripe=FakeStripe([promo(BUNDLE)]),
         ledger=FakeLedger(),
         row=None,
-        stripe_active_paid=None,
         customer_id=None,
     )
     monkeypatch.setattr(redemption, 'stripe', state.stripe)
@@ -142,7 +148,6 @@ def world(monkeypatch):
         state.customer_id = customer_id
 
     monkeypatch.setattr(redemption.users_db, 'set_stripe_customer_id', set_customer)
-    monkeypatch.setattr(redemption, 'find_active_paid_subscription_for_user', lambda uid: state.stripe_active_paid)
     monkeypatch.setattr(
         redemption,
         '_pro_prices',
@@ -301,9 +306,28 @@ def test_user_with_a_live_stripe_subscription_is_told_and_the_code_is_untouched(
     world.row = Subscription(plan=PlanType.unlimited_v2, status=SubscriptionStatus.active, current_period_end=NOW + DAY)
     assert _reason(UID, 'OMI-TRYBE-ABCD1234') == (409, 'has_plan')
     world.row = None
-    world.stripe_active_paid = Subscription(plan=PlanType.unlimited_v2, stripe_subscription_id='sub_live')
+    world.customer_id = 'cus_old'
+    world.stripe.existing = [{'id': 'sub_live', 'status': 'active', 'metadata': {'uid': UID}}]
     assert _reason(UID, 'OMI-TRYBE-ABCD1234') == (409, 'has_plan')
     assert world.stripe.created == [] and world.ledger.docs == {} and world.stripe.promos[0]['times_redeemed'] == 0
+
+
+@pytest.mark.parametrize('status', ['trialing', 'past_due', 'unpaid', 'incomplete', 'paused'])
+def test_any_stripe_subscription_that_can_still_bill_blocks_redeem(world, status):
+    # Firestore shows Free (past_due projects to Basic), but the old subscription would keep billing.
+    world.customer_id = 'cus_old'
+    world.stripe.existing = [{'id': 'sub_old', 'status': status, 'metadata': {'uid': UID}}]
+    assert _reason(UID, 'OMI-TRYBE-ABCD1234') == (409, 'has_plan')
+    assert world.stripe.created == [] and world.ledger.docs == {} and world.stripe.promos[0]['times_redeemed'] == 0
+
+
+def test_ended_stripe_subscriptions_do_not_block_redeem(world):
+    world.customer_id = 'cus_old'
+    world.stripe.existing = [
+        {'id': 'sub_a', 'status': 'canceled', 'metadata': {'uid': UID}},
+        {'id': 'sub_b', 'status': 'incomplete_expired', 'metadata': {}},
+    ]
+    assert redeem_prepaid_code(UID, 'OMI-TRYBE-ABCD1234')['status'] == 'redeemed'
 
 
 def test_user_with_a_live_play_subscription_is_told_and_the_code_is_untouched(world):
@@ -320,20 +344,26 @@ def test_lapsed_plan_can_redeem(world):
 # ---- switch, route and rate limits -------------------------------------------------------------
 
 
-def test_switch_defaults_off_and_admits_only_on_or_the_cohort(monkeypatch):
+def test_switch_is_three_state_and_off_reads_nothing(monkeypatch):
     from config import rollout_cohorts
 
-    monkeypatch.delenv(switch.ENV, raising=False)
-    monkeypatch.setattr(
-        rollout_cohorts, 'in_rollout_cohort', lambda uid, name: uid == UID and name == 'prepaid-code-redeem'
-    )
-    assert switch.enabled_for(UID, {}) is True  # test account through the cohort document
-    assert switch.enabled_for(OTHER, {}) is False
-    assert switch.enabled_for(OTHER, {'PREPAID_CODE_REDEEM': 'off'}) is False
-    assert switch.enabled_for(OTHER, {'PREPAID_CODE_REDEEM': 'yes'}) is False
+    reads = []
+
+    def member(uid, name):
+        reads.append((uid, name))
+        return uid == UID and name == 'prepaid-code-redeem'
+
+    monkeypatch.setattr(rollout_cohorts, 'in_rollout_cohort', member)
+    for off in ({}, {'PREPAID_CODE_REDEEM': 'off'}, {'PREPAID_CODE_REDEEM': 'yes'}, {'PREPAID_CODE_REDEEM': ''}):
+        assert switch.enabled_for(UID, off) is False
+    assert reads == []  # off: no cohort read for anyone
     assert switch.enabled_for(OTHER, {'PREPAID_CODE_REDEEM': ' ON '}) is True
+    assert reads == []  # on: everyone, no read
+    assert switch.enabled_for(UID, {'PREPAID_CODE_REDEEM': 'cohort'}) is True  # the test account
+    assert switch.enabled_for(OTHER, {'PREPAID_CODE_REDEEM': 'cohort'}) is False
+    assert len(reads) == 2
     monkeypatch.setattr(rollout_cohorts, 'in_rollout_cohort', lambda uid, name: (_ for _ in ()).throw(RuntimeError()))
-    assert switch.enabled_for(UID, {}) is False  # unknown membership keeps today's behaviour
+    assert switch.enabled_for(UID, {'PREPAID_CODE_REDEEM': 'cohort'}) is False  # unknown membership: off
 
 
 @pytest.fixture
@@ -350,33 +380,20 @@ def route(monkeypatch):
     return SimpleNamespace(module=redeem_code, calls=calls)
 
 
-def _request(xff=None):
-    from fastapi import Request
-
-    headers = [(b'x-forwarded-for', xff.encode())] if xff else []
-    return Request({'type': 'http', 'headers': headers, 'client': ('10.0.0.1', 1)})
-
-
 def test_switch_off_route_is_not_found_and_touches_nothing(monkeypatch, route):
     from fastapi import HTTPException
 
     monkeypatch.setattr(route.module.prepaid_code_config, 'enabled_for', lambda uid: False)
     with pytest.raises(HTTPException) as error:
-        route.module.redeem_prepaid_code_endpoint(route.module.RedeemCodeRequest(code='X'), _request(), uid=UID)
+        route.module.redeem_prepaid_code_endpoint(route.module.RedeemCodeRequest(code='X'), uid=UID)
     assert (error.value.status_code, error.value.detail) == (404, 'Not Found')
     assert route.calls == []
 
 
-def test_route_rate_limits_per_user_and_per_client_ip(monkeypatch, route):
+def test_route_rate_limits_per_user_only(monkeypatch, route):
     monkeypatch.setattr(route.module.prepaid_code_config, 'enabled_for', lambda uid: True)
-    body = route.module.RedeemCodeRequest(code='OMI-1')
-    route.module.redeem_prepaid_code_endpoint(body, _request('1.1.1.1, 203.0.113.9'), uid=UID)
-    route.module.redeem_prepaid_code_endpoint(body, _request('9.9.9.9, 203.0.113.9'), uid=OTHER)
-    assert [policy for _, policy in route.calls] == ['payments:prepaid_code', 'payments:prepaid_code_ip'] * 2
-    assert route.calls[0][0] == UID
-    # A spoofed leading hop does not change the IP bucket: the front end appends the real one.
-    assert route.calls[1][0] == route.calls[3][0] and route.calls[1][0].startswith('ip:')
-    assert '203.0.113.9' not in route.calls[1][0]
+    route.module.redeem_prepaid_code_endpoint(route.module.RedeemCodeRequest(code='OMI-1'), uid=UID)
+    assert route.calls == [(UID, 'payments:prepaid_code')]
 
 
 def test_route_rate_limit_rejection_stops_before_any_lookup(monkeypatch, route):
@@ -390,7 +407,7 @@ def test_route_rate_limit_rejection_stops_before_any_lookup(monkeypatch, route):
     monkeypatch.setattr(route.module.auth, 'check_rate_limit_inline', limited)
     monkeypatch.setattr(route.module, 'redeem_prepaid_code', lambda uid, code: pytest.fail('looked up a code'))
     with pytest.raises(HTTPException) as error:
-        route.module.redeem_prepaid_code_endpoint(route.module.RedeemCodeRequest(code='X'), _request(), uid=UID)
+        route.module.redeem_prepaid_code_endpoint(route.module.RedeemCodeRequest(code='X'), uid=UID)
     assert error.value.status_code == 429
 
 
@@ -404,7 +421,7 @@ def test_route_maps_errors_to_reason_codes(monkeypatch, route):
 
     monkeypatch.setattr(route.module, 'redeem_prepaid_code', refuse)
     with pytest.raises(HTTPException) as error:
-        route.module.redeem_prepaid_code_endpoint(route.module.RedeemCodeRequest(code='X'), _request(), uid=UID)
+        route.module.redeem_prepaid_code_endpoint(route.module.RedeemCodeRequest(code='X'), uid=UID)
     assert (error.value.status_code, error.value.detail) == (409, 'has_plan')
 
 
@@ -412,7 +429,7 @@ def test_rate_limit_policies_exist():
     from utils.rate_limit_config import RATE_POLICIES
 
     assert RATE_POLICIES['payments:prepaid_code'] == (10, 3600)
-    assert RATE_POLICIES['payments:prepaid_code_ip'] == (30, 3600)
+    assert 'payments:prepaid_code_ip' not in RATE_POLICIES
 
 
 def _subscription_body(monkeypatch):
@@ -486,14 +503,20 @@ def payment_router(monkeypatch):
         current_period_end=NOW + 30 * DAY,
     )
     monkeypatch.setattr(payment.users_db, 'get_user_subscription', lambda uid: row)
+    monkeypatch.setattr(payment.users_db, 'set_user_cancellation_feedback', lambda *a: pytest.fail('stored'))
     modified = []
+
+    class _Sub(dict):
+        def to_dict(self):
+            return dict(self)
+
     fake = SimpleNamespace(
-        retrieve=lambda sub_id, **kw: SimpleNamespace(to_dict=lambda: _prepaid_stripe_sub(**payment_router_over)),
+        retrieve=lambda sub_id, **kw: _Sub(_prepaid_stripe_sub(**payment_router_over)),
         modify=lambda *a, **kw: modified.append((a, kw)),
     )
     payment_router_over = {}
     monkeypatch.setattr(payment.stripe, 'Subscription', fake)
-    return SimpleNamespace(module=payment, modified=modified, over=payment_router_over)
+    return SimpleNamespace(module=payment, modified=modified, over=payment_router_over, row=row)
 
 
 def test_upgrade_refuses_a_prepaid_subscription_before_any_stripe_change(monkeypatch, payment_router):
@@ -529,3 +552,84 @@ def test_a_prepaid_subscription_is_shown_ending_at_its_term_not_renewing():
     assert row.current_period_end == ordinary['current_period_end'] and row.cancel_at_period_end is False
     ended = {**prepaid, 'status': 'canceled'}
     assert project_subscription(ended, None, get_plan_limits(PlanType.basic)).plan == PlanType.basic
+
+
+def test_cancel_refuses_a_prepaid_subscription_and_changes_nothing(payment_router):
+    from fastapi import HTTPException
+
+    with pytest.raises(HTTPException) as error:
+        payment_router.module.cancel_subscription_endpoint.__wrapped__(uid=UID)
+    assert error.value.status_code == 409 and 'prepaid' in error.value.detail
+    assert payment_router.modified == []
+
+
+def test_customer_portal_is_refused_for_a_prepaid_plan(monkeypatch, payment_router):
+    from fastapi import HTTPException
+
+    payment_router.row.prepaid = True
+    monkeypatch.setattr(
+        payment_router.module.stripe.billing_portal.Session, 'create', lambda **kw: pytest.fail('portal opened')
+    )
+    with pytest.raises(HTTPException) as error:
+        payment_router.module.create_customer_portal_endpoint(uid=UID)
+    assert error.value.status_code == 409
+
+
+def test_term_end_has_no_paid_through_grace_for_a_prepaid_plan():
+    from routers.payment import _build_subscription_from_stripe_object
+
+    ended = _prepaid_stripe_sub(status='canceled', current_period_end=NOW + 3600, cancel_at=NOW - 1)
+    row = _build_subscription_from_stripe_object(ended, grant_cancel_grace=True, now=NOW, period_paid=True)
+    assert row.plan == PlanType.basic
+    # An ordinary early cancel still keeps its paid-through grace.
+    ordinary = {**ended, 'metadata': {'uid': UID}, 'items': {'data': [{'price': {'id': 'price_any'}}]}}
+    import routers.payment as payment
+
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr(payment, 'get_plan_type_from_price_id', lambda price_id: PlanType.unlimited_v2)
+        kept = _build_subscription_from_stripe_object(ordinary, grant_cancel_grace=True, now=NOW, period_paid=True)
+    assert kept.plan == PlanType.unlimited_v2
+
+
+def test_subscription_response_carries_the_prepaid_marker_only_with_the_switch_on(monkeypatch, warm_subscription_route):
+    from models.users import UserSubscriptionResponse
+    from routers import users
+
+    def response():
+        row = Subscription(
+            plan=PlanType.unlimited_v2, status=SubscriptionStatus.active, current_period_end=NOW + DAY, prepaid=True
+        )
+        return UserSubscriptionResponse(
+            subscription=row,
+            transcription_seconds_used=0,
+            transcription_seconds_limit=0,
+            words_transcribed_used=0,
+            words_transcribed_limit=0,
+            insights_gained_used=0,
+            insights_gained_limit=0,
+        )
+
+    monkeypatch.setattr(users.prepaid_code_config, 'enabled_for', lambda uid: False)
+    off = response()
+    users._apply_prepaid_code_switch(off, UID)
+    dumped = json.loads(off.model_dump_json())
+    assert 'prepaid' not in dumped['subscription'] and 'prepaid_code_redeem' not in dumped
+    monkeypatch.setattr(users.prepaid_code_config, 'enabled_for', lambda uid: True)
+    on = response()
+    users._apply_prepaid_code_switch(on, UID)
+    dumped = json.loads(on.model_dump_json())
+    assert dumped['subscription']['prepaid'] is True and dumped['prepaid_code_redeem'] is True
+
+
+def test_subscription_route_reads_no_cohort_with_the_switch_off(monkeypatch, warm_subscription_route):
+    from config import rollout_cohorts
+
+    reads = []
+    monkeypatch.setattr(rollout_cohorts, 'in_rollout_cohort', lambda uid, name: reads.append(name) or False)
+    monkeypatch.delenv(switch.ENV, raising=False)
+    _, body = _subscription_body(monkeypatch)
+    body()
+    assert 'prepaid-code-redeem' not in reads
+    monkeypatch.setenv(switch.ENV, 'cohort')
+    body()
+    assert 'prepaid-code-redeem' in reads

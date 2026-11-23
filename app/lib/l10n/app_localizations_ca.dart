@@ -15868,7 +15868,7 @@ class AppLocalizationsCa extends AppLocalizations {
         'hasPlan': 'Ja tens un pla. El teu codi no s\'ha utilitzat.',
         'notPrepaid': 'Aquest codi no es pot bescanviar aquí. Fes-lo servir quan triïs un pla.',
         'notEligible': 'Aquest codi no es pot utilitzar en aquest compte.',
-        'rateLimited': 'Massa intents. Espera i torna-ho a provar més tard.',
+        'rateLimited': 'Massa intents. Torna-ho a provar més tard.',
         'other': 'Alguna cosa ha anat malament. Torna-ho a provar.',
       },
     );

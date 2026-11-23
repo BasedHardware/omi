@@ -15817,7 +15817,7 @@ class AppLocalizationsSl extends AppLocalizations {
         'hasPlan': 'Že imate paket. Vaša koda ni bila uporabljena.',
         'notPrepaid': 'Te kode ni mogoče unovčiti tukaj. Uporabite jo, ko izberete paket.',
         'notEligible': 'Te kode ni mogoče uporabiti v tem računu.',
-        'rateLimited': 'Preveč poskusov. Počakajte in poskusite pozneje.',
+        'rateLimited': 'Preveč poskusov. Poskusite pozneje.',
         'other': 'Prišlo je do napake. Poskusite znova.',
       },
     );

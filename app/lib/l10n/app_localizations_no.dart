@@ -15793,7 +15793,7 @@ class AppLocalizationsNo extends AppLocalizations {
         'hasPlan': 'Du har allerede et abonnement. Koden din ble ikke brukt.',
         'notPrepaid': 'Denne koden kan ikke løses inn her. Bruk den når du velger et abonnement.',
         'notEligible': 'Denne koden kan ikke brukes på denne kontoen.',
-        'rateLimited': 'For mange forsøk. Vent og prøv igjen senere.',
+        'rateLimited': 'For mange forsøk. Prøv igjen senere.',
         'other': 'Noe gikk galt. Prøv igjen.',
       },
     );

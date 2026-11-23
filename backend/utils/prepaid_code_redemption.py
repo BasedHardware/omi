@@ -26,7 +26,6 @@ from utils import play_stripe_guard
 from utils import stripe as stripe_utils
 from utils.log_sanitizer import sanitize
 from utils.subscription import (
-    find_active_paid_subscription_for_user,
     get_paid_plan_definitions,
     get_plan_display_name,
     is_paid_plan,
@@ -150,7 +149,21 @@ def _has_live_plan(uid: str, now: int) -> bool:
         and (current.current_period_end or 0) >= now
     ):
         return True
-    return find_active_paid_subscription_for_user(uid) is not None
+    return _has_open_stripe_subscription(uid)
+
+
+def _has_open_stripe_subscription(uid: str) -> bool:
+    """Any Stripe subscription that can still bill (active, trialing, past_due, unpaid, incomplete, paused):
+    an old one must never keep charging next to a prepaid one."""
+    customer_id = users_db.get_stripe_customer_id(uid)
+    if not customer_id:
+        return False
+    subscriptions = stripe.Subscription.list(customer=customer_id, status='all', limit=100)
+    return any(
+        (sub.get('status') not in stripe_utils.TERMINAL_SUBSCRIPTION_STATUSES)
+        and ((sub.get('metadata') or {}).get('uid') in (None, uid))
+        for sub in subscriptions.auto_paging_iter()
+    )
 
 
 def _customer_id(uid: str) -> str:

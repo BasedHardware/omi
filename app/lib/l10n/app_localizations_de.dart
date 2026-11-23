@@ -15905,7 +15905,7 @@ class AppLocalizationsDe extends AppLocalizations {
         'hasPlan': 'Du hast bereits einen Plan. Dein Code wurde nicht verwendet.',
         'notPrepaid': 'Dieser Code kann hier nicht eingelöst werden. Verwende ihn, wenn du einen Plan wählst.',
         'notEligible': 'Dieser Code kann für dieses Konto nicht verwendet werden.',
-        'rateLimited': 'Zu viele Versuche. Bitte warte und versuche es später erneut.',
+        'rateLimited': 'Zu viele Versuche. Versuche es später erneut.',
         'other': 'Etwas ist schiefgelaufen. Bitte versuche es erneut.',
       },
     );

@@ -48,6 +48,7 @@ class GeneratedSubscription {
   final List<String> features;
   final GeneratedPlanLimits limits;
   final String plan;
+  final bool? prepaid;
   final String? provider;
   final String status;
   final String? stripeSubscriptionId;
@@ -62,6 +63,7 @@ class GeneratedSubscription {
     this.features = const [],
     GeneratedPlanLimits? limits,
     this.plan = "basic",
+    this.prepaid,
     this.provider,
     this.status = "active",
     this.stripeSubscriptionId,
@@ -79,6 +81,7 @@ class GeneratedSubscription {
       features: _required(_readFieldValue<List<String>>(_readField(json, const ["features"]), "features", _readStringList, requiredField: false, nullable: false, defaultValue: const []), "features"),
       limits: _required(_readFieldValue<GeneratedPlanLimits>(_readField(json, const ["limits"]), "limits", (value) => _readObject(value, GeneratedPlanLimits.fromJson), requiredField: false, nullable: false, defaultValue: GeneratedPlanLimits.fromJson(const {})), "limits"),
       plan: _required(_readFieldValue<String>(_readField(json, const ["plan"]), "plan", _readString, requiredField: false, nullable: false, defaultValue: "basic"), "plan"),
+      prepaid: _readFieldValue<bool>(_readField(json, const ["prepaid"]), "prepaid", _readBool, requiredField: false, nullable: true),
       provider: _readFieldValue<String>(_readField(json, const ["provider"]), "provider", _readString, requiredField: false, nullable: true),
       status: _required(_readFieldValue<String>(_readField(json, const ["status"]), "status", _readString, requiredField: false, nullable: false, defaultValue: "active"), "status"),
       stripeSubscriptionId: _readFieldValue<String>(_readField(json, const ["stripe_subscription_id"]), "stripe_subscription_id", _readString, requiredField: false, nullable: true),
@@ -96,6 +99,7 @@ class GeneratedSubscription {
       'features': features,
       'limits': limits.toJson(),
       'plan': plan,
+      'prepaid': prepaid,
       'provider': provider,
       'status': status,
       'stripe_subscription_id': stripeSubscriptionId,

@@ -15818,7 +15818,7 @@ class AppLocalizationsPt extends AppLocalizations {
         'hasPlan': 'Já tem um plano. O seu código não foi usado.',
         'notPrepaid': 'Este código não pode ser resgatado aqui. Use-o quando escolher um plano.',
         'notEligible': 'Este código não pode ser usado nesta conta.',
-        'rateLimited': 'Demasiadas tentativas. Aguarde e tente mais tarde.',
+        'rateLimited': 'Demasiadas tentativas. Tente mais tarde.',
         'other': 'Algo correu mal. Tente novamente.',
       },
     );

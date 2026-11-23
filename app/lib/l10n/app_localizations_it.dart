@@ -15868,7 +15868,7 @@ class AppLocalizationsIt extends AppLocalizations {
         'hasPlan': 'Hai già un piano. Il tuo codice non è stato usato.',
         'notPrepaid': 'Questo codice non può essere riscattato qui. Usalo quando scegli un piano.',
         'notEligible': 'Questo codice non può essere usato su questo account.',
-        'rateLimited': 'Troppi tentativi. Attendi e riprova più tardi.',
+        'rateLimited': 'Troppi tentativi. Riprova più tardi.',
         'other': 'Qualcosa è andato storto. Riprova.',
       },
     );

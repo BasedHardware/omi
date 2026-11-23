@@ -179,9 +179,6 @@ Source: events.json. Presence is not task success. Existing SDK provenance/ident
 | upgradePlanSelected | Upgrade Plan Selected | plan, billing_interval, source | active | subscription-funnel |
 | upgradeSucceededAttributed | Upgrade Succeeded Attributed | plan, billing_interval | active | subscription-funnel |
 | upgradeBillingProvider | Upgrade Billing Provider | provider, stage, billing_interval | active | subscription-funnel |
-| prepaidPlanCodeRedeemStarted | Prepaid Plan Code Redeem Started | source | active | subscription-funnel |
-| prepaidPlanCodeRedeemSucceeded | Prepaid Plan Code Redeem Succeeded | source, months | active | subscription-funnel |
-| prepaidPlanCodeRedeemFailed | Prepaid Plan Code Redeem Failed | source, reason | active | subscription-funnel |
 | subscriptionPlanChanged | Subscription Plan Changed | previous_plan, new_plan, billing_interval, change_source | active | subscription-funnel |
 | subscriptionCancelReasonSelected | Subscription Cancel Reason Selected | reason | active | subscription-funnel |
 | subscriptionCancelConfirmed | Subscription Cancel Confirmed | reason, has_details | active | subscription-funnel |

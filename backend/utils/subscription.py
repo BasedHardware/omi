@@ -1188,6 +1188,7 @@ def find_active_paid_subscription_for_user(uid: str) -> Optional[Subscription]:
             current_period_end=prepaid_code_redeem.prepaid_end(d) or d.get('current_period_end'),
             current_period_start=d.get('current_period_start'),
             cancel_at_period_end=prepaid_code_redeem.prepaid_end(d) is not None or d.get('cancel_at_period_end', False),
+            prepaid=True if prepaid_code_redeem.prepaid_end(d) is not None else None,
             limits=get_plan_limits(plan),
         )
     return None
