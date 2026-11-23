@@ -171,7 +171,15 @@ class Transport:
             and parts.password is None
             and parts.port is None
             and not parts.fragment
-            and method in ('GET', 'PUT'),
+            and (
+                method in ('GET', 'PUT')
+                or (
+                    method == 'PATCH'
+                    and parts.netloc == 'us-central1-run.googleapis.com'
+                    and parts.path == f'/v2/projects/{PROJECT}/locations/{REGION}/services/backend'
+                    and parts.query == 'updateMask=traffic'
+                )
+            ),
             'transport_origin_refused',
         )
         if self._token is None:

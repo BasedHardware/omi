@@ -1734,10 +1734,32 @@ runs:
         ${{ inputs.integration_only != 'true' && (success()) }}
       id: shift-cloud-run-traffic
       shell: bash
+      env:
+        PROMOTION_PROJECT: ${{ inputs.project_id }}
+        PROMOTION_REGION: ${{ inputs.region }}
+        PROMOTION_SOURCE: ${{ inputs.admitted_sha }}
+        PROMOTION_CONTROL: ${{ github.workflow_sha }}
+        PROMOTION_CANDIDATE: ${{ steps.capture-backend-revision.outputs.revision }}
+        PROMOTION_INVERSE: ${{ inputs.rollback_revision }}
       run: |
         set -euo pipefail
         if [[ " $SELECTED_CLOUD_RUN_SERVICES " == *" backend "* ]]; then
-          gcloud run services update-traffic backend --project=${{ inputs.project_id }} --region=${{ inputs.region }} --to-revisions=${{ steps.capture-backend-revision.outputs.revision }}=100 --quiet
+          if [[ "${{ inputs.deploy_profile }}" == manual && "${{ inputs.environment }}" == prod ]]; then
+            promotion_args=(--scope "${{ inputs.cloud_run_service }}")
+            if [[ "${{ inputs.cloud_run_service }}" == backend ]]; then
+              test "$SELECTED_CLOUD_RUN_SERVICES" = backend
+              promotion_args+=(--inverse "$PROMOTION_INVERSE")
+            fi
+            python3 "$DEPLOY_CONTROL_SCRIPTS/promote_selected_backend.py" \
+              "${promotion_args[@]}" \
+              --project "$PROMOTION_PROJECT" --region "$PROMOTION_REGION" \
+              --candidate "$PROMOTION_CANDIDATE" \
+              --source "$PROMOTION_SOURCE" --control "$PROMOTION_CONTROL" \
+              --snapshot artifacts/backend-cloud-run-pre-promotion-traffic-snapshot.json \
+              --receipt artifacts/backend-promotion-stages.json
+          else
+            gcloud run services update-traffic backend --project=${{ inputs.project_id }} --region=${{ inputs.region }} --to-revisions=${{ steps.capture-backend-revision.outputs.revision }}=100 --quiet
+          fi
         fi
         if [[ " $SELECTED_CLOUD_RUN_SERVICES " == *" backend-sync "* ]]; then
           gcloud run services update-traffic backend-sync --project=${{ inputs.project_id }} --region=${{ inputs.region }} --to-revisions=${{ steps.capture-backend-sync-revision.outputs.revision }}=100 --quiet
@@ -2055,6 +2077,7 @@ runs:
           ${{ inputs.deploy_profile == 'auto-dev' && 'artifacts/dev-backend-candidate-status.json' || '' }}
           ${{ inputs.deploy_profile == 'auto-dev' && 'artifacts/dev-backend-cloud-run-traffic-restore.json' || 'artifacts/backend-cloud-run-traffic-restore.json' }}
           artifacts/integration-canary-receipt.json
+          artifacts/backend-promotion-stages.json
         if-no-files-found: warn
 
     - name: Show Output
