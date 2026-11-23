@@ -9,11 +9,11 @@ import sys
 from prometheus_client.parser import text_string_to_metric_families
 import pytest
 
+from database.rollout_cohorts import RAMP_NAMES
 from utils.sync.worker_privacy_metrics import WorkerPrivacyMetrics
 
 CHILD = """
 from database import privacy_check_metrics as metrics, privacy_ttl_cache as ttl_cache
-from database.rollout_cohorts import RAMP_NAMES
 from prometheus_client import Counter
 from types import SimpleNamespace
 import sys

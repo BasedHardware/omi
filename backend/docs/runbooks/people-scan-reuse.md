@@ -69,6 +69,16 @@ writer and inventory suites passed 17 tests, and
 loopback emulator, including review apply/undo/redo, enrollment, evidence backfill,
 rollback and concurrent increments. The emulator was stopped after verification.
 
+## Account erasure scope audit 2026-11-23
+
+SCA-3883 changes `user_data_deletion.purge_user_subtree` only in its rollout-cohort
+step: before deleting `rollout_cohorts/{uid}` it now enumerates that document's
+subcollections (the `go_finalization_audit` rows) and deletes each with the same
+`delete_collection` helper on the data-plane client. Re-audit found the People
+subtree walk, its generation-helper calls and their order unchanged; the new step
+touches no People document and adds or removes no generation bump. Only this scope
+is re-pinned, regenerated with the backend Python 3.11 environment.
+
 ## Measure before enabling
 
 `people_scan_dedupe` remains **0**. The closed-label counter
