@@ -109,3 +109,21 @@ def test_partial_stream_failure_counts_rows_and_burns_slot(monkeypatch, sweep_st
         'hour': HOUR,
         'cursors': {'quarantined': 'previous', 'held_expired': 'last-expired'},
     }
+
+
+def test_policy_only_provider_route_is_excluded(monkeypatch, sweep_store):
+    def provider():
+        return {'policy': {'stt_route': 'provider'}, 'owner_key': 'provider-only'}
+
+    def gpu():
+        return {'stt_route': {'stt_route': 'parakeet'}, 'policy': {'stt_route': 'provider'}, 'owner_key': 'gpu'}
+
+    docs = [SimpleNamespace(id='provider', to_dict=provider), SimpleNamespace(id='gpu', to_dict=gpu)]
+    monkeypatch.setattr(parked_sweep, 'parked_page', Mock(side_effect=[docs, []]))
+
+    ParkedSweep(sweep_store).tick(NOW)
+
+    sample = sweep_store.client.rows[CONTROL_PATH]['latest_page_sample']
+    assert sample['scanned'] == {'quarantined': 2, 'held_expired': 0}
+    assert sample['distinct_known_owners'] == 1
+    assert sample['reason_age'] == [{'reason': 'unknown', 'age_bucket': 'unknown', 'units': 1}]

@@ -80,6 +80,7 @@ def parked_page(client, namespace, *, expired, after):
         'recovery.started_at',
         'recovery.failure.reason',
         'stt_route.stt_route',
+        'policy.stt_route',
     ]
     return query.select(fields).limit(PAGE_SIZE).stream(retry=None)
 
@@ -133,7 +134,10 @@ class ParkedSweep:
                         scanned[name] += 1
                         last_id = doc.id
                         job = doc.to_dict() or {}
-                        if mapping(job.get('stt_route')).get('stt_route') != 'provider':
+                        route = mapping(job.get('stt_route')).get('stt_route')
+                        if route not in ('parakeet', 'provider'):
+                            route = mapping(job.get('policy')).get('stt_route')
+                        if route != 'provider':
                             rows.append(job)
                     wrapped = scanned[name] < PAGE_SIZE
                     next_cursors[name] = None if wrapped else last_id
