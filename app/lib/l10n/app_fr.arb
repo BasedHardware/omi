@@ -4776,5 +4776,12 @@
     "firmwareUpdateAppRequired": "Cette mise à jour du micrologiciel nécessite une version plus récente de l'application Omi. Mettez l'application à jour depuis votre boutique d'applications, puis vérifiez à nouveau.",
     "quietPayerTitle": "Aucun enregistrement depuis 5 jours",
     "quietPayerMessage": "Vérifiez votre Omi.",
-    "quietPayerCheck": "Vérifier"
+    "quietPayerCheck": "Vérifier",
+    "playManageSubscription": "Gérer l'abonnement",
+    "playBilledByGoogle": "Facturé par Google Play",
+    "playPurchasePending": "Votre paiement est en attente. Omi Pro démarre dès que Google Play le confirme.",
+    "playPurchaseOtherAccount": "Cet achat Google Play appartient à un autre compte Omi.",
+    "playPurchaseNotConfirmed": "Nous n'avons pas encore pu confirmer votre achat. Nous réessaierons automatiquement.",
+    "playRenewalTerms": "Se renouvelle automatiquement au prix indiqué jusqu'à résiliation. Gérez ou résiliez à tout moment dans Google Play.",
+    "playPaidAppUnavailable": "Non disponible sur Android"
 }

@@ -2701,6 +2701,42 @@ final class UpgradeSucceededAttributed extends RegisteredEvent {
   Map<String, Object> get properties => {"plan": plan.wireName, "billing_interval": billingInterval.wireName};
 }
 
+enum UpgradeBillingProviderProvider {
+  stripe("stripe"),
+  play("play");
+  const UpgradeBillingProviderProvider(this.wireName);
+  final String wireName;
+}
+
+enum UpgradeBillingProviderStage {
+  selected("selected"),
+  succeeded("succeeded"),
+  cancelled("cancelled"),
+  pending("pending"),
+  failed("failed");
+  const UpgradeBillingProviderStage(this.wireName);
+  final String wireName;
+}
+
+enum UpgradeBillingProviderBillingInterval {
+  month("month"),
+  year("year"),
+  unknown("unknown");
+  const UpgradeBillingProviderBillingInterval(this.wireName);
+  final String wireName;
+}
+
+final class UpgradeBillingProvider extends RegisteredEvent {
+  const UpgradeBillingProvider({required this.provider, required this.stage, required this.billingInterval});
+  final UpgradeBillingProviderProvider provider;
+  final UpgradeBillingProviderStage stage;
+  final UpgradeBillingProviderBillingInterval billingInterval;
+  @override
+  String get wireName => "Upgrade Billing Provider";
+  @override
+  Map<String, Object> get properties => {"provider": provider.wireName, "stage": stage.wireName, "billing_interval": billingInterval.wireName};
+}
+
 enum SubscriptionPlanChangedPreviousPlan {
   basic("basic"),
   plus("plus"),
