@@ -1,7 +1,9 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
 import 'package:in_app_purchase_platform_interface/in_app_purchase_platform_interface.dart';
 
 import 'package:omi/backend/http/api/play_billing_api.dart';
+import 'package:omi/env/env.dart';
 import 'package:omi/pages/paywall/paywall_checkout.dart';
 import 'package:omi/services/billing/play_billing.dart';
 
@@ -125,6 +127,25 @@ void main() {
     platform.owned = [playPurchase(PurchaseStatus.restored, token: 'current')];
     expect((await billing.restore(obfuscatedAccountId: 'a')).outcome, PlayPurchaseOutcome.purchased);
     expect(server.received, ['com.omi.app.plus:legacy', 'omi_pro:current']);
+  });
+
+  test('server answers map to keep-or-drop decisions for the stored token', () async {
+    Env.overrideApiBaseUrl('http://127.0.0.1:1/');
+    addTearDown(Env.clearApiBaseUrlOverrideForTesting);
+    Future<PlayVerifyResult> answer(int status, String body) => verifyPlayPurchase(
+          purchaseToken: 't',
+          productId: 'omi_pro',
+          send: (request) async {
+            expect(request.url, endsWith('v1/payments/play/purchases'));
+            expect(request.body, contains('"purchase_token":"t"'));
+            return http.Response(body, status);
+          },
+        );
+    expect((await answer(200, '{"status":"active"}')).status, 'active');
+    final owned = await answer(409, '{"detail":"purchase_owned_elsewhere","message":"x"}');
+    expect((owned.code, owned.retryable), ('purchase_owned_elsewhere', false));
+    expect((await answer(503, '{"detail":"play_unavailable"}')).retryable, isTrue);
+    expect((await answer(200, 'not json')).retryable, isTrue);
   });
 
   test('manage subscription opens Play subscription center for omi_pro', () {

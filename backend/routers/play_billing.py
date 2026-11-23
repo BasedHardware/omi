@@ -32,8 +32,8 @@ class PlayPurchaseResponse(BaseModel):
 
 
 class PlayBillingErrorResponse(BaseModel):
-    code: str
-    detail: str
+    detail: str  # stable machine code, e.g. purchase_owned_elsewhere
+    message: str
 
 
 class PlayNotificationResponse(BaseModel):
@@ -41,7 +41,7 @@ class PlayNotificationResponse(BaseModel):
 
 
 def _error(error: play_billing.PlayBillingError) -> JSONResponse:
-    return JSONResponse(status_code=error.http_status, content={'code': error.code, 'detail': error.message})
+    return JSONResponse(status_code=error.http_status, content={'detail': error.code, 'message': error.message})
 
 
 @router.post(

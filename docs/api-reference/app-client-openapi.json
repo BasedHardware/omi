@@ -27477,18 +27477,18 @@
       },
       "PlayBillingErrorResponse": {
         "properties": {
-          "code": {
-            "title": "Code",
-            "type": "string"
-          },
           "detail": {
             "title": "Detail",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
             "type": "string"
           }
         },
         "required": [
-          "code",
-          "detail"
+          "detail",
+          "message"
         ],
         "title": "PlayBillingErrorResponse",
         "type": "object"

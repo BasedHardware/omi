@@ -2,7 +2,7 @@
 // which validates it with Google, binds it to this account, acknowledges it and grants Omi Pro.
 import 'dart:convert';
 
-import 'package:omi/backend/http/shared.dart';
+import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/env/env.dart';
 
 /// Server answer for one Google Play purchase token.
@@ -20,24 +20,33 @@ class PlayVerifyResult {
 }
 
 /// POST /v1/payments/play/purchases: the server verifies the token with Google, binds and acknowledges it.
-Future<PlayVerifyResult> verifyPlayPurchase({required String purchaseToken, required String productId}) async {
-  final response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/payments/play/purchases',
-    headers: {},
-    method: 'POST',
-    body: jsonEncode({'purchase_token': purchaseToken, 'product_id': productId}),
+Future<PlayVerifyResult> verifyPlayPurchase({
+  required String purchaseToken,
+  required String productId,
+  ApiSend? send,
+}) async {
+  final result = await executeApi<String>(
+    request: ApiRequest(
+      url: '${Env.apiBaseUrl}v1/payments/play/purchases',
+      method: 'POST',
+      body: jsonEncode({'purchase_token': purchaseToken, 'product_id': productId}),
+    ),
+    send: send,
+    decode: (body) {
+      final decoded = jsonDecode(body);
+      final status = decoded is Map ? decoded['status'] : null;
+      if (status is! String) throw const FormatException('status');
+      return status;
+    },
   );
-  if (response == null) return const PlayVerifyResult('error', retryable: true);
-  Map<String, dynamic>? body;
-  try {
-    final decoded = jsonDecode(response.body);
-    if (decoded is Map<String, dynamic>) body = decoded;
-  } catch (_) {}
-  if (response.statusCode == 200) {
-    final status = body?['status'];
-    return PlayVerifyResult(status is String ? status : 'error', retryable: status is! String);
-  }
-  final code = body?['code'];
-  final retryable = response.statusCode >= 500 || response.statusCode == 429 || response.statusCode == 401;
-  return PlayVerifyResult('error', code: code is String ? code : null, retryable: retryable);
+  return switch (result) {
+    ApiSuccess(:final data) => PlayVerifyResult(data),
+    ApiFailure(:final problem) => PlayVerifyResult(
+        'error',
+        code: problem.detail,
+        // A paid purchase is never dropped on an outage or an unreadable answer: keep it and resend.
+        retryable:
+            problem.retryable || problem.kind == ApiProblemKind.decode || problem.kind == ApiProblemKind.authTerminal,
+      ),
+  };
 }
