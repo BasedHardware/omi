@@ -15746,6 +15746,9 @@ class AppLocalizationsLt extends AppLocalizations {
   String get stillWorkingOnIt => 'Vis dar dirbama.';
 
   @override
+  String get deviceReadyToUse => 'Paruošta naudoti';
+
+  @override
   String get firmwareUpdateFirmwareTooOld =>
       'Jūsų įrenginio programinė aparatinė įranga per sena šiam naujinimui. Kreipkitės į palaikymo tarnybą, kad padėtų atnaujinti įrenginį.';
 
@@ -15761,4 +15764,26 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get quietPayerCheck => 'Patikrinti';
+
+  @override
+  String get playManageSubscription => 'Tvarkyti prenumeratą';
+
+  @override
+  String get playBilledByGoogle => 'Mokestis per Google Play';
+
+  @override
+  String get playPurchasePending => 'Mokėjimas laukia. Omi Pro prasidės, kai Google Play jį patvirtins.';
+
+  @override
+  String get playPurchaseOtherAccount => 'Šis Google Play pirkinys priklauso kitai Omi paskyrai.';
+
+  @override
+  String get playPurchaseNotConfirmed => 'Pirkinio dar nepavyko patvirtinti. Bandysime dar kartą automatiškai.';
+
+  @override
+  String get playRenewalTerms =>
+      'Automatiškai atnaujinama nurodyta kaina, kol atšauksite. Tvarkykite ar atšaukite bet kada Google Play.';
+
+  @override
+  String get playPaidAppUnavailable => 'Android nepasiekiama';
 }

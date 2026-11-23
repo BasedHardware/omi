@@ -75,6 +75,11 @@
       "owner": "overflow / two-lane lead",
       "review_by": "2026-11-29"
     },
+    "BATCH_PARKED_JOB_SWEEPER_ENABLED": {
+      "owner": "omi-pipeline",
+      "review_by": "2026-12-18",
+      "registry": "config/feature-flags.yaml"
+    },
     "BATCH_PIPELINE_API_URL": {
       "seeded": "2026-10-25"
     },

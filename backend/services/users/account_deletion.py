@@ -43,7 +43,7 @@ from database.vector_db import (
     delete_screen_activity_vectors,
     delete_transcript_chunk_vectors_batch,
 )
-from utils import stripe as stripe_utils
+from utils import play_publisher, stripe as stripe_utils
 from utils.cloud_tasks import (
     assert_inline_account_deletion_permitted,
     enqueue_account_deletion_wipe,
@@ -694,6 +694,9 @@ def _cancel_subscription_for_account_deletion(uid: str) -> None:
         subscription_id = getattr(sub, 'stripe_subscription_id', None) if sub else None
         if subscription_id and subscription_id not in app_subscription_ids:
             stripe_utils.cancel_subscription_for_account_deletion(subscription_id)
+        # Google Play bills outside Stripe: stop it too, or the deleted account keeps being charged.
+        subscription_id = 'google_play'
+        play_publisher.cancel_for_account_deletion(uid)
     except Exception as error:
         raise DeletionBillingError(subscription_id, error) from error
 

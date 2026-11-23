@@ -15714,6 +15714,9 @@ class AppLocalizationsEt extends AppLocalizations {
   String get stillWorkingOnIt => 'Töötame veel selle kallal.';
 
   @override
+  String get deviceReadyToUse => 'Valmis kasutamiseks';
+
+  @override
   String get firmwareUpdateFirmwareTooOld =>
       'Teie seadme püsivara on selle värskenduse jaoks liiga vana. Seadme värskendamiseks abi saamiseks võtke ühendust klienditoega.';
 
@@ -15729,4 +15732,26 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get quietPayerCheck => 'Kontrolli';
+
+  @override
+  String get playManageSubscription => 'Halda tellimust';
+
+  @override
+  String get playBilledByGoogle => 'Arveldus Google Play kaudu';
+
+  @override
+  String get playPurchasePending => 'Makse ootel. Omi Pro algab, kui Google Play selle kinnitab.';
+
+  @override
+  String get playPurchaseOtherAccount => 'See Google Play ost kuulub teisele Omi kontole.';
+
+  @override
+  String get playPurchaseNotConfirmed => 'Ostu ei õnnestunud veel kinnitada. Proovime automaatselt uuesti.';
+
+  @override
+  String get playRenewalTerms =>
+      'Uueneb automaatselt näidatud hinnaga, kuni tühistad. Halda või tühista igal ajal Google Plays.';
+
+  @override
+  String get playPaidAppUnavailable => 'Androidis pole saadaval';
 }

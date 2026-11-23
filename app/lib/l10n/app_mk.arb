@@ -12293,9 +12293,17 @@
     "finishedSummaryReady": "Резимето е готово",
     "writingSummaryStatus": "Пишува резиме…",
     "stillWorkingOnIt": "Сè уште се работи на тоа.",
+    "deviceReadyToUse": "Подготовено за употреба",
     "firmwareUpdateFirmwareTooOld": "Фирмверот на вашиот уред е премногу стар за ова ажурирање. Контактирајте со поддршката за помош при ажурирањето на уредот.",
     "firmwareUpdateAppRequired": "Ова ажурирање на фирмверот бара понова верзија на апликацијата Omi. Ажурирајте ја апликацијата од вашата продавница за апликации, па проверете повторно.",
     "quietPayerTitle": "Нема снимки 5 дена",
     "quietPayerMessage": "Проверете го вашиот Omi.",
-    "quietPayerCheck": "Провери"
+    "quietPayerCheck": "Провери",
+    "playManageSubscription": "Управувај со претплатата",
+    "playBilledByGoogle": "Се наплаќа преку Google Play",
+    "playPurchasePending": "Плаќањето чека. Omi Pro започнува штом Google Play го потврди.",
+    "playPurchaseOtherAccount": "Ова купување на Google Play припаѓа на друга Omi сметка.",
+    "playPurchaseNotConfirmed": "Сè уште не можевме да го потврдиме купувањето. Ќе пробаме повторно автоматски.",
+    "playRenewalTerms": "Автоматски се обновува по прикажаната цена додека не откажете. Управувајте или откажете во секое време на Google Play.",
+    "playPaidAppUnavailable": "Не е достапно на Android"
 }

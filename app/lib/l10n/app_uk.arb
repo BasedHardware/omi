@@ -4736,9 +4736,17 @@
     "finishedSummaryReady": "Підсумок готовий",
     "writingSummaryStatus": "Пишемо підсумок…",
     "stillWorkingOnIt": "Ще працюємо над цим.",
+    "deviceReadyToUse": "Готово до використання",
     "firmwareUpdateFirmwareTooOld": "Прошивка вашого пристрою застаріла для цього оновлення. Зверніться до служби підтримки по допомогу з оновленням пристрою.",
     "firmwareUpdateAppRequired": "Для цього оновлення прошивки потрібна новіша версія застосунку Omi. Оновіть застосунок у магазині застосунків, а потім перевірте ще раз.",
     "quietPayerTitle": "Немає записів 5 днів",
     "quietPayerMessage": "Перевірте свій Omi.",
-    "quietPayerCheck": "Перевірити"
+    "quietPayerCheck": "Перевірити",
+    "playManageSubscription": "Керувати підпискою",
+    "playBilledByGoogle": "Оплата через Google Play",
+    "playPurchasePending": "Платіж очікує. Omi Pro почнеться, щойно Google Play його підтвердить.",
+    "playPurchaseOtherAccount": "Ця покупка в Google Play належить іншому акаунту Omi.",
+    "playPurchaseNotConfirmed": "Поки не вдалося підтвердити покупку. Ми спробуємо знову автоматично.",
+    "playRenewalTerms": "Автоматично поновлюється за вказаною ціною, доки ви не скасуєте. Керуйте або скасовуйте будь-коли в Google Play.",
+    "playPaidAppUnavailable": "Недоступно на Android"
 }

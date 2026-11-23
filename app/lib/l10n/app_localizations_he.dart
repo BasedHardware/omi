@@ -15609,6 +15609,9 @@ class AppLocalizationsHe extends AppLocalizations {
   String get stillWorkingOnIt => 'עדיין עובדים על זה.';
 
   @override
+  String get deviceReadyToUse => 'מוכן לשימוש';
+
+  @override
   String get firmwareUpdateFirmwareTooOld =>
       'הקושחה של המכשיר שלך ישנה מדי לעדכון הזה. יש לפנות לתמיכה לקבלת עזרה בעדכון המכשיר.';
 
@@ -15624,4 +15627,25 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get quietPayerCheck => 'בדיקה';
+
+  @override
+  String get playManageSubscription => 'ניהול המינוי';
+
+  @override
+  String get playBilledByGoogle => 'החיוב דרך Google Play';
+
+  @override
+  String get playPurchasePending => 'התשלום ממתין. Omi Pro יתחיל ברגע ש-Google Play יאשר אותו.';
+
+  @override
+  String get playPurchaseOtherAccount => 'הרכישה הזו ב-Google Play שייכת לחשבון Omi אחר.';
+
+  @override
+  String get playPurchaseNotConfirmed => 'עדיין לא הצלחנו לאשר את הרכישה. ננסה שוב אוטומטית.';
+
+  @override
+  String get playRenewalTerms => 'מתחדש אוטומטית במחיר המוצג עד שתבטלו. ניתן לנהל או לבטל בכל עת ב-Google Play.';
+
+  @override
+  String get playPaidAppUnavailable => 'לא זמין ב-Android';
 }

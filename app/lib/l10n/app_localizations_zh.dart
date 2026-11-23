@@ -15470,6 +15470,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get stillWorkingOnIt => '仍在处理中。';
 
   @override
+  String get deviceReadyToUse => '可正常使用';
+
+  @override
   String get firmwareUpdateFirmwareTooOld => '你的设备固件版本太旧，无法安装此更新。请联系支持团队，获取设备更新方面的帮助。';
 
   @override
@@ -15483,4 +15486,25 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get quietPayerCheck => '检查';
+
+  @override
+  String get playManageSubscription => '管理订阅';
+
+  @override
+  String get playBilledByGoogle => '通过 Google Play 计费';
+
+  @override
+  String get playPurchasePending => '付款待处理。Google Play 确认后 Omi Pro 即会开始。';
+
+  @override
+  String get playPurchaseOtherAccount => '此 Google Play 购买属于另一个 Omi 账户。';
+
+  @override
+  String get playPurchaseNotConfirmed => '暂时无法确认你的购买。我们会自动重试。';
+
+  @override
+  String get playRenewalTerms => '在你取消前将按所示价格自动续订。可随时在 Google Play 中管理或取消。';
+
+  @override
+  String get playPaidAppUnavailable => 'Android 上不可用';
 }

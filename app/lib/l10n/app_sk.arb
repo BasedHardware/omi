@@ -4736,9 +4736,17 @@
     "finishedSummaryReady": "Zhrnutie je pripravené",
     "writingSummaryStatus": "Zhrnutie sa píše…",
     "stillWorkingOnIt": "Ešte sa na tom pracuje.",
+    "deviceReadyToUse": "Pripravené na použitie",
     "firmwareUpdateFirmwareTooOld": "Firmvér vášho zariadenia je pre túto aktualizáciu príliš starý. Obráťte sa na podporu, ktorá vám pomôže aktualizovať zariadenie.",
     "firmwareUpdateAppRequired": "Táto aktualizácia firmvéru vyžaduje novšiu aplikáciu Omi. Aktualizujte aplikáciu v obchode s aplikáciami a potom znova skontrolujte aktualizácie.",
     "quietPayerTitle": "Žiadne nahrávky za 5 dní",
     "quietPayerMessage": "Skontrolujte svoj Omi.",
-    "quietPayerCheck": "Skontrolovať"
+    "quietPayerCheck": "Skontrolovať",
+    "playManageSubscription": "Spravovať predplatné",
+    "playBilledByGoogle": "Účtované cez Google Play",
+    "playPurchasePending": "Platba čaká. Omi Pro začne, keď ju Google Play potvrdí.",
+    "playPurchaseOtherAccount": "Tento nákup v Google Play patrí inému účtu Omi.",
+    "playPurchaseNotConfirmed": "Nákup sa zatiaľ nepodarilo potvrdiť. Skúsime to znova automaticky.",
+    "playRenewalTerms": "Automaticky sa obnovuje za uvedenú cenu, kým ho nezrušíte. Spravovať alebo zrušiť ho môžete kedykoľvek v Google Play.",
+    "playPaidAppUnavailable": "Na Androide nie je k dispozícii"
 }

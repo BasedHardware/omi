@@ -15730,6 +15730,9 @@ class AppLocalizationsSv extends AppLocalizations {
   String get stillWorkingOnIt => 'Jobbar fortfarande på det.';
 
   @override
+  String get deviceReadyToUse => 'Redo att använda';
+
+  @override
   String get firmwareUpdateFirmwareTooOld =>
       'Enhetens firmware är för gammal för den här uppdateringen. Kontakta supporten för att få hjälp med att uppdatera enheten.';
 
@@ -15745,4 +15748,26 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get quietPayerCheck => 'Kolla';
+
+  @override
+  String get playManageSubscription => 'Hantera prenumeration';
+
+  @override
+  String get playBilledByGoogle => 'Faktureras via Google Play';
+
+  @override
+  String get playPurchasePending => 'Betalningen väntar. Omi Pro startar så fort Google Play bekräftar den.';
+
+  @override
+  String get playPurchaseOtherAccount => 'Det här Google Play-köpet tillhör ett annat Omi-konto.';
+
+  @override
+  String get playPurchaseNotConfirmed => 'Vi kunde inte bekräfta köpet än. Vi försöker igen automatiskt.';
+
+  @override
+  String get playRenewalTerms =>
+      'Förnyas automatiskt till det visade priset tills du säger upp. Hantera eller säg upp när som helst i Google Play.';
+
+  @override
+  String get playPaidAppUnavailable => 'Inte tillgängligt på Android';
 }

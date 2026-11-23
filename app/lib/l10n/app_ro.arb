@@ -4736,9 +4736,17 @@
     "finishedSummaryReady": "Rezumat gata",
     "writingSummaryStatus": "Se scrie rezumatul…",
     "stillWorkingOnIt": "Încă lucrăm la asta.",
+    "deviceReadyToUse": "Pregătit pentru utilizare",
     "firmwareUpdateFirmwareTooOld": "Firmware-ul dispozitivului tău este prea vechi pentru această actualizare. Contactează echipa de asistență pentru ajutor la actualizarea dispozitivului.",
     "firmwareUpdateAppRequired": "Această actualizare de firmware necesită o versiune mai nouă a aplicației Omi. Actualizează aplicația din magazinul de aplicații, apoi verifică din nou.",
     "quietPayerTitle": "Nicio înregistrare de 5 zile",
     "quietPayerMessage": "Verifică-ți Omi.",
-    "quietPayerCheck": "Verifică"
+    "quietPayerCheck": "Verifică",
+    "playManageSubscription": "Gestionează abonamentul",
+    "playBilledByGoogle": "Facturat prin Google Play",
+    "playPurchasePending": "Plata este în așteptare. Omi Pro începe imediat ce Google Play o confirmă.",
+    "playPurchaseOtherAccount": "Această achiziție Google Play aparține altui cont Omi.",
+    "playPurchaseNotConfirmed": "Nu am putut confirma încă achiziția. Vom reîncerca automat.",
+    "playRenewalTerms": "Se reînnoiește automat la prețul afișat până când anulezi. Gestionează sau anulează oricând din Google Play.",
+    "playPaidAppUnavailable": "Indisponibil pe Android"
 }

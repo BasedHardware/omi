@@ -4736,9 +4736,17 @@
     "finishedSummaryReady": "الملخص جاهز",
     "writingSummaryStatus": "جارٍ كتابة الملخص…",
     "stillWorkingOnIt": "ما زلنا نعمل عليه.",
+    "deviceReadyToUse": "جاهز للاستخدام",
     "firmwareUpdateFirmwareTooOld": "البرنامج الثابت لجهازك قديم جدًا لهذا التحديث. تواصل مع الدعم للمساعدة في تحديث جهازك.",
     "firmwareUpdateAppRequired": "يتطلب تحديث البرنامج الثابت هذا إصدارًا أحدث من تطبيق Omi. حدّث التطبيق من متجر التطبيقات لديك، ثم تحقّق مرة أخرى.",
     "quietPayerTitle": "لا توجد تسجيلات منذ 5 أيام",
     "quietPayerMessage": "تحقّق من Omi.",
-    "quietPayerCheck": "تحقّق"
+    "quietPayerCheck": "تحقّق",
+    "playManageSubscription": "إدارة الاشتراك",
+    "playBilledByGoogle": "تتم الفوترة عبر Google Play",
+    "playPurchasePending": "دفعتك قيد الانتظار. يبدأ Omi Pro عند تأكيد Google Play لها.",
+    "playPurchaseOtherAccount": "هذا الشراء من Google Play يخص حساب Omi آخر.",
+    "playPurchaseNotConfirmed": "تعذّر تأكيد الشراء الآن. سنحاول مرة أخرى تلقائيًا.",
+    "playRenewalTerms": "يتجدد تلقائيًا بالسعر المعروض حتى تلغيه. يمكنك الإدارة أو الإلغاء في أي وقت من Google Play.",
+    "playPaidAppUnavailable": "غير متاح على Android"
 }

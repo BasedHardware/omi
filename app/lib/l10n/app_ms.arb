@@ -4736,9 +4736,17 @@
     "finishedSummaryReady": "Ringkasan sedia",
     "writingSummaryStatus": "Menulis ringkasan…",
     "stillWorkingOnIt": "Masih memprosesnya.",
+    "deviceReadyToUse": "Sedia untuk digunakan",
     "firmwareUpdateFirmwareTooOld": "Perisian tegar peranti anda terlalu lama untuk kemas kini ini. Hubungi sokongan untuk mendapatkan bantuan mengemas kini peranti anda.",
     "firmwareUpdateAppRequired": "Kemas kini perisian tegar ini memerlukan versi apl Omi yang lebih baharu. Kemas kini apl daripada gedung aplikasi anda, kemudian semak semula.",
     "quietPayerTitle": "Tiada rakaman dalam 5 hari",
     "quietPayerMessage": "Semak Omi anda.",
-    "quietPayerCheck": "Semak"
+    "quietPayerCheck": "Semak",
+    "playManageSubscription": "Urus langganan",
+    "playBilledByGoogle": "Dibilkan oleh Google Play",
+    "playPurchasePending": "Pembayaran anda belum selesai. Omi Pro bermula sebaik Google Play mengesahkannya.",
+    "playPurchaseOtherAccount": "Pembelian Google Play ini milik akaun Omi lain.",
+    "playPurchaseNotConfirmed": "Kami belum dapat mengesahkan pembelian. Kami akan cuba lagi secara automatik.",
+    "playRenewalTerms": "Diperbaharui secara automatik pada harga yang ditunjukkan sehingga anda membatalkannya. Urus atau batalkan bila-bila masa di Google Play.",
+    "playPaidAppUnavailable": "Tidak tersedia di Android"
 }

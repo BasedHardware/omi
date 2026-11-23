@@ -4736,9 +4736,17 @@
     "finishedSummaryReady": "요약이 준비되었습니다",
     "writingSummaryStatus": "요약 작성 중…",
     "stillWorkingOnIt": "아직 처리 중입니다.",
+    "deviceReadyToUse": "사용 준비 완료",
     "firmwareUpdateFirmwareTooOld": "기기의 펌웨어가 너무 오래되어 이 업데이트를 설치할 수 없습니다. 기기 업데이트에 도움이 필요하면 지원팀에 문의하세요.",
     "firmwareUpdateAppRequired": "이 펌웨어 업데이트에는 더 최신 버전의 Omi 앱이 필요합니다. 앱 스토어에서 앱을 업데이트한 후 다시 확인하세요.",
     "quietPayerTitle": "5일 동안 녹음이 없어요",
     "quietPayerMessage": "Omi를 확인해 보세요.",
-    "quietPayerCheck": "확인"
+    "quietPayerCheck": "확인",
+    "playManageSubscription": "구독 관리",
+    "playBilledByGoogle": "Google Play에서 청구됩니다",
+    "playPurchasePending": "결제가 대기 중입니다. Google Play에서 확인되면 Omi Pro가 시작됩니다.",
+    "playPurchaseOtherAccount": "이 Google Play 구매는 다른 Omi 계정에 속해 있습니다.",
+    "playPurchaseNotConfirmed": "아직 구매를 확인하지 못했습니다. 자동으로 다시 시도합니다.",
+    "playRenewalTerms": "해지할 때까지 표시된 가격으로 자동 갱신됩니다. Google Play에서 언제든지 관리하거나 해지할 수 있습니다.",
+    "playPaidAppUnavailable": "Android에서는 사용할 수 없음"
 }

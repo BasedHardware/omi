@@ -12293,9 +12293,17 @@
     "finishedSummaryReady": "சுருக்கம் தயார்",
     "writingSummaryStatus": "சுருக்கம் எழுதப்படுகிறது…",
     "stillWorkingOnIt": "இன்னும் அதில் வேலை செய்யப்படுகிறது.",
+    "deviceReadyToUse": "பயன்படுத்தத் தயாராக உள்ளது",
     "firmwareUpdateFirmwareTooOld": "உங்கள் சாதனத்தின் ஃபர்ம்வேர் இந்தப் புதுப்பிப்புக்கு மிகவும் பழையதாக உள்ளது. சாதனத்தைப் புதுப்பிக்க உதவி பெற ஆதரவைத் தொடர்புகொள்ளவும்.",
     "firmwareUpdateAppRequired": "இந்த ஃபர்ம்வேர் புதுப்பிப்புக்கு Omi ஆப்பின் புதிய பதிப்பு தேவை. உங்கள் ஆப் ஸ்டோரிலிருந்து ஆப்பைப் புதுப்பித்து, மீண்டும் சரிபார்க்கவும்.",
     "quietPayerTitle": "5 நாட்களாக பதிவுகள் இல்லை",
     "quietPayerMessage": "உங்கள் Omi-ஐ சரிபார்க்கவும்.",
-    "quietPayerCheck": "சரிபார்"
+    "quietPayerCheck": "சரிபார்",
+    "playManageSubscription": "சந்தாவை நிர்வகி",
+    "playBilledByGoogle": "Google Play மூலம் கட்டணம் வசூலிக்கப்படும்",
+    "playPurchasePending": "உங்கள் கட்டணம் நிலுவையில் உள்ளது. Google Play உறுதிசெய்ததும் Omi Pro தொடங்கும்.",
+    "playPurchaseOtherAccount": "இந்த Google Play வாங்குதல் வேறொரு Omi கணக்கைச் சேர்ந்தது.",
+    "playPurchaseNotConfirmed": "உங்கள் வாங்குதலை இன்னும் உறுதிசெய்ய முடியவில்லை. தானாக மீண்டும் முயல்வோம்.",
+    "playRenewalTerms": "நீங்கள் ரத்து செய்யும் வரை காட்டப்பட்ட விலையில் தானாகப் புதுப்பிக்கப்படும். Google Play இல் எப்போது வேண்டுமானாலும் நிர்வகிக்கலாம் அல்லது ரத்து செய்யலாம்.",
+    "playPaidAppUnavailable": "Android இல் கிடைக்காது"
 }

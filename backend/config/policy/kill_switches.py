@@ -20,6 +20,7 @@ KILL_SWITCHES = {
     'BATCH_TIMELINESS_ALL_TIME_COUNTS_ENABLED': False,
     'CONVERSATION_TERMINAL_FAMILY_MODE': True,
     'BATCH_HELD_DEAD_LETTER_ENABLED': True,
+    'BATCH_PARKED_JOB_SWEEPER_ENABLED': True,
     'BATCH_PIPELINE_LEADER_LEASE_ENABLED': True,
     'BATCH_PIPELINE_RECOVERY_TASKS_ENABLED': True,
     'BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED': True,
@@ -66,7 +67,11 @@ KILL_SWITCHES = {
     'BATCH_PIPELINE_RETAINED_DIGEST_HOLD_ENABLED': True,
 }
 DISABLE_ONLY_SWITCHES = frozenset(
-    {'BATCH_PIPELINE_LEADER_LEASE_ENABLED', 'BATCH_PIPELINE_DEFER_NATIVE_PROJECTION_AUDIO_PREFETCH_ENABLED'}
+    {
+        'BATCH_PIPELINE_LEADER_LEASE_ENABLED',
+        'BATCH_PIPELINE_DEFER_NATIVE_PROJECTION_AUDIO_PREFETCH_ENABLED',
+        'BATCH_PARKED_JOB_SWEEPER_ENABLED',
+    }
 )
 # Trimmed, case-insensitive true means on; never use the capture-coverage
 # serve-mode parser, which treats an unset default-off switch as on.
@@ -146,6 +151,7 @@ def kill_switch(name: str, *, policy_id: str = 'control', flags=None, log: bool 
     # Preserve the explicit off-only controls and true-only pump selector
     # in every parser mode.
     if name not in {
+        'BATCH_PARKED_JOB_SWEEPER_ENABLED',
         'BATCH_ACCOUNT_PRIVACY_WRITER_ENABLED',
         'CONVERSATION_BATCH_PURGE_COALESCING_ENABLED',
         'BATCH_ALLOWANCE_PARK_ENABLED',

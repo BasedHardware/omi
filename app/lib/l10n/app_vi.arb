@@ -4736,9 +4736,17 @@
     "finishedSummaryReady": "Đã có tóm tắt",
     "writingSummaryStatus": "Đang viết tóm tắt…",
     "stillWorkingOnIt": "Vẫn đang xử lý.",
+    "deviceReadyToUse": "Sẵn sàng để sử dụng",
     "firmwareUpdateFirmwareTooOld": "Firmware trên thiết bị của bạn quá cũ để cài đặt bản cập nhật này. Hãy liên hệ bộ phận hỗ trợ để được giúp cập nhật thiết bị.",
     "firmwareUpdateAppRequired": "Bản cập nhật firmware này yêu cầu phiên bản ứng dụng Omi mới hơn. Hãy cập nhật ứng dụng từ cửa hàng ứng dụng của bạn, rồi kiểm tra lại.",
     "quietPayerTitle": "Không có bản ghi nào trong 5 ngày",
     "quietPayerMessage": "Hãy kiểm tra Omi của bạn.",
-    "quietPayerCheck": "Kiểm tra"
+    "quietPayerCheck": "Kiểm tra",
+    "playManageSubscription": "Quản lý gói đăng ký",
+    "playBilledByGoogle": "Thanh toán qua Google Play",
+    "playPurchasePending": "Thanh toán đang chờ xử lý. Omi Pro bắt đầu ngay khi Google Play xác nhận.",
+    "playPurchaseOtherAccount": "Giao dịch Google Play này thuộc về một tài khoản Omi khác.",
+    "playPurchaseNotConfirmed": "Chưa thể xác nhận giao dịch. Chúng tôi sẽ tự động thử lại.",
+    "playRenewalTerms": "Tự động gia hạn theo giá hiển thị cho đến khi bạn hủy. Quản lý hoặc hủy bất cứ lúc nào trong Google Play.",
+    "playPaidAppUnavailable": "Không có trên Android"
 }

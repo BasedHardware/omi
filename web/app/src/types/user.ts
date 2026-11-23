@@ -224,6 +224,8 @@ export interface UserSubscription {
   cancel_at_period_end?: boolean;
   current_price_id?: string;
   features?: string[];
+  // 'play' when Google Play bills this subscription; absent for Stripe.
+  provider?: 'play';
 }
 
 // Pricing option for a plan (matches backend PricingOption)

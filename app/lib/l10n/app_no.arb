@@ -4736,9 +4736,17 @@
     "finishedSummaryReady": "Oppsummeringen er klar",
     "writingSummaryStatus": "Skriver oppsummering…",
     "stillWorkingOnIt": "Jobber fortsatt med det.",
+    "deviceReadyToUse": "Klar til bruk",
     "firmwareUpdateFirmwareTooOld": "Fastvaren på enheten din er for gammel for denne oppdateringen. Kontakt kundestøtte for hjelp med å oppdatere enheten.",
     "firmwareUpdateAppRequired": "Denne fastvareoppdateringen krever en nyere Omi-app. Oppdater appen fra appbutikken din, og se etter oppdateringer på nytt.",
     "quietPayerTitle": "Ingen opptak på 5 dager",
     "quietPayerMessage": "Sjekk Omi-en din.",
-    "quietPayerCheck": "Sjekk"
+    "quietPayerCheck": "Sjekk",
+    "playManageSubscription": "Administrer abonnement",
+    "playBilledByGoogle": "Faktureres via Google Play",
+    "playPurchasePending": "Betalingen venter. Omi Pro starter så snart Google Play bekrefter den.",
+    "playPurchaseOtherAccount": "Dette Google Play-kjøpet tilhører en annen Omi-konto.",
+    "playPurchaseNotConfirmed": "Vi kunne ikke bekrefte kjøpet ennå. Vi prøver igjen automatisk.",
+    "playRenewalTerms": "Fornyes automatisk til prisen som vises, til du sier opp. Administrer eller si opp når som helst i Google Play.",
+    "playPaidAppUnavailable": "Ikke tilgjengelig på Android"
 }

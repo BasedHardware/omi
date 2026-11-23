@@ -4736,9 +4736,17 @@
     "finishedSummaryReady": "Kokkuvõte on valmis",
     "writingSummaryStatus": "Kirjutan kokkuvõtet…",
     "stillWorkingOnIt": "Töötame veel selle kallal.",
+    "deviceReadyToUse": "Valmis kasutamiseks",
     "firmwareUpdateFirmwareTooOld": "Teie seadme püsivara on selle värskenduse jaoks liiga vana. Seadme värskendamiseks abi saamiseks võtke ühendust klienditoega.",
     "firmwareUpdateAppRequired": "See püsivara värskendus vajab Omi rakenduse uuemat versiooni. Värskendage rakendust oma rakenduste poes ja kontrollige seejärel uuesti.",
     "quietPayerTitle": "5 päeva pole salvestisi",
     "quietPayerMessage": "Kontrolli oma Omit.",
-    "quietPayerCheck": "Kontrolli"
+    "quietPayerCheck": "Kontrolli",
+    "playManageSubscription": "Halda tellimust",
+    "playBilledByGoogle": "Arveldus Google Play kaudu",
+    "playPurchasePending": "Makse ootel. Omi Pro algab, kui Google Play selle kinnitab.",
+    "playPurchaseOtherAccount": "See Google Play ost kuulub teisele Omi kontole.",
+    "playPurchaseNotConfirmed": "Ostu ei õnnestunud veel kinnitada. Proovime automaatselt uuesti.",
+    "playRenewalTerms": "Uueneb automaatselt näidatud hinnaga, kuni tühistad. Halda või tühista igal ajal Google Plays.",
+    "playPaidAppUnavailable": "Androidis pole saadaval"
 }
