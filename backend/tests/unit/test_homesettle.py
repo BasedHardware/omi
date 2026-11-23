@@ -362,7 +362,7 @@ def test_member_kill_switch_returns_source_rows_with_held_header(monkeypatch, co
             'query_string': b'',
         }
     )
-    fetch = Mock(return_value=[floor(summary_blocked_reason=None)])
+    fetch = Mock(return_value=[floor(summary_blocked_reason=None, created_at=NOW)])
     monkeypatch.setattr(routes.conversations_db, 'get_conversations_without_photos', fetch)
     monkeypatch.setattr(routes, '_heal_locked_conversations_if_eligible', lambda *a: None)
     monkeypatch.setattr(routes, 'redact_conversations_for_list', lambda *a: None)
