@@ -1073,11 +1073,9 @@ class Scheduler:
             policy = stage_in_transaction(tx, job, 'scheduler', candidates=candidates, observations=observations)
             attach_held_vad(job, measured_held_vad_speech_seconds, worker_vad_receipt)
             if quarantine or worker_failure is not None or job['attempt'] >= policy.max_attempts:
-                quarantine_job(tx, job, now, 'worker_failed')
+                quarantine_job(tx, job, now, 'worker_failed', worker_failure=worker_failure)
                 if quarantine and padded_retry in {'empty', 'skipped_oversize', 'skipped_long_speech'}:
                     job['worker_empty_evidence'] = {'padded_retry': padded_retry, 'version': 1}
-                if worker_failure is not None:
-                    job['worker_failure'] = dict(worker_failure)
             else:
                 _defer(job, now, 'worker_failed')
             tx.put('jobs', segment_id, job)

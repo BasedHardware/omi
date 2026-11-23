@@ -7872,6 +7872,18 @@ retries. Current debt counts only jobs still in `state=quarantined`; historical
 quarantine timestamps and counters include subsequently recovered results.
 Details: [worker runtime](../diarizer/batch_pipeline_runtime.md).
 
+The scheduler records `quarantine_diagnostic` on a job when it quarantines the
+job. `exception_class` is `lease_expired`, `worker_validation`, or `unknown`.
+`stage` is `scheduler` for lease expiry, the closed worker-validation stage for
+typed failures, or `unknown`. `worker_reason` is the closed worker-validation
+reason when supplied and `unknown` otherwise. `provider_error` and
+`artifact_kind` are `unknown` in this writer. Provider and artifact diagnostics
+remain in their owning records. Provider STT and artifact repair can quarantine
+directly without writing this field. Legacy rows can also omit it.
+The diagnostic preserves the last scheduler quarantine after recovery or
+requeue. Use the job's current state to count active stock. The diagnostic
+carries no authority to retry, settle, or reclaim audio.
+
 ### Batch result metadata across deploy units
 
 New source jobs carry `required_result_markers`, a map declared by

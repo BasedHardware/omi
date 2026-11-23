@@ -6,12 +6,17 @@ from config.batch_pipeline import batch_held_dead_letter_enabled, HELD_DEAD_LETT
 
 from config.policy import SchedulerPolicy
 from utils.batch_pipeline.correctness_metrics import record as record_correctness
+from utils.batch_pipeline.errors import validate_worker_failure
 from utils.capture.retry_cap import observe, retry_cap
 
 logger = logging.getLogger(__name__)
 
 
-def quarantine_job(tx, job: dict, now: float, reason: str) -> None:
+def quarantine_job(
+    tx, job: dict, now: float, reason: str, *, lease_expired: bool = False, worker_failure: dict | None = None
+) -> None:
+    if worker_failure is not None:
+        validate_worker_failure(worker_failure)
     # Preserve the durable audio and any existing artifact references for
     # operator recovery; quarantine never deletes encrypted source material.
     # Lease expiry/decode failures may never have reached VAD. Keep unknown
@@ -30,6 +35,24 @@ def quarantine_job(tx, job: dict, now: float, reason: str) -> None:
         quarantined_at=now,
         recovery_state='held',
     )
+    # Keep the legacy evidence for operator consumers. The diagnostic below
+    # describes the current quarantine independently of earlier attempts.
+    if worker_failure is not None:
+        job['worker_failure'] = dict(worker_failure)
+    diagnostic = {
+        'exception_class': 'unknown',
+        'stage': 'unknown',
+        'worker_reason': 'unknown',
+        'provider_error': 'unknown',
+        'artifact_kind': 'unknown',
+    }
+    if lease_expired:
+        diagnostic.update(exception_class='lease_expired', stage='scheduler')
+    elif worker_failure is not None:
+        diagnostic.update(
+            exception_class='worker_validation', stage=worker_failure['stage'], worker_reason=worker_failure['reason']
+        )
+    job['quarantine_diagnostic'] = diagnostic
     job.pop('retry_started_at', None)
     if batch_held_dead_letter_enabled():
         job['held_deadline_at'] = now + HELD_DEAD_LETTER_SECONDS
@@ -48,7 +71,7 @@ def expire_lease(tx, job, now, *, stage_policy, candidates, observations, defer)
             policy = SchedulerPolicy.from_dict(raw or {})
         decision = retry_cap(job['owner_id'], job['attempt'], policy.max_attempts, enforce=True)
     if decision is not None and decision.reached and decision.serving:
-        quarantine_job(tx, job, now, 'worker_failed')
+        quarantine_job(tx, job, now, 'worker_failed', lease_expired=True)
         event = 'quarantined'
     else:
         # refactor: superseded by retry_policy when CAPTURE_COVERAGE_MODE=serve
