@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:ui' as ui;
@@ -89,6 +90,9 @@ class _Sync extends ChangeNotifier with WalDerivedSyncViews implements SyncProvi
   final deleted = <Wal>[];
   final shared = <List<Wal>>[];
   bool failShare = false;
+  int shareAttempts = 0;
+  Completer<void>? wavPending;
+  Completer<void>? sharePending;
   int retried = 0;
   int discovered = 0;
   String? skipDeleteId;
@@ -101,8 +105,11 @@ class _Sync extends ChangeNotifier with WalDerivedSyncViews implements SyncProvi
   bool canPlayOrShareWal(Wal wal) => wal.filePath != null;
   @override
   Future<void> shareRecordingAsWav(List<Wal> wals) async {
+    shareAttempts++;
+    await wavPending?.future;
     if (failShare) throw StateError('Recording changed');
     shared.add(wals);
+    await sharePending?.future;
   }
 
   @override
@@ -581,15 +588,49 @@ void main() {
     final exportSheet = find.byType(OmiSheetScaffold);
     await _frame(tester, '002-mobile-ios-too-old-export-list');
     final share = find.descendant(of: exportSheet, matching: find.byIcon(Icons.ios_share_rounded));
+    final exportRow = find.descendant(of: exportSheet, matching: find.byType(OmiSettingsRow));
+    final spinner = find.descendant(of: exportRow, matching: find.byType(OmiSpinner));
+    final idleSize = tester.getSize(exportRow);
     sync.failShare = true;
-    await tester.tap(share);
+    final failedWav = sync.wavPending = Completer<void>();
+    await tester.tap(exportRow);
+    await tester.tap(exportRow);
+    expect(sync.shareAttempts, 1);
+    await tester.pump();
+    expect(spinner, findsOneWidget);
+    expect(tester.getSize(exportRow), idleSize);
+    await tester.tap(exportRow);
+    expect(sync.shareAttempts, 1);
+    failedWav.complete();
     await tester.pumpAndSettle();
     expect(find.text('Export failed. Please try again.'), findsOneWidget);
+    expect(spinner, findsNothing);
     expect(sync.deleted, isEmpty);
+
     sync.failShare = false;
+    final wav = sync.wavPending = Completer<void>();
+    final nativeShare = sync.sharePending = Completer<void>();
+    await tester.tap(share);
+    await tester.tap(share);
+    expect(sync.shareAttempts, 2);
+    await tester.pump();
+    expect(spinner, findsOneWidget);
+    wav.complete();
+    await tester.pump(const Duration(milliseconds: 350));
+    expect(sync.shared.single, rows);
+    expect(spinner, findsOneWidget);
+    await _frame(tester, '003-mobile-ios-too-old-export-in-progress');
+    await tester.tap(exportRow);
+    expect(sync.shareAttempts, 2);
+    expect(sync.shared.single, rows);
+    nativeShare.complete();
+    await tester.pumpAndSettle();
+    expect(spinner, findsNothing);
+
     await tester.tap(share);
     await tester.pumpAndSettle();
-    expect(sync.shared.single, rows);
+    expect(sync.shareAttempts, 3);
+    expect(sync.shared, [rows, rows]);
     expect(sync.deleted, isEmpty);
 
     await tester.tap(find.descendant(of: exportSheet, matching: find.byType(OmiCloseButton)));

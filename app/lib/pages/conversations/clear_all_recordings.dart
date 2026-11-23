@@ -51,10 +51,11 @@ Future<bool> confirmClearAllRecordings(
 
   final sorted = [...tooOld]..sort((a, b) => b.timerStart.compareTo(a.timerStart));
   final recordings = groupRecordingBlocks(sorted);
+  int? exportingIndex;
   await showOmiSheet<void>(
     context: context,
     title: l.downloadAudio,
-    builder: (sheetContext) {
+    builder: (_) => StatefulBuilder(builder: (sheetContext, setSheetState) {
       final rowHeight = 60.0 + MediaQuery.textScalerOf(sheetContext).scale(24);
       final maxHeight = MediaQuery.sizeOf(sheetContext).height * 0.55;
       return SizedBox(
@@ -65,23 +66,39 @@ Future<bool> confirmClearAllRecordings(
             final recording = recordings[index];
             final date = DateTime.fromMillisecondsSinceEpoch(recording.startSeconds * 1000);
             return OmiSettingsRow(
-              leading: const Icon(Icons.ios_share_rounded),
+              leading: exportingIndex == index
+                  ? Semantics(
+                      label: l.preparingAudio,
+                      liveRegion: true,
+                      child: const SizedBox.square(
+                        dimension: 20,
+                        child: Center(child: OmiSpinner(size: OmiSpinnerSize.small)),
+                      ),
+                    )
+                  : const Icon(Icons.ios_share_rounded),
               title: OmiDateFormat.of(sheetContext).dateTime(date),
               subtitle: OmiDuration.compact(recording.seconds, l),
               showChevron: false,
-              onTap: () async {
-                try {
-                  await share(recording.wals);
-                } catch (error) {
-                  Logger.debug('Offline Sync export failed: ${error.runtimeType}');
-                  if (sheetContext.mounted) OmiFeedback.error(sheetContext, l.exportFailedTryAgain);
-                }
-              },
+              onTap: exportingIndex != null
+                  ? null
+                  : () async {
+                      // Another tap can still reach this callback before the sheet rebuilds.
+                      if (exportingIndex != null) return;
+                      setSheetState(() => exportingIndex = index);
+                      try {
+                        await share(recording.wals);
+                      } catch (error) {
+                        Logger.debug('Offline Sync export failed: ${error.runtimeType}');
+                        if (sheetContext.mounted) OmiFeedback.error(sheetContext, l.exportFailedTryAgain);
+                      } finally {
+                        if (sheetContext.mounted) setSheetState(() => exportingIndex = null);
+                      }
+                    },
             );
           },
         ),
       );
-    },
+    }),
   );
   // Returning from the export list never invokes the destructive action.
   return false;
