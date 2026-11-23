@@ -112,7 +112,7 @@ class ParkedSweep:
                         or state.get('hour', -1) >= hour
                     ):
                         return None
-                    tx.set(control, {'hour': hour}, merge=True)
+                    tx.set(control, {**state, 'hour': hour})
                     return mapping(state.get('cursors'))
 
                 # One attempt each for the reservation and checkpoint. Reserve
@@ -150,7 +150,7 @@ class ParkedSweep:
                     state = control.get(transaction=tx).to_dict() or {}
                     if not parked_job_sweeper_enabled() or state.get('disabled') is True or state.get('hour') != hour:
                         return False
-                    tx.set(control, {'cursors': next_cursors, 'latest_page_sample': sample}, merge=True)
+                    tx.set(control, {**state, 'cursors': next_cursors, 'latest_page_sample': sample})
                     return True
 
                 if checkpoint(client.transaction(max_attempts=1)):
