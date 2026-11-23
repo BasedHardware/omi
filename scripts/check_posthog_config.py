@@ -6,8 +6,9 @@ sampling and warehouse syncs. This check fails when:
   - an event the config keeps at 100% has no measured est_events_per_day or no reader;
   - a debug/ops event (by purpose or by name) is kept above 2% without an
     unexpired waiver signed by David Zhang;
-  - the estimated monthly cost exceeds budget.monthly_usd (a budget.ceiling
-    counts only with an unexpired waiver signed by David Zhang);
+  - the estimated monthly cost exceeds budget.monthly_usd, or the higher
+    budget.waiver.monthly_usd while that waiver is unexpired and signed by
+    David Zhang;
   - a warehouse schema full-refreshes more than 1M rows per run;
   - a later sampling stage would overwrite omi_sample_pct with a looser rate
     than an earlier stage applied, so reweighting readers would read wrong.
@@ -147,22 +148,22 @@ def waiver_ok(waiver, today):
 
 
 def budget_errors(doc, today, cost):
-    """Over budget fails. A budget.ceiling counts only with an unexpired waiver signed by David Zhang."""
+    """Over budget fails. budget.waiver raises the limit to its monthly_usd only while it is
+    signed by David Zhang (by, date, reason) and unexpired."""
     budget = doc['budget']
-    ceiling = budget.get('ceiling')
-    errors = []
-    signed = False
-    if ceiling is not None:
-        try:
-            until = dt.date.fromisoformat(ceiling['until'])
-            usd = float(ceiling['usd'])
-        except (KeyError, TypeError, ValueError):
-            return ['budget.ceiling: needs usd, until (YYYY-MM-DD), reason and a waiver signed by David Zhang']
-        signed = waiver_ok(ceiling.get('waiver'), today) and until >= today
-        if not signed:
-            errors.append(f'budget.ceiling: a ceiling needs an unexpired waiver signed by {WAIVER_SIGNER}')
-    if cost['total'] > budget['monthly_usd'] and not (signed and cost['total'] <= usd):
-        errors.append(f"budget: estimated ${cost['total']:,.0f}/mo exceeds budget.monthly_usd ${budget['monthly_usd']:,}")
+    waiver = budget.get('waiver')
+    limit, errors = budget['monthly_usd'], []
+    if waiver is not None:
+        usd = waiver.get('monthly_usd') if isinstance(waiver, dict) else None
+        if not isinstance(usd, (int, float)) or isinstance(usd, bool) or usd <= 0:
+            errors.append('budget.waiver: needs monthly_usd, by, date, reason and expires (YYYY-MM-DD)')
+        elif not waiver_ok(waiver, today):
+            errors.append(f'budget.waiver: needs an unexpired waiver signed by {WAIVER_SIGNER}')
+        else:
+            limit = max(limit, usd)
+    if cost['total'] > limit:
+        over = 'budget.monthly_usd' if limit == budget['monthly_usd'] else 'budget.waiver.monthly_usd'
+        errors.append(f"budget: estimated ${cost['total']:,.0f}/mo exceeds {over} ${limit:,}")
     return errors
 
 

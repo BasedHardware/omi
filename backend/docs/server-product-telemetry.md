@@ -112,9 +112,10 @@ snapshot (by `raw_calls`) per actor/client/day. Its cadence statistics are
 computed from the same sums, so DAU/WAU/MAU stay exact for complete days.
 
 Kill switch: `MCP_DAILY_ROLLUP_ENABLED` (on unless `0`/`false`/`off`/`no`).
-Redis errors fail open and never touch the raw event. The raw event stays on
-until the first full UTC day of snapshots matches it in the reader; then
-`contracts/analytics/posthog.json` drops it (planned `mcp-raw-off`).
+Redis errors fail open and never touch the raw event. The server keeps emitting
+the raw event. `contracts/analytics/posthog.json` already drops it at ingestion;
+the release owner applies that only after the first full UTC day of snapshots
+matches the raw-row reader.
 
 ## Non-Python library labels
 

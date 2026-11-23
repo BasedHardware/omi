@@ -65,13 +65,17 @@ class CheckPostHogConfig(unittest.TestCase):
     def test_passing_fixture(self):
         self.assertEqual(errors(passing()), [])
 
-    def test_repository_config_fails_only_on_budget(self):
-        # The honest 2026-11-23 config is over $500 with no ceiling (David: no interim ceiling).
-        # Every other rule passes; when cuts land, this flips to passing.
+    def test_repository_config_passes_under_davids_waiver(self):
+        # David, 2026-11-23: $660 until Android 1.0.573 flag traffic falls, then $500.
         doc = json.loads((check.ROOT / check.SOURCE).read_text())
-        self.assertNotIn('ceiling', doc['budget'])
-        found = errors(doc)
-        self.assertTrue(all(e.startswith('budget: estimated') for e in found), found)
+        self.assertEqual(doc['budget']['monthly_usd'], 500)
+        self.assertEqual(doc['budget']['waiver']['by'], 'David Zhang')
+        self.assertEqual(errors(doc), [])
+        # Desired state: the raw MCP stream is off; the MCP Daily Activity rollup replaces it.
+        self.assertEqual(check.effective(doc, 'MCP Tool Use Succeeded')[0], 0)
+        self.assertEqual(check.effective(doc, 'MCP Daily Activity')[0], 100)
+        found = errors(doc, today=dt.date(2027, 2, 1))  # after expiry the $500 budget applies
+        self.assertTrue(found and all('budget' in e for e in found), found)
 
     def test_negative_estimate(self):
         doc = passing()
@@ -131,23 +135,28 @@ class CheckPostHogConfig(unittest.TestCase):
         doc['events']['Memory Created']['est_events_per_day'] = 2_000_000
         self.assertOneError(doc, 'exceeds budget.monthly_usd $500')
 
-    def test_unsigned_ceiling_never_counts(self):
+    def test_unsigned_waiver_never_raises_the_budget(self):
         doc = passing()
         doc['events']['Memory Created']['est_events_per_day'] = 400_000
-        doc['budget']['ceiling'] = {'usd': 1500, 'until': '2026-12-07', 'reason': 'glide path'}
+        doc['budget']['waiver'] = {'monthly_usd': 1500, 'by': 'agent', 'date': '2026-11-23', 'reason': 'x',
+                                   'expires': '2026-12-07'}
         found = errors(doc)
         self.assertEqual(len(found), 2, found)
-        self.assertIn('a ceiling needs an unexpired waiver signed by David Zhang', found[0])
+        self.assertIn('budget.waiver: needs an unexpired waiver signed by David Zhang', found[0])
         self.assertIn('exceeds budget.monthly_usd $500', found[1])
+        doc['budget']['waiver'] = {'by': 'David Zhang'}
+        self.assertIn('budget.waiver: needs monthly_usd', errors(doc)[0])
 
-    def test_signed_ceiling_covers_until_it_expires(self):
+    def test_signed_waiver_covers_until_it_expires(self):
         doc = passing()
         doc['events']['Memory Created']['est_events_per_day'] = 400_000
-        doc['budget']['ceiling'] = {'usd': 1500, 'until': '2026-12-07', 'reason': 'glide path', 'waiver': dict(WAIVER)}
+        doc['budget']['waiver'] = dict(WAIVER, monthly_usd=1500)
         self.assertEqual(errors(doc), [])
         doc['events']['Capture Wedge Detected']['waiver']['expires'] = '2026-12-31'
         found = errors(doc, today=dt.date(2026, 12, 8))
         self.assertEqual(len(found), 2, found)
+        doc['budget']['waiver']['monthly_usd'] = 600
+        self.assertIn('exceeds budget.waiver.monthly_usd $600', errors(doc)[0])
 
     def test_planned_savings_are_priced_separately(self):
         doc = passing()

@@ -64,28 +64,14 @@
   "other_monthly_usd": {
    "session_replay": 27.63
   },
-  "planned": [
-   {
-    "id": "mcp-raw-off",
-    "owner": "parent session (PostHog apply) after the rollup check",
-    "change": "Set MCP Tool Use Succeeded to off (add it to the drop function) once the first full UTC day of MCP Daily Activity matches the raw stream in wall-mcp (same daily actor counts). The reader already falls back to the rollup per actor/client/day, so the switch is a config apply.",
-    "measured": "7 days to 2026-11-23: 499,219 calls over 9,164 actor-client-days (1,309/day); 343 actor-days with 200+ calls carry 397,106 calls (80%).",
-    "saving": {
-     "events_per_day": {
-      "MCP Tool Use Succeeded": 71317
-     }
-    }
-   },
-   {
-    "id": "posthog-flags-off",
-    "owner": "David (PostHog write) after old builds age out",
-    "change": "Bring PostHog /flags requests to zero: deactivate the 24 active PostHog flags once the older builds that still call /flags have aged out. Current mobile, desktop and web/app builds already block /flags and read Omi flags. PostHog bills a /flags request that evaluates at least one active flag; with none active the requests should not bill (documented by implication, not verified). No flag billing limit (David).",
-    "risk": "Older builds would read every PostHog flag as off, including 12 kill switches and the paywall/onboarding experiment flags. Needs a per-flag review of what off means on those builds first.",
-    "saving": {
-     "feature_flag_requests": "all"
-    }
-   }
-  ]
+  "planned": [],
+  "waiver": {
+   "monthly_usd": 660,
+   "by": "David Zhang",
+   "date": "2026-11-23",
+   "reason": "PostHog /flags requests from Android 1.0.573 (about 2,245 users) and other old builds cannot be cut without user-visible flag fallbacks; return to 500 when they upgrade (SCA-3665)",
+   "expires": "2027-01-31"
+  }
  },
  "functions": [
   {
@@ -162,7 +148,6 @@
     "Action Item Completed",
     "Action Item Edited",
     "Action Item Manually Added",
-    "Action Items Page Opened",
     "Announcement Shown",
     "App Crash Detected",
     "App Enabled",
@@ -172,13 +157,11 @@
     "App Review Request Finished",
     "App Session Started",
     "App Shared",
-    "Apple Reminders Sync Completed",
     "Application Opened",
     "Apps Clear Filters",
     "Apps Filter Installed",
     "Apps Filter Rating",
     "Audio Share Completed",
-    "Battery Indicator Clicked",
     "Bottom Navigation Tab Clicked",
     "Capture Wedge Detected",
     "Changelog Dismissed",
@@ -235,7 +218,6 @@
     "Integrations Page Opened",
     "Live Transcript Card Clicked",
     "Local WAL Stuck",
-    "MCP Tool Use Succeeded",
     "Memory List Item Clicked",
     "Monitoring Started",
     "Monitoring Stopped",
@@ -258,7 +240,6 @@
     "Recording Upload Failed",
     "Recording Upload Started",
     "Referral Program Opened",
-    "Rewind Screenshot Viewed",
     "Screen Capture Broken Detected",
     "Screen Capture Reset Clicked",
     "Search Bar Focused",
@@ -380,7 +361,8 @@
     "WAL Stop Drain",
     "WAL Upload Refused",
     "WAL Write Receipt",
-    "wal_transcript_coverage"
+    "wal_transcript_coverage",
+    "MCP Tool Use Succeeded"
    ]
   },
   {
@@ -577,7 +559,8 @@
     "nX4yHJZR",
     "Ljh22BGA",
     "cCyMigls"
-   ]
+   ],
+   "sampled": "2% default since 2026-11-23. Readers are the presence check and saved insights last viewed 10-27 (xkycBQGR, nX4yHJZR, Ljh22BGA, cCyMigls); not in Omi TV qualified activity."
   },
   "Add MCP Server Opened": {
    "est_events_per_day": 48,
@@ -716,7 +699,8 @@
    "purpose": "product",
    "reader": [
     "contracts/analytics/consumers/mobile-instrumentation-presence.sql"
-   ]
+   ],
+   "sampled": "2% default since 2026-11-23. Only reader is the per-build presence check, which needs one row; low-volume builds can read absent."
   },
   "Application Backgrounded": {
    "est_events_per_day": 36,
@@ -866,7 +850,8 @@
    "purpose": "product",
    "reader": [
     "contracts/analytics/consumers/mobile-instrumentation-presence.sql"
-   ]
+   ],
+   "sampled": "2% default since 2026-11-23. Only reader is the per-build presence check, which needs one row; low-volume builds can read absent."
   },
   "Billing Subscription Cancellation Scheduled": {
    "est_events_per_day": 30,
@@ -1879,7 +1864,7 @@
    "reader": [
     "web/admin/lib/wall-mcp.ts"
    ],
-   "note": "Raw per-call stream, kept until the first full day of MCP Daily Activity is verified against it; then set this event to off (planned mcp-raw-off), a config apply."
+   "note": "Off in the desired state (David, 2026-11-23). Live keeps it until the MCP Daily Activity rollup's first full UTC day matches the raw-row reader in wall-mcp; the release owner applies only then, and apply.py drift reports this one difference until that apply."
   },
   "Memories Cache Reconcile": {
    "est_events_per_day": 460,
@@ -2494,7 +2479,8 @@
     "xkycBQGR",
     "nX4yHJZR",
     "Ljh22BGA"
-   ]
+   ],
+   "sampled": "2% default since 2026-11-23 (David: $660 waiver, weakest readers). Readers are saved insights last viewed 10-11 (xkycBQGR, nX4yHJZR) and 10-27 (Ljh22BGA); not in Omi TV qualified activity."
   },
   "Saved Pendant Reconnect": {
    "est_events_per_day": 240036,

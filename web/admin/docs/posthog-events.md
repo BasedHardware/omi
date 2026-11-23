@@ -164,8 +164,8 @@ To change sampling:
    `PostHog estimate: $X/mo (base $Y/mo, delta $Z)` and fails when an event kept
    at 100% has no measured estimate or no reader, when a debug/ops event is
    kept above 2% without an unexpired waiver signed by David Zhang, when the
-   estimate exceeds the budget (there is no ceiling: one counts only with an
-   unexpired waiver signed by David Zhang), when
+   estimate exceeds `budget.monthly_usd` (a `budget.waiver` raises it to its
+   `monthly_usd` only while it is signed by David Zhang and unexpired), when
    `feature_flags.measured_requests_per_day` is missing, or when a warehouse
    schema full-refreshes more than 1M rows per run. It also prints the
    estimate at flags = 0 and with each `budget.planned` change.
@@ -250,8 +250,16 @@ whole journey is sampled per user; its counts are at 2% scale. Small groups
 are noisy: one sampled person stands for 50.
 
 `MCP Tool Use Succeeded` is replaced by the server's `MCP Daily Activity`
-rollup (`backend/docs/server-product-telemetry.md`); the raw event is switched
-off in this file after the first full day of rollups is verified.
+rollup (`backend/docs/server-product-telemetry.md`). The file already has the
+raw event off; the release owner applies it only after the rollup's first full
+UTC day matches the raw-row reader, and `apply.py drift` reports that one
+difference until then.
+
+For the $660 waiver (David, 2026-11-23: `/flags` traffic from old builds such
+as Android 1.0.573 cannot be cut without user-visible flag fallbacks), four
+events with only presence checks or long-unviewed insights as readers also take
+the 2% default: `Rewind Screenshot Viewed`, `Battery Indicator Clicked`,
+`Apple Reminders Sync Completed` and `Action Items Page Opened`.
 
 ### Sampled windows on 2026-10-17
 
