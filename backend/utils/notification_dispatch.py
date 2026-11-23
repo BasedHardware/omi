@@ -31,6 +31,7 @@ class NotificationKind(str, Enum):
     CONVERSATION_MERGE = 'conversation_merge'
     PAYMENT_RECOVERY = 'payment_recovery'
     TRIAL_ENDING = 'trial_ending'
+    BILLING_CONFLICT = 'billing_conflict'
 
 
 class NotificationPolicy(str, Enum):

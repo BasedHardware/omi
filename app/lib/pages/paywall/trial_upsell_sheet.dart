@@ -19,6 +19,8 @@ abstract final class TrialUpsellSheet {
     if (!usage.showSubscriptionUI) return null;
     if (usage.subscription?.subscription.plan.isPaid == true) return null;
     if (usage.subscription?.trialEligible != true) return null;
+    // Stripe-only 30-day trial: Google Play sells only its own 7-day trial offer.
+    if (usage.playBilledPurchaser) return null;
     if (usage.availablePlans == null) await usage.loadAvailablePlans();
     if (!context.mounted) return null;
     final offer = PaywallOffer.fromCatalog(usage.availablePlans);

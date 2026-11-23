@@ -35,6 +35,9 @@ import {
   trackUpgradeSucceeded,
 } from '@/lib/analytics/subscriptionFunnel';
 
+const PLAY_SUBSCRIPTIONS_URL =
+  'https://play.google.com/store/account/subscriptions?sku=omi_pro&package=com.friend.ios';
+
 interface PlansSheetProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -343,7 +346,25 @@ export function PlansSheet({
 
                   {/* Content */}
                   <div className="space-y-6 p-6">
-                    {isUnknownPlan ? (
+                    {isPaid && subscription?.provider === 'play' ? (
+                      <div
+                        className="space-y-4 py-4 text-center"
+                        data-testid="plans-play-managed"
+                      >
+                        <p className="text-sm text-text-secondary">
+                          Your Omi Pro is billed by Google Play. Manage or cancel it in
+                          Google Play on your Android device.
+                        </p>
+                        <a
+                          href={PLAY_SUBSCRIPTIONS_URL}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-white py-3 text-sm font-medium text-black"
+                        >
+                          Manage in Google Play
+                        </a>
+                      </div>
+                    ) : isUnknownPlan ? (
                       <div className="py-8 text-center">
                         <p className="text-sm text-text-secondary">
                           This account uses a plan that this version of Omi does not

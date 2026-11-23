@@ -19242,5 +19242,33 @@
     "quietPayerCheck": "Check",
     "@quietPayerCheck": {
         "description": "Button on the quiet Home row; opens the Omi device page"
+    },
+    "playManageSubscription": "Manage subscription",
+    "@playManageSubscription": {
+        "description": "Google Play Billing (Android): playManageSubscription"
+    },
+    "playBilledByGoogle": "Billed by Google Play",
+    "@playBilledByGoogle": {
+        "description": "Google Play Billing (Android): playBilledByGoogle"
+    },
+    "playPurchasePending": "Your payment is pending. Omi Pro starts as soon as Google Play confirms it.",
+    "@playPurchasePending": {
+        "description": "Google Play Billing (Android): playPurchasePending"
+    },
+    "playPurchaseOtherAccount": "This Google Play purchase belongs to another Omi account.",
+    "@playPurchaseOtherAccount": {
+        "description": "Google Play Billing (Android): playPurchaseOtherAccount"
+    },
+    "playPurchaseNotConfirmed": "We couldn't confirm your purchase yet. We'll try again automatically.",
+    "@playPurchaseNotConfirmed": {
+        "description": "Google Play Billing (Android): playPurchaseNotConfirmed"
+    },
+    "playRenewalTerms": "Renews automatically at the price shown until you cancel. Manage or cancel anytime in Google Play.",
+    "@playRenewalTerms": {
+        "description": "Google Play Billing (Android): auto-renewal and where to cancel, under the Play purchase button"
+    },
+    "playPaidAppUnavailable": "Not available on Android",
+    "@playPaidAppUnavailable": {
+        "description": "Disabled action on a paid Marketplace app for a reader who buys through Google Play: it cannot be bought in the Android app"
     }
 }

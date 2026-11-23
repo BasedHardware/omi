@@ -36,6 +36,10 @@ def live_recap_enabled(uid: str) -> bool:
     return not any(set(member) & set('*?[]') for member in members) and uid in members
 
 
+def live_title_enabled() -> bool:
+    return os.getenv('CONVERSATIONS_V3_LIVE_TITLE', 'on').strip().lower() == 'on'
+
+
 ROTATION_COHORT = 'v3-recording-rotation'
 ROTATION_DEFAULTS = (180.0, 300.0)
 

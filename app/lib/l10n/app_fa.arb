@@ -12298,5 +12298,12 @@
     "firmwareUpdateAppRequired": "این به‌روزرسانی میان‌افزار به نسخه جدیدتری از برنامه Omi نیاز دارد. برنامه را از فروشگاه برنامه خود به‌روزرسانی کنید، سپس دوباره بررسی کنید.",
     "quietPayerTitle": "۵ روز است که ضبطی نیست",
     "quietPayerMessage": "Omi خود را بررسی کنید.",
-    "quietPayerCheck": "بررسی"
+    "quietPayerCheck": "بررسی",
+    "playManageSubscription": "مدیریت اشتراک",
+    "playBilledByGoogle": "صورتحساب از طریق Google Play",
+    "playPurchasePending": "پرداخت شما در انتظار است. Omi Pro پس از تأیید Google Play شروع می‌شود.",
+    "playPurchaseOtherAccount": "این خرید Google Play متعلق به حساب Omi دیگری است.",
+    "playPurchaseNotConfirmed": "هنوز نتوانستیم خرید را تأیید کنیم. دوباره خودکار تلاش می‌کنیم.",
+    "playRenewalTerms": "تا زمانی که لغو نکنید، با قیمت نمایش‌داده‌شده خودکار تمدید می‌شود. هر زمان در Google Play مدیریت یا لغو کنید.",
+    "playPaidAppUnavailable": "در Android در دسترس نیست"
 }
