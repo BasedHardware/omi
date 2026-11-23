@@ -1875,13 +1875,31 @@
       "budget_p50_minutes": 5,
       "display_name": "deploy",
       "expected_runs_class": "non-pr-or-unsampled",
-      "expected_runs_per_day": 0,
-      "if": null,
+      "expected_runs_per_day": 1,
+      "if": "inputs.mode == 'full'",
       "matrix": {},
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "rationale": "SCA-4008: retain the existing full redeploy path only for full-mode dispatches. Forecast at most one operator dispatch per day and no PR runs.",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "gcp_notifications_job.yml/image-only": {
+      "budget_p50_minutes": 15,
+      "display_name": "image-only",
+      "expected_runs_class": "non-pr",
+      "expected_runs_per_day": 0,
+      "if": "inputs.mode != 'full'",
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": [],
+      "owner": "Release",
+      "rationale": "SCA-4008: prod-approved manual validation builds and smokes one image. Apply and rollback reuse that image. No PR triggers.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -5683,7 +5701,7 @@
     "gcp_notifications_job.yml": {
       "name": "Deploy Notifications Job to Cloud RUN",
       "owner": "CI maintainers",
-      "rationale": "Initial workflow inventory",
+      "rationale": "SCA-4008: manual image-only validation, apply and rollback share the notifications deployment lock and prod approval with the existing full path.",
       "triggers": {
         "workflow_dispatch": {
           "inputs": {
@@ -5703,10 +5721,33 @@
               "required": "true",
               "type": "choice"
             },
+            "expected_generation": {
+              "description": "Live Cloud Run Job generation approved for this image-only operation",
+              "type": "string"
+            },
+            "mode": {
+              "default": "full",
+              "description": "Full deploy, or prod image-only validate/apply/rollback",
+              "options": [
+                "full",
+                "image-only-validate",
+                "image-only-apply",
+                "image-only-rollback"
+              ],
+              "type": "choice"
+            },
+            "release_sha": {
+              "description": "Image-only source SHA with main Release Eligibility proof",
+              "type": "string"
+            },
             "release_version": {
               "default": "",
               "description": "Release version (optional)",
               "required": "false"
+            },
+            "validation_run": {
+              "description": "Successful image-only validation run ID (required for apply and rollback)",
+              "type": "string"
             }
           }
         }
