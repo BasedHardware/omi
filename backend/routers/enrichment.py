@@ -181,7 +181,7 @@ def maintain(now: float) -> dict[str, int]:
     Both halves are safe beside the legacy sequencer sweep: the outbox sweep is per-row CAS and the
     summary-debt tick holds its own cursor lease, so a second owner never double-admits.
     """
-    from database.outbox_firestore import ENRICHMENT_OUTBOX
+    from database.outbox_firestore import ENRICHMENT_OUTBOX, provider_stt_outbox
     from services import summary_debt_repair
 
     from utils.conversations import final_pass_retry
@@ -207,6 +207,8 @@ def maintain(now: float) -> dict[str, int]:
         'provider_stt_rewoken': 0,
         'provider_stt_discarded': 0,
         'provider_stt_sweep_errors': 0,
+        'provider_stt_running_rewoken': 0,
+        'provider_stt_running_errors': 0,
         'summary_debt_scanned': 0,
         'summary_debt_admitted': 0,
         'summary_debt_near_expiry_admitted': 0,
@@ -217,9 +219,7 @@ def maintain(now: float) -> dict[str, int]:
     # invariant 4); it shares the enrichment maintenance schedule (M3 review). Its own failure
     # never blocks the enrichment half.
     try:
-        from database.outbox import OutboxKind, outbox_for
-
-        provider = outbox_for(OutboxKind.PROVIDER_STT).sweep(now=now)
+        provider = provider_stt_outbox().sweep(now=now)
         counts.update(
             provider_stt_rewoken=provider.rewoken,
             provider_stt_discarded=provider.discarded,
@@ -228,6 +228,12 @@ def maintain(now: float) -> dict[str, int]:
     except Exception as error:
         logger.error('event=provider_stt_sweep outcome=error exception_type=%s', type(error).__name__)
         counts['provider_stt_sweep_errors'] = 1
+    try:
+        rewoken, errors = provider_stt_outbox().sweep_running(now=now)
+        counts.update(provider_stt_running_rewoken=rewoken, provider_stt_running_errors=errors)
+    except Exception as error:
+        logger.error('event=provider_stt_running_sweep outcome=error exception_type=%s', type(error).__name__)
+        counts['provider_stt_running_errors'] = 1
     try:
         summary = summary_debt_repair.tick(now=now)
     except Exception as error:

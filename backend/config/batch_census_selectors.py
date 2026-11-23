@@ -380,7 +380,14 @@ EXCEPTIONS: dict[str, SelectorException] = {
         500,
         'provider wake backstop tick',
         'Select only actionable due provider wakes',
-        '6588b6d522fa48ef361b80752381e41491c281501b45d3df586a5c4f67d58176',
+        'ec6aba957693f79211f7d91470950bdff914adc3baf65a88faf661fb5532658d',
+    ),
+    'database.outbox_provider_stt.FirestoreProviderSttOutbox.sweep_running': _legacy(
+        'Old running jobs may lack an actionable deadline; paginate by their indexed enqueue age',
+        25,
+        'every two minutes on the provider wake backstop',
+        'Stamp a durable provider recovery deadline and migrate legacy running rows',
+        '351b2d73da9c35e1283020c28b29dd9d7bf9a896c5341c300e16953581921509',
     ),
     'database.record_seal_worker.pending_page': _legacy(
         'Legacy seal readiness depends on capture barrier checks after page',

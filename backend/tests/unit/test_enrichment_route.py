@@ -1112,12 +1112,13 @@ def test_non_transient_gateway_status_stays_5xx_and_keeps_the_lease(rows, client
     assert rows[0][KEY]['lease_until'] > 0
 
 
-def _provider_sweep(monkeypatch, sweep):
-    """Stub the C8 provider-STT outbox that maintain() also sweeps (M3 review); never touches Firestore."""
-    import database.outbox as outbox_module
+def _provider_sweep(monkeypatch, sweep, sweep_running=lambda *, now: (3, 0)):
+    from database import outbox_firestore
     from types import SimpleNamespace
 
-    monkeypatch.setattr(outbox_module, 'outbox_for', lambda kind: SimpleNamespace(sweep=sweep))
+    monkeypatch.setattr(
+        outbox_firestore, 'provider_stt_outbox', lambda: SimpleNamespace(sweep=sweep, sweep_running=sweep_running)
+    )
 
 
 @pytest.mark.parametrize('near_expiry', [2, None], ids=['current', 'legacy'])
@@ -1142,6 +1143,8 @@ def test_maintenance_sweeps_the_outbox_and_admits_summary_debt(rows, monkeypatch
         'provider_stt_rewoken': 4,
         'provider_stt_discarded': 2,
         'provider_stt_sweep_errors': 1,
+        'provider_stt_running_rewoken': 3,
+        'provider_stt_running_errors': 0,
         'summary_debt_scanned': 5,
         'summary_debt_expired_seen': 2,
         'summary_debt_admitted': 3,
@@ -1176,6 +1179,7 @@ def test_maintenance_isolates_a_provider_stt_sweep_failure(rows, monkeypatch):
     )
     counts = route.maintain(1000.0)
     assert counts['rewoken'] == 1 and counts['provider_stt_sweep_errors'] == 1
+    assert counts['provider_stt_running_rewoken'] == 3
     assert counts['summary_debt_admitted'] == 1
 
 
