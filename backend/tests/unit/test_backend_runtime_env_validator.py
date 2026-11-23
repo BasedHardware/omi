@@ -662,6 +662,7 @@ def with_cloud_run_oauth_secrets(payload: str) -> str:
         r'\n        {"name": "PROCESSING_ATTENTION_NON_RETRYABLE_EXPIRY_ENABLED", "value": "true"},'
         r'\n        {"name": "HOME_LIVE_MEMBER_NOTES_BOUNDED_ENABLED", "value": "true"},'
         r'\n        {"name": "BATCH_HELD_DEAD_LETTER_ENABLED", "value": "true"},'
+        r'\n        {"name": "BATCH_PARKED_JOB_SWEEPER_ENABLED", "value": "true"},'
         r'\n        {"name": "BATCH_ACCOUNT_PRIVACY_WRITER_ENABLED", "value": "true"},'
         r'\n        {"name": "CONVERSATION_TERMINAL_FAMILY_MODE", "value": "on"},',
         payload,
@@ -4165,6 +4166,7 @@ def test_quality_push_switches_are_bound_on_every_owning_backend_host(environmen
         for key in (
             'RECORD_SEAL_REPAIR_FRESH_ENABLED',
             'BATCH_HELD_DEAD_LETTER_ENABLED',
+            'BATCH_PARKED_JOB_SWEEPER_ENABLED',
             'RECORD_INTAKE_AGE_PRIORITY_ENABLED',
         ):
             assert key in classification['kinds']['config']
