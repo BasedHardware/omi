@@ -1,5 +1,6 @@
 import AppKit
 import Foundation
+import PostHog
 
 /// Closed reason a presented notification left the screen. Auto-hide and explicit
 /// close must not share a single "dismissed" bucket — that made engagement
@@ -1144,7 +1145,7 @@ class AnalyticsManager {
     guard !Self.isDevBuild else { return }
     var props = properties
     props["health_event"] = name
-    ClientTelemetryShadow.captureDesktopHealth()
+    if !PostHogSDK.shared.isOptOut() { ClientTelemetryShadow.captureDesktopHealth() }
     PostHogManager.shared.track("desktop_health_event", properties: props)
   }
 

@@ -650,7 +650,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   void _startDeviceSignalHeartbeat() {
     if (!ClientTelemetryFlags.migrationEnabled) return;
     void report() {
-      if (AnalyticsManager.trackingEnabled) ClientTelemetry.instance.observeDeviceHeartbeat();
+      if (AnalyticsManager.deviceSignalTrackingEnabled) ClientTelemetry.instance.observeDeviceHeartbeat();
     }
 
     report();

@@ -38,6 +38,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 import 'package:omi/utils/debugging/crashlytics_manager.dart';
 import 'package:omi/services/telemetry/client_telemetry.dart';
+import 'package:omi/services/telemetry/client_telemetry_flags.dart';
 import 'package:omi/utils/analytics/background_checkpoint_store.dart';
 
 part 'analytics_flag_reader.dart';
@@ -635,8 +636,14 @@ class AnalyticsManager {
     return true;
   }
 
+  static bool get deviceSignalTrackingEnabled =>
+      ClientTelemetryFlags.migrationEnabled &&
+      PlatformService.isAnalyticsSupported &&
+      _trackingEnabled &&
+      (_consentRevision != 0 || _preferences.getBool('product_analytics_enabled', defaultValue: true));
+
   static void mirrorDeviceSignal(String eventName, Map<String, dynamic>? properties) {
-    if (!_trackingEnabled || !PlatformService.isAnalyticsSupported) return;
+    if (!deviceSignalTrackingEnabled) return;
     ClientTelemetry.instance.observeDeviceSignal(eventName, properties);
   }
 
