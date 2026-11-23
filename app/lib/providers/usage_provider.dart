@@ -144,8 +144,10 @@ class UsageProvider with ChangeNotifier {
   bool get billingProviderUnknown =>
       !kIsWeb && defaultTargetPlatform == TargetPlatform.android && _subscription == null;
 
-  /// The first subscription read failed, so the provider stays unknown until a retry.
-  bool get billingProviderFailed => billingProviderUnknown && _error != null && !isLoading;
+  /// The last subscription read failed, so the provider stays unknown until a retry. Only a subscription
+  /// read sets or clears this (not the shared [error], which usage and plans reads also clear).
+  bool get billingProviderFailed => billingProviderUnknown && _subscriptionReadFailed;
+  bool _subscriptionReadFailed = false;
 
   /// The provider is not known yet and a read is (or will be) in flight: show loading, not an error.
   bool get billingProviderPending => billingProviderUnknown && !billingProviderFailed;
@@ -440,6 +442,7 @@ class UsageProvider with ChangeNotifier {
     _playOffers = null;
     _playPendingSent = false;
     _error = null;
+    _subscriptionReadFailed = false;
     _sessionGeneration++;
     _isSubscriptionLoading = false;
     _isUsageLoading = false;
@@ -496,6 +499,7 @@ class UsageProvider with ChangeNotifier {
     final generation = _sessionGeneration;
     final backlogGeneration = _backlogMutationGeneration;
     _isSubscriptionLoading = true;
+    _subscriptionReadFailed = false;
     _error = null;
     notifyListeners();
 
@@ -503,6 +507,7 @@ class UsageProvider with ChangeNotifier {
       final subscription = await _subscriptionRequest();
       if (generation != _sessionGeneration || backlogGeneration != _backlogMutationGeneration) return;
       if (subscription == null) {
+        _subscriptionReadFailed = true;
         _error = 'Failed to load subscription data. Please try again later.';
         return;
       }
@@ -513,6 +518,7 @@ class UsageProvider with ChangeNotifier {
       PlatformManager.instance.analytics.setSubscriptionTier(subscription.subscription.plan.name);
     } catch (e) {
       if (generation != _sessionGeneration) return;
+      _subscriptionReadFailed = true;
       _error = 'Failed to load subscription data. Please try again later.';
       Logger.debug('Failed to fetch subscription: $e');
     } finally {

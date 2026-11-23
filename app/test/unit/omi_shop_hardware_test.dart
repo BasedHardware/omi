@@ -137,6 +137,10 @@ void main() {
       'https://h.omi.me./apps',
       'https://www.omi.me./products/omi-gift-card',
       'https://omi.me./collections/all',
+      // Any number of trailing dots.
+      'https://app.omi.me../',
+      'https://h.omi.me.../apps',
+      'https://www.omi.me../products/omi-pro-first-3-months',
     ]) {
       for (final from in [_product, _cart, _checkout, paypal, null]) {
         expect(_go(from, url), WebNavigation.block, reason: '$from -> $url');
@@ -146,6 +150,7 @@ void main() {
     expect(_go(_checkout, 'https://app.omi.me./checkouts/cn/abc/post_purchase'), WebNavigation.block);
     // The dotted store host follows the store rules: the device page still gets the hardware view.
     expect(_go(_cart, 'https://www.omi.me./products/omi').kind, WebNavigationKind.replace);
+    expect(_go(_cart, 'https://www.omi.me../products/omi').kind, WebNavigationKind.replace);
     // Coming from a dotted Omi page is not coming from a payment page.
     expect(_go(Uri.parse('https://www.omi.me./products/omi?view=app-hardware'), 'https://example.com/'),
         WebNavigation.block);

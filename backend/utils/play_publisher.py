@@ -216,9 +216,11 @@ def purge_account_records(uid: str, confirmed_since: datetime, publisher: Option
     """Account wipe: drop the user's Play purchase records and account-map entries (uid + token).
 
     Refuses while any purchase lacks a cancel confirmed at or after ``confirmed_since``. Right before the
-    delete, Google is read once more per purchase: one that can charge (or be restored) again since the
-    cancel, for example resubscribed in Google Play, raises ``PlayCancelPending`` and is kept, so the
-    retried wipe cancels it again.
+    delete, Google is read once more per purchase: one that can charge again (``_CHARGEABLE_STATES``:
+    ACTIVE, IN_GRACE_PERIOD, ON_HOLD, PAUSED, PENDING), for example resubscribed in Google Play, raises
+    ``PlayCancelPending`` and is kept, so the retried wipe cancels it again. A user-cancelled purchase with
+    paid time left cannot charge: the cancel step already tried the developer cancel (best effort), and the
+    purge proceeds whatever Google answered, so erasure never waits for the paid time to run out.
     """
     for key in play_db.purchase_keys_for_uid(uid):
         token = (play_db.get_purchase(key) or {}).get('purchase_token')
@@ -229,7 +231,9 @@ def purge_account_records(uid: str, confirmed_since: datetime, publisher: Option
             chargeable, restorable = _google_view(publisher, token)
         except Exception as error:
             raise PlayCancelPending(_status_code(error), key) from None
-        if chargeable or restorable:
-            logger.warning('play_billing purchase chargeable again before purge; wipe retries')
+        if chargeable:
+            logger.warning('play_billing purchase chargeable again before purge; wipe retries: purchase=%s', key[:12])
             raise PlayCancelPending(None, key)
+        if restorable:
+            logger.warning('play_billing purge of a user-cancelled purchase with paid time left: purchase=%s', key[:12])
     return play_db.purge_account_records(uid, confirmed_since)

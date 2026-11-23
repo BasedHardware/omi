@@ -933,3 +933,49 @@ def test_a_second_deletion_counts_failed_attempts_from_one(monkeypatch):
     }
     account_deletion._report_grace_actions_failure(UID, record, RuntimeError('down'))
     persisted.assert_called_once_with(UID, 1, False)
+
+
+def test_purge_proceeds_on_a_user_cancelled_purchase_whose_developer_cancel_google_rejected(
+    subscribed, deletion_store, monkeypatch
+):
+    from datetime import datetime, timezone
+
+    purged = []
+    monkeypatch.setattr(
+        deletion_store.store, 'purge_account_records', lambda uid, since: purged.append(uid) or 1, raising=False
+    )
+    # The user cancelled in Google Play with 20 days of paid time left; Google rejects our developer cancel.
+    subscribed.publisher.resources[TOKEN] = resource('SUBSCRIPTION_STATE_CANCELED', renew=False, expiry=NOW + 20 * DAY)
+    publisher = CancelPublisher(subscribed.publisher, fail=play_publisher.PublisherHTTPError(400, 'cancel'))
+    since = datetime.now(timezone.utc)
+    assert play_publisher.cancel_for_account_deletion(UID, publisher) == 0
+    # It can no longer charge, so the purge goes through instead of waiting out the paid time.
+    assert play_publisher.purge_account_records(UID, since, publisher) == 1
+    assert purged == [UID]
+
+
+@pytest.mark.parametrize('state', ['SUBSCRIPTION_STATE_ACTIVE', 'SUBSCRIPTION_STATE_IN_GRACE_PERIOD'])
+def test_purge_still_refuses_a_purchase_that_can_charge(subscribed, deletion_store, monkeypatch, state):
+    from datetime import datetime, timezone
+
+    purged = []
+    monkeypatch.setattr(
+        deletion_store.store, 'purge_account_records', lambda uid, since: purged.append(uid) or 1, raising=False
+    )
+    subscribed.publisher.resources[TOKEN] = resource(state)
+    with pytest.raises(play_publisher.PlayCancelPending):
+        play_publisher.purge_account_records(UID, datetime.now(timezone.utc), CancelPublisher(subscribed.publisher))
+    assert purged == []
+
+
+def test_purge_still_refuses_when_google_cannot_be_read(subscribed, deletion_store, monkeypatch):
+    from datetime import datetime, timezone
+
+    purged = []
+    monkeypatch.setattr(
+        deletion_store.store, 'purge_account_records', lambda uid, since: purged.append(uid) or 1, raising=False
+    )
+    down = CancelPublisher(subscribed.publisher, read_fail=play_publisher.PublisherHTTPError(503, 'read'))
+    with pytest.raises(play_publisher.PlayCancelPending) as error:
+        play_publisher.purge_account_records(UID, datetime.now(timezone.utc), down)
+    assert error.value.status_code == 503 and purged == []

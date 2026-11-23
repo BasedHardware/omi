@@ -14,6 +14,7 @@ import 'package:omi/backend/schema/app.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/models/subscription.dart';
+import 'package:omi/models/user_usage.dart';
 import 'package:omi/pages/apps/app_detail/app_detail.dart';
 import 'package:omi/pages/apps/providers/add_app_provider.dart';
 import 'package:omi/providers/app_provider.dart';
@@ -202,4 +203,67 @@ void main() {
     expect(find.byKey(const Key('app_detail_paid_unavailable')), findsNothing);
     expect(find.text('Subscribe'), findsWidgets);
   }, variant: TargetPlatformVariant.only(TargetPlatform.iOS));
+
+  /// Opens the paid app page after the first subscription read already failed and a usage read then
+  /// cleared the provider's shared error. [answers] are the subscription reads after the first.
+  Future<List<int>> openAfterFailedRead(WidgetTester tester, List<UserSubscriptionResponse?> answers) async {
+    final reads = <int>[0];
+    final platform = FakePlayPlatform();
+    final billing = PlayBilling(platform: () => platform, verify: FakePlayServer().call, store: MemoryTokenStore());
+    addTearDown(billing.dispose);
+    final usage = UsageProvider(
+      subscriptionRequest: () async => reads[0]++ == 0 ? null : answers.removeAt(0),
+      usageRequest: ({required period, required timeZone}) async => UserUsageResponse(history: []),
+      deviceTimeZone: () async => 'UTC',
+      playBilling: billing,
+    );
+    addTearDown(usage.dispose);
+    await usage.fetchSubscription();
+    await usage.fetchUsageStats(period: 'monthly');
+    expect(usage.error, isNull);
+    expect(usage.billingProviderFailed, isTrue);
+    final app = _app(paid: true, paymentLink: 'https://pay.example.com/app');
+    await tester.pumpWidget(
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider<AppProvider>.value(value: _FakeAppProvider(app)),
+          ChangeNotifierProvider<AddAppProvider>.value(value: AddAppProvider()),
+          ChangeNotifierProvider<MessageProvider>.value(value: MessageProvider()),
+          ChangeNotifierProvider<UsageProvider>.value(value: usage),
+        ],
+        child: MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: const [Locale('en')],
+          home: AppDetailPage(
+            app: app,
+            preventAutoOpenHomePage: true,
+            enableApp: (_) async => (false, ''),
+            appDetailsLoader: (_) async => null,
+          ),
+        ),
+      ),
+    );
+    await settle(tester);
+    // Rebuilds never start another read.
+    for (var i = 0; i < 5; i++) {
+      usage.notifyListeners();
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+    return reads;
+  }
+
+  testWidgets('opening the page after a failed read retries once and a Stripe reader gets Subscribe', (tester) async {
+    final reads = await openAfterFailedRead(tester, [_response()]);
+    expect(reads.single, 2);
+    expect(find.byKey(const Key('app_detail_paid_pending')), findsNothing);
+    expect(find.byKey(const Key('app_detail_paid_unavailable')), findsNothing);
+    expect(find.text('Subscribe'), findsWidgets);
+  }, variant: TargetPlatformVariant.only(TargetPlatform.android));
+
+  testWidgets('a retry that fails again ends on "Not available", not a spinner', (tester) async {
+    final reads = await openAfterFailedRead(tester, [null]);
+    expect(reads.single, 2);
+    expect(find.byKey(const Key('app_detail_paid_pending')), findsNothing);
+    expect(find.byKey(const Key('app_detail_paid_unavailable')), findsOneWidget);
+  }, variant: TargetPlatformVariant.only(TargetPlatform.android));
 }
