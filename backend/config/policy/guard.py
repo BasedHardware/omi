@@ -9,9 +9,17 @@ import json
 from pathlib import Path
 import sys
 
+# These observability settings are policy-owned live reads, outside the snapshot.
+LIVE_OBSERVABILITY_ENV_KEYS = frozenset(
+    {
+        'BATCH_PIPELINE_PROJECTION_PHASE_SAMPLE_ENABLED',
+        'BATCH_PIPELINE_PROJECTION_PHASE_SAMPLE_PERCENT',
+    }
+)
 
-# The E1 boundary follows declared snapshot ownership, not the BATCH_PIPELINE_
-# namespace. Worker/process keys belong to E1b and must not block other teams.
+
+# The E1 boundary follows declared ownership. Worker/process keys belong to
+# E1b and must not block other teams.
 # Read declarations with AST so this check remains stdlib-only and import-pure.
 def protected_env_keys():
     directory = Path(__file__).resolve().parent
@@ -30,7 +38,7 @@ def protected_env_keys():
         if isinstance(node, ast.Assign)
         and any(isinstance(target, ast.Name) and target.id == 'KILL_SWITCHES' for target in node.targets)
     )
-    return frozenset(owned) | frozenset(live)
+    return frozenset(owned) | frozenset(live) | LIVE_OBSERVABILITY_ENV_KEYS
 
 
 def env_reads(source):

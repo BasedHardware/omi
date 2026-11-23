@@ -2784,6 +2784,7 @@ class ListenReceiver(ReplayFilterMixin):
                             now,
                             len(decoded) // 2,
                             decoded=decoded,
+                            source_frame=parse_live_frame(source_claim, len(data)) if source_claim else None,
                         )
                         if self.host.state.audio_ring_buffer is not None:
                             self.host.state.audio_ring_buffer.write(decoded, now)

@@ -282,6 +282,14 @@
       "review_by": "2026-12-01",
       "reason": "SCA-3850: give firestore-cost one week to review the off switch against its first qualified overlap readout"
     },
+    "BATCH_PIPELINE_PROJECTION_PHASE_SAMPLE_ENABLED": {
+      "owner": "Margin (SCA-3664)",
+      "review_by": "2026-12-07"
+    },
+    "BATCH_PIPELINE_PROJECTION_PHASE_SAMPLE_PERCENT": {
+      "owner": "Margin (SCA-3664)",
+      "review_by": "2026-12-07"
+    },
     "BATCH_PIPELINE_PROJECTION_PREFETCH": {
       "seeded": "2026-10-25"
     },
