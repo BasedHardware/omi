@@ -174,6 +174,19 @@ final class QuickActionsIconPatcher: NSObject {
     _ application: UIApplication,
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
   ) -> Bool {
+    OmiBluetoothLaunchDiagnostics.start()
+    NotificationCenter.default.addObserver(
+      self, selector: #selector(recordMemoryWarning),
+      name: UIApplication.didReceiveMemoryWarningNotification, object: nil
+    )
+    // A Bluetooth background launch can run without a Flutter scene.
+    if OmiBluetoothLaunchDiagnostics.enabled {
+      let restoreIDs = launchOptions?[.bluetoothCentrals] as? [String] ?? []
+      if restoreIDs.contains(OmiBleManager.restoreIdentifier) ||
+        !OmiSavedReconnectIntent().saved.isEmpty {
+        _ = OmiBleManager.shared
+      }
+    }
     BGTaskScheduler.shared.register(forTaskWithIdentifier: Self.periodicSyncIdentifier, using: .main) { [weak self] task in
       guard let self = self else {
         task.setTaskCompleted(success: false)
@@ -658,6 +671,7 @@ final class QuickActionsIconPatcher: NSObject {
   }
 
   override func applicationDidEnterBackground(_ application: UIApplication) {
+    OmiBluetoothLaunchDiagnostics.record("background")
     super.applicationDidEnterBackground(application)
     OmiBleManager.shared.markBackgroundTelemetryStart()
     if #available(iOS 13.0, *) {
@@ -760,11 +774,17 @@ final class QuickActionsIconPatcher: NSObject {
   }
 
   override func applicationWillEnterForeground(_ application: UIApplication) {
+    OmiBluetoothLaunchDiagnostics.record("foreground")
     super.applicationWillEnterForeground(application)
     OmiBleManager.shared.reconnectStalePeripherals()
   }
 
+  @objc private func recordMemoryWarning() {
+    OmiBluetoothLaunchDiagnostics.record("memory_warning")
+  }
+
   override func applicationWillTerminate(_ application: UIApplication) {
+    OmiBluetoothLaunchDiagnostics.record("terminate")
     QuickActionsIconPatcher.shared.stopObserving()
     OmiBleManager.shared.disconnectAllPeripherals()
     if #available(iOS 16.1, *) {
@@ -1446,4 +1466,65 @@ class SpeechRecognitionHandler: NSObject {
             }
         }
     }
+}
+
+// Native lifecycle breadcrumbs must work even when no Dart isolate is running.
+enum OmiBluetoothLaunchDiagnostics {
+  static var enabled: Bool {
+    UserDefaults.standard.object(forKey: "omi_ble_native_restore_enabled") as? Bool ?? true
+  }
+
+  private struct Session: Codable {
+    var state: String
+    var endedCleanly: Bool
+  }
+
+  private static let files = FileManager.default
+  private static let sentinel = files.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+    .appendingPathComponent("omi_ios_lifecycle.json")
+
+  static func start() {
+    guard enabled else {
+      try? files.removeItem(at: sentinel)
+      return
+    }
+    if let data = try? Data(contentsOf: sentinel),
+       let previous = try? JSONDecoder().decode(Session.self, from: data) {
+      log("previous_session state=\(previous.state) ended_cleanly=\(previous.endedCleanly)")
+    } else {
+      log("previous_session state=unknown ended_cleanly=unknown")
+    }
+    record("launch")
+  }
+
+  static func record(_ event: String) {
+    guard enabled else { return }
+    if ["launch", "background", "foreground", "terminate"].contains(event) {
+      do {
+        try files.createDirectory(at: sentinel.deletingLastPathComponent(), withIntermediateDirectories: true)
+        let data = try JSONEncoder().encode(Session(state: event, endedCleanly: event == "terminate"))
+        try data.write(to: sentinel, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
+      } catch {
+        log("session_marker_write_failed")
+      }
+    }
+    log(event)
+  }
+
+  private static func log(_ message: String) {
+    NSLog("[OmiLifecycle] %@", message)
+    guard UserDefaults.standard.bool(forKey: "flutter.devLogsToFileEnabled") else { return }
+    let timestamp = ISO8601DateFormatter().string(from: Date())
+    let day = timestamp.prefix(10).replacingOccurrences(of: "-", with: "")
+    let url = files.urls(for: .documentDirectory, in: .userDomainMask)[0]
+      .appendingPathComponent("omi_debug_\(day)_ios_lifecycle.log")
+    let previous = (try? Data(contentsOf: url)) ?? Data()
+    guard var line = try? SafeJSON.data(withJSONObject: [
+      "timestamp": timestamp, "level": "EVENT", "type": "ios_lifecycle", "message": message,
+    ]) else { return }
+    line.append(0x0A)
+    // This stream has one native writer and its own rotation boundary.
+    let contents = previous.count + line.count <= 64 * 1024 ? previous + line : line
+    try? contents.write(to: url, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
+  }
 }

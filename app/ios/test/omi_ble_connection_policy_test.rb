@@ -7,6 +7,18 @@ class OmiBleConnectionPolicyTest < Minitest::Test
   IOS_ROOT = File.expand_path('..', __dir__)
   POLICY_SOURCE = File.join(IOS_ROOT, 'Runner', 'Ble', 'OmiBleConnectionPolicy.swift')
 
+  def test_native_launch_registers_the_restorable_central_before_flutter_scene_setup
+    delegate = File.read(File.join(IOS_ROOT, 'Runner/AppDelegate.swift'))
+    launch = delegate[/didFinishLaunchingWithOptions launchOptions:.*?^  }/m]
+    refute_nil launch
+    assert_match(/restoreIDs.contains\(OmiBleManager.restoreIdentifier\) \|\|\s+!OmiSavedReconnectIntent\(\).saved.isEmpty/, launch)
+    assert_operator launch.index('_ = OmiBleManager.shared'), :<, launch.index('super.application(')
+
+    manager = File.read(File.join(IOS_ROOT, 'Runner/Ble/OmiBleManager.swift'))
+    assert_includes manager, 'CBCentralManagerOptionRestoreIdentifierKey: OmiBleManager.restoreIdentifier'
+    assert_match(/willRestoreState dict:.*?record\("restore_launch"\)/m, manager)
+  end
+
   def test_saved_reconnect_manager_callbacks_with_suspended_timers
     manager = File.read(File.join(IOS_ROOT, 'Runner/Ble/OmiBleManager.swift'))
     signatures = [

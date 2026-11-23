@@ -1726,6 +1726,7 @@ extension OmiBleManager: CBCentralManagerDelegate {
     }
 
     func centralManager(_ central: CBCentralManager, willRestoreState dict: [String: Any]) {
+        OmiBluetoothLaunchDiagnostics.record("restore_launch")
         appendLifecycleEvent("corebluetooth_restored")
         // CoreBluetooth can relaunch the process directly into the background;
         // applicationDidEnterBackground is not delivered for that lifecycle.
