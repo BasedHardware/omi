@@ -571,7 +571,13 @@ def _byok_subscription_json(monkeypatch, platform, build):
     return response.model_dump_json()
 
 
-def test_switch_off_subscription_route_is_byte_identical(monkeypatch, env):
+@pytest.fixture
+def warm_subscription_route(monkeypatch, env):
+    """Import the router and serve one response in setup, so the test's CPU budget measures the switch."""
+    _byok_subscription_json(monkeypatch, 'ios', '1')
+
+
+def test_switch_off_subscription_route_is_byte_identical(monkeypatch, env, warm_subscription_route):
     baseline = _byok_subscription_json(monkeypatch, 'android', '9999')
     assert 'play_billing' not in baseline
     monkeypatch.setenv('ANDROID_PLAY_BILLING_MIN_BUILD', '1700')
@@ -601,7 +607,14 @@ def test_play_subscriber_cannot_open_stripe_checkout(monkeypatch):
 # ---- routes and storage --------------------------------------------------------------------
 
 
-def test_rtdn_route_requires_google_push_identity_and_decodes_message(monkeypatch, env):
+@pytest.fixture(scope='module')
+def play_routes():
+    from routers import play_billing as routes
+
+    return routes
+
+
+def test_rtdn_route_requires_google_push_identity_and_decodes_message(monkeypatch, env, play_routes):
     from fastapi import HTTPException, Request
     from routers import play_billing as routes
 

@@ -202,6 +202,15 @@ def test_new_play_token_for_a_live_stripe_user_is_never_acknowledged(env):
     assert env.publisher.acks == []  # Google refunds it on day 3
 
 
+@pytest.fixture(scope='module', autouse=True)
+def _warm_imports():
+    """Heavy router imports belong to setup, not to a test's CPU budget."""
+    import routers.payment  # noqa: F401
+    import routers.play_billing  # noqa: F401
+    import routers.users  # noqa: F401
+    from services.users import account_deletion  # noqa: F401
+
+
 @pytest.fixture
 def webhook(monkeypatch):
     import routers.payment as payment
