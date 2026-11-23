@@ -114,22 +114,23 @@ def test_completed_word_floor_is_observed_once_on_settlement(strict, monkeypatch
     observe.assert_called_once_with(True, False)
 
 
-def test_cloud_run_sync_scrapes_both_word_floor_outcomes():
+@pytest.mark.parametrize(
+    'counter,label_keys,outcomes',
+    [
+        (
+            writers.metrics.WORD_FLOOR_COMPLETIONS,
+            ('method', 'floor'),
+            {('legacy', 'below'), ('legacy', 'met'), ('script_aware', 'below'), ('script_aware', 'met')},
+        ),
+        (writers.metrics.MANUAL_END_HOME, ('visibility',), {('visible',), ('hidden',)}),
+    ],
+)
+def test_cloud_run_sync_scrapes_v3_processing_outcomes(counter, label_keys, outcomes):
     profile = Path(__file__).resolve().parents[2] / 'deploy' / 'cloud_run_gmp_sync.yaml'
     rules = yaml.safe_load(profile.read_text())['spec']['endpoints'][0]['metricRelabeling']
     (rule,) = [r for r in rules if r['action'] == 'keep' and r['sourceLabels'] == ['__name__']]
-    samples = [
-        sample
-        for family in writers.metrics.WORD_FLOOR_COMPLETIONS.collect()
-        for sample in family.samples
-        if sample.name.endswith('_total')
-    ]
-    assert {(s.labels['method'], s.labels['floor']) for s in samples} == {
-        ('legacy', 'below'),
-        ('legacy', 'met'),
-        ('script_aware', 'below'),
-        ('script_aware', 'met'),
-    }
+    samples = [sample for family in counter.collect() for sample in family.samples if sample.name.endswith('_total')]
+    assert {tuple(s.labels[key] for key in label_keys) for s in samples} == outcomes
     assert all(re.fullmatch(rule['regex'], sample.name) for sample in samples)
 
 
