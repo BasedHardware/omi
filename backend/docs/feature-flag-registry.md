@@ -883,6 +883,9 @@ and an explicit empty literal renders as `''`.
 | `RECORD_RETAINED_ACK` | Default off; requires RECORD_GAP_FILL on for the uid (the proof runs in the gap-fill entry); on lets a closed record's jobs-missing upload get the covered 200 for the RECORD_RETAINED_ACK_PERCENT cohort once a byte-exact lossless server copy of every WAL sample is proven; off is the rollback | backend | env | closed | — | — | — | — | keep | keep | — | omi-pipeline |
 | `RECORD_SEAL_REPAIR_MODE` | plan or apply; default apply, plan performs canonical proofs without writes | backend | env | closed | — | — | — | — | keep | keep | — | two-lane lead |
 | `RECORD_SEAL_SWEEPER_MODE` | plan or apply; default apply, plan performs proofs without writes | backend | env | closed | — | — | — | — | keep | keep | — | two-lane lead |
+| `RECORD_WAL_DUPLICATE_PERCENT` | Default-off native WAL duplicate settlement cohort | backend | env | closed | — | — | — | — | keep | keep | — | quality |
+| `RECORD_WAL_DUPLICATE_SHADOW_EPOCH` | Separately approved native WAL duplicate shadow window | backend | env | closed | — | — | — | — | keep | keep | — | quality |
+| `RECORD_WAL_DUPLICATE_SOURCE_FENCE_VERIFIED` | Release qualification of native WAL backing sources and writers | backend | env | closed | — | — | — | — | keep | keep | — | quality |
 | `RECORD_WAL_HANDOFF_ENABLED` | Default off; readers-first opt-in to quota-bounded original WAL custody under the existing native record owner | backend | env | closed | — | — | — | — | keep | keep | — | quality |
 | `RECORD_WAL_PENDING_GLOBAL_BYTES` | Default 4294967296; hard cap on global pending/reserved encrypted bytes across stage namespaces | backend | env | closed | — | — | — | — | keep | keep | — | quality |
 | `RECORD_WAL_PENDING_GLOBAL_FILES` | Default 10000; hard cap on global pending/reserved original files across stage namespaces | backend | env | closed | — | — | — | — | keep | keep | — | quality |
@@ -1507,6 +1510,9 @@ their code default (`fail` tells you which way a missing value resolves).
 - `RECORD_SEAL_SWEEPER_MODE` — plan or apply; default apply, plan performs proofs without writes (fail: closed)
 - `RECORD_SEAL_UPLOAD_FAILED_REPAIR_ENABLED` — Default on; repair job may atomically clear upload_failed only after full normal proof and unchanged-state fencing (fail: open)
 - `RECORD_TOKEN_LEASE_MODE_SERVE_UID_SHA256S` — Default empty; digested uid serve cohort, inert in off and shadow modes (fail: closed)
+- `RECORD_WAL_DUPLICATE_PERCENT` — Default-off native WAL duplicate settlement cohort (fail: closed)
+- `RECORD_WAL_DUPLICATE_SHADOW_EPOCH` — Separately approved native WAL duplicate shadow window (fail: closed)
+- `RECORD_WAL_DUPLICATE_SOURCE_FENCE_VERIFIED` — Release qualification of native WAL backing sources and writers (fail: closed)
 - `RECORD_WAL_HANDOFF_ENABLED` — Default off; readers-first opt-in to quota-bounded original WAL custody under the existing native record owner (fail: closed)
 - `RECORD_WAL_PENDING_GLOBAL_BYTES` — Default 4294967296; hard cap on global pending/reserved encrypted bytes across stage namespaces (fail: closed)
 - `RECORD_WAL_PENDING_GLOBAL_FILES` — Default 10000; hard cap on global pending/reserved original files across stage namespaces (fail: closed)

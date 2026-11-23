@@ -43,6 +43,10 @@ def bundle_id(uid, cid, files):
     return JOB_PREFIX + identity([SCHEMA, uid, cid, files])
 
 
+def file_identity(uid, cid, generation, entry):
+    return identity([SCHEMA, uid, cid, generation, entry])
+
+
 def intake_collection(client, namespace):
     # Existing admission receipt storage; only tagged WAL files own this index.
     return _ref(client, namespace, '_wal_schema').parent
@@ -114,7 +118,7 @@ def begin(client, namespace, uid, cid, files, source, device):
         file_rows = []
         new_files = []
         for entry in files:
-            file_id = identity([SCHEMA, uid, cid, generation, entry])
+            file_id = file_identity(uid, cid, generation, entry)
             prior = _file_ref(client, namespace, file_id).get(transaction=tx).to_dict() or {}
             file_rows.append({'file_id': file_id, **entry, 'receipt': prior.get('receipt')})
             if not prior:

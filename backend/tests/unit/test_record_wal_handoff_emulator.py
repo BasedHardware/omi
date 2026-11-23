@@ -2,6 +2,7 @@
 
 from concurrent.futures import ThreadPoolExecutor
 from copy import deepcopy
+from datetime import datetime, timezone
 import os
 import json
 import struct
@@ -378,3 +379,199 @@ def test_sample_slot_only_has_one_winner_across_runtime_namespaces(world, monkey
     assert same == snapshot
     assert reads.issued == 10
     memo.assert_not_called()
+
+
+@pytest.fixture
+def duplicate_world(world, monkeypatch):
+    from config.record_audio import record_identity
+    from config.record_wal_duplicate import SOURCE_FIELD
+    from database import record_wal_duplicate as duplicate
+
+    monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
+    client, namespace, uid, cid, conversation, files, _, _ = world
+    store = FirestoreStore(namespace, firestore_client=client)
+    conversation.update({'status': 'completed', 'finished_at': datetime.now(timezone.utc)})
+    record, segment = record_identity(uid, cid)
+    canonical = 'bp_' + record
+    source = {
+        'bucket': 'private',
+        'revision': 7,
+        'units': [segment],
+        'slices': [{'unit': segment, 'path': 'raw-live/example', 'generation': 2, 'first': 0, 'count': 3200}],
+    }
+    client.collection(namespace + '_intakes').document(canonical).set(
+        {
+            'owner_id': uid,
+            'conversation_id': cid,
+            'content_id': record,
+            'segment_ids': [segment],
+            'total_files': 1,
+            'lane': 'fresh',
+            SOURCE_FIELD: source,
+        }
+    )
+    job_ref = client.collection(namespace + '_jobs').document(segment)
+    job_ref.set({'state': 'committed', 'owner_id': uid, 'conversation_id': cid, 'privacy_generation': 0})
+    store.run(
+        lambda tx: tx.put(
+            'content',
+            f'{uid}/{record}',
+            {
+                'job_id': canonical,
+                'dispatch_protocol': 'batch_v1',
+                'status': 'completed',
+                'result': {'total_segments': 1, 'failed_segments': 0, 'errors': [], 'new_memories': [cid]},
+            },
+        )
+    )
+
+    def request(content):
+        return duplicate.Request(uid, cid, 'omi', 'synthetic-device', content, None, 'header-digest')
+
+    def attempt(req, **options):
+        budget = ArtifactReadBudget(time.monotonic() + 10, 0, 0)
+        return duplicate.reconcile(store, duplicate.PointReads(budget), req, **options)
+
+    yield SimpleNamespace(
+        store=store,
+        files=files,
+        request=request,
+        attempt=attempt,
+        canonical=canonical,
+        conversation=conversation,
+        user=client.collection('users').document(uid),
+        cid=cid,
+        intake=client.collection(namespace + '_intakes').document(canonical),
+        job_ref=job_ref,
+    )
+    job_ref.delete()
+
+
+def test_duplicate_cas_replay_while_disabled_and_rebundle(duplicate_world, monkeypatch):
+    from config.record_wal_duplicate import mode
+
+    case = duplicate_world
+    first = case.request('first')
+    candidate = case.attempt(first, files=case.files)
+    assert candidate is not None
+    saved = case.attempt(first, files=case.files, expected=candidate.scope, placements=['a', 'b'], commit=True)
+    assert saved.reply['job_id'] == case.canonical
+    monkeypatch.setenv('RECORD_WAL_DUPLICATE_PERCENT', '0')
+    assert mode(first.uid, time.time()) == ('off', None)
+    assert case.attempt(first).reply == saved.reply
+    rebundle = case.request('second')
+    existing = case.attempt(rebundle, files=case.files[:1])
+    assert len(existing.known) == 1
+    assert (
+        case.attempt(rebundle, files=case.files[:1], expected=existing.scope, placements=['wrong'], commit=True) is None
+    )
+    assert case.attempt(rebundle) is None
+    assert (
+        case.attempt(rebundle, files=case.files[:1], expected=existing.scope, placements=['a'], commit=True).reply
+        == saved.reply
+    )
+
+
+@pytest.mark.parametrize('race', ('revision', 'tombstone', 'merge_removal'))
+def test_duplicate_cas_revalidates_source_and_privacy_after_compare(duplicate_world, race):
+    case = duplicate_world
+    request = case.request('race')
+    old = case.attempt(request, files=case.files)
+    authority = {'expected': old.scope, 'files': case.files, 'placements': ['a', 'b'], 'commit': True}
+    if race == 'tombstone':
+        case.user.collection('deleted_conversations').document(case.cid).set({'reason': 'synthetic'})
+        with pytest.raises(BatchPrivacyBlocked):
+            case.attempt(request, **authority)
+    else:
+        if race == 'revision':
+            case.conversation.update({'record_upload_revision': 8})
+        else:
+            from database.record_audio import fence_record_audio_removal
+
+            fence_record_audio_removal(request.uid, request.cid, firestore_client=case.store.client)
+        assert case.attempt(request, **authority) is None
+        assert case.attempt(request) is None
+
+
+def test_duplicate_shadow_and_mixed_version_leave_no_alias(duplicate_world):
+    case = duplicate_world
+    request = case.request('shadow')
+    old = case.attempt(request, files=case.files)
+    snapshot = case.attempt(request, files=case.files, expected=old.scope, placements=['a', 'b'])
+    assert snapshot.reply['job_id'] == case.canonical
+    assert case.attempt(request) is None
+    case.intake.update({'wal_duplicate_source_v1': firestore.DELETE_FIELD})
+    assert case.attempt(request, files=case.files) is None
+
+
+def test_duplicate_competing_concurrent_retries_publish_one_alias(duplicate_world):
+    from google.api_core.exceptions import Aborted
+
+    case = duplicate_world
+    request = case.request('concurrent')
+    old = case.attempt(request, files=case.files)
+
+    def commit():
+        try:
+            return case.attempt(request, files=case.files, expected=old.scope, placements=['a', 'b'], commit=True)
+        except Aborted:
+            return None
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        results = list(pool.map(lambda _: commit(), range(2)))
+    successful_creates = sum(1 for result in results if result and result.prior is None)
+    assert successful_creates <= 1
+    # A bounded snapshot can refuse both contenders under emulator locks.
+    # The next request still converges on one durable alias.
+    if not successful_creates:
+        assert commit().prior is None
+    assert case.attempt(request).reply['job_id'] == case.canonical
+    assert commit().prior is not None
+
+
+@pytest.mark.asyncio
+async def test_duplicate_replay_route_never_calls_legacy_status_or_archive(duplicate_world, monkeypatch, tmp_path):
+    from database import record_wal_handoff as handoff
+
+    case = duplicate_world
+    first = case.request('route')
+    request = type(first)(
+        first.uid, first.cid, first.source, first.device, first.content_id, None, handoff.identity({})
+    )
+    old = case.attempt(request, files=case.files)
+    assert case.attempt(request, files=case.files, expected=old.scope, placements=['a', 'b'], commit=True)
+    monkeypatch.setattr(live_upload, 'FirestoreStore', lambda *_: case.store)
+    legacy = Mock(side_effect=AssertionError('legacy status ran'))
+    archive = Mock(side_effect=AssertionError('archive ran'))
+    monkeypatch.setattr(live_upload, 'durable_status', legacy)
+    path = tmp_path / 'already-hashed'
+    monkeypatch.setenv('RECORD_WAL_DUPLICATE_PERCENT', '0')
+    response = await live_upload.registered_record_response(
+        uid=request.uid,
+        conversation_id=request.cid,
+        content_id=request.content_id,
+        paths=[str(path)],
+        source=request.source,
+        client_device_id=request.device,
+        loaded_conversation=case.conversation.get().to_dict(),
+        before_coverage=archive,
+    )
+    assert response.status_code == 202
+    assert json.loads(response.body)['job_id'] == case.canonical
+    assert json.loads(response.body)['status'] == 'completed'
+    legacy.assert_not_called()
+    archive.assert_not_called()
+
+
+def test_merge_removal_cannot_use_missing_source_as_durable_fence(duplicate_world):
+    from google.api_core.exceptions import NotFound
+    from database.record_audio import fence_record_audio_removal
+
+    case = duplicate_world
+    request = case.request('missing-source')
+    case.conversation.delete()
+    with pytest.raises(NotFound):
+        fence_record_audio_removal(request.uid, request.cid, firestore_client=case.store.client)
+    case.user.collection('deleted_conversations').document(case.cid).set({'reason': 'synthetic'})
+    fence_record_audio_removal(request.uid, request.cid, firestore_client=case.store.client)
+    assert not case.conversation.get().exists

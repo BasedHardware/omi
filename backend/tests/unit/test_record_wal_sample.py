@@ -70,7 +70,7 @@ def _pack(tmp_path):
 
 def test_counts_encoded_packet_matches_and_clock_without_releasing_custody(tmp_path):
     path = _pack(tmp_path)
-    files = sampler._upload_packets([path], budget())
+    files = sampler.read_staged_packets([path], budget())
     _, size, wal = files[0]
     live = [Packet(p.digest, p.ticks, p.start + 2 * CLOCK_RATE, p.size) for p in wal]
     measured, offsets = sampler._count(files, [live], {}, False, budget())
@@ -84,7 +84,7 @@ def test_counts_encoded_packet_matches_and_clock_without_releasing_custody(tmp_p
 
 def test_bracketed_hole_remains_ambiguous_with_unverified_upload_ordinals(tmp_path):
     path = _pack(tmp_path)
-    files = sampler._upload_packets([path], budget())
+    files = sampler.read_staged_packets([path], budget())
     _, _, wal = files[0]
     live = [
         Packet(p.digest, p.ticks, p.start, p.size, ('track', 0, index))
@@ -197,7 +197,7 @@ async def test_privacy_race_drops_the_sample_before_any_measurement_publishes(mo
     monkeypatch.setattr(
         state, 'authority', Mock(side_effect=[(1, {}), BatchPrivacyBlocked('privacy_generation_changed')])
     )
-    monkeypatch.setattr(sampler, '_inventory', Mock(return_value=([], False)))
+    monkeypatch.setattr(sampler, 'read_manifest_inventory', Mock(return_value=([], False)))
     counted = Mock(return_value=(Counter(), Counter()))
     monkeypatch.setattr(sampler, '_count', counted)
     attempts = Mock()
@@ -229,7 +229,7 @@ async def test_privacy_race_drops_the_sample_before_any_measurement_publishes(mo
 
 def test_alternate_chunks_suppress_gaps_without_discarding_positive_evidence(monkeypatch, tmp_path):
     path = _pack(tmp_path)
-    files = sampler._upload_packets([path], budget())
+    files = sampler.read_staged_packets([path], budget())
     _, size, wal = files[0]
     media = SimpleNamespace(name='raw-live/owner/record/pack/hash.bin')
     listed = SimpleNamespace(name='audio-outbox/owner/record/pack/hash.bin')
@@ -242,7 +242,7 @@ def test_alternate_chunks_suppress_gaps_without_discarding_positive_evidence(mon
     monkeypatch.setattr(sampler, 'get_private_cloud_sync_bucket', lambda: root)
     monkeypatch.setattr(sampler, '_manifest', lambda *_: wal)
     inventory_budget = budget()
-    runs, no_alternate = sampler._inventory('owner', 'record', True, inventory_budget)
+    runs, no_alternate = sampler.read_manifest_inventory('owner', 'record', True, inventory_budget)
     measured, _ = sampler._count(files, runs, {}, no_alternate, budget())
     assert not no_alternate
     assert measured['duplicate', 'bytes'] == size
@@ -256,7 +256,7 @@ def test_staged_durations_come_from_headers_and_bad_sibling_keeps_its_byte_count
     variable.write_bytes(struct.pack('<I', len(short)) + short + struct.pack('<I', len(nominal)) + nominal)
     bad = variable.with_name(variable.name.replace('1700000000', '1700000010'))
     bad.write_bytes(struct.pack('<I', 100) + short)
-    files = sampler._upload_packets([str(variable), str(bad)], budget())
+    files = sampler.read_staged_packets([str(variable), str(bad)], budget())
     measured, _ = sampler._count(files, [], {}, False, budget())
     assert measured['ambiguous', 'ticks'] == 480 + 960
     assert measured['ambiguous', 'bytes'] == variable.stat().st_size + bad.stat().st_size
@@ -269,12 +269,12 @@ async def test_observe_publishes_counted_duplicate_bytes_under_the_existing_repl
     monkeypatch, tmp_path, status, dispatch
 ):
     path = _pack(tmp_path)
-    _, size, wal = sampler._upload_packets([str(path)], budget())[0]
+    _, size, wal = sampler.read_staged_packets([str(path)], budget())[0]
     monkeypatch.setattr(sampler, 'slot_at', lambda now: 5002)
     monkeypatch.setattr(sampler, '_latest_attempted', -1)
     monkeypatch.setattr(state, 'claim_slot', Mock(return_value=True))
     monkeypatch.setattr(state, 'authority', Mock(return_value=(1, {})))
-    monkeypatch.setattr(sampler, '_inventory', Mock(return_value=([wal], False)))
+    monkeypatch.setattr(sampler, 'read_manifest_inventory', Mock(return_value=([wal], False)))
     observed = Mock()
     monkeypatch.setattr(sampler, 'totals', observed)
 

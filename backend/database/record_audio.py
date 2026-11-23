@@ -3,13 +3,28 @@
 from typing import Literal
 import time
 
+from google.api_core.exceptions import NotFound
 from google.cloud import firestore
 
 from config import record_seal_rules
 from database import pipeline_ledger
-from database._client import get_firestore_client, run_transactional
+from database._client import get_data_plane_firestore_client, get_firestore_client, run_transactional
 from database import record_token_lease_metrics as lease_metrics
 from database.record_seal_wake import prepare_native_wake
+
+
+def fence_record_audio_removal(uid: str, conversation_id: str, *, firestore_client=None) -> None:
+    """Invalidate a live record proof before a merge removes its backing audio."""
+    client = firestore_client if firestore_client is not None else get_data_plane_firestore_client()
+    user = client.collection('users').document(uid)
+    ref = user.collection('conversations').document(conversation_id)
+    try:
+        ref.update({'record_audio_removal_pending': True})
+    except NotFound:
+        # Absence alone cannot fence a recreated source. A durable tombstone
+        # allows old cleanup to replay without restoring the source row.
+        if not user.collection('deleted_conversations').document(conversation_id).get().exists:
+            raise
 
 
 class RecordUploadCapacityExceeded(ValueError):
