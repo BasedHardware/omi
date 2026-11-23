@@ -63,6 +63,10 @@ _SILENT_READS_AVOIDED = Counter(
 )
 
 
+# Bounded owner-wait queue classes (config.batch_pipeline.Priority names).
+_OWNER_WAIT_PRIORITIES = frozenset({'fresh', 'recent', 'deep'})
+
+
 class SilentReadStage(Enum):
     ASSIGNMENT_PRECHECK = 'projection_session_prepare'
     READY_ACK = 'projection_ready'
@@ -399,8 +403,9 @@ class QueueMetrics:
         )
         self.owner_wait = Histogram(
             'omi_batch_pipeline_owner_wait_seconds',
-            'Per-item admission to lease wait; no owner labels; relet="true" is a re-lease, not fresh wait',
-            ['relet'],
+            'Per-item admission to lease wait; no owner labels; relet="true" is a re-lease, not fresh wait; '
+            'priority is the leased queue class (fresh|recent|deep|unknown)',
+            ['relet', 'priority'],
             buckets=(1, 10, 30, 60, 300, 3600, 43200, 86400, 604800),
             registry=registry,
         )
@@ -779,6 +784,7 @@ class QueueMetrics:
         wait_seconds: float | None = None,
         relet: bool = False,
         reason: str | None = None,
+        priority: str | None = None,
     ) -> None:
         if event not in {
             'leased',
@@ -797,7 +803,8 @@ class QueueMetrics:
             raise ValueError('metric event must be a static worker transition')
         self.events.labels(event).inc()
         if event == 'leased' and wait_seconds is not None:
-            self.owner_wait.labels('true' if relet else 'false').observe(max(0.0, wait_seconds))
+            queue_class = priority if priority in _OWNER_WAIT_PRIORITIES else 'unknown'
+            self.owner_wait.labels('true' if relet else 'false', queue_class).observe(max(0.0, wait_seconds))
         if event == 'admission_policy_deferred' and reason:
             self.admission_hold_reasons.labels(
                 reason=reason_label(ReasonFamily.ADMISSION_HOLD, reason, AdmissionHoldReason)
