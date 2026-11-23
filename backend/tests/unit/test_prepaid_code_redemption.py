@@ -678,7 +678,9 @@ def test_customer_portal_is_refused_before_the_webhook_marks_the_row(monkeypatch
     from fastapi import HTTPException
 
     payment = payment_router.module
-    payment_router.row.prepaid = None  # the webhook has not written the row yet
+    # The webhook has not written the row yet: the stored plan is still Free.
+    payment_router.row.plan = PlanType.basic
+    payment_router.row.prepaid = None
     monkeypatch.setattr(payment.users_db, 'get_stripe_customer_id', lambda uid: 'cus_1')
     listed = {'subs': [_prepaid_stripe_sub()]}
     payment.stripe.Subscription.list = lambda **kw: SimpleNamespace(data=listed['subs'])
@@ -698,3 +700,51 @@ def test_customer_portal_is_refused_before_the_webhook_marks_the_row(monkeypatch
     ]
     assert payment.create_customer_portal_endpoint(uid=UID) == {'url': 'https://billing.example/session'}
     assert opened and opened[0]['customer'] == 'cus_1'
+
+
+def _portal(monkeypatch, payment_router, list_impl):
+    payment = payment_router.module
+    monkeypatch.setattr(payment.users_db, 'get_stripe_customer_id', lambda uid: 'cus_1')
+    payment.stripe.Subscription.list = list_impl
+    opened = []
+    monkeypatch.setattr(
+        payment.stripe.billing_portal.Session,
+        'create',
+        lambda **kw: opened.append(kw) or SimpleNamespace(url='https://billing.example/session'),
+    )
+    return payment, opened
+
+
+def test_customer_portal_for_a_normal_payer_makes_no_extra_stripe_call(monkeypatch, payment_router):
+    # The fixture row is a live paid monthly plan with no prepaid marker: the normal payer.
+    payment, opened = _portal(monkeypatch, payment_router, lambda **kw: pytest.fail('listed subscriptions'))
+    assert payment.create_customer_portal_endpoint(uid=UID) == {'url': 'https://billing.example/session'}
+    assert len(opened) == 1
+
+
+def test_customer_portal_stripe_error_is_a_logged_503(monkeypatch, payment_router, caplog):
+    import logging
+
+    from fastapi import HTTPException
+
+    def down(**kw):
+        raise real_stripe.APIConnectionError('stripe unreachable')
+
+    payment_router.row.plan = PlanType.basic
+    payment, opened = _portal(monkeypatch, payment_router, down)
+    with caplog.at_level(logging.ERROR, logger=payment.logger.name):
+        with pytest.raises(HTTPException) as error:
+            payment.create_customer_portal_endpoint(uid=UID)
+    assert error.value.status_code == 503 and 'try again' in error.value.detail
+    assert opened == []
+    assert any('Customer portal' in record.getMessage() for record in caplog.records)
+
+
+def test_a_refused_prepaid_cancel_stores_no_feedback(payment_router):
+    from fastapi import HTTPException
+
+    request = payment_router.module.CancelSubscriptionRequest(reason='too_expensive', reason_details='x')
+    with pytest.raises(HTTPException) as error:
+        payment_router.module.cancel_subscription_endpoint.__wrapped__(request, uid=UID)
+    assert error.value.status_code == 409
+    # The fixture fails the test if set_user_cancellation_feedback is called.
