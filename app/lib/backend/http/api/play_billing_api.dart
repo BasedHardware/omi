@@ -3,6 +3,7 @@
 import 'dart:convert';
 
 import 'package:omi/backend/http/api_result.dart';
+import 'package:omi/backend/schema/gen/subscription_usage_wire.g.dart' as wire;
 import 'package:omi/env/env.dart';
 
 /// Server answer for one Google Play purchase token.
@@ -34,9 +35,8 @@ Future<PlayVerifyResult> verifyPlayPurchase({
     send: send,
     decode: (body) {
       final decoded = jsonDecode(body);
-      final status = decoded is Map ? decoded['status'] : null;
-      if (status is! String) throw const FormatException('status');
-      return status;
+      if (decoded is! Map<String, dynamic>) throw const FormatException('play purchase response');
+      return wire.GeneratedPlayPurchaseResponse.fromJson(decoded).status;
     },
   );
   return switch (result) {
