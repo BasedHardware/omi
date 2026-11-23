@@ -130,6 +130,27 @@ void main() {
     expect(_go(_checkout, 'https://notomi.me/'), WebNavigation.allow);
   });
 
+  test('a trailing root dot does not get a host past the rules', () {
+    final paypal = Uri.parse('https://www.paypal.com/checkoutnow?token=1');
+    for (final url in [
+      'https://app.omi.me./',
+      'https://h.omi.me./apps',
+      'https://www.omi.me./products/omi-gift-card',
+      'https://omi.me./collections/all',
+    ]) {
+      for (final from in [_product, _cart, _checkout, paypal, null]) {
+        expect(_go(from, url), WebNavigation.block, reason: '$from -> $url');
+      }
+    }
+    // Post-purchase words on a dotted non-store host are not an order.
+    expect(_go(_checkout, 'https://app.omi.me./checkouts/cn/abc/post_purchase'), WebNavigation.block);
+    // The dotted store host follows the store rules: the device page still gets the hardware view.
+    expect(_go(_cart, 'https://www.omi.me./products/omi').kind, WebNavigationKind.replace);
+    // Coming from a dotted Omi page is not coming from a payment page.
+    expect(_go(Uri.parse('https://www.omi.me./products/omi?view=app-hardware'), 'https://example.com/'),
+        WebNavigation.block);
+  });
+
   test('the device page is shown only when the app-hardware marker is present', () {
     expect(omiHardwarePageCheck.appliesTo(_product), isTrue);
     expect(omiHardwarePageCheck.appliesTo(Uri.parse('https://www.omi.me/products/omi')), isTrue);

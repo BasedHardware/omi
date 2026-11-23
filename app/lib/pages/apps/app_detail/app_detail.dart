@@ -205,6 +205,7 @@ class _AppDetailPageState extends State<AppDetailPage> with WidgetsBindingObserv
     );
 
     WidgetsBinding.instance.addPostFrameCallback((_) async {
+      _retryFailedBillingRead();
       // Load details first: a transport-backed app's home URL carries a one-use
       // launch grant that only a fresh details response contains.
       final loaded = await _refreshAppDetails();
@@ -859,13 +860,28 @@ class _AppDetailPageState extends State<AppDetailPage> with WidgetsBindingObserv
     );
   }
 
+  /// A failed first subscription read leaves a paid app's button on the unavailable label; opening
+  /// the page tries the read once more.
+  void _retryFailedBillingRead() {
+    if (!mounted || !app.isPaid || app.isUserPaid) return;
+    try {
+      final usage = context.read<UsageProvider>();
+      if (usage.billingProviderFailed) usage.fetchSubscription();
+    } on ProviderNotFoundException {
+      // Hosts without plan state have nothing to retry.
+    }
+  }
+
   /// Google Play buyers cannot be sent to an app's own payment link. Until an Android reader's billing
-  /// provider is known the paid button waits (loading) rather than guessing either way. Hosts without
-  /// plan state never wait. Watched, so the button updates when the first subscription read lands.
+  /// provider is known the paid button waits (loading) rather than guessing either way; if that read
+  /// failed it shows the unavailable label, never the payment link. Hosts without plan state never
+  /// wait. Watched, so the button updates when the first subscription read lands.
   ({bool playBilled, bool unknown}) _paidAppBilling(BuildContext buildContext) {
     try {
-      return buildContext.select<UsageProvider, ({bool playBilled, bool unknown})>(
-          (usage) => (playBilled: usage.playBilledPurchaser, unknown: usage.billingProviderUnknown));
+      return buildContext.select<UsageProvider, ({bool playBilled, bool unknown})>((usage) => (
+            playBilled: usage.playBilledPurchaser || usage.billingProviderFailed,
+            unknown: usage.billingProviderPending
+          ));
     } on ProviderNotFoundException {
       return (playBilled: false, unknown: false);
     }
