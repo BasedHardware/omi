@@ -85,7 +85,7 @@ and archive/coalescing stages dark. Those later changes cannot explain onset.
 | Trigger | Writer path / conclusion |
 | --- | --- |
 | Open/play/precache | `routers/sync.py` precache and `/urls` -> `utils/sync/playback.py` -> named per-file and conversation tasks. Cache misses enqueue; repeated polls reuse names. |
-| File download/export fallback | `download_audio_file_endpoint` -> `download_audio_file_response` -> artifact download, then enqueue on miss; HTTP 202 while pending. Inline mode rebuilds WAV/PCM directly. |
+| File download/export fallback | `download_audio_file_endpoint` -> `download_audio_file_response` -> artifact download, then enqueue on miss. Returns HTTP 202 while pending. Inline mode rebuilds WAV/PCM directly. Inline PCM bodies over 32 MiB stream without `Content-Length` for both full (200) and range (206) downloads. |
 | Normal completion | `utils/conversations/process_conversation.py` -> create audio files -> `precache_conversation_audio` plus `enqueue_conversation_artifact_build`. |
 | Sync and historical sync | `utils/sync/pipeline.py` final audio metadata -> same two eager task paths. Historical transcription can expose previously captured audio; it is distinct from silent stuck-finalization backfill. |
 | Pusher chunk flush | Former `_upload_batch` -> new IDs -> fingerprint invalidation -> entire conversation rebuild. Removed by this PR; metadata refresh continues. `/urls` detects later source changes. |

@@ -334,7 +334,51 @@ def test_download_inline_wav_pcm_and_ranges(monkeypatch):
     )
     assert response.status_code == 200
     assert response.media_type == 'application/octet-stream'
+    assert response.headers['content-length'] == '3'
+    assert asyncio.run(_response_body(response)) == b'pcm'
     assert merge_calls == [(('u', 'c', [1.0]), {'fill_gaps': True, 'sample_rate': playback.AUDIO_SAMPLE_RATE})]
+
+
+@pytest.mark.parametrize(
+    ('range_header', 'start', 'stop', 'chunked'),
+    [
+        (None, 0, 32 * 1024 * 1024 + 6, True),
+        ('bytes=2-', 2, 32 * 1024 * 1024 + 6, True),
+        ('bytes=0-33554431', 0, 32 * 1024 * 1024, False),
+        ('bytes=-4', 32 * 1024 * 1024 + 2, 32 * 1024 * 1024 + 6, False),
+    ],
+)
+def test_large_pcm_download_respects_range_and_streams_oversized_bodies(
+    monkeypatch, range_header, start, stop, chunked
+):
+    pcm = b'\x01\x02\x03\x04' * (8 * 1024 * 1024) + b'\x05\x06\x07\x08\x09\x0a'
+    monkeypatch.setattr(playback, 'download_audio_chunks_and_merge', lambda *args, **kwargs: pcm)
+
+    response = playback.download_audio_file_response(
+        'u',
+        'c',
+        'a',
+        {'id': 'a', 'chunk_timestamps': [1.0]},
+        FakeRequest({'Range': range_header} if range_header else {}),
+        'pcm',
+    )
+    assert response.status_code == (206 if range_header else 200)
+    assert response.media_type == 'application/octet-stream'
+    assert response.headers.get('content-range') == (f'bytes {start}-{stop - 1}/{len(pcm)}' if range_header else None)
+    assert response.headers.get('content-length') == (None if chunked else str(stop - start))
+    expected = memoryview(pcm)
+
+    async def check_body():
+        offset = start
+        async for chunk in response.body_iterator:
+            if chunked:
+                assert 0 < len(chunk) <= 256 * 1024
+            next_offset = offset + len(chunk)
+            assert chunk == expected[offset:next_offset]
+            offset = next_offset
+        assert offset == stop
+
+    asyncio.run(check_body())
 
 
 def test_download_errors_preserve_contract(monkeypatch):
