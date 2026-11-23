@@ -362,15 +362,28 @@ if __name__ == "__main__":
 class TestIqRatingHtmlAndApiExceptionMasking(unittest.TestCase):
     def test_iq_rating_page_masks_exception_in_html(self):
         import asyncio
-        with patch.object(main, "get_people_for_user", side_effect=RuntimeError("sensitive database leak: /var/data/sqlite.db")):
-            response = asyncio.run(main.iq_rating_page(uid="test_user"))
-            html_content = getattr(response, "body", None)
-            if html_content is None:
-                html_content = getattr(response, "content", "")
-            if isinstance(html_content, bytes):
-                html_content = html_content.decode("utf-8")
-            self.assertIn("Failed to load IQ ratings. Please try again later.", html_content)
-            self.assertNotIn("sensitive database leak", html_content)
+        import os
+        os.environ["IQ_RATING_SECRET"] = "test-secret"
+        try:
+            scope = {
+                "type": "http",
+                "method": "GET",
+                "path": "/iq",
+                "headers": [(b"authorization", b"Bearer test-secret")],
+                "query_string": b"uid=test_user",
+            }
+            request = main.Request(scope)
+            with patch.object(main, "get_people_for_user", side_effect=RuntimeError("sensitive database leak: /var/data/sqlite.db")):
+                response = asyncio.run(main.iq_rating_page(request=request, uid="test_user"))
+        finally:
+            os.environ.pop("IQ_RATING_SECRET", None)
+        html_content = getattr(response, "body", None)
+        if html_content is None:
+            html_content = getattr(response, "content", "")
+        if isinstance(html_content, bytes):
+            html_content = html_content.decode("utf-8")
+        self.assertIn("Failed to load IQ ratings. Please try again later.", html_content)
+        self.assertNotIn("sensitive database leak", html_content)
 
     def test_iq_rating_api_masks_exception_in_500(self):
         import asyncio
