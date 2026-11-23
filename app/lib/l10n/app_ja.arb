@@ -4757,5 +4757,5 @@
     "prepaidCodeFieldHint": "コードを入力",
     "prepaidCodeRedeem": "使う",
     "prepaidCodeRedeemed": "コードを適用しました",
-    "prepaidCodeResult": "{reason, select, invalid{このコードは無効です。確認してもう一度お試しください。} used{このコードはすでに使用されています。} expired{このコードは有効期限が切れています。} hasPlan{すでにプランをお持ちです。コードは使用されていません。} notPrepaid{このコードはここでは使えません。プランを選ぶときに使ってください。} notEligible{このコードはこのアカウントでは使えません。} rateLimited{試行回数が多すぎます。後でもう一度お試しください。} other{問題が発生しました。もう一度お試しください。}}"
+    "prepaidCodeResult": "{reason, select, invalid{このコードは無効です。確認してもう一度お試しください。} used{このコードはすでに使用されています。} expired{このコードは有効期限が切れています。} hasPlan{すでにプランをお持ちです。コードは使用されていません。プランの終了後に使ってください。} notPrepaid{このコードはここでは使えません。プランを選ぶときに使ってください。} notEligible{このコードはこのアカウントでは使えません。} rateLimited{試行回数が多すぎます。後でもう一度お試しください。} other{問題が発生しました。もう一度お試しください。}}"
 }

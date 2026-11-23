@@ -15860,7 +15860,7 @@ class AppLocalizationsRo extends AppLocalizations {
         'invalid': 'Acest cod nu este valid. Verifică-l și încearcă din nou.',
         'used': 'Acest cod a fost deja folosit.',
         'expired': 'Acest cod a expirat.',
-        'hasPlan': 'Ai deja un plan. Codul tău nu a fost folosit.',
+        'hasPlan': 'Ai deja un plan. Codul tău nu a fost folosit. Folosește-l după ce planul tău se încheie.',
         'notPrepaid': 'Acest cod nu poate fi folosit aici. Folosește-l când alegi un plan.',
         'notEligible': 'Acest cod nu poate fi folosit în acest cont.',
         'rateLimited': 'Prea multe încercări. Încearcă mai târziu.',

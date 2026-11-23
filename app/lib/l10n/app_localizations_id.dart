@@ -15809,7 +15809,7 @@ class AppLocalizationsId extends AppLocalizations {
         'invalid': 'Kode ini tidak valid. Periksa dan coba lagi.',
         'used': 'Kode ini sudah digunakan.',
         'expired': 'Kode ini sudah kedaluwarsa.',
-        'hasPlan': 'Anda sudah memiliki paket. Kode Anda tidak digunakan.',
+        'hasPlan': 'Anda sudah memiliki paket. Kode Anda tidak digunakan. Tukarkan setelah paket Anda berakhir.',
         'notPrepaid': 'Kode ini tidak bisa ditukarkan di sini. Gunakan saat memilih paket.',
         'notEligible': 'Kode ini tidak bisa digunakan di akun ini.',
         'rateLimited': 'Terlalu banyak percobaan. Coba lagi nanti.',

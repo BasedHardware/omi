@@ -15540,7 +15540,7 @@ class AppLocalizationsZh extends AppLocalizations {
         'invalid': '此兑换码无效。请检查后重试。',
         'used': '此兑换码已被使用。',
         'expired': '此兑换码已过期。',
-        'hasPlan': '你已有套餐。你的兑换码未被使用。',
+        'hasPlan': '你已有套餐。你的兑换码未被使用。请在套餐结束后再兑换。',
         'notPrepaid': '此兑换码无法在这里使用。请在选择套餐时使用。',
         'notEligible': '此兑换码无法用于此账户。',
         'rateLimited': '尝试次数过多。请稍后再试。',

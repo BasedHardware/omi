@@ -15823,7 +15823,7 @@ class AppLocalizationsSl extends AppLocalizations {
         'invalid': 'Ta koda ni veljavna. Preverite jo in poskusite znova.',
         'used': 'Ta koda je že bila uporabljena.',
         'expired': 'Tej kodi je potekla veljavnost.',
-        'hasPlan': 'Že imate paket. Vaša koda ni bila uporabljena.',
+        'hasPlan': 'Že imate paket. Vaša koda ni bila uporabljena. Unovčite jo, ko se vaš paket konča.',
         'notPrepaid': 'Te kode ni mogoče unovčiti tukaj. Uporabite jo, ko izberete paket.',
         'notEligible': 'Te kode ni mogoče uporabiti v tem računu.',
         'rateLimited': 'Preveč poskusov. Poskusite pozneje.',

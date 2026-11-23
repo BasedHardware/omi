@@ -15926,7 +15926,7 @@ class AppLocalizationsFr extends AppLocalizations {
         'invalid': 'Ce code n\'est pas valide. Vérifiez-le et réessayez.',
         'used': 'Ce code a déjà été utilisé.',
         'expired': 'Ce code a expiré.',
-        'hasPlan': 'Vous avez déjà un forfait. Votre code n\'a pas été utilisé.',
+        'hasPlan': 'Vous avez déjà un forfait. Votre code n\'a pas été utilisé. Utilisez-le à la fin de votre forfait.',
         'notPrepaid': 'Ce code ne peut pas être utilisé ici. Utilisez-le lorsque vous choisissez un forfait.',
         'notEligible': 'Ce code ne peut pas être utilisé sur ce compte.',
         'rateLimited': 'Trop de tentatives. Réessayez plus tard.',

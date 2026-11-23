@@ -15787,7 +15787,7 @@ class AppLocalizationsEt extends AppLocalizations {
         'invalid': 'See kood ei kehti. Kontrolli seda ja proovi uuesti.',
         'used': 'Seda koodi on juba kasutatud.',
         'expired': 'Selle koodi kehtivus on lõppenud.',
-        'hasPlan': 'Sul on juba pakett. Sinu koodi ei kasutatud.',
+        'hasPlan': 'Sul on juba pakett. Sinu koodi ei kasutatud. Lunasta see, kui su pakett lõpeb.',
         'notPrepaid': 'Seda koodi ei saa siin lunastada. Kasuta seda paketi valimisel.',
         'notEligible': 'Seda koodi ei saa selles kontos kasutada.',
         'rateLimited': 'Liiga palju katseid. Proovi hiljem uuesti.',

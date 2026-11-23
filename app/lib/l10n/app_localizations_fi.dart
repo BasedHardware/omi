@@ -15800,7 +15800,7 @@ class AppLocalizationsFi extends AppLocalizations {
         'invalid': 'Tämä koodi ei ole kelvollinen. Tarkista se ja yritä uudelleen.',
         'used': 'Tämä koodi on jo käytetty.',
         'expired': 'Tämä koodi on vanhentunut.',
-        'hasPlan': 'Sinulla on jo tilaus. Koodiasi ei käytetty.',
+        'hasPlan': 'Sinulla on jo tilaus. Koodiasi ei käytetty. Lunasta se, kun tilauksesi päättyy.',
         'notPrepaid': 'Tätä koodia ei voi lunastaa täällä. Käytä sitä, kun valitset tilauksen.',
         'notEligible': 'Tätä koodia ei voi käyttää tällä tilillä.',
         'rateLimited': 'Liian monta yritystä. Yritä myöhemmin uudelleen.',

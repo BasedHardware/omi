@@ -752,4 +752,19 @@ void main() {
     expect(find.textContaining('Cancel'), findsNothing);
     expect(find.byKey(const ValueKey('prepaid_code_entry')), findsNothing);
   }, variant: TargetPlatformVariant.all());
+
+  testWidgets('switch off after a redeem: the prepaid plan still shows only its end date', (tester) async {
+    await _pump(tester, [
+      _response(
+          play: null,
+          plan: PlanType.unlimitedV2,
+          stripeId: 'sub_prepaid',
+          cancelAtPeriodEnd: true,
+          prepaid: true,
+          prepaidCodeRedeem: false)
+    ]);
+    expect(find.byKey(const ValueKey('plans_sheet_prepaid_ends')), findsOneWidget);
+    expect(find.textContaining('Resubscribe'), findsNothing);
+    expect(find.byKey(const ValueKey('prepaid_code_entry')), findsNothing);
+  }, variant: TargetPlatformVariant.only(TargetPlatform.iOS));
 }

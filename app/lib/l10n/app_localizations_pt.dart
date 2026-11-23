@@ -15824,7 +15824,7 @@ class AppLocalizationsPt extends AppLocalizations {
         'invalid': 'Este código não é válido. Verifique-o e tente novamente.',
         'used': 'Este código já foi usado.',
         'expired': 'Este código expirou.',
-        'hasPlan': 'Já tem um plano. O seu código não foi usado.',
+        'hasPlan': 'Já tem um plano. O seu código não foi usado. Resgate-o quando o seu plano terminar.',
         'notPrepaid': 'Este código não pode ser resgatado aqui. Use-o quando escolher um plano.',
         'notEligible': 'Este código não pode ser usado nesta conta.',
         'rateLimited': 'Demasiadas tentativas. Tente mais tarde.',

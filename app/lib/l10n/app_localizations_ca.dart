@@ -15874,7 +15874,7 @@ class AppLocalizationsCa extends AppLocalizations {
         'invalid': 'Aquest codi no és vàlid. Comprova\'l i torna-ho a provar.',
         'used': 'Aquest codi ja s\'ha utilitzat.',
         'expired': 'Aquest codi ha caducat.',
-        'hasPlan': 'Ja tens un pla. El teu codi no s\'ha utilitzat.',
+        'hasPlan': 'Ja tens un pla. El teu codi no s\'ha utilitzat. Bescanvia\'l quan acabi el teu pla.',
         'notPrepaid': 'Aquest codi no es pot bescanviar aquí. Fes-lo servir quan triïs un pla.',
         'notEligible': 'Aquest codi no es pot utilitzar en aquest compte.',
         'rateLimited': 'Massa intents. Torna-ho a provar més tard.',

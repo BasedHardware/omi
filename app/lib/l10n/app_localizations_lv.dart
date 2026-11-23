@@ -15830,7 +15830,7 @@ class AppLocalizationsLv extends AppLocalizations {
         'invalid': 'Šis kods nav derīgs. Pārbaudiet to un mēģiniet vēlreiz.',
         'used': 'Šis kods jau ir izmantots.',
         'expired': 'Šī koda derīgums ir beidzies.',
-        'hasPlan': 'Jums jau ir plāns. Jūsu kods netika izmantots.',
+        'hasPlan': 'Jums jau ir plāns. Jūsu kods netika izmantots. Izmantojiet to, kad jūsu plāns beigsies.',
         'notPrepaid': 'Šo kodu šeit nevar izmantot. Izmantojiet to, izvēloties plānu.',
         'notEligible': 'Šo kodu nevar izmantot šajā kontā.',
         'rateLimited': 'Pārāk daudz mēģinājumu. Mēģiniet vēlāk.',

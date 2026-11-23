@@ -15786,7 +15786,7 @@ class AppLocalizationsDa extends AppLocalizations {
         'invalid': 'Denne kode er ikke gyldig. Tjek den og prøv igen.',
         'used': 'Denne kode er allerede brugt.',
         'expired': 'Denne kode er udløbet.',
-        'hasPlan': 'Du har allerede en plan. Din kode blev ikke brugt.',
+        'hasPlan': 'Du har allerede en plan. Din kode blev ikke brugt. Indløs den, når din plan slutter.',
         'notPrepaid': 'Denne kode kan ikke indløses her. Brug den, når du vælger en plan.',
         'notEligible': 'Denne kode kan ikke bruges på denne konto.',
         'rateLimited': 'For mange forsøg. Prøv igen senere.',

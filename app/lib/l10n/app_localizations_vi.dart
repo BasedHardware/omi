@@ -15796,7 +15796,7 @@ class AppLocalizationsVi extends AppLocalizations {
         'invalid': 'Mã này không hợp lệ. Hãy kiểm tra và thử lại.',
         'used': 'Mã này đã được sử dụng.',
         'expired': 'Mã này đã hết hạn.',
-        'hasPlan': 'Bạn đã có gói. Mã của bạn chưa được sử dụng.',
+        'hasPlan': 'Bạn đã có gói. Mã của bạn chưa được sử dụng. Hãy đổi mã sau khi gói của bạn kết thúc.',
         'notPrepaid': 'Không thể đổi mã này tại đây. Hãy dùng khi bạn chọn gói.',
         'notEligible': 'Không thể dùng mã này cho tài khoản này.',
         'rateLimited': 'Quá nhiều lần thử. Hãy thử lại sau.',

@@ -15778,7 +15778,7 @@ class AppLocalizationsEn extends AppLocalizations {
         'invalid': 'This code isn\'t valid. Check it and try again.',
         'used': 'This code has already been used.',
         'expired': 'This code has expired.',
-        'hasPlan': 'You already have a plan. Your code was not used.',
+        'hasPlan': 'You already have a plan. Your code was not used. Redeem it after your plan ends.',
         'notPrepaid': 'This code can\'t be redeemed here. Use it when you choose a plan.',
         'notEligible': 'This code can\'t be used on this account.',
         'rateLimited': 'Too many tries. Try again later.',

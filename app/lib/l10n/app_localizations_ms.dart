@@ -15832,7 +15832,7 @@ class AppLocalizationsMs extends AppLocalizations {
         'invalid': 'Kod ini tidak sah. Semak dan cuba lagi.',
         'used': 'Kod ini telah digunakan.',
         'expired': 'Kod ini telah tamat tempoh.',
-        'hasPlan': 'Anda sudah mempunyai pelan. Kod anda tidak digunakan.',
+        'hasPlan': 'Anda sudah mempunyai pelan. Kod anda tidak digunakan. Tebusnya selepas pelan anda tamat.',
         'notPrepaid': 'Kod ini tidak boleh ditebus di sini. Gunakannya semasa memilih pelan.',
         'notEligible': 'Kod ini tidak boleh digunakan pada akaun ini.',
         'rateLimited': 'Terlalu banyak percubaan. Cuba lagi nanti.',

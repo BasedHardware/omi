@@ -15819,7 +15819,7 @@ class AppLocalizationsLt extends AppLocalizations {
         'invalid': 'Šis kodas negalioja. Patikrinkite jį ir bandykite dar kartą.',
         'used': 'Šis kodas jau panaudotas.',
         'expired': 'Šio kodo galiojimas baigėsi.',
-        'hasPlan': 'Jau turite planą. Jūsų kodas nepanaudotas.',
+        'hasPlan': 'Jau turite planą. Jūsų kodas nepanaudotas. Panaudokite jį, kai baigsis jūsų planas.',
         'notPrepaid': 'Šio kodo čia panaudoti negalima. Panaudokite jį rinkdamiesi planą.',
         'notEligible': 'Šio kodo negalima naudoti šioje paskyroje.',
         'rateLimited': 'Per daug bandymų. Bandykite vėliau.',

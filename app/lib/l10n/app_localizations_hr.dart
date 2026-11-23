@@ -15831,7 +15831,7 @@ class AppLocalizationsHr extends AppLocalizations {
         'invalid': 'Ovaj kôd nije valjan. Provjerite ga i pokušajte ponovno.',
         'used': 'Ovaj kôd je već iskorišten.',
         'expired': 'Ovaj kôd je istekao.',
-        'hasPlan': 'Već imate plan. Vaš kôd nije iskorišten.',
+        'hasPlan': 'Već imate plan. Vaš kôd nije iskorišten. Iskoristite ga kada vam plan istekne.',
         'notPrepaid': 'Ovaj kôd ne može se iskoristiti ovdje. Iskoristite ga kada odaberete plan.',
         'notEligible': 'Ovaj kôd ne može se koristiti na ovom računu.',
         'rateLimited': 'Previše pokušaja. Pokušajte kasnije.',

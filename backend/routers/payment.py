@@ -2271,6 +2271,16 @@ def stripe_cancel():
     """)
 
 
+def _customer_has_prepaid_subscription(customer_id: str) -> bool:
+    """Any subscription that can still bill and carries the prepaid marker, read from Stripe itself."""
+    subscriptions = stripe.Subscription.list(customer=customer_id, status='all', limit=20)
+    return any(
+        sub.get('status') not in stripe_utils.TERMINAL_SUBSCRIPTION_STATUSES
+        and prepaid_code_config.is_prepaid_subscription(sub)
+        for sub in subscriptions.data
+    )
+
+
 @router.post('/v1/payments/customer-portal', response_model=CustomerPortalSessionResponse)
 def create_customer_portal_endpoint(uid: str = Depends(auth.get_current_user_uid)):
     """Create a Stripe Customer Portal session for managing payment methods and subscriptions."""
@@ -2295,6 +2305,10 @@ def create_customer_portal_endpoint(uid: str = Depends(auth.get_current_user_uid
 
     if not customer_id:
         raise HTTPException(status_code=400, detail="No Stripe customer found. Please create a subscription first.")
+
+    # The stored row gets the prepaid marker only when the webhook lands; Stripe has it from creation.
+    if _customer_has_prepaid_subscription(customer_id):
+        raise HTTPException(status_code=409, detail=PREPAID_PLAN_DETAIL)
 
     return_url = urljoin(base_url, 'v1/payments/portal-return')
 

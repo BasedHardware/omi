@@ -15836,7 +15836,7 @@ class AppLocalizationsNl extends AppLocalizations {
         'invalid': 'Deze code is ongeldig. Controleer hem en probeer het opnieuw.',
         'used': 'Deze code is al gebruikt.',
         'expired': 'Deze code is verlopen.',
-        'hasPlan': 'Je hebt al een abonnement. Je code is niet gebruikt.',
+        'hasPlan': 'Je hebt al een abonnement. Je code is niet gebruikt. Wissel hem in als je abonnement afloopt.',
         'notPrepaid': 'Deze code kan hier niet worden ingewisseld. Gebruik hem wanneer je een abonnement kiest.',
         'notEligible': 'Deze code kan niet op dit account worden gebruikt.',
         'rateLimited': 'Te veel pogingen. Probeer het later opnieuw.',

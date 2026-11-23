@@ -15794,7 +15794,7 @@ class AppLocalizationsCs extends AppLocalizations {
         'invalid': 'Tento kód není platný. Zkontrolujte ho a zkuste to znovu.',
         'used': 'Tento kód už byl použit.',
         'expired': 'Platnost tohoto kódu vypršela.',
-        'hasPlan': 'Už máte plán. Váš kód nebyl použit.',
+        'hasPlan': 'Už máte plán. Váš kód nebyl použit. Uplatněte ho, až váš plán skončí.',
         'notPrepaid': 'Tento kód zde nelze uplatnit. Použijte ho při výběru plánu.',
         'notEligible': 'Tento kód nelze použít v tomto účtu.',
         'rateLimited': 'Příliš mnoho pokusů. Zkuste to později.',
