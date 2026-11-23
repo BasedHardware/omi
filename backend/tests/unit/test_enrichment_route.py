@@ -1113,6 +1113,29 @@ def test_empty_output_answers_200_deferred_and_leaves_a_durable_wake(rows, clien
     assert rows[1][-1]['document_id'] == KEY
 
 
+def test_empty_output_defer_starts_after_a_slow_callback(rows, monkeypatch):
+    """P1: a callback that outlives the backoff still gets a full delay before its next wake.
+
+    The defer used to be measured from the delivery's entry clock, so a 200s callback made
+    ``entry + 120`` land 80s in the past and the queue retried at once.
+    """
+    clock = [10_000.0]
+    monkeypatch.setattr(consumer_module, 'time', SimpleNamespace(time=lambda: clock[0], monotonic=time.monotonic))
+    monkeypatch.setattr(firestore_client, 'get_firestore_client', Mock())
+    monkeypatch.setattr(summary_processing, 'record_empty_failure', _bounded_empty_failure(rows))
+
+    def slow_empty(*_):
+        clock[0] += 200.0  # the callback outlives the 120s delay
+        return SimpleNamespace(structured={'title': 'Synthetic'})
+
+    result = _deliver(rows, slow_empty, now=10_000.0)
+    assert (result.outcome, result.reason) == ('deferred', 'not_due')
+    pending = rows[0][KEY]
+    assert pending['due_at'] == clock[0] + 120
+    assert pending['due_at'] - clock[0] == 120
+    assert pending['task_due_at'] == pending['due_at']
+
+
 def test_empty_output_backoff_zero_restores_the_immediate_409(rows, monkeypatch):
     """The kill switch: 0 restores the pre-SCA-3667 immediate callback retry."""
     monkeypatch.setenv('ENRICHMENT_EMPTY_OUTPUT_BACKOFF_SECONDS', '0')

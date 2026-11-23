@@ -1,6 +1,7 @@
 """Quiet-window state transitions; persistence/contention is proved on the emulator."""
 
 from copy import deepcopy
+import time
 from types import SimpleNamespace
 from unittest.mock import Mock
 
@@ -601,12 +602,12 @@ def test_first_pending_survives_death_lease_and_empty_output(state, monkeypatch)
     assert reprocess.run(key, token, lambda *_: SimpleNamespace(discarded=False, structured={}), now=120) == 'deferred'
     assert rows[key]['summary_empty_failures'] == 1
     assert rows[key]['first_pending_at'] == 0
-    assert rows[key]['due_at'] == 120 + reprocess.LIVE_DEFER_SECONDS
+    assert rows[key]['due_at'] == pytest.approx(120 + reprocess.LIVE_DEFER_SECONDS, abs=1)
     assert rows[key]['lease_until'] == 0 and rows[key]['owner'] is None
     retry_token = rows[key]['task_token']
     assert retry_token != token
     output = SimpleNamespace(discarded=False, structured={'overview': 'Recovered'})
-    assert reprocess.run(key, retry_token, lambda *_: output, now=120 + reprocess.LIVE_DEFER_SECONDS) == 'processed'
+    assert reprocess.run(key, retry_token, lambda *_: output, now=rows[key]['due_at']) == 'processed'
     assert rows[key]['summary_seen']
     assert reprocess.run(key, retry_token, Mock(), now=2000) == 'stale'
 
@@ -725,9 +726,26 @@ def test_unavailable_empty_output_strike_defers_instead_of_raising(state, monkey
 
     assert reprocess.run(key, token, empty, now=120) == 'deferred'
     assert rows[key]['deferred_reason'] == reprocess.EMPTY_OUTPUT_DEFER_REASON
-    assert rows[key]['due_at'] == 120 + reprocess.LIVE_DEFER_SECONDS
+    assert rows[key]['due_at'] == pytest.approx(120 + reprocess.LIVE_DEFER_SECONDS, abs=1)
     assert rows[key]['lease_until'] == 0 and rows[key]['owner'] is None
     assert rows[key].get('summary_empty_failures', 0) == 0
+
+
+def test_legacy_empty_output_defer_starts_after_a_slow_callback(state, monkeypatch):
+    """P1: the legacy handler's 120s defer is measured from the empty result, not the claim."""
+    rows, tasks = state
+    reprocess.mark('u', 'c', 'en', now=0)
+    key, token = reprocess.key('u', 'c'), tasks[-1]['task_token']
+    clock = [10_000.0]
+    monkeypatch.setattr(reprocess, 'time', SimpleNamespace(time=lambda: clock[0], monotonic=time.monotonic))
+
+    def slow_empty(*_):
+        clock[0] += 200.0  # the callback outlives the 120s delay
+        return SimpleNamespace(discarded=False, structured={})
+
+    assert reprocess.run(key, token, slow_empty, now=10_000.0) == 'deferred'
+    assert rows[key]['due_at'] == clock[0] + reprocess.LIVE_DEFER_SECONDS
+    assert rows[key]['due_at'] - clock[0] == reprocess.LIVE_DEFER_SECONDS
 
 
 def test_empty_kept_output_has_a_terminal_budget_and_cannot_be_remarked(state, monkeypatch):
@@ -740,7 +758,7 @@ def test_empty_kept_output_has_a_terminal_budget_and_cannot_be_remarked(state, m
         token = rows[key]['task_token']
         assert reprocess.run(key, token, empty, now=now) == 'deferred'
         assert rows[key]['summary_empty_failures'] == expected
-        assert rows[key]['due_at'] == now + reprocess.LIVE_DEFER_SECONDS
+        assert rows[key]['due_at'] == pytest.approx(now + reprocess.LIVE_DEFER_SECONDS, abs=1)
         now = rows[key]['due_at']
     token = rows[key]['task_token']
     assert reprocess.run(key, token, empty, now=now) == 'blocked'

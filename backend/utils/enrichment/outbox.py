@@ -707,7 +707,8 @@ def _heartbeat(document_id: str, task_token: str, owner: str, context: Row) -> I
 
 
 def run(document_id: str, task_token: str, process: Callable[[str, str, str], Any], *, now: float | None = None) -> str:
-    current = time.time() if now is None else now
+    started = time.time()
+    current = started if now is None else now
     from utils.conversations.demand_processing import admit
     from config.demand_processing import enabled
 
@@ -838,6 +839,9 @@ def run(document_id: str, task_token: str, process: Callable[[str, str, str], An
             # record: settle the empty reprocess like a completed one instead of failing
             # the request and retrying it forever.
             if process_context:
+                # The deferral clock starts when the callback returned empty, not when this
+                # delivery was claimed: a slow callback must not eat its own backoff.
+                empty_at = current + max(0.0, time.time() - started)
                 empty_outcome = record_empty_failure(
                     get_firestore_client(),
                     COLLECTION,
@@ -852,25 +856,25 @@ def run(document_id: str, task_token: str, process: Callable[[str, str, str], An
                     # New content landed while this attempt ran: no strike, and the
                     # newer version is due now.
                     logger.info('event=sync_reprocess outcome=deferred reason=%s', EMPTY_OUTPUT_DEFER_REASON)
-                    process_context.update(defer_reason=EMPTY_OUTPUT_DEFER_REASON, defer_until=current)
+                    process_context.update(defer_reason=EMPTY_OUTPUT_DEFER_REASON, defer_until=empty_at)
                 elif empty_outcome is EmptyFailureOutcome.RETRY:
                     # The strike is recorded and the debt stays armed. Re-arm the row
                     # for its bounded retry (the third strike blocks it) instead of
                     # letting the exception escape the request as a 500.
                     logger.info('event=sync_reprocess outcome=deferred reason=%s', EMPTY_OUTPUT_DEFER_REASON)
                     process_context.update(
-                        defer_reason=EMPTY_OUTPUT_DEFER_REASON, defer_until=current + LIVE_DEFER_SECONDS
+                        defer_reason=EMPTY_OUTPUT_DEFER_REASON, defer_until=empty_at + LIVE_DEFER_SECONDS
                     )
                 elif empty_outcome is EmptyFailureOutcome.UNAVAILABLE:
                     # The strike write could not land, so nothing was recorded. Re-arm
                     # the row for a bounded retry instead of failing the request.
                     logger.warning('event=sync_reprocess outcome=deferred reason=%s', EMPTY_OUTPUT_DEFER_REASON)
                     process_context.update(
-                        defer_reason=EMPTY_OUTPUT_DEFER_REASON, defer_until=current + LIVE_DEFER_SECONDS
+                        defer_reason=EMPTY_OUTPUT_DEFER_REASON, defer_until=empty_at + LIVE_DEFER_SECONDS
                     )
                 elif empty_outcome is EmptyFailureOutcome.OWNER_MISMATCH:
                     process_context.update(
-                        defer_reason='summary_owner_changed', defer_until=current + LIVE_DEFER_SECONDS
+                        defer_reason='summary_owner_changed', defer_until=empty_at + LIVE_DEFER_SECONDS
                     )
                 else:
                     record_delivery('summary', 'failed')

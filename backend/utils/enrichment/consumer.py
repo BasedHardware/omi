@@ -122,21 +122,25 @@ def _callback_pending(cause: str, now: float) -> Result:
     return Result(Outcome.RETRY, RetryReason.CALLBACK_PENDING, available_at=now)
 
 
-def _empty_output_deferred(now: float) -> Result:
+def _empty_output_deferred(empty_at: float) -> Result:
     """Re-arm an empty first summary instead of letting Cloud Tasks rerun the callback at once.
 
     The legacy ``sync_handler`` path already waits ``LIVE_DEFER_SECONDS``; the push consumer
     answered 409 with ``available_at=now``, so every empty output cost two immediate callback
     reruns (SCA-3667). ``ENRICHMENT_EMPTY_OUTPUT_BACKOFF_SECONDS=0`` restores that 409.
+
+    ``empty_at`` is when the callback returned the empty result, never the delivery's entry
+    clock: a callback that outlives the backoff must still get a full delay before its next
+    wake, or the defer lands in the past and the queue retries at once.
     """
     backoff = empty_output_backoff_seconds()
     if backoff <= 0:
-        return _callback_pending('empty_output', now)
+        return _callback_pending('empty_output', empty_at)
     logger.info('event=enrichment_consumer outcome=deferred reason=empty_output backoff_s=%d', backoff)
     return Result(
         Outcome.DEFERRED,
         ConsumerReason.NOT_DUE,
-        available_at=now + backoff,
+        available_at=empty_at + backoff,
         defer_cause=EMPTY_OUTPUT_DEFER_REASON,
     )
 
@@ -340,6 +344,9 @@ class EnrichmentConsumer:
                 # so an empty reprocess output is not a delivery failure. Retrying
                 # it forever would keep the wake alive for no user-visible gain.
                 return Result(Outcome.DONE, ConsumerReason.PROCESSED)
+            # The deferral clock starts when the callback returned empty, not when this
+            # delivery was claimed: a slow callback must not eat its own backoff.
+            empty_at = time.time()
             empty_outcome = record_empty_failure(
                 get_firestore_client(),
                 rows.COLLECTION,
@@ -358,18 +365,18 @@ class EnrichmentConsumer:
                 return Result(
                     Outcome.DEFERRED,
                     ConsumerReason.NOT_DUE,
-                    available_at=now,
+                    available_at=empty_at,
                     defer_cause='empty_output_superseded',
                 )
             if empty_outcome is EmptyFailureOutcome.OWNER_MISMATCH:
                 return Result(
                     Outcome.DEFERRED,
                     ConsumerReason.NOT_DUE,
-                    available_at=now + rows.LIVE_DEFER_SECONDS,
+                    available_at=empty_at + rows.LIVE_DEFER_SECONDS,
                     defer_cause='summary_owner_changed',
                 )
             if empty_outcome is EmptyFailureOutcome.RETRY:
-                return _empty_output_deferred(now)
+                return _empty_output_deferred(empty_at)
             if empty_outcome is EmptyFailureOutcome.UNAVAILABLE:
                 # The strike write could not land, so nothing was recorded. Release the
                 # lease for a bounded retry instead of failing the request; the row keeps
