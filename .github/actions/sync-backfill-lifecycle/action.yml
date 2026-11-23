@@ -148,6 +148,8 @@ runs:
             --format='value(name)' >/dev/null
         fi
         URL="https://${{ inputs.service }}-sync-backfill-${PROJECT_NUMBER}.${{ inputs.region }}.run.app"
+        # The handler URL and OIDC audience use the same value.
+        echo "::add-mask::${URL}/v2/sync-jobs/run"
         echo "url=${URL}" >> "$GITHUB_OUTPUT"
         {
           echo "sync_backfill_env_vars<<EOF"

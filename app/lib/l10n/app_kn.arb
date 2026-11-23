@@ -717,11 +717,11 @@
     "@hardwareSection": {
         "description": "Hardware section header"
     },
-    "v2Undetected": "V2 ಪತ್ತೆ ಮಾಡಲಾಗಿಲ್ಲ",
+    "v2Undetected": "ಆಫ್‌ಲೈನ್ ಸಿಂಕ್ ಲಭ್ಯವಿಲ್ಲ",
     "@v2Undetected": {
         "description": "V2 device undeteced dialog title"
     },
-    "v2UndetectedMessage": "ನಾವು ನೀವು ಯಾವುದೇ V1 ಸಾಧನ ಹೊಂದಿದ್ದೇನೆ ಅಥವಾ ನಿಮ್ಮ ಸಾಧನ ಸಂಪರ್ಕ ಆಗಿಲ್ಲ. SD ಕಾರ್ಡ ಕಾರ್ಯವು V2 ಸಾಧನಗಳಿಗೆ ಮಾತ್ರ ಲಭ್ಯ.",
+    "v2UndetectedMessage": "ಆಫ್‌ಲೈನ್ ಸಿಂಕ್‌ಗೆ SD ಕಾರ್ಡ್ ಸಂಗ್ರಹಣೆಯೊಂದಿಗೆ ಸಂಪರ್ಕಿತ Omi ಸಾಧನದ ಅಗತ್ಯವಿದೆ. ನಿಮ್ಮ ಪ್ರಸ್ತುತ ಸಾಧನವು ಇದನ್ನು ಬೆಂಬಲಿಸುವುದಿಲ್ಲ.",
     "@v2UndetectedMessage": {
         "description": "V2 device undeteced dialog message"
     },
@@ -12292,5 +12292,11 @@
     "conversationLiveNoEdits": "ಬದಲಾಯಿಸಲು ಅದು ಮುಗಿಯುವವರೆಗೆ ಕಾಯಿರಿ.",
     "finishedSummaryReady": "ಸಾರಾಂಶ ಸಿದ್ಧವಾಗಿದೆ",
     "writingSummaryStatus": "ಸಾರಾಂಶ ಬರೆಯಲಾಗುತ್ತಿದೆ…",
-    "stillWorkingOnIt": "ಇನ್ನೂ ಕೆಲಸ ನಡೆಯುತ್ತಿದೆ."
+    "stillWorkingOnIt": "ಇನ್ನೂ ಕೆಲಸ ನಡೆಯುತ್ತಿದೆ.",
+    "deviceReadyToUse": "ಬಳಸಲು ಸಿದ್ಧ",
+    "firmwareUpdateFirmwareTooOld": "ಈ ನವೀಕರಣಕ್ಕೆ ನಿಮ್ಮ ಸಾಧನದ ಫರ್ಮ್‌ವೇರ್ ತುಂಬಾ ಹಳೆಯದಾಗಿದೆ. ನಿಮ್ಮ ಸಾಧನವನ್ನು ನವೀಕರಿಸಲು ಸಹಾಯಕ್ಕಾಗಿ ಬೆಂಬಲ ತಂಡವನ್ನು ಸಂಪರ್ಕಿಸಿ.",
+    "firmwareUpdateAppRequired": "ಈ ಫರ್ಮ್‌ವೇರ್ ನವೀಕರಣಕ್ಕೆ Omi ಆ್ಯಪ್‌ನ ಹೊಸ ಆವೃತ್ತಿ ಅಗತ್ಯವಿದೆ. ನಿಮ್ಮ ಆ್ಯಪ್ ಸ್ಟೋರ್‌ನಿಂದ ಆ್ಯಪ್ ಅನ್ನು ನವೀಕರಿಸಿ, ನಂತರ ಮತ್ತೆ ಪರಿಶೀಲಿಸಿ.",
+    "quietPayerTitle": "5 ದಿನಗಳಿಂದ ಯಾವುದೇ ರೆಕಾರ್ಡಿಂಗ್ ಇಲ್ಲ",
+    "quietPayerMessage": "ನಿಮ್ಮ Omi ಪರಿಶೀಲಿಸಿ.",
+    "quietPayerCheck": "ಪರಿಶೀಲಿಸಿ"
 }

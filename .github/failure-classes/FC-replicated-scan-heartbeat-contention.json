@@ -1,6 +1,7 @@
 {
   "schema_version": 1,
   "id": "FC-replicated-scan-heartbeat-contention",
+  "family": "state-single-owner",
   "violated_contract": "A shared discovery cursor and admission-health heartbeat must not be independently rewritten by every serving replica. SCA-1800 observed 35 coalescing drainers polling one quota document every two seconds, exhausting Firestore contention retries even with no eligible uploads.",
   "canonical_prevention": "Elect one namespace-scoped scan owner, fail closed on ownership uncertainty, and validate its immutable token in the cursor, heartbeat and new-claim transactions. Keep accepted audio under its independent durable custody lease. Verify actual contention and handover with the Firestore emulator rather than a lenient transaction fake.",
   "canonical_prevention_artifact": [

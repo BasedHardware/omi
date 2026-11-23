@@ -178,8 +178,8 @@
     "deviceInfoSection": "Enhedsinformation",
     "customizationSection": "Tilpasning",
     "hardwareSection": "Hardware",
-    "v2Undetected": "V2 ikke opdaget",
-    "v2UndetectedMessage": "Vi kan se, at du enten har en V1-enhed, eller at din enhed ikke er tilsluttet. SD-kort-funktionalitet er kun tilgængelig for V2-enheder.",
+    "v2Undetected": "Offlinesynkronisering er ikke tilgængelig",
+    "v2UndetectedMessage": "Offlinesynkronisering kræver en tilsluttet Omi-enhed med SD-kortlager. Din nuværende enhed understøtter det ikke.",
     "endConversation": "Afslut samtale",
     "pauseResume": "Pause/Genoptag",
     "starConversation": "Stjernemarkér samtale",
@@ -4777,5 +4777,11 @@
     "conversationLiveNoEdits": "Vent til den er slut, før du ændrer den.",
     "finishedSummaryReady": "Opsummering klar",
     "writingSummaryStatus": "Skriver opsummering…",
-    "stillWorkingOnIt": "Vi arbejder stadig på det."
+    "stillWorkingOnIt": "Vi arbejder stadig på det.",
+    "deviceReadyToUse": "Klar til brug",
+    "firmwareUpdateFirmwareTooOld": "Din enheds firmware er for gammel til denne opdatering. Kontakt support for at få hjælp til at opdatere din enhed.",
+    "firmwareUpdateAppRequired": "Denne firmwareopdatering kræver en nyere version af Omi-appen. Opdater appen fra din appbutik, og søg derefter efter opdateringer igen.",
+    "quietPayerTitle": "Ingen optagelser i 5 dage",
+    "quietPayerMessage": "Tjek din Omi.",
+    "quietPayerCheck": "Tjek"
 }

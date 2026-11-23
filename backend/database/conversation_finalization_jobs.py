@@ -350,6 +350,9 @@ def _conversation_has_finalization_content(
     return next(iter(conversation_ref.collection('photos').limit(1).stream(transaction=transaction)), None) is not None
 
 
+SERVER_BATCH_ARCHIVE_UNREADY = 'server_batch_archive_unready'
+
+
 def recovery_admission_refusal(
     uid: str,
     conversation: Mapping[str, Any],
@@ -401,7 +404,16 @@ def recovery_admission_refusal(
     cut = recovery_cutoff if recovery_cutoff.tzinfo else recovery_cutoff.replace(tzinfo=timezone.utc)
     if (finished_at if finished_at.tzinfo else finished_at.replace(tzinfo=timezone.utc)) > cut:
         return 'not_stale'
-    if not (conversation.get('audio_files') or conversations_db.raw_conversation_has_content(uid, dict(conversation))):
+    if conversation.get('audio_files'):
+        if (
+            server_batch.owned(conversation)
+            and not server_batch.has_audio(conversation)
+            and not conversations_db.raw_conversation_has_content(uid, dict(conversation), log_decode_failure=False)
+        ):
+            # Audio file references alone cannot take the committed-audio path
+            # and also preclude empty cleanup, even after a close without bounds.
+            return SERVER_BATCH_ARCHIVE_UNREADY
+    elif not conversations_db.raw_conversation_has_content(uid, dict(conversation)):
         return 'no_content'
     if recovery_audio_file_ids(conversation) is None:
         return 'oversized_audio_files'
@@ -1951,6 +1963,9 @@ def _terminalize_exhausted_requeued_job_txn(
         return False
     job = snapshot.to_dict() or {}
     if not python_owns_finalization(job) or str(job.get('status') or '') != 'queued':
+        return False
+    if job.get('finalization_waiting_on_owner'):
+        # The row may have parked since the sweep read its candidate snapshot.
         return False
     if int(job.get('dispatch_generation') or 1) != expected_dispatch_generation:
         return False

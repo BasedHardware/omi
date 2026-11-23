@@ -1,6 +1,7 @@
 {
   "schema_version": 1,
   "id": "FC-stt-outcome-counter-skipped-by-cleanup",
+  "family": "observability-gap",
   "violated_contract": "A session outcome counter must be recorded from the session's observed speech and transcript state even when a later cleanup or health callback fails. A callback exception must not erase telemetry for completed work or leak the admission slot.",
   "canonical_prevention": "Record the bounded session outcome idempotently before invoking external cleanup callbacks, and release admission in a finally path. Exercise real admission and session teardown, and make a cleanup callback fail in a regression test to prove both the outcome counter and slot release still occur.",
   "canonical_prevention_artifact": [

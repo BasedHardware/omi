@@ -24,7 +24,7 @@
     "config/batch_language_recovery.py": "planscost"
   },
   "seed_review_by": "2026-11-15",
-  "budget": 161,
+  "budget": 159,
   "names": {
     "BATCH_ACCOUNT_PRIVACY_WRITER_ENABLED": {
       "owner": "batch-custody / lead2",
@@ -274,8 +274,8 @@
     },
     "BATCH_PIPELINE_PROJECTION_OVERLAP_DIAGNOSTICS": {
       "owner": "firestore-cost / projection overlap source owner",
-      "review_by": "2026-11-24",
-      "reason": "Default-on diagnostic off switch requested by PR25596 review; review after the first qualified overlap readout. Does not change discovery or the seeded flag budget."
+      "review_by": "2026-12-01",
+      "reason": "SCA-3850: give firestore-cost one week to review the off switch against its first qualified overlap readout"
     },
     "BATCH_PIPELINE_PROJECTION_PREFETCH": {
       "seeded": "2026-10-25"
@@ -305,12 +305,14 @@
     },
     "BATCH_PIPELINE_PROTECTED_SHARE_ENABLED": {
       "owner": "Pipeline / SCA-1894",
-      "review_by": "2026-11-23",
-      "registry": "config/feature-flags.yaml"
+      "review_by": "2026-11-30",
+      "registry": "config/feature-flags.yaml",
+      "reason": "SCA-3850: align with the approved registry extension; qualify synthetic load and obtain lead approval before the first CPU scheduler step"
     },
     "BATCH_PIPELINE_PROTECTED_SHARE_PERCENT": {
       "owner": "Pipeline / SCA-1894",
-      "review_by": "2026-11-23"
+      "review_by": "2026-11-30",
+      "reason": "SCA-3850: review the share limit with the protected-share scheduler canary decision"
     },
     "BATCH_PIPELINE_PROVIDER_BACKLOG_RELEASE_ENABLED": {
       "owner": "provider-stt drain",
@@ -683,8 +685,8 @@
     },
     "EPISODE_EMPTY_MEMBER_CLEANUP_ENABLED": {
       "owner": "quality-lead",
-      "review_by": "2026-11-22",
-      "reason": "2026-11-16 renewed: default-off opt-in detach (gated off in d4dcd04); quality lead decides keep-and-ramp or delete by 2026-11-22",
+      "review_by": "2026-11-30",
+      "reason": "SCA-3850: decision overdue, tracked on this issue",
       "registry": "config/feature-flags.yaml"
     },
     "EPISODE_HARD_CAP_ACROSS_CONVERSATIONS": {
@@ -849,9 +851,6 @@
     "PARAKEET_WINDOW_ALLOCATION_PERCENT": {
       "seeded": "2026-10-25"
     },
-    "PARAKEET_WINDOW_DIARIZATION": {
-      "seeded": "2026-10-25"
-    },
     "PARAKEET_WINDOW_FIRST_TEXT_CUT_ENABLED": {
       "owner": "dazheng (live STT / rollout lead)",
       "review_by": "2026-12-14"
@@ -879,7 +878,8 @@
     },
     "PRERECORDED_SONIOX_FAILOVER_ENABLED": {
       "owner": "refactor-lead",
-      "review_by": "2026-11-24"
+      "review_by": "2026-12-01",
+      "reason": "SCA-3850: give refactor-lead one week to decide the failover gate disposition"
     },
     "PROCESSING_ATTENTION_NON_RETRYABLE_EXPIRY_ENABLED": {
       "owner": "refactor-lead",
@@ -1075,9 +1075,6 @@
     "STT_PRERECORDED_VENDOR_FAIL_FAST": {
       "seeded": "2026-10-25"
     },
-    "STT_RESILIENT_RECONNECT": {
-      "seeded": "2026-10-25"
-    },
     "STT_ROUTING_DISRUPTION_GATE": {
       "seeded": "2026-10-25"
     },
@@ -1131,13 +1128,13 @@
     },
     "SYNC_BACKFILL_WORKER_API_URL": {
       "owner": "infracost / syncsplit",
-      "review_by": "2026-11-23",
-      "reason": "2026-11-10 renewed by flagrulings: review_by expiry failed every backend unit shard; owner to confirm keep or delete"
+      "review_by": "2026-11-30",
+      "reason": "SCA-3850: worker service URL; review a permanent budget slot with syncsplit"
     },
     "SYNC_BACKFILL_WORKER_AUDIENCE": {
       "owner": "infracost / syncsplit",
-      "review_by": "2026-11-23",
-      "reason": "2026-11-10 renewed by flagrulings: review_by expiry failed every backend unit shard; owner to confirm keep or delete"
+      "review_by": "2026-11-30",
+      "reason": "SCA-3850: worker service token audience; review a permanent budget slot with syncsplit"
     },
     "SYNC_CAPTURE_END_SILENCE_SECONDS": {
       "owner": "lifecycle-owner (SCA-1766)",
@@ -1174,8 +1171,8 @@
     },
     "SYNC_FUTURE_CAPTURE_CLAMP_ENABLED": {
       "owner": "Q12-AD / sync capture recovery",
-      "review_by": "2026-11-22",
-      "reason": "2026-11-16 renewed: review_by expiry failed the flag-budget guard for every branch; enabling waits on the product decision how recovered future-dated recordings appear on Home; quality lead keeps or deletes by 2026-11-22"
+      "review_by": "2026-11-29",
+      "reason": "2026-11-22 renewed: prod enabled for every reader and admitter (SCA-3501, go-ahead SCA-1819, David 2026-11-21 dark-ready ruling 17); after the 24 h guard and readback the flag graduates or is relabelled under SCA-3682 by 2026-11-29"
     },
     "SYNC_INLINE_BACKFILL_CONCURRENCY": {
       "seeded": "2026-10-25"
@@ -1260,8 +1257,8 @@
     },
     "LISTEN_BATCH_RECONNECT_ENABLED": {
       "owner": "capture-quality / Release",
-      "review_by": "2026-11-23",
-      "reason": "Aligned 2026-11-21 to the registry extension (until 2026-11-23, David's 2026-11-17 bulk ruling: extend); ramp not expanded by 2026-11-20 and the lapsed date turned main's unit tests red"
+      "review_by": "2026-11-30",
+      "reason": "SCA-3682: Release decision by November 27 after listen drains; target gate removal by November 30 or relabel the registry entry if the go-ahead slips"
     },
     "LISTEN_BATCH_RECONNECT_GRACE_SECONDS": {
       "owner": "capture-quality / Release",
@@ -1314,6 +1311,14 @@
     },
     "BATCH_PIPELINE_PROVIDER_STT_SWEEP_MAX_AGE_DAYS": {
       "on": "2026-11-16",
+      "replaced_by": null
+    },
+    "PARAKEET_WINDOW_DIARIZATION": {
+      "on": "2026-11-22",
+      "replaced_by": null
+    },
+    "STT_RESILIENT_RECONNECT": {
+      "on": "2026-11-22",
       "replaced_by": null
     }
   }

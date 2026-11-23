@@ -558,11 +558,11 @@ class AppLocalizationsFi extends AppLocalizations {
   String get hardwareSection => 'Laitteisto';
 
   @override
-  String get v2Undetected => 'V2 ei havaittu';
+  String get v2Undetected => 'Offline-synkronointi ei ole käytettävissä';
 
   @override
   String get v2UndetectedMessage =>
-      'Sinulla näyttää olevan V1-laite tai laitteesi ei ole yhdistetty. SD-korttitoiminto on saatavilla vain V2-laitteille.';
+      'Offline-synkronointi tarvitsee yhdistetyn Omi-laitteen, jossa on SD-korttitallennustila. Nykyinen laitteesi ei tue sitä.';
 
   @override
   String get endConversation => 'Lopeta keskustelu';
@@ -15725,4 +15725,24 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get stillWorkingOnIt => 'Yhä työn alla.';
+
+  @override
+  String get deviceReadyToUse => 'Valmis käytettäväksi';
+
+  @override
+  String get firmwareUpdateFirmwareTooOld =>
+      'Laitteesi laiteohjelmisto on liian vanha tätä päivitystä varten. Ota yhteyttä tukeen saadaksesi apua laitteen päivittämiseen.';
+
+  @override
+  String get firmwareUpdateAppRequired =>
+      'Tämä laiteohjelmistopäivitys tarvitsee Omi-sovelluksen uudemman version. Päivitä sovellus sovelluskaupastasi ja tarkista sitten uudelleen.';
+
+  @override
+  String get quietPayerTitle => 'Ei tallenteita 5 päivään';
+
+  @override
+  String get quietPayerMessage => 'Tarkista Omisi.';
+
+  @override
+  String get quietPayerCheck => 'Tarkista';
 }

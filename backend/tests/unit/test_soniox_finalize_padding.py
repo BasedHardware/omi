@@ -54,6 +54,10 @@ async def consume(wire, message):
 
 async def setup_peer(monkeypatch):
     monkeypatch.setenv('SONIOX_WIRE_LEDGER', 'true')
+    # No model is validated for the ordered clock today; these suites opt one in
+    # so the dormant clock stays covered until its padding law is revalidated.
+    monkeypatch.setattr(soniox, 'SONIOX_MODEL', 'stt-rt-v5')
+    monkeypatch.setattr(soniox, 'ORDERED_FINALIZE_VALIDATED_MODELS', frozenset({'stt-rt-v5'}))
     result = await managed(monkeypatch, True)
     leg, wire = result[4:6]
     leg.gate = None

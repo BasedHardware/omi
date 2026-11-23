@@ -560,11 +560,11 @@ class AppLocalizationsPl extends AppLocalizations {
   String get hardwareSection => 'Sprzęt';
 
   @override
-  String get v2Undetected => 'Nie wykryto V2';
+  String get v2Undetected => 'Synchronizacja offline jest niedostępna';
 
   @override
   String get v2UndetectedMessage =>
-      'Widzimy, że masz urządzenie V1 lub Twoje urządzenie nie jest podłączone. Funkcja karty SD jest dostępna tylko dla urządzeń V2.';
+      'Synchronizacja offline wymaga połączonego urządzenia Omi z pamięcią na karcie SD. Twoje obecne urządzenie tego nie obsługuje.';
 
   @override
   String get endConversation => 'Zakończ rozmowę';
@@ -15765,4 +15765,24 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get stillWorkingOnIt => 'Nadal pracujemy nad tym.';
+
+  @override
+  String get deviceReadyToUse => 'Gotowe do użycia';
+
+  @override
+  String get firmwareUpdateFirmwareTooOld =>
+      'Oprogramowanie układowe Twojego urządzenia jest zbyt stare dla tej aktualizacji. Skontaktuj się z pomocą techniczną, aby uzyskać pomoc w aktualizacji urządzenia.';
+
+  @override
+  String get firmwareUpdateAppRequired =>
+      'Ta aktualizacja oprogramowania układowego wymaga nowszej aplikacji Omi. Zaktualizuj aplikację w sklepie z aplikacjami, a następnie sprawdź ponownie.';
+
+  @override
+  String get quietPayerTitle => 'Brak nagrań od 5 dni';
+
+  @override
+  String get quietPayerMessage => 'Sprawdź swoje Omi.';
+
+  @override
+  String get quietPayerCheck => 'Sprawdź';
 }

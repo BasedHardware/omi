@@ -560,11 +560,11 @@ class AppLocalizationsKn extends AppLocalizations {
   String get hardwareSection => 'ಹಾರ್ಡ್‌ವೇರ್';
 
   @override
-  String get v2Undetected => 'V2 ಪತ್ತೆ ಮಾಡಲಾಗಿಲ್ಲ';
+  String get v2Undetected => 'ಆಫ್‌ಲೈನ್ ಸಿಂಕ್ ಲಭ್ಯವಿಲ್ಲ';
 
   @override
   String get v2UndetectedMessage =>
-      'ನಾವು ನೀವು ಯಾವುದೇ V1 ಸಾಧನ ಹೊಂದಿದ್ದೇನೆ ಅಥವಾ ನಿಮ್ಮ ಸಾಧನ ಸಂಪರ್ಕ ಆಗಿಲ್ಲ. SD ಕಾರ್ಡ ಕಾರ್ಯವು V2 ಸಾಧನಗಳಿಗೆ ಮಾತ್ರ ಲಭ್ಯ.';
+      'ಆಫ್‌ಲೈನ್ ಸಿಂಕ್‌ಗೆ SD ಕಾರ್ಡ್ ಸಂಗ್ರಹಣೆಯೊಂದಿಗೆ ಸಂಪರ್ಕಿತ Omi ಸಾಧನದ ಅಗತ್ಯವಿದೆ. ನಿಮ್ಮ ಪ್ರಸ್ತುತ ಸಾಧನವು ಇದನ್ನು ಬೆಂಬಲಿಸುವುದಿಲ್ಲ.';
 
   @override
   String get endConversation => 'ಸಂವಾದ ಆತೊಡೆತು';
@@ -15771,4 +15771,24 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get stillWorkingOnIt => 'ಇನ್ನೂ ಕೆಲಸ ನಡೆಯುತ್ತಿದೆ.';
+
+  @override
+  String get deviceReadyToUse => 'ಬಳಸಲು ಸಿದ್ಧ';
+
+  @override
+  String get firmwareUpdateFirmwareTooOld =>
+      'ಈ ನವೀಕರಣಕ್ಕೆ ನಿಮ್ಮ ಸಾಧನದ ಫರ್ಮ್‌ವೇರ್ ತುಂಬಾ ಹಳೆಯದಾಗಿದೆ. ನಿಮ್ಮ ಸಾಧನವನ್ನು ನವೀಕರಿಸಲು ಸಹಾಯಕ್ಕಾಗಿ ಬೆಂಬಲ ತಂಡವನ್ನು ಸಂಪರ್ಕಿಸಿ.';
+
+  @override
+  String get firmwareUpdateAppRequired =>
+      'ಈ ಫರ್ಮ್‌ವೇರ್ ನವೀಕರಣಕ್ಕೆ Omi ಆ್ಯಪ್‌ನ ಹೊಸ ಆವೃತ್ತಿ ಅಗತ್ಯವಿದೆ. ನಿಮ್ಮ ಆ್ಯಪ್ ಸ್ಟೋರ್‌ನಿಂದ ಆ್ಯಪ್ ಅನ್ನು ನವೀಕರಿಸಿ, ನಂತರ ಮತ್ತೆ ಪರಿಶೀಲಿಸಿ.';
+
+  @override
+  String get quietPayerTitle => '5 ದಿನಗಳಿಂದ ಯಾವುದೇ ರೆಕಾರ್ಡಿಂಗ್ ಇಲ್ಲ';
+
+  @override
+  String get quietPayerMessage => 'ನಿಮ್ಮ Omi ಪರಿಶೀಲಿಸಿ.';
+
+  @override
+  String get quietPayerCheck => 'ಪರಿಶೀಲಿಸಿ';
 }

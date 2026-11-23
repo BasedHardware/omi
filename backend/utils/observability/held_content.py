@@ -46,6 +46,10 @@ STAGING_RETRY = Counter(
 )
 DEFERRED_SECONDS = Counter('omi_held_content_deferred_seconds', 'Held seconds handed to encrypted staging journals')
 PCM_CUSTODY_SECONDS = Gauge('omi_held_content_pcm_custody_seconds', 'Process-local pending held PCM seconds')
+LIVE_STORAGE_QUOTA_REFUSALS = Counter(
+    'omi_held_content_live_storage_quota_refusals',
+    'Live sessions that hit the monthly held-audio storage quota at least once',
+)
 for _outcome in STAGING_RETRY_OUTCOMES:
     STAGING_RETRY.labels(outcome=reason_label(ReasonFamily.HELD_CONTENT, _outcome, StagingRetryOutcome))
 CHOICE_METHODS = ('get', 'put')
@@ -211,6 +215,10 @@ def record_transition_tail(outcome: str) -> None:
 def record_capture(kind: str) -> None:
     if kind in CAPTURE_KINDS:
         _inc(CAPTURE, kind=kind)
+
+
+def record_live_storage_quota_refusal() -> None:
+    _inc(LIVE_STORAGE_QUOTA_REFUSALS)
 
 
 def record_choice(outcome: str) -> None:

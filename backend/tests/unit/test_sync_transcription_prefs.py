@@ -1502,3 +1502,4 @@ def test_soniox_failover_metadata_reaches_sync_segments_and_outcomes(monkeypatch
     incoming = intake.call_args.args[1]
     assert incoming['transcript_segments'][0]['stt_provider'] == 'stt-async-v5'
     assert pipeline._bounded_sync_model('stt-async-v5') == 'stt-async-v5'
+    assert pipeline._bounded_sync_model('stt-async-v6') == 'stt-async-v6'

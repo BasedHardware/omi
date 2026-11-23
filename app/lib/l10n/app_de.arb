@@ -180,8 +180,8 @@
     "deviceInfoSection": "Geräteinformationen",
     "customizationSection": "Anpassung",
     "hardwareSection": "Hardware",
-    "v2Undetected": "V2 nicht erkannt",
-    "v2UndetectedMessage": "Wir sehen, dass Sie entweder ein V1-Gerät haben oder Ihr Gerät nicht verbunden ist. Die SD-Karten-Funktionalität ist nur für V2-Geräte verfügbar.",
+    "v2Undetected": "Offline-Synchronisierung nicht verfügbar",
+    "v2UndetectedMessage": "Für die Offline-Synchronisierung ist ein verbundenes Omi-Gerät mit SD-Kartenspeicher erforderlich. Dein aktuelles Gerät unterstützt dies nicht.",
     "endConversation": "Unterhaltung beenden",
     "pauseResume": "Pause/Fortsetzen",
     "starConversation": "Unterhaltung favorisieren",
@@ -4735,5 +4735,11 @@
     "conversationLiveNoEdits": "Warte bis zum Ende, um sie zu ändern.",
     "finishedSummaryReady": "Zusammenfassung bereit",
     "writingSummaryStatus": "Zusammenfassung wird erstellt…",
-    "stillWorkingOnIt": "Wir arbeiten noch daran."
+    "stillWorkingOnIt": "Wir arbeiten noch daran.",
+    "deviceReadyToUse": "Einsatzbereit",
+    "firmwareUpdateFirmwareTooOld": "Die Firmware deines Geräts ist zu alt für dieses Update. Wende dich an den Support, um Hilfe beim Aktualisieren deines Geräts zu erhalten.",
+    "firmwareUpdateAppRequired": "Dieses Firmware-Update benötigt eine neuere Version der Omi-App. Aktualisiere die App in deinem App-Store und suche dann erneut nach Updates.",
+    "quietPayerTitle": "Seit 5 Tagen keine Aufnahmen",
+    "quietPayerMessage": "Prüfe dein Omi.",
+    "quietPayerCheck": "Prüfen"
 }

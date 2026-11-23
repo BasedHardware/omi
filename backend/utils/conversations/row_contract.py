@@ -82,27 +82,54 @@ def check_write(row: Mapping[str, Any], *, producer: str) -> None:
             raise InvalidConversationRow(producer, conversation_id, paths) from None
 
 
+def _record_read_skip(row: Any, surface: str, paths: list[str]) -> None:
+    record_fallback(
+        component='conversation_row_contract',
+        from_mode='strict',
+        to_mode='row_skipped',
+        reason='malformed_doc',
+        outcome='degraded',
+    )
+    logger.warning(
+        'conversation row skipped on read surface=%s conversation_id=%s paths=%s',
+        surface,
+        str(row.get('id', 'unknown')) if isinstance(row, Mapping) else 'unknown',
+        paths,
+    )
+
+
+def projectable_rows(rows: Iterable[Any], *, surface: str) -> list[dict[str, Any]]:
+    """Screen storage shapes before list projection and redaction consume them.
+
+    Keep full model validation after redaction: locked rows may carry detail
+    fields that are removed from the response. Presentation can fill an omitted
+    structured field on legacy captures.
+    """
+    kept = []
+    for row in rows:
+        if not isinstance(row, dict):
+            _record_read_skip(row, surface, ['<root>:not_a_dict'])
+        elif 'structured' in row and not isinstance(row['structured'], Mapping):
+            _record_read_skip(row, surface, ['structured:not_a_mapping'])
+        elif (segments := row.get('transcript_segments')) and not isinstance(segments, Iterable):
+            _record_read_skip(row, surface, ['transcript_segments:not_iterable'])
+        else:
+            kept.append(row)
+    return kept
+
+
 def _screen(rows: Iterable[Any], surface: str, model: type[BaseModel]) -> list[tuple[Any, BaseModel]]:
     kept: list[tuple[Any, BaseModel]] = []
     for row in rows:
+        if not isinstance(row, Mapping):
+            _record_read_skip(row, surface, ['<root>:not_a_mapping'])
+            continue
         try:
-            if not isinstance(row, Mapping):
-                raise TypeError('not_a_mapping')
             kept.append((row, model.model_validate(row)))
-        except (ValidationError, TypeError) as error:
-            record_fallback(
-                component='conversation_row_contract',
-                from_mode='strict',
-                to_mode='row_skipped',
-                reason='malformed_doc',
-                outcome='degraded',
-            )
-            logger.warning(
-                'conversation row skipped on read surface=%s conversation_id=%s paths=%s',
-                surface,
-                str(row.get('id', 'unknown')) if isinstance(row, Mapping) else 'unknown',
-                error_paths(error) if isinstance(error, ValidationError) else ['<root>:not_a_mapping'],
-            )
+        except ValidationError as error:
+            _record_read_skip(row, surface, error_paths(error))
+        except TypeError:
+            _record_read_skip(row, surface, ['<root>:type_error'])
     return kept
 
 

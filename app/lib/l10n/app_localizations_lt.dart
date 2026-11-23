@@ -561,11 +561,11 @@ class AppLocalizationsLt extends AppLocalizations {
   String get hardwareSection => 'Aparatinė įranga';
 
   @override
-  String get v2Undetected => 'V2 neaptiktas';
+  String get v2Undetected => 'Sinchronizavimas neprisijungus nepasiekiamas';
 
   @override
   String get v2UndetectedMessage =>
-      'Matome, kad turite V1 įrenginį arba jūsų įrenginys neprijungtas. SD kortelės funkcija prieinama tik V2 įrenginiams.';
+      'Sinchronizavimui neprisijungus reikalingas prijungtas Omi įrenginys su SD kortelės atmintimi. Jūsų dabartinis įrenginys to nepalaiko.';
 
   @override
   String get endConversation => 'Baigti pokalbį';
@@ -15744,4 +15744,24 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get stillWorkingOnIt => 'Vis dar dirbama.';
+
+  @override
+  String get deviceReadyToUse => 'Paruošta naudoti';
+
+  @override
+  String get firmwareUpdateFirmwareTooOld =>
+      'Jūsų įrenginio programinė aparatinė įranga per sena šiam naujinimui. Kreipkitės į palaikymo tarnybą, kad padėtų atnaujinti įrenginį.';
+
+  @override
+  String get firmwareUpdateAppRequired =>
+      'Šiam programinės aparatinės įrangos naujinimui reikia naujesnės „Omi“ programėlės versijos. Atnaujinkite programėlę savo programėlių parduotuvėje ir patikrinkite dar kartą.';
+
+  @override
+  String get quietPayerTitle => '5 dienas nėra įrašų';
+
+  @override
+  String get quietPayerMessage => 'Patikrinkite savo Omi.';
+
+  @override
+  String get quietPayerCheck => 'Patikrinti';
 }

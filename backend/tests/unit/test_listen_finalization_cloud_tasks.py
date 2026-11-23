@@ -1293,7 +1293,14 @@ async def test_worker_closes_a_fenced_finalization_without_fanout(monkeypatch):
 
 
 @pytest.mark.anyio
-async def test_worker_requeues_an_unexpected_failure_after_claim(monkeypatch):
+@pytest.mark.parametrize(
+    'error,reason',
+    [
+        (RuntimeError('raw text'), 'worker_failed'),
+        (finalization_router.ServerBatchArchiveNotClosed('raw text'), 'server_batch_archive_not_closed'),
+    ],
+)
+async def test_worker_requeues_an_unexpected_failure_after_claim(monkeypatch, caplog, error, reason):
     monkeypatch.setattr(finalization_router, 'run_blocking', _inline_run_blocking)
     monkeypatch.setattr(finalization_router, 'try_acquire_job_run_lock', lambda key: 'lock-token')
     monkeypatch.setattr(finalization_router, 'release_job_run_lock', lambda key, token: None)
@@ -1303,9 +1310,7 @@ async def test_worker_requeues_an_unexpected_failure_after_claim(monkeypatch):
     monkeypatch.setattr(
         jobs_db, 'get_finalization_job', lambda job_id: {'uid': 'uid-1', 'conversation_id': 'conversation-1'}
     )
-    monkeypatch.setattr(
-        finalization_router, 'finalize_persisted_conversation', AsyncMock(side_effect=RuntimeError('raw text'))
-    )
+    monkeypatch.setattr(finalization_router, 'finalize_persisted_conversation', AsyncMock(side_effect=error))
     retryable = MagicMock(return_value=True)
     monkeypatch.setattr(jobs_db, 'mark_finalization_retryable', retryable)
     monkeypatch.setattr(finalization_router, 'get_listen_finalization_tasks_max_attempts_for_worker', lambda: 3)
@@ -1317,6 +1322,8 @@ async def test_worker_requeues_an_unexpected_failure_after_claim(monkeypatch):
     assert response.status_code == 500
     assert json.loads(response.body) == {'status': 'retry'}
     retryable.assert_called_once_with('job-1', 1, 9, 'worker_failed')
+    assert f'reason={reason}' in caplog.text
+    assert 'raw text' not in caplog.text
 
 
 @pytest.mark.anyio

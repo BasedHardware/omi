@@ -5,16 +5,18 @@ Synthetic data only.
 
 import logging
 from datetime import timedelta
+from unittest.mock import AsyncMock
 from types import SimpleNamespace
 
 import pytest
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.testclient import TestClient
 
 from database import conversations as db, conversations_v3 as store, conversations_v3_leases as leases
 from database.fsr_cache_telemetry import OMI_FALLBACK_TOTAL
-from models.conversation import Conversation
-from routers import conversations as routes
+from models.conversation import Conversation, SearchRequest
+from models.conversation_tasks import TaskConversationPageRequest
+from routers import conversation_tasks, conversations as routes, folders
 from utils.conversations import row_contract
 from tests.unit.test_conversations_v3_transactions import AT, R, strict  # noqa: F401
 
@@ -141,13 +143,10 @@ def test_get_conversations_returns_the_rest_of_a_page_with_one_malformed_row(mon
 
     page = [_row('a'), malformed, _row('b', is_locked=True, structured={'action_items': 'redacted on list reads'})]
     monkeypatch.setenv('HOME_STEP_PROJECTION', 'true')
-    monkeypatch.setattr(routes, 'home_transcription_presentation_gate_enabled', lambda: False)
+    monkeypatch.setenv('HOME_TRANSCRIPTION_PRESENTATION_GATE', 'false')
     monkeypatch.setattr(home_membership, 'held_for', lambda request: False)
     monkeypatch.setattr(home_membership, 'live_suppression_for', lambda *a: False)
     monkeypatch.setattr(home_membership, 'project_list', lambda uid, rows, *a, **kw: rows)
-    monkeypatch.setattr(
-        routes.ListVersionCheck, 'start', lambda *a: SimpleNamespace(not_modified=None, finish=lambda *a, **kw: None)
-    )
     monkeypatch.setattr(
         routes,
         'list_read_budget_for_request',
@@ -171,10 +170,61 @@ def test_get_conversations_returns_the_rest_of_a_page_with_one_malformed_row(mon
     assert 'surface=v1_conversations conversation_id=bad' in caplog.text
 
 
-async def test_search_exact_reference_drops_a_malformed_row(monkeypatch):
-    from models.conversation import SearchRequest
+def test_folder_only_skips_locked_null_structured_row(monkeypatch, caplog):
+    page = [
+        _row('a'),
+        _row('bad', is_locked=True, structured=None),
+        _row('b', is_locked=True, structured={'title': 'b', 'action_items': 'redacted on list reads'}),
+    ]
+    monkeypatch.setattr(folders.folders_db, 'get_folder', lambda *a: {'id': 'folder'})
+    monkeypatch.setattr(folders.folders_db, 'get_conversations_in_folder', lambda *a, **kw: page)
+    app = FastAPI()
+    app.include_router(folders.router)
+    app.dependency_overrides[folders.auth.get_current_user_uid] = lambda: 'synthetic'
 
-    monkeypatch.setattr(db, 'get_conversations_by_id_without_photos', lambda *a, **kw: [_broken('bad'), _row('a')])
+    before = _skips()
+    with TestClient(app) as client:
+        response = client.get('/v1/folders/folder/conversations')
+
+    assert response.status_code == 200
+    result = response.json()
+    assert [row['id'] for row in result] == ['a', 'b']
+    assert result[1]['structured']['action_items'] == []
+    assert _skips() == before + 1
+    assert 'surface=folder_conversations conversation_id=bad' in caplog.text
+
+
+async def test_task_list_only_skips_locked_null_structured_row(monkeypatch):
+    page = {
+        'items': [_row('a'), _row('bad', is_locked=True, structured=None), _row('b')],
+        'next_cursor': 'opaque',
+        'partial': True,
+    }
+    monkeypatch.setattr(conversation_tasks, 'task_conversation_page', AsyncMock(return_value=page))
+    monkeypatch.setattr(
+        conversation_tasks.paid_lock_recovery,
+        'PaidLockRecovery',
+        lambda uid: SimpleNamespace(can_recover=None, heal=lambda rows: None),
+    )
+    result = await conversation_tasks.conversations_with_tasks(
+        TaskConversationPageRequest(), Request({'type': 'http', 'headers': []}), uid='synthetic'
+    )
+    assert [row['id'] for row in result['items']] == ['a', 'b']
+    assert result['next_cursor'] == 'opaque' and result['partial'] is True
+
+
+def _malformed_pending_capture():
+    # Presentation would replace the explicit null with a valid placeholder.
+    return _row('pending', structured=None, record_lane_owner='batch_live_v1', home_transcription_deadline_at=AT)
+
+
+async def test_search_exact_reference_drops_a_malformed_row(monkeypatch):
+    monkeypatch.setenv('HOME_TRANSCRIPTION_PRESENTATION_GATE', 'true')
+    monkeypatch.setattr(
+        db,
+        'get_conversations_by_id_without_photos',
+        lambda *a, **kw: [_broken(), _malformed_pending_capture(), _row('a')],
+    )
     monkeypatch.setattr(routes, '_heal_locked_conversations_if_eligible', lambda *a: None)
     result = await routes._search_exact_conversation_reference(
         'bad', SearchRequest(query='bad'), 'synthetic', None, None
@@ -183,14 +233,17 @@ async def test_search_exact_reference_drops_a_malformed_row(monkeypatch):
 
 
 async def test_speaker_browse_drops_a_malformed_row(monkeypatch):
-    from models.conversation import SearchRequest
-
     monkeypatch.setattr(routes.conversation_scan_db, 'conversation_scan_budget', lambda *a, **kw: None)
     monkeypatch.setattr(routes.conversation_scan_db, 'speaker_browse_scan', lambda *a, **kw: [])
     monkeypatch.setattr(
         routes,
         'browse_conversations_by_speaker',
-        lambda *a, **kw: {'items': [_broken('bad'), _row('a')], 'total_pages': 1, 'current_page': 1, 'per_page': 10},
+        lambda *a, **kw: {
+            'items': [_broken(), _row('locked', is_locked=True, structured=None), _row('a')],
+            'total_pages': 1,
+            'current_page': 1,
+            'per_page': 10,
+        },
     )
     monkeypatch.setattr(
         routes.paid_lock_recovery,
@@ -202,3 +255,20 @@ async def test_speaker_browse_drops_a_malformed_row(monkeypatch):
         SearchRequest(speaker_id='spk'), 'synthetic', None, None, None, None
     )
     assert [row['id'] for row in result['items']] == ['a']
+
+
+async def test_ranked_search_skips_malformed_row_and_keeps_pagination(monkeypatch):
+    monkeypatch.setenv('HOME_TRANSCRIPTION_PRESENTATION_GATE', 'true')
+    monkeypatch.setattr(routes.vector_db, 'index', None)
+    monkeypatch.setattr(
+        routes,
+        'search_conversations',
+        lambda **kw: {'items': [{'id': 'a'}, {'id': 'pending'}], 'current_page': 1, 'per_page': 2},
+    )
+    monkeypatch.setattr(
+        db, 'get_conversations_by_id_without_photos', lambda *a, **kw: [_malformed_pending_capture(), _row('a')]
+    )
+    monkeypatch.setattr(routes, '_heal_locked_conversations_if_eligible', lambda *a: None)
+    result = await routes.search_conversations_endpoint(SearchRequest(query='query', per_page=2), uid='synthetic')
+    assert [row['id'] for row in result['items']] == ['a']
+    assert (result['current_page'], result['per_page'], result['total_pages']) == (1, 2, 2)

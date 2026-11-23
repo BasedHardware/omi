@@ -268,6 +268,7 @@ def with_memory_env(payload: str) -> str:
         {"name": "PLAYBACK_ON_DEMAND_ENABLED", "value": "true"},
         {"name": "REPEAT_WORK_LLM_VERSION", "value": "2026-10-16-v1"},
         {"name": "SYNC_POLL_BACKOFF_ENABLED", "value": "false"},
+        {"name": "SYNC_POLL_BACKOFF_PERCENT", "value": "0"},
         {"name": "SYNC_RECORD_COVERAGE_WAIT_MEMO", "value": "true"},
         {"name": "SYNC_RECORD_WAIT_MEMO_FIRST", "value": "true"},
         {"name": "SYNC_RECORD_DECODE_FAILURE_MEMO", "value": "true"},
@@ -279,13 +280,11 @@ def with_memory_env(payload: str) -> str:
         {"name": "AUDIO_ARCHIVE_SYNC_ENABLED", "value": "false"},
         {"name": "AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED", "value": "false"},
         {"name": "AUDIO_ARCHIVE_COALESCE_ENABLED", "value": "true"},
-        {"name": "AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED", "value": "false"},
         {"name": "AUDIO_ARCHIVE_PERCENT", "value": "0"},
         {"name": "AUDIO_ARCHIVE_STOP_PCM_PERCENT", "value": "0"},
         {"name": "AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT", "value": "0"},
         {"name": "AUDIO_ARCHIVE_UID_ALLOWLIST", "value": "vi7SA9ckQCe4ccobWNxlbdcNdC23"},
         {"name": "BUCKET_AUDIO_DERIVED", "value": ""},
-        {"name": "AUDIO_MERGE_WORKER_URL", "value": ""},
         {"name": "REDIS_DB_PORT", "value": "13151"},
         {"name": "CLIENT_SUMMARIES_AT_CAP_ENABLED", "value": "true"},
         {"name": "DESKTOP_UPDATE_POINTERS_MODE", "value": "primary"},
@@ -401,7 +400,6 @@ def with_audio_timeline_span_env(payload: str) -> str:
         '        {"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"},\n'
         '        {"name": "LIVE_CAPTURE_WINDOW_RETENTION", "value": "false"},\n'
         '        {"name": "LIVE_CAPTURE_WINDOW_STRICT_PROJECTION", "value": "false"},\n'
-        '        {"name": "LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION", "value": "false"},\n'
         '        {"name": "LIVE_CAPTURE_WINDOW_MERGE_UNION", "value": "false"},\n'
         '        {"name": "LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS", "value": "false"},\n'
         '        {"name": "SONIOX_CAPTURE_AXIS_DIAGNOSTICS", "value": "false"},\n'
@@ -3847,11 +3845,12 @@ def test_generated_read_lever_manifest_is_current_and_records_unresolved_sources
         integration['explicit'],
         usage_month_cache=0,
         usage_month_total=0,
-        bpp_decision_cache=100,
-        privacy_checks_shadow=10,
+        bpp_decision_cache=0,
+        privacy_checks_shadow=0,
         bpp_owner_memo_enforce=0,
     )
-    assert prod_worker['effective']['bpp_decision_cache'] == 100
+    assert prod_worker['effective']['bpp_decision_cache'] == 0
+    assert prod_worker['effective']['privacy_checks_shadow'] == 0
     assert prod_worker['effective']['batch_timeliness_leader'] == 100
     for service in ('backend', 'backend-sync', 'backend-sync-backfill', 'backend-integration'):
         surface = generated['surfaces'][f'runtime/prod/cloud_run/services/{service}']
@@ -4227,23 +4226,27 @@ def test_cloud_run_runtime_rejects_missing_listener_close_binding(tmp_path, key,
     }
 
 
-@pytest.mark.parametrize('environment', ['dev', 'prod'])
-def test_future_capture_admissions_default_off_until_reader_rollout(environment):
+@pytest.mark.parametrize(('environment', 'enabled'), [('dev', 'false'), ('prod', 'true')])
+def test_future_capture_clamp_respects_backend_and_backfill_preservation_pins(environment, enabled):
     config = yaml.safe_load((ROOT / 'deploy/runtime_env.yaml').read_text())['environments'][environment]
-    expected = {'value': 'false', 'category': 'rollout'}
-    hosts = [config['gke']['backend-listen'], *config['cloud_run']['services'].values()]
+    hosts = {'backend-listen': config['gke']['backend-listen'], **config['cloud_run']['services']}
     # SCA-3120: prod adds the derived projection pump as a sixth reader.
     assert len(hosts) == (6 if environment == 'prod' else 5)
     renderer = runpy.run_path(str(RENDERER_SCRIPT), run_name='future_capture_staged_renderer')
-    for host in hosts:
-        assert host['env']['SYNC_FUTURE_CAPTURE_CLAMP_ENABLED'] == expected
-        assert renderer['_render_env_entries']({'SYNC_FUTURE_CAPTURE_CLAMP_ENABLED': expected}) == [
-            {'name': 'SYNC_FUTURE_CAPTURE_CLAMP_ENABLED', 'value': 'false'}
+    for name, host in hosts.items():
+        # SCA-3555: backend keeps the live value until its SCA-3501 activation step.
+        # SCA-3544: backfill preserves false during its catch-up.
+        host_value = 'false' if name in ('backend', 'backend-sync-backfill') else enabled
+        assert host['env']['SYNC_FUTURE_CAPTURE_CLAMP_ENABLED'] == {'value': host_value, 'category': 'rollout'}
+        # Render this host's own manifest entry (not the expected literal).
+        entry = {'SYNC_FUTURE_CAPTURE_CLAMP_ENABLED': host['env']['SYNC_FUTURE_CAPTURE_CLAMP_ENABLED']}
+        assert renderer['_render_env_entries'](entry) == [
+            {'name': 'SYNC_FUTURE_CAPTURE_CLAMP_ENABLED', 'value': host_value}
         ]
     values = yaml.safe_load((ROOT.parent / config['gke']['backend-listen']['values_file']).read_text())
     assert {entry['name']: entry.get('value') for entry in values['env']}[
         'SYNC_FUTURE_CAPTURE_CLAMP_ENABLED'
-    ] == 'false'
+    ] == enabled
 
 
 @pytest.mark.parametrize('service', ['all', 'backend-sync'])
@@ -4284,15 +4287,15 @@ def test_control_sync_routing_validates_deployed_values_without_changing_manifes
     )[0].message == ('sync routing overlay outside selected service scope')
 
 
-@pytest.mark.parametrize('lever', ['bpp_decision_cache', 'privacy_checks_shadow', 'bpp_owner_memo_enforce'])
-def test_read_lever_parity_rejects_worker_inheriting_api_privacy_scope(read_lever_sources, lever):
-    """API-only admission must not flow through the integration comparison into a worker train."""
+@pytest.mark.parametrize(
+    ('lever', 'drift'), [('bpp_decision_cache', 100), ('privacy_checks_shadow', 10), ('bpp_owner_memo_enforce', 100)]
+)
+def test_read_lever_parity_rejects_unapproved_worker_privacy_values(read_lever_sources, lever, drift):
     policy, sources, expected = read_lever_sources
     changed = copy.deepcopy(sources)
     worker = 'chart/prod/batch-pipeline-worker'
-    integration = 'runtime/prod/cloud_run/services/backend-integration'
-    assert changed[worker][lever] != expected[integration][lever]
-    changed[worker][lever] = expected[integration][lever]
+    assert changed[worker][lever] == 0
+    changed[worker][lever] = drift
     assert any(worker in error for error in read_lever_manifest.parity_errors(changed, expected, policy))
 
 

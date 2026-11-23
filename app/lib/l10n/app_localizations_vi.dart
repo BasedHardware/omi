@@ -562,11 +562,11 @@ class AppLocalizationsVi extends AppLocalizations {
   String get hardwareSection => 'Phần cứng';
 
   @override
-  String get v2Undetected => 'Không phát hiện V2';
+  String get v2Undetected => 'Đồng bộ ngoại tuyến không khả dụng';
 
   @override
   String get v2UndetectedMessage =>
-      'Chúng tôi thấy rằng bạn có thiết bị V1 hoặc thiết bị của bạn chưa được kết nối. Chức năng thẻ SD chỉ khả dụng cho thiết bị V2.';
+      'Đồng bộ ngoại tuyến cần thiết bị Omi đã kết nối có bộ nhớ thẻ SD. Thiết bị hiện tại của bạn không hỗ trợ tính năng này.';
 
   @override
   String get endConversation => 'Kết thúc cuộc trò chuyện';
@@ -15721,4 +15721,24 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get stillWorkingOnIt => 'Vẫn đang xử lý.';
+
+  @override
+  String get deviceReadyToUse => 'Sẵn sàng để sử dụng';
+
+  @override
+  String get firmwareUpdateFirmwareTooOld =>
+      'Firmware trên thiết bị của bạn quá cũ để cài đặt bản cập nhật này. Hãy liên hệ bộ phận hỗ trợ để được giúp cập nhật thiết bị.';
+
+  @override
+  String get firmwareUpdateAppRequired =>
+      'Bản cập nhật firmware này yêu cầu phiên bản ứng dụng Omi mới hơn. Hãy cập nhật ứng dụng từ cửa hàng ứng dụng của bạn, rồi kiểm tra lại.';
+
+  @override
+  String get quietPayerTitle => 'Không có bản ghi nào trong 5 ngày';
+
+  @override
+  String get quietPayerMessage => 'Hãy kiểm tra Omi của bạn.';
+
+  @override
+  String get quietPayerCheck => 'Kiểm tra';
 }

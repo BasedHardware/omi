@@ -10,7 +10,6 @@ from utils.generated_compute import require_generated_compute, generated_compute
 import asyncio
 import hashlib
 import os
-from collections.abc import Mapping
 from contextlib import ExitStack, nullcontext
 
 from fastapi.responses import StreamingResponse
@@ -38,9 +37,7 @@ from database.legal_holds import (
 )
 from utils.other.account_gate_http import account_gate_busy_http_exception
 from database.firestore_read_metrics import FirestoreReadSite
-from utils.list_version_check import ListVersionCheck
 from config import historical_tier
-from config.episodes import home_step_projection_enabled, home_transcription_presentation_gate_enabled
 from utils.conversations import historical_projection, home_step, row_contract, transcribing_hold
 from utils.conversations.list_filters import aware_datetime, reject_oversized_filter
 from database.vector_db import (
@@ -1179,17 +1176,6 @@ def get_conversations(
 
     from utils.episodes import home_membership
 
-    held_request = home_membership.held_for(request)
-    # Reader-enforced expiry changes the body without a writer-version bump.
-    time_dependent = (
-        home_transcription_presentation_gate_enabled()
-        or home_step_projection_enabled()
-        or home_membership.live_suppression_for(uid, request)
-    )
-    version_check = ListVersionCheck.start(None if held_request or time_dependent else request, uid, 'conversations')
-    if version_check.not_modified is not None:
-        return version_check.not_modified
-
     # Request-scoped budget: the server-side offset is charged before the
     # query and the page stream runs under the derived per-RPC timeout, so a
     # deep page cannot consume the whole HTTP_GET_TIMEOUT (#11831).
@@ -1237,12 +1223,7 @@ def get_conversations(
         list_page_headers.apply(response, page)
     _heal_locked_conversations_if_eligible(uid, conversations)
     projected = []
-    for row in conversations:
-        # Presentation and redaction expect a structured object. Let the row
-        # contract report a malformed value before either can crash or mask it.
-        if 'structured' in row and not isinstance(row['structured'], Mapping):
-            projected.append(row)
-            continue
+    for row in row_contract.projectable_rows(conversations, surface='v1_conversations'):
         wire = historical_projection.project(
             transcribing_hold.project(home_step.project(row, show_held=show_held), home_list=True)
         )
@@ -1251,13 +1232,6 @@ def get_conversations(
     if budget.truncated and response is not None:
         response.headers[OMI_LIST_TRUNCATED_HEADER] = OMI_LIST_TRUNCATED_VALUE
     budget.observe('truncated' if budget.truncated else 'complete')
-    # Paid lock recovery depends on the current allowance (including rollover)
-    # and must run on every locked-page read, even without a source mutation.
-    version_check.finish(
-        response,
-        truncated=budget.truncated,
-        cacheable=not held_request and not time_dependent and not any(row.get('is_locked') for row in conversations),
-    )
     return conversations
 
 
@@ -2616,7 +2590,8 @@ async def _search_exact_conversation_reference(
     if exact_page != 1:
         conversations = []
     if read_budget is None:
-        conversations = [transcribing_hold.project(row) for row in conversations]
+        rows = row_contract.projectable_rows(conversations, surface='search_exact')
+        conversations = [transcribing_hold.project(row) for row in rows]
         redact_conversations_for_list(conversations)
         conversations = row_contract.readable_rows(conversations, surface='search_exact', model=ConversationSearchItem)
     return {
@@ -2667,10 +2642,11 @@ async def _browse_speaker_conversations(
         raise HTTPException(
             status_code=503, detail="Saved conversation access could not be restored. Please retry."
         ) from error
-    browse_results['items'] = [transcribing_hold.project(row) for row in browse_results['items']]
-    redact_conversations_for_list(browse_results['items'])
+    rows = row_contract.projectable_rows(browse_results['items'], surface='speaker_browse')
+    projected = [transcribing_hold.project(row) for row in rows]
+    redact_conversations_for_list(projected)
     browse_results['items'] = row_contract.readable_rows(
-        browse_results['items'], surface='speaker_browse', model=ConversationSearchItem
+        projected, surface='speaker_browse', model=ConversationSearchItem
     )
     finish_list_budget(response, budget)
     return browse_results
@@ -2818,9 +2794,10 @@ async def _search_conversation_page(
         conversations = attach_match_snippets_to_conversations(conversations, search_request.query)
     if candidates_only:
         return {**search_results, 'items': conversations}
-    conversations = [transcribing_hold.project(row) for row in conversations]
-    redact_conversations_for_list(conversations)
-    search_results['items'] = row_contract.readable_rows(conversations, surface='search', model=ConversationSearchItem)
+    rows = row_contract.projectable_rows(conversations, surface='search')
+    projected = [transcribing_hold.project(row) for row in rows]
+    redact_conversations_for_list(projected)
+    search_results['items'] = row_contract.readable_rows(projected, surface='search', model=ConversationSearchItem)
     # Recompute total_pages from the effective (clamped) pagination the search actually ran with, not the
     # raw request: search_request.page/per_page are optional and unbounded, so a null/0/huge value here
     # would 500 (None + 1 / len(...) >= None). search_conversations returns clamped current_page/per_page.

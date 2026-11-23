@@ -178,8 +178,8 @@
     "deviceInfoSection": "Enhetsinformasjon",
     "customizationSection": "Tilpasning",
     "hardwareSection": "Maskinvare",
-    "v2Undetected": "V2 ikke oppdaget",
-    "v2UndetectedMessage": "Vi ser at du enten har en V1-enhet eller at enheten din ikke er tilkoblet. SD-kortfunksjonalitet er kun tilgjengelig for V2-enheter.",
+    "v2Undetected": "Frakoblet synkronisering er ikke tilgjengelig",
+    "v2UndetectedMessage": "Frakoblet synkronisering krever en tilkoblet Omi-enhet med SD-kortlagring. Den nåværende enheten din støtter ikke dette.",
     "endConversation": "Avslutt samtale",
     "pauseResume": "Pause/Fortsett",
     "starConversation": "Favorittmerk samtale",
@@ -4735,5 +4735,11 @@
     "conversationLiveNoEdits": "Vent til den er avsluttet før du endrer den.",
     "finishedSummaryReady": "Oppsummeringen er klar",
     "writingSummaryStatus": "Skriver oppsummering…",
-    "stillWorkingOnIt": "Jobber fortsatt med det."
+    "stillWorkingOnIt": "Jobber fortsatt med det.",
+    "deviceReadyToUse": "Klar til bruk",
+    "firmwareUpdateFirmwareTooOld": "Fastvaren på enheten din er for gammel for denne oppdateringen. Kontakt kundestøtte for hjelp med å oppdatere enheten.",
+    "firmwareUpdateAppRequired": "Denne fastvareoppdateringen krever en nyere Omi-app. Oppdater appen fra appbutikken din, og se etter oppdateringer på nytt.",
+    "quietPayerTitle": "Ingen opptak på 5 dager",
+    "quietPayerMessage": "Sjekk Omi-en din.",
+    "quietPayerCheck": "Sjekk"
 }

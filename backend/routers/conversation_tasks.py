@@ -99,8 +99,9 @@ async def conversations_with_tasks(
         raise HTTPException(
             status_code=503, detail='Conversations with tasks are temporarily unavailable. Please retry.'
         ) from error
-    result['items'] = [transcribing_hold.project(row) for row in result['items']]
-    redact_conversations_for_list(result['items'])
-    result['items'] = row_contract.readable_rows(result['items'], surface='conversations_with_tasks')
+    rows = row_contract.projectable_rows(result['items'], surface='conversations_with_tasks')
+    projected = [transcribing_hold.project(row) for row in rows]
+    redact_conversations_for_list(projected)
+    result['items'] = row_contract.readable_rows(projected, surface='conversations_with_tasks')
     budget.observe('truncated' if result['partial'] else 'complete')
     return result

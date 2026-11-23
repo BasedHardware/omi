@@ -552,10 +552,10 @@ class AppLocalizationsJa extends AppLocalizations {
   String get hardwareSection => 'ハードウェア';
 
   @override
-  String get v2Undetected => 'V2が検出されません';
+  String get v2Undetected => 'オフライン同期は利用できません';
 
   @override
-  String get v2UndetectedMessage => 'V1デバイスをお持ちか、デバイスが接続されていないようです。SDカード機能はV2デバイスでのみ利用可能です。';
+  String get v2UndetectedMessage => 'オフライン同期には、SDカードストレージを備えた接続済みのOmiデバイスが必要です。現在のデバイスは対応していません。';
 
   @override
   String get endConversation => '会話を終了';
@@ -15492,4 +15492,22 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get stillWorkingOnIt => 'まだ処理中です。';
+
+  @override
+  String get deviceReadyToUse => '使用準備完了';
+
+  @override
+  String get firmwareUpdateFirmwareTooOld => 'デバイスのファームウェアが古いため、この更新を適用できません。デバイスの更新についてはサポートにお問い合わせください。';
+
+  @override
+  String get firmwareUpdateAppRequired => 'このファームウェアの更新には、新しいバージョンのOmiアプリが必要です。アプリストアからアプリを更新してから、もう一度確認してください。';
+
+  @override
+  String get quietPayerTitle => '5日間録音がありません';
+
+  @override
+  String get quietPayerMessage => 'Omiを確認してください。';
+
+  @override
+  String get quietPayerCheck => '確認';
 }

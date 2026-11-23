@@ -296,6 +296,13 @@ def test_quarantine_transaction_reads_before_writes_and_telemetry_cannot_escape(
     assert queue.fail('bad', lease.token, 1, worker_failure={'stage': 'vad_windows', 'reason': 'unsupported_language'})
     quarantined = client.rows[('batch_pipeline_dev_jobs', 'bad')]
     assert quarantined['state'] == 'quarantined' and quarantined['worker_failure']['reason'] == 'unsupported_language'
+    assert quarantined['quarantine_diagnostic'] == {
+        'exception_class': 'worker_validation',
+        'stage': 'vad_windows',
+        'worker_reason': 'unsupported_language',
+        'provider_error': 'unknown',
+        'artifact_kind': 'unknown',
+    }
     assert quarantined['audio_uri'] == 'gs://synthetic/bad'
     assert not queue.fail('bad', lease.token, 2)
 

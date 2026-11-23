@@ -562,11 +562,11 @@ class AppLocalizationsTe extends AppLocalizations {
   String get hardwareSection => 'హార్డ్‌వేర్';
 
   @override
-  String get v2Undetected => 'V2 గుర్తించబడలేదు';
+  String get v2Undetected => 'ఆఫ్‌లైన్ సింక్ అందుబాటులో లేదు';
 
   @override
   String get v2UndetectedMessage =>
-      'V1 డివైస్ ఉందని లేదా మీ డివైస్ కనెక్ట్ చేయబడలేదని మేము చూస్తున్నాము. SD కార్డ్ కార్యకలాపం V2 డివైసెస్‌కు మాత్రమే అందుబాటులో ఉంది.';
+      'ఆఫ్‌లైన్ సింక్ కోసం SD కార్డ్ స్టోరేజ్ ఉన్న కనెక్ట్ చేయబడిన Omi పరికరం అవసరం. మీ ప్రస్తుత పరికరం దీనికి మద్దతు ఇవ్వదు.';
 
   @override
   String get endConversation => 'సంభాషణను ముగించండి';
@@ -15782,4 +15782,24 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get stillWorkingOnIt => 'ఇంకా పని జరుగుతోంది.';
+
+  @override
+  String get deviceReadyToUse => 'వాడుకకు సిద్ధం';
+
+  @override
+  String get firmwareUpdateFirmwareTooOld =>
+      'ఈ నవీకరణకు మీ పరికరంలోని ఫర్మ్‌వేర్ చాలా పాతది. మీ పరికరాన్ని నవీకరించడంలో సహాయం కోసం సపోర్ట్‌ను సంప్రదించండి.';
+
+  @override
+  String get firmwareUpdateAppRequired =>
+      'ఈ ఫర్మ్‌వేర్ నవీకరణకు కొత్త వెర్షన్ Omi యాప్ అవసరం. మీ యాప్ స్టోర్ నుండి యాప్‌ను నవీకరించి, మళ్లీ తనిఖీ చేయండి.';
+
+  @override
+  String get quietPayerTitle => '5 రోజులుగా రికార్డింగ్‌లు లేవు';
+
+  @override
+  String get quietPayerMessage => 'మీ Omiని తనిఖీ చేయండి.';
+
+  @override
+  String get quietPayerCheck => 'తనిఖీ';
 }

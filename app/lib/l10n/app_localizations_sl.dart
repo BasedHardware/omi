@@ -559,11 +559,11 @@ class AppLocalizationsSl extends AppLocalizations {
   String get hardwareSection => 'Strojna oprema';
 
   @override
-  String get v2Undetected => 'V2 ni zaznan';
+  String get v2Undetected => 'Sinhronizacija brez povezave ni na voljo';
 
   @override
   String get v2UndetectedMessage =>
-      'Vidimo, da imate V1 napravo ali pa je vaša naprava nepriključena. Funkcionalnost SD kartice je dostopna samo za naprave V2.';
+      'Sinhronizacija brez povezave zahteva povezano napravo Omi s pomnilnikom na kartici SD. Vaša trenutna naprava tega ne podpira.';
 
   @override
   String get endConversation => 'Končaj pogovor';
@@ -15748,4 +15748,24 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get stillWorkingOnIt => 'Še vedno poteka obdelava.';
+
+  @override
+  String get deviceReadyToUse => 'Pripravljen za uporabo';
+
+  @override
+  String get firmwareUpdateFirmwareTooOld =>
+      'Vdelana programska oprema vaše naprave je prestara za to posodobitev. Za pomoč pri posodobitvi naprave se obrnite na podporo.';
+
+  @override
+  String get firmwareUpdateAppRequired =>
+      'Ta posodobitev vdelane programske opreme zahteva novejšo aplikacijo Omi. Posodobite aplikacijo v trgovini z aplikacijami in nato znova preverite.';
+
+  @override
+  String get quietPayerTitle => 'Ni posnetkov že 5 dni';
+
+  @override
+  String get quietPayerMessage => 'Preverite svoj Omi.';
+
+  @override
+  String get quietPayerCheck => 'Preveri';
 }

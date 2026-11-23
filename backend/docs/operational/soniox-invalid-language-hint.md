@@ -49,7 +49,7 @@ then **told** the provider the language anyway:
 ## Why a static vocabulary and not the live Get-models endpoint
 
 The list is the provider's documented, versioned page for the single unified
-model (`stt-rt-v5`), fetched per deployment. Keeping it beside the other
+model (`stt-rt-v6`), fetched per deployment. Keeping it beside the other
 capability tables in `config/stt_provider_policy.py` means a provider
 vocabulary change is one reviewed change in the one module that already owns
 provider capability — the same pattern as `MODULATE_SUPPORTED_LANGUAGES` and

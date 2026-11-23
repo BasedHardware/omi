@@ -52,7 +52,6 @@ from utils.stt.live_reason import (
 from utils.stt.replay_delivery import AudioDeliveryExpired, RecoveryWriteStalled, RecoveryWriterPace, paced_send
 from utils.stt.send_queue import AudioSendQueue
 from utils.observability.demand_cohort import create_connected_meter, create_wire_meter, telemetry_call
-from utils.stt.resilient_stream import enabled as resilient_reconnect_enabled
 from utils.stt.language_policy import LiveLanguageProfile, soniox_hints
 from utils.stt.stream_close import (
     PROVIDER_AUTH_REJECTED,
@@ -65,7 +64,12 @@ logger = logging.getLogger(__name__)
 
 SONIOX_SERVICE_NAME: Final = 'soniox'
 SONIOX_WS_URL: Final = os.getenv('SONIOX_WS_URL', 'wss://stt-rt.soniox.com/transcribe-websocket')
-SONIOX_MODEL: Final = os.getenv('SONIOX_MODEL', 'stt-rt-v5')
+SONIOX_MODEL: Final = os.getenv('SONIOX_MODEL', 'stt-rt-v6')
+# Models whose finalize padding matches OrderedSonioxProviderClock's 120 ms law.
+# Empty: the 2026-11-23 probe (scripts/soniox_finalize_padding_probe.py) found that
+# stt-rt-v5 and stt-rt-v6 both ack the exact sent cursor, so every ordered
+# prediction would mismatch. Add a model only after the probe reports law=padded.
+ORDERED_FINALIZE_VALIDATED_MODELS: frozenset[str] = frozenset()
 # Soniox closes any socket that receives neither audio nor keepalive for 20s.
 # VAD gating routinely holds audio back for longer than that, so idle sockets die
 # as 408 request_timeout unless we fill the gap ourselves.
@@ -147,8 +151,6 @@ def soniox_death_reason(error_code: Any, error_type: Any, error_message: Any = N
     if code == 413:
         # Documented rotation: open a new WebSocket. The failover path does.
         return SONIOX_DEATH_ROTATION
-    if resilient_reconnect_enabled() and code is not None and 500 <= code <= 599:
-        return 'provider_5xx'
     return 'connection_lost'
 
 
@@ -224,7 +226,7 @@ class SafeSonioxSocket(STTSocket):
             self._wire_ledger_enabled
             and soniox_ordered_finalize_enabled()
             and sample_rate == 16000
-            and SONIOX_MODEL == 'stt-rt-v5'
+            and SONIOX_MODEL in ORDERED_FINALIZE_VALIDATED_MODELS
             and SONIOX_WS_URL == 'wss://stt-rt.soniox.com/transcribe-websocket'
         ):
             self._provider_clock = OrderedSonioxProviderClock(sample_rate)
@@ -522,8 +524,6 @@ class SafeSonioxSocket(STTSocket):
                 raise RuntimeError('Soniox transport already owns a different ledger')
             return
         self._wire_epoch = epoch
-        # This switch uses the compact axis verified by the controlled probe.
-        epoch.soniox_elapsed_mode = 'off'
         if epoch.wire_audio_samples is None:
             epoch.wire_audio_samples = epoch.send_map.last_provider_sample or 0
         if epoch.wire_provider_samples is None:
@@ -654,14 +654,12 @@ class SafeSonioxSocket(STTSocket):
         except websockets.exceptions.ConnectionClosed as e:
             self._mark_dead(
                 f'ws send closed: {e}',
-                typed_reason='connection_lost' if resilient_reconnect_enabled() else None,
                 transport_error=e,
                 operation='send',
             )
         except Exception as e:
             self._mark_dead(
                 f'ws send error: {e}',
-                typed_reason='connection_lost' if resilient_reconnect_enabled() else None,
                 transport_error=e,
                 operation='send',
             )
@@ -745,7 +743,6 @@ class SafeSonioxSocket(STTSocket):
         except websockets.exceptions.ConnectionClosed as e:
             self._mark_dead(
                 f'ws recv closed: {e}',
-                typed_reason='connection_lost' if resilient_reconnect_enabled() else None,
                 transport_error=e,
                 operation='recv',
             )
@@ -754,7 +751,6 @@ class SafeSonioxSocket(STTSocket):
         except Exception as e:
             self._mark_dead(
                 f'ws recv error: {e}',
-                typed_reason='connection_lost' if resilient_reconnect_enabled() else None,
                 transport_error=e,
                 operation='recv',
             )

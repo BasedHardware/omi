@@ -157,7 +157,8 @@ def get_folder_conversations(
     conversations = folders_db.get_conversations_in_folder(
         uid, folder_id, limit=limit, offset=offset, include_discarded=include_discarded
     )
-    conversations = [transcribing_hold.project(row) for row in conversations]
+    rows = row_contract.projectable_rows(conversations, surface='folder_conversations')
+    conversations = [transcribing_hold.project(row) for row in rows]
     redact_conversations_for_list(conversations)
     # One malformed/legacy conversation must not fail the whole list with a 500.
     return row_contract.readable_models(conversations, surface='folder_conversations', model=Conversation)
