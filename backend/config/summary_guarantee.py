@@ -21,6 +21,12 @@ def repair_enabled(*, environ: Mapping[str, str] | None = None) -> bool:
     )
 
 
+def historical_repair_enabled() -> bool:
+    from config.refactor_modes import default_off
+
+    return default_off('SUMMARY_DEBT_REPAIR_HISTORICAL_ENABLED')
+
+
 def deadline_seconds() -> int:
     try:
         return max(60, min(120, int(os.getenv('FIRST_SUMMARY_DEADLINE_SECONDS', '120'))))

@@ -2,6 +2,7 @@
 
 from copy import deepcopy
 from types import SimpleNamespace
+from typing import Any
 
 import pytest
 from services import summary_debt_repair as repair
@@ -523,6 +524,7 @@ def test_disabled_gate_repairs_missing_pending_and_persists_legacy_cursor(
 ):
     client, uid, tasks, ref, row = debt_store
     monkeypatch.setenv('ENRICHMENT_MAX_AGE_HOURS', '0')
+    monkeypatch.setenv('SUMMARY_DEBT_REPAIR_HISTORICAL_ENABLED', 'true')
     monkeypatch.setattr(repair, 'REPAIR_SCAN_LIMIT', 1)
     missing = ref.parent.document('missing-pending')
     candidate = {**row, 'summary_due_at': 219}
@@ -946,6 +948,120 @@ def test_scan_stops_before_next_chunk_and_preserves_fetched_tail(debt_store, mon
             batch.commit()
 
 
+@pytest.mark.parametrize('enabled', [False, True], ids=['disabled', 'enabled'])
+def test_historical_slot_is_bounded_even_with_full_urgent_demand(debt_store, monkeypatch, enabled):
+    client, _, _, ref, row = debt_store
+    now = 1_800_000_000.0
+    monkeypatch.setenv('ENRICHMENT_MAX_AGE_HOURS', '72')
+    monkeypatch.setenv('ENRICHMENT_FRESH_PROMOTE_MAX_AGE_MIN', '30')
+    monkeypatch.setenv('SUMMARY_DEBT_REPAIR_HISTORICAL_ENABLED', str(enabled).lower())
+    monkeypatch.setattr(repair, 'REPAIR_ADMISSION_LIMIT', 2)
+    monkeypatch.setattr(repair, 'REPAIR_SCAN_LIMIT', 12)
+    monkeypatch.setattr(repair, 'account_deletion_blocks_user_work', lambda _: False)
+    ref.update({'summary_due_at': None})
+    candidates = {
+        'unknown-finish': (now - 14_400, None),
+        'recent-finish': (now - 10_800, now - 5),
+        'historical': (now - 7_200, now - 7_000),
+        'urgent-1': (now - 72 * 3600 + 100, now - 6_000),
+        'urgent-2': (now - 72 * 3600 + 101, now - 6_000),
+    }
+    refs = {name: ref.parent.document(name) for name in candidates}
+    attempts = []
+    calls = []
+    query = repair.due_conversations
+
+    def tracked(**options):
+        calls.append((options['phase'], options['limit']))
+        return query(**options)
+
+    def redrive(_, owner, cid, *, now, historical_before=None):
+        attempts.append((cid, historical_before))
+        return True
+
+    monkeypatch.setattr(repair, 'due_conversations', tracked)
+    monkeypatch.setattr(repair, 'redrive', redrive)
+    try:
+        for name, (pending, finished) in candidates.items():
+            refs[name].set(
+                {**row, 'summary_first_pending_at': pending, 'summary_due_at': now - 1, 'finished_at': finished}
+            )
+        counts = repair.tick(now=now, client=client)
+        assert counts['admitted'] == 2
+        if enabled:
+            assert calls[0] == ('historical', 3)
+            assert attempts == [('historical', now - 1_800), ('urgent-1', None)]
+            assert counts['near_expiry_admitted'] == 1
+        else:
+            assert all(phase != 'historical' for phase, _ in calls)
+            assert attempts == [('urgent-1', None), ('urgent-2', None)]
+            assert counts['near_expiry_admitted'] == 2
+    finally:
+        for candidate in refs.values():
+            candidate.delete()
+
+
+def test_historical_attempt_is_not_repeated_in_newest_phase(debt_store, monkeypatch):
+    client, _, _, ref, _ = debt_store
+    now = 1_800_000_000.0
+    monkeypatch.setenv('ENRICHMENT_MAX_AGE_HOURS', '72')
+    monkeypatch.setenv('ENRICHMENT_FRESH_PROMOTE_MAX_AGE_MIN', '30')
+    monkeypatch.setenv('SUMMARY_DEBT_REPAIR_HISTORICAL_ENABLED', 'true')
+    monkeypatch.setattr(repair, 'account_deletion_blocks_user_work', lambda _: False)
+    ref.update({'summary_first_pending_at': now - 7_200, 'summary_due_at': now - 1, 'finished_at': now - 7_000})
+    attempts = []
+
+    def refuse(*args, **options):
+        attempts.append(options.get('historical_before'))
+        return False
+
+    monkeypatch.setattr(repair, 'redrive', refuse)
+    counts = repair.tick(now=now, client=client)
+    assert counts['scanned'] == 2 and counts['admitted'] == 0
+    assert attempts == [now - 1_800]
+
+
+def test_historical_query_failure_preserves_normal_repair(debt_store, monkeypatch):
+    from google.api_core.exceptions import DeadlineExceeded
+
+    client, _, tasks, ref, _ = debt_store
+    now = 1_800_000_000.0
+    monkeypatch.setenv('ENRICHMENT_MAX_AGE_HOURS', '72')
+    monkeypatch.setenv('SUMMARY_DEBT_REPAIR_HISTORICAL_ENABLED', 'true')
+    ref.update({'summary_first_pending_at': now - 120, 'summary_due_at': now - 1, 'finished_at': now - 50})
+    query = repair.due_conversations
+
+    def fail_history(**options):
+        if options['phase'] == 'historical':
+            assert 0 < options['timeout'] <= repair.HISTORICAL_SCAN_SECONDS
+            raise DeadlineExceeded('synthetic historical query timeout')
+        return query(**options)
+
+    monkeypatch.setattr(repair, 'due_conversations', fail_history)
+    counts = repair.tick(now=now, client=client)
+    assert counts['errors'] == counts['admitted'] == len(tasks) == 1
+
+
+def test_historical_redrive_rechecks_finish_and_does_not_replace_an_existing_wake(debt_store, monkeypatch):
+    client, uid, tasks, ref, _ = debt_store
+    now = 1_800_000_000.0
+    monkeypatch.setenv('ENRICHMENT_MAX_AGE_HOURS', '72')
+    cutoff = now - 1_800
+    ref.update({'summary_first_pending_at': now - 7_200, 'summary_due_at': now - 1, 'finished_at': cutoff})
+    assert not repair.redrive(client, uid, 'c', now=now, historical_before=cutoff)
+    assert not tasks
+    ref.update({'finished_at': cutoff - 1, 'summary_first_pending_at': cutoff})
+    assert not repair.redrive(client, uid, 'c', now=now, historical_before=cutoff)
+    assert not tasks
+    ref.update({'summary_first_pending_at': now - 7_200})
+    assert repair.redrive(client, uid, 'c', now=now, historical_before=cutoff)
+    outbox = client.collection(reprocess.COLLECTION).document(reprocess.key(uid, 'c'))
+    committed = outbox.get()
+    assert not repair.redrive(client, uid, 'c', now=now, historical_before=cutoff)
+    assert outbox.get().update_time == committed.update_time
+    assert len(tasks) == 1
+
+
 @pytest.mark.parametrize('hours', [72, 0])
 def test_owner_deferral_continuation_discovers_other_owner_and_retries_all_debt_after_wrap(
     debt_store, monkeypatch, hours
@@ -1016,3 +1132,149 @@ def test_owner_deferral_continuation_discovers_other_owner_and_retries_all_debt_
         for added in urgent + newest + [other]:
             batch.delete(added)
         batch.commit()
+
+
+def test_historical_mixed_load_progress_and_fresh_five_minute_share(store, monkeypatch):
+    """Compare matched emulator runs and count every eligible fresh row in the denominator."""
+    import json
+    import time
+    import uuid
+
+    client, _, _ = store
+    now = 1_800_000_000.0
+    run_id = uuid.uuid4().hex
+    fresh_owner_sizes = (3, 3, 3, 3, 2, 2)
+    fresh_owners = [f'{run_id}-fresh-{index}' for index in range(len(fresh_owner_sizes))]
+    historical_owners = [f'{run_id}-historical-{index}' for index in range(3)]
+    users = fresh_owners + historical_owners
+    candidates: dict[tuple[str, str], Any] = {}
+    for owner in users:
+        client.collection('users').document(owner).set({'data_protection_level': 'standard'})
+    for owner, count in zip(fresh_owners, fresh_owner_sizes):
+        for index in range(count):
+            cid = f'fresh-{index}'
+            candidates[(owner, cid)] = (
+                client.collection('users').document(owner).collection('conversations').document(cid)
+            )
+    for index, owner in enumerate(historical_owners):
+        cid = f'historical-{index}'
+        candidates[(owner, cid)] = client.collection('users').document(owner).collection('conversations').document(cid)
+
+    monkeypatch.setenv('SUMMARY_DEBT_REPAIR_ENABLED', 'true')
+    monkeypatch.setenv('ENRICHMENT_MAX_AGE_HOURS', '72')
+    monkeypatch.setenv('ENRICHMENT_FRESH_PROMOTE_MAX_AGE_MIN', '30')
+    monkeypatch.setattr(repair, 'REPAIR_ADMISSION_LIMIT', 8)
+    monkeypatch.setattr(repair, 'REPAIR_SCAN_LIMIT', 100)
+    monkeypatch.setattr(repair, 'REPAIR_PER_OWNER_TICK_LIMIT', 3)
+    monkeypatch.setattr(repair, 'account_deletion_blocks_user_work', lambda _: False)
+
+    results = {}
+    try:
+        for enabled in (False, True):
+            monkeypatch.setenv('SUMMARY_DEBT_REPAIR_HISTORICAL_ENABLED', str(enabled).lower())
+            client.document(repair.CURSOR).delete()
+            for owner, cid in candidates:
+                client.collection(reprocess.COLLECTION).document(reprocess.key(owner, cid)).delete()
+            generated: list[dict[str, Any]] = []
+            monkeypatch.setattr(reprocess, '_enqueue', lambda row: generated.append(deepcopy(row)))
+
+            for (owner, cid), ref in candidates.items():
+                historical = cid.startswith('historical-')
+                pending = now - (7_200 if historical else 120)
+                ref.set(
+                    {
+                        'status': 'completed',
+                        'discarded': False,
+                        'summary_first_pending_at': pending,
+                        'summary_due_at': now,
+                        'summary_title_provenance': 'server_minimum',
+                        'summary_output_present': False,
+                        'summary_lane': 'batch',
+                        'sync_content_revision': 3,
+                        'data_protection_level': 'standard',
+                        'finished_at': pending,
+                    }
+                )
+
+            tick_results = []
+            historical_progress = []
+            for tick_index in range(3):
+                tick_now = now + tick_index * repair.REPAIR_INTERVAL_SECONDS
+                task_start = len(generated)
+                started = time.perf_counter()
+                counts = repair.tick(now=tick_now, client=client)
+                discovery_and_admission_seconds = time.perf_counter() - started
+                new_tasks = generated[task_start:]
+                assert counts['admitted'] == len(new_tasks) <= repair.REPAIR_ADMISSION_LIMIT
+                assert counts['scanned'] <= repair.REPAIR_SCAN_LIMIT
+
+                for task in new_tasks:
+                    uid, cid = task['uid'], task['conversation_id']
+                    completion_at = tick_now + discovery_and_admission_seconds + 30
+                    result = reprocess.run(
+                        reprocess.key(uid, cid),
+                        task['task_token'],
+                        lambda *_: SimpleNamespace(discarded=False, structured={'overview': 'Synthetic summary'}),
+                        now=completion_at,
+                    )
+                    assert result == 'processed'
+                    candidates[(uid, cid)].update(
+                        {
+                            'structured': {'overview': 'Synthetic summary'},
+                            'summary_output_present': True,
+                            'summary_completed_at': completion_at,
+                            'summary_due_at': None,
+                        }
+                    )
+
+                historical_completed = sum(
+                    bool(ref.get().to_dict().get('summary_output_present'))
+                    for (owner, cid), ref in candidates.items()
+                    if cid.startswith('historical-')
+                )
+                historical_progress.append(historical_completed)
+                tick_results.append(
+                    {
+                        'admitted': counts['admitted'],
+                        'scanned': counts['scanned'],
+                        'discovery_and_admission_ms': round(discovery_and_admission_seconds * 1000, 2),
+                        'conversation_ids': [task['conversation_id'] for task in new_tasks],
+                    }
+                )
+
+            if enabled:
+                assert historical_progress == [1, 2, 3], {
+                    'historical_progress': historical_progress,
+                    'ticks': tick_results,
+                }
+            else:
+                assert historical_progress[0] == 0
+
+            fresh_refs = [ref for (owner, cid), ref in candidates.items() if cid.startswith('fresh-')]
+            within_five_minutes = 0
+            for ref in fresh_refs:
+                row = ref.get().to_dict()
+                completed_at = row.get('summary_completed_at')
+                if completed_at is not None and completed_at - row['finished_at'] <= 300:
+                    within_five_minutes += 1
+            results['enabled' if enabled else 'disabled'] = {
+                'fresh_completed_within_5m': within_five_minutes,
+                'fresh_eligible_denominator': len(fresh_refs),
+                'historical_durable_progress_by_tick': historical_progress,
+                'ticks': tick_results,
+            }
+    finally:
+        client.document(repair.CURSOR).delete()
+        for (owner, cid), ref in candidates.items():
+            ref.delete()
+            client.collection(reprocess.COLLECTION).document(reprocess.key(owner, cid)).delete()
+        for owner in users:
+            client.collection('users').document(owner).delete()
+
+    report = {
+        'admission_latency_assumption_seconds': 30,
+        'global_attempt_cap_per_tick': 8,
+        'scenario': 'matched loopback Firestore load; 16 fresh rows across six owners and three historical rows',
+        **results,
+    }
+    print(f'SUMMARY_REPAIR_QUALIFICATION {json.dumps(report, sort_keys=True)}')

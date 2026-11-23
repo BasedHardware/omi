@@ -4195,9 +4195,11 @@ _add(
         neutrals={
             'now': (T0.timestamp(), 'timestamp operand only'),
             'limit': (500, 'per-query ceiling; shared tick budget is enforced by caller'),
+            'timeout': (10.0, 'finite RPC deadline/retry policy only; no filter or ordering effect'),
         },
         domains={
-            'phase': ['near_expiry', 'newest'],
+            'phase': ['historical', 'near_expiry', 'newest'],
+            'historical_before': [None, T0.timestamp() - 1800],
             'after': [
                 None,
                 {'due': T0.timestamp(), 'path': 'users/synthetic/conversations/c'},
@@ -4222,6 +4224,13 @@ _add(
                 {
                     'due': T0.timestamp() - 300000,
                     'pending': T0.timestamp() - 300000,
+                    'path': 'users/synthetic/conversations/c',
+                },
+                {
+                    'phase': 'historical',
+                    'window': 72 * 3600,
+                    'due': T0.timestamp() - 1,
+                    'pending': T0.timestamp() - 3600,
                     'path': 'users/synthetic/conversations/c',
                 },
                 *[

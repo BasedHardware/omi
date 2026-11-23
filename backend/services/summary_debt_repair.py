@@ -14,10 +14,13 @@ from collections import Counter
 from typing import Any, Callable, cast
 
 from google.cloud import firestore
-from google.api_core.exceptions import FailedPrecondition
+from google.api_core.exceptions import FailedPrecondition, GoogleAPICallError
+from config.enrichment import fresh_max_age_seconds
 from config.summary_guarantee import (
+    historical_repair_enabled,
     repair_enabled,
     REPAIR_INTERVAL_SECONDS,
+    REPAIR_NEAR_EXPIRY_SECONDS,
     REPAIR_SCAN_LIMIT,
     REPAIR_QUERY_PAGE_LIMIT,
     REPAIR_SCAN_TIME_BUDGET_SECONDS,
@@ -26,20 +29,27 @@ from config.summary_guarantee import (
 )
 from database._client import get_firestore_client
 from database.account_deletion_marker import account_deletion_blocks_user_work
-from database.summary_debt_queries import due_conversations
+from database.summary_debt_queries import Phase, due_conversations
 from database.batch_pipeline_privacy import assert_batch_write_allowed, BatchPrivacyBlocked
 from utils.conversations import summary_delivery as delivery
 from utils.sync import reprocess
-from utils.enrichment.age_gate import expired, max_age_seconds
+from utils.enrichment.age_gate import expired, max_age_seconds, timestamp
 from utils.observability.reasons import ReasonFamily, SummaryRepairDiscoveryOutcome as DiscoveryOutcome, reason_label
 
 Row = dict[str, Any]
 _scan_clock = time.monotonic
 CURSOR = 'maintenance/summary_debt_repair_v1'
+HISTORICAL_SCAN_LIMIT = 16
+HISTORICAL_SCAN_SECONDS = 10
 logger = logging.getLogger(__name__)
 
 
-def redrive(client: Any, uid: str, conversation_id: str, *, now: float) -> bool:
+def _finished_before(row: Row, boundary: float) -> bool:
+    finished = timestamp(row.get('finished_at'))
+    return finished is not None and finished < boundary
+
+
+def redrive(client: Any, uid: str, conversation_id: str, *, now: float, historical_before: float | None = None) -> bool:
     """Reuse the same obligation; no new finalization generation is admitted."""
     if account_deletion_blocks_user_work(uid):
         return False
@@ -58,6 +68,15 @@ def redrive(client: Any, uid: str, conversation_id: str, *, now: float) -> bool:
             due = row.get('summary_due_at')
             if delivery.refusal(row) or not isinstance(due, (int, float)) or due > now:
                 return {}, True
+            if historical_before is not None:
+                pending = timestamp(row.get('summary_first_pending_at'))
+                near_expiry = now - max_age_seconds() + REPAIR_NEAR_EXPIRY_SECONDS
+                if (
+                    pending is None
+                    or not near_expiry < pending < historical_before
+                    or not _finished_before(row, historical_before)
+                ):
+                    return {}, True
             assert_batch_write_allowed(client, transaction, uid, conversation_ids=[conversation_id])
             user: Row = client.collection('users').document(uid).get(transaction=transaction).to_dict() or {}
             # No credentials in background tasks, and never substitute Omi keys.
@@ -70,6 +89,10 @@ def redrive(client: Any, uid: str, conversation_id: str, *, now: float) -> bool:
             prior = outbox.get(transaction=transaction)
             old: Row | None = prior.to_dict() if prior.exists else None
             from utils.enrichment.age_gate import expired, parked, park_row
+
+            # Existing tasks retain their binding and normal recovery path.
+            if historical_before is not None and old is not None:
+                return {}, True
 
             if old and parked(old):
                 return {}, True
@@ -165,7 +188,18 @@ def tick(*, now: float | None = None, client: Any = None) -> dict[str, int]:
     phase_counts: dict[str, Counter[DiscoveryOutcome]] = {}
     overdue = 0
     oldest = 0.0
-    phases = ('near_expiry', 'newest') if window else ('newest',)
+    phases: tuple[Phase, ...] = ('near_expiry', 'newest') if window else ('newest',)
+    fresh_window = fresh_max_age_seconds()
+    historical_before = current - fresh_window
+    history_rows = min(HISTORICAL_SCAN_LIMIT, REPAIR_SCAN_LIMIT // 4)
+    if (
+        historical_repair_enabled()
+        and 0 < fresh_window < window - REPAIR_NEAR_EXPIRY_SECONDS
+        and history_rows
+        and REPAIR_ADMISSION_LIMIT > 1
+    ):
+        phases = ('historical', *phases)
+    historical_attempt = None
     for phase in phases:
         if (
             attempts >= REPAIR_ADMISSION_LIMIT
@@ -177,25 +211,33 @@ def tick(*, now: float | None = None, client: Any = None) -> dict[str, int]:
         last = None
         interrupted = False
         exhausted = False
+        historical = phase == 'historical'
+        attempt_limit = 1 if historical else REPAIR_ADMISSION_LIMIT
+        scan_limit = history_rows if historical else REPAIR_SCAN_LIMIT
+        deadline = min(scan_deadline, _scan_clock() + HISTORICAL_SCAN_SECONDS) if historical else scan_deadline
         observed = phase_counts[phase] = Counter()
         # Look ahead for skips without reading a full scan budget when the
         # remaining attempts could all be used on a short prefix.
-        page_target = 2 * max(8, REPAIR_ADMISSION_LIMIT - attempts)
-        while (
-            attempts < REPAIR_ADMISSION_LIMIT
-            and counts['scanned'] < REPAIR_SCAN_LIMIT
-            and _scan_clock() < scan_deadline
-        ):
-            limit = min(page_target, REPAIR_QUERY_PAGE_LIMIT, REPAIR_SCAN_LIMIT - counts['scanned'])
+        page_target = 2 * max(8, attempt_limit - attempts)
+        while attempts < attempt_limit and counts['scanned'] < scan_limit and _scan_clock() < deadline:
+            limit = min(page_target, REPAIR_QUERY_PAGE_LIMIT, scan_limit - counts['scanned'])
+            page_options = (
+                {'historical_before': historical_before, 'timeout': deadline - _scan_clock()} if historical else {}
+            )
+            if historical and page_options['timeout'] <= 0:
+                break
             observed[DiscoveryOutcome.QUERIES] += 1
             try:
-                page = due_conversations(now=current, phase=phase, limit=limit, after=walk, firestore_client=client)
-            except FailedPrecondition:
-                if phase != 'newest':
+                page = due_conversations(
+                    now=current, phase=phase, limit=limit, after=walk, firestore_client=client, **page_options
+                )
+            except GoogleAPICallError as error:
+                if not historical and (phase != 'newest' or not isinstance(error, FailedPrecondition)):
                     raise
-                # Hard-fail only this phase; finish still commits near-expiry
-                # progress and publishes this tick's counts. No alternate query.
-                logger.warning('event=summary_debt_repair_newest_index_unavailable outcome=error')
+                if historical:
+                    logger.warning('event=summary_debt_repair_historical_query_unavailable outcome=error')
+                else:
+                    logger.warning('event=summary_debt_repair_newest_index_unavailable outcome=error')
                 counts['errors'] += 1
                 observed[DiscoveryOutcome.QUERY_ERROR] += 1
                 break
@@ -205,7 +247,7 @@ def tick(*, now: float | None = None, client: Any = None) -> dict[str, int]:
             observed[DiscoveryOutcome.FETCHED] += len(page)
             exhausted = len(page) < limit
             for snapshot in page:
-                if attempts >= REPAIR_ADMISSION_LIMIT or _scan_clock() >= scan_deadline:
+                if attempts >= attempt_limit or _scan_clock() >= deadline:
                     interrupted = True
                     break
                 previous = last
@@ -214,6 +256,12 @@ def tick(*, now: float | None = None, client: Any = None) -> dict[str, int]:
                 row: Row = snapshot.to_dict() or {}
                 if delivery.refusal(row):
                     observed[DiscoveryOutcome.ROW_REFUSED] += 1
+                    continue
+                if historical and not _finished_before(row, historical_before):
+                    observed[DiscoveryOutcome.FINISH_NOT_HISTORICAL] += 1
+                    continue
+                if snapshot.reference.path == historical_attempt:
+                    observed[DiscoveryOutcome.ALREADY_ATTEMPTED] += 1
                     continue
                 parts = snapshot.reference.path.split('/')
                 if (len(parts) != 4) or (parts[0] != 'users') or (parts[2] != 'conversations'):
@@ -237,15 +285,18 @@ def tick(*, now: float | None = None, client: Any = None) -> dict[str, int]:
                     # pinning this cursor here can hide every later owner.
                     observed[DiscoveryOutcome.OWNER_DEFERRED] += 1
                     continue
-                if _scan_clock() >= scan_deadline:
+                if _scan_clock() >= deadline:
                     last = previous
                     interrupted = True
                     break
                 attempts += 1
                 observed[DiscoveryOutcome.ATTEMPTED] += 1
                 owner_attempts[parts[1]] = owner_attempts.get(parts[1], 0) + 1
+                admission_options = {'historical_before': historical_before} if historical else {}
+                if historical:
+                    historical_attempt = snapshot.reference.path
                 try:
-                    admitted = int(redrive(client, parts[1], parts[3], now=current))
+                    admitted = int(redrive(client, parts[1], parts[3], now=current, **admission_options))
                     observed[DiscoveryOutcome.ADMITTED if admitted else DiscoveryOutcome.NOT_ADMITTED] += 1
                     counts['admitted'] += admitted
                     if phase == 'near_expiry':
@@ -267,7 +318,7 @@ def tick(*, now: float | None = None, client: Any = None) -> dict[str, int]:
                     'due': row.get('summary_due_at'),
                     'pending': row.get('summary_first_pending_at') if window else None,
                 }
-            if exhausted or attempts >= REPAIR_ADMISSION_LIMIT or _scan_clock() >= scan_deadline:
+            if exhausted or attempts >= attempt_limit or _scan_clock() >= deadline:
                 break
             # A full examined page left capacity, so use larger chunks to
             # advance through refusals and owner deferrals.

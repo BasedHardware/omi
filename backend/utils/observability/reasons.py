@@ -353,6 +353,8 @@ class SummaryRepairDiscoveryOutcome(StrEnum):
     ROW_REFUSED = 'row_refused'
     INVALID_PATH = 'invalid_path'
     ACCOUNT_DELETION_BLOCKED = 'account_deletion_blocked'
+    FINISH_NOT_HISTORICAL = 'finish_not_historical'
+    ALREADY_ATTEMPTED = 'already_attempted'
     EXPIRED = 'expired'
     OWNER_DEFERRED = 'owner_deferred'
     ATTEMPTED = 'attempted'

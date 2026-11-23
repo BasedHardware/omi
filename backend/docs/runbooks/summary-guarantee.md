@@ -133,6 +133,36 @@ target fourfold. The page-size and total document caps still apply. This limits
 the unread tail when eligible rows are dense and preserves bounded discovery
 through sparse pages and owner deferrals.
 
+When `SUMMARY_DEBT_REPAIR_HISTORICAL_ENABLED` is on, one historical
+pass runs before the ordinary order. It uses at most 16 fetched rows or
+one fourth of the existing scan budget, whichever is smaller, and at most
+one of the existing admission attempts. It has a ten-second discovery
+window and a finite query deadline. The overall tick still checks its
+deadline before all admissions. An in-flight admission can finish later.
+The pass is inactive with the age gate or freshness window disabled,
+or if the budget cannot leave any capacity for ordinary phases.
+
+It uses the existing ascending index outside the near-expiry pending
+band, with a pending stamp older than the configured freshness window.
+Before spending an attempt it also verifies the conversation's finish
+clock against that same window. The admission transaction rechecks the
+finish clock and requires absence of an outbox. Existing wakes keep
+their binding and ordinary recovery path. The ordinary newest phase
+keeps its full scope, including rows with unknown finish clocks. A row
+attempted by the historical pass cannot receive a second attempt in
+the same tick. Both other phases can use the remaining budgets.
+
+Qualify the phase first with a synthetic backlog. Before enabling it on
+the scheduled integration role, capture the fresh five-minute summary
+completion share, queue age, model attempt spend, and recent historical
+summary receipt count. After the targeted rollout compare equivalent
+traffic windows for those signals and the discovery counters with
+`phase="historical"`. Stop the rollout and set the flag false if fresh
+completion, queue age, or spend leaves the release baseline guard.
+Turning the flag off restores the ordinary order and retains any
+committed wake. The version-2 cursor allows safe rewind when the
+historical pending band changes.
+
 At 720 ticks/day, each 100 returned documents/tick means 72,000 document
 reads/day at full scan utilization. The 2,800-row target means 2,800 document
 reads/tick and 2,016,000/day; the maximum 5,000 means 3,600,000/day. These are
