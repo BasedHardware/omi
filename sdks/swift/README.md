@@ -1,7 +1,7 @@
 <!-- This file is auto-generated from docs/doc/developer/sdk/swift.mdx. Do not edit manually. -->
 ## Overview
 
-An easy-to-install Swift package for connecting to Omi devices. Get started in seconds with local Whisper-based transcription - no cloud API required.
+A Swift package for connecting to Omi devices. It transcribes locally with Whisper, so no cloud API is required.
 
 <CardGroup cols={3}>
   <Card title="Swift Package" icon="swift">
@@ -11,14 +11,55 @@ An easy-to-install Swift package for connecting to Omi devices. Get started in s
     Whisper runs on-device
   </Card>
   <Card title="Simple API" icon="code">
-    Connect in minutes
+    Connect with a few calls
   </Card>
 </CardGroup>
 
+## Installation
 
-## Quick Start
+<Steps>
+  <Step title="Create a New Project">
+    Open Xcode → File → New Project → iOS → App
 
-Get transcription working in 2 minutes:
+    <Note>
+    Select **Storyboard** as the Interface option.
+    </Note>
+
+    <img
+      src="https://github.com/user-attachments/assets/7e59be15-48dc-4ff1-bcf1-235b8bab3990"
+      alt="Xcode New Project"
+      style={{maxWidth: '600px'}}
+    />
+  </Step>
+  <Step title="Add the Swift Package">
+    1. Navigate to **File → Swift Packages → Add Package Dependency...**
+    2. Select your project
+    3. Paste the repository URL: `https://github.com/BasedHardware/omi`
+    4. Click **Next**
+
+    <Tip>
+    If you aren't prompted to add the package to your target, click "Add Package" again, then "Add to Target" and choose your project.
+    </Tip>
+
+    <img
+      src="https://github.com/user-attachments/assets/5295b4df-81b6-49b2-80d8-67c43e2a31c2"
+      alt="Add Package to Target"
+      style={{maxWidth: '600px'}}
+    />
+  </Step>
+  <Step title="Add Bluetooth Permission">
+    Go to **Targets → Your Project → Info** and add this permission:
+
+    ```xml
+    <key>NSBluetoothAlwaysUsageDescription</key>
+    <string>This app needs Bluetooth access to connect to BLE devices.</string>
+    ```
+  </Step>
+</Steps>
+
+## Quick start
+
+Get live transcription running:
 
 <Steps>
   <Step title="Copy This Code">
@@ -76,10 +117,10 @@ Get transcription working in 2 minutes:
   <Step title="Test It">
     1. Turn on your Omi device
     2. The app should connect automatically
-    3. Speak - you'll see transcription in the Xcode console
+    3. Speak. You'll see transcription in the Xcode console
 
     <Note>
-    There's no UI in this example - transcription appears in the Xcode logs.
+    There's no UI in this example. Transcription appears in the Xcode logs.
     </Note>
 
     <img
@@ -90,6 +131,77 @@ Get transcription working in 2 minutes:
   </Step>
 </Steps>
 
+## API Reference
+
+The `OmiManager` class provides all device interaction methods:
+
+### Device Scanning
+
+```swift
+import omi_lib
+
+// Scan for any Omi device
+func lookForDevice() {
+    OmiManager.startScan { device, error in
+        if let device = device {
+            print("got device ", device)
+            self.connectToOmiDevice(device: device)
+            OmiManager.endScan()
+        }
+    }
+}
+
+// Scan for a specific device
+func lookForSpecificDevice(device_id: String) {
+    OmiManager.startScan { device, error in
+        if let device = device, device.id == "some_device_id" {
+            print("got device ", device)
+            self.connectToOmiDevice(device: device)
+            OmiManager.endScan()
+        }
+    }
+}
+```
+
+### Connection Management
+
+```swift
+func connectToOmiDevice(device: Device) {
+    OmiManager.connectToDevice(device: device)
+    self.reconnectIfDisconnects()
+}
+
+func reconnectIfDisconnects() {
+    OmiManager.connectionUpdated { connected in
+        if connected == false {
+            self.lookForDevice()
+        }
+    }
+}
+```
+
+### Live Data
+
+<Tabs>
+  <Tab title="Live Transcription">
+    ```swift
+    func listenToLiveTranscript(device: Device) {
+        OmiManager.getLiveTranscription(device: device) { transcription in
+            print("transcription:", transcription ?? "no transcription")
+        }
+    }
+    ```
+  </Tab>
+  <Tab title="Live Audio">
+    ```swift
+    func listenToLiveAudio(device: Device) {
+        OmiManager.getLiveAudio(device: device) { file_url in
+            print("file_url: ", file_url?.absoluteString ?? "no url")
+        }
+    }
+    ```
+  </Tab>
+</Tabs>
 
 ## OmiManager Methods
 
@@ -138,6 +250,9 @@ deepgram.appendPcm(pcmData)
 deepgram.stop()
 ```
 
+## License
+
+MIT License. Omi's Swift SDK is open source.
 
 ## Related
 
