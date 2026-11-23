@@ -14,6 +14,7 @@ import pytest
 from google.api_core.exceptions import Aborted
 
 
+from config.record_wal_duplicate import SETTLED_FIELD
 from database import conversations_v3 as store
 from utils.conversations.v3 import bind_request_log_trace, service, summary
 from utils.conversations import (
@@ -134,6 +135,18 @@ def test_projection_reads_unordered_chunks_and_prefers_existing_row(strict, monk
     assert strict.rows[R]['v3_pending'] is missing
     assert [len(call.args[0]) for call in batch_get.call_args_list] == [100, 1]
     assert all(call.kwargs['transaction'] is strict.transactions[-1] for call in batch_get.call_args_list)
+
+
+def test_projection_defers_full_row_replacement_of_settled_wal(strict):
+    token = leases.acquire('synthetic', 'builder', firestore_client=strict)
+    path = ('users', 'synthetic', 'conversations', 'c')
+    row = {'id': 'c', 'status': 'completed', 'started_at': AT, 'finished_at': AT, 'v3_recording_ids': []}
+    strict.rows[path] = {**row, SETTLED_FIELD: True}
+    existing = {**strict.rows[path], '_v3_revision': 1}
+    before = deepcopy(strict.rows)
+    with pytest.raises(store.Conflict, match='source_changed'):
+        store.commit_projection('synthetic', token, {}, {'c': existing}, [row], [], firestore_client=strict)
+    assert strict.rows == before
 
 
 def test_new_speech_preserves_pending_on_conflict(strict):

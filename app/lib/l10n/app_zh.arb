@@ -4748,5 +4748,7 @@
     "playPurchaseOtherAccount": "此 Google Play 购买属于另一个 Omi 账户。",
     "playPurchaseNotConfirmed": "暂时无法确认你的购买。我们会自动重试。",
     "playRenewalTerms": "在你取消前将按所示价格自动续订。可随时在 Google Play 中管理或取消。",
-    "playPaidAppUnavailable": "Android 上不可用"
+    "playPaidAppUnavailable": "Android 上不可用",
+    "pageNotAvailableInApp": "此页面无法在应用中打开。",
+    "shopOrderPlacedCheckEmail": "订单已提交。请查收确认邮件。"
 }

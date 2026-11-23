@@ -15537,4 +15537,10 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get playPaidAppUnavailable => 'Android에서는 사용할 수 없음';
+
+  @override
+  String get pageNotAvailableInApp => '이 페이지는 앱에서 볼 수 없습니다.';
+
+  @override
+  String get shopOrderPlacedCheckEmail => '주문이 완료되었습니다. 확인 메일을 확인하세요.';
 }

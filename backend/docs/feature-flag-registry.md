@@ -687,9 +687,9 @@ and an explicit empty literal renders as `''`.
 | `ACTION_ITEM_REMINDER_REDESIGN_ENABLED` | Default on; explicit reminder validation and source-clock date precision on the existing staged conversation path; false stops new admission and undelivered owned exports | backend | env | closed | — | — | — | — | keep | keep | — | auditfix |
 | `ACTION_ITEM_VALIDITY_MODE_SERVE_PERCENT` | Consistent uid serving percentage for task validity shadow mode; default zero | backend | env | closed | — | — | — | — | keep | keep | — | auditfix |
 | `ACTION_ITEM_VALIDITY_MODE_SERVE_UID_SHA256S` | Optional task validity serving uid digests; default empty | backend | env | closed | — | — | — | — | keep | keep | — | auditfix |
-| `ANDROID_BILLING` | stripe (default) or play: how new Android Omi Pro purchases start; play also needs ANDROID_PLAY_BILLING_MIN_BUILD | backend | env | closed | — | — | — | — | keep | keep | — | billing |
-| `ANDROID_PLAY_BILLING_COHORT` | uid:<uid>,pct:<n> or all: users on Google Play Billing while ANDROID_BILLING stays stripe (internal-track test accounts); malformed admits none | backend | env | closed | — | — | — | — | keep | keep | — | billing |
-| `ANDROID_PLAY_BILLING_MIN_BUILD` | First Android version code with Google Play Billing; unset means no build is told to use Play | backend | env | closed | — | — | — | — | keep | keep | — | billing |
+| `ANDROID_BILLING` | stripe (default) or play: how new Android Omi Pro purchases start; play also needs ANDROID_PLAY_BILLING_MIN_BUILD | backend | env | closed | — | — | {value: stripe, category: rollout} | — | keep | keep | — | billing |
+| `ANDROID_PLAY_BILLING_COHORT` | uid:<uid>,pct:<n> or all: users on Google Play Billing while ANDROID_BILLING stays stripe (internal-track test accounts); malformed admits none | backend | env | closed | — | — | {value: '', category: rollout} | — | keep | keep | — | billing |
+| `ANDROID_PLAY_BILLING_MIN_BUILD` | First Android version code with Google Play Billing; unset means no build is told to use Play | backend | env | closed | — | — | {value: '1617', category: rollout} | — | keep | keep | — | billing |
 | `AUDIO_CLEANUP_HOLD_ENABLED` | Default on: routine legacy staging and batch artifact cleanup preserve configured incident capture windows; only false disables the window hold. Durable success gates still apply; privacy erasure bypasses the hold | backend | env | closed | — | — | — | — | keep | keep | — | auditfix |
 | `AUDIO_CLEANUP_HOLD_WINDOWS` | Inclusive capture preservation windows, comma-separated timezone-qualified start..end pairs; defaults to 2026-10-22T13:36:30Z..2026-10-24T07:16:00Z. Empty/malformed configuration holds cleanup | backend | env | closed | — | — | — | — | keep | keep | — | auditfix |
 | `AUDIO_MERGE_DISPATCH_MODE` | Select audio-merge dispatch lane | backend | env | closed | — | — | — | — | keep | keep | — | unowned |
@@ -887,6 +887,9 @@ and an explicit empty literal renders as `''`.
 | `RECORD_RETAINED_ACK` | Default off; requires RECORD_GAP_FILL on for the uid (the proof runs in the gap-fill entry); on lets a closed record's jobs-missing upload get the covered 200 for the RECORD_RETAINED_ACK_PERCENT cohort once a byte-exact lossless server copy of every WAL sample is proven; off is the rollback | backend | env | closed | — | — | — | — | keep | keep | — | omi-pipeline |
 | `RECORD_SEAL_REPAIR_MODE` | plan or apply; default apply, plan performs canonical proofs without writes | backend | env | closed | — | — | — | — | keep | keep | — | two-lane lead |
 | `RECORD_SEAL_SWEEPER_MODE` | plan or apply; default apply, plan performs proofs without writes | backend | env | closed | — | — | — | — | keep | keep | — | two-lane lead |
+| `RECORD_WAL_DUPLICATE_PERCENT` | Default-off native WAL duplicate settlement cohort | backend | env | closed | — | — | — | — | keep | keep | — | quality |
+| `RECORD_WAL_DUPLICATE_SHADOW_EPOCH` | Separately approved native WAL duplicate shadow window | backend | env | closed | — | — | — | — | keep | keep | — | quality |
+| `RECORD_WAL_DUPLICATE_SOURCE_FENCE_VERIFIED` | Release qualification of native WAL backing sources and writers | backend | env | closed | — | — | — | — | keep | keep | — | quality |
 | `RECORD_WAL_HANDOFF_ENABLED` | Default off; readers-first opt-in to quota-bounded original WAL custody under the existing native record owner | backend | env | closed | — | — | — | — | keep | keep | — | quality |
 | `RECORD_WAL_PENDING_GLOBAL_BYTES` | Default 4294967296; hard cap on global pending/reserved encrypted bytes across stage namespaces | backend | env | closed | — | — | — | — | keep | keep | — | quality |
 | `RECORD_WAL_PENDING_GLOBAL_FILES` | Default 10000; hard cap on global pending/reserved original files across stage namespaces | backend | env | closed | — | — | — | — | keep | keep | — | quality |
@@ -1109,9 +1112,6 @@ their code default (`fail` tells you which way a missing value resolves).
 - `ACTION_ITEM_VALIDITY_MODE_SERVE_UID_SHA256S` — Optional task validity serving uid digests; default empty (fail: closed)
 - `ADMIN_KEY_AUTH_ENABLED` — Allow administrator-key authentication (fail: open)
 - `AI_PROFILE_BACKEND_REFRESH_ENABLED` — Default on; the backend regenerates users/{uid}.ai_user_profile at most once per owner per ~20h after a processed conversation or a stale GET, for owners admitted to generated compute (fail: open)
-- `ANDROID_BILLING` — stripe (default) or play: how new Android Omi Pro purchases start; play also needs ANDROID_PLAY_BILLING_MIN_BUILD (fail: closed)
-- `ANDROID_PLAY_BILLING_COHORT` — uid:<uid>,pct:<n> or all: users on Google Play Billing while ANDROID_BILLING stays stripe (internal-track test accounts); malformed admits none (fail: closed)
-- `ANDROID_PLAY_BILLING_MIN_BUILD` — First Android version code with Google Play Billing; unset means no build is told to use Play (fail: closed)
 - `AUDIO_CLEANUP_HOLD_ENABLED` — Default on: routine legacy staging and batch artifact cleanup preserve configured incident capture windows; only false disables the window hold. Durable success gates still apply; privacy erasure bypasses the hold (fail: closed)
 - `AUDIO_CLEANUP_HOLD_WINDOWS` — Inclusive capture preservation windows, comma-separated timezone-qualified start..end pairs; defaults to 2026-10-22T13:36:30Z..2026-10-24T07:16:00Z. Empty/malformed configuration holds cleanup (fail: closed)
 - `AUDIO_CUSTODY_FRAMED_PERCENT` — Default 0; framed custody windows and byte-exact PCM projections; independent of AUDIO_ARCHIVE_PERCENT; invalid values refuse admission (fail: closed)
@@ -1516,6 +1516,9 @@ their code default (`fail` tells you which way a missing value resolves).
 - `RECORD_SEAL_SWEEPER_MODE` — plan or apply; default apply, plan performs proofs without writes (fail: closed)
 - `RECORD_SEAL_UPLOAD_FAILED_REPAIR_ENABLED` — Default on; repair job may atomically clear upload_failed only after full normal proof and unchanged-state fencing (fail: open)
 - `RECORD_TOKEN_LEASE_MODE_SERVE_UID_SHA256S` — Default empty; digested uid serve cohort, inert in off and shadow modes (fail: closed)
+- `RECORD_WAL_DUPLICATE_PERCENT` — Default-off native WAL duplicate settlement cohort (fail: closed)
+- `RECORD_WAL_DUPLICATE_SHADOW_EPOCH` — Separately approved native WAL duplicate shadow window (fail: closed)
+- `RECORD_WAL_DUPLICATE_SOURCE_FENCE_VERIFIED` — Release qualification of native WAL backing sources and writers (fail: closed)
 - `RECORD_WAL_HANDOFF_ENABLED` — Default off; readers-first opt-in to quota-bounded original WAL custody under the existing native record owner (fail: closed)
 - `RECORD_WAL_PENDING_GLOBAL_BYTES` — Default 4294967296; hard cap on global pending/reserved encrypted bytes across stage namespaces (fail: closed)
 - `RECORD_WAL_PENDING_GLOBAL_FILES` — Default 10000; hard cap on global pending/reserved original files across stage namespaces (fail: closed)

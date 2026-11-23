@@ -9,6 +9,7 @@ import 'package:omi/pages/settings/widgets/plans/play_plans_content.dart';
 import 'package:omi/pages/paywall/paywall_pacing.dart';
 import 'package:omi/providers/auth_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
+import 'package:omi/services/billing/play_billing.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/analytics/registry/events.g.dart';
 import 'package:omi/utils/analytics/registry/typed_events.dart';
@@ -103,6 +104,15 @@ class _TrialPaywallPageState extends State<TrialPaywallPage> {
     }
   }
 
+  /// The trial page only sells plans Google Play lists with a free-trial phase for this account; any
+  /// plan without one sends the reader to the plain Play plans (price, Subscribe, renewal disclosure).
+  static bool _everyPlayPlanHasTrial(UsageProvider usage) {
+    final offers = usage.playOffers;
+    if (offers == null) return false;
+    final plans = [offers.monthly, offers.yearly].whereType<PlayPlanOffer>();
+    return plans.isNotEmpty && plans.every((plan) => plan.trial != null && (plan.trialDays ?? 0) > 0);
+  }
+
   /// A free-trial button may only open checkout while the backend still offers that trial.
   bool get _canCheckout => context.read<UsageProvider>().subscription?.trialEligible == true;
 
@@ -117,6 +127,7 @@ class _TrialPaywallPageState extends State<TrialPaywallPage> {
   Future<PaywallCheckoutOutcome?> _purchase(PaywallOffer offer) async {
     final price = _yearly ? (offer.yearly ?? offer.monthly) : (offer.monthly ?? offer.yearly);
     if (price == null || _locked) return null;
+    final trialDays = price.display != null ? price.trialDays : TrialPaywallPage.trialDays;
     // Never open a checkout that would charge at once under a free-trial button.
     if (!_canCheckout) {
       OmiFeedback.error(context, context.l10n.couldNotProcessSubscription);
@@ -131,7 +142,7 @@ class _TrialPaywallPageState extends State<TrialPaywallPage> {
                 plan: tierId,
                 interval: price.interval,
                 source: widget.source,
-                trialDays: TrialPaywallPage.trialDays,
+                trialDays: trialDays,
               );
       final outcome = await start(context, price, offer.tierId);
       if (mounted && !_dismissed && outcome == PaywallCheckoutOutcome.purchased) {
@@ -148,6 +159,9 @@ class _TrialPaywallPageState extends State<TrialPaywallPage> {
   Future<void> _offerMonthly(PaywallOffer offer) async {
     final monthly = offer.monthly;
     if (_monthlyOffered || monthly == null || !mounted || _locked) return;
+    final playBilled = context.read<UsageProvider>().playBilledPurchaser;
+    if (playBilled && monthly.trialDays == null) return;
+    final trialDays = playBilled ? monthly.trialDays! : TrialPaywallPage.trialDays;
     _monthlyOffered = true;
     // Leaving before the success page does not prove nothing was bought: ask the server first.
     final usage = context.read<UsageProvider>();
@@ -174,7 +188,7 @@ class _TrialPaywallPageState extends State<TrialPaywallPage> {
       builder: (_) => OmiSheetScaffold(
         showCloseButton: false,
         padding: EdgeInsets.zero,
-        child: _MonthlyOffer(price: monthly, trialDays: TrialPaywallPage.trialDays),
+        child: _MonthlyOffer(price: monthly, trialDays: trialDays),
       ),
     );
     if (accepted != true) {
@@ -213,16 +227,22 @@ class _TrialPaywallPageState extends State<TrialPaywallPage> {
     // At accessibility text sizes the pinned footer would fill the screen, so the cancel note and the
     // code hint scroll with the page there; at every other size they stay pinned under the button.
     final notesScroll = MediaQuery.textScalerOf(context).scale(1) >= 1.6;
+    final playBilled = context.select<UsageProvider, bool>((usage) => usage.playBilledPurchaser);
     final notes = [
-      Text(
-        l10n.paywallTrialCancelNote,
-        textAlign: TextAlign.center,
-        style: _Paper.label(size: 13, color: _Paper.success, weight: FontWeight.w600),
-      ),
+      // Google Play readers: renewal at the shown price, managed and cancelled in Google Play (Terms and
+      // Privacy stay in this page's own footer).
+      if (playBilled)
+        const PlayBillingDisclosure(color: _Paper.textSecondary, legalLinks: false)
+      else
+        Text(
+          l10n.paywallTrialCancelNote,
+          textAlign: TextAlign.center,
+          style: _Paper.label(size: 13, color: _Paper.success, weight: FontWeight.w600),
+        ),
       const SizedBox(height: 4),
       // Shopify buyers with an included year land here, not on the plans sheet with
       // its code field; their code goes in Stripe Checkout's promotion code box (not on Google Play).
-      if (!context.select<UsageProvider, bool>((usage) => usage.playBilledPurchaser))
+      if (!playBilled)
         Text(
           l10n.paywallTrialCodeHint,
           key: const Key('trial_paywall_code_hint'),
@@ -253,7 +273,7 @@ class _TrialPaywallPageState extends State<TrialPaywallPage> {
               if (widget.offer == null &&
                   usage.playBilledPurchaser &&
                   usage.playOffers != null &&
-                  usage.subscription?.trialEligible != true) {
+                  (usage.subscription?.trialEligible != true || !_everyPlayPlanHasTrial(usage))) {
                 return SafeArea(
                   child: Column(
                     children: [
@@ -282,10 +302,12 @@ class _TrialPaywallPageState extends State<TrialPaywallPage> {
               final offer = widget.offer ?? PaywallOffer.forUsage(usage);
               final loading = offer == null &&
                   widget.offer == null &&
-                  (usage.isLoadingPlans || usage.playOffersLoading || usage.billingProviderUnknown);
+                  (usage.isLoadingPlans || usage.playOffersLoading || usage.billingProviderPending);
               final yearly = offer?.yearly;
               final monthly = offer?.monthly;
               final selected = _yearly ? (yearly ?? monthly) : (monthly ?? yearly);
+              // Google Play readers: Play's own trial length for the selected plan, never the constant.
+              final trialDays = (usage.playBilledPurchaser ? selected?.trialDays : null) ?? TrialPaywallPage.trialDays;
               final currency = selected?.currency ?? 'usd';
               final zero = formatBillingPrice(0, currency);
               final yearlySaving = yearly != null && monthly != null && monthly.amountMinor * 12 > yearly.amountMinor
@@ -332,10 +354,9 @@ class _TrialPaywallPageState extends State<TrialPaywallPage> {
                               ),
                               _TimelineRow(
                                 icon: Icons.check_circle_outline_rounded,
-                                title: l10n.paywallTrialInDaysTitle(TrialPaywallPage.trialDays),
-                                body: selected?.trialLabel(context, TrialPaywallPage.trialDays) ??
-                                    l10n.paywallTrialEndsBody,
-                                date: onDay(TrialPaywallPage.trialDays),
+                                title: l10n.paywallTrialInDaysTitle(trialDays),
+                                body: selected?.trialLabel(context, trialDays) ?? l10n.paywallTrialEndsBody,
+                                date: onDay(trialDays),
                                 emphasis: _TimelineEmphasis.plain,
                                 last: true,
                               ),
@@ -370,7 +391,9 @@ class _TrialPaywallPageState extends State<TrialPaywallPage> {
                                   Expanded(child: _Skeleton(height: 96)),
                                 ])
                               : offer == null
-                                  ? Text(l10n.unableToLoadPlans, textAlign: TextAlign.center, style: _Paper.body())
+                                  ? (usage.playBilledPurchaser || usage.billingProviderFailed
+                                      ? const PlayPlansError()
+                                      : Text(l10n.unableToLoadPlans, textAlign: TextAlign.center, style: _Paper.body()))
                                   : IgnorePointer(
                                       // The CTA captures the selected price before the
                                       // session request resolves. Letting a card change
@@ -386,7 +409,7 @@ class _TrialPaywallPageState extends State<TrialPaywallPage> {
                                                 child: _PlanCard(
                                                   key: const Key('trial_paywall_monthly'),
                                                   title: l10n.billingMonthly,
-                                                  price: formatBillingPrice(monthly.amountMinor, monthly.currency),
+                                                  price: monthly.formatted,
                                                   footnote: l10n.paywallTrialBilledMonthly,
                                                   selected: !_yearly || yearly == null,
                                                   onTap: () => setState(() => _yearly = false),
@@ -398,12 +421,14 @@ class _TrialPaywallPageState extends State<TrialPaywallPage> {
                                                 child: _PlanCard(
                                                   key: const Key('trial_paywall_yearly'),
                                                   title: l10n.billingYearly,
-                                                  price: formatBillingPrice(yearly.amountMinor, yearly.currency),
-                                                  wasPrice: monthly == null
+                                                  price: yearly.formatted,
+                                                  // Play gives no "twelve months" or "saving" string; computed
+                                                  // amounts are never shown next to Play's own prices.
+                                                  wasPrice: monthly == null || usage.playBilledPurchaser
                                                       ? null
                                                       : formatBillingPrice(monthly.amountMinor * 12, monthly.currency),
                                                   footnote: l10n.paywallTrialBilledYearly,
-                                                  saving: yearlySaving == null
+                                                  saving: yearlySaving == null || usage.playBilledPurchaser
                                                       ? null
                                                       : l10n.paywallTrialSaveAmount(
                                                           formatBillingPrice(yearlySaving, yearly.currency)),
@@ -431,7 +456,7 @@ class _TrialPaywallPageState extends State<TrialPaywallPage> {
                       children: [
                         if (selected != null) ...[
                           Text(
-                            selected.trialLabel(context, TrialPaywallPage.trialDays),
+                            selected.trialLabel(context, trialDays),
                             key: const Key('trial_paywall_price_terms'),
                             textAlign: TextAlign.center,
                             style: OmiType.subhead.copyWith(color: _Paper.text, fontWeight: FontWeight.w600),
@@ -440,7 +465,12 @@ class _TrialPaywallPageState extends State<TrialPaywallPage> {
                         ],
                         _Button(
                           key: const Key('trial_paywall_cta'),
-                          label: l10n.paywallTrialCta(zero),
+                          // Google Play readers: Play's own trial-phase string, never an app-formatted zero.
+                          label: !usage.playBilledPurchaser
+                              ? l10n.paywallTrialCta(zero)
+                              : selected?.trialDisplay != null
+                                  ? l10n.paywallTrialCta(selected!.trialDisplay!)
+                                  : l10n.subscribe,
                           busy: _busy,
                           onPressed: offer == null || _busy ? null : () => _checkout(offer),
                         ),

@@ -4844,5 +4844,7 @@
     "playPurchaseOtherAccount": "Ez a Google Play-vásárlás egy másik Omi-fiókhoz tartozik.",
     "playPurchaseNotConfirmed": "Még nem tudtuk megerősíteni a vásárlást. Automatikusan újrapróbáljuk.",
     "playRenewalTerms": "Lemondásig automatikusan megújul a feltüntetett áron. Bármikor kezelheted vagy lemondhatod a Google Playen.",
-    "playPaidAppUnavailable": "Androidon nem érhető el"
+    "playPaidAppUnavailable": "Androidon nem érhető el",
+    "pageNotAvailableInApp": "Ez az oldal nem érhető el az alkalmazásban.",
+    "shopOrderPlacedCheckEmail": "A rendelés leadva. A visszaigazolást az e-mailjeidben találod."
 }

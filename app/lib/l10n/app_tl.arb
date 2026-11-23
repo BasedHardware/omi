@@ -12305,5 +12305,7 @@
     "playPurchaseOtherAccount": "Ang pagbiling ito sa Google Play ay pag-aari ng ibang Omi account.",
     "playPurchaseNotConfirmed": "Hindi pa namin makumpirma ang iyong pagbili. Susubukan naming muli nang awtomatiko.",
     "playRenewalTerms": "Awtomatikong nire-renew sa ipinakitang presyo hanggang kanselahin mo. Pamahalaan o kanselahin anumang oras sa Google Play.",
-    "playPaidAppUnavailable": "Hindi available sa Android"
+    "playPaidAppUnavailable": "Hindi available sa Android",
+    "pageNotAvailableInApp": "Hindi available ang page na ito sa app.",
+    "shopOrderPlacedCheckEmail": "Naipadala na ang order. Tingnan ang email mo para sa kumpirmasyon."
 }

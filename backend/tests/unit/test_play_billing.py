@@ -23,6 +23,8 @@ OTHER = 'fixture-other'
 TOKEN = 'play-token-1'
 NOW = int(time.time())
 DAY = 86400
+TEST_ACCOUNT_KEY = 'test-only-account-id-key-0123456789abcdef'
+KEY_ENV = 'PLAY_ACCOUNT_ID_HMAC_KEY'
 
 
 def _iso(seconds):
@@ -179,6 +181,7 @@ def env(monkeypatch):
     for name in list(os.environ):
         if name.startswith('PLAY_') or name in (config.ANDROID_BILLING_ENV, config.MIN_BUILD_ENV):
             monkeypatch.delenv(name)
+    monkeypatch.setenv(config.ACCOUNT_ID_KEY_ENV, TEST_ACCOUNT_KEY)
     return SimpleNamespace(store=store, users=users, publisher=publisher, effects=effects, stripe_subs=stripe_subs)
 
 
@@ -302,10 +305,12 @@ def test_deletion_fenced_account_cannot_bind(env, monkeypatch):
 # ---- real-time developer notifications -----------------------------------------------------
 
 
-def _notify(kind=None, token=TOKEN, voided=False):
+def _notify(kind=None, token=TOKEN, voided=False, order=None):
     note = {'packageName': 'com.friend.ios'}
     if voided:
         note['voidedPurchaseNotification'] = {'purchaseToken': token, 'productType': 1}
+        if order:
+            note['voidedPurchaseNotification']['orderId'] = order
     else:
         note['subscriptionNotification'] = {'notificationType': kind or 2, 'purchaseToken': token}
     return play_billing.handle_developer_notification(note)
@@ -361,7 +366,9 @@ def test_revoke_removes_access_even_if_google_still_reads_active(subscribed):
 def test_refund_voided_purchase_removes_access(subscribed):
     assert _notify(voided=True) == 'revoked'
     assert _row(subscribed).plan == PlanType.basic
-    assert subscribed.store.docs[play_db.token_key(TOKEN)]['next_check_at'] is None
+    doc = subscribed.store.docs[play_db.token_key(TOKEN)]
+    assert doc['revoked_through'] == NOW + 30 * DAY  # the refunded period
+    assert doc['next_check_at'] is not None  # Google may still renew it; keep reading
 
 
 def test_resubscribe_after_on_hold_restores_access(subscribed):
@@ -433,18 +440,43 @@ def test_reconcile_rereads_due_purchases(subscribed):
         ({}, 'android', '9999', False),
         ({'ANDROID_BILLING': 'stripe', 'ANDROID_PLAY_BILLING_MIN_BUILD': '1700'}, 'android', '9999', False),
         ({'ANDROID_BILLING': 'play'}, 'android', '9999', False),  # no minimum build: nobody qualifies
-        ({'ANDROID_BILLING': 'play', 'ANDROID_PLAY_BILLING_MIN_BUILD': '1700'}, 'android', '1699', False),
-        ({'ANDROID_BILLING': 'play', 'ANDROID_PLAY_BILLING_MIN_BUILD': '1700'}, 'android', '1700', True),
-        ({'ANDROID_BILLING': 'play', 'ANDROID_PLAY_BILLING_MIN_BUILD': '1700'}, 'ios', '9999', False),
-        ({'ANDROID_BILLING': 'play', 'ANDROID_PLAY_BILLING_MIN_BUILD': '1700'}, 'android', None, False),
-        ({'ANDROID_BILLING': 'play', 'ANDROID_PLAY_BILLING_MIN_BUILD': '1700'}, 'android', 'abc', False),
+        (
+            {'ANDROID_BILLING': 'play', 'ANDROID_PLAY_BILLING_MIN_BUILD': '1700', KEY_ENV: TEST_ACCOUNT_KEY},
+            'android',
+            '1699',
+            False,
+        ),
+        (
+            {'ANDROID_BILLING': 'play', 'ANDROID_PLAY_BILLING_MIN_BUILD': '1700', KEY_ENV: TEST_ACCOUNT_KEY},
+            'android',
+            '1700',
+            True,
+        ),
+        (
+            {'ANDROID_BILLING': 'play', 'ANDROID_PLAY_BILLING_MIN_BUILD': '1700', KEY_ENV: TEST_ACCOUNT_KEY},
+            'ios',
+            '9999',
+            False,
+        ),
+        (
+            {'ANDROID_BILLING': 'play', 'ANDROID_PLAY_BILLING_MIN_BUILD': '1700', KEY_ENV: TEST_ACCOUNT_KEY},
+            'android',
+            None,
+            False,
+        ),
+        (
+            {'ANDROID_BILLING': 'play', 'ANDROID_PLAY_BILLING_MIN_BUILD': '1700', KEY_ENV: TEST_ACCOUNT_KEY},
+            'android',
+            'abc',
+            False,
+        ),
     ],
 )
 def test_switch_and_minimum_build(environ, platform, build, expected):
     assert config.client_uses_play(platform, build, UID, environ=environ) is expected
 
 
-PLAY_ON = {'ANDROID_PLAY_BILLING_MIN_BUILD': '1700'}
+PLAY_ON = {'ANDROID_PLAY_BILLING_MIN_BUILD': '1700', 'PLAY_ACCOUNT_ID_HMAC_KEY': TEST_ACCOUNT_KEY}
 
 
 def test_cohort_puts_one_user_on_play_while_everyone_else_stays_on_stripe():
@@ -523,6 +555,20 @@ def test_every_notification_type_maps_to_access_without_the_app(subscribed, kind
         assert row.current_period_end == NOW + 40 * DAY
 
 
+def test_account_id_is_a_keyed_hmac_and_play_stays_off_without_the_key():
+    environ = {'ANDROID_BILLING': 'play', 'ANDROID_PLAY_BILLING_MIN_BUILD': '1700'}
+    assert config.client_uses_play('android', '1700', UID, environ=environ) is False
+    with pytest.raises(config.AccountIdKeyMissing):
+        config.obfuscated_account_id(UID, environ)
+    keyed = config.obfuscated_account_id(UID, {KEY_ENV: TEST_ACCOUNT_KEY})
+    other_key = config.obfuscated_account_id(UID, {KEY_ENV: TEST_ACCOUNT_KEY[::-1]})
+    import hashlib
+
+    assert keyed != other_key and len(keyed) == 64
+    assert keyed != hashlib.sha256(f'omi-play-account:{UID}'.encode()).hexdigest()  # not derivable from the uid
+    assert config.client_uses_play('android', '1700', UID, environ={**environ, KEY_ENV: 'short'}) is False
+
+
 def test_stripe_rows_serialize_exactly_as_before():
     legacy = Subscription(plan=PlanType.unlimited_v2, stripe_subscription_id='sub_1', current_period_end=NOW)
     assert 'provider' not in legacy.model_dump()
@@ -531,7 +577,7 @@ def test_stripe_rows_serialize_exactly_as_before():
     assert play.model_dump()['provider'] == 'play'
 
 
-def test_subscription_response_omits_play_billing_when_unset():
+def test_subscription_response_omits_play_billing_when_unset(env):
     response = UserSubscriptionResponse(
         subscription=Subscription(),
         transcription_seconds_used=0,
@@ -593,6 +639,47 @@ def test_switch_off_subscription_route_is_byte_identical(monkeypatch, env, warm_
     on = json.loads(_byok_subscription_json(monkeypatch, 'android', '1700'))
     assert on['play_billing']['product_id'] == 'omi_pro'
     assert {k: v for k, v in on.items() if k != 'play_billing'} == json.loads(baseline)
+
+
+@pytest.fixture(scope='module')
+def prod_play_env():
+    """The rendered prod backend values, parsed in setup (the file is large)."""
+    import yaml
+    from pathlib import Path
+
+    rendered = yaml.safe_load((Path(__file__).parents[2] / 'deploy' / 'runtime_env.yaml').read_text())
+    env = rendered['environments']['prod']['cloud_run']['services']['backend']['env']
+    keys = ('ANDROID_BILLING', 'ANDROID_PLAY_BILLING_MIN_BUILD', 'ANDROID_PLAY_BILLING_COHORT')
+    return {key: str(env[key]['value']) for key in keys}
+
+
+def test_deployed_prod_values_send_nobody_to_play_without_the_rollout_cohort(
+    monkeypatch, env, warm_subscription_route, prod_play_env
+):
+    prod = prod_play_env
+    assert prod == {
+        'ANDROID_BILLING': 'stripe',
+        'ANDROID_PLAY_BILLING_MIN_BUILD': '1617',
+        'ANDROID_PLAY_BILLING_COHORT': '',
+    }
+    environ = {**prod, KEY_ENV: TEST_ACCOUNT_KEY}
+    for build in ('1617', '9999'):
+        assert config.client_uses_play('android', build, UID, environ) is False
+    # The android-play-billing rollout cohort alone admits a test uid, on 1617 and later only.
+    with monkeypatch.context() as patch:
+        patch.setattr(
+            config.rollout_cohorts, 'in_rollout_cohort', lambda uid, name: uid == UID and name == 'android-play-billing'
+        )
+        assert config.client_uses_play('android', '1617', UID, environ) is True
+        assert config.client_uses_play('android', '1616', UID, environ) is False
+        assert config.client_uses_play('android', '9999', OTHER, environ) is False
+    # Switch-off response stays byte-identical under the deployed values.
+    baseline = _byok_subscription_json(monkeypatch, 'android', '9999')
+    for key, value in prod.items():
+        monkeypatch.setenv(key, value)
+    for build in ('1617', '9999'):
+        assert _byok_subscription_json(monkeypatch, 'android', build) == baseline
+    assert 'play_billing' not in baseline
 
 
 def test_play_subscriber_cannot_open_stripe_checkout(monkeypatch):

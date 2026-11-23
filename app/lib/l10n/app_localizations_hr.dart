@@ -15798,4 +15798,10 @@ class AppLocalizationsHr extends AppLocalizations {
 
   @override
   String get playPaidAppUnavailable => 'Nije dostupno na Androidu';
+
+  @override
+  String get pageNotAvailableInApp => 'Ova stranica nije dostupna u aplikaciji.';
+
+  @override
+  String get shopOrderPlacedCheckEmail => 'Narudžba je poslana. Potvrdu potražite u e-pošti.';
 }

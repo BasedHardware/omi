@@ -15674,4 +15674,10 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get playPaidAppUnavailable => 'غير متاح على Android';
+
+  @override
+  String get pageNotAvailableInApp => 'هذه الصفحة غير متاحة في التطبيق.';
+
+  @override
+  String get shopOrderPlacedCheckEmail => 'تم تقديم الطلب. تحقق من بريدك الإلكتروني للاطلاع على التأكيد.';
 }

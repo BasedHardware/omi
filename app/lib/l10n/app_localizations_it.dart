@@ -15841,4 +15841,10 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get playPaidAppUnavailable => 'Non disponibile su Android';
+
+  @override
+  String get pageNotAvailableInApp => 'Questa pagina non è disponibile nell\'app.';
+
+  @override
+  String get shopOrderPlacedCheckEmail => 'Ordine effettuato. Controlla l\'email per la conferma.';
 }

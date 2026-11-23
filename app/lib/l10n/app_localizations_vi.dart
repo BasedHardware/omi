@@ -15763,4 +15763,10 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get playPaidAppUnavailable => 'Không có trên Android';
+
+  @override
+  String get pageNotAvailableInApp => 'Trang này không khả dụng trong ứng dụng.';
+
+  @override
+  String get shopOrderPlacedCheckEmail => 'Đã đặt hàng. Kiểm tra email để xem xác nhận.';
 }

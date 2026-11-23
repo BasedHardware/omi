@@ -15827,4 +15827,10 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get playPaidAppUnavailable => 'Indisponibil pe Android';
+
+  @override
+  String get pageNotAvailableInApp => 'Această pagină nu este disponibilă în aplicație.';
+
+  @override
+  String get shopOrderPlacedCheckEmail => 'Comanda a fost plasată. Verifică e-mailul pentru confirmare.';
 }

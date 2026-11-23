@@ -25,6 +25,9 @@ class PlayPurchaseResult {
   final String? code;
 }
 
+/// How long Play may take to say whether billing is available or to list the product's offers.
+const playQueryTimeout = Duration(seconds: 10);
+
 /// One base plan as Play sells it to this Google account, in its own currency.
 @immutable
 class PlayPlanOffer {
@@ -37,6 +40,7 @@ class PlayPlanOffer {
     required this.base,
     this.trial,
     this.trialDays,
+    this.trialFormattedPrice,
   });
 
   final String basePlanId;
@@ -53,6 +57,9 @@ class PlayPlanOffer {
   /// The free-trial offer when Play lists it for this account (Play applies new-subscriber eligibility).
   final GooglePlayProductDetails? trial;
   final int? trialDays;
+
+  /// Play's own string for the free-trial phase (e.g. "Free" or "₹0.00").
+  final String? trialFormattedPrice;
 }
 
 @immutable
@@ -147,8 +154,9 @@ class PlayBilling {
   /// Play's offers for the configured base plans; null when Play is unavailable or has no product.
   Future<PlayOffers?> loadOffers(PlayBillingConfig config) async {
     final platform = _platform();
-    if (!await platform.isAvailable()) return null;
-    final response = await platform.queryProductDetails({config.productId});
+    // A Play client that never answers ends in the error state with Retry, not a skeleton forever.
+    if (!await platform.isAvailable().timeout(playQueryTimeout)) return null;
+    final response = await platform.queryProductDetails({config.productId}).timeout(playQueryTimeout);
     if (response.error != null) Logger.debug('Play product query error: ${response.error}');
     PlayPlanOffer? monthly;
     PlayPlanOffer? yearly;
@@ -173,6 +181,7 @@ class PlayBilling {
         base: base,
         trial: trial,
         trialDays: trial == null ? null : _trialDays(_offer(trial)!),
+        trialFormattedPrice: trial == null ? null : _offer(trial)!.pricingPhases.first.formattedPrice,
       );
       if (entry.value == 'year') {
         yearly = plan;
