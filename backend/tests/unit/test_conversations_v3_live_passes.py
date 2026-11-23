@@ -22,6 +22,11 @@ T0 = datetime(2026, 11, 18, 10, 0, tzinfo=timezone.utc)
 LOCK_ENV = ('CONVERSATIONS_V3_SILENCE_GAP_SECONDS', 'CONVERSATIONS_V3_LOCK_SECONDS')
 
 
+@pytest.fixture(autouse=True)
+def disable_live_title_unless_test_opts_in(monkeypatch):
+    monkeypatch.setenv('CONVERSATIONS_V3_LIVE_TITLE', 'off')
+
+
 def speech(count, step=30.0):
     return [
         {'id': f's{i}', 'text': 'word ' * 12, 'start': i * step, 'end': i * step + step - 2, 'is_user': True}
@@ -202,6 +207,23 @@ def test_live_title_excludes_protected_or_hidden_rows(exclusion):
     row = {'v3_derived': True, 'status': 'in_progress', 'tile_state': 'live'}
     assert policy.live_title_candidate(row)
     assert not policy.live_title_candidate({**row, **exclusion})
+
+
+@pytest.mark.parametrize('protection', ['private', 'e2ee'])
+def test_live_title_claim_rechecks_current_privacy(strict, protection):
+    cid = 'protected'
+    row = {
+        'v3_derived': True,
+        'status': 'in_progress',
+        'tile_state': 'live',
+        'sync_content_revision': 1,
+        'data_protection_level': protection,
+    }
+    strict.rows[path(cid)] = row
+    token = store.leases.acquire(UID, 'builder', firestore_client=strict)
+    assert token
+    assert not store.write_live_title_preview(UID, token, cid, 1, firestore_client=strict)
+    assert policy.LIVE_TITLE_STATE not in strict.rows[path(cid)]
 
 
 @pytest.mark.asyncio
