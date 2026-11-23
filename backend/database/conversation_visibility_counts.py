@@ -7,6 +7,26 @@ from fastapi import HTTPException
 
 from utils.sync import bridge_pending
 
+HIDDEN_LAYER_FIELDS = (
+    'discarded',
+    'status',
+    'source',
+    'structured.category',
+    'folder_id',
+    'starred',
+    'created_at',
+    'recording',
+    'home_hidden',
+)
+PENDING_LAYER_FIELDS = HIDDEN_LAYER_FIELDS + (
+    'sync_bridge_pending',
+    'sync_relevance_user_kept',
+    'has_photos',
+    'photos',
+    'user_title',
+    'folder_user_set',
+)
+
 
 def matches_list_predicates(
     data: Mapping[str, Any],
@@ -111,15 +131,16 @@ def count_hidden(
         matching += count_layer('home_hidden')
         if not include_recordings:
             matching -= count_layer('recording', 'home_hidden')
-    queries = [(collection.where(filter=FieldFilter('deleted', '==', True)), False)]
+    queries = [(collection.where(filter=FieldFilter('deleted', '==', True)).select(HIDDEN_LAYER_FIELDS), False)]
     if not include_discarded:
-        queries.append((collection.where(filter=FieldFilter('dream_duplicate_of', '>', '')), False))
+        duplicates = collection.where(filter=FieldFilter('dream_duplicate_of', '>', ''))
+        queries.append((duplicates.select(HIDDEN_LAYER_FIELDS), False))
     # Most users have no active bridge holds. Pay one bounded probe
     # rather than opening a second full document stream on every count call.
     if not include_discarded:
         pending = collection.where(filter=FieldFilter('sync_bridge_pending.expires_at', '>', now))
         if next(iter(pending.limit(1).stream()), None) is not None:
-            queries.append((pending, True))
+            queries.append((pending.select(PENDING_LAYER_FIELDS), True))
     seen = set()
     for query, pending_only in queries:
         for doc in query.stream():
