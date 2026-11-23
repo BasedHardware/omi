@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 
 import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/pages/paywall/paywall_checkout.dart';
+import 'package:omi/pages/settings/widgets/plans/play_plans_content.dart';
 import 'package:omi/pages/paywall/paywall_pacing.dart';
 import 'package:omi/providers/auth_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
@@ -90,6 +91,8 @@ class _TrialPaywallPageState extends State<TrialPaywallPage> {
           OmiFeedback.confirm(context, l10n.unlimitedPlan);
           _dismissed = true;
           Navigator.of(context).pop(true);
+        case RestoreOutcome.free when context.read<UsageProvider>().lastPlayRestoreRefusal != null:
+          OmiFeedback.error(context, playRefusalMessage(l10n, context.read<UsageProvider>().lastPlayRestoreRefusal));
         case RestoreOutcome.free:
           OmiFeedback.info(context, l10n.freePlan);
         case RestoreOutcome.failed:
@@ -189,7 +192,11 @@ class _TrialPaywallPageState extends State<TrialPaywallPage> {
       outcome: switch (outcome) {
         PaywallCheckoutOutcome.purchased => PaywallMonthlyFallbackAcceptedOutcome.purchased,
         PaywallCheckoutOutcome.cancelled => PaywallMonthlyFallbackAcceptedOutcome.cancelled,
-        PaywallCheckoutOutcome.failed || null => PaywallMonthlyFallbackAcceptedOutcome.failed,
+        // A pending Play payment has not been paid yet; the closed enum has no pending value.
+        PaywallCheckoutOutcome.failed ||
+        PaywallCheckoutOutcome.pending ||
+        null =>
+          PaywallMonthlyFallbackAcceptedOutcome.failed,
       },
     ));
   }
@@ -214,13 +221,14 @@ class _TrialPaywallPageState extends State<TrialPaywallPage> {
       ),
       const SizedBox(height: 4),
       // Shopify buyers with an included year land here, not on the plans sheet with
-      // its code field; their code goes in Stripe Checkout's promotion code box.
-      Text(
-        l10n.paywallTrialCodeHint,
-        key: const Key('trial_paywall_code_hint'),
-        textAlign: TextAlign.center,
-        style: _Paper.label(size: 13, color: _Paper.textSecondary),
-      ),
+      // its code field; their code goes in Stripe Checkout's promotion code box (not on Google Play).
+      if (!context.select<UsageProvider, bool>((usage) => usage.playBilledPurchaser))
+        Text(
+          l10n.paywallTrialCodeHint,
+          key: const Key('trial_paywall_code_hint'),
+          textAlign: TextAlign.center,
+          style: _Paper.label(size: 13, color: _Paper.textSecondary),
+        ),
     ];
     return PopScope(
       canPop: false,
@@ -240,8 +248,41 @@ class _TrialPaywallPageState extends State<TrialPaywallPage> {
           backgroundColor: _Paper.background,
           body: Consumer<UsageProvider>(
             builder: (context, usage, _) {
-              final offer = widget.offer ?? PaywallOffer.fromCatalog(usage.availablePlans);
-              final loading = offer == null && widget.offer == null && usage.isLoadingPlans;
+              // Google Play did not list the free-trial offer for this account: sell the base plan with
+              // honest copy instead of a trial button that cannot start a trial.
+              if (widget.offer == null &&
+                  usage.playBilledPurchaser &&
+                  usage.playOffers != null &&
+                  usage.subscription?.trialEligible != true) {
+                return SafeArea(
+                  child: Column(
+                    children: [
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: IconButton(
+                          key: const Key('trial_paywall_play_close'),
+                          icon: const Icon(Icons.close),
+                          tooltip: MaterialLocalizations.of(context).closeButtonTooltip,
+                          onPressed: _dismiss,
+                        ),
+                      ),
+                      Expanded(
+                        child: PlayPlansContent(
+                          analyticsSource: widget.source,
+                          onPurchased: () {
+                            _dismissed = true;
+                            Navigator.of(context).pop(true);
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }
+              final offer = widget.offer ?? PaywallOffer.forUsage(usage);
+              final loading = offer == null &&
+                  widget.offer == null &&
+                  (usage.isLoadingPlans || usage.playOffersLoading || usage.billingProviderUnknown);
               final yearly = offer?.yearly;
               final monthly = offer?.monthly;
               final selected = _yearly ? (yearly ?? monthly) : (monthly ?? yearly);

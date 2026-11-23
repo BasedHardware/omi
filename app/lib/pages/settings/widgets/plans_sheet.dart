@@ -23,6 +23,7 @@ import 'package:omi/pages/settings/widgets/plans/plan_cards.dart';
 import 'package:omi/pages/settings/widgets/plans/promo_code_field.dart';
 import 'package:omi/pages/settings/widgets/plans/plan_display_name.dart';
 import 'package:omi/pages/settings/widgets/plans/plans_hero.dart';
+import 'package:omi/pages/settings/widgets/plans/play_plans_content.dart';
 import 'package:omi/pages/settings/widgets/plans/training_data_option.dart';
 import 'package:omi/pages/settings/widgets/yearly_switch.dart';
 import 'package:omi/providers/capture_provider.dart';
@@ -776,6 +777,10 @@ class _PlansSheetState extends State<PlansSheet> {
             if (Navigator.of(context).canPop()) Navigator.of(context).pop();
           });
           return const SizedBox.shrink();
+        }
+        if (provider.billingProviderUnknown) return const PlayPlansLoading();
+        if (provider.playBilledPurchaser || provider.subscription?.subscription.billedByPlay == true) {
+          return PlayPlansContent(analyticsSource: widget.analyticsSource);
         }
 
         if (_storefrontEnabled) {

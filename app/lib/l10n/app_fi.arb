@@ -4741,5 +4741,12 @@
     "firmwareUpdateAppRequired": "Tämä laiteohjelmistopäivitys tarvitsee Omi-sovelluksen uudemman version. Päivitä sovellus sovelluskaupastasi ja tarkista sitten uudelleen.",
     "quietPayerTitle": "Ei tallenteita 5 päivään",
     "quietPayerMessage": "Tarkista Omisi.",
-    "quietPayerCheck": "Tarkista"
+    "quietPayerCheck": "Tarkista",
+    "playManageSubscription": "Hallinnoi tilausta",
+    "playBilledByGoogle": "Laskutus Google Playn kautta",
+    "playPurchasePending": "Maksusi odottaa. Omi Pro alkaa, kun Google Play vahvistaa sen.",
+    "playPurchaseOtherAccount": "Tämä Google Play -osto kuuluu toiselle Omi-tilille.",
+    "playPurchaseNotConfirmed": "Ostoa ei voitu vielä vahvistaa. Yritämme automaattisesti uudelleen.",
+    "playRenewalTerms": "Uusiutuu automaattisesti näytettyyn hintaan, kunnes peruutat. Hallinnoi tai peruuta milloin tahansa Google Playssa.",
+    "playPaidAppUnavailable": "Ei saatavilla Androidilla"
 }

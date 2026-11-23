@@ -196,10 +196,17 @@ def test_early_placement_and_coverage_implementations_are_main_bytes():
                 # process_segment lost the backfill day cap (#25677).
                 # The legacy reprocess callback runs after placement and has
                 # its own body parity check in test_enrichment_callback_parity.
+                # Its coordinator also runs after placement. Enrichment route
+                # tests cover the SCA-3874 retry enrollment there.
                 names = (
                     {'apply_wal_audio_coverage'}
                     if path.endswith('/wal_audio_coverage.py')
-                    else {'_retrieve_file_paths_v2', 'process_segment', '_reprocess_conversation_after_update'}
+                    else {
+                        '_retrieve_file_paths_v2',
+                        'process_segment',
+                        '_reprocess_conversation_after_update',
+                        '_reprocess_merged_conversations',
+                    }
                 )
                 lines = text.splitlines(keepends=True)
                 for node in sorted(
@@ -209,7 +216,11 @@ def test_early_placement_and_coverage_implementations_are_main_bytes():
                 ):
                     start = min([node.lineno] + [d.lineno for d in node.decorator_list])
                     lines = lines[: start - 1] + lines[node.end_lineno :]
-                return ''.join(lines).replace('from utils import backfill_hours_cap\n', '')
+                return (
+                    ''.join(lines)
+                    .replace('from utils import backfill_hours_cap\n', '')
+                    .replace('from utils.enrichment.admission import require_transcript_decoded\n', '')
+                )
 
             if path.endswith('/wal_audio_coverage.py'):
                 actual = actual.replace(
