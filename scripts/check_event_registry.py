@@ -266,6 +266,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--write', action='store_true')
     parser.add_argument('--base', default='origin/main')
+    parser.add_argument('--posthog-tests', action='store_true', help='also run the PostHog guard and apply.py fixture tests')
     args = parser.parse_args()
     doc = json.loads((ROOT / SOURCE).read_text())
     old = git(args.base, SOURCE)
@@ -285,6 +286,15 @@ def main():
         print(error)
     if not errors:
         print(f"C7: {len(doc['events'])} registered events, executable consumers, generated output current")
+    # PostHog ingestion config (SCA-3665) shares this manifest entry.
+    import check_posthog_config
+    errors += check_posthog_config.run(ROOT / check_posthog_config.SOURCE, args.base, check_posthog_config.dt.datetime.now(check_posthog_config.dt.timezone.utc).date())
+    if args.posthog_tests:
+        import unittest
+        suite = unittest.defaultTestLoader.discover(str(ROOT / 'scripts'), pattern='test_check_posthog_config.py', top_level_dir=str(ROOT / 'scripts'))
+        suite.addTests(unittest.defaultTestLoader.discover(str(ROOT / 'scripts/posthog'), pattern='test_apply.py', top_level_dir=str(ROOT / 'scripts/posthog')))
+        if not unittest.TextTestRunner(verbosity=0).run(suite).wasSuccessful():
+            errors.append('PostHog guard tests failed')
     return bool(errors)
 
 

@@ -1,0 +1,182 @@
+#!/usr/bin/env python3
+"""Fixture tests for scripts/check_posthog_config.py (stdlib unittest)."""
+import contextlib
+import copy
+import datetime as dt
+import io
+import json
+from pathlib import Path
+import sys
+import tempfile
+import unittest
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import check_posthog_config as check  # noqa: E402
+
+TODAY = dt.date(2026, 11, 23)
+WAIVER = {'by': 'David Zhang', 'date': '2026-11-23', 'reason': 'until collector alerts replace PostHog', 'expires': '2026-12-07'}
+
+
+def passing():
+    return {
+        'project_id': 1,
+        'budget': {
+            'monthly_usd': 500,
+            'days_per_month': 30,
+            'tiers': {
+                'events': [[1000000, 0], [2000000, 0.00005], [None, 0.0000343]],
+                'identified_events': [[1000000, 0], [2000000, 0.000198], [None, 0.0000697]],
+                'feature_flag_requests': [[1000000, 0], [2000000, 0.0001], [None, 0.000045]],
+            },
+            'warehouse_usd_per_row': 0.0000059,
+            'feature_flag_requests_per_month': 0,
+        },
+        'functions': [
+            {'id': 'keep', 'name': 'Keep-list', 'execution_order': 5, 'enabled': True, 'kind': 'keep_list', 'pct': 2,
+             'events': ['Memory Created', 'Capture Wedge Detected']},
+            {'id': 'wedge', 'name': 'Wedge 10%', 'execution_order': 9, 'enabled': True, 'kind': 'sample', 'pct': 10,
+             'events': ['Capture Wedge Detected']},
+            {'id': 'drop', 'name': 'Drop', 'execution_order': 7, 'enabled': True, 'kind': 'drop', 'pct': 0,
+             'events': ['wal_transcript_coverage']},
+            {'id': 'geo', 'name': 'GeoIP', 'execution_order': 1, 'enabled': True, 'kind': 'unmanaged'},
+        ],
+        'warehouse': {'schemas': [
+            {'source_id': 's', 'schema_id': 'raw', 'name': 'raw', 'should_sync': False, 'sync_type': 'full_refresh',
+             'est_rows_per_run': 31000000, 'runs_per_month': 4.3, 'reader': ['x']},
+        ]},
+        'events': {
+            'Memory Created': {'est_events_per_day': 1000, 'identified': True, 'purpose': 'product', 'reader': ['ins1']},
+            'Capture Wedge Detected': {'est_events_per_day': 20000, 'identified': True, 'purpose': 'debug',
+                                       'reader': ['grafana:device-signals'], 'waiver': dict(WAIVER)},
+            'Device Connected': {'est_events_per_day': 40000, 'identified': True},
+        },
+    }
+
+
+def errors(doc, prior=None, today=TODAY):
+    return check.validate(doc, today, prior)
+
+
+class CheckPostHogConfig(unittest.TestCase):
+    def assertOneError(self, doc, fragment, prior=None, today=TODAY):
+        found = errors(doc, prior, today)
+        self.assertEqual(len(found), 1, found)
+        self.assertIn(fragment, found[0])
+
+    def test_passing_fixture(self):
+        self.assertEqual(errors(passing()), [])
+
+    def test_repository_config_passes(self):
+        doc = json.loads((check.ROOT / check.SOURCE).read_text())
+        self.assertEqual(errors(doc), [])
+
+    def test_kept_event_without_estimate(self):
+        doc = passing()
+        del doc['events']['Memory Created']['est_events_per_day']
+        self.assertOneError(doc, 'without a measured est_events_per_day')
+
+    def test_new_keep_list_event_without_entry(self):
+        doc = passing()
+        doc['functions'][0]['events'].append('Brand New Event')
+        self.assertOneError(doc, 'Brand New Event: kept at 100% without a measured est_events_per_day')
+
+    def test_kept_event_without_reader(self):
+        doc = passing()
+        del doc['events']['Memory Created']['reader']
+        self.assertOneError(doc, 'kept at 100% with no reader')
+
+    def test_debug_purpose_above_ceiling_without_waiver(self):
+        doc = passing()
+        del doc['events']['Capture Wedge Detected']['waiver']
+        self.assertOneError(doc, 'debug event kept at 10%')
+
+    def test_expired_waiver(self):
+        doc = passing()
+        self.assertOneError(doc, 'needs an unexpired waiver', today=dt.date(2026, 12, 8))
+
+    def test_waiver_not_signed_by_david(self):
+        doc = passing()
+        doc['events']['Capture Wedge Detected']['waiver']['by'] = 'An Agent'
+        self.assertOneError(doc, 'signed by David Zhang')
+
+    def test_debug_named_product_event(self):
+        doc = passing()
+        doc['functions'][0]['events'].append('Phone Battery Sample')
+        doc['events']['Phone Battery Sample'] = {'est_events_per_day': 9000, 'identified': True, 'purpose': 'product', 'reader': ['route.ts']}
+        self.assertOneError(doc, 'Phone Battery Sample: debug-named event kept at 100%')
+
+    def test_debug_event_at_two_percent_is_allowed(self):
+        doc = passing()
+        doc['functions'][1]['pct'] = 2
+        del doc['events']['Capture Wedge Detected']['waiver']
+        self.assertEqual(errors(doc), [])
+
+    def test_debug_name_tokens(self):
+        for name in ('Recording Upload Failed', 'authenticated_request_401', 'fallback_triggered',
+                     'Mobile Device Health Daily', 'Phone Battery Sample', 'wal_transcript_coverage'):
+            self.assertTrue(check.debug_name(name), name)
+        for name in ('Daily Summary Detail Viewed', 'Memory Created', 'Diagnostics Opened', 'Sample Rate Changed'):
+            self.assertFalse(check.debug_name(name), name)
+
+    def test_budget_exceeded(self):
+        doc = passing()
+        doc['events']['Memory Created']['est_events_per_day'] = 2_000_000
+        self.assertOneError(doc, 'exceeds budget.monthly_usd $500')
+
+    def test_budget_ceiling_covers_glide_path_until_it_expires(self):
+        doc = passing()
+        doc['events']['Memory Created']['est_events_per_day'] = 400_000
+        doc['budget']['ceiling'] = {'usd': 1500, 'until': '2026-12-07', 'reason': 'glide path'}
+        self.assertEqual(errors(doc), [])
+        doc['events']['Capture Wedge Detected']['waiver']['expires'] = '2026-12-31'
+        self.assertOneError(doc, 'and budget.ceiling $1,500 until 2026-12-07', today=dt.date(2026, 12, 8))
+
+    def test_raising_budget_ceiling_needs_waiver(self):
+        prior = passing()
+        prior['budget']['ceiling'] = {'usd': 1000, 'until': '2026-12-07', 'reason': 'glide path'}
+        doc = copy.deepcopy(prior)
+        doc['budget']['ceiling']['usd'] = 1200
+        self.assertOneError(doc, 'raising or extending the ceiling', prior=prior)
+        doc['budget']['ceiling']['waiver'] = dict(WAIVER)
+        self.assertEqual(errors(doc, prior), [])
+
+    def test_warehouse_full_refresh_over_one_million_rows(self):
+        doc = passing()
+        doc['warehouse']['schemas'][0]['should_sync'] = True
+        doc['budget']['monthly_usd'] = 100000
+        self.assertOneError(doc, 'full_refresh re-bills 31,000,000 rows')
+
+    def test_later_stage_must_not_loosen_tag(self):
+        doc = passing()
+        doc['functions'].append({'id': 'uploads', 'name': 'Uploads 0.5%', 'execution_order': 3, 'enabled': True,
+                                 'kind': 'sample', 'pct': 0.5, 'events': ['Recording Upload Started']})
+        doc['events']['Recording Upload Started'] = {'est_events_per_day': 1000, 'identified': True}
+        self.assertOneError(doc, 'omi_sample_pct would read 2 but the event is kept at 0.5%')
+
+    def test_tiered_estimate(self):
+        tiers = passing()['budget']['tiers']['events']
+        self.assertEqual(check.tiered(900_000, tiers), 0)
+        self.assertAlmostEqual(check.tiered(3_000_000, tiers), 50 + 34.3)
+        doc = passing()
+        cost = check.estimate(doc)
+        # 1000 + 20000 * 10% + 40000 * 2% = 3800/day = 114k/month, inside the free tier.
+        self.assertAlmostEqual(cost['events_per_month'], 114000)
+        self.assertEqual(cost['total'], 0)
+
+    def test_unrelated_diff_only_warns(self):
+        doc = passing()
+        del doc['events']['Memory Created']['reader']
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / 'posthog.json'
+            path.write_text(json.dumps(doc))
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out):
+                self.assertEqual(check.run(path, None, TODAY, enforce=False), [])
+                self.assertEqual(len(check.run(path, None, TODAY, enforce=True)), 1)
+            text = out.getvalue()
+        self.assertIn('PostHog estimate: $0/mo (base $0/mo, delta $+0)', text)
+        self.assertIn('warning (PostHog config unchanged in this diff)', text)
+
+
+if __name__ == '__main__':
+    unittest.main()

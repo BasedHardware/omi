@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireScope } from "@/lib/auth";
 import { posthogResults } from "@/lib/posthog";
+import { SAMPLE_PCT_SQL, SAMPLE_WEIGHT_SQL } from "@/lib/posthog-sampling";
 
 export const dynamic = "force-dynamic";
 
@@ -39,6 +40,10 @@ export function parseDeviceHealthDays(raw: string | null): number {
   return Math.min(parsed, DEVICE_HEALTH_MAX_DAYS);
 }
 
+// Phone Battery Sample and Mobile Device Health Daily may be sampled at
+// ingestion. Counts are weighted per row and users divided by the largest
+// rate (lib/posthog-sampling.ts). Quantiles and the >= 20 sampled-user guard
+// stay on the sampled rows: they need sample size, not population.
 // Watch firmware leaks in from connected non-pendant devices: the stored
 // label is a watchOS version (26.6, 27.0, 27.0.1). Pendant majors are a
 // single digit (1, 2, 3), so a two-digit major is not a pendant. 1.0.4
@@ -48,13 +53,13 @@ export function pendantHealthQuery(days: number): string {
     SELECT trim(properties.firmware) AS firmware,
            coalesce(nullIf(properties.$os_name,''), properties.platform) AS os,
            any(properties.device_model) AS device_model,
-           count() AS events,
-           uniqExact(person_id) AS users,
-           countIf(toFloat(properties.drain_percent_per_hour) BETWEEN 0.1 AND 100) AS n_valid_drain,
+           round(sum(${SAMPLE_WEIGHT_SQL})) AS events,
+           round(uniqExact(person_id) * 100 / max(${SAMPLE_PCT_SQL})) AS users,
+           round(sumIf(${SAMPLE_WEIGHT_SQL}, toFloat(properties.drain_percent_per_hour) BETWEEN 0.1 AND 100)) AS n_valid_drain,
            round(quantileIf(0.5)(toFloat(properties.drain_percent_per_hour), toFloat(properties.drain_percent_per_hour) BETWEEN 0.1 AND 100),2) AS p50_drain_valid,
            round(quantileIf(0.9)(toFloat(properties.drain_percent_per_hour), toFloat(properties.drain_percent_per_hour) BETWEEN 0.1 AND 100),2) AS p90_drain_valid,
            round(avg(toFloat(properties.connected_time_fraction)),2) AS avg_connected_frac,
-           countIf(toFloat(properties.cliff_count) > 0) AS n_with_cliffs
+           round(sumIf(${SAMPLE_WEIGHT_SQL}, toFloat(properties.cliff_count) > 0)) AS n_with_cliffs
     FROM events
     WHERE event = 'Mobile Device Health Daily' AND timestamp >= now() - INTERVAL ${days} DAY
       AND nullIf(trim(properties.firmware),'') IS NOT NULL
@@ -91,7 +96,8 @@ export function phoneHealthQuery(days: number): string {
              properties.previous_battery_charging AS previous_charging,
              toFloat(properties.battery_interval_seconds) AS interval_s,
              properties.battery_interval_validity AS validity,
-             properties.charging_observed_in_interval AS charging_observed
+             properties.charging_observed_in_interval AS charging_observed,
+             ${SAMPLE_PCT_SQL} AS sample_pct
       FROM events
       WHERE event = 'Phone Battery Sample'
         AND timestamp >= now() - INTERVAL ${days} DAY
@@ -103,7 +109,7 @@ export function phoneHealthQuery(days: number): string {
       GROUP BY os, build
     ),
     pairs AS (
-      SELECT os, build, app_version, person_id, timestamp, level, charging,
+      SELECT os, build, app_version, person_id, timestamp, level, charging, sample_pct,
              dateDiff('second', lagInFrame(timestamp, 1, timestamp) OVER (PARTITION BY person_id ORDER BY timestamp), timestamp) AS elapsed_s,
              lagInFrame(level, 1, level) OVER (PARTITION BY person_id ORDER BY timestamp) - level AS level_drop,
              lagInFrame(charging, 1, charging) OVER (PARTITION BY person_id ORDER BY timestamp) AS prev_charging
@@ -111,7 +117,7 @@ export function phoneHealthQuery(days: number): string {
       WHERE schema_version = 1
     ),
     intervals AS (
-      SELECT os, build, app_version, person_id, elapsed_s, level_drop, 1 AS interval_schema
+      SELECT os, build, app_version, person_id, elapsed_s, level_drop, 1 AS interval_schema, sample_pct
       FROM pairs
       WHERE timestamp >= now() - INTERVAL ${days} DAY
         AND elapsed_s BETWEEN 900 AND 7200
@@ -120,7 +126,7 @@ export function phoneHealthQuery(days: number): string {
         AND (prev_charging = false OR isNull(prev_charging))
       UNION ALL
       SELECT os, build, app_version, person_id, interval_s AS elapsed_s,
-             previous_level - level AS level_drop, 2 AS interval_schema
+             previous_level - level AS level_drop, 2 AS interval_schema, sample_pct
       FROM samples
       WHERE timestamp >= now() - INTERVAL ${days} DAY
         AND schema_version = 2
@@ -133,12 +139,12 @@ export function phoneHealthQuery(days: number): string {
     )
     SELECT intervals.os AS os, intervals.build AS build,
            max(app_version) AS app_version,
-           countIf(if(build_presence.has_v2, interval_schema = 2, interval_schema = 1)) AS n_pairs,
-           uniqExactIf(person_id, if(build_presence.has_v2, interval_schema = 2, interval_schema = 1)) AS users,
+           round(sumIf(100 / sample_pct, if(build_presence.has_v2, interval_schema = 2, interval_schema = 1))) AS n_pairs,
+           round(uniqExactIf(person_id, if(build_presence.has_v2, interval_schema = 2, interval_schema = 1)) * 100 / greatest(maxIf(sample_pct, if(build_presence.has_v2, interval_schema = 2, interval_schema = 1)), 0.01)) AS users,
            round(quantileIf(0.5)(toFloat(level_drop) / (elapsed_s/3600.0), if(build_presence.has_v2, interval_schema = 2, interval_schema = 1)),2) AS p50_drain_per_hour,
            round(quantileIf(0.9)(toFloat(level_drop) / (elapsed_s/3600.0), if(build_presence.has_v2, interval_schema = 2, interval_schema = 1)),2) AS p90_drain_per_hour,
-           countIf(interval_schema = 1) AS n_v1_pairs,
-           countIf(interval_schema = 2) AS n_v2_intervals
+           round(sumIf(100 / sample_pct, interval_schema = 1)) AS n_v1_pairs,
+           round(sumIf(100 / sample_pct, interval_schema = 2)) AS n_v2_intervals
     FROM intervals
     INNER JOIN build_presence ON intervals.os = build_presence.os AND intervals.build = build_presence.build
     GROUP BY os, build
@@ -152,7 +158,7 @@ export function phoneHealthQuery(days: number): string {
 // pair are a real measurement.
 export function phoneEventCountQuery(days: number): string {
   return `
-    SELECT count() AS n
+    SELECT round(sum(${SAMPLE_WEIGHT_SQL})) AS n
     FROM events
     WHERE event = 'Phone Battery Sample'
       AND timestamp >= now() - INTERVAL ${days} DAY

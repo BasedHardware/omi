@@ -6,10 +6,6 @@ import {
   LEGACY_FALLBACK_TRIAGE_QUERY,
 } from "../telemetry/fallback-triage";
 import { MCP_MARKER_STATUS_ROW, MCP_SUCCESS_SELECT } from "../wall-mcp";
-import {
-  DESKTOP_HEALTH_EVENT_WEIGHT_SQL,
-  desktopHealthEventWeightSql,
-} from "../telemetry/desktop-health-sampling";
 const end = new Date("2026-10-15");
 it.skipIf(process.env.OMI_TV_LIVE_CHECK !== "1")(
   "MCP activity compiles with the production aggregate engine",
@@ -115,42 +111,6 @@ it.skipIf(process.env.OMI_TV_LIVE_CHECK !== "1")(
     );
   },
   360000
-);
-it.skipIf(process.env.OMI_TV_LIVE_CHECK !== "1")(
-  "real HogQL sampling weight preserves history and applies at the exact UTC cutover",
-  async () => {
-    const times = [
-      "2026-10-21 23:59:59",
-      "2026-10-22 00:00:00",
-      "2026-10-22 00:00:01",
-      "2026-10-22 01:00:00",
-    ];
-    const expressions = times.map((at) =>
-      desktopHealthEventWeightSql("2026-10-22T00:00:00Z").replace(
-        /\btimestamp\b/g,
-        `toDateTime('${at}','UTC')`
-      )
-    );
-    const rows = await queryPosthog(`SELECT ${expressions.join(",")} LIMIT 1`);
-    expect([...rows]).toEqual([[1, 10, 10, 10]]);
-    const unarmed = await queryPosthog(
-      `SELECT ${DESKTOP_HEALTH_EVENT_WEIGHT_SQL} LIMIT 1`
-    );
-    expect([...unarmed]).toEqual([[1]]);
-    const weights = rows[0].map(Number);
-    expect(weights.reduce((s, n) => s + n, 0)).toBe(31);
-    expect(weights[0] + weights[1] + weights[3]).toBe(21);
-    expect(4000 * weights[0] + 4000 * weights[1] + 8000 * weights[3]).toBe(
-      124000
-    );
-    process.stdout.write(
-      JSON.stringify({
-        fixture: "sampling boundary weights",
-        rows: [...rows],
-      }) + "\n"
-    );
-  },
-  180000
 );
 it.skipIf(process.env.OMI_TV_LIVE_CHECK !== "1")(
   "production health sampling readers compile against real source columns",

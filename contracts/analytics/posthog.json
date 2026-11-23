@@ -1,0 +1,3358 @@
+{
+ "$comment": "Single source of truth for PostHog project 302298 ingestion (SCA-3665). Edit in a PR; scripts/check_posthog_config.py prints the cost; scripts/posthog/apply.py applies it after merge. PostHog is for product analytics only.",
+ "project_id": 302298,
+ "measured": {
+  "window": "7 days to 2026-11-23T10:30Z",
+  "method": "HogQL per event: sum(100 / coalesce(omi_sample_pct, 100)) / 7; where a later looser stage overwrote the tag (Recording Upload Started/Completed: tagged 2, kept 0.5%), stored/day x 100 / effective pct. identified = person_mode full on at least half the rows."
+ },
+ "budget": {
+  "monthly_usd": 500,
+  "ceiling": {
+   "usd": 1350,
+   "until": "2026-12-07",
+   "reason": "SCA-3665 glide path from the 2026-11-23 live state: debug events leave PostHog when the collector (#21449) and Prometheus alerts replace them; flags and identified events are the remaining levers. Lower it as cuts land; raising or extending it needs a waiver signed by David Zhang."
+  },
+  "days_per_month": 30,
+  "source": "PostHog price tiers (per unit); warehouse price derived from the 2026-11-23T07:44:58Z projection ($807.83 for 136.4M rows).",
+  "tiers": {
+   "events": [
+    [
+     1000000,
+     0
+    ],
+    [
+     2000000,
+     5e-05
+    ],
+    [
+     null,
+     3.43e-05
+    ]
+   ],
+   "identified_events": [
+    [
+     1000000,
+     0
+    ],
+    [
+     2000000,
+     0.000198
+    ],
+    [
+     null,
+     6.97e-05
+    ]
+   ],
+   "feature_flag_requests": [
+    [
+     1000000,
+     0
+    ],
+    [
+     2000000,
+     0.0001
+    ],
+    [
+     null,
+     4.5e-05
+    ]
+   ]
+  },
+  "tiers_note": "Upper bounds in units per month; null is open-ended. The published 2-15M (events) and 2-10M (flags) rates are applied beyond their upper bound too, which overstates slightly.",
+  "warehouse_usd_per_row": 5.9e-06,
+  "warehouse_usd_per_row_derived": true,
+  "feature_flag_requests_per_month": 6880783,
+  "feature_flag_requests_source": "/api/billing/ projected usage, period 2026-11-06 to 2026-12-06, read 2026-11-23T07:44:58Z",
+  "other_monthly_usd": {
+   "session_replay": 27.63
+  }
+ },
+ "functions": [
+  {
+   "id": "019c0fee-bdee-0000-e7c3-88dcf0ec00a0",
+   "name": "GeoIP",
+   "execution_order": 1,
+   "enabled": true,
+   "kind": "unmanaged",
+   "note": "GeoIP enrichment"
+  },
+  {
+   "id": "01a13f9f-bd9e-0000-587f-42d1757b1be0",
+   "name": "Ops sampling 3% (cost cut 2026-10-17)",
+   "execution_order": 2,
+   "enabled": true,
+   "kind": "sample",
+   "pct": 3,
+   "events": [
+    "Suggestion Assistant Gate Outcome",
+    "Conversation Processing Completed",
+    "Recording Requested",
+    "Screen Task Frame Terminal",
+    "Mobile Telemetry Health",
+    "Recording Observation",
+    "Recording Completed",
+    "Update Check Completed",
+    "Suggestion Assistant Evaluation Started",
+    "Suggestion Assistant Evaluation Failed",
+    "Siri Index Rebuilt",
+    "Mobile Background Resource Session",
+    "Desktop Silent Mic Diagnostic",
+    "Audio Playback Seeked",
+    "Product Journey Outcome",
+    "Diarization Completed",
+    "Listen Session Realtime Demand",
+    "Encoded Audio Duration Measured",
+    "Transcript Started",
+    "Transcript Completed",
+    "Transcript Cancelled",
+    "Speech Positive Duration Measured",
+    "Speaker Identity Proposed"
+   ]
+  },
+  {
+   "id": "01a147e7-685b-0000-0b4b-85177eb1c46a",
+   "name": "Ops sampling 0.5% uploads (cost cut 2026-10-17)",
+   "execution_order": 3,
+   "enabled": true,
+   "kind": "sample",
+   "pct": 0.5,
+   "events": [
+    "Recording Upload Started",
+    "Recording Upload Completed"
+   ]
+  },
+  {
+   "id": "01a147f6-23e1-0000-c5aa-3f3e5d74817e",
+   "name": "Anonymous ingestion for ops events (cost cut 2026-10-17)",
+   "execution_order": 4,
+   "enabled": false,
+   "kind": "unmanaged",
+   "note": "Disabled. Setting $process_person_profile=false in a transformation does not make events anonymous for billing."
+  },
+  {
+   "id": "01a147fe-0748-0000-6dd2-c23e39cf9a3a",
+   "name": "Keep-list sampling: listed events pass, rest 2% (contracts/analytics/posthog.json)",
+   "execution_order": 5,
+   "enabled": true,
+   "kind": "keep_list",
+   "pct": 2,
+   "events": [
+    "AI App Generator Page Opened",
+    "Account Created",
+    "Action Item Completed",
+    "Action Item Edited",
+    "Action Item Manually Added",
+    "Action Items Page Opened",
+    "Announcement Shown",
+    "App Crash Detected",
+    "App Enabled",
+    "App Launched",
+    "App Review Opportunity",
+    "App Review Request Attempted",
+    "App Review Request Finished",
+    "App Session Started",
+    "App Shared",
+    "Apple Reminders Sync Completed",
+    "Application Opened",
+    "Apps Clear Filters",
+    "Apps Filter Installed",
+    "Apps Filter Rating",
+    "Audio Share Completed",
+    "Battery Indicator Clicked",
+    "Bottom Navigation Tab Clicked",
+    "Capture Ingress Health",
+    "Capture Wedge Detected",
+    "Changelog Dismissed",
+    "Changelog Shown",
+    "Chat Message Sent",
+    "Chat Message Shared",
+    "Connect Device Page Opened",
+    "Connect Friend Clicked",
+    "Connection Guide Opened",
+    "Conversation Action",
+    "Conversation Detail Opened",
+    "Conversation Detail Search Query Entered",
+    "Conversation Display Settings Opened",
+    "Conversation List Item Clicked",
+    "Conversation Opened From Search",
+    "Conversation Shared",
+    "Daily Summary Detail Viewed",
+    "Daily Summary Notification Opened",
+    "Daily Summary Settings Opened",
+    "Daily Summary Toggled",
+    "Data Privacy Page Opened",
+    "Delete Account Flow Started",
+    "Desktop Prompt Answered",
+    "Desktop Prompt Dismissed",
+    "Desktop Prompt Shown",
+    "Desktop Rating Submitted",
+    "Desktop Recording Started",
+    "Desktop Recording Stopped",
+    "Developer Settings Saved",
+    "Device Connect Failure Shown",
+    "Device Disconnected",
+    "Device Onboarding Abandoned",
+    "Device Onboarding Completed",
+    "Device Onboarding Started",
+    "Device Onboarding Step Completed",
+    "Device Paired",
+    "Device Pairing Blocked",
+    "Device Scan Empty",
+    "Device Session Ended",
+    "Disconnect Friend Clicked",
+    "Export Tasks Banner Clicked",
+    "Fact List Item Clicked",
+    "Fact Page Create Fact Button Pressed",
+    "Fact Page Created Fact",
+    "Fact Searched",
+    "Feedback Submitted",
+    "First Summary Rating Prompt Answered",
+    "First Summary Rating Prompt Shown",
+    "Get Omi Device Clicked",
+    "Guided Intro Completed",
+    "Guided Intro Payoff Continued",
+    "Guided Intro Payoff Shown",
+    "Import History Page Opened",
+    "Integration Connect Succeeded",
+    "Integrations Page Opened",
+    "Live Transcript Card Clicked",
+    "Local WAL Stuck",
+    "MCP Tool Use Succeeded",
+    "Memory Created",
+    "Memory List Item Clicked",
+    "Monitoring Started",
+    "Monitoring Stopped",
+    "Notification Clicked",
+    "Notification Dismissed",
+    "Notification Frequency Changed",
+    "Notification Sent",
+    "Omi Double Tap",
+    "Onboarding Completed",
+    "Payments Page Opened",
+    "Permissions Interstitial Completed",
+    "Permissions Interstitial Shown",
+    "Permissions Settings Opened",
+    "Phone Mic Recording Started",
+    "Phone Mic Recording Stopped",
+    "Product Journey First Result",
+    "Recording Produced No Conversation",
+    "Recording Start Failed",
+    "Recording Started",
+    "Recording Upload Completed",
+    "Recording Upload Failed",
+    "Recording Upload Started",
+    "Referral Program Opened",
+    "Rewind Screenshot Viewed",
+    "Screen Capture Broken Detected",
+    "Screen Capture Reset Clicked",
+    "Search Bar Focused",
+    "Search Query Entered",
+    "Search Result Opened",
+    "Share Action",
+    "Share CTA Clicked",
+    "Share Page Scrolled",
+    "Share Page Tab Switched",
+    "Share Page Viewed",
+    "Share Preview Requested",
+    "Short Conversation Threshold Changed",
+    "Show Discarded Conversations Toggled",
+    "Show Discarded Memories Toggled",
+    "Show Short Conversations Toggled",
+    "Sign In Completed",
+    "Speech Profile Capture Page Clicked",
+    "Speech Profile Embedding Stored",
+    "Speech Profile Skipped",
+    "Speech Profile Upload Succeeded",
+    "Tag Sheet Opened",
+    "Task Added",
+    "Task Completed",
+    "Task Extracted",
+    "Transcribe Later Recording Processed",
+    "Transcribe Later Toggled",
+    "Update Available",
+    "Update Installed",
+    "Usage Stats Shared",
+    "Voice Profile Setting Toggled",
+    "Voice Response Mode Changed",
+    "chat_agent_query_cancelled",
+    "chat_agent_query_completed",
+    "chat_agent_query_started",
+    "chat_tool_call_completed",
+    "desktop_health_event",
+    "floating_bar_ask_omi_opened",
+    "floating_bar_ptt_ended",
+    "floating_bar_ptt_started",
+    "floating_bar_query_sent",
+    "question_asked",
+    "quiz_answered",
+    "quiz_checkout_clicked",
+    "quiz_completed",
+    "quiz_email_submitted",
+    "quiz_screen_viewed",
+    "quiz_started"
+   ],
+   "note": "Listed events skip the default sample; later sample stages still apply to them. $-events (except $rageclick) and names containing the hog-source markers also pass; that rule lives in the function source, not in inputs."
+  },
+  {
+   "id": "01a14818-0c6c-0000-9d91-a05dd3fdcf8a",
+   "name": "desktop_health_event 2% (SCA-3665; readers reweight by omi_sample_pct)",
+   "execution_order": 6,
+   "enabled": true,
+   "kind": "sample",
+   "pct": 2,
+   "events": [
+    "desktop_health_event"
+   ]
+  },
+  {
+   "id": "01a14955-e81f-0000-91ae-520340a1716e",
+   "name": "Drop: Mobile Render Observation, wal_transcript_coverage, Capture Ingress Health (SCA-3665 2026-11-23)",
+   "execution_order": 7,
+   "enabled": true,
+   "kind": "drop",
+   "pct": 0,
+   "events": [
+    "Mobile Render Observation",
+    "wal_transcript_coverage",
+    "Capture Ingress Health"
+   ]
+  },
+  {
+   "id": "01a14997-d076-0000-366b-5533e678e2c9",
+   "name": "Sample Recording Upload Failed at 3% (SCA-3665 2026-11-23; was 10%)",
+   "execution_order": 8,
+   "enabled": true,
+   "kind": "sample",
+   "pct": 3,
+   "events": [
+    "Recording Upload Failed"
+   ]
+  },
+  {
+   "id": "01a1727c-015e-0000-4cf8-a02a1c045fba",
+   "name": "Sample Capture Wedge Detected, Local WAL Stuck, Recording Start Failed at 10% (SCA-3665 2026-11-23; was CIH 20%)",
+   "execution_order": 9,
+   "enabled": true,
+   "kind": "sample",
+   "pct": 10,
+   "events": [
+    "Capture Wedge Detected",
+    "Local WAL Stuck",
+    "Recording Start Failed"
+   ]
+  }
+ ],
+ "warehouse": {
+  "schemas": [
+   {
+    "source_id": "01a0e94f-760d-0000-7ad7-252a71bcb061",
+    "schema_id": "01a0e94f-87bd-0000-e7d4-d011f73d90f8",
+    "name": "gcp_billing_export_resource_v1_01B287_9348DC_02D256",
+    "should_sync": false,
+    "sync_type": "full_refresh",
+    "est_rows_per_run": 31383948,
+    "runs_per_month": 4.3,
+    "reader": [
+     "nDBOVoND",
+     "sJAgpHUX",
+     "NyQ5Gcsz"
+    ],
+    "note": "Raw resource export, re-billed in full every 7 days. Replaced by gcp_cost_daily (David 2026-11-23); off by 2026-11-25T22:00Z."
+   },
+   {
+    "source_id": "01a0e94f-760d-0000-7ad7-252a71bcb061",
+    "schema_id": null,
+    "status": "pending",
+    "name": "gcp_cost_daily",
+    "should_sync": true,
+    "sync_type": "full_refresh",
+    "est_rows_per_run": 7500,
+    "runs_per_month": 30,
+    "reader": [
+     "nDBOVoND",
+     "sJAgpHUX",
+     "NyQ5Gcsz"
+    ],
+    "note": "Daily view gcp_billing_export.gcp_cost_daily (day x service, ~28 rows/day since 2026-04). Created by David; add schema_id once PostHog lists it."
+   }
+  ],
+  "unmanaged": {
+   "sources": [
+    "MetaAds (4 accounts)",
+    "GoogleAds (2)",
+    "TikTokAds",
+    "Klaviyo",
+    "Shopify",
+    "Stripe"
+   ],
+   "est_rows_per_month": 1900000,
+   "note": "Marketing and finance sources, not managed by apply.py. Row estimate derived: 136.4M projected rows minus the raw GCP export (31.38M x 30/7)."
+  }
+ },
+ "events": {
+  "$autocapture": {
+   "est_events_per_day": 190,
+   "identified": false,
+   "purpose": "product"
+  },
+  "$experiment_exposure": {
+   "est_events_per_day": 491,
+   "identified": true,
+   "purpose": "product"
+  },
+  "$feature_flag_called": {
+   "est_events_per_day": 1951,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "vqD4W7kY",
+    "A18XnVDS"
+   ]
+  },
+  "$identify": {
+   "est_events_per_day": 10097,
+   "identified": true,
+   "purpose": "product"
+  },
+  "$pageleave": {
+   "est_events_per_day": 138,
+   "identified": false,
+   "purpose": "product"
+  },
+  "$pageview": {
+   "est_events_per_day": 287,
+   "identified": false,
+   "purpose": "product",
+   "reader": [
+    "adeL9Yra",
+    "WR6yvpjD",
+    "7weXK9Zj"
+   ]
+  },
+  "$push_notification_opened": {
+   "est_events_per_day": 13,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "XmB2HA7t"
+   ]
+  },
+  "$rageclick": {
+   "est_events_per_day": 420,
+   "identified": true
+  },
+  "$set": {
+   "est_events_per_day": 3880,
+   "identified": true,
+   "purpose": "product"
+  },
+  "AI App Generator Banner Clicked": {
+   "est_events_per_day": 7,
+   "identified": true
+  },
+  "AI App Generator Page Opened": {
+   "est_events_per_day": 7,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "contracts/analytics/consumers/mobile-instrumentation-presence.sql"
+   ]
+  },
+  "Account Created": {
+   "est_events_per_day": 193,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "EQSs6AZn",
+    "klKcLINq",
+    "iooG6yDn",
+    "kJwJcJBo"
+   ]
+  },
+  "Action Item Completed": {
+   "est_events_per_day": 268,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "p5559RUx",
+    "xkycBQGR",
+    "nX4yHJZR",
+    "Ljh22BGA"
+   ]
+  },
+  "Action Item Edited": {
+   "est_events_per_day": 6,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "xkycBQGR",
+    "nX4yHJZR",
+    "Ljh22BGA",
+    "S9ejqxZf"
+   ]
+  },
+  "Action Item Manually Added": {
+   "est_events_per_day": 4,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "xkycBQGR",
+    "nX4yHJZR",
+    "Ljh22BGA",
+    "S9ejqxZf"
+   ]
+  },
+  "Action Items Page Opened": {
+   "est_events_per_day": 1352,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "xkycBQGR",
+    "nX4yHJZR",
+    "Ljh22BGA",
+    "cCyMigls"
+   ]
+  },
+  "Add MCP Server Opened": {
+   "est_events_per_day": 48,
+   "identified": true
+  },
+  "Announcement Dismissed": {
+   "est_events_per_day": 128,
+   "identified": true
+  },
+  "Announcement Shown": {
+   "est_events_per_day": 140,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "XmB2HA7t"
+   ]
+  },
+  "App Crash Detected": {
+   "est_events_per_day": 1,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "web/admin/app/api/omi/releases/route.ts",
+    "web/admin/app/api/omi/stats/crash-rate/route.ts"
+   ]
+  },
+  "App Detail Opened": {
+   "est_events_per_day": 398,
+   "identified": true
+  },
+  "App Detail Subscribe Clicked": {
+   "est_events_per_day": 4,
+   "identified": true,
+   "purpose": "product"
+  },
+  "App Detail Viewed": {
+   "est_events_per_day": 422,
+   "identified": true
+  },
+  "App Enabled": {
+   "est_events_per_day": 149,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "ym8miKtQ",
+    "VHpsayOO",
+    "197taQZ7",
+    "pLMbNwCZ"
+   ]
+  },
+  "App Language Changed": {
+   "est_events_per_day": 19,
+   "identified": true
+  },
+  "App Launched": {
+   "est_events_per_day": 765,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "ICJKLjrE",
+    "1FLIFPcU",
+    "j7hCcAm4",
+    "2uESmZwV"
+   ]
+  },
+  "App Purchase Completed": {
+   "est_events_per_day": 0,
+   "identified": true,
+   "purpose": "product"
+  },
+  "App Purchase Started": {
+   "est_events_per_day": 2,
+   "identified": true,
+   "purpose": "product"
+  },
+  "App Review Opportunity": {
+   "est_events_per_day": 277,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "i428h1gr",
+    "qUHlVokl",
+    "yFfe3mQi",
+    "contracts/analytics/consumers/mobile-review-presence.sql"
+   ]
+  },
+  "App Review Request Attempted": {
+   "est_events_per_day": 63,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "U7PVITXf",
+    "eMA3A1vH",
+    "z2V0Oin6",
+    "JphTKTe2"
+   ]
+  },
+  "App Review Request Finished": {
+   "est_events_per_day": 63,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "contracts/analytics/consumers/mobile-review-presence.sql"
+   ]
+  },
+  "App Session Started": {
+   "est_events_per_day": 17743,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "ViHw9RI8",
+    "bZShNqgU",
+    "e8wp6WgL",
+    "L0xHnHgX"
+   ]
+  },
+  "App Shared": {
+   "est_events_per_day": 7,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "OqhWu9or",
+    "dL8uiyTW",
+    "nX4yHJZR",
+    "ulhG1X4r"
+   ]
+  },
+  "App Startup Timing": {
+   "est_events_per_day": 479,
+   "identified": true
+  },
+  "Apple Reminders Sync Completed": {
+   "est_events_per_day": 809,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "contracts/analytics/consumers/mobile-instrumentation-presence.sql"
+   ]
+  },
+  "Application Backgrounded": {
+   "est_events_per_day": 36,
+   "identified": true
+  },
+  "Application Opened": {
+   "est_events_per_day": 36,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "C9jmvhtc",
+    "x8kWRnFm",
+    "3Nx21C0T",
+    "eNisqntf"
+   ]
+  },
+  "Apps Capability Filter": {
+   "est_events_per_day": 1,
+   "identified": true
+  },
+  "Apps Clear Filters": {
+   "est_events_per_day": 1,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "contracts/analytics/consumers/mobile-instrumentation-presence.sql"
+   ]
+  },
+  "Apps Filter Capability": {
+   "est_events_per_day": 1,
+   "identified": true
+  },
+  "Apps Filter Installed": {
+   "est_events_per_day": 12,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "contracts/analytics/consumers/mobile-instrumentation-presence.sql"
+   ]
+  },
+  "Apps Filter Rating": {
+   "est_events_per_day": 2,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "contracts/analytics/consumers/mobile-instrumentation-presence.sql"
+   ]
+  },
+  "Apps Rating Filter": {
+   "est_events_per_day": 2,
+   "identified": true
+  },
+  "Apps Searched": {
+   "est_events_per_day": 36,
+   "identified": true
+  },
+  "Apps Sort Changed": {
+   "est_events_per_day": 2,
+   "identified": true
+  },
+  "Apps Sort Filter": {
+   "est_events_per_day": 2,
+   "identified": true
+  },
+  "Apps Type Filter": {
+   "est_events_per_day": 13,
+   "identified": true
+  },
+  "Audio Playback Failed": {
+   "est_events_per_day": 77,
+   "identified": true
+  },
+  "Audio Playback Paused": {
+   "est_events_per_day": 106,
+   "identified": true
+  },
+  "Audio Playback Seeked": {
+   "est_events_per_day": 1450,
+   "identified": true
+  },
+  "Audio Playback Started": {
+   "est_events_per_day": 343,
+   "identified": true
+  },
+  "Audio Share Completed": {
+   "est_events_per_day": 46,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "nX4yHJZR",
+    "ulhG1X4r"
+   ]
+  },
+  "Audio Share Failed": {
+   "est_events_per_day": 2,
+   "identified": true
+  },
+  "Audio Share Started": {
+   "est_events_per_day": 49,
+   "identified": true
+  },
+  "Auth Browser Opened": {
+   "est_events_per_day": 48,
+   "identified": false
+  },
+  "Auth Callback Received": {
+   "est_events_per_day": 37,
+   "identified": false
+  },
+  "Auth Callback Server Started": {
+   "est_events_per_day": 48,
+   "identified": false
+  },
+  "Auth Callback Valid": {
+   "est_events_per_day": 37,
+   "identified": false
+  },
+  "Auth Flow Cancelled": {
+   "est_events_per_day": 4,
+   "identified": false
+  },
+  "Auth Flow Completed": {
+   "est_events_per_day": 35,
+   "identified": true
+  },
+  "Auth Flow Started": {
+   "est_events_per_day": 48,
+   "identified": false
+  },
+  "Auth Flow Timed Out": {
+   "est_events_per_day": 3,
+   "identified": true
+  },
+  "Auth Token Exchange Completed": {
+   "est_events_per_day": 36,
+   "identified": false
+  },
+  "Auth Token Exchange Started": {
+   "est_events_per_day": 37,
+   "identified": false
+  },
+  "Battery Indicator Clicked": {
+   "est_events_per_day": 1944,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "contracts/analytics/consumers/mobile-instrumentation-presence.sql"
+   ]
+  },
+  "Billing Subscription Cancellation Scheduled": {
+   "est_events_per_day": 30,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "contracts/analytics/consumers/billing-lifecycle-events.sql",
+    "contracts/product-telemetry/fixtures/billing.jsonl",
+    "contracts/product-telemetry/posthog/billing-churn.hogql",
+    "contracts/product-telemetry/posthog/subscription-baseline.hogql"
+   ]
+  },
+  "Billing Subscription Churned": {
+   "est_events_per_day": 37,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "contracts/analytics/consumers/billing-lifecycle-events.sql",
+    "contracts/product-telemetry/fixtures/billing.jsonl",
+    "contracts/product-telemetry/posthog/billing-churn.hogql",
+    "contracts/product-telemetry/posthog/journey-scorecard.hogql"
+   ]
+  },
+  "Billing Subscription Plan Changed": {
+   "est_events_per_day": 3,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "contracts/analytics/consumers/billing-plan-changes.sql"
+   ]
+  },
+  "Billing Subscription Started": {
+   "est_events_per_day": 109,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "zTeIHbZc",
+    "contracts/analytics/consumers/billing-lifecycle-events.sql",
+    "contracts/product-telemetry/fixtures/billing.jsonl",
+    "contracts/product-telemetry/posthog/billing-churn.hogql"
+   ]
+  },
+  "Bottom Navigation Tab Clicked": {
+   "est_events_per_day": 1120,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "msvzrntf",
+    "web/admin/lib/qualified-activity.ts"
+   ]
+  },
+  "Brain Map Node Clicked": {
+   "est_events_per_day": 7,
+   "identified": true
+  },
+  "Capture Gap Detected": {
+   "est_events_per_day": 6,
+   "identified": true
+  },
+  "Capture Ingress Health": {
+   "est_events_per_day": 244391,
+   "identified": true,
+   "purpose": "debug"
+  },
+  "Capture Recovery Observed": {
+   "est_events_per_day": 21392,
+   "identified": true
+  },
+  "Capture Recovery Prompt Shown": {
+   "est_events_per_day": 11,
+   "identified": true
+  },
+  "Capture Recovery Resolved": {
+   "est_events_per_day": 12988,
+   "identified": true
+  },
+  "Capture Wedge Detected": {
+   "est_events_per_day": 21181,
+   "identified": true,
+   "purpose": "debug",
+   "reader": [
+    "grafana:device-signals"
+   ],
+   "waiver": {
+    "by": "David Zhang",
+    "date": "2026-11-23",
+    "reason": "until collector+Prometheus alerts replace PostHog (SCA-3665)",
+    "expires": "2026-12-07"
+   }
+  },
+  "Changelog Dismissed": {
+   "est_events_per_day": 5,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "contracts/analytics/consumers/mobile-instrumentation-presence.sql"
+   ]
+  },
+  "Changelog Shown": {
+   "est_events_per_day": 7,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "XmB2HA7t"
+   ]
+  },
+  "Chat Apps Opened": {
+   "est_events_per_day": 52,
+   "identified": true
+  },
+  "Chat Message Copied": {
+   "est_events_per_day": 12,
+   "identified": true
+  },
+  "Chat Message Memory Clicked": {
+   "est_events_per_day": 28,
+   "identified": true
+  },
+  "Chat Message Sent": {
+   "est_events_per_day": 862,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "ym8miKtQ",
+    "xkycBQGR",
+    "nX4yHJZR",
+    "Ljh22BGA"
+   ]
+  },
+  "Chat Message Shared": {
+   "est_events_per_day": 5,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "nX4yHJZR",
+    "ulhG1X4r"
+   ]
+  },
+  "Chat Voice Input Used": {
+   "est_events_per_day": 2821,
+   "identified": true
+  },
+  "Connect Device Page Opened": {
+   "est_events_per_day": 766,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "contracts/analytics/consumers/mobile-instrumentation-presence.sql"
+   ]
+  },
+  "Connect Friend Clicked": {
+   "est_events_per_day": 558,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "contracts/analytics/consumers/mobile-instrumentation-presence.sql"
+   ]
+  },
+  "Connection Guide Device Tapped": {
+   "est_events_per_day": 73,
+   "identified": true
+  },
+  "Connection Guide Dismissed": {
+   "est_events_per_day": 55,
+   "identified": true
+  },
+  "Connection Guide Opened": {
+   "est_events_per_day": 64,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "PtKCQzGn",
+    "uNfYBNXT",
+    "contracts/analytics/consumers/mobile-instrumentation-presence.sql"
+   ]
+  },
+  "Connectors Page Viewed": {
+   "est_events_per_day": 18,
+   "identified": true
+  },
+  "Conversation Action": {
+   "est_events_per_day": 2210,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "contracts/analytics/consumers/mobile-conversation-actions.sql",
+    "web/admin/lib/qualified-activity.ts"
+   ]
+  },
+  "Conversation Deleted": {
+   "est_events_per_day": 11,
+   "identified": true
+  },
+  "Conversation Detail Folder Chip Clicked": {
+   "est_events_per_day": 16,
+   "identified": true
+  },
+  "Conversation Detail Opened": {
+   "est_events_per_day": 103,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "xkycBQGR",
+    "nX4yHJZR",
+    "Ljh22BGA",
+    "S9ejqxZf"
+   ]
+  },
+  "Conversation Detail Search Query Entered": {
+   "est_events_per_day": 10,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "web/admin/lib/qualified-activity.ts"
+   ]
+  },
+  "Conversation Detail Tab Changed": {
+   "est_events_per_day": 2571,
+   "identified": true
+  },
+  "Conversation Display Settings Opened": {
+   "est_events_per_day": 69,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "contracts/analytics/consumers/mobile-instrumentation-presence.sql"
+   ]
+  },
+  "Conversation List Item Clicked": {
+   "est_events_per_day": 4288,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "XZ1qwpqK",
+    "p5559RUx",
+    "xkycBQGR",
+    "nX4yHJZR"
+   ]
+  },
+  "Conversation Memories Extracted": {
+   "est_events_per_day": 71,
+   "identified": true
+  },
+  "Conversation Merge Completed": {
+   "est_events_per_day": 7,
+   "identified": true
+  },
+  "Conversation Merge Initiated": {
+   "est_events_per_day": 14,
+   "identified": true
+  },
+  "Conversation Merge Selection Mode Entered": {
+   "est_events_per_day": 43,
+   "identified": true
+  },
+  "Conversation Merge Selection Mode Exited": {
+   "est_events_per_day": 29,
+   "identified": true
+  },
+  "Conversation Opened From Search": {
+   "est_events_per_day": 3,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "web/admin/lib/qualified-activity.ts"
+   ]
+  },
+  "Conversation Processing Completed": {
+   "est_events_per_day": 321,
+   "identified": true
+  },
+  "Conversation Processing Stalled": {
+   "est_events_per_day": 409,
+   "identified": true
+  },
+  "Conversation Selected For Merge": {
+   "est_events_per_day": 729,
+   "identified": true
+  },
+  "Conversation Shared": {
+   "est_events_per_day": 86,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "p5559RUx",
+    "OqhWu9or",
+    "xkycBQGR",
+    "dL8uiyTW"
+   ]
+  },
+  "Conversation Star Toggled": {
+   "est_events_per_day": 36,
+   "identified": true
+  },
+  "Conversation Starred": {
+   "est_events_per_day": 6,
+   "identified": true
+  },
+  "Conversation Swiped To Delete": {
+   "est_events_per_day": 1586,
+   "identified": true
+  },
+  "Conversation Three Dots Menu Action Selected": {
+   "est_events_per_day": 604,
+   "identified": true
+  },
+  "Conversation Three Dots Menu Opened": {
+   "est_events_per_day": 793,
+   "identified": true
+  },
+  "Conversation Untitled Rendered": {
+   "est_events_per_day": 17396,
+   "identified": true
+  },
+  "Conversation Viewed": {
+   "est_events_per_day": 307,
+   "identified": true
+  },
+  "Conversations Page Viewed": {
+   "est_events_per_day": 229,
+   "identified": true
+  },
+  "Custom Vocabulary Opened": {
+   "est_events_per_day": 118,
+   "identified": true
+  },
+  "Daily Summary Conversation Clicked": {
+   "est_events_per_day": 144,
+   "identified": true
+  },
+  "Daily Summary Deleted": {
+   "est_events_per_day": 17,
+   "identified": true
+  },
+  "Daily Summary Detail Viewed": {
+   "est_events_per_day": 373,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "p5559RUx",
+    "qUHlVokl",
+    "xkycBQGR",
+    "nX4yHJZR"
+   ]
+  },
+  "Daily Summary Notification Opened": {
+   "est_events_per_day": 78,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "XmB2HA7t",
+    "qUHlVokl"
+   ]
+  },
+  "Daily Summary Settings Opened": {
+   "est_events_per_day": 61,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "contracts/analytics/consumers/mobile-instrumentation-presence.sql"
+   ]
+  },
+  "Daily Summary Shared": {
+   "est_events_per_day": 14,
+   "identified": true
+  },
+  "Daily Summary Time Changed": {
+   "est_events_per_day": 9,
+   "identified": true
+  },
+  "Daily Summary Toggled": {
+   "est_events_per_day": 8,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "contracts/analytics/consumers/mobile-instrumentation-presence.sql"
+   ]
+  },
+  "Data Privacy Page Opened": {
+   "est_events_per_day": 41,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "contracts/analytics/consumers/mobile-instrumentation-presence.sql"
+   ]
+  },
+  "Delete Account Flow Started": {
+   "est_events_per_day": 14,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "contracts/analytics/consumers/mobile-instrumentation-presence.sql"
+   ]
+  },
+  "Delete Account Kept Account": {
+   "est_events_per_day": 0,
+   "identified": true
+  },
+  "Delete Account Reason Selected": {
+   "est_events_per_day": 10,
+   "identified": true
+  },
+  "Desktop Ambient Dictation Mic Suppressed": {
+   "est_events_per_day": 2143,
+   "identified": true
+  },
+  "Desktop Call App Audio Summary": {
+   "est_events_per_day": 328,
+   "identified": true
+  },
+  "Desktop Capture Attempt Outcome": {
+   "est_events_per_day": 2129,
+   "identified": true
+  },
+  "Desktop Conversation Reconciliation Failed": {
+   "est_events_per_day": 246,
+   "identified": true
+  },
+  "Desktop Meeting Confirmed": {
+   "est_events_per_day": 256,
+   "identified": true
+  },
+  "Desktop Microphone Armed": {
+   "est_events_per_day": 164,
+   "identified": true
+  },
+  "Desktop Prompt Answered": {
+   "est_events_per_day": 0,
+   "identified": false,
+   "purpose": "product",
+   "reader": [
+    "web/admin/app/api/omi/desktop-prompts/results/route.ts"
+   ]
+  },
+  "Desktop Prompt Dismissed": {
+   "est_events_per_day": 0,
+   "identified": false,
+   "purpose": "product",
+   "reader": [
+    "web/admin/app/api/omi/desktop-prompts/results/route.ts"
+   ]
+  },
+  "Desktop Prompt Shown": {
+   "est_events_per_day": 0,
+   "identified": false,
+   "purpose": "product",
+   "reader": [
+    "web/admin/app/api/omi/desktop-prompts/results/route.ts"
+   ]
+  },
+  "Desktop Rating Submitted": {
+   "est_events_per_day": 2,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "web/admin/app/api/omi/stats/desktop-ratings/route.ts"
+   ]
+  },
+  "Desktop Recording Error": {
+   "est_events_per_day": 7,
+   "identified": true
+  },
+  "Desktop Recording Started": {
+   "est_events_per_day": 2667,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "vMmfbRGm",
+    "1LSu6fVV",
+    "x8kWRnFm",
+    "iC2SPsYH"
+   ]
+  },
+  "Desktop Recording Stopped": {
+   "est_events_per_day": 2381,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "vMmfbRGm",
+    "1LSu6fVV",
+    "web/admin/app/api/omi/stats/viral-metrics/route.ts"
+   ]
+  },
+  "Desktop Silent Mic Diagnostic": {
+   "est_events_per_day": 9171,
+   "identified": true
+  },
+  "Developer API Docs Opened": {
+   "est_events_per_day": 7,
+   "identified": true
+  },
+  "Developer Settings Saved": {
+   "est_events_per_day": 20,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "contracts/analytics/consumers/mobile-instrumentation-presence.sql"
+   ]
+  },
+  "Developers Page Viewed": {
+   "est_events_per_day": 76,
+   "identified": true
+  },
+  "Device Connect Failed": {
+   "est_events_per_day": 74,
+   "identified": true
+  },
+  "Device Connect Failure Shown": {
+   "est_events_per_day": 129,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "contracts/analytics/consumers/onboarding-activation-funnel.sql"
+   ]
+  },
+  "Device Connected": {
+   "est_events_per_day": 45843,
+   "identified": true
+  },
+  "Device Disconnected": {
+   "est_events_per_day": 358,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "1FLIFPcU",
+    "j7hCcAm4",
+    "ZOOEHKks",
+    "wLw8KS4m"
+   ]
+  },
+  "Device Disconnected Detailed": {
+   "est_events_per_day": 101993,
+   "identified": true
+  },
+  "Device Onboarding Abandoned": {
+   "est_events_per_day": 312,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "contracts/analytics/consumers/mobile-instrumentation-presence.sql",
+    "web/admin/lib/mobile-onboarding-funnel.ts"
+   ]
+  },
+  "Device Onboarding Completed": {
+   "est_events_per_day": 18,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "contracts/analytics/consumers/mobile-instrumentation-presence.sql",
+    "web/admin/lib/mobile-onboarding-funnel.ts"
+   ]
+  },
+  "Device Onboarding Double Tap Configured": {
+   "est_events_per_day": 18,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "contracts/analytics/consumers/mobile-instrumentation-presence.sql"
+   ]
+  },
+  "Device Onboarding Started": {
+   "est_events_per_day": 342,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "web/admin/lib/mobile-onboarding-funnel.ts"
+   ]
+  },
+  "Device Onboarding Step Completed": {
+   "est_events_per_day": 142,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "web/admin/lib/mobile-onboarding-funnel.ts"
+   ]
+  },
+  "Device Paired": {
+   "est_events_per_day": 195,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "XZ1qwpqK",
+    "gueUNj7M",
+    "gVWFUp8X",
+    "v205aRRH"
+   ]
+  },
+  "Device Pairing Blocked": {
+   "est_events_per_day": 58,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "contracts/analytics/consumers/onboarding-activation-funnel.sql"
+   ]
+  },
+  "Device Pairing Settings Opened": {
+   "est_events_per_day": 7,
+   "identified": true
+  },
+  "Device Scan Empty": {
+   "est_events_per_day": 116,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "contracts/analytics/consumers/onboarding-activation-funnel.sql"
+   ]
+  },
+  "Device Session Ended": {
+   "est_events_per_day": 46419,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "web/admin/lib/wall-capture-sql.ts"
+   ]
+  },
+  "Diagnostics Opened": {
+   "est_events_per_day": 147,
+   "identified": true
+  },
+  "Diagnostics Send Failed": {
+   "est_events_per_day": 7,
+   "identified": true
+  },
+  "Diarization Completed": {
+   "est_events_per_day": 21486,
+   "identified": true
+  },
+  "Disconnect Friend Clicked": {
+   "est_events_per_day": 336,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "contracts/analytics/consumers/mobile-instrumentation-presence.sql"
+   ]
+  },
+  "Encoded Audio Duration Measured": {
+   "est_events_per_day": 28814,
+   "identified": true
+  },
+  "Export Tasks Banner Clicked": {
+   "est_events_per_day": 16,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "contracts/analytics/consumers/mobile-instrumentation-presence.sql"
+   ]
+  },
+  "Fact List Item Clicked": {
+   "est_events_per_day": 40,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "web/admin/lib/qualified-activity.ts"
+   ]
+  },
+  "Fact Page Create Fact Button Pressed": {
+   "est_events_per_day": 12,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "contracts/analytics/consumers/mobile-instrumentation-presence.sql"
+   ]
+  },
+  "Fact Page Created Fact": {
+   "est_events_per_day": 9,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "197taQZ7"
+   ]
+  },
+  "Fact Page Deleted Fact": {
+   "est_events_per_day": 30,
+   "identified": true
+  },
+  "Fact Searched": {
+   "est_events_per_day": 1,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "web/admin/lib/qualified-activity.ts"
+   ]
+  },
+  "Facts Management Sheet Opened": {
+   "est_events_per_day": 21,
+   "identified": true
+  },
+  "Feedback Submitted": {
+   "est_events_per_day": 0,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "web/admin/app/api/omi/releases/route.ts"
+   ]
+  },
+  "Firebase Custom Token Exchange Completed": {
+   "est_events_per_day": 36,
+   "identified": false
+  },
+  "Firebase Custom Token Exchange Started": {
+   "est_events_per_day": 36,
+   "identified": false
+  },
+  "Firmware Update Completed": {
+   "est_events_per_day": 41,
+   "identified": true
+  },
+  "Firmware Update Failed": {
+   "est_events_per_day": 14,
+   "identified": true
+  },
+  "Firmware Update Install Requested": {
+   "est_events_per_day": 50,
+   "identified": true
+  },
+  "Firmware Update Started": {
+   "est_events_per_day": 56,
+   "identified": true
+  },
+  "Firmware Update Upload Finished": {
+   "est_events_per_day": 50,
+   "identified": true
+  },
+  "First Summary Rating Prompt Answered": {
+   "est_events_per_day": 166,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "contracts/analytics/consumers/mobile-instrumentation-presence.sql"
+   ]
+  },
+  "First Summary Rating Prompt Shown": {
+   "est_events_per_day": 167,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "contracts/analytics/consumers/mobile-instrumentation-presence.sql"
+   ]
+  },
+  "Free Cap Sheet Choice": {
+   "est_events_per_day": 14,
+   "identified": true
+  },
+  "Free Plan Selected": {
+   "est_events_per_day": 10,
+   "identified": true,
+   "purpose": "product"
+  },
+  "Get Omi Device Clicked": {
+   "est_events_per_day": 44,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "contracts/analytics/consumers/mobile-instrumentation-presence.sql"
+   ]
+  },
+  "Goal Add Button Tapped": {
+   "est_events_per_day": 14,
+   "identified": true
+  },
+  "Goal Created": {
+   "est_events_per_day": 7,
+   "identified": true
+  },
+  "Goal Deleted": {
+   "est_events_per_day": 4,
+   "identified": true
+  },
+  "Goal Item Tapped For Edit": {
+   "est_events_per_day": 7,
+   "identified": true
+  },
+  "Guided Intro Completed": {
+   "est_events_per_day": 357,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "web/admin/lib/mobile-onboarding-funnel.ts"
+   ]
+  },
+  "Guided Intro Content Save": {
+   "est_events_per_day": 141,
+   "identified": true
+  },
+  "Guided Intro Payoff Continued": {
+   "est_events_per_day": 103,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "contracts/analytics/consumers/guided-intro-payoff-presence.sql"
+   ]
+  },
+  "Guided Intro Payoff Shown": {
+   "est_events_per_day": 107,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "contracts/analytics/consumers/guided-intro-payoff-presence.sql"
+   ]
+  },
+  "Guided Intro Prompt Completed": {
+   "est_events_per_day": 596,
+   "identified": true
+  },
+  "Guided Intro Prompt Viewed": {
+   "est_events_per_day": 776,
+   "identified": true
+  },
+  "Guided Intro Recording Started": {
+   "est_events_per_day": 592,
+   "identified": true
+  },
+  "Guided Intro Review Shown": {
+   "est_events_per_day": 121,
+   "identified": true
+  },
+  "Guided Intro Save Submitted": {
+   "est_events_per_day": 143,
+   "identified": true
+  },
+  "Guided Intro Started": {
+   "est_events_per_day": 367,
+   "identified": true
+  },
+  "Guided Intro Voice Enrollment": {
+   "est_events_per_day": 113,
+   "identified": true
+  },
+  "Help Page Viewed": {
+   "est_events_per_day": 7,
+   "identified": true
+  },
+  "Home Page Viewed": {
+   "est_events_per_day": 181,
+   "identified": true
+  },
+  "Home Trial Sheet Shown": {
+   "est_events_per_day": 99,
+   "identified": true,
+   "purpose": "product"
+  },
+  "Import History Page Opened": {
+   "est_events_per_day": 14,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "contracts/analytics/consumers/mobile-instrumentation-presence.sql"
+   ]
+  },
+  "Import Started": {
+   "est_events_per_day": 12,
+   "identified": true
+  },
+  "Integration Auth Refresh Attempted": {
+   "est_events_per_day": 200,
+   "identified": true
+  },
+  "Integration Auth Refresh Succeeded": {
+   "est_events_per_day": 200,
+   "identified": true
+  },
+  "Integration Connect Attempted": {
+   "est_events_per_day": 213,
+   "identified": true
+  },
+  "Integration Connect Failed": {
+   "est_events_per_day": 18,
+   "identified": true
+  },
+  "Integration Connect Succeeded": {
+   "est_events_per_day": 97,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "p5559RUx"
+   ]
+  },
+  "Integration Disconnected": {
+   "est_events_per_day": 7,
+   "identified": true
+  },
+  "Integration Nudge Actioned": {
+   "est_events_per_day": 32,
+   "identified": true
+  },
+  "Integration Nudge Shown": {
+   "est_events_per_day": 82,
+   "identified": true
+  },
+  "Integration Sync Attempted": {
+   "est_events_per_day": 1929,
+   "identified": true
+  },
+  "Integration Sync Failed": {
+   "est_events_per_day": 0,
+   "identified": true
+  },
+  "Integration Sync Succeeded": {
+   "est_events_per_day": 1929,
+   "identified": true
+  },
+  "Integrations Page Opened": {
+   "est_events_per_day": 318,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "contracts/analytics/consumers/mobile-instrumentation-presence.sql"
+   ]
+  },
+  "Language Changed": {
+   "est_events_per_day": 7,
+   "identified": true
+  },
+  "Language Settings Opened": {
+   "est_events_per_day": 297,
+   "identified": true
+  },
+  "Launch At Login Changed": {
+   "est_events_per_day": 38,
+   "identified": true,
+   "purpose": "product"
+  },
+  "Launch At Login Status": {
+   "est_events_per_day": 4,
+   "identified": true,
+   "purpose": "product"
+  },
+  "Listen Session Realtime Demand": {
+   "est_events_per_day": 28814,
+   "identified": true
+  },
+  "Listen Socket Zero Transcript": {
+   "est_events_per_day": 414,
+   "identified": true
+  },
+  "Live Preview Engine": {
+   "est_events_per_day": 33657,
+   "identified": true
+  },
+  "Live Preview First Word": {
+   "est_events_per_day": 12029,
+   "identified": true
+  },
+  "Live Preview Not Requested": {
+   "est_events_per_day": 5300,
+   "identified": true
+  },
+  "Live Preview Notes": {
+   "est_events_per_day": 117250,
+   "identified": true
+  },
+  "Live Preview Session Ended": {
+   "est_events_per_day": 32914,
+   "identified": true
+  },
+  "Live Preview Verdict": {
+   "est_events_per_day": 34650,
+   "identified": true
+  },
+  "Live Transcript Card Clicked": {
+   "est_events_per_day": 1136,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "contracts/analytics/consumers/mobile-instrumentation-presence.sql",
+    "web/admin/lib/qualified-activity.ts"
+   ]
+  },
+  "Local WAL Stuck": {
+   "est_events_per_day": 8383,
+   "identified": true,
+   "purpose": "debug",
+   "reader": [
+    "grafana:device-signals"
+   ],
+   "waiver": {
+    "by": "David Zhang",
+    "date": "2026-11-23",
+    "reason": "until collector+Prometheus alerts replace PostHog (SCA-3665)",
+    "expires": "2026-12-07"
+   }
+  },
+  "Login Page Viewed": {
+   "est_events_per_day": 208,
+   "identified": false,
+   "purpose": "product"
+  },
+  "MCP Active": {
+   "est_events_per_day": 4471,
+   "identified": false
+  },
+  "MCP Docs Opened": {
+   "est_events_per_day": 7,
+   "identified": true
+  },
+  "MCP Tool Call": {
+   "est_events_per_day": 10365,
+   "identified": false
+  },
+  "MCP Tool Use Succeeded": {
+   "est_events_per_day": 71317,
+   "identified": false,
+   "purpose": "product",
+   "reader": [
+    "web/admin/lib/wall-mcp.ts"
+   ]
+  },
+  "Memories Cache Reconcile": {
+   "est_events_per_day": 460,
+   "identified": true
+  },
+  "Memories Page Viewed": {
+   "est_events_per_day": 39,
+   "identified": true
+  },
+  "Memory Assistant Analysis Run": {
+   "est_events_per_day": 693,
+   "identified": true
+  },
+  "Memory Created": {
+   "est_events_per_day": 37210,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "ym8miKtQ",
+    "xkycBQGR",
+    "nX4yHJZR",
+    "Ljh22BGA"
+   ]
+  },
+  "Memory List Item Clicked": {
+   "est_events_per_day": 100,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "web/admin/lib/qualified-activity.ts"
+   ]
+  },
+  "Menu Bar Action Clicked": {
+   "est_events_per_day": 86,
+   "identified": true
+  },
+  "Menu Bar Opened": {
+   "est_events_per_day": 190,
+   "identified": true
+  },
+  "Mobile Background Observation Interrupted": {
+   "est_events_per_day": 2736,
+   "identified": true
+  },
+  "Mobile Background Resource Session": {
+   "est_events_per_day": 4936,
+   "identified": true
+  },
+  "Mobile Device Health Daily": {
+   "est_events_per_day": 3721,
+   "identified": true
+  },
+  "Mobile Telemetry Health": {
+   "est_events_per_day": 21164,
+   "identified": true
+  },
+  "Monitoring Started": {
+   "est_events_per_day": 473,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "xkycBQGR",
+    "nX4yHJZR",
+    "Ljh22BGA",
+    "vMmfbRGm"
+   ]
+  },
+  "Monitoring Stopped": {
+   "est_events_per_day": 466,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "vMmfbRGm",
+    "1LSu6fVV"
+   ]
+  },
+  "Native Custody Observed": {
+   "est_events_per_day": 1529,
+   "identified": true
+  },
+  "Notification Clicked": {
+   "est_events_per_day": 27,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "web/admin/app/api/omi/stats/notifications/route.ts"
+   ]
+  },
+  "Notification Dismissed": {
+   "est_events_per_day": 752,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "web/admin/app/api/omi/stats/notifications/route.ts"
+   ]
+  },
+  "Notification Frequency Changed": {
+   "est_events_per_day": 83,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "contracts/analytics/consumers/mobile-instrumentation-presence.sql"
+   ]
+  },
+  "Notification Repair Triggered": {
+   "est_events_per_day": 1,
+   "identified": true
+  },
+  "Notification Sent": {
+   "est_events_per_day": 818,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "web/admin/app/api/omi/stats/notifications/route.ts"
+   ]
+  },
+  "Notification Settings Checked": {
+   "est_events_per_day": 575,
+   "identified": true
+  },
+  "Omi Double Tap": {
+   "est_events_per_day": 1320,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "1FLIFPcU",
+    "j7hCcAm4",
+    "ZOOEHKks",
+    "wLw8KS4m"
+   ]
+  },
+  "Omi Shop Opened": {
+   "est_events_per_day": 5,
+   "identified": true
+  },
+  "On Device Transcription Used": {
+   "est_events_per_day": 879,
+   "identified": true
+  },
+  "Onboarding Chat Tool Used": {
+   "est_events_per_day": 31,
+   "identified": true,
+   "purpose": "product"
+  },
+  "Onboarding Completed": {
+   "est_events_per_day": 183,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "ksj0WqEq",
+    "7dmkGkJq",
+    "PYMHYfbY",
+    "PUMIm1Jd"
+   ]
+  },
+  "Onboarding Device Choice": {
+   "est_events_per_day": 182,
+   "identified": true,
+   "purpose": "product"
+  },
+  "Onboarding First Capture Choice Selected": {
+   "est_events_per_day": 11,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "contracts/analytics/consumers/mobile-instrumentation-presence.sql"
+   ]
+  },
+  "Onboarding First Capture Shown": {
+   "est_events_per_day": 15,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "contracts/analytics/consumers/mobile-instrumentation-presence.sql"
+   ]
+  },
+  "Onboarding First Capture Skipped": {
+   "est_events_per_day": 6,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "contracts/analytics/consumers/mobile-instrumentation-presence.sql"
+   ]
+  },
+  "Onboarding Get Started Tapped": {
+   "est_events_per_day": 1,
+   "identified": false,
+   "purpose": "product",
+   "reader": [
+    "contracts/analytics/consumers/onboarding-activation-funnel.sql"
+   ]
+  },
+  "Onboarding How Did You Hear": {
+   "est_events_per_day": 29,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "sVD20kDj",
+    "3jCE0XsO",
+    "5dqA4l3H",
+    "XOHLfHc3"
+   ]
+  },
+  "Onboarding Permission Result": {
+   "est_events_per_day": 490,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "contracts/analytics/consumers/onboarding-activation-funnel.sql"
+   ]
+  },
+  "Onboarding Setup Rating Prompt Answered": {
+   "est_events_per_day": 13,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "contracts/analytics/consumers/mobile-instrumentation-presence.sql"
+   ]
+  },
+  "Onboarding Setup Rating Prompt Shown": {
+   "est_events_per_day": 13,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "contracts/analytics/consumers/mobile-instrumentation-presence.sql"
+   ]
+  },
+  "Onboarding Step AI Consent Completed": {
+   "est_events_per_day": 279,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "web/admin/lib/mobile-onboarding-funnel.ts"
+   ]
+  },
+  "Onboarding Step Acquisition Source Completed": {
+   "est_events_per_day": 17,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "web/admin/lib/mobile-onboarding-funnel.ts"
+   ]
+  },
+  "Onboarding Step Auth Completed": {
+   "est_events_per_day": 4,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "web/admin/lib/mobile-onboarding-funnel.ts"
+   ]
+  },
+  "Onboarding Step Completed": {
+   "est_events_per_day": 766,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "contracts/analytics/consumers/mobile-instrumentation-presence.sql",
+    "web/admin/lib/onboarding-funnel.ts"
+   ]
+  },
+  "Onboarding Step Found Omi Completed": {
+   "est_events_per_day": 155,
+   "identified": true,
+   "purpose": "product"
+  },
+  "Onboarding Step Knowledge Graph Completed": {
+   "est_events_per_day": 0,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "web/admin/lib/mobile-onboarding-funnel.ts"
+   ]
+  },
+  "Onboarding Step Name Completed": {
+   "est_events_per_day": 20,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "Al17ptRP",
+    "RG2Gii1x",
+    "3T2uLud5",
+    "Rn8M2C3B"
+   ]
+  },
+  "Onboarding Step Pairing Completed": {
+   "est_events_per_day": 182,
+   "identified": true,
+   "purpose": "product"
+  },
+  "Onboarding Step Permissions Completed": {
+   "est_events_per_day": 197,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "web/admin/lib/mobile-onboarding-funnel.ts"
+   ]
+  },
+  "Onboarding Step Primary Language Completed": {
+   "est_events_per_day": 170,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "web/admin/lib/mobile-onboarding-funnel.ts"
+   ]
+  },
+  "Onboarding Step Setup Completed": {
+   "est_events_per_day": 12,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "web/admin/lib/mobile-onboarding-funnel.ts"
+   ]
+  },
+  "Onboarding Step Speech Profile Continued": {
+   "est_events_per_day": 6,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "contracts/analytics/consumers/mobile-instrumentation-presence.sql"
+   ]
+  },
+  "Onboarding Variant Shown": {
+   "est_events_per_day": 241,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "vqD4W7kY",
+    "fKierJQH",
+    "7dmkGkJq"
+   ]
+  },
+  "Onboarding Welcome Shown": {
+   "est_events_per_day": 1,
+   "identified": false,
+   "purpose": "product",
+   "reader": [
+    "contracts/analytics/consumers/onboarding-activation-funnel.sql"
+   ]
+  },
+  "Orphan Audio Reclaim": {
+   "est_events_per_day": 2050,
+   "identified": true
+  },
+  "Orphan Audio Recovery": {
+   "est_events_per_day": 2050,
+   "identified": true
+  },
+  "Payments Page Opened": {
+   "est_events_per_day": 16,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "contracts/analytics/consumers/mobile-instrumentation-presence.sql"
+   ]
+  },
+  "Paywall Monthly Fallback Accepted": {
+   "est_events_per_day": 12,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "contracts/analytics/consumers/mobile-instrumentation-presence.sql"
+   ]
+  },
+  "Paywall Monthly Fallback Dismissed": {
+   "est_events_per_day": 29,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "contracts/analytics/consumers/mobile-instrumentation-presence.sql"
+   ]
+  },
+  "Paywall Monthly Fallback Shown": {
+   "est_events_per_day": 43,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "contracts/analytics/consumers/mobile-instrumentation-presence.sql"
+   ]
+  },
+  "Paywall Opened": {
+   "est_events_per_day": 716,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "AgkokEtm",
+    "tl5c8d1z",
+    "v205aRRH",
+    "contracts/analytics/consumers/subscription-funnel.sql"
+   ]
+  },
+  "Paywall Variant Shown": {
+   "est_events_per_day": 382,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "7dmkGkJq",
+    "contracts/analytics/consumers/mobile-instrumentation-presence.sql"
+   ]
+  },
+  "Pendant Voice Question Dropped": {
+   "est_events_per_day": 1821,
+   "identified": true
+  },
+  "Permission Changed": {
+   "est_events_per_day": 13,
+   "identified": true
+  },
+  "Permissions Interstitial Completed": {
+   "est_events_per_day": 34,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "contracts/analytics/consumers/mobile-instrumentation-presence.sql"
+   ]
+  },
+  "Permissions Interstitial Shown": {
+   "est_events_per_day": 56,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "contracts/analytics/consumers/mobile-instrumentation-presence.sql"
+   ]
+  },
+  "Permissions Settings Opened": {
+   "est_events_per_day": 133,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "contracts/analytics/consumers/mobile-instrumentation-presence.sql"
+   ]
+  },
+  "Phone Battery Sample": {
+   "est_events_per_day": 8921,
+   "identified": true
+  },
+  "Phone Mic Recording Started": {
+   "est_events_per_day": 500,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "xkycBQGR",
+    "nX4yHJZR",
+    "Ljh22BGA",
+    "S9ejqxZf"
+   ]
+  },
+  "Phone Mic Recording Stopped": {
+   "est_events_per_day": 169,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "vMmfbRGm",
+    "1LSu6fVV",
+    "contracts/analytics/consumers/mobile-instrumentation-presence.sql",
+    "contracts/product-telemetry/posthog/journey-scorecard.hogql"
+   ]
+  },
+  "Product Error": {
+   "est_events_per_day": 1119,
+   "identified": true
+  },
+  "Product Journey First Result": {
+   "est_events_per_day": 615,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "contracts/analytics/consumers/mobile-product-outcomes.sql",
+    "contracts/product-telemetry/posthog/journey-scorecard.hogql"
+   ]
+  },
+  "Product Journey Outcome": {
+   "est_events_per_day": 15971,
+   "identified": true
+  },
+  "Product Journey Started": {
+   "est_events_per_day": 16465,
+   "identified": true
+  },
+  "Product Value": {
+   "est_events_per_day": 4893,
+   "identified": true
+  },
+  "Profile Change Name Opened": {
+   "est_events_per_day": 23,
+   "identified": true
+  },
+  "Profile Delete Account Dialog Opened": {
+   "est_events_per_day": 14,
+   "identified": true
+  },
+  "Profile Speech Profile Opened": {
+   "est_events_per_day": 352,
+   "identified": true
+  },
+  "Push Token Status": {
+   "est_events_per_day": 0,
+   "identified": true
+  },
+  "Re-process Memory": {
+   "est_events_per_day": 194,
+   "identified": true
+  },
+  "Recap Summary Card Clicked": {
+   "est_events_per_day": 27,
+   "identified": true
+  },
+  "Recording Completed": {
+   "est_events_per_day": 19407,
+   "identified": true
+  },
+  "Recording Mute Toggled": {
+   "est_events_per_day": 697,
+   "identified": true
+  },
+  "Recording Observation": {
+   "est_events_per_day": 35486,
+   "identified": true
+  },
+  "Recording Produced No Conversation": {
+   "est_events_per_day": 40,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "contracts/analytics/consumers/onboarding-activation-funnel.sql"
+   ]
+  },
+  "Recording Requested": {
+   "est_events_per_day": 36157,
+   "identified": true
+  },
+  "Recording Start Failed": {
+   "est_events_per_day": 12872,
+   "identified": true,
+   "purpose": "debug",
+   "reader": [
+    "grafana:device-signals",
+    "contracts/product-telemetry/posthog/journey-scorecard.hogql"
+   ],
+   "waiver": {
+    "by": "David Zhang",
+    "date": "2026-11-23",
+    "reason": "until collector+Prometheus alerts replace PostHog (SCA-3665)",
+    "expires": "2026-12-07"
+   }
+  },
+  "Recording Started": {
+   "est_events_per_day": 26328,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "contracts/product-telemetry/posthog/journey-scorecard.hogql"
+   ]
+  },
+  "Recording Subscription Failed": {
+   "est_events_per_day": 64,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "contracts/product-telemetry/posthog/journey-scorecard.hogql"
+   ]
+  },
+  "Recording Upload Completed": {
+   "est_events_per_day": 1076771,
+   "identified": true,
+   "purpose": "debug"
+  },
+  "Recording Upload Failed": {
+   "est_events_per_day": 422575,
+   "identified": true,
+   "purpose": "debug",
+   "reader": [
+    "grafana:device-signals",
+    "aU3qFtY1"
+   ],
+   "waiver": {
+    "by": "David Zhang",
+    "date": "2026-11-23",
+    "reason": "until collector+Prometheus alerts replace PostHog (SCA-3665)",
+    "expires": "2026-12-07"
+   }
+  },
+  "Recording Upload Started": {
+   "est_events_per_day": 3646571,
+   "identified": true,
+   "purpose": "debug"
+  },
+  "Referral Program Opened": {
+   "est_events_per_day": 78,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "sVD20kDj"
+   ]
+  },
+  "Referral Signup Completed": {
+   "est_events_per_day": 0,
+   "identified": true,
+   "purpose": "product"
+  },
+  "Relevance Decision Recorded": {
+   "est_events_per_day": 2771,
+   "identified": true
+  },
+  "Retention Offer Shown": {
+   "est_events_per_day": 14,
+   "identified": true
+  },
+  "Rewind Screenshot Viewed": {
+   "est_events_per_day": 4147,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "xkycBQGR",
+    "nX4yHJZR",
+    "Ljh22BGA"
+   ]
+  },
+  "Saved Pendant Reconnect": {
+   "est_events_per_day": 240036,
+   "identified": true
+  },
+  "Screen Capture Broken Detected": {
+   "est_events_per_day": 0,
+   "identified": false,
+   "purpose": "product",
+   "reader": [
+    "web/admin/app/api/omi/releases/route.ts"
+   ]
+  },
+  "Screen Capture Reset Clicked": {
+   "est_events_per_day": 0,
+   "identified": false,
+   "purpose": "product",
+   "reader": [
+    "web/admin/app/api/omi/releases/route.ts"
+   ]
+  },
+  "Screen Task Delivery Completed": {
+   "est_events_per_day": 159,
+   "identified": true
+  },
+  "Screen Task Frame Terminal": {
+   "est_events_per_day": 38921,
+   "identified": true
+  },
+  "Search Bar Focused": {
+   "est_events_per_day": 69,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "contracts/analytics/consumers/mobile-instrumentation-presence.sql"
+   ]
+  },
+  "Search Opened": {
+   "est_events_per_day": 138,
+   "identified": true
+  },
+  "Search Query Entered": {
+   "est_events_per_day": 59,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "iC2SPsYH"
+   ]
+  },
+  "Search Result Opened": {
+   "est_events_per_day": 8,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "web/admin/lib/qualified-activity.ts"
+   ]
+  },
+  "Setting Toggled": {
+   "est_events_per_day": 215,
+   "identified": true
+  },
+  "Settings Opened": {
+   "est_events_per_day": 1671,
+   "identified": true
+  },
+  "Settings Page Opened": {
+   "est_events_per_day": 1721,
+   "identified": true
+  },
+  "Settings Page Viewed": {
+   "est_events_per_day": 35,
+   "identified": true
+  },
+  "Settings Upgrade Row Tapped": {
+   "est_events_per_day": 69,
+   "identified": true,
+   "purpose": "product"
+  },
+  "Share Action": {
+   "est_events_per_day": 4,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "OqhWu9or",
+    "xkycBQGR",
+    "dL8uiyTW",
+    "nX4yHJZR"
+   ]
+  },
+  "Share CTA Clicked": {
+   "est_events_per_day": 9,
+   "identified": false,
+   "purpose": "product",
+   "reader": [
+    "OqhWu9or",
+    "xkycBQGR",
+    "ewYTY1a0"
+   ]
+  },
+  "Share Page Scrolled": {
+   "est_events_per_day": 156,
+   "identified": false,
+   "purpose": "product",
+   "reader": [
+    "e37E4Eyy"
+   ]
+  },
+  "Share Page Tab Switched": {
+   "est_events_per_day": 36,
+   "identified": false,
+   "purpose": "product",
+   "reader": [
+    "e37E4Eyy"
+   ]
+  },
+  "Share Page Viewed": {
+   "est_events_per_day": 165,
+   "identified": false,
+   "purpose": "product",
+   "reader": [
+    "OqhWu9or",
+    "trbd9gE2",
+    "xkycBQGR",
+    "EISweGIX"
+   ]
+  },
+  "Share Preview Requested": {
+   "est_events_per_day": 127,
+   "identified": false,
+   "purpose": "product",
+   "reader": [
+    "JxI86azY",
+    "EISweGIX"
+   ]
+  },
+  "Short Conversation Threshold Changed": {
+   "est_events_per_day": 35,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "contracts/analytics/consumers/mobile-instrumentation-presence.sql"
+   ]
+  },
+  "Show Discarded Conversations Toggled": {
+   "est_events_per_day": 8,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "contracts/analytics/consumers/mobile-instrumentation-presence.sql"
+   ]
+  },
+  "Show Discarded Memories Toggled": {
+   "est_events_per_day": 8,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "contracts/analytics/consumers/mobile-instrumentation-presence.sql"
+   ]
+  },
+  "Show Short Conversations Toggled": {
+   "est_events_per_day": 22,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "contracts/analytics/consumers/mobile-instrumentation-presence.sql"
+   ]
+  },
+  "Sign In Completed": {
+   "est_events_per_day": 91,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "ICJKLjrE",
+    "jVkU8kvd",
+    "web/admin/app/api/omi/stats/viral-metrics/route.ts"
+   ]
+  },
+  "Sign In Failed": {
+   "est_events_per_day": 88,
+   "identified": false,
+   "purpose": "product",
+   "reader": [
+    "jVkU8kvd",
+    "contracts/analytics/consumers/onboarding-activation-funnel.sql"
+   ]
+  },
+  "Sign In Failure Detail": {
+   "est_events_per_day": 24,
+   "identified": false,
+   "purpose": "product",
+   "reader": [
+    "contracts/analytics/consumers/onboarding-activation-funnel.sql"
+   ]
+  },
+  "Sign In Started": {
+   "est_events_per_day": 469,
+   "identified": false,
+   "purpose": "product",
+   "reader": [
+    "jVkU8kvd",
+    "contracts/analytics/consumers/onboarding-activation-funnel.sql"
+   ]
+  },
+  "Sign Out": {
+   "est_events_per_day": 4,
+   "identified": true
+  },
+  "Siri Index Rebuilt": {
+   "est_events_per_day": 10857,
+   "identified": true
+  },
+  "Speaker Identity Proposed": {
+   "est_events_per_day": 471,
+   "identified": true
+  },
+  "Speech Positive Duration Measured": {
+   "est_events_per_day": 2536,
+   "identified": true
+  },
+  "Speech Profile Capture Page Clicked": {
+   "est_events_per_day": 592,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "contracts/analytics/consumers/mobile-instrumentation-presence.sql"
+   ]
+  },
+  "Speech Profile Embedding Stored": {
+   "est_events_per_day": 108,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "contracts/analytics/consumers/mobile-instrumentation-presence.sql"
+   ]
+  },
+  "Speech Profile Memories Opened": {
+   "est_events_per_day": 193,
+   "identified": true
+  },
+  "Speech Profile Skipped": {
+   "est_events_per_day": 6,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "contracts/analytics/consumers/mobile-instrumentation-presence.sql"
+   ]
+  },
+  "Speech Profile Upload Succeeded": {
+   "est_events_per_day": 108,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "contracts/analytics/consumers/mobile-instrumentation-presence.sql"
+   ]
+  },
+  "Subscription Cancel Abandoned": {
+   "est_events_per_day": 4,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "5qjSv6Hk",
+    "ea8widwT",
+    "contracts/analytics/consumers/subscription-funnel.sql"
+   ]
+  },
+  "Subscription Cancel Confirmed": {
+   "est_events_per_day": 25,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "5qjSv6Hk",
+    "ea8widwT",
+    "contracts/analytics/consumers/subscription-funnel.sql"
+   ]
+  },
+  "Subscription Cancel Flow Started": {
+   "est_events_per_day": 31,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "5qjSv6Hk",
+    "ea8widwT",
+    "contracts/analytics/consumers/mobile-instrumentation-presence.sql",
+    "contracts/analytics/consumers/subscription-funnel.sql"
+   ]
+  },
+  "Subscription Cancel Kept Plan": {
+   "est_events_per_day": 1,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "5qjSv6Hk",
+    "ea8widwT",
+    "contracts/analytics/consumers/subscription-funnel.sql"
+   ]
+  },
+  "Subscription Cancel Reason Selected": {
+   "est_events_per_day": 29,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "VxOS5diq",
+    "ea8widwT",
+    "pA3A3gPf",
+    "contracts/analytics/consumers/subscription-funnel.sql"
+   ]
+  },
+  "Subscription Payment Issue Portal Opened": {
+   "est_events_per_day": 2,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "contracts/analytics/consumers/subscription-payment-recovery.sql"
+   ]
+  },
+  "Subscription Payment Issue Shown": {
+   "est_events_per_day": 16,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "contracts/analytics/consumers/subscription-payment-recovery.sql"
+   ]
+  },
+  "Subscription Payment Issue Update Tapped": {
+   "est_events_per_day": 2,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "contracts/analytics/consumers/subscription-payment-recovery.sql"
+   ]
+  },
+  "Subscription Plan Changed": {
+   "est_events_per_day": 89,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "contracts/analytics/consumers/subscription-funnel.sql"
+   ]
+  },
+  "Subscription Yearly Switch Confirmed": {
+   "est_events_per_day": 0,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "contracts/analytics/consumers/subscription-funnel.sql"
+   ]
+  },
+  "Subscription Yearly Switch Opened": {
+   "est_events_per_day": 1,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "contracts/analytics/consumers/subscription-funnel.sql"
+   ]
+  },
+  "Subscription Yearly Switch Shown": {
+   "est_events_per_day": 11,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "contracts/analytics/consumers/subscription-funnel.sql"
+   ]
+  },
+  "Subscription Yearly Switch Succeeded": {
+   "est_events_per_day": 0,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "contracts/analytics/consumers/subscription-funnel.sql"
+   ]
+  },
+  "Suggestion Assistant Delivery Outcome": {
+   "est_events_per_day": 1479,
+   "identified": true
+  },
+  "Suggestion Assistant Evaluation Completed": {
+   "est_events_per_day": 5036,
+   "identified": true
+  },
+  "Suggestion Assistant Evaluation Failed": {
+   "est_events_per_day": 6071,
+   "identified": true
+  },
+  "Suggestion Assistant Evaluation Started": {
+   "est_events_per_day": 11107,
+   "identified": true
+  },
+  "Suggestion Assistant Gate Outcome": {
+   "est_events_per_day": 21564,
+   "identified": true
+  },
+  "Summarized App Create Template Clicked": {
+   "est_events_per_day": 7,
+   "identified": true
+  },
+  "Summarized App Enable Apps Clicked": {
+   "est_events_per_day": 12,
+   "identified": true
+  },
+  "Summarized App Selected": {
+   "est_events_per_day": 35,
+   "identified": true
+  },
+  "Summarized App Sheet Viewed": {
+   "est_events_per_day": 76,
+   "identified": true
+  },
+  "Summary Apps Opened": {
+   "est_events_per_day": 12,
+   "identified": true
+  },
+  "Tag Sheet Opened": {
+   "est_events_per_day": 739,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "contracts/analytics/consumers/mobile-instrumentation-presence.sql"
+   ]
+  },
+  "Tagged Segment User": {
+   "est_events_per_day": 218,
+   "identified": true
+  },
+  "Tagged Segment User Person": {
+   "est_events_per_day": 355,
+   "identified": true
+  },
+  "Task Added": {
+   "est_events_per_day": 23,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "xkycBQGR",
+    "nX4yHJZR",
+    "Ljh22BGA",
+    "S9ejqxZf"
+   ]
+  },
+  "Task Completed": {
+   "est_events_per_day": 67,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "xkycBQGR",
+    "nX4yHJZR",
+    "Ljh22BGA",
+    "S9ejqxZf"
+   ]
+  },
+  "Task Extracted": {
+   "est_events_per_day": 205,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "xkycBQGR",
+    "nX4yHJZR",
+    "Ljh22BGA",
+    "S9ejqxZf"
+   ]
+  },
+  "Task Integration Enabled": {
+   "est_events_per_day": 12,
+   "identified": true
+  },
+  "Task Intelligence Attribution": {
+   "est_events_per_day": 177,
+   "identified": true
+  },
+  "Tasks Page Viewed": {
+   "est_events_per_day": 43,
+   "identified": true
+  },
+  "Transcribe Later Recording Captured": {
+   "est_events_per_day": 0,
+   "identified": true
+  },
+  "Transcribe Later Recording Processed": {
+   "est_events_per_day": 0,
+   "identified": false,
+   "purpose": "product",
+   "reader": [
+    "contracts/analytics/consumers/mobile-instrumentation-presence.sql",
+    "contracts/product-telemetry/posthog/journey-scorecard.hogql"
+   ]
+  },
+  "Transcribe Later Toggled": {
+   "est_events_per_day": 97,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "contracts/analytics/consumers/mobile-instrumentation-presence.sql"
+   ]
+  },
+  "Transcript Cancelled": {
+   "est_events_per_day": 2036,
+   "identified": true
+  },
+  "Transcript Completed": {
+   "est_events_per_day": 2229,
+   "identified": true
+  },
+  "Transcript Failed": {
+   "est_events_per_day": 4311,
+   "identified": true
+  },
+  "Transcript Segment Tapped": {
+   "est_events_per_day": 704,
+   "identified": true
+  },
+  "Transcript Started": {
+   "est_events_per_day": 4393,
+   "identified": true
+  },
+  "Transcription Provider Selected": {
+   "est_events_per_day": 87,
+   "identified": true
+  },
+  "Transcription Source Selected": {
+   "est_events_per_day": 371,
+   "identified": true
+  },
+  "Trial Upsell Claimed": {
+   "est_events_per_day": 32,
+   "identified": true,
+   "purpose": "product"
+  },
+  "Trial Upsell Declined": {
+   "est_events_per_day": 138,
+   "identified": true,
+   "purpose": "product"
+  },
+  "Trial Upsell Shown": {
+   "est_events_per_day": 155,
+   "identified": true,
+   "purpose": "product"
+  },
+  "Update Available": {
+   "est_events_per_day": 490,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "3RxbhZLf"
+   ]
+  },
+  "Update Check Completed": {
+   "est_events_per_day": 19414,
+   "identified": true
+  },
+  "Update Check Failed": {
+   "est_events_per_day": 445,
+   "identified": true
+  },
+  "Update Check Started": {
+   "est_events_per_day": 19414,
+   "identified": true
+  },
+  "Update Firmware Memories Opened": {
+   "est_events_per_day": 5,
+   "identified": true
+  },
+  "Update Install Started": {
+   "est_events_per_day": 133,
+   "identified": true
+  },
+  "Update Installed": {
+   "est_events_per_day": 174,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "3RxbhZLf"
+   ]
+  },
+  "Upgrade Cancelled": {
+   "est_events_per_day": 158,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "contracts/analytics/consumers/mobile-instrumentation-presence.sql",
+    "contracts/analytics/consumers/subscription-funnel.sql"
+   ]
+  },
+  "Upgrade Modal Clicked": {
+   "est_events_per_day": 534,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "contracts/analytics/consumers/mobile-instrumentation-presence.sql",
+    "contracts/analytics/consumers/app-update-prompt.sql"
+   ]
+  },
+  "Upgrade Modal Dismissed": {
+   "est_events_per_day": 717,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "tG8qCuRS",
+    "contracts/analytics/consumers/mobile-instrumentation-presence.sql",
+    "contracts/analytics/consumers/app-update-prompt.sql"
+   ]
+  },
+  "Upgrade Plan Selected": {
+   "est_events_per_day": 282,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "contracts/analytics/consumers/subscription-funnel.sql"
+   ]
+  },
+  "Upgrade Succeeded": {
+   "est_events_per_day": 90,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "7dmkGkJq",
+    "AgkokEtm",
+    "e090nGqv",
+    "v205aRRH"
+   ]
+  },
+  "Upgrade Succeeded Attributed": {
+   "est_events_per_day": 90,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "contracts/analytics/consumers/subscription-funnel.sql"
+   ]
+  },
+  "Usage Stats Shared": {
+   "est_events_per_day": 13,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "dL8uiyTW",
+    "nX4yHJZR",
+    "ulhG1X4r"
+   ]
+  },
+  "Use Without Device Onboarding Find Devices": {
+   "est_events_per_day": 53,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "contracts/analytics/consumers/mobile-instrumentation-presence.sql"
+   ]
+  },
+  "User Acquisition Source": {
+   "est_events_per_day": 57,
+   "identified": true
+  },
+  "User Deleted": {
+   "est_events_per_day": 9,
+   "identified": true
+  },
+  "Voice Profile Setting Toggled": {
+   "est_events_per_day": 12,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "contracts/analytics/consumers/speaker-tag-prompts-funnel.sql"
+   ]
+  },
+  "Voice Reply Playback": {
+   "est_events_per_day": 2793,
+   "identified": true
+  },
+  "Voice Response Mode Changed": {
+   "est_events_per_day": 52,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "contracts/analytics/consumers/mobile-instrumentation-presence.sql"
+   ]
+  },
+  "WAL Reconcile Poll Summary": {
+   "est_events_per_day": 177871,
+   "identified": true
+  },
+  "WAL Upload Refused": {
+   "est_events_per_day": 7,
+   "identified": true
+  },
+  "Webhooks Docs Opened": {
+   "est_events_per_day": 14,
+   "identified": true
+  },
+  "Whats New Opened": {
+   "est_events_per_day": 7,
+   "identified": true
+  },
+  "advertorial_read": {
+   "est_events_per_day": 50,
+   "identified": false
+  },
+  "api_edge_throttled": {
+   "est_events_per_day": 1991,
+   "identified": true
+  },
+  "auth_token_refresh_failed": {
+   "est_events_per_day": 1364,
+   "identified": true
+  },
+  "authenticated_request_401": {
+   "est_events_per_day": 980,
+   "identified": true
+  },
+  "chat_agent_error": {
+   "est_events_per_day": 50,
+   "identified": true
+  },
+  "chat_agent_query_cancelled": {
+   "est_events_per_day": 2,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "web/admin/lib/response-reliability.ts"
+   ]
+  },
+  "chat_agent_query_completed": {
+   "est_events_per_day": 140,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "xkycBQGR",
+    "nX4yHJZR",
+    "Ljh22BGA",
+    "S9ejqxZf"
+   ]
+  },
+  "chat_agent_query_started": {
+   "est_events_per_day": 154,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "mJZBso3r",
+    "web/admin/lib/response-reliability.ts",
+    "web/admin/lib/telemetry/fixtures.ts"
+   ]
+  },
+  "chat_first_capability_resolution": {
+   "est_events_per_day": 484,
+   "identified": true
+  },
+  "chat_first_rich_block": {
+   "est_events_per_day": 48,
+   "identified": true
+  },
+  "chat_first_route_entered": {
+   "est_events_per_day": 1270,
+   "identified": true
+  },
+  "chat_tool_call_completed": {
+   "est_events_per_day": 486,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "xkycBQGR",
+    "nX4yHJZR",
+    "Ljh22BGA",
+    "S9ejqxZf"
+   ]
+  },
+  "desktop_daily_summary": {
+   "est_events_per_day": 253,
+   "identified": true
+  },
+  "desktop_health_event": {
+   "est_events_per_day": 206283,
+   "identified": true,
+   "purpose": "debug",
+   "reader": [
+    "x8kWRnFm",
+    "web/admin/lib/response-reliability.ts",
+    "web/admin/lib/telemetry/fallback-triage.ts"
+   ]
+  },
+  "fallback_triggered": {
+   "est_events_per_day": 6985,
+   "identified": true
+  },
+  "first_real_app_card": {
+   "est_events_per_day": 36,
+   "identified": true
+  },
+  "floating_bar_ask_omi_closed": {
+   "est_events_per_day": 14,
+   "identified": true
+  },
+  "floating_bar_ask_omi_opened": {
+   "est_events_per_day": 14,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "DTx35exN",
+    "nZ4ntoX4",
+    "web/admin/app/api/omi/stats/floating-bar-usage/route.ts"
+   ]
+  },
+  "floating_bar_ptt_ended": {
+   "est_events_per_day": 717,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "i6jdbJbn",
+    "5l2a83hh",
+    "n2AouF9w",
+    "LbL3ctR0"
+   ]
+  },
+  "floating_bar_ptt_started": {
+   "est_events_per_day": 747,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "xkycBQGR",
+    "nX4yHJZR",
+    "Ljh22BGA",
+    "5l2a83hh"
+   ]
+  },
+  "floating_bar_query_sent": {
+   "est_events_per_day": 117,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "xkycBQGR",
+    "nX4yHJZR",
+    "Ljh22BGA",
+    "iC2SPsYH"
+   ]
+  },
+  "floating_bar_toggled": {
+   "est_events_per_day": 36,
+   "identified": true
+  },
+  "followup_chip_tapped": {
+   "est_events_per_day": 15,
+   "identified": true
+  },
+  "memory_review_action": {
+   "est_events_per_day": 25,
+   "identified": true
+  },
+  "memory_review_card_shown": {
+   "est_events_per_day": 52,
+   "identified": true
+  },
+  "notification_settings_drift": {
+   "est_events_per_day": 24,
+   "identified": true
+  },
+  "onboarding_chat_message_detailed": {
+   "est_events_per_day": 1,
+   "identified": true,
+   "purpose": "product"
+  },
+  "provider_auth_required": {
+   "est_events_per_day": 7,
+   "identified": true
+  },
+  "question_answered": {
+   "est_events_per_day": 210,
+   "identified": true
+  },
+  "question_asked": {
+   "est_events_per_day": 235,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "FZz8TV0F",
+    "72ajLWOh",
+    "web/admin/lib/qualified-activity.ts"
+   ]
+  },
+  "quiz_answered": {
+   "est_events_per_day": 0,
+   "identified": false,
+   "purpose": "product",
+   "reader": [
+    "LoqtSDsc",
+    "CRQNCezF",
+    "2GrcOzgi"
+   ]
+  },
+  "quiz_checkout_clicked": {
+   "est_events_per_day": 0,
+   "identified": false,
+   "purpose": "product",
+   "reader": [
+    "LoqtSDsc",
+    "xTPDeZr3",
+    "FAfAnaO3",
+    "CK1pMhpl"
+   ]
+  },
+  "quiz_completed": {
+   "est_events_per_day": 0,
+   "identified": false,
+   "purpose": "product",
+   "reader": [
+    "LoqtSDsc",
+    "xTPDeZr3",
+    "FAfAnaO3",
+    "CK1pMhpl"
+   ]
+  },
+  "quiz_email_submitted": {
+   "est_events_per_day": 0,
+   "identified": false,
+   "purpose": "product",
+   "reader": [
+    "LoqtSDsc",
+    "kQqYGlq5",
+    "2GrcOzgi"
+   ]
+  },
+  "quiz_screen_viewed": {
+   "est_events_per_day": 0,
+   "identified": false,
+   "purpose": "product",
+   "reader": [
+    "LoqtSDsc",
+    "xTPDeZr3",
+    "kQqYGlq5",
+    "CK1pMhpl"
+   ]
+  },
+  "quiz_started": {
+   "est_events_per_day": 0,
+   "identified": false,
+   "purpose": "product",
+   "reader": [
+    "2GrcOzgi"
+   ]
+  }
+ }
+}

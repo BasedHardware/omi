@@ -51,7 +51,7 @@ function phoneFixtureRows(
 ) {
   posthogResults.mockImplementation(async (_h, _p, _k, query: string) => {
     if (query.includes("Mobile Device Health Daily")) return [];
-    if (query.includes("SELECT count() AS n")) return [[rows.length]];
+    if (query.includes("AS n\n    FROM events")) return [[rows.length]];
     return JSON.parse(
       execFileSync(
         "python3",
@@ -133,7 +133,7 @@ describe("device health stats route", () => {
       if (query.includes("Mobile Device Health Daily")) {
         return [["3.0.21", "iOS", "Omi Device", 10, 4, 3, 5.03, 9.61, 0.26, 1]];
       }
-      if (query.includes("SELECT count() AS n")) return [[0]];
+      if (query.includes("AS n\n    FROM events")) return [[0]];
       return [];
     });
 
@@ -162,7 +162,7 @@ describe("device health stats route", () => {
     // Drain query is empty, so a count query confirms there are no events.
     expect(posthogResults).toHaveBeenCalledTimes(3);
     expect(
-      queries().some((query) => query.includes("SELECT count() AS n"))
+      queries().some((query) => query.includes("AS n\n    FROM events"))
     ).toBe(true);
   });
 
@@ -170,7 +170,7 @@ describe("device health stats route", () => {
     configure();
     posthogResults.mockImplementation(async (_h, _p, _k, query: string) => {
       if (query.includes("Mobile Device Health Daily")) return [];
-      if (query.includes("SELECT count() AS n")) return [[7]];
+      if (query.includes("AS n\n    FROM events")) return [[7]];
       return [];
     });
 
@@ -181,7 +181,7 @@ describe("device health stats route", () => {
       n_events: 7,
     });
     const countQuery = queries().find((query) =>
-      query.includes("SELECT count() AS n")
+      query.includes("AS n\n    FROM events")
     );
     expect(countQuery).toContain("event = 'Phone Battery Sample'");
     expect(countQuery).toContain("timestamp >= now() - INTERVAL 14 DAY");
@@ -396,6 +396,41 @@ describe("device health stats route", () => {
     });
   });
 
+  it("reweights sampled rows by omi_sample_pct so counts estimate the population", async () => {
+    configure();
+    phoneFixtureRows([
+      sampleFixture(2, 98600, { omi_sample_pct: 10 }),
+      {
+        ...sampleFixture(2, 98700, { omi_sample_pct: 10 }),
+        person_id: "fixture-user-2",
+      },
+    ]);
+    const body = await (await GET(request())).json();
+    expect(body.phone_health.series[0]).toMatchObject({
+      n_pairs: 20,
+      n_v2_intervals: 20,
+      n_v1_pairs: 0,
+      users: 20,
+      p50_drain_per_hour: 4,
+    });
+  });
+
+  it("weights pendant counts and keeps the sampled-user guard", async () => {
+    configure();
+    posthogResults.mockResolvedValue([]);
+    await GET(request());
+    const pendant = queries().find((query) =>
+      query.includes("Mobile Device Health Daily")
+    )!;
+    expect(pendant).toContain(
+      "round(sum(100 / greatest(coalesce(toFloat(properties.omi_sample_pct), 100), 0.01))) AS events"
+    );
+    expect(pendant).toContain(
+      "round(uniqExact(person_id) * 100 / max(greatest(coalesce(toFloat(properties.omi_sample_pct), 100), 0.01))) AS users"
+    );
+    expect(pendant).toContain("HAVING uniqExact(person_id) >= 20");
+  });
+
   it.each([
     ["null current charging endpoint", { battery_charging: null }],
     ["null previous charging endpoint", { previous_battery_charging: null }],
@@ -487,7 +522,7 @@ describe("device health stats route", () => {
     vi.useFakeTimers();
     let phoneAttempts = 0;
     posthogResults.mockImplementation(async (_h, _p, _k, query: string) => {
-      if (query.includes("SELECT count() AS n")) return [[0]];
+      if (query.includes("AS n\n    FROM events")) return [[0]];
       if (query.includes("FROM pairs")) {
         phoneAttempts += 1;
         if (phoneAttempts < 3)

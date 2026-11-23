@@ -4,9 +4,15 @@ Migration and PostHog retirement default off. Delete-class changes are active:
 routine `Mobile Render Observation` is not sent to PostHog, and
 `wal_transcript_coverage` is debug-log only.
 
-PostHog ingestion-side sampling is also active; see the [sampling table](../../../../web/admin/docs/posthog-events.md#ingestion-sampling-since-2026-10-17).
-New events default to 2% unless added to the explicit keep-list or matched by
-its keep rules. Cloud Run server events stay dark.
+PostHog is for product analytics only (David Zhang, 2026-11-23, SCA-3665).
+Debugging and health signals belong in the client telemetry collector (#21449)
+and Prometheus, not PostHog. PostHog ingestion sampling is configured in
+`contracts/analytics/posthog.json`: new events default to 2%, and readers
+weight rows by `100 / omi_sample_pct` (see
+[Ingestion sampling](../../../../web/admin/docs/posthog-events.md#ingestion-sampling)).
+Changing a rate means editing that file in a PR; CI prints the cost and
+`scripts/posthog/apply.py` applies it after merge. Cloud Run server events
+stay dark.
 
 `Pendant Frames Dropped` and `WAL Reconcile Poll Summary` are typed, count-only
 WAL health observations with no client sampling. Drops aggregate by closed
@@ -20,10 +26,11 @@ No content, account/device/job/WAL identifiers or raw errors are properties.
 `disk_space_unknown` and `storage_write_failed` remain distinct from
 `disk_reserve`; `count_cap` should be zero after the capture hotfix.
 
-These two new names require the observability owner to add them to PostHog's
-**100% ingestion keep-list before fleet counts are treated as complete**.
-This repository change does not apply that external configuration, deploy an
-alert, bypass consent, or guarantee SDK delivery. The executable consumer is
+These are health signals: their fleet counts belong in the collector, not in
+PostHog. On PostHog they stay at the 2% default; a PostHog count must weight
+rows by `omi_sample_pct`. Do not add them to the PostHog keep-list. This
+repository change does not deploy an alert, bypass consent, or guarantee SDK
+delivery. The executable consumer is
 `contracts/analytics/consumers/wal-backlog-health.json`.
 
 `Recording Requested` stays on PostHog. It means capture-session preparation,
@@ -66,9 +73,9 @@ Device Session Ended deliberately remains on PostHog with retirement enabled:
 its client-batch replacement lacks those adoption dimensions. Missing metadata
 is `unknown`. The reconnect owner refreshes DIS before emitting Connected.
 
-The ingestion sampling table linked above documents Device Connected at 2%,
-Device Paired/Session Ended in the keep-list, and unlisted long-tail events at
-2%. Firmware events need an explicit ingestion keep-list entry before raw
-funnel counts can represent the fleet. This app change does not update or
-verify that external PostHog configuration. No collector schema, production
-account, or remote flag is changed.
+`contracts/analytics/posthog.json` keeps Device Paired/Session Ended in the
+keep-list; Device Connected and unlisted long-tail events, including the
+firmware funnel, are at 2%. Firmware funnel counts weight rows by
+`omi_sample_pct` instead of asking for a keep-list entry; keeping one at 100%
+takes a PR with a measured estimate and a reader. No collector schema,
+production account, or remote flag is changed.

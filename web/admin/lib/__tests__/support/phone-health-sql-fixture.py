@@ -24,6 +24,7 @@ for name, fn in {
     'fixtureIsNull': lambda v: v is None,
     'now': lambda: 100000,
     'dateDiff': lambda unit, start, end: end - start,
+    'greatest': lambda *values: max(v for v in values if v is not None),
 }.items():
     db.create_function(name, -1, fn)
 
@@ -37,6 +38,30 @@ class CountIf:
 
     def finalize(self):
         return self.n
+
+
+class SumIf:
+    def __init__(self):
+        self.total = 0
+
+    def step(self, value, condition):
+        if condition and value is not None:
+            self.total += value
+
+    def finalize(self):
+        return self.total
+
+
+class MaxIf:
+    def __init__(self):
+        self.value = 0
+
+    def step(self, value, condition):
+        if condition and value is not None:
+            self.value = max(self.value, value)
+
+    def finalize(self):
+        return self.value
 
 
 class UniqExactIf:
@@ -70,6 +95,8 @@ class QuantileIf:
 
 db.create_aggregate('countIf', 1, CountIf)
 db.create_aggregate('uniqExactIf', 2, UniqExactIf)
+db.create_aggregate('sumIf', 2, SumIf)
+db.create_aggregate('maxIf', 2, MaxIf)
 db.create_aggregate('fixtureQuantileIf', 3, QuantileIf)
 query = payload['query']
 query = re.sub(r'properties\.([\w$]+)', lambda m: f"json_extract(properties, '$.\"{m[1]}\"')", query)
