@@ -12,9 +12,9 @@ import hashlib
 import logging
 import os
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
-from typing import Any, Mapping, Optional, Protocol
+from typing import Any, Literal, Mapping, Optional, Protocol
 
 import stripe
 
@@ -296,7 +296,7 @@ def _acknowledge(publisher: PublisherClient, state: PlayState, token: str) -> No
 
 @dataclass(frozen=True)
 class VerifyResult:
-    status: str  # active | pending | inactive
+    status: Literal['active', 'pending', 'inactive']
     subscription: Optional[Subscription]
 
 
@@ -334,7 +334,7 @@ def verify_and_bind(uid: str, purchase_token: str, product_id: str, publisher: O
 
     if granting:
         _acknowledge(publisher, state, purchase_token)
-        state = PlayState(**{**state.__dict__, 'acknowledged': True})
+        state = replace(state, acknowledged=True)
     owner = play_db.bind_purchase(token_hash, uid, _record(state, purchase_token, now))
     if owner != uid:
         raise PlayBillingError(409, 'purchase_owned_elsewhere', 'This purchase belongs to another Omi account.')
@@ -431,7 +431,10 @@ def client_config(uid: str):
 
     return PlayBillingConfig(
         product_id=config.product_id(),
-        base_plans=[PlayBasePlan(id=plan_id, interval=interval) for plan_id, interval in config.base_plans().items()],
+        base_plans=[
+            PlayBasePlan(id=plan_id, interval='year' if interval == 'year' else 'month')
+            for plan_id, interval in config.base_plans().items()
+        ],
         trial_offer_id=config.trial_offer_id(),
         obfuscated_account_id=obfuscated_account_id(uid),
     )

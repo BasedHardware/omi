@@ -61,7 +61,7 @@ def verify_play_purchase(request: PlayPurchaseRequest, uid: str = Depends(auth.g
 
 
 def _decode_push(body: dict) -> dict:
-    message = body.get('message') if isinstance(body, dict) else None
+    message = body.get('message')
     data = message.get('data') if isinstance(message, dict) else None
     if not isinstance(data, str):
         raise HTTPException(status_code=400, detail='Missing message data')
