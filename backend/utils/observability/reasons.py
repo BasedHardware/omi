@@ -780,6 +780,16 @@ class LocalPreviewOutcome(StrEnum):
     POLICY_ERROR = 'policy_error'
 
 
+class PreviewCustodyFallbackReason(StrEnum):
+    """Why a local-preview custody promotion opened a live transport instead (routers/listen/preview_custody.py)."""
+
+    UNKNOWN = 'unknown'
+    NONE = 'none'
+    POLICY = 'policy'
+    ARCHIVE = 'archive'
+    CLAIM = 'claim'
+
+
 class ServiceWindowOutcome(StrEnum):
     """Disposition of one admitted service-VIP window POST (`utils/stt/window_replicas.py`)."""
 

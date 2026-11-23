@@ -1097,11 +1097,20 @@ def test_connected_seconds_counts_open_wall_time_once(monkeypatch):
     from utils.observability import demand_cohort
 
     def value():
-        return (
+        return sum(
             REGISTRY.get_sample_value(
-                'omi_soniox_connected_seconds_total', {'demand_cohort': 'ineligible', 'origin': 'initial'}
+                'omi_soniox_connected_seconds_total',
+                {
+                    'provider': 'soniox',
+                    'demand_cohort': 'ineligible',
+                    'origin': 'initial',
+                    'visibility': visibility,
+                    'fallback_reason': fallback_reason,
+                },
             )
             or 0.0
+            for visibility in demand_cohort.VISIBILITY_BUCKETS
+            for fallback_reason in demand_cohort.FALLBACK_REASONS
         )
 
     clock = [1000.0]
@@ -1136,10 +1145,19 @@ def test_connected_seconds_stop_while_idle_closed(monkeypatch):
     def value():
         return sum(
             REGISTRY.get_sample_value(
-                'omi_soniox_connected_seconds_total', {'demand_cohort': 'ineligible', 'origin': origin}
+                'omi_soniox_connected_seconds_total',
+                {
+                    'provider': 'soniox',
+                    'demand_cohort': 'ineligible',
+                    'origin': origin,
+                    'visibility': visibility,
+                    'fallback_reason': fallback_reason,
+                },
             )
             or 0.0
             for origin in demand_cohort.TRANSPORT_ORIGINS
+            for visibility in demand_cohort.VISIBILITY_BUCKETS
+            for fallback_reason in demand_cohort.FALLBACK_REASONS
         )
 
     async def run():

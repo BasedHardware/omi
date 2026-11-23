@@ -273,6 +273,7 @@ def test_metrics_only_expose_closed_labels():
         telemetry.CAPTURE_AUDIO,
         telemetry.EXHAUSTED_SESSIONS,
         telemetry.OUTPUT_LATENCY,
+        telemetry.SONIOX_CONNECTED,
     ):
         for family in metric.collect():
             for sample in family.samples:
@@ -284,8 +285,16 @@ def test_metrics_only_expose_closed_labels():
                     'le',
                     'ineligible_reason',
                     'origin',
+                    'visibility',
+                    'fallback_reason',
                 }
                 assert sample.labels['demand_cohort'] in telemetry.DEMAND_COHORTS
+                visibility = sample.labels.get('visibility')
+                if visibility is not None:
+                    assert visibility in telemetry.VISIBILITY_BUCKETS
+                fallback_reason = sample.labels.get('fallback_reason')
+                if fallback_reason is not None:
+                    assert fallback_reason in telemetry.FALLBACK_REASONS
                 reason = sample.labels.get('ineligible_reason')
                 if reason is not None:
                     assert reason in telemetry.INELIGIBLE_REASONS or reason == 'none'
@@ -299,6 +308,28 @@ def test_metrics_only_expose_closed_labels():
             )
             is not None
         )
+        for visibility in telemetry.VISIBILITY_BUCKETS:
+            assert (
+                REGISTRY.get_sample_value(
+                    'omi_listen_demand_capture_audio_seconds_total',
+                    {'demand_cohort': cohort, 'visibility': visibility},
+                )
+                is not None
+            )
+            for fallback_reason in telemetry.FALLBACK_REASONS:
+                assert (
+                    REGISTRY.get_sample_value(
+                        'omi_soniox_connected_seconds_total',
+                        {
+                            'provider': 'soniox',
+                            'demand_cohort': cohort,
+                            'origin': 'initial',
+                            'visibility': visibility,
+                            'fallback_reason': fallback_reason,
+                        },
+                    )
+                    is not None
+                )
 
 
 def test_unanswered_output_waits_do_not_disappear_from_latency_gate():
@@ -623,13 +654,13 @@ async def test_demand_lifetime_loop_survives_lane_metrics_and_returns_to_vendor(
         {'foreground': False, 'transcript_visible': True},
     ],
 )
-def test_invalid_visibility_preserves_open_wait_and_last_valid_hidden_state(monkeypatch, payload):
+def test_invalid_visibility_preserves_open_wait_and_last_valid_background_state(monkeypatch, payload):
     now = [10.0]
     monkeypatch.setattr(telemetry, 'monotonic', lambda: now[0])
     cohort = telemetry.DemandTelemetry('admitted')
     cohort.observe_visibility({'foreground': False, 'transcript_visible': False})
     cohort.observe_visibility(payload)
-    assert cohort.visibility == 'hidden'
+    assert cohort.visibility == 'background'
     cohort.observe_visibility({'foreground': True, 'transcript_visible': True})
     now[0] = 14
     cohort.observe_visibility(payload)
@@ -639,3 +670,96 @@ def test_invalid_visibility_preserves_open_wait_and_last_valid_hidden_state(monk
     before = value(telemetry.OUTPUT_EVENTS, **labels)
     cohort.finish()
     assert value(telemetry.OUTPUT_EVENTS, **labels) == before + 1
+
+
+@pytest.mark.parametrize(
+    'payload,expected',
+    [
+        ({'foreground': True, 'transcript_visible': True}, 'visible'),
+        ({'foreground': True, 'transcript_visible': False}, 'foreground'),
+        ({'foreground': False, 'transcript_visible': False}, 'background'),
+    ],
+)
+def test_visibility_buckets_name_the_client_state(payload, expected):
+    cohort = telemetry.DemandTelemetry('admitted')
+    assert cohort.visibility is None
+    cohort.observe_visibility(payload)
+    assert cohort.visibility == expected
+
+
+def test_capture_audio_is_attributed_once_to_the_visibility_in_force(monkeypatch):
+    now = [100.0]
+    monkeypatch.setattr(telemetry, 'monotonic', lambda: now[0])
+    cohort = telemetry.DemandTelemetry('admitted')
+    token = telemetry.current_demand.set(cohort)
+    try:
+        before = {
+            bucket: value(telemetry.CAPTURE_AUDIO, demand_cohort='admitted', visibility=bucket)
+            for bucket in telemetry.VISIBILITY_BUCKETS
+        }
+        cohort.capture(2)  # never reported
+        cohort.observe_visibility({'foreground': False, 'transcript_visible': False})
+        cohort.capture(3)
+        cohort.observe_visibility({'foreground': True, 'transcript_visible': False})
+        cohort.capture(5)
+        cohort.observe_visibility({'foreground': True, 'transcript_visible': True})
+        cohort.capture(7)
+        after = {
+            bucket: value(telemetry.CAPTURE_AUDIO, demand_cohort='admitted', visibility=bucket)
+            for bucket in telemetry.VISIBILITY_BUCKETS
+        }
+        assert after['unreported'] - before['unreported'] == pytest.approx(2)
+        assert after['background'] - before['background'] == pytest.approx(3)
+        assert after['foreground'] - before['foreground'] == pytest.approx(5)
+        assert after['visible'] - before['visible'] == pytest.approx(7)
+    finally:
+        telemetry.current_demand.reset(token)
+
+
+def test_connected_seconds_split_at_a_transition_inside_one_flush(monkeypatch):
+    now = [100.0]
+    monkeypatch.setattr(telemetry, 'monotonic', lambda: now[0])
+    cohort = telemetry.DemandTelemetry('ineligible')
+    token = telemetry.current_demand.set(cohort)
+    try:
+        cohort.observe_visibility({'foreground': True, 'transcript_visible': False})
+        meter = telemetry.create_connected_meter()
+        labels = dict(provider='soniox', demand_cohort='ineligible', origin='initial', fallback_reason='none')
+        before = {
+            bucket: value(telemetry.SONIOX_CONNECTED, visibility=bucket, **labels)
+            for bucket in telemetry.VISIBILITY_BUCKETS
+        }
+        now[0] += 2
+        cohort.observe_visibility({'foreground': False, 'transcript_visible': False})
+        now[0] += 4
+        meter.flush(close=True)
+        after = {
+            bucket: value(telemetry.SONIOX_CONNECTED, visibility=bucket, **labels)
+            for bucket in telemetry.VISIBILITY_BUCKETS
+        }
+        assert after['foreground'] - before['foreground'] == pytest.approx(2)
+        assert after['background'] - before['background'] == pytest.approx(4)
+        assert after['visible'] - before['visible'] == pytest.approx(0)
+        assert after['unreported'] - before['unreported'] == pytest.approx(0)
+    finally:
+        telemetry.current_demand.reset(token)
+
+
+def test_connected_seconds_carry_the_custody_fallback_reason(monkeypatch):
+    now = [100.0]
+    monkeypatch.setattr(telemetry, 'monotonic', lambda: now[0])
+    cohort = telemetry.DemandTelemetry('ineligible')
+    token = telemetry.current_demand.set(cohort)
+    try:
+        meter = telemetry.create_connected_meter()
+        labels = dict(provider='soniox', demand_cohort='ineligible', origin='initial', visibility='unreported')
+        before = value(telemetry.SONIOX_CONNECTED, fallback_reason='claim', **labels)
+        cohort.note_fallback_reason('claim')
+        now[0] += 6
+        meter.flush(close=True)
+        assert value(telemetry.SONIOX_CONNECTED, fallback_reason='claim', **labels) == pytest.approx(before + 6)
+        # Bounded: an unknown reason never becomes a label value.
+        cohort.note_fallback_reason('unbounded-input')
+        assert cohort.fallback_reason == 'claim'
+    finally:
+        telemetry.current_demand.reset(token)

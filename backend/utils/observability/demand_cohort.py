@@ -10,10 +10,34 @@ current_demand: ContextVar['DemandTelemetry | None'] = ContextVar('listen_demand
 TRANSPORT_ORIGINS = ('initial', 'idle_reopened', 'replacement')
 current_transport_origin: ContextVar[str] = ContextVar('stt_transport_origin', default='initial')
 
+# Who could watch a session live, from the client's own ``client_state`` reports.
+# ``unreported`` is a client that never sent one (builds that predate the message),
+# never a guess: a malformed report keeps the last known bucket.
+VISIBILITY_BUCKETS = ('visible', 'foreground', 'background', 'unreported')
+# Why a local-preview custody promotion fell back to a live transport. ``none`` is
+# every transport that was not opened by a fallback.
+FALLBACK_REASONS = ('none', 'policy', 'archive', 'claim')
+# A client flapping state is not a reason to grow memory; past this many
+# transitions the oldest are dropped and the retained tail still splits a flush.
+MAX_VISIBILITY_TRANSITIONS = 32
+
 
 def transport_origin() -> str:
     origin = current_transport_origin.get()
     return origin if origin in TRANSPORT_ORIGINS else 'initial'
+
+
+def visibility_bucket(foreground, visible) -> str | None:
+    """Map one client_state report to a bucket; None when the report is malformed.
+
+    A visible transcript implies the app is in front, so ``visible`` with
+    ``foreground`` false is contradictory and is treated as malformed.
+    """
+    if type(foreground) is not bool or type(visible) is not bool:
+        return None
+    if visible:
+        return 'visible' if foreground else None
+    return 'foreground' if foreground else 'background'
 
 
 WIRE_AUDIO = Counter(
@@ -24,7 +48,7 @@ WIRE_AUDIO = Counter(
 SONIOX_CONNECTED = Counter(
     'omi_soniox_connected_seconds_total',
     'Wall seconds a Soniox real-time websocket was open (the vendor bills this, keepalive silence included)',
-    ['demand_cohort', 'origin'],
+    ['provider', 'demand_cohort', 'origin', 'visibility', 'fallback_reason'],
 )
 BATCH_WIRE_AUDIO = Counter(
     'omi_batch_live_stt_provider_wire_audio_seconds_total',
@@ -38,8 +62,8 @@ BATCH_CAPTURE_AUDIO = Counter(
 )
 CAPTURE_AUDIO = Counter(
     'omi_listen_demand_capture_audio_seconds_total',
-    'Decoded listen capture seconds before VAD or replay',
-    ['demand_cohort'],
+    'Decoded listen capture seconds before VAD or replay, by who could watch the session live',
+    ['demand_cohort', 'visibility'],
 )
 # Why a session was ineligible: the first failing admission condition, in the
 # order capture_demand_admission checks them. ~300/10m ineligible sessions were
@@ -139,9 +163,18 @@ def demand_cohort() -> str:
 try:
     for _cohort in DEMAND_COHORTS:
         BATCH_CAPTURE_AUDIO.labels(batch_cohort=_cohort)
-        CAPTURE_AUDIO.labels(demand_cohort=_cohort)
+        for _visibility in VISIBILITY_BUCKETS:
+            CAPTURE_AUDIO.labels(demand_cohort=_cohort, visibility=_visibility)
         for _origin in TRANSPORT_ORIGINS:
-            SONIOX_CONNECTED.labels(demand_cohort=_cohort, origin=_origin)
+            for _visibility in VISIBILITY_BUCKETS:
+                for _fallback_reason in FALLBACK_REASONS:
+                    SONIOX_CONNECTED.labels(
+                        provider='soniox',
+                        demand_cohort=_cohort,
+                        origin=_origin,
+                        visibility=_visibility,
+                        fallback_reason=_fallback_reason,
+                    )
             for _provider in ('soniox', 'modulate', 'deepgram'):
                 BATCH_WIRE_AUDIO.labels(provider=_provider, batch_cohort=_cohort, origin=_origin)
                 WIRE_AUDIO.labels(provider=_provider, demand_cohort=_cohort, origin=_origin)
@@ -196,29 +229,81 @@ class DemandTelemetry:
         self.first_output = False
         self.visible_at: float | None = None
         self.visibility: str | None = None
+        # Bounded transition log so a connected-seconds flush can split its
+        # interval at the exact moment the client changed state.
+        self._visibility_log: list[tuple[float, str]] = []
+        # Sticky for the session: a custody fallback that opened a live transport
+        # keeps naming that reason on every later transport, reconnects included.
+        self.fallback_reason = 'none'
 
     def capture(self, seconds: float) -> None:
         if seconds > 0:
             if self.first_audio_at is None:
                 self.first_audio_at = monotonic()
                 self.output_event('first_output', 'started')
-            record_metric(CAPTURE_AUDIO, {'demand_cohort': self.cohort}, seconds)
+            # One increment per decoded frame, before VAD and replay, so each
+            # captured second is attributed exactly once.
+            record_metric(
+                CAPTURE_AUDIO,
+                {'demand_cohort': self.cohort, 'visibility': self.visibility or 'unreported'},
+                seconds,
+            )
             record_metric(BATCH_CAPTURE_AUDIO, {'batch_cohort': self.batch_cohort}, seconds)
 
     def observe_visibility(self, payload) -> None:
-        foreground, visible = payload.get('foreground'), payload.get('transcript_visible')
-        state = None
-        if type(foreground) is bool and type(visible) is bool and (foreground or not visible):
-            state = 'visible' if visible else 'hidden'
-        state = self.visibility if state is None else state
-        if state == 'visible' and self.visibility == 'hidden':
+        bucket = visibility_bucket(payload.get('foreground'), payload.get('transcript_visible'))
+        if bucket is None:
+            bucket = self.visibility
+        if bucket is None:
+            # Malformed before the first valid report: nothing to record yet.
+            return
+        if bucket == 'visible' and self.visibility in ('foreground', 'background'):
             self.visible_at = monotonic()
             self.output_event('visible_return', 'started')
-        elif state != 'visible':
+        elif bucket != 'visible':
             if self.visible_at is not None:
                 self.output_event('visible_return', 'no_output')
             self.visible_at = None
-        self.visibility = state
+        if bucket != self.visibility:
+            self._note_visibility(bucket)
+        self.visibility = bucket
+
+    def note_fallback_reason(self, reason: str) -> None:
+        """Name why a live transport was opened; bounded and sticky for the session."""
+        if reason in FALLBACK_REASONS and reason != 'none':
+            self.fallback_reason = reason
+
+    def _note_visibility(self, bucket: str) -> None:
+        self._visibility_log.append((monotonic(), bucket))
+        if len(self._visibility_log) > MAX_VISIBILITY_TRANSITIONS:
+            del self._visibility_log[:-MAX_VISIBILITY_TRANSITIONS]
+
+    def _bucket_at(self, at: float) -> str:
+        current = 'unreported'
+        for changed_at, bucket in self._visibility_log:
+            if changed_at > at:
+                break
+            current = bucket
+        return current
+
+    def visibility_seconds(self, start: float, end: float) -> list[tuple[str, float]]:
+        """Split ``[start, end]`` into ``(bucket, seconds)`` at recorded transitions."""
+        if end <= start:
+            return []
+        segments: list[tuple[str, float]] = []
+        cursor = start
+        current = self._bucket_at(start)
+        for changed_at, bucket in self._visibility_log:
+            if changed_at <= cursor:
+                continue
+            if changed_at >= end:
+                break
+            segments.append((current, changed_at - cursor))
+            cursor = changed_at
+            current = bucket
+        if end > cursor:
+            segments.append((current, end - cursor))
+        return segments
 
     def delivered(self) -> None:
         now = monotonic()
@@ -291,18 +376,34 @@ class ConnectedSecondsMeter:
     """Billed stream time for one paid transport, flushed incrementally so rates stay smooth.
 
     Pin at transport creation; ``flush`` from the writer's wake-ups and once with
-    ``close=True`` when the websocket ends. Seconds are counted exactly once.
+    ``close=True`` when the websocket ends. Seconds are counted exactly once, and
+    each flush interval is split at the client's visibility transitions so a
+    session that goes background mid-stream is attributed to the right bucket.
     """
 
     FLUSH_SECONDS = 5.0
 
-    def __init__(self, metric=None):
+    def __init__(self, metric=None, provider: str = 'soniox'):
         self.metric = SONIOX_CONNECTED if metric is None else metric
-        telemetry = current_telemetry()
-        self.cohort = cohort_label(telemetry)
+        self.telemetry = current_telemetry()
+        self.cohort = cohort_label(self.telemetry)
         self.origin = transport_origin()
+        self.provider = provider
         self.accounted_at = monotonic()
         self.closed = False
+
+    def _fallback_reason(self) -> str:
+        reason = getattr(self.telemetry, 'fallback_reason', 'none')
+        return reason if reason in FALLBACK_REASONS else 'none'
+
+    def _split(self, start: float, end: float) -> list[tuple[str, float]]:
+        telemetry = self.telemetry
+        if telemetry is None:
+            return [('unreported', end - start)]
+        try:
+            return telemetry.visibility_seconds(start, end)
+        except Exception:
+            return [(getattr(telemetry, 'visibility', None) or 'unreported', end - start)]
 
     def flush(self, *, close: bool = False) -> None:
         if self.closed:
@@ -311,10 +412,24 @@ class ConnectedSecondsMeter:
         elapsed = now - self.accounted_at
         if not close and elapsed < self.FLUSH_SECONDS:
             return
-        self.accounted_at = now
+        start, self.accounted_at = self.accounted_at, now
         self.closed = close
-        if elapsed > 0:
-            record_metric(self.metric, {'demand_cohort': self.cohort, 'origin': self.origin}, elapsed)
+        if elapsed <= 0:
+            return
+        fallback_reason = self._fallback_reason()
+        for visibility, seconds in self._split(start, now):
+            if seconds > 0:
+                record_metric(
+                    self.metric,
+                    {
+                        'provider': self.provider,
+                        'demand_cohort': self.cohort,
+                        'origin': self.origin,
+                        'visibility': visibility,
+                        'fallback_reason': fallback_reason,
+                    },
+                    seconds,
+                )
 
 
 class MeteredSyncTransport:
@@ -333,9 +448,9 @@ class MeteredSyncTransport:
         return result
 
 
-def create_connected_meter():
+def create_connected_meter(provider: str = 'soniox'):
     try:
-        return ConnectedSecondsMeter()
+        return ConnectedSecondsMeter(provider=provider)
     except Exception:
         return None
 
