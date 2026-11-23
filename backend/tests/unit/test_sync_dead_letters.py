@@ -741,3 +741,21 @@ def test_terminal_delivery_ensure_failure_blocks_ack(monkeypatch):
 
     assert 'delete_blobs' not in calls
     assert 'release_slot' not in calls
+
+
+def test_durable_job_status_contention_returns_existing_retry_response(monkeypatch):
+    from database.firestore_transaction_retry import FirestoreContentionExhausted
+
+    monkeypatch.setattr(sync_router, 'admit_sync_job_poll', lambda uid: True)
+    monkeypatch.setattr(
+        sync_router,
+        'get_durable_job_status',
+        MagicMock(side_effect=FirestoreContentionExhausted('synthetic contention')),
+    )
+    redis_read = MagicMock()
+    monkeypatch.setattr(sync_router, 'get_sync_job', redis_read)
+    with pytest.raises(HTTPException) as exc:
+        sync_router.get_sync_job_status('job-1', uid='u1')
+    assert exc.value.status_code == 503
+    assert exc.value.headers == {'Retry-After': '10'}
+    redis_read.assert_not_called()

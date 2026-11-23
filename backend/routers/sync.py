@@ -73,7 +73,7 @@ from database import fair_use as fair_use_db
 from database import sync_dead_letters, sync_backfill_sequencer
 from database import users as users_db
 from database.memories import historical_scan_memo_scope
-from database.firestore_transaction_retry import transaction_retry_deadline_scope
+from database.firestore_transaction_retry import is_transaction_retry_failure, transaction_retry_deadline_scope
 from database.person_aliases import people_scan_attempt
 from database.firestore_read_metrics import FirestoreReadSite
 from database.firestore_read_origin import read_origin
@@ -1932,6 +1932,10 @@ def get_sync_job_status(
         )
     except BatchPrivacyBlocked:
         return privacy_blocked_response()
+    except Exception as error:
+        if not is_transaction_retry_failure(error):
+            raise
+        raise sync_finalization_retrying() from error
     if durable is not None:
         return with_poll_hint(durable, uid=uid, surface_open=surface_open)
     job = get_sync_job(job_id)

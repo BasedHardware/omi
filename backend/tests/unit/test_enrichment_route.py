@@ -1477,3 +1477,25 @@ def test_enrichment_early_abort_and_streak_metrics_pass_the_gmp_sync_allowlist()
         'omi_enrichment_early_abort',
     ):
         assert not any(re.fullmatch(pattern, name) for pattern in keep), name
+
+
+@pytest.mark.parametrize('budget', ['0', '300'])
+def test_claim_contention_is_409_and_leaves_custody_untouched(rows, client, monkeypatch, budget):
+    from google.api_core.exceptions import Aborted
+
+    state = deepcopy(rows[0][KEY])
+    monkeypatch.setenv('ENRICHMENT_DELIVERY_BUDGET_SECONDS', budget)
+    from database import firestore_transaction_retry
+
+    def contended(_row_id):
+        deadline = firestore_transaction_retry._retry_deadline.get()
+        assert (deadline is not None) == (budget != '0')
+        raise Aborted('privacy read contention')
+
+    monkeypatch.setattr(custody, 'discard_blocked', contended)
+    response = client.post(
+        '/v2/enrichment/run', json={'kind': 'enrichment', 'key': KEY, 'task_token': state['task_token']}
+    )
+    assert response.status_code == 409
+    assert response.json() == {'status': 'retry', 'reason': 'dependency_warming'}
+    assert rows[0][KEY] == state

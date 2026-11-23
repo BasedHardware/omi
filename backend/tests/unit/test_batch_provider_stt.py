@@ -1704,3 +1704,28 @@ def test_a_legacy_silent_intent_without_the_marker_also_settles_as_silence(world
     row = job(store, 'p1')
     assert row['state'] == 'result_ready'
     assert 'abandoned' not in [a.get('outcome') for a in row.get('provider_attempts') or []]
+
+
+def test_provider_stage_transaction_exhaustion_releases_lease_and_retries(monkeypatch):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    from database.firestore_transaction_retry import FirestoreContentionExhausted
+    from routers import batch_provider_stt
+
+    outbox = PushOutbox(_claim())
+    stage = ProviderSttStage(None, None)
+    monkeypatch.setattr(stage, '_prepare', Mock(side_effect=FirestoreContentionExhausted('synthetic contention')))
+    consumer = provider_stt.ProviderSttConsumer(lambda: stage)
+    monkeypatch.setattr(batch_provider_stt, 'ProviderSttConsumer', lambda **kwargs: consumer)
+    monkeypatch.setattr(batch_provider_stt, 'outbox_for', lambda kind: outbox)
+
+    app = FastAPI()
+    app.include_router(batch_provider_stt.router)
+    app.dependency_overrides[batch_provider_stt.verify_provider_stt_task] = lambda: 0
+    response = TestClient(app).post(
+        batch_provider_stt.ROUTE, json={'kind': 'provider_stt', 'row_id': 'p1', 'wake_token': 'wake'}
+    )
+    assert response.status_code == 409
+    assert response.json() == {'status': 'retry', 'reason': 'dependency_warming'}
+    assert [call[0] for call in outbox.calls] == ['claim_key', 'release']

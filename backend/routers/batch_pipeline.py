@@ -15,6 +15,7 @@ from config.batch_pipeline import projection_pump_enabled, read_only_metrics_ena
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
 from database.batch_pipeline_projection_protocol import ProjectionBlocked
 from database.batch_pipeline_record_dead_letter import requeue_record as requeue_record_job
+from database.firestore_transaction_retry import is_transaction_retry_failure
 from utils.batch_pipeline.contracts import PoolCapacity, WorkResult
 from utils.batch_pipeline.admission import authorize
 from utils.batch_pipeline.enrichment import run_enrichment
@@ -47,7 +48,7 @@ def expected_retry_reason(error: BaseException) -> str | None:
         reason = EXPECTED_RETRIES.get((cls.__module__, cls.__qualname__))
         if reason is not None:
             return reason
-    if dependency_failure(error):
+    if is_transaction_retry_failure(error) or dependency_failure(error):
         return RetryReason.DEPENDENCY_WARMING.value
     return None
 
@@ -341,12 +342,12 @@ async def enrichment_response(payload: dict):
             # The leased outbox and task watchdog retain custody after this ACK.
             return JSONResponse(status_code=200, content={'status': status})
         return JSONResponse(status_code=200, content={'status': status})
-    except (ValueError, TypeError):
-        return JSONResponse(status_code=400, content={'status': 'invalid_enrichment_task'})
     except Exception as error:
         from config.sync_telemetry import bounded_exception_class
 
         reason = expected_retry_reason(error)
+        if reason is None and isinstance(error, (ValueError, TypeError)):
+            return JSONResponse(status_code=400, content={'status': 'invalid_enrichment_task'})
         if reason is None:
             ENRICHMENT_RETRIES.labels('unexpected').inc()
             logger.error(

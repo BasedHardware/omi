@@ -372,3 +372,46 @@ def test_existing_outcome_tokens_are_unchanged(caplog):
     messages = [record.getMessage() for record in caplog.records]
     assert any('outcome=retry delay_ms=' in message for message in messages)
     assert any('outcome=recovered' in message for message in messages)
+
+
+@pytest.mark.parametrize('failure_phase', ['begin', 'read', 'commit'])
+def test_sdk_cleanup_preserves_retryable_error_and_restarts_fresh(failure_phase):
+    from unittest.mock import Mock
+
+    from google.auth.credentials import AnonymousCredentials
+    from google.cloud import firestore
+    from google.cloud.firestore_v1 import types
+
+    client = firestore.Client(project='transaction-retry-test', credentials=AnonymousCredentials())
+    rpc = Mock()
+    client._firestore_api_internal = rpc
+    rpc.begin_transaction.side_effect = [
+        aborted() if failure_phase == 'begin' else types.BeginTransactionResponse(transaction=b'first'),
+        types.BeginTransactionResponse(transaction=b'second'),
+    ]
+    rpc.commit.side_effect = [expired(), types.CommitResponse()] if failure_phase == 'commit' else None
+    rpc.commit.return_value = types.CommitResponse()
+    rpc.rollback.side_effect = expired()
+
+    seen = []
+
+    @firestore.transactional
+    def body(transaction):
+        seen.append(transaction.id)
+        if failure_phase == 'read' and transaction.id == b'first':
+            raise aborted()
+        return transaction.id
+
+    assert (
+        run_with_transaction_contention_retry(
+            lambda: client.transaction(max_attempts=1),
+            body,
+            operation_name='sdk_cleanup_test',
+            max_attempts=2,
+            sleep=lambda _: None,
+        )
+        == b'second'
+    )
+    assert seen == ([b'second'] if failure_phase == 'begin' else [b'first', b'second'])
+    assert rpc.begin_transaction.call_count == 2
+    assert rpc.rollback.call_count == (0 if failure_phase == 'begin' else 1)

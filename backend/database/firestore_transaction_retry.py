@@ -102,6 +102,32 @@ def _is_transaction_contention(error: BaseException) -> bool:
     return False
 
 
+def is_transaction_retry_failure(error: BaseException) -> bool:
+    """Classify expected storage failures for a request boundary, never for replay."""
+    return isinstance(error, FirestoreContentionExhausted) or _is_transaction_contention(error)
+
+
+def transaction_with_safe_rollback(transaction: Any) -> Any:
+    """Keep Firestore 2.20's rollback from replacing begin, body, or commit failures."""
+    try:
+        from google.cloud.firestore_v1.transaction import Transaction
+    except ImportError:  # Unit tests may stub the Firestore SDK.
+        return transaction
+    if not isinstance(transaction, Transaction):
+        return transaction
+    rollback: Callable[[], None] = getattr(transaction, '_rollback')
+
+    def best_effort_rollback() -> None:
+        if transaction.in_progress:
+            try:
+                rollback()
+            except Exception as error:
+                logger.warning('firestore_transaction_rollback_failed exception_type=%s', type(error).__name__)
+
+    setattr(transaction, '_rollback', best_effort_rollback)
+    return transaction
+
+
 def is_expired_transaction(error: BaseException) -> bool:
     """True when ``error`` itself (not its causes) reports a retired transaction chain."""
     return _is_expired_transaction(error)
@@ -225,7 +251,7 @@ def run_with_transaction_contention_retry(
                 raise error
         attempt_started = monotonic()
         try:
-            result = operation(transaction_factory())
+            result = operation(transaction_with_safe_rollback(transaction_factory()))
             if attempt > 1:
                 logger.info(
                     "firestore_transaction_contention operation=%s attempt=%d/%d outcome=recovered",
