@@ -71,15 +71,30 @@ void main() {
     expect(platform.launched.single.offerToken, 'token-monthly');
   });
 
-  test('user cancel and pending payment never reach the server', () async {
+  test('a user cancel never reaches the server', () async {
     final offers = (await billing.loadOffers(playConfig))!;
     platform.onLaunch = [playPurchase(PurchaseStatus.canceled)];
     expect((await billing.purchase(offer: offers.monthly!, withTrial: false, obfuscatedAccountId: 'a')).outcome,
         PlayPurchaseOutcome.cancelled);
-    platform.onLaunch = [playPurchase(PurchaseStatus.pending)];
-    expect((await billing.purchase(offer: offers.monthly!, withTrial: false, obfuscatedAccountId: 'a')).outcome,
-        PlayPurchaseOutcome.pending);
     expect(server.received, isEmpty);
+  });
+
+  test('a pending purchase hands its token to the server right away', () async {
+    final offers = (await billing.loadOffers(playConfig))!;
+    server.answer = (_, __) => const PlayVerifyResult('pending');
+    platform.onLaunch = [playPurchase(PurchaseStatus.pending, token: 'slow-pay')];
+    final result = await billing.purchase(offer: offers.monthly!, withTrial: false, obfuscatedAccountId: 'a');
+    expect(result.outcome, PlayPurchaseOutcome.pending);
+    await Future<void>.delayed(Duration.zero);
+    expect(server.received, ['omi_pro:slow-pay']);
+  });
+
+  test('a purchase that finishes with no screen waiting still reaches the server once listening', () async {
+    billing.startListening(obfuscatedAccountId: 'acct-hash');
+    platform.controller.add([playPurchase(PurchaseStatus.purchased, token: 'cleared-later')]);
+    await Future<void>.delayed(Duration.zero);
+    await Future<void>.delayed(Duration.zero);
+    expect(server.received, ['omi_pro:cleared-later']);
   });
 
   test('network loss after payment keeps the token and sends it again on the next launch', () async {

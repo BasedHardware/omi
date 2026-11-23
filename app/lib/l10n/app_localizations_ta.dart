@@ -15857,4 +15857,11 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get playPurchaseNotConfirmed => 'உங்கள் வாங்குதலை இன்னும் உறுதிசெய்ய முடியவில்லை. தானாக மீண்டும் முயல்வோம்.';
+
+  @override
+  String get playRenewalTerms =>
+      'நீங்கள் ரத்து செய்யும் வரை காட்டப்பட்ட விலையில் தானாகப் புதுப்பிக்கப்படும். Google Play இல் எப்போது வேண்டுமானாலும் நிர்வகிக்கலாம் அல்லது ரத்து செய்யலாம்.';
+
+  @override
+  String get playPaidAppUnavailable => 'Android இல் கிடைக்காது';
 }

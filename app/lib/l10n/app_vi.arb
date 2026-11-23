@@ -4745,5 +4745,7 @@
     "playBilledByGoogle": "Thanh toán qua Google Play",
     "playPurchasePending": "Thanh toán đang chờ xử lý. Omi Pro bắt đầu ngay khi Google Play xác nhận.",
     "playPurchaseOtherAccount": "Giao dịch Google Play này thuộc về một tài khoản Omi khác.",
-    "playPurchaseNotConfirmed": "Chưa thể xác nhận giao dịch. Chúng tôi sẽ tự động thử lại."
+    "playPurchaseNotConfirmed": "Chưa thể xác nhận giao dịch. Chúng tôi sẽ tự động thử lại.",
+    "playRenewalTerms": "Tự động gia hạn theo giá hiển thị cho đến khi bạn hủy. Quản lý hoặc hủy bất cứ lúc nào trong Google Play.",
+    "playPaidAppUnavailable": "Không có trên Android"
 }

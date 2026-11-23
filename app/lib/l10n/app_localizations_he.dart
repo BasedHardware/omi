@@ -15639,4 +15639,10 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get playPurchaseNotConfirmed => 'עדיין לא הצלחנו לאשר את הרכישה. ננסה שוב אוטומטית.';
+
+  @override
+  String get playRenewalTerms => 'מתחדש אוטומטית במחיר המוצג עד שתבטלו. ניתן לנהל או לבטל בכל עת ב-Google Play.';
+
+  @override
+  String get playPaidAppUnavailable => 'לא זמין ב-Android';
 }

@@ -15498,4 +15498,10 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get playPurchaseNotConfirmed => '暂时无法确认你的购买。我们会自动重试。';
+
+  @override
+  String get playRenewalTerms => '在你取消前将按所示价格自动续订。可随时在 Google Play 中管理或取消。';
+
+  @override
+  String get playPaidAppUnavailable => 'Android 上不可用';
 }

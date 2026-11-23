@@ -96,11 +96,30 @@ typedef PlayVerifier = Future<PlayVerifyResult> Function(String purchaseToken, S
 
 class PlayBilling {
   PlayBilling({InAppPurchasePlatform Function()? platform, PlayVerifier? verify, PlayPendingTokenStore? store})
-      : _platform = platform ?? (() => InAppPurchasePlatform.instance),
+      : _platform = platform ?? androidPlayPlatform,
         _verify = verify ?? ((token, product) => verifyPlayPurchase(purchaseToken: token, productId: product)),
         _store = store ?? _PrefsPendingTokenStore();
 
   static PlayBilling instance = PlayBilling();
+
+  static bool _registered = false;
+
+  /// The plugin's Android platform, registered on first use. Not at startup: its client connects to
+  /// Play when created, and only users the server put on Play Billing should pay that cost.
+  static InAppPurchasePlatform androidPlayPlatform() {
+    if (!_registered) {
+      InAppPurchaseAndroidPlatform.registerPlatform();
+      _registered = true;
+    }
+    return InAppPurchasePlatform.instance;
+  }
+
+  /// Starts listening for purchase updates so a purchase that finishes while no screen waits for it
+  /// (slow payment, Play Store resubscribe, app restarted mid-purchase) still reaches the server.
+  void startListening({required String obfuscatedAccountId}) {
+    if (_accountId.isEmpty) _accountId = obfuscatedAccountId;
+    _listen();
+  }
 
   final InAppPurchasePlatform Function() _platform;
   final PlayVerifier _verify;
@@ -246,6 +265,10 @@ class PlayBilling {
     for (final purchase in purchases) {
       switch (purchase.status) {
         case PurchaseStatus.pending:
+          // Hand the token over now: the server records it (no access yet) and grants when Google clears
+          // the payment, even if the app is never opened again.
+          final token = purchase.verificationData.serverVerificationData;
+          if (token.isNotEmpty) unawaited(_deliver(token, purchase.productID));
           _finish(const PlayPurchaseResult(PlayPurchaseOutcome.pending));
         case PurchaseStatus.canceled:
           _finish(const PlayPurchaseResult(PlayPurchaseOutcome.cancelled));

@@ -15734,4 +15734,11 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get playPurchaseNotConfirmed => 'हम अभी आपकी खरीदारी की पुष्टि नहीं कर सके। हम अपने आप फिर कोशिश करेंगे।';
+
+  @override
+  String get playRenewalTerms =>
+      'रद्द करने तक दिखाई गई कीमत पर अपने आप नवीनीकृत होता है। Google Play में कभी भी प्रबंधित या रद्द करें।';
+
+  @override
+  String get playPaidAppUnavailable => 'Android पर उपलब्ध नहीं';
 }

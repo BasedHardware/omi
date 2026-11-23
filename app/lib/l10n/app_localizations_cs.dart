@@ -15751,4 +15751,11 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get playPurchaseNotConfirmed => 'Nákup se zatím nepodařilo potvrdit. Zkusíme to znovu automaticky.';
+
+  @override
+  String get playRenewalTerms =>
+      'Automaticky se obnovuje za uvedenou cenu, dokud ho nezrušíte. Spravovat nebo zrušit ho můžete kdykoli v Google Play.';
+
+  @override
+  String get playPaidAppUnavailable => 'Na Androidu není k dispozici';
 }

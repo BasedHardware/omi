@@ -4745,5 +4745,7 @@
     "playBilledByGoogle": "Оплата через Google Play",
     "playPurchasePending": "Платіж очікує. Omi Pro почнеться, щойно Google Play його підтвердить.",
     "playPurchaseOtherAccount": "Ця покупка в Google Play належить іншому акаунту Omi.",
-    "playPurchaseNotConfirmed": "Поки не вдалося підтвердити покупку. Ми спробуємо знову автоматично."
+    "playPurchaseNotConfirmed": "Поки не вдалося підтвердити покупку. Ми спробуємо знову автоматично.",
+    "playRenewalTerms": "Автоматично поновлюється за вказаною ціною, доки ви не скасуєте. Керуйте або скасовуйте будь-коли в Google Play.",
+    "playPaidAppUnavailable": "Недоступно на Android"
 }

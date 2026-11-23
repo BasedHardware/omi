@@ -15810,4 +15810,11 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get playPurchaseNotConfirmed => 'Még nem tudtuk megerősíteni a vásárlást. Automatikusan újrapróbáljuk.';
+
+  @override
+  String get playRenewalTerms =>
+      'Lemondásig automatikusan megújul a feltüntetett áron. Bármikor kezelheted vagy lemondhatod a Google Playen.';
+
+  @override
+  String get playPaidAppUnavailable => 'Androidon nem érhető el';
 }

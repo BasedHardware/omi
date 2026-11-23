@@ -4745,5 +4745,7 @@
     "playBilledByGoogle": "通过 Google Play 计费",
     "playPurchasePending": "付款待处理。Google Play 确认后 Omi Pro 即会开始。",
     "playPurchaseOtherAccount": "此 Google Play 购买属于另一个 Omi 账户。",
-    "playPurchaseNotConfirmed": "暂时无法确认你的购买。我们会自动重试。"
+    "playPurchaseNotConfirmed": "暂时无法确认你的购买。我们会自动重试。",
+    "playRenewalTerms": "在你取消前将按所示价格自动续订。可随时在 Google Play 中管理或取消。",
+    "playPaidAppUnavailable": "Android 上不可用"
 }

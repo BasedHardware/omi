@@ -15780,4 +15780,11 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get playPurchaseNotConfirmed => 'Nakupa še nismo mogli potrditi. Samodejno bomo poskusili znova.';
+
+  @override
+  String get playRenewalTerms =>
+      'Samodejno se podaljšuje po prikazani ceni, dokler ne prekličete. Upravljajte ali prekličite kadar koli v Google Play.';
+
+  @override
+  String get playPaidAppUnavailable => 'Ni na voljo v Androidu';
 }

@@ -4745,5 +4745,7 @@
     "playBilledByGoogle": "Dibilkan oleh Google Play",
     "playPurchasePending": "Pembayaran anda belum selesai. Omi Pro bermula sebaik Google Play mengesahkannya.",
     "playPurchaseOtherAccount": "Pembelian Google Play ini milik akaun Omi lain.",
-    "playPurchaseNotConfirmed": "Kami belum dapat mengesahkan pembelian. Kami akan cuba lagi secara automatik."
+    "playPurchaseNotConfirmed": "Kami belum dapat mengesahkan pembelian. Kami akan cuba lagi secara automatik.",
+    "playRenewalTerms": "Diperbaharui secara automatik pada harga yang ditunjukkan sehingga anda membatalkannya. Urus atau batalkan bila-bila masa di Google Play.",
+    "playPaidAppUnavailable": "Tidak tersedia di Android"
 }

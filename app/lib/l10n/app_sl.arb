@@ -12302,5 +12302,7 @@
     "playBilledByGoogle": "Obračunano prek Google Play",
     "playPurchasePending": "Plačilo je v teku. Omi Pro se začne, ko ga Google Play potrdi.",
     "playPurchaseOtherAccount": "Ta nakup v Google Play pripada drugemu računu Omi.",
-    "playPurchaseNotConfirmed": "Nakupa še nismo mogli potrditi. Samodejno bomo poskusili znova."
+    "playPurchaseNotConfirmed": "Nakupa še nismo mogli potrditi. Samodejno bomo poskusili znova.",
+    "playRenewalTerms": "Samodejno se podaljšuje po prikazani ceni, dokler ne prekličete. Upravljajte ali prekličite kadar koli v Google Play.",
+    "playPaidAppUnavailable": "Ni na voljo v Androidu"
 }

@@ -139,6 +139,11 @@ class UsageProvider with ChangeNotifier {
   PlayBillingConfig? get playBilling =>
       !kIsWeb && defaultTargetPlatform == TargetPlatform.android ? _subscription?.playBilling : null;
 
+  /// Android before the first subscription read: the billing provider is not known yet, so no
+  /// purchase surface may show a price (it could be the wrong provider's).
+  bool get billingProviderUnknown =>
+      !kIsWeb && defaultTargetPlatform == TargetPlatform.android && _subscription == null;
+
   /// New purchases go through Google Play. A live Stripe subscriber keeps today's Stripe management.
   bool get playBilledPurchaser {
     if (playBilling == null) return false;
@@ -159,6 +164,12 @@ class UsageProvider with ChangeNotifier {
   }
 
   void _afterSubscriptionLoaded() {
+    final android = !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
+    // A token paid for before the switch or build gate turned this reader off is still delivered.
+    if (android && !_playPendingSent) {
+      _playPendingSent = true;
+      unawaited(_deliverPendingPlayTokens());
+    }
     final config = playBilling;
     if (config == null) return;
     // Play decides trial eligibility per Google account: no trial offer listed, no trial promised.
@@ -170,10 +181,7 @@ class UsageProvider with ChangeNotifier {
       _playOffersLoading = true;
       unawaited(_loadPlayOffers(config, _sessionGeneration));
     }
-    if (!_playPendingSent) {
-      _playPendingSent = true;
-      unawaited(_deliverPendingPlayTokens());
-    }
+    playBillingService.startListening(obfuscatedAccountId: config.obfuscatedAccountId);
   }
 
   Future<void> _loadPlayOffers(PlayBillingConfig config, int generation) async {
@@ -459,10 +467,16 @@ class UsageProvider with ChangeNotifier {
 
   /// Restore Purchases: read the plan again. A read that failed is [RestoreOutcome.failed], never
   /// "Free plan" (ux-contract §17.2): a paying reader must not be told they are free.
+  /// Why the last Google Play restore granted nothing (a server refusal code), or null.
+  String? get lastPlayRestoreRefusal => _lastPlayRestoreRefusal;
+  String? _lastPlayRestoreRefusal;
+
   Future<RestoreOutcome> restorePurchases() async {
     final config = playBilling;
+    _lastPlayRestoreRefusal = null;
     if (config != null) {
-      await playBillingService.restore(obfuscatedAccountId: config.obfuscatedAccountId);
+      final restored = await playBillingService.restore(obfuscatedAccountId: config.obfuscatedAccountId);
+      if (restored.outcome != PlayPurchaseOutcome.purchased) _lastPlayRestoreRefusal = restored.code;
     }
     await fetchSubscription();
     final plan = _subscription?.subscription.plan;

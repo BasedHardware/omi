@@ -4780,5 +4780,7 @@
     "playBilledByGoogle": "Google Play üzerinden faturalandırılır",
     "playPurchasePending": "Ödemeniz beklemede. Google Play onayladığında Omi Pro başlar.",
     "playPurchaseOtherAccount": "Bu Google Play satın alımı başka bir Omi hesabına ait.",
-    "playPurchaseNotConfirmed": "Satın alımınızı henüz doğrulayamadık. Otomatik olarak yeniden deneyeceğiz."
+    "playPurchaseNotConfirmed": "Satın alımınızı henüz doğrulayamadık. Otomatik olarak yeniden deneyeceğiz.",
+    "playRenewalTerms": "İptal edene kadar gösterilen fiyattan otomatik olarak yenilenir. Google Play'den istediğiniz zaman yönetin veya iptal edin.",
+    "playPaidAppUnavailable": "Android'de kullanılamaz"
 }

@@ -15804,4 +15804,11 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get playPurchaseNotConfirmed => 'Пока не удалось подтвердить покупку. Мы попробуем снова автоматически.';
+
+  @override
+  String get playRenewalTerms =>
+      'Продлевается автоматически по указанной цене, пока вы не отмените. Управляйте подпиской или отменяйте её в Google Play.';
+
+  @override
+  String get playPaidAppUnavailable => 'Недоступно на Android';
 }

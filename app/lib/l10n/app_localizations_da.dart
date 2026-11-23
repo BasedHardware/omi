@@ -15743,4 +15743,11 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get playPurchaseNotConfirmed => 'Vi kunne ikke bekræfte købet endnu. Vi prøver igen automatisk.';
+
+  @override
+  String get playRenewalTerms =>
+      'Fornyes automatisk til den viste pris, indtil du opsiger. Administrer eller opsig når som helst i Google Play.';
+
+  @override
+  String get playPaidAppUnavailable => 'Ikke tilgængelig på Android';
 }

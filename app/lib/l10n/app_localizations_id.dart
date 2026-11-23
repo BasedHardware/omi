@@ -15766,4 +15766,11 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get playPurchaseNotConfirmed => 'Kami belum bisa mengonfirmasi pembelian. Kami akan mencoba lagi otomatis.';
+
+  @override
+  String get playRenewalTerms =>
+      'Diperpanjang otomatis dengan harga yang ditampilkan sampai Anda membatalkan. Kelola atau batalkan kapan saja di Google Play.';
+
+  @override
+  String get playPaidAppUnavailable => 'Tidak tersedia di Android';
 }

@@ -15762,4 +15762,11 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get playPurchaseNotConfirmed => 'Satın alımınızı henüz doğrulayamadık. Otomatik olarak yeniden deneyeceğiz.';
+
+  @override
+  String get playRenewalTerms =>
+      'İptal edene kadar gösterilen fiyattan otomatik olarak yenilenir. Google Play\'den istediğiniz zaman yönetin veya iptal edin.';
+
+  @override
+  String get playPaidAppUnavailable => 'Android\'de kullanılamaz';
 }

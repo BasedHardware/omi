@@ -4841,5 +4841,7 @@
     "playBilledByGoogle": "A számlázás a Google Playen keresztül történik",
     "playPurchasePending": "A fizetés függőben van. Az Omi Pro akkor indul, amikor a Google Play megerősíti.",
     "playPurchaseOtherAccount": "Ez a Google Play-vásárlás egy másik Omi-fiókhoz tartozik.",
-    "playPurchaseNotConfirmed": "Még nem tudtuk megerősíteni a vásárlást. Automatikusan újrapróbáljuk."
+    "playPurchaseNotConfirmed": "Még nem tudtuk megerősíteni a vásárlást. Automatikusan újrapróbáljuk.",
+    "playRenewalTerms": "Lemondásig automatikusan megújul a feltüntetett áron. Bármikor kezelheted vagy lemondhatod a Google Playen.",
+    "playPaidAppUnavailable": "Androidon nem érhető el"
 }

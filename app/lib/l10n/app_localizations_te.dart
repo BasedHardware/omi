@@ -15815,4 +15815,11 @@ class AppLocalizationsTe extends AppLocalizations {
   @override
   String get playPurchaseNotConfirmed =>
       'మీ కొనుగోలును ఇంకా నిర్ధారించలేకపోయాము. మేము ఆటోమేటిక్‌గా మళ్లీ ప్రయత్నిస్తాము.';
+
+  @override
+  String get playRenewalTerms =>
+      'మీరు రద్దు చేసే వరకు చూపిన ధరకు ఆటోమేటిక్‌గా పునరుద్ధరించబడుతుంది. Google Playలో ఎప్పుడైనా నిర్వహించండి లేదా రద్దు చేయండి.';
+
+  @override
+  String get playPaidAppUnavailable => 'Androidలో అందుబాటులో లేదు';
 }

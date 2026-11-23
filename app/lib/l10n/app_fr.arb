@@ -4780,5 +4780,7 @@
     "playBilledByGoogle": "Facturé par Google Play",
     "playPurchasePending": "Votre paiement est en attente. Omi Pro démarre dès que Google Play le confirme.",
     "playPurchaseOtherAccount": "Cet achat Google Play appartient à un autre compte Omi.",
-    "playPurchaseNotConfirmed": "Nous n'avons pas encore pu confirmer votre achat. Nous réessaierons automatiquement."
+    "playPurchaseNotConfirmed": "Nous n'avons pas encore pu confirmer votre achat. Nous réessaierons automatiquement.",
+    "playRenewalTerms": "Se renouvelle automatiquement au prix indiqué jusqu'à résiliation. Gérez ou résiliez à tout moment dans Google Play.",
+    "playPaidAppUnavailable": "Non disponible sur Android"
 }

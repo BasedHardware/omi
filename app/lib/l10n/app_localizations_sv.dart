@@ -15760,4 +15760,11 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get playPurchaseNotConfirmed => 'Vi kunde inte bekräfta köpet än. Vi försöker igen automatiskt.';
+
+  @override
+  String get playRenewalTerms =>
+      'Förnyas automatiskt till det visade priset tills du säger upp. Hantera eller säg upp när som helst i Google Play.';
+
+  @override
+  String get playPaidAppUnavailable => 'Inte tillgängligt på Android';
 }

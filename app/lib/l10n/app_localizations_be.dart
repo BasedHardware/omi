@@ -15787,4 +15787,11 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get playPurchaseNotConfirmed => 'Не ўдалося пацвердзіць пакупку. Мы паспрабуем зноў аўтаматычна.';
+
+  @override
+  String get playRenewalTerms =>
+      'Аўтаматычна падаўжаецца па паказаным кошце, пакуль вы не скасуеце. Кіраваць ці скасаваць можна ў любы час у Google Play.';
+
+  @override
+  String get playPaidAppUnavailable => 'Недаступна на Android';
 }

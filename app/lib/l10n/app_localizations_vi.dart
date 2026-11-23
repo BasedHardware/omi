@@ -15753,4 +15753,11 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get playPurchaseNotConfirmed => 'Chưa thể xác nhận giao dịch. Chúng tôi sẽ tự động thử lại.';
+
+  @override
+  String get playRenewalTerms =>
+      'Tự động gia hạn theo giá hiển thị cho đến khi bạn hủy. Quản lý hoặc hủy bất cứ lúc nào trong Google Play.';
+
+  @override
+  String get playPaidAppUnavailable => 'Không có trên Android';
 }

@@ -4745,5 +4745,7 @@
     "playBilledByGoogle": "تتم الفوترة عبر Google Play",
     "playPurchasePending": "دفعتك قيد الانتظار. يبدأ Omi Pro عند تأكيد Google Play لها.",
     "playPurchaseOtherAccount": "هذا الشراء من Google Play يخص حساب Omi آخر.",
-    "playPurchaseNotConfirmed": "تعذّر تأكيد الشراء الآن. سنحاول مرة أخرى تلقائيًا."
+    "playPurchaseNotConfirmed": "تعذّر تأكيد الشراء الآن. سنحاول مرة أخرى تلقائيًا.",
+    "playRenewalTerms": "يتجدد تلقائيًا بالسعر المعروض حتى تلغيه. يمكنك الإدارة أو الإلغاء في أي وقت من Google Play.",
+    "playPaidAppUnavailable": "غير متاح على Android"
 }

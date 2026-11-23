@@ -14,7 +14,8 @@ import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 
-enum PaywallCheckoutOutcome { purchased, cancelled, failed }
+/// [pending]: Google Play accepted a purchase whose payment has not cleared; nothing to retry or upsell.
+enum PaywallCheckoutOutcome { purchased, cancelled, failed, pending }
 
 /// The purchase path shared by every paywall variant: the same Stripe Checkout session and in-app
 /// webview the `PlansSheet` uses for a free user, with the same analytics. Variants only change
@@ -152,7 +153,7 @@ Future<PaywallCheckoutOutcome> _startPlay(
     case PlayPurchaseOutcome.pending:
       report(l10n.playPurchasePending, error: false);
       analytics.playBillingStage(stage: UpgradeBillingProviderStage.pending, billingInterval: interval);
-      return PaywallCheckoutOutcome.cancelled;
+      return PaywallCheckoutOutcome.pending;
     case PlayPurchaseOutcome.cancelled:
       analytics.upgradeCancelled();
       analytics.playBillingStage(stage: UpgradeBillingProviderStage.cancelled, billingInterval: interval);
@@ -196,6 +197,7 @@ class PaywallOffer {
   /// or null when the catalog does not contain it.
   /// Play's prices for a Play-billed reader (null until Play answers); the server catalog otherwise.
   static PaywallOffer? forUsage(UsageProvider usage, {bool cancelAtPeriodEnd = false, String? currentPriceId}) {
+    if (usage.billingProviderUnknown) return null;
     if (usage.playBilledPurchaser) {
       final offers = usage.playOffers;
       return offers == null ? null : fromPlay(offers);

@@ -4745,5 +4745,7 @@
     "playBilledByGoogle": "Google Play द्वारा बिल किया जाता है",
     "playPurchasePending": "आपका भुगतान लंबित है। Google Play की पुष्टि होते ही Omi Pro शुरू होगा।",
     "playPurchaseOtherAccount": "यह Google Play खरीदारी किसी दूसरे Omi खाते की है।",
-    "playPurchaseNotConfirmed": "हम अभी आपकी खरीदारी की पुष्टि नहीं कर सके। हम अपने आप फिर कोशिश करेंगे।"
+    "playPurchaseNotConfirmed": "हम अभी आपकी खरीदारी की पुष्टि नहीं कर सके। हम अपने आप फिर कोशिश करेंगे।",
+    "playRenewalTerms": "रद्द करने तक दिखाई गई कीमत पर अपने आप नवीनीकृत होता है। Google Play में कभी भी प्रबंधित या रद्द करें।",
+    "playPaidAppUnavailable": "Android पर उपलब्ध नहीं"
 }

@@ -4745,5 +4745,7 @@
     "playBilledByGoogle": "Laskutus Google Playn kautta",
     "playPurchasePending": "Maksusi odottaa. Omi Pro alkaa, kun Google Play vahvistaa sen.",
     "playPurchaseOtherAccount": "Tämä Google Play -osto kuuluu toiselle Omi-tilille.",
-    "playPurchaseNotConfirmed": "Ostoa ei voitu vielä vahvistaa. Yritämme automaattisesti uudelleen."
+    "playPurchaseNotConfirmed": "Ostoa ei voitu vielä vahvistaa. Yritämme automaattisesti uudelleen.",
+    "playRenewalTerms": "Uusiutuu automaattisesti näytettyyn hintaan, kunnes peruutat. Hallinnoi tai peruuta milloin tahansa Google Playssa.",
+    "playPaidAppUnavailable": "Ei saatavilla Androidilla"
 }

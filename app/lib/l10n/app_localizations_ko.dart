@@ -15528,4 +15528,10 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get playPurchaseNotConfirmed => '아직 구매를 확인하지 못했습니다. 자동으로 다시 시도합니다.';
+
+  @override
+  String get playRenewalTerms => '해지할 때까지 표시된 가격으로 자동 갱신됩니다. Google Play에서 언제든지 관리하거나 해지할 수 있습니다.';
+
+  @override
+  String get playPaidAppUnavailable => 'Android에서는 사용할 수 없음';
 }

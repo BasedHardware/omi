@@ -12302,5 +12302,7 @@
     "playBilledByGoogle": "החיוב דרך Google Play",
     "playPurchasePending": "התשלום ממתין. Omi Pro יתחיל ברגע ש-Google Play יאשר אותו.",
     "playPurchaseOtherAccount": "הרכישה הזו ב-Google Play שייכת לחשבון Omi אחר.",
-    "playPurchaseNotConfirmed": "עדיין לא הצלחנו לאשר את הרכישה. ננסה שוב אוטומטית."
+    "playPurchaseNotConfirmed": "עדיין לא הצלחנו לאשר את הרכישה. ננסה שוב אוטומטית.",
+    "playRenewalTerms": "מתחדש אוטומטית במחיר המוצג עד שתבטלו. ניתן לנהל או לבטל בכל עת ב-Google Play.",
+    "playPaidAppUnavailable": "לא זמין ב-Android"
 }

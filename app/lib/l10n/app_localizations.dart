@@ -27662,6 +27662,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'We couldn\'t confirm your purchase yet. We\'ll try again automatically.'**
   String get playPurchaseNotConfirmed;
+
+  /// Google Play Billing (Android): auto-renewal and where to cancel, under the Play purchase button
+  ///
+  /// In en, this message translates to:
+  /// **'Renews automatically at the price shown until you cancel. Manage or cancel anytime in Google Play.'**
+  String get playRenewalTerms;
+
+  /// Disabled action on a paid Marketplace app for a reader who buys through Google Play: it cannot be bought in the Android app
+  ///
+  /// In en, this message translates to:
+  /// **'Not available on Android'**
+  String get playPaidAppUnavailable;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

@@ -15793,4 +15793,11 @@ class AppLocalizationsNl extends AppLocalizations {
   @override
   String get playPurchaseNotConfirmed =>
       'We konden je aankoop nog niet bevestigen. We proberen het automatisch opnieuw.';
+
+  @override
+  String get playRenewalTerms =>
+      'Wordt automatisch verlengd tegen de getoonde prijs tot je opzegt. Beheer of zeg op wanneer je wilt in Google Play.';
+
+  @override
+  String get playPaidAppUnavailable => 'Niet beschikbaar op Android';
 }

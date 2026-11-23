@@ -15804,4 +15804,11 @@ class AppLocalizationsKn extends AppLocalizations {
   @override
   String get playPurchaseNotConfirmed =>
       'ನಿಮ್ಮ ಖರೀದಿಯನ್ನು ಇನ್ನೂ ದೃಢೀಕರಿಸಲಾಗಲಿಲ್ಲ. ನಾವು ಸ್ವಯಂಚಾಲಿತವಾಗಿ ಮತ್ತೆ ಪ್ರಯತ್ನಿಸುತ್ತೇವೆ.';
+
+  @override
+  String get playRenewalTerms =>
+      'ನೀವು ರದ್ದುಗೊಳಿಸುವವರೆಗೆ ತೋರಿಸಿದ ಬೆಲೆಯಲ್ಲಿ ಸ್ವಯಂಚಾಲಿತವಾಗಿ ನವೀಕರಿಸುತ್ತದೆ. Google Play ನಲ್ಲಿ ಯಾವಾಗ ಬೇಕಾದರೂ ನಿರ್ವಹಿಸಿ ಅಥವಾ ರದ್ದುಗೊಳಿಸಿ.';
+
+  @override
+  String get playPaidAppUnavailable => 'Android ನಲ್ಲಿ ಲಭ್ಯವಿಲ್ಲ';
 }

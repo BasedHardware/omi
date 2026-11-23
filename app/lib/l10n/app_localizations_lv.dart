@@ -15787,4 +15787,11 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get playPurchaseNotConfirmed => 'Pirkumu vēl neizdevās apstiprināt. Mēģināsim vēlreiz automātiski.';
+
+  @override
+  String get playRenewalTerms =>
+      'Automātiski atjaunojas par norādīto cenu, līdz atcelsiet. Pārvaldiet vai atceliet jebkurā laikā Google Play.';
+
+  @override
+  String get playPaidAppUnavailable => 'Nav pieejams Android';
 }

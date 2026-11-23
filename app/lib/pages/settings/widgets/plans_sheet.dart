@@ -778,7 +778,10 @@ class _PlansSheetState extends State<PlansSheet> {
           });
           return const SizedBox.shrink();
         }
-        if (provider.playBilledPurchaser) return PlayPlansContent(analyticsSource: widget.analyticsSource);
+        if (provider.billingProviderUnknown) return const PlayPlansLoading();
+        if (provider.playBilledPurchaser || provider.subscription?.subscription.billedByPlay == true) {
+          return PlayPlansContent(analyticsSource: widget.analyticsSource);
+        }
 
         if (_storefrontEnabled) {
           return StorefrontPlansContent(

@@ -15744,4 +15744,11 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get playPurchaseNotConfirmed => 'Ostu ei õnnestunud veel kinnitada. Proovime automaatselt uuesti.';
+
+  @override
+  String get playRenewalTerms =>
+      'Uueneb automaatselt näidatud hinnaga, kuni tühistad. Halda või tühista igal ajal Google Plays.';
+
+  @override
+  String get playPaidAppUnavailable => 'Androidis pole saadaval';
 }

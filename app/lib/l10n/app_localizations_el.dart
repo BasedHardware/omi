@@ -15855,4 +15855,11 @@ class AppLocalizationsEl extends AppLocalizations {
   @override
   String get playPurchaseNotConfirmed =>
       'Δεν μπορέσαμε να επιβεβαιώσουμε την αγορά ακόμα. Θα ξαναδοκιμάσουμε αυτόματα.';
+
+  @override
+  String get playRenewalTerms =>
+      'Ανανεώνεται αυτόματα στην τιμή που εμφανίζεται μέχρι να την ακυρώσετε. Διαχείριση ή ακύρωση οποτεδήποτε στο Google Play.';
+
+  @override
+  String get playPaidAppUnavailable => 'Μη διαθέσιμο στο Android';
 }

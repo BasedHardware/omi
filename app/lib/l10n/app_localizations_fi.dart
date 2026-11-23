@@ -15757,4 +15757,11 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get playPurchaseNotConfirmed => 'Ostoa ei voitu vielä vahvistaa. Yritämme automaattisesti uudelleen.';
+
+  @override
+  String get playRenewalTerms =>
+      'Uusiutuu automaattisesti näytettyyn hintaan, kunnes peruutat. Hallinnoi tai peruuta milloin tahansa Google Playssa.';
+
+  @override
+  String get playPaidAppUnavailable => 'Ei saatavilla Androidilla';
 }

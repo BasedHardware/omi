@@ -15746,4 +15746,11 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get playPurchaseNotConfirmed => 'কেনাকাটা এখনও নিশ্চিত করা যায়নি। আমরা নিজে থেকে আবার চেষ্টা করব।';
+
+  @override
+  String get playRenewalTerms =>
+      'বাতিল না করা পর্যন্ত দেখানো দামে স্বয়ংক্রিয়ভাবে নবায়ন হয়। যেকোনো সময় Google Play-এ পরিচালনা বা বাতিল করুন।';
+
+  @override
+  String get playPaidAppUnavailable => 'Android-এ উপলভ্য নয়';
 }

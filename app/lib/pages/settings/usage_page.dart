@@ -831,7 +831,13 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin, Wi
     String? displayText;
     double percentage = 0.0;
 
-    if (sub.chatQuotaUnit == 'cost_usd') {
+    if (sub.chatQuotaUnit == 'cost_usd' && (provider.playBilledPurchaser || sub.subscription.billedByPlay)) {
+      // Google Play readers see the share of their allowance, never a US$ amount.
+      final limit = sub.subscription.limits.chatCostUsdPerMonth;
+      percentage = limit != null && limit > 0 ? (used / limit).clamp(0.0, 1.0) : 0.0;
+      value = NumberFormat.percentPattern(l10n.localeName).format(percentage);
+      displayText = value;
+    } else if (sub.chatQuotaUnit == 'cost_usd') {
       value = formatBillingPrice((used * 100).round(), 'usd');
       final limit = sub.subscription.limits.chatCostUsdPerMonth;
       if (limit != null && limit > 0) {

@@ -4745,5 +4745,7 @@
     "playBilledByGoogle": "Norēķini caur Google Play",
     "playPurchasePending": "Maksājums gaida. Omi Pro sāksies, tiklīdz Google Play to apstiprinās.",
     "playPurchaseOtherAccount": "Šis Google Play pirkums pieder citam Omi kontam.",
-    "playPurchaseNotConfirmed": "Pirkumu vēl neizdevās apstiprināt. Mēģināsim vēlreiz automātiski."
+    "playPurchaseNotConfirmed": "Pirkumu vēl neizdevās apstiprināt. Mēģināsim vēlreiz automātiski.",
+    "playRenewalTerms": "Automātiski atjaunojas par norādīto cenu, līdz atcelsiet. Pārvaldiet vai atceliet jebkurā laikā Google Play.",
+    "playPaidAppUnavailable": "Nav pieejams Android"
 }

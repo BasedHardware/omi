@@ -15776,4 +15776,11 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get playPurchaseNotConfirmed => 'Pirkinio dar nepavyko patvirtinti. Bandysime dar kartą automatiškai.';
+
+  @override
+  String get playRenewalTerms =>
+      'Automatiškai atnaujinama nurodyta kaina, kol atšauksite. Tvarkykite ar atšaukite bet kada Google Play.';
+
+  @override
+  String get playPaidAppUnavailable => 'Android nepasiekiama';
 }
