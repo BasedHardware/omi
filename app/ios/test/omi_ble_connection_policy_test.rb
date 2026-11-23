@@ -11,7 +11,10 @@ class OmiBleConnectionPolicyTest < Minitest::Test
     delegate = File.read(File.join(IOS_ROOT, 'Runner/AppDelegate.swift'))
     launch = delegate[/didFinishLaunchingWithOptions launchOptions:.*?^  }/m]
     refute_nil launch
-    assert_match(/restoreIDs.contains\(OmiBleManager.restoreIdentifier\) \|\|\s+!OmiSavedReconnectIntent\(\).saved.isEmpty/, launch)
+    assert_match(
+      /if OmiBluetoothLaunchDiagnostics\.enabled \{\s+let restoreIDs = [^\n]+\s+if restoreIDs\.contains\(OmiBleManager\.restoreIdentifier\) \|\|\s+!OmiSavedReconnectIntent\(\)\.saved\.isEmpty \{\s+_ = OmiBleManager\.shared\s+\}\s+\}/,
+      launch,
+    )
     assert_operator launch.index('_ = OmiBleManager.shared'), :<, launch.index('super.application(')
 
     manager = File.read(File.join(IOS_ROOT, 'Runner/Ble/OmiBleManager.swift'))

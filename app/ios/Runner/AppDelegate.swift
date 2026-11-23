@@ -1497,9 +1497,18 @@ enum OmiBluetoothLaunchDiagnostics {
     record("launch")
   }
 
+  private static var recordedAudioDrop = false
+
+  static func recordAudioDropBeforeFlutter() {
+    // Core Bluetooth delivers these callbacks on the main queue. Record once per process.
+    guard enabled, !recordedAudioDrop else { return }
+    recordedAudioDrop = true
+    log("audio_dropped_before_flutter")
+  }
+
   static func record(_ event: String) {
     guard enabled else { return }
-    if ["launch", "background", "foreground", "terminate"].contains(event) {
+    if ["launch", "restore_launch", "background", "foreground", "terminate"].contains(event) {
       do {
         try files.createDirectory(at: sentinel.deletingLastPathComponent(), withIntermediateDirectories: true)
         let data = try JSONEncoder().encode(Session(state: event, endedCleanly: event == "terminate"))

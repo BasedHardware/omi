@@ -2142,8 +2142,14 @@ extension OmiBleManager: CBPeripheralDelegate {
             return
         }
 
+        guard let flutterApi else {
+            if characteristic.uuid == Self.audioCharUuid {
+                OmiBluetoothLaunchDiagnostics.recordAudioDropBeforeFlutter()
+            }
+            return
+        }
         let typedData = FlutterStandardTypedData(bytes: data)
-        flutterApi?.onCharacteristicValueUpdated(
+        flutterApi.onCharacteristicValueUpdated(
             peripheralUuid: uuid,
             serviceUuid: serviceUuid,
             characteristicUuid: charUuid,
