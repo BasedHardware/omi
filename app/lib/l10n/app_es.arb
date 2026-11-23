@@ -4740,5 +4740,10 @@
     "firmwareUpdateAppRequired": "Esta actualización del firmware necesita una versión más reciente de la app Omi. Actualiza la app desde tu tienda de aplicaciones y vuelve a comprobarlo.",
     "quietPayerTitle": "Sin grabaciones en 5 días",
     "quietPayerMessage": "Revisa tu Omi.",
-    "quietPayerCheck": "Revisar"
+    "quietPayerCheck": "Revisar",
+    "playManageSubscription": "Gestionar suscripción",
+    "playBilledByGoogle": "Facturado por Google Play",
+    "playPurchasePending": "Tu pago está pendiente. Omi Pro empezará cuando Google Play lo confirme.",
+    "playPurchaseOtherAccount": "Esta compra de Google Play pertenece a otra cuenta de Omi.",
+    "playPurchaseNotConfirmed": "Aún no pudimos confirmar tu compra. Lo intentaremos de nuevo automáticamente."
 }

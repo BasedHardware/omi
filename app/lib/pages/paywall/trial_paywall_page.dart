@@ -214,13 +214,14 @@ class _TrialPaywallPageState extends State<TrialPaywallPage> {
       ),
       const SizedBox(height: 4),
       // Shopify buyers with an included year land here, not on the plans sheet with
-      // its code field; their code goes in Stripe Checkout's promotion code box.
-      Text(
-        l10n.paywallTrialCodeHint,
-        key: const Key('trial_paywall_code_hint'),
-        textAlign: TextAlign.center,
-        style: _Paper.label(size: 13, color: _Paper.textSecondary),
-      ),
+      // its code field; their code goes in Stripe Checkout's promotion code box (not on Google Play).
+      if (!context.select<UsageProvider, bool>((usage) => usage.playBilledPurchaser))
+        Text(
+          l10n.paywallTrialCodeHint,
+          key: const Key('trial_paywall_code_hint'),
+          textAlign: TextAlign.center,
+          style: _Paper.label(size: 13, color: _Paper.textSecondary),
+        ),
     ];
     return PopScope(
       canPop: false,
@@ -240,8 +241,9 @@ class _TrialPaywallPageState extends State<TrialPaywallPage> {
           backgroundColor: _Paper.background,
           body: Consumer<UsageProvider>(
             builder: (context, usage, _) {
-              final offer = widget.offer ?? PaywallOffer.fromCatalog(usage.availablePlans);
-              final loading = offer == null && widget.offer == null && usage.isLoadingPlans;
+              final offer = widget.offer ?? PaywallOffer.forUsage(usage);
+              final loading =
+                  offer == null && widget.offer == null && (usage.isLoadingPlans || usage.playOffersLoading);
               final yearly = offer?.yearly;
               final monthly = offer?.monthly;
               final selected = _yearly ? (yearly ?? monthly) : (monthly ?? yearly);

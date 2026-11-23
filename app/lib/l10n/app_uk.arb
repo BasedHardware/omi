@@ -4740,5 +4740,10 @@
     "firmwareUpdateAppRequired": "Для цього оновлення прошивки потрібна новіша версія застосунку Omi. Оновіть застосунок у магазині застосунків, а потім перевірте ще раз.",
     "quietPayerTitle": "Немає записів 5 днів",
     "quietPayerMessage": "Перевірте свій Omi.",
-    "quietPayerCheck": "Перевірити"
+    "quietPayerCheck": "Перевірити",
+    "playManageSubscription": "Керувати підпискою",
+    "playBilledByGoogle": "Оплата через Google Play",
+    "playPurchasePending": "Платіж очікує. Omi Pro почнеться, щойно Google Play його підтвердить.",
+    "playPurchaseOtherAccount": "Ця покупка в Google Play належить іншому акаунту Omi.",
+    "playPurchaseNotConfirmed": "Поки не вдалося підтвердити покупку. Ми спробуємо знову автоматично."
 }

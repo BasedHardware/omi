@@ -15815,4 +15815,20 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get quietPayerCheck => 'Comprova';
+
+  @override
+  String get playManageSubscription => 'Gestiona la subscripció';
+
+  @override
+  String get playBilledByGoogle => 'Facturat per Google Play';
+
+  @override
+  String get playPurchasePending => 'El pagament està pendent. Omi Pro començarà quan Google Play el confirmi.';
+
+  @override
+  String get playPurchaseOtherAccount => 'Aquesta compra de Google Play pertany a un altre compte d\'Omi.';
+
+  @override
+  String get playPurchaseNotConfirmed =>
+      'Encara no hem pogut confirmar la compra. Ho tornarem a provar automàticament.';
 }

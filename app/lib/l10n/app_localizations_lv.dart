@@ -15772,4 +15772,19 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get quietPayerCheck => 'Pārbaudīt';
+
+  @override
+  String get playManageSubscription => 'Pārvaldīt abonementu';
+
+  @override
+  String get playBilledByGoogle => 'Norēķini caur Google Play';
+
+  @override
+  String get playPurchasePending => 'Maksājums gaida. Omi Pro sāksies, tiklīdz Google Play to apstiprinās.';
+
+  @override
+  String get playPurchaseOtherAccount => 'Šis Google Play pirkums pieder citam Omi kontam.';
+
+  @override
+  String get playPurchaseNotConfirmed => 'Pirkumu vēl neizdevās apstiprināt. Mēģināsim vēlreiz automātiski.';
 }

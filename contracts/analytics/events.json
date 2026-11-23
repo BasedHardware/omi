@@ -4066,6 +4066,48 @@
       "correlation": null
     },
     {
+      "id": "upgradeBillingProvider",
+      "wire_name": "Upgrade Billing Provider",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "provider": {
+          "type": "enum",
+          "wire_name": "provider",
+          "values": [
+            "stripe",
+            "play"
+          ]
+        },
+        "stage": {
+          "type": "enum",
+          "wire_name": "stage",
+          "values": [
+            "selected",
+            "succeeded",
+            "cancelled",
+            "pending",
+            "failed"
+          ]
+        },
+        "billingInterval": {
+          "type": "enum",
+          "wire_name": "billing_interval",
+          "values": [
+            "month",
+            "year",
+            "unknown"
+          ]
+        }
+      },
+      "consumers": [
+        "subscription-funnel"
+      ],
+      "correlation": null
+    },
+    {
       "id": "subscriptionPlanChanged",
       "wire_name": "Subscription Plan Changed",
       "status": "active",

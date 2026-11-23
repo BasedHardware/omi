@@ -4740,5 +4740,10 @@
     "firmwareUpdateAppRequired": "يتطلب تحديث البرنامج الثابت هذا إصدارًا أحدث من تطبيق Omi. حدّث التطبيق من متجر التطبيقات لديك، ثم تحقّق مرة أخرى.",
     "quietPayerTitle": "لا توجد تسجيلات منذ 5 أيام",
     "quietPayerMessage": "تحقّق من Omi.",
-    "quietPayerCheck": "تحقّق"
+    "quietPayerCheck": "تحقّق",
+    "playManageSubscription": "إدارة الاشتراك",
+    "playBilledByGoogle": "تتم الفوترة عبر Google Play",
+    "playPurchasePending": "دفعتك قيد الانتظار. يبدأ Omi Pro عند تأكيد Google Play لها.",
+    "playPurchaseOtherAccount": "هذا الشراء من Google Play يخص حساب Omi آخر.",
+    "playPurchaseNotConfirmed": "تعذّر تأكيد الشراء الآن. سنحاول مرة أخرى تلقائيًا."
 }

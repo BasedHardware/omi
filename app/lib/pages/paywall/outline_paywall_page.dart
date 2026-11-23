@@ -147,12 +147,12 @@ class _OutlinePaywallPageState extends State<OutlinePaywallPage> with TickerProv
             final subscription = usage.subscription?.subscription;
             final cancelPending = subscription?.cancelAtPeriodEnd == true;
             final offer = widget.offer ??
-                PaywallOffer.fromCatalog(
-                  usage.availablePlans,
+                PaywallOffer.forUsage(
+                  usage,
                   cancelAtPeriodEnd: cancelPending,
                   currentPriceId: subscription?.currentPriceId,
                 );
-            final loading = offer == null && widget.offer == null && usage.isLoadingPlans;
+            final loading = offer == null && widget.offer == null && (usage.isLoadingPlans || usage.playOffersLoading);
             final blocked = cancelPending && widget.offer == null && !loading && offer?.resubscribe != true;
             final freeMinutes = (usage.subscription?.transcriptionSecondsLimit ?? 0) ~/ 60;
             final yearly = offer?.yearly;

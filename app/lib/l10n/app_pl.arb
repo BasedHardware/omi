@@ -4775,5 +4775,10 @@
     "firmwareUpdateAppRequired": "Ta aktualizacja oprogramowania układowego wymaga nowszej aplikacji Omi. Zaktualizuj aplikację w sklepie z aplikacjami, a następnie sprawdź ponownie.",
     "quietPayerTitle": "Brak nagrań od 5 dni",
     "quietPayerMessage": "Sprawdź swoje Omi.",
-    "quietPayerCheck": "Sprawdź"
+    "quietPayerCheck": "Sprawdź",
+    "playManageSubscription": "Zarządzaj subskrypcją",
+    "playBilledByGoogle": "Rozliczane przez Google Play",
+    "playPurchasePending": "Płatność oczekuje. Omi Pro zacznie działać, gdy Google Play ją potwierdzi.",
+    "playPurchaseOtherAccount": "Ten zakup w Google Play należy do innego konta Omi.",
+    "playPurchaseNotConfirmed": "Nie udało się jeszcze potwierdzić zakupu. Spróbujemy ponownie automatycznie."
 }

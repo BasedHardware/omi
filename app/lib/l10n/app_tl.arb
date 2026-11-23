@@ -12297,5 +12297,10 @@
     "firmwareUpdateAppRequired": "Kailangan ng firmware update na ito ng mas bagong Omi app. I-update ang app mula sa iyong app store, pagkatapos ay tingnan muli.",
     "quietPayerTitle": "Walang recording sa loob ng 5 araw",
     "quietPayerMessage": "Tingnan ang iyong Omi.",
-    "quietPayerCheck": "Tingnan"
+    "quietPayerCheck": "Tingnan",
+    "playManageSubscription": "Pamahalaan ang subscription",
+    "playBilledByGoogle": "Sinisingil ng Google Play",
+    "playPurchasePending": "Nakabinbin ang bayad mo. Magsisimula ang Omi Pro kapag kinumpirma ito ng Google Play.",
+    "playPurchaseOtherAccount": "Ang pagbiling ito sa Google Play ay pag-aari ng ibang Omi account.",
+    "playPurchaseNotConfirmed": "Hindi pa namin makumpirma ang iyong pagbili. Susubukan naming muli nang awtomatiko."
 }

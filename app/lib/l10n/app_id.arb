@@ -4775,5 +4775,10 @@
     "firmwareUpdateAppRequired": "Pembaruan firmware ini memerlukan aplikasi Omi versi lebih baru. Perbarui aplikasi dari toko aplikasi Anda, lalu periksa lagi.",
     "quietPayerTitle": "Tidak ada rekaman dalam 5 hari",
     "quietPayerMessage": "Periksa Omi Anda.",
-    "quietPayerCheck": "Periksa"
+    "quietPayerCheck": "Periksa",
+    "playManageSubscription": "Kelola langganan",
+    "playBilledByGoogle": "Ditagih oleh Google Play",
+    "playPurchasePending": "Pembayaran tertunda. Omi Pro dimulai setelah Google Play mengonfirmasinya.",
+    "playPurchaseOtherAccount": "Pembelian Google Play ini milik akun Omi lain.",
+    "playPurchaseNotConfirmed": "Kami belum bisa mengonfirmasi pembelian. Kami akan mencoba lagi otomatis."
 }

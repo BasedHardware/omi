@@ -15842,4 +15842,19 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get quietPayerCheck => 'சரிபார்';
+
+  @override
+  String get playManageSubscription => 'சந்தாவை நிர்வகி';
+
+  @override
+  String get playBilledByGoogle => 'Google Play மூலம் கட்டணம் வசூலிக்கப்படும்';
+
+  @override
+  String get playPurchasePending => 'உங்கள் கட்டணம் நிலுவையில் உள்ளது. Google Play உறுதிசெய்ததும் Omi Pro தொடங்கும்.';
+
+  @override
+  String get playPurchaseOtherAccount => 'இந்த Google Play வாங்குதல் வேறொரு Omi கணக்கைச் சேர்ந்தது.';
+
+  @override
+  String get playPurchaseNotConfirmed => 'உங்கள் வாங்குதலை இன்னும் உறுதிசெய்ய முடியவில்லை. தானாக மீண்டும் முயல்வோம்.';
 }

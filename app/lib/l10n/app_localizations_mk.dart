@@ -15801,4 +15801,20 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String get quietPayerCheck => 'Провери';
+
+  @override
+  String get playManageSubscription => 'Управувај со претплатата';
+
+  @override
+  String get playBilledByGoogle => 'Се наплаќа преку Google Play';
+
+  @override
+  String get playPurchasePending => 'Плаќањето чека. Omi Pro започнува штом Google Play го потврди.';
+
+  @override
+  String get playPurchaseOtherAccount => 'Ова купување на Google Play припаѓа на друга Omi сметка.';
+
+  @override
+  String get playPurchaseNotConfirmed =>
+      'Сè уште не можевме да го потврдиме купувањето. Ќе пробаме повторно автоматски.';
 }

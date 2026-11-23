@@ -27632,6 +27632,36 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Check'**
   String get quietPayerCheck;
+
+  /// Google Play Billing (Android): playManageSubscription
+  ///
+  /// In en, this message translates to:
+  /// **'Manage subscription'**
+  String get playManageSubscription;
+
+  /// Google Play Billing (Android): playBilledByGoogle
+  ///
+  /// In en, this message translates to:
+  /// **'Billed by Google Play'**
+  String get playBilledByGoogle;
+
+  /// Google Play Billing (Android): playPurchasePending
+  ///
+  /// In en, this message translates to:
+  /// **'Your payment is pending. Omi Pro starts as soon as Google Play confirms it.'**
+  String get playPurchasePending;
+
+  /// Google Play Billing (Android): playPurchaseOtherAccount
+  ///
+  /// In en, this message translates to:
+  /// **'This Google Play purchase belongs to another Omi account.'**
+  String get playPurchaseOtherAccount;
+
+  /// Google Play Billing (Android): playPurchaseNotConfirmed
+  ///
+  /// In en, this message translates to:
+  /// **'We couldn\'t confirm your purchase yet. We\'ll try again automatically.'**
+  String get playPurchaseNotConfirmed;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

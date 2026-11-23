@@ -15795,4 +15795,19 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get quietPayerCheck => 'Megnézem';
+
+  @override
+  String get playManageSubscription => 'Előfizetés kezelése';
+
+  @override
+  String get playBilledByGoogle => 'A számlázás a Google Playen keresztül történik';
+
+  @override
+  String get playPurchasePending => 'A fizetés függőben van. Az Omi Pro akkor indul, amikor a Google Play megerősíti.';
+
+  @override
+  String get playPurchaseOtherAccount => 'Ez a Google Play-vásárlás egy másik Omi-fiókhoz tartozik.';
+
+  @override
+  String get playPurchaseNotConfirmed => 'Még nem tudtuk megerősíteni a vásárlást. Automatikusan újrapróbáljuk.';
 }

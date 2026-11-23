@@ -15751,4 +15751,19 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get quietPayerCheck => 'Periksa';
+
+  @override
+  String get playManageSubscription => 'Kelola langganan';
+
+  @override
+  String get playBilledByGoogle => 'Ditagih oleh Google Play';
+
+  @override
+  String get playPurchasePending => 'Pembayaran tertunda. Omi Pro dimulai setelah Google Play mengonfirmasinya.';
+
+  @override
+  String get playPurchaseOtherAccount => 'Pembelian Google Play ini milik akun Omi lain.';
+
+  @override
+  String get playPurchaseNotConfirmed => 'Kami belum bisa mengonfirmasi pembelian. Kami akan mencoba lagi otomatis.';
 }

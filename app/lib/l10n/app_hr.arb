@@ -12297,5 +12297,10 @@
     "firmwareUpdateAppRequired": "Ovo ažuriranje firmvera zahtijeva noviju verziju aplikacije Omi. Ažurirajte aplikaciju iz svoje trgovine aplikacija, a zatim ponovno provjerite.",
     "quietPayerTitle": "Nema snimki 5 dana",
     "quietPayerMessage": "Provjerite svoj Omi.",
-    "quietPayerCheck": "Provjeri"
+    "quietPayerCheck": "Provjeri",
+    "playManageSubscription": "Upravljaj pretplatom",
+    "playBilledByGoogle": "Naplaćuje Google Play",
+    "playPurchasePending": "Plaćanje je na čekanju. Omi Pro počinje kad ga Google Play potvrdi.",
+    "playPurchaseOtherAccount": "Ova kupnja na Google Playu pripada drugom Omi računu.",
+    "playPurchaseNotConfirmed": "Kupnju još nismo mogli potvrditi. Pokušat ćemo ponovno automatski."
 }

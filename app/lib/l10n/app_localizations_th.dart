@@ -15662,4 +15662,19 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get quietPayerCheck => 'ตรวจสอบ';
+
+  @override
+  String get playManageSubscription => 'จัดการการสมัครสมาชิก';
+
+  @override
+  String get playBilledByGoogle => 'เรียกเก็บเงินผ่าน Google Play';
+
+  @override
+  String get playPurchasePending => 'การชำระเงินรอดำเนินการ Omi Pro จะเริ่มเมื่อ Google Play ยืนยัน';
+
+  @override
+  String get playPurchaseOtherAccount => 'การซื้อใน Google Play นี้เป็นของบัญชี Omi อื่น';
+
+  @override
+  String get playPurchaseNotConfirmed => 'ยังยืนยันการซื้อไม่ได้ เราจะลองอีกครั้งโดยอัตโนมัติ';
 }

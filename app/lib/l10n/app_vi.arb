@@ -4740,5 +4740,10 @@
     "firmwareUpdateAppRequired": "Bản cập nhật firmware này yêu cầu phiên bản ứng dụng Omi mới hơn. Hãy cập nhật ứng dụng từ cửa hàng ứng dụng của bạn, rồi kiểm tra lại.",
     "quietPayerTitle": "Không có bản ghi nào trong 5 ngày",
     "quietPayerMessage": "Hãy kiểm tra Omi của bạn.",
-    "quietPayerCheck": "Kiểm tra"
+    "quietPayerCheck": "Kiểm tra",
+    "playManageSubscription": "Quản lý gói đăng ký",
+    "playBilledByGoogle": "Thanh toán qua Google Play",
+    "playPurchasePending": "Thanh toán đang chờ xử lý. Omi Pro bắt đầu ngay khi Google Play xác nhận.",
+    "playPurchaseOtherAccount": "Giao dịch Google Play này thuộc về một tài khoản Omi khác.",
+    "playPurchaseNotConfirmed": "Chưa thể xác nhận giao dịch. Chúng tôi sẽ tự động thử lại."
 }

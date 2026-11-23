@@ -15788,4 +15788,19 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get quietPayerCheck => 'Провери';
+
+  @override
+  String get playManageSubscription => 'Управление на абонамента';
+
+  @override
+  String get playBilledByGoogle => 'Таксува се чрез Google Play';
+
+  @override
+  String get playPurchasePending => 'Плащането чака. Omi Pro започва, щом Google Play го потвърди.';
+
+  @override
+  String get playPurchaseOtherAccount => 'Тази покупка в Google Play принадлежи на друг акаунт в Omi.';
+
+  @override
+  String get playPurchaseNotConfirmed => 'Не успяхме да потвърдим покупката. Ще опитаме отново автоматично.';
 }

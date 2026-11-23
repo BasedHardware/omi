@@ -15729,4 +15729,19 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get quietPayerCheck => 'بررسی';
+
+  @override
+  String get playManageSubscription => 'مدیریت اشتراک';
+
+  @override
+  String get playBilledByGoogle => 'صورتحساب از طریق Google Play';
+
+  @override
+  String get playPurchasePending => 'پرداخت شما در انتظار است. Omi Pro پس از تأیید Google Play شروع می‌شود.';
+
+  @override
+  String get playPurchaseOtherAccount => 'این خرید Google Play متعلق به حساب Omi دیگری است.';
+
+  @override
+  String get playPurchaseNotConfirmed => 'هنوز نتوانستیم خرید را تأیید کنیم. دوباره خودکار تلاش می‌کنیم.';
 }

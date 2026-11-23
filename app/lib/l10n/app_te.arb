@@ -12297,5 +12297,10 @@
     "firmwareUpdateAppRequired": "ఈ ఫర్మ్‌వేర్ నవీకరణకు కొత్త వెర్షన్ Omi యాప్ అవసరం. మీ యాప్ స్టోర్ నుండి యాప్‌ను నవీకరించి, మళ్లీ తనిఖీ చేయండి.",
     "quietPayerTitle": "5 రోజులుగా రికార్డింగ్‌లు లేవు",
     "quietPayerMessage": "మీ Omiని తనిఖీ చేయండి.",
-    "quietPayerCheck": "తనిఖీ"
+    "quietPayerCheck": "తనిఖీ",
+    "playManageSubscription": "సబ్‌స్క్రిప్షన్ నిర్వహించండి",
+    "playBilledByGoogle": "Google Play ద్వారా బిల్ చేయబడుతుంది",
+    "playPurchasePending": "మీ చెల్లింపు పెండింగ్‌లో ఉంది. Google Play నిర్ధారించగానే Omi Pro మొదలవుతుంది.",
+    "playPurchaseOtherAccount": "ఈ Google Play కొనుగోలు మరో Omi ఖాతాకు చెందినది.",
+    "playPurchaseNotConfirmed": "మీ కొనుగోలును ఇంకా నిర్ధారించలేకపోయాము. మేము ఆటోమేటిక్‌గా మళ్లీ ప్రయత్నిస్తాము."
 }

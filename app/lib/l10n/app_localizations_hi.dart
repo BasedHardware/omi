@@ -15719,4 +15719,19 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get quietPayerCheck => 'जांचें';
+
+  @override
+  String get playManageSubscription => 'सदस्यता प्रबंधित करें';
+
+  @override
+  String get playBilledByGoogle => 'Google Play द्वारा बिल किया जाता है';
+
+  @override
+  String get playPurchasePending => 'आपका भुगतान लंबित है। Google Play की पुष्टि होते ही Omi Pro शुरू होगा।';
+
+  @override
+  String get playPurchaseOtherAccount => 'यह Google Play खरीदारी किसी दूसरे Omi खाते की है।';
+
+  @override
+  String get playPurchaseNotConfirmed => 'हम अभी आपकी खरीदारी की पुष्टि नहीं कर सके। हम अपने आप फिर कोशिश करेंगे।';
 }

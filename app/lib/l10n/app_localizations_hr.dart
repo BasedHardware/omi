@@ -15773,4 +15773,19 @@ class AppLocalizationsHr extends AppLocalizations {
 
   @override
   String get quietPayerCheck => 'Provjeri';
+
+  @override
+  String get playManageSubscription => 'Upravljaj pretplatom';
+
+  @override
+  String get playBilledByGoogle => 'Naplaćuje Google Play';
+
+  @override
+  String get playPurchasePending => 'Plaćanje je na čekanju. Omi Pro počinje kad ga Google Play potvrdi.';
+
+  @override
+  String get playPurchaseOtherAccount => 'Ova kupnja na Google Playu pripada drugom Omi računu.';
+
+  @override
+  String get playPurchaseNotConfirmed => 'Kupnju još nismo mogli potvrditi. Pokušat ćemo ponovno automatski.';
 }

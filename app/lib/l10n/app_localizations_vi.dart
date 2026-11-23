@@ -15738,4 +15738,19 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get quietPayerCheck => 'Kiểm tra';
+
+  @override
+  String get playManageSubscription => 'Quản lý gói đăng ký';
+
+  @override
+  String get playBilledByGoogle => 'Thanh toán qua Google Play';
+
+  @override
+  String get playPurchasePending => 'Thanh toán đang chờ xử lý. Omi Pro bắt đầu ngay khi Google Play xác nhận.';
+
+  @override
+  String get playPurchaseOtherAccount => 'Giao dịch Google Play này thuộc về một tài khoản Omi khác.';
+
+  @override
+  String get playPurchaseNotConfirmed => 'Chưa thể xác nhận giao dịch. Chúng tôi sẽ tự động thử lại.';
 }

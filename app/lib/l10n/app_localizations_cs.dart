@@ -15736,4 +15736,19 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get quietPayerCheck => 'Zkontrolovat';
+
+  @override
+  String get playManageSubscription => 'Spravovat předplatné';
+
+  @override
+  String get playBilledByGoogle => 'Účtováno přes Google Play';
+
+  @override
+  String get playPurchasePending => 'Platba čeká na vyřízení. Omi Pro začne, jakmile ji Google Play potvrdí.';
+
+  @override
+  String get playPurchaseOtherAccount => 'Tento nákup v Google Play patří jinému účtu Omi.';
+
+  @override
+  String get playPurchaseNotConfirmed => 'Nákup se zatím nepodařilo potvrdit. Zkusíme to znovu automaticky.';
 }

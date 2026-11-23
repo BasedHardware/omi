@@ -15761,4 +15761,19 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get quietPayerCheck => 'Patikrinti';
+
+  @override
+  String get playManageSubscription => 'Tvarkyti prenumeratą';
+
+  @override
+  String get playBilledByGoogle => 'Mokestis per Google Play';
+
+  @override
+  String get playPurchasePending => 'Mokėjimas laukia. Omi Pro prasidės, kai Google Play jį patvirtins.';
+
+  @override
+  String get playPurchaseOtherAccount => 'Šis Google Play pirkinys priklauso kitai Omi paskyrai.';
+
+  @override
+  String get playPurchaseNotConfirmed => 'Pirkinio dar nepavyko patvirtinti. Bandysime dar kartą automatiškai.';
 }
