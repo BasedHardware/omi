@@ -8,6 +8,7 @@ and raises when Google cannot confirm it, so the deletion task stays retryable.
 from __future__ import annotations
 
 import logging
+from datetime import datetime, timezone
 from typing import Optional, Protocol
 
 import database.play_subscriptions as play_db
@@ -114,13 +115,25 @@ def default_publisher() -> PublisherClient:
     return _default
 
 
-def _still_chargeable(publisher: PublisherClient, token: str) -> bool:
-    """Google's current view: can this purchase still be charged? Not found counts as no."""
+def _google_view(publisher: PublisherClient, token: str) -> tuple[bool, bool]:
+    """Google's current view: (can still be charged, user-cancelled with paid time left). Not found is neither."""
     try:
         resource = publisher.get_subscription(config.package_name(), token)
     except PurchaseNotFound:
+        return False, False
+    state = str(resource.get('subscriptionState') or '')
+    if state in _CHARGEABLE_STATES:
+        return True, False
+    return False, state == 'SUBSCRIPTION_STATE_CANCELED' and _expires_in_future(resource)
+
+
+def _expires_in_future(resource: dict) -> bool:
+    items = resource.get('lineItems') or []
+    expiry = (items[0] or {}).get('expiryTime') if items and isinstance(items[0], dict) else None
+    try:
+        return datetime.fromisoformat(str(expiry).replace('Z', '+00:00')) > datetime.now(timezone.utc)
+    except ValueError:
         return False
-    return str(resource.get('subscriptionState') or '') in _CHARGEABLE_STATES
 
 
 def _status_code(error: BaseException) -> Optional[int]:
@@ -130,12 +143,13 @@ def _status_code(error: BaseException) -> Optional[int]:
 def cancel_for_account_deletion(uid: str, publisher: Optional[PublisherClient] = None) -> int:
     """Stop every future Google charge for ``uid``. Returns how many purchases needed a cancel.
 
-    Google is re-read first: an ended, expired, cancelled (no further charge) or unknown purchase is
-    already done. A failed cancel is re-read once and accepted when it can no longer be charged.
-    Anything else raises ``PlayCancelPending``, which the deletion wipe retries with backoff; the
-    error carries the HTTP status and a token hash only, never the token.
+    Google is re-read first: an ended, expired or unknown purchase is already done. A failed cancel
+    is re-read once and accepted when it can no longer be charged. Anything else raises
+    ``PlayCancelPending``, which the deletion wipe retries with backoff; the error carries the HTTP
+    status and a token hash only, never the token. A user-cancelled purchase with paid time left is
+    cancelled too (best effort), so it cannot be restored in Google Play once the account is gone.
+    The publisher (Google credentials) is built only when the user has a Play purchase.
     """
-    publisher = publisher or default_publisher()
     fields = play_db.get_user_fields(uid)
     keys = [key for key in (fields.get(play_db.USER_POINTER_FIELD), fields.get(play_db.PENDING_FIELD)) if key]
     cancelled = 0
@@ -144,23 +158,30 @@ def cancel_for_account_deletion(uid: str, publisher: Optional[PublisherClient] =
         token = record.get('purchase_token')
         if record.get('uid') != uid or not token or record.get('account_deletion_cancelled'):
             continue
+        publisher = publisher or default_publisher()
         try:
-            chargeable = _still_chargeable(publisher, token)
+            chargeable, restorable = _google_view(publisher, token)
         except Exception as error:
             raise PlayCancelPending(_status_code(error), key) from None
-        if chargeable:
+        if chargeable or restorable:
             try:
                 publisher.cancel(config.package_name(), token)
                 cancelled += 1
             except PurchaseNotFound:
                 pass
             except Exception as error:
-                try:
-                    chargeable = _still_chargeable(publisher, token)
-                except Exception:
-                    chargeable = True
-                if chargeable:
-                    logger.warning('play_billing deletion cancel failed: status=%s', _status_code(error))
-                    raise PlayCancelPending(_status_code(error), key) from None
+                if restorable:
+                    # No charge is due: the user already cancelled. Best effort only.
+                    logger.warning(
+                        'play_billing deletion cancel of a cancelled purchase failed: status=%s', _status_code(error)
+                    )
+                else:
+                    try:
+                        chargeable = _google_view(publisher, token)[0]
+                    except Exception:
+                        chargeable = True
+                    if chargeable:
+                        logger.warning('play_billing deletion cancel failed: status=%s', _status_code(error))
+                        raise PlayCancelPending(_status_code(error), key) from None
         play_db.update_purchase(key, {'auto_renewing': False, 'account_deletion_cancelled': True})
     return cancelled

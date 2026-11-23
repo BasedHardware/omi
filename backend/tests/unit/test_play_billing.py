@@ -641,6 +641,43 @@ def test_switch_off_subscription_route_is_byte_identical(monkeypatch, env, warm_
     assert {k: v for k, v in on.items() if k != 'play_billing'} == json.loads(baseline)
 
 
+def _prod_backend_play_env():
+    import yaml
+    from pathlib import Path
+
+    rendered = yaml.safe_load((Path(__file__).parents[2] / 'deploy' / 'runtime_env.yaml').read_text())
+    env = rendered['environments']['prod']['cloud_run']['services']['backend']['env']
+    keys = ('ANDROID_BILLING', 'ANDROID_PLAY_BILLING_MIN_BUILD', 'ANDROID_PLAY_BILLING_COHORT')
+    return {key: str(env[key]['value']) for key in keys}
+
+
+def test_deployed_prod_values_send_nobody_to_play_without_the_rollout_cohort(monkeypatch, env, warm_subscription_route):
+    prod = _prod_backend_play_env()
+    assert prod == {
+        'ANDROID_BILLING': 'stripe',
+        'ANDROID_PLAY_BILLING_MIN_BUILD': '1617',
+        'ANDROID_PLAY_BILLING_COHORT': '',
+    }
+    environ = {**prod, KEY_ENV: TEST_ACCOUNT_KEY}
+    for build in ('1617', '9999'):
+        assert config.client_uses_play('android', build, UID, environ) is False
+    # The android-play-billing rollout cohort alone admits a test uid, on 1617 and later only.
+    with monkeypatch.context() as patch:
+        patch.setattr(
+            config.rollout_cohorts, 'in_rollout_cohort', lambda uid, name: uid == UID and name == 'android-play-billing'
+        )
+        assert config.client_uses_play('android', '1617', UID, environ) is True
+        assert config.client_uses_play('android', '1616', UID, environ) is False
+        assert config.client_uses_play('android', '9999', OTHER, environ) is False
+    # Switch-off response stays byte-identical under the deployed values.
+    baseline = _byok_subscription_json(monkeypatch, 'android', '9999')
+    for key, value in prod.items():
+        monkeypatch.setenv(key, value)
+    for build in ('1617', '9999'):
+        assert _byok_subscription_json(monkeypatch, 'android', build) == baseline
+    assert 'play_billing' not in baseline
+
+
 def test_play_subscriber_cannot_open_stripe_checkout(monkeypatch):
     from utils import subscription as subscription_utils
 

@@ -15,6 +15,7 @@ from database.quiet_check_retirement import stop_quiet_checks_for_account
 from database._client import get_data_plane_firestore_client, run_transactional
 from database.batch_account_authority import account_authority_writer_enabled, mutate_account_authority
 from database.memory_collections import RELEASED_MEMORY_CHANGE_HEAD
+from database import play_subscriptions
 from database.people_generation import generation_ref
 from database.staged_promote_cache import invalidate_around_write
 from database.apps import apps_collection, PUBLIC_APPROVED_APPS_CACHE_KEY, search_apps_db
@@ -36,6 +37,9 @@ def purge_user_subtree(uid: str, client: Any, delete_collection: Callable) -> di
     # client's project). A failed delete must propagate so the account wipe
     # retries it.
     get_data_plane_firestore_client().collection('rollout_cohorts').document(uid).delete()
+    # Google Play purchase records (uid + purchase token) and the account map live outside users/{uid}.
+    # The wipe's billing step already confirmed Google stopped charging; a failure here propagates.
+    play_subscriptions.purge_account_records(uid)
     # Creator-owned marketplace apps live outside users/{uid}; remove their
     # nested API keys/reviews too so final and immediate erasure share parity.
     delete_generic_cache(PUBLIC_APPROVED_APPS_CACHE_KEY)

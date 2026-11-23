@@ -4748,5 +4748,7 @@
     "playPurchaseOtherAccount": "Questo acquisto su Google Play appartiene a un altro account Omi.",
     "playPurchaseNotConfirmed": "Non è stato ancora possibile confermare l'acquisto. Riproveremo automaticamente.",
     "playRenewalTerms": "Si rinnova automaticamente al prezzo indicato finché non disdici. Gestisci o disdici in qualsiasi momento su Google Play.",
-    "playPaidAppUnavailable": "Non disponibile su Android"
+    "playPaidAppUnavailable": "Non disponibile su Android",
+    "pageNotAvailableInApp": "Questa pagina non è disponibile nell'app.",
+    "shopOrderPlacedCheckEmail": "Ordine effettuato. Controlla l'email per la conferma."
 }

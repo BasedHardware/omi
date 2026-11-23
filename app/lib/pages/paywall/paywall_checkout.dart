@@ -215,6 +215,7 @@ class PaywallOffer {
             currency: plan.currencyCode.toLowerCase(),
             display: plan.formattedPrice,
             trialDisplay: plan.trialFormattedPrice,
+            trialDays: plan.trialFormattedPrice == null ? null : plan.trialDays,
           );
     final offer = PaywallOffer(tierId: 'unlimited_v2', monthly: price(offers.monthly), yearly: price(offers.yearly));
     return offer.monthly == null && offer.yearly == null ? null : offer;
@@ -300,6 +301,7 @@ class PaywallPrice {
     required this.currency,
     this.display,
     this.trialDisplay,
+    this.trialDays,
   });
 
   final String priceId;
@@ -312,6 +314,9 @@ class PaywallPrice {
 
   /// Google Play's own string for the free-trial phase, when Play lists a trial for this account.
   final String? trialDisplay;
+
+  /// Google Play's free-trial length for this account; null when Play lists no free trial phase.
+  final int? trialDays;
 
   String get formatted => display ?? formatBillingPrice(amountMinor, currency);
 

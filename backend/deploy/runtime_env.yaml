@@ -4467,7 +4467,7 @@ environments:
             PLAY_RECONCILE_INVOKER_SA:
               value: play-billing-reconcile@based-hardware.iam.gserviceaccount.com
               category: service_discovery
-            ANDROID_PLAY_BILLING_MIN_BUILD: {value: '', category: rollout}
+            ANDROID_PLAY_BILLING_MIN_BUILD: {value: '1617', category: rollout}
             ANDROID_PLAY_BILLING_COHORT: {value: '', category: rollout}
             BATCH_PIPELINE_SILENCE_READ_SKIP_ENABLED:
               value: 'false'

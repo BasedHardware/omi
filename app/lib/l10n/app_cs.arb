@@ -4748,5 +4748,7 @@
     "playPurchaseOtherAccount": "Tento nákup v Google Play patří jinému účtu Omi.",
     "playPurchaseNotConfirmed": "Nákup se zatím nepodařilo potvrdit. Zkusíme to znovu automaticky.",
     "playRenewalTerms": "Automaticky se obnovuje za uvedenou cenu, dokud ho nezrušíte. Spravovat nebo zrušit ho můžete kdykoli v Google Play.",
-    "playPaidAppUnavailable": "Na Androidu není k dispozici"
+    "playPaidAppUnavailable": "Na Androidu není k dispozici",
+    "pageNotAvailableInApp": "Tato stránka není v aplikaci dostupná.",
+    "shopOrderPlacedCheckEmail": "Objednávka byla odeslána. Potvrzení najdete v e-mailu."
 }

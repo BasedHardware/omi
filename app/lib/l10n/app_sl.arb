@@ -12305,5 +12305,7 @@
     "playPurchaseOtherAccount": "Ta nakup v Google Play pripada drugemu računu Omi.",
     "playPurchaseNotConfirmed": "Nakupa še nismo mogli potrditi. Samodejno bomo poskusili znova.",
     "playRenewalTerms": "Samodejno se podaljšuje po prikazani ceni, dokler ne prekličete. Upravljajte ali prekličite kadar koli v Google Play.",
-    "playPaidAppUnavailable": "Ni na voljo v Androidu"
+    "playPaidAppUnavailable": "Ni na voljo v Androidu",
+    "pageNotAvailableInApp": "Ta stran v aplikaciji ni na voljo.",
+    "shopOrderPlacedCheckEmail": "Naročilo je oddano. Potrditev boste našli v e-pošti."
 }

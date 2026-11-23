@@ -15770,4 +15770,10 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get playPaidAppUnavailable => 'Inte tillgängligt på Android';
+
+  @override
+  String get pageNotAvailableInApp => 'Den här sidan är inte tillgänglig i appen.';
+
+  @override
+  String get shopOrderPlacedCheckEmail => 'Beställningen är lagd. Bekräftelsen finns i din e-post.';
 }

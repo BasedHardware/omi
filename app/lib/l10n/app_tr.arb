@@ -4783,5 +4783,7 @@
     "playPurchaseOtherAccount": "Bu Google Play satın alımı başka bir Omi hesabına ait.",
     "playPurchaseNotConfirmed": "Satın alımınızı henüz doğrulayamadık. Otomatik olarak yeniden deneyeceğiz.",
     "playRenewalTerms": "İptal edene kadar gösterilen fiyattan otomatik olarak yenilenir. Google Play'den istediğiniz zaman yönetin veya iptal edin.",
-    "playPaidAppUnavailable": "Android'de kullanılamaz"
+    "playPaidAppUnavailable": "Android'de kullanılamaz",
+    "pageNotAvailableInApp": "Bu sayfa uygulamada kullanılamıyor.",
+    "shopOrderPlacedCheckEmail": "Sipariş verildi. Onay için e-postanızı kontrol edin."
 }

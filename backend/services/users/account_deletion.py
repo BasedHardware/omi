@@ -698,17 +698,12 @@ def _cancel_stripe_for_account_deletion(uid: str) -> None:
         raise DeletionBillingError(subscription_id, error) from error
 
 
-def _cancel_subscription_for_account_deletion(uid: str, *, defer_play_failure: bool = False) -> None:
+def _cancel_subscription_for_account_deletion(uid: str) -> None:
     _cancel_stripe_for_account_deletion(uid)
     # Google Play bills outside Stripe: stop it too, or the deleted account keeps being charged. A failure
-    # is a plain retryable error (never a parked billing failure): the wipe backs off and tries again.
-    try:
-        play_publisher.cancel_for_account_deletion(uid)
-    except Exception as error:
-        if not defer_play_failure:
-            raise
-        # Admission only: the wipe repeats the cancel at its irreversible boundary until Google confirms.
-        logger.warning('delete_account admission: Play cancel pending (%s)', type(error).__name__)
+    # propagates like a Stripe failure: admission is not marked complete (the grace reconciler re-runs it
+    # every cycle) and the wipe retries it with backoff. It is never a parked billing failure.
+    play_publisher.cancel_for_account_deletion(uid)
 
 
 def purge_user_conversation_index(uid: str) -> None:
@@ -722,7 +717,7 @@ def _run_immediate_deletion_steps(uid: str) -> None:
     """Run admission actions, leaving protected credential deletion to the wipe."""
     failures: list[Exception] = []
     try:
-        _cancel_subscription_for_account_deletion(uid, defer_play_failure=True)
+        _cancel_subscription_for_account_deletion(uid)
     except Exception as error:
         failures.append(error)
     try:

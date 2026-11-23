@@ -4,6 +4,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:in_app_purchase_android/in_app_purchase_android.dart';
 import 'package:in_app_purchase_platform_interface/in_app_purchase_platform_interface.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -462,6 +463,81 @@ void main() {
     await tester.tap(find.byKey(const Key('play_subscribe')));
     await tester.pumpAndSettle();
     expect(world.platform.launched.single.offerToken, 'token-yearly');
+  }, variant: TargetPlatformVariant.only(TargetPlatform.android));
+
+  Future<_World> pumpTrialPage(WidgetTester tester, List<GooglePlayProductDetails> details) async {
+    tester.view.physicalSize = const Size(430, 2400);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final world = _World([_response()]);
+    world.platform.details
+      ..clear()
+      ..addAll(details);
+    addTearDown(world.usage.dispose);
+    await world.usage.fetchSubscription();
+    await tester.pump();
+    await tester.pumpWidget(ChangeNotifierProvider<UsageProvider>.value(
+      value: world.usage,
+      child: MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: const [Locale('en')],
+        home: TrialPaywallPage(source: 'test', now: DateTime(2026, 11, 22)),
+      ),
+    ));
+    await tester.pumpAndSettle();
+    return world;
+  }
+
+  testWidgets('trial paywall uses Play\'s own trial length (3 days), never the 7-day constant', (tester) async {
+    final world = await pumpTrialPage(tester, omiProDetails(trialPeriod: 'P3D'));
+    expect(find.text('In 3 days'), findsOneWidget);
+    expect(find.text('Nov 25, 2026'), findsOneWidget); // the day the charge starts
+    expect(find.textContaining('7 days'), findsNothing);
+    expect(find.text('3 days free, then ₹22,500.00/year'), findsWidgets);
+    world.platform.onLaunch = [playPurchase(PurchaseStatus.purchased)];
+    await tester.tap(find.byKey(const Key('trial_paywall_cta')));
+    await tester.pumpAndSettle();
+    expect(world.platform.launched.single.offerToken, 'token-yearly-trial');
+  }, variant: TargetPlatformVariant.only(TargetPlatform.android));
+
+  testWidgets('a plan with no Play free-trial phase gets the plain plans: price, Subscribe, disclosure, no trial',
+      (tester) async {
+    final world = await pumpTrialPage(tester, omiProDetails(yearlyTrial: false));
+    expect(find.byType(PlayPlansContent), findsOneWidget);
+    expect(find.byKey(const Key('trial_paywall_cta')), findsNothing);
+    expect(find.text('In 7 days'), findsNothing);
+    expect(find.byKey(const Key('play_renewal_terms')), findsOneWidget);
+    // Yearly is selected and has no trial phase: no trial line, a plain Subscribe of the base plan.
+    expect(find.textContaining('days free'), findsNothing);
+    world.platform.onLaunch = [playPurchase(PurchaseStatus.purchased)];
+    await tester.tap(find.byKey(const Key('play_subscribe')));
+    await tester.pumpAndSettle();
+    expect(world.platform.launched.single.offerToken, 'token-yearly');
+  }, variant: TargetPlatformVariant.only(TargetPlatform.android));
+
+  testWidgets('a Play client that never answers ends in Retry, not a skeleton forever', (tester) async {
+    tester.view.physicalSize = const Size(430, 2400);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final world = _World([_response()], platform: FakePlayPlatform(hang: true));
+    addTearDown(world.usage.dispose);
+    await world.usage.fetchSubscription();
+    await tester.pumpWidget(ChangeNotifierProvider<UsageProvider>.value(
+      value: world.usage,
+      child: MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: const [Locale('en')],
+        home: TrialPaywallPage(source: 'test', now: DateTime(2026, 11, 22)),
+      ),
+    ));
+    await tester.pump();
+    expect(find.byKey(const Key('play_plans_error')), findsNothing);
+    await tester.pump(playQueryTimeout + const Duration(seconds: 1));
+    await tester.pump();
+    expect(world.usage.playOffersLoading, isFalse);
+    expect(find.byKey(const Key('play_plans_error')), findsOneWidget);
   }, variant: TargetPlatformVariant.only(TargetPlatform.android));
 
   testWidgets('Restore says when the purchase belongs to another Omi account', (tester) async {

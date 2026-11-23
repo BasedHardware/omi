@@ -15756,4 +15756,10 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get playPaidAppUnavailable => 'Android-এ উপলভ্য নয়';
+
+  @override
+  String get pageNotAvailableInApp => 'এই পৃষ্ঠাটি অ্যাপে উপলব্ধ নয়।';
+
+  @override
+  String get shopOrderPlacedCheckEmail => 'অর্ডার দেওয়া হয়েছে। নিশ্চিতকরণের জন্য আপনার ইমেল দেখুন।';
 }

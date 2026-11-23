@@ -15772,4 +15772,10 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get playPaidAppUnavailable => 'Android\'de kullanılamaz';
+
+  @override
+  String get pageNotAvailableInApp => 'Bu sayfa uygulamada kullanılamıyor.';
+
+  @override
+  String get shopOrderPlacedCheckEmail => 'Sipariş verildi. Onay için e-postanızı kontrol edin.';
 }

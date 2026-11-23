@@ -8,6 +8,7 @@ a Stripe Omi Pro subscriber holds.
 
 from __future__ import annotations
 
+import hmac
 import logging
 import time
 from dataclasses import dataclass, replace
@@ -350,7 +351,9 @@ def verify_and_bind(uid: str, purchase_token: str, product_id: str, publisher: O
     except config.AccountIdKeyMissing:
         logger.error('play_billing verify refused: %s is not configured', config.ACCOUNT_ID_KEY_ENV)
         raise PlayBillingError(503, 'play_not_configured', 'Google Play purchases are unavailable. Try again later.')
-    if state.obfuscated_account_id and state.obfuscated_account_id != expected_account:
+    if state.obfuscated_account_id and not hmac.compare_digest(
+        state.obfuscated_account_id.encode(), expected_account.encode()
+    ):
         raise PlayBillingError(*_OWNED_ELSEWHERE)
     if account_deletion_blocks_user_work(uid):
         raise PlayBillingError(409, 'account_deletion_pending', 'This account is being deleted.')
@@ -388,7 +391,9 @@ def _resolve_unbound_owner(state: PlayState) -> Optional[str]:
     if state.linked_token:
         linked_owner = (play_db.get_purchase(play_db.token_key(state.linked_token)) or {}).get('uid')
     account_owner = play_db.account_uid(state.obfuscated_account_id) if state.obfuscated_account_id else None
-    if account_owner and obfuscated_account_id(account_owner) != state.obfuscated_account_id:
+    if account_owner and not hmac.compare_digest(
+        obfuscated_account_id(account_owner).encode(), (state.obfuscated_account_id or '').encode()
+    ):
         # The map only ever holds ids the server issued; anything else is refused.
         logger.warning('play_billing account map entry does not match its uid; not bound')
         account_owner = None
@@ -404,7 +409,7 @@ def _latest_order_ids(resource: Mapping[str, Any]) -> set[str]:
         if isinstance(item, Mapping):
             ids.add(str(item.get('latestSuccessfulOrderId') or ''))
     ids.discard('')
-    return ids or {'unknown'}
+    return ids
 
 
 def apply_token(
@@ -426,8 +431,14 @@ def apply_token(
         if existing.get('uid'):
             _revoke(existing['uid'], token_hash)
         return 'not_found'
+    except Exception as error:
+        # Transport errors can carry the request URL, which holds the token: keep the type name only.
+        logger.warning('play_billing publisher read failed: %s', type(error).__name__)
+        raise PlayBillingError(503, 'play_unavailable', 'Google Play is unavailable. Try again.') from None
     state = read_state(resource)
-    if revoked and voided_order_id and voided_order_id not in _latest_order_ids(resource):
+    latest_orders = _latest_order_ids(resource)
+    # Without Google's order ids the voided order cannot be shown to be an earlier one: revoke (fail closed).
+    if revoked and voided_order_id and latest_orders and voided_order_id not in latest_orders:
         # A refund of an earlier order: the current period was paid separately and keeps its access.
         logger.info('play_billing refund of an earlier order; current period kept')
         revoked = False

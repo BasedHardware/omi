@@ -314,6 +314,20 @@ def isolated_dream_dynamic_control(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def no_play_records_purge_without_a_client(monkeypatch):
+    """Account-wipe suites run purge_user_subtree offline; the Play records purge needs a client to run."""
+    play_subscriptions = sys.modules.get('database.play_subscriptions')
+    real = getattr(play_subscriptions, 'purge_account_records', None)
+    if not callable(real) or isinstance(real, MagicMock):
+        return
+
+    def purge(uid, *, firestore_client=None):
+        return real(uid, firestore_client=firestore_client) if firestore_client is not None else 0
+
+    monkeypatch.setattr(play_subscriptions, 'purge_account_records', purge)
+
+
+@pytest.fixture(autouse=True)
 def empty_rollout_cohorts(monkeypatch):
     """Inject an empty store without importing SDKs or scheduling real reads."""
     cohorts = _rollout_cohorts

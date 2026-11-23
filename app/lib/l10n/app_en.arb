@@ -19270,5 +19270,13 @@
     "playPaidAppUnavailable": "Not available on Android",
     "@playPaidAppUnavailable": {
         "description": "Disabled action on a paid Marketplace app for a reader who buys through Google Play: it cannot be bought in the Android app"
+    },
+    "pageNotAvailableInApp": "This page isn't available in the app.",
+    "@pageNotAvailableInApp": {
+        "description": "Shown when an in-app store page links somewhere the app does not open"
+    },
+    "shopOrderPlacedCheckEmail": "Order placed. Check your email for the confirmation.",
+    "@shopOrderPlacedCheckEmail": {
+        "description": "Shown after the in-app store closes once an order is paid"
     }
 }
