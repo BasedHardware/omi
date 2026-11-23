@@ -5,9 +5,8 @@ from typing import Literal
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
-from omi_logging import bind_request_log_trace
 from utils.cloud_tasks import verify_cloud_tasks_oidc
-from utils.conversations.v3 import backfill, service
+from utils.conversations.v3 import backfill, bind_request_log_trace, service
 from config.conversations_v3 import backfill_enabled
 
 router = APIRouter()

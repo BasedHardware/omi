@@ -13,10 +13,9 @@ from unittest.mock import AsyncMock, Mock
 import pytest
 from google.api_core.exceptions import Aborted
 
-from omi_logging import bind_request_log_trace
 
 from database import conversations_v3 as store
-from utils.conversations.v3 import service, summary
+from utils.conversations.v3 import bind_request_log_trace, service, summary
 from utils.conversations import (
     lifecycle,
 )  # noqa: F401 -- the commit path's import graph is paid at collection, not in a test's CPU budget
