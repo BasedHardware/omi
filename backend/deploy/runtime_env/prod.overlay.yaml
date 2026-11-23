@@ -642,8 +642,10 @@ overlay:
             secret: PLAY_ACCOUNT_ID_HMAC_KEY
             version: latest
         env:
-          # Google Play Billing (Android). ANDROID_BILLING stays unset (= stripe). Test accounts go in the
-          # android-play-billing rollout cohort (Firestore), never here. RTDN push and reconcile identities:
+          # Google Play Billing (Android). ANDROID_BILLING=stripe keeps new purchases on Stripe ('play' = everyone).
+          # Test accounts go in the android-play-billing rollout cohort (Firestore), never here.
+          ANDROID_BILLING: {value: stripe, category: rollout}
+          # RTDN push and reconcile identities:
           PLAY_RTDN_OIDC_AUDIENCE: {value: 'https://api.omi.me/v2/internal/play-billing/rtdn', category: service_discovery}
           PLAY_RTDN_PUSH_SA: {value: play-billing-rtdn-push@based-hardware.iam.gserviceaccount.com, category: service_discovery}
           PLAY_RECONCILE_OIDC_AUDIENCE: {value: 'https://api.omi.me/v2/internal/play-billing/reconcile', category: service_discovery}

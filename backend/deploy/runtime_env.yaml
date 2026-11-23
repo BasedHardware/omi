@@ -4454,6 +4454,7 @@ environments:
             BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
+            ANDROID_BILLING: {value: stripe, category: rollout}
             PLAY_RTDN_OIDC_AUDIENCE:
               value: https://api.omi.me/v2/internal/play-billing/rtdn
               category: service_discovery
