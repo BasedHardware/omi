@@ -91,7 +91,6 @@ class CustomSttTranscriptSegmentSocketService extends TranscriptSegmentSocketSer
     super.source,
     super.geolocation,
     super.clientConversationId,
-    super.custodyOwner,
     super.includeSpeechProfile = true,
   }) : super.create(customSttMode: true);
 }
@@ -213,7 +212,8 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
     var url = '${baseUrl}v4/listen$params';
 
     // Conversation Listen is mono. Multichannel phone calls use their own transport.
-    audioCustodyEnabled = custodyOwner != null &&
+    audioCustodyEnabled = !customSttMode &&
+        custodyOwner != null &&
         hasCurrentListenOwner(uid) &&
         // Use the same authority check as buildHeaders for runtime overrides.
         // ignore: invalid_use_of_visible_for_testing_member
@@ -250,10 +250,9 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
     this.geolocation,
     this.clientConversationId,
     this.localPreview = false,
-    TranscriptSegmentSocketService? omiListen,
   }) {
-    _listenOwner = omiListen?._listenOwner;
-    audioCustodyEnabled = omiListen?.audioCustodyEnabled ?? false;
+    _listenOwner = null;
+    audioCustodyEnabled = false;
     _socket = socket;
     _socket.setListener(this);
   }
@@ -475,18 +474,14 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
         !hasCurrentListenOwner(SharedPreferencesUtil().uid)) {
       return;
     }
-    final socket = _socket;
-    if (socket is CompositeTranscriptionSocket &&
-        (socket.secondaryDegraded || socket.secondarySocket.status != PureSocketStatus.connected)) {
-      return;
-    }
     final String? claimedRecordingId;
     switch (event) {
-      case AudioCustodyEvent(owner: final receiptOwner, :final recordingSessionId) when receiptOwner == owner:
-        claimedRecordingId = recordingSessionId;
+      case AudioCustodyEvent(owner: final receiptOwner, :final clientSessionId, :final recordingSessionId)
+          when receiptOwner == owner:
+        claimedRecordingId = clientSessionId ?? recordingSessionId;
       case CaptureCommittedEvent(channel: 'mono', :final audioCustody, :final recordingSessionId)
           when audioCustody == null || audioCustody.owner == owner:
-        claimedRecordingId = recordingSessionId;
+        claimedRecordingId = audioCustody?.clientSessionId ?? recordingSessionId;
       default:
         return;
     }
@@ -668,7 +663,6 @@ class TranscriptSocketServiceFactory {
     String? source,
     Geolocation? geolocation,
     String? clientConversationId,
-    AuthSessionSnapshot? custodyOwner,
   }) {
     if (!config.isEnabled) {
       return createDefault(
@@ -678,7 +672,6 @@ class TranscriptSocketServiceFactory {
         source: source,
         geolocation: geolocation,
         clientConversationId: clientConversationId,
-        custodyOwner: custodyOwner,
       );
     }
 
@@ -706,7 +699,6 @@ class TranscriptSocketServiceFactory {
       sttProvider: config.provider.name,
       forwardRawAudioToSecondary: config.sendRawAudioToOmi,
       clientConversationId: clientConversationId,
-      custodyOwner: custodyOwner,
     );
   }
 
@@ -846,7 +838,6 @@ class TranscriptSocketServiceFactory {
     required bool forwardRawAudioToSecondary,
     Geolocation? geolocation,
     String? clientConversationId,
-    AuthSessionSnapshot? custodyOwner,
   }) {
     final secondaryService = CustomSttTranscriptSegmentSocketService.create(
       sampleRate,
@@ -856,7 +847,6 @@ class TranscriptSocketServiceFactory {
       geolocation: geolocation,
       clientConversationId: clientConversationId,
       includeSpeechProfile: includeSpeechProfileForCustomSecondary(sttConfigId),
-      custodyOwner: forwardRawAudioToSecondary ? custodyOwner : null,
     );
     final compositeSocket = CompositeTranscriptionSocket(
       primarySocket: primarySocket,
@@ -877,7 +867,6 @@ class TranscriptSocketServiceFactory {
       sttConfigId: sttConfigId,
       geolocation: geolocation,
       clientConversationId: clientConversationId,
-      omiListen: secondaryService,
     );
   }
 }

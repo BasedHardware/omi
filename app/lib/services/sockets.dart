@@ -73,8 +73,7 @@ class SocketServicePool extends ISocketService {
   }) async {
     final uid = SharedPreferencesUtil().uid;
     final customConfig = customSttConfig?.isEnabled == true ? customSttConfig : null;
-    final custodyOwner =
-        customConfig?.sendRawAudioToOmi == false ? null : TranscriptSegmentSocketService.captureListenOwner(uid);
+    final custodyOwner = customConfig != null ? null : TranscriptSegmentSocketService.captureListenOwner(uid);
     bool ownerIsCurrent() =>
         SharedPreferencesUtil().uid == uid &&
         (custodyOwner == null || AuthService.instance.isSessionSnapshotCurrent(custodyOwner));
@@ -115,7 +114,6 @@ class SocketServicePool extends ISocketService {
           source: source,
           geolocation: geolocation,
           clientConversationId: clientConversationId,
-          custodyOwner: custodyOwner,
         );
       } else {
         _socket = TranscriptSocketServiceFactory.createDefault(

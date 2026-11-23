@@ -20,6 +20,7 @@ const _sample = [3, 9];
 AudioCustodyEvent _manifest(List<(int, List<int>)> frames,
     {String? session = 'recording', int epoch = 2, String owner = _owner}) {
   final wire = jsonDecode(File('test/fixtures/listen_audio_custody.json').readAsStringSync()) as Map<String, dynamic>;
+  wire.remove('client_session_id');
   wire['recording_session_id'] = session;
   final receipt = wire['receipt'] as Map<String, dynamic>;
   for (final key in ['path', 'manifest_path']) {
@@ -173,6 +174,36 @@ void main() {
     ]) {
       expect(await journal.covers(_owner, ineligible), isFalse);
     }
+  });
+
+  test('server rollover binds both kinds of receipt to the original phone session after restart', () async {
+    final wire = _manifest([(7, _sample)]).toJson()..['client_session_id'] = 'phone-session';
+    final rolled = AudioCustodyEvent.parse(wire)!;
+    final wal = _wal()..recordingSessionId = 'phone-session';
+    await journal.record(_owner, _range(audio: rolled), recordingSessionId: 'different-socket');
+    expect(await restart().covers(_owner, wal), isFalse);
+    await journal.record(_owner, _range(audio: rolled), recordingSessionId: 'phone-session');
+    expect(await restart().covers(_owner, wal), isTrue);
+    expect(await restart().covers(_owner, _wal()), isFalse);
+  });
+
+  test('shadow file or journal changes invalidate a previously matching disk audit', () async {
+    final wal = _wal();
+    await journal.record(_owner, _manifest([(7, _sample)]));
+    expect((await journal.evaluate(_owner, wal, shadow: true)).audited, isTrue);
+    expect((await journal.evaluate(_owner, wal, shadow: true)).audited, isTrue);
+    await localFile.writeAsBytes(encodeWalFrames([
+      [9, 9, 9]
+    ]));
+    expect((await journal.evaluate(_owner, wal, shadow: true)).audited, isFalse);
+    await localFile.writeAsBytes(encodeWalFrames([_sample]));
+    expect((await journal.evaluate(_owner, wal, shadow: true)).audited, isTrue);
+    await journal.record(
+        _owner,
+        _manifest([
+          (7, [8, 8])
+        ]));
+    expect(await journal.evaluate(_owner, wal, shadow: true), (covered: false, audited: false));
   });
 
   test('socket recording session scopes an unbound receipt across restart', () async {

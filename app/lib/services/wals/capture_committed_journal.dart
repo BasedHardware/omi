@@ -114,7 +114,7 @@ class CaptureCommittedJournal {
 
   /// [covered] is the compact interval check. [audited] walks local frame
   /// payloads against the manifest hashes. Null indicates unavailable evidence.
-  Future<({bool covered, bool? audited})> evaluate(String owner, Wal wal) async {
+  Future<({bool covered, bool? audited})> evaluate(String owner, Wal wal, {bool shadow = false}) async {
     const unknown = (covered: false, audited: null);
     final identity = _identity(owner, wal);
     if (identity == null) return unknown;
@@ -131,7 +131,7 @@ class CaptureCommittedJournal {
         final covered = stream.covers(identity.start, identity.start + identity.count, identity.session);
         bool? audited;
         try {
-          audited = await _audit(file.parent, wal, identity, stream);
+          audited = await _audit(file.parent, wal, identity, stream, shadow: shadow);
         } on FileSystemException {
           // The compact predicate remains meaningful when local audio is unavailable.
         }
@@ -220,7 +220,9 @@ List<_FrameRun> _manifestRuns(String owner, MessageEvent event, String? socketSe
   final rangeSession = range?.recordingSessionId;
   final audioSession = audio.recordingSessionId;
   if (rangeSession != null && audioSession != null && rangeSession != audioSession) return const [];
-  final supplied = rangeSession ?? audioSession;
+  // A server lifecycle rollover can allocate a new recording ID on the same
+  // client capture. Only the writer's explicit client binding bridges the two.
+  final supplied = audio.clientSessionId ?? rangeSession ?? audioSession;
   if (socketSession != null && supplied != null && socketSession != supplied) return const [];
   final session = supplied ?? socketSession;
   if (session != null && session.trim().isEmpty) return const [];
@@ -386,9 +388,14 @@ class _ManifestIndex {
   final frames = <int, _FrameProof>{};
   final _ranges = <String?, SplayTreeMap<int, int>>{};
   final _conflicts = SplayTreeMap<int, bool>();
+  // Weak keys release cached decisions with their WAL or the proof index.
+  // Serving always walks the current file before changing retention.
+  final shadowAudits = Expando<({_WalIdentity identity, int revision, FileStat stat, bool matched})>();
+  int revision = 0;
   int lastOrdinal = -1;
 
   void add(_FrameRun run, int offset) {
+    revision++;
     final start = run.start + offset;
     final end = run.start + run.hashes.length;
     if (end - 1 > lastOrdinal) lastOrdinal = end - 1;
@@ -434,7 +441,8 @@ bool _sameStat(FileStat before, FileStat after) =>
     before.modified == after.modified &&
     before.changed == after.changed;
 
-Future<bool?> _audit(Directory directory, Wal wal, _WalIdentity identity, _ManifestIndex stream) async {
+Future<bool?> _audit(Directory directory, Wal wal, _WalIdentity identity, _ManifestIndex stream,
+    {required bool shadow}) async {
   // With too few indexed coordinates, an independent payload walk cannot
   // certify this WAL. Avoid reopening a pending copy for each arriving frame.
   final end = identity.start + identity.count;
@@ -470,6 +478,13 @@ Future<bool?> _audit(Directory directory, Wal wal, _WalIdentity identity, _Manif
     if (await FileSystemEntity.type(file.path, followLinks: false) != FileSystemEntityType.file) return null;
     final before = await file.stat();
     if (before.size ~/ 5 < identity.count || before.size > _maxWalBytes) return null;
+    final cached = shadow ? stream.shadowAudits[wal] : null;
+    if (cached != null &&
+        cached.identity == identity &&
+        cached.revision == stream.revision &&
+        _sameStat(cached.stat, before)) {
+      return cached.matched;
+    }
     Digest? fileDigest;
     final digestSink = identity.fileSha256 == null
         ? null
@@ -493,6 +508,9 @@ Future<bool?> _audit(Directory directory, Wal wal, _WalIdentity identity, _Manif
         (digestSink != null && fileDigest.toString() != identity.fileSha256) ||
         !_sameStat(before, await file.stat())) {
       return null;
+    }
+    if (shadow && !missing) {
+      stream.shadowAudits[wal] = (identity: identity, revision: stream.revision, stat: before, matched: !mismatch);
     }
   }
   return mismatch ? false : (missing ? null : true);

@@ -22,7 +22,8 @@ class CustodyFrame {
 
 /// Receipt issued by Listen after committing the original and its frame manifest.
 class AudioCustodyEvent extends MessageEvent {
-  AudioCustodyEvent._(this._wire, this.owner, this.frames, this.recordingSessionId, this.conversationId)
+  AudioCustodyEvent._(
+      this._wire, this.owner, this.frames, this.recordingSessionId, this.clientSessionId, this.conversationId)
       : super(eventType: 'audio_custody');
 
   static final _sha256 = RegExp(r'^[0-9a-f]{64}$');
@@ -33,7 +34,15 @@ class AudioCustodyEvent extends MessageEvent {
 
   // The persisted wire doubles as an input to the orphan-file census. An
   // unrecognized field may introduce a local file reference in a newer schema.
-  static const _eventFields = {'type', 'recording_session_id', 'capture_root', 'channel', 'frames', 'receipt'};
+  static const _eventFields = {
+    'type',
+    'recording_session_id',
+    'client_session_id',
+    'capture_root',
+    'channel',
+    'frames',
+    'receipt'
+  };
   static const _frameFields = {
     'sequence',
     'byte_offset',
@@ -64,6 +73,7 @@ class AudioCustodyEvent extends MessageEvent {
   final String owner;
   final List<CustodyFrame> frames;
   final String? recordingSessionId;
+  final String? clientSessionId;
   final String? conversationId;
 
   // Keep the receipt and its original frame rows intact when journaling for restart.
@@ -72,6 +82,7 @@ class AudioCustodyEvent extends MessageEvent {
   static AudioCustodyEvent? parse(Map<String, dynamic> json) {
     final archiveRoot = json['capture_root'];
     final session = json['recording_session_id'];
+    final clientSession = json['client_session_id'];
     final receipt = json['receipt'];
     final rows = json['frames'];
     // Listen uses index 0 for mono and also for the first channel of a
@@ -81,6 +92,7 @@ class AudioCustodyEvent extends MessageEvent {
         json['channel'] != '0' ||
         archiveRoot is! String ||
         !_archiveRoot.hasMatch(archiveRoot) ||
+        (clientSession != null && (clientSession is! String || clientSession.trim().isEmpty)) ||
         (session != null && (session is! String || session.trim().isEmpty)) ||
         receipt is! Map<String, dynamic> ||
         !_validReceipt(receipt, archiveRoot) ||
@@ -128,6 +140,7 @@ class AudioCustodyEvent extends MessageEvent {
         (receipt['path'] as String).split('/')[1],
         List.unmodifiable(frames),
         session as String?,
+        clientSession as String?,
         receipt['conversation_id'] as String?,
       );
     } on JsonUnsupportedObjectError {

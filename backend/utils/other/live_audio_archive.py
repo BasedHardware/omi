@@ -385,6 +385,7 @@ class LiveAudioArchive:
             if query.get('audio_custody') == '1' and hasattr(self.host, 'send_event'):
                 event = AudioCustodyEvent(
                     event_type='audio_custody',
+                    client_session_id=getattr(self.host, 'client_conversation_id', None),
                     recording_session_id=getattr(self.host, 'recording_session_ids_by_conversation', {}).get(
                         pack.conversation_id
                     ),
@@ -398,7 +399,9 @@ class LiveAudioArchive:
                     and getattr(self.host, 'is_multi_channel', None) is False
                     and serving_for('CAPTURE_COVERAGE_MODE', request.uid)
                 ):
-                    self._custody_windows.append(event)
+                    mapped = [row for row in event.frames if row['source'] is not None and row['samples'] > 0]
+                    if mapped:
+                        self._custody_windows.append(event.model_copy(update={'frames': mapped}))
                 self.host.send_event(event)
             return
         await run_blocking(

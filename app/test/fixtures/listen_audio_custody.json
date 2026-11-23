@@ -1,6 +1,7 @@
 {
   "type": "audio_custody",
   "recording_session_id": "recording",
+  "client_session_id": "client-capture",
   "capture_root": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
   "channel": "0",
   "frames": [

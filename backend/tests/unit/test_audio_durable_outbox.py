@@ -505,6 +505,7 @@ async def test_listen_wire_binds_only_intersecting_pinned_original_frames(remote
     monkeypatch.setenv('AUDIO_CUSTODY_FRAMED_PERCENT', '0')
     h = host()
     h.is_multi_channel = multichannel
+    h.client_conversation_id = 'client-capture'
     h.recording_session_id = 'recording'
     h.recording_session_ids_by_conversation = {'conversation': 'recording'}
     if not opt_in:

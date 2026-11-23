@@ -61,7 +61,9 @@ provider's scan: keeping that dependency would strand overflow once Home becomes
    `audio_custody` supplies independent proof. A `capture_committed` range contributes only
    where explicitly bound to committed original-audio evidence. Legacy transcript-only
    receipts remain readable. The socket owner, device capture root, mono channel, clock epoch
-   and supplied recording session must match. Gaps, conflicts and unknown mappings keep
+   and supplied recording session must match. A server recording rollover can retain the
+   phone session only through an explicit client-session binding on the writer receipt.
+   Custom STT sockets do not negotiate receipt release. Gaps, conflicts and unknown mappings keep
    the repair path open. Receipt ranges are journaled durably per owner in shadow and serve.
    In-flight, manual and on-device WALs are excluded. The WAL index must persist synced
    retention successfully. Only the existing retention policy deletes bytes. The existing

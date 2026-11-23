@@ -28,6 +28,7 @@ Map<String, dynamic> _audioReceipt({String owner = 'alice', String channel = '0'
     receipt[key] = (receipt[key] as String).replaceFirst('/owner/', '/$owner/');
   }
   wire['channel'] = channel;
+  wire.remove('client_session_id');
   wire['recording_session_id'] = session;
   return wire;
 }
@@ -208,7 +209,10 @@ void main() {
     final secondPeer = await nextPeer(_recording);
     reconnected.subscribe(listener, listener);
     first.onMessage(jsonEncode(_commit())); // A queued callback from the retired socket.
-    await listener.receive(secondPeer, [_commit(), _audioReceipt(session: _recording)]);
+    await listener.receive(secondPeer, [
+      _commit(),
+      _audioReceipt(session: 'server-rollover')..['client_session_id'] = _recording,
+    ]);
     expect(listener.receipts.skip(2), [
       (reconnected, 'capture_committed', 'alice', _recording),
       (reconnected, 'audio_custody', 'alice', _recording),
@@ -244,6 +248,10 @@ void main() {
       (unidentified, 'audio_custody', 'bob', null),
       (unidentified, 'capture_committed', 'bob', null),
     ]);
+
+    final custom = TranscriptSegmentSocketService.create(16000, BleAudioCodec.opus, 'en',
+        customSttMode: true, custodyOwner: TranscriptSegmentSocketService.captureListenOwner('bob'));
+    expect(custom.audioCustodyEnabled, isFalse);
 
     Env.overrideApiBaseUrl(baseUrl); // A custom backend does not get the fixture's credential trust.
     final untrusted = (await open('untrusted-recording'))!;

@@ -43,7 +43,7 @@ extension CaptureCommittedCustody on LocalWalSyncImpl {
     for (final wal in candidates) {
       if (!current()) return;
       final identity = CaptureCommittedJournal.releaseIdentity(owner, wal);
-      final decision = await captureCommits.evaluate(owner, wal);
+      final decision = await captureCommits.evaluate(owner, wal, shadow: !release);
       if (decision.audited == null) {
         unknown++;
       } else if (decision.covered != decision.audited) {
