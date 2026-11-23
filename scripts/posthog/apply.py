@@ -4,7 +4,9 @@
   plan   print the differences; exit 0
   drift  print the differences; exit 1 when there are any (run daily)
   apply  write the live before-state to --snapshot-dir, then PATCH only the
-         differing hog function inputs and names and warehouse should_sync
+         differing hog function inputs and names and warehouse should_sync;
+         enabled, execution_order and untracked functions are reported and
+         leave apply exiting 1
 
 Stdlib only. The key comes from POSTHOG_PERSONAL_API_KEY and is never printed.
 Hog function inputs are read from the detail endpoint; the list endpoint omits them.
@@ -91,6 +93,10 @@ def diff(config, live_functions, live_list, live_schemas):
             continue
         if live.get('name') != fn['name']:
             changes.append({'target': fn['id'], 'field': 'name', 'live': live.get('name'), 'desired': fn['name']})
+        # Reported, never PATCHed: apply changes only inputs, names and should_sync.
+        for field in ('enabled', 'execution_order'):
+            if field in fn and field in live and live[field] != fn[field]:
+                changes.append({'target': fn['id'], 'field': field, 'live': live[field], 'desired': fn[field]})
         for key, want in desired_inputs(fn).items():
             have = live_value(live, key)
             equal = same_number(have, want) if key == 'percentage' else have == want
@@ -150,10 +156,13 @@ def patch_bodies(config, live_functions, changes):
             want = change['desired']
             if key == 'triggeringEvents':
                 want = ','.join(want)
-            # PostHog replaces the inputs object, so carry the unchanged inputs along.
+            # PostHog replaces the inputs object, so carry the unchanged inputs along whole.
+            # A changed input keeps its order but drops compiled bytecode; the server recompiles it.
             body = bodies.setdefault(('fn', target), {})
-            inputs = body.setdefault('inputs', {k: {'value': v.get('value')} for k, v in (live_functions[target].get('inputs') or {}).items()})
-            inputs[key] = {'value': want}
+            live_inputs = live_functions[target].get('inputs') or {}
+            inputs = body.setdefault('inputs', {k: dict(v) for k, v in live_inputs.items()})
+            kept = {k: v for k, v in (live_inputs.get(key) or {}).items() if k not in ('value', 'bytecode', 'bytecode_contract')}
+            inputs[key] = dict(kept, value=want)
         elif field == 'should_sync':
             bodies.setdefault(('schema', target), {})['should_sync'] = change['desired']
     return bodies
@@ -203,6 +212,9 @@ def main(argv=None):
         print(f'patched {kind} {target}: {sorted(body)}')
     after = diff(config, *fetch(client, config))
     print(f'{len(after)} difference(s) remain after apply')
+    for change in after:
+        if change['field'] in ('enabled', 'execution_order', 'untracked', 'exists'):
+            print(f'not applied by this tool, fix in PostHog or in the file: {describe(change)}')
     return 1 if after else 0
 
 

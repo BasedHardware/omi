@@ -264,7 +264,7 @@ describe("device health stats route", () => {
     expect(pendant).not.toContain("'1.0.4'");
     expect(pendant).toContain("any(properties.device_model) AS device_model");
     expect(pendant).toContain("GROUP BY firmware, os");
-    expect(pendant).toContain("HAVING uniqExact(person_id) >= 20");
+    expect(pendant).toContain("HAVING uniqExact(person_id) >= 5");
     expect(pendant).toContain("ORDER BY users DESC");
     expect(pendant).not.toContain("LIMIT");
     expect(phone).toContain(
@@ -415,7 +415,7 @@ describe("device health stats route", () => {
     });
   });
 
-  it("weights pendant counts and keeps the sampled-user guard", async () => {
+  it("weights pendant counts and guards on estimated and sampled users", async () => {
     configure();
     posthogResults.mockResolvedValue([]);
     await GET(request());
@@ -428,7 +428,9 @@ describe("device health stats route", () => {
     expect(pendant).toContain(
       "round(uniqExact(person_id) * 100 / max(greatest(coalesce(toFloat(properties.omi_sample_pct), 100), 0.01))) AS users"
     );
-    expect(pendant).toContain("HAVING uniqExact(person_id) >= 20");
+    expect(pendant).toContain(
+      "AND uniqExact(person_id) * 100 / max(greatest(coalesce(toFloat(properties.omi_sample_pct), 100), 0.01)) >= 20"
+    );
   });
 
   it.each([

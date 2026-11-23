@@ -70,6 +70,11 @@ class CheckPostHogConfig(unittest.TestCase):
         doc = json.loads((check.ROOT / check.SOURCE).read_text())
         self.assertEqual(errors(doc), [])
 
+    def test_negative_estimate(self):
+        doc = passing()
+        doc['events']['Device Connected']['est_events_per_day'] = -40000
+        self.assertOneError(doc, 'Device Connected: est_events_per_day must be a non-negative integer')
+
     def test_kept_event_without_estimate(self):
         doc = passing()
         del doc['events']['Memory Created']['est_events_per_day']
@@ -139,6 +144,9 @@ class CheckPostHogConfig(unittest.TestCase):
         self.assertOneError(doc, 'raising or extending the ceiling', prior=prior)
         doc['budget']['ceiling']['waiver'] = dict(WAIVER)
         self.assertEqual(errors(doc, prior), [])
+        doc = copy.deepcopy(prior)
+        prior_without = passing()
+        self.assertOneError(doc, 'raising or extending the ceiling', prior=prior_without)
 
     def test_warehouse_full_refresh_over_one_million_rows(self):
         doc = passing()

@@ -59,16 +59,20 @@ class ApplyDiff(unittest.TestCase):
         functions['keep']['inputs']['keep']['value'].append('Debug Thing')
         functions['wedge']['inputs']['percentage']['value'] = 100
         functions['wedge']['name'] = 'Wedge 100% (agent edit)'
+        functions['keep']['enabled'] = False
+        functions['keep']['execution_order'] = 5
         listing.append({'id': 'rogue', 'name': 'Sample X at 100%'})
         schemas['raw']['should_sync'] = True
         changes = apply.diff(CONFIG, functions, listing, schemas)
         fields = sorted((c['target'], c['field']) for c in changes)
-        self.assertEqual(fields, [('keep', 'inputs.keep'), ('raw', 'should_sync'), ('rogue', 'untracked'),
+        self.assertEqual(fields, [('keep', 'enabled'), ('keep', 'inputs.keep'), ('raw', 'should_sync'), ('rogue', 'untracked'),
                                   ('wedge', 'inputs.percentage'), ('wedge', 'name')])
         text = '\n'.join(apply.describe(c) for c in changes)
         self.assertIn("keep inputs.keep: -1 ['Debug Thing'] +0 []", text)
         self.assertIn('wedge inputs.percentage: 100 -> 10', text)
         self.assertIn('untracked live transformation', text)
+        bodies = apply.patch_bodies(CONFIG, functions, changes)
+        self.assertNotIn('enabled', bodies[('fn', 'keep')])
 
     def test_missing_function_and_schema(self):
         functions, listing, schemas = in_sync()
@@ -84,8 +88,9 @@ class ApplyDiff(unittest.TestCase):
         schemas['raw']['should_sync'] = True
         bodies = apply.patch_bodies(CONFIG, functions, apply.diff(CONFIG, functions, listing, schemas))
         self.assertEqual(bodies[('fn', 'wedge')], {'inputs': {
-            'percentage': {'value': 10}, 'randomSampling': {'value': False},
-            'triggeringEvents': {'value': 'Capture Wedge Detected,Local WAL Stuck'}}})
+            'percentage': {'order': 0, 'value': 10},
+            'randomSampling': {'order': 1, 'value': False, 'bytecode': ['_H']},
+            'triggeringEvents': {'order': 2, 'value': 'Capture Wedge Detected,Local WAL Stuck'}}})
         self.assertEqual(bodies[('schema', 'raw')], {'should_sync': False})
         self.assertNotIn(('fn', 'keep'), bodies)
 

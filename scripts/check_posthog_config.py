@@ -7,8 +7,8 @@ sampling and warehouse syncs. This check fails when:
   - a debug/ops event (by purpose or by name) is kept above 2% without an
     unexpired waiver signed by David Zhang;
   - the estimated monthly cost exceeds budget.monthly_usd, unless an unexpired
-    budget.ceiling covers it (a glide path; raising or extending the ceiling
-    needs a waiver signed by David Zhang);
+    budget.ceiling covers it (a dated glide path; raising or extending the
+    ceiling needs a waiver signed by David Zhang);
   - a warehouse schema full-refreshes more than 1M rows per run;
   - a later sampling stage would overwrite omi_sample_pct with a looser rate
     than an earlier stage applied, so reweighting readers would read wrong.
@@ -26,7 +26,7 @@ import subprocess
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = 'contracts/analytics/posthog.json'
-OWNED_PATHS = (SOURCE, 'scripts/check_posthog_config.py', 'scripts/posthog')
+OWNED_PATHS = (SOURCE, 'scripts/check_posthog_config.py', 'scripts/test_check_posthog_config.py', 'scripts/posthog')
 SAMPLE_CEILING = 2.0
 WAIVER_SIGNER = 'David Zhang'
 FULL_REFRESH_ROW_LIMIT = 1_000_000
@@ -95,7 +95,9 @@ def estimate(doc):
     days = budget.get('days_per_month', 30)
     events = identified = 0.0
     for name, entry in doc['events'].items():
-        stored = entry.get('est_events_per_day', 0) * effective(doc, name)[0] / 100 * days
+        est = entry.get('est_events_per_day')
+        est = est if isinstance(est, (int, float)) and est > 0 else 0  # validate() reports bad values
+        stored = est * effective(doc, name)[0] / 100 * days
         events += stored
         if entry.get('identified'):
             identified += stored
@@ -135,6 +137,8 @@ def budget_errors(doc, prior, today, cost):
         old = (prior or {}).get('budget', {}).get('ceiling') if prior else None
         try:
             until = dt.date.fromisoformat(ceiling['until'])
+            # The file's first ceiling records the measured state it was born with; David
+            # signs it on that PR. Any later raise or extension needs his waiver in the file.
             raised = prior is not None and (old is None or float(ceiling['usd']) > float(old['usd'])
                                             or until > dt.date.fromisoformat(old['until']))
         except (KeyError, TypeError, ValueError):
@@ -174,7 +178,11 @@ def validate(doc, today, prior=None):
         pct, tag, applied = effective(doc, name)
         entry = events.get(name)
         listed = name in keep[0]['events']
-        if pct > SAMPLE_CEILING and (entry is None or not isinstance(entry.get('est_events_per_day'), int)):
+        est = (entry or {}).get('est_events_per_day')
+        if entry is not None and est is not None and (not isinstance(est, int) or est < 0):
+            errors.append(f'{name}: est_events_per_day must be a non-negative integer')
+            continue
+        if pct > SAMPLE_CEILING and not isinstance(est, int):
             errors.append(f'{name}: kept at {pct:g}% without a measured est_events_per_day (7-day HogQL count reweighted by omi_sample_pct)')
             continue
         if entry is None:

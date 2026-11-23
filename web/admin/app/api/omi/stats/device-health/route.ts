@@ -42,8 +42,9 @@ export function parseDeviceHealthDays(raw: string | null): number {
 
 // Phone Battery Sample and Mobile Device Health Daily may be sampled at
 // ingestion. Counts are weighted per row and users divided by the largest
-// rate (lib/posthog-sampling.ts). Quantiles and the >= 20 sampled-user guard
-// stay on the sampled rows: they need sample size, not population.
+// rate (lib/posthog-sampling.ts). Quantiles stay on the sampled rows; a group
+// needs 20 estimated users and at least 5 sampled ones, so a 2% rate still
+// shows the larger firmware groups.
 // Watch firmware leaks in from connected non-pendant devices: the stored
 // label is a watchOS version (26.6, 27.0, 27.0.1). Pendant majors are a
 // single digit (1, 2, 3), so a two-digit major is not a pendant. 1.0.4
@@ -66,7 +67,8 @@ export function pendantHealthQuery(days: number): string {
       AND trim(properties.firmware) NOT IN ('','Unknown','unknown','26.6','27.0')
       AND NOT match(trim(properties.firmware), '^[0-9]{2}[.]')
     GROUP BY firmware, os
-    HAVING uniqExact(person_id) >= 20
+    HAVING uniqExact(person_id) >= 5
+       AND uniqExact(person_id) * 100 / max(${SAMPLE_PCT_SQL}) >= 20
     ORDER BY users DESC
   `;
 }
