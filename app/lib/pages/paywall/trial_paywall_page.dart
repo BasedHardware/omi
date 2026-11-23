@@ -129,6 +129,7 @@ class _TrialPaywallPageState extends State<TrialPaywallPage> {
                 interval: price.interval,
                 source: widget.source,
                 trialDays: TrialPaywallPage.trialDays,
+                currency: price.currency,
               );
       final outcome = await start(context, price, offer.tierId);
       if (mounted && !_dismissed && outcome == PaywallCheckoutOutcome.purchased) {

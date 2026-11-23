@@ -15,6 +15,7 @@ from models.storefront import (
     StorefrontUsage,
 )
 from models.users import Subscription
+from utils import local_currency
 from utils.storefront_copy import (
     copy_for,
     format_date,
@@ -167,12 +168,14 @@ def offered_intervals(
     return ordered
 
 
-def _valid_price_rows(rows: list[dict[str, Any]], *, current: bool = False) -> list[dict[str, Any]]:
+def _valid_price_rows(
+    rows: list[dict[str, Any]], *, current: bool = False, currency: str = 'usd'
+) -> list[dict[str, Any]]:
     valid = [
         row
         for row in rows
         if isinstance(row.get('id'), str)
-        and row.get('currency') == 'usd'
+        and row.get('currency') == currency
         and type(row.get('unit_amount')) is int
         and row['unit_amount'] > 0
         and (current or row.get('active') is True)
@@ -190,8 +193,10 @@ def _prices_for(
     locale: str | None,
     current: bool = False,
     switch_yearly: bool = False,
+    currency: str = 'usd',
+    money: Callable[[int, str], str] | None = None,
 ) -> list[StorefrontPrice]:
-    valid = _valid_price_rows(rows, current=current)
+    valid = _valid_price_rows(rows, current=current, currency=currency)
     monthly = next((row for row in valid if row['recurring']['interval'] == 'month'), None)
     monthly_minor = monthly['unit_amount'] if monthly else None
     rendered = []
@@ -206,6 +211,7 @@ def _prices_for(
             currency=row['currency'],
             monthly_minor=monthly_minor,
             locale=locale,
+            **({'money': money} if money is not None else {}),
         )
         if switch_yearly and interval == 'year' and monthly_minor is not None:
             # The toggle can still read Monthly. Keep the headline on the price
@@ -231,9 +237,15 @@ def _compact(*, is_current: bool, action: str, prices: list[StorefrontPrice]) ->
     return not any(price.cta_label for price in prices)
 
 
-def _free_price(currency: str, locale: str | None) -> StorefrontPrice:
+def _free_price(currency: str, locale: str | None, money: Callable[[int, str], str] | None = None) -> StorefrontPrice:
     rendered = render_price(
-        price_id=None, interval='month', amount_minor=0, currency=currency, monthly_minor=None, locale=locale
+        price_id=None,
+        interval='month',
+        amount_minor=0,
+        currency=currency,
+        monthly_minor=None,
+        locale=locale,
+        **({'money': money} if money is not None else {}),
     )
     # The paid renewal sentence does not apply to the zero price.
     rendered['renewal_line'] = None
@@ -285,13 +297,23 @@ def build_storefront(
     source: str | None = None,
     trigger: str | None = None,
     locale: str | None = None,
+    subscription_currency: str | None = None,
 ) -> StorefrontResponse:
     del source  # Opening surface is accepted; header selection uses trigger, legacy, and usage.
     current_plan = subscription.plan.value
     current_price_id = subscription.current_price_id
     binding_set = set(bindings)
     legacy = is_legacy_plan(current_plan, current_price_id, binding_set)
-    current_row = _retrieve(retrieve_price, current_price_id)
+    current_row: dict[str, Any] | None = _retrieve(retrieve_price, current_price_id)
+    # A subscription billed through a local currency option keeps that currency on every
+    # card; USD offers are dropped rather than shown in a foreign currency.
+    offer_currency = 'usd'
+    money = None
+    if current_row and subscription_currency and local_currency.billed_in_option(current_row, subscription_currency):
+        offer_currency = subscription_currency
+        money = local_currency.display_money
+        amount = local_currency.option_amount_for(current_row, offer_currency)
+        current_row = {**current_row, 'currency': offer_currency, 'unit_amount': amount} if amount else None
     current_interval = None
     current_amount = None
     current_currency = 'usd'
@@ -340,13 +362,13 @@ def build_storefront(
                 row = _retrieve(retrieve_price, price_id)
                 if row and (row.get('recurring') or {}).get('interval') == registration['interval']:
                     rows.append(row)
-        available = [row['recurring']['interval'] for row in _valid_price_rows(rows)]
+        available = [row['recurring']['interval'] for row in _valid_price_rows(rows, currency=offer_currency)]
         if plan == 'basic':
             available = ['month']
         is_current = plan == current_plan and not legacy
         switch = False
         if plan == 'basic':
-            prices = [_free_price(currency, locale)]
+            prices = [_free_price(offer_currency if money else currency, locale, money)]
         else:
             resubscribe_this = resubscribe_only and is_current
             offered = offered_intervals(
@@ -358,7 +380,14 @@ def build_storefront(
                 legacy=legacy,
             )
             want_switch = is_current and current_interval == 'month' and not resubscribe_only and 'year' in offered
-            prices = _prices_for(rows, offered=offered, locale=locale, switch_yearly=want_switch)
+            prices = _prices_for(
+                rows,
+                offered=offered,
+                locale=locale,
+                switch_yearly=want_switch,
+                currency=offer_currency,
+                money=money,
+            )
             if want_switch and subscription.current_period_end:
                 for item in prices:
                     if item.interval == 'year' and item.cta_label:
@@ -378,7 +407,7 @@ def build_storefront(
             switch = want_switch and any(item.cta_label for item in prices)
             if want_switch and not switch:
                 month_offered = ['month'] if 'month' in available else []
-                prices = _prices_for(rows, offered=month_offered, locale=locale)
+                prices = _prices_for(rows, offered=month_offered, locale=locale, currency=offer_currency, money=money)
         if plan != 'basic' and not prices and plan != 'architect':
             continue
         action = tier_action(
@@ -439,7 +468,9 @@ def build_storefront(
                 resubscribe_only=resubscribe_only,
                 legacy=legacy,
             )
-            current_prices = _prices_for([current_row], offered=offered, locale=locale, current=True)
+            current_prices = _prices_for(
+                [current_row], offered=offered, locale=locale, current=True, currency=offer_currency, money=money
+            )
             if resubscribe_only and current_price_id:
                 current_prices = [item for item in current_prices if item.price_id == current_price_id]
         if action == 'checkout' and not current_prices:
@@ -474,6 +505,7 @@ def build_storefront(
         legacy=legacy,
         locale=locale,
         currency=current_currency,
+        price_label=money(current_amount, current_currency) if money and current_amount is not None else None,
     )
     line_template, _ = current_line(
         plan_id=current_plan,
@@ -551,18 +583,31 @@ def build_single_plan_storefront(
     retrieve_price: Callable[[str], dict[str, Any]],
     trigger: str | None = None,
     locale: str | None = None,
-) -> StorefrontResponse:
+    local_currency_code: str | None = None,
+) -> StorefrontResponse | None:
     """Omi Pro (`unlimited_v2`) offer sheet for a buyer with no current paid plan.
 
     Omi Pro is the only plan sold, on every platform. The ladder sheet has no
     Omi Pro card, so this single-tier v2 sheet is served instead; current
     subscribers keep the ladder sheet via `build_storefront`.
+
+    With ``local_currency_code`` every price, the Free card included, is in that
+    currency; None when a configured price lacks its approved currency option.
     """
     ladder = load_ladder()
     current_plan = subscription.plan.value
     raw_currency = ladder.get('currency')
     currency = raw_currency if isinstance(raw_currency, str) else 'usd'
-    prices = _prices_for(_configured_unlimited_v2_rows(retrieve_price), offered=['month', 'year'], locale=locale)
+    rows = _configured_unlimited_v2_rows(retrieve_price)
+    money = None
+    if local_currency_code:
+        localized = local_currency.localize_rows(rows, local_currency_code) if len(rows) == 2 else None
+        if localized is None:
+            return None
+        rows, currency, money = localized, local_currency_code, local_currency.display_money
+    prices = _prices_for(
+        rows, offered=['month', 'year'], locale=locale, currency=local_currency_code or 'usd', money=money
+    )
     action: Literal['checkout', 'current', 'none'] = 'checkout' if prices else 'none'
     tier = StorefrontTier(
         tier_id='unlimited_v2:single_plan',
@@ -593,7 +638,7 @@ def build_single_plan_storefront(
         cta_label=None,
         blocked_line=None,
         compact=True,
-        prices=[_free_price(currency, locale)],
+        prices=[_free_price(currency, locale, money)],
     )
     line, _ = current_line(
         plan_id=current_plan,

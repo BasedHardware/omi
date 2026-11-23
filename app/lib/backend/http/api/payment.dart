@@ -11,12 +11,15 @@ Future<Map<String, dynamic>?> createCheckoutSession({
   required String priceId,
   String? promotionCode,
   int? trialDays,
+  String? currency,
 }) async {
   final body = <String, dynamic>{'price_id': priceId};
   if (promotionCode != null && promotionCode.trim().isNotEmpty) {
     body['promotion_code'] = promotionCode.trim();
   }
   if (trialDays != null && trialDays > 0) body['trial_days'] = trialDays;
+  // The currency the reader was shown; the server refuses a checkout in any other.
+  if (currency != null && currency.isNotEmpty) body['currency'] = currency.toLowerCase();
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/payments/checkout-session',
     headers: {},

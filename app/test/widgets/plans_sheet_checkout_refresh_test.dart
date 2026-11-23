@@ -52,6 +52,7 @@ class _Usage extends UsageProvider {
     required String priceId,
     String? promotionCode,
     int? trialDays,
+    String? currency,
   }) async {
     return {'url': 'https://checkout.stripe.com/session'};
   }

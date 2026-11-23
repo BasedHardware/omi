@@ -11,6 +11,8 @@ from typing import Any, Optional
 
 import stripe
 
+from utils import local_currency
+
 logger = logging.getLogger(__name__)
 
 COUPON_ID = 'omi-retention-50off-3mo'
@@ -86,6 +88,13 @@ def evaluate(sub: Any, customer: Any) -> RetentionOffer:
     if _get(recurring, 'interval') != 'month' or int(_get(recurring, 'interval_count', 1) or 1) != 1:
         return _ineligible('not_monthly')
     amount = _get(price, 'unit_amount')
+    currency = _get(price, 'currency')
+    if local_currency.billed_in_option(price, _get(sub, 'currency')):
+        # Billed through a local currency option: show that amount, never the base USD one.
+        currency = _get(sub, 'currency')
+        amount = local_currency.option_amount_for(price, currency)
+        if amount is None:
+            return _ineligible('unavailable')
     if not amount:
         return _ineligible('free_price')
     quantity = int(_get(items[0], 'quantity', 1) or 1)
@@ -95,7 +104,7 @@ def evaluate(sub: Any, customer: Any) -> RetentionOffer:
         reason='eligible',
         regular_amount=regular,
         discounted_amount=regular * (100 - PERCENT_OFF) // 100,
-        currency=_get(price, 'currency'),
+        currency=currency,
     )
 
 

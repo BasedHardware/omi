@@ -8,8 +8,9 @@ what it says. Pure functions over Stripe dicts, so the webhook stays thin.
 """
 
 import math
-from typing import Any, Mapping, Optional
+from typing import Any, Callable, Mapping, Optional
 
+from utils import local_currency
 from utils.storefront_copy import format_money
 from utils.subscription import get_plan_type_from_price_id, is_paid_plan
 
@@ -23,12 +24,30 @@ def _when(trial_end: int, now: int) -> str:
     return f'in {days} days'
 
 
-def recurring_terms(amount_minor: int, currency: str, interval: str) -> str:
+def recurring_terms(
+    amount_minor: int, currency: str, interval: str, money: Optional[Callable[[int, str], str]] = None
+) -> str:
     """`US$269.91 a year` / `US$29.99 a month`."""
-    return f"{format_money(amount_minor, currency)} a {'year' if interval == 'year' else 'month'}"
+    return f"{(money or format_money)(amount_minor, currency)} a {'year' if interval == 'year' else 'month'}"
 
 
-def trial_ending_reminder_body(uid: str, subscription: Mapping[str, Any], now: int) -> Optional[str]:
+def _billed(price: Mapping[str, Any], subscription: Mapping[str, Any], retrieve_price: Optional[Callable[[str], Any]]):
+    """(amount, currency, formatter) Stripe bills, or None when a local-currency amount is unknown."""
+    currency = subscription.get('currency') or price.get('currency')
+    if not isinstance(currency, str) or not local_currency.billed_in_option(price, currency):
+        return price.get('unit_amount'), price.get('currency'), None
+    amount = local_currency.option_amount_for(price, currency, retrieve_price)
+    if amount is None:
+        return None
+    return amount, currency, local_currency.display_money
+
+
+def trial_ending_reminder_body(
+    uid: str,
+    subscription: Mapping[str, Any],
+    now: int,
+    retrieve_price: Optional[Callable[[str], Any]] = None,
+) -> Optional[str]:
     """Push body for a trial that will convert to a paid charge, or None when no reminder applies.
 
     No reminder when the trial is already set to cancel, belongs to another account, has a
@@ -61,20 +80,28 @@ def trial_ending_reminder_body(uid: str, subscription: Mapping[str, Any], now: i
             return None
     except ValueError:
         return None
-    amount = price.get('unit_amount')
-    currency = price.get('currency')
+    billed = _billed(price, subscription, retrieve_price)
+    if billed is None:
+        return None
+    amount, currency, money = billed
     interval = (price.get('recurring') or {}).get('interval')
     quantity = items[0].get('quantity') or 1
     if not isinstance(amount, int) or amount <= 0 or not currency or interval not in ('month', 'year'):
         return None
-    terms = recurring_terms(amount * quantity, currency, interval)
+    terms = recurring_terms(amount * quantity, currency, interval, money)
     return (
         f'It ends {_when(trial_end, now)}, then your card is charged {terms}. '
         'To pay nothing, cancel before then in Settings.'
     )
 
 
-def checkout_trial_terms(trial_days: int, amount_minor: Optional[int], currency: str, interval: Optional[str]) -> str:
+def checkout_trial_terms(
+    trial_days: int,
+    amount_minor: Optional[int],
+    currency: str,
+    interval: Optional[str],
+    money: Optional[Callable[[int, str], str]] = None,
+) -> str:
     """The line shown above Stripe Checkout's button for a free-trial session."""
     if not isinstance(amount_minor, int) or amount_minor <= 0 or interval not in ('month', 'year'):
         return (
@@ -83,7 +110,7 @@ def checkout_trial_terms(trial_days: int, amount_minor: Optional[int], currency:
         )
     return (
         f'No charge today. When your {trial_days}-day free trial ends, your card is charged '
-        f'{recurring_terms(amount_minor, currency, interval)}, less any code you apply, until you cancel. '
+        f'{recurring_terms(amount_minor, currency, interval, money)}, less any code you apply, until you cancel. '
         'Cancel in the Omi app before the trial ends and you pay nothing.'
     )
 

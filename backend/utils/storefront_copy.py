@@ -5,7 +5,7 @@ from decimal import Decimal, ROUND_DOWN, ROUND_HALF_UP
 from functools import lru_cache
 from pathlib import Path
 import json
-from typing import Any
+from typing import Any, Callable, Optional
 
 from babel import Locale as BabelLocale
 from babel.dates import format_skeleton
@@ -417,12 +417,20 @@ def cta_label(*, action: str, tier_plan: str, current_plan: str, locale: str | N
     return None
 
 
-def monthly_headline(amount_minor: int, locale: str | None = None, currency: str = 'usd') -> str:
-    """Monthly price line. Free is "$0"; a paid month is "{amount}/month"."""
+def monthly_headline(
+    amount_minor: int,
+    locale: str | None = None,
+    currency: str = 'usd',
+    money: Optional[Callable[[int, str], str]] = None,
+) -> str:
+    """Monthly price line. Free is "$0"; a paid month is "{amount}/month".
+
+    ``money`` replaces format_money for a local-currency offer (utils.local_currency).
+    """
     text = copy_for(locale)['prices']
     if amount_minor == 0:
-        return text['headline_free']
-    return text['headline_month'].format(amount=format_money(amount_minor, currency))
+        return text['headline_free'] if money is None else money(0, currency)
+    return text['headline_month'].format(amount=(money or format_money)(amount_minor, currency))
 
 
 def render_price(
@@ -433,15 +441,17 @@ def render_price(
     currency: str,
     monthly_minor: int | None,
     locale: str | None = None,
+    money: Optional[Callable[[int, str], str]] = None,
 ) -> dict[str, Any]:
     text = copy_for(locale)['prices']
+    fmt = money or format_money
     if interval == 'year':
         # Half-up in minor units. USD cents: 19990 → 1666 → $16.66.
         # Zero-decimal currencies stay whole major units (no /100).
         equivalent_minor = int((Decimal(amount_minor) / Decimal(12)).quantize(Decimal('1'), rounding=ROUND_HALF_UP))
-        headline = text['headline_year'].format(amount=format_money(equivalent_minor, currency))
+        headline = text['headline_year'].format(amount=fmt(equivalent_minor, currency))
         free = months_free(monthly_minor, amount_minor) if monthly_minor else None
-        annual = format_money(amount_minor, currency)
+        annual = fmt(amount_minor, currency)
         if free is not None:
             subline = text['subline_year'].format(amount=annual, free=months_free_phrase(free, locale))
         else:
@@ -462,7 +472,7 @@ def render_price(
         'interval': 'month',
         'amount_minor': amount_minor,
         'currency': currency,
-        'headline': monthly_headline(amount_minor, locale, currency=currency),
+        'headline': monthly_headline(amount_minor, locale, currency=currency, money=money),
         'subline': None,
         'renewal_line': text['renewal_month'] if amount_minor else None,
         'months_free': None,

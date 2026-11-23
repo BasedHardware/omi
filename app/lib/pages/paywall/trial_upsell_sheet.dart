@@ -69,6 +69,7 @@ class TrialUpsellContentState extends State<TrialUpsellContent> {
               interval: widget.price.interval,
               source: widget.source,
               trialDays: TrialUpsellSheet.trialDays,
+              currency: widget.price.currency,
             );
       if (!mounted) return;
       if (outcome == PaywallCheckoutOutcome.purchased) Navigator.of(context).pop(true);

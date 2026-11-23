@@ -58,6 +58,7 @@ from utils.notification_dispatch import (
     dispatch_notification_async,
 )
 from utils import billing_recovery
+from utils import local_currency
 from utils import trial_reminder
 from models.users import PlanType, Subscription, SubscriptionStatus, PlanLimits
 from utils.subscription import (
@@ -148,6 +149,8 @@ class CreateCheckoutRequest(BaseModel):
     # A free trial of this many days before the first charge. Honored only for a first-time
     # subscriber (no Stripe customer yet), so nobody chains trials by cancelling and re-subscribing.
     trial_days: Optional[int] = Field(None, ge=1, le=30)
+    # The currency the app displayed for this price. Checkout refuses a different one.
+    currency: Optional[str] = Field(None, pattern=r'^[A-Za-z]{3}$')
 
 
 class UpgradeSubscriptionRequest(BaseModel):
@@ -498,6 +501,7 @@ def get_available_plans_endpoint(
     x_app_platform: Optional[str] = Header(None, alias='X-App-Platform'),
     x_app_version: Optional[str] = Header(None, alias='X-App-Version'),
     x_billing_currency: Optional[str] = Header(None, alias='X-Omi-Billing-Currency'),
+    x_storefront_region: Optional[str] = Header(None, alias=local_currency.REGION_HEADER),
 ):
     """Get available subscription plans with their price IDs and billing intervals."""
     try:
@@ -506,6 +510,7 @@ def get_available_plans_endpoint(
         current_price_id = None
         scheduled_price_id = None
         billing_currency = None
+        billed_in_option = False
 
         # Read currency for current paid subscriptions, including pending cancellation.
         if (
@@ -524,6 +529,9 @@ def get_available_plans_endpoint(
                 billing_currency = subscription_currency(stripe_sub)
                 if stripe_sub and stripe_sub['items']['data']:
                     current_price_id = stripe_sub['items']['data'][0]['price']['id']
+                    billed_in_option = local_currency.billed_in_option(
+                        stripe_sub['items']['data'][0]['price'], billing_currency
+                    )
 
                     # Check for pending subscription schedules
                     customer_id = stripe_sub.get('customer')
@@ -596,7 +604,9 @@ def get_available_plans_endpoint(
             annual_price_id = definition["annual_price_id"]
             if monthly_price_id:
                 try:
-                    monthly_price = price_for_currency(stripe.Price.retrieve(monthly_price_id), billing_currency)
+                    monthly_price = price_for_currency(
+                        stripe.Price.retrieve(monthly_price_id), billing_currency, allow_options=billed_in_option
+                    )
                     pricing_options.append(
                         PricingOption(
                             id=monthly_price.id,
@@ -620,7 +630,9 @@ def get_available_plans_endpoint(
                     )
             if annual_price_id:
                 try:
-                    annual_price = price_for_currency(stripe.Price.retrieve(annual_price_id), billing_currency)
+                    annual_price = price_for_currency(
+                        stripe.Price.retrieve(annual_price_id), billing_currency, allow_options=billed_in_option
+                    )
                     pricing_options.append(
                         PricingOption(
                             id=annual_price.id,
@@ -643,6 +655,17 @@ def get_available_plans_endpoint(
                         f"(price_id={annual_price_id}): {sanitize(str(e))}"
                     )
 
+        if billing_currency is None and current_plan == PlanType.basic:
+            offer = local_currency.offer_for(x_app_platform, x_storefront_region)
+            if offer.kind == 'local':
+                localized = _localized_pricing_options(pricing_options, offer.currency or '')
+                if localized is not None:
+                    return AvailablePlansResponse(plans=localized)
+                offer = local_currency.unconfigured(x_app_platform)
+            if offer.kind == 'hidden':
+                # No approved local price: show no purchase price rather than a foreign one.
+                return AvailablePlansResponse(plans=[])
+
         if not pricing_options:
             raise HTTPException(
                 status_code=409 if billing_currency else 500,
@@ -656,6 +679,33 @@ def get_available_plans_endpoint(
     except Exception as e:
         logger.error(f"Error fetching available plans: {sanitize(str(e))}")
         raise HTTPException(status_code=500, detail="Failed to fetch available plans")
+
+
+def _localized_pricing_options(options: List[PricingOption], currency: str) -> Optional[List[PricingOption]]:
+    """The same offers in an approved local currency, or None when any price lacks it."""
+    if not options:
+        return None
+    localized = []
+    for option in options:
+        try:
+            amount = local_currency.approved_amount(local_currency.retrieve_with_options(option.id), currency)
+        except Exception as e:
+            logger.warning(f"Local currency price lookup failed: {type(e).__name__}")
+            return None
+        if amount is None:
+            return None
+        per_month = amount if option.interval == 'month' else amount // 12
+        localized.append(
+            option.model_copy(
+                update={
+                    'currency': currency,
+                    'unit_amount': amount,
+                    'price_string': f"{local_currency.display_money(per_month, currency)}/mo",
+                    'billing_total': local_currency.display_money(amount, currency),
+                }
+            )
+        )
+    return localized
 
 
 class OverageInfoResponse(BaseModel):
@@ -737,6 +787,7 @@ def create_checkout_session_endpoint(
     request: CreateCheckoutRequest,
     uid: str = Depends(auth.get_current_user_uid),
     x_app_platform: Optional[str] = Header(None, alias='X-App-Platform'),
+    x_storefront_region: Optional[str] = Header(None, alias=local_currency.REGION_HEADER),
 ):
     # Retained currency prices are management-only; ordinary targets keep the
     # existing purchase and eligibility checks before promotion-code lookup.
@@ -788,6 +839,12 @@ def create_checkout_session_endpoint(
     if single_plan_error:
         raise HTTPException(status_code=400, detail=single_plan_error)
 
+    # The currency this buyer was shown (utils.local_currency); released apps send no region.
+    checkout_currency = _new_buyer_checkout_currency(request.price_id, x_app_platform, x_storefront_region)
+    shown_currency = request.currency.lower() if request.currency else None
+    if shown_currency is not None and shown_currency != (checkout_currency or 'usd'):
+        raise HTTPException(status_code=400, detail="Prices have changed. Please reopen the plan page.")
+
     # Normal checkout flow for new subscriptions (Scenario B or first-time subscribers)
     idempotency_key = str(uuid.uuid4())
     existing_customer_id = users_db.get_stripe_customer_id(uid)
@@ -804,18 +861,41 @@ def create_checkout_session_endpoint(
         }
         if resolved_checkout_attribution is not None:
             checkout_options['promotion_attribution'] = resolved_checkout_attribution
+        if checkout_currency is not None:
+            checkout_options['local_currency_code'] = checkout_currency
         session = stripe_utils.create_subscription_checkout_session(
             uid,
             request.price_id,
             idempotency_key,
             **checkout_options,
         )
+    except ValueError as e:
+        if str(e) != 'local_currency_unavailable':
+            raise
+        raise HTTPException(status_code=400, detail="Prices have changed. Please reopen the plan page.")
     except stripe.error.InvalidRequestError as e:
         detail = str(e.user_message) if hasattr(e, 'user_message') and e.user_message else str(e)
         raise HTTPException(status_code=400, detail=detail)
     if not session:
         raise HTTPException(status_code=500, detail="Could not create checkout session.")
     return {"url": session.url, "session_id": session.id}
+
+
+def _new_buyer_checkout_currency(price_id: str, platform: Optional[str], region: Optional[str]) -> Optional[str]:
+    """Local currency for a new Checkout, None for today's price currency; 409 when none is offered."""
+    offer = local_currency.offer_for(platform, region)
+    if offer.kind == 'local' and offer.currency:
+        try:
+            price = local_currency.retrieve_with_options(price_id)
+        except stripe.error.StripeError as error:
+            logger.warning(f"Local currency price lookup failed: {type(error).__name__}")
+            raise HTTPException(status_code=503, detail="Could not load this price. Please try again.")
+        if local_currency.approved_amount(price, offer.currency) is not None:
+            return offer.currency
+        offer = local_currency.unconfigured(platform)
+    if offer.kind == 'hidden':
+        raise HTTPException(status_code=400, detail="This plan is not available in your region yet.")
+    return None
 
 
 def _release_attached_schedules(stripe_sub: dict) -> None:
@@ -941,12 +1021,19 @@ def upgrade_subscription_endpoint(request: UpgradeSubscriptionRequest, uid: str 
         if target_recurring is None:
             raise HTTPException(status_code=409, detail="This plan price is not a recurring subscription.")
         target_interval = target_recurring.interval  # "month" or "year"
+        option_currency = None
         try:
             currency = subscription_currency(stripe_sub)
             if target_price.currency != currency:
-                raise BillingCurrencyUnavailable(
-                    'Please reopen Plans & Billing to select a price in your billing currency.'
-                )
+                if currency_binding is not None or not local_currency.billed_in_option(
+                    stripe_sub['items']['data'][0]['price'], currency
+                ):
+                    raise BillingCurrencyUnavailable(
+                        'Please reopen Plans & Billing to select a price in your billing currency.'
+                    )
+                # A local-currency subscription keeps its currency: the target must carry that option.
+                price_for_currency(target_price, currency, allow_options=True)
+                option_currency = currency
             if currency_binding is not None:
                 plan, interval, expected_currency = currency_binding
                 if stripe_sub.get('status') not in ('active', 'trialing'):
@@ -1083,6 +1170,7 @@ def upgrade_subscription_endpoint(request: UpgradeSubscriptionRequest, uid: str 
                     ],
                     'start_date': stripe_sub['current_period_start'],
                     'end_date': stripe_sub['current_period_end'],
+                    **({'currency': option_currency} if option_currency else {}),
                 },
                 {
                     'items': [
@@ -1091,6 +1179,7 @@ def upgrade_subscription_endpoint(request: UpgradeSubscriptionRequest, uid: str 
                         }
                     ],
                     **({'discounts': [{'promotion_code': resolved_promo_id}]} if resolved_promo_id else {}),
+                    **({'currency': option_currency} if option_currency else {}),
                 },
             ],
             metadata={'uid': uid, 'upgrade_type': f'{current_plan.value}_{target_interval}'},
@@ -1268,7 +1357,15 @@ async def _schedule_trial_ending_notification(
     stored = await run_blocking(db_executor, users_db.get_user_subscription, uid)
     if stored is None or stored.stripe_subscription_id != subscription_id:
         return
-    body = trial_reminder.trial_ending_reminder_body(uid, subscription_obj, int(time.time()))
+    items = (subscription_obj.get('items') or {}).get('data') or []
+    first_price = (items[0].get('price') or {}) if items else {}
+    if local_currency.billed_in_option(first_price, subscription_obj.get('currency')):
+        # A local-currency trial: the charged amount is the Price's currency option (a Stripe read).
+        body = await run_blocking(
+            stripe_executor, trial_reminder.trial_ending_reminder_body, uid, subscription_obj, int(time.time())
+        )
+    else:
+        body = trial_reminder.trial_ending_reminder_body(uid, subscription_obj, int(time.time()))
     if body is None:
         return
     claimed = await run_blocking(

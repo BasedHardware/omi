@@ -71,7 +71,7 @@ from database.users import (
     resolve_deletion_wipe_job_id,
     set_user_transcription_preferences,
 )
-from utils import ai_profile_refresh, billing_recovery, screen_vector_entitlements
+from utils import ai_profile_refresh, billing_recovery, local_currency, screen_vector_entitlements
 from utils.observability.fallback import record_fallback
 from config.daily_summary_depth import DEFAULT_DAILY_SUMMARY_DEPTH, DailySummaryDepth
 from utils.sync.held_audio_summary import attach_subscription_held_audio
@@ -1293,6 +1293,46 @@ def _byok_unlimited_subscription(
     )
 
 
+def _local_price_strings(
+    response: UserSubscriptionResponse, currency: str
+) -> Optional[list[tuple[PricingOption, str]]]:
+    """Every offered price string in ``currency``, or None when any price lacks its approved option."""
+    localized: list[tuple[PricingOption, str]] = []
+    for plan in response.available_plans:
+        for price in plan.prices:
+            try:
+                row = local_currency.retrieve_with_options(price.id)
+            except Exception as e:
+                logger.warning(f"Local currency price lookup failed: {type(e).__name__}")
+                return None
+            amount = local_currency.approved_amount(row, currency)
+            if amount is None:
+                return None
+            localized.append(
+                (price, f"{local_currency.display_money(amount, currency)}/{row['recurring']['interval']}")
+            )
+    return localized or None
+
+
+def _apply_local_currency_offer(
+    response: UserSubscriptionResponse, platform: Optional[str], region: Optional[str]
+) -> None:
+    """A buyer with no paid plan: local-currency price strings, or no purchase UI (utils.local_currency)."""
+    if response.subscription.plan != PlanType.basic:
+        return
+    offer = local_currency.offer_for(platform, region)
+    if offer.kind == 'local' and offer.currency:
+        localized = _local_price_strings(response, offer.currency)
+        if localized is not None:
+            for price, text in localized:
+                price.price_string = text
+            return
+        offer = local_currency.unconfigured(platform)
+    if offer.kind == 'hidden':
+        response.show_subscription_ui = False
+        response.available_plans = []
+
+
 @router.get('/v1/users/me/subscription', tags=['v1'], response_model=UserSubscriptionResponse)
 def get_user_subscription_endpoint(
     request: Request,
@@ -1335,6 +1375,7 @@ def get_user_subscription_endpoint(
         )
         funded = allowance
     response.transcription_allowance = TranscriptionAllowanceSnapshot(**allowance.as_dict())
+    _apply_local_currency_offer(response, x_app_platform, request.headers.get(local_currency.REGION_HEADER))
     # Resolve from the real subscription, never the synthetic BYOK response plan.
     try:
         if 'subscription' not in already_read:

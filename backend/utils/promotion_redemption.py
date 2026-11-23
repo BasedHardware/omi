@@ -15,6 +15,7 @@ import stripe
 
 from database import promotion_redemptions as redemptions_db
 from database import users as users_db
+from utils import local_currency
 from utils import stripe as stripe_utils
 from utils.log_sanitizer import sanitize
 
@@ -70,17 +71,43 @@ def _check_eligible(promo: dict, coupon: dict, subscription: dict) -> None:
         raise RedemptionError(400, 'This code is for a different plan.')
 
     restrictions = promo.get('restrictions') or {}
-    minimum = restrictions.get('minimum_amount')
-    if minimum:
-        if (
-            restrictions.get('minimum_amount_currency') != price['currency']
-            or (price.get('unit_amount') or 0) < minimum
-        ):
-            raise RedemptionError(400, 'This code is for a different plan.')
+    currency = subscription.get('currency')
+    if isinstance(currency, str) and local_currency.billed_in_option(price, currency):
+        _check_local_currency_eligible(restrictions, coupon, price, currency)
+    else:
+        minimum = restrictions.get('minimum_amount')
+        if minimum:
+            if (
+                restrictions.get('minimum_amount_currency') != price['currency']
+                or (price.get('unit_amount') or 0) < minimum
+            ):
+                raise RedemptionError(400, 'This code is for a different plan.')
     if promo.get('customer') and promo['customer'] != subscription['customer']:
         raise _invalid()
     if restrictions.get('first_time_transaction') and subscription['status'] != 'trialing':
         raise RedemptionError(400, 'This code is only for new subscriptions.')
+
+
+def _check_local_currency_eligible(restrictions: dict, coupon: dict, price: dict, currency: str) -> None:
+    """A subscription billed in a local currency option: the code must work in that currency.
+
+    The plan amount is the Price's option for the subscription currency. A minimum must be
+    stated in that currency (directly or in the restriction's currency_options), and a fixed
+    amount-off coupon needs an amount in that currency; otherwise the code is refused.
+    """
+    amount = local_currency.option_amount_for(price, currency)
+    if amount is None:
+        raise RedemptionError(400, 'This code cannot be applied to your plan.')
+    if restrictions.get('minimum_amount'):
+        if restrictions.get('minimum_amount_currency') == currency:
+            minimum = restrictions.get('minimum_amount')
+        else:
+            minimum = ((restrictions.get('currency_options') or {}).get(currency) or {}).get('minimum_amount')
+        if not isinstance(minimum, int) or amount < minimum:
+            raise RedemptionError(400, 'This code is for a different plan.')
+    if coupon.get('amount_off') and coupon.get('currency') != currency:
+        if not ((coupon.get('currency_options') or {}).get(currency) or {}).get('amount_off'):
+            raise RedemptionError(400, 'This code is for a different plan.')
 
 
 def redeem_promotion_code(uid: str, code: str) -> dict:

@@ -182,6 +182,7 @@ class _WebPaywallPageState extends State<WebPaywallPage> {
         plan: offer.tierId,
         interval: price.interval,
         source: widget.source,
+        currency: price.currency,
       );
       if (!mounted) return;
       await _tell('onCheckout', outcome.name);

@@ -8,6 +8,7 @@ import pycountry
 import stripe
 
 from database import redis_db
+from utils import local_currency
 from utils.trial_reminder import checkout_trial_terms
 import logging
 
@@ -218,11 +219,15 @@ def create_subscription_checkout_session(
     promotion_code_id: Optional[str] = None,
     trial_period_days: Optional[int] = None,
     promotion_attribution: Optional[Mapping[str, str]] = None,
+    local_currency_code: Optional[str] = None,
 ):
     """Create a Stripe Checkout session for a subscription.
 
     `trial_period_days` starts the subscription with a free trial; Checkout still collects the
     card, and Stripe charges the first period when the trial ends unless the subscriber cancels.
+
+    `local_currency_code` charges the Price's approved `currency_options` entry instead of its
+    base currency (utils.local_currency); a Price without that approved entry raises ValueError.
     """
     try:
         success_url = urljoin(base_url, 'v1/payments/success?session_id={CHECKOUT_SESSION_ID}')  # type: ignore[reportArgumentType]  # base_url validated at runtime
@@ -231,8 +236,16 @@ def create_subscription_checkout_session(
         # Pin the selected price's original currency as well as disabling FX.
         # Multi-currency Prices can otherwise select a presentment currency by IP.
         # Existing non-USD management/reactivation stays outside new Checkout.
-        price = stripe.Price.retrieve(price_id)
-        currency = price.currency.lower()
+        local_amount = None
+        if local_currency_code:
+            price = local_currency.retrieve_with_options(price_id)
+            local_amount = local_currency.approved_amount(price, local_currency_code)
+            if local_amount is None:
+                raise ValueError('local_currency_unavailable')
+            currency = local_currency_code
+        else:
+            price = stripe.Price.retrieve(price_id)
+            currency = price.currency.lower()
 
         # Only the narrow, server-derived allowlist can cross this boundary. Authentication
         # and plan ownership always win over attribution supplied by another internal caller.
@@ -257,7 +270,7 @@ def create_subscription_checkout_session(
             'currency': currency,
             # Pinned, not 'auto': the cart must render the same currency string
             # the app shows (see CHECKOUT_LOCALE). Language follows the pin.
-            'locale': CHECKOUT_LOCALE,
+            'locale': CHECKOUT_LOCALE if local_amount is None else local_currency.checkout_locale(currency),
             'success_url': success_url,
             'cancel_url': cancel_url,
             'metadata': dict(metadata),
@@ -278,15 +291,18 @@ def create_subscription_checkout_session(
             submit_lines.append(
                 checkout_trial_terms(
                     trial_period_days,
-                    getattr(price, 'unit_amount', None),
+                    getattr(price, 'unit_amount', None) if local_amount is None else local_amount,
                     currency,
                     recurring.get('interval') if recurring else None,
+                    money=None if local_amount is None else local_currency.display_money,
                 )
             )
         if currency == 'usd':
             # Stripe owns its currency glyphs. Keep USD explicit even where its
             # hosted template uses a dollar glyph rather than the app's US$.
             submit_lines.append('All amounts are in USD (US dollars).')
+        elif local_amount is not None:
+            submit_lines.append(f'All amounts are in {currency.upper()}.')
         if submit_lines:
             session_params['custom_text'] = {'submit': {'message': ' '.join(submit_lines)}}
 
@@ -306,6 +322,11 @@ def create_subscription_checkout_session(
         return checkout_session
     except stripe.error.InvalidRequestError:  # type: ignore[reportAttributeAccessIssue,reportUnknownMemberType]  # stripe.error exposed dynamically at runtime
         raise
+    except ValueError as e:
+        if str(e) == 'local_currency_unavailable':
+            raise
+        logger.error(f"Error creating checkout session: {e}")
+        return None
     except Exception as e:
         logger.error(f"Error creating checkout session: {e}")
         return None

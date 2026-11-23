@@ -5,10 +5,13 @@ management bindings in the plan catalog may supplement the configured prices;
 new Checkout cannot use these management targets. Stripe owns amounts.
 """
 
+from types import SimpleNamespace
+
 import stripe
 
 from config.plan_catalog import MANAGEMENT_CURRENCY_PRICES, resolve_price_entitlements
 from models.users import PlanType
+from utils import local_currency
 
 
 class BillingCurrencyUnavailable(ValueError):
@@ -31,10 +34,28 @@ def management_binding(price_id: str) -> tuple[PlanType, str, str] | None:
     return None
 
 
-def price_for_currency(price: stripe.Price, currency: str | None) -> stripe.Price:
-    """Resolve an explicit currency variant; never convert or invent an amount."""
+def price_for_currency(price: stripe.Price, currency: str | None, *, allow_options: bool = False) -> stripe.Price:
+    """Resolve an explicit currency variant; never convert or invent an amount.
+
+    ``allow_options``: the subscription is billed through a table currency option of a
+    multi-currency Price (utils.local_currency), so the same Price id is offered at its
+    own ``currency_options`` amount in that currency.
+    """
     if currency is None or price.currency == currency:
         return price
+    if allow_options and local_currency.billed_in_option(price, currency):
+        amount = local_currency.option_amount_for(price, currency)
+        recurring = price.recurring
+        if amount is None or recurring is None or price.active is not True:
+            raise BillingCurrencyUnavailable('This plan is not available in your subscription currency.')
+        return SimpleNamespace(  # type: ignore[return-value]
+            id=price.id,
+            currency=currency,
+            unit_amount=amount,
+            recurring=recurring,
+            active=price.active,
+            livemode=price.livemode,
+        )
     resolved = resolve_price_entitlements(price.id)
     if not resolved or resolved['entitlement_version'] != 'legacy':
         raise BillingCurrencyUnavailable('This plan is not available in your subscription currency.')

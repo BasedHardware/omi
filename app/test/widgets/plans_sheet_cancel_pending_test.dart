@@ -60,7 +60,7 @@ class _Usage extends UsageProvider {
 
   @override
   Future<Map<String, dynamic>?> createUserCheckoutSession(
-      {required String priceId, String? promotionCode, int? trialDays}) async {
+      {required String priceId, String? promotionCode, int? trialDays, String? currency}) async {
     sessions.add(priceId);
     if (sessionError != null) throw sessionError!;
     return sessionResult;

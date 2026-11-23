@@ -64,7 +64,7 @@ class _Usage extends UsageProvider {
   Future<void> loadAvailablePlans() async {}
   @override
   Future<Map<String, dynamic>?> createUserCheckoutSession(
-      {required String priceId, String? promotionCode, int? trialDays}) async {
+      {required String priceId, String? promotionCode, int? trialDays, String? currency}) async {
     sessions.add((priceId, trialDays, promotionCode));
     return {'error': true, 'status_code': 400, 'detail': 'Fixture: checkout handoff captured'};
   }
@@ -455,7 +455,7 @@ void main() {
     expect(formatBillingPrice(2999, 'usd'), r'US$29.99');
     expect(formatBillingPrice(0, 'usd'), r'US$0.00');
     expect(formatBillingPrice(4800, 'jpy'), '¥4,800');
-    expect(formatBillingPrice(2999, 'cad'), 'CAD 29.99');
+    expect(formatBillingPrice(2999, 'cad'), r'CA$29.99'); // Stripe Checkout's `en` glyph
     expect(formatBillingPrice(1234, 'kwd'), 'KWD 1.234');
     expect(formatBillingPrice(500, 'isk'), 'ISK 5.00');
   });

@@ -28,6 +28,7 @@ import 'package:omi/services/auth/auth_token_result.dart';
 import 'package:omi/services/auth_service.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
+import 'package:omi/utils/storefront_region.dart';
 
 class ApiClient {
   static const Duration requestTimeoutRead = Duration(seconds: 30);
@@ -231,6 +232,7 @@ Future<Map<String, String>> buildHeaders({
     'X-Omi-Plan-Identity': '1',
     'X-App-Build': PlatformManager.instance.appBuild,
     appChannelHeader: currentAppChannel().wire,
+    if (deviceStorefrontRegion() case final region?) storefrontRegionHeader: region,
     ...fromHeaders,
   };
 

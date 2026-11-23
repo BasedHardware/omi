@@ -574,6 +574,7 @@ class _PlansSheetState extends State<PlansSheet> {
         final sessionData = await provider.createUserCheckoutSession(
           priceId: priceId,
           promotionCode: promoCode.isNotEmpty ? promoCode : null,
+          currency: selectedOffer?['currency'] as String?,
         );
         if (!mounted) return;
         if (sessionData != null && sessionData['error'] == true) {

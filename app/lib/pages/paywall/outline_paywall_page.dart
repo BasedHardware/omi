@@ -84,6 +84,7 @@ class _OutlinePaywallPageState extends State<OutlinePaywallPage> with TickerProv
                 plan: tierId,
                 interval: price.interval,
                 source: widget.source,
+                currency: price.currency,
                 surface: (message) {
                   if (mounted) setState(() => _notice = message);
                 },

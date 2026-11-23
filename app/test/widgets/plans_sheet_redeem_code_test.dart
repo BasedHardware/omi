@@ -59,7 +59,7 @@ class _Usage extends UsageProvider {
   Future<void> loadAvailablePlans() async {}
   @override
   Future<Map<String, dynamic>?> createUserCheckoutSession(
-      {required String priceId, String? promotionCode, int? trialDays}) async {
+      {required String priceId, String? promotionCode, int? trialDays, String? currency}) async {
     checkouts++;
     checkoutCodes.add(promotionCode);
     return null;

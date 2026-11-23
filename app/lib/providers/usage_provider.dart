@@ -702,6 +702,7 @@ class UsageProvider with ChangeNotifier {
     required String priceId,
     String? promotionCode,
     int? trialDays,
+    String? currency,
   }) async {
     if (_isPaymentLoading) return null;
 
@@ -710,8 +711,8 @@ class UsageProvider with ChangeNotifier {
     notifyListeners();
 
     try {
-      final sessionData =
-          await createCheckoutSession(priceId: priceId, promotionCode: promotionCode, trialDays: trialDays);
+      final sessionData = await createCheckoutSession(
+          priceId: priceId, promotionCode: promotionCode, trialDays: trialDays, currency: currency);
       return sessionData;
     } catch (e) {
       _error = 'Failed to create checkout session. Please try again later.';

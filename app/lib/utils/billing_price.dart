@@ -8,14 +8,28 @@ import 'package:intl/intl.dart';
 String formatBillingPrice(int amountMinor, String currency) {
   final code = currency.trim().toUpperCase();
   final digits = _zeroDecimal.contains(code) ? 0 : (_threeDecimal.contains(code) ? 3 : 2);
-  final symbol = switch (code) {
-    'USD' => 'US\$',
-    'JPY' => '¥',
-    _ => '$code ',
-  };
+  final symbol = _symbols[code] ?? '$code ';
   return NumberFormat.currency(locale: 'en_US', name: code, symbol: symbol, decimalDigits: digits)
       .format(amountMinor / math.pow(10, digits));
 }
+
+// The glyph Stripe Checkout renders at the server's pinned locale for that currency
+// (backend/utils/local_currency.py: `en-GB` for USD, `en` otherwise), so the offer
+// page and the cart show one string. Keep the two tables identical.
+const _symbols = {
+  'USD': 'US\$',
+  'JPY': '¥',
+  'GBP': '£',
+  'EUR': '€',
+  'AUD': 'A\$',
+  'CAD': 'CA\$',
+  'MXN': 'MX\$',
+  'BRL': 'R\$',
+  'INR': '₹',
+  'KRW': '₩',
+  'NZD': 'NZ\$',
+  'HKD': 'HK\$',
+};
 
 // Stripe's charge units, rather than CLDR's cash/payout units (notably ISK/UGX).
 const _zeroDecimal = {

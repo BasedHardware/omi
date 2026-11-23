@@ -25,6 +25,7 @@ abstract final class PaywallCheckout {
     required String source,
     void Function(String message)? surface,
     int? trialDays,
+    String? currency,
   }) async {
     final provider = context.read<UsageProvider>();
     final l10n = context.l10n;
@@ -51,7 +52,8 @@ abstract final class PaywallCheckout {
     }
     PlatformManager.instance.analytics.upgradePlanSelected(plan: plan, billingInterval: interval, source: source);
     try {
-      final session = await provider.createUserCheckoutSession(priceId: priceId, trialDays: trialDays);
+      final session =
+          await provider.createUserCheckoutSession(priceId: priceId, trialDays: trialDays, currency: currency);
       if (!context.mounted) return PaywallCheckoutOutcome.cancelled;
       if (session != null && session['error'] == true) {
         // Checkout's 409 is an existing subscription, not a pending cancellation.

@@ -13,7 +13,8 @@ from database.app_review_config import should_hide_subscription_ui
 from models.users import Subscription
 from models.storefront import StorefrontResponse, StorefrontUsage
 from utils.other import endpoints as auth
-from utils import storefront_flags, subscription as subscription_utils
+from utils import local_currency, storefront_flags, subscription as subscription_utils
+from utils.billing_currency import subscription_currency
 from utils.observability.fallback import record_fallback
 from utils.storefront import build_single_plan_storefront, build_storefront, load_ladder
 from utils.storefront_copy import present_usage
@@ -41,6 +42,27 @@ def _retrieve_price(price_id: str) -> dict[str, Any]:
     except Exception:
         _degraded('storefront_price', 'hidden_price')
         raise
+
+
+def _retrieve_price_with_options(price_id: str) -> dict[str, Any]:
+    """Live Price with currency_options; uncached so the sheet shows what Checkout charges."""
+    try:
+        return local_currency.retrieve_with_options(price_id).to_dict_recursive()
+    except Exception:
+        _degraded('storefront_price', 'hidden_price')
+        raise
+
+
+def _subscription_billing_currency(subscription: Subscription) -> str | None:
+    """The Stripe subscription's currency, read only once a local-currency table exists."""
+    subscription_id = subscription.stripe_subscription_id
+    if not local_currency.load_table().amounts or not subscription_id or not subscription_id.startswith('sub_'):
+        return None
+    try:
+        return subscription_currency(stripe.Subscription.retrieve(subscription_id).to_dict())
+    except Exception:
+        _degraded('storefront_currency', 'base_currency')
+        return None
 
 
 def _usage(uid: str, subscription: Subscription, locale: str | None = None) -> StorefrontUsage:
@@ -101,6 +123,7 @@ def get_storefront(
     uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid_no_byok_validation, 'storefront:plans')),
     x_app_platform: Optional[str] = Header(None, alias='X-App-Platform'),
     x_app_version: Optional[str] = Header(None, alias='X-App-Version'),
+    x_storefront_region: Optional[str] = Header(None, alias=local_currency.REGION_HEADER),
 ):
     if not storefront_flags.enabled():
         raise HTTPException(status_code=404, detail='Storefront is not enabled')
@@ -114,8 +137,30 @@ def get_storefront(
     # gets a single-tier Omi Pro sheet on every platform (the ladder sheet has
     # no Omi Pro card). NEW_BUYER_SINGLE_PLAN_ENABLED=false restores the ladder.
     usage = _usage(uid, subscription, locale)
-    if subscription_utils.new_buyer_single_plan_applies(subscription.plan):
-        return build_single_plan_storefront(
+    single_plan = subscription_utils.new_buyer_single_plan_applies(subscription.plan)
+    # A buyer with no paid plan sees the price in their approved local currency, or on
+    # Android no price at all when none is approved (utils.local_currency). Default off.
+    offer = local_currency.DEFAULT
+    if subscription.plan.value == 'basic':
+        offer = local_currency.offer_for(x_app_platform, x_storefront_region)
+        if offer.kind == 'local' and single_plan:
+            localized = build_single_plan_storefront(
+                catalog_revision=catalog.CATALOG_REVISION,
+                subscription=subscription,
+                usage=usage,
+                retrieve_price=_retrieve_price_with_options,
+                trigger=trigger,
+                locale=locale,
+                local_currency_code=offer.currency,
+            )
+            if localized is not None:
+                return localized
+        if offer.kind == 'local':
+            offer = local_currency.unconfigured(x_app_platform)
+        if offer.kind == 'hidden':
+            return StorefrontResponse(catalog_revision=catalog.CATALOG_REVISION, show_subscription_ui=False)
+    if single_plan:
+        return build_single_plan_storefront(  # type: ignore[return-value]  # None only with a local currency
             catalog_revision=catalog.CATALOG_REVISION,
             subscription=subscription,
             usage=usage,
@@ -158,6 +203,7 @@ def get_storefront(
             )
         except Exception:
             _degraded('storefront_daily_cap', 'unavailable_usage')
+    billed_currency = _subscription_billing_currency(subscription)
     return build_storefront(
         catalog_revision=catalog.CATALOG_REVISION,
         ladder=load_ladder(),
@@ -170,4 +216,5 @@ def get_storefront(
         source=source,
         trigger=trigger,
         locale=locale,
+        **({'subscription_currency': billed_currency} if billed_currency else {}),
     )
