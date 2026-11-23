@@ -4222,9 +4222,9 @@ and retains strict observed-send containment. Unknown text persists without an
 audio window. OFF retains the compact admission-time ledger exactly.
 
 `SONIOX_ORDERED_FINALIZE` is one additional default-off switch, effective only
-with the wire ledger, production Soniox endpoint, `stt-rt-v5` and mono
-pcm_s16le at 16 kHz. The default model is `stt-rt-v6`, so the switch has no
-effect unless `SONIOX_MODEL=stt-rt-v5` is set. Keep it off: the 2026-11-23
+with the wire ledger, production Soniox endpoint, a model listed in
+`ORDERED_FINALIZE_VALIDATED_MODELS` (`utils/stt/soniox.py`) and mono pcm_s16le at
+16 kHz. That set is empty, so the switch currently has no effect on any model. The 2026-11-23
 re-probe (`backend/scripts/soniox_finalize_padding_probe.py`) found that neither
 `stt-rt-v5` nor `stt-rt-v6` pads on finalize any more. Every `<fin>` reported
 the exact sent cursor, and the next speech started there, so every prediction
