@@ -17,6 +17,8 @@ HIDDEN_LAYER_FIELDS = (
     'created_at',
     'recording',
     'home_hidden',
+)
+PENDING_LAYER_FIELDS = HIDDEN_LAYER_FIELDS + (
     'sync_bridge_pending',
     'sync_relevance_user_kept',
     'has_photos',
@@ -138,7 +140,7 @@ def count_hidden(
     if not include_discarded:
         pending = collection.where(filter=FieldFilter('sync_bridge_pending.expires_at', '>', now))
         if next(iter(pending.limit(1).stream()), None) is not None:
-            queries.append((pending.select(HIDDEN_LAYER_FIELDS), True))
+            queries.append((pending.select(PENDING_LAYER_FIELDS), True))
     seen = set()
     for query, pending_only in queries:
         for doc in query.stream():

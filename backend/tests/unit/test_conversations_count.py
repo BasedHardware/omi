@@ -402,9 +402,20 @@ class TestAppsV2LimitBoundary:
 
 
 class _CountDoc:
-    def __init__(self, data):
-        self._data = dict(data)
-        self.id = self._data.get('id')
+    def __init__(self, data, projection=None):
+        self.id = data.get('id')
+        self._data = dict(data) if projection is None else {}
+        for field in projection or ():
+            source, target = data, self._data
+            *parents, leaf = field.split('.')
+            for parent in parents:
+                source = source.get(parent)
+                if not isinstance(source, dict):
+                    break
+                target = target.setdefault(parent, {})
+            else:
+                if leaf in source:
+                    target[leaf] = source[leaf]
 
     def to_dict(self):
         return dict(self._data)
@@ -445,15 +456,21 @@ class _CountQuery:
     changes membership when a ``created_at`` bound already requires the field.
     """
 
-    def __init__(self, docs, record, filters=(), orders=(), limit_count=None):
+    def __init__(self, docs, record, filters=(), orders=(), limit_count=None, projection=None):
         self._docs = docs
         self._record = record
         self._filters = filters
         self._orders = orders
         self._limit_count = limit_count
+        self._projection = projection
 
     def _copy(self, **overrides):
-        params = {'filters': self._filters, 'orders': self._orders, 'limit_count': self._limit_count}
+        params = {
+            'filters': self._filters,
+            'orders': self._orders,
+            'limit_count': self._limit_count,
+            'projection': self._projection,
+        }
         params.update(overrides)
         return _CountQuery(self._docs, self._record, **params)
 
@@ -466,7 +483,7 @@ class _CountQuery:
         return self._copy(orders=(*self._orders, (field_path, name)))
 
     def select(self, fields):
-        return self
+        return self._copy(projection=tuple(fields))
 
     def limit(self, value):
         return self._copy(limit_count=value)
@@ -479,7 +496,7 @@ class _CountQuery:
         return matched_unordered, docs[: self._limit_count]
 
     def stream(self):
-        return iter(_CountDoc(doc) for doc in self._matched()[1])
+        return iter(_CountDoc(doc, self._projection) for doc in self._matched()[1])
 
     def count(self):
         matched_unordered, docs = self._matched()
@@ -790,24 +807,26 @@ def test_pending_bridge_preserves_user_curated_rows_and_layer_counts_use_aggrega
         {'id': 'both', 'discarded': False, 'recording': True, 'home_hidden': True},
         {'id': 'double-hidden', 'discarded': False, 'recording': True, 'deleted': True},
     ]
+    for field, value in {
+        'sync_relevance_user_kept': True,
+        'has_photos': True,
+        'photos': [{'base64': 'cGhvdG8='}],
+        'user_title': 'User title',
+        'folder_user_set': True,
+    }.items():
+        docs.append({'id': field, 'discarded': False, field: value, 'sync_bridge_pending': {'expires_at': now + 100}})
     aggregate_calls = []
     query = _CountQuery(docs, aggregate_calls)
     original_stream = _CountQuery.stream
     streamed_projections = []
 
-    def select(self, fields):
-        projected = self._copy()
-        projected.projection = tuple(fields)
-        return projected
-
     def stream(self):
         assert not any(
             f.field_path in {'recording', 'home_hidden'} for f in self._filters
         ), 'layer count streamed documents'
-        streamed_projections.append((self._filters[0].field_path, self._limit_count, getattr(self, 'projection', None)))
+        streamed_projections.append((self._filters[0].field_path, self._limit_count, self._projection))
         return original_stream(self)
 
-    monkeypatch.setattr(_CountQuery, 'select', select)
     monkeypatch.setattr(_CountQuery, 'stream', stream)
     assert count_hidden(query, include_discarded=False, hide_home=True) == 5
     assert len(aggregate_calls) == 3
@@ -821,6 +840,8 @@ def test_pending_bridge_preserves_user_curated_rows_and_layer_counts_use_aggrega
         'created_at',
         'recording',
         'home_hidden',
+    )
+    expected_pending_projection = expected_projection + (
         'sync_bridge_pending',
         'sync_relevance_user_kept',
         'has_photos',
@@ -832,10 +853,49 @@ def test_pending_bridge_preserves_user_curated_rows_and_layer_counts_use_aggrega
         ('sync_bridge_pending.expires_at', 1, None),
         ('deleted', None, expected_projection),
         ('dream_duplicate_of', None, expected_projection),
-        ('sync_bridge_pending.expires_at', None, expected_projection),
+        ('sync_bridge_pending.expires_at', None, expected_pending_projection),
     ]
     monkeypatch.setattr(_CountQuery, 'stream', original_stream)
     assert count_hidden(query, include_discarded=False, hide_home=True, starred=True) == 0
+
+
+@pytest.mark.parametrize('hidden_fields', [{'deleted': True}, {'dream_duplicate_of': 'winner'}])
+def test_projected_hidden_rows_respect_list_filters_and_layer_overlap(hidden_fields):
+    from database.conversation_visibility_counts import count_hidden
+
+    matching = {
+        **hidden_fields,
+        'discarded': False,
+        'status': 'completed',
+        'source': 'omi',
+        'structured': {'category': 'work', 'overview': 'Unused summary'},
+        'folder_id': 'folder-a',
+        'starred': True,
+        'created_at': _T1,
+    }
+    docs = [
+        {**matching, 'id': 'matching'},
+        {**matching, 'id': 'discarded', 'discarded': True},
+        {**matching, 'id': 'unstarred', 'starred': False},
+        {**matching, 'id': 'out-of-range', 'created_at': _T0},
+        {**matching, 'id': 'recording', 'recording': True},
+        {**matching, 'id': 'home-hidden', 'home_hidden': True},
+    ]
+    assert (
+        count_hidden(
+            _CountQuery(docs, []),
+            include_discarded=False,
+            statuses=['completed'],
+            sources=['omi'],
+            categories=['work'],
+            folder_id='folder-a',
+            starred=True,
+            start_date=_T1,
+            end_date=_T2,
+            hide_home=True,
+        )
+        == 3
+    )
 
 
 def test_filtered_hidden_layers_use_bounded_metadata_scan_without_predicate_indexes(monkeypatch):
