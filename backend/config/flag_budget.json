@@ -75,6 +75,11 @@
       "owner": "overflow / two-lane lead",
       "review_by": "2026-11-29"
     },
+    "BATCH_PARKED_JOB_SWEEPER_ENABLED": {
+      "owner": "omi-pipeline",
+      "review_by": "2026-12-18",
+      "registry": "config/feature-flags.yaml"
+    },
     "BATCH_PIPELINE_API_URL": {
       "seeded": "2026-10-25"
     },
@@ -281,6 +286,14 @@
       "owner": "firestore-cost / projection overlap source owner",
       "review_by": "2026-12-01",
       "reason": "SCA-3850: give firestore-cost one week to review the off switch against its first qualified overlap readout"
+    },
+    "BATCH_PIPELINE_PROJECTION_PHASE_SAMPLE_ENABLED": {
+      "owner": "Margin (SCA-3664)",
+      "review_by": "2026-12-07"
+    },
+    "BATCH_PIPELINE_PROJECTION_PHASE_SAMPLE_PERCENT": {
+      "owner": "Margin (SCA-3664)",
+      "review_by": "2026-12-07"
     },
     "BATCH_PIPELINE_PROJECTION_PREFETCH": {
       "seeded": "2026-10-25"

@@ -72,7 +72,6 @@ import 'package:omi/services/capture/finish_outcome.dart';
 import 'package:omi/services/capture/live_finalize_gate.dart';
 import 'package:omi/services/capture/optimistic_processing.dart';
 import 'package:omi/services/capture/speaker_suggestions.dart';
-import 'package:omi/backend/schema/capture_committed_event.dart';
 import 'package:omi/services/experiments/client_refactor_flags.dart';
 import 'package:omi/services/capture/manual_live_labels.dart';
 import 'package:omi/services/services.dart';
@@ -134,7 +133,7 @@ enum _VoiceCommandTrigger { toggle, legacyLongPress }
 
 class CaptureController extends ChangeNotifier
     with MessageNotifierMixin, CaptureSpeakerAssignment
-    implements ITransctiptSegmentSocketServiceListener {
+    implements ITransctiptSegmentSocketServiceListener, ListenCustodyReceiptListener {
   static const MethodChannel _nativeBleTranscriptChannel = MethodChannel('com.friend.ios/native_ble_transcript');
   static const int _maxInProgressConversationRefreshAttempts = 30;
   static const Duration _inProgressConversationRefreshInterval = Duration(seconds: 2);
@@ -859,7 +858,15 @@ class CaptureController extends ChangeNotifier
   /// conversation so the pipeline can be joined without timing heuristics.
   String? get activeRecordingId => _recordingTelemetry.recordingId;
 
-  ({String uid, String recordingId, CaptureSessionToken? token})? _liveSocketIdentity;
+  ({String uid, String? recordingId, CaptureSessionToken? token})? _liveSocketIdentity;
+
+  bool get _canReuseTranscriptionSocket {
+    final socket = _socket;
+    return socket != null &&
+        socket.state == SocketServiceState.connected &&
+        (!socket.audioCustodyEnabled ||
+            socket.hasCurrentListenOwner(_preferences.uid) && socket.clientConversationId == activeRecordingId);
+  }
 
   /// Recording provenance from this phone's active listen connection. A
   /// per-user in-progress pointer or a nearby timestamp cannot prove it.
@@ -868,6 +875,8 @@ class CaptureController extends ChangeNotifier
     final socket = _socket;
     if (identity == null ||
         socket == null ||
+        !socket.localPreview ||
+        identity.recordingId == null ||
         identity.uid.isEmpty ||
         identity.uid != _preferences.uid ||
         identity.recordingId != activeRecordingId ||
@@ -1993,9 +2002,7 @@ class CaptureController extends ChangeNotifier
     if (!identical(_socket, socket)) {
       _socket?.unsubscribe(this);
       _socket = socket;
-      final recordingId = activeRecordingId;
-      _liveSocketIdentity =
-          recordingId == null ? null : (uid: _preferences.uid, recordingId: recordingId, token: sessionToken);
+      _liveSocketIdentity = (uid: _preferences.uid, recordingId: activeRecordingId, token: sessionToken);
       _lastPublishedSocketCustomStt = socket.customSttMode;
       _localPreview.socketPublished(declared: socket.localPreview, send: _sendPendantToSocket);
       _socket?.subscribe(this, this);
@@ -2643,7 +2650,7 @@ class CaptureController extends ChangeNotifier
 
     if (language != _socket?.language ||
         codec != _socket?.codec ||
-        _socket?.state != SocketServiceState.connected ||
+        !_canReuseTranscriptionSocket ||
         _socket?.sttConfigId != sttConfigId ||
         _sessionGeolocationDiffersFromSocket()) {
       await _initiateWebsocket(audioCodec: codec, force: true, source: _getConversationSourceFromDevice());
@@ -2740,7 +2747,6 @@ class CaptureController extends ChangeNotifier
   void _refreshLimitlessCustomLiveWatch() {
     final connection = _limitlessAudioConnection;
     if (connection == null) return;
-    connection.stopCustomLiveAudioWatch();
     final device = _recordingDevice;
     final session = _capture.stagedReadModel.state.active;
     final recordingId = session?.recordingId;
@@ -2754,6 +2760,7 @@ class CaptureController extends ChangeNotifier
         accountId.isEmpty ||
         !config.isEnabled ||
         config.provider != SttProvider.customLive) {
+      connection.stopCustomLiveAudioWatch();
       return;
     }
     final configId = config.sttConfigId;
@@ -2782,9 +2789,13 @@ class CaptureController extends ChangeNotifier
       return _preferences.customSttConfig.sttConfigId == configId;
     }
 
-    if (!isCurrent()) return;
+    if (!isCurrent()) {
+      connection.stopCustomLiveAudioWatch();
+      return;
+    }
     _recordingTelemetry.observeCustomLiveAudioEligibility();
     if (_customLiveAudioRecoveryKilled) {
+      connection.stopCustomLiveAudioWatch();
       _recordingTelemetry.observeCustomLiveAudioDetection(enabled: false);
       return;
     }
@@ -4206,6 +4217,35 @@ class CaptureController extends ChangeNotifier
   }
 
   @override
+  void onCustodyReceipt(
+    TranscriptSegmentSocketService socket,
+    MessageEvent event, {
+    required String owner,
+    String? recordingSessionId,
+  }) {
+    final identity = _liveSocketIdentity;
+    if (_captureControllerDisposed ||
+        !identical(_socket, socket) ||
+        socket.state != SocketServiceState.connected ||
+        socket.stoppedIntentionally ||
+        !socket.hasCurrentListenOwner(owner) ||
+        identity == null ||
+        identity.uid != owner ||
+        owner != _preferences.uid ||
+        !_captureSessionIsCurrent(identity.token) ||
+        recordingSessionId != socket.clientConversationId ||
+        (recordingSessionId != null && recordingSessionId != activeRecordingId)) {
+      return;
+    }
+    final phone = _wal.getSyncs().phone;
+    if (phone is LocalWalSyncImpl) {
+      unawaited(phone.recordCustodyReceipt(event, owner: owner, recordingSessionId: recordingSessionId).catchError(
+            (Object _) => Logger.debug('event=refactor_shadow lane=L5 check=custody_commit outcome=error'),
+          ));
+    }
+  }
+
+  @override
   void onMessageEventReceived(MessageEvent event) {
     if (_captureControllerDisposed) return;
     if (event is ConversationSessionEvent) {
@@ -4248,15 +4288,6 @@ class CaptureController extends ChangeNotifier
       return;
     }
 
-    if (event is CaptureCommittedEvent) {
-      final phone = _wal.getSyncs().phone;
-      if (phone is LocalWalSyncImpl) {
-        unawaited(phone.recordCaptureCommitted(event).catchError((Object _) {
-          Logger.debug('event=refactor_shadow lane=L5 check=custody_commit outcome=error');
-        }));
-      }
-      return;
-    }
     if (event is SpeakerLabelSuggestionEvent) {
       _handleSpeakerLabelSuggestionEvent(event);
       return;
@@ -4913,7 +4944,7 @@ class CaptureController extends ChangeNotifier
             _closeBleStream(disableNativeBackground: disableNativeBackground),
         startBleStream: () => _initiateDeviceAudioStreaming(),
         openSocket: (spec) async {
-          if (spec.ensureOnly && _socket?.state == SocketServiceState.connected) return;
+          if (spec.ensureOnly && _canReuseTranscriptionSocket) return;
           await _initiateWebsocket(
             audioCodec: spec.codec,
             sampleRate: spec.sampleRate,

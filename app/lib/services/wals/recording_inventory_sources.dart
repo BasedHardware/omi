@@ -2,9 +2,18 @@
 // call repairing loaders or infer server receipt from these local sources.
 part of 'recording_inventory.dart';
 
-_Decoded _decode(Uint8List bytes, String kind) {
+final _custodyProofLogName = RegExp(r'^capture_committed_([0-9a-f]{64})\.jsonl(?:\.tmp)?$');
+
+_Decoded _decode(Uint8List bytes, String kind, String name) {
   try {
-    final decoded = jsonDecode(utf8.decode(bytes));
+    final content = utf8.decode(bytes);
+    final proof = kind == 'capture_committed' ? _custodyProofLogName.firstMatch(name) : null;
+    if (proof != null) {
+      return CaptureCommittedJournal.isReadableProofLog(content, proof.group(1)!)
+          ? _Decoded([], null)
+          : _Decoded([], 'invalid_schema');
+    }
+    final decoded = jsonDecode(content);
     if (kind == 'capture_committed') {
       const fields = {
         'type',

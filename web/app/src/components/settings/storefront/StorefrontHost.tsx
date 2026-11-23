@@ -1,5 +1,7 @@
 'use client';
 
+import { CHECKOUT_POPUP_BLOCKED, openCheckoutWindow } from '@/lib/checkoutWindow';
+
 import * as Dialog from '@radix-ui/react-dialog';
 import { X } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -98,7 +100,7 @@ async function purchase(
   }
   const result = await createCheckoutSession(price.id);
   if (result?.url) {
-    window.open(result.url, '_blank');
+    if (!openCheckoutWindow(result.url)) return CHECKOUT_POPUP_BLOCKED;
     const handleFocus = () => {
       onSubscriptionUpdate();
       window.removeEventListener('focus', handleFocus);
@@ -152,15 +154,24 @@ export function StorefrontPanel({
     if (!data || busyPriceId !== null) return;
     setBusyPriceId(price.id);
     setError(null);
+    let checkoutBlocked = false;
     try {
-      setError(
-        await purchase(data, tier, price, source, livePlanId, onSubscriptionUpdate),
+      const purchaseError = await purchase(
+        data,
+        tier,
+        price,
+        source,
+        livePlanId,
+        onSubscriptionUpdate,
       );
+      setError(purchaseError);
+      checkoutBlocked = purchaseError === CHECKOUT_POPUP_BLOCKED;
     } catch {
       setError('Something went wrong. Try again.');
     } finally {
       setBusyPriceId(null);
-      void reload();
+      // Reloading unmounts the interval picker and would reset a blocked offer.
+      if (!checkoutBlocked) void reload();
     }
   };
 

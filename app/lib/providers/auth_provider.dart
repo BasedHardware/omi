@@ -381,12 +381,15 @@ class AuthenticationProvider extends BaseProvider {
     }
   }
 
+  static const termsOfServiceUrl = 'https://www.omi.me/pages/terms-of-service';
+  static const privacyPolicyUrl = 'https://www.omi.me/pages/privacy';
+
   void openTermsOfService() {
-    _launchUrl('https://www.omi.me/pages/terms-of-service');
+    _launchUrl(termsOfServiceUrl);
   }
 
   void openPrivacyPolicy() {
-    _launchUrl('https://www.omi.me/pages/privacy');
+    _launchUrl(privacyPolicyUrl);
   }
 
   void _launchUrl(String url) async {

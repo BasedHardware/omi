@@ -42,6 +42,7 @@ def test_2026_11_17_state_reports_each_escape(manifest):
     assert missing == {
         # Stale gateway: older than the commit that adds the v3 lanes, and the lanes are not served.
         'service:llm-gateway:contains:012329830a9e',
+        'lane:omi:auto:conversation-v3-live-title',
         'lane:omi:auto:conversation-v3-outline',
         'lane:omi:auto:conversation-v3-summary',
         'lane:omi:auto:conversation-v3-summary-open',
@@ -240,6 +241,18 @@ def test_order_defers_the_moving_service_and_later_steps(manifest):
 
     with pytest.raises(check.InvalidInput):
         check.evaluate(manifest, state, 'diarizer')
+
+
+@pytest.mark.parametrize('builder', ['backend', 'backend-sync', 'backend-sync-backfill', 'backend-integration'])
+def test_live_title_lane_must_be_serving_before_builder_rollout(manifest, builder):
+    state = _state('state-ready.json')
+    assert check.evaluate(manifest, state, builder).verdict == check.READY
+
+    lane = 'omi:auto:conversation-v3-live-title'
+    state['services']['llm-gateway']['serving'][0]['lanes'].remove(lane)
+    verdict = check.evaluate(manifest, state, builder)
+    assert verdict.verdict == check.BLOCKED
+    assert f'lane:{lane}' in _by_status(verdict, check.MISSING)
 
 
 def test_infra_before_field(manifest):

@@ -679,7 +679,12 @@ class Scheduler:
                     for _, enqueued_at, relet in receipts:
                         if self.metrics:
                             try:
-                                self.metrics.record('leased', wait_seconds=now - enqueued_at, relet=relet)
+                                self.metrics.record(
+                                    'leased',
+                                    wait_seconds=now - enqueued_at,
+                                    relet=relet,
+                                    priority=priority.name.lower(),
+                                )
                             except Exception:
                                 pass  # Metrics cannot turn an issued lease into a failed pull.
                     return [lease for lease, _, _ in receipts]

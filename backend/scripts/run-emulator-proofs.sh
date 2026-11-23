@@ -208,6 +208,10 @@ run_proof "Firestore read budget: batch unit end-to-end (M3 scenario 1)" \
   "$PYTHON" -m pytest -q -s -p no:cacheprovider tests/integration/test_firestore_read_budget_batch_unit.py
 run_proof "Firestore read budget: conversation list page (M3 scenario 3)" \
   "$PYTHON" -m pytest -q -s -p no:cacheprovider tests/integration/test_firestore_read_budget_conversation_page.py
+run_proof "Firestore read budget: sync upload, privacy and status polls" \
+  "$PYTHON" -m pytest -q -s -p no:cacheprovider tests/integration/test_firestore_read_budget_sync.py
+run_proof "Firestore read budget: idle projection and pending-work backlog" \
+  "$PYTHON" -m pytest -q -s -p no:cacheprovider tests/integration/test_firestore_read_budget_idle.py
 
 
 if (( ${#failures[@]} )); then

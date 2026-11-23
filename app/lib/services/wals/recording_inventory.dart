@@ -7,6 +7,7 @@ import 'dart:typed_data';
 import 'package:path/path.dart' as path;
 import 'package:crypto/crypto.dart';
 import 'package:omi/backend/schema/capture_committed_event.dart';
+import 'package:omi/services/wals/capture_committed_journal.dart';
 import 'package:omi/utils/batch_recording.dart';
 
 import 'package:omi/utils/off_ui_isolate.dart';
@@ -278,7 +279,8 @@ Future<RecordingOrphanCensus> captureRecordingCensus(
         result = _Decoded([], 'size_limit');
       } else {
         final bytes = await File(meta.filePath).readAsBytes();
-        result = await offUiIsolate(() => _decode(bytes, meta.kind),
+        final name = path.basename(meta.filePath);
+        result = await offUiIsolate(() => _decode(bytes, meta.kind, name),
             size: bytes.length, threshold: 0, debugName: 'recording_inventory_decode');
         final after = await File(meta.filePath).stat();
         if (after.size != meta.bytes || after.modified.microsecondsSinceEpoch != meta.modifiedUs) changed++;
@@ -295,16 +297,15 @@ Future<RecordingOrphanCensus> captureRecordingCensus(
     loaderEvents.addAll(result.loaderEvents);
     buckets.putIfAbsent(meta.kind, () => []).addAll(result.rows);
     if (meta.kind == 'capture_committed') {
-      final expected = 'capture_committed_${sha256.convert(utf8.encode(currentOwner))}.json';
+      final expected = 'capture_committed_${sha256.convert(utf8.encode(currentOwner))}';
+      final name = path.basename(meta.filePath).replaceFirst(RegExp(r'\.tmp$'), '');
       buckets[meta.kind]!.add(RecordingInventoryRow(
           status: 'unknown',
           captureSeconds: null,
           audioSeconds: null,
           indexBytes: 0,
           disk: false,
-          owner: path.basename(meta.filePath).replaceFirst(RegExp(r'\.tmp$'), '') == expected
-              ? currentOwner
-              : 'unknown-journal-owner'));
+          owner: name == '$expected.json' || name == '$expected.jsonl' ? currentOwner : 'unknown-journal-owner'));
     }
   }
   final legacy = <RecordingInventoryRow>[

@@ -32,8 +32,9 @@ from models.conversation import Conversation, CreateConversation
 from models.conversation_enums import ConversationSource, ConversationStatus
 from models.structured import Structured
 from models.transcript_segment import TranscriptSegment
+from database import _client as firestore_client
+from tests.support.isolated_prometheus import isolated_prometheus
 from testing.import_isolation import AutoMockModule, load_module_fresh, stub_modules
-from tests.unit.memory_import_isolation import make_database_client_stub
 
 BACKEND_DIR = Path(__file__).resolve().parent.parent.parent
 
@@ -62,14 +63,6 @@ def _build_fakes() -> dict[str, ModuleType]:
     refresh = ModuleType('utils.conversations.action_item_refresh')
     refresh.preserve = lambda *a, **k: False
     add('utils.conversations.action_item_refresh', refresh)
-
-    database_pkg = ModuleType("database")
-    database_pkg.__path__ = [str(BACKEND_DIR / "database")]  # type: ignore[attr-defined]
-    add("database", database_pkg)
-
-    client_mod = make_database_client_stub()
-    client_mod.run_transactional = MagicMock()
-    add("database._client", client_mod)
 
     vector_db = add("database.vector_db", AutoMockModule("database.vector_db"))
     for attr in [
@@ -378,7 +371,12 @@ def _load_modules(request):
     teardown, keeping the suite hermetic.
     """
     fakes = _build_fakes()
-    with stub_modules(fakes):
+    with pytest.MonkeyPatch.context() as patch, isolated_prometheus(), stub_modules(fakes):
+        client = MagicMock()
+        patch.setattr(firestore_client, '_firestore_client', client)
+        patch.setattr(firestore_client, '_customer_firestore_client', client)
+        patch.setattr(firestore_client, '_data_plane_firestore_client', client)
+        patch.setattr(firestore_client, 'run_transactional', MagicMock())
         ut = load_module_fresh(
             "utils.llm.usage_tracker",
             str(BACKEND_DIR / "utils" / "llm" / "usage_tracker.py"),

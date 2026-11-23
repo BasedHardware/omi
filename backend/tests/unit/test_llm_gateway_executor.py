@@ -534,6 +534,25 @@ async def test_executor_does_not_use_lkg_when_active_route_policy_rejects_failur
 
 
 @pytest.mark.asyncio
+async def test_live_title_lane_does_not_retry_after_provider_timeout(monkeypatch):
+    request = {
+        'model': 'omi:auto:conversation-v3-live-title',
+        'messages': [{'role': 'user', 'content': 'Discuss the release schedule.'}],
+        'max_completion_tokens': 32,
+    }
+    monkeypatch.setenv(executor.FLEX_FIRST_LANES_ENV_VAR, request['model'])
+    resolved = resolve_chat_completion_route(gateway_config(), request)
+    provider = FakeChatCompletionProvider([ProviderFailure(FailureClass.TIMEOUT_BEFORE_OUTPUT)])
+
+    with pytest.raises(GatewayProviderFailureError) as exc_info:
+        await execute_chat_completion(resolved, omi_credentials(), ProviderRegistry({'openai': provider}))
+
+    assert exc_info.value.failure_class == FailureClass.TIMEOUT_BEFORE_OUTPUT
+    assert len(provider.calls) == 1
+    assert provider.calls[0].request['max_completion_tokens'] == 32
+
+
+@pytest.mark.asyncio
 async def test_executor_remains_error_when_active_and_lkg_routes_both_fail():
     config = config_with_active_route(active_route_with_fallbacks([]))
     resolved = resolve_chat_completion_route(config, valid_request())

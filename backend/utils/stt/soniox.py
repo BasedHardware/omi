@@ -35,7 +35,7 @@ from config.live_stt_replay import ReplayLimits
 from config.live_stt_recovery import recovery_enabled
 from utils.stt.socket import STTSocket
 from config.soniox_idle import idle_close_seconds
-from config.audio_timeline import soniox_wire_ledger_enabled, soniox_ordered_finalize_enabled
+from config.audio_timeline import soniox_wire_ledger_enabled
 from utils.stt.soniox_wire_ledger import SonioxProviderClock, OrderedSonioxProviderClock, capture_spans, observed_audio
 from utils.stt.soniox_capture_axis import (
     CaptureAxisDiagnostics,
@@ -65,11 +65,6 @@ logger = logging.getLogger(__name__)
 SONIOX_SERVICE_NAME: Final = 'soniox'
 SONIOX_WS_URL: Final = os.getenv('SONIOX_WS_URL', 'wss://stt-rt.soniox.com/transcribe-websocket')
 SONIOX_MODEL: Final = os.getenv('SONIOX_MODEL', 'stt-rt-v6')
-# Models whose finalize padding matches OrderedSonioxProviderClock's 120 ms law.
-# Empty: the 2026-11-23 probe (scripts/soniox_finalize_padding_probe.py) found that
-# stt-rt-v5 and stt-rt-v6 both ack the exact sent cursor, so every ordered
-# prediction would mismatch. Add a model only after the probe reports law=padded.
-ORDERED_FINALIZE_VALIDATED_MODELS: frozenset[str] = frozenset()
 # Soniox closes any socket that receives neither audio nor keepalive for 20s.
 # VAD gating routinely holds audio back for longer than that, so idle sockets die
 # as 408 request_timeout unless we fill the gap ourselves.
@@ -222,15 +217,7 @@ class SafeSonioxSocket(STTSocket):
         self._wire_samples = 0
         self._provider_clock: SonioxProviderClock | None = None
         self._wire_provider_origin = 0
-        if (
-            self._wire_ledger_enabled
-            and soniox_ordered_finalize_enabled()
-            and sample_rate == 16000
-            and SONIOX_MODEL in ORDERED_FINALIZE_VALIDATED_MODELS
-            and SONIOX_WS_URL == 'wss://stt-rt.soniox.com/transcribe-websocket'
-        ):
-            self._provider_clock = OrderedSonioxProviderClock(sample_rate)
-        elif self._wire_ledger_enabled:
+        if self._wire_ledger_enabled:
             self._provider_clock = SonioxProviderClock(sample_rate)
         self._capture_axis: CaptureAxisDiagnostics | None = None
         self._capture_axis_failed = False

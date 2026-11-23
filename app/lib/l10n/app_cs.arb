@@ -4741,5 +4741,12 @@
     "firmwareUpdateAppRequired": "Tato aktualizace firmwaru vyžaduje novější verzi aplikace Omi. Aktualizujte aplikaci v obchodě s aplikacemi a poté proveďte kontrolu znovu.",
     "quietPayerTitle": "Žádné nahrávky za 5 dní",
     "quietPayerMessage": "Zkontrolujte svůj Omi.",
-    "quietPayerCheck": "Zkontrolovat"
+    "quietPayerCheck": "Zkontrolovat",
+    "playManageSubscription": "Spravovat předplatné",
+    "playBilledByGoogle": "Účtováno přes Google Play",
+    "playPurchasePending": "Platba čeká na vyřízení. Omi Pro začne, jakmile ji Google Play potvrdí.",
+    "playPurchaseOtherAccount": "Tento nákup v Google Play patří jinému účtu Omi.",
+    "playPurchaseNotConfirmed": "Nákup se zatím nepodařilo potvrdit. Zkusíme to znovu automaticky.",
+    "playRenewalTerms": "Automaticky se obnovuje za uvedenou cenu, dokud ho nezrušíte. Spravovat nebo zrušit ho můžete kdykoli v Google Play.",
+    "playPaidAppUnavailable": "Na Androidu není k dispozici"
 }

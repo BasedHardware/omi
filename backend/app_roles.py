@@ -66,6 +66,7 @@ from routers import (
     retention_offer,
     yearly_switch,
     monthly_switch,
+    play_billing,
     redeem_code,
     storefront,
     integration,
@@ -257,6 +258,7 @@ ROUTER_MOUNTS: tuple[Mount, ...] = (
     Mount(retention_offer),
     Mount(yearly_switch),
     Mount(monthly_switch),
+    Mount(play_billing, roles=API_WORKERS),  # Pub/Sub RTDN push and Scheduler reconcile
     Mount(redeem_code),
     Mount(storefront),
     Mount(api_key_management, attr='mcp_router'),

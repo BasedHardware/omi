@@ -545,6 +545,13 @@ def _stub_transcription_allowance():
         yield
 
 
+@pytest.fixture(autouse=True)
+def _no_play_history(monkeypatch):
+    """Trial eligibility also reads Google Play history; these readers have none."""
+    monkeypatch.setattr(users_router.play_subscriptions_db, 'is_play_customer', lambda uid: False)
+    monkeypatch.setattr(users_router.play_subscriptions_db, 'remember_account_once', lambda *args: None)
+
+
 @pytest.fixture
 def real_subscription_authority(monkeypatch):
     """Synthetic BYOK/reviewer display plans still resolve real account entitlements."""
