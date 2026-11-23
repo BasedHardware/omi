@@ -15,7 +15,7 @@ from google.api_core.exceptions import DeadlineExceeded, InvalidArgument
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
-from database._client import get_firestore_client
+from database._client import firestore_failure_reason, get_firestore_client
 from database.transcript_pointer import TranscriptBlobAbsent, TranscriptShredded
 from database import conversations, conversations_v3_leases as leases
 from database.conversations_v3_undo_removals import removal_ref
@@ -577,6 +577,21 @@ def mark_pending(uid, cid, *, manual_end=False, firestore_client=None):
     return mark(client.transaction())
 
 
+def _projection_snapshots(client, coll, tx, ids, *, batch_reads):
+    if not batch_reads:
+        for cid in ids:
+            yield cid, coll.document(cid).get(transaction=tx)
+        return
+    for start in range(0, len(ids), CLAIM_READ_CHUNK):
+        chunk = ids[start : start + CLAIM_READ_CHUNK]
+        # BatchGet can return snapshots out of order, including missing documents.
+        snapshots = {
+            snapshot.id: snapshot for snapshot in client.get_all([coll.document(cid) for cid in chunk], transaction=tx)
+        }
+        for cid in chunk:
+            yield cid, snapshots[cid]
+
+
 def commit_projection(
     uid,
     token,
@@ -654,6 +669,7 @@ def commit_projection(
                 )
         prepared.append(encoded)
     encrypted_cache = encrypt(json.dumps(cache, default=str), uid)
+    batch_reads = os.getenv('CONVERSATIONS_V3_BATCH_COMMIT_READS', 'on').strip().lower() != 'off'
     # What the current transaction attempt writes, kept by reference and sized only after a failure.
     staged = {}
 
@@ -674,8 +690,9 @@ def commit_projection(
         if lease.get('token') != token or not lease.get('until') or lease['until'] <= now:
             raise Conflict('lease_lost')
         # Firestore requires every read before every write, including tombstones.
-        for rid, row in {**recordings, **existing}.items():
-            snapshot = coll.document(rid).get(transaction=tx)
+        inputs = {**recordings, **existing}
+        for rid, snapshot in _projection_snapshots(client, coll, tx, list(inputs), batch_reads=batch_reads):
+            row = inputs[rid]
             current = snapshot.to_dict() or {} if snapshot.exists else None
             if not snapshot.exists or snapshot.update_time != row['_v3_revision']:
                 if rid in existing or rid not in recordings or not speech_moved(row, current):
@@ -859,6 +876,15 @@ def commit_projection(
         except InvalidArgument as error:
             if size_error(error):
                 log_largest_write(staged, batch=index, batches=len(batches))
+            raise
+        except Exception as error:
+            if not isinstance(error, Conflict):
+                logger.warning(
+                    'v3 projection commit failed reason=%s batch=%d batches=%d',
+                    firestore_failure_reason(error),
+                    index,
+                    len(batches),
+                )
             raise
         from utils.conversations.v3 import metrics
 

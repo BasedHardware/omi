@@ -75,7 +75,13 @@ def test_expired_worker_cannot_release_successor(strict):
     assert strict.rows[L]['token'] == new
 
 
-def test_atomic_projection_and_claim(strict):
+@pytest.mark.parametrize('mode', ['default', 'off'])
+def test_atomic_projection_and_claim(strict, monkeypatch, mode):
+    monkeypatch.delenv('CONVERSATIONS_V3_BATCH_COMMIT_READS', raising=False)
+    if mode == 'off':
+        monkeypatch.setenv('CONVERSATIONS_V3_BATCH_COMMIT_READS', 'off')
+    batch_get = Mock(wraps=strict.get_all)
+    monkeypatch.setattr(strict, 'get_all', batch_get)
     strict.rows[R] = {'recording': True, 'v3_pending': True}
     token = leases.acquire('synthetic', 'builder', firestore_client=strict)
     source = {'id': 'r', 'recording': True, '_v3_revision': 1}
@@ -89,6 +95,11 @@ def test_atomic_projection_and_claim(strict):
         'structured': {},
     }
     store.commit_projection('synthetic', token, {'r': source}, {}, [row], [], firestore_client=strict)
+    if mode == 'default':
+        batch_get.assert_called_once()
+        assert batch_get.call_args.kwargs['transaction'] is strict.transactions[-1]
+    else:
+        batch_get.assert_not_called()
     assert strict.rows[R]['v3_pending'] is False
     assert strict.rows[R]['claims'] == [{'conversation_id': 'c', 'start': AT, 'end': AT}]
     assert strict.rows[('users', 'synthetic', 'conversations', 'c')]['id'] == 'c'
