@@ -63,7 +63,9 @@ def test_disconnected_recovery_parts_retain_both_transcripts_and_replay():
 
 
 @pytest.mark.asyncio
-async def test_missing_recovered_audio_repair_decodes_original_receipt_clock(anchors, tmp_path, monkeypatch):
+@pytest.mark.parametrize('retained_only', [False, True])
+async def test_missing_recovered_audio_repair_counts_with_clamp_off(anchors, tmp_path, monkeypatch, retained_only):
+    monkeypatch.setenv('SYNC_FUTURE_CAPTURE_CLAMP_ENABLED', 'false')
     [original] = units(tmp_path / 'original', [FUTURE], run=None)
     from tests.unit.test_batch_pipeline_audio import pcm
     from pathlib import Path
@@ -81,12 +83,18 @@ async def test_missing_recovered_audio_repair_decodes_original_receipt_clock(anc
     )
     binding = ProjectionBinding('synthetic', 'job', 'content', ('segment',))
     snapshots = {'segment': {'generation': 1}}
+    repair_context = {'capture_clock_policy': POLICY, 'capture_received_at': RECEIVED}
+    if retained_only:
+        repair_context.update(
+            capture_received_at=FUTURE,
+            retained_capture_offsets_by_name={path.name: FUTURE - original.stored_capture_at},
+        )
     monkeypatch.setattr(artifact_reupload, '_repair_plan', lambda *a: (object(), (binding, [asdict(item)], snapshots)))
     monkeypatch.setattr(
         artifact_reupload,
         '_repair_evidence',
         lambda *a: (
-            {'capture_clock_policy': POLICY, 'capture_received_at': RECEIVED},
+            repair_context,
             {'segment': {'stt_language': 'en'}},
         ),
     )
@@ -100,7 +108,6 @@ async def test_missing_recovered_audio_repair_decodes_original_receipt_clock(anc
 
     @future_capture_request.observe_upload
     async def repair_request():
-        future_capture_request.classify_upload([path.name], RECEIVED)
         result = await artifact_reupload.restore_upload(
             object(),
             'synthetic',
@@ -117,10 +124,15 @@ async def test_missing_recovered_audio_repair_decodes_original_receipt_clock(anc
         future_capture_request.mark(future_capture_request.Outcome.PRIOR_CUSTODY)
         return result
 
-    reached = future_capture_request._OUTCOMES.labels(outcome='reached_offsets')
-    before = reached._value.get()
+    counters = {
+        outcome: future_capture_request._OUTCOMES.labels(outcome=outcome) for outcome in future_capture_request.Outcome
+    }
+    before = {outcome: counter._value.get() for outcome, counter in counters.items()}
     result = await repair_request()
-    assert reached._value.get() == before + 1
+    assert {outcome: counter._value.get() for outcome, counter in counters.items()} == {
+        **before,
+        'reached_offsets': before['reached_offsets'] + 1,
+    }
     assert result == 'job' and len(staged) == 1
     assert staged[0].capture_at == original.stored_capture_at
     assert staged[0].conversation_id == original.recovery_id

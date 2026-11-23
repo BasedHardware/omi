@@ -26,7 +26,7 @@ class Outcome(StrEnum):
 
 _OUTCOMES = Counter(
     'omi_sync_future_capture_request_outcome_total',
-    'One outcome per clamp-enabled v2 upload request carrying a far-future file',
+    'One outcome per eligible v2 far-future upload or durable receipt-clock repair',
     ('outcome',),
 )
 for _outcome in Outcome:
@@ -78,6 +78,12 @@ def classify_upload(filenames: Iterable[str], received_at: float) -> None:
             # Staging retains the authoritative validation and refusal order.
             # A malformed sibling can still accompany an eligible file.
             continue
+
+
+def include_receipt_clock_repair() -> None:
+    observation = _observation.get()
+    if observation is not None:
+        observation.eligible = True
 
 
 def mark(outcome: Outcome) -> None:

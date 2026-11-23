@@ -25,6 +25,7 @@ def decode_future_units(
     max_seconds=3600,
     coverage_context=None,
     retained_offsets_by_name=None,
+    durable_repair=False,
 ):
     retained = (
         {
@@ -48,6 +49,9 @@ def decode_future_units(
     if not future and not estimated:
         require_future_upload([], received_at=received_at)
     if future:
+        if durable_repair:
+            # A durable repair can still need offsets when new admission is off.
+            future_capture_request.include_receipt_clock_repair()
         yield from _future_units(
             future,
             uid=uid,
