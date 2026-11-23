@@ -2314,7 +2314,9 @@ def create_customer_portal_endpoint(uid: str = Depends(auth.get_current_user_uid
         and current.status == SubscriptionStatus.active
         and (current.current_period_end or 0) >= int(time.time())
     )
-    if not live_paid_row:
+    # Switch off and no prepaid marker on the row: nobody can be mid-redemption, so the portal is exactly
+    # as before the feature (no extra Stripe read, no new failure mode). Cohort or on turns the read back on.
+    if not live_paid_row and prepaid_code_config.mode() != 'off':
         try:
             has_prepaid = _customer_has_prepaid_subscription(customer_id)
         except stripe.error.StripeError as error:

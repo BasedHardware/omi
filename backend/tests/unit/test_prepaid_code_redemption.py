@@ -677,6 +677,8 @@ def test_a_play_billed_android_caller_is_refused_before_any_lookup(monkeypatch, 
 def test_customer_portal_is_refused_before_the_webhook_marks_the_row(monkeypatch, payment_router):
     from fastapi import HTTPException
 
+    monkeypatch.setenv(switch.ENV, 'cohort')
+
     payment = payment_router.module
     # The webhook has not written the row yet: the stored plan is still Free.
     payment_router.row.plan = PlanType.basic
@@ -730,6 +732,7 @@ def test_customer_portal_stripe_error_is_a_logged_503(monkeypatch, payment_route
     def down(**kw):
         raise real_stripe.APIConnectionError('stripe unreachable')
 
+    monkeypatch.setenv(switch.ENV, 'on')
     payment_router.row.plan = PlanType.basic
     payment, opened = _portal(monkeypatch, payment_router, down)
     with caplog.at_level(logging.ERROR, logger=payment.logger.name):
@@ -748,3 +751,106 @@ def test_a_refused_prepaid_cancel_stores_no_feedback(payment_router):
         payment_router.module.cancel_subscription_endpoint.__wrapped__(request, uid=UID)
     assert error.value.status_code == 409
     # The fixture fails the test if set_user_cancellation_feedback is called.
+
+
+# ---- switch off: the portal is exactly as before the feature -------------------------------------
+
+
+@pytest.mark.parametrize('mode', [None, 'off', 'bogus'])
+@pytest.mark.parametrize(
+    'row_plan,row_status',
+    [(PlanType.basic, SubscriptionStatus.active), (PlanType.unlimited_v2, SubscriptionStatus.inactive)],
+    ids=['free', 'churned_or_past_due'],
+)
+def test_switch_off_portal_makes_no_extra_stripe_read(monkeypatch, payment_router, mode, row_plan, row_status):
+    if mode is None:
+        monkeypatch.delenv(switch.ENV, raising=False)
+    else:
+        monkeypatch.setenv(switch.ENV, mode)
+    payment_router.row.plan, payment_router.row.status = row_plan, row_status
+    payment, opened = _portal(monkeypatch, payment_router, lambda **kw: pytest.fail('listed subscriptions'))
+    assert payment.create_customer_portal_endpoint(uid=UID) == {'url': 'https://billing.example/session'}
+    assert opened == [{'customer': 'cus_1', 'return_url': opened[0]['return_url']}]
+
+
+@pytest.mark.parametrize('mode', ['cohort', 'on'])
+def test_switch_cohort_or_on_refuses_a_free_row_with_a_marked_stripe_subscription(monkeypatch, payment_router, mode):
+    from fastapi import HTTPException
+
+    monkeypatch.setenv(switch.ENV, mode)
+    payment_router.row.plan = PlanType.basic
+    payment, opened = _portal(monkeypatch, payment_router, lambda **kw: SimpleNamespace(data=[_prepaid_stripe_sub()]))
+    with pytest.raises(HTTPException) as error:
+        payment.create_customer_portal_endpoint(uid=UID)
+    assert error.value.status_code == 409 and opened == []
+
+
+@pytest.mark.parametrize('mode', [None, 'off', 'cohort', 'on'])
+def test_a_stored_prepaid_row_is_refused_whatever_the_switch(monkeypatch, payment_router, mode):
+    from fastapi import HTTPException
+
+    if mode is None:
+        monkeypatch.delenv(switch.ENV, raising=False)
+    else:
+        monkeypatch.setenv(switch.ENV, mode)
+    payment_router.row.prepaid = True
+    payment, opened = _portal(monkeypatch, payment_router, lambda **kw: pytest.fail('listed subscriptions'))
+    with pytest.raises(HTTPException) as error:
+        payment.create_customer_portal_endpoint(uid=UID)
+    assert error.value.status_code == 409 and opened == []
+
+
+def test_switch_mode_is_an_env_read_only():
+    assert switch.mode({}) == 'off'
+    assert switch.mode({'PREPAID_CODE_REDEEM': ' Cohort '}) == 'cohort'
+    assert switch.mode({'PREPAID_CODE_REDEEM': 'ON'}) == 'on'
+    assert switch.mode({'PREPAID_CODE_REDEEM': 'yes'}) == 'off'
+
+
+# ---- resume after an unknown outcome -------------------------------------------------------------
+
+
+def _half_finished_claim(world):
+    """First attempt: Stripe outcome unknown, so the claim stays with the reader and has no subscription id."""
+    world.stripe.fail_create = real_stripe.APIConnectionError('timeout')
+    assert _reason(UID, 'OMI-TRYBE-ABCD1234') == (503, 'try_again')
+    world.stripe.fail_create = None
+    assert world.ledger.docs['promo_1']['subscription_id'] == ''
+
+
+def test_resume_with_only_its_own_half_finished_subscription_completes(world):
+    _half_finished_claim(world)
+    # The create had in fact landed in Stripe: the reader's own prepaid plan exists, and the webhook
+    # already wrote it to the stored row. Neither may block the resume.
+    own = redemption._create_subscription(UID, world.stripe.promos[0], MONTHLY['id'], NOW + 30 * DAY)
+    world.customer_id = 'cus_1'
+    world.row = Subscription(
+        plan=PlanType.unlimited_v2,
+        status=SubscriptionStatus.active,
+        current_period_end=NOW + 30 * DAY,
+        stripe_subscription_id=own['id'],
+    )
+    result = redeem_prepaid_code(UID, 'OMI-TRYBE-ABCD1234')
+    assert result['status'] == 'redeemed'
+    assert len(world.stripe.created) == 1
+
+
+def test_resume_next_to_another_live_plan_is_refused_and_creates_nothing(world):
+    _half_finished_claim(world)
+    # The first create never reached Stripe, and the reader bought a card-billed plan since.
+    world.customer_id = 'cus_1'
+    world.stripe.existing = [{'id': 'sub_card', 'status': 'active', 'metadata': {'uid': UID}}]
+    world.row = Subscription(
+        plan=PlanType.unlimited_v2,
+        status=SubscriptionStatus.active,
+        current_period_end=NOW + 30 * DAY,
+        stripe_subscription_id='sub_card',
+    )
+    assert _reason(UID, 'OMI-TRYBE-ABCD1234') == (409, 'has_plan')
+    assert world.stripe.created == []
+    assert world.stripe.promos[0]['times_redeemed'] == 0
+    assert world.ledger.docs['promo_1']['uid'] == UID  # kept for this reader, used by nobody else
+    # Once that plan has ended, the same reader can finish the redemption.
+    world.stripe.existing = [{'id': 'sub_card', 'status': 'canceled', 'metadata': {'uid': UID}}]
+    world.row = None
+    assert redeem_prepaid_code(UID, 'OMI-TRYBE-ABCD1234')['status'] == 'redeemed'
