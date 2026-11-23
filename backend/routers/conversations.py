@@ -53,6 +53,7 @@ from utils.other.storage import (
     get_app_thumbnail_url,
 )
 from utils.screen_frames.store import delete_conversation_screen_frames
+from utils.log_sanitizer import sanitize
 from models.calendar_context import CalendarMeetingContext
 from utils.free_tier_processing_policy import client_summaries_at_cap_enabled
 from models.client_processing import PROJECTION_FAMILY_FIELDS, ClientProcessing
@@ -1825,6 +1826,21 @@ def erase_accepted_conversation(uid: str, conversation_id: str, audio_source_ids
         func(*args, **kwargs)
 
 
+def _delete_privacy_audio_after_response(uid: str, conversation_id: str, *, source_ids: List[str]) -> None:
+    from database.account_deletion_operational_holds import StoragePrefixPurgeBlocked, StoragePrefixPurgeError
+
+    try:
+        delete_privacy_conversation_audio(uid, conversation_id, source_ids=source_ids)
+    except StoragePrefixPurgeError as error:
+        logger.error(
+            'event=conversation_audio_purge uid=%s conversation_id=%s outcome=%s reason=%s',
+            uid,
+            conversation_id,
+            'blocked' if isinstance(error, StoragePrefixPurgeBlocked) else 'failed',
+            sanitize(error),
+        )
+
+
 def _delete_conversation_under_gate(
     conversation_id, background_tasks, cascade, http_request, uid, memory_service, db_client, *, record_event=True
 ):
@@ -1894,7 +1910,8 @@ def _delete_conversation_under_gate(
             except Exception as error:
                 raise HTTPException(503, 'Conversation storage deletion is busy, please retry') from error
             source_ids = (raw or {}).get('sync_merged_from', [])
-        background_tasks.add_task(delete_privacy_conversation_audio, uid, conversation_id, source_ids=source_ids)
+        purge_audio = _delete_privacy_audio_after_response if record_event else delete_privacy_conversation_audio
+        background_tasks.add_task(purge_audio, uid, conversation_id, source_ids=source_ids)
 
     # Screen frames (meeting-note screenshots) are primary conversation
     # content, not cascade-only derived data, so this runs unconditionally
