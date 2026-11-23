@@ -1,4 +1,8 @@
-"""Indexed summary-debt phases; cursors never need a document read."""
+"""Indexed summary-debt phases; cursors never need a document read.
+
+When ``historical_before`` is supplied, ``newest`` selects the inclusive fresh
+side of that boundary and ``historical`` selects its older side.
+"""
 
 from typing import Any, Literal
 import math
@@ -26,19 +30,27 @@ def due_conversations(
         return []
     cutoff = now - window
     boundary = cutoff + REPAIR_NEAR_EXPIRY_SECONDS
-    phase_end = historical_before if phase == 'historical' else None
+    phase_end = historical_before if phase in {'historical', 'newest'} else None
     if phase == 'historical' and (phase_end is None or phase_end <= boundary):
         return []
+    if phase == 'newest' and phase_end is not None and phase_end <= boundary:
+        phase_end = None
     query = client.collection_group('conversations').where(filter=firestore.FieldFilter('summary_due_at', '<=', now))
     if window:
         # Equality at the expiry cutoff is still eligible. Retained due
         # timestamps need not track pending timestamps; bound on the gate field.
         query = query.where(filter=firestore.FieldFilter('summary_first_pending_at', '>=', cutoff))
-        query = query.where(
-            filter=firestore.FieldFilter('summary_first_pending_at', '<=' if phase == 'near_expiry' else '>', boundary)
-        )
-        if phase_end is not None:
+        if phase == 'historical' and phase_end is not None:
+            query = query.where(filter=firestore.FieldFilter('summary_first_pending_at', '>', boundary))
             query = query.where(filter=firestore.FieldFilter('summary_first_pending_at', '<', phase_end))
+        elif phase == 'newest' and phase_end is not None:
+            query = query.where(filter=firestore.FieldFilter('summary_first_pending_at', '>=', phase_end))
+        else:
+            query = query.where(
+                filter=firestore.FieldFilter(
+                    'summary_first_pending_at', '<=' if phase == 'near_expiry' else '>', boundary
+                )
+            )
         direction = firestore.Query.DESCENDING if phase == 'newest' else firestore.Query.ASCENDING
         query = query.order_by('summary_first_pending_at', direction=direction)
     query = query.order_by('summary_due_at').order_by('__name__')
@@ -54,11 +66,16 @@ def due_conversations(
             due = timestamp(due)
         elif not math.isfinite(due):
             due = None
-        in_band = (
-            pending is not None
-            and (phase_end is None or pending < phase_end)
-            and (cutoff <= pending <= boundary if phase == 'near_expiry' else pending > boundary)
-        )
+        in_band = False
+        if pending is not None:
+            if phase == 'near_expiry':
+                in_band = cutoff <= pending <= boundary
+            elif phase == 'historical':
+                in_band = phase_end is not None and boundary < pending < phase_end
+            elif phase_end is not None:
+                in_band = pending >= phase_end
+            else:
+                in_band = pending > boundary
         if in_band and due is not None:
             query = query.start_after(
                 {

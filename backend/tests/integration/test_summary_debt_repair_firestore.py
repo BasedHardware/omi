@@ -338,6 +338,60 @@ def test_empty_output_budget_atomically_removes_terminal_debt_and_preserves_cont
     assert not [s for s in repair.due_conversations(now=time.time() + 1000, firestore_client=client) if s.id == 'c']
 
 
+def test_historical_repair_reopens_rearmed_empty_output_outbox(debt_store, monkeypatch):
+    client, uid, tasks, ref, _row = debt_store
+    now = 1_800_000_000.0
+    pending = now - 7_200
+    monkeypatch.setenv('ENRICHMENT_MAX_AGE_HOURS', '72')
+    monkeypatch.setenv('ENRICHMENT_FRESH_PROMOTE_MAX_AGE_MIN', '30')
+    monkeypatch.setattr(repair, 'account_deletion_blocks_user_work', lambda _: False)
+    ref.update(
+        {
+            'summary_first_pending_at': pending,
+            'summary_due_at': now - 1,
+            'finished_at': pending,
+        }
+    )
+    assert repair.redrive(client, uid, 'c', now=now)
+    outbox = client.collection(reprocess.COLLECTION).document(reprocess.key(uid, 'c'))
+    outbox.update(
+        {
+            'dormant': True,
+            'due_at': None,
+            'task_due_at': None,
+            'lease_until': 0,
+            'owner': None,
+            'summary_blocked_reason': delivery.EMPTY_BLOCKED_REASON,
+        }
+    )
+
+    existing = ref.get().to_dict()
+    existing.update(
+        summary_blocked_reason=delivery.EMPTY_BLOCKED_REASON,
+        summary_due_at=None,
+        summary_empty_failures=3,
+    )
+    write = {**existing, 'sync_content_revision': existing.get('sync_content_revision', 0) + 1}
+    delivery.rearm_on_revision_change(existing, write, now=now)
+    ref.set(write)
+    assert write['summary_first_pending_at'] == pending
+    assert write['summary_due_at'] == now + delivery.deadline_seconds()
+
+    assert repair.redrive(
+        client,
+        uid,
+        'c',
+        now=now + delivery.deadline_seconds() + 1,
+        historical_before=now + delivery.deadline_seconds() + 1 - 1_800,
+    )
+    reopened = outbox.get().to_dict()
+    assert not reopened['dormant']
+    assert reopened['summary_blocked_reason'] is None
+    assert reopened['summary_empty_failures'] == 0
+    assert reopened['summary_expected_revision'] == write['sync_content_revision']
+    assert len(tasks) == 2
+
+
 def test_empty_failure_never_clears_a_previously_committed_good_overview(debt_store):
     from database.summary_processing import record_empty_failure, EmptyFailureOutcome
 
@@ -949,7 +1003,7 @@ def test_scan_stops_before_next_chunk_and_preserves_fetched_tail(debt_store, mon
 
 
 @pytest.mark.parametrize('enabled', [False, True], ids=['disabled', 'enabled'])
-def test_historical_slot_is_bounded_even_with_full_urgent_demand(debt_store, monkeypatch, enabled):
+def test_historical_work_yields_capacity_to_full_urgent_demand(debt_store, monkeypatch, enabled):
     client, _, _, ref, row = debt_store
     now = 1_800_000_000.0
     monkeypatch.setenv('ENRICHMENT_MAX_AGE_HOURS', '72')
@@ -989,9 +1043,9 @@ def test_historical_slot_is_bounded_even_with_full_urgent_demand(debt_store, mon
         counts = repair.tick(now=now, client=client)
         assert counts['admitted'] == 2
         if enabled:
-            assert calls[0] == ('historical', 3)
-            assert attempts == [('historical', now - 1_800), ('urgent-1', None)]
-            assert counts['near_expiry_admitted'] == 1
+            assert calls[0][0] == 'near_expiry'
+            assert attempts == [('urgent-1', None), ('urgent-2', None)]
+            assert counts['near_expiry_admitted'] == 2
         else:
             assert all(phase != 'historical' for phase, _ in calls)
             assert attempts == [('urgent-1', None), ('urgent-2', None)]
@@ -1001,24 +1055,55 @@ def test_historical_slot_is_bounded_even_with_full_urgent_demand(debt_store, mon
             candidate.delete()
 
 
-def test_historical_attempt_is_not_repeated_in_newest_phase(debt_store, monkeypatch):
-    client, _, _, ref, _ = debt_store
+def test_historical_and_newest_queries_use_disjoint_freshness_bands(debt_store, monkeypatch):
+    client, _, _, ref, row = debt_store
     now = 1_800_000_000.0
     monkeypatch.setenv('ENRICHMENT_MAX_AGE_HOURS', '72')
     monkeypatch.setenv('ENRICHMENT_FRESH_PROMOTE_MAX_AGE_MIN', '30')
     monkeypatch.setenv('SUMMARY_DEBT_REPAIR_HISTORICAL_ENABLED', 'true')
     monkeypatch.setattr(repair, 'account_deletion_blocks_user_work', lambda _: False)
+    fresh = ref.parent.document('fresh')
     ref.update({'summary_first_pending_at': now - 7_200, 'summary_due_at': now - 1, 'finished_at': now - 7_000})
+    fresh.set({**row, 'summary_first_pending_at': now - 120, 'summary_due_at': now - 1, 'finished_at': now - 50})
     attempts = []
 
-    def refuse(*args, **options):
-        attempts.append(options.get('historical_before'))
+    def refuse(_client, _owner, cid, **options):
+        attempts.append((cid, options.get('historical_before')))
         return False
 
     monkeypatch.setattr(repair, 'redrive', refuse)
-    counts = repair.tick(now=now, client=client)
-    assert counts['scanned'] == 2 and counts['admitted'] == 0
-    assert attempts == [now - 1_800]
+    try:
+        counts = repair.tick(now=now, client=client)
+        assert counts['scanned'] == 2 and counts['admitted'] == 0
+        assert attempts == [('fresh', None), ('c', now - 1_800)]
+    finally:
+        fresh.delete()
+
+
+def test_historical_band_keeps_older_rows_without_finish_proof_in_normal_repair(debt_store, monkeypatch):
+    client, _, _, ref, row = debt_store
+    now = 1_800_000_000.0
+    monkeypatch.setenv('ENRICHMENT_MAX_AGE_HOURS', '72')
+    monkeypatch.setenv('ENRICHMENT_FRESH_PROMOTE_MAX_AGE_MIN', '30')
+    monkeypatch.setenv('SUMMARY_DEBT_REPAIR_HISTORICAL_ENABLED', 'true')
+    monkeypatch.setattr(repair, 'REPAIR_ADMISSION_LIMIT', 2)
+    monkeypatch.setattr(repair, 'account_deletion_blocks_user_work', lambda _: False)
+    fresh = ref.parent.document('fresh')
+    ref.update({'summary_first_pending_at': now - 7_200, 'summary_due_at': now - 1})
+    fresh.set({**row, 'summary_first_pending_at': now - 120, 'summary_due_at': now - 1})
+    attempts = []
+
+    def admit(_client, _owner, cid, **options):
+        attempts.append((cid, options.get('historical_before')))
+        return True
+
+    monkeypatch.setattr(repair, 'redrive', admit)
+    try:
+        counts = repair.tick(now=now, client=client)
+        assert counts['admitted'] == 2
+        assert attempts == [('fresh', None), ('c', None)]
+    finally:
+        fresh.delete()
 
 
 def test_historical_query_failure_preserves_normal_repair(debt_store, monkeypatch):
@@ -1198,7 +1283,7 @@ def test_historical_mixed_load_progress_and_fresh_five_minute_share(store, monke
 
             tick_results = []
             historical_progress = []
-            for tick_index in range(3):
+            for tick_index in range(5):
                 tick_now = now + tick_index * repair.REPAIR_INTERVAL_SECONDS
                 task_start = len(generated)
                 started = time.perf_counter()
@@ -1243,7 +1328,7 @@ def test_historical_mixed_load_progress_and_fresh_five_minute_share(store, monke
                 )
 
             if enabled:
-                assert historical_progress == [1, 2, 3], {
+                assert historical_progress == [0, 0, 1, 2, 3], {
                     'historical_progress': historical_progress,
                     'ticks': tick_results,
                 }
@@ -1263,6 +1348,7 @@ def test_historical_mixed_load_progress_and_fresh_five_minute_share(store, monke
                 'historical_durable_progress_by_tick': historical_progress,
                 'ticks': tick_results,
             }
+            assert within_five_minutes == len(fresh_refs) == 16
     finally:
         client.document(repair.CURSOR).delete()
         for (owner, cid), ref in candidates.items():
@@ -1275,6 +1361,7 @@ def test_historical_mixed_load_progress_and_fresh_five_minute_share(store, monke
         'admission_latency_assumption_seconds': 30,
         'global_attempt_cap_per_tick': 8,
         'scenario': 'matched loopback Firestore load; 16 fresh rows across six owners and three historical rows',
+        'historical_progress_sweep_bound': 5,
         **results,
     }
     print(f'SUMMARY_REPAIR_QUALIFICATION {json.dumps(report, sort_keys=True)}')

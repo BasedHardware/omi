@@ -1,6 +1,7 @@
 """Universal first-summary deadlines with independent repair and preservation controls."""
 
 from config.refactor_switches import default_off as rollout_default_off
+from config.refactor_modes import default_off as mode_default_off
 
 from contextvars import ContextVar
 from collections.abc import Mapping
@@ -22,9 +23,7 @@ def repair_enabled(*, environ: Mapping[str, str] | None = None) -> bool:
 
 
 def historical_repair_enabled() -> bool:
-    from config.refactor_modes import default_off
-
-    return default_off('SUMMARY_DEBT_REPAIR_HISTORICAL_ENABLED')
+    return mode_default_off('SUMMARY_DEBT_REPAIR_HISTORICAL_ENABLED')
 
 
 def deadline_seconds() -> int:

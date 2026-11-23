@@ -91,7 +91,12 @@ def redrive(client: Any, uid: str, conversation_id: str, *, now: float, historic
             from utils.enrichment.age_gate import expired, parked, park_row
 
             # Existing tasks retain their binding and normal recovery path.
-            if historical_before is not None and old is not None:
+            # A revision can reopen exhausted debt while its old outbox stays
+            # dormant; the ordinary outbox sweep does not visit that row.
+            rearmed_empty_debt = bool(
+                old and old.get('dormant') and old.get('summary_blocked_reason') == delivery.EMPTY_BLOCKED_REASON
+            )
+            if historical_before is not None and old is not None and not rearmed_empty_debt:
                 return {}, True
 
             if old and parked(old):
@@ -192,14 +197,17 @@ def tick(*, now: float | None = None, client: Any = None) -> dict[str, int]:
     fresh_window = fresh_max_age_seconds()
     historical_before = current - fresh_window
     history_rows = min(HISTORICAL_SCAN_LIMIT, REPAIR_SCAN_LIMIT // 4)
-    if (
+    historical_split = bool(
         historical_repair_enabled()
         and 0 < fresh_window < window - REPAIR_NEAR_EXPIRY_SECONDS
         and history_rows
         and REPAIR_ADMISSION_LIMIT > 1
-    ):
-        phases = ('historical', *phases)
-    historical_attempt = None
+    )
+    if historical_split:
+        # Serve the existing urgent and fresh bands first. Historical work only
+        # sees a slot left after those deadlines have used the global cap.
+        phases = (*phases, 'historical')
+    attempted_paths: set[str] = set()
     for phase in phases:
         if (
             attempts >= REPAIR_ADMISSION_LIMIT
@@ -212,7 +220,7 @@ def tick(*, now: float | None = None, client: Any = None) -> dict[str, int]:
         interrupted = False
         exhausted = False
         historical = phase == 'historical'
-        attempt_limit = 1 if historical else REPAIR_ADMISSION_LIMIT
+        attempt_limit = min(REPAIR_ADMISSION_LIMIT, attempts + 1) if historical else REPAIR_ADMISSION_LIMIT
         scan_limit = history_rows if historical else REPAIR_SCAN_LIMIT
         deadline = min(scan_deadline, _scan_clock() + HISTORICAL_SCAN_SECONDS) if historical else scan_deadline
         observed = phase_counts[phase] = Counter()
@@ -221,9 +229,11 @@ def tick(*, now: float | None = None, client: Any = None) -> dict[str, int]:
         page_target = 2 * max(8, attempt_limit - attempts)
         while attempts < attempt_limit and counts['scanned'] < scan_limit and _scan_clock() < deadline:
             limit = min(page_target, REPAIR_QUERY_PAGE_LIMIT, scan_limit - counts['scanned'])
-            page_options = (
-                {'historical_before': historical_before, 'timeout': deadline - _scan_clock()} if historical else {}
-            )
+            page_options = {}
+            if historical or (historical_split and phase == 'newest'):
+                page_options['historical_before'] = historical_before
+            if historical:
+                page_options['timeout'] = deadline - _scan_clock()
             if historical and page_options['timeout'] <= 0:
                 break
             observed[DiscoveryOutcome.QUERIES] += 1
@@ -257,10 +267,10 @@ def tick(*, now: float | None = None, client: Any = None) -> dict[str, int]:
                 if delivery.refusal(row):
                     observed[DiscoveryOutcome.ROW_REFUSED] += 1
                     continue
-                if historical and not _finished_before(row, historical_before):
+                historical_candidate = historical and _finished_before(row, historical_before)
+                if historical and not historical_candidate:
                     observed[DiscoveryOutcome.FINISH_NOT_HISTORICAL] += 1
-                    continue
-                if snapshot.reference.path == historical_attempt:
+                if snapshot.reference.path in attempted_paths:
                     observed[DiscoveryOutcome.ALREADY_ATTEMPTED] += 1
                     continue
                 parts = snapshot.reference.path.split('/')
@@ -292,9 +302,8 @@ def tick(*, now: float | None = None, client: Any = None) -> dict[str, int]:
                 attempts += 1
                 observed[DiscoveryOutcome.ATTEMPTED] += 1
                 owner_attempts[parts[1]] = owner_attempts.get(parts[1], 0) + 1
-                admission_options = {'historical_before': historical_before} if historical else {}
-                if historical:
-                    historical_attempt = snapshot.reference.path
+                attempted_paths.add(snapshot.reference.path)
+                admission_options = {'historical_before': historical_before} if historical_candidate else {}
                 try:
                     admitted = int(redrive(client, parts[1], parts[3], now=current, **admission_options))
                     observed[DiscoveryOutcome.ADMITTED if admitted else DiscoveryOutcome.NOT_ADMITTED] += 1

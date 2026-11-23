@@ -295,7 +295,7 @@ and an explicit empty literal renders as `''`.
 | `STT_VOCAB_MODE_SERVE_UID_SHA256S` | Serve cohort digest selector; default empty | backend | env | closed | — | — | — | — | pending | undecided | 2026-11-07 | auditfix |
 | `STT_VOCAB_MODE_SHADOW_PERCENT` | Shadow vocabulary source-read sample percentage; default 1 | backend | env | closed | — | — | — | — | pending | undecided | 2026-11-07 | auditfix |
 | `SUMMARY_DEBT_REPAIR_ENABLED` | Code default false; production enabled on scheduled backend-integration until the long-term fix; backend-sync held off; bounded completed server-minimum repair; requires first-summary gate | backend | env | closed | — | — | {value: 'false', category: rollout} (cloud_run/backend-sync); {value: 'true', category: rollout} (cloud_run/backend-integration) | — | ship | on | 2026-11-18 | auditfix |
-| `SUMMARY_DEBT_REPAIR_HISTORICAL_ENABLED` | Default off; reserve at most one attempt inside the existing summary repair cap for eligible older debt without an outbox | backend | env | closed | — | — | — | — | pending | undecided | 2026-11-22 | summary-repair (cl2-fixnow) |
+| `SUMMARY_DEBT_REPAIR_HISTORICAL_ENABLED` | Default off; after near-expiry and fresh work, admit at most one eligible older row using leftover capacity inside the existing repair cap | backend | env | closed | — | — | — | — | pending | undecided | 2026-11-22 | summary-repair (cl2-fixnow) |
 | `SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED` | Bounded fresh-transaction retries for sync assignment contention | backend | env | closed | declared | false | true | — | graduate | on | 2026-11-18 | backlog-refactor |
 | `SYNC_BACKFILL_UID_SEQUENCER` | Accept backfill uploads then dispatch one worker job per uid from durable queue | backend | env | closed | off | off | on | — | with_legacy | off | 2026-12-01 | auditfix |
 | `SYNC_BACKFILL_WORKER_PERCENT` | Default zero closes backfill pull-worker intake before persistence reads; existing token-fenced leases drain | backend | env | closed | — | — | — | — | pending | on | 2026-11-09 | backlog-refactor |
@@ -1562,7 +1562,7 @@ their code default (`fail` tells you which way a missing value resolves).
 - `STT_VOCAB_MODE_SERVE_PERCENT` — Serve cohort percentage; default zero (fail: closed)
 - `STT_VOCAB_MODE_SERVE_UID_SHA256S` — Serve cohort digest selector; default empty (fail: closed)
 - `STT_VOCAB_MODE_SHADOW_PERCENT` — Shadow vocabulary source-read sample percentage; default 1 (fail: closed)
-- `SUMMARY_DEBT_REPAIR_HISTORICAL_ENABLED` — Default off; reserve at most one attempt inside the existing summary repair cap for eligible older debt without an outbox (fail: closed)
+- `SUMMARY_DEBT_REPAIR_HISTORICAL_ENABLED` — Default off; after near-expiry and fresh work, admit at most one eligible older row using leftover capacity inside the existing repair cap (fail: closed)
 - `SUMMARY_DEBT_REPAIR_PER_OWNER_LIMIT` — Summary repair admission-attempt cap per owner per tick across all phases; default 3, clamped 1..10 (fail: closed)
 - `SUMMARY_DEBT_REPAIR_SCAN_LIMIT` — Global summary-repair document scan budget per tick; default 100, clamped 1..5000 (fail: closed)
 - `SUMMARY_PROJECTION_DEBT_ENABLED` — Default on; a batch projection that lands a transcript on a completed untitled row stamps first-summary debt so Home shows Writing notes and the repair can see it (fail: open)

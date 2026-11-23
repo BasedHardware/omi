@@ -349,6 +349,32 @@ def test_repair_query_uses_gate_window_and_safe_cursor(monkeypatch, hours, phase
     assert shape.uses_cursors is (cursor_kind == 'current')
 
 
+def test_historical_and_newest_queries_partition_the_freshness_band(monkeypatch):
+    from database.summary_debt_queries import due_conversations
+    from tests.support.firestore_shape_recorder import RecordingFirestore, install_recorder
+
+    monkeypatch.setenv('ENRICHMENT_MAX_AGE_HOURS', '72')
+    now = 1_800_000_000.0
+    historical_before = now - 1_800
+    boundary = now - 72 * 3600 + flags.REPAIR_NEAR_EXPIRY_SECONDS
+    for phase in ('newest', 'historical'):
+        client = RecordingFirestore()
+        with install_recorder(client), client.recording_context('database.summary_debt_queries.due_conversations', {}):
+            due_conversations(
+                now=now,
+                phase=phase,
+                historical_before=historical_before,
+                firestore_client=client,
+            )
+        filters = {(f.field, f.operator, f.value) for f in client.shapes[0].filters}
+        if phase == 'newest':
+            assert ('summary_first_pending_at', '>=', historical_before) in filters
+            assert ('summary_first_pending_at', '>', boundary) not in filters
+        else:
+            assert ('summary_first_pending_at', '>', boundary) in filters
+            assert ('summary_first_pending_at', '<', historical_before) in filters
+
+
 @pytest.mark.parametrize('cursor_kind', ['legacy', 'gated', 'old_disabled_phase'])
 @pytest.mark.parametrize('pending_kind', ['missing', 'null'])
 def test_disabled_gate_scans_and_admits_missing_pending_with_legacy_query(monkeypatch, cursor_kind, pending_kind):

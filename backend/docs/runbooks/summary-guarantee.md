@@ -133,24 +133,33 @@ target fourfold. The page-size and total document caps still apply. This limits
 the unread tail when eligible rows are dense and preserves bounded discovery
 through sparse pages and owner deferrals.
 
-When `SUMMARY_DEBT_REPAIR_HISTORICAL_ENABLED` is on, one historical
-pass runs before the ordinary order. It uses at most 16 fetched rows or
-one fourth of the existing scan budget, whichever is smaller, and at most
-one of the existing admission attempts. It has a ten-second discovery
-window and a finite query deadline. The overall tick still checks its
-deadline before all admissions. An in-flight admission can finish later.
-The pass is inactive with the age gate or freshness window disabled,
-or if the budget cannot leave any capacity for ordinary phases.
+When `SUMMARY_DEBT_REPAIR_HISTORICAL_ENABLED` is on, the ordinary
+near-expiry and fresh bands run first. The newest query is limited to
+pending stamps at or after the configured freshness boundary; the
+historical query covers older eligible stamps outside the near-expiry
+band. The historical pass uses at most 16 fetched rows or one fourth of
+the existing scan budget, whichever is smaller, a ten-second discovery
+window, and at most one admission left after ordinary work uses the
+global cap. The overall tick checks its deadline before every admission;
+an in-flight admission can finish later. The pass is inactive with the
+age gate or freshness window disabled, or when the admission cap is one.
 
-It uses the existing ascending index outside the near-expiry pending
-band, with a pending stamp older than the configured freshness window.
-Before spending an attempt it also verifies the conversation's finish
-clock against that same window. The admission transaction rechecks the
-finish clock and requires absence of an outbox. Existing wakes keep
-their binding and ordinary recovery path. The ordinary newest phase
-keeps its full scope, including rows with unknown finish clocks. A row
-attempted by the historical pass cannot receive a second attempt in
-the same tick. Both other phases can use the remaining budgets.
+Before spending a historical attempt, the repair verifies the conversation's
+finish clock against the freshness boundary, and the admission transaction
+rechecks it. Older pending rows without finish proof still use ordinary
+redrive after fresh work, preserving the prior newest phase's eligibility.
+Existing active outboxes keep their binding and ordinary recovery path. A
+dormant outbox blocked by empty output can be reopened when a later transcript
+revision has rearmed the conversation's debt; other dormant or custody-held
+outboxes remain untouched. A row is attempted at most once per tick. With the
+flag off, the newest query retains its full scope and the ordinary phase order.
+
+The matched saturation fixture must keep every eligible fresh row within
+five minutes for both flag states. It also asserts historical durable
+progress within five sweeps when spare attempts recur after fresh work
+uses the cap. This is a qualification gate only: the flag remains off
+until the backlog owner and Release confirm need and the rollout evidence
+passes the agreed guard.
 
 Qualify the phase first with a synthetic backlog. Before enabling it on
 the scheduled integration role, capture the fresh five-minute summary
