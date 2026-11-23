@@ -178,10 +178,10 @@ export function PlansSheet({
       const tier = option?.plan_id ?? 'unknown';
       const interval = option?.interval ?? option?.title ?? 'unknown';
 
+      trackUpgradePlanSelected(tier, interval, 'web_plans');
       // If already subscribed and selecting a different plan, use upgrade endpoint
       if (isPaid && !isCanceling_ && !isCurrentPlan) {
         purchaseRoute = 'upgrade';
-        trackUpgradePlanSelected(tier, interval, 'web_plans');
         const result = await upgradeSubscription(priceId);
         if (result?.status === 'success' || result?.scheduled_start) {
           trackUpgradeSucceeded(tier, interval);
@@ -198,13 +198,7 @@ export function PlansSheet({
           // Stripe Checkout opens in a new tab. The parent page never sees the
           // cancel URL Stripe returns to, so Upgrade Cancelled is not emitted
           // here. trackUpgradeCancelled exists for a client that can observe it.
-          if (
-            !openCheckoutWindow(result.url, {
-              plan: tier,
-              billingInterval: interval,
-              source: 'web_plans',
-            })
-          ) {
+          if (!openCheckoutWindow(result.url)) {
             setError(CHECKOUT_POPUP_BLOCKED);
             return;
           }
@@ -216,7 +210,6 @@ export function PlansSheet({
           };
           window.addEventListener('focus', handleFocus);
         } else if (result?.status === 'reactivated') {
-          trackUpgradePlanSelected(tier, interval, 'web_plans');
           const seconds = renewalDateSeconds(
             result.next_billing_date,
             subscription?.current_period_end,

@@ -27,7 +27,7 @@ beforeEach(() => vi.clearAllMocks());
 afterEach(() => vi.unstubAllGlobals());
 
 describe('SettingsPage checkout', () => {
-  it('shows blocked guidance, retries the same annual offer and tracks each actual launch result once', async () => {
+  it('shows blocked guidance, retries the same annual offer and tracks each plan selection once', async () => {
     const checkout = { opener: window };
     vi.stubGlobal(
       'open',

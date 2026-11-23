@@ -76,6 +76,52 @@ describe('PlansSheet checkout', () => {
     );
   });
 
+  it.each(['no URL', 'rejection'])(
+    'records the selected plan before checkout creation ends in %s',
+    async (failure) => {
+      const selections = () =>
+        capture.mock.calls.filter(([event]) => event === 'Upgrade Plan Selected');
+      let selectionsBeforeRequest: ReturnType<typeof selections> = [];
+      createCheckoutSession.mockImplementationOnce(async () => {
+        selectionsBeforeRequest = selections();
+        if (failure === 'rejection') throw new Error('checkout unavailable');
+        return { url: '' };
+      });
+      render(
+        <PlansSheet
+          open
+          onOpenChange={vi.fn()}
+          onSubscriptionUpdate={vi.fn()}
+          subscription={{ plan: 'basic', status: 'active', is_unlimited: false }}
+          cachedPlans={[
+            {
+              id: 'price_plus_month',
+              plan_id: 'plus',
+              title: 'Plus Monthly',
+              price_string: '$19',
+              interval: 'month',
+            },
+          ]}
+        />,
+      );
+
+      fireEvent.click(await screen.findByRole('button', { name: 'Continue to Payment' }));
+      const message =
+        failure === 'rejection'
+          ? 'An error occurred. Please try again.'
+          : 'Failed to create checkout session';
+      expect(await screen.findByText(message)).toBeInTheDocument();
+      expect(window.open).not.toHaveBeenCalled();
+      expect(selectionsBeforeRequest).toEqual([
+        [
+          'Upgrade Plan Selected',
+          { plan: 'plus', billing_interval: 'month', source: 'web_plans' },
+        ],
+      ]);
+      expect(selections()).toHaveLength(1);
+    },
+  );
+
   it('renders a single-plan Omi Pro catalog as two intervals and checks out the selected one', async () => {
     // 2026-10-24 ruling: a new buyer's web catalog is unlimited_v2 only.
     // The sheet renders both billing intervals of the single tier, preselects
