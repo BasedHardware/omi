@@ -14,6 +14,7 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/models/subscription.dart';
+import 'package:omi/models/user_usage.dart';
 import 'package:omi/pages/paywall/paywall_checkout.dart';
 import 'package:omi/pages/paywall/trial_paywall_page.dart';
 import 'package:omi/pages/settings/payment_webview_page.dart';
@@ -59,7 +60,7 @@ UserSubscriptionResponse _response({
     );
 
 class _Usage extends UsageProvider {
-  _Usage({required super.subscriptionRequest, required super.playBilling});
+  _Usage({required super.subscriptionRequest, required super.playBilling, super.usageRequest, super.deviceTimeZone});
 
   int checkoutSessions = 0;
 
@@ -347,6 +348,48 @@ void main() {
       // No trial length, date or timeline in the error state.
       expect(find.byKey(const Key('trial_paywall_timeline')), findsNothing);
       expect(find.text('In 7 days'), findsNothing);
+    }, variant: TargetPlatformVariant.only(TargetPlatform.android));
+  }
+
+  for (final page in ['outline', 'trial']) {
+    testWidgets('$page paywall: a failed subscription read stays failed after a usage read clears the shared error',
+        (tester) async {
+      var calls = 0;
+      final world = _World([_response()]);
+      final usage = _Usage(
+        subscriptionRequest: () async => ++calls == 1 ? null : _response(),
+        playBilling: world.billing,
+        usageRequest: ({required period, required timeZone}) async => UserUsageResponse(history: []),
+        deviceTimeZone: () async => 'UTC',
+      );
+      addTearDown(usage.dispose);
+      await usage.fetchSubscription();
+      await usage.fetchUsageStats(period: 'monthly');
+      expect(usage.error, isNull); // the usage read cleared the shared error...
+      expect(usage.billingProviderFailed, isTrue); // ...but the subscription read is still known to have failed
+      expect(usage.billingProviderPending, isFalse);
+      tester.view.physicalSize = const Size(430, 2400);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      await tester.pumpWidget(ChangeNotifierProvider<UsageProvider>.value(
+        value: usage,
+        child: MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: const [Locale('en')],
+          home: page == 'outline'
+              ? const OutlinePaywallPage(source: 'test')
+              : TrialPaywallPage(source: 'test', now: DateTime(2026, 11, 22)),
+        ),
+      ));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('play_plans_error')), findsOneWidget);
+      expect(find.byKey(const Key('trial_paywall_timeline_pending')), findsNothing);
+      // A successful subscription read clears it.
+      await usage.fetchSubscription();
+      expect(calls, 2);
+      expect(usage.billingProviderFailed, isFalse);
+      expect(usage.billingProviderUnknown, isFalse);
     }, variant: TargetPlatformVariant.only(TargetPlatform.android));
   }
 
