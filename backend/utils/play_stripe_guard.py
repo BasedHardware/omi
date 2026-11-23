@@ -14,7 +14,7 @@ from config.plan_catalog import _paid_period_still_open
 from models.users import Subscription
 from utils import stripe as stripe_utils
 from utils.executors import db_executor, run_blocking, stripe_executor
-from utils.notifications import send_notification
+from utils.notification_dispatch import NotificationIntent, NotificationKind, dispatch_notification_async
 from utils.subscription import is_paid_plan
 
 logger = logging.getLogger(__name__)
@@ -47,14 +47,18 @@ async def refuse_stripe_for_play_subscriber(uid: str, stripe_subscription_id: st
         result.get('refund_id'),
         (pointer or '')[:12],
     )
+    body = 'Your Omi Pro is billed through Google Play, so we canceled the new card subscription' + (
+        ' and refunded it.' if result.get('refund_id') else '. You were not charged.'
+    )
     try:
-        await run_blocking(
-            db_executor,
-            send_notification,
-            uid,
-            'You already have Omi Pro',
-            'Your Omi Pro is billed through Google Play, so we canceled the new card subscription'
-            + (' and refunded it.' if result.get('refund_id') else '. You were not charged.'),
+        await dispatch_notification_async(
+            NotificationIntent(
+                user_id=uid,
+                title='You already have Omi Pro',
+                body=body,
+                source='play_billing_double_billing',
+                kind=NotificationKind.BILLING_CONFLICT,
+            )
         )
     except Exception:
         logger.warning('play_billing double billing notice not sent for uid=%s', uid)

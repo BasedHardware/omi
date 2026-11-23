@@ -223,9 +223,11 @@ def webhook(monkeypatch):
         'cancel_and_refund_checkout_subscription',
         lambda sub_id: state.refused.append(sub_id) or {'subscription_id': sub_id, 'refund_id': 're_1'},
     )
-    monkeypatch.setattr(
-        payment.play_stripe_guard, 'send_notification', lambda uid, title, body: state.notices.append(body)
-    )
+
+    async def notice(intent):
+        state.notices.append(intent.body)
+
+    monkeypatch.setattr(payment.play_stripe_guard, 'dispatch_notification_async', notice)
     monkeypatch.setattr(payment, 'record_subscription_event', lambda **kw: None)
     monkeypatch.setattr(
         payment,
