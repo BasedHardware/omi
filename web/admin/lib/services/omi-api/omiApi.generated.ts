@@ -11025,6 +11025,7 @@ export interface OmiApiPaths {
         "401": void;
         "409": PlayBillingErrorResponse;
         "422": HTTPValidationError;
+        "429": void;
       };
     };
   };

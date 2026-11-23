@@ -73,9 +73,17 @@ class FakePublisher:
 class FakeStore:
     def __init__(self):
         self.docs = {}
-        self.pointers = {}
+        self.users = {}
+        self.accounts = {}
 
     token_key = staticmethod(play_db.token_key)
+    USER_POINTER_FIELD = play_db.USER_POINTER_FIELD
+    PENDING_FIELD = play_db.PENDING_FIELD
+    CUSTOMER_FIELD = play_db.CUSTOMER_FIELD
+
+    @property
+    def pointers(self):
+        return {uid: f[self.USER_POINTER_FIELD] for uid, f in self.users.items() if f.get(self.USER_POINTER_FIELD)}
 
     def get_purchase(self, key):
         return dict(self.docs[key]) if key in self.docs else None
@@ -85,7 +93,7 @@ class FakeStore:
             self.docs[key] = {**self.docs.get(key, {}), **record, 'uid': uid}
             return uid
         if self.docs[key]['uid'] == uid:
-            self.docs[key].update(record)
+            self.docs[key].update({k: v for k, v in record.items() if k != 'uid'})
         return self.docs[key]['uid']
 
     def record_unbound(self, key, record):
@@ -98,11 +106,23 @@ class FakeStore:
         rows = [dict(v, _key=k) for k, v in self.docs.items() if v.get('next_check_at') and v['next_check_at'] <= now]
         return rows[:limit]
 
+    def get_user_fields(self, uid):
+        return dict(self.users.get(uid, {}))
+
+    def set_user_fields(self, uid, fields):
+        self.users.setdefault(uid, {}).update(fields)
+
     def get_user_pointer(self, uid):
-        return self.pointers.get(uid)
+        return self.users.get(uid, {}).get(self.USER_POINTER_FIELD)
 
     def set_user_pointer(self, uid, key):
-        self.pointers[uid] = key
+        self.set_user_fields(uid, {self.USER_POINTER_FIELD: key})
+
+    def remember_account(self, account, uid):
+        self.accounts.setdefault(account, uid)
+
+    def account_uid(self, account):
+        return self.accounts.get(account)
 
 
 class FakeUsers:
@@ -540,6 +560,7 @@ def _byok_subscription_json(monkeypatch, platform, build):
     monkeypatch.setattr(users.users_db, 'is_byok_active', lambda _uid: True)
     monkeypatch.setattr(users, 'request_has_llm_byok_key', lambda: True)
     monkeypatch.setattr(users.users_db, 'get_user_valid_subscription', lambda *a, **k: None)
+    monkeypatch.setattr(users.play_subscriptions_db, 'remember_account_once', lambda *a: None)
     response = users.get_user_subscription_endpoint(
         request=Request({'type': 'http', 'headers': []}),
         uid=UID,

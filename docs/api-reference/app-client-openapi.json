@@ -71141,6 +71141,9 @@
               }
             },
             "description": "Validation Error"
+          },
+          "429": {
+            "description": "Too Many Requests"
           }
         },
         "security": [

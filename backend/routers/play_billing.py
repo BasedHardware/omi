@@ -48,10 +48,13 @@ def _error(error: play_billing.PlayBillingError) -> JSONResponse:
     '/v1/payments/play/purchases',
     response_model=PlayPurchaseResponse,
     response_model_exclude_none=True,
-    responses={400: {'model': PlayBillingErrorResponse}, 409: {'model': PlayBillingErrorResponse}},
+    responses={400: {'model': PlayBillingErrorResponse}, 409: {'model': PlayBillingErrorResponse}, 429: {}},
 )
 @fresh_reader
-def verify_play_purchase(request: PlayPurchaseRequest, uid: str = Depends(auth.get_current_user_uid)):
+def verify_play_purchase(
+    request: PlayPurchaseRequest,
+    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, 'payments:play_verify')),
+):
     """Verify a Google Play purchase token, bind it to this account and grant Omi Pro once Google says it is paid."""
     try:
         result = play_billing.verify_and_bind(uid, request.purchase_token, request.product_id)

@@ -10,6 +10,8 @@ backend/docs/checkout-admission.md).
 
 from config.plan_catalog import configured_ladder_prices, validate_ladder_price
 from database.fsr_read_cache import fresh_reader, fresh_reads
+import database.play_subscriptions as play_subscriptions_db
+from config import play_billing as play_billing_config
 import os
 from datetime import datetime, timezone
 
@@ -50,7 +52,7 @@ from utils.billing_flags import payment_recovery_notification_enabled, webhook_l
 from utils.stripe_webhook_ledger import dispatch_with_ledger, RetryableBillingSkip
 from config.stt_cap_dispatch import any_execution_admission_enabled as funded_processing_enabled
 from utils.fair_use import clear_fair_use_on_upgrade
-from utils.notifications import send_subscription_paid_personalized_notification
+from utils.notifications import send_notification, send_subscription_paid_personalized_notification
 from utils.notification_dispatch import (
     NotificationIntent,
     NotificationKind,
@@ -793,7 +795,7 @@ def create_checkout_session_endpoint(
     existing_customer_id = users_db.get_stripe_customer_id(uid)
     # A trial is only for a first-time subscriber. A client that asked for one on behalf of a former
     # subscriber promised something this checkout cannot give, so refuse rather than charge at once.
-    if request.trial_days and existing_customer_id:
+    if request.trial_days and (existing_customer_id or play_subscriptions_db.is_play_customer(uid)):
         raise HTTPException(status_code=400, detail="trial_unavailable")
     trial_period_days = request.trial_days or None
     try:
@@ -1140,6 +1142,8 @@ def cancel_subscription_endpoint(
     uid: str = Depends(auth.get_current_user_uid),
 ):
     subscription = users_db.get_user_subscription(uid)
+    if subscription.provider == 'play':
+        raise HTTPException(status_code=409, detail=PLAY_MANAGED_DETAIL)
     if not subscription.stripe_subscription_id:
         raise HTTPException(status_code=400, detail="No active Stripe subscription found.")
 
@@ -1356,6 +1360,48 @@ async def stripe_webhook(
     return result
 
 
+PLAY_MANAGED_DETAIL = (
+    'Your Omi Pro subscription is billed through Google Play. '
+    'Manage or cancel it in Google Play: https://play.google.com/store/account/subscriptions'
+)
+
+
+def _live_play_row(subscription: Subscription | None) -> bool:
+    return bool(
+        subscription is not None
+        and subscription.provider == 'play'
+        and is_paid_plan(subscription.plan)
+        and _paid_period_still_open(subscription.current_period_end, datetime.now(timezone.utc))
+    )
+
+
+async def _refuse_checkout_for_play_subscriber(uid: str, stripe_subscription_id: str) -> dict:
+    """A Stripe checkout finished for a user Google Play already bills: undo it, never keep both."""
+    result = await run_blocking(
+        stripe_executor, stripe_utils.cancel_and_refund_checkout_subscription, stripe_subscription_id
+    )
+    pointer = await run_blocking(db_executor, play_subscriptions_db.get_user_pointer, uid)
+    logger.error(
+        'play_billing double billing refused: uid=%s stripe_subscription=%s refund=%s play_token=%s',
+        uid,
+        stripe_subscription_id,
+        result.get('refund_id'),
+        (pointer or '')[:12],
+    )
+    try:
+        await run_blocking(
+            db_executor,
+            send_notification,
+            uid,
+            'You already have Omi Pro',
+            'Your Omi Pro is billed through Google Play, so we canceled the new card subscription'
+            + (' and refunded it.' if result.get('refund_id') else '. You were not charged.'),
+        )
+    except Exception:
+        logger.warning('play_billing double billing notice not sent for uid=%s', uid)
+    return {"status": "success", "message": "Checkout refused: Google Play already bills this user."}
+
+
 @fresh_reader
 async def _handle_stripe_event(event: dict, background_tasks: BackgroundTasks | None = None):
     if event['type'] == 'customer.subscription.trial_will_end':
@@ -1423,6 +1469,8 @@ async def _handle_stripe_event(event: dict, background_tasks: BackgroundTasks | 
             # An incomplete Basic row is not a completed paid checkout;
             # preserve the existing duplicate/replacement decision in pure code.
             existing_subscription = await run_blocking(db_executor, users_db.get_user_valid_subscription, uid)
+            if _live_play_row(existing_subscription) and session.get('subscription'):
+                return await _refuse_checkout_for_play_subscriber(uid, session['subscription'])
             checkout_decision = transition(
                 existing_subscription,
                 ResolvedStripeEvent(event['type'], session.get('subscription'), None, int(time.time())),
@@ -1539,6 +1587,12 @@ async def _handle_stripe_event(event: dict, background_tasks: BackgroundTasks | 
                 subscription_obj, grant_cancel_grace=True, now=now
             )
             if new_subscription:
+                if (
+                    is_paid_plan(new_subscription.plan)
+                    and subscription_obj.get('status') in ('active', 'trialing', 'past_due')
+                    and _live_play_row(await run_blocking(db_executor, users_db.get_existing_user_subscription, uid))
+                ):
+                    return await _refuse_checkout_for_play_subscriber(uid, subscription_obj['id'])
                 # Resolve prior entitlement before reconciliation; emit only
                 # after the authoritative write so stale deletion is not churn.
                 billing_owner_confirmed = False
@@ -2052,6 +2106,9 @@ def stripe_cancel():
 @router.post('/v1/payments/customer-portal', response_model=CustomerPortalSessionResponse)
 def create_customer_portal_endpoint(uid: str = Depends(auth.get_current_user_uid)):
     """Create a Stripe Customer Portal session for managing payment methods and subscriptions."""
+    # Released clients open this URL as-is; a Play subscriber is sent to Google Play's subscription center.
+    if users_db.get_user_subscription(uid).provider == 'play':
+        return {"url": play_billing_config.manage_subscription_url()}
 
     customer_id = users_db.get_stripe_customer_id(uid)
 

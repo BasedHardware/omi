@@ -12,7 +12,7 @@ import logging
 import time
 from dataclasses import dataclass, replace
 from datetime import datetime
-from typing import Any, Literal, Mapping, Optional, Protocol
+from typing import Any, Literal, Mapping, Optional
 
 import stripe
 
@@ -24,6 +24,7 @@ from database import redis_db
 from database.account_deletion_marker import account_deletion_blocks_user_work
 from models.users import PlanType, Subscription, SubscriptionStatus
 from utils.fair_use import clear_fair_use_on_upgrade
+from utils.play_publisher import GooglePublisher, PublisherClient, PurchaseNotFound, default_publisher
 from utils.subscription import get_plan_limits, is_paid_plan
 
 logger = logging.getLogger(__name__)
@@ -44,6 +45,9 @@ ACCESS_STATES = frozenset({STATE_ACTIVE, STATE_GRACE, STATE_CANCELED})
 # States that can still change on their own; reconcile keeps re-reading them.
 OPEN_STATES = ACCESS_STATES | {STATE_ON_HOLD, STATE_PAUSED, STATE_PENDING}
 RECHECK_SECONDS = 24 * 3600
+# Google keeps extending expiryTime through a grace period; never cut access before a fresh read.
+GRACE_RECHECK_SECONDS = 6 * 3600
+GRACE_FLOOR_SECONDS = 24 * 3600
 
 
 class PlayBillingError(Exception):
@@ -56,58 +60,13 @@ class PlayBillingError(Exception):
         self.message = message
 
 
-class PublisherClient(Protocol):
-    def get_subscription(self, package_name: str, token: str) -> dict: ...
-
-    def acknowledge(self, package_name: str, product_id: str, token: str) -> None: ...
-
-
-class PurchaseNotFound(Exception):
-    """Google says the token does not exist for this package."""
-
-
-_PUBLISHER_API = 'https://androidpublisher.googleapis.com/androidpublisher/v3/applications'
-
-
-class _GooglePublisher:
-    """Android Publisher v3 REST over google-auth (built lazily on first use)."""
-
-    def __init__(self):
-        from urllib.parse import quote
-
-        import google.auth
-        from google.auth.transport.requests import AuthorizedSession
-
-        # Application Default Credentials: the runtime service account. No key file.
-        credentials, _ = google.auth.default(scopes=['https://www.googleapis.com/auth/androidpublisher'])
-        self._session = AuthorizedSession(credentials)
-        self._quote = lambda value: quote(value, safe='')
-
-    def get_subscription(self, package_name: str, token: str) -> dict:
-        url = f'{_PUBLISHER_API}/{self._quote(package_name)}/purchases/subscriptionsv2/tokens/{self._quote(token)}'
-        response = self._session.get(url, timeout=15)
-        if response.status_code in (400, 404, 410):
-            raise PurchaseNotFound()
-        response.raise_for_status()
-        return response.json()
-
-    def acknowledge(self, package_name: str, product_id: str, token: str) -> None:
-        url = (
-            f'{_PUBLISHER_API}/{self._quote(package_name)}/purchases/subscriptions/'
-            f'{self._quote(product_id)}/tokens/{self._quote(token)}:acknowledge'
-        )
-        response = self._session.post(url, json={}, timeout=15)
-        response.raise_for_status()
-
-
+# Back-compat names: the client lives in the light utils.play_publisher module.
+_GooglePublisher = GooglePublisher
 _publisher: Optional[PublisherClient] = None
 
 
 def get_publisher() -> PublisherClient:
-    global _publisher
-    if _publisher is None:
-        _publisher = _GooglePublisher()
-    return _publisher
+    return _publisher or default_publisher()
 
 
 obfuscated_account_id = config.obfuscated_account_id
@@ -139,7 +98,15 @@ class PlayState:
     test_purchase: bool
 
     def has_access(self, now: int) -> bool:
+        if self.state == STATE_GRACE:
+            # During grace Google extends expiryTime and says the user keeps access.
+            return True
         return self.state in ACCESS_STATES and self.expiry is not None and self.expiry > now
+
+    def access_until(self, now: int) -> Optional[int]:
+        if self.state == STATE_GRACE:
+            return max(self.expiry or 0, now + GRACE_FLOOR_SECONDS)
+        return self.expiry
 
 
 def read_state(resource: Mapping[str, Any]) -> PlayState:
@@ -167,7 +134,7 @@ def _record(state: PlayState, token: str, now: int, *, revoked: bool = False) ->
     open_state = state.state in OPEN_STATES and not revoked
     next_check = None
     if open_state:
-        next_check = now + RECHECK_SECONDS
+        next_check = now + (GRACE_RECHECK_SECONDS if state.state == STATE_GRACE else RECHECK_SECONDS)
         if state.expiry is not None and state.expiry > now:
             next_check = min(next_check, state.expiry + 60)
     return {
@@ -188,12 +155,12 @@ def _record(state: PlayState, token: str, now: int, *, revoked: bool = False) ->
     }
 
 
-def play_subscription(state: PlayState) -> Subscription:
+def play_subscription(state: PlayState, now: Optional[int] = None) -> Subscription:
     """The Omi Pro row a Stripe subscription with the same period would store."""
     return Subscription(
         plan=PLAY_PLAN,
         status=SubscriptionStatus.active,
-        current_period_end=state.expiry,
+        current_period_end=state.access_until(now if now is not None else int(time.time())),
         current_period_start=state.start,
         cancel_at_period_end=not state.auto_renewing,
         limits=get_plan_limits(PLAY_PLAN),
@@ -201,9 +168,13 @@ def play_subscription(state: PlayState) -> Subscription:
     )
 
 
-def _grant(uid: str, state: PlayState) -> Subscription:
+def _grant(uid: str, state: PlayState, token_hash: str) -> Subscription:
     # Same write + side effects as the Stripe upgrade paths (routers/monthly_switch._store).
     subscription = play_subscription(state)
+    play_db.set_user_fields(
+        uid,
+        {play_db.USER_POINTER_FIELD: token_hash, play_db.PENDING_FIELD: None, play_db.CUSTOMER_FIELD: True},
+    )
     users_db.update_user_subscription(uid, subscription.model_dump())
     redis_db.set_credits_invalidation_signal(uid)
     conversations_db.unlock_all_conversations(uid)
@@ -294,6 +265,55 @@ class VerifyResult:
     subscription: Optional[Subscription]
 
 
+_OWNED_ELSEWHERE = (409, 'purchase_owned_elsewhere', 'This purchase belongs to another Omi account.')
+_REFUNDED = (409, 'purchase_refunded', 'This Google Play purchase was refunded and no longer includes Omi Pro.')
+_STRIPE_ACTIVE = (
+    409,
+    'stripe_subscription_active',
+    'You already have Omi Pro billed outside Google Play. Cancel it before subscribing here.',
+)
+
+
+def _clear_pending(uid: str, token_hash: str) -> None:
+    if play_db.get_user_fields(uid).get(play_db.PENDING_FIELD) == token_hash:
+        play_db.set_user_fields(uid, {play_db.PENDING_FIELD: None})
+
+
+def _settle(uid: str, token_hash: str, state: PlayState, token: str, publisher: PublisherClient, *, fresh: bool) -> str:
+    """Project Google's state for a token already bound to ``uid``: grant, hold pending, or remove.
+
+    ``fresh`` means this call is the first to bind the token, so a live Stripe subscription refuses
+    it outright (unacknowledged, Google refunds it). For an older token a live Stripe row is
+    never overwritten: the two are logged as double billing instead of flip-flopping each period.
+    """
+    if state.has_access(int(time.time())):
+        if account_deletion_blocks_user_work(uid):
+            raise PlayBillingError(409, 'account_deletion_pending', 'This account is being deleted.')
+        pointer = play_db.get_user_pointer(uid)
+        if _live_stripe_subscription(uid):
+            if fresh or not state.acknowledged:
+                raise PlayBillingError(*_STRIPE_ACTIVE)
+            logger.error(
+                'play_billing double billing: live Stripe row and Play token for uid=%s token=%s', uid, token_hash[:12]
+            )
+            return 'stripe_conflict'
+        if pointer and pointer != token_hash and _holds_live_paid_row(uid):
+            return 'not_current'  # a newer Play token owns the live row
+        _acknowledge(publisher, state, token)
+        _grant(uid, replace(state, acknowledged=True), token_hash)
+        if state.test_purchase:
+            # License-tester purchases grant like real ones (internal testing); keep them visible.
+            logger.warning('play_billing test purchase granted uid=%s token=%s', uid, token_hash[:12])
+        if state.offer_id == config.trial_offer_id() and not fresh:
+            logger.info('play_billing trial granted via notification uid=%s', uid)
+        return 'active'
+    if state.state == STATE_PENDING:
+        play_db.set_user_fields(uid, {play_db.PENDING_FIELD: token_hash})
+        return 'pending'
+    _clear_pending(uid, token_hash)
+    return 'revoked' if _revoke(uid, token_hash) else 'inactive'
+
+
 def verify_and_bind(uid: str, purchase_token: str, product_id: str, publisher: Optional[PublisherClient] = None):
     """Validate a client-reported purchase, bind it to ``uid`` and grant Omi Pro when Google says it is paid."""
     publisher = publisher or get_publisher()
@@ -307,46 +327,50 @@ def verify_and_bind(uid: str, purchase_token: str, product_id: str, publisher: O
     _check_product(state)
     expected_account = obfuscated_account_id(uid)
     if state.obfuscated_account_id and state.obfuscated_account_id != expected_account:
-        raise PlayBillingError(409, 'purchase_owned_elsewhere', 'This purchase belongs to another Omi account.')
+        raise PlayBillingError(*_OWNED_ELSEWHERE)
     if account_deletion_blocks_user_work(uid):
         raise PlayBillingError(409, 'account_deletion_pending', 'This account is being deleted.')
 
     token_hash = play_db.token_key(purchase_token)
-    existing = play_db.get_purchase(token_hash)
-    if existing and existing.get('uid') and existing['uid'] != uid:
-        raise PlayBillingError(409, 'purchase_owned_elsewhere', 'This purchase belongs to another Omi account.')
+    existing = play_db.get_purchase(token_hash) or {}
+    if existing.get('uid') and existing['uid'] != uid:
+        raise PlayBillingError(*_OWNED_ELSEWHERE)
     if state.linked_token:
         linked = play_db.get_purchase(play_db.token_key(state.linked_token))
         if linked and linked.get('uid') and linked['uid'] != uid:
-            raise PlayBillingError(409, 'purchase_owned_elsewhere', 'This purchase belongs to another Omi account.')
+            raise PlayBillingError(*_OWNED_ELSEWHERE)
+    if existing.get('revoked'):
+        raise PlayBillingError(*_REFUNDED)
 
-    granting = state.has_access(now)
-    already_ours = bool(existing and existing.get('uid') == uid)
-    if granting and not already_ours and _live_stripe_subscription(uid):
-        raise PlayBillingError(
-            409,
-            'stripe_subscription_active',
-            'You already have Omi Pro billed outside Google Play. Cancel it before subscribing here.',
-        )
-
-    if granting:
-        _acknowledge(publisher, state, purchase_token)
-        state = replace(state, acknowledged=True)
+    fresh = existing.get('uid') != uid
+    if fresh and state.has_access(now) and _live_stripe_subscription(uid):
+        raise PlayBillingError(*_STRIPE_ACTIVE)
+    play_db.remember_account(expected_account, uid)
     owner = play_db.bind_purchase(token_hash, uid, _record(state, purchase_token, now))
     if owner != uid:
-        raise PlayBillingError(409, 'purchase_owned_elsewhere', 'This purchase belongs to another Omi account.')
-
-    if granting:
-        play_db.set_user_pointer(uid, token_hash)
-        return VerifyResult('active', _grant(uid, state))
-    if state.state == STATE_PENDING:
+        raise PlayBillingError(*_OWNED_ELSEWHERE)
+    outcome = _settle(uid, token_hash, state, purchase_token, publisher, fresh=fresh)
+    if outcome == 'active':
+        return VerifyResult('active', play_subscription(replace(state, acknowledged=True), now))
+    if outcome == 'pending':
         return VerifyResult('pending', None)
-    _revoke(uid, token_hash)
     return VerifyResult('inactive', None)
 
 
+def _resolve_unbound_owner(state: PlayState) -> Optional[str]:
+    """uid for a token no client delivered: through the previous token, else the obfuscated account id."""
+    linked_owner = None
+    if state.linked_token:
+        linked_owner = (play_db.get_purchase(play_db.token_key(state.linked_token)) or {}).get('uid')
+    account_owner = play_db.account_uid(state.obfuscated_account_id) if state.obfuscated_account_id else None
+    if linked_owner and account_owner and linked_owner != account_owner:
+        logger.warning('play_billing unbound token: linked and account owners disagree; not bound')
+        return None
+    return linked_owner or account_owner
+
+
 def apply_token(purchase_token: str, publisher: Optional[PublisherClient] = None, *, revoked: bool = False) -> str:
-    """Re-read one token from Google and project it onto its bound account. Returns the outcome label."""
+    """Re-read one token from Google and project it onto its account. Returns the outcome label."""
     publisher = publisher or get_publisher()
     now = int(time.time())
     token_hash = play_db.token_key(purchase_token)
@@ -359,30 +383,33 @@ def apply_token(purchase_token: str, publisher: Optional[PublisherClient] = None
             _revoke(existing['uid'], token_hash)
         return 'not_found'
     state = read_state(resource)
+    existing = play_db.get_purchase(token_hash) or {}
+    # A refund or revoke is permanent for this token.
+    revoked = revoked or bool(existing.get('revoked'))
     record = _record(state, purchase_token, now, revoked=revoked)
-    existing = play_db.get_purchase(token_hash)
-    uid = (existing or {}).get('uid')
-    if not uid:
-        play_db.record_unbound(token_hash, record)
-        return 'unbound'
-    play_db.update_purchase(token_hash, record)
+    uid = existing.get('uid')
     if state.product_id != config.product_id():
+        play_db.record_unbound(token_hash, record) if not uid else play_db.update_purchase(token_hash, record)
         if state.product_id in config.LEGACY_PRODUCT_IDS:
             logger.warning('play_billing legacy product notification ignored: product=%s', state.product_id)
             return 'legacy_product'
         return 'ignored_product'
-    if not revoked and state.has_access(now):
-        if account_deletion_blocks_user_work(uid):
-            return 'deletion_fenced'
-        if play_db.get_user_pointer(uid) != token_hash and _holds_live_paid_row(uid):
-            # Never overwrite another live entitlement (Stripe, or a newer Play token).
-            return 'not_current'
-        if not state.acknowledged:
-            _acknowledge(publisher, state, purchase_token)
-        play_db.set_user_pointer(uid, token_hash)
-        _grant(uid, state)
-        return 'active'
-    return 'revoked' if _revoke(uid, token_hash) else 'inactive'
+    fresh = False
+    if not uid:
+        uid = _resolve_unbound_owner(state)
+        if not uid:
+            play_db.record_unbound(token_hash, record)
+            logger.warning('play_billing notification for a token with no known owner; recorded, not granted')
+            return 'unbound'
+        if play_db.bind_purchase(token_hash, uid, record) != uid:
+            return 'unbound'
+        fresh = True
+    else:
+        play_db.update_purchase(token_hash, record)
+    if revoked:
+        _clear_pending(uid, token_hash)
+        return 'revoked' if _revoke(uid, token_hash) else 'inactive'
+    return _settle(uid, token_hash, state, purchase_token, publisher, fresh=fresh)
 
 
 def reconcile_due(publisher: Optional[PublisherClient] = None, limit: int = 200) -> dict[str, int]:

@@ -127,3 +127,11 @@ def client_config_payload(uid: str, environ: Optional[Mapping[str, str]] = None)
         'trial_offer_id': trial_offer_id(environ),
         'obfuscated_account_id': obfuscated_account_id(uid),
     }
+
+
+def manage_subscription_url(environ: Optional[Mapping[str, str]] = None) -> str:
+    """Google Play's subscription center for Omi Pro."""
+    return (
+        'https://play.google.com/store/account/subscriptions'
+        f'?sku={product_id(environ)}&package={package_name(environ)}'
+    )

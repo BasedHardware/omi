@@ -74,6 +74,7 @@ from database.users import (
 from utils import ai_profile_refresh, billing_recovery, screen_vector_entitlements
 from utils.observability.fallback import record_fallback
 from config import play_billing as play_billing_config
+import database.play_subscriptions as play_subscriptions_db
 from config.daily_summary_depth import DEFAULT_DAILY_SUMMARY_DEPTH, DailySummaryDepth
 from utils.sync.held_audio_summary import attach_subscription_held_audio
 from config.stt_cap_dispatch import any_execution_admission_enabled as funded_processing_enabled
@@ -1375,6 +1376,10 @@ def get_user_subscription_endpoint(
         response.processing_backlog = processing_backlog.snapshot(uid, allowance=funded, audio=audio)
     if play_billing_config.client_uses_play(x_app_platform, x_app_build, uid):
         response.play_billing = PlayBillingConfig.model_validate(play_billing_config.client_config_payload(uid))
+        try:
+            play_subscriptions_db.remember_account_once(response.play_billing.obfuscated_account_id, uid)
+        except Exception:  # noqa: BLE001 - the map only helps bind notification-only tokens
+            logger.warning('play_billing account map write failed')
     return response
 
 
@@ -1392,6 +1397,17 @@ def process_waiting_recordings(
     if snapshot is not None and snapshot.state == 'capped':
         raise HTTPException(status_code=402, detail={'error': 'usage_budget_exhausted', 'trigger': 'usage_budget'})
     return snapshot
+
+
+def _never_subscribed(uid: str) -> bool:
+    """No Stripe customer and no Play subscription ever: the only readers a trial may be promised to.
+
+    Fails closed: when a lookup is unavailable the client must not promise a trial checkout refuses.
+    """
+    try:
+        return not users_db.get_stripe_customer_id(uid) and not play_subscriptions_db.is_play_customer(uid)
+    except Exception:  # noqa: BLE001 - eligibility is a promotion hint, never worth a 500
+        return False
 
 
 def _user_subscription_response(
@@ -1624,14 +1640,8 @@ def _user_subscription_response(
             )
 
     show_subscription_ui = not should_hide_subscription_ui(uid, x_app_platform, x_app_version)
-    # Read from the true plan, before the client remap below. Fail closed: when the Stripe customer
-    # lookup is unavailable the client must not promise a trial the checkout may refuse.
-    trial_eligible = False
-    if subscription.plan == PlanType.basic:
-        try:
-            trial_eligible = not users_db.get_stripe_customer_id(uid)
-        except Exception:  # noqa: BLE001 - eligibility is a promotion hint, never worth a 500
-            trial_eligible = False
+    # Read from the true plan, before the client remap below.
+    trial_eligible = subscription.plan == PlanType.basic and _never_subscribed(uid)
 
     # Phone-call feature access + monthly free-tier usage snapshot.
     phone_call_quota = PhoneCallQuota(**get_phone_call_quota_snapshot(uid).to_client_dict())

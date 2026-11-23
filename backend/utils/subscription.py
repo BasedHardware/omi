@@ -22,6 +22,7 @@ from utils import screen_vector_entitlements
 
 import database.users as users_db
 import database.user_usage as user_usage_db
+import database.play_subscriptions as play_subscriptions_db
 from database._client import get_customer_firestore_client
 from database.announcements import compare_versions
 from config.plan_catalog import (
@@ -1323,6 +1324,8 @@ def can_user_make_payment(uid: str, target_price_id: Optional[str] = None) -> Tu
     # A live Google Play subscription is managed in Play; never start a second (Stripe) one.
     if subscription is not None and subscription.provider == 'play' and is_paid_plan(subscription.plan):
         return False, "Your Omi Pro subscription is billed through Google Play. Manage it in the Play Store."
+    if play_subscriptions_db.pending_play_purchase(uid):
+        return False, "Your Google Play purchase is still being processed. Try again once it completes."
     if target_price_id in configured_ladder_prices() and subscription is not None:
         if subscription.plan != PlanType.basic and ladder_policy.entitlements(subscription) is None:
             return False, "Legacy subscriptions keep their current plan"
