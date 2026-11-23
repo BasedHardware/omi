@@ -69,6 +69,42 @@ def _log_grant_denial(tool: str, grant: Any) -> None:
 
 _MEMORY_KEYSET_SORTS = frozenset({"scoring_desc", "updated_desc"})
 _MEMORY_KEYSET_MAX_ROUNDS = 4
+_MEMORY_SORTS = ("scoring_desc", "created_desc", "updated_desc", "manual_first")
+
+
+def _decode_memory_cursor(
+    cursor_token: Any, *, cursor_kind: str, uid: str, filters: Dict[str, Any], sort: str
+) -> Dict[str, Any]:
+    """Decode a memory cursor, naming a cross-sort reuse instead of "Invalid cursor".
+
+    Cursors are bound to the validated filter set, which includes ``sort``. A
+    client that follows the bounded-window coverage hint by switching to
+    ``updated_desc`` while keeping the old cursor would otherwise get an opaque
+    "Invalid cursor"; name the sort the cursor belongs to so the restart is
+    unambiguous. Every other validation failure (wrong tool, user, or filters)
+    keeps the original error.
+    """
+    try:
+        return decode_cursor(cursor_token, kind=cursor_kind, uid=uid, filters=filters)
+    except ToolExecutionError:
+        for other_sort in _MEMORY_SORTS:
+            if other_sort == sort:
+                continue
+            try:
+                decode_cursor(
+                    cursor_token,
+                    kind=cursor_kind,
+                    uid=uid,
+                    filters={**filters, "sort": other_sort},
+                )
+            except ToolExecutionError:
+                continue
+            raise ToolExecutionError(
+                f"This cursor was minted for sort={other_sort}. Restart with sort={other_sort}, or drop the "
+                "cursor and restart with sort=updated_desc to page older candidates.",
+                code=-32602,
+            )
+        raise
 
 
 def _read_memories_keyset_page(
@@ -256,7 +292,7 @@ def memories_page_core(
     if cursor_token is not None:
         if offset != 0:
             raise ToolExecutionError("cursor and offset are mutually exclusive.", code=-32602)
-        position = decode_cursor(cursor_token, kind=cursor_kind, uid=uid, filters=filters)
+        position = _decode_memory_cursor(cursor_token, cursor_kind=cursor_kind, uid=uid, filters=filters, sort=sort)
         if "uml" in position:
             uml_cursor = uml_position(position)
         else:
@@ -282,10 +318,14 @@ def memories_page_core(
         )
         page = rows[offset : offset + limit]
         more = len(rows) > offset + limit
+        # ``has_more``/``next_cursor`` describe pageable continuation inside
+        # this window only. A short source read is not proof of exhaustion:
+        # the keyset fill also stops on the request budget and the raw-row cap,
+        # so global coverage stays explicitly unknown.
         result = {
             'memories': page,
             'returned_count': len(page),
-            'has_more': True,
+            'has_more': more,
             'more_in_window': more,
             'more_in_window_known': True,
             'scan_truncated': True,
@@ -296,7 +336,11 @@ def memories_page_core(
             'sort': sort,
             'include_activity': include_activity,
             'include_sensitive': include_sensitive,
-            'coverage': 'bounded newest-updated source window; global ordering and exhaustion are unknown; use updated_desc with cursor for older candidates',
+            'coverage': (
+                'bounded newest-updated source window; global ordering and exhaustion are unknown; '
+                'has_more and next_cursor describe only this window. To page older candidates, restart with '
+                'sort=updated_desc and no cursor; a cursor minted for this sort cannot be reused with another sort.'
+            ),
             'source_window_limit': window_limit,
         }
         if more:
@@ -370,7 +414,15 @@ def memories_page_core(
             http_status=503,
         )
     if result.get('scan_truncated') and use_keyset:
-        result['coverage'] = 'bounded_scan; older candidates may be omitted; use updated_desc with cursor'
+        if result.get('next_cursor'):
+            result['coverage'] = (
+                'bounded_scan; continue with next_cursor; candidates beyond the scan budget may be omitted'
+            )
+        else:
+            result['coverage'] = (
+                'bounded_scan; the scan budget ended before global exhaustion could be established and this '
+                'sort has no continuation; narrow updated_after or retry with a smaller limit'
+            )
     # Apply locked content truncation
     for memory in result["memories"]:
         if memory.get('is_locked', False):
