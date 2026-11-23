@@ -3,15 +3,10 @@
  "project_id": 302298,
  "measured": {
   "window": "7 days to 2026-11-23T10:30Z",
-  "method": "HogQL per event: sum(100 / coalesce(omi_sample_pct, 100)) / 7; where a later looser stage overwrote the tag (Recording Upload Started/Completed: tagged 2, kept 0.5%), stored/day x 100 / effective pct. identified = person_mode full on at least half the rows."
+  "method": "HogQL per event: sum(100 / coalesce(omi_sample_pct, 100)) / 7; where a later looser stage overwrote the tag (Recording Upload Started/Completed: tagged 2, kept 0.5%), stored/day x 100 / effective pct. identified = person_mode full on at least half the rows. identified = person_mode other than propertyless (force_upgrade bills as identified), re-read 2026-11-23 ~12:00Z."
  },
  "budget": {
   "monthly_usd": 500,
-  "ceiling": {
-   "usd": 1350,
-   "until": "2026-12-07",
-   "reason": "SCA-3665 glide path from the 2026-11-23 live state: debug events leave PostHog when the collector (#21449) and Prometheus alerts replace them; flags and identified events are the remaining levers. Lower it as cuts land; raising or extending it needs a waiver signed by David Zhang."
-  },
   "days_per_month": 30,
   "source": "PostHog price tiers (per unit); warehouse price derived from the 2026-11-23T07:44:58Z projection ($807.83 for 136.4M rows).",
   "tiers": {
@@ -61,11 +56,33 @@
   "tiers_note": "Upper bounds in units per month; null is open-ended. The published 2-15M (events) and 2-10M (flags) rates are applied beyond their upper bound too, which overstates slightly.",
   "warehouse_usd_per_row": 5.9e-06,
   "warehouse_usd_per_row_derived": true,
-  "feature_flag_requests_per_month": 6880783,
-  "feature_flag_requests_source": "/api/billing/ projected usage, period 2026-11-06 to 2026-12-06, read 2026-11-23T07:44:58Z",
+  "feature_flag_requests_per_month": 4710000,
+  "feature_flag_requests_source": "/api/billing/usage feature_flag_requests, team 302298: mean of 2026-11-16..22 = 157,105/day x 30. All of it is project 302298.",
   "other_monthly_usd": {
    "session_replay": 27.63
-  }
+  },
+  "planned": [
+   {
+    "id": "mcp-daily-rollup",
+    "owner": "backend (mcp_analytics) + web/admin wall-mcp",
+    "change": "Server keeps per uid/client/UTC-day cadence stats in Redis and emits one rollup event per actor-client-day; wall-mcp reads the rollup. Exact for DAU/WAU/MAU; replaces the per-call MCP Tool Use Succeeded stream.",
+    "measured": "7 days to 2026-11-23: 499,219 calls over 9,164 actor-client-days (1,309/day); 343 actor-days with 200+ calls carry 397,106 calls (80%).",
+    "saving": {
+     "events_per_day": {
+      "MCP Tool Use Succeeded": 70008
+     }
+    }
+   },
+   {
+    "id": "posthog-flags-off",
+    "owner": "David (PostHog write) after old builds age out",
+    "change": "Deactivate the 24 active PostHog flags. Current mobile, desktop and web/app builds already block /flags and read Omi flags; the residual 157k requests/day come from older builds still in the field. PostHog bills a /flags request that evaluates at least one active flag; with none active the requests should not bill (documented by implication, not verified).",
+    "risk": "Older builds would read every PostHog flag as off, including 12 kill switches and the paywall/onboarding experiment flags. Needs a per-flag review of what off means on those builds first.",
+    "saving": {
+     "feature_flag_requests_per_month": 4710000
+    }
+   }
+  ]
  },
  "functions": [
   {
@@ -111,11 +128,11 @@
   },
   {
    "id": "01a147e7-685b-0000-0b4b-85177eb1c46a",
-   "name": "Ops sampling 0.5% uploads (cost cut 2026-10-17)",
+   "name": "Drop Recording Upload Started/Completed (SCA-3665; was 0.5%)",
    "execution_order": 3,
    "enabled": true,
-   "kind": "sample",
-   "pct": 0.5,
+   "kind": "drop",
+   "pct": 0,
    "events": [
     "Recording Upload Started",
     "Recording Upload Completed"
@@ -305,35 +322,84 @@
   },
   {
    "id": "01a14955-e81f-0000-91ae-520340a1716e",
-   "name": "Drop: Mobile Render Observation, wal_transcript_coverage, Capture Ingress Health (SCA-3665 2026-11-23)",
+   "name": "Drop debug/ops events: route to the client collector (SCA-3665, David 2026-11-23)",
    "execution_order": 7,
    "enabled": true,
    "kind": "drop",
    "pct": 0,
    "events": [
+    "api_edge_throttled",
+    "App Startup Timing",
+    "Audio Playback Failed",
+    "Audio Share Failed",
+    "auth_token_refresh_failed",
+    "authenticated_request_401",
+    "Capture Gap Detected",
+    "Capture Ingress Health",
+    "Capture Recovery Observed",
+    "Capture Recovery Prompt Shown",
+    "Capture Recovery Resolved",
+    "Conversation Processing Completed",
+    "Conversation Processing Stalled",
+    "Conversation Untitled Rendered",
+    "Desktop Conversation Reconciliation Failed",
+    "Desktop Recording Error",
+    "Desktop Silent Mic Diagnostic",
+    "Diagnostics Send Failed",
+    "Diarization Completed",
+    "Encoded Audio Duration Measured",
+    "fallback_triggered",
+    "Integration Connect Failed",
+    "Integration Sync Failed",
+    "Listen Session Realtime Demand",
+    "Memories Cache Reconcile",
+    "Mobile Background Observation Interrupted",
+    "Mobile Background Resource Session",
     "Mobile Render Observation",
-    "wal_transcript_coverage",
-    "Capture Ingress Health"
+    "Native Custody Observed",
+    "Orphan Audio Reclaim",
+    "Orphan Audio Recovery",
+    "Pendant Frames Dropped",
+    "Recording Upload Completed",
+    "Recording Upload Started",
+    "Saved Pendant Reconnect",
+    "Screen Task Frame Terminal",
+    "Siri Index Rebuilt",
+    "Speaker Identity Proposed",
+    "Speech Positive Duration Measured",
+    "Suggestion Assistant Evaluation Completed",
+    "Suggestion Assistant Evaluation Failed",
+    "Suggestion Assistant Evaluation Started",
+    "Transcript Cancelled",
+    "Transcript Completed",
+    "Transcript Failed",
+    "Transcript Started",
+    "Update Check Completed",
+    "WAL Reconcile Poll Summary",
+    "WAL Stop Drain",
+    "WAL Upload Refused",
+    "WAL Write Receipt",
+    "wal_transcript_coverage"
    ]
   },
   {
    "id": "01a14997-d076-0000-366b-5533e678e2c9",
-   "name": "Sample Recording Upload Failed at 3% (SCA-3665 2026-11-23; was 10%)",
+   "name": "Sample Recording Upload Failed at 2% (SCA-3665, David 2026-11-23)",
    "execution_order": 8,
    "enabled": true,
    "kind": "sample",
-   "pct": 3,
+   "pct": 2,
    "events": [
     "Recording Upload Failed"
    ]
   },
   {
    "id": "01a1727c-015e-0000-4cf8-a02a1c045fba",
-   "name": "Sample Capture Wedge Detected, Local WAL Stuck, Recording Start Failed at 10% (SCA-3665 2026-11-23; was CIH 20%)",
+   "name": "Sample Capture Wedge Detected, Local WAL Stuck, Recording Start Failed at 2% (SCA-3665, David 2026-11-23)",
    "execution_order": 9,
    "enabled": true,
    "kind": "sample",
-   "pct": 10,
+   "pct": 2,
    "events": [
     "Capture Wedge Detected",
     "Local WAL Stuck",
@@ -640,7 +706,8 @@
   },
   "App Startup Timing": {
    "est_events_per_day": 479,
-   "identified": true
+   "identified": true,
+   "purpose": "debug"
   },
   "Apple Reminders Sync Completed": {
    "est_events_per_day": 809,
@@ -719,7 +786,8 @@
   },
   "Audio Playback Failed": {
    "est_events_per_day": 77,
-   "identified": true
+   "identified": true,
+   "purpose": "debug"
   },
   "Audio Playback Paused": {
    "est_events_per_day": 106,
@@ -744,7 +812,8 @@
   },
   "Audio Share Failed": {
    "est_events_per_day": 2,
-   "identified": true
+   "identified": true,
+   "purpose": "debug"
   },
   "Audio Share Started": {
    "est_events_per_day": 49,
@@ -854,7 +923,8 @@
   },
   "Capture Gap Detected": {
    "est_events_per_day": 6,
-   "identified": true
+   "identified": true,
+   "purpose": "debug"
   },
   "Capture Ingress Health": {
    "est_events_per_day": 244391,
@@ -863,15 +933,18 @@
   },
   "Capture Recovery Observed": {
    "est_events_per_day": 21392,
-   "identified": true
+   "identified": true,
+   "purpose": "debug"
   },
   "Capture Recovery Prompt Shown": {
    "est_events_per_day": 11,
-   "identified": true
+   "identified": true,
+   "purpose": "debug"
   },
   "Capture Recovery Resolved": {
    "est_events_per_day": 12988,
-   "identified": true
+   "identified": true,
+   "purpose": "debug"
   },
   "Capture Wedge Detected": {
    "est_events_per_day": 21181,
@@ -879,13 +952,7 @@
    "purpose": "debug",
    "reader": [
     "grafana:device-signals"
-   ],
-   "waiver": {
-    "by": "David Zhang",
-    "date": "2026-11-23",
-    "reason": "until collector+Prometheus alerts replace PostHog (SCA-3665)",
-    "expires": "2026-12-07"
-   }
+   ]
   },
   "Changelog Dismissed": {
    "est_events_per_day": 5,
@@ -1066,11 +1133,13 @@
   },
   "Conversation Processing Completed": {
    "est_events_per_day": 321,
-   "identified": true
+   "identified": true,
+   "purpose": "debug"
   },
   "Conversation Processing Stalled": {
    "est_events_per_day": 409,
-   "identified": true
+   "identified": true,
+   "purpose": "debug"
   },
   "Conversation Selected For Merge": {
    "est_events_per_day": 729,
@@ -1109,7 +1178,8 @@
   },
   "Conversation Untitled Rendered": {
    "est_events_per_day": 17396,
-   "identified": true
+   "identified": true,
+   "purpose": "debug"
   },
   "Conversation Viewed": {
    "est_events_per_day": 307,
@@ -1213,7 +1283,8 @@
   },
   "Desktop Conversation Reconciliation Failed": {
    "est_events_per_day": 246,
-   "identified": true
+   "identified": true,
+   "purpose": "debug"
   },
   "Desktop Meeting Confirmed": {
    "est_events_per_day": 256,
@@ -1257,7 +1328,8 @@
   },
   "Desktop Recording Error": {
    "est_events_per_day": 7,
-   "identified": true
+   "identified": true,
+   "purpose": "debug"
   },
   "Desktop Recording Started": {
    "est_events_per_day": 2667,
@@ -1282,7 +1354,8 @@
   },
   "Desktop Silent Mic Diagnostic": {
    "est_events_per_day": 9171,
-   "identified": true
+   "identified": true,
+   "purpose": "debug"
   },
   "Developer API Docs Opened": {
    "est_events_per_day": 7,
@@ -1418,11 +1491,13 @@
   },
   "Diagnostics Send Failed": {
    "est_events_per_day": 7,
-   "identified": true
+   "identified": true,
+   "purpose": "debug"
   },
   "Diarization Completed": {
    "est_events_per_day": 21486,
-   "identified": true
+   "identified": true,
+   "purpose": "debug"
   },
   "Disconnect Friend Clicked": {
    "est_events_per_day": 336,
@@ -1434,7 +1509,8 @@
   },
   "Encoded Audio Duration Measured": {
    "est_events_per_day": 28814,
-   "identified": true
+   "identified": true,
+   "purpose": "debug"
   },
   "Export Tasks Banner Clicked": {
    "est_events_per_day": 16,
@@ -1664,7 +1740,8 @@
   },
   "Integration Connect Failed": {
    "est_events_per_day": 18,
-   "identified": true
+   "identified": true,
+   "purpose": "debug"
   },
   "Integration Connect Succeeded": {
    "est_events_per_day": 97,
@@ -1692,7 +1769,8 @@
   },
   "Integration Sync Failed": {
    "est_events_per_day": 0,
-   "identified": true
+   "identified": true,
+   "purpose": "debug"
   },
   "Integration Sync Succeeded": {
    "est_events_per_day": 1929,
@@ -1726,7 +1804,8 @@
   },
   "Listen Session Realtime Demand": {
    "est_events_per_day": 28814,
-   "identified": true
+   "identified": true,
+   "purpose": "debug"
   },
   "Listen Socket Zero Transcript": {
    "est_events_per_day": 414,
@@ -1771,13 +1850,7 @@
    "purpose": "debug",
    "reader": [
     "grafana:device-signals"
-   ],
-   "waiver": {
-    "by": "David Zhang",
-    "date": "2026-11-23",
-    "reason": "until collector+Prometheus alerts replace PostHog (SCA-3665)",
-    "expires": "2026-12-07"
-   }
+   ]
   },
   "Login Page Viewed": {
    "est_events_per_day": 208,
@@ -1786,7 +1859,7 @@
   },
   "MCP Active": {
    "est_events_per_day": 4471,
-   "identified": false
+   "identified": true
   },
   "MCP Docs Opened": {
    "est_events_per_day": 7,
@@ -1794,11 +1867,11 @@
   },
   "MCP Tool Call": {
    "est_events_per_day": 10365,
-   "identified": false
+   "identified": true
   },
   "MCP Tool Use Succeeded": {
    "est_events_per_day": 71317,
-   "identified": false,
+   "identified": true,
    "purpose": "product",
    "reader": [
     "web/admin/lib/wall-mcp.ts"
@@ -1806,7 +1879,8 @@
   },
   "Memories Cache Reconcile": {
    "est_events_per_day": 460,
-   "identified": true
+   "identified": true,
+   "purpose": "debug"
   },
   "Memories Page Viewed": {
    "est_events_per_day": 39,
@@ -1845,11 +1919,13 @@
   },
   "Mobile Background Observation Interrupted": {
    "est_events_per_day": 2736,
-   "identified": true
+   "identified": true,
+   "purpose": "debug"
   },
   "Mobile Background Resource Session": {
    "est_events_per_day": 4936,
-   "identified": true
+   "identified": true,
+   "purpose": "debug"
   },
   "Mobile Device Health Daily": {
    "est_events_per_day": 3721,
@@ -1881,7 +1957,8 @@
   },
   "Native Custody Observed": {
    "est_events_per_day": 1529,
-   "identified": true
+   "identified": true,
+   "purpose": "debug"
   },
   "Notification Clicked": {
    "est_events_per_day": 27,
@@ -2144,11 +2221,13 @@
   },
   "Orphan Audio Reclaim": {
    "est_events_per_day": 2050,
-   "identified": true
+   "identified": true,
+   "purpose": "debug"
   },
   "Orphan Audio Recovery": {
    "est_events_per_day": 2050,
-   "identified": true
+   "identified": true,
+   "purpose": "debug"
   },
   "Payments Page Opened": {
    "est_events_per_day": 16,
@@ -2340,13 +2419,7 @@
    "reader": [
     "grafana:device-signals",
     "contracts/product-telemetry/posthog/journey-scorecard.hogql"
-   ],
-   "waiver": {
-    "by": "David Zhang",
-    "date": "2026-11-23",
-    "reason": "until collector+Prometheus alerts replace PostHog (SCA-3665)",
-    "expires": "2026-12-07"
-   }
+   ]
   },
   "Recording Started": {
    "est_events_per_day": 26328,
@@ -2376,13 +2449,7 @@
    "reader": [
     "grafana:device-signals",
     "aU3qFtY1"
-   ],
-   "waiver": {
-    "by": "David Zhang",
-    "date": "2026-11-23",
-    "reason": "until collector+Prometheus alerts replace PostHog (SCA-3665)",
-    "expires": "2026-12-07"
-   }
+   ]
   },
   "Recording Upload Started": {
    "est_events_per_day": 3646571,
@@ -2422,7 +2489,8 @@
   },
   "Saved Pendant Reconnect": {
    "est_events_per_day": 240036,
-   "identified": true
+   "identified": true,
+   "purpose": "debug"
   },
   "Screen Capture Broken Detected": {
    "est_events_per_day": 0,
@@ -2446,7 +2514,8 @@
   },
   "Screen Task Frame Terminal": {
    "est_events_per_day": 38921,
-   "identified": true
+   "identified": true,
+   "purpose": "debug"
   },
   "Search Bar Focused": {
    "est_events_per_day": 69,
@@ -2628,15 +2697,18 @@
   },
   "Siri Index Rebuilt": {
    "est_events_per_day": 10857,
-   "identified": true
+   "identified": true,
+   "purpose": "debug"
   },
   "Speaker Identity Proposed": {
    "est_events_per_day": 471,
-   "identified": true
+   "identified": true,
+   "purpose": "debug"
   },
   "Speech Positive Duration Measured": {
    "est_events_per_day": 2536,
-   "identified": true
+   "identified": true,
+   "purpose": "debug"
   },
   "Speech Profile Capture Page Clicked": {
    "est_events_per_day": 592,
@@ -2796,15 +2868,18 @@
   },
   "Suggestion Assistant Evaluation Completed": {
    "est_events_per_day": 5036,
-   "identified": true
+   "identified": true,
+   "purpose": "debug"
   },
   "Suggestion Assistant Evaluation Failed": {
    "est_events_per_day": 6071,
-   "identified": true
+   "identified": true,
+   "purpose": "debug"
   },
   "Suggestion Assistant Evaluation Started": {
    "est_events_per_day": 11107,
-   "identified": true
+   "identified": true,
+   "purpose": "debug"
   },
   "Suggestion Assistant Gate Outcome": {
    "est_events_per_day": 21564,
@@ -2914,15 +2989,18 @@
   },
   "Transcript Cancelled": {
    "est_events_per_day": 2036,
-   "identified": true
+   "identified": true,
+   "purpose": "debug"
   },
   "Transcript Completed": {
    "est_events_per_day": 2229,
-   "identified": true
+   "identified": true,
+   "purpose": "debug"
   },
   "Transcript Failed": {
    "est_events_per_day": 4311,
-   "identified": true
+   "identified": true,
+   "purpose": "debug"
   },
   "Transcript Segment Tapped": {
    "est_events_per_day": 704,
@@ -2930,7 +3008,8 @@
   },
   "Transcript Started": {
    "est_events_per_day": 4393,
-   "identified": true
+   "identified": true,
+   "purpose": "debug"
   },
   "Transcription Provider Selected": {
    "est_events_per_day": 87,
@@ -2965,7 +3044,8 @@
   },
   "Update Check Completed": {
    "est_events_per_day": 19414,
-   "identified": true
+   "identified": true,
+   "purpose": "debug"
   },
   "Update Check Failed": {
    "est_events_per_day": 445,
@@ -3094,11 +3174,13 @@
   },
   "WAL Reconcile Poll Summary": {
    "est_events_per_day": 177871,
-   "identified": true
+   "identified": true,
+   "purpose": "debug"
   },
   "WAL Upload Refused": {
    "est_events_per_day": 7,
-   "identified": true
+   "identified": true,
+   "purpose": "debug"
   },
   "Webhooks Docs Opened": {
    "est_events_per_day": 14,
@@ -3114,15 +3196,18 @@
   },
   "api_edge_throttled": {
    "est_events_per_day": 1991,
-   "identified": true
+   "identified": true,
+   "purpose": "debug"
   },
   "auth_token_refresh_failed": {
    "est_events_per_day": 1364,
-   "identified": true
+   "identified": true,
+   "purpose": "debug"
   },
   "authenticated_request_401": {
    "est_events_per_day": 980,
-   "identified": true
+   "identified": true,
+   "purpose": "debug"
   },
   "chat_agent_error": {
    "est_events_per_day": 50,
@@ -3196,7 +3281,8 @@
   },
   "fallback_triggered": {
    "est_events_per_day": 6985,
-   "identified": true
+   "identified": true,
+   "purpose": "debug"
   },
   "first_real_app_card": {
    "est_events_per_day": 36,

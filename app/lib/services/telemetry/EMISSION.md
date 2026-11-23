@@ -27,8 +27,9 @@ No content, account/device/job/WAL identifiers or raw errors are properties.
 `disk_reserve`; `count_cap` should be zero after the capture hotfix.
 
 These are health signals: their fleet counts belong in the collector, not in
-PostHog. On PostHog they stay at the 2% default; a PostHog count must weight
-rows by `omi_sample_pct`. Do not add them to the PostHog keep-list. This
+PostHog. Since SCA-3665 (2026-11-23) PostHog drops both at ingestion
+(`contracts/analytics/posthog.json`), so the WAL backlog consumer reads
+nothing from PostHog until it moves to the collector. Do not add them back. This
 repository change does not deploy an alert, bypass consent, or guarantee SDK
 delivery. The executable consumer is
 `contracts/analytics/consumers/wal-backlog-health.json`.

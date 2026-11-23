@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """Fixture tests for scripts/check_posthog_config.py (stdlib unittest)."""
 import contextlib
-import copy
 import datetime as dt
 import io
 import json
@@ -53,22 +52,26 @@ def passing():
     }
 
 
-def errors(doc, prior=None, today=TODAY):
-    return check.validate(doc, today, prior)
+def errors(doc, today=TODAY):
+    return check.validate(doc, today)
 
 
 class CheckPostHogConfig(unittest.TestCase):
-    def assertOneError(self, doc, fragment, prior=None, today=TODAY):
-        found = errors(doc, prior, today)
+    def assertOneError(self, doc, fragment, today=TODAY):
+        found = errors(doc, today)
         self.assertEqual(len(found), 1, found)
         self.assertIn(fragment, found[0])
 
     def test_passing_fixture(self):
         self.assertEqual(errors(passing()), [])
 
-    def test_repository_config_passes(self):
+    def test_repository_config_fails_only_on_budget(self):
+        # The honest 2026-11-23 config is over $500 with no ceiling (David: no interim ceiling).
+        # Every other rule passes; when cuts land, this flips to passing.
         doc = json.loads((check.ROOT / check.SOURCE).read_text())
-        self.assertEqual(errors(doc), [])
+        self.assertNotIn('ceiling', doc['budget'])
+        found = errors(doc)
+        self.assertTrue(all(e.startswith('budget: estimated') for e in found), found)
 
     def test_negative_estimate(self):
         doc = passing()
@@ -128,25 +131,35 @@ class CheckPostHogConfig(unittest.TestCase):
         doc['events']['Memory Created']['est_events_per_day'] = 2_000_000
         self.assertOneError(doc, 'exceeds budget.monthly_usd $500')
 
-    def test_budget_ceiling_covers_glide_path_until_it_expires(self):
+    def test_unsigned_ceiling_never_counts(self):
         doc = passing()
         doc['events']['Memory Created']['est_events_per_day'] = 400_000
         doc['budget']['ceiling'] = {'usd': 1500, 'until': '2026-12-07', 'reason': 'glide path'}
+        found = errors(doc)
+        self.assertEqual(len(found), 2, found)
+        self.assertIn('a ceiling needs an unexpired waiver signed by David Zhang', found[0])
+        self.assertIn('exceeds budget.monthly_usd $500', found[1])
+
+    def test_signed_ceiling_covers_until_it_expires(self):
+        doc = passing()
+        doc['events']['Memory Created']['est_events_per_day'] = 400_000
+        doc['budget']['ceiling'] = {'usd': 1500, 'until': '2026-12-07', 'reason': 'glide path', 'waiver': dict(WAIVER)}
         self.assertEqual(errors(doc), [])
         doc['events']['Capture Wedge Detected']['waiver']['expires'] = '2026-12-31'
-        self.assertOneError(doc, 'and budget.ceiling $1,500 until 2026-12-07', today=dt.date(2026, 12, 8))
+        found = errors(doc, today=dt.date(2026, 12, 8))
+        self.assertEqual(len(found), 2, found)
 
-    def test_raising_budget_ceiling_needs_waiver(self):
-        prior = passing()
-        prior['budget']['ceiling'] = {'usd': 1000, 'until': '2026-12-07', 'reason': 'glide path'}
-        doc = copy.deepcopy(prior)
-        doc['budget']['ceiling']['usd'] = 1200
-        self.assertOneError(doc, 'raising or extending the ceiling', prior=prior)
-        doc['budget']['ceiling']['waiver'] = dict(WAIVER)
-        self.assertEqual(errors(doc, prior), [])
-        doc = copy.deepcopy(prior)
-        prior_without = passing()
-        self.assertOneError(doc, 'raising or extending the ceiling', prior=prior_without)
+    def test_planned_savings_are_priced_separately(self):
+        doc = passing()
+        doc['events']['Memory Created']['est_events_per_day'] = 400_000
+        doc['budget']['feature_flag_requests_per_month'] = 3_000_000
+        doc['budget']['planned'] = [{'id': 'p', 'saving': {'events_per_day': {'Memory Created': 300_000},
+                                                            'feature_flag_requests_per_month': 3_000_000}}]
+        now, later = check.estimate(doc), check.estimate(doc, with_planned=True)
+        self.assertAlmostEqual(later['events_per_month'], now['events_per_month'] - 9_000_000)
+        self.assertEqual(later['flags'], 0)
+        self.assertGreater(now['flags'], 0)
+        self.assertIn('exceeds budget.monthly_usd', errors(doc)[0])
 
     def test_warehouse_full_refresh_over_one_million_rows(self):
         doc = passing()

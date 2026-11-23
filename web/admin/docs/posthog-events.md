@@ -200,9 +200,25 @@ an event to be kept at 100% instead.
   funnel.
 - **A warehouse `full_refresh` re-bills every row on every run.** The raw GCP
   billing export (31M rows, weekly) was the largest single line in 2026-11.
-- **Feature-flag requests are billed too**, separately from events.
+- **Feature-flag requests are billed too**, separately from events. Current
+  mobile, desktop and web clients block PostHog `/flags` and read Omi flags;
+  the remaining requests come from older builds still in the field.
 - **Setting `$process_person_profile=false` in a transformation does nothing**
-  for billing; the event is still identified.
+  for billing. Sent from the client it still does nothing for a signed-in
+  user: an event whose `distinct_id` already has a person profile is billed
+  as identified (PostHog `person_mode` `force_upgrade`). About 99% of Omi's
+  events are identified, so each extra million events costs about $104.
+
+### Debugging events and Device Signals (2026-11-23)
+
+David's ruling for SCA-3665: `Capture Wedge Detected`, `Local WAL Stuck`,
+`Recording Start Failed` and `Recording Upload Failed` are sampled at 2%;
+other debugging and health events are dropped from PostHog unless a product
+reader needs them (the drop list is in `contracts/analytics/posthog.json`).
+The Device Signals alert rules read these events from PostHog, so they are
+coarse at 2% (one sampled device stands for about 50) and the dropped events
+no longer reach any alert, until SCA-3922 moves the alerts to the client
+collector and Prometheus.
 
 ### Sampled windows on 2026-10-17
 

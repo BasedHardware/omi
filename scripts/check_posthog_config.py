@@ -6,9 +6,8 @@ sampling and warehouse syncs. This check fails when:
   - an event the config keeps at 100% has no measured est_events_per_day or no reader;
   - a debug/ops event (by purpose or by name) is kept above 2% without an
     unexpired waiver signed by David Zhang;
-  - the estimated monthly cost exceeds budget.monthly_usd, unless an unexpired
-    budget.ceiling covers it (a dated glide path; raising or extending the
-    ceiling needs a waiver signed by David Zhang);
+  - the estimated monthly cost exceeds budget.monthly_usd (a budget.ceiling
+    counts only with an unexpired waiver signed by David Zhang);
   - a warehouse schema full-refreshes more than 1M rows per run;
   - a later sampling stage would overwrite omi_sample_pct with a looser rate
     than an earlier stage applied, so reweighting readers would read wrong.
@@ -90,13 +89,22 @@ def tiered(units, tiers):
     return cost
 
 
-def estimate(doc):
+def estimate(doc, with_planned=False):
+    """Monthly cost. with_planned applies budget.planned savings (changes not yet made)."""
     budget = doc['budget']
     days = budget.get('days_per_month', 30)
+    planned = budget.get('planned', []) if with_planned else []
+    event_saving, flag_saving = {}, 0
+    for item in planned:
+        saving = item.get('saving', {})
+        for name, per_day in saving.get('events_per_day', {}).items():
+            event_saving[name] = event_saving.get(name, 0) + per_day
+        flag_saving += saving.get('feature_flag_requests_per_month', 0)
     events = identified = 0.0
     for name, entry in doc['events'].items():
         est = entry.get('est_events_per_day')
         est = est if isinstance(est, (int, float)) and est > 0 else 0  # validate() reports bad values
+        est = max(0, est - event_saving.get(name, 0))
         stored = est * effective(doc, name)[0] / 100 * days
         events += stored
         if entry.get('identified'):
@@ -108,7 +116,7 @@ def estimate(doc):
     parts = {
         'events': tiered(events, tiers['events']),
         'identified': tiered(identified, tiers['identified_events']),
-        'flags': tiered(budget.get('feature_flag_requests_per_month', 0), tiers['feature_flag_requests']),
+        'flags': tiered(max(0, budget.get('feature_flag_requests_per_month', 0) - flag_saving), tiers['feature_flag_requests']),
         'warehouse': rows * budget['warehouse_usd_per_row'],
         'other': sum(budget.get('other_monthly_usd', {}).values()),
     }
@@ -129,31 +137,27 @@ def waiver_ok(waiver, today):
         return False
 
 
-def budget_errors(doc, prior, today, cost):
+def budget_errors(doc, today, cost):
+    """Over budget fails. A budget.ceiling counts only with an unexpired waiver signed by David Zhang."""
     budget = doc['budget']
     ceiling = budget.get('ceiling')
     errors = []
+    signed = False
     if ceiling is not None:
-        old = (prior or {}).get('budget', {}).get('ceiling') if prior else None
         try:
             until = dt.date.fromisoformat(ceiling['until'])
-            # The file's first ceiling records the measured state it was born with; David
-            # signs it on that PR. Any later raise or extension needs his waiver in the file.
-            raised = prior is not None and (old is None or float(ceiling['usd']) > float(old['usd'])
-                                            or until > dt.date.fromisoformat(old['until']))
+            usd = float(ceiling['usd'])
         except (KeyError, TypeError, ValueError):
-            return ['budget.ceiling: needs usd, until (YYYY-MM-DD) and reason']
-        if raised and not waiver_ok(ceiling.get('waiver'), today):
-            errors.append(f'budget.ceiling: raising or extending the ceiling needs a waiver signed by {WAIVER_SIGNER}')
-    if cost['total'] > budget['monthly_usd']:
-        covered = ceiling is not None and dt.date.fromisoformat(ceiling['until']) >= today and cost['total'] <= float(ceiling['usd'])
-        if not covered:
-            limit = f" and budget.ceiling ${float(ceiling['usd']):,.0f} until {ceiling['until']}" if ceiling else ''
-            errors.append(f"budget: estimated ${cost['total']:,.0f}/mo exceeds budget.monthly_usd ${budget['monthly_usd']:,}{limit}")
+            return ['budget.ceiling: needs usd, until (YYYY-MM-DD), reason and a waiver signed by David Zhang']
+        signed = waiver_ok(ceiling.get('waiver'), today) and until >= today
+        if not signed:
+            errors.append(f'budget.ceiling: a ceiling needs an unexpired waiver signed by {WAIVER_SIGNER}')
+    if cost['total'] > budget['monthly_usd'] and not (signed and cost['total'] <= usd):
+        errors.append(f"budget: estimated ${cost['total']:,.0f}/mo exceeds budget.monthly_usd ${budget['monthly_usd']:,}")
     return errors
 
 
-def validate(doc, today, prior=None):
+def validate(doc, today):
     errors = []
     ids = [f['id'] for f in doc['functions']]
     if len(set(ids)) != len(ids):
@@ -201,7 +205,7 @@ def validate(doc, today, prior=None):
     for schema in doc['warehouse']['schemas']:
         if schema.get('should_sync') and schema.get('sync_type') == 'full_refresh' and schema.get('est_rows_per_run', 0) > FULL_REFRESH_ROW_LIMIT:
             errors.append(f"warehouse {schema['name']}: full_refresh re-bills {schema['est_rows_per_run']:,} rows every run; use incremental/append or a smaller view")
-    return errors + budget_errors(doc, prior, today, estimate(doc))
+    return errors + budget_errors(doc, today, estimate(doc))
 
 
 def merge_base(base):
@@ -226,7 +230,7 @@ def run(path, base, today, enforce=None):
     doc = json.loads(Path(path).read_text())
     ref = merge_base(base) if base else None
     prior = base_doc(ref) if ref else None
-    errors = validate(doc, today, prior)
+    errors = validate(doc, today)
     cost = estimate(doc)
     old = estimate(prior)['total'] if prior else 0.0
     if enforce is None:
@@ -234,6 +238,9 @@ def run(path, base, today, enforce=None):
     print(f"PostHog estimate: ${cost['total']:,.0f}/mo (base ${old:,.0f}/mo, delta ${cost['total'] - old:+,.0f})")
     print(f"  events {cost['events_per_month'] / 1e6:.2f}M/mo ${cost['events']:,.0f}; identified {cost['identified_per_month'] / 1e6:.2f}M/mo ${cost['identified']:,.0f}; "
           f"flags ${cost['flags']:,.0f}; warehouse {cost['warehouse_rows_per_month'] / 1e6:.2f}M rows ${cost['warehouse']:,.0f}; other ${cost['other']:,.0f}")
+    if doc['budget'].get('planned'):
+        ids = ', '.join(item['id'] for item in doc['budget']['planned'])
+        print(f"  with planned changes ({ids}): ${estimate(doc, with_planned=True)['total']:,.0f}/mo")
     for error in errors:
         print(error if enforce else f'warning (PostHog config unchanged in this diff): {error}')
     return errors if enforce else []
