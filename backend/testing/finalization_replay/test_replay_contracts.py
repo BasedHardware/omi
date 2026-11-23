@@ -13,7 +13,7 @@ from unittest.mock import patch
 from testing.finalization_replay.candidate import _Handler, replay_database
 from testing.finalization_replay.driver import _observe
 from testing.finalization_replay.metrics import _delete_write, _invoke_rpc, _wrap_stream, prompt_token_estimate
-from testing.finalization_replay.state import CaseState, episode_attach_memo_valid
+from testing.finalization_replay.state import CaseState, episode_attach_memo_failure_reason, episode_attach_memo_valid
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 VERIFY_PATH = REPO_ROOT / 'backend-go' / 'tools' / 'replay' / 'verify.py'
@@ -65,6 +65,17 @@ class ReplayContractTests(unittest.TestCase):
                 transcript_decoder=decode,
                 content_key_fn=compute_key,
             )
+        )
+        self.assertEqual(
+            episode_attach_memo_failure_reason(
+                'owner',
+                'conversation',
+                conversation,
+                {link_path: link},
+                transcript_decoder=decode,
+                content_key_fn=compute_key,
+            ),
+            'owner_binding_mismatch',
         )
         link['attach_owner_id'] = 'episode'
         link['attach_revision'] = 'v2:fixture-key'

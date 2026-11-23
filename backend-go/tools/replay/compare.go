@@ -23,26 +23,27 @@ type admission struct {
 }
 
 type observation struct {
-	OwnerID                   string                     `json:"owner_id"`
-	ConversationID            string                     `json:"conversation_id"`
-	SeededTokenHashes         []string                   `json:"seeded_token_hashes"`
-	QueueFanout               string                     `json:"queue_fanout_key"`
-	UpdatedAtChanged          bool                       `json:"updated_at_changed"`
-	Admitted                  *admission                 `json:"admitted"`
-	EpisodeAttachMemoValid    bool                       `json:"episode_attach_memo_valid"`
-	Started                   time.Time                  `json:"started_at"`
-	Finished                  time.Time                  `json:"finished_at"`
-	ProviderCalls             []string                   `json:"provider_calls"`
-	Effects                   map[string]any             `json:"effects"`
-	Status                    string                     `json:"status"`
-	Document                  any                        `json:"conversation"`
-	Derived                   map[string]any             `json:"derived_documents"`
-	BatchPrivacy              *batchPrivacyEvidence      `json:"batch_pipeline_privacy,omitempty"`
-	HomeDirtyReceiptTrace     map[string]int             `json:"home_dirty_receipt_trace,omitempty"`
-	FirestoreOperationSources map[string]operationSource `json:"firestore_operation_sources,omitempty"`
-	Webhooks                  []any                      `json:"webhooks"`
-	Cost                      replayCost                 `json:"cost"`
-	GoEvidence                map[string]any             `json:"go_evidence,omitempty"`
+	OwnerID                        string                     `json:"owner_id"`
+	ConversationID                 string                     `json:"conversation_id"`
+	SeededTokenHashes              []string                   `json:"seeded_token_hashes"`
+	QueueFanout                    string                     `json:"queue_fanout_key"`
+	UpdatedAtChanged               bool                       `json:"updated_at_changed"`
+	Admitted                       *admission                 `json:"admitted"`
+	EpisodeAttachMemoValid         bool                       `json:"episode_attach_memo_valid"`
+	EpisodeAttachMemoFailureReason string                     `json:"episode_attach_memo_failure_reason,omitempty"`
+	Started                        time.Time                  `json:"started_at"`
+	Finished                       time.Time                  `json:"finished_at"`
+	ProviderCalls                  []string                   `json:"provider_calls"`
+	Effects                        map[string]any             `json:"effects"`
+	Status                         string                     `json:"status"`
+	Document                       any                        `json:"conversation"`
+	Derived                        map[string]any             `json:"derived_documents"`
+	BatchPrivacy                   *batchPrivacyEvidence      `json:"batch_pipeline_privacy,omitempty"`
+	HomeDirtyReceiptTrace          map[string]int             `json:"home_dirty_receipt_trace,omitempty"`
+	FirestoreOperationSources      map[string]operationSource `json:"firestore_operation_sources,omitempty"`
+	Webhooks                       []any                      `json:"webhooks"`
+	Cost                           replayCost                 `json:"cost"`
+	GoEvidence                     map[string]any             `json:"go_evidence,omitempty"`
 }
 
 type operationSource struct {
@@ -135,12 +136,18 @@ type difference struct {
 
 type caseReport struct {
 	replayCase
-	PythonStatus          string                    `json:"python_status,omitempty"`
-	GoStatus              string                    `json:"go_status,omitempty"`
-	Differences           []difference              `json:"differences"`
-	Cost                  costPair                  `json:"cost"`
-	GoEvidence            map[string]any            `json:"go_evidence,omitempty"`
-	HomeDirtyReceiptTrace map[string]map[string]int `json:"home_dirty_receipt_trace,omitempty"`
+	PythonStatus            string                     `json:"python_status,omitempty"`
+	GoStatus                string                     `json:"go_status,omitempty"`
+	Differences             []difference               `json:"differences"`
+	Cost                    costPair                   `json:"cost"`
+	GoEvidence              map[string]any             `json:"go_evidence,omitempty"`
+	HomeDirtyReceiptTrace   map[string]map[string]int  `json:"home_dirty_receipt_trace,omitempty"`
+	EpisodeAttachMemoChecks map[string]attachMemoCheck `json:"episode_attach_memo_checks,omitempty"`
+}
+
+type attachMemoCheck struct {
+	Valid         bool   `json:"valid"`
+	FailureReason string `json:"failure_reason,omitempty"`
 }
 
 type report struct {
@@ -185,6 +192,12 @@ func compare(cases []replayCase) (report, error) {
 				}
 				entry.HomeDirtyReceiptTrace["python"] = maps.Clone(c.Python.HomeDirtyReceiptTrace)
 			}
+			if entry.EpisodeAttachMemoChecks == nil {
+				entry.EpisodeAttachMemoChecks = make(map[string]attachMemoCheck)
+			}
+			entry.EpisodeAttachMemoChecks["python"] = attachMemoCheck{
+				Valid: c.Python.EpisodeAttachMemoValid, FailureReason: c.Python.EpisodeAttachMemoFailureReason,
+			}
 		}
 		if c.Go != nil {
 			entry.GoStatus = c.Go.Status
@@ -195,6 +208,12 @@ func compare(cases []replayCase) (report, error) {
 					entry.HomeDirtyReceiptTrace = make(map[string]map[string]int)
 				}
 				entry.HomeDirtyReceiptTrace["go"] = maps.Clone(c.Go.HomeDirtyReceiptTrace)
+			}
+			if entry.EpisodeAttachMemoChecks == nil {
+				entry.EpisodeAttachMemoChecks = make(map[string]attachMemoCheck)
+			}
+			entry.EpisodeAttachMemoChecks["go"] = attachMemoCheck{
+				Valid: c.Go.EpisodeAttachMemoValid, FailureReason: c.Go.EpisodeAttachMemoFailureReason,
 			}
 		}
 		out.CostRows = append(out.CostRows, costRow{Case: c.Name, Python: entry.Cost.Python, Go: entry.Cost.Go})

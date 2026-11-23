@@ -60,10 +60,10 @@ def _documents(collection):
             yield from _documents(child)
 
 
-def episode_attach_memo_valid(
+def _episode_attach_memo_failure_reason(
     uid, cid, conversation, derived_documents, *, transcript_decoder=None, content_key_fn=None
 ):
-    """Return value-free evidence that this side's attach memo matches its transcript."""
+    """Return a value-free failure code when this side's attach memo check fails."""
     try:
         if transcript_decoder is None:
             from database.conversations import decode_transcript_segments_verified as transcript_decoder
@@ -73,30 +73,63 @@ def episode_attach_memo_valid(
         link_path = f'users/{uid}/episode_links/{cid}'
         link = derived_documents.get(link_path)
         if not isinstance(link, dict):
-            return False
+            return 'missing_link'
         raw_segments = conversation.get('transcript_segments')
         if raw_segments is None:
-            return False
+            return 'missing_transcript'
         row = dict(conversation)
         if isinstance(raw_segments, (list, tuple)):
             # Go observations contain the already-decoded segment list.
             row['transcript_segments'] = raw_segments
         else:
-            row['transcript_segments'] = transcript_decoder(
-                uid, raw_segments, bool(conversation.get('transcript_segments_compressed'))
-            )
+            try:
+                row['transcript_segments'] = transcript_decoder(
+                    uid, raw_segments, bool(conversation.get('transcript_segments_compressed'))
+                )
+            except Exception:
+                return 'transcript_decode_failed'
         key = content_key_fn(row)
+        if not key:
+            return 'content_key_unavailable'
         completed = link.get('attach_completed')
-        return bool(
-            key
-            and completed == key
-            and link.get('attach_revision') == key
-            and link.get('attach_owner_id') == link.get('episode_id')
-            and (link.get('attach_finalized') is None or link.get('attach_finalized') == completed)
-        )
+        if completed != key:
+            return 'completed_key_mismatch'
+        if link.get('attach_revision') != key:
+            return 'revision_key_mismatch'
+        if link.get('attach_owner_id') != link.get('episode_id'):
+            return 'owner_binding_mismatch'
+        if link.get('attach_finalized') is not None and link.get('attach_finalized') != completed:
+            return 'finalized_binding_mismatch'
+        return ''
     except Exception:
-        # Evidence is fail-closed and contains no decrypted or derived values.
-        return False
+        return 'check_failed'
+
+
+def episode_attach_memo_valid(
+    uid, cid, conversation, derived_documents, *, transcript_decoder=None, content_key_fn=None
+):
+    """Return value-free evidence that this side's attach memo matches its transcript."""
+    return not _episode_attach_memo_failure_reason(
+        uid,
+        cid,
+        conversation,
+        derived_documents,
+        transcript_decoder=transcript_decoder,
+        content_key_fn=content_key_fn,
+    )
+
+
+def episode_attach_memo_failure_reason(
+    uid, cid, conversation, derived_documents, *, transcript_decoder=None, content_key_fn=None
+):
+    return _episode_attach_memo_failure_reason(
+        uid,
+        cid,
+        conversation,
+        derived_documents,
+        transcript_decoder=transcript_decoder,
+        content_key_fn=content_key_fn,
+    )
 
 
 class CaseState:
@@ -282,7 +315,7 @@ class CaseState:
         else:
             derived_documents = changed_documents
         document = self.conversation.get().to_dict()
-        memo_valid = episode_attach_memo_valid(
+        memo_failure_reason = episode_attach_memo_failure_reason(
             getattr(self, 'uid', ''), getattr(self, 'cid', ''), document or {}, derived_documents
         )
         empty_privacy = {'exists': False, 'fields': {}}
@@ -296,7 +329,8 @@ class CaseState:
             'queue_fanout_key': self.queue_fanout_key,
             'updated_at_changed': (document or {}).get('updated_at') != self.initial_updated_at,
             'admitted': self.admitted,
-            'episode_attach_memo_valid': memo_valid,
+            'episode_attach_memo_valid': not memo_failure_reason,
+            'episode_attach_memo_failure_reason': memo_failure_reason,
             'started_at': self.started_at.isoformat(),
             'finished_at': datetime.now(timezone.utc).isoformat(),
             'provider_calls': sorted(self.provider_calls),

@@ -144,7 +144,8 @@ func TestTranscriptComparisonAcceptsGoDecodedSegmentsAndKeepsStoredFields(t *tes
 	python.OwnerID, goRun.OwnerID = uid, uid
 	segments := []any{map[string]any{
 		"text": "agenda", "start": json.Number("0"), "end": json.Number("1"),
-		"speaker": "SPEAKER_00", "is_user": true, "original_text": "agenda raw",
+		"speaker": "SPEAKER_00", "speaker_id": json.Number("0"), "speaker_identity_status": "user",
+		"speaker_label_source": nil, "speaker_word_seconds": nil, "is_user": true, "original_text": "agenda raw",
 	}}
 	python.Document = map[string]any{
 		"transcript_segments":            encryptedTranscript(t, uid, segments, 41),

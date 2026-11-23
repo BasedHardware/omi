@@ -32,7 +32,11 @@ func compareObservationsForRun(python, goRun *observation, pythonTokens, goToken
 				diff.Reason = approvedTimestampDifference(diff.Path, python, goRun)
 			}
 			if diff.Reason == "" {
-				diff.Reason = protectedDifferenceReason(diff.Path, python, goRun)
+				var failureReason string
+				diff.Reason, failureReason = protectedDifferenceEvidence(diff.Path, python, goRun)
+				if diff.Reason == "" && diff.FailureReason == "" {
+					diff.FailureReason = failureReason
+				}
 			}
 			if diff.Reason == "" {
 				diff.Reason = approvedEpisodeAttachMemoDifference(diff.Path, python, goRun)
@@ -51,13 +55,21 @@ func compareObservationsForRun(python, goRun *observation, pythonTokens, goToken
 			}
 		case "missing_in_go":
 			if diff.Reason == "" {
-				diff.Reason = protectedDifferenceReason(diff.Path, python, goRun)
+				var failureReason string
+				diff.Reason, failureReason = protectedDifferenceEvidence(diff.Path, python, goRun)
+				if diff.Reason == "" && diff.FailureReason == "" {
+					diff.FailureReason = failureReason
+				}
 			}
 			if diff.Reason == "" && unported(diff.Path) {
 				diff.Kind = "unported"
 			}
 		case "missing_in_python":
-			diff.Reason = protectedDifferenceReason(diff.Path, python, goRun)
+			var failureReason string
+			diff.Reason, failureReason = protectedDifferenceEvidence(diff.Path, python, goRun)
+			if diff.Reason == "" && diff.FailureReason == "" {
+				diff.FailureReason = failureReason
+			}
 			if diff.Reason == "" {
 				diff.Reason = approvedGoOnlyDifference(diff.Path, python, goRun)
 			}

@@ -14,7 +14,7 @@ malformed compression, or different plaintext leaves the row unexplained.
 
 | Field | Check |
 | --- | --- |
-| `conversation.transcript_segments` | Decrypt both sides and inflate the marked payload. Compare `text`, `start`, `end`, `speaker`, and `is_user`; absent `speaker` uses the model default `SPEAKER_00`. Go must preserve every non-default field present in Python's stored segment. The value-free `$bytes` wrapper is decoded before comparison, and an already-decoded Go segment list is compared as plaintext. |
+| `conversation.transcript_segments` | Decrypt both sides and inflate the marked payload. Compare `text`, `start`, `end`, `speaker`, and `is_user`; absent `speaker` uses the model default `SPEAKER_00`. Ignore only known Python model defaults, including derived `speaker_id` and `speaker_identity_status`; Go must preserve every non-default field present in Python's stored segment. The value-free `$bytes` wrapper is decoded before comparison, and an already-decoded Go segment list is compared as plaintext. |
 | `conversation.user_corrections` | Require a true compression marker and storage consistent with each side's protection level; decrypt/inflate both blobs and compare correction lists. |
 | `conversation.home_display` | Decrypt both envelopes and compare card content. |
 | `episodes/{id}.content` | Decrypt both envelopes and compare episode content. |
@@ -26,8 +26,9 @@ Differences in `episode_links/{cid}.attach_completed`, `.attach_finalized`, and
 `.attach_revision` are by design only when each side's decrypted transcript reproduces its
 `content_key`, `attach_revision == attach_completed == content_key`,
 `attach_owner_id == episode_id`, and `attach_finalized` is null or equals `attach_completed`.
-The harness emits only a boolean check result. Alternating engines do not reuse the other
-engine's memo because their re-encoded transcript inputs can differ.
+The harness emits only a boolean check result and a value-free failure code when a precondition
+fails. Alternating engines do not reuse the other engine's memo because their re-encoded
+transcript inputs can differ.
 
 ## Clocks
 

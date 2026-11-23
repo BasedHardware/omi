@@ -13,6 +13,7 @@ import (
 	"errors"
 	"io"
 	"reflect"
+	"strconv"
 	"strings"
 )
 
@@ -39,6 +40,11 @@ func decryptReplayEnvelope(uid, envelope, secret string) ([]byte, error) {
 }
 
 func protectedDifferenceReason(path string, python, goRun *observation) string {
+	reason, _ := protectedDifferenceEvidence(path, python, goRun)
+	return reason
+}
+
+func protectedDifferenceEvidence(path string, python, goRun *observation) (string, string) {
 	parts := pointerParts(path)
 	field := ""
 	var pyValue, goValue any
@@ -74,20 +80,20 @@ func protectedDifferenceReason(path string, python, goRun *observation) string {
 		goValue, _ = nestedField(goRun.Document, "home_display")
 	case len(parts) == 3 && parts[0] == "derived_documents" && parts[2] == "content":
 		if !episodeDocumentPath(parts[1]) {
-			return ""
+			return "", ""
 		}
 		field = "episode content"
 		pyValue = derivedField(python, parts[1], "content")
 		goValue = derivedField(goRun, parts[1], "content")
 	case len(parts) == 3 && parts[0] == "derived_documents" && parts[2] == "home_display":
 		if !episodeDocumentPath(parts[1]) {
-			return ""
+			return "", ""
 		}
 		field = "home_display"
 		pyValue = derivedField(python, parts[1], "home_display")
 		goValue = derivedField(goRun, parts[1], "home_display")
 	default:
-		return ""
+		return "", ""
 	}
 	var pyPlain, goPlain any
 	var pyErr, goErr error
@@ -99,29 +105,35 @@ func protectedDifferenceReason(path string, python, goRun *observation) string {
 		goPlain, goErr = protectedPlaintext(field, goRun.OwnerID, goValue, goCompressed, defaultReplayTestKey)
 	}
 	if pyErr != nil || goErr != nil {
-		return ""
+		if pyErr != nil {
+			return "", "python_plaintext_decode_failed"
+		}
+		return "", "go_plaintext_decode_failed"
 	}
 	switch field {
 	case "transcript":
-		if !transcriptSemanticsEqual(pyPlain, goPlain) || !goPreservesPythonStoredFields(pyPlain, goPlain) {
-			return ""
+		if !transcriptSemanticsEqual(pyPlain, goPlain) {
+			return "", "transcript_semantics_mismatch"
 		}
-		return "transcript semantic fields match and Go preserves every non-default Python segment field"
+		if !goPreservesPythonStoredFields(pyPlain, goPlain) {
+			return "", "python_stored_segment_field_missing_in_go"
+		}
+		return "transcript semantic fields match and Go preserves every non-default Python segment field", ""
 	case "user_corrections":
 		if !reflect.DeepEqual(pyPlain, goPlain) {
-			return ""
+			return "", "corrections_plaintext_mismatch"
 		}
-		return "both correction blobs have storage consistent with their protection level and decrypt to the same correction list"
+		return "both correction blobs have storage consistent with their protection level and decrypt to the same correction list", ""
 	case "episode content":
 		if !reflect.DeepEqual(pyPlain, goPlain) {
-			return ""
+			return "", "episode_content_plaintext_mismatch"
 		}
-		return "both episode content ciphertexts decrypt with the fixture key to the same content plaintext"
+		return "both episode content ciphertexts decrypt with the fixture key to the same content plaintext", ""
 	default:
 		if !reflect.DeepEqual(pyPlain, goPlain) {
-			return ""
+			return "", "home_display_plaintext_mismatch"
 		}
-		return "both home_display ciphertexts decrypt with the fixture key to the same card plaintext"
+		return "both home_display ciphertexts decrypt with the fixture key to the same card plaintext", ""
 	}
 }
 
@@ -291,7 +303,7 @@ func goPreservesPythonStoredFields(python, goRun any) bool {
 			return false
 		}
 		for field, value := range py {
-			if isTranscriptDefault(field, value) {
+			if isTranscriptDefault(field, value, py) {
 				continue
 			}
 			goValue, exists := goSegment[field]
@@ -303,19 +315,43 @@ func goPreservesPythonStoredFields(python, goRun any) bool {
 	return true
 }
 
-func isTranscriptDefault(field string, value any) bool {
+func isTranscriptDefault(field string, value any, segment map[string]any) bool {
 	defaults := map[string]any{
-		"id": nil, "original_text": nil, "speaker": "SPEAKER_00", "speaker_id": nil,
-		"person_id": nil, "speaker_label_source": nil, "translations": []any{},
+		"original_text": nil, "speaker": "SPEAKER_00", "person_id": nil,
+		"speaker_label_source": nil, "speaker_word_seconds": nil, "translations": []any{},
 		"speech_profile_processed": true, "stt_provider": nil, "speaker_match_source": nil,
-		"speaker_id_scope": nil, "speaker_identity_status": "unknown", "audio_alignment": nil,
+		"speaker_id_scope": nil, "audio_alignment": nil,
 		"audio_capture_run": nil, "audio_capture_start": nil, "audio_capture_end": nil,
 		"audio_source": nil, "recurring_voice_id": nil, "voice_candidates": nil,
 		"speaker_match_scores": nil, "provider_speaker": nil, "speaker_grouping_shadow": nil,
 		"speaker_grouping_shadow_expires_at": nil,
 	}
 	defaultValue, known := defaults[field]
-	return known && reflect.DeepEqual(value, defaultValue)
+	if known && reflect.DeepEqual(value, defaultValue) {
+		return true
+	}
+	if field == "speaker_identity_status" {
+		expected := "unknown"
+		if segment["is_user"] == true {
+			expected = "user"
+		}
+		return value == expected
+	}
+	if field == "speaker_id" {
+		number, ok := value.(json.Number)
+		if !ok {
+			return false
+		}
+		actual, err := number.Int64()
+		speaker, speakerOK := segment["speaker"].(string)
+		if !speakerOK {
+			speaker = "SPEAKER_00"
+		}
+		suffix, found := strings.CutPrefix(speaker, "SPEAKER_")
+		expected, parseErr := strconv.ParseInt(suffix, 10, 64)
+		return err == nil && found && parseErr == nil && actual == expected
+	}
+	return false
 }
 
 func equalReplayValue(left, right any) bool {
