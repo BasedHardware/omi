@@ -33,7 +33,16 @@ func compareObservationsForRun(python, goRun *observation, pythonTokens, goToken
 				diff.Reason = approvedTimestampDifference(diff.Path, python, goRun)
 			}
 			if diff.Reason == "" {
+				diff.Reason = protectedDifferenceReason(diff.Path, python, goRun)
+			}
+			if diff.Reason == "" {
 				diff.Reason = allowedHomeTokenDifference(diff.Path, python, goRun, pythonTokens, goTokens)
+			}
+			if diff.Reason == "" {
+				diff.Reason = approvedGoOnlyDifference(diff.Path, python, goRun)
+			}
+			if diff.Reason == "" {
+				diff.Reason = approvedBatchPrivacyDifference(diff.Path, python, goRun)
 			}
 			if diff.Reason == "" && webhookMatches(diff.Path, python) && webhookMatches(diff.Path, goRun) {
 				diff.Reason = "both webhook keys bind to their own admitted fanout"
@@ -42,18 +51,30 @@ func compareObservationsForRun(python, goRun *observation, pythonTokens, goToken
 			if unported(diff.Path) {
 				diff.Kind = "unported"
 			}
+		case "missing_in_python":
+			diff.Reason = approvedGoOnlyDifference(diff.Path, python, goRun)
 		}
 	}
 	validateTimestampEvidence(&diffs, "python", python)
 	validateTimestampEvidence(&diffs, "go", goRun)
+	validateBatchPrivacyEvidence(&diffs, "python", python)
+	validateBatchPrivacyEvidence(&diffs, "go", goRun)
+	validateBatchPrivacyPair(&diffs, python, goRun)
 	validateHomeTokenEvidence(&diffs, "python", python, pythonTokens)
 	validateHomeTokenEvidence(&diffs, "go", goRun, goTokens)
 	validateBinding(&diffs, "/python", python, false)
 	validateBinding(&diffs, "/go", goRun, true)
+	validateReviewedGoOnlyFields(&diffs, python, goRun)
 	if (python.Admitted == nil) != (goRun.Admitted == nil) {
-		addDifference(&diffs, "/admitted", "different_value")
+		diffs = append(diffs, difference{Path: "/admitted", Kind: "different_value", Reason: approvedGoOnlyDifference("/admitted", python, goRun)})
 	} else if python.Admitted != nil {
 		compareValue(&diffs, "/admitted/own_key", python.Admitted.OwnKey, goRun.Admitted.OwnKey)
+		if python.Admitted.Job != goRun.Admitted.Job {
+			diffs = append(diffs, difference{Path: "/admitted/job_id", Kind: "different_value", Reason: approvedGoOnlyDifference("/admitted/job_id", python, goRun)})
+		}
+		if python.Admitted.Fanout != goRun.Admitted.Fanout {
+			diffs = append(diffs, difference{Path: "/admitted/fanout_key", Kind: "different_value", Reason: approvedGoOnlyDifference("/admitted/fanout_key", python, goRun)})
+		}
 	}
 	return diffs
 }
@@ -124,8 +145,12 @@ func timestampInWindow(run *observation) bool {
 }
 
 func validateBinding(diffs *[]difference, side string, run *observation, goSide bool) {
-	if run.UpdatedAtChanged && run.Document != nil && !timestampInWindow(run) {
-		addDifference(diffs, side+"/conversation/updated_at", "invalid_clock")
+	if run == nil {
+		return
+	}
+	if goSide {
+		validateGoFenceBinding(diffs, side, run)
+		validateGoMinimumBinding(diffs, side, run)
 	}
 	if run.Admitted == nil {
 		return

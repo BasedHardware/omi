@@ -61,7 +61,7 @@ func TestApprovedTimestampRulesRequireSideLocalTypeAndWindow(t *testing.T) {
 		{"goal-updated", "users/u/goals/g", "updated_at", timestampValue, func(any) any { return "2026-05-06T10:00:00Z" }},
 		{"goal-history-recorded", "users/u/goals/g/goal_history/2026-05-06", "recorded_at", timestampValue, func(any) any { return wrappedStamp(ruleStart.Add(24 * time.Hour)) }},
 		{"llm-usage-updated", "users/u/llm_usage/2026-05-06", "last_updated", timestampValue, func(any) any { return wrappedStamp(ruleStart.Add(-time.Second)) }},
-		{"memory-apply-control-rfc3339", "users/u/memory_state/apply_control", "updated_at", func(value time.Time) any { return value.Format(time.RFC3339Nano) }, func(any) any { return wrappedStamp(ruleStart.Add(time.Minute)) }},
+		{"memory-apply-control-timestamp", "users/u/memory_state/apply_control", "updated_at", timestampValue, func(any) any { return ruleStart.Add(time.Minute).Format(time.RFC3339Nano) }},
 		{"episode-link-updated", "users/u/episode_links/c", "updated_at", timestampValue, func(any) any { return wrappedStamp(ruleStart.Add(3 * time.Hour)) }},
 	}
 	for _, test := range tests {

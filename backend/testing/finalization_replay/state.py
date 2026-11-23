@@ -66,6 +66,8 @@ class CaseState:
         self.case = case
         self.uid = case.get('uid', f'replay-{case["name"]}')
         self.cid = case.get('conversation_id', case['name'])
+        self.home_dirty_receipt_path = f'users/{self.uid}/episode_links/{self.cid}'
+        self.batch_privacy_document_path = f'batch_pipeline_privacy/{sha256(self.uid.encode("utf-8")).hexdigest()}'
         self.user = client.collection('users').document(self.uid)
         self.conversation = self.user.collection('conversations').document(self.cid)
         self.notes = case.get('notes', {'title': 'Synthetic replay', 'overview': 'Review the synthetic agenda.'})
@@ -87,12 +89,17 @@ class CaseState:
             'query_requests': 0,
             'writes': 0,
             'deletes': 0,
+            'batch_pipeline_privacy_document_reads': 0,
+            'batch_pipeline_privacy_document_writes': 0,
+            'batch_pipeline_privacy_document_deletes': 0,
         }
         self.go_evidence = {}
         self._metrics_lock = Lock()
         self.cost_measured = False
         self.started_at = None
         self.seeded_token_hashes = []
+        self.batch_privacy_seed = None
+        self.home_dirty_receipt_trace = {'set_true': 0, 'set_false': 0, 'deleted': 0, 'other_write': 0}
 
     def record_provider_call(self, feature, prompt, completion):
         from testing.finalization_replay.metrics import prompt_token_estimate, token_estimate
@@ -118,6 +125,15 @@ class CaseState:
         with self._metrics_lock:
             for name, count in counts.items():
                 self.firestore_operations[name] += count
+
+    def record_home_dirty_receipt_write(self, value):
+        bucket = (
+            'deleted'
+            if value == 'deleted'
+            else 'set_true' if value is True else 'set_false' if value is False else 'other_write'
+        )
+        with self._metrics_lock:
+            self.home_dirty_receipt_trace[bucket] += 1
 
     def cost(self):
         with self._metrics_lock:
@@ -201,7 +217,13 @@ class CaseState:
 
     def start(self):
         self.initial_updated_at = (self.conversation.get().to_dict() or {}).get('updated_at')
+        self.batch_privacy_seed = self.batch_privacy_snapshot()
         self.started_at = datetime.now(timezone.utc)
+
+    def batch_privacy_snapshot(self):
+        collection, document = self.batch_privacy_document_path.split('/')
+        snapshot = self.client.collection(collection).document(document).get()
+        return {'exists': snapshot.exists, 'fields': pack(snapshot.to_dict() or {})}
 
     def observe(self, status, before):
         after = self.documents()
@@ -211,6 +233,9 @@ class CaseState:
             if not _same_snapshot_value(before.get(path), after.get(path))
         }
         document = self.conversation.get().to_dict()
+        empty_privacy = {'exists': False, 'fields': {}}
+        privacy_seed = getattr(self, 'batch_privacy_seed', None) or empty_privacy
+        privacy_final = self.batch_privacy_snapshot() if hasattr(self, 'client') else empty_privacy
         return {
             'owner_id': getattr(self, 'uid', ''),
             'conversation_id': getattr(self, 'cid', ''),
@@ -224,6 +249,15 @@ class CaseState:
             'provider_calls': sorted(self.provider_calls),
             'cost': self.cost(),
             'go_evidence': self.go_evidence,
+            'batch_pipeline_privacy': {
+                'seed': privacy_seed,
+                'final': privacy_final,
+            },
+            'home_dirty_receipt_trace': dict(
+                getattr(
+                    self, 'home_dirty_receipt_trace', {'set_true': 0, 'set_false': 0, 'deleted': 0, 'other_write': 0}
+                )
+            ),
             'effects': pack(self.effects),
             'conversation': pack(document),
             'derived_documents': changed,

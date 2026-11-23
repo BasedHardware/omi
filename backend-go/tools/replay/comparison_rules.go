@@ -9,35 +9,9 @@ import (
 	"slices"
 	"strconv"
 	"strings"
-	"time"
 )
 
 var uuid4Hex = regexp.MustCompile(`^[0-9a-f]{12}4[0-9a-f]{3}[89ab][0-9a-f]{15}$`)
-
-type timestampKind int
-
-const (
-	firestoreTimestamp timestampKind = iota
-	rfc3339String
-)
-
-type timestampRule struct {
-	collection string
-	document   string
-	field      string
-	kind       timestampKind
-}
-
-var approvedTimestampRules = []timestampRule{
-	{collection: "episodes", document: "*", field: "compose_deferred_at", kind: firestoreTimestamp},
-	{collection: "episodes", document: "*", field: "created_at", kind: firestoreTimestamp},
-	{collection: "episodes", document: "*", field: "title_changed_at", kind: firestoreTimestamp},
-	{collection: "goals", document: "", field: "updated_at", kind: firestoreTimestamp},
-	{collection: "goals", document: "goal_history/*", field: "recorded_at", kind: firestoreTimestamp},
-	{collection: "llm_usage", document: "*", field: "last_updated", kind: firestoreTimestamp},
-	{collection: "memory_state", document: "apply_control", field: "updated_at", kind: rfc3339String},
-	{collection: "episode_links", document: "*", field: "updated_at", kind: firestoreTimestamp},
-}
 
 type tokenSlot struct {
 	path     string
@@ -99,6 +73,9 @@ func homeTokenSlots(run *observation) []tokenSlot {
 			continue
 		}
 		parts := strings.Split(path, "/")
+		if len(parts) == 4 && parts[0] == "users" && parts[2] == "memory_state" && parts[3] == "released_memory_changes_v1" {
+			add("/derived_documents/"+escapePointer(path)+"/token", path, "token", doc)
+		}
 		if len(parts) == 4 && parts[0] == "users" && parts[2] == "episodes" {
 			for _, field := range []string{"home_content_epoch", "home_display_version"} {
 				add("/derived_documents/"+escapePointer(path)+"/"+field, path, field, doc)
@@ -123,12 +100,28 @@ func validateHomeTokenEvidence(diffs *[]difference, side string, run *observatio
 			valid = !seededHomeToken(run, value) && counts[value] == 1 && homeTokenLinkValid(run, slot, value)
 		}
 		if !valid {
-			addDifference(diffs, side+slot.path, "invalid_token_binding")
+			*diffs = append(*diffs, difference{
+				Path: side + slot.path, Kind: "invalid_token_binding",
+				FailureReason: homeTokenFailureReason(run, slot, value, ok, counts),
+			})
 		}
 	}
 }
 
 func allowedHomeTokenDifference(path string, python, goRun *observation, pythonCounts, goCounts map[string]int) string {
+	if strings.HasPrefix(path, "/derived_documents/") && strings.HasSuffix(path, "/memory_state~1released_memory_changes_v1/token") {
+		pySlot, pyOK := tokenSlotAt(python, path)
+		goSlot, goOK := tokenSlotAt(goRun, path)
+		if pyOK && goOK {
+			pyValue, pyString := pySlot.value.(string)
+			goValue, goString := goSlot.value.(string)
+			if pyString && goString && homeTokenValid(python, pySlot, pyValue, pythonCounts) &&
+				homeTokenValid(goRun, goSlot, goValue, goCounts) {
+				return "both release tokens are fresh UUIDv4 values bound to their own released-memory state documents"
+			}
+		}
+		return ""
+	}
 	if path == "/conversation/home_prepared_source_version" {
 		if linkedHomeToken(python, "/conversation/home_source_version", "home_prepared_source_version", pythonCounts) &&
 			linkedHomeToken(goRun, "/conversation/home_source_version", "home_prepared_source_version", goCounts) {
@@ -244,9 +237,87 @@ func homeTokenLinkValid(run *observation, slot tokenSlot, value string) bool {
 		return ok && display != "" && slot.document["home_needs_prepare"] == true
 	case len(parts) == 4 && parts[2] == "episode_links" && parts[3] == "home_feed_control":
 		return slot.document["ready"] == false
+	case len(parts) == 4 && parts[2] == "memory_state" && parts[3] == "released_memory_changes_v1" && slot.field == "token":
+		return run.OwnerID != "" && parts[1] == run.OwnerID && slot.document["token"] == value
 	default:
 		return false
 	}
+}
+
+func homeTokenFailureReason(run *observation, slot tokenSlot, value any, isString bool, counts map[string]int) string {
+	if !isString {
+		return "value_not_string"
+	}
+	if !uuid4Hex.MatchString(value.(string)) {
+		return "not_uuidv4_hex"
+	}
+	if seededHomeToken(run, value.(string)) {
+		return "collides_with_seeded_uuid"
+	}
+	if counts[value.(string)] != 1 {
+		return "not_unique_in_side_run"
+	}
+	return homeTokenLinkFailureReason(run, slot, value.(string))
+}
+
+func homeTokenLinkFailureReason(run *observation, slot tokenSlot, value string) string {
+	parts := strings.Split(slot.docPath, "/")
+	switch {
+	case slot.path == "/conversation/home_source_version":
+		if run.OwnerID == "" || run.ConversationID == "" {
+			return "missing_owner_or_conversation_identity"
+		}
+		receipt, ok := run.Derived["users/"+run.OwnerID+"/episode_links/"+run.ConversationID].(map[string]any)
+		if !ok {
+			return "home_dirty_receipt_missing"
+		}
+		if receipt["home_dirty"] != true {
+			return "home_dirty_receipt_not_true"
+		}
+		if prepared, exists := slot.document["home_prepared_source_version"]; exists && prepared != value {
+			return "prepared_source_version_mismatch"
+		}
+	case slot.path == "/conversation/home_display_version":
+		display, ok := slot.document["home_display"].(string)
+		if !ok || display == "" {
+			return "home_display_payload_missing"
+		}
+	case len(parts) == 4 && parts[2] == "episodes" && slot.field == "home_content_epoch":
+		if slot.document["home_needs_prepare"] != true {
+			return "episode_not_marked_for_preparation"
+		}
+		if state, exists := slot.document["home_prepare_state"]; exists {
+			prepared, ok := state.(map[string]any)
+			if !ok {
+				return "home_prepare_state_not_object"
+			}
+			if prepared["epoch"] != value {
+				return "home_prepare_epoch_mismatch"
+			}
+		}
+	case len(parts) == 4 && parts[2] == "episodes" && slot.field == "home_display_version":
+		if slot.document["home_needs_prepare"] != true {
+			return "episode_not_marked_for_preparation"
+		}
+		display, ok := slot.document["home_display"].(string)
+		if !ok || display == "" {
+			return "home_display_payload_missing"
+		}
+	case len(parts) == 4 && parts[2] == "episode_links" && parts[3] == "home_feed_control":
+		if slot.document["ready"] != false {
+			return "home_feed_control_not_deferred"
+		}
+	case len(parts) == 4 && parts[2] == "memory_state" && parts[3] == "released_memory_changes_v1" && slot.field == "token":
+		if run.OwnerID == "" || parts[1] != run.OwnerID {
+			return "release_token_owner_path_mismatch"
+		}
+		if slot.document["token"] != value {
+			return "release_token_document_mismatch"
+		}
+	default:
+		return "same_side_link_not_valid"
+	}
+	return "same_side_link_not_valid"
 }
 
 func compareDerivedDocuments(diffs *[]difference, python, goRun *observation) {
@@ -360,119 +431,6 @@ func integerValue(value any) (int64, bool) {
 	default:
 		return 0, false
 	}
-}
-
-func timestampText(value any) (string, bool) {
-	wrapped, ok := value.(map[string]any)
-	if !ok || len(wrapped) != 1 {
-		return "", false
-	}
-	stamp, ok := wrapped["$timestamp"].(string)
-	return stamp, ok
-}
-
-func validTimestampValue(run *observation, value any, firestore bool) bool {
-	if run == nil || run.Started.IsZero() || run.Finished.IsZero() || run.Finished.Before(run.Started) {
-		return false
-	}
-	var stamp string
-	var ok bool
-	if firestore {
-		stamp, ok = timestampText(value)
-	} else {
-		stamp, ok = value.(string)
-	}
-	if !ok {
-		return false
-	}
-	parsed, err := time.Parse(time.RFC3339Nano, stamp)
-	return err == nil && !parsed.Before(run.Started) && !parsed.After(run.Finished)
-}
-
-func timestampRuleForDocument(path, field string) (timestampRule, bool) {
-	parts := strings.Split(path, "/")
-	if len(parts) < 4 || parts[0] != "users" {
-		return timestampRule{}, false
-	}
-	for _, rule := range approvedTimestampRules {
-		if parts[2] != rule.collection || field != rule.field {
-			continue
-		}
-		document := strings.Join(parts[3:], "/")
-		if rule.document == "" && len(parts) == 4 || rule.document == "*" && len(parts) == 4 ||
-			rule.document == "goal_history/*" && len(parts) == 6 && parts[4] == "goal_history" && parts[5] != "" ||
-			rule.document == "apply_control" && document == "apply_control" {
-			return rule, true
-		}
-	}
-	return timestampRule{}, false
-}
-
-func approvedTimestampDifference(path string, python, goRun *observation) string {
-	parts := pointerParts(path)
-	if len(parts) == 3 && parts[0] == "conversation" && parts[1] == "updated_at" && parts[2] == "$timestamp" {
-		if timestampInWindow(python) && timestampInWindow(goRun) {
-			return "both conversation timestamps are Firestore timestamps within their own replay windows"
-		}
-		return ""
-	}
-	if len(parts) < 3 || parts[0] != "derived_documents" {
-		return ""
-	}
-	docPath := parts[1]
-	field := parts[2]
-	rule, ok := timestampRuleForDocument(docPath, field)
-	if !ok || (len(parts) != 3 && (len(parts) != 4 || parts[3] != "$timestamp")) {
-		return ""
-	}
-	py, pyOK := python.Derived[docPath].(map[string]any)
-	goDoc, goOK := goRun.Derived[docPath].(map[string]any)
-	if pyOK && goOK && validTimestampValue(python, py[field], rule.kind == firestoreTimestamp) &&
-		validTimestampValue(goRun, goDoc[field], rule.kind == firestoreTimestamp) &&
-		additionalTimestampRuleValid(docPath, py, field) && additionalTimestampRuleValid(docPath, goDoc, field) {
-		return "both values retain the contract timestamp type and fall within their own replay windows"
-	}
-	return ""
-}
-
-func validateTimestampEvidence(diffs *[]difference, side string, run *observation) {
-	if run.UpdatedAtChanged && run.Document != nil && !timestampInWindow(run) {
-		addDifference(diffs, "/"+side+"/conversation/updated_at", "invalid_clock")
-	}
-	for path, raw := range run.Derived {
-		doc, ok := raw.(map[string]any)
-		if !ok {
-			continue
-		}
-		for field := range doc {
-			rule, approved := timestampRuleForDocument(path, field)
-			if approved && (!validTimestampValue(run, doc[field], rule.kind == firestoreTimestamp) || !additionalTimestampRuleValid(path, doc, field)) {
-				addDifference(diffs, "/"+side+"/derived_documents/"+escapePointer(path)+"/"+field, "invalid_clock")
-			}
-		}
-	}
-}
-
-func additionalTimestampRuleValid(path string, doc map[string]any, field string) bool {
-	parts := strings.Split(path, "/")
-	if field == "recorded_at" && len(parts) == 6 && parts[4] == "goal_history" {
-		stamp, ok := timestampText(doc[field])
-		if !ok {
-			return false
-		}
-		parsed, err := time.Parse(time.RFC3339Nano, stamp)
-		date, dateOK := doc["date"].(string)
-		return err == nil && dateOK && date == parts[5] && parsed.UTC().Format("2006-01-02") == parts[5]
-	}
-	if field == "last_updated" && len(parts) == 4 && parts[2] == "llm_usage" {
-		stamp, ok := timestampText(doc[field])
-		if !ok {
-			return false
-		}
-		parsed, err := time.Parse(time.RFC3339Nano, stamp)
-		return err == nil && parsed.UTC().Format("2006-01-02") == parts[3]
-	}
-	return true
 }
 
 func pointerParts(path string) []string {

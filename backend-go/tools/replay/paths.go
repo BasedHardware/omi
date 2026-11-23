@@ -3,9 +3,6 @@ package main
 import (
 	"bytes"
 	"compress/zlib"
-	"crypto/aes"
-	"crypto/cipher"
-	"crypto/hkdf"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
@@ -361,23 +358,7 @@ func readOwnerTestKey(path string) (key string, err error) {
 // internal/platform/crypt. Tools stay standard-library-only, so the Python-generated
 // known-answer test keeps this small compatibility reader tied to that contract.
 func decryptOwnerTranscript(uid, envelope string, compressed bool, secret string) error {
-	sealed, err := base64.StdEncoding.Strict().DecodeString(envelope)
-	if err != nil {
-		return errors.New("invalid base64 envelope")
-	}
-	key, err := hkdf.Key(sha256.New, []byte(secret), []byte(uid), "user-data-encryption", 32)
-	if err != nil {
-		return err
-	}
-	block, err := aes.NewCipher(key)
-	if err != nil {
-		return err
-	}
-	aead, err := cipher.NewGCM(block)
-	if err != nil || len(sealed) < aead.NonceSize()+aead.Overhead() {
-		return errors.New("invalid encrypted envelope")
-	}
-	plain, err := aead.Open(nil, sealed[:aead.NonceSize()], sealed[aead.NonceSize():], nil)
+	plain, err := decryptReplayEnvelope(uid, envelope, secret)
 	if err != nil {
 		return errors.New("encrypted envelope authentication failed")
 	}

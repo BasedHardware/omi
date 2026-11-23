@@ -29,7 +29,7 @@ PYTHON_BUG_EXCEPTIONS = {
         'issue': 'SCA-3874',
         'python_status': 'discarded',
         'go_status': 'failure',
-        'rows': {
+        'sentinels': {
             '/status': 'different_value',
             '/conversation/discarded': 'missing_in_go',
             '/conversation/transcript_segments': 'different_value',
@@ -110,25 +110,30 @@ def validate_label(label: object, approved_reason: object = None) -> str:
     raise ValueError(f'invalid difference label: {label!r}')
 
 
-def validate_python_bug_exception(case: dict) -> set[str]:
+def validate_python_bug_exception(case: dict) -> str | None:
     exception = PYTHON_BUG_EXCEPTIONS.get(case.get('name'))
     if exception is None:
-        return set()
+        return None
     if case.get('python_status') != exception['python_status'] or case.get('go_status') != exception['go_status']:
         raise ValueError(f"{exception['issue']} exception is stale or changed; review and remove it")
     differences = {difference.get('path'): difference.get('kind') for difference in case.get('differences', [])}
-    if any(differences.get(path) != kind for path, kind in exception['rows'].items()):
+    if any(differences.get(path) != kind for path, kind in exception['sentinels'].items()):
         raise ValueError(f"{exception['issue']} exception no longer matches its expected difference rows")
-    return set(exception['rows'])
+    return exception['issue']
 
 
 def enrich(report: dict) -> dict:
     totals = {family: {'unexplained': 0, 'allowed': 0, 'go_gap': 0, 'python_bug': 0, 'total': 0} for family in FAMILIES}
     allowed_by_rule = Counter()
     label_totals = Counter()
+    home_receipt_rows = 0
+    home_receipt_side_traces = {}
     raw_unexplained = report.get('unexplained_differences', 0)
     for case in report.get('cases', []):
-        python_bug_paths = validate_python_bug_exception(case)
+        python_bug_issue = validate_python_bug_exception(case)
+        case['home_dirty_receipt_trace'] = {
+            side: (case.get(side) or {}).get('home_dirty_receipt_trace', {}) for side in ('python', 'go')
+        }
         case.pop('cost', None)
         case.pop('go_evidence', None)
         case.pop('python', None)
@@ -136,14 +141,28 @@ def enrich(report: dict) -> dict:
         for difference in case.get('differences', []):
             family = family_for_path(difference.get('path', ''))
             difference['family'] = family
-            if difference.get('path') in python_bug_paths:
-                label = f"python_bug:{PYTHON_BUG_EXCEPTIONS[case['name']]['issue']}"
+            if difference.get('failure_reason') == 'home_dirty_receipt_missing':
+                label = None
+                home_receipt_rows += 1
+                side = difference.get('path', '').split('/', 1)[0]
+                if side in {'python', 'go'}:
+                    home_receipt_side_traces[(case.get('name'), side)] = case['home_dirty_receipt_trace'][side]
             elif difference.get('label'):
                 label = validate_label(difference['label'], difference.get('reason'))
                 if label.startswith('python_bug:'):
                     raise ValueError('python_bug labels require a matching approved case-specific exception')
+            elif difference.get('path') == '/conversation/finalization_job_id' and python_bug_issue:
+                label = f'python_bug:{python_bug_issue}'
+            elif difference.get('path') in {
+                '/conversation/go_finalization_notes_input_hash',
+                '/conversation/go_finalization_notes_output_hash',
+                '/conversation/finalization_job_id',
+            }:
+                label = 'go_gap'
             elif difference.get('reason'):
                 label = f"by_design:{difference['reason']}"
+            elif python_bug_issue:
+                label = f'python_bug:{python_bug_issue}'
             else:
                 label = None
             difference['label'] = label
@@ -174,6 +193,26 @@ def enrich(report: dict) -> dict:
         'allowed_by_rule': dict(sorted(allowed_by_rule.items())),
         'approved_rule_reference': 'backend-go/tools/replay/comparison-rules.md',
         'known_gaps': KNOWN_GAPS,
+        'home_dirty_receipt_missing': {
+            'rows': home_receipt_rows,
+            'observed_case_sides': len(home_receipt_side_traces),
+            'writes_set_true': sum(trace.get('set_true', 0) for trace in home_receipt_side_traces.values()),
+            'writes_set_false': sum(trace.get('set_false', 0) for trace in home_receipt_side_traces.values()),
+            'deletes': sum(trace.get('deleted', 0) for trace in home_receipt_side_traces.values()),
+            'other_writes': sum(trace.get('other_write', 0) for trace in home_receipt_side_traces.values()),
+            'by_side': {
+                side: {
+                    key: sum(
+                        trace.get(key, 0)
+                        for (_case_name, trace_side), trace in home_receipt_side_traces.items()
+                        if trace_side == side
+                    )
+                    for key in ('set_true', 'set_false', 'deleted', 'other_write')
+                }
+                for side in ('python', 'go')
+            },
+            'label': 'unlabelled',
+        },
         'value_free': True,
         'cost_measured': False,
     }

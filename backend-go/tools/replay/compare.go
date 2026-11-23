@@ -12,28 +12,43 @@ import (
 )
 
 type admission struct {
-	Job    string `json:"job_id"`
-	Fanout string `json:"fanout_key"`
-	OwnKey bool   `json:"own_key"`
+	Job        string `json:"job_id"`
+	Fanout     string `json:"fanout_key"`
+	OwnKey     bool   `json:"own_key"`
+	Engine     string `json:"engine,omitempty"`
+	OwnerEpoch int64  `json:"owner_epoch,omitempty"`
+	Revision   int64  `json:"revision,omitempty"`
 }
 
 type observation struct {
-	OwnerID           string         `json:"owner_id"`
-	ConversationID    string         `json:"conversation_id"`
-	SeededTokenHashes []string       `json:"seeded_token_hashes"`
-	QueueFanout       string         `json:"queue_fanout_key"`
-	UpdatedAtChanged  bool           `json:"updated_at_changed"`
-	Admitted          *admission     `json:"admitted"`
-	Started           time.Time      `json:"started_at"`
-	Finished          time.Time      `json:"finished_at"`
-	ProviderCalls     []string       `json:"provider_calls"`
-	Effects           map[string]any `json:"effects"`
-	Status            string         `json:"status"`
-	Document          any            `json:"conversation"`
-	Derived           map[string]any `json:"derived_documents"`
-	Webhooks          []any          `json:"webhooks"`
-	Cost              replayCost     `json:"cost"`
-	GoEvidence        map[string]any `json:"go_evidence,omitempty"`
+	OwnerID               string                `json:"owner_id"`
+	ConversationID        string                `json:"conversation_id"`
+	SeededTokenHashes     []string              `json:"seeded_token_hashes"`
+	QueueFanout           string                `json:"queue_fanout_key"`
+	UpdatedAtChanged      bool                  `json:"updated_at_changed"`
+	Admitted              *admission            `json:"admitted"`
+	Started               time.Time             `json:"started_at"`
+	Finished              time.Time             `json:"finished_at"`
+	ProviderCalls         []string              `json:"provider_calls"`
+	Effects               map[string]any        `json:"effects"`
+	Status                string                `json:"status"`
+	Document              any                   `json:"conversation"`
+	Derived               map[string]any        `json:"derived_documents"`
+	BatchPrivacy          *batchPrivacyEvidence `json:"batch_pipeline_privacy,omitempty"`
+	HomeDirtyReceiptTrace map[string]int        `json:"home_dirty_receipt_trace,omitempty"`
+	Webhooks              []any                 `json:"webhooks"`
+	Cost                  replayCost            `json:"cost"`
+	GoEvidence            map[string]any        `json:"go_evidence,omitempty"`
+}
+
+type batchPrivacySnapshot struct {
+	Exists bool           `json:"exists"`
+	Fields map[string]any `json:"fields"`
+}
+
+type batchPrivacyEvidence struct {
+	Seed  batchPrivacySnapshot `json:"seed"`
+	Final batchPrivacySnapshot `json:"final"`
 }
 
 type tokenUsage struct {
@@ -43,12 +58,15 @@ type tokenUsage struct {
 }
 
 type firestoreOperations struct {
-	RPCCalls       int64 `json:"rpc_calls"`
-	DocumentReads  int64 `json:"document_reads"`
-	QueryDocuments int64 `json:"query_documents"`
-	QueryRequests  int64 `json:"query_requests"`
-	Writes         int64 `json:"writes"`
-	Deletes        int64 `json:"deletes"`
+	RPCCalls                    int64 `json:"rpc_calls"`
+	DocumentReads               int64 `json:"document_reads"`
+	QueryDocuments              int64 `json:"query_documents"`
+	QueryRequests               int64 `json:"query_requests"`
+	Writes                      int64 `json:"writes"`
+	Deletes                     int64 `json:"deletes"`
+	BatchPrivacyDocumentReads   int64 `json:"batch_pipeline_privacy_document_reads"`
+	BatchPrivacyDocumentWrites  int64 `json:"batch_pipeline_privacy_document_writes"`
+	BatchPrivacyDocumentDeletes int64 `json:"batch_pipeline_privacy_document_deletes"`
 }
 
 func (f firestoreOperations) Total() int64 {
@@ -76,9 +94,10 @@ type replayCase struct {
 }
 
 type difference struct {
-	Path   string `json:"path"`
-	Kind   string `json:"kind"`
-	Reason string `json:"reason,omitempty"`
+	Path          string `json:"path"`
+	Kind          string `json:"kind"`
+	Reason        string `json:"reason,omitempty"`
+	FailureReason string `json:"failure_reason,omitempty"`
 }
 
 type caseReport struct {

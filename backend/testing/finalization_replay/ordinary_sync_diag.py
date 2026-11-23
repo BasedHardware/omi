@@ -20,7 +20,9 @@ from uuid import UUID, uuid4
 from testing.finalization_replay.candidate import replay_database
 from testing.finalization_replay.corpus import DEFAULT_TEST_KEY, pack, read_corpus, seed_document
 from testing.finalization_replay.driver import _ReplayKey, _clear, _observe, _seed
+from testing.finalization_replay.firestore_proxy import FirestoreProxy
 from testing.finalization_replay import reference as reference_module
+from testing.finalization_replay.metrics import suspend_meter
 from testing.replay_harness.env import emulator_endpoint, replay_environment
 
 
@@ -83,13 +85,15 @@ def _seed_worker_intent(state):
     return job
 
 
-def _go_sync(state, binary, database, key, url):
-    job = _seed_worker_intent(state)
+def _go_sync(state, binary, database, key, url, firestore_proxy):
+    with suspend_meter():
+        job = _seed_worker_intent(state)
+    firestore_proxy.reset()
     process = subprocess.run(
         [str(binary), '-test.run=^TestOrdinarySyncReplay$', '-test.timeout=75s'],
         env={
             'PATH': os.environ['PATH'],
-            'FIRESTORE_EMULATOR_HOST': emulator_endpoint(),
+            'FIRESTORE_EMULATOR_HOST': firestore_proxy.address,
             'TEST_DATABASE_URL': database,
             'TEST_DATABASE_REQUIRED': '1',
             'OMI_ORDINARY_SYNC_REPLAY': '1',
@@ -101,14 +105,27 @@ def _go_sync(state, binary, database, key, url):
         capture_output=True,
         timeout=80,
     )
+    state.add_firestore_operations(**firestore_proxy.counts())
+    for bucket, count in firestore_proxy.home_receipt_trace().items():
+        value = {'set_true': True, 'set_false': False, 'deleted': 'deleted'}.get(bucket)
+        for _ in range(count):
+            state.record_home_dirty_receipt_write(value)
     result = re.search(r'^ORDINARY_SYNC_RESULT=(\w+)$', process.stdout, re.MULTILINE)
     cause = re.search(r'^ORDINARY_SYNC_CAUSE=(\w+)$', process.stdout, re.MULTILINE)
     if process.returncode or result is None:
         details = '\n'.join((process.stdout + process.stderr).splitlines()[-12:])[-2000:]
         raise RuntimeError(f'workerd worker replay failed (exit {process.returncode}): {details}')
-    row = job.get().to_dict() or {}
+    with suspend_meter():
+        row = job.get().to_dict() or {}
     fanout = row.get('fanout_key', '')
-    state.admitted = {'job_id': job.id, 'fanout_key': fanout, 'own_key': False}
+    state.admitted = {
+        'job_id': job.id,
+        'fanout_key': fanout,
+        'own_key': False,
+        'engine': row.get('finalization_engine', ''),
+        'owner_epoch': row.get('finalization_owner_epoch', 0),
+        'revision': row.get('finalization_revision', 0),
+    }
     state.queue_fanout_key = fanout
     state.go_evidence = {
         'job': {
@@ -119,7 +136,8 @@ def _go_sync(state, binary, database, key, url):
     }
     if result[1] != 'success':
         return result[1]
-    final = state.conversation.get().to_dict()
+    with suspend_meter():
+        final = state.conversation.get().to_dict()
     return 'discarded' if final.get('discarded') else final['status']
 
 
@@ -198,7 +216,11 @@ def _run_side(cases, side, binary, database, key, worker_backend):
                 def invoke(state):
                     if side == 'python':
                         return _python_sync(state)
-                    return _go_sync(state, binary, database, key, url)
+                    privacy_document_path = f"batch_pipeline_privacy/{sha256(state.uid.encode('utf-8')).hexdigest()}"
+                    with FirestoreProxy(
+                        emulator_endpoint(), privacy_document_path, state.home_dirty_receipt_path
+                    ) as proxy:
+                        return _go_sync(state, binary, database, key, url, proxy)
 
                 from utils.episodes import client_gate, finalize
 

@@ -109,7 +109,7 @@ func TestCompareOnlyExcusesVerifiedFanoutAndClocks(t *testing.T) {
 		}
 		if diff.Path == "/conversation/finalization_job_id" {
 			if diff.Reason != "" {
-				t.Fatalf("finalization_job_id must stay unexplained pending reader evidence: %v", diff)
+				t.Fatalf("finalization_job_id remains a go_gap pending the status-route fix: %v", diff)
 			}
 			continue
 		}

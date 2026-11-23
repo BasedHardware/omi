@@ -85,6 +85,20 @@ def measure(state):
             _ACTIVE_STATE = None
 
 
+@contextmanager
+def suspend_meter():
+    """Exclude replay fixture setup and observation reads from product operation counts."""
+    global _ACTIVE_STATE
+    with _ACTIVE_LOCK:
+        active = _ACTIVE_STATE
+        _ACTIVE_STATE = None
+    try:
+        yield
+    finally:
+        with _ACTIVE_LOCK:
+            _ACTIVE_STATE = active
+
+
 def _active_state():
     with _ACTIVE_LOCK:
         return _ACTIVE_STATE
@@ -104,6 +118,105 @@ def _writes(request):
     return getattr(request, 'writes', ())
 
 
+def _field(value, name, default=None):
+    if isinstance(value, dict):
+        return value.get(name, default)
+    return getattr(value, name, default)
+
+
+def _matches_batch_privacy_document(state, name):
+    path = getattr(state, 'batch_privacy_document_path', '')
+    if not isinstance(name, str) or not path:
+        return False
+    marker = '/documents/'
+    resource = name.split(marker, 1)[1] if marker in name else name
+    return resource.strip('/') == path
+
+
+def _write_document_name(write):
+    return (
+        _field(write, 'delete', '')
+        or _field(_field(write, 'update', {}), 'name', '')
+        or _field(_field(write, 'transform', {}), 'document', '')
+        or ''
+    )
+
+
+def _direct_write_document_name(name, request):
+    document_name = _field(request, 'name', '') or _field(_field(request, 'document', {}), 'name', '')
+    if document_name or name != 'create_document':
+        return document_name
+    parent = _field(request, 'parent', '') or ''
+    collection = _field(request, 'collection_id', '') or ''
+    document_id = _field(request, 'document_id', '') or ''
+    if parent and collection and document_id:
+        return f'{parent.rstrip("/")}/{collection}/{document_id}'
+    return ''
+
+
+def _batch_privacy_read_count(state, name, request):
+    path = getattr(state, 'batch_privacy_document_path', '')
+    if not path:
+        return 0
+    if name == 'get_document':
+        return int(_matches_batch_privacy_document(state, _field(request, 'name', '')))
+    if name == 'batch_get_documents':
+        return sum(
+            _matches_batch_privacy_document(state, document) for document in (_field(request, 'documents', ()) or ())
+        )
+    if name == 'list_documents':
+        parent = _field(request, 'parent', '') or ''
+        collection = _field(request, 'collection_id', '') or ''
+        return int(collection == 'batch_pipeline_privacy' and parent.rstrip('/').endswith('/documents'))
+    if name in {'run_query', 'run_aggregation_query'}:
+        query = _field(request, 'structured_query', {}) or {}
+        if name == 'run_aggregation_query':
+            aggregation = _field(request, 'structured_aggregation_query', {}) or {}
+            query = _field(aggregation, 'structured_query', query) or query
+        sources = _field(query, 'from_', _field(query, 'from', ())) or ()
+        targets_collection = any(_field(source, 'collection_id', '') == 'batch_pipeline_privacy' for source in sources)
+        parent = _field(request, 'parent', '') or ''
+        return int(targets_collection and parent.rstrip('/').endswith('/documents'))
+    return 0
+
+
+def _matches_home_dirty_receipt(state, name):
+    path = getattr(state, 'home_dirty_receipt_path', '')
+    if not isinstance(name, str) or not path:
+        return False
+    marker = '/documents/'
+    resource = name.split(marker, 1)[1] if marker in name else name
+    return resource.strip('/') == path
+
+
+def _home_dirty_value(fields):
+    if fields is None:
+        return None, False
+    try:
+        if 'home_dirty' not in fields:
+            return None, False
+    except TypeError:
+        return None, False
+    value = fields['home_dirty']
+    if isinstance(value, bool):
+        return value, True
+    value = getattr(value, '_pb', value)
+    try:
+        if value.WhichOneof('value_type') == 'boolean_value':
+            return value.boolean_value, True
+    except (AttributeError, ValueError):
+        pass
+    return None, True
+
+
+def _record_home_receipt_write(state, name, fields):
+    if not _matches_home_dirty_receipt(state, name):
+        return
+    value, present = _home_dirty_value(fields)
+    if present:
+        state.record_home_dirty_receipt_write(value)
+
+
 def _delete_write(write):
     if isinstance(write, dict):
         return 'delete' in write and write['delete'] is not None
@@ -118,7 +231,26 @@ def _count_write_request(state, request):
     if not writes:
         return
     deletes = sum(_delete_write(write) for write in writes)
-    state.add_firestore_operations(writes=len(writes) - deletes, deletes=deletes)
+    privacy_writes = privacy_deletes = 0
+    for write in writes:
+        name = _write_document_name(write)
+        update = _field(write, 'update', {}) or {}
+        if _delete_write(write):
+            if _matches_home_dirty_receipt(state, name):
+                state.record_home_dirty_receipt_write('deleted')
+        else:
+            _record_home_receipt_write(state, name, _field(update, 'fields', {}) or {})
+        if _matches_batch_privacy_document(state, name):
+            if _delete_write(write):
+                privacy_deletes += 1
+            else:
+                privacy_writes += 1
+    state.add_firestore_operations(
+        writes=len(writes) - deletes,
+        deletes=deletes,
+        batch_pipeline_privacy_document_writes=privacy_writes,
+        batch_pipeline_privacy_document_deletes=privacy_deletes,
+    )
 
 
 def _invoke_rpc(state, name, read_methods, call, *args, **kwargs):
@@ -128,6 +260,9 @@ def _invoke_rpc(state, name, read_methods, call, *args, **kwargs):
             query_requests=int(name in {'run_query', 'run_aggregation_query'}),
             document_reads=int(name in read_methods),
         )
+        privacy_reads = _batch_privacy_read_count(state, name, _request(args, kwargs))
+        if privacy_reads:
+            state.add_firestore_operations(batch_pipeline_privacy_document_reads=privacy_reads)
     return call(*args, **kwargs)
 
 
@@ -156,7 +291,7 @@ def _wrap_stream(result, method, state):
 
 
 def install_firestore_meter():
-    """Count emulator RPCs made by both the Python reference and Go shim."""
+    """Count emulator RPCs made by Python; the Go child uses firestore_proxy."""
     global _METER_INSTALLED
     if _METER_INSTALLED:
         return
@@ -178,7 +313,24 @@ def install_firestore_meter():
                 if state is None:
                     return result
                 if name in direct_writes:
-                    state.add_firestore_operations(**({'deletes': 1} if name == 'delete_document' else {'writes': 1}))
+                    deleted = name == 'delete_document'
+                    counts = {'deletes': int(deleted), 'writes': int(not deleted)}
+                    if _matches_batch_privacy_document(state, _direct_write_document_name(name, request)):
+                        counts[
+                            (
+                                'batch_pipeline_privacy_document_deletes'
+                                if deleted
+                                else 'batch_pipeline_privacy_document_writes'
+                            )
+                        ] = 1
+                    state.add_firestore_operations(**counts)
+                    document = _field(request, 'document', {}) or {}
+                    document_name = _direct_write_document_name(name, request)
+                    if deleted:
+                        if _matches_home_dirty_receipt(state, document_name):
+                            state.record_home_dirty_receipt_write('deleted')
+                    else:
+                        _record_home_receipt_write(state, document_name, _field(document, 'fields', {}) or {})
                 elif name in batched_writes:
                     _count_write_request(state, request)
                 if name in streams:

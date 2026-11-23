@@ -32,13 +32,24 @@ class OrdinarySyncDiagnosticTests(unittest.TestCase):
         self.assertEqual(family_for_path('/conversation/summary_due_at'), 'Digest, minimum and relevance')
         report = {
             'commit_sha': 'a' * 40,
-            'unexplained_differences': 2,
+            'unexplained_differences': 4,
             'cases': [
                 {
                     'differences': [
                         {'path': '/provider_calls/memory-l1', 'kind': 'different_value'},
                         {'path': '/webhooks/sample/0/payload', 'kind': 'different_value'},
                         {'path': '/conversation/home_source_version', 'kind': 'different_value', 'reason': 'bound'},
+                        {
+                            'path': 'go/conversation/home_source_version',
+                            'kind': 'invalid_token_binding',
+                            'failure_reason': 'home_dirty_receipt_missing',
+                        },
+                        {'path': '/conversation/go_finalization_notes_input_hash', 'kind': 'missing_in_python'},
+                        {
+                            'path': '/conversation/finalization_job_id',
+                            'kind': 'missing_in_python',
+                            'reason': 'Go finalization job ID binds to its admitted queue job',
+                        },
                     ]
                 }
             ],
@@ -49,13 +60,54 @@ class OrdinarySyncDiagnosticTests(unittest.TestCase):
         self.assertEqual(counts['Memory source and metering']['unexplained'], 1)
         self.assertEqual(counts['Apps']['unexplained'], 1)
         self.assertEqual(counts['Other']['allowed'], 1)
+        self.assertEqual(counts['Other']['unexplained'], 1)
+        self.assertEqual(counts['Other']['go_gap'], 2)
         self.assertEqual(enriched['diagnostic']['allowed_by_rule'], {'bound': 1})
+        self.assertEqual(enriched['diagnostic']['label_counts']['go_gap'], 2)
+        self.assertEqual(enriched['diagnostic']['home_dirty_receipt_missing']['rows'], 1)
+        self.assertEqual(enriched['diagnostic']['home_dirty_receipt_missing']['label'], 'unlabelled')
         self.assertEqual(
             enriched['diagnostic']['approved_rule_reference'],
             'backend-go/tools/replay/comparison-rules.md',
         )
         self.assertNotIn('cost_table', enriched)
         self.assertNotIn('cost', enriched['cases'][0])
+        token_row = enriched['cases'][0]['differences'][3]
+        self.assertEqual(token_row['failure_reason'], 'home_dirty_receipt_missing')
+
+    def test_python_bug_exception_labels_only_its_live_case(self):
+        report = {
+            'unexplained_differences': 4,
+            'cases': [
+                {
+                    'name': 'unreadable-ciphertext-dead-letters',
+                    'python_status': 'discarded',
+                    'go_status': 'failure',
+                    'differences': [
+                        {'path': '/status', 'kind': 'different_value'},
+                        {'path': '/conversation/discarded', 'kind': 'missing_in_go'},
+                        {'path': '/conversation/transcript_segments', 'kind': 'different_value'},
+                        {'path': '/conversation/summary', 'kind': 'different_value'},
+                        {
+                            'path': '/conversation/notes_written_at',
+                            'kind': 'different_value',
+                            'reason': 'both conversation write clocks are valid',
+                        },
+                        {'path': '/conversation/finalization_job_id', 'kind': 'missing_in_python'},
+                    ],
+                }
+            ],
+        }
+        enriched = enrich(report)
+        self.assertEqual(
+            enriched['diagnostic']['label_counts'],
+            {'by_design:both conversation write clocks are valid': 1, 'python_bug:SCA-3874': 5},
+        )
+        self.assertEqual(enriched['unexplained_differences'], 0)
+
+        report['cases'][0]['python_status'] = 'completed'
+        with self.assertRaisesRegex(ValueError, 'stale or changed'):
+            enrich(report)
 
 
 if __name__ == '__main__':

@@ -1,64 +1,90 @@
 # Approved ordinary-sync comparison rules
 
-Source report: slice B bundle `8c9770e02e46d23288488f7c108505ffc593df16`, four
-ordinary-sync cases, 438 unexplained differences. David approved the timestamp,
-goal-event and Home-token rules below on 2026-11-22. Each is executable and has a
-negative test. Values remain in the comparison; the oracle validates their types,
-replay windows, identities and same-side links before explaining a difference.
-Null and absent remain distinct, and missing Python writes remain unexplained until
-Go matches them.
+Source: slice B diagnostic report attached to SCA-3887. David approved the rules below on
+2026-11-23. Every rule has a positive executable check and a negative test. The diagnostic
+keeps values in comparisons and emits only paths, kinds, labels, and bounded failure reasons.
+Differences without a matching executable rule remain unlabelled.
 
-## Timestamps
+## Protected payloads
 
-For every listed field, parse the value from each side and require it to fall within
-that side's observed `[started_at, finished_at]` replay window. A missing or malformed
-value, an invalid run window, or a value outside its own window is a failure. Counts
-are occurrences in the four-case report.
+The comparator decrypts both sides with the synthetic replay fixture key, using the owner ID
+as the HKDF salt and the production `user-data-encryption` info string. It parses the resulting
+JSON and compares the plaintext structures. A different nonce is allowed; failed authentication,
+malformed compression, or different plaintext leaves the row unexplained.
 
-| Field | Occurrences | Additional check |
-| --- | ---: | --- |
-| `users/{uid}/episodes/{episode_id}/compose_deferred_at` | 4 | — |
-| `users/{uid}/episodes/{episode_id}/created_at` | 4 | — |
-| `users/{uid}/episodes/{episode_id}/title_changed_at` | 2 | — |
-| `users/{uid}/goals/{goal_id}/updated_at` | 1 | — |
-| `users/{uid}/goals/{goal_id}/goal_history/{day}/recorded_at` | 1 | The history day and `date` must match the contract's fixture timezone day for that timestamp. |
-| `users/{uid}/llm_usage/{day}/last_updated` | 2 | The daily bucket key must match the contract's fixture timezone day for that timestamp. |
-| `users/{uid}/memory_state/apply_control/updated_at` | 2 | Parse the stored RFC3339 string (not a Firestore timestamp wrapper). |
-| `users/{uid}/episode_links/{conversation_id}/updated_at` | 1 | — |
+| Field | Check |
+| --- | --- |
+| `conversation.transcript_segments` | Decrypt both envelopes. Inflate the marked compressed payload and compare transcript segment lists. The value-free `$bytes` wrapper is decoded before comparison. |
+| `conversation.home_display` | Decrypt both envelopes and compare card content. |
+| `episodes/{id}.content` | Decrypt both envelopes and compare episode content. |
+| `episodes/{id}.home_display` | Decrypt both envelopes and compare card content. |
 
-Python-only conversation timestamps, including `/conversation/title_changed_at`, are
-not covered by these rules. They remain differences until Go writes the matching
-fields.
+## Clocks
 
-## Generated identifiers and version tokens
+Each timestamp must preserve its field's wire type and fall inside that side's own
+`[started_at, finished_at]` replay window. Only the two scheduled post-finish writes below may
+use the stated five-second grace; all other clocks stop at `finished_at`.
 
-Each check is side-local: it validates the token against the write, document, or
-projection it identifies. Cross-side random values need not be byte-equal only after
-the corresponding rule is approved and implemented.
+| Field | Additional check |
+| --- | --- |
+| Conversation `updated_at`, `notes_written_at`, `terminal_family_at`, `summary_completed_at` | Firestore timestamp; own replay window. |
+| `episodes/{id}.compose_deferred_at`, `created_at`, `title_changed_at` | Firestore timestamp; `created_at` alone permits up to 5 seconds after finish for the scheduled episode write. |
+| `goals/{id}.updated_at` | Firestore timestamp; own replay window. |
+| `goals/{id}/goal_history/{day}.recorded_at` | Firestore timestamp; `date` and document day must match the timestamp's UTC day. |
+| `llm_usage/{day}.last_updated`, `hourly_usage/{day}.last_updated` | Firestore timestamp; bucket day must match the timestamp's UTC day. |
+| `memory_state/apply_control.updated_at` | Firestore timestamp; own replay window. |
+| `memory_state/head.updated_at`, `memory_outbox/{id}.available_at`, `memory_commits/{id}.updated_at`, `memory_operations/{id}.created_at` and `.updated_at` | Firestore timestamp; own replay window. |
+| `memory_items/{id}.captured_at`, `.expires_at`, `.updated_at`, `.valid_from` | Firestore timestamp; own replay window. |
+| `memory_source_replacements/{id}.committed_at`, `.control_state.updated_at` | Firestore timestamp; own replay window. |
+| `episode_links/{id}.updated_at` | Firestore timestamp; up to 5 seconds after finish for the scheduled link write. |
+| `episode_segment_receipts/{id}.updated_at`, `conversations/{id}/analytics_markers/{marker}.created_at` | Firestore timestamp; own replay window. |
 
-| Field | Occurrences | Proposed check |
-| --- | ---: | --- |
-| `users/{uid}/goals/{goal_id}/events/{event_id}` document ID and its `event_id` field | 2 | On each side, the path ID equals `event_id`; `goal_id` binds to an existing parent goal; `sequence` equals that goal's `latest_progress_sequence`; and event semantics compare after excluding only the bound ID and independently checked `created_at`. |
-| `/conversation/home_source_version` | 4 | Require a fresh UUIDv4 hex token, absent from seeded UUID values and unique among Home tokens in that side's run. Its same-side `episode_links/{conversation_id}` receipt must be dirty; if `home_prepared_source_version` exists, it must match. |
-| `/conversation/home_display_version` | 4 | Require a fresh UUIDv4 hex token, absent from seeded values and unique in that side's run. The same-side conversation must contain a non-empty `home_display` payload. |
-| `users/{uid}/episodes/{episode_id}/home_content_epoch` | 4 | Require a fresh UUIDv4 hex token, absent from seeded values and unique in that side's run, with `home_needs_prepare=true`; if `home_prepare_state.epoch` exists, it must equal the token. |
-| `users/{uid}/episodes/{episode_id}/home_display_version` | 4 | Require a fresh UUIDv4 hex token, absent from seeded values and unique in that side's run. The same-side episode must be deferred for preparation and contain a non-empty `home_display` payload. |
-| `users/{uid}/episode_links/home_feed_control/generation` | 4 | Require a fresh UUIDv4 hex token, absent from seeded values and unique in that side's run; the same-side control document must have `ready=false`. |
+Malformed, missing, or out-of-window values add `invalid_clock` evidence and cannot justify a
+timestamp difference. The five-second allowance is limited to episode creation and episode-link
+writes; it is not applied to conversation or memory clocks.
 
-Home card responses are not part of these finalization observations, so the Home
-display rules verify the persisted payload and deferred control links only. Go-only
-notes hashes, ownership/revision metadata, absent conversation fields, and all other
-differences remain unexplained unless separately resolved.
+## Generated IDs and tokens
 
-## `finalization_job_id` remains unexplained
+IDs may differ only after each side binds them to its own write or queue job.
 
-No rule currently excuses `conversation.finalization_job_id`. The app has no direct
-Firestore read permission for user documents. FastAPI conversation responses use
-typed models that ignore unmodeled stored fields; MCP cards and REST responses select
-their output fields explicitly. The Python public reader and index audit found no
-query, filter, ordering or Firestore index on this field. Internal lifecycle code
-does read it for state gates and fencing, including `conversation_processing_recovery`,
-`no_speech_terminal`, `batch_summary_debt`, `live_member_notes`, `smart_merge`,
-`conversation_quiet_checks`, and `processing_attention`. The replay-only binding rule
-stays disabled until its Go queue-row evidence and Python no-binding assertion are
-implemented and reviewed.
+| Field | Check |
+| --- | --- |
+| Admitted job and fanout IDs | Each side's job and fanout values bind to its own admission and stored row; ordinary-sync Python has no Go admission. |
+| `finalization_engine`, `finalization_owner_epoch`, `finalization_revision` | Go values must be present and bind to its admitted job, owner epoch, and revision. The Python row must not contain these Go fence fields. |
+| `go_sync_minimum_discarded`, `go_sync_minimum_revision` | Go receipt fields must be present together, use the expected types, and bind to the Go row's sync content revision and discarded outcome. The Python row must not contain them. |
+| Home version fields and `home_feed_control.generation` | Existing UUIDv4 checks require a fresh, seeded-value-free, side-unique token with its same-side Home receipt or preparation link. |
+| `memory_state/released_memory_changes_v1.token` | Require a fresh UUIDv4 value, absent from seeded values, unique on that side, and stored in the matching owner's state document. |
+| Goal event ID and path | Each event ID matches its path, parent goal and latest progress sequence; semantic payloads are compared after removing only the independently checked ID and timestamp. |
+| `batch_pipeline_privacy/{sha256(uid)}.memo_token` and `.memo_schema` | Both sides must have a fresh Python-format UUIDv4 hex token absent from seeded values, matching memo schema, generation/account_epoch/purging/blocked/memo_blocked equal to each side's seed and to the other side, and exactly one measured document write with zero reads and deletes per finalization. |
+
+`invalid_token_binding` rows include a per-slot `failure_reason` such as
+`prepared_source_version_mismatch` or `home_dirty_receipt_missing`. The reason contains no token
+value and does not label the difference by itself.
+
+The `home_dirty_receipt_missing` reason remains unlabelled. The diagnostic records successful
+`home_dirty` writes to the exact receipt document (`true`, `false`, or delete) per case and side;
+the final-state difference still needs a lead ruling before it can become a comparison rule.
+
+The ownership-fence, minimum-receipt, and fanout fields are checked from replay observations;
+the reader audit found no app, API, or MCP response exposing those fields, and no Python query or
+index depends on them. Internal lifecycle reads remain in place for fencing. The finalization job
+pointer is the exception: the Go status route exposes it as `job_id`, so its row is a `go_gap`.
+The value-free report emits no stored row values.
+
+## Go gap and Python bug
+
+`go_finalization_notes_input_hash` and `go_finalization_notes_output_hash` are `go_gap` on
+SCA-3551: Go will write Python's notes keys instead. They are not approved as by design.
+`conversation.finalization_job_id` is also `go_gap`: the Go status route resolves that pointer
+and returns it as `job_id`, while the Go ID breaks Python's status lookup. The case-specific
+SCA-3874 exception retains precedence for its unreadable-ciphertext case.
+
+The only Python-bug exception is the unreadable-ciphertext case `unreadable-ciphertext-dead-letters`,
+filed as SCA-3874. While Python still discards the conversation and Go fails closed, remaining
+unexplained rows in that case receive `python_bug:SCA-3874`; independently verified by-design
+rules and Go gaps keep their own labels. The reporter requires both statuses and the status,
+discarded, and transcript sentinel differences, so it fails when Python's behavior is fixed or
+the case changes.
+
+All other differences keep `label: null` until a lead approves an executable comparison rule or
+files a Python-bug issue with file-and-line evidence and a Done check.

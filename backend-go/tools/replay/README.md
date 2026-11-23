@@ -70,9 +70,12 @@ oracle comparator. The value-free report records each difference's family, path,
 label, and approved reason. Labels are `go_gap`, `python_bug:<issue>`, or
 `by_design:<rule>`; the by-design suffix is the comparator's approved reason. Rows without
 a reviewed label have `label: null` and count as unlabelled. It includes totals by label
-and family. The known SCA-3874 exception applies
-only while the unreadable-ciphertext case still shows Python discarding the conversation
-against Go's failure; the report fails if that behavior or its three affected rows change.
+and family. Invalid Home token evidence includes a per-slot `failure_reason`, without token
+values. The SCA-3874 exception labels only remaining unexplained rows while the unreadable-
+ciphertext case still shows Python discarding the conversation against Go's failure. The
+reporter checks both statuses and three sentinel differences; the exception expires when that
+case behavior changes. Protected payload, clock, ID, and token checks are listed in
+`comparison-rules.md`.
 Family attribution uses this precedence: goals; apps and webhooks; memory source and
 metering; digest, minimum and relevance; other. A nonzero unlabelled count is a measurement,
 not a gate failure.
