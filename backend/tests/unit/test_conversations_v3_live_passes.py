@@ -14,7 +14,8 @@ from types import SimpleNamespace
 import pytest
 
 from database import conversations_v3 as store
-from utils.conversations.v3 import service
+from utils.conversations.v3 import policy, service
+from utils.home_feed.projection import reveal_display
 from tests.unit.test_conversations_v3_claim_growth import strict, owners_import, path, UID  # noqa: F401
 
 T0 = datetime(2026, 11, 18, 10, 0, tzinfo=timezone.utc)
@@ -164,9 +165,6 @@ async def test_live_title_is_attempted_once_and_final_outline_wins(strict, monke
         return 'Planning the fall release'
 
     monkeypatch.setattr(service.models, 'live_title', live_title)
-    monkeypatch.setattr(
-        store, 'stamp_home_display', lambda uid, row, kind: {'home_title_for_test': row['structured']['title']}
-    )
     for count in (6, 7, 8):
         segments = speech(count)
         now = T0 + timedelta(seconds=segments[-1]['end'] + 1)
@@ -178,7 +176,7 @@ async def test_live_title_is_attempted_once_and_final_outline_wins(strict, monke
         expected = '' if count == 6 or provider_fails else 'Planning the fall release'
         assert row['structured']['title'] == expected
         if count == 7 and not provider_fails:
-            assert row['home_title_for_test'] == expected
+            assert reveal_display(UID, row['home_display'])['title'] == expected
 
     put_recording(strict, segments, status='completed', landed=now)
     assert await reconcile_at(strict, monkeypatch, now + timedelta(seconds=gap + 1)) == 'committed'
@@ -186,6 +184,33 @@ async def test_live_title_is_attempted_once_and_final_outline_wins(strict, monke
     assert not planner_open(row)
     assert row['structured']['title'] == 'Talk'
     assert calls == [UID]
+
+
+@pytest.mark.parametrize(
+    'exclusion',
+    [
+        {'data_protection_level': 'private'},
+        {'data_protection_level': 'e2ee'},
+        {'is_locked': True},
+        {'backfilled': True},
+        {'title_locked': True},
+        {'home_content_invalidated': True},
+        {'home_hidden': True},
+    ],
+)
+def test_live_title_excludes_protected_or_hidden_rows(exclusion):
+    row = {'v3_derived': True, 'status': 'in_progress', 'tile_state': 'live'}
+    assert policy.live_title_candidate(row)
+    assert not policy.live_title_candidate({**row, **exclusion})
+
+
+@pytest.mark.asyncio
+async def test_live_title_skips_legacy_row_without_content_revision(monkeypatch):
+    def unexpected_store_call(*args):
+        pytest.fail('A row without a content revision must not claim a title attempt')
+
+    monkeypatch.setattr(service, 'run_blocking', unexpected_store_call)
+    await service._maybe_publish_live_title(UID, 'builder', 'token', {'id': 'legacy', 'transcript_segments': speech(8)})
 
 
 def test_live_title_model_caps_multibyte_input_and_output(monkeypatch):

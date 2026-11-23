@@ -23,7 +23,15 @@ def live_title_candidate(row):
         and row.get('data_protection_level') not in {'private', 'e2ee'}
         and not any(
             row.get(field)
-            for field in ('deleted', 'discarded', 'is_locked', 'backfilled', 'title_locked', 'home_content_invalidated')
+            for field in (
+                'deleted',
+                'discarded',
+                'is_locked',
+                'backfilled',
+                'title_locked',
+                'home_content_invalidated',
+                'home_hidden',
+            )
         )
         and not str(row.get('user_title') or '').strip()
         and not str((row.get('structured') or {}).get('title') or '').strip()

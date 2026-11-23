@@ -807,11 +807,12 @@ async def reconcile(
 
 
 async def _maybe_publish_live_title(uid, key, token, row):
-    segments = row['transcript_segments']
-    if deduplicated_transcribed_speech_seconds(segments) < 180:
-        return
-    args = (uid, token, row['id'], row['sync_content_revision'])
     try:
+        revision = row.get('sync_content_revision')
+        segments = row.get('transcript_segments') or []
+        if revision is None or deduplicated_transcribed_speech_seconds(segments) < 180:
+            return
+        args = (uid, token, row['id'], revision)
         if await run_blocking(db_executor, store.write_live_title_preview, *args):
             title = await leased_work(uid, key, token, llm_executor, models.live_title, uid, segments)
             if title and live_title_enabled():
