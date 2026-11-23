@@ -242,20 +242,38 @@ weight by `omi_sample_pct`:
   cohort `captured` and device-funnel `conv1`/`conv7` weight each person by
   100/pct of the rows that show the outcome.
 - `viral-metrics` activation and saved conversations.
+- Omi TV weekly growth population uses the same weights as the activity
+  snapshot. Weeks touching November 23, 2026 UTC or later omit growth
+  transitions, quick ratio, stickiness and the L1–L7 distribution because the
+  sampled capture stream lacks the days and transitions needed for those measures.
+- BigQuery's `daily-1` Omi TV reader serves historical windows ending at or
+  before November 23, 2026 00:00 UTC. Later windows use HogQL, even if BigQuery
+  reports full coverage. Deploy the updated admin reader before step A.
 
-Not reweighted, so they read low for people seen only through these events:
-qualified-day counts (activation's two-day rule, L1-L7, person-days),
-weekly growth accounting, retention curves, established users, capture-source
-segments, the BigQuery Omi TV rollup (`wall-rollup-extract.ts`) and saved
-insights. Recording-journey ratios in the scorecard stay unbiased because the
+Activation's two-day rule, retention curves, established users, capture-source
+segments and the saved insights listed in PR #26119 still read low for people
+seen only through sampled events. Recording-journey ratios in the scorecard stay unbiased because the
 whole journey is sampled per user; its counts are at 2% scale. Small groups
 are noisy: one sampled person stands for 50.
 
 `MCP Tool Use Succeeded` is replaced by the server's `MCP Daily Activity`
-rollup (`backend/docs/server-product-telemetry.md`). The file already has the
-raw event off; the release owner applies it only after the rollup's first full
-UTC day matches the raw-row reader, and `apply.py drift` reports that one
-difference until then.
+rollup (`backend/docs/server-product-telemetry.md`). Step A keeps raw successes
+at 100%. Generate its temporary configuration from the checked-in file:
+
+```sh
+jq --arg raw 'MCP Tool Use Succeeded' '
+  .functions |= map(
+    if .kind == "keep_list" then .events |= (. + [$raw] | unique)
+    elif .kind == "drop" then .events |= map(select(. != $raw))
+    else . end
+  )' contracts/analytics/posthog.json > posthog-step-a.json
+python3 scripts/posthog/apply.py plan --config posthog-step-a.json
+python3 scripts/posthog/apply.py apply --config posthog-step-a.json --snapshot-dir <dir>
+```
+
+After step A, drift against the checked-in file should show only this event's
+keep-list and drop-stage input changes. At step B, plan and apply the
+checked-in file after the first full UTC day matches the raw-row reader.
 
 For the $660 waiver (David, 2026-11-23: `/flags` traffic from old builds such
 as Android 1.0.573 cannot be cut without user-visible flag fallbacks), four

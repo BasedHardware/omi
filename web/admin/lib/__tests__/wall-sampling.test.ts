@@ -5,6 +5,7 @@ import {
   cohortQuery,
   deviceFunnelQuery,
   mauOffsetsQuery,
+  weeklyGrowthQuery,
 } from "../wall-posthog";
 import { SAMPLE_PCT_SQL, SAMPLE_WEIGHT_SQL } from "../posthog-sampling";
 
@@ -28,6 +29,13 @@ describe("readers of sampled product events (SCA-3665)", () => {
     expect(activityQuery(end, 7, "assistant", 1)).toContain(
       "SELECT period,p,count()"
     );
+  });
+
+  it("uses the same per-actor population weight in weekly growth and activity", () => {
+    const sql = weeklyGrowthQuery(end, 1);
+    expect(sql).toContain("if(sum(fgn)>0,1,100/max(cap_pct)) weight");
+    expect(sql).toContain("groupArray(tuple(period,primary,n,weight))");
+    expect(sql).toContain("round(sum(tupleElement(t,6)))");
   });
 
   it("weights MAU offsets per window", () => {

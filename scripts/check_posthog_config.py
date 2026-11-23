@@ -182,6 +182,8 @@ def validate(doc, today):
             errors.append(f"{f['id']}: pct must be within 0..100")
         elif f['kind'] == 'drop' and float(f['pct']) != 0:
             errors.append(f"{f['id']}: a drop function has pct 0")
+        elif f['kind'] in ('sample', 'drop') and not isinstance(f.get('randomSampling'), bool):
+            errors.append(f"{f['id']}: randomSampling must be a boolean")
     flags = doc.get('feature_flags', {}).get('measured_requests_per_day')
     if not isinstance(flags, int) or isinstance(flags, bool) or flags < 0:
         errors.append('feature_flags.measured_requests_per_day: a non-negative integer from a billing measurement is required')

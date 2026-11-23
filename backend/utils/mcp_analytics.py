@@ -451,8 +451,8 @@ def schedule_mcp_daily_rollup(
             initiator=initiator if initiator in {"user", "scheduled_agent", "unknown"} else "unknown",
             now=occurred_at or datetime.now(timezone.utc),
         )
-    except Exception as exc:  # noqa: BLE001 - optional telemetry must fail open
-        logger.warning("mcp daily rollup scheduling failed error=%s", type(exc).__name__)
+    except Exception:  # noqa: BLE001 - optional telemetry must fail open
+        mcp_daily_rollup.record_rollup_degradation('executor_submit', 'skip', 'enqueue_failed')
 
 
 def emit_mcp_tool_use_succeeded(

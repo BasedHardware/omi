@@ -165,6 +165,33 @@ it("requires every receipt for the exact version and key epoch, otherwise uses e
   await preferRollup(async () => got, request, noFallback);
   expect(noFallback).not.toHaveBeenCalled();
 });
+it("uses HogQL for windows touching capture sampling even with BigQuery enabled", async () => {
+  vi.stubEnv("OMI_TV_ROLLUP_ENABLED", "1");
+  const query = vi.fn();
+  const fallback = vi.fn().mockResolvedValue([[0, "ios", 51]]);
+  const request: RollupRequest = {
+    kind: "growth",
+    end: new Date("2026-11-24T00:00Z"),
+    periods: 1,
+  };
+  expect(
+    await preferRollup((r) => readRollup(r, { query }), request, fallback)
+  ).toEqual([[0, "ios", 51]]);
+  // Retention can observe activity past the cohort end.
+  expect(
+    await readRollup(
+      {
+        kind: "curve",
+        end,
+        periods: 1,
+        observedEnd: request.end,
+      },
+      { query }
+    )
+  ).toBeNull();
+  expect(query).not.toHaveBeenCalled();
+});
+
 it("caps the rollup status lookup at one second and keeps filling the cache", async () => {
   vi.stubEnv("OMI_TV_ROLLUP_ENABLED", "1");
   vi.stubEnv("CRON_SECRET", key);

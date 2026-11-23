@@ -17,14 +17,15 @@ emitted independently and never depends on Redis.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
-import threading
-import time
 from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Optional
 
 import database.redis_db as redis_db
+from utils.executors import db_executor, run_blocking
+from utils.observability.fallback import record_fallback
 from utils.product_telemetry import emit_product_event
 
 logger = logging.getLogger(__name__)
@@ -73,8 +74,26 @@ redis.call('EXPIRE', KEYS[2], tonumber(ARGV[4]))
 return now
 """
 
-_sweeper_lock = threading.Lock()
-_sweeper_started = False
+# Fetch and claim atomically. If the Redis read fails, the dirty entry stays
+# available to another sweep. Also recheck the due score after listing keys.
+_CLAIM = """
+local score = redis.call('ZSCORE', KEYS[1], KEYS[2])
+if not score or (ARGV[1] ~= '+inf' and tonumber(score) > tonumber(ARGV[1])) then return {} end
+local stats = redis.call('HGETALL', KEYS[2])
+redis.call('ZREM', KEYS[1], KEYS[2])
+return stats
+"""
+
+
+def record_rollup_degradation(stage: str, action: str, reason: str) -> None:
+    record_fallback(
+        component='mcp_daily_rollup',
+        from_mode=stage,
+        to_mode=action,
+        reason=reason,
+        outcome='degraded',
+        log=logger,
+    )
 
 
 def enabled() -> bool:
@@ -122,10 +141,9 @@ def record_success(
             KEY_TTL_SECONDS,
             "" if clock_s is None else str(int(clock_s)),
         )
-    except Exception as exc:  # noqa: BLE001 - telemetry must fail open
-        logger.warning("mcp daily rollup record failed error=%s", type(exc).__name__)
+    except Exception:  # noqa: BLE001 - telemetry must fail open
+        record_rollup_degradation('redis_record', 'skip', 'unavailable')
         return False
-    _ensure_sweeper()
     return True
 
 
@@ -175,55 +193,44 @@ def flush_due(
         dirty = dirty_key(day)
         try:
             members = r.zrangebyscore(dirty, "-inf", cutoff, start=0, num=batch)
-        except Exception as exc:  # noqa: BLE001
-            logger.warning("mcp daily rollup sweep failed error=%s", type(exc).__name__)
-            return emitted
+        except Exception:  # noqa: BLE001
+            record_rollup_degradation('redis_sweep', 'retry', 'unavailable')
+            continue
         for member in members:
             key = _text(member)
             try:
-                if not r.zrem(dirty, key):
-                    continue
-                stats = r.hgetall(key)
-            except Exception as exc:  # noqa: BLE001
-                logger.warning("mcp daily rollup claim failed error=%s", type(exc).__name__)
+                fields = r.eval(_CLAIM, 2, dirty, key, cutoff)
+            except Exception:  # noqa: BLE001
+                record_rollup_degradation('redis_claim', 'retry', 'unavailable')
                 continue
-            parts = key.split(":", 4)
-            if len(parts) != 5 or not stats:
+            if not fields:
                 continue
-            _, _, key_day, client, uid = parts
-            accepted = emit(
-                uid=uid,
-                event=MCP_DAILY_ACTIVITY,
-                properties=snapshot_properties(key_day, client, stats),
-                timestamp=now,
-            )
-            if accepted is False:
-                # Not captured: put the claim back so a later sweep retries (bounded by the key TTL).
-                try:
-                    r.zadd(dirty, {key: now.timestamp() + SWEEP_INTERVAL_SECONDS}, nx=True)
-                except Exception as exc:  # noqa: BLE001
-                    logger.warning("mcp daily rollup requeue failed error=%s", type(exc).__name__)
+            try:
+                _, _, key_day, client, uid = key.split(":", 4)
+                accepted = emit(
+                    uid=uid,
+                    event=MCP_DAILY_ACTIVITY,
+                    properties=snapshot_properties(key_day, client, dict(zip(fields[::2], fields[1::2]))),
+                    timestamp=now,
+                )
+            except Exception:  # noqa: BLE001 - retry the claimed snapshot
+                accepted = False
+            if accepted:
+                emitted += 1
                 continue
-            emitted += 1
+            record_rollup_degradation('posthog_capture', 'retry', 'enqueue_failed')
+            try:
+                r.zadd(dirty, {key: now.timestamp() + SWEEP_INTERVAL_SECONDS}, nx=True)
+            except Exception:  # noqa: BLE001
+                record_rollup_degradation('redis_requeue', 'skip', 'unavailable')
     return emitted
 
 
-def _sweep_forever() -> None:
+async def sweep_forever() -> None:
+    """Run each blocking sweep on the DB executor for the serving app's lifetime."""
     while True:
-        time.sleep(SWEEP_INTERVAL_SECONDS)
         try:
-            flush_due(emit_product_event)
-        except Exception as exc:  # noqa: BLE001 - the sweeper must survive
-            logger.warning("mcp daily rollup sweeper error=%s", type(exc).__name__)
-
-
-def _ensure_sweeper() -> None:
-    """Start one daemon sweeper per process that serves MCP traffic."""
-    global _sweeper_started
-    if _sweeper_started:
-        return
-    with _sweeper_lock:
-        if _sweeper_started:
-            return
-        threading.Thread(target=_sweep_forever, name="mcp-daily-rollup", daemon=True).start()
-        _sweeper_started = True
+            await run_blocking(db_executor, flush_due, emit_product_event)
+        except Exception:  # noqa: BLE001 - keep the managed task alive for the next sweep
+            record_rollup_degradation('sweep_executor', 'retry', 'unavailable')
+        await asyncio.sleep(SWEEP_INTERVAL_SECONDS)

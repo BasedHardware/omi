@@ -29,23 +29,30 @@ export const MCP_ROLLUP_EVENT = "MCP Daily Activity";
 export const MCP_ROLLUP_SCHEMA_VERSION = 1;
 const UTC_DAY_OF = (at: string) => `intDiv(toUnixTimestamp(${at}),86400)`;
 const prop = (name: string) => `JSONExtractString(properties,'${name}')`;
-const num = (name: string) => `toFloatOrZero(${prop(name)})`;
+const int = (name: string) => `JSONExtractInt(properties,'${name}')`;
+const num = (name: string) => `toFloat(${int(name)})`;
+type McpSource = "both" | "raw" | "rollup";
 
 /** Raw per-success rows plus the server's daily rollup snapshots (SCA-3665).
  * `mcp_marker` counts either kind, so the marker survives the raw stream going
  * off. Snapshots for day D arrive up to a flush after D ends, so they are read
  * one day past `end` and filtered by their own UTC day. */
-export function mcpMarkerCte(start: Date, end: Date, observationDays = 30) {
+export function mcpMarkerCte(
+  start: Date,
+  end: Date,
+  observationDays = 30,
+  source: McpSource = "both"
+) {
   // A quiet day must show zero once a v2 marker has appeared in recent history.
   const observedStart = new Date(
     Math.min(start.getTime(), shiftDay(end, -observationDays).getTime())
   );
   return `mcp_raw AS (
     SELECT ${MCP_SUCCESS_SELECT}
-    FROM events WHERE event='${MCP_MARKER}' AND timestamp >= ${sqlTime(
-    observedStart
-  )} AND timestamp < ${sqlTime(end)}
-      AND toIntOrZero(toString(properties.schema_version))=2 AND ${EXCLUSIONS_SQL}
+    FROM events WHERE event='${MCP_MARKER}'${
+    source === "rollup" ? " AND false" : ""
+  } AND timestamp >= ${sqlTime(observedStart)} AND timestamp < ${sqlTime(end)}
+      AND ${int("schema_version")}=2 AND ${EXCLUSIONS_SQL}
   ),
   mcp_rollup_raw AS (
     SELECT coalesce(toString(person_id),distinct_id) actor,timestamp,
@@ -58,11 +65,13 @@ export function mcpMarkerCte(start: Date, end: Date, observationDays = 30) {
     "sum_gap_sq_s"
   )} sum_gap_sq,
       ${num("dominant_tool_calls")} dominant,
-      toDateTime(toInt64OrZero(${prop("last_call_s")})) latest
-    FROM events WHERE event='${MCP_ROLLUP_EVENT}' AND timestamp >= ${sqlTime(
-    observedStart
-  )} AND timestamp < ${sqlTime(shiftDay(end, 1))}
-      AND toIntOrZero(toString(properties.schema_version))=${MCP_ROLLUP_SCHEMA_VERSION} AND ${num(
+      toDateTime(${int("last_call_s")}) latest
+    FROM events WHERE event='${MCP_ROLLUP_EVENT}'${
+    source === "raw" ? " AND false" : ""
+  } AND timestamp >= ${sqlTime(observedStart)} AND timestamp < ${sqlTime(
+    shiftDay(end, 1)
+  )}
+      AND ${int("schema_version")}=${MCP_ROLLUP_SCHEMA_VERSION} AND ${int(
     "raw_calls"
   )} > 0 AND ${EXCLUSIONS_SQL}
   ),
@@ -79,8 +88,13 @@ export function mcpMarkerCte(start: Date, end: Date, observationDays = 30) {
  * positive gaps, gap sums and dominant tool as the raw SQL below; its day comes
  * from the success time and its gaps from Redis TIME (one ordered clock), so
  * gaps can differ from the raw event clock by queue delay. */
-export function mcpActivityCtes(start: Date, end: Date, observationDays = 30) {
-  return `${mcpMarkerCte(start, end, observationDays)},
+export function mcpActivityCtes(
+  start: Date,
+  end: Date,
+  observationDays = 30,
+  source: McpSource = "both"
+) {
+  return `${mcpMarkerCte(start, end, observationDays, source)},
   mcp_eligible AS (SELECT *,intDiv(toUnixTimestamp(timestamp),86400) AS utc_day FROM mcp_raw WHERE initiator IN ('user','unknown')),
   mcp_ordered AS (SELECT actor,timestamp,client,tool,initiator,utc_day,
     lagInFrame(timestamp,1,timestamp) OVER (PARTITION BY actor,client,utc_day ORDER BY timestamp) previous_at
@@ -124,4 +138,19 @@ export function mcpActivityCtes(start: Date, end: Date, observationDays = 30) {
       sqlTime(start)
     )} AND utc_day < ${UTC_DAY_OF(sqlTime(end))}
     GROUP BY actor,utc_day HAVING sum(calls)>=${MCP_DAILY_MIN_SUCCESSES})`;
+}
+
+/** Release check for one full UTC day. Each count comes from one source only.
+ * Compare eligible calls and qualified actors; require observed inputs on both
+ * sides so an empty rollup does not pass on a quiet day. */
+export function mcpDailyReconciliationQuery(
+  day: Date,
+  source: Exclude<McpSource, "both">
+) {
+  return `WITH ${mcpActivityCtes(day, shiftDay(day, 1), 1, source)}
+    SELECT (SELECT count() FROM mcp_marker) marker_rows,
+      (SELECT count() FROM mcp_days) qualified_actors,
+      (SELECT sum(calls) FROM mcp_streams WHERE utc_day=${UTC_DAY_OF(
+        sqlTime(day)
+      )}) eligible_calls`;
 }

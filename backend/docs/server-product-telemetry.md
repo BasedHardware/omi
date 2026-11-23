@@ -102,10 +102,13 @@ raw calls, qualifying calls (`user`/`unknown`), first/last call second,
 positive-gap count, sum and sum of squares, and the dominant tool's count. Each
 success queues one atomic Lua call on `postprocess_executor` (hash, TTL 3 days,
 and a `ZADD NX` on the day's dirty set `mcp:roll:dirty:{YYYYMMDD}`). A
-per-process daemon sweeper emits a cumulative `MCP Daily Activity` snapshot
-(schema 1, `$process_person_profile: false`) at most once per 30 minutes per key,
-and a final one for every key still dirty after its day ends. ZREM on the dirty
-set is the claim, so one instance emits each snapshot.
+managed task on each API-serving process sweeps every 60 seconds on the DB
+executor and is cancelled during backend shutdown. It emits a cumulative
+`MCP Daily Activity` snapshot (schema 1, `$process_person_profile: false`) at
+most once per 30 minutes per key, plus a final one for every key still dirty
+after its day ends. Redis reads and claims a snapshot atomically. A rejected
+capture is requeued. Redis and scheduling failures emit the shared
+`omi_fallback_total` signal with `component="mcp_daily_rollup"`.
 
 `web/admin/lib/wall-mcp.ts` reads, per actor/client/day, whichever source saw
 more qualifying calls (raw on a tie; the largest snapshot by `raw_calls`). The
@@ -119,6 +122,20 @@ Redis errors fail open and never touch the raw event. The server keeps emitting
 the raw event. `contracts/analytics/posthog.json` already drops it at ingestion;
 the release owner applies that only after the first full UTC day of snapshots
 matches the raw-row reader.
+
+From `web/admin`, use the existing read-only PostHog credential and set
+`OMI_TV_MCP_RECONCILE_DAY` to the first UTC date served by the rollup from
+00:00 through 24:00. Run the comparison after the closing snapshots arrive.
+
+```sh
+OMI_TV_LIVE_CHECK=1 OMI_TV_MCP_RECONCILE_DAY=YYYY-MM-DD \
+  npx vitest run lib/__tests__/wall-mcp-live.test.ts -t 'first complete production UTC day'
+```
+
+The check runs the same reader independently for raw events and numeric
+snapshots. Record the UTC date, input rows, qualifying actor counts and
+eligible call totals. Both sources must have input rows and agree on actor
+and call counts before step B.
 
 ## Non-Python library labels
 

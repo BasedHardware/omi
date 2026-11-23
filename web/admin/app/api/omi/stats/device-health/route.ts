@@ -41,8 +41,9 @@ export function parseDeviceHealthDays(raw: string | null): number {
 }
 
 // Phone Battery Sample and Mobile Device Health Daily may be sampled at
-// ingestion. Counts are weighted per row and users divided by the largest
-// rate (lib/posthog-sampling.ts). Quantiles stay on the sampled rows; a group
+// ingestion. Counts are weighted per row. Each person contributes once at
+// their highest retained rate because distinct-ID sampling nests the cohorts.
+// Quantiles stay on the sampled rows; a group
 // needs 20 estimated users and at least 5 sampled ones, so a 2% rate still
 // shows the larger firmware groups.
 // Watch firmware leaks in from connected non-pendant devices: the stored
@@ -51,24 +52,40 @@ export function parseDeviceHealthDays(raw: string | null): number {
 // stays — it is the original Friend pendant, and the label names it.
 export function pendantHealthQuery(days: number): string {
   return `
-    SELECT trim(properties.firmware) AS firmware,
-           coalesce(nullIf(properties.$os_name,''), properties.platform) AS os,
-           any(properties.device_model) AS device_model,
-           round(sum(${SAMPLE_WEIGHT_SQL})) AS events,
-           round(uniqExact(person_id) * 100 / max(${SAMPLE_PCT_SQL})) AS users,
-           round(sumIf(${SAMPLE_WEIGHT_SQL}, toFloat(properties.drain_percent_per_hour) BETWEEN 0.1 AND 100)) AS n_valid_drain,
-           round(quantileIf(0.5)(toFloat(properties.drain_percent_per_hour), toFloat(properties.drain_percent_per_hour) BETWEEN 0.1 AND 100),2) AS p50_drain_valid,
-           round(quantileIf(0.9)(toFloat(properties.drain_percent_per_hour), toFloat(properties.drain_percent_per_hour) BETWEEN 0.1 AND 100),2) AS p90_drain_valid,
-           round(avg(toFloat(properties.connected_time_fraction)),2) AS avg_connected_frac,
-           round(sumIf(${SAMPLE_WEIGHT_SQL}, toFloat(properties.cliff_count) > 0)) AS n_with_cliffs
-    FROM events
-    WHERE event = 'Mobile Device Health Daily' AND timestamp >= now() - INTERVAL ${days} DAY
-      AND nullIf(trim(properties.firmware),'') IS NOT NULL
-      AND trim(properties.firmware) NOT IN ('','Unknown','unknown','26.6','27.0')
-      AND NOT match(trim(properties.firmware), '^[0-9]{2}[.]')
+    WITH samples AS (
+      SELECT trim(properties.firmware) AS firmware,
+             coalesce(nullIf(properties.$os_name,''), properties.platform) AS os,
+             properties.device_model AS model,
+             toFloat(properties.drain_percent_per_hour) AS drain,
+             toFloat(properties.connected_time_fraction) AS connected_fraction,
+             toFloat(properties.cliff_count) AS cliff_count,
+             ${SAMPLE_PCT_SQL} AS sample_pct,
+             person_id
+      FROM events
+      WHERE event = 'Mobile Device Health Daily' AND timestamp >= now() - INTERVAL ${days} DAY
+        AND nullIf(trim(properties.firmware),'') IS NOT NULL
+        AND trim(properties.firmware) NOT IN ('','Unknown','unknown','26.6','27.0')
+        AND NOT match(trim(properties.firmware), '^[0-9]{2}[.]')
+    ),
+    ranked_samples AS (
+      SELECT *,
+             row_number() OVER (
+               PARTITION BY firmware, os, person_id ORDER BY sample_pct DESC
+             ) AS person_rank
+      FROM samples
+    )
+    SELECT firmware, os, any(model) AS device_model,
+           round(sum(100 / sample_pct)) AS events,
+           round(sumIf(100 / sample_pct, person_rank = 1)) AS users,
+           round(sumIf(100 / sample_pct, drain BETWEEN 0.1 AND 100)) AS n_valid_drain,
+           round(quantileIf(0.5)(drain, drain BETWEEN 0.1 AND 100),2) AS p50_drain_valid,
+           round(quantileIf(0.9)(drain, drain BETWEEN 0.1 AND 100),2) AS p90_drain_valid,
+           round(avg(connected_fraction),2) AS avg_connected_frac,
+           round(sumIf(100 / sample_pct, cliff_count > 0)) AS n_with_cliffs
+    FROM ranked_samples
     GROUP BY firmware, os
-    HAVING uniqExact(person_id) >= 5
-       AND uniqExact(person_id) * 100 / max(${SAMPLE_PCT_SQL}) >= 20
+    HAVING countIf(person_rank = 1) >= 5
+       AND sumIf(100 / sample_pct, person_rank = 1) >= 20
     ORDER BY users DESC
   `;
 }
@@ -138,17 +155,31 @@ export function phoneHealthQuery(days: number): string {
         AND previous_level - level >= 0
         AND charging = false AND previous_charging = false
         AND (charging_observed = false OR isNull(charging_observed))
+    ),
+    selected_intervals AS (
+      SELECT intervals.os AS os, intervals.build AS build,
+             intervals.app_version AS app_version, intervals.person_id AS person_id,
+             elapsed_s, level_drop, interval_schema, sample_pct,
+             if(build_presence.has_v2, interval_schema = 2, interval_schema = 1) AS selected
+      FROM intervals
+      INNER JOIN build_presence ON intervals.os = build_presence.os AND intervals.build = build_presence.build
+    ),
+    ranked_intervals AS (
+      SELECT *,
+             row_number() OVER (
+               PARTITION BY os, build, person_id ORDER BY selected DESC, sample_pct DESC
+             ) AS person_rank
+      FROM selected_intervals
     )
-    SELECT intervals.os AS os, intervals.build AS build,
+    SELECT os, build,
            max(app_version) AS app_version,
-           round(sumIf(100 / sample_pct, if(build_presence.has_v2, interval_schema = 2, interval_schema = 1))) AS n_pairs,
-           round(uniqExactIf(person_id, if(build_presence.has_v2, interval_schema = 2, interval_schema = 1)) * 100 / greatest(maxIf(sample_pct, if(build_presence.has_v2, interval_schema = 2, interval_schema = 1)), 0.01)) AS users,
-           round(quantileIf(0.5)(toFloat(level_drop) / (elapsed_s/3600.0), if(build_presence.has_v2, interval_schema = 2, interval_schema = 1)),2) AS p50_drain_per_hour,
-           round(quantileIf(0.9)(toFloat(level_drop) / (elapsed_s/3600.0), if(build_presence.has_v2, interval_schema = 2, interval_schema = 1)),2) AS p90_drain_per_hour,
+           round(sumIf(100 / sample_pct, selected)) AS n_pairs,
+           round(sumIf(100 / sample_pct, selected AND person_rank = 1)) AS users,
+           round(quantileIf(0.5)(toFloat(level_drop) / (elapsed_s/3600.0), selected),2) AS p50_drain_per_hour,
+           round(quantileIf(0.9)(toFloat(level_drop) / (elapsed_s/3600.0), selected),2) AS p90_drain_per_hour,
            round(sumIf(100 / sample_pct, interval_schema = 1)) AS n_v1_pairs,
            round(sumIf(100 / sample_pct, interval_schema = 2)) AS n_v2_intervals
-    FROM intervals
-    INNER JOIN build_presence ON intervals.os = build_presence.os AND intervals.build = build_presence.build
+    FROM ranked_intervals
     GROUP BY os, build
     HAVING n_pairs > 0
     ORDER BY os, build

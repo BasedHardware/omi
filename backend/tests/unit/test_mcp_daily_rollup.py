@@ -16,7 +16,6 @@ T0 = int(DAY.timestamp())
 @pytest.fixture
 def redis(monkeypatch):
     server = fakeredis.FakeRedis()
-    monkeypatch.setattr(rollup, '_ensure_sweeper', lambda: None)
     monkeypatch.delenv(rollup.ENABLED_ENV, raising=False)
     return server
 
@@ -104,9 +103,13 @@ def test_kill_switch_and_redis_failure_fail_open(redis, monkeypatch):
     assert not record(redis, 0)
     assert redis.keys('*') == []
     monkeypatch.delenv(rollup.ENABLED_ENV)
+    degraded = Mock()
+    monkeypatch.setattr(rollup, 'record_fallback', degraded)
     broken = Mock()
     broken.eval.side_effect = ConnectionError('down')
     assert not rollup.record_success(uid='u', client='codex', tool='get_memories', initiator='user', redis=broken)
+    assert degraded.call_args.kwargs['component'] == 'mcp_daily_rollup'
+    assert degraded.call_args.kwargs['from_mode'] == 'redis_record'
 
 
 def test_success_path_queues_rollup_without_blocking_raw_event(monkeypatch):
@@ -145,10 +148,41 @@ def test_day_bucket_follows_the_success_time_not_the_worker_clock(redis):
     assert not redis.exists(rollup.stats_key('20261124', 'u1', 'codex'))
 
 
-def test_refused_snapshot_is_requeued_and_retried(redis):
+@pytest.mark.parametrize('error', [None, RuntimeError('capture failed')])
+def test_refused_snapshot_is_requeued_and_retried(redis, error):
     record(redis, 0)
-    refused = Mock(return_value=False)
+    refused = Mock(return_value=False, side_effect=error)
     assert rollup.flush_due(refused, now=DAY + timedelta(days=1), redis=redis) == 0
     assert refused.call_count == 1
     count, emitted = flush(redis, DAY + timedelta(days=1, minutes=2))
     assert count == 1 and emitted[0]['properties']['calls'] == 1
+
+
+def test_failed_claim_preserves_pending_snapshot(redis, monkeypatch):
+    record(redis, 0)
+    with monkeypatch.context() as patch:
+        patch.setattr(redis, 'eval', Mock(side_effect=ConnectionError('down')))
+        assert flush(redis, DAY + timedelta(days=1))[0] == 0
+    assert flush(redis, DAY + timedelta(days=1))[0] == 1
+
+
+@pytest.mark.asyncio
+async def test_sweeper_offloads_work_and_cancels(monkeypatch):
+    import asyncio
+
+    swept = asyncio.Event()
+
+    async def blocking(executor, fn, emitter):
+        assert executor is rollup.db_executor
+        assert fn is rollup.flush_due
+        assert emitter is rollup.emit_product_event
+        swept.set()
+
+    monkeypatch.setattr(rollup, 'run_blocking', blocking)
+    task = asyncio.create_task(rollup.sweep_forever())
+    try:
+        await asyncio.wait_for(swept.wait(), timeout=1)
+    finally:
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task

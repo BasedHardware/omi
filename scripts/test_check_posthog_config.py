@@ -33,9 +33,9 @@ def passing():
         'functions': [
             {'id': 'keep', 'name': 'Keep-list', 'execution_order': 5, 'enabled': True, 'kind': 'keep_list', 'pct': 2,
              'events': ['Memory Created', 'Capture Wedge Detected']},
-            {'id': 'wedge', 'name': 'Wedge 10%', 'execution_order': 9, 'enabled': True, 'kind': 'sample', 'pct': 10,
+            {'id': 'wedge', 'name': 'Wedge 10%', 'execution_order': 9, 'enabled': True, 'kind': 'sample', 'pct': 10, 'randomSampling': False,
              'events': ['Capture Wedge Detected']},
-            {'id': 'drop', 'name': 'Drop', 'execution_order': 7, 'enabled': True, 'kind': 'drop', 'pct': 0,
+            {'id': 'drop', 'name': 'Drop', 'execution_order': 7, 'enabled': True, 'kind': 'drop', 'pct': 0, 'randomSampling': False,
              'events': ['wal_transcript_coverage']},
             {'id': 'geo', 'name': 'GeoIP', 'execution_order': 1, 'enabled': True, 'kind': 'unmanaged'},
         ],
@@ -76,6 +76,11 @@ class CheckPostHogConfig(unittest.TestCase):
         self.assertEqual(check.effective(doc, 'MCP Daily Activity')[0], 100)
         found = errors(doc, today=dt.date(2027, 2, 1))  # after expiry the $500 budget applies
         self.assertTrue(found and all('budget' in e for e in found), found)
+
+    def test_sample_function_declares_a_boolean_mode(self):
+        doc = passing()
+        doc['functions'][1]['randomSampling'] = 'false'
+        self.assertOneError(doc, 'wedge: randomSampling must be a boolean')
 
     def test_negative_estimate(self):
         doc = passing()
@@ -196,7 +201,7 @@ class CheckPostHogConfig(unittest.TestCase):
     def test_later_stage_must_not_loosen_tag(self):
         doc = passing()
         doc['functions'].append({'id': 'uploads', 'name': 'Uploads 0.5%', 'execution_order': 3, 'enabled': True,
-                                 'kind': 'sample', 'pct': 0.5, 'events': ['Recording Upload Started']})
+                                 'kind': 'sample', 'pct': 0.5, 'randomSampling': False, 'events': ['Recording Upload Started']})
         doc['events']['Recording Upload Started'] = {'est_events_per_day': 1000, 'identified': True}
         self.assertOneError(doc, 'omi_sample_pct would read 2 but the event is kept at 0.5%')
 

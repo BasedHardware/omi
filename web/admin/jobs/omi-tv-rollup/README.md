@@ -4,6 +4,12 @@ Option A, approved 2026-10-16. No production deployment or new workflow is part
 of this change. **David must name/authorize a public GitHub Actions workflow
 before a new production image is built/shipped.** No `.github/` files change.
 
+The `daily-1` admin reader uses HogQL for any observation window that
+touches November 23, 2026 UTC or later. The current BigQuery schema discards
+capture sampling rates and foreground evidence, so its coverage receipts apply
+only to earlier windows. Serving later windows from BigQuery requires preserving
+that evidence during extraction and reweighting the affected aggregations.
+
 ## Data contract
 
 `wall-rollup-extract.ts` queries **one closed UTC arrival day per extraction**,

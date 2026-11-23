@@ -42,16 +42,23 @@ function queries(): string[] {
 
 // Execute production selection SQL over event fixtures inside the existing
 // PostHog mock. The adapter changes dialect only; it does not duplicate guards.
-function phoneFixtureRows(
+function healthFixtureRows(
   rows: Array<{
+    event?: string;
     person_id: string;
     timestamp: number;
     properties: Record<string, unknown>;
   }>
 ) {
   posthogResults.mockImplementation(async (_h, _p, _k, query: string) => {
-    if (query.includes("Mobile Device Health Daily")) return [];
-    if (query.includes("AS n\n    FROM events")) return [[rows.length]];
+    if (query.includes("AS n\n    FROM events")) {
+      return [
+        [
+          rows.filter((row) => row.event !== "Mobile Device Health Daily")
+            .length,
+        ],
+      ];
+    }
     return JSON.parse(
       execFileSync(
         "python3",
@@ -235,14 +242,10 @@ describe("device health stats route", () => {
     expect(pendant).toBeTruthy();
     expect(phone).toBeTruthy();
     expect(
-      pendant!.match(
-        /quantileIf\(0\.5\)\(toFloat\(properties\.drain_percent_per_hour\), toFloat\(properties\.drain_percent_per_hour\) BETWEEN 0\.1 AND 100\)/g
-      )
+      pendant!.match(/quantileIf\(0\.5\)\(drain, drain BETWEEN 0\.1 AND 100\)/g)
     ).toHaveLength(1);
     expect(
-      pendant!.match(
-        /quantileIf\(0\.9\)\(toFloat\(properties\.drain_percent_per_hour\), toFloat\(properties\.drain_percent_per_hour\) BETWEEN 0\.1 AND 100\)/g
-      )
+      pendant!.match(/quantileIf\(0\.9\)\(drain, drain BETWEEN 0\.1 AND 100\)/g)
     ).toHaveLength(1);
     expect(pendant).toContain("BETWEEN 0.1 AND 100");
     expect(pendant).toContain("timestamp >= now() - INTERVAL 14 DAY");
@@ -262,9 +265,9 @@ describe("device health stats route", () => {
       "NOT match(trim(properties.firmware), '^[0-9]{2}[.]')"
     );
     expect(pendant).not.toContain("'1.0.4'");
-    expect(pendant).toContain("any(properties.device_model) AS device_model");
+    expect(pendant).toContain("properties.device_model AS model");
     expect(pendant).toContain("GROUP BY firmware, os");
-    expect(pendant).toContain("HAVING uniqExact(person_id) >= 5");
+    expect(pendant).toContain("HAVING countIf(person_rank = 1) >= 5");
     expect(pendant).toContain("ORDER BY users DESC");
     expect(pendant).not.toContain("LIMIT");
     expect(phone).toContain(
@@ -321,7 +324,7 @@ describe("device health stats route", () => {
 
   it("mixed v1/v2 fixture rows select v2 without double-counting the same build", async () => {
     configure();
-    phoneFixtureRows([
+    healthFixtureRows([
       sampleFixture(1, 95000, { battery_level: 90 }),
       sampleFixture(1, 96800, { battery_level: 80 }),
       sampleFixture(2, 98600),
@@ -338,7 +341,7 @@ describe("device health stats route", () => {
 
   it("mixed-schema fixtures retain a v1-only build alongside a v2 build", async () => {
     configure();
-    phoneFixtureRows([
+    healthFixtureRows([
       sampleFixture(1, 95000, { app_build: "1347", battery_level: 90 }),
       sampleFixture(1, 96800, { app_build: "1347", battery_level: 80 }),
       sampleFixture(2, 98600),
@@ -367,7 +370,7 @@ describe("device health stats route", () => {
 
   it("invalid v2 baseline suppresses v1 fallback for that build", async () => {
     configure();
-    phoneFixtureRows([
+    healthFixtureRows([
       sampleFixture(1, 95000, { battery_level: 90 }),
       sampleFixture(1, 96800, { battery_level: 80 }),
       sampleFixture(2, 98600, {
@@ -386,7 +389,9 @@ describe("device health stats route", () => {
 
   it("zero-drop v2 fixture intervals contribute to the aggregate", async () => {
     configure();
-    phoneFixtureRows([sampleFixture(2, 98600, { previous_battery_level: 70 })]);
+    healthFixtureRows([
+      sampleFixture(2, 98600, { previous_battery_level: 70 }),
+    ]);
     const body = await (await GET(request())).json();
     expect(body.phone_health.series[0]).toMatchObject({
       n_pairs: 1,
@@ -398,7 +403,7 @@ describe("device health stats route", () => {
 
   it("reweights sampled rows by omi_sample_pct so counts estimate the population", async () => {
     configure();
-    phoneFixtureRows([
+    healthFixtureRows([
       sampleFixture(2, 98600, { omi_sample_pct: 10 }),
       {
         ...sampleFixture(2, 98700, { omi_sample_pct: 10 }),
@@ -415,22 +420,78 @@ describe("device health stats route", () => {
     });
   });
 
-  it("weights pendant counts and guards on estimated and sampled users", async () => {
+  it("weights each phone user once using their highest eligible sampling rate", async () => {
     configure();
-    posthogResults.mockResolvedValue([]);
-    await GET(request());
-    const pendant = queries().find((query) =>
-      query.includes("Mobile Device Health Daily")
-    )!;
-    expect(pendant).toContain(
-      "round(sum(100 / greatest(coalesce(toFloat(properties.omi_sample_pct), 100), 0.01))) AS events"
-    );
-    expect(pendant).toContain(
-      "round(uniqExact(person_id) * 100 / max(greatest(coalesce(toFloat(properties.omi_sample_pct), 100), 0.01))) AS users"
-    );
-    expect(pendant).toContain(
-      "AND uniqExact(person_id) * 100 / max(greatest(coalesce(toFloat(properties.omi_sample_pct), 100), 0.01)) >= 20"
-    );
+    healthFixtureRows([
+      sampleFixture(2, 98000),
+      sampleFixture(2, 98100, { omi_sample_pct: 2 }),
+      {
+        ...sampleFixture(2, 98200, { omi_sample_pct: 2 }),
+        person_id: "sampled-user",
+      },
+      {
+        ...sampleFixture(2, 98300, { omi_sample_pct: 2 }),
+        person_id: "sampled-user",
+      },
+      {
+        ...sampleFixture(1, 95000, { battery_level: 90 }),
+        person_id: "sampled-user",
+      },
+      {
+        ...sampleFixture(1, 96800, { battery_level: 80 }),
+        person_id: "sampled-user",
+      },
+    ]);
+    const body = await (await GET(request())).json();
+    expect(body.phone_health.series[0]).toMatchObject({
+      users: 51,
+      n_pairs: 151,
+      n_v1_pairs: 1,
+    });
+  });
+
+  it("uses weighted pendant users for the population guard while requiring five observed people", async () => {
+    configure();
+    function pendantHealth(firmware: string, person_id: string, pct: number) {
+      return {
+        event: "Mobile Device Health Daily",
+        person_id,
+        timestamp: 98000,
+        properties: {
+          firmware,
+          platform: "iOS",
+          device_model: "Omi",
+          omi_sample_pct: pct,
+        },
+      };
+    }
+    healthFixtureRows([
+      pendantHealth("3.0.21", "a", 100),
+      pendantHealth("3.0.21", "a", 2),
+      ...["b", "c", "d", "e"].map((person) =>
+        pendantHealth("3.0.21", person, 2)
+      ),
+      ...["a", "b", "c", "d"].map((person) =>
+        pendantHealth("3.0.22", person, 2)
+      ),
+      ...["a", "b", "c", "d", "e"].map((person) =>
+        pendantHealth("3.0.23", person, 100)
+      ),
+    ]);
+    const body = await (await GET(request())).json();
+    expect(
+      body.pendant_health.map(
+        ({
+          firmware,
+          events,
+          users,
+        }: {
+          firmware: string;
+          events: number;
+          users: number;
+        }) => ({ firmware, events, users })
+      )
+    ).toEqual([{ firmware: "3.0.21", events: 251, users: 201 }]);
   });
 
   it.each([
@@ -440,7 +501,7 @@ describe("device health stats route", () => {
     ["clock-invalid interval", { battery_interval_validity: "clock_invalid" }],
   ])("excludes v2 fixture with %s", async (_name, properties) => {
     configure();
-    phoneFixtureRows([sampleFixture(2, 98600, properties)]);
+    healthFixtureRows([sampleFixture(2, 98600, properties)]);
     const body = await (await GET(request())).json();
     expect(body.phone_health).toEqual({
       status: "measured_no_valid_pairs",

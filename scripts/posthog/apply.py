@@ -65,7 +65,8 @@ def names(value):
 def desired_inputs(fn):
     if fn['kind'] == 'keep_list':
         return {'keep': names(fn['events']), 'percentage': fn['pct']}
-    return {'percentage': fn['pct'], 'triggeringEvents': names(fn['events'])}
+    return {'percentage': fn['pct'], 'triggeringEvents': names(fn['events']),
+            'randomSampling': fn['randomSampling']}
 
 
 def live_value(live, key):
@@ -99,7 +100,10 @@ def diff(config, live_functions, live_list, live_schemas):
                 changes.append({'target': fn['id'], 'field': field, 'live': live[field], 'desired': fn[field]})
         for key, want in desired_inputs(fn).items():
             have = live_value(live, key)
-            equal = same_number(have, want) if key == 'percentage' else have == want
+            if key == 'randomSampling':
+                equal = have is want
+            else:
+                equal = same_number(have, want) if key == 'percentage' else have == want
             if not equal:
                 changes.append({'target': fn['id'], 'field': f'inputs.{key}', 'live': have, 'desired': want})
     for live in live_list:

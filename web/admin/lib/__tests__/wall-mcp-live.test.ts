@@ -5,7 +5,11 @@ import {
   LEGACY_FALLBACK_EXHAUSTED_QUERY,
   LEGACY_FALLBACK_TRIAGE_QUERY,
 } from "../telemetry/fallback-triage";
-import { MCP_MARKER_STATUS_ROW, MCP_SUCCESS_SELECT } from "../wall-mcp";
+import {
+  MCP_MARKER_STATUS_ROW,
+  MCP_SUCCESS_SELECT,
+  mcpDailyReconciliationQuery,
+} from "../wall-mcp";
 const end = new Date("2026-10-15");
 it.skipIf(process.env.OMI_TV_LIVE_CHECK !== "1")(
   "MCP activity compiles with the production aggregate engine",
@@ -135,6 +139,27 @@ it.skipIf(process.env.OMI_TV_LIVE_CHECK !== "1")(
         JSON.stringify({ healthReaderCount: rows[0][0] }) + "\n"
       );
     }
+  },
+  360000
+);
+
+const reconcileDay = process.env.OMI_TV_MCP_RECONCILE_DAY;
+it.skipIf(process.env.OMI_TV_LIVE_CHECK !== "1" || !reconcileDay)(
+  "reconciles the first complete production UTC day before raw MCP retirement",
+  async () => {
+    const day = new Date(`${reconcileDay}T00:00:00Z`);
+    expect(day.toISOString().slice(0, 10)).toBe(reconcileDay);
+    expect(Date.now()).toBeGreaterThanOrEqual(+day + 86_400_000);
+    const [raw] = await queryPosthog(mcpDailyReconciliationQuery(day, "raw"));
+    const [rollup] = await queryPosthog(
+      mcpDailyReconciliationQuery(day, "rollup")
+    );
+    expect(Number(raw[0])).toBeGreaterThan(0);
+    expect(Number(rollup[0])).toBeGreaterThan(0);
+    expect(rollup.slice(1).map(Number)).toEqual(raw.slice(1).map(Number));
+    process.stdout.write(
+      JSON.stringify({ day: reconcileDay, raw, rollup }) + "\n"
+    );
   },
   360000
 );

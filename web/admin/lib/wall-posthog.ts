@@ -84,8 +84,11 @@ function activityCtes(
  * saved count weights every saved actor, since saved status is itself sampled.
  * cap_pct is 0 on rows without captures, so the max covers capture rows only.
  * Counts are unbiased but noisy for small groups (one sampled user = 50). */
+const activeActorWeight = (foreground: string, pct: string) =>
+  `if(${foreground}>0,1,100/${pct})`;
+
 const ACTOR_COUNT = {
-  active: "toInt64(round(sum(if(fg_any>0,1,100/pct_any))))",
+  active: `toInt64(round(sum(${activeActorWeight("fg_any", "pct_any")})))`,
   saved: "toInt64(round(sum(100/pct_any)))",
   assistant: "count()",
 } as const;
@@ -128,6 +131,10 @@ const UTC_DAY = (at: string) => `intDiv(toUnixTimestamp(${at}),86400)`;
  * histogram. Scans one extra period so the oldest returned period still knows
  * who was active the week before. One pass per actor (CTEs are inlined, so no
  * joins): the primary platform is the snapshot ranking's first row via argMax.
+ * Weekly population uses the same actor weight as the snapshot. The remaining
+ * columns describe observed rows; wall-series only displays them for weeks
+ * before capture sampling, as one week weight cannot recover missing days or
+ * the transition between adjacent weeks.
  * Columns: period, label, people, person_days, retained, new. `label` is the
  * primary platform, CHURNED_ROW (prior-period people absent this period) or
  * DAYS_ROW_PREFIX + qualified UTC days in the period; those reuse `people`.
@@ -143,9 +150,10 @@ export function weeklyGrowthQuery(end: Date, periods = 4) {
     ap AS (SELECT actor,period,
         argMax(p,tuple(p!='integrations',days,latest,-(${PLATFORM_RANK_SQL}))) primary,
         length(groupUniqArrayArray(ds)) n,
+        ${activeActorWeight("sum(fgn)", "max(cap_pct)")} weight,
         minIf(a,p!='integrations') anchor
       FROM pd GROUP BY actor,period),
-    pa AS (SELECT actor,groupArray(tuple(period,primary,n)) rs,groupArray(period) ps,
+    pa AS (SELECT actor,groupArray(tuple(period,primary,n,weight)) rs,groupArray(period) ps,
         minIf(anchor,anchor > toDateTime('1970-01-01 00:00:00','UTC')) first_seen
       FROM ap GROUP BY actor),
     labelled AS (SELECT arrayConcat(
@@ -157,16 +165,19 @@ export function weeklyGrowthQuery(end: Date, periods = 4) {
             "r",
             1
           )}+1) AND first_seen > toDateTime('1970-01-01 00:00:00','UTC')
-          AND first_seen >= ${stop} - toIntervalDay(7*(${el("r", 1)}+1))),rs),
-        arrayMap(q -> tuple('${CHURNED_ROW}',q-1,0,false,false),arrayFilter(q -> q >= 1 AND NOT has(ps,q-1),ps)),
+          AND first_seen >= ${stop} - toIntervalDay(7*(${el("r", 1)}+1)),${el(
+    "r",
+    4
+  )}),rs),
+        arrayMap(q -> tuple('${CHURNED_ROW}',q-1,0,false,false,1.0),arrayFilter(q -> q >= 1 AND NOT has(ps,q-1),ps)),
         arrayMap(r -> tuple(concat('${DAYS_ROW_PREFIX}',toString(least(${el(
     "r",
     3
-  )},7))),${el("r", 1)},0,false,false),rs)) ts FROM pa)
-    SELECT ${el("t", 2)} period,${el("t", 1)} label,count(),sum(${el(
+  )},7))),${el("r", 1)},0,false,false,1.0),rs)) ts FROM pa)
+    SELECT ${el("t", 2)} period,${el("t", 1)} label,toInt64(round(sum(${el(
     "t",
-    3
-  )}),countIf(${el("t", 4)}),countIf(${el("t", 5)})
+    6
+  )}))),sum(${el("t", 3)}),countIf(${el("t", 4)}),countIf(${el("t", 5)})
     FROM labelled ARRAY JOIN ts AS t WHERE ${el("t", 2)} < ${periods}
     GROUP BY period,label LIMIT 100`;
 }

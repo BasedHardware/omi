@@ -88,6 +88,7 @@
    "execution_order": 2,
    "enabled": true,
    "kind": "sample",
+   "randomSampling": false,
    "pct": 3,
    "events": [
     "Suggestion Assistant Gate Outcome",
@@ -121,6 +122,7 @@
    "execution_order": 3,
    "enabled": true,
    "kind": "drop",
+   "randomSampling": false,
    "pct": 0,
    "events": [
     "Recording Upload Started",
@@ -295,6 +297,7 @@
    "execution_order": 6,
    "enabled": true,
    "kind": "sample",
+   "randomSampling": false,
    "pct": 2,
    "events": [
     "desktop_health_event"
@@ -306,6 +309,7 @@
    "execution_order": 7,
    "enabled": true,
    "kind": "drop",
+   "randomSampling": false,
    "pct": 0,
    "events": [
     "api_edge_throttled",
@@ -369,6 +373,7 @@
    "execution_order": 8,
    "enabled": true,
    "kind": "sample",
+   "randomSampling": false,
    "pct": 2,
    "events": [
     "Recording Upload Failed"
@@ -380,6 +385,7 @@
    "execution_order": 9,
    "enabled": true,
    "kind": "sample",
+   "randomSampling": false,
    "pct": 2,
    "events": [
     "Capture Wedge Detected",

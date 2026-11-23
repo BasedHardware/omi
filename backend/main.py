@@ -44,7 +44,7 @@ from utils.observability.sync_upload import SyncUploadMetricsMiddleware
 from utils.observability.external_lists import ExternalListMetricsMiddleware
 
 # app_roles imports every router (the route table) in the original order.
-from app_roles import mount_routers, role_from_env
+from app_roles import AppRole, mount_routers, role_from_env
 from config.process_role import ProcessRole, startup_process_role
 from database.batch_account_authority import ErasedAccountMutationRefused
 from routers import messaging  # also used directly for the adapter runtime below
@@ -272,6 +272,11 @@ async def startup_event():
     start_background_task(retry_settled_composes(), name='episode_compose_settle')
     if not full:
         return
+    if OMI_APP_ROLE in (AppRole.ALL, AppRole.API):
+        from utils import mcp_daily_rollup
+
+        if mcp_daily_rollup.enabled():
+            start_background_task(mcp_daily_rollup.sweep_forever(), name='mcp_daily_rollup')
     # Drain account-deletion wipes orphaned by a previous deploy/restart. Offloaded
     # to db_executor so the blocking Firestore queries don't stall event-loop startup.
     start_background_task(

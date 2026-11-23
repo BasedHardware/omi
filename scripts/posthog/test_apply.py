@@ -19,7 +19,7 @@ CONFIG = {
         {'id': 'geo', 'name': 'GeoIP', 'execution_order': 1, 'enabled': True, 'kind': 'unmanaged'},
         {'id': 'keep', 'name': 'Keep-list', 'execution_order': 5, 'enabled': True, 'kind': 'keep_list', 'pct': 2,
          'events': ['Memory Created', 'App Launched']},
-        {'id': 'wedge', 'name': 'Wedge 10%', 'execution_order': 9, 'enabled': True, 'kind': 'sample', 'pct': 10,
+        {'id': 'wedge', 'name': 'Wedge 10%', 'execution_order': 9, 'enabled': True, 'kind': 'sample', 'pct': 10, 'randomSampling': False,
          'events': ['Capture Wedge Detected', 'Local WAL Stuck']},
     ],
     'warehouse': {'schemas': [
@@ -141,6 +141,19 @@ class ApplyDiff(unittest.TestCase):
                         mock.patch.object(apply, 'fetch', lambda *_: (functions, listing, schemas)), \
                         contextlib.redirect_stdout(io.StringIO()):
                     self.assertEqual(apply.main(['drift', '--config', str(config)]), expected)
+
+    def test_drift_detects_switch_to_per_event_sampling(self):
+        functions, listing, schemas = in_sync()
+        functions['wedge']['inputs']['randomSampling']['value'] = True
+        with tempfile.TemporaryDirectory() as tmp:
+            config = Path(tmp) / 'posthog.json'
+            config.write_text(json.dumps(CONFIG))
+            out = io.StringIO()
+            with mock.patch.dict(os.environ, {'POSTHOG_PERSONAL_API_KEY': 'fixture'}), \
+                    mock.patch.object(apply, 'fetch', return_value=(functions, listing, schemas)), \
+                    contextlib.redirect_stdout(out):
+                self.assertEqual(apply.main(['drift', '--config', str(config)]), 1)
+            self.assertIn('wedge inputs.randomSampling: True -> False', out.getvalue())
 
     def test_apply_requires_snapshot_dir_and_key(self):
         with mock.patch.dict(os.environ, {'POSTHOG_PERSONAL_API_KEY': 'k'}), contextlib.redirect_stderr(io.StringIO()):
