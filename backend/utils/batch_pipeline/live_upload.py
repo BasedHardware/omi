@@ -569,6 +569,9 @@ async def _answer_registered_upload(
             current = tx.get('content', f'{uid}/{content_id}')
             original = tx.get('content', f'{uid}/{content}')
             tx.check_privacy(uid, (conversation_id,))
+            if RECEIPT_FIELD in current:
+                # A concurrent settlement owns this alias. Retry reads its receipt.
+                return False
             if current and current.get('job_id') != original.get('job_id'):
                 return False
             tx.put(

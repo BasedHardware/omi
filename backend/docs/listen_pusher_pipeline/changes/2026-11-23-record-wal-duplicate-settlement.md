@@ -23,6 +23,8 @@ until equivalence is established.
 Expected failures in optional proof reads, including an oversized inventory,
 continue through the existing upload coverage path. Once a settlement CAS is
 dispatched, an uncertain result holds for exact replay.
+The legacy coverage transaction preserves a concurrent settlement receipt and
+leaves its status to exact replay.
 
 ## Terminal status retention
 

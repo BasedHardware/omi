@@ -187,6 +187,37 @@ async def test_duplicate_settlement_only_falls_back_before_commit(world, monkeyp
         assert reconcile.call_count == 2 and reconcile.call_args.kwargs['commit'] is True
 
 
+async def test_legacy_coverage_cannot_replace_a_concurrently_settled_alias(world, monkeypatch):
+    from config.record_audio import record_identity
+    from config.record_wal_duplicate import RECEIPT_FIELD
+    from utils.batch_pipeline import record_lease_append
+
+    monkeypatch.setenv('RECORD_WAL_HANDOFF_ENABLED', 'false')
+    monkeypatch.setattr(live_upload, 'coverage_wait_memo_enabled', lambda: False)
+    monkeypatch.setattr(record_lease_append, 'retain_upload', AsyncMock())
+    monkeypatch.setattr(live_upload, 'artifacts_for', lambda _: object())
+    legacy = Mock(side_effect=AssertionError('legacy status must not redrive a settled alias'))
+    monkeypatch.setattr(live_upload, 'durable_status', legacy)
+    canonical = record_identity(UID, CID)[0]
+    job = 'bp_' + canonical
+    world.client.rows[(f'{NS}_intakes', job)] = {'segment_ids': ['segment']}
+    world.client.rows[(f'{NS}_jobs', 'segment')] = {'state': 'committed'}
+    original = {'dispatch_protocol': 'batch_v1', 'job_id': job, 'status': 'completed'}
+    world.store.run(lambda tx: tx.put('content', f'{UID}/{canonical}', original))
+    alias_key = f'{UID}/synthetic-upload'
+    winner = {**original, 'record_content_id': canonical, RECEIPT_FIELD: {'scope': 'synthetic'}}
+
+    def covered(*args):
+        world.store.run(lambda tx: tx.put('content', alias_key, winner))
+        return True
+
+    monkeypatch.setattr(live_upload, '_covered', covered)
+    response = await world.upload()
+    assert response.status_code == 503
+    assert world.store.run(lambda tx: tx.get('content', alias_key)) == winner
+    legacy.assert_not_called()
+
+
 async def test_all_files_accepted_before_decode_and_completed_native_job_never_completes_upload(world):
     response = await world.upload()
     assert response.status_code == 202
