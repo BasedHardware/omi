@@ -341,9 +341,14 @@ def process_key(args: argparse.Namespace, key: state.PartitionKey, db: Any, tran
             after = state.cutover(key, token, receipt['revision'], receipt, firestore_client=db)
             atomic_json(journal_path, {**journal, 'status': 'complete', 'receipt': receipt, 'after': asdict(after)})
             return {**result, 'status': 'complete', 'records': receipt['records'], 'after': asdict(after)}
-        except (MigrationNotReady, state.PartitionConflict) as error:
-            route = state.get_route(key, firestore_client=db)
-            if route.pending_count or route.uncertain_count:
+        except (MigrationNotReady, state.PartitionConflict, state.PartitionBusy) as error:
+            try:
+                route = state.get_route(key, firestore_client=db)
+                unsettled = route.pending_count or route.uncertain_count
+            except state.PartitionBusy:
+                # A deferred route read cannot prove settlement; stay held.
+                unsettled = True
+            if unsettled:
                 status = 'blocked_unsettled_operations'
             elif attempt < args.max_attempts:
                 continue

@@ -515,6 +515,33 @@ def test_resume_cannot_qualify_while_uncertain_mutation_is_unresolved(setup):
     assert route.uncertain_count == 1
 
 
+def test_held_route_reservation_surfaces_as_not_ready(setup, monkeypatch):
+    key, db, _, runner = setup
+
+    def held(*args, **kwargs):
+        raise state.PartitionBusy('synthetic held reservation')
+
+    monkeypatch.setattr(state, 'begin_migration', held)
+    with pytest.raises(migration.MigrationNotReady, match='held'):
+        runner.qualify('run', dimension=2)
+    assert state.get_route(key, firestore_client=db).mode == 'legacy'
+
+
+def test_held_copy_admission_surfaces_as_not_ready(setup, monkeypatch):
+    key, db, provider, runner = setup
+
+    def held(*args, **kwargs):
+        raise state.PartitionBusy('synthetic held admission')
+
+    monkeypatch.setattr(state, 'begin_mutation', held)
+    with pytest.raises(migration.MigrationNotReady, match='held'):
+        runner.qualify('run', dimension=2)
+    route = state.get_route(key, firestore_client=db)
+    assert route.mode == 'copying'
+    assert route.primary_namespace == key.family
+    assert provider.calls == []
+
+
 def test_missing_fresh_target_id_is_detected_even_if_count_was_previously_equal(setup, monkeypatch):
     key, db, provider, runner = setup
     original_wait = provider.await_indexed

@@ -11,7 +11,7 @@ from hashlib import sha256
 from functools import wraps
 import json
 import logging
-from threading import Lock
+from threading import RLock
 from time import sleep
 from typing import Any, Mapping, Sequence, cast
 from uuid import uuid4
@@ -26,8 +26,9 @@ from database.pinecone_mutation_lifecycle import MutationRegistry, UNCERTAIN
 logger = logging.getLogger(__name__)
 _mutations = MutationRegistry()
 # Fixed stripes bound memory without keeping an unbounded owner registry. Only
-# route transactions hold a stripe; provider IO must never hold one.
-_mutation_locks = tuple(Lock() for _ in range(256))
+# route transactions hold a stripe; provider IO must never hold one. A stripe is
+# reentrant so a nested route transaction in the same thread cannot self-deadlock.
+_mutation_locks = tuple(RLock() for _ in range(256))
 
 
 def start_mutations() -> None:
@@ -128,7 +129,7 @@ def _document(client: Any, key: PartitionKey) -> Any:
     return client.collection(COLLECTION).document(key.document_id)
 
 
-def _mutation_transaction(client: Any, key: PartitionKey, function: Any, *args: Any, finish: bool = False) -> Any:
+def _route_transaction(client: Any, key: PartitionKey, function: Any, *args: Any, settle: bool = False) -> Any:
     lock = _mutation_locks[int(key.document_id[:8], 16) % len(_mutation_locks)]
     for attempt in range(3):
         try:
@@ -141,10 +142,15 @@ def _mutation_transaction(client: Any, key: PartitionKey, function: Any, *args: 
             aborted = isinstance(error, Aborted) or (
                 isinstance(error, ValueError) and isinstance(error.__cause__, Aborted)
             )
-            transient_finish = finish and isinstance(error, (Unauthenticated, ServiceUnavailable, DeadlineExceeded))
-            if attempt == 2 or not (aborted or transient_finish):
+            transient_settle = settle and isinstance(error, (Unauthenticated, ServiceUnavailable, DeadlineExceeded))
+            if not (aborted or transient_settle):
                 raise
-            # A fresh transaction follows a confirmed abort. Finish is also
+            if attempt == 2:
+                # An exhausted commit is a held outcome, never a wedge: aborted
+                # transactions wrote nothing and settlement admissions are
+                # idempotent, so the caller may defer and retry safely.
+                raise PartitionBusy('partition route commit deferred after bounded retries') from error
+            # A fresh transaction follows a confirmed abort. Settlement is also
             # idempotent after a lost commit response; provider IO is not repeated.
             sleep(equal_jitter_delay(attempt + 1))
 
@@ -245,7 +251,7 @@ def get_route(key: PartitionKey, *, firestore_client: Any | None = None) -> Rout
     snapshot = ref.get()
     if snapshot.exists:
         return _route(_snapshot_row(snapshot, key))
-    return _register_missing_route(client.transaction(), ref, key)
+    return _route_transaction(client, key, _register_missing_route, settle=True)
 
 
 @_transactional
@@ -305,7 +311,7 @@ def begin_mutation(
     except RuntimeError as error:
         raise PartitionBusy(str(error)) from error
     try:
-        ticket = _mutation_transaction(
+        ticket = _route_transaction(
             client,
             key,
             _begin_mutation,
@@ -385,7 +391,7 @@ def finish_mutation(
         raise ValueError('write_lsn must be a nonnegative integer')
     client = _client(firestore_client)
     try:
-        route = _mutation_transaction(client, key, _finish_mutation, ticket, write_lsn, finish=True)
+        route = _route_transaction(client, key, _finish_mutation, ticket, write_lsn, settle=True)
     except BaseException:
         # Preserve the original failure, including process interruption. A retry
         # must not silently orphan the old admission under a fresh token.
@@ -439,7 +445,7 @@ def mark_mutation_uncertain(key: PartitionKey, ticket: MutationTicket, *, firest
     if ticket.key_id != key.document_id:
         raise PartitionConflict('mutation ticket belongs to a different owner/family/index')
     client = _client(firestore_client)
-    route = _mark_mutation_uncertain(client.transaction(), _document(client, key), key, ticket)
+    route = _route_transaction(client, key, _mark_mutation_uncertain, ticket, settle=True)
     _mutations.discard((id(client), key.document_id, ticket.token))
     UNCERTAIN.inc()
     return route
@@ -481,7 +487,7 @@ def uncertain_mutations_are_deletes(key: PartitionKey, revision: int, *, firesto
     Account-purge verification only; migration still requires reconciliation.
     """
     client = _client(firestore_client)
-    return _uncertain_mutations_are_deletes(client.transaction(), _document(client, key), key, revision)
+    return _route_transaction(client, key, _uncertain_mutations_are_deletes, revision, settle=True)
 
 
 @_transactional
@@ -533,8 +539,8 @@ def reconcile_mutation(
     ):
         raise ValueError('bounded recovery receipt and exact revision are required')
     client = _client(firestore_client)
-    return _reconcile_mutation(
-        client.transaction(), _document(client, key), key, operation_id, expected_revision, dict(receipt)
+    return _route_transaction(
+        client, key, _reconcile_mutation, operation_id, expected_revision, dict(receipt), settle=True
     )
 
 
@@ -665,7 +671,7 @@ def begin_migration(
         raise ValueError('invalid migration token')
     client = _client(firestore_client)
     deletion_ref = client.collection('account_deletions').document(key.uid)
-    return _begin_migration(client.transaction(), _document(client, key), key, token, rollback, deletion_ref)
+    return _route_transaction(client, key, _begin_migration, token, rollback, deletion_ref, settle=True)
 
 
 def begin_rollback(key: PartitionKey, token: str, *, firestore_client: Any | None = None) -> Route:
@@ -682,7 +688,7 @@ def cancel_migration(key: PartitionKey, token: str, *, firestore_client: Any | N
     if not _valid_token(token):
         raise ValueError('invalid migration token')
     client = _client(firestore_client)
-    return _cancel_migration(client.transaction(), _document(client, key), key, token)
+    return _route_transaction(client, key, _cancel_migration, token, settle=True)
 
 
 @_transactional
@@ -751,7 +757,7 @@ def cutover(
     if type(expected_revision) is not int or expected_revision < 0 or not _valid_token(token):
         raise ValueError('invalid cutover generation')
     client = _client(firestore_client)
-    return _cutover(client.transaction(), _document(client, key), key, token, expected_revision, dict(receipt))
+    return _route_transaction(client, key, _cutover, token, expected_revision, dict(receipt), settle=True)
 
 
 @_transactional

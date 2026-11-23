@@ -172,6 +172,56 @@ def test_copying_requires_explicit_resume_and_matching_journal(args, key, monkey
     assert cli.process_key(args, key, None, None)['status'] == 'blocked_foreign_or_unowned_migration'
 
 
+def test_held_route_outcome_is_blocked_not_stopped(args, key, monkeypatch):
+    args.apply, args.dimension = True, 2
+    monkeypatch.setattr(
+        state,
+        'get_route',
+        Mock(side_effect=[route(key, mode='legacy'), route(key, mode='legacy'), route(key, pending_count=1)]),
+    )
+    qualify = Mock(side_effect=state.PartitionBusy('synthetic held route'))
+    monkeypatch.setattr(cli, 'BoundedMigration', lambda *a, **kw: SimpleNamespace(qualify=qualify))
+    result = cli.process_key(args, key, None, SimpleNamespace(last_write_request_id=None))
+    assert result['status'] == 'blocked_unsettled_operations'
+    assert result['error_type'] == 'PartitionBusy'
+    journal = json.loads((args.output_dir / 'owners' / f'{key.document_id}.json').read_text())
+    assert journal['status'] == 'blocked_unsettled_operations'
+
+
+def test_held_route_read_during_failure_stays_blocked(args, key, monkeypatch):
+    args.apply, args.dimension = True, 2
+    monkeypatch.setattr(
+        state,
+        'get_route',
+        Mock(
+            side_effect=[
+                route(key, mode='legacy'),
+                route(key, mode='legacy'),
+                state.PartitionBusy('synthetic held read'),
+            ]
+        ),
+    )
+    qualify = Mock(side_effect=state.PartitionBusy('synthetic held route'))
+    monkeypatch.setattr(cli, 'BoundedMigration', lambda *a, **kw: SimpleNamespace(qualify=qualify))
+    result = cli.process_key(args, key, None, SimpleNamespace(last_write_request_id=None))
+    assert result['status'] == 'blocked_unsettled_operations'
+
+
+def test_held_route_retries_within_bounded_attempts(args, key, monkeypatch):
+    args.apply, args.dimension = True, 2
+    monkeypatch.setattr(
+        state,
+        'get_route',
+        Mock(side_effect=[route(key, mode='legacy')] * 5),
+    )
+    qualify = Mock(side_effect=state.PartitionBusy('synthetic held route'))
+    monkeypatch.setattr(cli, 'BoundedMigration', lambda *a, **kw: SimpleNamespace(qualify=qualify))
+    result = cli.process_key(args, key, None, SimpleNamespace(last_write_request_id=None))
+    assert result['status'] == 'qualification_failed'
+    assert result['error_type'] == 'PartitionBusy'
+    assert qualify.call_count == args.max_attempts
+
+
 class SweepDB:
     """Only models the operator's bounded single-field discovery calls."""
 

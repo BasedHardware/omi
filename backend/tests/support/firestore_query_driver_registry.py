@@ -280,7 +280,6 @@ BODY_DIGEST = {
     'database.jobstore.reconcile._primary_keys': '47158c3d453cda1ca78ea73d191f342a72e677bb2012ac67ee0c172f4e673cc8',
     'database.jobstore.reconcile.process_page': '0a7c1c343f8a0397e152558629477f9d0127e9e10a73fa829c7863d7209a0eea',
     'database.pinecone_partition_state._uncertain_mutations_are_deletes': '6b08a953074c2ae24cc1cf503ee5ae2e32049b62d3446e11248d5f72253b162d',
-    'database.pinecone_partition_state.uncertain_mutations_are_deletes': '49b0052e3a4aeb004ae9680393cd599fe972e1716ec3089a9ac163c445c6d384',
 }
 
 # Retained application entry-point recipes. Their query bodies now belong to
@@ -3669,7 +3668,7 @@ _add(
         neutrals={'limit': (2, 'uncertain_count + 1 overflow bound; not filter-affecting')},
     )
 )
-for _name in ('_uncertain_mutations_are_deletes', 'uncertain_mutations_are_deletes'):
+for _name in ('_uncertain_mutations_are_deletes',):
     _add(
         CoveredByEntry(
             f'database.pinecone_partition_state.{_name}',

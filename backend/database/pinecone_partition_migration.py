@@ -384,13 +384,16 @@ class OwnerMigration:
 
     @contextmanager
     def _copy_admission(self, token: str, ids: list[str], namespace: str, operation_kind: str) -> Iterator[None]:
-        ticket = state.begin_mutation(
-            self.key,
-            affected_ids=ids,
-            operation_kind=operation_kind,
-            attempted_namespaces=[namespace],
-            firestore_client=self.firestore_client,
-        )
+        try:
+            ticket = state.begin_mutation(
+                self.key,
+                affected_ids=ids,
+                operation_kind=operation_kind,
+                attempted_namespaces=[namespace],
+                firestore_client=self.firestore_client,
+            )
+        except state.PartitionBusy as error:
+            raise MigrationNotReady('Copy admission is held by unresolved partition work') from error
         if ticket.migration_token != token:
             state.finish_mutation(self.key, ticket, firestore_client=self.firestore_client)
             raise MigrationNotReady('Migration token is no longer active')
@@ -422,7 +425,10 @@ class OwnerMigration:
         that the dirty journal enumerates every legacy-ID and filtered deletion.
         Active accounts can retry without exposing an incomplete target.
         """
-        route = state.begin_migration(self.key, token, rollback=rollback, firestore_client=self.firestore_client)
+        try:
+            route = state.begin_migration(self.key, token, rollback=rollback, firestore_client=self.firestore_client)
+        except state.PartitionBusy as error:
+            raise MigrationNotReady('Owner migration is held by unresolved partition work') from error
         source, target = route.source_namespace, route.target_namespace
         if target is None:
             raise MigrationNotReady('Migration target is absent')

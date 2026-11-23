@@ -116,7 +116,7 @@ def test_persistent_transient_finish_falls_back_after_three_attempts(db, key, mo
 
     monkeypatch.setattr(state, '_finish_mutation', unavailable)
     monkeypatch.setattr(state, 'sleep', lambda _: None)
-    with pytest.raises(ServiceUnavailable):
+    with pytest.raises(state.PartitionBusy):
         state.finish_mutation(key, ticket, write_lsn=42, firestore_client=db)
     assert len(calls) == 3
     route = state.get_route(key, firestore_client=db)
@@ -158,7 +158,7 @@ def test_wrapped_contention_is_bounded_and_never_repeats_provider(db, key, monke
     monkeypatch.setattr(state, 'sleep', sleeps.append)
     scoped = OwnerIndex(Provider(), key.uid, index_name=key.index_name, firestore_client=db)
     if exhausted:
-        with pytest.raises(ValueError, match='5 attempts'):
+        with pytest.raises(state.PartitionBusy):
             scoped.delete(namespace=key.family, ids=['vector-a', 'vector-b'])
     else:
         scoped.delete(namespace=key.family, ids=['vector-a', 'vector-b'])
@@ -170,6 +170,171 @@ def test_wrapped_contention_is_bounded_and_never_repeats_provider(db, key, monke
     route = state.get_route(key, firestore_client=db)
     assert (route.pending_count, route.uncertain_count) == (0, int(exhausted and phase == 'finish'))
     assert state.drain_mutations() == 0
+
+
+def test_deferred_admission_commit_holds_without_wedging_the_partition(db, key, monkeypatch):
+    """Exhausted admission retries hold the caller; the partition takes the next mutation."""
+    original = state._begin_mutation
+    attempts = []
+
+    def contend(*args):
+        attempts.append(args)
+        raise exhausted_contention()
+
+    monkeypatch.setattr(state, '_begin_mutation', contend)
+    monkeypatch.setattr(state, 'sleep', lambda _: None)
+    with pytest.raises(state.PartitionBusy):
+        state.begin_mutation(key, affected_ids=['vector-a'], firestore_client=db)
+    assert len(attempts) == 3
+    monkeypatch.setattr(state, '_begin_mutation', original)
+    second = state.begin_mutation(key, affected_ids=['vector-b'], firestore_client=db)
+    route = state.finish_mutation(key, second, write_lsn=11, firestore_client=db)
+    assert (route.pending_count, route.uncertain_count, route.latest_write_lsn) == (0, 0, 11)
+    assert state.drain_mutations() == 0
+
+
+def test_ambiguous_admission_commit_never_double_applies(db, key, monkeypatch):
+    """A committed admission reported as contention still refuses a repeated token."""
+    original = state._begin_mutation
+    attempts = []
+
+    def lie(*args):
+        original(*args)
+        attempts.append(args)
+        raise exhausted_contention()
+
+    monkeypatch.setattr(state, '_begin_mutation', lie)
+    monkeypatch.setattr(state, 'sleep', lambda _: None)
+    with pytest.raises(state.PartitionBusy):
+        state.begin_mutation(key, affected_ids=['vector-a'], operation_id='op-held', firestore_client=db)
+    assert 1 <= len(attempts) <= 3
+    monkeypatch.setattr(state, '_begin_mutation', original)
+    assert state.get_route(key, firestore_client=db).pending_count == 1
+    with pytest.raises(state.PartitionBusy, match='already pending'):
+        state.begin_mutation(key, affected_ids=['vector-a'], operation_id='op-held', firestore_client=db)
+    assert state.get_route(key, firestore_client=db).pending_count == 1
+    second = state.begin_mutation(key, affected_ids=['vector-b'], firestore_client=db)
+    route = state.finish_mutation(key, second, write_lsn=9, firestore_client=db)
+    assert (route.pending_count, route.uncertain_count) == (1, 0)
+    assert state.drain_mutations() == 0
+
+
+def test_deferred_finish_settlement_frees_pending_for_the_next_mutation(db, key, monkeypatch):
+    """Exhausted finish retries settle uncertain: capacity frees, migration stays held."""
+    original = state._finish_mutation
+    ticket = state.begin_mutation(key, affected_ids=['vector-a'], firestore_client=db)
+
+    def contend(*args):
+        raise exhausted_contention()
+
+    monkeypatch.setattr(state, '_finish_mutation', contend)
+    monkeypatch.setattr(state, 'sleep', lambda _: None)
+    with pytest.raises(state.PartitionBusy):
+        state.finish_mutation(key, ticket, write_lsn=42, firestore_client=db)
+    monkeypatch.setattr(state, '_finish_mutation', original)
+    route = state.get_route(key, firestore_client=db)
+    assert (route.pending_count, route.uncertain_count) == (0, 1)
+    second = state.begin_mutation(key, affected_ids=['vector-b'], firestore_client=db)
+    state.finish_mutation(key, second, write_lsn=43, firestore_client=db)
+    with pytest.raises(state.PartitionBusy):
+        state.begin_migration(key, 'migration', firestore_client=db)
+    assert state.drain_mutations() == 0
+
+
+def test_transient_uncertain_settlement_retries_without_wedging(db, key, monkeypatch):
+    original = state._mark_mutation_uncertain
+    ticket = state.begin_mutation(key, affected_ids=['vector-a'], firestore_client=db)
+    calls = []
+
+    def transient(*args):
+        calls.append(args)
+        if len(calls) == 1:
+            raise ServiceUnavailable('synthetic settlement outage')
+        return original(*args)
+
+    monkeypatch.setattr(state, '_mark_mutation_uncertain', transient)
+    monkeypatch.setattr(state, 'sleep', lambda _: None)
+    route = state.mark_mutation_uncertain(key, ticket, firestore_client=db)
+    assert len(calls) == 2
+    assert (route.pending_count, route.uncertain_count) == (0, 1)
+    second = state.begin_mutation(key, affected_ids=['vector-b'], firestore_client=db)
+    state.finish_mutation(key, second, firestore_client=db)
+    assert state.drain_mutations() == 0
+
+
+def test_exhausted_uncertain_commit_stays_pending_for_later_settlement(db, key, monkeypatch):
+    original = state._mark_mutation_uncertain
+    ticket = state.begin_mutation(key, affected_ids=['vector-a'], firestore_client=db)
+    calls = []
+
+    def contend(*args):
+        calls.append(args)
+        raise exhausted_contention()
+
+    monkeypatch.setattr(state, '_mark_mutation_uncertain', contend)
+    monkeypatch.setattr(state, 'sleep', lambda _: None)
+    with pytest.raises(state.PartitionBusy):
+        state.mark_mutation_uncertain(key, ticket, firestore_client=db)
+    assert len(calls) == 3
+    assert state.get_route(key, firestore_client=db).pending_count == 1
+    monkeypatch.setattr(state, '_mark_mutation_uncertain', original)
+    # The settlement stayed registered, so a later drain still resolves it.
+    assert state.drain_mutations() == 1
+    assert state.get_route(key, firestore_client=db).uncertain_count == 1
+
+
+def test_deferred_route_registration_retries_then_reads(db, key, monkeypatch):
+    original = state._register_missing_route
+    calls = []
+
+    def contend(*args):
+        calls.append(args)
+        if len(calls) == 1:
+            raise exhausted_contention()
+        return original(*args)
+
+    monkeypatch.setattr(state, '_register_missing_route', contend)
+    monkeypatch.setattr(state, 'sleep', lambda _: None)
+    route = state.get_route(key, firestore_client=db)
+    assert len(calls) == 2
+    assert route.mode == 'legacy'
+
+
+def test_exhausted_migration_commit_is_held_then_admits_on_retry(db, key, monkeypatch):
+    original = state._begin_migration
+    calls = []
+
+    def contend(*args):
+        calls.append(args)
+        raise exhausted_contention()
+
+    monkeypatch.setattr(state, '_begin_migration', contend)
+    monkeypatch.setattr(state, 'sleep', lambda _: None)
+    with pytest.raises(state.PartitionBusy):
+        state.begin_migration(key, 'migration', firestore_client=db)
+    assert len(calls) == 3
+    assert state.get_route(key, firestore_client=db).mode == 'legacy'
+    monkeypatch.setattr(state, '_begin_migration', original)
+    assert state.begin_migration(key, 'migration', firestore_client=db).mode == 'copying'
+
+
+def test_deferred_cutover_keeps_source_primary_until_retry(db, key, monkeypatch):
+    route = state.begin_migration(key, 'migration', firestore_client=db)
+    original = state._cutover
+    calls = []
+
+    def contend(*args):
+        calls.append(args)
+        raise exhausted_contention()
+
+    monkeypatch.setattr(state, '_cutover', contend)
+    monkeypatch.setattr(state, 'sleep', lambda _: None)
+    with pytest.raises(state.PartitionBusy):
+        switch(key, route, db)
+    assert len(calls) == 3
+    assert state.get_route(key, firestore_client=db).primary_namespace == key.family
+    monkeypatch.setattr(state, '_cutover', original)
+    assert switch(key, route, db).primary_namespace == key.partition_namespace
 
 
 @pytest.mark.parametrize('error', [ValueError('invalid scope'), DeadlineExceeded('unknown admission outcome')])
@@ -219,7 +384,7 @@ def test_failed_finish_and_uncertain_fallback_remain_visible_to_drain(db, key, m
     monkeypatch.setattr(state, '_finish_mutation', unavailable)
     monkeypatch.setattr(state, '_mark_mutation_uncertain', unavailable)
     monkeypatch.setattr(state, 'sleep', lambda _: None)
-    with pytest.raises(ServiceUnavailable):
+    with pytest.raises(state.PartitionBusy):
         state.finish_mutation(key, ticket, write_lsn=42, firestore_client=db)
     assert state.get_route(key, firestore_client=db).pending_count == 1
     monkeypatch.setattr(state, '_mark_mutation_uncertain', mark)
