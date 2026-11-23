@@ -66,6 +66,7 @@ _RELEASE_HEAD_STATES = _FRESH_FIRST_HEAD_STATES | {'held'}
 # Aged GPU results may cross the depth cap one at a time per owner.
 GPU_DEPTH_HOLD_AGE_SECONDS = 6 * 3600
 GPU_AGED_RELEASE_INTERVAL_SECONDS = 60
+GPU_AGED_RELEASE_SWITCH = 'BATCH_PIPELINE_MERGE_AGED_GPU_RELEASE_ENABLED'
 _WAIT_BUCKETS = (60, 120, 300, 600, 1800)
 
 
@@ -470,6 +471,7 @@ class OrderedMerge:
         fresh_first: dict = {}
         released: dict = {}
         held: dict = {}
+        aged_gpu: dict = {}
         head: dict = {}
         # Retry rows read at the owner's strict or fresh head (see _promote_stale_heads).
         stale: dict[str, dict] = {}
@@ -494,6 +496,7 @@ class OrderedMerge:
             fresh_first.clear()
             released.clear()
             held.clear()
+            aged_gpu.clear()
             head.clear()
             gate['determined'] = True  # Reset on every transaction retry.
             owner = tx.get('owners', key)
@@ -683,17 +686,27 @@ class OrderedMerge:
             if over_cap and not fresh_first and not released.get('recovered') and _catch_up(candidate):
                 # Keep the owner's unprojected log short so a fresh row lands
                 # near the projection head.
-                if (candidate.get('stt_route') or {}).get('stt_route') != 'provider':
+                route = (candidate.get('stt_route') or {}).get('stt_route')
+                if route in (None, 'parakeet'):
                     since = _ready_since(candidate)
+                    age_source = 'ready_at' if since is not None else 'enqueued_at'
                     if since is None:
                         since = candidate.get('enqueued_at')
                     if since is not None:
                         held['gpu_age'] = max(0.0, now - since)
-                        held['gpu_eligible'] = (
-                            held['gpu_age'] >= GPU_DEPTH_HOLD_AGE_SECONDS
-                            and now >= owner.get('next_aged_gpu_release_at', 0)
+                        held['gpu_age_source'] = age_source
+                        projection_watermark = owner.get('projection_watermark')
+                        prior_release_watermark_present = 'aged_gpu_release_projection_watermark' in owner
+                        projection_advanced = not prior_release_watermark_present or projection_watermark != owner.get(
+                            'aged_gpu_release_projection_watermark'
                         )
-                        aged_gpu_release = allow_aged_gpu and held['gpu_eligible']
+                        held['gpu_release_eligible'] = (
+                            held['gpu_age'] >= GPU_DEPTH_HOLD_AGE_SECONDS
+                            and kill_switch(GPU_AGED_RELEASE_SWITCH, log=False)
+                            and now >= owner.get('next_aged_gpu_release_at', 0)
+                            and projection_advanced
+                        )
+                        aged_gpu_release = allow_aged_gpu and held['gpu_release_eligible']
                 if not aged_gpu_release:
                     held['catch_up'] = True
                     return None
@@ -745,6 +758,8 @@ class OrderedMerge:
             tx.put('jobs', job['segment_id'], job)
             if aged_gpu_release:
                 owner['next_aged_gpu_release_at'] = now + GPU_AGED_RELEASE_INTERVAL_SECONDS
+                owner['aged_gpu_release_projection_watermark'] = owner.get('projection_watermark')
+                aged_gpu.update(age=held['gpu_age'], age_source=held['gpu_age_source'])
             owner.pop('record_sibling_cursor', None)
             owner.update(
                 watermark=watermark if late else position,
@@ -762,7 +777,8 @@ class OrderedMerge:
             entry, fenced = None, error
         strict_blocked, strict_catch_up = dict(blocked), bool(held.get('catch_up'))
         strict_gpu_age = held.get('gpu_age')
-        strict_gpu_eligible = held.get('gpu_eligible', False)
+        strict_gpu_age_source = held.get('gpu_age_source')
+        strict_gpu_eligible = held.get('gpu_release_eligible', False)
         # A held backlog row at or behind the head needs the fresh probe even when the depth
         # hold is switched off: a ready head is refused, and behind an unready one the head
         # wait would pick a held row and commit nothing.
@@ -986,7 +1002,9 @@ class OrderedMerge:
             except HeadWaitUnavailable:
                 return self._head_wait_unavailable()
             if entry is None and self.metrics and 'gpu_age' in held:
-                self.metrics.gpu_depth_held_age.observe(held['gpu_age'])
+                self.metrics.gpu_depth_held_age.labels(*self.metrics.scope, held['gpu_age_source']).observe(
+                    held['gpu_age']
+                )
             if skip_wait and entry is None:
                 return None  # A refused skip keeps the ordinary wait: no hold or fallback fires early.
             if held and not held.get('backlog'):
@@ -1023,7 +1041,7 @@ class OrderedMerge:
                         type(failure.error).__name__,
                     )
         if entry is None and self.metrics and strict_gpu_age is not None:
-            self.metrics.gpu_depth_held_age.observe(strict_gpu_age)
+            self.metrics.gpu_depth_held_age.labels(*self.metrics.scope, strict_gpu_age_source).observe(strict_gpu_age)
         if backlog.get('refusal'):
             backlog_release.REFUSED.labels(backlog['refusal']).inc()
         if entry and entry.get('backlog_release'):
@@ -1037,6 +1055,11 @@ class OrderedMerge:
             record_correctness('committed', source=self.commit_source)
             if self.metrics:
                 self.metrics.record('committed')
+                if aged_gpu:
+                    self.metrics.gpu_aged_releases.labels(*self.metrics.scope).inc()
+                    self.metrics.gpu_aged_release_age.labels(*self.metrics.scope, aged_gpu['age_source']).observe(
+                        aged_gpu['age']
+                    )
             if fresh_first:
                 head_state = (
                     fresh_first['head_state'] if fresh_first['head_state'] in _FRESH_FIRST_HEAD_STATES else 'other'

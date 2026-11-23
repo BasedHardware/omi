@@ -15,7 +15,12 @@ from database.batch_pipeline_privacy import BatchPrivacyBlocked
 from database.batch_pipeline_purge import _write_erased_result
 from tests.unit.test_batch_pipeline_scheduler import MemoryStore, MemoryTransaction, item
 from utils.batch_pipeline.contracts import WorkResult
-from utils.batch_pipeline.merge import GPU_AGED_RELEASE_INTERVAL_SECONDS, GPU_DEPTH_HOLD_AGE_SECONDS, OrderedMerge
+from utils.batch_pipeline.merge import (
+    GPU_AGED_RELEASE_INTERVAL_SECONDS,
+    GPU_AGED_RELEASE_SWITCH,
+    GPU_DEPTH_HOLD_AGE_SECONDS,
+    OrderedMerge,
+)
 from utils.batch_pipeline.metrics import QueueMetrics
 from utils.batch_pipeline.pump import Pump
 from utils.batch_pipeline.scheduler import Scheduler, owner_key
@@ -91,26 +96,112 @@ def test_aged_gpu_depth_hold_releases_in_capture_order_with_durable_cooldown():
     rows = {'first': (1000, CATCH_UP), 'second': (1010, CATCH_UP), 'fresh': (90_000, FRESH)}
     store, queue, leases = admitted(rows)
     store.rows['owners', OWNER]['log_sequence'] = 1800
+    store.rows['owners', OWNER]['projection_watermark'] = 'p1'
+    store.rows['results', 'p1'] = {'log_sequence': 1}
+    store.rows['results', 'p2'] = {'log_sequence': 2}
     for segment in ('first', 'second'):
         complete(queue, leases, segment)
 
     registry = CollectorRegistry()
-    merge = OrderedMerge(store, metrics=QueueMetrics(registry=registry), head_wait_seconds=0, catch_up_depth=16)
+    metrics = QueueMetrics(registry=registry)
+    merge = OrderedMerge(store, metrics=metrics, head_wait_seconds=0, catch_up_depth=16)
     eligible_at = NOW + GPU_DEPTH_HOLD_AGE_SECONDS
     assert merge.commit_next('heavy', eligible_at - 1) is None
-    assert registry.get_sample_value('omi_batch_pipeline_gpu_depth_held_age_seconds_count') == 1
+    labels = {'worker_release': 'unscoped', 'namespace': 'unscoped', 'age_source': 'ready_at'}
+    assert registry.get_sample_value('omi_batch_pipeline_gpu_depth_held_age_seconds_count', labels) == 1
     assert store.rows['merge_holds', OWNER]['held']
 
     complete(queue, leases, 'fresh', eligible_at)
     assert merge.commit_next('heavy', eligible_at)['segment_id'] == 'fresh'
     assert merge.commit_next('heavy', eligible_at)['segment_id'] == 'first'
     # Another process sees the same cooldown in the owner record.
-    restarted = merge_for(store, depth=16)
+    restarted = OrderedMerge(store, metrics=metrics, head_wait_seconds=0, catch_up_depth=16)
     next_slot = eligible_at + GPU_AGED_RELEASE_INTERVAL_SECONDS
     assert restarted.commit_next('heavy', next_slot - 1) is None
+    assert restarted.commit_next('heavy', next_slot) is None  # The same projection watermark cannot release twice.
+    store.rows['owners', OWNER]['projection_watermark'] = 'p2'
     entry = restarted.commit_next('heavy', next_slot)
     assert entry['segment_id'] == 'second' and entry['previous_segment_id'] == 'first'
     assert entry['log_sequence'] == 1803
+    assert (
+        registry.get_sample_value(
+            'omi_batch_pipeline_gpu_aged_releases_total', {'worker_release': 'unscoped', 'namespace': 'unscoped'}
+        )
+        == 2
+    )
+    assert registry.get_sample_value('omi_batch_pipeline_gpu_aged_release_age_seconds_count', labels) == 2
+
+
+def test_aged_gpu_release_uses_enqueued_age_for_legacy_rows_without_ready_at():
+    store, queue, leases = admitted({'old': (1000, CATCH_UP)})
+    store.rows['owners', OWNER]['log_sequence'] = 1800
+    complete(queue, leases, 'old', NOW)
+    row = store.rows['jobs', 'old']
+    row.pop('ready_at')
+    row['enqueued_at'] = NOW
+    registry = CollectorRegistry()
+    merge = OrderedMerge(store, metrics=QueueMetrics(registry=registry), head_wait_seconds=0, catch_up_depth=16)
+    labels = {'worker_release': 'unscoped', 'namespace': 'unscoped', 'age_source': 'enqueued_at'}
+
+    assert merge.commit_next('heavy', NOW + GPU_DEPTH_HOLD_AGE_SECONDS - 1) is None
+    entry = merge.commit_next('heavy', NOW + GPU_DEPTH_HOLD_AGE_SECONDS)
+    assert entry['segment_id'] == 'old'
+    assert registry.get_sample_value('omi_batch_pipeline_gpu_depth_held_age_seconds_count', labels) == 1
+    assert registry.get_sample_value('omi_batch_pipeline_gpu_aged_release_age_seconds_count', labels) == 1
+
+
+def test_aged_gpu_release_kill_switch_holds_old_rows(monkeypatch):
+    monkeypatch.setenv(GPU_AGED_RELEASE_SWITCH, 'false')
+    store, queue, leases = admitted({'old': (1000, CATCH_UP)})
+    store.rows['owners', OWNER]['log_sequence'] = 1800
+    complete(queue, leases, 'old', NOW - GPU_DEPTH_HOLD_AGE_SECONDS)
+
+    assert merge_for(store, depth=16).commit_next('heavy', NOW) is None
+    assert 'next_aged_gpu_release_at' not in store.rows['owners', OWNER]
+    assert 'aged_gpu_release_projection_watermark' not in store.rows['owners', OWNER]
+
+
+def test_provider_catch_up_rows_never_use_the_aged_gpu_release(monkeypatch):
+    monkeypatch.setenv('BATCH_PIPELINE_BACKLOG_RELEASE_METER_ENABLED', 'false')
+    monkeypatch.setenv('BATCH_PIPELINE_PROVIDER_BACKLOG_RELEASE_ENABLED', 'true')
+    store, queue, leases = admitted({'provider': (1000, CATCH_UP)})
+    store.rows['owners', OWNER]['log_sequence'] = 1800
+    complete(queue, leases, 'provider', NOW - GPU_DEPTH_HOLD_AGE_SECONDS)
+    store.rows['jobs', 'provider']['stt_route'] = {'stt_route': 'provider'}
+
+    assert merge_for(store, depth=16).commit_next('heavy', NOW) is None
+    assert 'next_aged_gpu_release_at' not in store.rows['owners', OWNER]
+    assert 'aged_gpu_release_projection_watermark' not in store.rows['owners', OWNER]
+
+
+def test_head_wait_can_release_one_aged_gpu_row():
+    store, queue, leases = admitted({'head': (1000, CATCH_UP), 'waiter': (1010, CATCH_UP)})
+    store.rows['owners', OWNER]['log_sequence'] = 1800
+    complete(queue, leases, 'waiter', NOW)
+    merge = OrderedMerge(store, head_wait_seconds=60, catch_up_depth=16)
+
+    entry = merge.commit_next('heavy', NOW + GPU_DEPTH_HOLD_AGE_SECONDS + 60)
+    assert entry['segment_id'] == 'waiter'
+    assert store.rows['owners', OWNER]['next_aged_gpu_release_at'] == NOW + GPU_DEPTH_HOLD_AGE_SECONDS + 60 + 60
+
+
+def test_recovered_release_does_not_use_aged_gpu_release_metrics():
+    store, queue, leases = admitted({'recovered': (1000, CATCH_UP)})
+    store.rows['owners', OWNER]['log_sequence'] = 1800
+    complete(queue, leases, 'recovered', NOW - GPU_DEPTH_HOLD_AGE_SECONDS)
+    store.rows['jobs', 'recovered']['recovery_state'] = 'recovered'
+    registry = CollectorRegistry()
+    merge = OrderedMerge(store, metrics=QueueMetrics(registry=registry), head_wait_seconds=0, catch_up_depth=16)
+
+    entry = merge.commit_next('heavy', NOW, release=merge.release_set('recovered'))
+    assert entry['segment_id'] == 'recovered' and entry['recovered_release'] is True
+    assert 'next_aged_gpu_release_at' not in store.rows['owners', OWNER]
+    assert (
+        registry.get_sample_value(
+            'omi_batch_pipeline_gpu_aged_releases_total', {'worker_release': 'unscoped', 'namespace': 'unscoped'}
+        )
+        is None
+    )
 
 
 def test_fresh_row_passes_a_held_catch_up_backlog_and_lands_near_the_projection_head():
