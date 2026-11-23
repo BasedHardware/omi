@@ -15825,4 +15825,10 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get playPaidAppUnavailable => 'Androidలో అందుబాటులో లేదు';
+
+  @override
+  String get pageNotAvailableInApp => 'ఈ పేజీ యాప్‌లో అందుబాటులో లేదు.';
+
+  @override
+  String get shopOrderPlacedCheckEmail => 'ఆర్డర్ చేయబడింది. నిర్ధారణ కోసం మీ ఇమెయిల్ చూడండి.';
 }

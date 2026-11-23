@@ -57,7 +57,7 @@ def prepare_recording(pipeline, *, discarded=True):
         return True
 
     pipeline.process_segment = ingest
-    pipeline.conversations_db.get_conversation = lambda *args: deepcopy(row)
+    pipeline.conversations_db.get_conversation = lambda *args, include_transcript_decode_status=False: deepcopy(row)
     pipeline.deserialize_conversation = lambda data: SimpleNamespace(**data)
 
     def restore(*args):

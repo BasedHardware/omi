@@ -18,7 +18,8 @@ from scripts.rollout_cohort_migration import migrate
 def main(argv=None, *, client_factory=None, live_reader=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--uid-file', type=Path, help='Private file containing one UID; never printed')
-    parser.add_argument('--cohort', action='append', choices=sorted(COHORT_ENVS))
+    # go-finalization membership changes need an audit row: use scripts/rollout/go_finalization_cohort.py.
+    parser.add_argument('--cohort', action='append', choices=sorted(set(COHORT_ENVS) - {'go-finalization'}))
     parser.add_argument('--project', choices=('based-hardware', 'based-hardware-dev'), required=True)
     parser.add_argument('--environment', choices=('dev', 'prod'), required=True)
     operation = parser.add_mutually_exclusive_group(required=True)

@@ -15648,4 +15648,10 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get playPaidAppUnavailable => 'לא זמין ב-Android';
+
+  @override
+  String get pageNotAvailableInApp => 'הדף הזה לא זמין באפליקציה.';
+
+  @override
+  String get shopOrderPlacedCheckEmail => 'ההזמנה בוצעה. האישור נשלח לאימייל שלך.';
 }

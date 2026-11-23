@@ -35,6 +35,7 @@ from config.prerecorded_language import language_guard_enabled, language_class
 from config.stt_cap_dispatch import offline_enforcement_enabled
 from config.stt_provider_policy import normalized_stt_language, PARAKEET_SUPPORTED_LANGUAGES_BY_MODEL
 from database import batch_pipeline_allowance_hold as allowance_hold
+from database import record_wal_duplicate as wal_duplicate
 from database import record_wal_handoff as wal_receipts
 from database.batch_pipeline_intake import admit, cache_completed
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
@@ -1457,8 +1458,11 @@ def get_durable_job_status(job_id: str, uid: str, *, artifact_retry: bool = Fals
     if job_id.startswith(wal_receipts.JOB_PREFIX):
         status = _wal_receipt_status(uid, job_id)
     else:
+        store = FirestoreStore(f'batch_pipeline_{current_stage()}')
+        witnessed, status = wal_duplicate.terminal_status(store, uid, job_id)
         # A2 seam: durable_status may redrive a dead job (writes jobs/queues/control).
-        status = durable_status(shadow_from_env(FirestoreStore(f'batch_pipeline_{current_stage()}')), uid, job_id)
+        if not witnessed:
+            status = durable_status(shadow_from_env(store), uid, job_id)
     if status is None:
         raise HTTPException(status_code=404, detail='Sync job not found')
     if status.get('reason_code') == 'batch_artifact_missing' and not artifact_retry:

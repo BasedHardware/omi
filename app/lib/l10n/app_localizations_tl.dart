@@ -15888,4 +15888,10 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get playPaidAppUnavailable => 'Hindi available sa Android';
+
+  @override
+  String get pageNotAvailableInApp => 'Hindi available ang page na ito sa app.';
+
+  @override
+  String get shopOrderPlacedCheckEmail => 'Naipadala na ang order. Tingnan ang email mo para sa kumpirmasyon.';
 }

@@ -15795,4 +15795,10 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get playPaidAppUnavailable => 'Недоступно на Android';
+
+  @override
+  String get pageNotAvailableInApp => 'Ця сторінка недоступна в застосунку.';
+
+  @override
+  String get shopOrderPlacedCheckEmail => 'Замовлення оформлено. Підтвердження надійде на вашу пошту.';
 }

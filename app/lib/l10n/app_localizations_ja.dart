@@ -15531,4 +15531,10 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get playPaidAppUnavailable => 'Android では利用できません';
+
+  @override
+  String get pageNotAvailableInApp => 'このページはアプリでは表示できません。';
+
+  @override
+  String get shopOrderPlacedCheckEmail => 'ご注文を受け付けました。確認メールをご確認ください。';
 }

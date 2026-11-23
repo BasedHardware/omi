@@ -4,6 +4,7 @@ import logging
 import math
 import threading
 import time
+from enum import Enum
 
 from config.firestore_read_levers import lever_enabled
 from config.policy.kill_switches import kill_switch
@@ -50,6 +51,48 @@ PROJECTION_FINISH_CLASSIFICATION_FAILURES = Counter(
     'omi_batch_projection_finish_classification_failures_total',
     'Legacy async finish clock classification attempts that raised; rows remain eligible',
 )
+_SILENT_READ_SKIPS = Counter(
+    'omi_batch_pipeline_silent_read_skips_total',
+    'Silent projection read decisions by stage and outcome',
+    ['stage', 'outcome'],
+)
+_SILENT_READS_AVOIDED = Counter(
+    'omi_batch_pipeline_silent_read_skip_reads_avoided_total',
+    'Fixed Firestore document lookups avoided by silent projection. Excludes variable per-sibling speech rechecks.',
+    ['stage'],
+)
+
+
+# Bounded owner-wait queue classes (config.batch_pipeline.Priority names).
+_OWNER_WAIT_PRIORITIES = frozenset(p.name.lower() for p in Priority)
+
+
+class SilentReadStage(Enum):
+    ASSIGNMENT_PRECHECK = 'projection_session_prepare'
+    READY_ACK = 'projection_ready'
+    ACCOUNTING = 'prepare_accounting'
+    COMPLETION_SNAPSHOT = 'completion_snapshot'
+    COMPLETION_PRIVACY = 'privacy_read'
+
+
+class SilentReadOutcome(Enum):
+    SKIPPED = 'skipped'
+    NOT_SILENT = 'not_silent'
+    DISABLED = 'disabled'
+
+
+def record_silent_read_skip(stage: SilentReadStage, outcome: SilentReadOutcome) -> None:
+    _SILENT_READ_SKIPS.labels(stage.value, outcome.value).inc()
+    if stage is SilentReadStage.COMPLETION_SNAPSHOT and outcome is SilentReadOutcome.SKIPPED:
+        # The completion commit reuses its current unit's job and result snapshots.
+        _SILENT_READS_AVOIDED.labels(stage.value).inc(2)
+
+
+def record_silent_completion_reads(outcome: SilentReadOutcome) -> None:
+    record_silent_read_skip(SilentReadStage.COMPLETION_SNAPSHOT, outcome)
+    record_silent_read_skip(SilentReadStage.COMPLETION_PRIVACY, outcome)
+
+
 PROJECTION_DRAIN_CLAIM_HELD = Counter(
     'omi_batch_projection_drains_skipped_total', 'Owner drain admissions deferred because the fleet claim is held'
 )
@@ -360,8 +403,9 @@ class QueueMetrics:
         )
         self.owner_wait = Histogram(
             'omi_batch_pipeline_owner_wait_seconds',
-            'Per-item admission to lease wait; no owner labels; relet="true" is a re-lease, not fresh wait',
-            ['relet'],
+            'Per-item admission to lease wait; no owner labels; relet="true" is a re-lease, not fresh wait; '
+            'priority is the leased queue class (fresh|recent|deep|unknown)',
+            ['relet', 'priority'],
             buckets=(1, 10, 30, 60, 300, 3600, 43200, 86400, 604800),
             registry=registry,
         )
@@ -740,6 +784,7 @@ class QueueMetrics:
         wait_seconds: float | None = None,
         relet: bool = False,
         reason: str | None = None,
+        priority: str | None = None,
     ) -> None:
         if event not in {
             'leased',
@@ -758,7 +803,8 @@ class QueueMetrics:
             raise ValueError('metric event must be a static worker transition')
         self.events.labels(event).inc()
         if event == 'leased' and wait_seconds is not None:
-            self.owner_wait.labels('true' if relet else 'false').observe(max(0.0, wait_seconds))
+            queue_class = priority if priority in _OWNER_WAIT_PRIORITIES else 'unknown'
+            self.owner_wait.labels('true' if relet else 'false', queue_class).observe(max(0.0, wait_seconds))
         if event == 'admission_policy_deferred' and reason:
             self.admission_hold_reasons.labels(
                 reason=reason_label(ReasonFamily.ADMISSION_HOLD, reason, AdmissionHoldReason)

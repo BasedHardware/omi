@@ -4748,5 +4748,7 @@
     "playPurchaseOtherAccount": "Šis Google Play pirkums pieder citam Omi kontam.",
     "playPurchaseNotConfirmed": "Pirkumu vēl neizdevās apstiprināt. Mēģināsim vēlreiz automātiski.",
     "playRenewalTerms": "Automātiski atjaunojas par norādīto cenu, līdz atcelsiet. Pārvaldiet vai atceliet jebkurā laikā Google Play.",
-    "playPaidAppUnavailable": "Nav pieejams Android"
+    "playPaidAppUnavailable": "Nav pieejams Android",
+    "pageNotAvailableInApp": "Šī lapa lietotnē nav pieejama.",
+    "shopOrderPlacedCheckEmail": "Pasūtījums veikts. Apstiprinājumu meklējiet e-pastā."
 }
