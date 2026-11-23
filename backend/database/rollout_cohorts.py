@@ -4,6 +4,7 @@ from collections.abc import Iterable, Mapping
 import math
 import re
 from typing import Any
+import uuid
 
 from google.cloud import firestore
 
@@ -84,6 +85,8 @@ RAMP_NAMES = (
     'legacy-sync',
     'batch-vendor-routing',
     'new-owner-cell1',
+    # Strict switch for Go finalization (utils/rollout/go_finalization_admission.py): open only at 100.
+    'go-finalization',
 )
 # Names whose percent is a subset of the batch-pipeline bucket (same empty salt).
 BATCH_NESTED_RAMP_NAMES = ('batch-live-stt-retire', 'batch-vendor-routing')
@@ -314,5 +317,80 @@ def write_ramp(
             },
         )
         return revision, before, after
+
+    return run_transactional(client, commit)
+
+
+# ---------------------------------------------------------------------------
+# Go finalization membership (SCA-3883): every change is atomic with its audit row.
+# ---------------------------------------------------------------------------
+
+GO_FINALIZATION_COHORT = 'go-finalization'
+GO_FINALIZATION_AUDIT_DOC = '_audit-go-finalization'
+GO_FINALIZATION_AUDIT_ENTRIES = 'entries'
+GO_FINALIZATION_ENVS = ('prod', 'dev', 'local', 'offline')
+
+
+def write_go_finalization_membership(
+    uid: str,
+    env: str,
+    member: bool,
+    *,
+    actor: str,
+    reason: str,
+    at: str,
+    firestore_client: Any | None = None,
+) -> tuple[bool | None, bool]:
+    """Set `cohorts.<env>.go-finalization` on `rollout_cohorts/{uid}` and append its audit row in one transaction.
+
+    Returns (before, after). `before` is None when the flag was absent. The audit row records the
+    actor, reason, environment, uid, before and after; it is created, never updated.
+    """
+    if not valid_uid(uid):
+        raise ValueError('membership uid invalid')
+    if env not in GO_FINALIZATION_ENVS:
+        raise ValueError('membership env unsupported')
+    if type(member) is not bool:
+        raise ValueError('membership value must be boolean')
+    if not _is_token(actor, _ACTOR_RE):
+        raise ValueError('membership actor malformed')
+    if not _is_token(reason, _TOKEN_RE):
+        raise ValueError('membership reason malformed')
+    client = firestore_client or get_data_plane_firestore_client()
+    collection = client.collection(COLLECTION)
+    ref = collection.document(uid)
+    entry_ref = (
+        collection.document(GO_FINALIZATION_AUDIT_DOC)
+        .collection(GO_FINALIZATION_AUDIT_ENTRIES)
+        .document(uuid.uuid4().hex)
+    )
+
+    @firestore.transactional
+    def commit(transaction):
+        snapshot = ref.get(transaction=transaction)
+        data = (snapshot.to_dict() or {}) if snapshot.exists else {}
+        cohorts = data.get('cohorts', {})
+        if not isinstance(cohorts, dict) or not isinstance(cohorts.get(env, {}), dict):
+            raise ValueError('invalid cohort document')
+        before = cohorts.get(env, {}).get(GO_FINALIZATION_COHORT)
+        if before is not None and type(before) is not bool:
+            raise ValueError('invalid cohort document')
+        # The snapshot was read in this transaction, so a full write keeps every other cohort flag.
+        updated = {**data, 'cohorts': {**cohorts, env: {**cohorts.get(env, {}), GO_FINALIZATION_COHORT: member}}}
+        transaction.set(ref, updated)
+        transaction.create(
+            entry_ref,
+            {
+                'cohort': GO_FINALIZATION_COHORT,
+                'env': env,
+                'uid': uid,
+                'before': before,
+                'after': member,
+                'actor': actor,
+                'reason': reason,
+                'at': at,
+            },
+        )
+        return before, member
 
     return run_transactional(client, commit)

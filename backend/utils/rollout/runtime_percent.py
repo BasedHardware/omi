@@ -284,6 +284,9 @@ def effective_percents(snapshot: RampSnapshot) -> dict[str, float]:
             percent('batch-vendor-routing', parse_percent(os.getenv('BATCH_VENDOR_ROUTING_PERCENT', '0'))), batch
         ),
         'new-owner-cell1': percent('new-owner-cell1', owner_default),
+        # Telemetry only. Go admission reads this name strictly (no last-known-good) in
+        # utils/rollout/go_finalization_admission.py and opens only at exactly 100.
+        'go-finalization': percent('go-finalization', 0.0),
     }
 
 
