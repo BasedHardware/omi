@@ -68,6 +68,26 @@ def summarize(rows, now):
     }
 
 
+def parked_page(client, namespace, *, expired, after):
+    jobs = client.collection(f'{namespace}_jobs')
+    if expired:
+        query = jobs.where('state', '==', 'dead').where('dead_letter_reason', '==', 'held_expired')
+    else:
+        query = jobs.where('state', '==', 'quarantined')
+    query = query.order_by('__name__')
+    if after:
+        query = query.start_after({'__name__': jobs.document(after)})
+    fields = [
+        'owner_key',
+        'quarantined_at',
+        'quarantine_diagnostic',
+        'recovery.started_at',
+        'recovery.failure.reason',
+        'stt_route.stt_route',
+    ]
+    return list(query.select(fields).limit(PAGE_SIZE).stream(retry=None))
+
+
 class ParkedSweep:
     def __init__(self, store):
         self.store = store
@@ -101,39 +121,20 @@ class ParkedSweep:
                 if cursors is None:
                     outcome = 'not_admitted'
                     return
-                jobs = client.collection(f'{self.store.namespace}_jobs')
-                streams = {
-                    'quarantined': jobs.where('state', '==', 'quarantined'),
-                    'held_expired': jobs.where('state', '==', 'dead').where('dead_letter_reason', '==', 'held_expired'),
-                }
                 next_cursors, coverage, rows = {}, {}, []
-                for name, query in streams.items():
+                for name in scanned:
                     if not enabled():
                         outcome = 'disabled'
                         return
                     after = cursors.get(name)
-                    query = query.order_by('__name__')
-                    if after:
-                        query = query.start_after({'__name__': jobs.document(after)})
-                    last = None
-                    for doc in (
-                        query.select(
-                            [
-                                'owner_key',
-                                'quarantined_at',
-                                'quarantine_diagnostic',
-                                'recovery.started_at',
-                                'recovery.failure.reason',
-                            ]
-                        )
-                        .limit(PAGE_SIZE)
-                        .stream(retry=None)
-                    ):
-                        scanned[name] += 1
-                        last = doc.id
-                        rows.append(doc.to_dict() or {})
-                    wrapped = scanned[name] < PAGE_SIZE
-                    next_cursors[name] = None if wrapped else last
+                    docs = parked_page(client, self.store.namespace, expired=name == 'held_expired', after=after)
+                    scanned[name] = len(docs)
+                    for doc in docs:
+                        job = doc.to_dict() or {}
+                        if mapping(job.get('stt_route')).get('stt_route') != 'provider':
+                            rows.append(job)
+                    wrapped = len(docs) < PAGE_SIZE
+                    next_cursors[name] = None if wrapped else docs[-1].id
                     coverage[name] = {'started_at_head': not after, 'reached_end': wrapped}
 
                 sample = {

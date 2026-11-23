@@ -270,7 +270,7 @@
     },
     {
       "site": "backend/utils/batch_pipeline/parked_sweep.py",
-      "expression": "f'{self.store.namespace}_jobs'",
+      "expression": "f'{namespace}_jobs'",
       "collection_pattern": "batch_pipeline_*_jobs",
       "owner": "Goal: Pipeline (SCA-3880)",
       "unit": "admitted hourly parked GPU page",

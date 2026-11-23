@@ -74,6 +74,14 @@ def _legacy(reason, max_rows, cadence, removal, body_digest, *, owner='batch own
 # Exceptions pin the executable builder and its response bound. A cursor in
 # one page proves neither that a caller advances it nor that it stops at EOF.
 EXCEPTIONS: dict[str, SelectorException] = {
+    'utils.batch_pipeline.parked_sweep.parked_page': _legacy(
+        'SCA-3880 diagnosis includes parked rows even when no decision is due',
+        100,
+        'two streams per admitted UTC hour',
+        'Replace with a bounded aggregate producer when approved',
+        '97cdc6958f2d4aa220e749f393b5f76fd6ebb2ef3edcb0e984e492867f84d591',
+        owner='omi-pipeline',
+    ),
     'database.batch_census_export.sample_entry': _legacy(
         'A single clock-only row accompanies the aggregate stock count',
         1,
