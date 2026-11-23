@@ -24,8 +24,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from config.rollout_cohorts import valid_uid  # noqa: E402
 from database import rollout_cohorts as store  # noqa: E402
 
-# Each cohort environment is bound to exactly one project and the tier allowed to write it.
-TARGETS = {'prod': ('based-hardware', 'prod-operator'), 'dev': ('based-hardware-dev', 'dev-operator')}
+# Dev and prod runtimes both read membership from the shared `based-hardware` customer data
+# plane (docs/runbooks/rollout-cohorts.md), so both cohort environments write there.
+TARGETS = {'prod': ('based-hardware', 'prod-operator'), 'dev': ('based-hardware', 'prod-operator')}
 
 
 def build_parser() -> argparse.ArgumentParser:

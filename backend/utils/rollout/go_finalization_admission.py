@@ -21,7 +21,8 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from threading import Lock, Thread
+from concurrent.futures import Future
+from threading import Lock
 import time
 from typing import Any, Callable, Literal
 
@@ -76,7 +77,7 @@ class _Switch:
         self._refresh_lock = Lock()
         self._open = False
         self._read_at: float | None = None
-        self._background: Thread | None = None
+        self._background: Future | None = None
 
     def _fresh(self, now: float) -> bool:
         return self._read_at is not None and now - self._read_at < TTL_SECONDS
@@ -118,10 +119,11 @@ class _Switch:
             finally:
                 self._refresh_lock.release()
 
+        # A short point read: the managed db executor carries context, health and shutdown.
+        from utils.executors import db_executor, submit_with_context
+
         try:
-            thread = Thread(target=run, name='go-finalization-switch-refresh', daemon=True)
-            self._background = thread
-            thread.start()
+            self._background = submit_with_context(db_executor, run)
         except Exception:
             self._refresh_lock.release()
 

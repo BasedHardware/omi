@@ -110,7 +110,7 @@ def test_event_loop_caller_gets_closed_and_starts_one_background_refresh(member)
 
     async def on_loop():
         first = admission.go_finalization_decision(UID)
-        admission._switch._background.join(5)
+        admission._switch._background.result(5)
         return first, admission.go_finalization_decision(UID)
 
     # The stale caller never blocks the loop; the refresh it starts serves the next call.
@@ -254,14 +254,15 @@ def test_cli_apply_binds_env_to_project_and_never_prints_uid(tmp_path, capsys):
     projects = []
     assert _cli(tmp_path, '--apply', factory=lambda **kw: projects.append(kw['project']) or db) == 0
     out = capsys.readouterr().out
-    assert projects == ['based-hardware-dev'] and UID not in out and '"after": true' in out
+    # Dev membership lives on the shared customer data plane the dev runtime reads.
+    assert projects == ['based-hardware'] and UID not in out and '"after": true' in out
     assert db.rows[('rollout_cohorts', UID)]['cohorts']['dev']['go-finalization'] is True
 
 
 def test_cli_apply_requires_the_matching_operator_tier(tmp_path, monkeypatch, capsys):
     monkeypatch.setenv('GCP_AGENT_TIER', 'ro-prod')
     assert _cli(tmp_path, '--apply') == 2
-    assert 'dev-operator' in capsys.readouterr().err
+    assert 'prod-operator' in capsys.readouterr().err
 
 
 def test_cli_hides_sdk_errors_and_rejects_multiline_uid_files(tmp_path, capsys):
@@ -298,3 +299,25 @@ def test_switch_reads_stay_outside_transaction_callbacks():
     """The decision is made before the creating transaction; the module never opens one."""
     text = (Path(__file__).parents[2] / 'utils/rollout/go_finalization_admission.py').read_text()
     assert 'transactional' not in text and 'run_transactional' not in text
+
+
+def test_real_resolver_reports_unavailable_membership_as_a_fallback(monkeypatch):
+    """A membership-store outage reaches the admission handler instead of reading as a miss."""
+    from utils import rollout_cohorts as resolver
+
+    calls = []
+    monkeypatch.setattr(admission, 'record_fallback', lambda **kw: calls.append(kw))
+    monkeypatch.setattr(policy, '_membership_resolver', resolver._in_rollout_cohort)
+    monkeypatch.setattr(resolver._cache, 'get', lambda uid: None)  # the TTL reader's outage value
+    configure(env(100))
+    assert admission.go_finalization_decision(UID) == ('python', 'not_member')
+    assert len(calls) == 1 and calls[0]['reason'] == 'unavailable'
+
+
+def test_unbound_resolver_is_reported_as_unavailable(monkeypatch):
+    calls = []
+    monkeypatch.setattr(admission, 'record_fallback', lambda **kw: calls.append(kw))
+    monkeypatch.setattr(policy, '_membership_resolver', None)
+    configure(env(100))
+    assert admission.go_finalization_decision(UID) == ('python', 'not_member')
+    assert len(calls) == 1
