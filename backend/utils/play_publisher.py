@@ -33,6 +33,28 @@ class PurchaseNotFound(Exception):
     """Google says the token does not exist for this package."""
 
 
+class PublisherHTTPError(Exception):
+    """A Publisher API failure carrying only the HTTP status: request URLs hold the purchase token."""
+
+    def __init__(self, status_code: int, operation: str):
+        super().__init__(f'Google Play {operation} failed with HTTP {status_code}')
+        self.status_code = status_code
+
+
+class PlayCancelPending(RuntimeError):
+    """Google could not confirm a deletion cancel yet. Retryable: the deletion wipe backs off and tries again."""
+
+    def __init__(self, status_code: Optional[int], token_hash: str):
+        status = status_code if status_code is not None else 'unavailable'
+        super().__init__(f'Google Play cancel not confirmed (status {status}) for purchase {token_hash[:12]}')
+        self.status_code = status_code
+
+
+def _raise_for_status(response, operation: str) -> None:
+    if response.status_code >= 400:
+        raise PublisherHTTPError(response.status_code, operation)
+
+
 class PublisherClient(Protocol):
     def get_subscription(self, package_name: str, token: str) -> dict: ...
 
@@ -64,13 +86,13 @@ class GooglePublisher:
         )
         if response.status_code in (400, 404, 410):
             raise PurchaseNotFound()
-        response.raise_for_status()
+        _raise_for_status(response, 'read')
         return response.json()
 
     def acknowledge(self, package_name: str, product_id: str, token: str) -> None:
         url = f'{self._base(package_name)}/subscriptions/{self._quote(product_id)}/tokens/{self._quote(token)}:acknowledge'
         response = self._session.post(url, json={}, timeout=15)
-        response.raise_for_status()
+        _raise_for_status(response, 'acknowledge')
 
     def cancel(self, package_name: str, token: str) -> None:
         """subscriptionsv2.cancel: stops the next payment; the developer type cannot be restored by the user."""
@@ -79,7 +101,7 @@ class GooglePublisher:
         response = self._session.post(url, json=body, timeout=15)
         if response.status_code in (404, 410):
             raise PurchaseNotFound()
-        response.raise_for_status()
+        _raise_for_status(response, 'cancel')
 
 
 _default: Optional[PublisherClient] = None
@@ -92,25 +114,53 @@ def default_publisher() -> PublisherClient:
     return _default
 
 
-def cancel_for_account_deletion(uid: str, publisher: Optional[PublisherClient] = None) -> int:
-    """Cancel every chargeable Play subscription bound to ``uid``. Returns how many were cancelled.
+def _still_chargeable(publisher: PublisherClient, token: str) -> bool:
+    """Google's current view: can this purchase still be charged? Not found counts as no."""
+    try:
+        resource = publisher.get_subscription(config.package_name(), token)
+    except PurchaseNotFound:
+        return False
+    return str(resource.get('subscriptionState') or '') in _CHARGEABLE_STATES
 
-    Raises on any Google error so deletion never reports success while Google keeps billing.
+
+def _status_code(error: BaseException) -> Optional[int]:
+    return getattr(error, 'status_code', None)
+
+
+def cancel_for_account_deletion(uid: str, publisher: Optional[PublisherClient] = None) -> int:
+    """Stop every future Google charge for ``uid``. Returns how many purchases needed a cancel.
+
+    Google is re-read first: an ended, expired, cancelled (no further charge) or unknown purchase is
+    already done. A failed cancel is re-read once and accepted when it can no longer be charged.
+    Anything else raises ``PlayCancelPending``, which the deletion wipe retries with backoff; the
+    error carries the HTTP status and a token hash only, never the token.
     """
+    publisher = publisher or default_publisher()
     fields = play_db.get_user_fields(uid)
     keys = [key for key in (fields.get(play_db.USER_POINTER_FIELD), fields.get(play_db.PENDING_FIELD)) if key]
     cancelled = 0
     for key in dict.fromkeys(keys):
         record = play_db.get_purchase(key) or {}
         token = record.get('purchase_token')
-        if record.get('uid') != uid or not token or record.get('state') not in _CHARGEABLE_STATES:
-            continue
-        if record.get('account_deletion_cancelled'):
+        if record.get('uid') != uid or not token or record.get('account_deletion_cancelled'):
             continue
         try:
-            (publisher or default_publisher()).cancel(config.package_name(), token)
-        except PurchaseNotFound:
-            logger.info('play_billing deletion cancel: purchase already gone')
+            chargeable = _still_chargeable(publisher, token)
+        except Exception as error:
+            raise PlayCancelPending(_status_code(error), key) from None
+        if chargeable:
+            try:
+                publisher.cancel(config.package_name(), token)
+                cancelled += 1
+            except PurchaseNotFound:
+                pass
+            except Exception as error:
+                try:
+                    chargeable = _still_chargeable(publisher, token)
+                except Exception:
+                    chargeable = True
+                if chargeable:
+                    logger.warning('play_billing deletion cancel failed: status=%s', _status_code(error))
+                    raise PlayCancelPending(_status_code(error), key) from None
         play_db.update_purchase(key, {'auto_renewing': False, 'account_deletion_cancelled': True})
-        cancelled += 1
     return cancelled

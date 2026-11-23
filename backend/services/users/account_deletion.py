@@ -694,11 +694,11 @@ def _cancel_subscription_for_account_deletion(uid: str) -> None:
         subscription_id = getattr(sub, 'stripe_subscription_id', None) if sub else None
         if subscription_id and subscription_id not in app_subscription_ids:
             stripe_utils.cancel_subscription_for_account_deletion(subscription_id)
-        # Google Play bills outside Stripe: stop it too, or the deleted account keeps being charged.
-        subscription_id = 'google_play'
-        play_publisher.cancel_for_account_deletion(uid)
     except Exception as error:
         raise DeletionBillingError(subscription_id, error) from error
+    # Google Play bills outside Stripe: stop it too, or the deleted account keeps being charged. A failure
+    # is a plain retryable error (never a parked billing failure): the wipe backs off and tries again.
+    play_publisher.cancel_for_account_deletion(uid)
 
 
 def purge_user_conversation_index(uid: str) -> None:
@@ -713,6 +713,9 @@ def _run_immediate_deletion_steps(uid: str) -> None:
     failures: list[Exception] = []
     try:
         _cancel_subscription_for_account_deletion(uid)
+    except play_publisher.PlayCancelPending as error:
+        # The wipe repeats the cancel at its irreversible boundary and retries until Google confirms.
+        logger.warning('delete_account admission: %s', error)
     except Exception as error:
         failures.append(error)
     try:

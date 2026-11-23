@@ -130,8 +130,9 @@ def read_state(resource: Mapping[str, Any]) -> PlayState:
     )
 
 
-def _record(state: PlayState, token: str, now: int, *, revoked: bool = False) -> dict:
-    open_state = state.state in OPEN_STATES and not revoked
+def _record(state: PlayState, token: str, now: int, *, revoked_through: Optional[int] = None) -> dict:
+    # A refund-only token can still renew at Google, so it keeps being re-read while its state is open.
+    open_state = state.state in OPEN_STATES
     next_check = None
     if open_state:
         next_check = now + (GRACE_RECHECK_SECONDS if state.state == STATE_GRACE else RECHECK_SECONDS)
@@ -149,10 +150,29 @@ def _record(state: PlayState, token: str, now: int, *, revoked: bool = False) ->
         'obfuscated_account_id': state.obfuscated_account_id,
         'linked_token_key': play_db.token_key(state.linked_token) if state.linked_token else None,
         'test_purchase': state.test_purchase,
-        'revoked': revoked,
+        'revoked_through': revoked_through,
         'next_check_at': next_check,
         'updated_at': now,
     }
+
+
+# Paid states: a renewal Google charged for. Grace is a failed charge, so it never re-grants a refund.
+PAID_STATES = frozenset({STATE_ACTIVE, STATE_CANCELED})
+
+
+def refunded_through(existing: Mapping[str, Any]) -> Optional[int]:
+    """Expiry of the period a refund or revoke removed, or None. Older records stored only a flag."""
+    through = existing.get('revoked_through')
+    if through is None and existing.get('revoked'):
+        return 2**62  # legacy sticky revoke: never re-grant
+    return through
+
+
+def paid_after_refund(state: PlayState, through: Optional[int]) -> bool:
+    """A refunded token grants again only for a later period Google has been paid for."""
+    if through is None:
+        return True
+    return state.state in PAID_STATES and state.expiry is not None and state.expiry > through
 
 
 def play_subscription(state: PlayState, now: Optional[int] = None) -> Subscription:
@@ -325,7 +345,11 @@ def verify_and_bind(uid: str, purchase_token: str, product_id: str, publisher: O
     now = int(time.time())
     state = _fetch(publisher, purchase_token)
     _check_product(state)
-    expected_account = obfuscated_account_id(uid)
+    try:
+        expected_account = obfuscated_account_id(uid)
+    except config.AccountIdKeyMissing:
+        logger.error('play_billing verify refused: %s is not configured', config.ACCOUNT_ID_KEY_ENV)
+        raise PlayBillingError(503, 'play_not_configured', 'Google Play purchases are unavailable. Try again later.')
     if state.obfuscated_account_id and state.obfuscated_account_id != expected_account:
         raise PlayBillingError(*_OWNED_ELSEWHERE)
     if account_deletion_blocks_user_work(uid):
@@ -339,14 +363,15 @@ def verify_and_bind(uid: str, purchase_token: str, product_id: str, publisher: O
         linked = play_db.get_purchase(play_db.token_key(state.linked_token))
         if linked and linked.get('uid') and linked['uid'] != uid:
             raise PlayBillingError(*_OWNED_ELSEWHERE)
-    if existing.get('revoked'):
+    through = refunded_through(existing)
+    if not paid_after_refund(state, through):
         raise PlayBillingError(*_REFUNDED)
 
     fresh = existing.get('uid') != uid
     if fresh and state.has_access(now) and _live_stripe_subscription(uid):
         raise PlayBillingError(*_STRIPE_ACTIVE)
     play_db.remember_account(expected_account, uid)
-    owner = play_db.bind_purchase(token_hash, uid, _record(state, purchase_token, now))
+    owner = play_db.bind_purchase(token_hash, uid, _record(state, purchase_token, now, revoked_through=through))
     if owner != uid:
         raise PlayBillingError(*_OWNED_ELSEWHERE)
     outcome = _settle(uid, token_hash, state, purchase_token, publisher, fresh=fresh)
@@ -363,13 +388,32 @@ def _resolve_unbound_owner(state: PlayState) -> Optional[str]:
     if state.linked_token:
         linked_owner = (play_db.get_purchase(play_db.token_key(state.linked_token)) or {}).get('uid')
     account_owner = play_db.account_uid(state.obfuscated_account_id) if state.obfuscated_account_id else None
+    if account_owner and obfuscated_account_id(account_owner) != state.obfuscated_account_id:
+        # The map only ever holds ids the server issued; anything else is refused.
+        logger.warning('play_billing account map entry does not match its uid; not bound')
+        account_owner = None
     if linked_owner and account_owner and linked_owner != account_owner:
         logger.warning('play_billing unbound token: linked and account owners disagree; not bound')
         return None
     return linked_owner or account_owner
 
 
-def apply_token(purchase_token: str, publisher: Optional[PublisherClient] = None, *, revoked: bool = False) -> str:
+def _latest_order_ids(resource: Mapping[str, Any]) -> set[str]:
+    ids = {str(resource.get('latestOrderId') or '')}
+    for item in resource.get('lineItems') or []:
+        if isinstance(item, Mapping):
+            ids.add(str(item.get('latestSuccessfulOrderId') or ''))
+    ids.discard('')
+    return ids or {'unknown'}
+
+
+def apply_token(
+    purchase_token: str,
+    publisher: Optional[PublisherClient] = None,
+    *,
+    revoked: bool = False,
+    voided_order_id: Optional[str] = None,
+) -> str:
     """Re-read one token from Google and project it onto its account. Returns the outcome label."""
     publisher = publisher or get_publisher()
     now = int(time.time())
@@ -383,10 +427,16 @@ def apply_token(purchase_token: str, publisher: Optional[PublisherClient] = None
             _revoke(existing['uid'], token_hash)
         return 'not_found'
     state = read_state(resource)
+    if revoked and voided_order_id and voided_order_id not in _latest_order_ids(resource):
+        # A refund of an earlier order: the current period was paid separately and keeps its access.
+        logger.info('play_billing refund of an earlier order; current period kept')
+        revoked = False
     existing = play_db.get_purchase(token_hash) or {}
-    # A refund or revoke is permanent for this token.
-    revoked = revoked or bool(existing.get('revoked'))
-    record = _record(state, purchase_token, now, revoked=revoked)
+    through = refunded_through(existing)
+    if revoked:
+        # Refund or revoke: the period Google showed at that moment is no longer paid for.
+        through = max(through or 0, state.expiry or now)
+    record = _record(state, purchase_token, now, revoked_through=through)
     uid = existing.get('uid')
     if state.product_id != config.product_id():
         play_db.record_unbound(token_hash, record) if not uid else play_db.update_purchase(token_hash, record)
@@ -406,7 +456,7 @@ def apply_token(purchase_token: str, publisher: Optional[PublisherClient] = None
         fresh = True
     else:
         play_db.update_purchase(token_hash, record)
-    if revoked:
+    if revoked or not paid_after_refund(state, through):
         _clear_pending(uid, token_hash)
         return 'revoked' if _revoke(uid, token_hash) else 'inactive'
     return _settle(uid, token_hash, state, purchase_token, publisher, fresh=fresh)
@@ -444,7 +494,10 @@ def handle_developer_notification(notification: Mapping[str, Any], publisher: Op
     voided = notification.get('voidedPurchaseNotification')
     if isinstance(voided, Mapping) and voided.get('purchaseToken'):
         # Refund or chargeback on a subscription purchase: access ends now.
-        return apply_token(str(voided['purchaseToken']), publisher, revoked=True)
+        order = voided.get('orderId')
+        return apply_token(
+            str(voided['purchaseToken']), publisher, revoked=True, voided_order_id=str(order) if order else None
+        )
     sub = notification.get('subscriptionNotification')
     if isinstance(sub, Mapping) and sub.get('purchaseToken'):
         revoked = sub.get('notificationType') == NOTIFICATION_REVOKED
