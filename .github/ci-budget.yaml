@@ -1587,13 +1587,13 @@
       "budget_p50_minutes": 24,
       "display_name": "deploy",
       "expected_runs_class": "non-pr-or-unsampled",
-      "expected_runs_per_day": 1,
+      "expected_runs_per_day": 3,
       "if": null,
       "matrix": {},
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "Manual prod/dev deploy, about one dispatch a day; B5 (2026-10-19) adds only the break_glass_lock dispatch input, no new trigger. 2026-10-24 adds the diarizer-batch service option (W1: a CI path for the prod-omi-diarizer-batch Helm release, still manual-only dispatch); the one-minute bump records the trigger change; SCA-2149: opt-in preserve-live dispatch inputs add bounded inventory/dry-run/CAS/spec verification calls; reserve one minute p50 headroom, no new automatic runs or jobs; SCA-2160 review repair: isolate the helper in a single-file immutable checkout and route rollback through the same writer; reserve one further minute for the additional checkout, with no new job or automatic trigger; SCA-2944 (David 2026-11-19): the worker_dry_run input adds a no-write dry-run step (server dry-runs only, no build or push) on manual dispatch; one minute p50 headroom records the trigger change, with no new job or automatic trigger",
+      "rationale": "Manual prod/dev deploy, about one dispatch a day; B5 (2026-10-19) adds only the break_glass_lock dispatch input, no new trigger. 2026-10-24 adds the diarizer-batch service option (W1: a CI path for the prod-omi-diarizer-batch Helm release, still manual-only dispatch); the one-minute bump records the trigger change; SCA-2149: opt-in preserve-live dispatch inputs add bounded inventory/dry-run/CAS/spec verification calls; reserve one minute p50 headroom, no new automatic runs or jobs; SCA-2160 review repair: isolate the helper in a single-file immutable checkout and route rollback through the same writer; reserve one further minute for the additional checkout, with no new job or automatic trigger; SCA-2944 (David 2026-11-19): the worker_dry_run input adds a no-write dry-run step (server dry-runs only, no build or push) on manual dispatch; one minute p50 headroom records the trigger change, with no new job or automatic trigger; SCA-3276 forecasts up to two additional manual dispatches on a rollout day (one API-server plan and one apply) alongside the existing daily dispatch budget. The p50 estimate and PR minute caps are unchanged.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -5250,7 +5250,7 @@
     "gcp_diarizer.yml": {
       "name": "Deploy Diarizer to GKE",
       "owner": "CI maintainers",
-      "rationale": "B5 prod-train lock and worker digest promotion (2026-10-19): break_glass_lock and image_digest dispatch inputs added. 2026-10-24: diarizer-batch service option added so the prod-omi-diarizer-batch Helm release has a CI deploy path (W1); triggers otherwise unchanged; SCA-2149 adds opt-in preserve_live_worker and admitted worker_live_baseline dispatch inputs; manual-only trigger and runner unchanged; SCA-2160 adds the guarded worker_rollback_receipt dispatch input; rollback reuses the existing prod environment and shared writer; SCA-2944 (David 2026-11-19) adds the worker_dry_run input: a server-dry-run-only preserve-live run under the same prod-train lock that never writes, builds or pushes",
+      "rationale": "B5 prod-train lock and worker digest promotion (2026-10-19): break_glass_lock and image_digest dispatch inputs added. 2026-10-24: diarizer-batch service option added so the prod-omi-diarizer-batch Helm release has a CI deploy path (W1); triggers otherwise unchanged; SCA-2149 adds opt-in preserve_live_worker and admitted worker_live_baseline dispatch inputs; manual-only trigger and runner unchanged; SCA-2160 adds the guarded worker_rollback_receipt dispatch input; rollback reuses the existing prod environment and shared writer; SCA-2944 (David 2026-11-19) adds the worker_dry_run input: a server-dry-run-only preserve-live run under the same prod-train lock that never writes, builds or pushes; SCA-3276 adds a production-only depth mode with separate manual plan and apply dispatches under the existing prod-train lock. Both use the same deploy job and runner. There are no new automatic triggers.",
       "triggers": {
         "workflow_dispatch": {
           "inputs": {
@@ -5265,6 +5265,15 @@
               "required": "false",
               "type": "boolean"
             },
+            "depth_operation": {
+              "default": "plan",
+              "description": "Worker depth mode only: server rehearsal (plan), or rehearse and roll (apply)",
+              "options": [
+                "plan",
+                "apply"
+              ],
+              "type": "choice"
+            },
             "environment": {
               "default": "development",
               "description": "Select the environment to deploy to",
@@ -5275,10 +5284,35 @@
               "required": "true",
               "type": "choice"
             },
+            "expected_current_depth": {
+              "description": "Worker depth mode only: live literal depth (3 or 4)",
+              "type": "string"
+            },
+            "expected_worker_digest": {
+              "description": "Worker depth mode only: exact serving sha256 digest",
+              "type": "string"
+            },
+            "expected_worker_resource_version": {
+              "description": "Worker depth mode only: live primary Deployment resourceVersion",
+              "type": "string"
+            },
+            "expected_worker_uid": {
+              "description": "Worker depth mode only: live primary Deployment UID",
+              "type": "string"
+            },
             "image_digest": {
               "default": "",
               "description": "batch-pipeline-worker only: deploy this already-built gcr.io digest (sha256:...) instead of rebuilding; its omi.release.tree label must equal the source tree",
               "required": "false"
+            },
+            "mode": {
+              "default": "standard",
+              "description": "Use worker-depth-only for a production batch worker depth CAS",
+              "options": [
+                "standard",
+                "worker-depth-only"
+              ],
+              "type": "choice"
             },
             "preserve_live_worker": {
               "default": "false",
@@ -5301,6 +5335,10 @@
               ],
               "required": "true",
               "type": "choice"
+            },
+            "target_depth": {
+              "description": "Worker depth mode only: target literal depth (3 or 4)",
+              "type": "string"
             },
             "worker_dry_run": {
               "default": "false",
