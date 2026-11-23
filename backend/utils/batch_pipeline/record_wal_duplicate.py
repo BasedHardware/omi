@@ -195,12 +195,12 @@ def _budget():
     return ArtifactReadBudget(time.monotonic() + ATTEMPT_SECONDS, sample.MAX_MANIFEST_TOTAL, 20)
 
 
-def _views(budget):
-    return ledger.PointReads(budget), ledger.PointReads(budget)
+def _views(budget, current):
+    return ledger.PointReads(budget, mode=current), ledger.PointReads(budget, mode=current)
 
 
 async def replay(store, uid, cid, source, device, content_id, session, claims):
-    reads, _ = await run_blocking(sync_executor, _views, _budget())
+    reads, _ = await run_blocking(sync_executor, _views, _budget(), 'replay')
     try:
         async with asyncio.timeout(ATTEMPT_SECONDS):
             request = await run_blocking(sync_executor, _request, uid, cid, source, device, content_id, session, claims)
@@ -235,7 +235,7 @@ async def evaluate(store, uid, cid, source, device, content_id, session, paths, 
     proof_started = False
     try:
         async with asyncio.timeout(ATTEMPT_SECONDS):
-            prepare, finish = await run_blocking(sync_executor, _views, budget)
+            prepare, finish = await run_blocking(sync_executor, _views, budget, current)
             if current == 'shadow':
                 if slot is None or not _claim_process(slot):
                     return None

@@ -38,7 +38,13 @@ until equivalence is established.
 - Score whole-bundle would-settle and hold outcomes, whole-file coverage and
   agreement on positive proofs. The shadow directly bounds proof work to
   49,920 Firestore point reads, 9,600 GCS RPCs and 7.5 GiB of manifest downloads.
-  Report slot-create contenders and transaction-lifecycle RPCs separately.
+  Report slot-create contenders separately. The fixed-label Firestore
+  lifecycle counter records begin, commit and rollback attempts and outcomes
+  at the worker making the call, including deadline and RPC cancellation.
+  An expired unattempted rollback is a separate outcome. The shadow runs at
+  most two read-only views per claim, so it can attempt at most 1,920
+  lifecycle RPCs over the window (two begins and two rollbacks per claim).
+  It should never attempt a commit.
   Reconcile early alias reads, reached candidates, holds and replays before
   setting active budget and guard thresholds. No activation on absent metrics.
 - After full custody review and written Release approval, clear the shadow

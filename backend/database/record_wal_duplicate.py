@@ -3,6 +3,8 @@
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
+from prometheus_client import Counter
+
 from config.record_audio import record_identity
 from config.record_wal_duplicate import MAX_JOBS, RECEIPT_FIELD, SOURCE_FIELD
 from database import record_wal_handoff as handoff
@@ -14,6 +16,11 @@ from utils.batch_pipeline.artifact_reads import ArtifactReadBudget, ArtifactRead
 
 MAX_FILES = 20
 MAX_VIEW_READS = 5 + 3 + MAX_JOBS + 2 * MAX_FILES
+lifecycle_rpcs = Counter(
+    'omi_record_wal_handoff_duplicate_firestore_transactions_total',
+    'Duplicate WAL snapshot lifecycle RPC attempts and outcomes',
+    ['mode', 'rpc', 'outcome'],
+)
 
 
 @dataclass
@@ -21,6 +28,12 @@ class PointReads:
     work: ArtifactReadBudget
     limit: int = MAX_VIEW_READS
     issued: int = 0
+    mode: str = 'settle'
+
+    def transaction_rpc(self, rpc, outcome):
+        # Observe at the leaf. If the async request is cancelled, the bounded
+        # worker still accounts for the actual RPC outcome and cleanup.
+        lifecycle_rpcs.labels(self.mode, rpc, outcome).inc()
 
     @property
     def deadline(self):
@@ -258,4 +271,4 @@ def reconcile(store, reads, request, *, files=None, expected=None, placements=No
         return state
 
     runner = write_snapshot if commit else read_snapshot
-    return runner(store, read, reads)
+    return runner(store, read, reads, on_rpc=reads.transaction_rpc)

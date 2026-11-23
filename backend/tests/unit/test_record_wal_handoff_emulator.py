@@ -493,12 +493,22 @@ def test_duplicate_cas_revalidates_source_and_privacy_after_compare(duplicate_wo
         assert case.attempt(request) is None
 
 
-def test_duplicate_shadow_and_mixed_version_leave_no_alias(duplicate_world):
+def test_duplicate_shadow_and_mixed_version_leave_no_alias(duplicate_world, monkeypatch):
+    from database import record_wal_duplicate as duplicate
+
+    lifecycle = Mock()
+    monkeypatch.setattr(duplicate, 'lifecycle_rpcs', lifecycle)
     case = duplicate_world
     request = case.request('shadow')
     old = case.attempt(request, files=case.files)
     snapshot = case.attempt(request, files=case.files, expected=old.scope, placements=['a', 'b'])
     assert snapshot.reply['job_id'] == case.canonical
+    assert [call.args[1:] for call in lifecycle.labels.call_args_list] == [
+        ('begin', 'attempt'),
+        ('begin', 'success'),
+        ('rollback', 'attempt'),
+        ('rollback', 'success'),
+    ] * 2
     assert case.attempt(request) is None
     case.intake.update({'wal_duplicate_source_v1': firestore.DELETE_FIELD})
     assert case.attempt(request, files=case.files) is None

@@ -127,3 +127,14 @@ def test_spanning_packs_requires_one_archive_session():
     assert prove([first, second], wal=first + second)[0][0]
     assert prove([first, second], wal=first + second, capture_sessions=('first', 'second'))[0] == [None]
     assert prove([first], wal=first, capture_sessions=(None,))[0] == [None]
+
+
+def test_lifecycle_rpc_records_termination_at_the_sync_boundary():
+    from google.api_core.exceptions import Cancelled, DeadlineExceeded
+    from database.batch_pipeline_reads import observe_rpc
+
+    observed = []
+    for failure, expected in [(Cancelled('cancelled'), 'cancelled'), (DeadlineExceeded('deadline'), 'deadline')]:
+        with pytest.raises(type(failure)), observe_rpc(lambda *event: observed.append(event), 'begin'):
+            raise failure
+        assert observed[-2:] == [('begin', 'attempt'), ('begin', expected)]
