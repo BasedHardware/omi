@@ -44,17 +44,20 @@ class CaptureCommittedJournal {
   static int _revision = 0;
   ({String path, FileStat stat, int revision, _ProofLog proof})? _cache;
 
-  Future<void> record(String owner, MessageEvent event, {String? recordingSessionId}) async {
-    if (owner.isEmpty || owner == 'legacy') return;
+  /// Return the source intervals whose evidence changed, to limit receipt-time
+  /// reconciliation to WALs that this write can affect.
+  Future<List<({String root, int epoch, int start, int end})>> record(String owner, MessageEvent event,
+      {String? recordingSessionId}) async {
+    if (owner.isEmpty || owner == 'legacy') return const [];
     final runs = _manifestRuns(owner, event, recordingSessionId);
     final transcriptOnly = event is CaptureCommittedEvent && event.audioCustody == null;
-    if (runs.isEmpty && !transcriptOnly) return;
-    await _lock.withResource(() async {
+    if (runs.isEmpty && !transcriptOnly) return const [];
+    return _lock.withResource(() async {
       final ownerHash = sha256.convert(utf8.encode(owner)).toString();
       final file = await _file(ownerHash);
       final proof = await _read(file, ownerHash);
       final fresh = runs.where(proof.hasNewEvidence).toList();
-      if (fresh.isEmpty && !transcriptOnly) return;
+      if (fresh.isEmpty && !transcriptOnly) return const [];
       // Preserve the immutable object pins alongside the exact source evidence.
       // Replay goes through the same wire parser as live delivery. Bare
       // transcript receipts remain readable but never populate the proof index.
@@ -62,7 +65,7 @@ class CaptureCommittedJournal {
       final line = '${jsonEncode([recordingSessionId, wire])}\n';
       final lineBytes = utf8.encode(line).length;
       // Historical transcript information must never evict durable audio proof.
-      if (transcriptOnly && proof.payloadBytes + lineBytes > _maxEvidenceBytes) return;
+      if (transcriptOnly && proof.payloadBytes + lineBytes > _maxEvidenceBytes) return const [];
       _revision++;
       try {
         if (proof.payloadBytes + lineBytes > _maxEvidenceBytes) {
@@ -86,6 +89,10 @@ class CaptureCommittedJournal {
           proof.add(fresh, lineBytes);
         }
         _cache = (path: file.path, stat: await file.stat(), revision: _revision, proof: proof);
+        return [
+          for (final run in fresh)
+            (root: run.key.$1, epoch: run.key.$2, start: run.start, end: run.start + run.hashes.length)
+        ];
       } catch (_) {
         // A failed write may have been carrying a contradiction. Any later
         // evaluation in this process must keep this owner's audio pending.
@@ -95,6 +102,10 @@ class CaptureCommittedJournal {
       }
     });
   }
+
+  /// Capture the same source and file identity used by the evaluator, so a
+  /// caller deciding a batch can revalidate each row immediately before commit.
+  static Object? releaseIdentity(String owner, Wal wal) => _identity(owner, wal);
 
   Future<bool> covers(String owner, Wal wal) async {
     final result = await evaluate(owner, wal);
@@ -136,11 +147,11 @@ class CaptureCommittedJournal {
 
   Future<_ProofLog> _read(File file, String ownerHash) async {
     final stat = await file.stat();
+    if (await File('${file.path}.tmp').exists()) throw const FormatException('interrupted custody journal replacement');
     final cached = _cache;
     if (cached != null && cached.path == file.path && cached.revision == _revision && _sameStat(cached.stat, stat)) {
       return cached.proof;
     }
-    if (await File('${file.path}.tmp').exists()) throw const FormatException('interrupted custody journal replacement');
     final _ProofLog proof;
     if (stat.type == FileSystemEntityType.notFound) {
       proof = _ProofLog();
@@ -285,6 +296,9 @@ void _walkProof(String content, String ownerHash,
     }
     final wire = entry[1] as Map<String, dynamic>;
     final event = MessageEvent.fromJson(wire);
+    if (event is CaptureCommittedEvent && !wire.keys.every(event.toJson().containsKey)) {
+      throw const FormatException('unknown transcript journal field');
+    }
     final audio = event is AudioCustodyEvent
         ? event
         : event is CaptureCommittedEvent
@@ -359,11 +373,7 @@ class _FrameProof {
   Set<String?>? _otherSessions;
   bool conflict = false;
 
-  bool supports(String? candidate) =>
-      session == null ||
-      session == candidate ||
-      (_otherSessions?.contains(null) ?? false) ||
-      (_otherSessions?.contains(candidate) ?? false);
+  bool supports(String? candidate) => session == candidate || (_otherSessions?.contains(candidate) ?? false);
 
   void addScope(String? candidate) {
     if (!supports(candidate)) (_otherSessions ??= {}).add(candidate);
@@ -412,20 +422,9 @@ class _ManifestIndex {
   bool covers(int start, int end, String? session) {
     final conflict = _conflicts.firstKeyAfter(start - 1);
     if (conflict != null && conflict < end) return false;
-    var cursor = start;
-    while (cursor < end) {
-      final sharedEnd = _through(_ranges[null], cursor);
-      final sessionEnd = session == null ? cursor : _through(_ranges[session], cursor);
-      final next = sharedEnd > sessionEnd ? sharedEnd : sessionEnd;
-      if (next <= cursor) return false;
-      cursor = next;
-    }
-    return true;
-  }
-
-  static int _through(SplayTreeMap<int, int>? intervals, int cursor) {
-    final start = intervals?.lastKeyBefore(cursor + 1);
-    return start == null ? cursor : intervals![start]!;
+    final intervals = _ranges[session];
+    final left = intervals?.lastKeyBefore(start + 1);
+    return left != null && intervals![left]! >= end;
   }
 }
 

@@ -41,6 +41,12 @@ void main() {
     expect((event.toJson()['receipt'] as Map)['generation'], '17');
   });
 
+  test('unknown nested fields cannot hide local references in the receipt journal', () {
+    final wire = _listenWire();
+    (wire['frames'][0]['source'] as Map)['file_path'] = 'older-local-copy.bin';
+    expect(AudioCustodyEvent.parse(wire), isNull);
+  });
+
   test('accepts the media-addressed path of a framed encrypted manifest', () {
     final wire = _listenWire();
     final receipt = wire['receipt'] as Map<String, dynamic>;

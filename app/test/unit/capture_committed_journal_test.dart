@@ -152,7 +152,7 @@ void main() {
     final wal = _wal(count: 3);
     await localFile.writeAsBytes(encodeWalFrames(List.filled(3, _sample)));
     await Future.wait([
-      journal.record(_owner, _manifest([(7, _sample)], session: null)),
+      journal.record(_owner, _manifest([(7, _sample)])),
       restart().record(_owner, _manifest([(9, _sample)])),
     ]);
     await journal.record(_owner, _manifest([(8, _sample)], session: 'other'));
@@ -177,6 +177,9 @@ void main() {
 
   test('socket recording session scopes an unbound receipt across restart', () async {
     final unbound = _manifest([(7, _sample)], session: null);
+    await journal.record(_owner, unbound);
+    expect(await restart().covers(_owner, _wal()), isFalse);
+    expect(await restart().covers(_owner, _wal()..recordingSessionId = null), isTrue);
     await journal.record(_owner, unbound, recordingSessionId: 'other');
     expect(await restart().covers(_owner, _wal()), isFalse);
     await journal.record(_owner, _manifest([(7, _sample)]), recordingSessionId: 'other');

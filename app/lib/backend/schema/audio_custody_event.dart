@@ -31,6 +31,35 @@ class AudioCustodyEvent extends MessageEvent {
   static final _sourceRoot = RegExp(r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$');
   static const _maxFrames = 4096; // Listen's capture pack limit.
 
+  // The persisted wire doubles as an input to the orphan-file census. An
+  // unrecognized field may introduce a local file reference in a newer schema.
+  static const _eventFields = {'type', 'recording_session_id', 'capture_root', 'channel', 'frames', 'receipt'};
+  static const _frameFields = {
+    'sequence',
+    'byte_offset',
+    'bytes',
+    'start',
+    'samples',
+    'gap_before',
+    'sha256',
+    'source'
+  };
+  static const _sourceFields = {'capture_root', 'clock_epoch', 'source_frame'};
+  static const _receiptFields = {
+    'bucket',
+    'path',
+    'generation',
+    'sha256',
+    'manifest_path',
+    'manifest_generation',
+    'manifest_sha256',
+    'pcm_sha256',
+    'conversation_id',
+    'start',
+    'samples',
+    'sample_rate',
+  };
+
   final String _wire;
   final String owner;
   final List<CustodyFrame> frames;
@@ -47,7 +76,8 @@ class AudioCustodyEvent extends MessageEvent {
     final rows = json['frames'];
     // Listen uses index 0 for mono and also for the first channel of a
     // multichannel socket. The caller must additionally know the socket is mono.
-    if (json['type'] != 'audio_custody' ||
+    if (!json.keys.every(_eventFields.contains) ||
+        json['type'] != 'audio_custody' ||
         json['channel'] != '0' ||
         archiveRoot is! String ||
         !_archiveRoot.hasMatch(archiveRoot) ||
@@ -63,7 +93,7 @@ class AudioCustodyEvent extends MessageEvent {
     final frames = <CustodyFrame>[];
     var previousSequence = -1;
     for (final row in rows) {
-      if (row is! Map<String, dynamic>) return null;
+      if (row is! Map<String, dynamic> || !row.keys.every(_frameFields.contains)) return null;
       final sequence = row['sequence'], hash = row['sha256'];
       if (sequence is! int ||
           sequence <= previousSequence ||
@@ -78,7 +108,7 @@ class AudioCustodyEvent extends MessageEvent {
       previousSequence = sequence;
       final source = row['source'];
       if (source == null) continue;
-      if (source is! Map<String, dynamic>) return null;
+      if (source is! Map<String, dynamic> || !source.keys.every(_sourceFields.contains)) return null;
       final root = source['capture_root'], epoch = source['clock_epoch'], ordinal = source['source_frame'];
       if (root is! String ||
           !_sourceRoot.hasMatch(root) ||
@@ -109,7 +139,8 @@ class AudioCustodyEvent extends MessageEvent {
     final bucket = receipt['bucket'], original = receipt['path'], manifest = receipt['manifest_path'];
     final originalSha = receipt['sha256'], manifestSha = receipt['manifest_sha256'];
     final conversation = receipt['conversation_id'], pcmSha = receipt['pcm_sha256'];
-    if (!_pathPart(bucket) ||
+    if (!receipt.keys.every(_receiptFields.contains) ||
+        !_pathPart(bucket) ||
         original is! String ||
         manifest is! String ||
         !_matches(_generation, receipt['generation']) ||

@@ -8,14 +8,22 @@ extension CaptureCommittedCustody on LocalWalSyncImpl {
     bool current() => _isCurrent(generation) && owner == _currentWalOwnerUid();
     return _enqueueBuffer(() async {
       if (owner.isEmpty || owner == 'legacy' || !current()) return;
-      await captureCommits.record(owner, event, recordingSessionId: recordingSessionId);
-      if (current()) await _persistCaptureCommits(generation);
+      final intervals = await captureCommits.record(owner, event, recordingSessionId: recordingSessionId);
+      if (!current() || intervals.isEmpty) return;
+      await _persistCaptureCommits(generation, affected: (wal) {
+        final start = wal.sourceFrameStart!;
+        return intervals.any((range) =>
+            range.root == wal.captureRoot &&
+            range.epoch == wal.sourceClockEpoch &&
+            start < range.end &&
+            range.start < start + wal.totalFrames);
+      });
     });
   }
 
   /// The buffer queue serializes journal updates, flushes, and confirmations.
   /// Compute decisions first so a slow audit cannot expose half a batch.
-  Future<void> _persistCaptureCommits(int generation) async {
+  Future<void> _persistCaptureCommits(int generation, {bool Function(Wal)? affected}) async {
     final owner = _currentWalOwnerUid();
     bool current() => _isCurrent(generation) && owner == _currentWalOwnerUid();
     if (!current() || owner.isEmpty || owner == 'legacy' || _initialIndexAdmissionPending) return;
@@ -24,15 +32,17 @@ extension CaptureCommittedCustody on LocalWalSyncImpl {
             wal.ownerUid == owner &&
             wal.storage == WalStorage.disk &&
             _captureCommitEligible(wal) &&
-            captureEvidenceWalClaimable(wal))
+            captureEvidenceWalClaimable(wal) &&
+            (affected == null || affected(wal)))
         .toList();
     if (candidates.isEmpty) return;
 
     final release = await ClientRefactorFlags.custodyRelease();
-    final verified = <Wal>[];
+    final verified = <Wal, Object>{};
     var agreeCovered = 0, agreePending = 0, disagree = 0, unknown = 0;
     for (final wal in candidates) {
       if (!current()) return;
+      final identity = CaptureCommittedJournal.releaseIdentity(owner, wal);
       final decision = await captureCommits.evaluate(owner, wal);
       if (decision.audited == null) {
         unknown++;
@@ -40,7 +50,7 @@ extension CaptureCommittedCustody on LocalWalSyncImpl {
         disagree++;
       } else if (decision.covered) {
         agreeCovered++;
-        if (release) verified.add(wal);
+        if (release && identity != null) verified[wal] = identity;
       } else {
         agreePending++;
       }
@@ -48,10 +58,12 @@ extension CaptureCommittedCustody on LocalWalSyncImpl {
     if (!current()) return;
     // Immediately recheck membership and eligibility. In particular an uploader
     // may have reserved a row while the manifest digests were being checked.
-    verified.removeWhere(
-        (wal) => !_activeWals.containsIdentity(wal) || wal.ownerUid != owner || !_captureCommitEligible(wal));
+    verified.removeWhere((wal, identity) =>
+        !_activeWals.containsIdentity(wal) ||
+        !_captureCommitEligible(wal) ||
+        identity != CaptureCommittedJournal.releaseIdentity(owner, wal));
     final now = _now().millisecondsSinceEpoch ~/ 1000;
-    for (final wal in verified) {
+    for (final wal in verified.keys) {
       wal.status = WalStatus.synced;
       wal.syncedAt = now;
       wal.keptForTranscriptRecovery = false;
@@ -60,7 +72,7 @@ extension CaptureCommittedCustody on LocalWalSyncImpl {
       try {
         if (!await _saveWalsToFile(generation)) throw StateError('WAL index admission unavailable');
       } catch (_) {
-        for (final wal in verified) {
+        for (final wal in verified.keys) {
           if (_isTrackedWal(wal)) _keepForTranscriptRepair(wal);
         }
         rethrow;
