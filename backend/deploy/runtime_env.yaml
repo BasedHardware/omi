@@ -353,7 +353,6 @@ environments:
           DREAM_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
           PROACTIVITY_V2_POSTHOG_TOKEN: {value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y, category: rollout}
           PROACTIVITY_V2_POSTHOG_HOST: {value: 'https://us.posthog.com', category: rollout}
-          SONIOX_ORDERED_FINALIZE: {value: 'false', category: rollout}
           BUCKET_OBJECT_LAKE:
             category: storage_retention
             value: omi-dev-object-lake-uc1
@@ -614,7 +613,6 @@ environments:
           DREAM_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
           PROACTIVITY_V2_POSTHOG_TOKEN: {value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y, category: rollout}
           PROACTIVITY_V2_POSTHOG_HOST: {value: 'https://us.posthog.com', category: rollout}
-          SONIOX_ORDERED_FINALIZE: {value: 'false', category: rollout}
           BUCKET_OBJECT_LAKE:
             category: storage_retention
             value: omi-dev-object-lake-uc1
@@ -1301,7 +1299,6 @@ environments:
             DREAM_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
             PROACTIVITY_V2_POSTHOG_TOKEN: {value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y, category: rollout}
             PROACTIVITY_V2_POSTHOG_HOST: {value: 'https://us.posthog.com', category: rollout}
-            SONIOX_ORDERED_FINALIZE: {value: 'false', category: rollout}
             REVIEW_SURFACE_MODE: {value: 'on', category: rollout}
             BUCKET_OBJECT_LAKE:
               category: storage_retention
@@ -1728,7 +1725,6 @@ environments:
               category: telemetry
             PROACTIVITY_V2_POSTHOG_TOKEN: {value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y, category: rollout}
             PROACTIVITY_V2_POSTHOG_HOST: {value: 'https://us.posthog.com', category: rollout}
-            SONIOX_ORDERED_FINALIZE: {value: 'false', category: rollout}
             BUCKET_OBJECT_LAKE:
               category: storage_retention
               value: omi-dev-object-lake-uc1
@@ -2154,7 +2150,6 @@ environments:
               category: telemetry
             PROACTIVITY_V2_POSTHOG_TOKEN: {value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y, category: rollout}
             PROACTIVITY_V2_POSTHOG_HOST: {value: 'https://us.posthog.com', category: rollout}
-            SONIOX_ORDERED_FINALIZE: {value: 'false', category: rollout}
             BATCH_PIPELINE_AUTHORITATIVE_LABELS_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_LIVE_ADMISSION_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_REQUIRE_LIVE_TARGET_ENABLED: {value: 'false', category: rollout}
@@ -2527,7 +2522,6 @@ environments:
             DREAM_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
             PROACTIVITY_V2_POSTHOG_TOKEN: {value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y, category: rollout}
             PROACTIVITY_V2_POSTHOG_HOST: {value: 'https://us.posthog.com', category: rollout}
-            SONIOX_ORDERED_FINALIZE: {value: 'false', category: rollout}
             BATCH_PIPELINE_AUTHORITATIVE_LABELS_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_LIVE_ADMISSION_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_REQUIRE_LIVE_TARGET_ENABLED: {value: 'false', category: rollout}
@@ -3304,7 +3298,6 @@ environments:
           DREAM_ON_DEMAND_ENABLED: {value: 'false', category: rollout}
           PROACTIVITY_V2_POSTHOG_TOKEN: {value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y, category: rollout}
           PROACTIVITY_V2_POSTHOG_HOST: {value: 'https://us.posthog.com', category: rollout}
-          SONIOX_ORDERED_FINALIZE: {value: 'false', category: rollout}
           BUCKET_OBJECT_LAKE:
             category: storage_retention
             value: ''
@@ -3690,7 +3683,6 @@ environments:
           DREAM_ON_DEMAND_ENABLED: {value: 'false', category: rollout}
           PROACTIVITY_V2_POSTHOG_TOKEN: {value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y, category: rollout}
           PROACTIVITY_V2_POSTHOG_HOST: {value: 'https://us.posthog.com', category: rollout}
-          SONIOX_ORDERED_FINALIZE: {value: 'false', category: rollout}
           BUCKET_OBJECT_LAKE:
             category: storage_retention
             value: ''
@@ -4417,7 +4409,6 @@ environments:
             DREAM_ON_DEMAND_ENABLED: {value: 'false', category: rollout}
             PROACTIVITY_V2_POSTHOG_TOKEN: {value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y, category: rollout}
             PROACTIVITY_V2_POSTHOG_HOST: {value: 'https://us.posthog.com', category: rollout}
-            SONIOX_ORDERED_FINALIZE: {value: 'false', category: rollout}
             REVIEW_SURFACE_MODE: {value: 'on', category: rollout}
             BUCKET_OBJECT_LAKE:
               category: storage_retention
@@ -4990,7 +4981,6 @@ environments:
               category: telemetry
             PROACTIVITY_V2_POSTHOG_TOKEN: {value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y, category: rollout}
             PROACTIVITY_V2_POSTHOG_HOST: {value: 'https://us.posthog.com', category: rollout}
-            SONIOX_ORDERED_FINALIZE: {value: 'false', category: rollout}
             BUCKET_OBJECT_LAKE:
               category: storage_retention
               value: ''
@@ -5572,7 +5562,6 @@ environments:
               category: telemetry
             PROACTIVITY_V2_POSTHOG_TOKEN: {value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y, category: rollout}
             PROACTIVITY_V2_POSTHOG_HOST: {value: 'https://us.posthog.com', category: rollout}
-            SONIOX_ORDERED_FINALIZE: {value: 'false', category: rollout}
             BATCH_PIPELINE_AUTHORITATIVE_LABELS_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_LIVE_ADMISSION_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_REQUIRE_LIVE_TARGET_ENABLED: {value: 'false', category: rollout}
@@ -6080,7 +6069,6 @@ environments:
             DREAM_ON_DEMAND_ENABLED: {value: 'false', category: rollout}
             PROACTIVITY_V2_POSTHOG_TOKEN: {value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y, category: rollout}
             PROACTIVITY_V2_POSTHOG_HOST: {value: 'https://us.posthog.com', category: rollout}
-            SONIOX_ORDERED_FINALIZE: {value: 'false', category: rollout}
             BATCH_PIPELINE_AUTHORITATIVE_LABELS_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_LIVE_ADMISSION_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_REQUIRE_LIVE_TARGET_ENABLED: {value: 'true', category: rollout}
@@ -6573,7 +6561,6 @@ environments:
             DREAM_ON_DEMAND_ENABLED: {value: 'false', category: rollout}
             PROACTIVITY_V2_POSTHOG_TOKEN: {value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y, category: rollout}
             PROACTIVITY_V2_POSTHOG_HOST: {value: 'https://us.posthog.com', category: rollout}
-            SONIOX_ORDERED_FINALIZE: {value: 'false', category: rollout}
             BATCH_PIPELINE_AUTHORITATIVE_LABELS_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_LIVE_ADMISSION_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_REQUIRE_LIVE_TARGET_ENABLED: {value: 'true', category: rollout}

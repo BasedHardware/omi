@@ -295,6 +295,21 @@ default and is listed in `PRODUCTION_ONLY_IMPORT_UIDS` because the
 `gmp-cloud-run` datasource exists only in production. Neither switch changes
 runtime read behaviour.
 
+### Absolute read gap
+
+`omi-firestore-unattributed-absolute` uses the same 30-minute inputs and
+fires when billed minus instrumented reads stays above 579 reads/s for two
+hours, about 50 million reads/day at that rate. A gap below 3% can still
+cross this threshold. The absolute rule requires fresh LOOKUP, QUERY and
+NOT_FOUND billed series. When billed coverage is incomplete, check
+`omi-firestore-unattributed-reads-blind`.
+
+Margin owns the cost and unattributed-read rules through SCA-3891. Their
+agent-tier Telegram delivery is muted by `omi-tier-silent`. The hourly
+Margin reconciler evaluates the read gap independently and reports to
+SCA-3891. For a sustained gap, compare scheduled operator reads with the
+native and attributed rates. Revert the source PR to roll back the rule.
+
 ## Acceptance
 
 For dashboard investigation only, after deploy each of the three type ratios

@@ -764,8 +764,6 @@ env:
     value: "false"
   - name: SONIOX_WIRE_LEDGER
     value: "false"
-  - name: SONIOX_ORDERED_FINALIZE
-    value: "false"
   - name: SONIOX_CAPTURE_AXIS_DIAGNOSTICS
     value: "false"
   # Fair-use system (PR #5748)

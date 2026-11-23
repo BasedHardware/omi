@@ -23,5 +23,5 @@ abstract final class _SegmentChunks {
 }
 
 abstract final class _CustodyRelease {
-  static const enabledFlag = 'custody_capture_committed_release';
+  static const enabledFlag = 'custody_durable_audio_release';
 }

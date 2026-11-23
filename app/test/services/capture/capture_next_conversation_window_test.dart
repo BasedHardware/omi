@@ -35,7 +35,7 @@ void main() {
     );
     // This regression exercises the legacy saved-transcript coverage contract. Committed receipt
     // custody, and Custom STT's deliberate coverage fallback, have separate assertions below.
-    await setRefactorFlags({'custody_capture_committed_release': false});
+    await setRefactorFlags({'custody_durable_audio_release': false});
   });
 
   tearDown(() async {
@@ -473,7 +473,7 @@ void main() {
         if (!await WalFileManager.saveWals(wals)) throw StateError('test WAL index write failed');
       },
     );
-    await setRefactorFlags({'custody_capture_committed_release': false});
+    await setRefactorFlags({'custody_durable_audio_release': false});
     final link = await connectPendant();
     final origin = world.clock.now();
     await streamPendant(link, 20);
@@ -534,7 +534,7 @@ void main() {
         if (!await WalFileManager.saveWals(wals)) throw StateError('test WAL index write failed');
       },
     );
-    await setRefactorFlags({'custody_capture_committed_release': false});
+    await setRefactorFlags({'custody_durable_audio_release': false});
     world.autoUploadAllowed = false;
     world.processOutcome = () => firstResponse.future;
     final link = await connectPendant();
@@ -607,7 +607,7 @@ void main() {
 
   for (final rawAudio in [false, true]) {
     test('Custom STT second window preserves partial coverage and upload choice rawAudio=$rawAudio', () async {
-      await setRefactorFlags({'custody_capture_committed_release': true});
+      await setRefactorFlags({'custody_durable_audio_release': true});
       await SharedPreferencesUtil().saveCustomSttConfig(
           CustomSttConfig(provider: SttProvider.geminiLive, apiKey: 'synthetic-key', sendRawAudioToOmi: rawAudio));
       world.autoUploadAllowed = false;

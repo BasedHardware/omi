@@ -1,17 +1,21 @@
 """Gateway-only outline and notes clients; existing notes prompts stay authoritative."""
 
+import asyncio
 import json
 from contextlib import contextmanager
 from contextvars import ContextVar
 from typing import Callable
 
 from langchain_core.callbacks import BaseCallbackHandler
+from openai import DefaultAsyncHttpxClient
 
 from utils.llm.gateway_client import feature_auto_lane_id
 from utils.llm.usage_tracker import track_usage
 from utils.generated_compute import require_current_generated_compute
 from utils.conversations.v3 import metrics
 from utils.summary_quality import valid_title
+
+OUTLINE_DEADLINE_SECONDS = 60
 
 
 def get_or_create_omi_gateway_llm(*args, **kwargs):
@@ -100,10 +104,25 @@ def outline(uid, messages):
             options={'request_timeout': 30, 'max_retries': 0},
             feature='conversation_v3_outline',
         )
-        return ''.join(
-            str(chunk.content or '')
-            for chunk in model.bind(reasoning_effort='none', response_format={'type': 'json_object'}).stream(messages)
+        return asyncio.run(_stream_outline(model, messages))
+
+
+async def _stream_outline(model, messages):
+    # Each executor call owns its event loop, so give it a fresh connection pool.
+    async with DefaultAsyncHttpxClient() as transport:
+        client = model.root_async_client.with_options(http_client=transport)
+        stream = model.model_copy(update={'root_async_client': client, 'async_client': client.chat.completions}).bind(
+            reasoning_effort='none', response_format={'type': 'json_object'}
         )
+        deadline = asyncio.timeout(OUTLINE_DEADLINE_SECONDS)
+        try:
+            async with deadline:
+                return ''.join([str(chunk.content or '') async for chunk in stream.astream(messages)])
+        except TimeoutError:
+            if not deadline.expired():
+                raise
+            # An incomplete outline takes the same path as an invalid reply.
+            return ''
 
 
 LIVE_TITLE_FEATURE = 'conversation_v3_live_title'

@@ -223,10 +223,10 @@ when the peer opts in with the WebSocket query `audio_custody=1`.
 The event carries the receipt and per-frame source mappings when supplied by
 the client. Unknown mappings cannot release a device WAL. Pusher can emit
 opcode 203 with the same receipt when the caller opts in with
-`audio_custody=1`; legacy peers receive no new opcode. Existing
-`capture_committed` remains a transcript receipt. Client adoption of audio-only
-WAL release is a separate compatibility/deployment requirement; this server
-change cannot certify the retention behavior of already installed legacy apps.
+`audio_custody=1`; legacy peers receive no new opcode. Capable phone builds journal receipts in shadow. Their
+`custody_durable_audio_release` switch opts into synced retention once every local frame
+matches durable evidence. A `capture_committed` range contributes only frames in its
+explicit `audio_custody` binding. Earlier builds retain their existing upload path.
 Windowed custody increases time-to-ACK and client WAL retention from roughly
 one relay cycle to pack completion: up to an active 60-second pack plus storage
 latency for audio-only receipts (or an earlier boundary). A coalesced coverage

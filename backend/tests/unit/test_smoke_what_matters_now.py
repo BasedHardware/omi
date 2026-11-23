@@ -128,21 +128,11 @@ def test_auto_dev_smoke_uses_the_tagged_candidate_output_with_existing_auth():
         'Shift Cloud Run traffic to validated revisions'
     )
     assert '--audience backend=${{ steps.candidate-urls.outputs.backend_audience }}' in workflow
-    assert 'smoke_what_matters_now.py --base-url https://api.omiapi.com' not in workflow
+    assert 'smoke-what-matters-now-datastore-query' not in workflow
 
 
-def test_manual_development_smoke_keeps_its_existing_external_hostname_path():
+def test_manual_development_deploy_does_not_run_the_suspended_datastore_smoke():
     workflow = backend_deploy_contract_text("gcp_backend.yml")
 
-    assert 'OMI_TASK_INTELLIGENCE_SMOKE_UID' not in workflow
-    assert '--secret=ADMIN_KEY' in workflow
-    # The SCA-33 workflow refactor invokes the smoke via the deploy-control scripts
-    # root: `"$DEPLOY_CONTROL_SCRIPTS/smoke_what_matters_now.py" --base-url ...`, so
-    # the quote from that path prefix sits between the script name and the flag.
-    assert 'smoke_what_matters_now.py" --base-url https://api.omiapi.com' in workflow
-    assert 'id: smoke-what-matters-now-datastore-query' in workflow
-    assert "steps.smoke-what-matters-now-datastore-query.outcome == 'failure'" in workflow
-    restore = workflow.index('Restore Cloud Run traffic snapshot after failed promotion')
-    smoke = workflow.index('Smoke What Matters Now datastore query')
-    verify = workflow.index('Verify serving backend release vector')
-    assert verify < smoke < restore
+    assert 'smoke_what_matters_now.py' not in workflow
+    assert 'smoke-what-matters-now-datastore-query' not in workflow
