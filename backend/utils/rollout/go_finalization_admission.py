@@ -21,7 +21,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from threading import Lock
+from threading import Lock, Thread
 import time
 from typing import Any, Callable, Literal
 
@@ -29,6 +29,7 @@ from prometheus_client import Counter
 
 from config import rollout_cohorts as policy
 from database import rollout_cohorts as store
+from utils.observability.fallback import record_fallback
 
 COHORT = 'go-finalization'
 RAMP_NAME = 'go-finalization'
@@ -37,6 +38,7 @@ TTL_SECONDS = 30.0
 # A failed read is cached as closed this long, so an outage costs one read per process per
 # interval instead of one serialized read per waiting caller.
 ERROR_BACKOFF_SECONDS = 5.0
+assert ERROR_BACKOFF_SECONDS < TTL_SECONDS, 'the error backoff is encoded as an aged successful read'
 
 Engine = Literal['python', 'go']
 Reason = Literal['closed', 'not_member', 'admitted']
@@ -74,6 +76,7 @@ class _Switch:
         self._refresh_lock = Lock()
         self._open = False
         self._read_at: float | None = None
+        self._background: Thread | None = None
 
     def _fresh(self, now: float) -> bool:
         return self._read_at is not None and now - self._read_at < TTL_SECONDS
@@ -83,30 +86,50 @@ class _Switch:
             if self._fresh(self._clock()):
                 return self._open
         if _on_event_loop():
-            # Contract: refresh only from a worker thread (the sync admission path runs on one).
-            # A blocking point read must never stall the loop, so an event-loop caller with a
-            # stale cache gets closed rather than a read.
+            # A blocking point read must never stall the loop. An event-loop caller with a stale
+            # cache gets closed now and starts one background refresh, so later calls see it.
             SWITCH_READS.labels('event_loop').inc()
+            self._refresh_in_background()
             return False
         with self._refresh_lock:
-            with self._state_lock:
-                if self._fresh(self._clock()):  # another caller refreshed while we waited
-                    return self._open
-            result, opened = self._read()
-            with self._state_lock:
-                self._open = opened
-                now = self._clock()
-                # A failed read never counts as a successful one: it is cached closed for
-                # ERROR_BACKOFF_SECONDS only, shared by every waiter, and then retried.
-                self._read_at = now if result != 'error' else now - TTL_SECONDS + ERROR_BACKOFF_SECONDS
-            SWITCH_READS.labels(result).inc()
-            return opened
+            return self._refresh_locked()
+
+    def _refresh_locked(self) -> bool:
+        with self._state_lock:
+            if self._fresh(self._clock()):  # another caller refreshed while we waited
+                return self._open
+        result, opened = self._read()
+        with self._state_lock:
+            self._open = opened
+            now = self._clock()
+            # A failed read never counts as a successful one: it is cached closed for
+            # ERROR_BACKOFF_SECONDS only, shared by every waiter, and then retried.
+            self._read_at = now if result != 'error' else now - TTL_SECONDS + ERROR_BACKOFF_SECONDS
+        SWITCH_READS.labels(result).inc()
+        return opened
+
+    def _refresh_in_background(self) -> None:
+        if not self._refresh_lock.acquire(blocking=False):
+            return  # a refresh is already running; it serves this caller too
+
+        def run():
+            try:
+                self._refresh_locked()
+            finally:
+                self._refresh_lock.release()
+
+        try:
+            thread = Thread(target=run, name='go-finalization-switch-refresh', daemon=True)
+            self._background = thread
+            thread.start()
+        except Exception:
+            self._refresh_lock.release()
 
     def _read(self) -> tuple[str, bool]:
         try:
             env_doc = self._reader()
         except Exception:
-            logger.warning('event=go_finalization_switch_read outcome=error')
+            _record_python_fallback()
             return 'error', False
         if not env_doc:
             return 'absent', False
@@ -116,6 +139,19 @@ class _Switch:
         if (type(value) is int or type(value) is float) and value == OPEN_PERCENT:
             return 'open', True
         return ('absent' if value is None else 'closed'), False
+
+
+def _record_python_fallback() -> None:
+    # A read error routes a would-be Go owner to the incumbent engine: a mode change, so it is
+    # reported through the shared fallback contract rather than only a local counter.
+    record_fallback(
+        component='sync_dispatch',
+        from_mode='go_finalization',
+        to_mode='python_finalization',
+        reason='unavailable',
+        outcome='degraded',
+        log=logger,
+    )
 
 
 def _on_event_loop() -> bool:
@@ -142,6 +178,7 @@ def go_finalization_decision(uid: str) -> tuple[Engine, Reason]:
     try:
         member = policy.in_rollout_cohort(uid, COHORT)
     except Exception:
+        _record_python_fallback()
         member = False
     if not member:
         return 'python', 'not_member'

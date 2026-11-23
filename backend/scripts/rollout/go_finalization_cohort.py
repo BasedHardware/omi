@@ -86,9 +86,15 @@ def main(argv: Sequence[str] | None = None, *, client_factory: Callable[..., Any
         return 2
     except Exception:
         # SDK errors may name the document path, which carries the uid. Never print or re-raise them.
-        print('Membership write failed; no UID or SDK error is logged. Nothing was committed.', file=sys.stderr)
+        # A commit-time timeout is ambiguous: the write may have landed.
+        print(
+            'Membership write outcome unknown; no UID or SDK error is logged. Re-read the flag and its '
+            'audit row before retrying.',
+            file=sys.stderr,
+        )
         return 1
     print(json.dumps({'env': args.env, 'cohort': store.GO_FINALIZATION_COHORT, 'before': before, 'after': after}))
+    print('Allow 60 seconds for process caches before expecting admission to change.', file=sys.stderr)
     return 0
 
 

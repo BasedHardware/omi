@@ -103,17 +103,52 @@ def test_read_error_closes_and_never_serves_last_known_good(member):
     assert reader.calls == 3
 
 
-def test_event_loop_caller_with_stale_cache_gets_closed_without_a_read(member):
+def test_event_loop_caller_gets_closed_and_starts_one_background_refresh(member):
     import asyncio
 
     reader, _clock = configure(env(100))
 
     async def on_loop():
-        return admission.go_finalization_decision(UID)
+        first = admission.go_finalization_decision(UID)
+        admission._switch._background.join(5)
+        return first, admission.go_finalization_decision(UID)
 
-    assert asyncio.run(on_loop()) == ('python', 'closed')
-    assert reader.calls == 0
-    assert admission.go_finalization_decision(UID) == ('go', 'admitted')  # worker thread refreshes
+    # The stale caller never blocks the loop; the refresh it starts serves the next call.
+    assert asyncio.run(on_loop()) == (('python', 'closed'), ('go', 'admitted'))
+    assert reader.calls == 1
+
+
+def test_read_and_membership_errors_report_a_python_fallback(member, monkeypatch):
+    calls = []
+    monkeypatch.setattr(admission, 'record_fallback', lambda **kw: calls.append(kw))
+    configure(RuntimeError('down'))
+    assert admission.go_finalization_decision(UID) == ('python', 'closed')
+    configure(env(100))
+
+    def boom(uid, name):
+        raise RuntimeError('unknown')
+
+    monkeypatch.setattr(policy, 'in_rollout_cohort', boom)
+    assert admission.go_finalization_decision(UID) == ('python', 'not_member')
+    assert [(c['component'], c['to_mode'], c['reason'], c['outcome']) for c in calls] == [
+        ('sync_dispatch', 'python_finalization', 'unavailable', 'degraded')
+    ] * 2
+
+
+def test_membership_write_refuses_to_write_back_a_malformed_sibling_flag():
+    db = StrictFirestore()
+    db.rows[('rollout_cohorts', UID)] = {'cohorts': {'dev': {'dream-agent': 'yes'}}}
+    with pytest.raises(ValueError):
+        store.write_go_finalization_membership(
+            UID, 'prod', True, actor='lead', reason='ok', at='t', firestore_client=db
+        )
+    assert db.rows[('rollout_cohorts', UID)] == {'cohorts': {'dev': {'dream-agent': 'yes'}}}
+
+
+def test_live_preflight_knows_every_ramp_name():
+    from scripts.rollout import live_preflight
+
+    assert live_preflight.RAMP_NAMES == frozenset(store.RAMP_NAMES)
 
 
 def test_closed_and_non_member_paths_add_no_firestore_operations(monkeypatch):
@@ -155,14 +190,11 @@ def test_membership_write_is_atomic_with_its_audit_row():
     )
     assert (before, after) == (None, True)
     assert db.rows[('rollout_cohorts', UID)]['cohorts']['prod'] == {'dream-agent': True, 'go-finalization': True}
-    entries = [
-        row for path, row in db.rows.items() if path[:3] == ('rollout_cohorts', '_audit-go-finalization', 'entries')
-    ]
+    entries = [row for path, row in db.rows.items() if path[:3] == ('rollout_cohorts', UID, 'go_finalization_audit')]
     assert len(entries) == 1
     assert entries[0] | {} == {
         'cohort': 'go-finalization',
         'env': 'prod',
-        'uid': UID,
         'before': None,
         'after': True,
         'actor': 'release-lead',
@@ -172,9 +204,7 @@ def test_membership_write_is_atomic_with_its_audit_row():
     store.write_go_finalization_membership(
         UID, 'prod', False, actor='release-lead', reason='close', at='2026-11-23T09:01:00+00:00', firestore_client=db
     )
-    entries = [
-        row for path, row in db.rows.items() if path[:3] == ('rollout_cohorts', '_audit-go-finalization', 'entries')
-    ]
+    entries = [row for path, row in db.rows.items() if path[:3] == ('rollout_cohorts', UID, 'go_finalization_audit')]
     assert sorted((str(row['before']), row['after']) for row in entries) == [('None', True), ('True', False)]
 
 
@@ -182,6 +212,7 @@ def test_membership_write_is_atomic_with_its_audit_row():
     'kwargs',
     [
         {'uid': '_ramp'},
+        {'uid': '_audit-go-finalization'},
         {'env': 'staging'},
         {'member': 1},
         {'actor': ''},

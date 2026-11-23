@@ -14,7 +14,18 @@ else as closed. Write the name only after every `_ramp` reader runs a build that
 knows it (backend, backend-listen, pusher, backend-sync, notifications job), because
 older readers reject the whole document. Change cohort membership only with
 `scripts/rollout/go_finalization_cohort.py`, which writes the flag and its audit row
-in one transaction.
+(`rollout_cohorts/{uid}/go_finalization_audit`, erased with the account) in one
+transaction; allow 60 seconds for membership caches.
+
+Opening: `ramp_set.py --percent go-finalization=100` needs `--accept-not-live "<reason>"`
+on the first open, because the live preflight requires a non-zero
+`omi_runtime_percent{name="go-finalization"}` series and that gauge is 0 until the switch
+opens. Name the release issue's go-ahead in the reason. Rollback: write
+`go-finalization=0` (a narrowing write, no preflight); the tooling never removes a name.
+
+Environments: the switch reads `_ramp.envs.<deployment_env>` while membership reads
+`cohorts.<rollout_environment>`, and the CLI writes only `prod` and `dev`. Staging
+therefore has no admissible members; rehearse on dev.
 
 The exporter uses the serving cache (30 seconds, existing pending/LKG rules),
 not a second Firestore reader. A scrape refreshes that cache even on an idle

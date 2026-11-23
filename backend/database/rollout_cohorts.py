@@ -326,8 +326,9 @@ def write_ramp(
 # ---------------------------------------------------------------------------
 
 GO_FINALIZATION_COHORT = 'go-finalization'
-GO_FINALIZATION_AUDIT_DOC = '_audit-go-finalization'
-GO_FINALIZATION_AUDIT_ENTRIES = 'entries'
+# Audit rows live under the owner's own cohort document, so account erasure removes them with it
+# (database/user_data_deletion.py) and no shared store keeps the uid.
+GO_FINALIZATION_AUDIT_COLLECTION = 'go_finalization_audit'
 GO_FINALIZATION_ENVS = ('prod', 'dev', 'local', 'offline')
 
 
@@ -343,10 +344,11 @@ def write_go_finalization_membership(
 ) -> tuple[bool | None, bool]:
     """Set `cohorts.<env>.go-finalization` on `rollout_cohorts/{uid}` and append its audit row in one transaction.
 
-    Returns (before, after). `before` is None when the flag was absent. The audit row records the
-    actor, reason, environment, uid, before and after; it is created, never updated.
+    Returns (before, after). `before` is None when the flag was absent. The audit row, at
+    `rollout_cohorts/{uid}/go_finalization_audit/{id}`, records the actor, reason, environment,
+    before and after; it is created, never updated, and erased with the account.
     """
-    if not valid_uid(uid):
+    if not valid_uid(uid) or uid.startswith('_'):
         raise ValueError('membership uid invalid')
     if env not in GO_FINALIZATION_ENVS:
         raise ValueError('membership env unsupported')
@@ -359,22 +361,21 @@ def write_go_finalization_membership(
     client = firestore_client or get_data_plane_firestore_client()
     collection = client.collection(COLLECTION)
     ref = collection.document(uid)
-    entry_ref = (
-        collection.document(GO_FINALIZATION_AUDIT_DOC)
-        .collection(GO_FINALIZATION_AUDIT_ENTRIES)
-        .document(uuid.uuid4().hex)
-    )
+    entry_ref = ref.collection(GO_FINALIZATION_AUDIT_COLLECTION).document(uuid.uuid4().hex)
 
     @firestore.transactional
     def commit(transaction):
         snapshot = ref.get(transaction=transaction)
         data = (snapshot.to_dict() or {}) if snapshot.exists else {}
         cohorts = data.get('cohorts', {})
-        if not isinstance(cohorts, dict) or not isinstance(cohorts.get(env, {}), dict):
+        # Same rule as _read_memberships: a malformed sibling flag would make readers reject the
+        # whole document, so refuse to write one back.
+        if not isinstance(cohorts, dict) or any(
+            not isinstance(flags, dict) or any(type(value) is not bool for value in flags.values())
+            for flags in cohorts.values()
+        ):
             raise ValueError('invalid cohort document')
         before = cohorts.get(env, {}).get(GO_FINALIZATION_COHORT)
-        if before is not None and type(before) is not bool:
-            raise ValueError('invalid cohort document')
         # The snapshot was read in this transaction, so a full write keeps every other cohort flag.
         updated = {**data, 'cohorts': {**cohorts, env: {**cohorts.get(env, {}), GO_FINALIZATION_COHORT: member}}}
         transaction.set(ref, updated)
@@ -383,7 +384,6 @@ def write_go_finalization_membership(
             {
                 'cohort': GO_FINALIZATION_COHORT,
                 'env': env,
-                'uid': uid,
                 'before': before,
                 'after': member,
                 'actor': actor,
