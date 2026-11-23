@@ -15705,6 +15705,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get stillWorkingOnIt => 'Still working on it.';
 
   @override
+  String get deviceReadyToUse => 'Ready to use';
+
+  @override
   String get firmwareUpdateFirmwareTooOld =>
       'Your device\'s firmware is too old for this update. Contact support for help updating your device.';
 

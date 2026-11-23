@@ -15733,6 +15733,9 @@ class AppLocalizationsUr extends AppLocalizations {
   String get stillWorkingOnIt => 'ابھی کام جاری ہے۔';
 
   @override
+  String get deviceReadyToUse => 'استعمال کے لیے تیار';
+
+  @override
   String get firmwareUpdateFirmwareTooOld =>
       'آپ کے آلے کا فرم ویئر اس اپ ڈیٹ کے لیے بہت پرانا ہے۔ آلے کو اپ ڈیٹ کرنے میں مدد کے لیے سپورٹ سے رابطہ کریں۔';
 

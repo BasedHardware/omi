@@ -15757,6 +15757,9 @@ class AppLocalizationsLv extends AppLocalizations {
   String get stillWorkingOnIt => 'Vēl tiek pie tā strādāts.';
 
   @override
+  String get deviceReadyToUse => 'Gatavs lietošanai';
+
+  @override
   String get firmwareUpdateFirmwareTooOld =>
       'Jūsu ierīces aparātprogrammatūra ir pārāk veca šim atjauninājumam. Sazinieties ar atbalsta dienestu, lai saņemtu palīdzību ierīces atjaunināšanā.';
 

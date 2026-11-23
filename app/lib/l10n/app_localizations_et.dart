@@ -15714,6 +15714,9 @@ class AppLocalizationsEt extends AppLocalizations {
   String get stillWorkingOnIt => 'Töötame veel selle kallal.';
 
   @override
+  String get deviceReadyToUse => 'Valmis kasutamiseks';
+
+  @override
   String get firmwareUpdateFirmwareTooOld =>
       'Teie seadme püsivara on selle värskenduse jaoks liiga vana. Seadme värskendamiseks abi saamiseks võtke ühendust klienditoega.';
 

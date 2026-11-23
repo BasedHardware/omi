@@ -15758,6 +15758,9 @@ class AppLocalizationsMs extends AppLocalizations {
   String get stillWorkingOnIt => 'Masih memprosesnya.';
 
   @override
+  String get deviceReadyToUse => 'Sedia untuk digunakan';
+
+  @override
   String get firmwareUpdateFirmwareTooOld =>
       'Perisian tegar peranti anda terlalu lama untuk kemas kini ini. Hubungi sokongan untuk mendapatkan bantuan mengemas kini peranti anda.';
 

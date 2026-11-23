@@ -15773,6 +15773,9 @@ class AppLocalizationsKn extends AppLocalizations {
   String get stillWorkingOnIt => 'ಇನ್ನೂ ಕೆಲಸ ನಡೆಯುತ್ತಿದೆ.';
 
   @override
+  String get deviceReadyToUse => 'ಬಳಸಲು ಸಿದ್ಧ';
+
+  @override
   String get firmwareUpdateFirmwareTooOld =>
       'ಈ ನವೀಕರಣಕ್ಕೆ ನಿಮ್ಮ ಸಾಧನದ ಫರ್ಮ್‌ವೇರ್ ತುಂಬಾ ಹಳೆಯದಾಗಿದೆ. ನಿಮ್ಮ ಸಾಧನವನ್ನು ನವೀಕರಿಸಲು ಸಹಾಯಕ್ಕಾಗಿ ಬೆಂಬಲ ತಂಡವನ್ನು ಸಂಪರ್ಕಿಸಿ.';
 

@@ -15773,6 +15773,9 @@ class AppLocalizationsBg extends AppLocalizations {
   String get stillWorkingOnIt => 'Все още работим по него.';
 
   @override
+  String get deviceReadyToUse => 'Готово за използване';
+
+  @override
   String get firmwareUpdateFirmwareTooOld =>
       'Фърмуерът на устройството ви е твърде стар за тази актуализация. Свържете се с поддръжката за помощ с актуализирането на устройството.';
 

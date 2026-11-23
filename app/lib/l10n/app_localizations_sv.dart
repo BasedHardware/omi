@@ -15730,6 +15730,9 @@ class AppLocalizationsSv extends AppLocalizations {
   String get stillWorkingOnIt => 'Jobbar fortfarande på det.';
 
   @override
+  String get deviceReadyToUse => 'Redo att använda';
+
+  @override
   String get firmwareUpdateFirmwareTooOld =>
       'Enhetens firmware är för gammal för den här uppdateringen. Kontakta supporten för att få hjälp med att uppdatera enheten.';
 

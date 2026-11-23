@@ -15800,6 +15800,9 @@ class AppLocalizationsCa extends AppLocalizations {
   String get stillWorkingOnIt => 'Encara hi estem treballant.';
 
   @override
+  String get deviceReadyToUse => 'Llest per utilitzar';
+
+  @override
   String get firmwareUpdateFirmwareTooOld =>
       'El microprogramari del dispositiu és massa antic per a aquesta actualització. Contacta amb el servei d\'assistència perquè t\'ajudi a actualitzar el dispositiu.';
 

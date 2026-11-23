@@ -15784,6 +15784,9 @@ class AppLocalizationsTe extends AppLocalizations {
   String get stillWorkingOnIt => 'ఇంకా పని జరుగుతోంది.';
 
   @override
+  String get deviceReadyToUse => 'వాడుకకు సిద్ధం';
+
+  @override
   String get firmwareUpdateFirmwareTooOld =>
       'ఈ నవీకరణకు మీ పరికరంలోని ఫర్మ్‌వేర్ చాలా పాతది. మీ పరికరాన్ని నవీకరించడంలో సహాయం కోసం సపోర్ట్‌ను సంప్రదించండి.';
 

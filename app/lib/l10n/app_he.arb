@@ -12293,6 +12293,7 @@
     "finishedSummaryReady": "הסיכום מוכן",
     "writingSummaryStatus": "כותב סיכום…",
     "stillWorkingOnIt": "עדיין עובדים על זה.",
+    "deviceReadyToUse": "מוכן לשימוש",
     "firmwareUpdateFirmwareTooOld": "הקושחה של המכשיר שלך ישנה מדי לעדכון הזה. יש לפנות לתמיכה לקבלת עזרה בעדכון המכשיר.",
     "firmwareUpdateAppRequired": "עדכון הקושחה הזה דורש גרסה חדשה יותר של אפליקציית Omi. יש לעדכן את האפליקציה מחנות האפליקציות שלך, ואז לבדוק שוב.",
     "quietPayerTitle": "אין הקלטות כבר 5 ימים",

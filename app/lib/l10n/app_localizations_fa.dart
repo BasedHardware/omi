@@ -15714,6 +15714,9 @@ class AppLocalizationsFa extends AppLocalizations {
   String get stillWorkingOnIt => 'هنوز روی آن کار می‌کنیم.';
 
   @override
+  String get deviceReadyToUse => 'آماده برای استفاده';
+
+  @override
   String get firmwareUpdateFirmwareTooOld =>
       'میان‌افزار دستگاه شما برای این به‌روزرسانی خیلی قدیمی است. برای دریافت کمک در به‌روزرسانی دستگاه با پشتیبانی تماس بگیرید.';
 

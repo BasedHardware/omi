@@ -15727,6 +15727,9 @@ class AppLocalizationsFi extends AppLocalizations {
   String get stillWorkingOnIt => 'Yhä työn alla.';
 
   @override
+  String get deviceReadyToUse => 'Valmis käytettäväksi';
+
+  @override
   String get firmwareUpdateFirmwareTooOld =>
       'Laitteesi laiteohjelmisto on liian vanha tätä päivitystä varten. Ota yhteyttä tukeen saadaksesi apua laitteen päivittämiseen.';
 

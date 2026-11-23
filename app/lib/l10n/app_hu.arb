@@ -4832,6 +4832,7 @@
     "finishedSummaryReady": "Az összefoglaló kész",
     "writingSummaryStatus": "Összefoglaló írása…",
     "stillWorkingOnIt": "Még dolgozunk rajta.",
+    "deviceReadyToUse": "Használatra kész",
     "firmwareUpdateFirmwareTooOld": "Az eszköz firmware-e túl régi ehhez a frissítéshez. Az eszköz frissítéséhez kérjen segítséget az ügyfélszolgálattól.",
     "firmwareUpdateAppRequired": "Ehhez a firmware-frissítéshez az Omi alkalmazás újabb verziója szükséges. Frissítse az alkalmazást az alkalmazásboltban, majd ellenőrizze újra.",
     "quietPayerTitle": "5 napja nincs felvétel",

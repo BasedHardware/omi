@@ -15780,6 +15780,9 @@ class AppLocalizationsHu extends AppLocalizations {
   String get stillWorkingOnIt => 'Még dolgozunk rajta.';
 
   @override
+  String get deviceReadyToUse => 'Használatra kész';
+
+  @override
   String get firmwareUpdateFirmwareTooOld =>
       'Az eszköz firmware-e túl régi ehhez a frissítéshez. Az eszköz frissítéséhez kérjen segítséget az ügyfélszolgálattól.';
 

@@ -15494,6 +15494,9 @@ class AppLocalizationsJa extends AppLocalizations {
   String get stillWorkingOnIt => 'まだ処理中です。';
 
   @override
+  String get deviceReadyToUse => '使用準備完了';
+
+  @override
   String get firmwareUpdateFirmwareTooOld => 'デバイスのファームウェアが古いため、この更新を適用できません。デバイスの更新についてはサポートにお問い合わせください。';
 
   @override

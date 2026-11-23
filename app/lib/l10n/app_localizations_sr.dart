@@ -15729,6 +15729,9 @@ class AppLocalizationsSr extends AppLocalizations {
   String get stillWorkingOnIt => 'Још увек радимо на томе.';
 
   @override
+  String get deviceReadyToUse => 'Спремно за употребу';
+
+  @override
   String get firmwareUpdateFirmwareTooOld =>
       'Фирмвер вашег уређаја је престар за ово ажурирање. Обратите се подршци за помоћ при ажурирању уређаја.';
 

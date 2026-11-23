@@ -15852,6 +15852,9 @@ class AppLocalizationsFr extends AppLocalizations {
   String get stillWorkingOnIt => 'Toujours en cours.';
 
   @override
+  String get deviceReadyToUse => 'Prêt à l\'emploi';
+
+  @override
   String get firmwareUpdateFirmwareTooOld =>
       'Le micrologiciel de votre appareil est trop ancien pour cette mise à jour. Contactez l\'assistance pour obtenir de l\'aide afin de mettre à jour votre appareil.';
 

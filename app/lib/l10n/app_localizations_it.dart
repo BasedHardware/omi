@@ -15800,6 +15800,9 @@ class AppLocalizationsIt extends AppLocalizations {
   String get stillWorkingOnIt => 'Ancora al lavoro.';
 
   @override
+  String get deviceReadyToUse => 'Pronto per l\'uso';
+
+  @override
   String get firmwareUpdateFirmwareTooOld =>
       'Il firmware del tuo dispositivo è troppo vecchio per questo aggiornamento. Contatta l\'assistenza per ricevere aiuto con l\'aggiornamento del dispositivo.';
 
