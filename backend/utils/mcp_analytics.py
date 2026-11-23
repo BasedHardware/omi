@@ -27,6 +27,7 @@ from datetime import datetime, timezone
 from typing import Any, List, Mapping, Optional
 
 import database.redis_db as redis_db
+from utils import mcp_daily_rollup
 from utils.executors import postprocess_executor, submit_with_context
 from utils.product_telemetry import emit_product_event
 from utils.mcp_server.constants import MCP_MAX_BATCH_MESSAGES
@@ -414,7 +415,9 @@ def schedule_mcp_tool_use_succeeded(*, uid: str, tool_name: Any, client_name: An
 
     No current transport signal verifies initiation; never infer it from OAuth,
     arguments or client names. Keep scheduled_agent successes in the raw stream
-    for downstream qualification and cadence analysis. No sampling or Redis.
+    for downstream qualification and cadence analysis. The raw event never
+    touches Redis; the daily rollup (``utils.mcp_daily_rollup``) is queued
+    separately and fails open.
     """
     emit_mcp_tool_use_succeeded(
         uid=uid,
@@ -423,6 +426,25 @@ def schedule_mcp_tool_use_succeeded(*, uid: str, tool_name: Any, client_name: An
         initiator=initiator,
         occurred_at=datetime.now(timezone.utc),
     )
+    schedule_mcp_daily_rollup(uid=uid, tool_name=tool_name, client_name=client_name, initiator=initiator)
+
+
+def schedule_mcp_daily_rollup(*, uid: str, tool_name: Any, client_name: Any, initiator: str) -> None:
+    """Queue the Redis accumulation for the ``MCP Daily Activity`` snapshot off the request path."""
+    tool = mcp_tool_enum(tool_name)
+    if not uid or uid == MCP_ANONYMOUS_DISTINCT_ID or tool == "unknown" or not mcp_daily_rollup.enabled():
+        return
+    try:
+        submit_with_context(
+            postprocess_executor,
+            mcp_daily_rollup.record_success,
+            uid=uid,
+            client=client_name if client_name in _MCP_CLIENT_NAMES else "unknown",
+            tool=tool,
+            initiator=initiator if initiator in {"user", "scheduled_agent", "unknown"} else "unknown",
+        )
+    except Exception as exc:  # noqa: BLE001 - optional telemetry must fail open
+        logger.warning("mcp daily rollup scheduling failed error=%s", type(exc).__name__)
 
 
 def emit_mcp_tool_use_succeeded(

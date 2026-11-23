@@ -73,7 +73,7 @@ it("pins v2 per-success input, UTC day threshold and app-first attribution", () 
   expect(sql).toContain("properties.schema_version))=2");
   expect(sql).toContain("initiator IN ('user','unknown')");
   expect(sql).toContain("intDiv(toUnixTimestamp(timestamp),86400)");
-  expect(sql).toContain("HAVING count()>=2");
+  expect(sql).toContain("HAVING sum(calls)>=2");
   expect(sql).toContain("ORDER BY (p!='integrations') DESC");
   expect(sql).not.toContain("MCP Tool Call");
   expect(sql).not.toContain("MCP Active");
@@ -136,5 +136,49 @@ it("carries marker presence without letting a status-only row enter any period's
     expect(m.prev).toBeNull();
     expect(m.split.mcp).toBe(0);
     expect(m.mcpReason).not.toBe(MCP_MARKER_MISSING);
+  }
+});
+
+it("falls back to the server's daily rollup only where raw rows are absent (SCA-3665)", () => {
+  const sql = activityQuery(new Date("2026-10-15"), 7);
+  expect(sql).toContain("event='MCP Daily Activity'");
+  expect(sql).toContain("properties.schema_version))=1");
+  // Snapshots for the last day arrive after it ends: read one day past the window.
+  expect(sql).toContain("timestamp < toDateTime('2026-10-16 00:00:00', 'UTC')");
+  // Raw (prio 1) wins over the rollup (prio 0) for the same actor/client/day.
+  expect(sql).toContain("1 prio FROM mcp_raw_stats");
+  expect(sql).toContain("0 prio FROM mcp_roll_stats");
+  expect(sql).toContain("argMax(c,prio) calls");
+  // The largest cumulative snapshot of a day is the one read.
+  expect(sql).toContain("argMax(calls,tuple(raw_calls,timestamp))");
+  // The marker survives the raw stream being switched off.
+  expect(sql).toContain(
+    "SELECT actor FROM mcp_raw UNION ALL SELECT actor FROM mcp_rollup_raw"
+  );
+  expect(sql).toContain("(SELECT count() FROM mcp_marker)");
+});
+
+it("reads every property the backend rollup snapshot emits", () => {
+  const source = readFileSync("../../backend/utils/mcp_daily_rollup.py", "utf8")
+    .split("def snapshot_properties(")[1]
+    .split("def flush_due(")[0];
+  const emitted = Array.from(source.matchAll(/^\s*"([a-z_]+)":/gm)).map(
+    (m) => m[1]
+  );
+  const sql = activityQuery(new Date("2026-10-15"), 7);
+  for (const key of [
+    "utc_day",
+    "client",
+    "raw_calls",
+    "calls",
+    "positive_gaps",
+    "sum_gap_s",
+    "sum_gap_sq_s",
+    "span_s",
+    "dominant_tool_calls",
+    "last_call_s",
+  ]) {
+    expect(emitted).toContain(key);
+    expect(sql).toContain(`JSONExtractString(properties,'${key}')`);
   }
 });

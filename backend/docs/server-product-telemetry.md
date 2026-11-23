@@ -93,6 +93,29 @@ unsampled best-effort delivery is not a durable outbox or proof of ingestion.
 `MCP Tool Call` remains the stable 25%-per-UID sampled diagnostic; `MCP Active`
 remains authenticated transport presence and never qualifies by itself.
 
+### `MCP Daily Activity` rollup (SCA-3665)
+
+The per-call stream is about 71k PostHog events a day, 80% of them from a few
+always-on streams. `utils/mcp_daily_rollup.py` keeps, per uid/client/UTC day, the
+counters the Omi TV reader needs in a Redis hash `mcp:roll:{YYYYMMDD}:{client}:{uid}`:
+raw calls, qualifying calls (`user`/`unknown`), first/last call second,
+positive-gap count, sum and sum of squares, and the dominant tool's count. Each
+success queues one atomic Lua call on `postprocess_executor` (hash, TTL 3 days,
+and a `ZADD NX` on the day's dirty set `mcp:roll:dirty:{YYYYMMDD}`). A
+per-process daemon sweeper emits a cumulative `MCP Daily Activity` snapshot
+(schema 1, `$process_person_profile: false`) at most once per 30 minutes per key,
+and a final one for every key still dirty after its day ends. ZREM on the dirty
+set is the claim, so one instance emits each snapshot.
+
+`web/admin/lib/wall-mcp.ts` prefers raw rows and falls back to the largest
+snapshot (by `raw_calls`) per actor/client/day. Its cadence statistics are
+computed from the same sums, so DAU/WAU/MAU stay exact for complete days.
+
+Kill switch: `MCP_DAILY_ROLLUP_ENABLED` (on unless `0`/`false`/`off`/`no`).
+Redis errors fail open and never touch the raw event. The raw event stays on
+until the first full UTC day of snapshots matches it in the reader; then
+`contracts/analytics/posthog.json` drops it (planned `mcp-raw-off`).
+
 ## Non-Python library labels
 
 `posthog-capture-v1-internal` comes from PostHog's own Django internal capture

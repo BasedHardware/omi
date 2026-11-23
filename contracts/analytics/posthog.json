@@ -5,6 +5,11 @@
   "window": "7 days to 2026-11-23T10:30Z",
   "method": "HogQL per event: sum(100 / coalesce(omi_sample_pct, 100)) / 7; where a later looser stage overwrote the tag (Recording Upload Started/Completed: tagged 2, kept 0.5%), stored/day x 100 / effective pct. identified = person_mode full on at least half the rows. identified = person_mode other than propertyless (force_upgrade bills as identified), re-read 2026-11-23 ~12:00Z."
  },
+ "feature_flags": {
+  "measured_requests_per_day": 157105,
+  "source": "/api/billing/usage feature_flag_requests, team 302298: mean of 2026-11-16..22. All of it is project 302298. Billing counts the residual from older mobile builds; current mobile, desktop and web/app builds block /flags, and backend proactivity_flags made 0 PostHog calls in 7 days (GMP, ro-prod).",
+  "note": "Update this from a fresh billing measurement; the estimate prices flags as measured_requests_per_day x days_per_month."
+ },
  "budget": {
   "monthly_usd": 500,
   "days_per_month": 30,
@@ -56,30 +61,28 @@
   "tiers_note": "Upper bounds in units per month; null is open-ended. The published 2-15M (events) and 2-10M (flags) rates are applied beyond their upper bound too, which overstates slightly.",
   "warehouse_usd_per_row": 5.9e-06,
   "warehouse_usd_per_row_derived": true,
-  "feature_flag_requests_per_month": 4710000,
-  "feature_flag_requests_source": "/api/billing/usage feature_flag_requests, team 302298: mean of 2026-11-16..22 = 157,105/day x 30. All of it is project 302298.",
   "other_monthly_usd": {
    "session_replay": 27.63
   },
   "planned": [
    {
-    "id": "mcp-daily-rollup",
-    "owner": "backend (mcp_analytics) + web/admin wall-mcp",
-    "change": "Server keeps per uid/client/UTC-day cadence stats in Redis and emits one rollup event per actor-client-day; wall-mcp reads the rollup. Exact for DAU/WAU/MAU; replaces the per-call MCP Tool Use Succeeded stream.",
+    "id": "mcp-raw-off",
+    "owner": "parent session (PostHog apply) after the rollup check",
+    "change": "Set MCP Tool Use Succeeded to off (add it to the drop function) once the first full UTC day of MCP Daily Activity matches the raw stream in wall-mcp (same daily actor counts). The reader already falls back to the rollup per actor/client/day, so the switch is a config apply.",
     "measured": "7 days to 2026-11-23: 499,219 calls over 9,164 actor-client-days (1,309/day); 343 actor-days with 200+ calls carry 397,106 calls (80%).",
     "saving": {
      "events_per_day": {
-      "MCP Tool Use Succeeded": 70008
+      "MCP Tool Use Succeeded": 71317
      }
     }
    },
    {
     "id": "posthog-flags-off",
     "owner": "David (PostHog write) after old builds age out",
-    "change": "Deactivate the 24 active PostHog flags. Current mobile, desktop and web/app builds already block /flags and read Omi flags; the residual 157k requests/day come from older builds still in the field. PostHog bills a /flags request that evaluates at least one active flag; with none active the requests should not bill (documented by implication, not verified).",
+    "change": "Bring PostHog /flags requests to zero: deactivate the 24 active PostHog flags once the older builds that still call /flags have aged out. Current mobile, desktop and web/app builds already block /flags and read Omi flags. PostHog bills a /flags request that evaluates at least one active flag; with none active the requests should not bill (documented by implication, not verified). No flag billing limit (David).",
     "risk": "Older builds would read every PostHog flag as off, including 12 kill switches and the paywall/onboarding experiment flags. Needs a per-flag review of what off means on those builds first.",
     "saving": {
-     "feature_flag_requests_per_month": 4710000
+     "feature_flag_requests": "all"
     }
    }
   ]
@@ -214,7 +217,6 @@
     "Device Paired",
     "Device Pairing Blocked",
     "Device Scan Empty",
-    "Device Session Ended",
     "Disconnect Friend Clicked",
     "Export Tasks Banner Clicked",
     "Fact List Item Clicked",
@@ -234,7 +236,6 @@
     "Live Transcript Card Clicked",
     "Local WAL Stuck",
     "MCP Tool Use Succeeded",
-    "Memory Created",
     "Memory List Item Clicked",
     "Monitoring Started",
     "Monitoring Stopped",
@@ -253,7 +254,6 @@
     "Product Journey First Result",
     "Recording Produced No Conversation",
     "Recording Start Failed",
-    "Recording Started",
     "Recording Upload Completed",
     "Recording Upload Failed",
     "Recording Upload Started",
@@ -305,7 +305,8 @@
     "quiz_completed",
     "quiz_email_submitted",
     "quiz_screen_viewed",
-    "quiz_started"
+    "quiz_started",
+    "MCP Daily Activity"
    ],
    "note": "Listed events skip the default sample; later sample stages still apply to them. $-events (except $rageclick) and names containing the hog-source markers also pass; that rule lives in the function source, not in inputs."
   },
@@ -1482,8 +1483,10 @@
    "identified": true,
    "purpose": "product",
    "reader": [
-    "web/admin/lib/wall-capture-sql.ts"
-   ]
+    "web/admin/lib/wall-capture-sql.ts",
+    "web/admin/lib/wall-posthog.ts"
+   ],
+   "sampled": "2% by the keep-list default since 2026-11-23 (David). Readers weight by omi_sample_pct."
   },
   "Diagnostics Opened": {
    "est_events_per_day": 147,
@@ -1875,7 +1878,8 @@
    "purpose": "product",
    "reader": [
     "web/admin/lib/wall-mcp.ts"
-   ]
+   ],
+   "note": "Raw per-call stream, kept until the first full day of MCP Daily Activity is verified against it; then set this event to off (planned mcp-raw-off), a config apply."
   },
   "Memories Cache Reconcile": {
    "est_events_per_day": 460,
@@ -1895,11 +1899,15 @@
    "identified": true,
    "purpose": "product",
    "reader": [
+    "web/admin/lib/qualified-activity.ts",
+    "web/admin/lib/wall-posthog.ts",
+    "web/admin/app/api/viral-metrics/route.ts",
     "ym8miKtQ",
     "xkycBQGR",
     "nX4yHJZR",
     "Ljh22BGA"
-   ]
+   ],
+   "sampled": "2% by the keep-list default since 2026-11-23 (David). Readers weight by omi_sample_pct; per-actor qualified metrics count actors with foreground activity exactly and weight capture-only actors."
   },
   "Memory List Item Clicked": {
    "est_events_per_day": 100,
@@ -2427,7 +2435,8 @@
    "purpose": "product",
    "reader": [
     "contracts/product-telemetry/posthog/journey-scorecard.hogql"
-   ]
+   ],
+   "sampled": "2% by the keep-list default since 2026-11-23 (David). Readers weight by omi_sample_pct."
   },
   "Recording Subscription Failed": {
    "est_events_per_day": 64,
@@ -3438,6 +3447,15 @@
    "reader": [
     "2GrcOzgi"
    ]
+  },
+  "MCP Daily Activity": {
+   "est_events_per_day": 7700,
+   "identified": true,
+   "purpose": "product",
+   "reader": [
+    "web/admin/lib/wall-mcp.ts"
+   ],
+   "note": "Server rollup (backend/utils/mcp_daily_rollup.py): cumulative snapshot per uid/client/UTC day at most once per 30 min, plus one after the day ends. Estimate is an upper bound from 7 days to 2026-11-23: 44,553 active 30-minute windows (6,365/day) plus 1,310 actor-client-days of final snapshots. Sent with $process_person_profile false, but uids with a person bill as identified."
   }
  }
 }

@@ -2,6 +2,7 @@ import { captureEvidenceCtes } from "./wall-capture-sql";
 import { mcpActivityCtes, MCP_MARKER_STATUS_ROW } from "./wall-mcp";
 import { WallSourceError } from "./wall-source-error";
 import { withRowLimit } from "./posthog";
+import { SAMPLE_PCT_SQL } from "./posthog-sampling";
 import {
   EXCLUSIONS_SQL,
   PLATFORM_SQL,
@@ -52,7 +53,8 @@ function activityCtes(
     app_pd AS (SELECT actor,p,intDiv(dateDiff('second',${at},${sqlTime(
     end
   )})-1,${days * 86400}) period,
-      uniqExact(${UTC_DAY(at)}) days,max(${at}) latest,countIf(cap) captures${
+      uniqExact(${UTC_DAY(at)}) days,max(${at}) latest,countIf(cap) captures,
+      countIf(fg) fgn,if(countIf(cap)>0,maxIf(${SAMPLE_PCT_SQL},cap),100) cap_pct${
     extra.app
   } FROM qualified
       WHERE ${predicate} AND ${at} >= ${sqlTime(start)} AND ${at} < ${sqlTime(
@@ -65,13 +67,33 @@ function activityCtes(
       intDiv(dateDiff('second',mcp_days.latest,${sqlTime(end)})-1,${
             days * 86400
           }) period,
-      count() days,max(mcp_days.latest) latest,0 captures${
+      count() days,max(mcp_days.latest) latest,0 captures,1 fgn,100 cap_pct${
         extra.mcp
       } FROM mcp_days GROUP BY actor,period`
         : ""
     }),
-    ranked AS (SELECT *,sum(captures) OVER (PARTITION BY actor,period) saved,row_number() OVER (PARTITION BY actor,period ORDER BY (p!='integrations') DESC,days DESC,latest DESC,${PLATFORM_RANK_SQL} ASC) rn FROM pd)`;
+    ranked AS (SELECT *,sum(captures) OVER (PARTITION BY actor,period) saved,
+      sum(fgn) OVER (PARTITION BY actor,period) fg_any,max(cap_pct) OVER (PARTITION BY actor,period) pct_any,row_number() OVER (PARTITION BY actor,period ORDER BY (p!='integrations') DESC,days DESC,latest DESC,${PLATFORM_RANK_SQL} ASC) rn FROM pd)`;
 }
+
+/** Saved captures (Memory Created) are kept for a stable 2% of distinct IDs
+ * since 2026-11-23 (contracts/analytics/posthog.json). Sampling is per user, so
+ * an actor seen only through captures stands for 100/pct actors; an actor with
+ * any foreground or MCP activity is seen regardless and counts once. Actors
+ * with any untagged (pre-sampling) capture in the period count once too. The
+ * saved count weights every saved actor, since saved status is itself sampled.
+ * Counts are unbiased but noisy for small groups (one sampled user = 50). */
+const ACTOR_COUNT = {
+  active: "toInt64(round(sum(if(fg_any>0,1,100/pct_any))))",
+  saved: "toInt64(round(sum(100/pct_any)))",
+  assistant: "count()",
+} as const;
+
+/** People with a sampled outcome (a saved capture), weighted by 100 / the
+ * largest rate among the rows that show it. Sampling is per distinct ID, so a
+ * person's outcome is seen with that probability; untagged rows weigh 1. */
+const weightedIf = (cond: string, pct: string) =>
+  `toInt64(round(sumIf(100/${pct},${cond})))`;
 
 /** Six nonoverlapping complete periods, ranking iOS/Android before folding Mobile. */
 export function activityQuery(
@@ -82,14 +104,14 @@ export function activityQuery(
 ) {
   const start = shiftDay(end, -days * periods);
   return `WITH ${activityCtes(start, end, days, kind)}
-    SELECT period,p,count()${
-      kind === "active" ? ",(SELECT count() FROM mcp_raw) marker_rows" : ""
-    } FROM ranked WHERE rn=1 ${
+    SELECT period,p,${ACTOR_COUNT[kind]}${
+    kind === "active" ? ",(SELECT count() FROM mcp_marker) marker_rows" : ""
+  } FROM ranked WHERE rn=1 ${
     kind === "saved" ? "AND saved>0" : ""
   } GROUP BY period,p
     ${
       kind === "active"
-        ? `UNION ALL SELECT -1,'${MCP_MARKER_STATUS_ROW}',0,(SELECT count() FROM mcp_raw)`
+        ? `UNION ALL SELECT -1,'${MCP_MARKER_STATUS_ROW}',0,(SELECT count() FROM mcp_marker)`
         : ""
     }
     LIMIT 100`;
@@ -148,7 +170,8 @@ export function weeklyGrowthQuery(end: Date, periods = 4) {
     GROUP BY period,label LIMIT 100`;
 }
 
-/** Qualified MAU (snapshot definition, MCP included) for 30-day windows ending
+/** Capture-only actors are weighted as in activityQuery (ACTOR_COUNT).
+ * Qualified MAU (snapshot definition, MCP included) for 30-day windows ending
  * `offset` complete days before `end`. One row per offset: offset, people.
  * Like the snapshot, an event counts only when both its qualified time and its
  * ingestion timestamp fall inside the window (client clocks can disagree).
@@ -159,19 +182,21 @@ export function mauOffsetsQuery(end: Date, offsets: number[]) {
   const ago = (at: string) =>
     `intDiv(dateDiff('second',${at},${stop})-1,86400)`;
   return `WITH ${raw(start, end)},${mcpActivityCtes(start, end)},
-    ad AS (SELECT actor,groupUniqArray(tuple(lo,hi)) spans FROM (
+    ad AS (SELECT actor,groupUniqArray(tuple(lo,hi,seen,pct)) spans FROM (
         SELECT actor,least(${ago("qt")},${ago("timestamp")}) lo,greatest(${ago(
     "qt"
-  )},${ago("timestamp")}) hi
+  )},${ago("timestamp")}) hi,fg seen,if(fg,100,${SAMPLE_PCT_SQL}) pct
         FROM qualified WHERE (fg OR cap) AND qt >= ${sqlTime(
           start
         )} AND qt < ${stop}
         UNION ALL SELECT actor,${ago("latest")} lo,${ago(
     "latest"
-  )} hi FROM mcp_days)
-      GROUP BY actor)
-    SELECT o,countIf(arrayExists(s -> tupleElement(s,1) >= o AND tupleElement(s,2) < o + 30,spans)) FROM ad
-    ARRAY JOIN [${offsets.join(",")}] AS o GROUP BY o LIMIT 100`;
+  )} hi,true seen,100 pct FROM mcp_days)
+      GROUP BY actor),
+    win AS (SELECT o,arrayFilter(s -> tupleElement(s,1) >= o AND tupleElement(s,2) < o + 30,spans) hits FROM ad
+      ARRAY JOIN [${offsets.join(",")}] AS o)
+    SELECT o,toInt64(round(sum(if(length(hits)=0,0,if(arrayExists(s -> tupleElement(s,3),hits),1,
+      100/arrayMax(arrayMap(s -> tupleElement(s,4),hits))))))) FROM win GROUP BY o LIMIT 100`;
 }
 
 /** Weekly first-seen cohorts (snapshot cohort anchor and 180-day history check),
@@ -223,14 +248,15 @@ export function cohortQuery(end: Date, maturity: 0 | 2 | 7 | 37, periods = 6) {
       )},(fg OR cap) AND qt >= anchor AND qt < anchor + interval 7 day) days7,
       countIf((fg OR cap) AND qt >= anchor + interval 1 day AND qt < anchor + interval 2 day) d1,
       countIf((fg OR cap) AND qt >= anchor + interval 7 day AND qt < anchor + interval 37 day) returned,
-      countIf(cap AND qt >= anchor AND qt < anchor + interval 7 day) capture
+      countIf(cap AND qt >= anchor AND qt < anchor + interval 7 day) capture,
+      maxIf(${SAMPLE_PCT_SQL},cap AND qt >= anchor AND qt < anchor + interval 7 day) capture_pct
       FROM qualified GROUP BY actor)
     SELECT intDiv(dateDiff('second',a,${sqlTime(
       cohortEnd
     )})-1,604800) period,entry,
       count() denominator,countIf(days7>=2) activated,countIf(days7>=2 AND returned>0) retained,
       countIf(days7<2) nonactivated,countIf(days7<2 AND returned>0) recovered,
-      countIf(d1>0) day1,countIf(capture>0) captured
+      countIf(d1>0) day1,${weightedIf("capture>0", "capture_pct")} captured
     FROM people WHERE first_event >= a GROUP BY period,entry LIMIT 100`;
 }
 
@@ -469,13 +495,18 @@ export function deviceFunnelQuery(end: Date) {
         AND timestamp < anchor + interval 2 day) > 0 device,
       countIf(event='Onboarding Completed' AND timestamp < anchor + interval 7 day) > 0 onboarded,
       countIf(cap AND qt >= anchor AND qt < anchor + interval 1 day) > 0 conv1,
+      maxIf(${SAMPLE_PCT_SQL},cap AND qt >= anchor AND qt < anchor + interval 1 day) conv1_pct,
       countIf(cap AND qt >= anchor AND qt < anchor + interval 7 day) > 0 conv7,
+      maxIf(${SAMPLE_PCT_SQL},cap AND qt >= anchor AND qt < anchor + interval 7 day) conv7_pct,
       uniqExactIf(${UTC_DAY(
         "qt"
       )},(fg OR cap) AND qt >= anchor AND qt < anchor + interval 7 day) days7,
       countIf((fg OR cap) AND qt >= anchor + interval 7 day AND qt < anchor + interval 35 day) > 0 later
       FROM qualified GROUP BY actor)
-    SELECT entry,device,count(),countIf(onboarded),countIf(conv1),countIf(conv7),
+    SELECT entry,device,count(),countIf(onboarded),${weightedIf(
+      "conv1",
+      "conv1_pct"
+    )},${weightedIf("conv7", "conv7_pct")},
       countIf(days7>=2),countIf(days7>=2 AND later)
     FROM people WHERE first_event >= a GROUP BY entry,device LIMIT 100`;
 }

@@ -28,8 +28,8 @@ def passing():
                 'feature_flag_requests': [[1000000, 0], [2000000, 0.0001], [None, 0.000045]],
             },
             'warehouse_usd_per_row': 0.0000059,
-            'feature_flag_requests_per_month': 0,
         },
+        'feature_flags': {'measured_requests_per_day': 0},
         'functions': [
             {'id': 'keep', 'name': 'Keep-list', 'execution_order': 5, 'enabled': True, 'kind': 'keep_list', 'pct': 2,
              'events': ['Memory Created', 'Capture Wedge Detected']},
@@ -152,14 +152,28 @@ class CheckPostHogConfig(unittest.TestCase):
     def test_planned_savings_are_priced_separately(self):
         doc = passing()
         doc['events']['Memory Created']['est_events_per_day'] = 400_000
-        doc['budget']['feature_flag_requests_per_month'] = 3_000_000
+        doc['feature_flags']['measured_requests_per_day'] = 100_000
         doc['budget']['planned'] = [{'id': 'p', 'saving': {'events_per_day': {'Memory Created': 300_000},
-                                                            'feature_flag_requests_per_month': 3_000_000}}]
+                                                            'feature_flag_requests': 'all'}}]
         now, later = check.estimate(doc), check.estimate(doc, with_planned=True)
         self.assertAlmostEqual(later['events_per_month'], now['events_per_month'] - 9_000_000)
         self.assertEqual(later['flags'], 0)
         self.assertGreater(now['flags'], 0)
         self.assertIn('exceeds budget.monthly_usd', errors(doc)[0])
+
+    def test_flags_are_priced_from_the_measured_daily_rate(self):
+        doc = passing()
+        doc['feature_flags']['measured_requests_per_day'] = 100_000  # 3M/month: 1M free, 1M at $0.0001, 1M at $0.000045
+        cost = check.estimate(doc)
+        self.assertAlmostEqual(cost['flags'], 145.0)
+        self.assertEqual(cost['flag_requests_per_month'], 3_000_000)
+        self.assertEqual(check.estimate(doc, flags_per_day=0)['flags'], 0)
+
+    def test_flag_measurement_is_required(self):
+        for bad in (None, -1, 1.5, True):
+            doc = passing()
+            doc['feature_flags']['measured_requests_per_day'] = bad
+            self.assertTrue(any('feature_flags.measured_requests_per_day' in e for e in errors(doc)), bad)
 
     def test_warehouse_full_refresh_over_one_million_rows(self):
         doc = passing()

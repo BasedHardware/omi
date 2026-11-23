@@ -7,6 +7,7 @@ import {
 import { activationCacheKey } from "@/app/api/omi/stats/activation/route";
 import { getPayload } from "@/lib/payload-cache";
 import { posthogResults } from "@/lib/posthog";
+import { SAMPLE_PCT_SQL, SAMPLE_WEIGHT_SQL } from "@/lib/posthog-sampling";
 import {
   completedEstablishedRetention,
   completedWeeklyGrowthAccounting,
@@ -279,6 +280,11 @@ export async function GET(request: NextRequest) {
 
       // 7. Activation: new signups who created a Memory within 7 days.
       //
+      // Memory Created is kept for a stable 2% of distinct IDs since
+      // 2026-11-23 (contracts/analytics/posthog.json), so each activated
+      // signup is weighted by 100 / its memories' sample rate; the signup
+      // denominator is unsampled. Small days are noisy.
+      //
       // Three things this query has to get right, each of which silently
       // understated the rate before:
       //   - The cohort is the user's FIRST-EVER sign-in, matching query 1.
@@ -301,9 +307,9 @@ export async function GET(request: NextRequest) {
         SELECT
           toDate(toString(s_ts)) as day,
           count(*) as signups,
-          countIf(memories_in_window > 0) as activated,
+          toInt64(round(sumIf(100 / mem_pct, memories_in_window > 0))) as activated,
           countIf(reports_activation) as capable_signups,
-          countIf(reports_activation AND memories_in_window > 0) as capable_activated
+          toInt64(round(sumIf(100 / mem_pct, reports_activation AND memories_in_window > 0))) as capable_activated
         FROM (
           SELECT
             signups.s_id as s_id,
@@ -312,7 +318,12 @@ export async function GET(request: NextRequest) {
             countIf(
               memories.m_ts >= signups.s_ts
               AND memories.m_ts <= signups.s_ts + interval 7 day
-            ) as memories_in_window
+            ) as memories_in_window,
+            maxIf(
+              memories.m_pct,
+              memories.m_ts >= signups.s_ts
+              AND memories.m_ts <= signups.s_ts + interval 7 day
+            ) as mem_pct
           FROM (
             SELECT
               COALESCE(person_id, distinct_id) as s_id,
@@ -329,7 +340,8 @@ export async function GET(request: NextRequest) {
             GROUP BY s_id
           ) signups
           LEFT JOIN (
-            SELECT COALESCE(person_id, distinct_id) as m_id, timestamp as m_ts
+            SELECT COALESCE(person_id, distinct_id) as m_id, timestamp as m_ts,
+              ${SAMPLE_PCT_SQL} as m_pct
             FROM events
             WHERE event = 'Memory Created'
               AND (properties.memory_result IS NULL OR properties.memory_result = 'saved')
@@ -496,7 +508,9 @@ export async function GET(request: NextRequest) {
       `
       ),
 
-      // 16. Meaningful capture proxy: unique people with a successfully
+      // 16. Memory Created is sampled per distinct ID (2% since 2026-11-23):
+      // counts are weighted, creators scaled by the day's largest rate.
+      // Meaningful capture proxy: unique people with a successfully
       // saved/reconciled conversation. Flutter supplies saved/discarded;
       // macOS has no result field and its Memory Created event is already the
       // post-reconciliation conversation-created signal.
@@ -507,8 +521,8 @@ export async function GET(request: NextRequest) {
         `
         SELECT
           toDate(timestamp) as day,
-          uniq(COALESCE(person_id, distinct_id)) as conversation_creators,
-          count(*) as saved_conversations
+          toInt64(round(uniq(COALESCE(person_id, distinct_id)) * 100 / max(${SAMPLE_PCT_SQL}))) as conversation_creators,
+          toInt64(round(sum(${SAMPLE_WEIGHT_SQL}))) as saved_conversations
         FROM events
         WHERE event = 'Memory Created'
           AND (properties.memory_result IS NULL OR properties.memory_result = 'saved')

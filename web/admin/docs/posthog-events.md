@@ -164,8 +164,11 @@ To change sampling:
    `PostHog estimate: $X/mo (base $Y/mo, delta $Z)` and fails when an event kept
    at 100% has no measured estimate or no reader, when a debug/ops event is
    kept above 2% without an unexpired waiver signed by David Zhang, when the
-   estimate exceeds the budget (or the dated `budget.ceiling` glide path), or
-   when a warehouse schema full-refreshes more than 1M rows per run.
+   estimate exceeds the budget (there is no ceiling: one counts only with an
+   unexpired waiver signed by David Zhang), when
+   `feature_flags.measured_requests_per_day` is missing, or when a warehouse
+   schema full-refreshes more than 1M rows per run. It also prints the
+   estimate at flags = 0 and with each `budget.planned` change.
 3. After merge, the release owner runs `scripts/posthog/apply.py plan`, then
    `apply --snapshot-dir DIR` from `main`. `apply.py drift` runs daily and exits
    1 on any difference, including a transformation that is not in the file.
@@ -202,7 +205,9 @@ an event to be kept at 100% instead.
   billing export (31M rows, weekly) was the largest single line in 2026-11.
 - **Feature-flag requests are billed too**, separately from events. Current
   mobile, desktop and web clients block PostHog `/flags` and read Omi flags;
-  the remaining requests come from older builds still in the field.
+  the remaining requests come from older builds still in the field. The check
+  prices them from `feature_flags.measured_requests_per_day`; refresh it from
+  `/api/billing/usage` when it moves. Never set a flag billing limit.
 - **Setting `$process_person_profile=false` in a transformation does nothing**
   for billing. Sent from the client it still does nothing for a signed-in
   user: an event whose `distinct_id` already has a person profile is billed
@@ -219,6 +224,34 @@ The Device Signals alert rules read these events from PostHog, so they are
 coarse at 2% (one sampled device stands for about 50) and the dropped events
 no longer reach any alert, until SCA-3922 moves the alerts to the client
 collector and Prometheus.
+
+### Product events sampled at 2% (2026-11-23)
+
+David's ruling for SCA-3665: the $500 target includes product sampling.
+`Device Session Ended`, `Memory Created` and `Recording Started` left the
+keep-list and take the 2% default, like the rest of the recording journey
+(`Recording Requested`, `Recording Completed`, `Recording Observation`,
+`Device Connected`), on the same `distinct_id` hash. Readers that count them
+weight by `omi_sample_pct`:
+
+- Omi TV qualified actors (`activityQuery`, `mauOffsetsQuery` in
+  `lib/wall-posthog.ts`): an actor seen only through saved captures counts
+  100/pct; one with foreground or MCP activity counts once. Saved creators,
+  cohort `captured` and device-funnel `conv1`/`conv7` weight each person by
+  100/pct of the rows that show the outcome.
+- `viral-metrics` activation and saved conversations.
+
+Not reweighted, so they read low for people seen only through these events:
+qualified-day counts (activation's two-day rule, L1-L7, person-days),
+weekly growth accounting, retention curves, established users, capture-source
+segments, the BigQuery Omi TV rollup (`wall-rollup-extract.ts`) and saved
+insights. Recording-journey ratios in the scorecard stay unbiased because the
+whole journey is sampled per user; its counts are at 2% scale. Small groups
+are noisy: one sampled person stands for 50.
+
+`MCP Tool Use Succeeded` is replaced by the server's `MCP Daily Activity`
+rollup (`backend/docs/server-product-telemetry.md`); the raw event is switched
+off in this file after the first full day of rollups is verified.
 
 ### Sampled windows on 2026-10-17
 

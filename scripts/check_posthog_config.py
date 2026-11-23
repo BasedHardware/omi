@@ -89,17 +89,25 @@ def tiered(units, tiers):
     return cost
 
 
-def estimate(doc, with_planned=False):
-    """Monthly cost. with_planned applies budget.planned savings (changes not yet made)."""
+def flag_requests_per_day(doc):
+    value = doc.get('feature_flags', {}).get('measured_requests_per_day', 0)
+    return value if isinstance(value, (int, float)) and value > 0 else 0  # validate() reports bad values
+
+
+def estimate(doc, with_planned=False, flags_per_day=None):
+    """Monthly cost. with_planned applies budget.planned savings (changes not yet made);
+    flags_per_day overrides feature_flags.measured_requests_per_day."""
     budget = doc['budget']
     days = budget.get('days_per_month', 30)
     planned = budget.get('planned', []) if with_planned else []
-    event_saving, flag_saving = {}, 0
+    flags = flag_requests_per_day(doc) if flags_per_day is None else flags_per_day
+    event_saving = {}
     for item in planned:
         saving = item.get('saving', {})
         for name, per_day in saving.get('events_per_day', {}).items():
             event_saving[name] = event_saving.get(name, 0) + per_day
-        flag_saving += saving.get('feature_flag_requests_per_month', 0)
+        if saving.get('feature_flag_requests') == 'all':
+            flags = 0
     events = identified = 0.0
     for name, entry in doc['events'].items():
         est = entry.get('est_events_per_day')
@@ -116,7 +124,7 @@ def estimate(doc, with_planned=False):
     parts = {
         'events': tiered(events, tiers['events']),
         'identified': tiered(identified, tiers['identified_events']),
-        'flags': tiered(max(0, budget.get('feature_flag_requests_per_month', 0) - flag_saving), tiers['feature_flag_requests']),
+        'flags': tiered(flags * days, tiers['feature_flag_requests']),
         'warehouse': rows * budget['warehouse_usd_per_row'],
         'other': sum(budget.get('other_monthly_usd', {}).values()),
     }
@@ -124,6 +132,7 @@ def estimate(doc, with_planned=False):
     parts['events_per_month'] = events
     parts['identified_per_month'] = identified
     parts['warehouse_rows_per_month'] = rows
+    parts['flag_requests_per_month'] = flags * days
     return parts
 
 
@@ -172,6 +181,9 @@ def validate(doc, today):
             errors.append(f"{f['id']}: pct must be within 0..100")
         elif f['kind'] == 'drop' and float(f['pct']) != 0:
             errors.append(f"{f['id']}: a drop function has pct 0")
+    flags = doc.get('feature_flags', {}).get('measured_requests_per_day')
+    if not isinstance(flags, int) or isinstance(flags, bool) or flags < 0:
+        errors.append('feature_flags.measured_requests_per_day: a non-negative integer from a billing measurement is required')
     if errors:
         return errors
     events = doc['events']
@@ -238,9 +250,13 @@ def run(path, base, today, enforce=None):
     print(f"PostHog estimate: ${cost['total']:,.0f}/mo (base ${old:,.0f}/mo, delta ${cost['total'] - old:+,.0f})")
     print(f"  events {cost['events_per_month'] / 1e6:.2f}M/mo ${cost['events']:,.0f}; identified {cost['identified_per_month'] / 1e6:.2f}M/mo ${cost['identified']:,.0f}; "
           f"flags ${cost['flags']:,.0f}; warehouse {cost['warehouse_rows_per_month'] / 1e6:.2f}M rows ${cost['warehouse']:,.0f}; other ${cost['other']:,.0f}")
-    if doc['budget'].get('planned'):
-        ids = ', '.join(item['id'] for item in doc['budget']['planned'])
-        print(f"  with planned changes ({ids}): ${estimate(doc, with_planned=True)['total']:,.0f}/mo")
+    print(f"  flags {flag_requests_per_day(doc):,.0f} requests/day (feature_flags.measured_requests_per_day); "
+          f"at flags = 0: ${estimate(doc, flags_per_day=0)['total']:,.0f}/mo")
+    for item in doc['budget'].get('planned', []):
+        alone = dict(doc, budget=dict(doc['budget'], planned=[item]))
+        print(f"  planned {item['id']} alone: ${estimate(alone, with_planned=True)['total']:,.0f}/mo")
+    if len(doc['budget'].get('planned', [])) > 1:
+        print(f"  all planned changes: ${estimate(doc, with_planned=True)['total']:,.0f}/mo")
     for error in errors:
         print(error if enforce else f'warning (PostHog config unchanged in this diff): {error}')
     return errors if enforce else []
