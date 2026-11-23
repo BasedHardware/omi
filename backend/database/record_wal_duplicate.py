@@ -218,6 +218,7 @@ def _read(view, reads, request, files, expected):
     stored = prior.get(RECEIPT_FIELD) if prior is not None else None
     if prior is not None and (not isinstance(stored, dict) or not stored):
         return None
+    incoming = tuple(handoff.file_identity(uid, cid, generation, entry) for entry in files) if files else ()
     if stored:
         if request.claim_digest is not None and stored.get('claim_digest') != request.claim_digest:
             return None
@@ -225,15 +226,14 @@ def _read(view, reads, request, files, expected):
         if not isinstance(ids, list) or not 0 < len(ids) <= MAX_FILES:
             return None
         file_ids = tuple(ids)
-    elif files:
-        file_ids = tuple(handoff.file_identity(uid, cid, generation, entry) for entry in files)
+        if incoming and file_ids != incoming:
+            return None
+    elif incoming:
+        file_ids = incoming
     else:
         return None
     if any(not _digest(key) for key in file_ids) or len(set(file_ids)) != len(file_ids):
         return None
-    if files and file_ids != tuple(handoff.file_identity(uid, cid, generation, entry) for entry in files):
-        return None
-
     if stored:
         expires = _deadline(prior)
         now = datetime.now(timezone.utc)

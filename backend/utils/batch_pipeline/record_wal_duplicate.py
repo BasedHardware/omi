@@ -7,6 +7,7 @@ import hashlib
 import threading
 import time
 
+from google.api_core.exceptions import GoogleAPICallError
 from prometheus_client import Counter as Metric
 
 from config.record_wal_duplicate import ARCHIVE_BUCKET, mode
@@ -15,7 +16,7 @@ from database import record_wal_duplicate as ledger
 from database.record_wal_handoff import identity
 from database.record_wal_sample import claim_slot
 from utils.batch_pipeline import record_wal_sample as sample
-from utils.batch_pipeline.artifact_reads import ArtifactReadBudget
+from utils.batch_pipeline.artifact_reads import ArtifactReadBudget, ArtifactReadLimit
 from utils.batch_pipeline.record_wal_alignment import Packet, index_live, overlap
 from utils.executors import db_executor, run_blocking, storage_executor, sync_executor
 from utils.other.storage import get_private_cloud_sync_bucket
@@ -237,6 +238,7 @@ async def evaluate(store, uid, cid, source, device, content_id, session, paths, 
     outcome = 'hold'
     counted = False
     proof_started = False
+    committing = False
     try:
         async with asyncio.timeout(ATTEMPT_SECONDS):
             prepare, finish = await run_blocking(sync_executor, _views, budget, current)
@@ -277,6 +279,7 @@ async def evaluate(store, uid, cid, source, device, content_id, session, paths, 
             await run_blocking(storage_executor, _recheck, data, budget)
             if select(uid, content_id)[0] != current:
                 return None
+            committing = current == 'settle'
             settled = await run_blocking(
                 db_executor,
                 ledger.reconcile,
@@ -286,7 +289,7 @@ async def evaluate(store, uid, cid, source, device, content_id, session, paths, 
                 files=entries,
                 expected=before.scope,
                 placements=placements,
-                commit=current == 'settle',
+                commit=committing,
             )
             if settled is None:
                 return None
@@ -300,6 +303,13 @@ async def evaluate(store, uid, cid, source, device, content_id, session, paths, 
                     proof_io.labels(current, 'receipt_writes').inc(settled.receipt_writes)
                     proof_io.labels(current, 'donor_writes').inc(int(not settled.marked))
             return settled.reply if current == 'settle' else None
+    except (ArtifactReadLimit, GoogleAPICallError, OSError, ValueError):
+        outcome = 'unavailable'
+        # Proof reads are optional to legacy coverage. An in-flight CAS may
+        # already own the result, so only an exact retry can resolve its reply.
+        if committing:
+            raise
+        return None
     except Exception:
         outcome = 'unavailable'
         if current == 'settle':

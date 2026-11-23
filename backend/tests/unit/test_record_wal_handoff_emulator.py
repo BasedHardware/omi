@@ -459,6 +459,7 @@ def test_duplicate_cas_replay_while_disabled_and_rebundle(duplicate_world, monke
     monkeypatch.setenv('RECORD_WAL_DUPLICATE_PERCENT', '0')
     assert mode(first.uid, time.time()) == ('off', None)
     assert case.attempt(first).reply == saved.reply
+    assert case.attempt(first, files=[{**case.files[0], 'sha256': 'f' * 64}, case.files[1]]) is None
     rebundle = case.request('second')
     existing = case.attempt(rebundle, files=case.files[:1])
     assert len(existing.known) == 1
@@ -626,7 +627,10 @@ def test_duplicate_competing_concurrent_retries_publish_one_alias(duplicate_worl
 
 
 @pytest.mark.asyncio
-async def test_duplicate_replay_route_never_calls_legacy_status_or_archive(duplicate_world, monkeypatch, tmp_path):
+@pytest.mark.parametrize('rotate_privacy', (False, True))
+async def test_duplicate_replay_route_never_calls_legacy_status_or_archive(
+    duplicate_world, monkeypatch, tmp_path, rotate_privacy
+):
     from database import record_wal_handoff as handoff
 
     case = duplicate_world
@@ -642,6 +646,10 @@ async def test_duplicate_replay_route_never_calls_legacy_status_or_archive(dupli
     monkeypatch.setattr(live_upload, 'durable_status', legacy)
     path = tmp_path / 'already-hashed'
     monkeypatch.setenv('RECORD_WAL_DUPLICATE_PERCENT', '0')
+    if rotate_privacy:
+        case.store.client.collection('batch_pipeline_privacy').document(privacy_owner_key(request.uid)).set(
+            {'generation': 1, 'blocked': False, 'purging': False}
+        )
     response = await live_upload.registered_record_response(
         uid=request.uid,
         conversation_id=request.cid,
@@ -652,9 +660,12 @@ async def test_duplicate_replay_route_never_calls_legacy_status_or_archive(dupli
         loaded_conversation=case.conversation.get().to_dict(),
         before_coverage=archive,
     )
-    assert response.status_code == 202
-    assert json.loads(response.body)['job_id'] == case.canonical
-    assert json.loads(response.body)['status'] == 'completed'
+    if rotate_privacy:
+        assert response.status_code == 503
+    else:
+        assert response.status_code == 202
+        assert json.loads(response.body)['job_id'] == case.canonical
+        assert json.loads(response.body)['status'] == 'completed'
     legacy.assert_not_called()
     archive.assert_not_called()
 

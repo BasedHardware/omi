@@ -87,6 +87,7 @@ def _snapshot(store, body, budget, *, write, on_rpc):
             timeout = budget.timeout(10)
             with observe_rpc(on_rpc, 'commit'):
                 transaction.commit_snapshot(client, timeout)
+            return result
         budget.timeout(10)
         return result
     except DeadlineExceeded as error:

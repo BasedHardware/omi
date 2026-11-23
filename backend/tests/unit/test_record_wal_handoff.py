@@ -8,10 +8,10 @@ import hashlib
 import json
 import struct
 from types import SimpleNamespace
-from unittest.mock import Mock
+from unittest.mock import AsyncMock, Mock
 
 import google_crc32c
-from google.api_core.exceptions import PreconditionFailed
+from google.api_core.exceptions import PreconditionFailed, ServiceUnavailable
 from google.cloud.exceptions import NotFound
 import pytest
 
@@ -25,6 +25,7 @@ from database.batch_pipeline_store import FirestoreStore
 from models.sync_job_status import SyncJobStartResponse, SyncJobStatusResponse
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 from utils.batch_pipeline import live_upload, record_wal_handoff as handoff, record_wal_metrics as metrics
+from utils.batch_pipeline.artifact_reads import ArtifactReadLimit
 from utils.batch_pipeline.intake import durable_status
 from utils.other import storage
 from utils.other.local_storage import LocalStorageClient
@@ -148,6 +149,42 @@ def world(monkeypatch, tmp_path):
         return {path[-1]: row for path, row in client.rows.items() if path[0] == f'{NS}_{table}'}
 
     return SimpleNamespace(client=client, store=store, bucket=bucket, paths=paths, upload=upload, rows=rows)
+
+
+@pytest.mark.parametrize('failure_at', ('inventory', 'commit'))
+async def test_duplicate_settlement_only_falls_back_before_commit(world, monkeypatch, failure_at):
+    from config.record_audio import record_identity
+    from utils.batch_pipeline import record_wal_duplicate as duplicate
+
+    job = 'bp_' + record_identity(UID, CID)[0]
+    world.client.rows[(f'{NS}_intakes', job)] = {'segment_ids': ['segment']}
+    world.client.rows[(f'{NS}_jobs', 'segment')] = {'state': 'committed'}
+    monkeypatch.setattr(duplicate, 'select', lambda *_: ('settle', None))
+
+    def staged(paths, budget, *, descriptors):
+        descriptors['wal'] = {}
+        return [('wal', 1, [])]
+
+    monkeypatch.setattr(duplicate.sample, 'read_staged_packets', staged)
+    prepared = SimpleNamespace(prior=None, scope=SimpleNamespace(source={}))
+    reconcile = Mock(side_effect=[prepared, ServiceUnavailable('uncertain synthetic CAS')])
+    monkeypatch.setattr(duplicate.ledger, 'reconcile', reconcile)
+    inventory = Mock(side_effect=ArtifactReadLimit('archive count limit') if failure_at == 'inventory' else None)
+    monkeypatch.setattr(duplicate, '_inventory', inventory)
+    monkeypatch.setattr(duplicate, '_placements', lambda *_: (['proved'], False))
+    monkeypatch.setattr(duplicate, '_recheck', lambda *_: None)
+    legacy = AsyncMock(return_value=live_upload.JSONResponse(status_code=202, content={'job_id': job}))
+    monkeypatch.setattr(live_upload, '_answer_registered_upload', legacy)
+
+    response = await world.upload(upload_paths=world.paths[:1], capture_claims={'wal': {}})
+    if failure_at == 'inventory':
+        assert response.status_code == 202
+        legacy.assert_awaited_once()
+        assert reconcile.call_count == 1
+    else:
+        assert response.status_code == 503
+        legacy.assert_not_awaited()
+        assert reconcile.call_count == 2 and reconcile.call_args.kwargs['commit'] is True
 
 
 async def test_all_files_accepted_before_decode_and_completed_native_job_never_completes_upload(world):

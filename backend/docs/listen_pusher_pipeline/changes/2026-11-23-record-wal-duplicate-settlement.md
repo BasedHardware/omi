@@ -20,6 +20,9 @@ Retain receipt readers on rollback. Merge cleanup marks the source row before
 removing backing audio, and retained-donor erasure requires its tombstone. A
 failed fence leaves prefix cleanup pending. A canonical revision change refuses replay
 until equivalence is established.
+Expected failures in optional proof reads, including an oversized inventory,
+continue through the existing upload coverage path. Once a settlement CAS is
+dispatched, an uncertain result holds for exact replay.
 
 ## Terminal status retention
 
@@ -57,7 +60,9 @@ successor deletion uses its existing persisted source-deletion lineage.
 
 Post-publication donor cleanup retracts derived state and preserves original
 custody, canonical obligations and aliases. Smart merge, automatic sync
-lineage and v3 projection defer when they cannot maintain these bindings.
+lineage and v3 projection defer when they cannot maintain these bindings. V3
+full-row replacement defers on any selected retained-custody row. Before
+activation, Release must account for those deferrals in the serving cohort.
 A rollback after the first settlement must keep the verified merge writers,
 erasure and replay behavior serving, including with settlement disabled.
 

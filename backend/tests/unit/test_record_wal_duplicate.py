@@ -162,6 +162,12 @@ def _stage_intake(view):
 
 def test_lifecycle_rpc_observes_successful_commit(snapshot_rpc):
     case = snapshot_rpc
+
+    # A confirmed server commit remains successful even if its reply arrives at the deadline.
+    def complete_at_deadline(**kwargs):
+        case.clock.now = case.budget.deadline
+
+    case.api.commit.side_effect = complete_at_deadline
     assert write_snapshot(case.store, _stage_intake, case.budget, on_rpc=case.observe) == 'staged'
     assert [call[0] for call in case.api.mock_calls] == ['begin_transaction', 'commit']
     assert case.api.begin_transaction.call_args.kwargs['request']['options'] == {'read_write': {}}
