@@ -90,7 +90,8 @@ class FakeCloud:
             assert method == 'GET'
             query = parse_qs(urlsplit(url).query)
             metric = re.search(
-                r'metric.type="(?:run.googleapis.com/|loadbalancing.googleapis.com/https/)([^"]+)"', query['filter'][0]
+                r'metric\.type="(?:run\.googleapis\.com/|loadbalancing\.googleapis\.com/https/)([^"]+)"',
+                query['filter'][0],
             )[1]
             candidate = f'revision_name="{NEW}"' in query['filter'][0]
             ingress = 'resource.type="https_lb_rule"' in query['filter'][0]
@@ -107,12 +108,15 @@ class FakeCloud:
             end = '2026-11-22T16:00:00Z'
         if ingress and self.writes and self.scenario == 'missing_ingress':
             return {}
-        if metric == 'container/startup_latencies':
-            return {}
         labels = {}
-        if metric == 'request_count':
+        if metric == 'container/startup_latencies':
+            if not candidate or self.scenario != 'pass':
+                return {}
+            value = {'distributionValue': {'count': '3', 'mean': 240}}
+        elif metric == 'request_count':
             if ingress:
-                labels['response_code'] = '503' if self.writes and self.scenario == 'ingress_error' else '200'
+                error_codes = {'ingress_error': '503', 'ingress_throttled': '429', 'ingress_no_response': '0'}
+                labels['response_code'] = error_codes.get(self.scenario, '200') if self.writes else '200'
             else:
                 labels['response_code_class'] = '5xx' if candidate and self.scenario == 'unhealthy' else '2xx'
             value = {'int64Value': '500'}
@@ -173,6 +177,8 @@ def test_promote_records_verified_stages_and_total_duration(tmp_path, monkeypatc
     assert [row['weights'][NEW] for row in receipt['stages']] == [10, 50, 90, 100]
     assert [row['generation'] for row in receipt['stages']] == ['2', '3', '4', '5']
     assert [row['candidate_health']['active_instances'] for row in receipt['stages'][:-1]] == [8, 8, 8]
+    assert [row['candidate_health']['startup_count'] for row in receipt['stages'][:-1]] == [3, 3, 3]
+    assert [row['candidate_health']['startup_mean_ms'] for row in receipt['stages'][:-1]] == [240, 240, 240]
     assert all('ingress_health' in row for row in receipt['stages'][:-1])
     assert receipt['stages'][-1]['weights'] == {NEW: 100}
     assert rollout.transport.polls == 4
@@ -189,6 +195,8 @@ def test_promote_records_verified_stages_and_total_duration(tmp_path, monkeypatc
         ('unhealthy', 'stage_error_regression'),
         ('missing_ingress', 'stage_deadline'),
         ('ingress_error', 'ingress_error_regression'),
+        ('ingress_throttled', 'ingress_error_regression'),
+        ('ingress_no_response', 'ingress_error_regression'),
         ('ingress_slow', 'ingress_latency_regression'),
         ('foreign_generation', 'generation_drift'),
         ('wrong_weight', 'observed_traffic_drift'),
