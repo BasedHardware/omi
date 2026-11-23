@@ -186,6 +186,7 @@ class UsageProvider with ChangeNotifier {
       }
       notifyListeners();
     } catch (e) {
+      // omi-ux-allow: silent-catch -- plans sheet shows retry
       Logger.debug('Failed to load Play offers: $e');
     } finally {
       _playOffersLoading = false;
@@ -198,6 +199,7 @@ class UsageProvider with ChangeNotifier {
     try {
       if (await playBillingService.deliverPendingTokens()) await fetchSubscription();
     } catch (e) {
+      // omi-ux-allow: silent-catch -- token resent next launch
       Logger.debug('Failed to deliver pending Play purchases: $e');
     }
   }
