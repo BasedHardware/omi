@@ -4409,7 +4409,7 @@ class CaptureController extends ChangeNotifier
         if (conversationId != null) _rememberConversationClose(conversationId);
         actions.onManualFinishSettled(
           placeholder,
-          outcome.response?.conversation,
+          outcome,
           showFailure: !confirmedProcessing,
         );
         await OptimisticProcessingPlaceholder.applyProcessResult(

@@ -52,7 +52,7 @@ abstract interface class CaptureExternalActions {
 
   void onManualFinishSettled(
     ServerConversation placeholder,
-    ServerConversation? result, {
+    InProgressProcessOutcome? outcome, {
     required bool showFailure,
   });
 
@@ -127,7 +127,7 @@ class NoopCaptureExternalActions implements CaptureExternalActions {
   @override
   void onManualFinishSettled(
     ServerConversation placeholder,
-    ServerConversation? result, {
+    InProgressProcessOutcome? outcome, {
     required bool showFailure,
   }) {}
 

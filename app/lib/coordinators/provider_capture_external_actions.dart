@@ -129,26 +129,28 @@ class ProviderCaptureExternalActions implements CaptureExternalActions {
   @override
   void onManualFinishSettled(
     ServerConversation placeholder,
-    ServerConversation? result, {
+    InProgressProcessOutcome? outcome, {
     required bool showFailure,
   }) {
     final v3 = conversationsV3;
+    final result = outcome?.response?.conversation;
     if (v3 == null || !v3.settleManualFinish(placeholder, result)) return;
-    if (showFailure && (result == null || result.discarded || result.status == ConversationStatus.in_progress)) {
+    if (showFailure) {
       final l10n = globalNavigatorKey.currentContext?.l10n;
       if (l10n != null) {
-        AppSnackbar.showSnackbarError(
-          result == null
-              ? l10n.finishFailed
-              : result.discarded
-                  ? l10n.discardedOnlyRecording
-                  : l10n.finishAudioNotReceived,
-        );
+        if (outcome?.absence == ProcessAbsence.emptyBody || result?.discarded == true) {
+          AppSnackbar.showSnackbar(l10n.discardedOnlyRecording);
+        } else if (result == null) {
+          // A 404 has no active recording. It does not establish whether a summary exists yet.
+          AppSnackbar.showSnackbarError(l10n.finishFailed);
+        } else if (result.status == ConversationStatus.in_progress) {
+          AppSnackbar.showSnackbar(l10n.finishAudioNotReceived);
+        }
       }
     }
     unawaited(v3.refreshAfterManualFinish().catchError((Object _) {}));
     unawaited(
-      conversationProvider.fetchConversations().then<void>(
+      conversationProvider.forceRefreshConversations().then<void>(
             (_) {},
             onError: (Object _) {},
           ),

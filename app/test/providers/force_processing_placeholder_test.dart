@@ -12,6 +12,7 @@ import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/services/capture/capture_external_actions.dart';
 import 'package:omi/services/capture/capture_seams.dart';
+import 'package:omi/services/capture/empty_recording_notice.dart';
 import 'package:omi/services/capture/local_segment_store.dart';
 import 'package:omi/services/wals/wal_interfaces.dart';
 
@@ -22,6 +23,7 @@ class _RecordingActions extends NoopCaptureExternalActions {
   final upserted = <ServerConversation>[];
   ServerConversation? manualFinishRow;
   bool? manualFinishFailed;
+  ProcessAbsence? manualFinishAbsence;
 
   @override
   void onManualFinishStarted(ServerConversation placeholder, String? recordingId, {String? liveConversationId}) {
@@ -29,8 +31,11 @@ class _RecordingActions extends NoopCaptureExternalActions {
   }
 
   @override
-  void onManualFinishSettled(ServerConversation placeholder, ServerConversation? result, {required bool showFailure}) {
-    if (identical(placeholder, manualFinishRow)) manualFinishFailed = result == null && showFailure;
+  void onManualFinishSettled(ServerConversation placeholder, InProgressProcessOutcome? outcome,
+      {required bool showFailure}) {
+    if (!identical(placeholder, manualFinishRow)) return;
+    manualFinishFailed = outcome?.response?.conversation == null && showFailure;
+    manualFinishAbsence = outcome?.absence;
   }
 
   @override
@@ -247,6 +252,7 @@ void main() {
     finalize.complete();
     await _flushEventQueue();
     expect(actions.manualFinishFailed, isTrue);
+    expect(actions.manualFinishAbsence, ProcessAbsence.transport);
     expect(actions.processing, isEmpty);
   });
 
