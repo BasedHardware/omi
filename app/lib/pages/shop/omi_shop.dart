@@ -24,6 +24,12 @@ const omiHardwareMarkerScript = "document.getElementById('omi-app-hardware') !==
 Uri omiHardwareUrl(String source) =>
     Uri.https('www.omi.me', '/products/omi', {'view': omiHardwareView, '_ref': source});
 
+/// The host in lower case without a trailing root dot (`app.omi.me.` is `app.omi.me`).
+String _hostOf(Uri uri) {
+  final host = uri.host.toLowerCase();
+  return host.endsWith('.') ? host.substring(0, host.length - 1) : host;
+}
+
 bool _isStoreHost(String host) => host == 'www.omi.me' || host == 'omi.me';
 
 /// Any Omi host. Only the store hosts serve pages here; the rest (app.omi.me sells Omi Pro, h.omi.me)
@@ -32,7 +38,7 @@ bool _isOmiHost(String host) => host == 'omi.me' || host.endsWith('.omi.me');
 
 bool _isProductPage(Uri uri) {
   final path = uri.path.toLowerCase();
-  return _isStoreHost(uri.host.toLowerCase()) && (path == '/products/omi' || path == '/products/omi/');
+  return _isStoreHost(_hostOf(uri)) && (path == '/products/omi' || path == '/products/omi/');
 }
 
 bool _isCheckoutPath(String path) => path.startsWith('/checkouts/') || RegExp(r'^/\d+/checkouts/').hasMatch(path);
@@ -60,7 +66,7 @@ bool _isPostPurchase(String host, String path) {
 /// Subframes (card fields, in-page 3-D Secure) are not filtered.
 WebNavigation omiHardwareNavigation(Uri? current, Uri target) {
   if (target.scheme != 'https') return WebNavigation.block;
-  final host = target.host.toLowerCase();
+  final host = _hostOf(target);
   final path = target.path.toLowerCase();
   if (_isPostPurchase(host, path)) return WebNavigation.finish;
   if (_isOmiHost(host) && !_isStoreHost(host)) return WebNavigation.block;
@@ -78,7 +84,7 @@ WebNavigation omiHardwareNavigation(Uri? current, Uri target) {
     return allowed ? WebNavigation.allow : WebNavigation.block;
   }
   if (current == null || current.scheme != 'https') return WebNavigation.block;
-  final fromHost = current.host.toLowerCase();
+  final fromHost = _hostOf(current);
   final fromCheckout = _isCheckoutPath(current.path.toLowerCase());
   final fromPaymentHop = !_isOmiHost(fromHost);
   return fromCheckout || fromPaymentHop ? WebNavigation.allow : WebNavigation.block;

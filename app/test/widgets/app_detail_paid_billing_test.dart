@@ -186,6 +186,16 @@ void main() {
     expect(find.byKey(const Key('app_detail_paid_unavailable')), findsOneWidget);
   }, variant: TargetPlatformVariant.only(TargetPlatform.android));
 
+  testWidgets('a failed subscription read ends on "Not available", never a spinner or the payment link',
+      (tester) async {
+    final gate = await pumpPaidApp(tester);
+    expect(find.byKey(const Key('app_detail_paid_pending')), findsOneWidget);
+    gate.complete(null);
+    await settle(tester);
+    expect(find.byKey(const Key('app_detail_paid_pending')), findsNothing);
+    expect(find.byKey(const Key('app_detail_paid_unavailable')), findsOneWidget);
+  }, variant: TargetPlatformVariant.only(TargetPlatform.android));
+
   testWidgets('iOS never waits on the billing provider', (tester) async {
     await pumpPaidApp(tester);
     expect(find.byKey(const Key('app_detail_paid_pending')), findsNothing);

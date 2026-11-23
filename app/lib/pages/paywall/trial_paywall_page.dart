@@ -309,8 +309,10 @@ class _TrialPaywallPageState extends State<TrialPaywallPage> {
               // Google Play readers: Play's own trial length for the selected plan, never the constant.
               final trialDays = (usage.playBilledPurchaser ? selected?.trialDays : null) ?? TrialPaywallPage.trialDays;
               // Until Play's offer has loaded (or when it failed) a Play reader sees no trial length,
-              // date or timeline: there is no Play trial to describe yet.
-              final playTrialUnknown = usage.playBilledPurchaser && selected?.trialDays == null;
+              // date or timeline: there is no Play trial to describe yet. The same holds on Android
+              // while the billing provider is still unknown: the reader may turn out to be Play-billed.
+              final playTrialUnknown = (widget.offer == null && usage.billingProviderUnknown) ||
+                  (usage.playBilledPurchaser && selected?.trialDays == null);
               final currency = selected?.currency ?? 'usd';
               final zero = formatBillingPrice(0, currency);
               final yearlySaving = yearly != null && monthly != null && monthly.amountMinor * 12 > yearly.amountMinor

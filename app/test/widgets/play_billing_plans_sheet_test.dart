@@ -381,6 +381,50 @@ void main() {
     expect(find.textContaining('₹22,500.00'), findsWidgets);
   }, variant: TargetPlatformVariant.only(TargetPlatform.android));
 
+  testWidgets('trial paywall: no trial length while the billing provider is unknown or its read failed',
+      (tester) async {
+    var calls = 0;
+    final gate = Completer<UserSubscriptionResponse?>();
+    final world = _World([_response()]);
+    final usage = _Usage(
+      subscriptionRequest: () => ++calls == 1 ? gate.future : Future.value(_response(play: null)),
+      playBilling: world.billing,
+    );
+    addTearDown(usage.dispose);
+    tester.view.physicalSize = const Size(430, 2400);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    unawaited(usage.fetchSubscription());
+    await tester.pumpWidget(ChangeNotifierProvider<UsageProvider>.value(
+      value: usage,
+      child: MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: const [Locale('en')],
+        home: TrialPaywallPage(source: 'test', now: DateTime(2026, 11, 22)),
+      ),
+    ));
+    await tester.pump();
+    // Read in flight: the reader may turn out to be Play-billed, so no constant trial promise yet.
+    expect(usage.billingProviderPending, isTrue);
+    expect(find.byKey(const Key('trial_paywall_timeline_pending')), findsOneWidget);
+    expect(find.byKey(const Key('trial_paywall_timeline')), findsNothing);
+    expect(find.text('In 7 days'), findsNothing);
+    // The read fails: Retry, still no trial length or date.
+    gate.complete(null);
+    await tester.pumpAndSettle();
+    expect(usage.billingProviderFailed, isTrue);
+    expect(find.byKey(const Key('play_plans_error')), findsOneWidget);
+    expect(find.byKey(const Key('trial_paywall_timeline')), findsNothing);
+    expect(find.byKey(const Key('trial_paywall_timeline_pending')), findsNothing);
+    expect(find.text('In 7 days'), findsNothing);
+    // Retry lands on a Stripe-billed reader: the 7-day timeline is back.
+    await tester.tap(find.descendant(of: find.byKey(const Key('play_plans_error')), matching: find.byType(OmiButton)));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('trial_paywall_timeline')), findsOneWidget);
+    expect(find.text('In 7 days'), findsOneWidget);
+  }, variant: TargetPlatformVariant.only(TargetPlatform.android));
+
   testWidgets('before the billing provider is known, Android shows loading and never a price', (tester) async {
     final gate = Completer<UserSubscriptionResponse?>();
     final world = _World([_response()]);
