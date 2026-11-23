@@ -779,7 +779,7 @@ def test_repair_preclaim_retries_only_an_eligible_new_revision(pipeline, monkeyp
     row = {'status': 'completed', 'summary_title_provenance': 'server_minimum', 'sync_content_revision': 4}
     if manual:
         row['user_title'] = 'Synthetic manual title'
-    monkeypatch.setattr(pipeline.conversations_db, 'get_conversation', lambda *_: row)
+    monkeypatch.setattr(pipeline.conversations_db, 'get_conversation', lambda *_, **_kwargs: row)
     process = Mock()
     monkeypatch.setattr(pipeline, 'process_conversation', process)
     token = delivery.REPAIR_CONTEXT.set({'summary_expected_revision': 3})
@@ -978,7 +978,7 @@ def test_pipeline_only_receipts_a_rule_discard_after_persistence(pipeline, monke
     monkeypatch.setattr(
         pipeline.conversations_db,
         'get_conversation',
-        lambda *_: {'status': 'completed', 'sync_relevance': 'review', 'transcript_segments': []},
+        lambda *_, **_kwargs: {'status': 'completed', 'sync_relevance': 'review', 'transcript_segments': []},
     )
     monkeypatch.setattr(pipeline, 'fragment_rule', lambda *_: ('discard', 'synthetic-rule'))
     monkeypatch.setattr(pipeline, 'is_user_curated', lambda *_: False)
@@ -1009,7 +1009,7 @@ def test_pipeline_receipts_an_intake_discarded_fragment_without_a_second_write(p
     monkeypatch.setattr(
         pipeline.conversations_db,
         'get_conversation',
-        lambda *_: {
+        lambda *_, **_kwargs: {
             'status': 'completed',
             'sync_relevance': 'review',
             'discarded': True,
@@ -1047,7 +1047,12 @@ def test_intake_discarded_fragment_settles_admitted_obligation_instead_of_callba
     monkeypatch.setattr(
         pipeline.conversations_db,
         'get_conversation',
-        lambda *_: {'status': 'completed', 'sync_relevance': 'review', 'discarded': True, 'transcript_segments': []},
+        lambda *_, **_kwargs: {
+            'status': 'completed',
+            'sync_relevance': 'review',
+            'discarded': True,
+            'transcript_segments': [],
+        },
     )
     monkeypatch.setattr(pipeline, 'fragment_rule', lambda *_: ('discard', 'synthetic-rule'))
     monkeypatch.setattr(pipeline, 'is_user_curated', lambda *_: False)
@@ -1074,7 +1079,12 @@ def test_occasion_review_reaches_canonical_processing_before_fragment_discard(pi
     monkeypatch.setattr(
         pipeline.conversations_db,
         'get_conversation',
-        lambda *_: {'status': 'completed', 'sync_relevance': 'review', 'discarded': True, 'transcript_segments': []},
+        lambda *_, **_kwargs: {
+            'status': 'completed',
+            'sync_relevance': 'review',
+            'discarded': True,
+            'transcript_segments': [],
+        },
     )
     monkeypatch.setattr(pipeline, 'repair_fenced', lambda *_: False)
     rule = Mock(side_effect=AssertionError('occasion mode must assess the canonical span'))
@@ -1151,7 +1161,7 @@ def test_episode_schedule_only_for_changed_reprocess_or_unattached(pipeline, mon
         row.pop('episode_id')
     model = SimpleNamespace(**deepcopy(row), structured={}, language='en')
     model.model_dump = lambda: {k: v for k, v in vars(model).items() if k != 'model_dump'}
-    monkeypatch.setattr(pipeline.conversations_db, 'get_conversation', lambda *_: row)
+    monkeypatch.setattr(pipeline.conversations_db, 'get_conversation', lambda *_, **_kwargs: row)
     monkeypatch.setattr(pipeline, 'deserialize_conversation', lambda *_: model)
     monkeypatch.setattr(pipeline, 'repair_fenced', lambda *_: False)
     monkeypatch.setattr(pipeline.bridge_pending, 'live_finalization_owns', lambda *_: False)
@@ -1228,5 +1238,5 @@ def test_python_sync_refuses_foreign_finalization_before_processing(pipeline, mo
             pipeline._reprocess_conversation_after_update('u', 'c', 'en')
     finally:
         pipeline.PROCESS_CONTEXT.reset(token)
-    read.assert_called_once_with('u', 'c')
+    read.assert_called_once_with('u', 'c', include_transcript_decode_status=True)
     processor.assert_not_called()

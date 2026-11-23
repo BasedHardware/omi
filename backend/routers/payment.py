@@ -10,6 +10,9 @@ backend/docs/checkout-admission.md).
 
 from config.plan_catalog import configured_ladder_prices, validate_ladder_price
 from database.fsr_read_cache import fresh_reader, fresh_reads
+import database.play_subscriptions as play_subscriptions_db
+from utils import play_stripe_guard
+from config import play_billing as play_billing_config
 import os
 from datetime import datetime, timezone
 
@@ -847,7 +850,7 @@ def create_checkout_session_endpoint(
     existing_customer_id = users_db.get_stripe_customer_id(uid)
     # A trial is only for a first-time subscriber. A client that asked for one on behalf of a former
     # subscriber promised something this checkout cannot give, so refuse rather than charge at once.
-    if request.trial_days and existing_customer_id:
+    if request.trial_days and (existing_customer_id or play_subscriptions_db.is_play_customer(uid)):
         raise HTTPException(status_code=400, detail="trial_unavailable")
     trial_period_days = request.trial_days or None
     try:
@@ -1194,6 +1197,8 @@ def cancel_subscription_endpoint(
     uid: str = Depends(auth.get_current_user_uid),
 ):
     subscription = users_db.get_user_subscription(uid)
+    if subscription.provider == 'play':
+        raise HTTPException(status_code=409, detail=play_stripe_guard.PLAY_MANAGED_DETAIL)
     if not subscription.stripe_subscription_id:
         raise HTTPException(status_code=400, detail="No active Stripe subscription found.")
 
@@ -1410,6 +1415,9 @@ async def stripe_webhook(
     return result
 
 
+PLAY_CHECKOUT_REFUSED = 'Checkout refused: Google Play already bills this user.'
+
+
 async def _restore_paid_cancel_grace(invoice: dict, subscription_obj: dict) -> None:
     """Grant the paid-through grace once a canceled subscription's latest invoice is paid late.
 
@@ -1590,6 +1598,9 @@ async def _handle_stripe_event(event: dict, background_tasks: BackgroundTasks | 
             # An incomplete Basic row is not a completed paid checkout;
             # preserve the existing duplicate/replacement decision in pure code.
             existing_subscription = await run_blocking(db_executor, users_db.get_user_valid_subscription, uid)
+            if play_stripe_guard.live_play_row(existing_subscription) and session.get('subscription'):
+                await play_stripe_guard.refuse_stripe_for_play_subscriber(uid, session['subscription'])
+                return {"status": "success", "message": PLAY_CHECKOUT_REFUSED}
             checkout_decision = transition(
                 existing_subscription,
                 ResolvedStripeEvent(event['type'], session.get('subscription'), None, int(time.time())),
@@ -1709,6 +1720,15 @@ async def _handle_stripe_event(event: dict, background_tasks: BackgroundTasks | 
                 subscription_obj, grant_cancel_grace=True, now=now, period_paid=period_paid
             )
             if new_subscription:
+                if (
+                    is_paid_plan(new_subscription.plan)
+                    and subscription_obj.get('status') in ('active', 'trialing', 'past_due')
+                    and play_stripe_guard.live_play_row(
+                        await run_blocking(db_executor, users_db.get_existing_user_subscription, uid)
+                    )
+                ):
+                    await play_stripe_guard.refuse_stripe_for_play_subscriber(uid, subscription_obj['id'])
+                    return {"status": "success", "message": PLAY_CHECKOUT_REFUSED}
                 # Resolve prior entitlement before reconciliation; emit only
                 # after the authoritative write so stale deletion is not churn.
                 billing_owner_confirmed = False
@@ -2235,6 +2255,9 @@ def stripe_cancel():
 @router.post('/v1/payments/customer-portal', response_model=CustomerPortalSessionResponse)
 def create_customer_portal_endpoint(uid: str = Depends(auth.get_current_user_uid)):
     """Create a Stripe Customer Portal session for managing payment methods and subscriptions."""
+    # Released clients open this URL as-is; a Play subscriber is sent to Google Play's subscription center.
+    if users_db.get_user_subscription(uid).provider == 'play':
+        return {"url": play_billing_config.manage_subscription_url()}
 
     customer_id = users_db.get_stripe_customer_id(uid)
 

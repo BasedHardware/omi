@@ -5,6 +5,7 @@ deliveries answer 200. Rows bound to the legacy ``/v2/sync-jobs/run`` handler an
 same payload and row, so both drain.
 """
 
+from copy import deepcopy
 import json
 import logging
 import threading
@@ -22,8 +23,10 @@ from database.outbox_firestore import ENRICHMENT_OUTBOX
 from database.summary_processing import EmptyFailureOutcome
 import database.summary_processing as summary_processing
 from routers import enrichment as route
+from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 from tests.unit.test_sync_reprocess_coalesce import state, sweep_query  # noqa: F401
 from utils.enrichment import callback  # noqa: F401 (heavy import at collection time, not in a test call)
+from utils.enrichment.admission import TRANSCRIPT_DECODE_FAILURES
 from utils.enrichment import consumer as consumer_module
 from utils.enrichment import custody
 from utils.enrichment import outbox as reprocess
@@ -80,6 +83,84 @@ def test_callback_pending_is_a_409_retry_that_keeps_the_wake(rows, client, monke
     assert response.status_code == 409
     assert response.json() == {'status': 'retry', 'reason': 'callback_pending'}
     assert rows[0][KEY]['lease_until'] == 0 and rows[0][KEY]['task_token'] == token  # the queue retry reclaims
+
+
+@pytest.fixture
+def wrong_key_conversation(monkeypatch):
+    from database import conversations as conversations_db
+
+    store = StrictFirestore()
+    path = ('users', 'u', 'conversations', 'c')
+    conversation = conversations_db.encode_conversation_for_write(
+        'different-encryption-user',
+        {
+            'id': 'c',
+            'status': 'completed',
+            'discarded': False,
+            'sync_relevance': 'review',
+            'has_photos': False,
+            'transcript_segments': [{'text': 'synthetic transcript'}],
+        },
+        'enhanced',
+    )
+    store.rows[path] = deepcopy(conversation)
+    monkeypatch.setattr(conversations_db, 'db', store)
+    monkeypatch.setattr(conversations_db, 'get_firestore_client', lambda: store)
+    return store, path, conversation
+
+
+def test_wrong_key_transcript_keeps_ciphertext_and_retries(rows, client, monkeypatch, wrong_key_conversation):
+    store, path, conversation = wrong_key_conversation
+    ciphertext = conversation['transcript_segments']
+    assert isinstance(ciphertext, str) and ciphertext
+    process = Mock()
+    claim_summary = Mock()
+    discard = Mock()
+    monkeypatch.setattr(callback, 'process_conversation', process)
+    monkeypatch.setattr(callback, 'claim_from_snapshot', claim_summary)
+    monkeypatch.setattr(callback.lifecycle_service, 'rule_discard_outcome', discard)
+    monkeypatch.setattr(callback, 'occasion_relevance_enabled', lambda: False)
+    decode_failures_before = TRANSCRIPT_DECODE_FAILURES._value.get()
+
+    token = rows[0][KEY]['task_token']
+    response = client.post('/v2/enrichment/run', json={'kind': 'enrichment', 'key': KEY, 'task_token': token})
+
+    assert response.status_code == 409
+    assert response.json() == {'status': 'retry', 'reason': 'callback_pending'}
+    assert rows[0][KEY]['lease_until'] == 0 and rows[0][KEY]['task_token'] == token
+    assert store.rows[path]['transcript_segments'].encode('utf-8') == ciphertext.encode('utf-8')
+    assert store.rows[path] == conversation
+    assert TRANSCRIPT_DECODE_FAILURES._value.get() == decode_failures_before + 1
+    process.assert_not_called()
+    claim_summary.assert_not_called()
+    discard.assert_not_called()
+
+
+@pytest.mark.parametrize('reuse_snapshot', ['true', 'false'])
+def test_legacy_direct_redirect_queues_undecodable_transcript(
+    state, monkeypatch, wrong_key_conversation, reuse_snapshot
+):
+    from utils.sync import pipeline
+
+    store, path, conversation = wrong_key_conversation
+    donor_path = ('users', 'u', 'conversations', 'donor')
+    donor = {'id': 'donor', 'deleted': True, 'sync_merged_into': 'c', 'has_photos': False}
+    store.rows[donor_path] = deepcopy(donor)
+    monkeypatch.setenv('SYNC_OPERATION_SNAPSHOT_ENABLED', reuse_snapshot)
+    monkeypatch.setattr(pipeline.processing_hold, 'scheduling_enabled', lambda: False)
+    monkeypatch.setenv('SYNC_REPROCESS_COALESCE_ENABLED', 'false')
+    monkeypatch.setenv('DEMAND_PROCESSING_ENABLED', 'false')
+    process = Mock()
+    monkeypatch.setattr(pipeline, 'process_conversation', process)
+
+    pipeline._reprocess_merged_conversations('u', {'_merged': {'donor': 'en'}})
+
+    key = reprocess.key('u', 'donor')
+    assert state[0][key]['conversation_id'] == 'donor'
+    assert state[1][-1]['task_token'] == state[0][key]['task_token']
+    assert store.rows[path] == conversation
+    assert store.rows[donor_path] == donor
+    process.assert_not_called()
 
 
 def _pending(*_):

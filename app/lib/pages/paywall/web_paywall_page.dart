@@ -99,8 +99,8 @@ class _WebPaywallPageState extends State<WebPaywallPage> {
     if (usage.availablePlans == null) await usage.loadAvailablePlans();
     if (!mounted) return;
     final subscription = usage.subscription?.subscription;
-    _offer = PaywallOffer.fromCatalog(
-      usage.availablePlans,
+    _offer = PaywallOffer.forUsage(
+      usage,
       cancelAtPeriodEnd: subscription?.cancelAtPeriodEnd == true,
       currentPriceId: subscription?.currentPriceId,
     );

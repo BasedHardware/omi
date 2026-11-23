@@ -4741,5 +4741,12 @@
     "firmwareUpdateAppRequired": "इस फ़र्मवेयर अपडेट के लिए Omi ऐप के नए संस्करण की ज़रूरत है। अपने ऐप स्टोर से ऐप अपडेट करें, फिर दोबारा जाँचें।",
     "quietPayerTitle": "5 दिनों से कोई रिकॉर्डिंग नहीं",
     "quietPayerMessage": "अपना Omi जांचें।",
-    "quietPayerCheck": "जांचें"
+    "quietPayerCheck": "जांचें",
+    "playManageSubscription": "सदस्यता प्रबंधित करें",
+    "playBilledByGoogle": "Google Play द्वारा बिल किया जाता है",
+    "playPurchasePending": "आपका भुगतान लंबित है। Google Play की पुष्टि होते ही Omi Pro शुरू होगा।",
+    "playPurchaseOtherAccount": "यह Google Play खरीदारी किसी दूसरे Omi खाते की है।",
+    "playPurchaseNotConfirmed": "हम अभी आपकी खरीदारी की पुष्टि नहीं कर सके। हम अपने आप फिर कोशिश करेंगे।",
+    "playRenewalTerms": "रद्द करने तक दिखाई गई कीमत पर अपने आप नवीनीकृत होता है। Google Play में कभी भी प्रबंधित या रद्द करें।",
+    "playPaidAppUnavailable": "Android पर उपलब्ध नहीं"
 }
