@@ -25,6 +25,8 @@ from database import batch_pipeline_projection_outbox as projection_outbox
 from testing.store_fixtures import store_backend  # noqa: F401  (the parametrized fixture)
 from utils.batch_pipeline.contracts import Priority, WorkItem, WorkResult
 from utils.batch_pipeline.merge import OrderedMerge
+from utils.batch_pipeline.projection_discovery import ProjectionDiscovery
+from utils.batch_pipeline.projection_outbox import ProjectionOutbox
 from utils.batch_pipeline.scheduler import Scheduler, owner_key as scheduler_owner_key
 
 pytestmark = pytest.mark.integration
@@ -598,9 +600,6 @@ def test_projection_outbox_merge_and_token_conformance(h, monkeypatch):
 
 @pytest.mark.parametrize('coverage_loss', ['overdue_debt', 'failed_scan'])
 def test_pl668_legacy_projection_recovers_when_outbox_coverage_is_lost(h, monkeypatch, coverage_loss):
-    from utils.batch_pipeline.projection_discovery import ProjectionDiscovery
-    from utils.batch_pipeline.projection_outbox import ProjectionOutbox
-
     monkeypatch.setenv('BATCH_PROJECTION_OUTBOX', 'on')
     monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED', 'true')
     monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_STRIPING_ENABLED', 'off')
