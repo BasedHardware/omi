@@ -344,6 +344,10 @@ def process_key(args: argparse.Namespace, key: state.PartitionKey, db: Any, tran
         except (MigrationNotReady, state.PartitionConflict, state.PartitionBusy) as error:
             try:
                 route = state.get_route(key, firestore_client=db)
+                if route.mode == desired:
+                    after = asdict(route)
+                    atomic_json(journal_path, {**journal, 'status': 'complete', 'after': after})
+                    return {**result, 'status': 'already_complete', 'after': after}
                 unsettled = route.pending_count or route.uncertain_count
             except state.PartitionBusy:
                 # A deferred route read cannot prove settlement; stay held.

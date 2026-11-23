@@ -222,6 +222,41 @@ def test_held_route_retries_within_bounded_attempts(args, key, monkeypatch):
     assert qualify.call_count == args.max_attempts
 
 
+def test_applied_cutover_with_lost_response_is_reported_complete(args, key, monkeypatch):
+    args.apply, args.dimension = True, 2
+    before = route(key, mode='legacy', target_namespace=None, migration_token=None)
+    after = route(
+        key,
+        mode='partitioned',
+        primary_namespace=key.partition_namespace,
+        source_namespace=key.partition_namespace,
+        target_namespace=None,
+        migration_token=None,
+        revision=1,
+    )
+    monkeypatch.setattr(state, 'get_route', Mock(side_effect=[before, before, after]))
+    receipt = {'revision': 0, 'records': 2}
+    qualify = Mock(return_value=receipt)
+    monkeypatch.setattr(cli, 'BoundedMigration', lambda *a, **kw: SimpleNamespace(qualify=qualify))
+    cutover = Mock(side_effect=state.PartitionConflict('generation changed after committed cutover'))
+    monkeypatch.setattr(state, 'cutover', cutover)
+
+    result = cli.process_key(args, key, None, SimpleNamespace(last_write_request_id=None))
+
+    assert result == {
+        'key_id': key.document_id,
+        'family': key.family,
+        'before': asdict(before),
+        'status': 'already_complete',
+        'after': asdict(after),
+    }
+    assert qualify.call_count == 1
+    cutover.assert_called_once()
+    journal = json.loads((args.output_dir / 'owners' / f'{key.document_id}.json').read_text())
+    assert journal['status'] == 'complete'
+    assert journal['after'] == asdict(after)
+
+
 class SweepDB:
     """Only models the operator's bounded single-field discovery calls."""
 
