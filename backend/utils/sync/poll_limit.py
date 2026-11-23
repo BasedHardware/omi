@@ -37,6 +37,9 @@ def with_poll_hint(status: dict, *, uid: str | None = None, surface_open: bool =
     queued work may wait 60s. A new/active job immediately selects the short
     interval, independent of previous hints. Surface-open callers can explicitly
     request foreground cadence on this read-only endpoint.
+
+    The authenticated job-status route uses sync_job_poll_response to record
+    cohort telemetry before calling this pacing helper.
     """
     # Custody holds do not benefit from foreground polling or the generic
     # backoff rollback. Five minutes also matches held-partial reconciliation.

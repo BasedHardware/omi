@@ -226,7 +226,7 @@ def test_active_uploader_scrape_expires_uids_without_another_poll(monkeypatch):
 
 @pytest.mark.parametrize(
     'enabled,percent,cohort',
-    [('false', '0', 'out'), ('true', '5', 'out'), ('true', '5', 'in')],
+    [('false', '0', 'out'), ('false', '5', 'out'), ('false', '5', 'in'), ('true', '5', 'out'), ('true', '5', 'in')],
 )
 def test_job_status_poll_observes_durable_completion_in_serving_cohort(
     poll_client, monkeypatch, enabled, percent, cohort

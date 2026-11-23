@@ -1762,21 +1762,22 @@ def test_prod_backfill_renders_sibling_skip_and_poll_backoff_preservation_pins(m
         assert [(name, value) for name, value in rendered if name == key] == [(key, expected)]
 
 
-def test_prod_job_status_poll_cohort_renders_for_client_facing_backend(monkeypatch):
+@pytest.mark.parametrize(('environment', 'enabled', 'percent'), [('dev', 'false', '0'), ('prod', 'true', '5')])
+def test_job_status_poll_cohort_renders_for_client_facing_backend(monkeypatch, environment, enabled, percent):
     # Client GET /v2/sync-local-files/{job_id} goes to backend. The sync worker
     # processes Cloud Tasks, and keys in its env alone cannot configure client polls.
-    prod = _MANIFEST['environments']['prod']
-    _set_workflow_bound_env(monkeypatch, prod)
+    config = _MANIFEST['environments'][environment]
+    _set_workflow_bound_env(monkeypatch, config)
     monkeypatch.setenv('CLOUD_RUN_VPC_NETWORK', 'omi-prod-vpc')
     monkeypatch.setenv('CLOUD_RUN_VPC_SUBNET', 'omi-prod-subnet')
-    monkeypatch.setattr('sys.argv', ['render_backend_runtime_env.py', '--env', 'prod'])
+    monkeypatch.setattr('sys.argv', ['render_backend_runtime_env.py', '--env', environment])
 
     assert _MODULE['main']() == 0
     output = _read_workflow_outputs()
     block = '\n'.join(_job_env_block(output, 'backend').splitlines()[1:-1])
     rendered = _MODULE['_parse_deploy_cloud_run_env_vars'](block)
-    assert [value for key, value in rendered if key == 'SYNC_POLL_BACKOFF_ENABLED'] == ['true']
-    assert [value for key, value in rendered if key == 'SYNC_POLL_BACKOFF_PERCENT'] == ['5']
-    service = prod['cloud_run']['services']['backend']
+    assert [value for key, value in rendered if key == 'SYNC_POLL_BACKOFF_ENABLED'] == [enabled]
+    assert [value for key, value in rendered if key == 'SYNC_POLL_BACKOFF_PERCENT'] == [percent]
+    service = config['cloud_run']['services']['backend']
     removed = _MODULE['_action_removed_env_names']('backend') | set(service.get('forbidden_env', []))
     assert removed.isdisjoint({'SYNC_POLL_BACKOFF_ENABLED', 'SYNC_POLL_BACKOFF_PERCENT'})

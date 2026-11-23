@@ -9,10 +9,13 @@ not reshuffle users already admitted. A partial rollout requires the authenticat
 UID; missing UIDs and invalid percentages fail closed. An unset percentage defaults
 to 0, so enabling the kill switch without an explicit cohort does not serve hints.
 
-Dev stays `false` / `0`. The production overlay renders `true` / `5` for Cloud Run
-`backend`, which serves the client status GET. Production `backend-sync-backfill` keeps its
-`false` / `0` preservation pins. Count only traffic on `backend` toward the canary.
-Custody-held responses retain their independent 300-second hint regardless of either setting.
+Dev renders `false` / `0`. The production overlay renders `true` / `5` for Cloud Run
+`backend`, which serves the client status GET. The staging parity contract
+composes the same values on `backend-staging` with staging's isolated data and
+service identity. Production `backend-sync-backfill` keeps its `false` / `0`
+preservation pins. Count only authenticated production `backend` traffic
+toward the canary. Custody-held responses retain their independent 300-second
+hint in every environment.
 
 The status response schema, client polling behavior and rate ceilings are unchanged.
 Released Flutter polling honors `poll_after_ms`; older clients ignore the additive
@@ -30,8 +33,10 @@ process-local and is an approximation when aggregating replicas.
 
 `omi_sync_job_completion_to_first_terminal_read_seconds` records the delay from
 the stored completion timestamp to the first terminal GET observed by each
-process. The GET records either cohort regardless of the kill switch and exposes
-histogram series before their first sample. It uses the already-loaded completion
+process. The authenticated GET uses `sync_job_poll_response` to record telemetry
+before applying pacing. Cohort labels continue to use the configured percentage
+when the kill switch is off. Both histogram cohorts appear before their first
+sample. The response uses the already-loaded completion
 timestamp and a bounded, process-salted job-ID cache. A terminal row needs an
 authoritative completion timestamp to contribute. Compare its cohort p50 from
 `histogram_quantile(0.5, sum by (le, cohort) (rate(omi_sync_job_completion_to_first_terminal_read_seconds_bucket{service_name="backend"}[5m])))`
