@@ -1097,6 +1097,7 @@ async def test_flex_fallback_reason_counts_reconcile_for_conv_structure(monkeypa
     fallback_labels = {'lane_id': lane_id, 'outcome': 'fallback_standard'}
     previous_total = REGISTRY.get_sample_value('llm_gateway_flex_first_total', fallback_labels) or 0
     reason_metric = 'llm_gateway_conv_structure_flex_fallback_reason_total'
+    previous_reason_family_total = REGISTRY.get_sample_value('omi_reason_total', {'family': 'fallback'})
     previous_counts = {
         bucket: REGISTRY.get_sample_value(reason_metric, {'reason': bucket})
         for bucket in ('timeout', 'http_429', 'other')
@@ -1112,6 +1113,7 @@ async def test_flex_fallback_reason_counts_reconcile_for_conv_structure(monkeypa
     for bucket, previous in previous_counts.items():
         assert REGISTRY.get_sample_value(reason_metric, {'reason': bucket}) == previous + (bucket == reason)
     assert REGISTRY.get_sample_value(reason_metric, {'reason': 'unknown'}) is None
+    assert REGISTRY.get_sample_value('omi_reason_total', {'family': 'fallback'}) == previous_reason_family_total
 
 
 @pytest.mark.asyncio
