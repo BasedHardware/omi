@@ -287,9 +287,9 @@
       "owner": "Goal: Pipeline (SCA-3880)",
       "unit": "admitted hourly parked GPU page",
       "reads_per_unit_budget": 2,
-      "reads_per_day_budget": 48,
+      "reads_per_day_budget": 288,
       "basis": "planning-bound",
-      "source": "SCA-3880 DESIGN revision 2. One admission read and one cursor checkpoint read per admitted pass. Rejected admission adds one read per competing serving instance per UTC hour.",
+      "source": "SCA-3880 DESIGN revision 2. One admission read and one cursor checkpoint read per admitted pass. Planning bound includes up to 10 rejected admission attempts per hour (240 extra reads/day), across replicas and restarts. Verify that envelope before rollout; it is not a global limit on rejected claims.",
       "reviewed": "2026-11-23"
     },
     {
