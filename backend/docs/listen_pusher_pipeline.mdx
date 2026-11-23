@@ -7632,7 +7632,17 @@ Eligible server-STT WALs return the native public job only after exact
 PCM interval/byte coverage is proven against its pinned references. A successful
 proof aliases the existing upload-content ledger to that public job, so retries
 survive artifact expiry and producer rollback. Missing tails, clock/byte conflicts and pending capture uploads return retryable
-503 with local audio retained. Privacy refusals return terminal 409. Neither
+503 with local audio retained, while proof can still arrive. Once the record is
+final (closed, sealed, not partial, no open upload session or seal refusal, and
+both `finished_at` and the last `record_sealed_at` at least 6 hours old) an
+unproven coverage answer whose cause is `audio_bytes_differ` (the record holds
+audio at every WAL instant; only bytes differ) is terminal HTTP 400 `record_capture_unprovable`
+(`retryable: false`, no Retry-After): the phone keeps the WAL as a refused
+upload and stops the 30-second retry. WAL audio outside or past the record,
+unknown causes and coverage-check errors stay retryable. The coverage memo
+stores the static cause.
+`SYNC_RECORD_COVERAGE_TERMINAL` defaults `true`; `false` restores the 503.
+Privacy refusals return terminal 409. Neither
 creates a legacy twin. Desktop uploads targeting an existing
 from-segments row use the same projection contract and atomically reserve
 `batch_sync_v1`; sync upload metering remains on the existing sync path. Native

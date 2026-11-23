@@ -184,6 +184,8 @@ env:
     value: "true"
   - name: SYNC_RECORD_DECODE_FAILURE_MEMO
     value: "true"
+  - name: SYNC_RECORD_COVERAGE_TERMINAL
+    value: "true"
   - name: CONVERSATION_TERMINAL_FAMILY_MODE
     value: "on"
   - name: HOME_TRANSCRIPTION_PRESENTATION_GATE

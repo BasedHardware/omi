@@ -71,7 +71,7 @@ async def test_record_wait_reason_retains_custody_without_alias(monkeypatch, cap
     }
     monkeypatch.setattr(live_upload, 'FirestoreStore', lambda *_: store)
     monkeypatch.setattr(live_upload, 'artifacts_for', lambda *_: object())
-    monkeypatch.setattr(live_upload, '_covered', lambda *_: False)
+    monkeypatch.setattr(live_upload, '_coverage_gap', lambda *_: 'audio_bytes_differ')
     # A stable upload identity keeps the coverage memo in play without a real file.
     monkeypatch.setattr(live_upload, '_upload_identity', lambda paths: (len(paths), 0))
     monkeypatch.setattr(live_upload, 'cached_coverage_wait', lambda *_: False)
@@ -91,11 +91,11 @@ async def test_record_wait_reason_retains_custody_without_alias(monkeypatch, cap
             raise RuntimeError('sensitive@example.test users/0123456789012345678901234567/jobs/private-job')
 
         if case == 'failed_check':
-            monkeypatch.setattr(live_upload, '_covered', fail)
+            monkeypatch.setattr(live_upload, '_coverage_gap', fail)
         elif case == 'artifact_failed':
             monkeypatch.setattr(live_upload, 'artifacts_for', fail)
         else:
-            monkeypatch.setattr(live_upload, '_covered', lambda *_: True)
+            monkeypatch.setattr(live_upload, '_coverage_gap', lambda *_: None)
             if case == 'status_failed':
                 monkeypatch.setattr(live_upload, 'durable_status', fail)
             else:
@@ -230,6 +230,10 @@ def _wav(pcm: bytes) -> bytes:
         (-0.5, b'\x01\x00' * 16000, 'wal_audio_outside_record'),
         (0.0, b'\x02\x00' * 16000, 'audio_bytes_differ'),
         (0.5, b'\x01\x00' * 16000, 'wal_audio_past_record'),
+        # Differing bytes AND audio past the record: the server lacks some of
+        # this WAL, so the cause must be the retryable past-record one.
+        (0.5, b'\x02\x00' * 16000, 'wal_audio_past_record'),
+        (-0.5, b'\x02\x00' * 16000, 'wal_audio_outside_record'),
     ],
 )
 def test_coverage_failure_logs_which_way_the_wal_and_record_disagree(monkeypatch, caplog, wal_start, wal_pcm, cause):
@@ -246,7 +250,7 @@ def test_coverage_failure_logs_which_way_the_wal_and_record_disagree(monkeypatch
     }
     artifacts = SimpleNamespace(fetch_audio=lambda item: _wav(record_pcm))
     with caplog.at_level(logging.INFO, logger=live_upload.__name__):
-        covered = live_upload._covered(['synthetic-audio.bin'], [job], artifacts)
-    assert covered is (cause is None)
+        gap = live_upload._coverage_gap(['synthetic-audio.bin'], [job], artifacts)
+    assert gap == cause
     messages = [record.getMessage() for record in caplog.records]
     assert messages == ([] if cause is None else [f'event=sync_record_coverage outcome=unproven cause={cause}'])

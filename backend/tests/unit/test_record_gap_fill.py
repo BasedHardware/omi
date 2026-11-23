@@ -348,11 +348,11 @@ def test_empty_retained_set_fills_from_capture_start_and_wal_proves_coverage(wor
     artifacts = SimpleNamespace(fetch_audio=lambda item: audio_unit(start, materialized(world, units[0])).wav)
     clipped = [audio_unit(99.0, wal_pcm[RATE * 2 : 13 * RATE * 2])]
     monkeypatch.setattr(live_upload, 'decode_units', lambda paths: iter(clipped))
-    assert live_upload._covered(['synthetic-wal.bin'], jobs, artifacts) is True
+    assert live_upload._coverage_gap(['synthetic-wal.bin'], jobs, artifacts) is None
     # A WAL that differs from what was written is never released.
     other = [audio_unit(99.0, tone(12, 3))]
     monkeypatch.setattr(live_upload, 'decode_units', lambda paths: iter(other))
-    assert live_upload._covered(['synthetic-wal.bin'], jobs, artifacts) is False
+    assert live_upload._coverage_gap(['synthetic-wal.bin'], jobs, artifacts) is not None
 
 
 def test_a_wal_that_skips_ahead_of_held_audio_writes_nothing(world):

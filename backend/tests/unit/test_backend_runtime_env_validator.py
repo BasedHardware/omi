@@ -272,6 +272,7 @@ def with_memory_env(payload: str) -> str:
         {"name": "SYNC_RECORD_COVERAGE_WAIT_MEMO", "value": "true"},
         {"name": "SYNC_RECORD_WAIT_MEMO_FIRST", "value": "true"},
         {"name": "SYNC_RECORD_DECODE_FAILURE_MEMO", "value": "true"},
+        {"name": "SYNC_RECORD_COVERAGE_TERMINAL", "value": "true"},
         {"name": "OMI_EXTERNAL_LIST_POLLING_CACHE_ENABLED", "value": "true"},
         {"name": "OMI_EXTERNAL_LIST_POLLING_CACHE_PERCENT", "value": "100"},
         {"name": "AUDIO_ARCHIVE_LIVE_ENABLED", "value": "true"},

@@ -31,6 +31,10 @@ BRIDGE_FIELDS = [
     'sync_bridge_audio_target',
     'private_cloud_sync_enabled',
 ]
+# The sync route hands this row to the registered-record router as its loaded
+# conversation, so it also carries the record-finality markers that router
+# reads (``live_upload.coverage_final``); a field missing here reads as "not
+# final" and keeps the retryable wait. Same single document read.
 PROVENANCE_FIELDS = [
     'id',
     'client_device_id',
@@ -40,6 +44,11 @@ PROVENANCE_FIELDS = [
     'source',
     'uses_custom_stt',
     'deleted',
+    'record_audio_closed',
+    'record_audio_partial',
+    'record_sealed_at',
+    'record_seal_refused_at',
+    'record_upload_sessions',
 ]
 
 

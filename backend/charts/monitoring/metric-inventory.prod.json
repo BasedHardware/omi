@@ -2375,6 +2375,7 @@
     "omi_pipeline_ledger_unknown_end_type_total",
     "omi_pipeline_ledger_write_failures_total",
     "omi_pipeline_ledger_write_total",
+    "omi_pipeline_record_coverage_terminal_total",
     "omi_pipeline_record_wait_answers_total",
     "omi_pipeline_record_wait_memo_hits_total",
     "omi_pusher_storage_pcm_budget_limit_bytes",
