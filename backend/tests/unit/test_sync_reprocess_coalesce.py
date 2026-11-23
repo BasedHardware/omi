@@ -1,6 +1,7 @@
 """Quiet-window state transitions; persistence/contention is proved on the emulator."""
 
 from copy import deepcopy
+import time
 from types import SimpleNamespace
 from unittest.mock import Mock
 
@@ -38,11 +39,13 @@ def state(monkeypatch):
     monkeypatch.setattr(enrichment_scan, 'begin', lambda *_: (None, None))
     monkeypatch.setattr(enrichment_scan, 'finish', lambda *_: None)
 
-    def empty_failure(_client, _collection, document_id, owner, token):
+    def empty_failure(_client, _collection, document_id, owner, token, *, expected_version=None):
         from database.summary_processing import EmptyFailureOutcome
 
         row = rows[document_id]
         assert row['owner'] == owner and row['task_token'] == token
+        if expected_version is not None and row.get('version') != expected_version:
+            return EmptyFailureOutcome.SUPERSEDED
         row['summary_empty_failures'] = min(3, row.get('summary_empty_failures', 0) + 1)
         if row['summary_empty_failures'] == 3:
             row.update(dormant=True, due_at=None, lease_until=0, summary_blocked_reason='empty_output_exhausted')
@@ -91,6 +94,18 @@ def test_flags_default_to_serving_truth(monkeypatch):
     monkeypatch.setenv('FIRESTORE_EMULATOR_HOST', '127.0.0.1:8080')
     monkeypatch.delenv('OMI_ENV_STAGE', raising=False)
     assert flags.coalesce_enabled()
+
+
+@pytest.mark.parametrize(
+    'raw,expected',
+    [(None, 120), ('', 120), ('0', 0), ('45', 45), ('99999', 3600), ('-5', 0), ('soon', 120)],
+)
+def test_empty_output_backoff_reads_the_kill_switch_at_the_call_boundary(monkeypatch, raw, expected):
+    if raw is None:
+        monkeypatch.delenv('ENRICHMENT_EMPTY_OUTPUT_BACKOFF_SECONDS', raising=False)
+    else:
+        monkeypatch.setenv('ENRICHMENT_EMPTY_OUTPUT_BACKOFF_SECONDS', raw)
+    assert flags.empty_output_backoff_seconds() == expected
 
 
 def test_explicit_env_is_the_kill_switch(monkeypatch):
@@ -587,12 +602,12 @@ def test_first_pending_survives_death_lease_and_empty_output(state, monkeypatch)
     assert reprocess.run(key, token, lambda *_: SimpleNamespace(discarded=False, structured={}), now=120) == 'deferred'
     assert rows[key]['summary_empty_failures'] == 1
     assert rows[key]['first_pending_at'] == 0
-    assert rows[key]['due_at'] == 120 + reprocess.LIVE_DEFER_SECONDS
+    assert rows[key]['due_at'] == pytest.approx(120 + reprocess.LIVE_DEFER_SECONDS, abs=1)
     assert rows[key]['lease_until'] == 0 and rows[key]['owner'] is None
     retry_token = rows[key]['task_token']
     assert retry_token != token
     output = SimpleNamespace(discarded=False, structured={'overview': 'Recovered'})
-    assert reprocess.run(key, retry_token, lambda *_: output, now=120 + reprocess.LIVE_DEFER_SECONDS) == 'processed'
+    assert reprocess.run(key, retry_token, lambda *_: output, now=rows[key]['due_at']) == 'processed'
     assert rows[key]['summary_seen']
     assert reprocess.run(key, retry_token, Mock(), now=2000) == 'stale'
 
@@ -704,16 +719,33 @@ def test_unavailable_empty_output_strike_defers_instead_of_raising(state, monkey
     rows, tasks = state
     reprocess.mark('u', 'c', 'en', now=0)
     key, token = reprocess.key('u', 'c'), tasks[-1]['task_token']
-    monkeypatch.setattr(reprocess, 'record_empty_failure', lambda *_: EmptyFailureOutcome.UNAVAILABLE)
+    monkeypatch.setattr(reprocess, 'record_empty_failure', lambda *_, **__: EmptyFailureOutcome.UNAVAILABLE)
 
     def empty(*_):
         return SimpleNamespace(discarded=False, structured={})
 
     assert reprocess.run(key, token, empty, now=120) == 'deferred'
     assert rows[key]['deferred_reason'] == reprocess.EMPTY_OUTPUT_DEFER_REASON
-    assert rows[key]['due_at'] == 120 + reprocess.LIVE_DEFER_SECONDS
+    assert rows[key]['due_at'] == pytest.approx(120 + reprocess.LIVE_DEFER_SECONDS, abs=1)
     assert rows[key]['lease_until'] == 0 and rows[key]['owner'] is None
     assert rows[key].get('summary_empty_failures', 0) == 0
+
+
+def test_legacy_empty_output_defer_starts_after_a_slow_callback(state, monkeypatch):
+    """P1: the legacy handler's 120s defer is measured from the empty result, not the claim."""
+    rows, tasks = state
+    reprocess.mark('u', 'c', 'en', now=0)
+    key, token = reprocess.key('u', 'c'), tasks[-1]['task_token']
+    clock = [10_000.0]
+    monkeypatch.setattr(reprocess, 'time', SimpleNamespace(time=lambda: clock[0], monotonic=time.monotonic))
+
+    def slow_empty(*_):
+        clock[0] += 200.0  # the callback outlives the 120s delay
+        return SimpleNamespace(discarded=False, structured={})
+
+    assert reprocess.run(key, token, slow_empty, now=10_000.0) == 'deferred'
+    assert rows[key]['due_at'] == clock[0] + reprocess.LIVE_DEFER_SECONDS
+    assert rows[key]['due_at'] - clock[0] == reprocess.LIVE_DEFER_SECONDS
 
 
 def test_empty_kept_output_has_a_terminal_budget_and_cannot_be_remarked(state, monkeypatch):
@@ -726,7 +758,7 @@ def test_empty_kept_output_has_a_terminal_budget_and_cannot_be_remarked(state, m
         token = rows[key]['task_token']
         assert reprocess.run(key, token, empty, now=now) == 'deferred'
         assert rows[key]['summary_empty_failures'] == expected
-        assert rows[key]['due_at'] == now + reprocess.LIVE_DEFER_SECONDS
+        assert rows[key]['due_at'] == pytest.approx(now + reprocess.LIVE_DEFER_SECONDS, abs=1)
         now = rows[key]['due_at']
     token = rows[key]['task_token']
     assert reprocess.run(key, token, empty, now=now) == 'blocked'
@@ -742,7 +774,7 @@ def test_empty_kept_output_has_a_terminal_budget_and_cannot_be_remarked(state, m
 def test_legacy_empty_output_owner_race_defers_without_spending_attempts(state, monkeypatch):
     from database.summary_processing import EmptyFailureOutcome
 
-    monkeypatch.setattr(reprocess, 'record_empty_failure', lambda *_: EmptyFailureOutcome.OWNER_MISMATCH)
+    monkeypatch.setattr(reprocess, 'record_empty_failure', lambda *_, **__: EmptyFailureOutcome.OWNER_MISMATCH)
     rows, tasks = state
     reprocess.mark('u', 'c', 'en', now=0)
     key, token = reprocess.key('u', 'c'), tasks[0]['task_token']
