@@ -16,6 +16,8 @@ from scripts import worker_primary_cas as carrier
 
 CHART = Path(__file__).resolve().parents[2] / 'charts' / 'batch-pipeline-worker'
 SYNTHETIC_UID = 'syntheticAccountIdForThisTest01'
+DUMMY_SECRET_REF = {'name': 'synthetic-worker-secret', 'key': 'synthetic-allowlist'}
+PROD_FALLBACK_REF = {'name': 'prod-omi-backend-secrets', 'key': 'BATCH_PIPELINE_UID_ALLOWLIST_SECRET'}
 DIGEST = 'sha256:' + 'a' * 64
 
 
@@ -46,7 +48,6 @@ def cluster(tmp_path):
                                 'name': container,
                                 'image': 'example.invalid/worker@sha256:' + str(i) * 64,
                                 'env': [
-                                    {'name': carrier.ALLOWLIST, 'value': SYNTHETIC_UID},
                                     {'name': carrier.DEPTH, 'value': '3'},
                                 ],
                             }
@@ -153,8 +154,22 @@ def render(kubeconfig, *args):
     )
 
 
-def test_connected_render_and_carrier_preview_never_print_live_allowlist(cluster, capsys):
+@pytest.mark.parametrize(
+    'binding_kind,binding_fields',
+    [
+        ('literal', {'value': SYNTHETIC_UID}),
+        ('reference', {'valueFrom': {'secretKeyRef': DUMMY_SECRET_REF}}),
+        ('empty', {'value': ''}),
+        ('absent', None),
+    ],
+    ids=['literal', 'secret-reference', 'empty', 'absent'],
+)
+def test_connected_render_and_carrier_preserve_live_allowlist(cluster, capsys, binding_kind, binding_fields):
     kubeconfig, live = cluster
+    if binding_fields is not None:
+        for deployment in live.values():
+            carrier.target_container(deployment)[1]['env'].append({'name': carrier.ALLOWLIST, **binding_fields})
+
     normal = render(kubeconfig)
     assert normal.returncode == 0, normal.stderr
     assert SYNTHETIC_UID not in normal.stdout + normal.stderr
@@ -165,7 +180,7 @@ def test_connected_render_and_carrier_preview_never_print_live_allowlist(cluster
     ]
     assert len(workers) == 2
     for doc in workers:
-        assert doc['metadata']['annotations']['omi.ai/worker-allowlist-binding-kind'] == 'literal'
+        assert doc['metadata']['annotations']['omi.ai/worker-allowlist-binding-kind'] == binding_kind
         assert all(entry['name'] != carrier.ALLOWLIST for entry in carrier.target_container(doc)[1]['env'])
 
     upgrade = render(kubeconfig, '--is-upgrade')
@@ -173,38 +188,42 @@ def test_connected_render_and_carrier_preview_never_print_live_allowlist(cluster
     assert 'use the primary-only patch' in upgrade.stderr
     assert SYNTHETIC_UID not in upgrade.stdout + upgrade.stderr
 
-    literal = render(kubeconfig, '--set-string', f'worker.uidAllowlist.value={SYNTHETIC_UID}')
-    assert literal.returncode != 0
-    assert 'use an allowlist Secret reference' in literal.stderr
-    assert SYNTHETIC_UID not in literal.stdout + literal.stderr
-
     preview_flags = ('--set', 'rollout.primaryOnlyPreview=true', '--show-only', 'templates/primary-only-preview.yaml')
     preview = render(kubeconfig, *preview_flags)
     assert preview.returncode == 0, preview.stderr
     assert SYNTHETIC_UID not in preview.stdout + preview.stderr
     summary = carrier.preview(yaml.safe_load(preview.stdout))
-    assert summary[carrier.PRIMARY]['allowlist'] == {'name': carrier.ALLOWLIST, 'kind': 'literal'}
+    assert all(entry['allowlist'] == {'name': carrier.ALLOWLIST, 'kind': binding_kind} for entry in summary.values())
     patch, expected = carrier.plan(live, summary)
     assert SYNTHETIC_UID not in json.dumps(patch)
     assert [item['path'] for item in patch if item['op'] == 'replace'] == [
         '/spec/template/spec/containers/0/image',
-        '/spec/template/spec/containers/0/env/1/value',
+        '/spec/template/spec/containers/0/env/0/value',
     ]
     assert patch[:2] == [
         {'op': 'test', 'path': '/metadata/uid', 'value': 'deployment-1'},
         {'op': 'test', 'path': '/metadata/resourceVersion', 'value': '1'},
     ]
     assert all(expected[name] == live[name] for name in carrier.TARGETS if name != carrier.PRIMARY)
+    expected_entries = [] if binding_fields is None else [{'name': carrier.ALLOWLIST, **binding_fields}]
+    for deployment in expected.values():
+        env = carrier.target_container(deployment)[1]['env']
+        assert [entry for entry in env if entry['name'] == carrier.ALLOWLIST] == expected_entries
+
     assert carrier.compare(live, expected, expected)
     output = capsys.readouterr().out
-    assert output.count('literal) equal=true') == 3
+    assert output.count(f'({binding_kind}) equal=true') == 3
     assert SYNTHETIC_UID not in output
 
     observed = deepcopy(expected)
-    carrier.target_container(observed[carrier.PRIMARY])[1]['env'][0]['value'] = 'differentSyntheticAccountId'
+    observed_env = carrier.target_container(observed[carrier.PRIMARY])[1]['env']
+    if binding_kind == 'reference':
+        observed_env[1]['valueFrom']['secretKeyRef']['key'] = 'different-synthetic-key'
+    else:
+        observed_env[1:] = [{'name': carrier.ALLOWLIST, 'value': 'differentSyntheticAccountId'}]
     assert not carrier.compare(live, expected, observed)
     output = capsys.readouterr().out
-    assert 'literal) equal=false' in output
+    assert f'({binding_kind}) equal=false' in output
     assert SYNTHETIC_UID not in output and 'differentSyntheticAccountId' not in output
 
     live.update(expected)
@@ -213,5 +232,32 @@ def test_connected_render_and_carrier_preview_never_print_live_allowlist(cluster
     assert SYNTHETIC_UID not in rollback.stdout + rollback.stderr
     patch, _ = carrier.plan(live, carrier.preview(yaml.safe_load(rollback.stdout)))
     assert [item['path'] for item in patch if item['op'] == 'replace'] == [
-        '/spec/template/spec/containers/0/env/1/value',
+        '/spec/template/spec/containers/0/env/0/value',
     ]
+
+
+def test_connected_install_selects_configured_secret_when_worker_deployments_are_missing(cluster):
+    kubeconfig, live = cluster
+    live.clear()
+
+    result = render(kubeconfig)
+    assert result.returncode == 0, result.stderr
+    workers = {
+        doc['metadata']['name']: doc
+        for doc in yaml.safe_load_all(result.stdout)
+        if doc and doc['kind'] == 'Deployment' and doc['metadata']['name'].startswith(carrier.PRIMARY)
+    }
+    assert workers.keys() == {carrier.PRIMARY, carrier.PRIMARY + '-t4'}
+    for doc in workers.values():
+        env = carrier.target_container(doc)[1]['env']
+        assert [entry for entry in env if entry['name'] == carrier.ALLOWLIST] == [
+            {'name': carrier.ALLOWLIST, 'valueFrom': {'secretKeyRef': PROD_FALLBACK_REF}}
+        ]
+
+
+def test_connected_render_rejects_configured_literal_allowlist(cluster):
+    kubeconfig, _ = cluster
+    literal = render(kubeconfig, '--set-string', f'worker.uidAllowlist.value={SYNTHETIC_UID}')
+    assert literal.returncode != 0
+    assert 'use an allowlist Secret reference' in literal.stderr
+    assert SYNTHETIC_UID not in literal.stdout + literal.stderr
