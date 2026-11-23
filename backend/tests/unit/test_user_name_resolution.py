@@ -153,6 +153,7 @@ def test_absent_firebase_user_still_uses_ai_identity(sources):
 def test_chat_system_prompt_uses_ai_identity(sources, monkeypatch):
     sources.document.to_dict.return_value = {'ai_user_profile': {'profile_text': '- David Zhang is an engineer.'}}
     monkeypatch.setattr(chat.goals_db, 'get_user_goals', lambda *a, **k: [])
+    monkeypatch.setattr(chat.users_db, 'get_custom_instructions', lambda *a, **k: None)
     prompt = chat._get_agentic_qa_prompt('u', tz='UTC')
     assert 'David' in prompt
     assert 'The User' not in prompt

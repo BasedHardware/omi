@@ -237,6 +237,7 @@ async def execute_chat_stream(
     client_tz: Optional[str] = None,
     device_tool_names: Optional[set] = None,
     shaped_invocation: bool = False,
+    custom_instructions_enabled: Optional[bool] = None,
 ) -> AsyncGenerator[Optional[str], None]:
     """Route chat requests to the agentic chat handler.
 
@@ -278,6 +279,9 @@ async def execute_chat_stream(
         # Persona apps previously took a dedicated LangChain/OpenAI stream; every
         # turn now keeps the shared prompt, history and tools so a selected persona
         # cannot drop tool, memory, or file access.
+        extra_kwargs: Dict[str, Any] = {}
+        if custom_instructions_enabled is not None:
+            extra_kwargs['custom_instructions_enabled'] = custom_instructions_enabled
         async for chunk in execute_agentic_chat_stream(
             uid,
             messages,
@@ -292,6 +296,7 @@ async def execute_chat_stream(
             setup_deadline_at=setup_deadline_at,
             device_tool_names=device_tool_names,
             shaped_invocation=shaped_invocation,
+            **extra_kwargs,
         ):
             yield chunk
 

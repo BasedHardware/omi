@@ -149,6 +149,7 @@ sys.modules["database.redis_db"].get_enabled_apps = MagicMock(return_value=[])
 sys.modules["database.redis_db"].get_cached_user_geolocation = MagicMock(return_value=None)
 sys.modules["database.redis_db"].r = MagicMock()
 sys.modules["database.users"].get_user_location_context_consent = MagicMock(return_value=None)
+sys.modules["database.users"].get_custom_instructions = MagicMock(return_value=None)
 sys.modules["database.conversations"].get_conversations = MagicMock(return_value=[])
 sys.modules["database.memories"].get_memories = MagicMock(return_value=[])
 sys.modules["database.vector_db"].query_vectors_enhanced = MagicMock(return_value=[])
@@ -396,6 +397,7 @@ def _set_user(chat_mod, name: str, tz: str, goal=None):
     chat_mod.notification_db.get_user_time_zone = MagicMock(return_value=tz)
     chat_mod.goals_db.get_user_goal = MagicMock(return_value=goal)
     chat_mod.goals_db.get_user_goals = MagicMock(return_value=[goal] if goal else [])
+    chat_mod.users_db = types.SimpleNamespace(get_custom_instructions=MagicMock(return_value=None))
     chat_mod.ZoneInfo = _test_zone_info
 
 

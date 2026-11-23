@@ -20,6 +20,7 @@ def test_chat_prompt_lists_every_active_goal(monkeypatch):
     monkeypatch.setattr(goals_db, '_get_db', lambda firestore_client=None: _Client(GOALS))
     monkeypatch.setattr(llm_chat, 'get_user_name', MagicMock(return_value='Tester'))
     monkeypatch.setattr(llm_chat.notification_db, 'get_user_time_zone', MagicMock(return_value='UTC'))
+    monkeypatch.setattr(llm_chat.users_db, 'get_custom_instructions', MagicMock(return_value={}))
 
     prompt = llm_chat._get_agentic_qa_prompt('u1')
 

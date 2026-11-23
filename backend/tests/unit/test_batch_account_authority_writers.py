@@ -105,6 +105,14 @@ KNOWN_RAW = {
         1,
         'Integration preference can provision a profile and remains observed.',
     ),
+    ('database/users.py', 'update_custom_instructions', 'users', 'set'): (
+        1,
+        'Custom instructions preference may provision a profile and remains observed.',
+    ),
+    ('database/users.py', 'delete_custom_instructions', 'users', 'set'): (
+        1,
+        'Clearing custom instructions writes the reset projection with merge=True and remains observed.',
+    ),
     ('database/voice_preferences.py', 'set_assistant_voice', 'users', 'set'): (
         1,
         'Assistant voice metadata can provision a profile and remains observed.',
