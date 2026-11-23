@@ -468,6 +468,28 @@ void main() {
     await tester.pumpWidget(const SizedBox());
   });
 
+  test('a late first live read binds to a finish accepted before it', () async {
+    final live = _conversation('live-1', extra: {
+      'kind': 'conversation',
+      'tile_state': 'live',
+      'status': 'in_progress',
+      'v3_recording_ids': ['rec-1'],
+    });
+    final v3 = ConversationsV3Provider(
+      uid: () => 'owner',
+      cached: 'owner:1',
+      fetchLive: () async => ApiSuccess(ConversationsLiveRead(v3: true, conversation: live)),
+    );
+    addTearDown(v3.dispose);
+    final row = OptimisticProcessingPlaceholder.conversation();
+    v3.startManualFinish(row, 'rec-1');
+    expect(v3.settleManualFinish(row, _recordingDoc('rec-1')), isTrue);
+    await v3.refresh();
+    expect(v3.live, isNull, reason: 'the ended window must not show beside Processing');
+    expect(v3.finishRow, same(row));
+    v3.acknowledgeManualFinish(row);
+  });
+
   test('End keeps its explicit conversation when Home has no live row cached', () {
     final v3 = ConversationsV3Provider(uid: () => 'owner', cached: 'owner:1');
     addTearDown(v3.dispose);

@@ -266,6 +266,13 @@ class ConversationsV3Provider extends ChangeNotifier {
       case ApiSuccess(:final data):
         _v3 = data.v3;
         _live = data.v3 ? data.conversation : null;
+        // A finish accepted before the first read: bind the late live window of its recording.
+        if (_finishRow != null &&
+            _finishLiveId == null &&
+            _finishRecordingId != null &&
+            _live?.v3?.recordingIds.contains(_finishRecordingId) == true) {
+          _finishLiveId = _live!.id;
+        }
         if (_live != null &&
             _live!.id != _finishLiveId &&
             (_finishRecordingId == null || _live!.v3?.recordingIds.contains(_finishRecordingId) != true)) {
