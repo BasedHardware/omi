@@ -100,19 +100,14 @@ class ConversationsV3Provider extends ChangeNotifier {
     return true;
   }
 
-  bool finishHasSuccessor(Iterable<ServerConversation> rows) =>
-      _finishAccepted &&
-      rows.any(
+  /// Home supplies its visible rows so an excluded or failed row cannot take over the slot.
+  bool finishHasSuccessor(Iterable<ServerConversation> visibleRows) => visibleRows.any(
         (row) =>
-            row.v3?.recording != true &&
-            row.v3?.homeHidden != true &&
-            !row.isHiddenFromDefaultList &&
-            row.v3?.tileState != ConversationTileState.failed &&
-            row.status != ConversationStatus.failed &&
             row.v3?.tileState != ConversationTileState.live &&
             row.status != ConversationStatus.in_progress &&
             (row.id == _finishLiveId ||
-                (_finishLiveId == null &&
+                (_finishAccepted &&
+                    _finishLiveId == null &&
                     _finishRecordingId != null &&
                     (row.v3?.recordingIds.contains(_finishRecordingId) == true ||
                         row.v3?.recordingPieces.any(
@@ -122,7 +117,7 @@ class ConversationsV3Provider extends ChangeNotifier {
       );
 
   void acknowledgeManualFinish(ServerConversation row) {
-    if (!identical(finishRow, row)) return;
+    if (!_finishAccepted || !identical(finishRow, row)) return;
     _clearManualFinish(keepClosedLive: true);
     notifyListeners();
   }

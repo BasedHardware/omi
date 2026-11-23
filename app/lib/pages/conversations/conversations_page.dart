@@ -918,7 +918,9 @@ class _ConversationsPageState extends State<ConversationsPage>
         final v3Home = v3On && defaultHome;
         final v3Live = v3Home ? v3!.live : null;
         final manualFinish = v3Home ? v3!.finishRow : null;
-        final finishHandedOff = manualFinish != null && v3!.finishHasSuccessor(snapshot.conversations);
+        final finishHandedOff = manualFinish != null &&
+            v3!.finishHasSuccessor(
+                convoProvider.groupedConversations.values.expand((rows) => rows).where(shownOnV3Home));
         final showManualFinish = manualFinish != null && !finishHandedOff;
         if (finishHandedOff) {
           WidgetsBinding.instance.addPostFrameCallback((_) {

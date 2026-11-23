@@ -1345,9 +1345,19 @@ void main() {
         await tester.pump();
         expect(find.byKey(const Key('home_processing_row')), findsOneWidget);
 
+        home.conversations.upsertConversation(
+          _conversation('live-1', home.liveStart, 'Launch checklist').withHomeStep('failed'),
+        );
+        await tester.pump();
+        expect(find.byKey(const Key('home_processing_row')), findsOneWidget,
+            reason: 'a failed Activity row does not take over the Home slot');
+
         home.capture.streaming = false;
         home.capture.ping();
-        home.conversations.upsertConversation(_conversation('live-1', home.liveStart, 'Launch checklist', v3: _done));
+        home.conversations.upsertConversation(
+          _conversation('live-1', home.liveStart, 'Launch checklist', v3: _done),
+          preserveHomeStep: false,
+        );
         await tester.pump();
         await tester.pump();
         expect(find.byKey(const Key('home_processing_row')), findsNothing);
