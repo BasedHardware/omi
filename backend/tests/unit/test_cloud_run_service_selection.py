@@ -22,7 +22,7 @@ def step(name):
     return next(s for s in STEPS if s['name'] == name)
 
 
-def render(script, *, service='all'):
+def render(script):
     values = {
         'inputs.project_id': 'based-hardware',
         'inputs.admitted_sha': 'a' * 40,
@@ -33,7 +33,6 @@ def render(script, *, service='all'):
         'inputs.deploy_profile': 'manual',
         'inputs.environment': 'prod',
         'inputs.deploy_targets': 'cloud-run-only',
-        'inputs.cloud_run_service': service,
         'inputs.deploy_gateway': 'false',
         'inputs.service': 'backend',
         'inputs.integration_only': 'false',
@@ -123,7 +122,7 @@ def test_actual_shared_shell_never_targets_omitted_services(tmp_path, service, n
     fake.chmod(0o700)
     (tmp_path / 'gcloud').symlink_to(fake)
     result = subprocess.run(
-        ['bash', '-c', render(step(name)['run'], service=service)],
+        ['bash', '-c', render(step(name)['run'])],
         env=dict(
             os.environ,
             PATH=str(tmp_path) + ':' + os.environ['PATH'],
@@ -132,12 +131,6 @@ def test_actual_shared_shell_never_targets_omitted_services(tmp_path, service, n
             SELECTED_CLOUD_RUN_SERVICES=' '.join(selected(service)),
             CLOUD_RUN_SERVICE=service,
             ROLLBACK_REVISION=f'{service}-old',
-            PROMOTION_PROJECT='based-hardware',
-            PROMOTION_REGION='us-central1',
-            PROMOTION_CANDIDATE='backend-new',
-            PROMOTION_INVERSE='backend-old',
-            PROMOTION_SOURCE='a' * 40,
-            PROMOTION_CONTROL='b' * 40,
             GMP_CANDIDATE_TAG='',
             RUNNER_TEMP=str(tmp_path),
         ),
@@ -147,22 +140,11 @@ def test_actual_shared_shell_never_targets_omitted_services(tmp_path, service, n
     )
     assert result.returncode == 0, result.stderr
     calls = log.read_text().splitlines() if log.exists() else []
-    staged = name == 'Shift Cloud Run traffic to validated revisions' and service in ('backend', 'all')
-    if staged:
-        inverse = ' --inverse backend-old' if service == 'backend' else ''
-        assert calls[0] == (
-            f'/controls/promote_selected_backend.py --scope {service}{inverse} '
-            '--project based-hardware --region us-central1 '
-            f"--candidate backend-new --source {'a' * 40} --control {'b' * 40} "
-            '--snapshot artifacts/backend-cloud-run-pre-promotion-traffic-snapshot.json '
-            '--receipt artifacts/backend-promotion-stages.json'
-        )
-        assert not any('update-traffic backend ' in call for call in calls)
     expected = set(selected(service))
     if name == 'Attach Managed Prometheus to sync and integration candidates':
         expected.discard('backend')
     # Identify actual fixed service arguments, not image/secret content.
-    seen = {'backend'} if staged else set()
+    seen = set()
     for line in calls:
         for match in re.finditer(
             r'(?:--service[= ]|--wait-revision-ready |--migrate-legacy-public-binding |update-traffic )(backend(?:-sync(?:-backfill)?|-integration)?)(?=[ =]|$)',
@@ -178,9 +160,7 @@ def test_actual_shared_shell_never_targets_omitted_services(tmp_path, service, n
             assert f'--expected-serving-revision {service}-old' in calls[0]
     if name == 'Shift Cloud Run traffic to validated revisions':
         assert len(calls) == len(expected)
-        direct_services = selected(service)[1:] if staged else selected(service)
-        direct_calls = calls[1:] if staged else calls
-        assert all('--to-revisions=' + s + '-new=100' in c for s, c in zip(direct_services, direct_calls))
+        assert all('--to-revisions=' + s + '-new=100' in c for s, c in zip(selected(service), calls))
 
 
 @pytest.mark.parametrize('service', SERVICES)
