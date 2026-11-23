@@ -18,7 +18,6 @@ from urllib.parse import urlencode
 if __package__:
     from .cloud_run_traffic_snapshot import SNAPSHOT_SCHEMA_VERSION, restore_targets
     from .integration_canary_metrics import (
-        METRIC_LAG,
         PROJECT,
         REGION,
         Clock,
@@ -31,7 +30,6 @@ if __package__:
 else:
     from cloud_run_traffic_snapshot import SNAPSHOT_SCHEMA_VERSION, restore_targets
     from integration_canary_metrics import (
-        METRIC_LAG,
         PROJECT,
         REGION,
         Clock,
@@ -49,6 +47,9 @@ REVISION = 'TRAFFIC_TARGET_ALLOCATION_TYPE_REVISION'
 LATEST = 'TRAFFIC_TARGET_ALLOCATION_TYPE_LATEST'
 STAGES = (10, 50, 90, 100)
 STAGE_SECONDS = 360
+# Global external load-balancer metrics can take 210 seconds to publish.
+METRIC_LAG = 210
+INGRESS_BACKEND = 'custom-domains-api-omi-me-backend-49a4-be'
 
 
 def routing(rows, latest=None):
@@ -182,21 +183,29 @@ class Promotion:
         return landed
 
     def metric(self, revision, metric, end, deadline):
-        params = {
-            'filter': (
+        if revision is None:
+            metric_filter = (
+                f'metric.type="loadbalancing.googleapis.com/https/{metric}" AND resource.type="https_lb_rule"'
+                f' AND resource.labels.project_id="{PROJECT}" AND resource.labels.backend_target_name="{INGRESS_BACKEND}"'
+            )
+        else:
+            metric_filter = (
                 f'metric.type="run.googleapis.com/{metric}" AND resource.type="cloud_run_revision"'
                 f' AND resource.labels.project_id="{PROJECT}" AND resource.labels.location="{REGION}"'
                 f' AND resource.labels.service_name="backend" AND resource.labels.revision_name="{revision}"'
-            ),
+            )
+        params = {
+            'filter': metric_filter,
             'interval.startTime': iso(end - 60),
             'interval.endTime': iso(end),
             'aggregation.alignmentPeriod': '60s',
             'aggregation.perSeriesAligner': 'ALIGN_SUM',
             'aggregation.crossSeriesReducer': 'REDUCE_SUM',
         }
+        code_label = 'response_code' if revision is None else 'response_code_class'
         if metric == 'request_count':
-            params['aggregation.groupByFields'] = 'metric.labels.response_code_class'
-        if metric == 'request_latencies':
+            params['aggregation.groupByFields'] = f'metric.labels.{code_label}'
+        if metric in ('request_latencies', 'total_latencies'):
             params['secondaryAggregation.alignmentPeriod'] = '60s'
             params['secondaryAggregation.perSeriesAligner'] = 'ALIGN_PERCENTILE_95'
         if metric == 'container/instance_count':
@@ -209,7 +218,7 @@ class Promotion:
         )
         result = {}
         for series in page.get('timeSeries', []):
-            label = series.get('metric', {}).get('labels', {}).get('response_code_class', '')
+            label = series.get('metric', {}).get('labels', {}).get(code_label, '')
             require(label not in result, 'duplicate_metric_series')
             points = series['points']
             require(len(points) == 1, 'invalid_metric_bucket')
@@ -220,16 +229,21 @@ class Promotion:
 
     def health(self, revision, end, deadline, *, capacity=False):
         counts = self.metric(revision, 'request_count', end, deadline)
-        latencies = self.metric(revision, 'request_latencies', end, deadline)
+        latencies = self.metric(revision, 'total_latencies' if revision is None else 'request_latencies', end, deadline)
         if not counts or not latencies:
             raise MissingSample('missing_request_evidence')
-        require(set(counts) <= {'1xx', '2xx', '3xx', '4xx', '5xx'}, 'invalid_response_class')
+        if revision is None:
+            require(all(re.fullmatch(r'0|[1-5][0-9]{2}', code) for code in counts), 'invalid_ingress_response_code')
+            error_codes = [code for code in counts if code in ('0', '429') or code.startswith('5')]
+        else:
+            require(set(counts) <= {'1xx', '2xx', '3xx', '4xx', '5xx'}, 'invalid_response_class')
+            error_codes = ['5xx']
         requests = {key: int(value['int64Value']) for key, value in counts.items()}
         total = sum(requests.values())
         require(total > 0 and min(requests.values()) >= 0, 'invalid_request_count')
         p95 = latencies['']['doubleValue']
         require(type(p95) in (int, float) and 0 <= p95 and math.isfinite(p95), 'invalid_request_latency')
-        sample = {'requests': total, 'errors_5xx': requests.get('5xx', 0), 'p95_ms': p95}
+        sample = {'requests': total, 'errors': sum(requests.get(code, 0) for code in error_codes), 'p95_ms': p95}
         if capacity:
             instances = self.metric(revision, 'container/instance_count', end, deadline)
             if not instances:
@@ -247,13 +261,13 @@ class Promotion:
         return sample
 
     @staticmethod
-    def check_health(sample, reference):
-        rate = sample['errors_5xx'] / sample['requests']
-        reference_rate = reference['errors_5xx'] / reference['requests']
-        require(rate <= max(0.01, 2 * reference_rate + 0.001), 'stage_5xx_regression')
-        require(sample['p95_ms'] <= max(1000, 2 * reference['p95_ms']), 'stage_latency_regression')
+    def check_health(sample, reference, scope='stage'):
+        rate = sample['errors'] / sample['requests']
+        reference_rate = reference['errors'] / reference['requests']
+        require(rate <= max(0.01, 2 * reference_rate + 0.001), f'{scope}_error_regression')
+        require(sample['p95_ms'] <= max(1000, 2 * reference['p95_ms']), f'{scope}_latency_regression')
 
-    def guard(self, row, convergence, baseline, deadline):
+    def guard(self, row, convergence, baseline, ingress_baseline, deadline):
         # The entire bucket starts after convergence. Re-read only absent samples
         # within the stage deadline, and never substitute an older bucket.
         first_end = (int(convergence // 60) + 2) * 60
@@ -265,16 +279,18 @@ class Promotion:
             try:
                 candidate = self.health(self.candidate, end, deadline, capacity=True)
                 inverse = self.health(self.inverse, end, deadline)
+                ingress = self.health(None, end, deadline)
             except MissingSample:
                 self.pause(5, deadline)
                 continue
             break
         require(METRIC_LAG <= self.clock.time() - end <= METRIC_LAG + 60, 'stale_health_sample')
-        row.update(sample_end=iso(end), candidate_health=candidate, inverse_health=inverse)
+        row.update(sample_end=iso(end), candidate_health=candidate, inverse_health=inverse, ingress_health=ingress)
         self.record()
         self.check_health(inverse, baseline)
         self.check_health(candidate, baseline)
         self.check_health(candidate, inverse)
+        self.check_health(ingress, ingress_baseline, 'ingress')
         row['health_verified_at'] = iso(self.clock.time())
 
     def run(self):
@@ -288,8 +304,10 @@ class Promotion:
             verify_service(initial, self.candidate, expected, tags)
             baseline_end = int((self.clock.time() - METRIC_LAG) // 60) * 60
             baseline = self.health(self.inverse, baseline_end, deadline)
+            ingress_baseline = self.health(None, baseline_end, deadline)
             require(self.clock.time() - baseline_end <= METRIC_LAG + 60, 'stale_baseline')
             self.receipt['baseline'] = {'sample_end': iso(baseline_end), **baseline}
+            self.receipt['ingress_baseline'] = {'sample_end': iso(baseline_end), **ingress_baseline}
             current = initial
             for percent in STAGES:
                 deadline = self.clock.monotonic() + STAGE_SECONDS
@@ -307,7 +325,7 @@ class Promotion:
                 row.update(verified_at=iso(convergence), generation=current['generation'])
                 self.record()
                 if percent < 100:
-                    self.guard(row, convergence, baseline, deadline)
+                    self.guard(row, convergence, baseline, ingress_baseline, deadline)
                 require(self.clock.monotonic() <= deadline, 'stage_deadline')
             self.receipt['outcome'] = 'promoted'
         except Refused as exc:

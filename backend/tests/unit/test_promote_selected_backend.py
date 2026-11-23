@@ -89,25 +89,35 @@ class FakeCloud:
         else:
             assert method == 'GET'
             query = parse_qs(urlsplit(url).query)
-            metric = re.search(r'metric.type="run.googleapis.com/([^"]+)"', query['filter'][0])[1]
+            metric = re.search(
+                r'metric.type="(?:run.googleapis.com/|loadbalancing.googleapis.com/https/)([^"]+)"', query['filter'][0]
+            )[1]
             candidate = f'revision_name="{NEW}"' in query['filter'][0]
-            doc = self.metrics(query, metric, candidate)
+            ingress = 'resource.type="https_lb_rule"' in query['filter'][0]
+            if ingress:
+                assert f'backend_target_name="{promotion.INGRESS_BACKEND}"' in query['filter'][0]
+            doc = self.metrics(query, metric, candidate, ingress)
         return SimpleNamespace(doc=doc)
 
-    def metrics(self, query, metric, candidate):
+    def metrics(self, query, metric, candidate, ingress):
         end = query['interval.endTime'][0]
         if candidate and self.scenario == 'missing':
             return {}
         if candidate and self.scenario == 'stale':
             end = '2026-11-22T16:00:00Z'
+        if ingress and self.writes and self.scenario == 'missing_ingress':
+            return {}
         if metric == 'container/startup_latencies':
             return {}
         labels = {}
         if metric == 'request_count':
-            labels['response_code_class'] = '5xx' if candidate and self.scenario == 'unhealthy' else '2xx'
+            if ingress:
+                labels['response_code'] = '503' if self.writes and self.scenario == 'ingress_error' else '200'
+            else:
+                labels['response_code_class'] = '5xx' if candidate and self.scenario == 'unhealthy' else '2xx'
             value = {'int64Value': '500'}
-        elif metric == 'request_latencies':
-            value = {'doubleValue': 100}
+        elif metric in ('request_latencies', 'total_latencies'):
+            value = {'doubleValue': 5000 if ingress and self.writes and self.scenario == 'ingress_slow' else 100}
         else:
             assert metric == 'container/instance_count'
             value = {'int64Value': '8'}
@@ -163,6 +173,7 @@ def test_promote_records_verified_stages_and_total_duration(tmp_path, monkeypatc
     assert [row['weights'][NEW] for row in receipt['stages']] == [10, 50, 90, 100]
     assert [row['generation'] for row in receipt['stages']] == ['2', '3', '4', '5']
     assert [row['candidate_health']['active_instances'] for row in receipt['stages'][:-1]] == [8, 8, 8]
+    assert all('ingress_health' in row for row in receipt['stages'][:-1])
     assert receipt['stages'][-1]['weights'] == {NEW: 100}
     assert rollout.transport.polls == 4
     for patch in rollout.transport.writes:
@@ -175,7 +186,10 @@ def test_promote_records_verified_stages_and_total_duration(tmp_path, monkeypatc
     [
         ('missing', 'stage_deadline'),
         ('stale', 'stale_metric_bucket'),
-        ('unhealthy', 'stage_5xx_regression'),
+        ('unhealthy', 'stage_error_regression'),
+        ('missing_ingress', 'stage_deadline'),
+        ('ingress_error', 'ingress_error_regression'),
+        ('ingress_slow', 'ingress_latency_regression'),
         ('foreign_generation', 'generation_drift'),
         ('wrong_weight', 'observed_traffic_drift'),
         ('operation_failure', 'traffic_operation_failed'),
