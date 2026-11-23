@@ -3,12 +3,12 @@
 import json
 import logging
 import math
-import os
 import time
 from collections import Counter
 
 from google.cloud import firestore
 
+from config.batch_pipeline import parked_job_sweeper_enabled
 from database.rpc_deadline import bind_firestore_client, rpc_deadline
 from utils.batch_pipeline.errors import WORKER_VALIDATION_REASONS
 
@@ -17,10 +17,6 @@ PAGE_SIZE = 100  # Two indexed streams, at most 200 document reads together.
 PASS_SECONDS = 10
 HOUR_SECONDS = 3600
 logger = logging.getLogger(__name__)
-
-
-def enabled():
-    return os.getenv('BATCH_PARKED_JOB_SWEEPER_ENABLED', '').strip().lower() != 'false'
 
 
 def mapping(value):
@@ -95,7 +91,7 @@ class ParkedSweep:
 
     def tick(self, now):
         hour = int(now // HOUR_SECONDS)
-        if not enabled() or hour <= self.last_attempt_hour:
+        if not parked_job_sweeper_enabled() or hour <= self.last_attempt_hour:
             return
         self.last_attempt_hour = hour
         scanned = {'quarantined': 0, 'held_expired': 0}
@@ -110,7 +106,11 @@ class ParkedSweep:
                 @firestore.transactional
                 def admit(tx):
                     state = control.get(transaction=tx).to_dict() or {}
-                    if not enabled() or state.get('disabled') is True or state.get('hour', -1) >= hour:
+                    if (
+                        not parked_job_sweeper_enabled()
+                        or state.get('disabled') is True
+                        or state.get('hour', -1) >= hour
+                    ):
                         return None
                     tx.set(control, {'hour': hour}, merge=True)
                     return mapping(state.get('cursors'))
@@ -123,7 +123,7 @@ class ParkedSweep:
                     return
                 next_cursors, coverage, rows = {}, {}, []
                 for name in scanned:
-                    if not enabled():
+                    if not parked_job_sweeper_enabled():
                         outcome = 'disabled'
                         return
                     after = cursors.get(name)
@@ -148,7 +148,7 @@ class ParkedSweep:
                 @firestore.transactional
                 def checkpoint(tx):
                     state = control.get(transaction=tx).to_dict() or {}
-                    if not enabled() or state.get('disabled') is True or state.get('hour') != hour:
+                    if not parked_job_sweeper_enabled() or state.get('disabled') is True or state.get('hour') != hour:
                         return False
                     tx.set(control, {'cursors': next_cursors, 'latest_page_sample': sample}, merge=True)
                     return True
