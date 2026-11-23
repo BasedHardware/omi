@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 
 import 'package:omi/pages/apps/widgets/omi_web_page.dart';
 import 'package:omi/providers/usage_provider.dart';
+import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 
@@ -101,8 +102,6 @@ Future<void> openOmiShop(BuildContext context, {required String source}) async {
   final title = context.l10n.getOmiDevice;
   final hardwareOnly = omiShopRestrictedToHardware(context);
   // Presented as a sheet that slides up, with Close rather than Back: it is a detour, not a step.
-  final messenger = ScaffoldMessenger.maybeOf(context);
-  final orderPlaced = context.l10n.shopOrderPlacedCheckEmail;
   // Presented as a sheet that slides up, with Close rather than Back: it is a detour, not a step.
   final outcome = await Navigator.of(context).push<WebNavigationKind>(
     MaterialPageRoute<WebNavigationKind>(
@@ -117,7 +116,7 @@ Future<void> openOmiShop(BuildContext context, {required String source}) async {
     ),
   );
   // The store closed itself on a post-purchase page: the payment went through.
-  if (outcome == WebNavigationKind.finish) {
-    messenger?.showSnackBar(SnackBar(content: Text(orderPlaced)));
+  if (outcome == WebNavigationKind.finish && context.mounted) {
+    OmiFeedback.info(context, context.l10n.shopOrderPlacedCheckEmail);
   }
 }

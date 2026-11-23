@@ -123,11 +123,7 @@ class _OmiWebPageState extends State<OmiWebPage> {
                 if (mounted) Navigator.of(context).pop(WebNavigationKind.finish);
                 return NavigationDecision.prevent;
               case WebNavigationKind.block:
-                if (mounted) {
-                  ScaffoldMessenger.of(context)
-                    ..hideCurrentSnackBar()
-                    ..showSnackBar(SnackBar(content: Text(context.l10n.pageNotAvailableInApp)));
-                }
+                if (mounted) OmiFeedback.info(context, context.l10n.pageNotAvailableInApp);
                 return NavigationDecision.prevent;
             }
           },
