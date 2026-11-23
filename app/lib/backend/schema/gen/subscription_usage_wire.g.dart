@@ -639,6 +639,38 @@ class GeneratedPlayPurchaseResponse {
   }
 }
 
+class GeneratedRedeemPrepaidCodeResponse {
+  final int endsAt;
+  final int months;
+  final String plan;
+  final String status;
+
+  const GeneratedRedeemPrepaidCodeResponse({
+    required this.endsAt,
+    required this.months,
+    required this.plan,
+    required this.status,
+  });
+
+  factory GeneratedRedeemPrepaidCodeResponse.fromJson(Map<String, dynamic> json) {
+    return GeneratedRedeemPrepaidCodeResponse(
+      endsAt: _required(_readFieldValue<int>(_readField(json, const ["ends_at"]), "ends_at", _readInt, requiredField: true, nullable: false), "ends_at"),
+      months: _required(_readFieldValue<int>(_readField(json, const ["months"]), "months", _readInt, requiredField: true, nullable: false), "months"),
+      plan: _required(_readFieldValue<String>(_readField(json, const ["plan"]), "plan", _readString, requiredField: true, nullable: false), "plan"),
+      status: _required(_readFieldValue<String>(_readField(json, const ["status"]), "status", _readString, requiredField: true, nullable: false), "status"),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'ends_at': endsAt,
+      'months': months,
+      'plan': plan,
+      'status': status,
+    };
+  }
+}
+
 class GeneratedUsageStats {
   final int insightsGained;
   final int memoriesCreated;

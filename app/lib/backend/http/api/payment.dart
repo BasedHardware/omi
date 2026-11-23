@@ -4,6 +4,7 @@ import 'package:omi/backend/http/shared.dart';
 import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/schema/gen/misc_wire.g.dart' as misc_wire;
 import 'package:omi/backend/schema/gen/payments_wire.g.dart' as wire;
+import 'package:omi/backend/schema/gen/subscription_usage_wire.g.dart' as subscription_wire;
 import 'package:omi/env/env.dart';
 import 'package:omi/utils/logger.dart';
 
@@ -293,17 +294,13 @@ Future<ApiResult<PrepaidCodeRedemption>> redeemPrepaidCode(String code, {ApiSend
     send: send,
     decode: (body) {
       final decoded = jsonDecode(body);
-      if (decoded is! Map ||
-          decoded['status'] != 'redeemed' ||
-          decoded['plan'] is! String ||
-          decoded['ends_at'] is! int ||
-          decoded['months'] is! int) {
-        throw const FormatException('Expected redeemed prepaid code');
-      }
+      if (decoded is! Map<String, dynamic>) throw const FormatException('prepaid code response');
+      final response = subscription_wire.GeneratedRedeemPrepaidCodeResponse.fromJson(decoded);
+      if (response.status != 'redeemed') throw const FormatException('Expected redeemed prepaid code');
       return PrepaidCodeRedemption(
-        plan: decoded['plan'] as String,
-        endsAt: DateTime.fromMillisecondsSinceEpoch((decoded['ends_at'] as int) * 1000),
-        months: decoded['months'] as int,
+        plan: response.plan,
+        endsAt: DateTime.fromMillisecondsSinceEpoch(response.endsAt * 1000),
+        months: response.months,
       );
     },
   );
