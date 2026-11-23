@@ -4,6 +4,7 @@ import logging
 import math
 import threading
 import time
+from enum import Enum
 
 from config.firestore_read_levers import lever_enabled
 from config.policy.kill_switches import kill_switch
@@ -50,6 +51,45 @@ PROJECTION_FINISH_CLASSIFICATION_FAILURES = Counter(
     'omi_batch_projection_finish_classification_failures_total',
     'Legacy async finish clock classification attempts that raised; rows remain eligible',
 )
+_SILENT_READ_SKIPS = Counter(
+    'omi_batch_pipeline_silent_read_skips_total',
+    'Silent projection read decisions by stage and outcome',
+    ['stage', 'outcome'],
+)
+_SILENT_READS_AVOIDED = Counter(
+    'omi_batch_pipeline_silent_read_skip_reads_avoided_total',
+    'Fixed-cost Firestore document lookups avoided by silent projection',
+    ['stage'],
+)
+
+
+class SilentReadStage(Enum):
+    ASSIGNMENT_PRECHECK = 'projection_session_prepare'
+    READY_ACK = 'projection_ready'
+    ACCOUNTING = 'prepare_accounting'
+    COMPLETION_ENTRIES = 'completion_entries'
+    COMPLETION_PRIVACY = 'privacy_read'
+
+
+class SilentReadOutcome(Enum):
+    SKIPPED = 'skipped'
+    NOT_SILENT = 'not_silent'
+    DISABLED = 'disabled'
+
+
+def record_silent_read_skip(stage: SilentReadStage, outcome: SilentReadOutcome) -> None:
+    _SILENT_READ_SKIPS.labels(stage.value, outcome.value).inc()
+    if stage is SilentReadStage.COMPLETION_ENTRIES and outcome is SilentReadOutcome.SKIPPED:
+        # The completion commit reuses its current unit's job and result snapshots.
+        _SILENT_READS_AVOIDED.labels(stage.value).inc(2)
+
+
+def record_silent_completion_reads(outcome: SilentReadOutcome) -> None:
+    record_silent_read_skip(SilentReadStage.ACCOUNTING, outcome)
+    record_silent_read_skip(SilentReadStage.COMPLETION_ENTRIES, outcome)
+    record_silent_read_skip(SilentReadStage.COMPLETION_PRIVACY, outcome)
+
+
 PROJECTION_DRAIN_CLAIM_HELD = Counter(
     'omi_batch_projection_drains_skipped_total', 'Owner drain admissions deferred because the fleet claim is held'
 )
