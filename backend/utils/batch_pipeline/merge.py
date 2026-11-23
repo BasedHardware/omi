@@ -837,6 +837,9 @@ class OrderedMerge:
         ):
             try:
                 entry = self.store.run(lambda tx: commit(tx, tx_fresh=True))
+                # The strict transaction ran before this fresh-work transaction, so
+                # carry its conclusive empty result into both aged-release paths.
+                fresh_probe_succeeded = gate['fresh_check_clear']
                 probe = not gate['determined']
             except _FreshGateReadError as failure:
                 if isinstance(failure.error, FailedPrecondition):

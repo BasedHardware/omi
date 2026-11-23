@@ -142,7 +142,8 @@ def test_aged_gpu_depth_hold_releases_in_capture_order_with_durable_cooldown():
     assert registry.get_sample_value('omi_batch_pipeline_gpu_aged_release_age_seconds_count', labels) == 2
 
 
-def test_aged_gpu_release_budget_allows_bounded_progress_without_watermark_advance():
+def test_aged_gpu_release_budget_allows_bounded_progress_without_watermark_advance(monkeypatch):
+    monkeypatch.setenv('BATCH_PIPELINE_MERGE_TX_FRESH_GATE_ENABLED', 'true')
     rows = {
         f'old{index:02}': (1000 + index, CATCH_UP)
         for index in range(GPU_AGED_RELEASES_PER_PROJECTION_WATERMARK_MAX * 2 + 1)
