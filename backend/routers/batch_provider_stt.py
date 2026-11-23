@@ -14,17 +14,16 @@ from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
 
 from config.batch_pipeline import merge_head_wait_seconds, provider_merge_membership_enabled
-from database.firestore_transaction_retry import is_transaction_retry_failure, transaction_retry_deadline_scope
+from database.firestore_transaction_retry import transaction_retry_deadline_scope
 from database.outbox import Outbox, OutboxKind, outbox_for
 from utils.batch_pipeline.provider_drain import OwnerDrainCoalescer
 from utils.batch_pipeline.provider_stt import ProviderSttConsumer
 from utils.batch_pipeline.serving import serving_for_stage
 from utils.executors import run_blocking, sync_executor
-from utils.observability.reasons import RetryReason
 from utils.sync.stage import current_stage
 from utils.workers.consumer import Result, http_response, run_push, run_push_async
 
-from utils.workers.retry import retry_response
+from utils.workers.retry import firestore_retry_reason, retry_response
 
 ROUTE = '/v2/batch-pipeline/provider-stt/run'
 _BOUNDED_ID = 128
@@ -123,6 +122,7 @@ async def run_provider_stt(request: Request, _retry_count: int = Depends(verify_
         with transaction_retry_deadline_scope(time.monotonic() + _TRANSACTION_RETRY_WINDOW_SECONDS):
             return http_response(await run_delivery_async(body['row_id'], body['wake_token']))
     except Exception as error:
-        if not is_transaction_retry_failure(error):
+        reason = firestore_retry_reason(error)
+        if reason is None:
             raise
-        return retry_response(RetryReason.DEPENDENCY_WARMING)
+        return retry_response(reason)

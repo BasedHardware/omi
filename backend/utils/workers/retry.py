@@ -5,13 +5,14 @@ A Cloud Tasks or Cloud Scheduler target returns 2xx when the delivery is consume
 and 500 only for an unexpected exception. Never 429 or 503: Cloud Tasks ignores ``Retry-After`` and
 system-throttles a queue that sees fast 5xx (10-18 18:14Z and 10-19 04:52Z stalls).
 
-Imports only ``utils.observability.reasons`` and FastAPI.
+The database classifier below inspects exceptions without performing I/O.
 """
 
 from __future__ import annotations
 
 from fastapi.responses import JSONResponse
 
+from database.firestore_transaction_retry import is_transaction_retry_failure
 from utils.observability.reasons import RetryReason
 
 RETRY_STATUS_CODE = 409
@@ -30,3 +31,9 @@ class ExpectedRetry(Exception):
 def retry_response(reason: RetryReason) -> JSONResponse:
     """409 {"status": "retry", "reason": "<reason>"}. The only allowed shape for an expected retry."""
     return JSONResponse(status_code=RETRY_STATUS_CODE, content={'status': 'retry', 'reason': RetryReason(reason).value})
+
+
+def firestore_retry_reason(error: BaseException) -> RetryReason | None:
+    if is_transaction_retry_failure(error):
+        return RetryReason.DEPENDENCY_WARMING
+    return None

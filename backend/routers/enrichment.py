@@ -18,12 +18,12 @@ from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
 
 from config import enrichment as enrichment_config
-from database.firestore_transaction_retry import is_transaction_retry_failure, transaction_retry_deadline_scope
+from database.firestore_transaction_retry import transaction_retry_deadline_scope
 from utils.enrichment import fresh_demotion
 from utils.executors import db_executor, postprocess_executor, run_blocking
 from utils.observability.reasons import RetryReason
 from utils.workers.consumer import http_response, run_push
-from utils.workers.retry import retry_response
+from utils.workers.retry import firestore_retry_reason, retry_response
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -133,9 +133,10 @@ async def run_enrichment_task(request: Request, _retry_count: int = Depends(veri
                 return await _deliver_task(request, payload['kind'], task, budget)
         return await _deliver_task(request, payload['kind'], task, budget)
     except Exception as error:
-        if not is_transaction_retry_failure(error):
+        reason = firestore_retry_reason(error)
+        if reason is None:
             raise
-        return retry_response(RetryReason.DEPENDENCY_WARMING)
+        return retry_response(reason)
 
 
 async def _deliver_task(request: Request, kind: str, task: tuple[str, str], budget: float) -> JSONResponse:

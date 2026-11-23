@@ -15,7 +15,6 @@ from config.batch_pipeline import projection_pump_enabled, read_only_metrics_ena
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
 from database.batch_pipeline_projection_protocol import ProjectionBlocked
 from database.batch_pipeline_record_dead_letter import requeue_record as requeue_record_job
-from database.firestore_transaction_retry import is_transaction_retry_failure
 from utils.batch_pipeline.contracts import PoolCapacity, WorkResult
 from utils.batch_pipeline.admission import authorize
 from utils.batch_pipeline.enrichment import run_enrichment
@@ -23,7 +22,7 @@ from utils.batch_pipeline.serving import serving_for_stage
 from utils.batch_pipeline.shadow_projection import run as run_shadow_projection
 from utils.executors import db_executor, postprocess_executor, run_blocking, sync_executor
 from utils.observability.reasons import RetryReason
-from utils.workers.retry import retry_response
+from utils.workers.retry import firestore_retry_reason, retry_response
 from utils.sync.stage import current_stage, require_http_stage
 
 logger = logging.getLogger(__name__)
@@ -48,7 +47,7 @@ def expected_retry_reason(error: BaseException) -> str | None:
         reason = EXPECTED_RETRIES.get((cls.__module__, cls.__qualname__))
         if reason is not None:
             return reason
-    if is_transaction_retry_failure(error) or dependency_failure(error):
+    if firestore_retry_reason(error) is not None or dependency_failure(error):
         return RetryReason.DEPENDENCY_WARMING.value
     return None
 
