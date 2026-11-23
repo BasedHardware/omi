@@ -95,19 +95,22 @@ class _LiveConversationEndButtonState extends State<LiveConversationEndButton> {
                 setEndSuppressed?.call(true);
                 final v3 = context.read<ConversationsV3Provider?>();
                 final previousFinish = v3?.finishRow;
-                final bool started;
+                var started = false;
+                var closed = false;
                 try {
                   final finish = capture.forceProcessingCurrentConversation(
                       manualFinish: true, liveConversationId: conversation.id);
                   started = v3?.finishRow != null && !identical(v3!.finishRow, previousFinish);
                   await finish;
+                  closed = true;
                 } catch (_) {
                   // The close kept the capture. End stays on detail so the user can retry it.
                   return;
                 } finally {
-                  _ended = false;
-                  if (_owns(conversation, capture, v3Feedback)) {
-                    setEndSuppressed?.call(false);
+                  // A closed window with a published finish stays latched; only a failed close restores End.
+                  if (!(closed && started)) {
+                    _ended = false;
+                    if (_owns(conversation, capture, v3Feedback)) setEndSuppressed?.call(false);
                   }
                 }
                 if (!context.mounted || !started || ModalRoute.of(context)?.isCurrent != true) return;

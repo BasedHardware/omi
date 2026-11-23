@@ -223,6 +223,8 @@ class _LiveCapture extends CaptureProvider {
 
   /// Keeps the segments and ownership visible until End's local drain settles.
   Completer<void>? drain;
+  // The real controller keeps the verified pendant recording after a successful close.
+  bool keepVerifiedAfterClose = false;
 
   @override
   String? verifiedLiveServerRecordingId;
@@ -239,7 +241,7 @@ class _LiveCapture extends CaptureProvider {
       rethrow;
     }
     segments = [];
-    verifiedLiveServerRecordingId = null;
+    if (!keepVerifiedAfterClose) verifiedLiveServerRecordingId = null;
     notifyListeners();
   }
 }
@@ -1368,6 +1370,9 @@ void main() {
         final context = tester.element(find.byType(ConversationsPage));
         final tabs = context.read<HomeProvider>()..setIndex(HomeProvider.tasksTab);
         home.conversations.showStarredOnly = true;
+        home.capture
+          ..verifiedLiveServerRecordingId = 'rec-1'
+          ..keepVerifiedAfterClose = true;
         final navigator = Navigator.of(context);
         Future<bool> openRoute(String route, {bool Function()? canOpen}) async {
           unawaited(navigator.push(omiPageRoute(
@@ -1387,6 +1392,12 @@ void main() {
         await tester.pump(const Duration(milliseconds: 500));
         expect(find.byType(ConversationDetailPage), findsOneWidget, reason: 'starred Home cannot show Processing');
         expect(tabs.selectedIndex, HomeProvider.tasksTab);
+        final calls = home.capture.endCalls;
+        final end = find.byKey(const Key('live_conversation_end'));
+        expect(end, findsOneWidget, reason: 'the verified recording still owns this detail');
+        await tester.tap(end, warnIfMissed: false);
+        await tester.pump();
+        expect(home.capture.endCalls, calls, reason: 'a closed window keeps End latched');
         home.conversations.showStarredOnly = false;
         await _dispose(tester, home);
       });
