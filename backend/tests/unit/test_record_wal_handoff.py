@@ -157,6 +157,8 @@ def world(monkeypatch, tmp_path):
     [
         ('inventory', ArtifactReadLimit('archive count limit')),
         ('inventory', KeyError('missing manifest')),
+        ('inventory', ValueError('manifest must be a JSON object')),
+        ('inventory', OverflowError('manifest has an out-of-range rate')),
         ('inventory', InvalidTag()),
         ('parse', struct.error('truncated WAL')),
         ('revalidate', ServiceUnavailable('final snapshot read failed')),

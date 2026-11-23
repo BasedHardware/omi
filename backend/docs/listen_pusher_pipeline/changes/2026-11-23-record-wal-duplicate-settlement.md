@@ -45,6 +45,8 @@ write at commit, for a maximum of 105 proof reads across both views and
 bounded to 104 reads per candidate with no witness writes. Direct polls for
 eligible batch handles add one document read on a miss, and use at most 11
 document reads on a hit including the owner snapshot.
+The bounded authority snapshot uses the live privacy walk directly.
+Privacy experiment observations run outside these proof and replay views.
 Report fixed-label lookup hit, miss and error counts and include them in
 Release's read budget before activation.
 
@@ -66,8 +68,9 @@ uses custom speech recognition.
 Post-publication donor cleanup retracts derived state and preserves original
 custody, canonical obligations and aliases. Smart merge, automatic sync
 lineage and v3 projection defer when they cannot maintain these bindings. V3
-full-row replacement defers on any selected retained-custody row. Before
-activation, Release must account for those deferrals in the serving cohort.
+full-row replacement, including refinement, re-derive and backfill, defers on
+settled source rows even before a merge, as well as retained-lineage rows.
+Before activation, Release must account for those deferrals in the serving cohort.
 A rollback after the first settlement must keep the verified merge writers,
 erasure and replay behavior serving, including with settlement disabled.
 
@@ -84,7 +87,8 @@ erasure and replay behavior serving, including with settlement disabled.
   `RECORD_WAL_DUPLICATE_SOURCE_FENCE_VERIFIED=true` and the one approved
   `RECORD_WAL_DUPLICATE_SHADOW_EPOCH` on backend-sync. Shadow preserves the
   existing reply and writes no settlement receipts. Its own 480 durable slots
-  are separate from the Nov 24 sampler.
+  are separate from the Nov 24 sampler. Only requests with a nonempty capture
+  claim set and one claim per staged file can claim a shadow slot.
 - Score whole-bundle would-settle and hold outcomes, whole-file coverage and
   agreement on positive proofs. The shadow directly bounds proof work to
   49,920 Firestore point reads, 9,600 GCS RPCs and 7.5 GiB of manifest downloads.

@@ -131,7 +131,17 @@ async def test_shadow_offload_failure_cannot_change_existing_reply(monkeypatch):
         raise RuntimeError('executor unavailable')
 
     monkeypatch.setattr(duplicate, 'run_blocking', unavailable)
-    assert await duplicate.evaluate(None, 'u', 'c', 'omi', 'd', 'id', None, ['synthetic'], {}, 'shadow', 1) is None
+    claims = {'synthetic': {}}
+    assert await duplicate.evaluate(None, 'u', 'c', 'omi', 'd', 'id', None, ['synthetic'], claims, 'shadow', 1) is None
+
+
+@pytest.mark.parametrize('claims', ({}, {'a': {}, 'b': {}}))
+@pytest.mark.asyncio
+async def test_ineligible_shadow_upload_does_not_claim_a_slot(monkeypatch, claims):
+    claim = Mock(side_effect=AssertionError('ineligible shadow request reached slot arbitration'))
+    monkeypatch.setattr(duplicate, '_claim_process', claim)
+    assert await duplicate.evaluate(None, 'u', 'c', 'omi', 'd', 'id', None, ['synthetic'], claims, 'shadow', 1) is None
+    claim.assert_not_called()
 
 
 def test_spanning_packs_requires_one_archive_session():

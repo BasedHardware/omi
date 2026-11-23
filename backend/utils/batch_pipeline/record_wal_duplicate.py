@@ -235,6 +235,8 @@ def _claim_process(slot):
 
 async def evaluate(store, uid, cid, source, device, content_id, session, paths, claims, current, slot=None):
     """The shadow observes a refused reply. Only active mode can write an alias."""
+    if not claims or len(claims) != len(paths):
+        return None
     budget = _budget()
     prepare, finish = None, None
     outcome = 'hold'
@@ -253,8 +255,6 @@ async def evaluate(store, uid, cid, source, device, content_id, session, paths, 
             proof_started = True
             counted = True
             files_seen.labels(current, 'evaluated').inc(len(paths))
-            if not claims or len(claims) != len(paths):
-                return None
             descriptors: dict = {}
             layout = await run_blocking(
                 sync_executor, sample.read_staged_packets, paths, budget, descriptors=descriptors
@@ -305,7 +305,17 @@ async def evaluate(store, uid, cid, source, device, content_id, session, paths, 
                     proof_io.labels(current, 'receipt_writes').inc(settled.receipt_writes)
                     proof_io.labels(current, 'donor_writes').inc(int(not settled.marked))
             return settled.reply if current == 'settle' else None
-    except (ArtifactReadLimit, GoogleAPICallError, OSError, ValueError, KeyError, TypeError, InvalidTag, struct.error):
+    except (
+        ArtifactReadLimit,
+        GoogleAPICallError,
+        OSError,
+        ValueError,
+        KeyError,
+        TypeError,
+        InvalidTag,
+        struct.error,
+        OverflowError,
+    ):
         outcome = 'unavailable'
         # Proof reads are optional to legacy coverage. An in-flight CAS may
         # already own the result, so only an exact retry can resolve its reply.

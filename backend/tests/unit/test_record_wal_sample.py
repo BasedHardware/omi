@@ -174,6 +174,13 @@ def test_manifest_body_only_with_both_preconditions(monkeypatch):
     media.generation += 1
     with pytest.raises(ValueError):
         sampler._manifest(bucket, 'owner', 'record', media, listed, spent)
+    media.generation -= 1
+    for invalid in (b'null', b'[]', b'"manifest"'):
+        listed.size = len(invalid)
+        listed.metadata['sha256'] = hashlib.sha256(invalid).hexdigest()
+        blob.download_as_bytes.return_value = invalid
+        with pytest.raises(ValueError, match='manifest must be a JSON object'):
+            sampler._manifest(bucket, 'owner', 'record', media, listed, budget())
 
 
 def test_continuation_is_ambiguous_and_never_paginated():

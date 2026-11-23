@@ -447,10 +447,13 @@ def duplicate_world(world, monkeypatch):
     job_ref.delete()
 
 
-def test_duplicate_cas_replay_while_disabled_and_rebundle(duplicate_world, monkeypatch):
+@pytest.mark.parametrize('privacy_shadow', (False, True))
+def test_duplicate_cas_replay_while_disabled_and_rebundle(duplicate_world, monkeypatch, privacy_shadow):
     from config.record_wal_duplicate import mode
 
     case = duplicate_world
+    if privacy_shadow:
+        monkeypatch.setattr(privacy, 'lever_enabled', lambda name, *_: name == 'privacy_checks_shadow')
     first = case.request('first')
     candidate = case.attempt(first, files=case.files)
     assert candidate is not None

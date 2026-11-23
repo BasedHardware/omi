@@ -220,6 +220,8 @@ def _manifest(bucket, uid, cid, media, listed, budget):
     if hashlib.sha256(raw).hexdigest() != before.get('sha256'):
         raise ValueError('manifest digest changed')
     manifest = json.loads(raw)
+    if not isinstance(manifest, dict):
+        raise ValueError('manifest must be a JSON object')
     if manifest.get('schema') != 'audio_custody_v1' or manifest['media'] != {
         'bucket': bucket.name,
         'path': media.name,
