@@ -7,7 +7,10 @@ both notes budgets honour it, and that every other caller is untouched.
 """
 
 import asyncio
+import threading
 import time
+from datetime import datetime, timezone
+from types import SimpleNamespace
 
 import pytest
 from fastapi import HTTPException
@@ -18,8 +21,11 @@ from utils.other.raise_site import raise_site_of
 from utils.other.request_deadline import (
     FROM_SEGMENTS_REQUEST_BUDGET_SECONDS,
     MINIMUM_DEADLINE_SECONDS,
+    RequestDeadlineExceeded,
+    call_within_request_deadline,
     capped_deadline_seconds,
     from_segments_request_deadline,
+    request_deadline_absolute,
     request_deadline_exceeded,
     request_deadline_remaining_seconds,
     reset_request_deadline,
@@ -148,3 +154,213 @@ def test_budget_reaches_a_sync_dependency_and_the_sync_handler():
     assert seen['handler'] <= FROM_SEGMENTS_REQUEST_BUDGET_SECONDS
     # The dependency's finally reset it, so the next request starts clean.
     assert request_deadline_remaining_seconds() is None
+
+
+# ---------------------------------------------------------------------------
+# In-flight auth calls: a single stalled call cannot outlast the budget.
+# ---------------------------------------------------------------------------
+
+
+def test_call_within_request_deadline_runs_inline_without_a_budget():
+    assert call_within_request_deadline(lambda: 7) == 7
+
+
+def test_call_within_request_deadline_does_not_start_a_spent_call():
+    started: list[bool] = []
+    token = set_request_deadline(0.0)
+    try:
+        with pytest.raises(RequestDeadlineExceeded):
+            call_within_request_deadline(lambda: started.append(True))
+    finally:
+        reset_request_deadline(token)
+    assert started == []
+
+
+def test_stalled_auth_call_answers_a_retryable_503_within_the_budget(monkeypatch):
+    """A hung identity call is abandoned at the budget, not waited out."""
+    release = threading.Event()
+
+    def _stalled_verify_token(token: str) -> str:
+        release.wait(30)
+        raise RuntimeError('released')
+
+    monkeypatch.setattr(endpoints, 'verify_token', _stalled_verify_token)
+    token = set_request_deadline(0.5)
+    started = time.monotonic()
+    try:
+        with pytest.raises(HTTPException) as raised:
+            endpoints.get_current_user_uid(authorization='Bearer token')
+    finally:
+        elapsed = time.monotonic() - started
+        reset_request_deadline(token)
+        release.set()
+
+    assert elapsed < 5.0
+    assert raised.value.status_code == 503
+    assert raised.value.headers == {'Retry-After': '1'}
+    assert raised.value.detail == {'code': 'auth_deadline_exceeded', 'retryable': True}
+    assert raise_site_of(raised.value) == 'auth_deadline_exceeded'
+
+
+def test_auth_chain_still_runs_inline_without_a_budget(monkeypatch):
+    """Every other route keeps the existing synchronous auth path."""
+    seen: list[str] = []
+
+    def _verify(token: str) -> str:
+        seen.append(token)
+        return 'uid1'
+
+    monkeypatch.setattr(endpoints, 'verify_token', _verify)
+    monkeypatch.setattr(endpoints, 'enforce_account_deletion_http_access', lambda uid: None)
+    monkeypatch.setattr(endpoints, '_enforce_cutover_http_if_request', lambda uid, request: None)
+    monkeypatch.setattr(endpoints, '_resolve_request_plane_or_503', lambda uid, **kwargs: None)
+    monkeypatch.setattr(endpoints, 'validate_byok_request', lambda uid: None)
+    monkeypatch.setattr(endpoints, 'record_user_platform', lambda uid, platform: None)
+    monkeypatch.setattr(endpoints, 'record_client_device', lambda uid, **kwargs: None)
+    monkeypatch.setattr(endpoints, '_recover_locked_content_if_request', lambda uid, request: None)
+    monkeypatch.setattr(endpoints, 'load_rollout_cohorts', lambda uid: None)
+
+    assert endpoints.get_current_user_uid(authorization='Bearer token') == 'uid1'
+    assert seen == ['token']
+
+
+# ---------------------------------------------------------------------------
+# Notes: one absolute deadline across the agentic attempt and the fallback.
+# ---------------------------------------------------------------------------
+
+
+def _notes_prefix(words: int = 6000):
+    from utils.llm.conversation_prompt_context import ConversationPromptPrefix
+
+    return ConversationPromptPrefix(
+        conversation_id='conv-deadline',
+        context='unused preamble',
+        shaped_context=' '.join(['word'] * words),
+        has_usable_content=True,
+    )
+
+
+def _notes_kwargs() -> dict:
+    return {
+        'started_at': datetime(2026, 11, 23, 9, 0, tzinfo=timezone.utc),
+        'language_code': 'en',
+        'output_language_code': 'en',
+        'tz': 'UTC',
+        'task_intelligence_capture': False,
+    }
+
+
+@pytest.fixture
+def shaped_notes(monkeypatch):
+    from contextlib import asynccontextmanager
+
+    @asynccontextmanager
+    async def _passthrough(model):
+        yield model
+
+    monkeypatch.setenv('OMI_SHAPED_AGENT_MODE', 'on')
+    monkeypatch.setattr(conversation_processing, 'isolated_notes_model', _passthrough)
+
+
+def test_agentic_stall_does_not_start_the_one_shot_fallback(monkeypatch, shaped_notes):
+    """A spent agentic attempt answers retryably instead of buying a second call."""
+    one_shot_calls: list[int] = []
+
+    def _stalled_agentic(**kwargs):
+        time.sleep(0.6)
+        return None
+
+    class _StalledModel:
+        async def ainvoke(self, messages):
+            one_shot_calls.append(1)
+            await asyncio.sleep(30)
+            return SimpleNamespace(content='{}')
+
+    monkeypatch.setattr(conversation_processing, 'agentic_notes_payload', _stalled_agentic)
+    monkeypatch.setattr(conversation_processing, 'get_llm', lambda *args, **kwargs: _StalledModel())
+
+    token = set_request_deadline(0.5)
+    started = time.monotonic()
+    try:
+        with pytest.raises(RequestDeadlineExceeded):
+            conversation_processing.get_conversation_notes(_notes_prefix(), **_notes_kwargs())
+    finally:
+        elapsed = time.monotonic() - started
+        reset_request_deadline(token)
+
+    assert elapsed < 5.0
+    assert one_shot_calls == []
+
+
+def test_one_shot_fallback_spends_only_the_remaining_budget(monkeypatch, shaped_notes):
+    """The fallback derives its timeout from the same absolute deadline."""
+    one_shot_calls: list[int] = []
+
+    def _fast_agentic(**kwargs):
+        time.sleep(1.5)
+        return None
+
+    class _StalledModel:
+        async def ainvoke(self, messages):
+            one_shot_calls.append(1)
+            await asyncio.sleep(30)
+            return SimpleNamespace(content='{}')
+
+    monkeypatch.setattr(conversation_processing, 'agentic_notes_payload', _fast_agentic)
+    monkeypatch.setattr(conversation_processing, 'get_llm', lambda *args, **kwargs: _StalledModel())
+
+    token = set_request_deadline(2.0)
+    started = time.monotonic()
+    try:
+        with pytest.raises(TimeoutError) as raised:
+            conversation_processing.get_conversation_notes(_notes_prefix(), **_notes_kwargs())
+    finally:
+        elapsed = time.monotonic() - started
+        reset_request_deadline(token)
+
+    # 1.5 s agentic + the 0.5 s that remained, not a fresh 2 s one-shot budget.
+    assert elapsed < 2.6
+    assert one_shot_calls == [1]
+    assert type(raised.value) is TimeoutError
+
+
+def test_notes_deadline_maps_to_a_tagged_retryable_503():
+    from utils.llm.gateway_error_contract import conversation_processing_http_exception
+
+    exc = conversation_processing_http_exception(RequestDeadlineExceeded('spent'))
+    assert exc.status_code == 503
+    assert exc.headers == {'Retry-After': '2'}
+    assert raise_site_of(exc) == 'notes_deadline_exceeded'
+
+
+def test_absolute_deadline_is_one_instant_for_every_step():
+    token = set_request_deadline(10.0)
+    try:
+        absolute = request_deadline_absolute()
+        assert absolute is not None
+        assert request_deadline_remaining_seconds() <= 10.0
+        assert request_deadline_absolute() == absolute
+    finally:
+        reset_request_deadline(token)
+
+
+def test_agentic_budget_is_re_derived_from_the_absolute_deadline():
+    """Packet building must not restart the agent's relative timeout."""
+    token = set_request_deadline(10.0)
+    try:
+        decision = notes_agent_policy.plan_notes_agent(uid='uid1', conversation_id='c1', words=6000)
+        assert decision.budget is not None
+        planned = decision.budget.deadline_seconds
+        assert planned <= 10.0
+
+        tighter = set_request_deadline(2.0)
+        try:
+            rederived = notes_agent_policy.bounded_budget(decision.budget)
+        finally:
+            reset_request_deadline(tighter)
+
+        assert rederived.deadline_seconds <= 2.0
+        assert rederived.deadline_seconds < planned
+        assert rederived.force_submit_after_seconds < rederived.deadline_seconds
+    finally:
+        reset_request_deadline(token)

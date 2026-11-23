@@ -103,6 +103,17 @@ def _capped_budget(budget: NotesAgentBudget) -> NotesAgentBudget:
     )
 
 
+def bounded_budget(budget: NotesAgentBudget) -> NotesAgentBudget:
+    """Re-derive the agentic deadline from the request's absolute deadline.
+
+    ``plan_notes_agent`` caps the budget when the plan is made, but packet
+    building runs before the agent starts. Re-deriving at the call site keeps
+    the agent's relative timeout anchored to the one absolute deadline instead
+    of to the moment the plan was built.
+    """
+    return _capped_budget(budget)
+
+
 def plan_notes_agent(
     *,
     uid: Optional[str],

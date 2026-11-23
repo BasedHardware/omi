@@ -38,7 +38,11 @@ from utils.byok import (
 from utils.executors import ExecutorSaturatedError, critical_executor, db_executor, run_blocking
 from utils.rate_limit_config import RATE_POLICIES, RATE_LIMIT_SHADOW, get_effective_limit
 from utils.other.raise_site import tag_raise_site
-from utils.other.request_deadline import request_deadline_exceeded
+from utils.other.request_deadline import (
+    RequestDeadlineExceeded,
+    call_within_request_deadline,
+    request_deadline_exceeded,
+)
 from database.fsr_read_cache import request_read_scope
 
 logger = logging.getLogger(__name__)
@@ -263,18 +267,9 @@ def _recover_locked_content_if_request(uid: str, request: Request | None) -> Non
         recover_locked_content(uid)
 
 
-def _enforce_auth_deadline() -> None:
-    """Answer a retryable 503 once the request's auth budget is spent.
-
-    Only the from-segments route sets a budget (``utils.other.request_deadline``);
-    every other caller is a no-op. The check runs between auth steps, so a chain
-    of slow Firestore reads cannot hold the request past the client's own pool
-    deadline. A single hung provider call is still bounded by the Firestore
-    client's own deadline.
-    """
-    if not request_deadline_exceeded():
-        return
-    raise tag_raise_site(
+def _auth_deadline_exceeded_exception() -> HTTPException:
+    """The tagged retryable 503 for a spent auth budget."""
+    return tag_raise_site(
         HTTPException(
             status_code=503,
             detail={'code': 'auth_deadline_exceeded', 'retryable': True},
@@ -282,6 +277,21 @@ def _enforce_auth_deadline() -> None:
         ),
         'auth_deadline_exceeded',
     )
+
+
+def _enforce_auth_deadline() -> None:
+    """Answer a retryable 503 once the request's auth budget is spent.
+
+    Only the from-segments route sets a budget (``utils.other.request_deadline``);
+    every other caller is a no-op. The check runs between auth steps, so a chain
+    of slow Firestore reads cannot hold the request past the client's own pool
+    deadline. The whole chain is also bounded by
+    ``call_within_request_deadline``, which abandons a single in-flight call that
+    outlives the budget.
+    """
+    if not request_deadline_exceeded():
+        return
+    raise _auth_deadline_exceeded_exception()
 
 
 def get_current_user_uid_readonly(
@@ -306,7 +316,32 @@ def get_current_user_uid(
     request: Request = None,  # pyright: ignore[reportArgumentType]  # FastAPI injects Request; direct callers omit it
     _read_scope: Any = Depends(request_read_scope),
 ) -> str:
-    """Authenticate, enforce account fences and BYOK, then optional registration/recovery."""
+    """Authenticate, enforce account fences and BYOK, then optional registration/recovery.
+
+    The whole chain runs inside the request deadline when the route sets one, so
+    a single stalled identity or Firestore call cannot hold the request past the
+    client's own pool deadline. Every other caller has no budget and runs inline.
+    """
+    try:
+        return call_within_request_deadline(
+            _resolve_current_user_uid,
+            authorization,
+            x_app_platform,
+            x_device_id_hash,
+            x_app_version,
+            request,
+        )
+    except RequestDeadlineExceeded as error:
+        raise _auth_deadline_exceeded_exception() from error
+
+
+def _resolve_current_user_uid(
+    authorization: str | None,
+    x_app_platform: str | None,
+    x_device_id_hash: str | None,
+    x_app_version: str | None,
+    request: Request | None,
+) -> str:
     if not authorization:
         raise HTTPException(status_code=401, detail="Authorization header not found")
     elif len(str(authorization).split(' ')) != 2:

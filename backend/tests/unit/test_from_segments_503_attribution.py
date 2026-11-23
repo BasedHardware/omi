@@ -2,9 +2,10 @@
 
 The route's 503s come from its dependency chain as well as its handler, and the
 response body is not in Cloud Logging, so the only way to attribute one is a log
-line emitted at the route boundary. These tests pin: one WARNING per 503, the
+line emitted at the route boundary. These tests pin: one line per 503, the
 tagged raise site, the serialized body length, no line for a non-503, and an
-unchanged response.
+unchanged response. Every reachable site is tagged; an untagged 503 is a defect
+logged at ERROR, never an accepted outcome.
 """
 
 import json
@@ -18,6 +19,7 @@ from utils.llm import gateway_error_contract
 from utils.other import endpoints
 from utils.other.from_segments_503 import (
     FROM_SEGMENTS_503_EVENT,
+    FROM_SEGMENTS_503_UNATTRIBUTED_EVENT,
     FROM_SEGMENTS_PATH,
     FromSegments503Route,
 )
@@ -26,6 +28,11 @@ from utils.other.raise_site import (
     raise_site_of,
     serialized_detail_bytes,
     tag_raise_site,
+)
+from utils.other.request_deadline import (
+    RequestDeadlineExceeded,
+    reset_request_deadline,
+    set_request_deadline,
 )
 
 LOGGER_NAME = 'utils.other.from_segments_503'
@@ -94,7 +101,8 @@ def test_dependency_503_is_attributed_too(caplog):
     assert lines[0].body_bytes == len(response.content)
 
 
-def test_untagged_503_is_named_unattributed(caplog):
+def test_untagged_503_is_a_defect_marker_not_an_accepted_outcome(caplog):
+    """Every reachable site is tagged; an untagged 503 is alertable, not normal."""
     caplog.set_level(logging.WARNING, logger=LOGGER_NAME)
     app = FastAPI()
     router = APIRouter(route_class=FromSegments503Route)
@@ -109,8 +117,140 @@ def test_untagged_503_is_named_unattributed(caplog):
     assert response.status_code == 503
     lines = _lines(caplog)
     assert len(lines) == 1
+    assert lines[0].levelno == logging.ERROR
+    assert lines[0].event == FROM_SEGMENTS_503_UNATTRIBUTED_EVENT
     assert lines[0].raise_site == UNATTRIBUTED_RAISE_SITE
     assert lines[0].body_bytes == 64
+
+
+def test_every_reachable_503_site_is_tagged():
+    """The route's dependency chain has no untagged 503 left."""
+    for expected, exc in _reachable_503_sites().items():
+        assert exc.status_code == 503, expected
+        assert raise_site_of(exc) == expected
+        assert raise_site_of(exc) != UNATTRIBUTED_RAISE_SITE
+
+
+def test_no_reachable_503_logs_unattributed(caplog):
+    """Drive each enumerated site through the route hook and read the line."""
+    caplog.set_level(logging.WARNING, logger=LOGGER_NAME)
+    for expected, exc in _reachable_503_sites().items():
+        caplog.clear()
+        app = FastAPI()
+        router = APIRouter(route_class=FromSegments503Route)
+
+        def _make_route(error: HTTPException):
+            def _route() -> dict:
+                raise error
+
+            return _route
+
+        router.add_api_route(FROM_SEGMENTS_PATH, _make_route(exc), methods=['POST'])
+        app.include_router(router)
+        response = TestClient(app).post(FROM_SEGMENTS_PATH, json={})
+
+        assert response.status_code == 503, expected
+        lines = _lines(caplog)
+        assert len(lines) == 1, expected
+        assert lines[0].raise_site == expected
+        assert lines[0].raise_site != UNATTRIBUTED_RAISE_SITE
+
+
+def _account_deletion_503():
+    from utils.other import endpoints as endpoints_module
+
+    original = endpoints_module.get_user_deletion_wipe_status
+
+    def _boom(uid):
+        raise RuntimeError('authority down')
+
+    endpoints_module.get_user_deletion_wipe_status = _boom
+    try:
+        with pytest.raises(HTTPException) as raised:
+            endpoints_module._account_deletion_status('uid1')
+    finally:
+        endpoints_module.get_user_deletion_wipe_status = original
+    return raised.value
+
+
+def _directory_routing_503():
+    from database import directory as directory_module
+
+    original_active = directory_module.router.routing_active
+    original_resolve = directory_module.router.resolve
+
+    def _active():
+        return True
+
+    def _resolve(*args, **kwargs):
+        raise directory_module.router.DirectoryRoutingUnavailable('down')
+
+    directory_module.router.routing_active = _active
+    directory_module.router.resolve = _resolve
+    try:
+        with pytest.raises(HTTPException) as raised:
+            endpoints._resolve_request_plane_or_503('uid1')
+    finally:
+        directory_module.router.routing_active = original_active
+        directory_module.router.resolve = original_resolve
+    return raised.value
+
+
+def _rate_limiter_503():
+    with pytest.raises(HTTPException) as raised:
+        endpoints._enforce_rate_limit('key', 'conversations:from-segments', fail_closed=True)
+    return raised.value
+
+
+def _cutover_503():
+    from models.account_cutover import AccountCutoverClientAction
+    from utils.account_cutover import access as cutover_access
+
+    original = cutover_access.evaluate_account_cutover_access
+
+    def _deny(*args, **kwargs):
+        raise cutover_access.AccountCutoverAccessDenial(
+            code='account_cutover_state_unavailable',
+            detail={'code': 'account_cutover_state_unavailable', 'retryable': True},
+            client_action=AccountCutoverClientAction.migration_maintenance,
+        )
+
+    cutover_access.evaluate_account_cutover_access = _deny
+    try:
+        with pytest.raises(HTTPException) as raised:
+            cutover_access.enforce_account_cutover_http_access(
+                'uid1', method='POST', path=FROM_SEGMENTS_PATH, headers={}
+            )
+    finally:
+        cutover_access.evaluate_account_cutover_access = original
+    return raised.value
+
+
+def _auth_deadline_503():
+    token = set_request_deadline(0.0)
+    try:
+        with pytest.raises(HTTPException) as raised:
+            endpoints._enforce_auth_deadline()
+    finally:
+        reset_request_deadline(token)
+    return raised.value
+
+
+def _reachable_503_sites() -> dict[str, HTTPException]:
+    return {
+        'executor_saturated': endpoints._executor_saturated_http_exception(endpoints.ExecutorSaturatedError('full')),
+        'account_deletion_state_unavailable': _account_deletion_503(),
+        'directory_routing_unavailable': _directory_routing_503(),
+        'rate_limiter_unavailable': _rate_limiter_503(),
+        'account_cutover_state_unavailable': _cutover_503(),
+        'conversation_processing_retryable': gateway_error_contract.conversation_processing_http_exception(
+            TimeoutError('slow')
+        ),
+        'notes_deadline_exceeded': gateway_error_contract.conversation_processing_http_exception(
+            RequestDeadlineExceeded('spent')
+        ),
+        'auth_deadline_exceeded': _auth_deadline_503(),
+    }
 
 
 @pytest.mark.parametrize('status', [200, 422])

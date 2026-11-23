@@ -73,7 +73,11 @@ from config.refactor_modes import serving_for
 from config.open_loops import open_loops_enabled
 from utils.llm.notes_packet import PACKET_RULES, select_notes_packet, _local_started_at_iso
 from utils.llm.notes_output_contract import finish_notes_contract, OUTPUT_RULES
-from utils.other.request_deadline import capped_deadline_seconds
+from utils.other.request_deadline import (
+    RequestDeadlineExceeded,
+    capped_deadline_seconds,
+    request_deadline_exceeded,
+)
 from utils.llm.notes_identity import notes_identity, screen_speaker_bindings
 from utils.llm.notes_output import NotesOutput, OpenLoopNotesOutput
 from utils.llm.notes_observability import current_run, observe_notes
@@ -442,6 +446,20 @@ Do not infer attendance, absence, or a no-show from either listing.
     )
 
 
+def _bounded_notes_mount(mount: Mount) -> Mount:
+    """Re-derive the notes budget from the one absolute request deadline.
+
+    ``notes_mount()`` snapshots the remaining budget when it is built. The
+    agentic attempt may run for most of it before falling back, so the one-shot
+    path must recompute from the same absolute deadline instead of reusing the
+    snapshot — otherwise the two paths can each spend the full budget.
+    """
+    deadline = capped_deadline_seconds(mount.budget.deadline_seconds)
+    if deadline == mount.budget.deadline_seconds:
+        return mount
+    return replace(mount, budget=replace(mount.budget, deadline_seconds=deadline))
+
+
 def _notes_output_schema(uid: Optional[str], *, agent: bool = False) -> type[Any]:
     """The one-shot parser target: v2/legacy arm, plus open-loop fields when enabled.
 
@@ -573,6 +591,11 @@ def _get_shaped_conversation_notes(
         )
     # An agent may discover screen evidence before falling back. Use the final
     # identity authority for both the prompt and output repair.
+    if request_deadline_exceeded():
+        # The agentic attempt spent the request budget. Starting the one-shot
+        # fallback now would hold the request past the client's own deadline, so
+        # answer the retryable 503 instead of buying a second stalled call.
+        raise RequestDeadlineExceeded('notes fallback started after the request budget was spent')
     one_shot_packet = packet if serving_for('NOTES_PACKET_V2_MODE', uid) else legacy_packet
     one_shot_packet['screen_speaker_bindings'] = screen_speaker_bindings(kwargs['notes_identity'])
     evidence[0]['content'] = json.dumps(one_shot_packet, ensure_ascii=False, default=str)
@@ -603,7 +626,7 @@ def _get_shaped_conversation_notes(
                     content = ''.join(part.get('text', '') if isinstance(part, dict) else str(part) for part in content)
                 return Turn(value=_parse_notes_model_output(extraction_parser, str(content)))
 
-            return await run_loop(mount, evidence, model_turn)
+            return await run_loop(_bounded_notes_mount(mount), evidence, model_turn)
 
     result = asyncio.run(invoke())
     output_schema = _notes_output_schema(uid)
