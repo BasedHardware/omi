@@ -254,3 +254,40 @@ def test_missing_sources_count_and_the_source_bound_holds_before_reading(monkeyp
     with pytest.raises(Conflict, match='v3_source_closure_budget'):
         store.load('u', firestore_client=MemoryQuery(rows))
     assert not any(rid.startswith('gone') for rid in reads)
+
+
+def test_reconcile_reuses_full_lookahead_snapshot_as_linked_source(monkeypatch):
+    from types import SimpleNamespace
+
+    from database.firestore_read_origin import bind_read_scope, reset_read_scope
+
+    rows = neighbours()
+    rows[C + 'q'].update(v3_pending=True, v3_pending_since=AT)
+    rows[C + 'dp']['v3_recording_ids'].append('q')
+    # Put 31 earlier obligations between p and q so q is the lookahead.
+    for i in range(31):
+        rid = f'early{i}'
+        stamp = AT - timedelta(days=1)
+        rows[C + rid] = source(rid, started_at=stamp, v3_pending=True, v3_pending_since=stamp)
+    point_reads = []
+    original_get = MemoryQuery.get
+
+    def count(self):
+        if self.path == C + 'q':
+            point_reads.append(self.path)
+        return original_get(self)
+
+    monkeypatch.setattr(MemoryQuery, 'get', count)
+    scope = bind_read_scope({'type': 'http', 'route': SimpleNamespace(path='/v1/conversations-v3/reconcile')})
+    try:
+        monkeypatch.delenv('FIRESTORE_READ_LEVERS', raising=False)
+        before = store.load('u', firestore_client=MemoryQuery(rows))
+        legacy_reads = len(point_reads)
+        point_reads.clear()
+        monkeypatch.setenv('FIRESTORE_READ_LEVERS', '{"conversation_reconcile_snapshot_reuse":100}')
+        after = store.load('u', firestore_client=MemoryQuery(rows))
+        assert after == before
+        assert 'q' in after[0]
+        assert len(point_reads) == legacy_reads - 1
+    finally:
+        reset_read_scope(scope)

@@ -20,11 +20,13 @@ from database.transcript_pointer import TranscriptBlobAbsent, TranscriptShredded
 from database import conversations, conversations_v3_leases as leases
 from database.conversations_v3_undo_removals import removal_ref
 from database.home_feed_fields import COMMIT_STAMPED_FIELDS
+from database.firestore_read_origin import current_read_origin
 from database.account_deletion_marker import account_deletion_blocks_user_work, account_deletion_document
 from database.account_deletion_policy import account_deletion_marker_blocks_access
 from models.finalization_owner import ENGINE_FIELD, EPOCH_FIELD, python_owns_finalization
 from utils.encryption import encrypt, decrypt
 from config.conversations_v3 import boundary_seconds, stretch_cohesion_enabled
+from config.firestore_read_levers import lever_enabled
 from utils.conversations.v3 import Conflict, policy, preview_wakes
 from utils.open_loops.extraction import OPEN_LOOP_EXTRACTIONS_COMPRESSED_FIELD, OPEN_LOOP_EXTRACTIONS_FIELD
 
@@ -52,6 +54,12 @@ DERIVED_LIMIT = _env_int('CONVERSATIONS_V3_DERIVED_LIMIT', 1024)
 DERIVED_BYTES = _env_int('CONVERSATIONS_V3_DERIVED_BYTES', 16 * 1024 * 1024)
 SOURCE_LIMIT = _env_int('CONVERSATIONS_V3_SOURCE_LIMIT', 400)
 CLAIM_READ_CHUNK = 100
+
+
+def _reuse_reconcile_snapshots(uid):
+    return current_read_origin() == 'http:/v1/conversations-v3/reconcile' and lever_enabled(
+        'conversation_reconcile_snapshot_reuse', uid
+    )
 
 
 def closure_by_claims():
@@ -267,6 +275,10 @@ def load(uid, *, conversation_id=None, firestore_client=None):
             coll.where(filter=FieldFilter('v3_pending', '==', True)).order_by('v3_pending_since').limit(33).stream()
         )
     pending = pending[:32] if not conversation_id else pending
+    # The lookahead returns a full snapshot from this same collection. If it
+    # becomes a closure source, its revision is validated at commit as usual.
+    reuse_reads = not conversation_id and _reuse_reconcile_snapshots(uid)
+    following = None
     recordings, unreadable = {}, {}
     for doc in pending:
         row = recording_input(uid, doc)
@@ -354,7 +366,11 @@ def load(uid, *, conversation_id=None, firestore_client=None):
         if len(recordings) + len(unreadable) + len(missing) + len(unseen) > SOURCE_LIMIT:
             raise Conflict('v3_source_closure_budget')
         for rid in unseen:
-            row = recording_input(uid, coll.document(rid).get())
+            row = None
+            if reuse_reads and following is not None and following.id == rid:
+                row = recording_input(uid, following)
+            if not row or row.get('_v3_unreadable'):
+                row = recording_input(uid, coll.document(rid).get())
             if not row:
                 missing.add(rid)
             elif row.get('_v3_unreadable'):
@@ -656,6 +672,7 @@ def commit_projection(
     encrypted_cache = encrypt(json.dumps(cache, default=str), uid)
     # What the current transaction attempt writes, kept by reference and sized only after a failure.
     staged = {}
+    reuse_reads = _reuse_reconcile_snapshots(uid)
 
     @firestore.transactional
     def commit(tx, batch_rows, batch_prepared, final):
@@ -687,7 +704,10 @@ def commit_projection(
             raise Conflict('source_changed')
         if retired and merge_donors_have_tasks(uid, retired, firestore_client=client, transaction=tx):
             raise Conflict('rederive_live_donor_tasks')
-        for cid in [*(row['id'] for row in batch_rows), *absorbed, *(retire if final else ())]:
+        tombstone_ids = [*(row['id'] for row in batch_rows), *absorbed, *(retire if final else ())]
+        if reuse_reads:
+            tombstone_ids = list(dict.fromkeys(tombstone_ids))
+        for cid in tombstone_ids:
             tombstone = (
                 client.collection('users')
                 .document(uid)

@@ -10,6 +10,7 @@ import time
 from uuid import uuid4
 
 from google.cloud import firestore
+from prometheus_client import Counter
 
 from database._client import run_transactional, get_data_plane_firestore_client
 from database.batch_pipeline_privacy import (
@@ -29,6 +30,10 @@ BUNDLE_KIND = 'record_wal_bundle'
 FILE_KIND = 'record_wal_file'
 PENDING_REASON = 'source_alignment_pending'
 FENCE_SECONDS = 600
+FIRST_ACCEPTS = Counter(
+    'omi_record_wal_handoff_first_accepts_total',
+    'First acknowledged durable acceptances of an exact WAL bundle',
+)
 
 
 class HandoffConflict(RuntimeError):
@@ -178,7 +183,7 @@ def commit(client, namespace, fence, receipts):
             raise HandoffConflict('record upload revision regressed')
         current = ref.get(transaction=tx).to_dict() or {}
         if current.get('state') == 'accepted':
-            return current
+            return current, False
         if current.get('fence_token') != fence['fence_token'] or current.get('fence_until', 0) < time.time():
             raise HandoffConflict('exact request fence lost')
         if len(receipts) != len(fence['files']) or not receipts:
@@ -250,9 +255,12 @@ def commit(client, namespace, fence, receipts):
         tx.set(ref, accepted)
         conversation = client.collection('users').document(uid).collection('conversations').document(cid)
         tx.update(conversation, {'record_upload_revision': revision, 'record_wal_handoff_present': True})
-        return accepted
+        return accepted, True
 
-    return run_transactional(client, finish, transient=True)
+    accepted, first_accept = run_transactional(client, finish, transient=True)
+    if first_accept:
+        FIRST_ACCEPTS.inc()
+    return accepted
 
 
 def check_fence(client, namespace, fence):

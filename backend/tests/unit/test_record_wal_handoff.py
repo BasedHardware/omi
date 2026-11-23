@@ -151,12 +151,18 @@ def world(monkeypatch, tmp_path):
 
 
 async def test_all_files_accepted_before_decode_and_completed_native_job_never_completes_upload(world):
+    first_accepts = database.FIRST_ACCEPTS._value
+    before = first_accepts.get()
     response = await world.upload()
     assert response.status_code == 202
     start = json.loads(response.body)
     SyncJobStartResponse(**start)
     assert start['job_id'].startswith(database.JOB_PREFIX)
     assert start['status'] == 'processing' and start['total_files'] == 2
+    assert first_accepts.get() == before + 1
+    repeated = await world.upload()
+    assert json.loads(repeated.body)['job_id'] == start['job_id']
+    assert first_accepts.get() == before + 1
     for _ in range(3):
         status = durable_status(world.store, UID, start['job_id'])
         SyncJobStatusResponse(**status)

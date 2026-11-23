@@ -55,6 +55,7 @@ KNOWN_LEVERS = frozenset(
         'episode_members_singleflight',  # ship-on: concurrent identical reads only; 0 restores independent reads
         'episode_members_cache',  # Home member projections may be stale for <= 60s; absent = 0/off
         'conversation_list_cursor',  # conversations:_collect_visible_conversation_page
+        'conversation_day_list_cursor',  # opt-in keyset paging for the mobile day view
         'finjob_candidate_queries',  # conversation_finalization_jobs:{scan_in_progress,get_abandoned_byok,get_stale_processing}
         'bpp_decision_cache',  # batch privacy: token-validated generation reuse across attempts, <= 60s
         'bpp_owner_memo',  # ship-on: batch privacy owner-level decision reuse, same per-use token certification; 0 restores id-set keying
@@ -64,6 +65,9 @@ KNOWN_LEVERS = frozenset(
         'privacy_ttl60',  # legal-hold fence, tombstone and deletion-marker decisions reused <= 60s, no token read
         'action_items_ttl120',  # action_items_cache: 120s default reuse under action_items_page
         'lifecycle_record_pending_head',  # lifecycle_metrics_queries:record_pending head(1)+count, key=serving replica
+        'sync_upload_transaction_reads',  # transaction-local snapshot reuse on POST /v2/sync-local-files
+        'sync_status_transaction_reads',  # transaction-local snapshot reuse on the GET poll route
+        'conversation_reconcile_snapshot_reuse',  # live builder load only, before commit revalidation
         'admission_frontier_hint',  # ship-on: owner activation reads the service frontier outside the txn; 0 restores the txn query
         'sync_allowance_single_resolve',  # ship-on: one admission answer; 0 restores the legacy two-call race
     }

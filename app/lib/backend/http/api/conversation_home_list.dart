@@ -15,6 +15,7 @@ Future<ApiResult<List<ServerConversation>>> _listHomeConversations(
   void Function(int)? onStorageCount,
   void Function(ConversationPageHeaders)? onPageHeaders,
   String? cursor,
+  required bool dayCursor,
 }) async {
   final held = <String, ServerConversation>{};
   final pairs = <String>[];
@@ -40,7 +41,11 @@ Future<ApiResult<List<ServerConversation>>> _listHomeConversations(
           starred: starred,
           cursor: cursor),
       method: 'GET',
-      headers: {'X-Omi-Home-Ownership': '1', if (pairs.isNotEmpty) 'X-Omi-Home-Episode-Ids': pairs.join(',')},
+      headers: {
+        'X-Omi-Home-Ownership': '1',
+        if (dayCursor) 'X-Omi-Day-Cursor': '1',
+        if (pairs.isNotEmpty) 'X-Omi-Home-Episode-Ids': pairs.join(','),
+      },
     ),
     send: api._send,
     onResponseHeaders: (value) => headers = value,

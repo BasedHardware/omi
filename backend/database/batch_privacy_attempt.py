@@ -8,6 +8,7 @@ import inspect
 from threading import RLock
 from datetime import datetime
 import re
+from typing import Any
 
 TOKEN_FIELD = 'memo_token'
 SCHEMA_FIELD = 'memo_schema'
@@ -158,3 +159,39 @@ def with_batch_privacy_attempt(function):
                 return function(*args, **kwargs)
 
     return wrapped
+
+
+# This holds raw snapshots, including NOT_FOUND, never authorization decisions.
+# The batch store creates a new scope inside each SDK callback, after a retry has
+# opened a new transaction. References must belong to the same customer client.
+_TRANSACTION_READS: ContextVar[tuple[Any, Any, dict[str, Any]] | None] = ContextVar(
+    'batch_transaction_reads', default=None
+)
+_TRANSACTION_READ_LIMIT = 512
+
+
+@contextmanager
+def batch_transaction_reads(client, transaction):
+    token = _TRANSACTION_READS.set((client, transaction, {}))
+    try:
+        yield
+    finally:
+        _TRANSACTION_READS.reset(token)
+
+
+def transaction_snapshot(reference, transaction, read):
+    scope = _TRANSACTION_READS.get()
+    if scope is None or transaction is not scope[1] or getattr(reference, '_client', None) is not scope[0]:
+        return read()
+    # Never bypass the SDK's read-after-write check if an existing caller has
+    # written directly to the raw transaction instead of staging via the store.
+    if not getattr(transaction, 'in_progress', True) or getattr(transaction, '_write_pbs', ()):
+        return read()
+    snapshots = scope[2]
+    path = reference.path
+    if path in snapshots:
+        return snapshots[path]
+    snapshot = read()
+    if len(snapshots) < _TRANSACTION_READ_LIMIT:
+        snapshots[path] = snapshot
+    return snapshot

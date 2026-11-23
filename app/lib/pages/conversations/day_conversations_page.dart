@@ -23,20 +23,61 @@ typedef DayConversationsFetcher = Future<({List<ServerConversation> items, bool 
   int offset,
 });
 
+typedef _DayPage = ({
+  List<ServerConversation> items,
+  bool ok,
+  bool truncated,
+  int storageCount,
+  ConversationPageHeaders headers,
+});
+
+Future<_DayPage> _fetchDayPage(
+  ConversationApi api,
+  DateTime start,
+  DateTime end,
+  int limit,
+  int offset, {
+  String? cursor,
+}) async {
+  var headers = const ConversationPageHeaders();
+  int? storageCount;
+  final result = await api.list(
+    limit: limit,
+    offset: offset,
+    cursor: cursor,
+    dayCursor: true,
+    includeDiscarded: false,
+    startDate: start,
+    endDate: end,
+    onPageHeaders: (value) => headers = value,
+    onStorageCount: (value) => storageCount = value,
+  );
+  return switch (result) {
+    ApiSuccess(:final data, :final truncated, :final rejectedRows) => (
+        items: data,
+        ok: true,
+        truncated: truncated || rejectedRows > 0,
+        storageCount: storageCount ?? data.length,
+        headers: headers,
+      ),
+    ApiFailure() => _failedPage(),
+  };
+}
+
+_DayPage _failedPage() => (
+      items: <ServerConversation>[],
+      ok: false,
+      truncated: false,
+      storageCount: 0,
+      headers: const ConversationPageHeaders(),
+    );
+
 /// The server's conversations for a day, decoded row by row: one malformed conversation must not
 /// hide every other valid row behind an error. Rejected rows surface as partial data instead.
 DayConversationsFetcher fetchDayConversations(ConversationApi api) =>
     ({required endDate, limit = 50, offset = 0, required startDate}) async {
-      final result =
-          await api.list(limit: limit, offset: offset, includeDiscarded: false, startDate: startDate, endDate: endDate);
-      return switch (result) {
-        ApiSuccess(:final data, :final truncated, :final rejectedRows) => (
-            items: data,
-            ok: true,
-            truncated: truncated || rejectedRows > 0,
-          ),
-        ApiFailure() => (items: <ServerConversation>[], ok: false, truncated: false),
-      };
+      final page = await _fetchDayPage(api, startDate, endDate, limit, offset);
+      return (items: page.items, ok: page.ok, truncated: page.truncated);
     };
 
 (DateTime start, DateTime end) dayDateBounds(DateTime day) {
@@ -45,10 +86,11 @@ DayConversationsFetcher fetchDayConversations(ConversationApi api) =>
 }
 
 class DayConversationsPage extends StatefulWidget {
-  const DayConversationsPage({super.key, required this.date, this.fetchConversations});
+  const DayConversationsPage({super.key, required this.date, this.fetchConversations, this.api});
 
   final DateTime date;
   final DayConversationsFetcher? fetchConversations;
+  final ConversationApi? api;
 
   @override
   State<DayConversationsPage> createState() => _DayConversationsPageState();
@@ -69,11 +111,10 @@ class _DayConversationsPageState extends State<DayConversationsPage> {
   bool _truncated = false;
   bool _hasMore = true;
   int _offset = 0;
+  String? _cursor;
   int _generation = 0;
 
-  late final ConversationApi _api = ConversationApi(baseUrl: Env.apiBaseUrl ?? '');
-
-  DayConversationsFetcher get _fetch => widget.fetchConversations ?? fetchDayConversations(_api);
+  late final ConversationApi _api = widget.api ?? ConversationApi(baseUrl: Env.apiBaseUrl ?? '');
 
   @override
   void initState() {
@@ -88,13 +129,33 @@ class _DayConversationsPageState extends State<DayConversationsPage> {
     super.dispose();
   }
 
-  Future<({List<ServerConversation> items, bool ok, bool truncated})> _page(
-      DateTime start, DateTime end, int offset) async {
+  Future<_DayPage> _page(DateTime start, DateTime end, int offset, {String? cursor}) async {
     try {
-      return await _fetch(startDate: start, endDate: end, limit: _limit, offset: offset).timeout(_pageDeadline);
+      final fetch = widget.fetchConversations;
+      if (fetch == null) {
+        return await _fetchDayPage(_api, start, end, _limit, offset, cursor: cursor).timeout(_pageDeadline);
+      }
+      final result = await fetch(startDate: start, endDate: end, limit: _limit, offset: offset).timeout(_pageDeadline);
+      return (
+        items: result.items,
+        ok: result.ok,
+        truncated: result.truncated,
+        storageCount: result.items.length,
+        headers: const ConversationPageHeaders(),
+      );
     } catch (_) {
-      return (items: <ServerConversation>[], ok: false, truncated: false);
+      return _failedPage();
     }
+  }
+
+  void _advancePage(_DayPage page) {
+    final cursorEnabled = page.headers.dayCursorEnabled;
+    _offset += cursorEnabled || _cursor != null ? page.storageCount : page.items.length;
+    _cursor = cursorEnabled ? page.headers.nextCursor : null;
+    _truncated = page.truncated;
+    _hasMore = cursorEnabled
+        ? page.headers.more(storageCount: page.storageCount, pageSize: _limit, truncated: page.truncated)
+        : !page.truncated && page.items.length >= _limit;
   }
 
   Future<void> _loadDay({bool clearRows = false}) async {
@@ -109,6 +170,7 @@ class _DayConversationsPageState extends State<DayConversationsPage> {
       _truncated = false;
       _hasMore = false;
       _offset = 0;
+      _cursor = null;
       if (clearRows) {
         _provider.conversations = [];
         _provider.groupedConversations = {};
@@ -128,9 +190,7 @@ class _DayConversationsPageState extends State<DayConversationsPage> {
       }
       _provider.conversations = result.items;
       _provider.groupConversationsByDate();
-      _offset = result.items.length;
-      _truncated = result.truncated;
-      _hasMore = !result.truncated && result.items.length >= _limit;
+      _advancePage(result);
     });
   }
 
@@ -139,11 +199,12 @@ class _DayConversationsPageState extends State<DayConversationsPage> {
     final generation = _generation;
     final (start, end) = dayDateBounds(_day);
     final offset = _offset;
+    final cursor = _cursor;
     setState(() {
       _loadingMore = true;
       _loadMoreFailed = false;
     });
-    final result = await _page(start, end, offset);
+    final result = await _page(start, end, offset, cursor: cursor);
     if (!mounted || generation != _generation) return;
     setState(() {
       _loadingMore = false;
@@ -151,12 +212,10 @@ class _DayConversationsPageState extends State<DayConversationsPage> {
         _loadMoreFailed = true;
         return;
       }
-      _offset += result.items.length;
+      _advancePage(result);
       final seen = _provider.conversations.map((c) => c.id).toSet();
       _provider.conversations = [..._provider.conversations, ...result.items.where((c) => seen.add(c.id))];
       _provider.groupConversationsByDate();
-      _truncated = result.truncated;
-      _hasMore = !result.truncated && result.items.length >= _limit;
     });
   }
 

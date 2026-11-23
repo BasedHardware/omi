@@ -653,11 +653,13 @@ class ConversationApi {
     void Function(int)? onStorageCount,
     void Function(ConversationPageHeaders)? onPageHeaders,
     String? cursor,
+    bool dayCursor = false,
   }) =>
       _listHomeConversations(this,
           limit: limit,
           offset: offset,
           cursor: cursor,
+          dayCursor: dayCursor,
           onPageHeaders: onPageHeaders,
           statuses: statuses,
           includeDiscarded: includeDiscarded,

@@ -246,3 +246,42 @@ def test_day_view_applies_home_visibility(monkeypatch, routes, filters, hide_hom
     monkeypatch.setattr(routes.conversations_db, 'get_conversations_without_photos', fetch)
     call_route(routes, **filters)
     assert calls[0]['hide_home'] is hide_home
+
+
+def test_day_cursor_resume_reads_current_rows_and_has_an_independent_kill_switch(monkeypatch, routes):
+    from starlette.requests import Request
+
+    monkeypatch.setenv('FIRESTORE_READ_LEVERS', '{"conversation_list_cursor":100,"conversation_day_list_cursor":100}')
+    data, expected = owner(before=12, hidden=0, after=0)
+    # All rows tie on the date key. Firestore resolves the tie using document ID.
+    for row in data:
+        row['created_at'] = datetime(2026, 11, 19, tzinfo=timezone.utc)
+    request = Request({'type': 'http', 'query_string': b'', 'headers': [(b'x-omi-day-cursor', b'1')]})
+    params = dict(request=request, limit=3, start_date=data[0]['created_at'] - timedelta(days=1))
+    monkeypatch.setattr(db, 'db', CountingQuery(data))
+    first, response = call_route(routes, **params)
+    assert [row['id'] for row in first] == expected[:3]
+    assert response.headers['X-Omi-Day-Cursor'] == '1'
+    cursor = response.headers['X-Omi-Next-Cursor']
+
+    # Delete the cursor anchor and another unseen row, update an unseen row,
+    # and insert a row above the bookmark. Pagination must use the old values,
+    # and a refresh must see the new head.
+    data[3]['structured'] = {'title': 'Edited between pages'}
+    data[2]['deleted'] = data[4]['deleted'] = True
+    data.insert(0, {**data[0], 'id': '099'})
+    query = CountingQuery(data)
+    monkeypatch.setattr(db, 'db', query)
+    second, _ = call_route(routes, **params, cursor=cursor, offset=3)
+    assert [row['id'] for row in second] == [expected[3], expected[5], expected[6]]
+    assert second[0]['structured']['title'] == 'Edited between pages'
+    assert query.counts['offsets'] == []
+    refreshed, _ = call_route(routes, **params)
+    assert refreshed[0]['id'] == '099'
+
+    monkeypatch.setenv('FIRESTORE_READ_LEVERS', '{"conversation_list_cursor":100}')
+    fallback_query = CountingQuery(data)
+    monkeypatch.setattr(db, 'db', fallback_query)
+    _, response = call_route(routes, **params, cursor=cursor, offset=3)
+    assert fallback_query.counts['offsets'] == [3]
+    assert 'X-Omi-Day-Cursor' not in response.headers

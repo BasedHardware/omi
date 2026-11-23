@@ -38,6 +38,7 @@ from database.legal_holds import (
 from utils.other.account_gate_http import account_gate_busy_http_exception
 from database.firestore_read_metrics import FirestoreReadSite
 from config import historical_tier
+from config.firestore_read_levers import lever_enabled
 from utils.conversations import historical_projection, home_step, transcribing_hold
 from utils.conversations.list_filters import aware_datetime, reject_oversized_filter
 from database.vector_db import (
@@ -1179,6 +1180,10 @@ def get_conversations(
     # query and the page stream runs under the derived per-RPC timeout, so a
     # deep page cannot consume the whole HTTP_GET_TIMEOUT (#11831).
     budget = list_read_budget_for_request(request, route='conversations')
+    day_cursor_opt_in = request is not None and request.headers.get('X-Omi-Day-Cursor') == '1'
+    day_cursor_enabled = day_cursor_opt_in and lever_enabled('conversation_day_list_cursor', uid)
+    if day_cursor_opt_in and not day_cursor_enabled:
+        cursor = None
     page: Dict[str, Any] = {}
     reveal = include_discarded or sources or folder_id or starred is not None or statuses != 'processing,completed'
     default_home = not (reveal or start_date or end_date)
@@ -1220,6 +1225,8 @@ def get_conversations(
     )
     if response is not None:
         list_page_headers.apply(response, page)
+        if day_cursor_enabled:
+            response.headers['X-Omi-Day-Cursor'] = '1'
     _heal_locked_conversations_if_eligible(uid, conversations)
     conversations = [
         historical_projection.project(
@@ -1231,6 +1238,10 @@ def get_conversations(
     if budget.truncated and response is not None:
         response.headers[OMI_LIST_TRUNCATED_HEADER] = OMI_LIST_TRUNCATED_VALUE
     budget.observe('truncated' if budget.truncated else 'complete')
+    from utils.metrics import OMI_CONVERSATION_LIST_PAGES_TOTAL
+
+    paging = 'cursor_requested' if cursor is not None else 'offset' if offset else 'first'
+    OMI_CONVERSATION_LIST_PAGES_TOTAL.labels(paging, str(include_discarded).lower()).inc()
     return conversations
 
 

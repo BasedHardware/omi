@@ -15,7 +15,7 @@ import time
 from google.api_core import exceptions as google_errors
 from prometheus_client import Counter, Gauge, Histogram
 from config.plan_catalog import PlanType
-from database.batch_privacy_attempt import PrivacyAttempt, token_version
+from database.batch_privacy_attempt import PrivacyAttempt, token_version, transaction_snapshot
 from database.firestore_tier_context import current_tier
 from utils.async_tasks import create_named_task, drain_tasks, wait_for_event
 from utils.batch_pipeline.artifact_reads import ArtifactReadLimit
@@ -414,6 +414,14 @@ def negative_lookup(collection, mode, result):
 
 def read_snapshot(family, reference, *, read_budget=None, uid=None, **kwargs):
     """Count issued reads, including failures, without inspecting paths or payloads."""
+    if family == 'batch' and kwargs.get('transaction') is not None:
+        return transaction_snapshot(
+            reference, kwargs['transaction'], lambda: _issue_snapshot_read(family, reference, read_budget, uid, kwargs)
+        )
+    return _issue_snapshot_read(family, reference, read_budget, uid, kwargs)
+
+
+def _issue_snapshot_read(family, reference, read_budget, uid, kwargs):
     _count(family, 'reads')
     caller = _READ_CALLERS[_family(family)]
     caller_token = _READ_CALLER.set(caller)
