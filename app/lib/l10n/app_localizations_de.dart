@@ -15908,7 +15908,7 @@ class AppLocalizationsDe extends AppLocalizations {
         'invalid': 'Dieser Code ist ungültig. Prüfe ihn und versuche es erneut.',
         'used': 'Dieser Code wurde bereits verwendet.',
         'expired': 'Dieser Code ist abgelaufen.',
-        'hasPlan': 'Du hast bereits einen Plan. Dein Code wurde nicht verwendet.',
+        'hasPlan': 'Du hast bereits einen Plan. Dein Code wurde nicht verwendet. Löse ihn ein, wenn dein Plan endet.',
         'notPrepaid': 'Dieser Code kann hier nicht eingelöst werden. Verwende ihn, wenn du einen Plan wählst.',
         'notEligible': 'Dieser Code kann für dieses Konto nicht verwendet werden.',
         'rateLimited': 'Zu viele Versuche. Versuche es später erneut.',

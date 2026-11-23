@@ -1386,11 +1386,10 @@ def get_user_subscription_endpoint(
 
 
 def _apply_prepaid_code_switch(response: UserSubscriptionResponse, uid: str) -> None:
-    """Prepaid code fields appear only for users the switch admits; otherwise the response is unchanged."""
+    """Only the ability to redeem follows the switch. A stored prepaid plan keeps its `prepaid` marker
+    either way, so a redeemed reader never sees Resubscribe when the switch or cohort changes."""
     if prepaid_code_config.enabled_for(uid):
         response.prepaid_code_redeem = True
-    else:
-        response.subscription.prepaid = None
 
 
 @router.post('/v1/users/processing-backlog/process', response_model=ProcessingBacklog, tags=['v1'])

@@ -985,7 +985,6 @@ class _PlansSheetState extends State<PlansSheet> {
                       // promo field for checkout.
                       if (provider.canRedeemPrepaidCode && !_showPromoField)
                         PrepaidCodeEntry(
-                          source: PrepaidCodeSource.plansSheet,
                           onDiscountCode: (code) => setState(() {
                             _promoCodeController.text = code;
                             _promoCodeError = null;

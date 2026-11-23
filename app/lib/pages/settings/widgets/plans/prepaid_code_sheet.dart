@@ -11,8 +11,6 @@ import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
-enum PrepaidCodeSource { paywall, plansSheet }
-
 typedef PrepaidCodeRedeem = Future<ApiResult<PrepaidCodeRedemption>> Function(String code);
 
 /// The redeem call the entry uses; tests replace it.
@@ -25,14 +23,12 @@ PrepaidCodeRedeem prepaidCodeRedeemer = redeemPrepaidCode;
 class PrepaidCodeEntry extends StatelessWidget {
   const PrepaidCodeEntry({
     super.key,
-    required this.source,
     this.style,
     this.center = false,
     this.onRedeemed,
     this.onDiscountCode,
   });
 
-  final PrepaidCodeSource source;
   final TextStyle? style;
   final bool center;
   final VoidCallback? onRedeemed;
@@ -46,7 +42,7 @@ class PrepaidCodeEntry extends StatelessWidget {
       child: InkWell(
         key: const ValueKey('prepaid_code_entry'),
         onTap: () async {
-          final redeemed = await showPrepaidCodeSheet(context, source: source, onDiscountCode: onDiscountCode);
+          final redeemed = await showPrepaidCodeSheet(context, onDiscountCode: onDiscountCode);
           if (redeemed) onRedeemed?.call();
         },
         borderRadius: OmiRadius.smAll,
@@ -70,7 +66,6 @@ class PrepaidCodeEntry extends StatelessWidget {
 /// True when a code was redeemed before the sheet closed.
 Future<bool> showPrepaidCodeSheet(
   BuildContext context, {
-  required PrepaidCodeSource source,
   ValueChanged<String>? onDiscountCode,
   PrepaidCodeRedeem? redeem,
 }) async {
@@ -81,7 +76,6 @@ Future<bool> showPrepaidCodeSheet(
     context: context,
     title: context.l10n.prepaidCodeTitle,
     builder: (sheetContext) => PrepaidCodeSheet(
-      source: source,
       redeem: redeem ?? prepaidCodeRedeemer,
       onRedeemed: () {
         redeemed = true;
@@ -105,13 +99,11 @@ Future<bool> showPrepaidCodeSheet(
 class PrepaidCodeSheet extends StatefulWidget {
   const PrepaidCodeSheet({
     super.key,
-    required this.source,
     required this.redeem,
     this.onRedeemed,
     this.onDiscountCode,
   });
 
-  final PrepaidCodeSource source;
   final PrepaidCodeRedeem redeem;
   final VoidCallback? onRedeemed;
 

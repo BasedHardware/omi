@@ -591,13 +591,16 @@ def test_term_end_has_no_paid_through_grace_for_a_prepaid_plan():
     assert kept.plan == PlanType.unlimited_v2
 
 
-def test_subscription_response_carries_the_prepaid_marker_only_with_the_switch_on(monkeypatch, warm_subscription_route):
+def test_a_redeemed_plan_keeps_its_prepaid_marker_whatever_the_switch(monkeypatch, warm_subscription_route):
     from models.users import UserSubscriptionResponse
     from routers import users
 
-    def response():
+    def response(prepaid):
         row = Subscription(
-            plan=PlanType.unlimited_v2, status=SubscriptionStatus.active, current_period_end=NOW + DAY, prepaid=True
+            plan=PlanType.unlimited_v2,
+            status=SubscriptionStatus.active,
+            current_period_end=NOW + DAY,
+            prepaid=True if prepaid else None,
         )
         return UserSubscriptionResponse(
             subscription=row,
@@ -609,16 +612,23 @@ def test_subscription_response_carries_the_prepaid_marker_only_with_the_switch_o
             insights_gained_limit=0,
         )
 
+    def dumped(prepaid):
+        r = response(prepaid)
+        users._apply_prepaid_code_switch(r, UID)
+        return json.loads(r.model_dump_json())
+
+    # Switch off (or the tester left the cohort): a redeemed reader still sees "plan ends", not Resubscribe.
     monkeypatch.setattr(users.prepaid_code_config, 'enabled_for', lambda uid: False)
-    off = response()
-    users._apply_prepaid_code_switch(off, UID)
-    dumped = json.loads(off.model_dump_json())
-    assert 'prepaid' not in dumped['subscription'] and 'prepaid_code_redeem' not in dumped
+    off = dumped(prepaid=True)
+    assert off['subscription']['prepaid'] is True and 'prepaid_code_redeem' not in off
+    # A reader without a prepaid plan: switch-off response is exactly today's.
+    plain = dumped(prepaid=False)
+    assert 'prepaid' not in plain['subscription'] and 'prepaid_code_redeem' not in plain
+    assert plain == json.loads(response(prepaid=False).model_dump_json())
+    # Switch on: only the ability to redeem is added.
     monkeypatch.setattr(users.prepaid_code_config, 'enabled_for', lambda uid: True)
-    on = response()
-    users._apply_prepaid_code_switch(on, UID)
-    dumped = json.loads(on.model_dump_json())
-    assert dumped['subscription']['prepaid'] is True and dumped['prepaid_code_redeem'] is True
+    on = dumped(prepaid=False)
+    assert on['prepaid_code_redeem'] is True and 'prepaid' not in on['subscription']
 
 
 def test_subscription_route_reads_no_cohort_with_the_switch_off(monkeypatch, warm_subscription_route):
@@ -633,3 +643,58 @@ def test_subscription_route_reads_no_cohort_with_the_switch_off(monkeypatch, war
     monkeypatch.setenv(switch.ENV, 'cohort')
     body()
     assert 'prepaid-code-redeem' in reads
+
+
+def test_a_play_billed_android_caller_is_refused_before_any_lookup(monkeypatch, route):
+    from fastapi import HTTPException
+
+    monkeypatch.setattr(route.module.prepaid_code_config, 'enabled_for', lambda uid: True)
+    monkeypatch.setattr(route.module, 'redeem_prepaid_code', lambda uid, code: pytest.fail('looked up a code'))
+    monkeypatch.setenv('ANDROID_BILLING', 'play')
+    monkeypatch.setenv('ANDROID_PLAY_BILLING_MIN_BUILD', '1700')
+    monkeypatch.setenv('PLAY_ACCOUNT_ID_HMAC_KEY', 'test-only-play-account-key-0123456789abcdef')
+    body = route.module.RedeemCodeRequest(code='OMI-1')
+    with pytest.raises(HTTPException) as error:
+        route.module.redeem_prepaid_code_endpoint(body, uid=UID, x_app_platform='android', x_app_build='1700')
+    assert (error.value.status_code, error.value.detail) == (409, 'play_billed')
+    assert route.calls == []  # refused before the rate-limit bucket or Stripe
+    # The same server on iOS, or an Android build below the Play floor, still redeems.
+    monkeypatch.setattr(
+        route.module,
+        'redeem_prepaid_code',
+        lambda uid, code: {'status': 'redeemed', 'plan': 'Omi Pro', 'ends_at': 1, 'months': 12},
+    )
+    assert (
+        route.module.redeem_prepaid_code_endpoint(body, uid=UID, x_app_platform='ios', x_app_build='1700')['status']
+        == 'redeemed'
+    )
+    assert (
+        route.module.redeem_prepaid_code_endpoint(body, uid=UID, x_app_platform='android', x_app_build='1699')['status']
+        == 'redeemed'
+    )
+
+
+def test_customer_portal_is_refused_before_the_webhook_marks_the_row(monkeypatch, payment_router):
+    from fastapi import HTTPException
+
+    payment = payment_router.module
+    payment_router.row.prepaid = None  # the webhook has not written the row yet
+    monkeypatch.setattr(payment.users_db, 'get_stripe_customer_id', lambda uid: 'cus_1')
+    listed = {'subs': [_prepaid_stripe_sub()]}
+    payment.stripe.Subscription.list = lambda **kw: SimpleNamespace(data=listed['subs'])
+    opened = []
+    monkeypatch.setattr(
+        payment.stripe.billing_portal.Session,
+        'create',
+        lambda **kw: opened.append(kw) or SimpleNamespace(url='https://billing.example/session'),
+    )
+    with pytest.raises(HTTPException) as error:
+        payment.create_customer_portal_endpoint(uid=UID)
+    assert error.value.status_code == 409 and opened == []
+    # An ended prepaid plan, or an ordinary subscription, opens the portal as before.
+    listed['subs'] = [
+        _prepaid_stripe_sub(status='canceled'),
+        {**_prepaid_stripe_sub(), 'metadata': {'uid': UID}},
+    ]
+    assert payment.create_customer_portal_endpoint(uid=UID) == {'url': 'https://billing.example/session'}
+    assert opened and opened[0]['customer'] == 'cus_1'

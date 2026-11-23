@@ -247,7 +247,6 @@ class _TrialPaywallPageState extends State<TrialPaywallPage> {
       // Server switch on: redeem a prepaid code right here, no card. Never for a Play-billed reader.
       if (canRedeemCode)
         PrepaidCodeEntry(
-          source: PrepaidCodeSource.paywall,
           center: true,
           style: _Paper.label(size: 13, color: _Paper.textSecondary),
           // Redeemed: the reader is Pro now, so close the paywall the way a restored purchase does.

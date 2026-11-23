@@ -19751,7 +19751,7 @@ export async function verify_play_purchase_v1_payments_play_purchases_post(heade
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-export async function redeem_prepaid_code_endpoint_v1_payments_prepaid_code_redeem_post(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: RedeemCodeRequest, init?: OmiApiClientInit): Promise<RedeemPrepaidCodeResponse> {
+export async function redeem_prepaid_code_endpoint_v1_payments_prepaid_code_redeem_post(header: { X_App_Platform?: string, X_App_Build?: string | null, authorization?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: RedeemCodeRequest, init?: OmiApiClientInit): Promise<RedeemPrepaidCodeResponse> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/payments/prepaid-code/redeem`;
   const _search = "";
@@ -19761,8 +19761,9 @@ export async function redeem_prepaid_code_endpoint_v1_payments_prepaid_code_rede
       ...(body ? { 'Content-Type': 'application/json' } : {}),
       ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
       ...init?.headers,
-      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
       ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_App_Build !== undefined ? { "X-App-Build": String(header.X_App_Build) } : {}),
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
       ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
       ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
     },

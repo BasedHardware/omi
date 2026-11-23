@@ -15820,7 +15820,7 @@ class AppLocalizationsBs extends AppLocalizations {
         'invalid': 'Ovaj kod nije važeći. Provjerite ga i pokušajte ponovo.',
         'used': 'Ovaj kod je već iskorišten.',
         'expired': 'Ovaj kod je istekao.',
-        'hasPlan': 'Već imate plan. Vaš kod nije iskorišten.',
+        'hasPlan': 'Već imate plan. Vaš kod nije iskorišten. Iskoristite ga kada vam plan istekne.',
         'notPrepaid': 'Ovaj kod se ne može iskoristiti ovdje. Iskoristite ga kada odaberete plan.',
         'notEligible': 'Ovaj kod se ne može koristiti na ovom računu.',
         'rateLimited': 'Previše pokušaja. Pokušajte kasnije.',

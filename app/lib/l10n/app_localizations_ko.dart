@@ -15567,7 +15567,7 @@ class AppLocalizationsKo extends AppLocalizations {
         'invalid': '유효하지 않은 코드입니다. 확인 후 다시 시도하세요.',
         'used': '이미 사용된 코드입니다.',
         'expired': '만료된 코드입니다.',
-        'hasPlan': '이미 플랜이 있습니다. 코드는 사용되지 않았습니다.',
+        'hasPlan': '이미 플랜이 있습니다. 코드는 사용되지 않았습니다. 플랜이 끝난 후에 사용하세요.',
         'notPrepaid': '이 코드는 여기에서 사용할 수 없습니다. 플랜을 선택할 때 사용하세요.',
         'notEligible': '이 계정에서는 이 코드를 사용할 수 없습니다.',
         'rateLimited': '시도 횟수가 너무 많습니다. 나중에 다시 시도하세요.',

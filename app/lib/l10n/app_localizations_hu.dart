@@ -15850,7 +15850,7 @@ class AppLocalizationsHu extends AppLocalizations {
         'invalid': 'Ez a kód érvénytelen. Ellenőrizd, és próbáld újra.',
         'used': 'Ezt a kódot már felhasználták.',
         'expired': 'Ez a kód lejárt.',
-        'hasPlan': 'Már van csomagod. A kódodat nem használtuk fel.',
+        'hasPlan': 'Már van csomagod. A kódodat nem használtuk fel. Váltsd be, amikor a csomagod lejár.',
         'notPrepaid': 'Ez a kód itt nem váltható be. Használd, amikor csomagot választasz.',
         'notEligible': 'Ez a kód ezen a fiókon nem használható.',
         'rateLimited': 'Túl sok próbálkozás. Próbáld újra később.',

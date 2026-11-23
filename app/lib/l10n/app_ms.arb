@@ -4756,5 +4756,5 @@
     "prepaidCodeFieldHint": "Masukkan kod anda",
     "prepaidCodeRedeem": "Tebus",
     "prepaidCodeRedeemed": "Kod berjaya ditebus",
-    "prepaidCodeResult": "{reason, select, invalid{Kod ini tidak sah. Semak dan cuba lagi.} used{Kod ini telah digunakan.} expired{Kod ini telah tamat tempoh.} hasPlan{Anda sudah mempunyai pelan. Kod anda tidak digunakan.} notPrepaid{Kod ini tidak boleh ditebus di sini. Gunakannya semasa memilih pelan.} notEligible{Kod ini tidak boleh digunakan pada akaun ini.} rateLimited{Terlalu banyak percubaan. Cuba lagi nanti.} other{Ada sesuatu yang tidak kena. Sila cuba lagi.}}"
+    "prepaidCodeResult": "{reason, select, invalid{Kod ini tidak sah. Semak dan cuba lagi.} used{Kod ini telah digunakan.} expired{Kod ini telah tamat tempoh.} hasPlan{Anda sudah mempunyai pelan. Kod anda tidak digunakan. Tebusnya selepas pelan anda tamat.} notPrepaid{Kod ini tidak boleh ditebus di sini. Gunakannya semasa memilih pelan.} notEligible{Kod ini tidak boleh digunakan pada akaun ini.} rateLimited{Terlalu banyak percubaan. Cuba lagi nanti.} other{Ada sesuatu yang tidak kena. Sila cuba lagi.}}"
 }

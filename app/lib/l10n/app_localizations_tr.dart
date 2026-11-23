@@ -15802,7 +15802,7 @@ class AppLocalizationsTr extends AppLocalizations {
         'invalid': 'Bu kod geçerli değil. Kontrol edip tekrar deneyin.',
         'used': 'Bu kod zaten kullanılmış.',
         'expired': 'Bu kodun süresi dolmuş.',
-        'hasPlan': 'Zaten bir planınız var. Kodunuz kullanılmadı.',
+        'hasPlan': 'Zaten bir planınız var. Kodunuz kullanılmadı. Planınız bittikten sonra kullanın.',
         'notPrepaid': 'Bu kod burada kullanılamaz. Bir plan seçerken kullanın.',
         'notEligible': 'Bu kod bu hesapta kullanılamaz.',
         'rateLimited': 'Çok fazla deneme. Daha sonra tekrar deneyin.',

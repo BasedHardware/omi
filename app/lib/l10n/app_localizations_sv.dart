@@ -15800,7 +15800,7 @@ class AppLocalizationsSv extends AppLocalizations {
         'invalid': 'Den här koden är inte giltig. Kontrollera den och försök igen.',
         'used': 'Den här koden har redan använts.',
         'expired': 'Den här koden har gått ut.',
-        'hasPlan': 'Du har redan en plan. Din kod användes inte.',
+        'hasPlan': 'Du har redan en plan. Din kod användes inte. Lös in den när din plan tar slut.',
         'notPrepaid': 'Den här koden kan inte lösas in här. Använd den när du väljer en plan.',
         'notEligible': 'Den här koden kan inte användas på det här kontot.',
         'rateLimited': 'För många försök. Försök igen senare.',
