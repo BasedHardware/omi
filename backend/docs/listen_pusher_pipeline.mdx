@@ -4222,8 +4222,15 @@ and retains strict observed-send containment. Unknown text persists without an
 audio window. OFF retains the compact admission-time ledger exactly.
 
 `SONIOX_ORDERED_FINALIZE` is one additional default-off switch, effective only
-with the wire ledger, production Soniox endpoint/model (`stt-rt-v5`) and mono
-pcm_s16le at 16 kHz. Controlled synthetic probes covered sub-boundary offsets,
+with the wire ledger, production Soniox endpoint, a model listed in
+`ORDERED_FINALIZE_VALIDATED_MODELS` (`utils/stt/soniox.py`) and mono pcm_s16le at
+16 kHz. That set is empty, so the switch currently has no effect on any model. The 2026-11-23
+re-probe (`backend/scripts/soniox_finalize_padding_probe.py`) found that neither
+`stt-rt-v5` nor `stt-rt-v6` pads on finalize any more. Every `<fin>` reported
+the exact sent cursor, and the next speech started there, so every prediction
+below would now mismatch and refuse capture. Predictions
+still require matching progress fields before capture placement; mismatches
+invalidate capture. The original 2026-10-06 v5 synthetic probes covered sub-boundary offsets,
 back-to-back finalizes and five finalizes in flight: all 28 individual `<fin>`
 reports and 18 post-finalize speech starts matched the ordered padding model.
 For local provider cursor P, sending a finalize reserves the provider-only hole
@@ -7865,6 +7872,18 @@ retries. Current debt counts only jobs still in `state=quarantined`; historical
 quarantine timestamps and counters include subsequently recovered results.
 Details: [worker runtime](../diarizer/batch_pipeline_runtime.md).
 
+The scheduler records `quarantine_diagnostic` on a job when it quarantines the
+job. `exception_class` is `lease_expired`, `worker_validation`, or `unknown`.
+`stage` is `scheduler` for lease expiry, the closed worker-validation stage for
+typed failures, or `unknown`. `worker_reason` is the closed worker-validation
+reason when supplied and `unknown` otherwise. `provider_error` and
+`artifact_kind` are `unknown` in this writer. Provider and artifact diagnostics
+remain in their owning records. Provider STT and artifact repair can quarantine
+directly without writing this field. Legacy rows can also omit it.
+The diagnostic preserves the last scheduler quarantine after recovery or
+requeue. Use the job's current state to count active stock. The diagnostic
+carries no authority to retry, settle, or reclaim audio.
+
 ### Batch result metadata across deploy units
 
 New source jobs carry `required_result_markers`, a map declared by
@@ -7927,7 +7946,7 @@ Details: [worker runtime](../diarizer/batch_pipeline_runtime.md).
 
 The worker's `unsupported_language` handoff covers unsupported and unknown
 language routes; Parakeet never runs on those windows. CPU quarantine recovery
-uses Modulate, then at most one independent Soniox async `stt-async-v5` attempt
+uses Modulate, then at most one independent Soniox async `stt-async-v6` attempt
 when Modulate returns valid empty or fails. Shadow recovery preserves the typed
 worker reason and uses the same independent route and measured disposition,
 without writing transcripts or user usage. This does not change general

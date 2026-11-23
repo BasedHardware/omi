@@ -27603,6 +27603,12 @@ abstract class AppLocalizations {
   /// **'Still working on it.'**
   String get stillWorkingOnIt;
 
+  /// Status under the device name after successful Omi pairing. Refers to connection readiness, not to battery level.
+  ///
+  /// In en, this message translates to:
+  /// **'Ready to use'**
+  String get deviceReadyToUse;
+
   /// Firmware update unavailable because the device is below the release minimum firmware version.
   ///
   /// In en, this message translates to:

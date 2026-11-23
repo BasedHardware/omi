@@ -15470,6 +15470,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get stillWorkingOnIt => '仍在处理中。';
 
   @override
+  String get deviceReadyToUse => '可正常使用';
+
+  @override
   String get firmwareUpdateFirmwareTooOld => '你的设备固件版本太旧，无法安装此更新。请联系支持团队，获取设备更新方面的帮助。';
 
   @override

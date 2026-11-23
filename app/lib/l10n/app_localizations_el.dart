@@ -15824,6 +15824,9 @@ class AppLocalizationsEl extends AppLocalizations {
   String get stillWorkingOnIt => 'Εξακολουθούμε να δουλεύουμε πάνω σε αυτό.';
 
   @override
+  String get deviceReadyToUse => 'Έτοιμο για χρήση';
+
+  @override
   String get firmwareUpdateFirmwareTooOld =>
       'Το υλικολογισμικό της συσκευής σας είναι πολύ παλιό για αυτήν την ενημέρωση. Επικοινωνήστε με την υποστήριξη για βοήθεια με την ενημέρωση της συσκευής σας.';
 

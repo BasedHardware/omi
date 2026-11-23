@@ -19219,6 +19219,10 @@
     "@stillWorkingOnIt": {
         "description": "Quiet notice on a conversation page when the app stopped checking a conversation that is still being transcribed or summarized. Shown with a Try Again button."
     },
+    "deviceReadyToUse": "Ready to use",
+    "@deviceReadyToUse": {
+        "description": "Status under the device name after successful Omi pairing. Refers to connection readiness, not to battery level."
+    },
     "firmwareUpdateFirmwareTooOld": "Your device's firmware is too old for this update. Contact support for help updating your device.",
     "@firmwareUpdateFirmwareTooOld": {
         "description": "Firmware update unavailable because the device is below the release minimum firmware version."

@@ -15787,6 +15787,9 @@ class AppLocalizationsRo extends AppLocalizations {
   String get stillWorkingOnIt => 'Încă lucrăm la asta.';
 
   @override
+  String get deviceReadyToUse => 'Pregătit pentru utilizare';
+
+  @override
   String get firmwareUpdateFirmwareTooOld =>
       'Firmware-ul dispozitivului tău este prea vechi pentru această actualizare. Contactează echipa de asistență pentru ajutor la actualizarea dispozitivului.';
 

@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-pending-retained.png",
+      "platform": "mobile-ios",
+      "description": "Classic Offline Sync reports a partial failure and shows the retained synthetic recording",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "002-mobile-ios-pending-cleared.png",
+      "platform": "mobile-ios",
+      "description": "Classic Offline Sync confirms successful removal of both synthetic pending recordings",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ]
+}

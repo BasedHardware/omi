@@ -15647,6 +15647,9 @@ class AppLocalizationsTh extends AppLocalizations {
   String get stillWorkingOnIt => 'ยังดำเนินการอยู่';
 
   @override
+  String get deviceReadyToUse => 'พร้อมใช้งาน';
+
+  @override
   String get firmwareUpdateFirmwareTooOld =>
       'เฟิร์มแวร์ของอุปกรณ์คุณเก่าเกินไปสำหรับการอัปเดตนี้ ติดต่อฝ่ายสนับสนุนเพื่อขอความช่วยเหลือในการอัปเดตอุปกรณ์';
 

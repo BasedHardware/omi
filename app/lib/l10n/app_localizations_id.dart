@@ -15736,6 +15736,9 @@ class AppLocalizationsId extends AppLocalizations {
   String get stillWorkingOnIt => 'Masih dikerjakan.';
 
   @override
+  String get deviceReadyToUse => 'Siap digunakan';
+
+  @override
   String get firmwareUpdateFirmwareTooOld =>
       'Firmware perangkat Anda terlalu lama untuk pembaruan ini. Hubungi dukungan untuk bantuan memperbarui perangkat Anda.';
 

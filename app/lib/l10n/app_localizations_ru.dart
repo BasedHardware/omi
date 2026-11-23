@@ -15773,6 +15773,9 @@ class AppLocalizationsRu extends AppLocalizations {
   String get stillWorkingOnIt => 'Всё ещё работаем над этим.';
 
   @override
+  String get deviceReadyToUse => 'Готово к использованию';
+
+  @override
   String get firmwareUpdateFirmwareTooOld =>
       'Прошивка вашего устройства слишком стара для этого обновления. Обратитесь в службу поддержки за помощью в обновлении устройства.';
 

@@ -15500,6 +15500,9 @@ class AppLocalizationsKo extends AppLocalizations {
   String get stillWorkingOnIt => '아직 처리 중입니다.';
 
   @override
+  String get deviceReadyToUse => '사용 준비 완료';
+
+  @override
   String get firmwareUpdateFirmwareTooOld => '기기의 펌웨어가 너무 오래되어 이 업데이트를 설치할 수 없습니다. 기기 업데이트에 도움이 필요하면 지원팀에 문의하세요.';
 
   @override

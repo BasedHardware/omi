@@ -10,8 +10,8 @@ UID; missing UIDs and invalid percentages fail closed. An unset percentage defau
 to 0, so enabling the kill switch without an explicit cohort does not serve hints.
 
 Dev stays `false` / `0`. The production overlay renders `true` / `5` for Cloud Run
-`backend`, which serves the client status GET. Cohort settings on other services
-stay as configured. Count only traffic on `backend` toward the canary.
+`backend`, which serves the client status GET. Production `backend-sync-backfill` keeps its
+`false` / `0` preservation pins. Count only traffic on `backend` toward the canary.
 Custody-held responses retain their independent 300-second hint regardless of either setting.
 
 The status response schema, client polling behavior and rate ceilings are unchanged.
@@ -46,8 +46,9 @@ only the intended flag and percent changes. Before dispatch, render the backend
 inverse with `SYNC_POLL_BACKOFF_ENABLED=false` and verify it leaves the percent at
 `5`. Apply that inverse if a guard trips.
 
-Start the 24-hour soak once the cohort is serving on backend. Before advancing,
-require lower polls per active uploader in-cohort and an in-cohort terminal-read
+Start the 24-hour soak once production `backend` serves the 5% configuration and
+the authenticated job-status route reports measurable in-cohort traffic. Before
+advancing, require lower polls per active uploader in-cohort and an in-cohort terminal-read
 p50 at most 60 seconds above out-of-cohort, with observation counts in both
 cohorts. Sync 5xx and 429 rates plus support and upload-retry signals must stay
 flat. Require the same readback after the 25% soak before advancing to 100%.

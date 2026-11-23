@@ -15704,6 +15704,9 @@ class AppLocalizationsHi extends AppLocalizations {
   String get stillWorkingOnIt => 'अभी भी इस पर काम चल रहा है।';
 
   @override
+  String get deviceReadyToUse => 'उपयोग के लिए तैयार';
+
+  @override
   String get firmwareUpdateFirmwareTooOld =>
       'इस अपडेट के लिए आपके डिवाइस का फ़र्मवेयर बहुत पुराना है। डिवाइस अपडेट करने में मदद के लिए सहायता टीम से संपर्क करें।';
 

@@ -15746,6 +15746,9 @@ class AppLocalizationsLt extends AppLocalizations {
   String get stillWorkingOnIt => 'Vis dar dirbama.';
 
   @override
+  String get deviceReadyToUse => 'Paruošta naudoti';
+
+  @override
   String get firmwareUpdateFirmwareTooOld =>
       'Jūsų įrenginio programinė aparatinė įranga per sena šiam naujinimui. Kreipkitės į palaikymo tarnybą, kad padėtų atnaujinti įrenginį.';
 

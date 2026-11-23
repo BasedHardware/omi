@@ -15717,6 +15717,9 @@ class AppLocalizationsSk extends AppLocalizations {
   String get stillWorkingOnIt => 'Ešte sa na tom pracuje.';
 
   @override
+  String get deviceReadyToUse => 'Pripravené na použitie';
+
+  @override
   String get firmwareUpdateFirmwareTooOld =>
       'Firmvér vášho zariadenia je pre túto aktualizáciu príliš starý. Obráťte sa na podporu, ktorá vám pomôže aktualizovať zariadenie.';
 

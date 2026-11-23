@@ -15634,6 +15634,9 @@ class AppLocalizationsAr extends AppLocalizations {
   String get stillWorkingOnIt => 'ما زلنا نعمل عليه.';
 
   @override
+  String get deviceReadyToUse => 'جاهز للاستخدام';
+
+  @override
   String get firmwareUpdateFirmwareTooOld =>
       'البرنامج الثابت لجهازك قديم جدًا لهذا التحديث. تواصل مع الدعم للمساعدة في تحديث جهازك.';
 

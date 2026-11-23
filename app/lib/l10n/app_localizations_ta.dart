@@ -15827,6 +15827,9 @@ class AppLocalizationsTa extends AppLocalizations {
   String get stillWorkingOnIt => 'இன்னும் அதில் வேலை செய்யப்படுகிறது.';
 
   @override
+  String get deviceReadyToUse => 'பயன்படுத்தத் தயாராக உள்ளது';
+
+  @override
   String get firmwareUpdateFirmwareTooOld =>
       'உங்கள் சாதனத்தின் ஃபர்ம்வேர் இந்தப் புதுப்பிப்புக்கு மிகவும் பழையதாக உள்ளது. சாதனத்தைப் புதுப்பிக்க உதவி பெற ஆதரவைத் தொடர்புகொள்ளவும்.';
 

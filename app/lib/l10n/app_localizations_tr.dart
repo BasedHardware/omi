@@ -15732,6 +15732,9 @@ class AppLocalizationsTr extends AppLocalizations {
   String get stillWorkingOnIt => 'Hâlâ üzerinde çalışılıyor.';
 
   @override
+  String get deviceReadyToUse => 'Kullanıma hazır';
+
+  @override
   String get firmwareUpdateFirmwareTooOld =>
       'Cihazınızın donanım yazılımı bu güncelleme için çok eski. Cihazınızı güncelleme konusunda yardım almak için destek ekibiyle iletişime geçin.';
 

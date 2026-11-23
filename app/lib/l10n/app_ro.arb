@@ -4736,6 +4736,7 @@
     "finishedSummaryReady": "Rezumat gata",
     "writingSummaryStatus": "Se scrie rezumatul…",
     "stillWorkingOnIt": "Încă lucrăm la asta.",
+    "deviceReadyToUse": "Pregătit pentru utilizare",
     "firmwareUpdateFirmwareTooOld": "Firmware-ul dispozitivului tău este prea vechi pentru această actualizare. Contactează echipa de asistență pentru ajutor la actualizarea dispozitivului.",
     "firmwareUpdateAppRequired": "Această actualizare de firmware necesită o versiune mai nouă a aplicației Omi. Actualizează aplicația din magazinul de aplicații, apoi verifică din nou.",
     "quietPayerTitle": "Nicio înregistrare de 5 zile",

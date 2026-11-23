@@ -4736,6 +4736,7 @@
     "finishedSummaryReady": "要約が完了しました",
     "writingSummaryStatus": "要約を作成中…",
     "stillWorkingOnIt": "まだ処理中です。",
+    "deviceReadyToUse": "使用準備完了",
     "firmwareUpdateFirmwareTooOld": "デバイスのファームウェアが古いため、この更新を適用できません。デバイスの更新についてはサポートにお問い合わせください。",
     "firmwareUpdateAppRequired": "このファームウェアの更新には、新しいバージョンのOmiアプリが必要です。アプリストアからアプリを更新してから、もう一度確認してください。",
     "quietPayerTitle": "5日間録音がありません",

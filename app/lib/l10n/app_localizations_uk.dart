@@ -15755,6 +15755,9 @@ class AppLocalizationsUk extends AppLocalizations {
   String get stillWorkingOnIt => 'Ще працюємо над цим.';
 
   @override
+  String get deviceReadyToUse => 'Готово до використання';
+
+  @override
   String get firmwareUpdateFirmwareTooOld =>
       'Прошивка вашого пристрою застаріла для цього оновлення. Зверніться до служби підтримки по допомогу з оновленням пристрою.';
 

@@ -4736,6 +4736,7 @@
     "finishedSummaryReady": "Kopsavilkums gatavs",
     "writingSummaryStatus": "Tiek rakstīts kopsavilkums…",
     "stillWorkingOnIt": "Vēl tiek pie tā strādāts.",
+    "deviceReadyToUse": "Gatavs lietošanai",
     "firmwareUpdateFirmwareTooOld": "Jūsu ierīces aparātprogrammatūra ir pārāk veca šim atjauninājumam. Sazinieties ar atbalsta dienestu, lai saņemtu palīdzību ierīces atjaunināšanā.",
     "firmwareUpdateAppRequired": "Šim aparātprogrammatūras atjauninājumam nepieciešama jaunāka Omi lietotnes versija. Atjauniniet lietotni savā lietotņu veikalā un pēc tam pārbaudiet vēlreiz.",
     "quietPayerTitle": "5 dienas nav ierakstu",

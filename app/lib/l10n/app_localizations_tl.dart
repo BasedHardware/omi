@@ -15846,6 +15846,9 @@ class AppLocalizationsTl extends AppLocalizations {
   String get stillWorkingOnIt => 'Pinagtatrabahuhan pa rin ito.';
 
   @override
+  String get deviceReadyToUse => 'Handa nang gamitin';
+
+  @override
   String get firmwareUpdateFirmwareTooOld =>
       'Napakaluma na ng firmware ng iyong device para sa update na ito. Makipag-ugnayan sa support para sa tulong sa pag-update ng iyong device.';
 

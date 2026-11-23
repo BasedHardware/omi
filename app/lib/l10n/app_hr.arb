@@ -12293,6 +12293,7 @@
     "finishedSummaryReady": "Sažetak je gotov",
     "writingSummaryStatus": "Pisanje sažetka…",
     "stillWorkingOnIt": "I dalje radimo na tome.",
+    "deviceReadyToUse": "Spremno za upotrebu",
     "firmwareUpdateFirmwareTooOld": "Firmver vašeg uređaja prestar je za ovo ažuriranje. Obratite se podršci za pomoć pri ažuriranju uređaja.",
     "firmwareUpdateAppRequired": "Ovo ažuriranje firmvera zahtijeva noviju verziju aplikacije Omi. Ažurirajte aplikaciju iz svoje trgovine aplikacija, a zatim ponovno provjerite.",
     "quietPayerTitle": "Nema snimki 5 dana",

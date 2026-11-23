@@ -15730,6 +15730,9 @@ class AppLocalizationsMr extends AppLocalizations {
   String get stillWorkingOnIt => 'अजून त्यावर काम सुरू आहे.';
 
   @override
+  String get deviceReadyToUse => 'वापरण्यासाठी तयार';
+
+  @override
   String get firmwareUpdateFirmwareTooOld =>
       'या अपडेटसाठी तुमच्या डिव्हाइसचे फर्मवेअर खूप जुने आहे. डिव्हाइस अपडेट करण्यासाठी मदत हवी असल्यास सपोर्टशी संपर्क साधा.';
 

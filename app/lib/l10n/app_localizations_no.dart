@@ -15726,6 +15726,9 @@ class AppLocalizationsNo extends AppLocalizations {
   String get stillWorkingOnIt => 'Jobber fortsatt med det.';
 
   @override
+  String get deviceReadyToUse => 'Klar til bruk';
+
+  @override
   String get firmwareUpdateFirmwareTooOld =>
       'Fastvaren på enheten din er for gammel for denne oppdateringen. Kontakt kundestøtte for hjelp med å oppdatere enheten.';
 

@@ -1716,11 +1716,15 @@ def test_record_close_notify_renders_on_every_cloud_run_listener(environment, se
         assert [(name, value) for name, value in rendered if name == key] == [(key, expected)]
 
 
-def test_prod_silence_read_skip_respects_backend_pump_and_listen_pins():
+def test_prod_silence_read_skip_respects_backend_backfill_pump_and_listen_pins():
     key = 'BATCH_PIPELINE_SILENCE_READ_SKIP_ENABLED'
     prod = _MANIFEST['environments']['prod']
-    for name in ('backend-sync', 'backend-sync-backfill', 'backend-integration'):
+    for name in ('backend-sync', 'backend-integration'):
         assert prod['cloud_run']['services'][name]['env'][key] == {'value': 'true', 'category': 'ops_kill'}
+    assert prod['cloud_run']['services']['backend-sync-backfill']['env'][key] == {
+        'value': 'false',
+        'category': 'ops_kill',
+    }
     # SCA-3555: keep live backend behavior until the SCA-1824 guard covers first traffic.
     assert prod['cloud_run']['services']['backend']['env'][key] == {'value': 'false', 'category': 'ops_kill'}
     # SCA-3318: the pump's one-key activation keeps its dark successor's false; widening it is a later change.
@@ -1742,6 +1746,20 @@ def test_prod_backend_renders_sibling_skip_preservation_pin(monkeypatch):
     rendered = dict(_MODULE['_parse_deploy_cloud_run_env_vars'](_MODULE['_render_env_vars'](backend['env'])))
 
     assert rendered['BATCH_PIPELINE_FOLLOWUP_CLAIMED_SIBLING_SKIP_ENABLED'] == 'false'
+
+
+def test_prod_backfill_renders_sibling_skip_and_poll_backoff_preservation_pins(monkeypatch):
+    prod = _MANIFEST['environments']['prod']
+    _set_workflow_bound_env(monkeypatch, prod)
+    backfill = prod['cloud_run']['services']['backend-sync-backfill']
+    rendered = _MODULE['_parse_deploy_cloud_run_env_vars'](_MODULE['_render_env_vars'](backfill['env']))
+
+    for key, expected in {
+        'BATCH_PIPELINE_FOLLOWUP_CLAIMED_SIBLING_SKIP_ENABLED': 'false',
+        'SYNC_POLL_BACKOFF_ENABLED': 'false',
+        'SYNC_POLL_BACKOFF_PERCENT': '0',
+    }.items():
+        assert [(name, value) for name, value in rendered if name == key] == [(key, expected)]
 
 
 def test_prod_job_status_poll_cohort_renders_for_client_facing_backend(monkeypatch):

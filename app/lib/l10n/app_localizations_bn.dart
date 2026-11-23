@@ -15716,6 +15716,9 @@ class AppLocalizationsBn extends AppLocalizations {
   String get stillWorkingOnIt => 'এখনও কাজ চলছে।';
 
   @override
+  String get deviceReadyToUse => 'ব্যবহারের জন্য প্রস্তুত';
+
+  @override
   String get firmwareUpdateFirmwareTooOld =>
       'এই আপডেটের জন্য আপনার ডিভাইসের ফার্মওয়্যার অনেক পুরোনো। ডিভাইস আপডেট করতে সাহায্যের জন্য সহায়তা দলের সঙ্গে যোগাযোগ করুন।';
 

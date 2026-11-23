@@ -15750,6 +15750,9 @@ class AppLocalizationsSl extends AppLocalizations {
   String get stillWorkingOnIt => 'Še vedno poteka obdelava.';
 
   @override
+  String get deviceReadyToUse => 'Pripravljen za uporabo';
+
+  @override
   String get firmwareUpdateFirmwareTooOld =>
       'Vdelana programska oprema vaše naprave je prestara za to posodobitev. Za pomoč pri posodobitvi naprave se obrnite na podporo.';
 

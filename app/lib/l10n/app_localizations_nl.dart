@@ -15762,6 +15762,9 @@ class AppLocalizationsNl extends AppLocalizations {
   String get stillWorkingOnIt => 'Er wordt nog aan gewerkt.';
 
   @override
+  String get deviceReadyToUse => 'Klaar voor gebruik';
+
+  @override
   String get firmwareUpdateFirmwareTooOld =>
       'De firmware van je apparaat is te oud voor deze update. Neem contact op met de ondersteuning voor hulp bij het bijwerken van je apparaat.';
 

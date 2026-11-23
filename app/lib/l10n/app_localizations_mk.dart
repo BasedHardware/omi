@@ -15786,6 +15786,9 @@ class AppLocalizationsMk extends AppLocalizations {
   String get stillWorkingOnIt => 'Сè уште се работи на тоа.';
 
   @override
+  String get deviceReadyToUse => 'Подготовено за употреба';
+
+  @override
   String get firmwareUpdateFirmwareTooOld =>
       'Фирмверот на вашиот уред е премногу стар за ова ажурирање. Контактирајте со поддршката за помош при ажурирањето на уредот.';
 

@@ -15723,6 +15723,9 @@ class AppLocalizationsVi extends AppLocalizations {
   String get stillWorkingOnIt => 'Vẫn đang xử lý.';
 
   @override
+  String get deviceReadyToUse => 'Sẵn sàng để sử dụng';
+
+  @override
   String get firmwareUpdateFirmwareTooOld =>
       'Firmware trên thiết bị của bạn quá cũ để cài đặt bản cập nhật này. Hãy liên hệ bộ phận hỗ trợ để được giúp cập nhật thiết bị.';
 
